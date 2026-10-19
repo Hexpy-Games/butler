@@ -180,9 +180,15 @@ impl ProviderSecrets {
         store: &SecretStore,
         key: &SecretKey,
     ) -> Result<Option<SecretText>, CredentialStoreError> {
+        let source = format!("store:{}:{}", key.service(), key.account());
         let (owned, key) = (store.clone(), key.clone());
-        self.call(store.backend().is_system(), move || owned.get(&key))
-            .await
+        let secret = self
+            .call(store.backend().is_system(), move || owned.get(&key))
+            .await?;
+        if let Some(secret) = &secret {
+            butler_log::register_secret_for(&source, secret.expose());
+        }
+        Ok(secret)
     }
 
     /// Stores `secret` under `key` and reads it back.
@@ -193,6 +199,10 @@ impl ProviderSecrets {
         secret: &str,
     ) -> Result<(), CredentialStoreError> {
         let (owned, key) = (store.clone(), key.clone());
+        butler_log::register_secret_for(
+            &format!("store:{}:{}", key.service(), key.account()),
+            secret,
+        );
         let secret = SecretText::new(secret.to_owned());
         let verified = self
             .call(store.backend().is_system(), move || {

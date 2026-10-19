@@ -24,7 +24,7 @@ use super::super::{
 use super::{ModelConfigurationClock, array, first_by_key, text};
 
 /// The credentials file, relative to the data root.
-pub(super) const CREDENTIALS_FILE: &str = "auth/model-provider-credentials.json";
+pub(super) const CREDENTIALS_FILE: &str = butler_platform::data_paths::PROVIDER_CREDENTIALS;
 
 /// The journal field of store entries still to be removed.
 const PENDING: &str = "pending_secret_removals";
@@ -142,6 +142,7 @@ pub(super) fn record(
     }
     let id = text(value.get("id"))?.to_owned();
     let (home, masked) = if let Some(secret) = text(value.get("secret")) {
+        butler_log::register_secret_for(&format!("credential:{provider_id}:{id}"), secret);
         let masked = mask(secret);
         (
             SecretHome::Plaintext(SecretText::new(secret.into())),

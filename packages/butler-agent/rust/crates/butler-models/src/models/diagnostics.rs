@@ -79,11 +79,17 @@ pub(super) fn http(
         identity,
         &["message", "error_message", "errorMessage", "detail"],
     );
-    let normalized = normalized_code(
-        provider_code.as_deref(),
-        provider_type.as_deref(),
-        detail.as_deref(),
-    );
+    let tools_refused = matches!(status, 400 | 422)
+        && refuses_tools(string(identity, &["param"]).as_deref(), detail.as_deref());
+    let normalized = if tools_refused {
+        Some("provider_tools_unsupported")
+    } else {
+        normalized_code(
+            provider_code.as_deref(),
+            provider_type.as_deref(),
+            detail.as_deref(),
+        )
+    };
     let context = detail.as_deref().is_some_and(is_context_limit);
     let code = normalized.unwrap_or({
         if context {
@@ -97,31 +103,7 @@ pub(super) fn http(
         }
     });
     let retryable = normalized.is_none() && !context && (status == 429 || status >= 500);
-    let message = match code {
-        "provider_quota_exhausted" => {
-            "Model provider reported that the configured quota, credit, or billing limit is exhausted."
-        }
-        "provider_model_not_found" => {
-            "Model provider reported that the configured model was not found."
-        }
-        "provider_model_retired" => "Model provider reported that the configured model is retired.",
-        "provider_model_unavailable" => {
-            "Model provider reported that the configured model is unavailable."
-        }
-        "provider_unsupported_model" => {
-            "Model provider reported that the configured model is unsupported."
-        }
-        "provider_context_limit_exceeded" => {
-            "Model provider context limit was exceeded. Compact or reduce the session context, then retry."
-        }
-        "provider_auth_error" => {
-            "Model provider authentication failed. Check the configured provider credentials."
-        }
-        "provider_rate_limited" => {
-            "Model provider API rate limit was reached. Retry after provider readiness."
-        }
-        _ => "Model provider API request failed.",
-    };
+    let message = http_message(code);
     let mut failure = error(code, message, provider, api, retryable);
     failure.status_code = Some(status);
     failure.provider_error_code = provider_code;
@@ -148,6 +130,38 @@ pub(super) fn http(
         })));
     }
     failure
+}
+
+/// The safe message for a normalized HTTP failure `code`.
+fn http_message(code: &str) -> &'static str {
+    match code {
+        "provider_quota_exhausted" => {
+            "Model provider reported that the configured quota, credit, or billing limit is exhausted."
+        }
+        "provider_model_not_found" => {
+            "Model provider reported that the configured model was not found."
+        }
+        "provider_model_retired" => "Model provider reported that the configured model is retired.",
+        "provider_model_unavailable" => {
+            "Model provider reported that the configured model is unavailable."
+        }
+        "provider_unsupported_model" => {
+            "Model provider reported that the configured model is unsupported."
+        }
+        "provider_tools_unsupported" => {
+            "Model provider reported that the configured model or server does not support tool calls."
+        }
+        "provider_context_limit_exceeded" => {
+            "Model provider context limit was exceeded. Compact or reduce the session context, then retry."
+        }
+        "provider_auth_error" => {
+            "Model provider authentication failed. Check the configured provider credentials."
+        }
+        "provider_rate_limited" => {
+            "Model provider API rate limit was reached. Retry after provider readiness."
+        }
+        _ => "Model provider API request failed.",
+    }
 }
 
 fn error(
@@ -274,6 +288,41 @@ fn normalized_code(
     }
 }
 
+/// Whether a rejected request says the server or model cannot take tools:
+/// the standard OpenAI error `param` is `tools` or `tool_choice`, or the
+/// message states that tool calling as a whole is unsupported or disabled.
+/// Errors about a particular tool call or history stay ordinary API errors
+/// the model can act on.
+fn refuses_tools(param: Option<&str>, message: Option<&str>) -> bool {
+    let param = param.unwrap_or("").to_ascii_lowercase();
+    if ["tools", "tool_choice", "functions", "function_call"].contains(&param.as_str()) {
+        return true;
+    }
+    let message = message.unwrap_or("").to_ascii_lowercase();
+    const SUBJECTS: [&str; 6] = [
+        "tools",
+        "tool calls",
+        "tool calling",
+        "tool use",
+        "function calling",
+        "function calls",
+    ];
+    SUBJECTS.iter().any(|subject| {
+        [
+            format!("does not support {subject}"),
+            format!("doesn't support {subject}"),
+            format!("do not support {subject}"),
+            format!("{subject} is not supported"),
+            format!("{subject} are not supported"),
+            format!("{subject} is not enabled"),
+            format!("{subject} are not enabled"),
+            format!("{subject} not supported"),
+        ]
+        .iter()
+        .any(|phrase| message.contains(phrase.as_str()))
+    })
+}
+
 fn signal(value: Option<&str>) -> String {
     value
         .unwrap_or("")
@@ -319,10 +368,22 @@ fn safe_text(value: &str) -> Option<String> {
     }
     static SECRET: LazyLock<Regex> = LazyLock::new(|| {
         fixed_regex(
-            r"(?i)\b(api[_-]?key|token|secret|password|authorization)\s*[:=]\s*\S+|Bearer\s+[A-Za-z0-9._~+/=-]+",
+            r"(?i)\b(api[_-]?key|token|secret|password|authorization)\s*[:=]\s*\S+|Bearer\s+[A-Za-z0-9._~+/=-]+|\b(sk|pk|rk|key)[-_][A-Za-z0-9_-]{6,}",
         )
     });
-    Some(bounded(&SECRET.replace_all(&words, "[redacted]"), 500))
+    // Long opaque runs mixing letters and digits (echoed keys, tokens).
+    static OPAQUE: LazyLock<Regex> = LazyLock::new(|| fixed_regex(r"[A-Za-z0-9_+/=-]{32,}"));
+    let named = SECRET.replace_all(&words, "[redacted]");
+    let opaque = OPAQUE.replace_all(&named, |found: &regex::Captures<'_>| {
+        let text = &found[0];
+        if text.chars().any(|c| c.is_ascii_digit()) && text.chars().any(|c| c.is_ascii_alphabetic())
+        {
+            "[redacted]".to_owned()
+        } else {
+            text.to_owned()
+        }
+    });
+    Some(bounded(&opaque, 500))
 }
 
 fn header(headers: Option<&HeaderMap>, names: &[&str]) -> Option<String> {

@@ -17,6 +17,14 @@ pub(crate) fn next_due_read_count() -> usize {
     NEXT_DUE_READS.load(Ordering::Relaxed)
 }
 
+#[cfg(feature = "e2e-fixtures")]
+static DISPATCH_ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(feature = "e2e-fixtures")]
+pub(crate) fn dispatch_attempt_count() -> usize {
+    DISPATCH_ATTEMPTS.load(Ordering::Relaxed)
+}
+
 pub(crate) fn signals() -> (Arc<Notify>, Arc<std::sync::atomic::AtomicBool>) {
     (
         Arc::new(Notify::new()),
@@ -41,12 +49,22 @@ impl AutomationScheduler {
 
     pub(crate) fn initialize(&self, app: AppApplication) -> Result<(), GatewayApplicationError> {
         #[cfg(feature = "e2e-fixtures")]
-        NEXT_DUE_READS.store(0, Ordering::Relaxed);
+        {
+            NEXT_DUE_READS.store(0, Ordering::Relaxed);
+            DISPATCH_ATTEMPTS.store(0, Ordering::Relaxed);
+        }
         let cancel = self.cancellation.clone();
         let wake = self.wake.clone();
         *self.task.lock() = Some(tokio::spawn(async move {
             let mut dispatch_failing = false;
             let mut read_failing = false;
+            // Due runs admit turns, which first needs the executor, as for
+            // the queue dispatcher; a failed wait leaves dispatch to report.
+            tokio::select! {
+                biased;
+                () = cancel.cancelled() => return,
+                _ = app.dependencies.executor_readiness.wait_ready() => {},
+            }
             // Recovery also dispatches runs queued before a restart.
             let _ = dispatch(&app, &mut dispatch_failing).await;
             loop {
@@ -115,12 +133,23 @@ impl AutomationScheduler {
 }
 
 async fn dispatch(app: &AppApplication, failing: &mut bool) -> bool {
-    if app.dispatch_due_owned().await.is_err() {
+    #[cfg(feature = "e2e-fixtures")]
+    let timing = crate::gateway::command_timing::CommandTiming::new("scheduler_dispatch");
+    let succeeded = app.dispatch_due_owned().await.is_ok();
+    #[cfg(feature = "e2e-fixtures")]
+    timing.mark("owned_completed");
+    if succeeded {
+        *failing = false;
+    } else {
         record_failure(app, failing).await;
-        return false;
     }
-    *failing = false;
-    true
+    #[cfg(feature = "e2e-fixtures")]
+    {
+        timing.mark("completed");
+        drop(timing);
+        DISPATCH_ATTEMPTS.fetch_add(1, Ordering::Relaxed);
+    }
+    succeeded
 }
 
 async fn record_failure(app: &AppApplication, failing: &mut bool) {

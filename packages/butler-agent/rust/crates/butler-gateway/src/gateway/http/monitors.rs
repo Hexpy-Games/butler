@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use super::{HttpError, HttpState, MAX_REQUEST_BODY_SIZE, json, query, read_body_with_limit};
 use crate::gateway::{
-    AppDeveloperLogsQuery, AppMonitorPage, AppUsageMonitorQuery, AppWorkerActivityQuery,
+    AppMonitorPage, AppUsageMonitorQuery, AppWorkerActivityQuery,
     protocol::{APP_PROTOCOL_VERSION, ApiEnvelope},
 };
 
@@ -76,33 +76,6 @@ pub(super) async fn route(
                 .list_system_events(AppMonitorPage {
                     limit: positive_integer(parameters.get("limit")),
                     offset: nonnegative_integer(parameters.get("offset")),
-                })
-                .await?
-        }
-        "/developer-logs" => {
-            let settings = state.application.read_settings().await?;
-            if settings.get("diagnostics_enabled").and_then(Value::as_bool) != Some(true) {
-                return Err(HttpError::public(
-                    403,
-                    "developer_mode_required",
-                    "Developer mode is required to view model diagnostics.",
-                ));
-            }
-            state
-                .application
-                .list_developer_logs(AppDeveloperLogsQuery {
-                    limit: positive_integer(parameters.get("limit")),
-                    offset: nonnegative_integer(parameters.get("offset")),
-                    session_id: parameters
-                        .get("session_id")
-                        .filter(|value| !value.is_empty())
-                        .cloned(),
-                    turn_id: parameters
-                        .get("turn_id")
-                        .filter(|value| !value.is_empty())
-                        .cloned(),
-                    kind: parameters.get("kind").cloned(),
-                    query: parameters.get("query").cloned(),
                 })
                 .await?
         }
@@ -253,7 +226,6 @@ fn usage_query(parameters: &std::collections::HashMap<String, String>) -> AppUsa
         usage_scope: None,
         since_ts: hours.map(|hours| now - hours * 3_600_000.0),
         until_ts: hours.map(|_| now),
-        schedule_turns: Default::default(),
     }
 }
 
@@ -301,7 +273,7 @@ fn session_activity_path(path: &str) -> Option<(String, bool)> {
     Some((decode_component(encoded).ok()?, suffix == "/history"))
 }
 
-fn decode_component(value: &str) -> Result<String, HttpError> {
+pub(super) fn decode_component(value: &str) -> Result<String, HttpError> {
     let mut bytes = Vec::with_capacity(value.len());
     let mut input = value.as_bytes().iter().copied();
     while let Some(byte) = input.next() {

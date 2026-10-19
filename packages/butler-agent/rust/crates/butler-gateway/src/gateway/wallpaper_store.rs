@@ -58,7 +58,7 @@ impl AppWallpaperFiles {
     pub(crate) fn new(data_root: &Path) -> Self {
         Self(Arc::new(Lane {
             root: data_root.join("app-server/wallpapers"),
-            modules: data_root.join("wallpapers"),
+            modules: data_root.join(butler_platform::data_paths::WALLPAPERS),
             module_access: RwLock::new(()),
             permits: Arc::new(Semaphore::new(2)),
             decodes: Arc::new(Semaphore::new(1)),

@@ -8,12 +8,14 @@ publish.workspace = true
 
 [features]
 # E2E fault, clock and instrumentation hooks; never enabled in shipped binaries.
-e2e-fixtures = []
+e2e-fixtures = ["butler-log/e2e-fixtures"]
+test-support = []
 default = ["prebuilt-ort"]
 prebuilt-ort = ["butler-memory/prebuilt-ort"]
 static-ort = ["butler-memory/static-ort"]
 
 [dependencies]
+butler-log = { path = "../butler-log" }
 butler-core = { path = "../butler-core" }
 butler-platform = { path = "../butler-platform" }
 butler-turn = { path = "../butler-turn" }
@@ -43,6 +45,7 @@ rusqlite.workspace = true
 sha2.workspace = true
 subtle.workspace = true
 zeroize.workspace = true
+tracing.workspace = true
 tokio.workspace = true
 tokio-util = { workspace = true, features = ["io"] }
 tz-rs.workspace = true

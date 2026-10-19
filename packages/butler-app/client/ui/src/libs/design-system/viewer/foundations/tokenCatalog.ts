@@ -92,6 +92,7 @@ const RULES: Array<[TokenCategory, string, RegExp]> = [
   ["color", "Glass", /^--(composer-glass|tinted-glass)-/u],
   ["color", "Chart", /^--context-/u],
   ["color", "Syntax", /^--syntax-/u],
+  ["color", "Trace", /^--trace-/u],
 ];
 
 const COLOR_VALUE = /(rgba?\(|#[0-9a-f]{3,8}\b|gradient\(|color-mix\(|transparent|var\(--(color-|text-|line|accent|neutral-|grayscale-|surface|send-|danger|ok|placeholder|icon-muted))/iu;

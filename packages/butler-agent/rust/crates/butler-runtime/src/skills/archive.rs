@@ -14,7 +14,8 @@ pub(super) fn import(
     project: Option<&str>,
 ) -> Result<SkillImportResult, SkillError> {
     let staging = data
-        .join("skills/.imports")
+        .join(butler_platform::data_paths::SKILLS)
+        .join(".imports")
         .join(uuid::Uuid::new_v4().to_string());
     fs::create_dir_all(&staging).map_err(SkillError::Io)?;
     let result = extract_and_install(data, archive_path, project, &staging);

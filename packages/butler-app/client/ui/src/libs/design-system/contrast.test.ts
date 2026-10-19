@@ -79,11 +79,12 @@ function parseColor(value: string): Rgba {
   throw new Error(`unsupported color ${value}`);
 }
 
-/** Paints `layers` bottom to top; the first layer must be opaque. */
+/** Paints `layers` (tokens or literal colors) bottom to top; the first layer must be opaque. */
 function paint(layers: readonly string[], theme: Theme): Rgba {
-  let [r, g, b] = parseColor(resolve(layers[0]!, theme));
+  const color = (layer: string) => parseColor(layer.startsWith("--") ? resolve(layer, theme) : layer);
+  let [r, g, b] = color(layers[0]!);
   for (const layer of layers.slice(1)) {
-    const [lr, lg, lb, alpha] = parseColor(resolve(layer, theme));
+    const [lr, lg, lb, alpha] = color(layer);
     [r, g, b] = [lr * alpha + r * (1 - alpha), lg * alpha + g * (1 - alpha), lb * alpha + b * (1 - alpha)];
   }
   return [r, g, b, 1];
@@ -170,6 +171,32 @@ describe("text contrast meets WCAG AA (4.5:1) in both themes", () => {
     for (const [role, layers] of tintedPairs) {
       test(`${theme} ${role} on ${layers.at(-1)}`, () => {
         expect(contrast(role, layers, theme)).toBeGreaterThanOrEqual(4.5);
+      });
+    }
+  }
+});
+
+// The shell is translucent: sidebar text sits on the platform's shell layer
+// over the native material, which the desktop behind the window darkens
+// (light) or lightens (dark). Each floor is the worst material measured in
+// the #1187 captures, so floor plus layer reproduces the captured shell:
+// Windows light acrylic 135 behind black -> 237, macOS light vibrancy -> 217
+// behind black, Windows dark -> ~90 behind white, macOS dark -> 59,60,62
+// behind white.
+const shellFloors = [
+  { platform: "windows", light: "rgb(135, 135, 135)", dark: "rgb(146, 146, 146)" },
+  { platform: "mac", light: "rgb(201, 201, 201)", dark: "rgb(82, 83, 84)" },
+] as const;
+
+describe("shell text meets 4.5:1 on the worst native material", () => {
+  for (const theme of themes) {
+    for (const { platform, [theme]: floor } of shellFloors) {
+      test(`${theme} ${platform} sidebar secondary and tertiary text`, () => {
+        const failures = ["secondary", "tertiary"]
+          .map((role) => `--${platform}-sidebar-text-${role}`)
+          .map((role) => ({ role, ratio: Number(contrast(role, [floor, `--${platform}-sidebar-bg`], theme).toFixed(2)) }))
+          .filter(({ ratio }) => ratio < 4.5);
+        expect(failures).toEqual([]);
       });
     }
   }

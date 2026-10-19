@@ -169,16 +169,19 @@ export async function evaluateString(
   return typeof result.result?.value === "string" ? result.result.value : "";
 }
 
+/**
+ * A control the user can reach: not in an inert copy of the previous step and
+ * not under a running setup morph, which takes no clicks until it ends.
+ */
+const REACHABLE = "((element) => !element.closest('[inert],[data-morph]'))";
+
 export async function clickButton(client: CdpClient, label: string): Promise<void> {
-  await waitForExpression(
-    client,
-    `Array.from(document.querySelectorAll("button")).some((button) => button.textContent?.trim() === ${JSON.stringify(label)})`,
-    `button ${label}`,
-  );
+  const find = `Array.from(document.querySelectorAll("button,[role=button]")).find((candidate) => candidate.textContent?.trim() === ${JSON.stringify(label)} && !candidate.disabled && ${REACHABLE}(candidate))`;
+  await waitForExpression(client, `Boolean(${find})`, `button ${label}`);
   const clicked = await evaluateBoolean(
     client,
     `(() => {
-      const button = Array.from(document.querySelectorAll("button")).find((candidate) => candidate.textContent?.trim() === ${JSON.stringify(label)});
+      const button = ${find};
       if (!button) return false;
       button.click();
       return true;
@@ -219,7 +222,7 @@ export async function waitForHeading(
 ): Promise<void> {
   await waitForExpression(
     client,
-    `Array.from(document.querySelectorAll("h1,h2,h3")).some((heading) => heading.textContent?.trim() === ${JSON.stringify(label)})`,
+    `Array.from(document.querySelectorAll("h1,h2,h3")).some((heading) => heading.textContent?.trim() === ${JSON.stringify(label)} && !heading.closest("[inert]"))`,
     `heading ${label}`,
     timeoutMs,
   );

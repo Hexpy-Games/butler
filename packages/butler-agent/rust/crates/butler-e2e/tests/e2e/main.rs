@@ -1,3 +1,8 @@
+#![allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_types,
+    reason = "test crate HTTP drivers"
+)]
 //! All current scenarios share one integration-test link.
 mod acceptance_payload;
 mod access;
@@ -9,13 +14,18 @@ mod alias_index_drop;
 mod answer_blocks;
 mod anthropic_cache;
 mod anthropic_requests;
+mod anthropic_thinking_history;
 mod app_admission_history;
+mod app_db_schema;
 mod app_state;
 mod app_storage_scale;
 mod ask_user;
+mod attachment_reach;
+mod attachment_types;
 mod authority_parallel_batch;
 mod authority_permissions;
 mod automation;
+mod briefing_effort;
 mod browser_agent;
 mod browser_approval;
 mod browser_batch;
@@ -48,6 +58,7 @@ mod context_telemetry;
 mod conversation_background;
 mod credential_store;
 mod credentials;
+mod custom_model_errors;
 mod default_model;
 mod downloads_live;
 mod durable_configuration;
@@ -55,6 +66,7 @@ mod durable_files;
 mod embed_download;
 mod error_library;
 mod favicons;
+mod full_reset;
 mod gateway_browser;
 #[path = "gateway_pairing.rs"]
 mod gateway_pairing;
@@ -62,12 +74,14 @@ mod gateway_remote;
 mod gateway_rotation;
 mod gateway_security;
 mod gateway_tunnel;
+mod gemini_requests;
 mod general_clear;
 mod harness_hygiene;
 mod hedge_v2_stub;
 mod hooks;
 mod idle_resources;
 mod image_errors;
+mod image_limits;
 mod image_only;
 mod install_app;
 mod install_hardening;
@@ -112,6 +126,8 @@ mod prompt_history;
 mod prompt_history_cache;
 mod prompt_layout;
 mod queue_admission_shutdown;
+#[cfg(debug_assertions)]
+mod queue_claim_crash;
 mod queue_notifications;
 mod queue_pause;
 mod queue_shutdown;
@@ -120,6 +136,7 @@ mod recovery;
 mod reduce_motion;
 mod schedule_calendar;
 mod schedule_chat;
+mod schedule_model;
 mod schedule_sleep_wake;
 mod schedule_store;
 mod schedules;
@@ -141,6 +158,7 @@ mod shutdown_wal;
 mod skills_disclosure;
 mod startup_port;
 mod startup_readiness;
+mod steward_direction_failure;
 mod steward_interrupted_queue;
 mod steward_presentation;
 mod steward_results;
@@ -156,6 +174,7 @@ mod tools_effects;
 mod turn;
 mod turn_continuation;
 mod turn_faults;
+mod unadmitted_stop;
 mod unicode_delivery;
 mod update_channels;
 mod update_discovery;
@@ -188,6 +207,7 @@ mod cli_project_folder;
 mod data_perf;
 mod delegate_followup;
 mod delegate_host_lost;
+mod deliverables;
 mod mac_app_update;
 mod memory_instructions;
 mod memory_management;
@@ -222,3 +242,10 @@ mod session_titles;
 mod storage_correction_seed;
 
 mod web_speed;
+
+mod logs_request_completion;
+mod structured_logs;
+
+mod outbound_http;
+
+mod trace_spans;

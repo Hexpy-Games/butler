@@ -73,20 +73,12 @@ test("refusal reasons: model, catalog MIME list (gif counts as png), inline byte
   expect(imageRefusal({ name: "a.webp", type: "image/webp", size: 10 ** 9 }, unlimited)).toBeNull();
 });
 
-test("picker accept excludes image MIME types unless the model supports images", () => {
+test("picker accepts all files and filters images only for image-capable models", () => {
   const allowed = composerImagePolicy(model({ image_input_support: "supported" }));
   expect(attachmentPickerFilter("files", allowed)).toEqual({ filter: "all-files" });
 
   const textOnly = composerImagePolicy(model({ image_input_support: "unsupported" }));
-  const files = attachmentPickerFilter("files", textOnly);
-  expect(files.filter).toBe("non-image");
-  const accept = files.accept?.split(",") ?? [];
-  expect(accept.length).toBeGreaterThan(0);
-  for (const blocked of ["image/*", "image/png", "image/jpeg", "image/webp", "image/gif", ".png", ".jpg", ".jpeg", ".webp", ".gif"]) {
-    expect(accept).not.toContain(blocked);
-  }
-  expect(accept).toContain(".pdf");
-  expect(accept).toContain("text/*");
+  expect(attachmentPickerFilter("files", textOnly)).toEqual({ filter: "all-files" });
 
   const limited = composerImagePolicy(model({
     image_input_support: "supported", image_accepted_mime_types: ["image/png", "image/jpeg"],
@@ -98,8 +90,8 @@ test("picker accept excludes image MIME types unless the model supports images",
     filter: "images", accept: "image/png,image/jpeg,image/webp,image/gif",
   });
   for (const blocked of [textOnly, composerImagePolicy(model())]) {
-    expect(attachmentPickerFilter("files", blocked).filter).toBe("non-image");
-    expect(attachmentPickerFilter("images", blocked).filter).toBe("non-image");
+    expect(attachmentPickerFilter("files", blocked)).toEqual({ filter: "all-files" });
+    expect(attachmentPickerFilter("images", blocked)).toEqual({ filter: "all-files" });
   }
 });
 

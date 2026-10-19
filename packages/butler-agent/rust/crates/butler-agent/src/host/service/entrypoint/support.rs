@@ -10,7 +10,7 @@ use crate::host::service::shutdown_trace::measure;
 use crate::host::{AgentRuntime, ServiceConfiguration, SystemIdentity};
 
 pub(super) async fn deliver_parent_results(
-    client: &reqwest::Client,
+    client: &butler_log::http::Client,
     repository: &butler_turn::btcc::SqliteSubsessionRepository,
     base: &str,
     auth: &butler_gateway::gateway::LocalAuthConfig,
@@ -257,6 +257,7 @@ pub(super) async fn open_runtime(
         AgentRuntime::open(
             RuntimePaths {
                 data_root: config.data_root.clone(),
+                requested_data_root: config.requested_data_root.clone(),
                 installation_root: config.installation.root().to_path_buf(),
                 executable_path: config.installation.executable().to_path_buf(),
                 resource_root: config.installation.resources().to_path_buf(),

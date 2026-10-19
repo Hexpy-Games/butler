@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::time::SystemTime;
 
-const FILE: &str = "sandbox-mountns-probe.json";
+const FILE: &str = crate::data_paths::SANDBOX_PROBE;
 
 #[derive(Serialize, Deserialize, PartialEq)]
 struct Key {

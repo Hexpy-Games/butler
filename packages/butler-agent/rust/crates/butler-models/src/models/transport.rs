@@ -1,7 +1,9 @@
 mod sse;
 mod timing;
 
-use reqwest::{Client, RequestBuilder, Response};
+use butler_log::http::Client;
+use butler_log::http::RequestBuilder;
+use reqwest::Response;
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
@@ -43,6 +45,7 @@ pub(super) enum GuardStart {
     AfterAdmission,
 }
 
+#[derive(Debug)]
 enum TransportError {
     Admission(ModelRoundError),
     Provider(Box<ProviderRequestError>),
@@ -129,7 +132,7 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
                 })?;
                 trace.start().await.map_err(TransportError::Admission)?;
                 let result = send_attempt(
-                    current,
+                    trace.http_request(current, provider, attempt),
                     provider,
                     api,
                     (quota, clock),
@@ -335,6 +338,13 @@ fn with_receipt(
 }
 
 /// Waits `delay_ms` before a retry, unless the request is cancelled.
+#[tracing::instrument(
+    name = "retry.wait",
+    level = "warn",
+    skip_all,
+    fields(delay_ms, provider, api),
+    err(Debug)
+)]
 async fn before_retry(
     progress: &super::request_guard::RequestProgress,
     delay_ms: f64,
@@ -419,8 +429,8 @@ async fn checked(
 }
 
 pub fn provider_http_client() -> Result<Client, reqwest::Error> {
-    Client::builder()
-        .redirect(reqwest::redirect::Policy::limited(20))
+    butler_log::http::external(butler_log::http::Purpose::new("model"))
+        .redirect(butler_log::http::RedirectPolicy::limited(20))
         .build()
 }
 

@@ -19,6 +19,8 @@ where
     T: Send + 'static,
     F: FnOnce(&mut Connection) -> StorageResult<T> + Send + 'static,
 {
+    // Barriers own their transactions after draining the preceding batch.
+    let inspect = inspect || barrier;
     let started = Instant::now();
     let timing = crate::gateway::command_timing::CommandTiming::new("app_sqlite_operation");
     timing.mark(std::any::type_name::<F>());

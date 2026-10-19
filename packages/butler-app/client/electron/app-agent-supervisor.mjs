@@ -18,6 +18,7 @@ import {
   selectReplacementInstance,
   writeAgentStopIntent,
 } from "./app-agent-stop-intent.mjs";
+import { killOwnedProcessGroup } from "./butler-platform/process-group.mjs";
 
 export const APP_LOCAL_AUTH_SCHEMA = "butler.app-local-agent-auth.v1";
 
@@ -41,6 +42,14 @@ export function readAppLocalAuth({ butlerData }) {
   };
 }
 
+/**
+ * The Agent's full reset journal. While it exists the Agent may still move
+ * the data folder away and then writes a new token itself.
+ */
+export function fullResetPending({ butlerData }) {
+  return existsSync(join(butlerData, "state", "full-reset.json"));
+}
+
 export function prepareAppLocalAuth({
   butlerData,
   now = () => new Date(),
@@ -49,6 +58,8 @@ export function prepareAppLocalAuth({
   const path = appLocalAuthPath(butlerData);
   const existing = readAppLocalAuth({ butlerData });
   if (existing) return existing;
+  // Nothing is created in a data folder being reset; the token is read once the Agent writes it.
+  if (fullResetPending({ butlerData })) return { filePath: path, created: false, token: null };
   const token = generateToken();
   if (typeof token !== "string" || token.length < 32) {
     throw new Error("App local auth token generation failed");
@@ -125,6 +136,9 @@ export function createBundledAgentSupervisor({
   // SIGTERM → SIGKILL grace, the same as the CLI/MCP controllers: an Agent
   // still draining an announced stop exits 0 by itself at 6 s (#244).
   killTimeoutMs = AGENT_STOP_KILL_TIMEOUT_MS,
+  // Only the tree this supervisor spawned; never a name pattern.
+  terminateOwnedTree = killOwnedProcessGroup,
+  log = (line) => console.error(line),
   probeTimeoutMs = 2000,
   stdio = "inherit",
   onUnexpectedExit = () => {},
@@ -517,11 +531,11 @@ export function createBundledAgentSupervisor({
     const exited = wait ? new Promise((resolve) => stopping.once("exit", (code, signal) => resolve({ code, signal }))) : null;
     const intent = recordAppStopIntent(stopping, reason);
     if (preserveWork) {
-      if (!activeGateway?.foregroundHost || !stopping.stdin?.writable) {
-        throw new Error("foreground_graceful_stop_unavailable");
-      }
       // EOF is the portable App-owned graceful request. Windows kill() is not.
-      stopping.stdin.end();
+      if (activeGateway?.foregroundHost === true && stopping.stdin?.writable === true) stopping.stdin.end();
+      else if (!deliverSignal(stopping, "SIGTERM") && intent) safeRetractStopIntent(intent);
+      // The stop always ends: an Agent that ignores it past the grace is terminated.
+      shutdownKillTimer = setKillTimer(() => forceTerminate(stopping, killTimeoutMs), killTimeoutMs);
     } else {
       // Non-Quit controllers retain their existing signal/deadline policy.
       if (!deliverSignal(stopping, "SIGTERM") && intent) safeRetractStopIntent(intent);
@@ -837,6 +851,13 @@ export function createBundledAgentSupervisor({
     return changed;
   }
 
+  function forceTerminate(target, waitedMs) {
+    if (child !== target || typeof target.pid !== "number") return;
+    log(`agent did not stop in ${waitedMs} ms; terminating pid ${target.pid}`);
+    try { terminateOwnedTree(target.pid); } catch { /* The direct kill below still applies. */ }
+    deliverSignal(target, "SIGKILL");
+  }
+
   function clearShutdownTimer() {
     if (!shutdownKillTimer) return;
     clearKillTimer(shutdownKillTimer);
@@ -886,9 +907,13 @@ export function createBundledAgentSupervisor({
     if (!healthy) {
       return { healthy: false, ready: false, timedOut: health.timedOut };
     }
-    const readiness = await runBoundedProbe(() =>
+    let readiness = await runBoundedProbe(() =>
       readinessCheck(localAuth, activeGateway, portOverride),
     );
+    // The Agent may have written a new token (a reset) after health passed.
+    if (!readiness.value && reloadLocalAuth()) {
+      readiness = await runBoundedProbe(() => readinessCheck(localAuth, activeGateway, portOverride));
+    }
     return {
       healthy: true,
       ready: readiness.value,

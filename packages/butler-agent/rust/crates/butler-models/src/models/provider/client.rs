@@ -3,8 +3,8 @@ mod dispatch;
 
 use std::sync::Arc;
 
+use butler_log::http::Client;
 use bytes::Bytes;
-use reqwest::Client;
 
 use butler_turn::btcc::{ModelRoundError, ModelRoundPort, ModelRoundRequest, ModelRoundResult};
 
@@ -27,6 +27,7 @@ struct PreparedResponse {
     continuation: Option<super::continuation::LegacyProjection>,
     identity: Option<serde_json::Value>,
     prefix: serde_json::Value,
+    thinking_binding: Option<super::anthropic_thinking::Binding>,
 }
 
 pub struct ModelProvider {
@@ -174,6 +175,9 @@ impl ModelProvider {
             request,
             prepared.continuation,
         );
+        if let Some(binding) = &prepared.thinking_binding {
+            super::anthropic_thinking::bind(&mut result, binding);
+        }
         if result.usage.is_none() && matches!(prepared.carrier, serialize::Carrier::Chat { .. }) {
             result.usage = super::stream_usage::estimate(&result, &prepared.prefix, request.model);
         }
@@ -212,7 +216,7 @@ impl ModelProvider {
         mode: transport::ResponseMode,
         carrier: super::serialize::Carrier,
         body: Bytes,
-    ) -> reqwest::RequestBuilder {
+    ) -> butler_log::http::RequestBuilder {
         let mut http = self
             .client
             .post(super::route::stream_endpoint(&config.endpoint, mode))

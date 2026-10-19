@@ -397,7 +397,7 @@ async fn real_store_read_compile_and_recent_use_one_bounded_owner() {
             RecentConversationInput {
                 transport: "app",
                 runtime_session_id: "runtime",
-                model_ref: Some("google/gemini-3.5-flash"),
+                model_ref: Some("google/gemini-3.8-flash"),
                 event_id: Some("event-current"),
             },
             ContextAssembly::default(),
@@ -414,7 +414,7 @@ async fn real_store_read_compile_and_recent_use_one_bounded_owner() {
         RecentConversationInput {
             transport: "app",
             runtime_session_id: "runtime",
-            model_ref: Some("google/gemini-3.5-flash"),
+            model_ref: Some("google/gemini-3.8-flash"),
             event_id: Some("event-current"),
         },
         ContextAssembly::default(),

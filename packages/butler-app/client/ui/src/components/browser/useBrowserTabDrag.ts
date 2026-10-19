@@ -25,7 +25,8 @@ export function useBrowserTabDragHandler(tabs: BrowserTab[]) {
       const record = row && projectSpace(useButlerStore.getState().navigation).get(row.dataset.treeItem!);
       const target = record?.session && record.node.kind === "session" && source.tab.owner !== `conversation:${record.session.id}`
         ? { session: record.session.id, instance: row!.dataset.dragInstance!, title: record.title } : undefined;
-      useBrowserTabDrag.setState({ tabId: source.tab.id, owner: source.tab.owner, outside, target });
+      useBrowserTabDrag.setState({ tabId: source.tab.id, owner: source.tab.owner, outside, target,
+        x: event.clientX, y: event.clientY, title: source.tab.title, favicon: source.tab.favicon });
       const scroller = hit?.closest<HTMLElement>('[data-test-class="sidebar-scroll"]');
       if (scroller) scroll.update(event.clientY, scroller); else scroll.stop();
     };

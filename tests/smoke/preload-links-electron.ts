@@ -15,7 +15,7 @@ mkdirSync(evidence, { recursive: true });
 const dir = mkdtempSync(join(tmpdir(), "preload-links-"));
 const result = join(dir, "result.json");
 writeFileSync(join(dir, "package.json"), JSON.stringify({ main: "main.cjs" }));
-writeFileSync(join(dir, "fixture.html"), '<a id="web" href="https://example.invalid/path"><span>Web</span></a><a id="mail" href="mailto:fixture@example.invalid">Mail</a><div data-butler-link="https://example.invalid/plain"><span id="plain">Plain</span></div>');
+writeFileSync(join(dir, "fixture.html"), '<a id="web" href="https://example.invalid/path"><span>Web</span></a><a id="mail" href="mailto:fixture@example.invalid">Mail</a><div data-butler-link="https://example.invalid/plain"><span id="plain">Plain</span></div><span data-butler-link-target="external"><a id="account" href="https://example.invalid/account"><span>Account</span></a></span>');
 writeFileSync(join(dir, "main.cjs"), `
 const { app, BrowserWindow, ipcMain } = require('electron');
 const { writeFileSync } = require('node:fs');
@@ -38,7 +38,7 @@ app.whenReady().then(async () => {
     const security = await window.butlerApp.getSecurity();
     return { security, browserBridge: typeof window.butlerBrowser.call,
       prevented: [dispatch('#web span', 'click'), dispatch('#web span', 'contextmenu'),
-        dispatch('#plain', 'contextmenu'), dispatch('#mail', 'contextmenu')] };
+        dispatch('#plain', 'contextmenu'), dispatch('#mail', 'contextmenu'), dispatch('#account span', 'click')] };
   })()\`);
   // Round-trip IPC fences the preceding asynchronous link sends.
   await win.webContents.executeJavaScript('window.butlerApp.getSecurity()');
@@ -66,11 +66,12 @@ try {
   assert.equal(out.electron, "44.5.1");
   assert.deepEqual(out.security, { ok: true, data: { route: "getSecurity" } });
   assert.equal(out.browserBridge, "function");
-  assert.deepEqual(out.prevented, [true, true, true, false]);
+  assert.deepEqual(out.prevented, [true, true, true, false, true]);
   assert.deepEqual(out.calls, [
     ["open", "https://example.invalid/path", { x: 12, y: 34 }],
     ["menu", "https://example.invalid/path", { x: 12, y: 34 }],
     ["menu", "https://example.invalid/plain", { x: 12, y: 34 }],
+    ["external", "https://example.invalid/account", { x: 12, y: 34 }],
   ]);
   writeFileSync(join(evidence, "preload-links.json"), JSON.stringify(out, null, 2));
   console.log("Sandboxed preload bridge and link smoke passed");

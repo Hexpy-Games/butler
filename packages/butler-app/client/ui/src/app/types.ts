@@ -497,70 +497,9 @@ export interface AppInfoView {
   developer_mode_enabled: boolean;
 }
 
-export interface DeveloperLogSectionView {
-  id: string;
-  title: string;
-  region: string;
-  char_count: number;
-  content: string;
-}
-
-export interface DeveloperLogEntryView {
-  schema: "butler.developer-log.v1";
-  id: string;
-  kind: "model_turn" | "model_turn_error";
-  created_at: string;
-  session_id: string;
-  turn_id: string | null;
-  role: string;
-  transport: string;
-  route: {
-    session_id: string | null;
-    role: string | null;
-    reason: string | null;
-    project_id: string | null;
-  };
-  model: {
-    requested_model_ref: string;
-    provider_id: string | null;
-    runtime_adapter_id: string | null;
-  };
-  context: {
-    live_config_hash: string | null;
-    region_order: readonly string[];
-    sections: DeveloperLogSectionView[];
-    references: Array<{
-      kind: string;
-      id: string;
-      label?: string;
-      metadata?: Record<string, unknown>;
-    }>;
-    prompt_context: string;
-  };
-  request: {
-    input_text: string;
-    metadata: Record<string, unknown>;
-  };
-  response: {
-    text: string;
-    raw: unknown;
-  };
-  privacy: {
-    raw_text_included: true;
-    secrets_redacted: true;
-    local_only: true;
-  };
-}
-
-export interface DeveloperLogListView {
-  developer_mode_enabled: true;
-  entries: DeveloperLogEntryView[];
-  pagination: PaginationView;
-  generated_at: string;
-  raw_text_included: true;
-}
-
 export interface SettingsView {
+  /** Opaque id of the agent's data; it changes when Butler is reset. */
+  data_generation?: string;
   update_previews?: boolean;
   bridge_mode: "local" | "external";
   gateway_profile: "electron";
@@ -616,6 +555,11 @@ export interface SettingsView {
   translucent_sidebar: boolean;
   smart_grouping_enabled: boolean;
   diagnostics_enabled: boolean;
+  /** Structured log preset; developer mode only (agents before #1218 omit it). */
+  log_level?: "minimal" | "standard" | "detailed" | "full";
+  log_category_levels?: Record<string, string>;
+  /** The full-logging lease: when it ends and the preset it returns to. */
+  log_full?: { expires_at: string; previous: string } | null;
   desktop_notifications: DesktopNotificationSettingsView;
   desktop_tray_enabled: boolean;
   web_search: WebSearchSettingsView;
@@ -787,7 +731,8 @@ export type ModelCatalogState =
   | "unavailable"
   | "error";
 
-export type ComposerModelState = ModelCatalogState;
+// The composer has no error state: a failed read falls back, never locks the picker.
+export type ComposerModelState = Exclude<ModelCatalogState, "error">;
 
 export type ControlsLoadState = "loading" | "ready" | "error";
 
@@ -878,6 +823,10 @@ export interface ActiveChatView {
 }
 
 export interface MessageFileRef {
+  /** Workspace label the file was produced under; null on legacy rows. */
+  source_label?: string | null;
+  /** Handed to the user as a finished file (it is in the Library). */
+  deliverable?: boolean;
   file_id: string;
   kind: MessageFileKind;
   mime_type: string;
@@ -898,6 +847,8 @@ export interface ChangedFileLine {
 }
 
 export interface ChangedFileDetail {
+  /** The stored copy of this file on the same message, when it has one. */
+  file_id?: string | null;
   path: string;
   additions: number;
   deletions: number;
@@ -1572,6 +1523,16 @@ export interface SessionArtifactSummary {
   size_bytes?: number;
   created_at: string;
   open_action?: "route" | "unsupported" | string;
+  source_label?: string | null;
+  deliverable?: boolean;
+  /** Library versions of a deliverable, newest first. */
+  revisions?: ArtifactRevision[];
+}
+
+export interface ArtifactRevision {
+  file: MessageFileRef;
+  message?: string | null;
+  capturedAt: string;
 }
 
 export interface AutomationTargetSummary {
@@ -1777,6 +1738,8 @@ export interface AutomationSummary {
   next_run_at?: string | null;
   /** The access the schedule's runs get; it never changes the target conversation's mode. */
   access_mode: AccessMode;
+  /** The schedule's own model; absent or null means none is set and runs follow the target chat's model. An update that omits it or sends null leaves it unchanged. */
+  model?: string | null;
 }
 
 export interface AutomationRunSummary {
@@ -1784,6 +1747,8 @@ export interface AutomationRunSummary {
   state: string;
   safe_error_code?: string;
   started_at: string;
+  /** The turn the run started, once it started one. */
+  turn_id?: string;
 }
 
 export interface SessionOption {

@@ -8,7 +8,7 @@ use serde_json::Value;
 use std::{path::Path, time::Duration};
 
 pub(super) struct Client {
-    http: reqwest::Client,
+    http: butler_log::http::Client,
     base: String,
     token: std::sync::Arc<str>,
     admin: String,
@@ -19,9 +19,9 @@ impl Client {
         let app = AppServiceConfiguration::capture(root);
         let gateway = app.gateway_config();
         Ok(Self {
-            http: reqwest::Client::builder()
+            http: butler_log::http::loopback()
                 .no_proxy()
-                .redirect(reqwest::redirect::Policy::none())
+                .redirect(butler_log::http::RedirectPolicy::none())
                 .timeout(Duration::from_secs(30))
                 .build()
                 .map_err(|_| unavailable())?,

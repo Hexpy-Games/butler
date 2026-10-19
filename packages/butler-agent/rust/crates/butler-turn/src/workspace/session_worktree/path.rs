@@ -166,7 +166,7 @@ pub(super) fn deterministic_target(
     project: Option<&str>,
 ) -> std::io::Result<String> {
     let data = canonical_path(&data.to_string_lossy())?;
-    let worktrees = data.join("worktrees");
+    let worktrees = data.join(butler_platform::data_paths::WORKTREES);
     let root = worktrees.join("sessions");
     let mut hasher = Sha256::new();
     hasher.update(session.as_bytes());
@@ -193,7 +193,7 @@ pub(super) fn deterministic_target(
 pub(super) fn ensure_target_root(data: &Path, target: &str) -> std::io::Result<()> {
     validate_target_root(data, target)?;
     let data = canonical_path(&data.to_string_lossy())?;
-    let worktrees = data.join("worktrees");
+    let worktrees = data.join(butler_platform::data_paths::WORKTREES);
     let root = worktrees.join("sessions");
     std::fs::create_dir_all(&root)?;
     let actual = canonical_path(&root.to_string_lossy())?;
@@ -206,7 +206,7 @@ pub(super) fn ensure_target_root(data: &Path, target: &str) -> std::io::Result<(
 pub(super) fn validate_target_root(data: &Path, target: &str) -> std::io::Result<()> {
     let data = canonical_path(&data.to_string_lossy())?;
     let target = PathBuf::from(target);
-    let worktrees = data.join("worktrees");
+    let worktrees = data.join(butler_platform::data_paths::WORKTREES);
     let root = worktrees.join("sessions");
     if !target.starts_with(&data) || target == data {
         return Err(std::io::Error::other("target escape"));

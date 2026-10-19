@@ -5,11 +5,11 @@ use butler_platform::sqlite;
 pub(super) fn start(db: &rusqlite::Connection) -> StorageResult<Option<sqlite::CheckpointOwner>> {
     let observer = (command_timings() || super::metrics::enabled())
         .then_some(observe as sqlite::CheckpointObserver);
-    sqlite::CheckpointOwner::start(db, observer).map_err(error)
+    sqlite::CheckpointOwner::start(db, "App", observer).map_err(error)
 }
 
 fn command_timings() -> bool {
-    std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref() == Some(std::ffi::OsStr::new("1"))
+    crate::gateway::command_timing::CommandTiming::enabled()
 }
 
 pub(super) fn close(owner: Option<sqlite::CheckpointOwner>) -> StorageResult<()> {
@@ -29,9 +29,9 @@ fn observe(event: sqlite::CheckpointEvent) {
         crate::gateway::command_timing::CommandTiming::report_duration(
             "app_sqlite_checkpoint",
             if succeeded {
-                "background_passive_finished"
+                "background_index_finished"
             } else {
-                "background_passive_failed"
+                "background_index_failed"
             },
             elapsed,
         );

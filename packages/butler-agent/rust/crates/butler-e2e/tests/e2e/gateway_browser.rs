@@ -336,6 +336,27 @@ async fn sec_07_message_files_never_run_as_gateway_pages() -> Result<(), Harness
     let served = s.gw.raw(reqwest::Method::GET, &path, &[]).await?;
     assert_sandboxed(served, "image/svg+xml", svg).await?;
 
+    for (name, declared, stored, bytes) in [
+        (
+            "tool.exe",
+            "application/x-msdownload",
+            "application/x-msdownload",
+            b"MZ\x90\x00".as_slice(),
+        ),
+        (
+            "fake.pdf",
+            "application/pdf",
+            "application/octet-stream",
+            b"not a pdf\0\x01".as_slice(),
+        ),
+    ] {
+        let uploaded = s.gw.upload(name, declared, bytes, Some("general")).await?;
+        assert_eq!(uploaded.status, 201, "{}", uploaded.text);
+        let path = uploaded.data()["file"]["url"].as_str().unwrap().to_owned();
+        let served = s.gw.raw(reqwest::Method::GET, &path, &[]).await?;
+        assert_sandboxed(served, stored, bytes).await?;
+    }
+
     let pdf = b"%PDF-1.4\n%%EOF\n";
     let report =
         s.gw.upload("report.pdf", "application/pdf", pdf, Some("general"))
@@ -412,3 +433,5 @@ async fn assert_sandboxed(
     assert_eq!(response.bytes().await?.to_vec(), bytes);
     Ok(())
 }
+
+mod routing;

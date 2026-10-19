@@ -2,10 +2,10 @@ import type { SettingsSectionId } from "@/app/types.ts";
 import { AboutSettings } from "./AboutSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { ArchivesSettings } from "./ArchivesSettings";
-import { DeveloperLogsSettings } from "./DeveloperLogsSettings";
 import { GeneralSettings } from "./GeneralSettings";
 import { MemorySettings } from "./MemorySettings";
 import { HooksSettings } from "./HooksSettings";
+import { LogsSettings } from "./logs/LogsSettings";
 import { McpSettings } from "./McpSettings";
 import { ModelsSettings } from "./ModelsSettings";
 import { PersonalizationSettings } from "./PersonalizationSettings";
@@ -37,7 +37,7 @@ export function SettingsDetailContent({
       {activeSection === "skills" && <SkillsSettings />}
       {activeSection === "usage" && <UsageSettings />}
       {activeSection === "logs" && developerModeEnabled && (
-        <DeveloperLogsSettings />
+        <LogsSettings />
       )}
       {activeSection === "browser" && <BrowserSettings />}
       {activeSection === "security" && <SecuritySettings />}

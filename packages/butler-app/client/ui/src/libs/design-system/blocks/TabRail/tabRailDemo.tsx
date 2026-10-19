@@ -7,6 +7,7 @@ import { Typo } from "../../components/Typo";
 import { demoCard, type DemoState } from "../LiveTabCard/liveTabDemo";
 import { ComposerCard } from "../ComposerCard";
 import { ConversationScroll, ConversationShell, MessageListSurface } from "../ConversationShell";
+import { MarkdownContent } from "../MarkdownContent";
 import { MessageRow } from "../MessageRow";
 import type { TabRailLabels, TabRailTab } from "./TabRail";
 import { TabRail, type TabRailProps } from "./TabRail";
@@ -48,8 +49,8 @@ export function InConversation({ locale, states = SET_A }: { locale: AppLocale; 
       <ConversationShell composerReserve={72} railView="demo" rail={<Rail locale={locale} states={states} view="demo" />}>
         <ConversationScroll>
           <MessageListSurface>
-            <MessageRow index={0} role="user"><Typo.Body as="p">{user}</Typo.Body></MessageRow>
-            <MessageRow index={1} role="assistant"><Typo.Body as="p">{reply}</Typo.Body></MessageRow>
+            <MessageRow index={0} role="user"><Typo.Text as="div" wrap="pre">{user}</Typo.Text></MessageRow>
+            <MessageRow index={1} role="assistant"><MarkdownContent><p>{reply}</p></MarkdownContent></MessageRow>
           </MessageListSurface>
         </ConversationScroll>
         <ComposerCard floating><Typo.Body as="p" tone="secondary">{prompt}</Typo.Body></ComposerCard>

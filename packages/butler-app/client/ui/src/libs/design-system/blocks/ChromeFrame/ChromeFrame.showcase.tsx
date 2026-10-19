@@ -3,6 +3,7 @@ import { Folder, MessageSquare, PencilLine, Search } from "../../components/Icon
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { KeyValueRow } from "../KeyValueRow";
+import { MarkdownContent } from "../MarkdownContent";
 import { MessageRow } from "../MessageRow";
 import { NavRow } from "../NavRow";
 import { ChromeFrame } from "./ChromeFrame";
@@ -53,8 +54,8 @@ function Frame({ locale, rightOpen, leftCollapsed }: ShowcaseRenderContext & { r
       }
     >
       <Stack gap="md">
-        <MessageRow role="user"><Typo.Body as="p">{text.user}</Typo.Body></MessageRow>
-        <MessageRow role="assistant"><Typo.Body as="p">{text.assistant}</Typo.Body></MessageRow>
+        <MessageRow role="user"><Typo.Text as="div" wrap="pre">{text.user}</Typo.Text></MessageRow>
+        <MessageRow role="assistant"><MarkdownContent><p>{text.assistant}</p></MarkdownContent></MessageRow>
       </Stack>
     </ChromeFrame>
   );

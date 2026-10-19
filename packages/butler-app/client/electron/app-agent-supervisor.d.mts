@@ -23,6 +23,9 @@ export function readAppLocalAuth(input: { butlerData: string }): {
   token: string;
 } | null;
 
+export function fullResetPending(input: { butlerData: string }): boolean;
+
+/** `token` is null only while a full reset is pending and the Agent has not written one yet. */
 export function prepareAppLocalAuth(input: {
   butlerData: string;
   now?: () => Date;
@@ -30,7 +33,7 @@ export function prepareAppLocalAuth(input: {
 }): {
   filePath: string;
   created: boolean;
-  token: string;
+  token: string | null;
 };
 
 export function buildBundledAgentSupervisorEnv(input: {
@@ -79,11 +82,11 @@ export function createBundledAgentSupervisor(input: {
     stdin?: { writable: boolean; end(): unknown };
   };
   healthCheck: (
-    localAuth?: { filePath: string; created: boolean; token: string } | null,
+    localAuth?: { filePath: string; created: boolean; token: string | null } | null,
     portOverride?: number | null,
   ) => boolean | Promise<boolean>;
   readinessCheck?: (
-    localAuth?: { filePath: string; created: boolean; token: string } | null,
+    localAuth?: { filePath: string; created: boolean; token: string | null } | null,
     activeGateway?: Record<string, unknown> | null,
     portOverride?: number | null,
   ) => boolean | Promise<boolean>;
@@ -108,6 +111,8 @@ export function createBundledAgentSupervisor(input: {
   startupTimeoutMs?: number | null;
   startupDeadline?: () => number;
   killTimeoutMs?: number;
+  terminateOwnedTree?: (pid: number) => void;
+  log?: (line: string) => void;
   probeTimeoutMs?: number;
   stdio?: string;
   onGatewayStarting?: (gateway: {

@@ -21,6 +21,8 @@ const MAX_BYTES: u64 = 10 * 1024 * 1024;
 #[derive(Clone, Debug, Serialize)]
 pub(super) struct Artifact {
     pub path: String,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub deliverable: bool,
     pub artifact_kind: &'static str,
     pub size_bytes: u64,
     pub modified_at: String,
@@ -167,12 +169,7 @@ fn declared(
             relative.to_string_lossy().replace('\\', "/")
         );
         if seen.insert(label.clone()) {
-            artifacts.push(Artifact {
-                path: label,
-                artifact_kind: kind(&published),
-                size_bytes: stat.len(),
-                modified_at: iso(stat.modified().unwrap_or(std::time::UNIX_EPOCH)),
-            });
+            artifacts.push(declared_file(&published, &stat, label));
         }
         if artifacts.len() >= MAX_ARTIFACTS {
             break;
@@ -388,6 +385,7 @@ fn visit(
 
 fn artifact(file: &File) -> Artifact {
     Artifact {
+        deliverable: false,
         path: format!("artifacts/generated/{}", file.relative),
         artifact_kind: kind(&file.path),
         size_bytes: file.size,
@@ -439,4 +437,14 @@ fn same_file(left: &fs::Metadata, right: &fs::Metadata) -> bool {
     left_identity.id == right_identity.id
         && left.len() == right.len()
         && left_identity.modified == right_identity.modified
+}
+
+fn declared_file(path: &Path, stat: &fs::Metadata, label: String) -> Artifact {
+    Artifact {
+        deliverable: false,
+        path: label,
+        artifact_kind: kind(path),
+        size_bytes: stat.len(),
+        modified_at: iso(stat.modified().unwrap_or(std::time::UNIX_EPOCH)),
+    }
 }

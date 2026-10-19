@@ -8,13 +8,13 @@ use crate::host::ActiveAppEndpoint;
 
 pub(crate) struct AppWorkerProfileReader {
     endpoint: std::sync::Arc<ActiveAppEndpoint>,
-    client: reqwest::Client,
+    client: butler_log::http::Client,
 }
 
 impl AppWorkerProfileReader {
     pub(crate) fn new(endpoint: std::sync::Arc<ActiveAppEndpoint>) -> Result<Self, BtccError> {
-        let client = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
+        let client = butler_log::http::loopback()
+            .redirect(butler_log::http::RedirectPolicy::none())
             .build()
             .map_err(|source| error("worker_profile_reader_unavailable").with_source(source))?;
         Ok(Self { endpoint, client })

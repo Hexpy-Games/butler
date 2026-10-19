@@ -61,37 +61,7 @@ impl LegacyHot {
         let body = if text.starts_with("**") {
             text.to_owned()
         } else {
-            let prompt = format!(
-                "Analyze the following conversation and summarize it in the format below. Omit any sections that don't apply.\n\n**Task**: Work performed, decisions made, completed/incomplete items (dev/file/search etc.)\n**Learning**: New concepts learned, important insights\n**Chat**: Core of casual conversation, exchange of opinions\n**Preference**: User preferences/tastes/tendencies newly revealed in this conversation (exclude recurring ones)\n\nEach section in 1-2 lines max. Omit the section entirely if empty.\n\nConversation:\n{text}"
-            );
-            let root = self.data_root.to_string_lossy().into_owned();
-            let summary = self.provider.run_prompt(
-                ProviderPromptRequest {
-                    prompt: &prompt,
-                    model: None,
-                    reasoning_effort: None,
-                    instructions: None,
-                    response_format: None,
-                    cache_scope: None,
-                    cache_boundary: None,
-                    cancellation: cancellation.clone(),
-                    attachments: &[],
-                    butler_data: Some(&root),
-                    usage_attribution: None,
-                    stream_observer: None,
-                    provider_retry_attempts: None,
-                },
-                ProviderPromptLifecycle::none(),
-            );
-            tokio::time::timeout(Duration::from_secs(120), summary)
-                .await
-                .map_err(|source| {
-                    crate::host::HostError::new("legacy_hot_summary_timeout").with_source(source)
-                })?
-                .map_err(|source| {
-                    crate::host::HostError::new("legacy_hot_summary_failed").with_source(source)
-                })?
-                .text
+            self.summarize(text, cancellation).await?
         };
         if trim_js_whitespace(&body).is_empty() {
             return Err("hot_cache_entry_empty".into());
@@ -338,4 +308,46 @@ fn contains_secret(value: &str) -> bool {
         )
     });
     SECRET.is_match(value)
+}
+
+impl LegacyHot {
+    async fn summarize(
+        &self,
+        text: &str,
+        cancellation: &CancellationToken,
+    ) -> Result<String, crate::host::HostError> {
+        let prompt = format!(
+            "Analyze the following conversation and summarize it in the format below. Omit any sections that don't apply.\n\n**Task**: Work performed, decisions made, completed/incomplete items (dev/file/search etc.)\n**Learning**: New concepts learned, important insights\n**Chat**: Core of casual conversation, exchange of opinions\n**Preference**: User preferences/tastes/tendencies newly revealed in this conversation (exclude recurring ones)\n\nEach section in 1-2 lines max. Omit the section entirely if empty.\n\nConversation:\n{text}"
+        );
+        let root = self.data_root.to_string_lossy().into_owned();
+        let attribution =
+            butler_models::models::PromptUsageAttribution::for_phase("memory_extraction");
+        let summary = self.provider.run_prompt(
+            ProviderPromptRequest {
+                prompt: &prompt,
+                model: None,
+                reasoning_effort: None,
+                instructions: None,
+                response_format: None,
+                cache_scope: None,
+                cache_boundary: None,
+                cancellation: cancellation.clone(),
+                attachments: &[],
+                butler_data: Some(&root),
+                usage_attribution: Some(&attribution),
+                stream_observer: None,
+                provider_retry_attempts: None,
+            },
+            ProviderPromptLifecycle::none(),
+        );
+        Ok(tokio::time::timeout(Duration::from_secs(120), summary)
+            .await
+            .map_err(|source| {
+                crate::host::HostError::new("legacy_hot_summary_timeout").with_source(source)
+            })?
+            .map_err(|source| {
+                crate::host::HostError::new("legacy_hot_summary_failed").with_source(source)
+            })?
+            .text)
+    }
 }

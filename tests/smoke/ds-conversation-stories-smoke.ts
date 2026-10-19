@@ -203,6 +203,9 @@ async function checkActivityTurns(page: Page, baseUrl: string): Promise<void> {
   const live = running.locator("[data-ds-theme]").first();
   assert(await live.locator('[data-test-class="assistant-footer"]').count() === 0, "live turn defers footer");
   assert(await live.getByRole("button", { name: /Activity/ }).count() === 0, "no completed summary while running");
+  const tops = await Promise.all([live.getByRole("button", { name: /Current/ }), live.getByText("The activity stays attached to the answer."),
+    live.getByText("Generating answer", { exact: true })].map(async (target) => (await target.boundingBox())!.y));
+  assert(tops[0]! < tops[1]! && tops[1]! < tops[2]!, `running turn reads activity, answer, status: ${tops.join(",")}`);
   const completed = await openStory(page, baseUrl, "blocks/MessageRow", "Completed activity", "375");
   const frame = completed.locator("[data-ds-theme]").first();
   const summary = frame.getByRole("button", { name: /Activity/ });

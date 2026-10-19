@@ -202,6 +202,8 @@ def local_sources(root, path, source, seen, owner_input=False):
 
 
 def audit(root):
+    # Sources are followed by resolved path, so report them against the resolved root.
+    root = root.resolve()
     findings, jobs = [], []
     for workflow in sorted((root / '.github/workflows').glob('*.y*ml')):
         source = workflow.read_text()

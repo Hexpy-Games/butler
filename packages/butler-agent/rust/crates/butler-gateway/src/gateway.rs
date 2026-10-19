@@ -7,6 +7,8 @@
 mod application;
 pub use application::AppAssetCommand;
 pub use application::storage::history::{AppHistoryCommand, AppHistoryQuery};
+#[cfg(feature = "test-support")]
+pub use application::storage::testing as storage_testing;
 mod file_watch;
 pub use file_watch::FileChangeWatch;
 mod auth;
@@ -41,7 +43,7 @@ pub use crate::gateway::inbound_queue::{
 };
 pub use crate::gateway::message_file_store::AppMessageFiles;
 pub use application::settings::{
-    DiagnosticsSettingsReader, command_sandbox_enabled, diagnostics_enabled_readonly,
+    command_sandbox_enabled, diagnostics_enabled_readonly, producer_log_config, startup_log_config,
     stored_ui_language_readonly,
 };
 pub use application::{
@@ -52,8 +54,8 @@ pub use application::{
     AppBranchSummaryInput, AppCancellation, AppChatKind, AppChatSummary, AppContextBudgetFacts,
     AppContextConfigurationFacts, AppContextReadFacts, AppContextReadPort, AppContextReadQuery,
     AppContextUsage, AppCreateProjectRequest, AppCreateProjectResult, AppCreateSessionInput,
-    AppCreateSessionRequest, AppCreateSessionResult, AppDeveloperLogsQuery, AppExecutorReadiness,
-    AppFileDownload, AppFileUpload, AppFileWrite, AppGrantRef, AppGrantView, AppIdentityClock,
+    AppCreateSessionRequest, AppCreateSessionResult, AppExecutorReadiness, AppFileDownload,
+    AppFileUpload, AppFileWrite, AppGrantRef, AppGrantView, AppIdentityClock,
     AppLedgerSourceRequest, AppLibraryChange, AppLibraryCommand, AppLibraryQuery, AppMemoryCommand,
     AppMemoryPort, AppMessageFileSnapshot, AppMessageFileStorage, AppModelCatalogCommand,
     AppModelCatalogPort, AppModelFallbackFacts, AppModelMetadata, AppMonitorPage,
@@ -152,6 +154,9 @@ pub use session_controls_contract::GatewaySessionControls;
 ///
 /// Every method is required. Composition cannot replace absent persistence or
 /// BTCC readiness with process-liveness guesses or an optional callback.
+mod data_reset;
+pub use data_reset::{AppDataResetPort, FullResetRequest, ResetNonce};
+
 pub trait GatewayApplication:
     GatewayMutationCommands
     + GatewayProjectDashboard
@@ -163,6 +168,12 @@ pub trait GatewayApplication:
     + Sync
     + 'static
 {
+    fn data_reset(&self) -> Option<Arc<dyn AppDataResetPort>> {
+        None
+    }
+    fn accept_full_reset(&self, _input: serde_json::Value) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     /// Read a bounded page of saved browser items.
     fn library(&self, command: AppLibraryCommand) -> ApplicationFuture<serde_json::Value> {
         let _ = command;
@@ -255,10 +266,6 @@ pub trait GatewayApplication:
         chat_id: String,
     ) -> ApplicationFuture<AppWorkStatusConversationFact>;
     fn list_system_events(&self, page: AppMonitorPage) -> ApplicationFuture<serde_json::Value>;
-    fn list_developer_logs(
-        &self,
-        query: AppDeveloperLogsQuery,
-    ) -> ApplicationFuture<serde_json::Value>;
     fn read_app_info(&self) -> ApplicationFuture<serde_json::Value>;
     fn model_catalog(
         &self,
@@ -469,3 +476,10 @@ mod wallpaper_store;
 mod wallpapers;
 
 pub use application::project_folder;
+
+#[cfg(feature = "test-support")]
+pub fn http_route_templates() -> Vec<&'static str> {
+    http::route_templates()
+}
+
+pub use http::reset_browser_secret_keys;

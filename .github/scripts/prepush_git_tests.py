@@ -9,19 +9,19 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from prepush_tests import ROOT, prepush
+import prepush_tests
+from prepush_tests import ROOT, isolate_git, prepush
 
 
 class PrepushGitChecks(unittest.TestCase):
     def setUp(self):
+        isolate_git(self)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name) / 'main'
         self.root.mkdir()
         self.remote = Path(self.temp.name) / 'remote.git'
         self.git(self.root, 'init', '-q', '-b', 'ci/main-check')
-        self.git(self.root, 'config', 'user.name', 'Test')
-        self.git(self.root, 'config', 'user.email', 'test@example.invalid')
         files = ['.githooks/pre-push', 'scripts/prepush',
                  '.github/scripts/isolated.py', '.github/scripts/prepush.py',
                  '.github/scripts/branch-name.py', '.github/scripts/ci_rust_inputs.py',
@@ -103,8 +103,10 @@ class PrepushGitChecks(unittest.TestCase):
                    'import os, shutil, subprocess, tempfile; '
                    'assert not any(k.startswith("GIT_") for k in os.environ); '
                    'd=tempfile.mkdtemp(); subprocess.run(["git", "init", "-q", d], check=True); '
-                   'assert subprocess.check_output(["git", "-C", d, "rev-parse", '
-                   '"--show-toplevel"], text=True).strip() == d; '
+                   # macOS temp dirs are symlinks (/var -> /private/var); Git
+                   # reports the resolved path.
+                   'assert os.path.realpath(subprocess.check_output(["git", "-C", d, "rev-parse", '
+                   '"--show-toplevel"], text=True).strip()) == os.path.realpath(d); '
                    'shutil.rmtree(d); assert os.environ["HOME"] != os.environ["BUTLER_DATA"]']
         env = dict(os.environ, GIT_DIR=gitdir, GIT_WORK_TREE=str(self.linked),
                    GIT_INDEX_FILE=gitdir + '/index', GIT_COMMON_DIR=str(self.root / '.git'),
@@ -115,6 +117,28 @@ class PrepushGitChecks(unittest.TestCase):
                 f'HEAD {self.git(self.linked, "rev-parse", "HEAD").strip()} '
                 f'refs/heads/ci/exported {"0" * 40}\n'), cwd=self.linked, env=env, text=True)
         self.assertIn('prepush: PASS', result)
+
+    # test-category: security
+    def test_fixtures_never_touch_the_calling_repository(self):
+        # Hooks and `rebase --exec` in a linked worktree export GIT_DIR, and that
+        # worktree shares .git/config with every other worktree.
+        caller = Path(self.temp.name) / 'caller'
+        subprocess.run(['git', 'init', '-q', '-b', 'ci/caller', str(caller)], check=True)
+        subprocess.run(['git', '-C', str(caller), 'commit', '-q', '--allow-empty', '-m', 'caller'],
+                       check=True)
+        subprocess.run(['git', '-C', str(caller), 'worktree', 'add', '-q', '-b', 'ci/other',
+                        str(Path(self.temp.name) / 'caller-linked')], check=True)
+        config = caller / '.git/config'
+        before = (config.read_text(), self.git(caller, 'for-each-ref'))
+        fixtures = (prepush_tests.PrepushChecks('test_changed_paths_include_commits_staged_'
+                                                'unstaged_untracked_and_deletions'),
+                    PrepushGitChecks('test_detached_head_push_uses_destination_branch'))
+        with patch.dict(os.environ, GIT_DIR=str(caller / '.git/worktrees/caller-linked')):
+            for fixture in fixtures:
+                result = unittest.TestResult()
+                fixture.run(result)
+                self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
+        self.assertEqual((config.read_text(), self.git(caller, 'for-each-ref')), before)
 
     # test-category: pure-logic
     def test_shared_bare_config_does_not_break_linked_hook(self):

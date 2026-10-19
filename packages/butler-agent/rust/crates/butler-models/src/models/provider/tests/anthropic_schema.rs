@@ -140,8 +140,14 @@ fn validate_other_carriers(tools: &[ModelRoundTool], definitions: &[Value]) {
                 tool
             };
             assert_eq!(tool["name"], original["name"]);
-            assert_eq!(tool["parameters"], original["parameters"]);
-            validate_refs(&tool["parameters"], &tool["parameters"]);
+            if matches!(carrier, serialize::Carrier::Gemini) {
+                assert!(tool.get("parameters").is_none());
+                assert_eq!(tool["parametersJsonSchema"]["type"], "object");
+                validate_refs(&tool["parametersJsonSchema"], &tool["parametersJsonSchema"]);
+            } else {
+                assert_eq!(tool["parameters"], original["parameters"]);
+                validate_refs(&tool["parameters"], &tool["parameters"]);
+            }
         }
     }
 }

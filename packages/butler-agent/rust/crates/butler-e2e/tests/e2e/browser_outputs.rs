@@ -124,6 +124,11 @@ async fn published_outputs_are_isolated_deduplicated_and_revoked() -> Result<(),
     assert_eq!(client.get(traversal).send().await?.status(), 403);
     let (turn, _) = s.turn("general", "Again").await?;
     assert_eq!(result(&s, &turn)["new_blobs"], 0);
+    assert_eq!(
+        result(&s, &turn)["revision"],
+        1,
+        "Unchanged publication adds a reference, not a revision"
+    );
     assert_eq!(blob_count(&s.sandbox.data.join("outputs/blobs")), 2);
     s.restart().await?;
     assert_eq!(
@@ -131,12 +136,16 @@ async fn published_outputs_are_isolated_deduplicated_and_revoked() -> Result<(),
         200,
         "content survives restart"
     );
-    for _ in 0..5 {
+    for revision in 0..5 {
+        std::fs::write(
+            site.join("app.js"),
+            format!("document.title = 'Revision {revision}';"),
+        )?;
         let (turn, _) = s.turn("general", "Again").await?;
-        assert_eq!(result(&s, &turn)["new_blobs"], 0);
+        assert_eq!(result(&s, &turn)["new_blobs"], 1);
     }
     let revisions = s.gw.get(&view_path).await?;
-    assert_eq!(revisions.data()["revisions"], json!([3, 4, 5, 6, 7]));
+    assert_eq!(revisions.data()["revisions"], json!([2, 3, 4, 5, 6]));
     let fresh_url = revisions.data()["url"].as_str().unwrap().to_owned();
     assert_eq!(
         client.get(&url).send().await?.status(),

@@ -42,7 +42,9 @@ impl std::error::Error for FreshStorageError {}
 /// Whether `butler_data` is a pre-BTCC data folder the agent refuses to
 /// start on (and so must not write into).
 pub(crate) fn is_unsupported_legacy_data(butler_data: &Path) -> bool {
-    !butler_data.join("agent-runtime/btcc.sqlite").exists()
+    !butler_data
+        .join(butler_platform::data_paths::BTCC_DB)
+        .exists()
         && butler_data.join("app-server/butler-client.sqlite").exists()
 }
 
@@ -55,7 +57,7 @@ pub(crate) fn prepare_fresh_btcc_storage(
     if butler_data.join("app-server/butler-client.sqlite").exists() {
         return Err(FreshStorageError::ExistingData(butler_data.to_owned()));
     }
-    let path = butler_data.join("agent-runtime/btcc.sqlite");
+    let path = butler_data.join(butler_platform::data_paths::BTCC_DB);
     let fence = format!("native-service-pre-readiness:{}", std::process::id());
     let completed_at = butler_core::js_date::iso_from_system_time(SystemTime::now());
     let manifest_id = bootstrap_fresh_storage(&path, &fence, runtime_version, &completed_at)
@@ -69,7 +71,7 @@ pub(crate) fn prepare_btcc_storage(
     butler_data: &Path,
     runtime_version: &str,
 ) -> Result<FreshStorageBootstrap, FreshStorageError> {
-    let path = butler_data.join("agent-runtime/btcc.sqlite");
+    let path = butler_data.join(butler_platform::data_paths::BTCC_DB);
     if path.exists() {
         let manifest_id = begin_storage_startup(&path).map_err(FreshStorageError::Storage)?;
         return Ok(FreshStorageBootstrap { path, manifest_id });

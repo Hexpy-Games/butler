@@ -5,6 +5,7 @@ mod access;
 mod answer_blocks;
 mod answer_blocks_stream;
 pub(in crate::host::guided) use answer_blocks_stream::AnswerBlocksStream;
+mod deliver;
 mod discovery;
 mod dispatch;
 mod effect;
@@ -66,6 +67,7 @@ pub(crate) struct GuidedToolBinding {
     pub project_id: Option<String>,
     pub project_folder: Option<PathBuf>,
     pub project_sources: Vec<Value>,
+    pub attachment_files: Vec<PathBuf>,
     pub surface: Vec<ModelRoundTool>,
     pub authorized_names: HashSet<String>,
     pub visible_names: HashSet<String>,
@@ -161,7 +163,7 @@ pub(crate) struct GuidedTools {
     session_worktrees: butler_turn::workspace::SessionWorktrees,
     web_session: butler_runtime::web_access::WebSession,
     app_endpoint: Arc<crate::host::ActiveAppEndpoint>,
-    browser_http: OnceCell<reqwest::Client>,
+    browser_http: OnceCell<butler_log::http::Client>,
     binding: GuidedToolBinding,
     state: Mutex<State>,
     resume: OnceCell<Mutex<ResumePool>>,
@@ -289,6 +291,7 @@ impl GuidedTools {
                     | ToolName::WriteFile
                     | ToolName::OutputCheck
                     | ToolName::OutputPublish
+                    | ToolName::DeliverFiles
                     | ToolName::AnswerBlocks
                     | ToolName::EditFile
                     | ToolName::GrepFiles

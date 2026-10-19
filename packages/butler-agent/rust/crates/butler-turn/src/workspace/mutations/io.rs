@@ -313,8 +313,15 @@ fn atomic_replace(
     timing.mark("temporary_synced");
     verify_unchanged(prepared)?;
     timing.mark("unchanged_verified");
-    publish_temporary(prepared, temporary, observer)
-        .map_err(|error| mutation_io(prepared, temporary, &error))
+    let mut retry_failure = None;
+    let mut before_retry = || {
+        verify_unchanged(prepared).map_err(|failure| {
+            retry_failure = Some(failure);
+            std::io::Error::other("replacement snapshot changed")
+        })
+    };
+    publish_temporary(prepared, temporary, observer, &mut before_retry)
+        .map_err(|error| retry_failure.unwrap_or_else(|| mutation_io(prepared, temporary, &error)))
 }
 
 fn write_temporary(
@@ -346,9 +353,10 @@ fn publish_temporary(
     prepared: &Prepared,
     temporary: &Path,
     observer: &dyn CommitObserver,
+    before_retry: &mut dyn FnMut() -> std::io::Result<()>,
 ) -> std::io::Result<bool> {
     if prepared.before.exists {
-        fs::rename(temporary, &prepared.before.path.absolute)
+        secure_fs::replace_file(temporary, &prepared.before.path.absolute, before_retry)
             .map_err(|error| failure::inspect_io("rename", error))?;
         Ok(false)
     } else {

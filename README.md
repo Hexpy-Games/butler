@@ -72,7 +72,7 @@ Download Butler from the [0.1.0 preview.12 release](https://github.com/Hexpy-Gam
 Each file has a `.sha256` checksum, and `butler-0.1.0-preview.12-SHA256SUMS` lists them all.
 
 On macOS and Linux, Settings → Updates installs the new App and bundled Agent, then relaunches with the same data directory.
-**Receive preview versions** defaults to OFF. Turn it on to receive the newest stable or preview release.
+**Receive preview versions** is ON by default in preview builds and OFF in stable builds. When it is on, you receive the newest stable or preview release.
 After installing `0.1.0-preview.12`, later previews arrive through Settings → Updates when **Receive preview versions** is on. `butler --version` shows the exact version.
 Before updating to `0.1.0-preview.12`, quit Butler and copy `~/.butler`; its first launch rewrites the database once.
 The CLI shares this preference: `butler config set update.previews true` (or `false`); `butler status` shows it.
@@ -82,7 +82,7 @@ On first launch, choose the interface language on the welcome screen, accept the
 
 ### macOS first open
 
-macOS preview builds are signed but not notarized, so Gatekeeper shows a prompt on first open. Right-click **Butler → Open**, or choose **System Settings → Privacy & Security → Open Anyway** after trying to open it.
+macOS preview builds are signed but not notarized, so Gatekeeper shows a prompt on first open. Try to open Butler once, then choose **System Settings → Privacy & Security → Open Anyway** (works on every supported macOS version). On macOS 14 or earlier, right-click **Butler → Open** also works.
 
 ### Windows
 
@@ -142,4 +142,4 @@ To build Butler from source, run the checks or work on the Rust agent, see [CONT
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). Contributions are covered by the [CLA](CLA-v1.md). The Butler name and logo follow the [trademark policy](TRADEMARKS.md).

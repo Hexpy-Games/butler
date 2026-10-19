@@ -24,7 +24,7 @@ export function QuestionAnswerCard({ questions, answers = [], variant = "answere
   return <MessageRow role="user" data-slot="question-answer-card" {...props}>
     <Stack gap="sm">
       <Typo.Caption tone="tertiary">{labels[variant]}</Typo.Caption>
-      {variant === "message" ? <Typo.Body wrap="anywhere">{message}</Typo.Body> : questions.map((q) =>
+      {variant === "message" ? <Typo.Text as="div" wrap="anywhere">{message}</Typo.Text> : questions.map((q) =>
         <Stack key={q.id} gap="none"><Typo.Caption tone="tertiary">{q.header}</Typo.Caption>
           <Typo.Label wrap="anywhere">{variant === "skipped" ? labels.skipped : answerText(q, answers.find((a) => a.id === q.id)) || labels.skipped}</Typo.Label></Stack>)}
     </Stack>

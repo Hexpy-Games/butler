@@ -17,6 +17,9 @@ use butler_gateway::gateway::{ClaimedInboundEvent, InboundQueue, QueuedInboundEv
 use butler_turn::btcc::{Btcc, StopRequest, TurnOutcomeKind};
 use butler_turn::workspace::SessionBindingStore;
 
+/// The result summary of a child turn its parent cancelled.
+const CANCELLED_SUMMARY: &str = "Delegated work was cancelled by its parent.";
+
 struct Executed {
     delivered: usize,
     eligible_turn_id: Option<String>,
@@ -93,7 +96,10 @@ pub(super) fn eligible_for_claim(
     batch_sessions.insert(session)
 }
 
-pub(super) async fn one(item: ClaimedInboundEvent, deps: DispatchDependencies) -> IngressPoll {
+mod trace;
+pub(super) use trace::one;
+
+async fn one_traced(item: ClaimedInboundEvent, deps: DispatchDependencies) -> IngressPoll {
     let DispatchDependencies {
         shutdown,
         queue,
@@ -133,6 +139,7 @@ pub(super) async fn one(item: ClaimedInboundEvent, deps: DispatchDependencies) -
     match result {
         Ok(executed) => handled(&item, executed, &queue, &restart_handoff).await,
         Err(error) => {
+            tracing::error!(category = "turn", event = "turn.failed", error = %error, "Turn dispatch failed");
             let subsessions = subsessions.as_ref();
             let poll = failed(
                 &item,
@@ -194,9 +201,17 @@ async fn failed(
     } else {
         "runtime-interrupted"
     };
-    if let Some(poll) =
-        interrupted::settle_returning_child(item, queue, bindings, delivery, subsessions, status)
-            .await
+    let code = interrupted::child_end_code(item, error);
+    if let Some(poll) = interrupted::settle_closing_child(
+        item,
+        queue,
+        bindings,
+        delivery,
+        subsessions,
+        status,
+        code,
+    )
+    .await
     {
         return poll;
     }
@@ -362,7 +377,7 @@ async fn execute(
             .pointer("/metadata/kind")
             .and_then(serde_json::Value::as_str)
             == Some("final_result");
-        if !delivery.deliver(binding.session_id.clone(), action).await? {
+        if !trace::deliver(delivery, &binding.session_id, action).await? {
             return Err(super::IngressError::new(
                 "inbound_delivery_interrupted",
                 "App result delivery unavailable",
@@ -388,12 +403,7 @@ async fn complete_subsession_child(
         TurnOutcomeKind::Cancelled { .. } | TurnOutcomeKind::AlreadyCancelled { .. }
     ) {
         return subsessions
-            .complete_child(
-                session_id,
-                turn_id,
-                "cancelled",
-                "Delegated work was cancelled by its parent.".into(),
-            )
+            .complete_child(session_id, turn_id, "cancelled", CANCELLED_SUMMARY.into())
             .await
             .map_err(|error| {
                 super::IngressError::new("subsession_result_commit_failed", error.code())

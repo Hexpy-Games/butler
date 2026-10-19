@@ -10,6 +10,7 @@ use butler_turn::btcc::{
 
 use crate::host::guided::activity::GuidedActivity;
 mod closeout;
+pub(super) use closeout::artifacts::mime_for;
 
 pub(crate) struct GuidedJournal {
     turn_id: String,

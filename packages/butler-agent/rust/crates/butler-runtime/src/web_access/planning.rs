@@ -273,7 +273,9 @@ async fn run_planner(
                 cancellation: cancellation.clone(),
                 attachments: &[],
                 butler_data: None,
-                usage_attribution: None,
+                usage_attribution: Some(&butler_models::models::PromptUsageAttribution::for_phase(
+                    "web_access_planning",
+                )),
                 stream_observer: Some(&observer),
                 provider_retry_attempts: None,
             },

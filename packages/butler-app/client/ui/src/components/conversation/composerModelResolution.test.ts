@@ -20,7 +20,7 @@ describe("composer model truth", () => {
     ).toMatchObject({ state: "loading", model: "" });
   });
 
-  test("uses exact session controls only when catalog generations agree", () => {
+  test("uses session controls and flags a catalog generation to refresh", () => {
     const controls = {
       session_id: "general",
       revision: 3,
@@ -57,14 +57,14 @@ describe("composer model truth", () => {
         planModeAvailable: false,
       }),
     ).toMatchObject({
-      state: "loading",
-      model: "",
+      state: "ready",
+      model: "openai/gpt-5.6-sol",
       generationMismatch: true,
     });
   });
 
-  test("preserves an unavailable selected ref instead of substituting another model", () => {
-    const result = resolveComposerModelTruth({
+  test("a deleted selected model falls back to the Settings default, then the first model", () => {
+    const input = {
       catalog: HARNESS_MODEL_CATALOG,
       catalogState: "ready",
       controls: {
@@ -79,14 +79,42 @@ describe("composer model truth", () => {
         },
       },
       controlsState: "ready",
-      settings: EMPTY_SETTINGS,
+      planModeAvailable: false,
+    } as const;
+    const models = runtimeModels(HARNESS_MODEL_CATALOG);
+    const fallback = models.at(-1)!.model_ref;
+    expect(
+      resolveComposerModelTruth({ ...input, settings: { ...EMPTY_SETTINGS, model: fallback } }),
+    ).toMatchObject({ state: "ready", model: fallback });
+    expect(
+      resolveComposerModelTruth({
+        ...input,
+        catalog: { ...HARNESS_MODEL_CATALOG, default_model_ref: "openai/also-removed" },
+        settings: { ...EMPTY_SETTINGS, model: "openai/also-removed" },
+      }),
+    ).toMatchObject({ state: "ready", model: models[0]!.model_ref });
+  });
+
+  test("a failed controls read keeps the picker on the Settings model", () => {
+    const result = resolveComposerModelTruth({
+      catalog: HARNESS_MODEL_CATALOG,
+      catalogState: "ready",
+      controls: null,
+      controlsState: "error",
+      settings: { ...EMPTY_SETTINGS, model: HARNESS_MODEL_CATALOG.default_model_ref },
       planModeAvailable: false,
     });
-    expect(result).toMatchObject({
-      state: "unavailable",
-      model: "openai/removed-model",
-    });
-    expect(result.metadata).toBeUndefined();
+    expect(result).toMatchObject({ state: "ready", model: HARNESS_MODEL_CATALOG.default_model_ref });
+  });
+
+  test("only an empty catalog leaves the composer without a model", () => {
+    const input = { controls: null, controlsState: "ready", settings: EMPTY_SETTINGS, planModeAvailable: false } as const;
+    expect(
+      resolveComposerModelTruth({ ...input, catalog: EMPTY_MODEL_CATALOG, catalogState: "unavailable" }).state,
+    ).toBe("unavailable");
+    expect(
+      resolveComposerModelTruth({ ...input, catalog: EMPTY_MODEL_CATALOG, catalogState: "error" }).state,
+    ).toBe("loading");
   });
 
   test("new chats default to ask_except_reads and keep a chosen access mode", () => {

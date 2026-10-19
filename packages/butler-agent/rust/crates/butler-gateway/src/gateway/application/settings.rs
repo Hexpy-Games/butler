@@ -8,14 +8,14 @@ use serde_json::{Value, json};
 
 mod access;
 mod command_sandbox;
+mod logging;
 pub use command_sandbox::command_sandbox_enabled;
+pub use logging::{producer_config as producer_log_config, startup_config as startup_log_config};
 mod background_sources;
 mod composer_decoration;
 mod controls;
 mod conversation_background;
 mod default_model;
-mod diagnostics_reader;
-pub use diagnostics_reader::DiagnosticsSettingsReader;
 mod model;
 mod onboarding;
 pub(super) mod persistence;
@@ -37,6 +37,7 @@ use controls::{
     Controls, append_controls_event, controls_json, global_settings, has_message_override,
     inherited_controls, merge_message_controls,
 };
+pub(super) use model::selectable_model_ref;
 use model::{
     assert_selectable, available as available_models, normalize as normalize_controls,
     normalized_fallback, parse_reasoning,
@@ -151,7 +152,7 @@ pub(super) fn resolve_for_message_send(
         .flatten()
         .and_then(|v| v.as_object().cloned())
         .unwrap_or_default();
-    let mut controls = inherited_controls(&settings, &stored, facts, explicit);
+    let mut controls = inherited_controls(&settings, &stored, facts);
     // A per-message override applies to this message only: the session keeps
     // its own controls (PATCH /sessions/{id}/controls changes those).
     let message_override = has_message_override(request);
@@ -289,6 +290,17 @@ impl super::AppApplication {
             .map_err(super::app_error)
     }
 
+    pub(super) async fn resolve_settings_projection(
+        &self,
+        settings: Value,
+    ) -> Result<Value, crate::gateway::GatewayApplicationError> {
+        let mut settings = self.resolve_background_sources(settings).await?;
+        if let Some(port) = &self.dependencies.data_reset {
+            settings["data_generation"] = port.generation().into();
+        }
+        Ok(settings)
+    }
+
     pub(super) async fn worker_profile_settings(
         &self,
     ) -> Result<Value, crate::gateway::GatewayApplicationError> {
@@ -302,16 +314,18 @@ impl super::AppApplication {
             .read(move |db| view::read(db, &subscribers, &facts, &now, &workspace_root))
             .await
             .map_err(super::app_error)?;
-        self.resolve_background_sources(view).await
+        self.resolve_settings_projection(view).await
     }
 
     pub(super) async fn update_settings_owned(
         &self,
         input: Value,
     ) -> Result<Value, crate::gateway::GatewayApplicationError> {
-        self.update_settings_from(input, WallpaperOrigin::User)
-            .await
-            .map(|(_, projection)| projection)
+        let (_, projection) = self
+            .update_settings_from(input, WallpaperOrigin::User)
+            .await?;
+        logging::apply(&projection).await?;
+        Ok(projection)
     }
 
     /// Applies a settings PATCH from `origin`. Returns the effective
@@ -350,7 +364,7 @@ impl super::AppApplication {
         {
             return Ok((
                 wallpaper::source(&current),
-                self.resolve_background_sources(current).await?,
+                self.resolve_settings_projection(current).await?,
             ));
         }
         self.dependencies
@@ -365,7 +379,7 @@ impl super::AppApplication {
         let projection =
             update::project_after_refresh(&current, &prepared.patch, &refreshed, &workspace_root);
         let stored_projection = update::persistence_projection(&projection);
-        let projection = self.resolve_background_sources(projection).await?;
+        let projection = self.resolve_settings_projection(projection).await?;
         let event_payload = update::event_payload(&projection);
         let previous = wallpaper::source(&current);
         let wallpaper_event = wallpapers::change_payload(

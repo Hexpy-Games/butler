@@ -36,6 +36,7 @@ const COLUMNS: &[(&str, &str, &str)] = &[
         "INTEGER NOT NULL DEFAULT 0",
     ),
     ("app_automations", "access_mode", "TEXT"),
+    ("app_automations", "model", "TEXT"),
     (
         "app_automations",
         "schedule_type",
@@ -53,6 +54,7 @@ const COLUMNS: &[(&str, &str, &str)] = &[
     ("session_queued_messages", "client_message_id", "TEXT"),
     ("session_queued_messages", "input_identity_digest", "TEXT"),
     ("session_queued_messages", "control_resolution_json", "TEXT"),
+    ("session_queued_messages", "trace_context_json", "TEXT"),
     ("session_queued_messages", "claim_id", "TEXT"),
     ("session_queued_messages", "claim_owner", "TEXT"),
     ("session_queued_messages", "claimed_at", "TEXT"),
@@ -100,6 +102,30 @@ pub(super) fn table_exists(connection: &Connection, table: &str) -> Result<bool,
         .optional()
         .map(|row| row.is_some())
         .map_err(AppStorageError::sqlite)
+}
+
+/// Runs a table rebuild or rename with `PRAGMA legacy_alter_table=ON`, then
+/// restores the connection's previous setting.
+///
+/// A modern `ALTER TABLE ... RENAME` re-parses every trigger and view in the
+/// database and fails on any that no longer resolves, even one unrelated to
+/// the renamed table. Legacy mode renames only the table with its own indexes
+/// and triggers, which is what SQLite's generalized ALTER TABLE procedure
+/// (create, copy, drop, rename to the original name) needs: nothing else
+/// refers to the temporary name. The caller's savepoint keeps it atomic.
+pub(super) fn without_schema_revalidation<T>(
+    connection: &Connection,
+    operation: impl FnOnce() -> rusqlite::Result<T>,
+) -> rusqlite::Result<T> {
+    let previous: bool = connection.query_row("PRAGMA legacy_alter_table", [], |row| row.get(0))?;
+    connection.execute_batch("PRAGMA legacy_alter_table=ON")?;
+    let result = operation();
+    let restored = connection.execute_batch(if previous {
+        "PRAGMA legacy_alter_table=ON"
+    } else {
+        "PRAGMA legacy_alter_table=OFF"
+    });
+    result.and_then(|value| restored.map(|()| value))
 }
 
 pub(super) fn add_current_columns(connection: &Connection) -> Result<(), AppStorageError> {

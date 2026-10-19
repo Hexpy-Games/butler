@@ -1,6 +1,7 @@
 //! Durable application service behind the native App HTTP facade.
 
 mod assets;
+mod data_reset;
 pub use assets::AppAssetCommand;
 mod admission;
 mod admission_identity;
@@ -105,9 +106,9 @@ pub use contracts::*;
 use events::EventSubscribers;
 pub use model_catalog::{AppModelCatalogCommand, AppModelCatalogPort};
 pub use monitoring::{
-    AppBoundWorkStatusFact, AppDeveloperLogsQuery, AppMonitorPage, AppMonitoringPort,
-    AppUsageMonitorQuery, AppUsageMonitorView, AppWorkOperationalNoticeFact,
-    AppWorkStatusConversationFact, AppWorkerActivityQuery,
+    AppBoundWorkStatusFact, AppMonitorPage, AppMonitoringPort, AppUsageMonitorQuery,
+    AppUsageMonitorView, AppWorkOperationalNoticeFact, AppWorkStatusConversationFact,
+    AppWorkerActivityQuery,
 };
 pub(crate) use monitoring::{
     work_status as app_work_status, worker_activity as app_worker_activity,
@@ -341,13 +342,14 @@ impl AppApplication {
             .ok_or(GatewayApplicationError::internal())?
             .initialize(self.clone_handle())
             .await?;
+        // Settled Stops free their sessions before schedules catch up.
+        self.recover_turn_cancellations().await?;
         let automation_scheduler = self
             .automation_scheduler
             .as_ref()
             .ok_or(GatewayApplicationError::internal())?;
         self.automation_runs.initialize(self.clone_handle()).await?;
         automation_scheduler.initialize(self.clone_handle())?;
-        self.recover_turn_cancellations().await?;
         self.watch_wallpaper_modules().await;
         authority_recovery::retry(self).await;
         self.setup_readiness.start(

@@ -83,7 +83,7 @@ export function UsageSettings() {
       state={result.error && !result.view ? "error" : "ready"} errorMessage={appCopy.interfacePanels.usageFailed} onRetry={refresh}>
       <Stack gap="lg">
         <Inline justify="between" cross="start" gap="md" wrap>
-          <Stack grow basis="md" gap="xs" minWidth="0"><Typo.Caption>{copy.chats}</Typo.Caption>
+          <Stack grow basis="md" gap="xs" minWidth="0" maxWidth="field"><Typo.Caption>{copy.chats}</Typo.Caption>
             <UsageSessionSelect triggerRef={pickerTrigger} open={pickerOpen} onOpenChange={setPickerOpen} range={ranges.find(r => r.value === String(hours))!.label} sessions={sessions} value={session} onChange={setSession} /></Stack>
           <Stack gap="xs" grow><Typo.Caption>{copy.period}</Typo.Caption>
             <Inline justify="between" cross="center" gap="md">

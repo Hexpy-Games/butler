@@ -281,6 +281,9 @@ impl AppNativeIngress for Native {
             })
         })
     }
+    fn stop_confirmed(&self, _: String) -> ApplicationFuture<bool> {
+        Box::pin(async { Ok(false) })
+    }
 }
 
 pub(super) struct Assets;
@@ -380,9 +383,6 @@ impl AppMonitoringPort for UnprovidedMonitoring {
     fn system_events(&self, _: AppMonitorPage) -> ApplicationFuture<Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
-    fn developer_logs(&self, _: AppDeveloperLogsQuery) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::internal()) })
-    }
 }
 
 impl AppQueueOwnerLiveness for Liveness {
@@ -393,6 +393,7 @@ impl AppQueueOwnerLiveness for Liveness {
 
 pub(super) fn dependencies(native: Arc<Native>, clock: u64) -> AppApplicationDependencies {
     AppApplicationDependencies {
+        data_reset: None,
         hooks: None,
         service_shutdown: tokio_util::sync::CancellationToken::new(),
         updates: test_updates(),
