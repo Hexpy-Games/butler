@@ -36,7 +36,7 @@ pub use history_window::HistoryWindow;
 pub use source::{
     Archived, CanonicalMemoryReadBinding, ConversationScalar, ConversationSourceReader,
     MessageOrigins, PageOrder, PublicMemoryScope, PublicMemorySnapshot, PublicSessionRow,
-    RecallOutcomeRow, decode_message_scalars, scalar_for_part,
+    RecallOutcomeRow, SourceChange, SourceChangeKind, decode_message_scalars, scalar_for_part,
 };
 pub use text_projection::{ToolParts, text_for_message, text_for_part};
 pub use types::*;

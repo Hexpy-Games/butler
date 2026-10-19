@@ -2,7 +2,7 @@ use rusqlite::Connection;
 
 use super::{ConversationError, ConversationIdentityClock, ConversationResult};
 
-pub(super) const VERSION: u64 = 5;
+pub(super) const VERSION: u64 = 6;
 
 const SQL: &str = r"
 CREATE TABLE IF NOT EXISTS conversation_sessions (
@@ -70,6 +70,10 @@ INSERT OR IGNORE INTO conversation_public_source_state (singleton, revision) VAL
 CREATE TABLE IF NOT EXISTS conversation_source_identity (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1), identity TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS conversation_source_changes (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, entity_id TEXT NOT NULL,
+  UNIQUE (kind, entity_id)
+);
 CREATE INDEX IF NOT EXISTS conversation_turns_session_seq_idx ON conversation_turns(session_id, seq);
 CREATE INDEX IF NOT EXISTS conversation_messages_session_seq_idx ON conversation_messages(session_id, seq);
 CREATE INDEX IF NOT EXISTS conversation_messages_role_created_idx ON conversation_messages(role, created_at, id);
@@ -123,6 +127,7 @@ fn migrate(
     connection
         .execute_batch(SQL)
         .map_err(ConversationError::sqlite)?;
+    install_change_triggers(connection)?;
     connection.execute(
         "INSERT OR IGNORE INTO conversation_source_identity (singleton, identity) VALUES (1, ?1)",
         [uuid::Uuid::new_v4().to_string()],
@@ -150,5 +155,40 @@ fn migrate(
         "INSERT OR IGNORE INTO conversation_schema_migrations (version, applied_at) VALUES (?1, ?2)",
         rusqlite::params![VERSION, clock.now_iso()],
     ).map_err(ConversationError::sqlite)?;
+    Ok(())
+}
+
+/// Each written turn, turn outcome, message or message part moves its turn
+/// or message to the end of `conversation_source_changes`, so a consumer
+/// reads every mutation after its watermark, from any writer and including
+/// foreign-key cascades. A delete precedes the insert because an outer
+/// statement's conflict policy (`INSERT OR IGNORE`) overrides a trigger's.
+fn install_change_triggers(connection: &Connection) -> ConversationResult<()> {
+    for (table, kind, column) in [
+        ("conversation_turns", "turn", "id"),
+        ("conversation_turn_outcomes", "turn", "turn_id"),
+        ("conversation_messages", "message", "id"),
+        ("conversation_parts", "message", "message_id"),
+    ] {
+        for (event, rows) in [
+            ("INSERT", &["NEW"][..]),
+            ("UPDATE", &["OLD", "NEW"][..]),
+            ("DELETE", &["OLD"][..]),
+        ] {
+            let mut body = String::new();
+            for row in rows {
+                body.push_str(&format!(
+                    "DELETE FROM conversation_source_changes WHERE kind='{kind}' AND entity_id={row}.{column}; \
+                     INSERT INTO conversation_source_changes(kind,entity_id) SELECT '{kind}',{row}.{column} WHERE {row}.{column} IS NOT NULL;"
+                ));
+            }
+            connection
+                .execute_batch(&format!(
+                    "CREATE TRIGGER IF NOT EXISTS {table}_source_change_{name} AFTER {event} ON {table} BEGIN {body} END;",
+                    name = event.to_lowercase()
+                ))
+                .map_err(ConversationError::sqlite)?;
+        }
+    }
     Ok(())
 }

@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
 
-use super::{MemorySyncPoll, catchup, paused};
+use super::{MemorySyncPoll, catchup, inventory, paused};
 mod cache;
 mod index_retirement;
 mod projection;
@@ -145,8 +145,9 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
     if let Some(error) = queue_error {
         return Err(error);
     }
+    let indexing = inventory::run(&input).await;
     let projected = projection::process(&input).await?;
-    Ok(if processed || caught_up || projected {
+    Ok(if processed || caught_up || indexing || projected {
         MemorySyncPoll::Processed
     } else if queued {
         MemorySyncPoll::Deferred

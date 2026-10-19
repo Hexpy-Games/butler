@@ -2,8 +2,10 @@ use butler_platform::sqlite;
 use std::path::Path;
 use std::time::Duration;
 
+mod changes;
 mod public_memory;
 mod recall_pages;
+pub use changes::{SourceChange, SourceChangeKind};
 pub use public_memory::{
     Archived, CanonicalMemoryReadBinding, MessageOrigins, PageOrder, PublicMemoryScope,
     PublicMemorySnapshot, PublicSessionRow,
@@ -183,6 +185,39 @@ impl ConversationSourceReader {
         limit: Option<usize>,
     ) -> ConversationResult<Vec<RecallOutcomeRow>> {
         recall_pages::outcomes(self.connection()?, after_id, limit)
+    }
+
+    /// The latest outcome of one turn, as [`Self::read_recall_outcome_page`]
+    /// returns it.
+    pub fn read_recall_outcome(
+        &self,
+        turn_id: &str,
+    ) -> ConversationResult<Option<RecallOutcomeRow>> {
+        recall_pages::turn_outcome(self.connection()?, turn_id)
+    }
+
+    /// One message when it is a recovered source, as
+    /// [`Self::read_recovered_source_page`] returns it.
+    pub fn read_recovered_source(
+        &self,
+        message_id: &str,
+    ) -> ConversationResult<Option<ConversationMessageWithParts>> {
+        recall_pages::recovered_one(self.connection()?, message_id)
+    }
+
+    /// The highest committed source change; `None` for a store that does
+    /// not record changes.
+    pub fn source_change_head(&self) -> ConversationResult<Option<u64>> {
+        changes::head(self.connection()?)
+    }
+
+    /// Up to `limit` source changes after `after`, in commit order.
+    pub fn read_source_changes(
+        &self,
+        after: u64,
+        limit: usize,
+    ) -> ConversationResult<Vec<SourceChange>> {
+        changes::after(self.connection()?, after, limit)
     }
 
     /// A page of recovered source messages.
