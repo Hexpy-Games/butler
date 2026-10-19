@@ -73,6 +73,11 @@ pub(super) fn roots(environment: &HashMap<String, String>) -> Vec<PathBuf> {
     if let Some(data) = &data {
         roots.push(data.join("auth"));
         roots.push(data.join(crate::data_paths::SANDBOX_QUARANTINE));
+        roots.extend(
+            crate::data_paths::GATEWAY_CREDENTIALS
+                .iter()
+                .map(|path| data.join(path)),
+        );
         // These general product settings also cover externally stored logins.
         // Relative Butler profile paths resolve under the configured data root.
         for key in ["BUTLER_CODEX_AUTH_PROFILE", "BUTLER_OPENAI_AUTH_PROFILE"] {

@@ -31,7 +31,7 @@ impl GuidedCommand {
             let timing = super::timing::CommandTiming::new("guard_work");
             let cwd = Commands::guarded_directory_in_scope(&root, requested.as_deref(), path_form)?;
             timing.mark("cwd_done");
-            let denied = sensitive(&command, &cwd)
+            let denied = sensitive(&command, &cwd, &data, home.as_deref())
                 .or_else(|| ledger_guard::guard(&command, &cwd, &root, &data, installation.as_deref(), home.as_deref()));
             timing.mark("guard_done");
             Ok::<_, butler_turn::workspace::CommandError>(denied.map(|denied| json!({
@@ -49,7 +49,7 @@ impl GuidedCommand {
     }
 }
 
-fn sensitive(command: &str, cwd: &Path) -> Option<Value> {
+fn sensitive(command: &str, cwd: &Path, data: &Path, home: Option<&Path>) -> Option<Value> {
     let denied = |target: &str| {
         json!({"error":"protected_path", "message":"Credential paths are protected.",
         "protected_path":target,
@@ -63,11 +63,32 @@ fn sensitive(command: &str, cwd: &Path) -> Option<Value> {
             return Some(denied(&directory.to_string_lossy()));
         }
     }
+    let credentials: Vec<_> = butler_platform::data_paths::GATEWAY_CREDENTIALS
+        .iter()
+        .map(|path| ledger_guard::real_or_nearest(&data.join(path)))
+        .collect();
     for raw in butler_platform::command_sandbox::path_tokens(command) {
         let token = butler_platform::command_sandbox::normalize_path_token(raw);
-        if looks_sensitive(&token) {
+        if looks_sensitive(&token) || names_any(&token, cwd, data, home, &credentials) {
             return Some(denied(raw));
         }
     }
     None
+}
+
+/// Whether `token`, resolved like the Ledger guard resolves paths, names one
+/// of `credentials` (real paths) or a path beneath one.
+fn names_any(
+    token: &str,
+    cwd: &Path,
+    data: &Path,
+    home: Option<&Path>,
+    credentials: &[PathBuf],
+) -> bool {
+    ledger_guard::resolve(token, cwd, data, home).is_some_and(|path| {
+        let path = ledger_guard::real_or_nearest(&path);
+        credentials
+            .iter()
+            .any(|credential| butler_platform::secure_fs::path_is_within(&path, credential))
+    })
 }
