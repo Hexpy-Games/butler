@@ -43,9 +43,9 @@ and provider processes retain their own names.
 `--prepare-process-links` creates or verifies exactly three hardlinks beside the
 original Agent: macOS uses the full role name, Linux uses the short role name,
 and Windows adds `.exe` to the full role name. It runs in Rust installer
-staging, shell installer staging and Electron payload preparation. macOS bundle
-normalization and Linux package staging rebuild hardlinks after packager copying
-and before signing or archiving. Path APIs and argument arrays carry spaces and
+staging, shell installer staging and non-Windows Electron payload preparation.
+macOS bundle normalization and Linux package staging rebuild hardlinks after
+packager copying and before signing or archiving. Path APIs and argument arrays carry spaces and
 parentheses without shell splitting. Permissions remain executable for every
 hardlink; no alias binary is copied.
 
@@ -68,12 +68,13 @@ chat, event, transcript or memory database size. No polling or scans are added.
 
 ## Windows portable Electron App
 
-`package:win` bundles `butler-agent.exe` and prepares the three role-named
-NTFS hardlinks (`butler-agent (memory).exe`, `(restart).exe`, `(update).exe`).
-The portable ZIP contains the whole `Butler-win32-x64` directory, renderer,
-resources and notices. ZIP extraction turns links into copies; the bundled
-loader restores these aliases as hardlinks before launching the child. Extract
-onto a writable NTFS volume. Copies cannot satisfy Rust's file identity check.
+`package:win`, the portable ZIP and the Squirrel nupkg ship only the canonical
+`butler-agent.exe`. The bundled loader creates the three role-named hardlinks
+(`butler-agent (memory).exe`, `(restart).exe`, `(update).exe`) beside that binary
+in the current application folder before launching the child. Repeated launches
+verify existing links. If creation fails, the loader logs once per binary and
+missing aliases run the canonical executable. Copies cannot satisfy Rust's file
+identity check. CLI installers still prepare links after archive extraction.
 The foreground child uses a stdin owner lease; its Electron diagnostics report
 `direct_child`, with no Job Object or owner-death guarantee claimed.
 

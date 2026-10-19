@@ -8,8 +8,8 @@ const root = resolve(process.argv[2]);
 if (process.platform !== "win32" || !existsSync(join(root, "Butler.exe"))) {
   throw new Error("Portable Windows packaging requires a packaged Butler.exe on Windows.");
 }
-// ZIP copies role aliases. The bundled loader restores NTFS hardlinks on first
-// launch, preserving the platform's verified executable identity contract.
+// Only the canonical Agent ships. The bundled loader creates role hardlinks
+// on first launch when the extraction filesystem supports them.
 const archive = join(dirname(root), `${basename(root)}-portable.zip`);
 const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
   "Compress-Archive -LiteralPath $env:BUTLER_PORTABLE_ROOT -DestinationPath $env:BUTLER_PORTABLE_ZIP -Force",
