@@ -5,9 +5,9 @@ use std::{
     io,
     path::{Path, PathBuf},
 };
-pub(in crate::command_sandbox) type LinkIdentity = (u64, OsString);
-pub(super) type Entry = (OsString, bool, Option<LinkIdentity>);
-type Links = Vec<(PathBuf, LinkIdentity)>;
+pub(in crate::command_sandbox) type LinkTime = std::time::SystemTime;
+pub(super) type Entry = (OsString, bool, Option<LinkTime>);
+type Links = Vec<(PathBuf, LinkTime)>;
 #[cfg(unix)]
 type Inventory = (Vec<PathBuf>, Links);
 pub(in crate::command_sandbox) const MAX_ENTRIES: usize = 200_000;
@@ -52,12 +52,6 @@ pub(super) fn walk_for_sweep(root: &Path) -> io::Result<Inventory> {
     Ok((walk.found, walk.links))
 }
 
-#[cfg(unix)]
-pub(in crate::command_sandbox) fn inventory(root: &Path) -> io::Result<Inventory> {
-    let walk = scan(root, true, true)?;
-    Ok((walk.found, walk.links))
-}
-
 fn scan(root: &Path, bounded: bool, collect_links: bool) -> io::Result<Walk> {
     let dir = Native::root(root)?;
     let mut walk = Walk {
@@ -93,8 +87,8 @@ impl Walk {
                 ));
             }
             let path = relative.join(&name);
-            if let Some(identity) = link {
-                self.links.push((path.clone(), identity));
+            if let Some(ctime) = link {
+                self.links.push((path.clone(), ctime));
             }
             if crate::command_sandbox::secret_name(&name.to_string_lossy()) {
                 self.found.push(path);

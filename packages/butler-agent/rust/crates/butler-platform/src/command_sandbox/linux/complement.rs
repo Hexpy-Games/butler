@@ -130,7 +130,11 @@ pub(super) fn apply(
 pub(super) fn entry_aliases(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>, Error> {
     let mut targets = Vec::new();
     for path in &paths {
-        if std::fs::symlink_metadata(path)?.file_type().is_symlink() {
+        let metadata = match std::fs::symlink_metadata(path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            result => result?,
+        };
+        if metadata.file_type().is_symlink() {
             targets.push(canonical_or_missing(path, &mut HashMap::new())?);
         }
     }
@@ -194,7 +198,7 @@ fn canonical_or_missing(
 // every component with readlink. O_PATH follows aliases without reading data.
 // Keep the fd alive until procfs returns its physical path; on hosts without
 // procfs, retain the standard canonicalization behavior.
-fn resolved_path(path: &Path) -> std::io::Result<PathBuf> {
+pub(in crate::command_sandbox) fn resolved_path(path: &Path) -> std::io::Result<PathBuf> {
     use nix::{fcntl::OFlag, sys::stat::Mode};
     use std::os::fd::AsRawFd;
     let fd = nix::fcntl::open(path, OFlag::O_PATH | OFlag::O_CLOEXEC, Mode::empty())?;

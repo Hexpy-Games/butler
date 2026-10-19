@@ -44,9 +44,10 @@ async fn sweep_quarantines_secret_target_links() -> Result<(), HarnessError> {
     let public = s.sandbox.home.join("public-dir");
     std::fs::create_dir_all(&public)?;
     butler_platform::secure_fs::symlink(&root.join(".env"), &root.join("src/existing-secret"))?;
+    tokio::time::sleep(Duration::from_millis(1100)).await;
     let since = command_sandbox::discover_project_secret_inventory(root)?;
     let command = format!(
-        "set -e; ln -s '{}' src/credential; ln -s '{}' src/profile; ln -s ../.env src/project; ln -s '{}' src/directory; rm src/changed; ln -s ../.env src/changed; ln -s ../public src/safe; ln -s '{}' src/.env-alias; ln -s '{}' src/indirect; ln -s '{}' src/data-parent; ln -s '{}' src/auth-parent; ln -s '{}' src/public-dir; ln -s '{}' src/profile-parent; ln -s .. src/project-root",
+        "set -e; ln -s '{}' src/credential; ln -s '{}' src/profile; ln -s ../.env src/project; ln -s '{}' src/directory; rm src/changed; ln -s ../.env src/changed; ln -s ../public src/safe; ln -s '{}' src/.env-alias; ln -s '{}' src/indirect; ln -s '{}' src/data-parent; ln -s '{}' src/auth-parent; ln -s '{}' src/public-dir; ln -s '{}' src/profile-parent; ln -s .. src/project-root; ln -s missing src/dangling; ln -s loop src/loop",
         s.sandbox.data.join("auth/entry").display(),
         s.sandbox.data.join("profiles/login/entry").display(),
         s.sandbox.data.join("auth").display(),
@@ -70,9 +71,11 @@ async fn sweep_quarantines_secret_target_links() -> Result<(), HarnessError> {
         "auth-parent",
         "changed",
         "credential",
+        "dangling",
         "data-parent",
         "directory",
         "indirect",
+        "loop",
         "profile",
         "profile-parent",
         "project",

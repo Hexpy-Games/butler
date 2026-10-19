@@ -9,7 +9,7 @@ async fn perf_project_secret_discovery_and_sweep() -> Result<(), HarnessError> {
         command_sandbox::linux_test_host(),
         "Linux project sweep latency"
     );
-    measure(false)
+    measure(0)
 }
 
 #[tokio::test]
@@ -19,17 +19,29 @@ async fn perf_project_secret_sweep_with_preexisting_links() -> Result<(), Harnes
         command_sandbox::linux_test_host(),
         "Linux project sweep latency"
     );
-    measure(true)
+    measure(5000)
 }
 
-fn measure(links: bool) -> Result<(), HarnessError> {
+#[tokio::test]
+async fn perf_project_secret_sweep_with_20000_links() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        command_sandbox::linux_test_host(),
+        "Linux project sweep latency"
+    );
+    measure(20000)
+}
+
+fn measure(link_count: usize) -> Result<(), HarnessError> {
+    let links = link_count > 0;
+    let directories = if link_count == 20000 { 200 } else { 50 };
     let mut setup = Setup::new(if links {
         "LINUX-L1-LINK-LATENCY"
     } else {
         "LINUX-L1-WALK-LATENCY"
     })?;
     let root = &setup.sandbox.workspace;
-    for dir in 0..50 {
+    for dir in 0..directories {
         let path = root.join(format!("src/d{dir}"));
         std::fs::create_dir_all(&path)?;
         for file in 0..100 {
@@ -44,11 +56,15 @@ fn measure(links: bool) -> Result<(), HarnessError> {
     }
     let protected = root.join("src/d49/.env");
     std::fs::write(&protected, "existing")?;
+    std::thread::sleep(Duration::from_millis(1100));
+    let scratch = setup.sandbox.data.join("scratch");
+    std::fs::create_dir_all(&scratch)?;
     let mut discover = Vec::new();
     let mut sweep = Vec::new();
     for index in 0..21 {
         let started = Instant::now();
-        let secrets = command_sandbox::discover_project_secret_inventory(root)?;
+        let secrets = command_sandbox::discover_project_secret_inventory(root)?
+            .with_writable_roots(&[&scratch]);
         discover.push(started.elapsed());
         assert_eq!(&*secrets, std::slice::from_ref(&protected));
         let since = secrets;
@@ -64,12 +80,14 @@ fn measure(links: bool) -> Result<(), HarnessError> {
     discover.sort();
     sweep.sort();
     eprintln!(
-        "| Step (5,000 files, pre-existing links={links}) | p50 ms |\n| --- | ---: |\n| discovery | {:.3} |\n| sweep + quarantine | {:.3} |",
+        "| Step ({directories} directories, pre-existing links={link_count}) | p50 ms |\n| --- | ---: |\n| discovery | {:.3} |\n| sweep + quarantine | {:.3} |",
         discover[10].as_secs_f64() * 1000.0,
         sweep[10].as_secs_f64() * 1000.0
     );
     for (step, duration) in [("discovery", discover[10]), ("sweep", sweep[10])] {
-        butler_e2e::assert_wall_clock_budget!(duration, Duration::from_millis(30), step);
+        if link_count <= 5000 {
+            butler_e2e::assert_wall_clock_budget!(duration, Duration::from_millis(30), step);
+        }
     }
     let mut quarantines = std::fs::read_dir(setup.sandbox.data.join("sandbox-quarantine"))?
         .map(|entry| entry.map(|entry| entry.path()))
@@ -83,7 +101,7 @@ fn measure(links: bool) -> Result<(), HarnessError> {
         );
     }
     // Complete tree and content remain intact, including the last directory.
-    for dir in 0..50 {
+    for dir in 0..directories {
         for file in 0..100 {
             if links {
                 let link = root.join(format!("src/d{dir}/l{file}"));

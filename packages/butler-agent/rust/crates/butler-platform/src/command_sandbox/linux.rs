@@ -1,5 +1,5 @@
 //! Safe Landlock trampoline; never restrict the multithreaded agent itself.
-mod complement;
+pub(super) mod complement;
 mod generated;
 mod links;
 mod mountns;

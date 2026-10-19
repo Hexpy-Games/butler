@@ -32,8 +32,8 @@ pub(super) fn discover_project_secrets(root: &Path) -> std::io::Result<Vec<PathB
 }
 
 /// Moves new secret names and unsafe ordinary-named links into a private
-/// data-folder quarantine. Filesystem timestamps may precede wall-clock launch
-/// time by a clock tick, so the inventory is the authority for new names.
+/// data-folder quarantine. The inventory identifies existing protected names;
+/// a conservative ctime cutoff identifies new or changed links.
 /// Directories the walk cannot inspect are quarantined whole. One failed move
 /// never leaves later entries in place: all are attempted, then it reports.
 #[cfg(unix)]
@@ -48,30 +48,24 @@ pub(super) fn sweep_new_secrets(
         .into_iter()
         .map(|relative| root.join(relative))
         .collect();
-    // Reuse pre-run targets for protected links that are still the same identity.
-    // Even when another link is new, no untouched project link is resolved.
-    let known: std::collections::HashMap<_, _> = links
-        .iter()
-        .filter(|(path, identity)| since.links.get(path) == Some(identity))
-        .filter_map(|(path, _)| {
-            since
-                .link_targets
-                .get(path)
-                .map(|target| (root.join(path), target.clone()))
-        })
-        .collect();
-    let changed: Vec<_> = links
-        .into_iter()
-        .filter(|(path, identity)| since.links.get(path) != Some(identity))
-        .collect();
-    let changed_paths: HashSet<_> = changed.iter().map(|(path, _)| root.join(path)).collect();
-    if !changed.is_empty() {
-        let targets = targets::SecretTargets::new(&found, data, environment, &known);
-        for (relative, _) in changed {
-            let path = root.join(relative);
-            if targets.protects(&path) {
-                found.push(path);
-            }
+    let mut targets = targets::SecretTargets::new(&found, data, environment, root, &since.writable);
+    let mut changed_paths = HashSet::new();
+    for (relative, ctime) in links {
+        let path = root.join(relative);
+        let changed = since.started.is_none_or(|started| ctime >= started);
+        // Resolve all links after reaping. Old scratch aliases are never trusted.
+        // Unresolvable new links cannot be proven safe for a later reader.
+        let target = crate::command_sandbox::linux::complement::resolved_path(&path);
+        let unsafe_link = targets.writable_indirection(&path, target.as_deref().ok())
+            || (changed
+                && target
+                    .as_ref()
+                    .map_or(true, |target| targets.protects(target)));
+        if changed || unsafe_link {
+            changed_paths.insert(path.clone());
+        }
+        if unsafe_link {
+            found.push(path);
         }
     }
     found.sort();

@@ -4,14 +4,33 @@ use std::path::{Path, PathBuf};
 #[path = "project_secrets/portable/mod.rs"]
 pub(in crate::command_sandbox) mod portable;
 
-/// Pre-run protected names and no-follow link identities from one walk.
+/// Pre-run protected names and a conservative realtime change cutoff.
 #[derive(Default, Debug)]
 pub struct ProjectSecretInventory {
     paths: Vec<PathBuf>,
     #[cfg(target_os = "linux")]
-    links: std::collections::HashMap<PathBuf, portable::tree::LinkIdentity>,
+    started: Option<std::time::SystemTime>,
     #[cfg(target_os = "linux")]
-    link_targets: std::collections::HashMap<PathBuf, PathBuf>,
+    writable: Vec<PathBuf>,
+}
+
+impl ProjectSecretInventory {
+    /// Supply exactly the external roots granted by the command write policy.
+    /// No filesystem work is added to command preparation.
+    pub fn with_writable_roots(self, roots: &[&Path]) -> Self {
+        #[cfg(target_os = "linux")]
+        {
+            Self {
+                writable: roots.iter().map(|path| path.to_path_buf()).collect(),
+                ..self
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = roots;
+            self
+        }
+    }
 }
 
 impl std::ops::Deref for ProjectSecretInventory {
@@ -21,40 +40,19 @@ impl std::ops::Deref for ProjectSecretInventory {
     }
 }
 
-/// Captures link identities in one no-follow walk. Protected aliases are
-/// resolved before execution so the sweep can reuse untouched targets.
+/// Capture the realtime cutoff before the existing metadata-only discovery.
+/// One second covers coarse filesystem ctime granularity as well as Linux's
+/// cached clock tick. A link close to launch is conservatively judged changed.
+/// User space cannot restore ctime after creation, rename or inode reuse.
 pub fn discover_project_secret_inventory(root: &Path) -> std::io::Result<ProjectSecretInventory> {
     #[cfg(target_os = "linux")]
-    {
-        let (paths, links) = portable::tree::inventory(root)?;
-        let links: std::collections::HashMap<_, _> = links.into_iter().collect();
-        let link_targets = paths
-            .iter()
-            .filter(|path| links.contains_key(*path))
-            .map(|path| {
-                let absolute = root.join(path);
-                let target = absolute
-                    .canonicalize()
-                    .or_else(|error| {
-                        if error.kind() == std::io::ErrorKind::NotFound {
-                            super::linux::unresolved::target(&absolute)
-                        } else {
-                            Err(error)
-                        }
-                    })
-                    .unwrap_or(absolute);
-                (path.clone(), target)
-            })
-            .collect();
-        Ok(ProjectSecretInventory {
-            link_targets,
-            paths: paths.into_iter().map(|path| root.join(path)).collect(),
-            links,
-        })
-    }
-    #[cfg(not(target_os = "linux"))]
+    let started = std::time::SystemTime::now().checked_sub(std::time::Duration::from_secs(1));
     Ok(ProjectSecretInventory {
         paths: discover_project_secrets(root)?,
+        #[cfg(target_os = "linux")]
+        started,
+        #[cfg(target_os = "linux")]
+        writable: Vec::new(),
     })
 }
 

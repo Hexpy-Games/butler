@@ -3,7 +3,7 @@
 use std::ffi::{OsStr, OsString};
 use std::io;
 use std::os::fd::{AsFd, OwnedFd};
-use std::os::unix::ffi::{OsStrExt, OsStringExt};
+use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
 pub(super) type Directory = OwnedFd;
@@ -36,21 +36,26 @@ pub(in crate::command_sandbox) fn entries(dir: &OwnedFd) -> io::Result<Vec<(OsSt
     read_entries(dir, |name, kind, _| (name, kind == FileType::Directory))
 }
 
-/// Read link text without following it. Inodes can be recycled immediately
-/// after unlink, so both inode and immutable link text identify a retarget.
-/// Ordinary launch discovery requests no identities and needs no readlink.
+/// Only the post-run walk stats links. Launch discovery uses directory-entry
+/// types and adds no per-link syscalls. ctime uses the kernel realtime clock.
 pub(super) fn entries_with_links(
     dir: &OwnedFd,
     collect_links: bool,
 ) -> io::Result<Vec<super::tree::Entry>> {
-    read_entries(dir, |name, kind, inode| {
-        let identity = if collect_links && kind == FileType::Symlink {
-            let target = rustix::fs::readlinkat(dir, name.as_os_str(), Vec::new())?;
-            Some((inode, OsString::from_vec(target.into_bytes())))
+    read_entries(dir, |name, kind, _| {
+        let changed = if collect_links && kind == FileType::Symlink {
+            let stat = statat(dir, name.as_os_str(), AtFlags::SYMLINK_NOFOLLOW)?;
+            Some(
+                std::time::UNIX_EPOCH
+                    + std::time::Duration::new(
+                        stat.st_ctime.try_into().map_err(io::Error::other)?,
+                        stat.st_ctime_nsec.try_into().map_err(io::Error::other)?,
+                    ),
+            )
         } else {
             None
         };
-        Ok::<_, io::Error>((name, kind == FileType::Directory, identity))
+        Ok::<_, io::Error>((name, kind == FileType::Directory, changed))
     })?
     .into_iter()
     .collect()

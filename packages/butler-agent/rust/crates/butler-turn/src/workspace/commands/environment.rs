@@ -11,6 +11,11 @@ pub(super) struct Scratch {
 }
 
 impl Scratch {
+    /// The same roots feed both the write grant and post-run link judgment.
+    pub(super) fn writable_roots(&self) -> [&Path; 3] {
+        [&self.temporary, &self.cache, &self.artifacts]
+    }
+
     /// A project-write command gets its own temp and cache folders, so it can
     /// neither touch another Butler component's temp files nor plant files an
     /// unsandboxed command later picks up from a shared cache.

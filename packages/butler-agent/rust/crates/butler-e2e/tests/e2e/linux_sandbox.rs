@@ -4,6 +4,7 @@ mod boundaries;
 mod latency;
 mod project_boundaries;
 mod project_write;
+mod scratch_links;
 mod secret_inventory;
 mod secret_links;
 mod secret_perf;

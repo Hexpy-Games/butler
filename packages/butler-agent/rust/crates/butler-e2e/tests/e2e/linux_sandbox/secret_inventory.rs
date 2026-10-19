@@ -13,6 +13,7 @@ async fn unresolvable_inventory_preserves_unrelated_links() -> Result<(), Harnes
     std::fs::create_dir_all(root.join("src"))?;
     std::fs::write(root.join("public"), "complete-public")?;
     butler_platform::secure_fs::symlink(Path::new("../public"), &root.join("src/existing"))?;
+    tokio::time::sleep(Duration::from_millis(1100)).await;
     let since = command_sandbox::discover_project_secret_inventory(root)?;
     butler_platform::secure_fs::set_file_mode(
         &private,
@@ -84,6 +85,7 @@ async fn new_alias_to_later_created_protected_target_is_quarantined() -> Result<
     std::fs::create_dir_all(root.join("src"))?;
     std::fs::create_dir_all(root.join("links"))?;
     butler_platform::secure_fs::symlink(Path::new("src/missing"), &root.join(".env"))?;
+    tokio::time::sleep(Duration::from_millis(1100)).await;
     let since = command_sandbox::discover_project_secret_inventory(root)?;
     // An outside writer can create a protected target after the snapshot.
     std::fs::write(root.join("src/missing"), "private-fixture")?;

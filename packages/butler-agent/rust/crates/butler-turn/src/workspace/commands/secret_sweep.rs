@@ -49,7 +49,9 @@ pub(super) async fn before_run(input: &GuidedCommandInput) -> Result<Prepared, C
     let data = input.butler_data.clone();
     tokio::task::spawn_blocking(move || {
         let lease = butler_platform::command_sandbox::prepare_project_write(&root, &data)?;
-        let paths = butler_platform::command_sandbox::discover_project_secret_inventory(&root)?;
+        let scratch = super::environment::Scratch::new(&data, true);
+        let paths = butler_platform::command_sandbox::discover_project_secret_inventory(&root)?
+            .with_writable_roots(&scratch.writable_roots());
         Ok(Prepared {
             paths,
             lease: Some(lease),
