@@ -1,9 +1,10 @@
+import { waitBrowserTurn } from "../support/browser-turn";
 // test-category: race
 /** Offline public user turn covers delayed autocomplete, waypoints, canvas route and reply. */
 import { strict as assert } from "node:assert";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
+import { browserAgentApp } from "../support/browser-agent-app";
 import { browserStub, bridgeBrowser, latestBrowser } from "../support/browser-agent-stub";
 import type { StubModelRequest } from "../support/native-app-server";
 
@@ -12,7 +13,7 @@ const stub=browserStub(), app=await browserAgentApp(evidence, stub.handler);
 async function send(text:string) {
  const prior=await app.gateway.api<{ latest_turn?:{ id:string } }>("/session-view?session_id=general");
  await app.gateway.api("/messages", { method:"POST", body:JSON.stringify({ chat_id:"general", text, client_message_id:crypto.randomUUID() }) });
- await waitBrowser(async()=>{const v=await app.gateway.api<{ latest_turn?:{ id:string;state:string } }>("/session-view?session_id=general");return v.latest_turn?.id!==prior.latest_turn?.id&&v.latest_turn?.state==="delivered";}, "delivered route turn");
+ await waitBrowserTurn(app.gateway.api, "general", prior.latest_turn?.id, evidence);
 }
 const observe=(r:StubModelRequest)=>bridgeBrowser("browser_observe", { tab:latestBrowser(r, "tab").tab });
 function act(role:string, name:string, value?:string) {
