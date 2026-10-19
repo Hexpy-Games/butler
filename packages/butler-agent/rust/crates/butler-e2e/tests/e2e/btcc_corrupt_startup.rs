@@ -77,7 +77,11 @@ async fn btcc_flagged_owner_scale_fails_fast_without_mutation() -> Result<(), Ha
         }
         let verdict = std::fs::read(path.with_extension("sqlite.corrupt"))?;
         let (elapsed, log) = failed_start(&mut s, generation).await?;
-        assert!(elapsed < Duration::from_secs(3), "{elapsed:?}");
+        butler_e2e::assert_wall_clock_budget!(
+            elapsed,
+            Duration::from_secs(3),
+            "flagged owner-scale BTCC startup"
+        );
         assert!(
             log.contains(CORRUPTION),
             "existing corruption message: {log}"
