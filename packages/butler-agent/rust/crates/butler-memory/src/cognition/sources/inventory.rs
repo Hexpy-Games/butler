@@ -10,8 +10,8 @@ use std::{cmp::Ordering, collections::HashSet};
 use indexmap::IndexMap;
 
 pub(in crate::cognition) use candidate::{
-    CandidateKind, EligibleSource, InventoryCandidate, recovered as recovered_candidate,
-    source_key, turn as turn_candidate,
+    CandidateKind, EligibleSource, InventoryCandidate, SourceFault, faulted,
+    recovered as recovered_candidate, source_key, turn as turn_candidate, turn_or_fault,
 };
 pub(in crate::cognition) use coverage::{CoverageRead, InventoryCoverage, inventory_coverage};
 pub(in crate::cognition) use filter::RecallFilter;

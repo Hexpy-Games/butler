@@ -132,6 +132,9 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
     if queued {
         input.catchup_at.lock().take();
     }
+    // The inventory mirror is independent of the queue and catch-up; their
+    // failures must not keep it behind.
+    let indexing = inventory::run(&input).await;
     let caught_up = match catchup::run_if_due(&input).await {
         Ok(caught_up) => caught_up,
         Err(catchup_error) => match queue_error {
@@ -145,7 +148,6 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
     if let Some(error) = queue_error {
         return Err(error);
     }
-    let indexing = inventory::run(&input).await;
     let projected = projection::process(&input).await?;
     Ok(if processed || caught_up || indexing || projected {
         MemorySyncPoll::Processed

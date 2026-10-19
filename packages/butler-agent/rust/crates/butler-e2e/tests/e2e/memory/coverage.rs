@@ -1,9 +1,9 @@
 //! MEM-COVERAGE: recall's projection coverage read from the graph's canonical
 //! inventory mirror equals a full canonical scan after every kind of source
-//! mutation: appended turns, recovered messages, edited and compacted
-//! messages, project moves and deleted sessions; while changes are only in
-//! the store (overlay) and after the mirror applied them (rows), and for an
-//! existing store whose mirror has never been built.
+//! mutation: appended and regenerated turns, recovered messages, compacted
+//! messages, project moves, deleted sessions and turns; while changes are
+//! only in the store (overlay) and after the mirror applied them (rows), and
+//! for an existing store whose mirror has never been built.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -11,12 +11,12 @@
     reason = "test assertions"
 )]
 
+use super::coverage_seed::{recovered, regenerate, session, turn};
 use super::coverage_support::{
-    Variant, canonical, chat, coverage, graph, hide_mirror, hold_gate, pending, recall, recall_in,
-    recovered, release_gate, session, settle, show_mirror, start, turn,
+    Variant, canonical, chats, compare, coverage, graph, hold_gate, incomplete_jobs, recall,
+    release_gate, settle, start,
 };
 use butler_e2e::e2e::HarnessError;
-use butler_e2e::e2e::scenario::Scenario;
 use serde_json::json;
 
 const S1: &str = "coverage-s1";
@@ -26,6 +26,7 @@ const S3: &str = "coverage-s3";
 const S4: &str = "coverage-s4";
 const P1: &str = "coverage-p1";
 const P2: &str = "coverage-p2";
+const MARCH: &str = "2026-03-10T00:00:00.000Z";
 
 fn variants() -> Vec<Variant> {
     vec![
@@ -53,26 +54,24 @@ fn variants() -> Vec<Variant> {
     ]
 }
 
-/// Recalls every variant through the mirror and through a full scan of the
-/// same unchanged stores; returns whether each reported pending ingestion.
-async fn compare(s: &Scenario, chats: &[String], step: &str) -> Result<Vec<bool>, HarnessError> {
-    let data = &s.sandbox.data;
-    let mut pending_by_variant = Vec::new();
-    for (variant, chat) in variants().iter().zip(chats) {
-        let (incremental, _) = recall_in(s, chat, variant).await?;
-        let phase = hide_mirror(data);
-        let (full, _) = recall_in(s, chat, variant).await?;
-        show_mirror(data, &phase);
-        assert_eq!(
-            coverage(&incremental),
-            coverage(&full),
-            "{step}: {} mirror coverage differs from the full scan",
-            variant.prompt
-        );
-        pending_by_variant.push(pending(&incremental));
+fn seed(data: &std::path::Path) {
+    let db = canonical(data);
+    session(&db, S1, Some(P1));
+    session(&db, S2, None);
+    session(&db, S3, Some(P1));
+    session(&db, S4, Some(P1));
+    for n in 1..=4 {
+        let one = format!("seeded fact {n} in one");
+        turn(&db, S1, n, &one, "2026-02-10T00:00:00.000Z");
+        turn(&db, S2, n, &format!("seeded fact {n} in two"), MARCH);
     }
-    eprintln!("MEM-COVERAGE {step} pending={pending_by_variant:?}");
-    Ok(pending_by_variant)
+    turn(
+        &db,
+        S3,
+        1,
+        "seeded fact in three",
+        "2026-02-11T00:00:00.000Z",
+    );
 }
 
 #[tokio::test]
@@ -80,43 +79,11 @@ async fn mem_coverage_mirror_matches_full_scan() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = start("MEM-COVERAGE", &variants()).await?;
     let data = s.sandbox.data.clone();
-    let mut chats = Vec::new();
-    for index in 0..variants().len() {
-        chats.push(chat(&s, &format!("Coverage recall {index}")).await?);
-    }
+    let chats = chats(&s, variants().len()).await?;
     s.turn("general", "Coverage recall over every chat.")
         .await?;
-    {
-        let db = canonical(&data);
-        session(&db, S1, Some(P1));
-        session(&db, S2, None);
-        session(&db, S3, Some(P1));
-        session(&db, S4, Some(P1));
-        for n in 1..=4 {
-            turn(
-                &db,
-                S1,
-                n,
-                &format!("seeded fact {n} in one"),
-                "2026-02-10T00:00:00.000Z",
-            );
-            turn(
-                &db,
-                S2,
-                n,
-                &format!("seeded fact {n} in two"),
-                "2026-03-10T00:00:00.000Z",
-            );
-        }
-        turn(
-            &db,
-            S3,
-            1,
-            "seeded fact in three",
-            "2026-02-11T00:00:00.000Z",
-        );
-    }
-    settle(&data, true).await;
+    seed(&data);
+    settle(&data, &[S1, S2, S3]).await;
 
     // Migration: an existing store whose mirror was never built.
     let gate = hold_gate(&data);
@@ -126,41 +93,32 @@ async fn mem_coverage_mirror_matches_full_scan() -> Result<(), HarnessError> {
     ).unwrap();
     let (first, _) = recall(&s, &variants()[0]).await?;
     release_gate(&gate);
-    settle(&data, true).await;
+    settle(&data, &[S1, S2, S3]).await;
     let gate = hold_gate(&data);
     let (rebuilt, _) = recall(&s, &variants()[0]).await?;
     assert_eq!(
         coverage(&first),
         coverage(&rebuilt),
-        "first recall before the mirror was built"
+        "recall before the mirror was built"
     );
-    assert_eq!(compare(&s, &chats, "settled").await?[..4], [false; 4]);
+    let v = variants();
+    assert_eq!(compare(&s, &v, &chats, "settled").await?[..4], [false; 4]);
 
     // Store-only changes: the mirror is behind, recall overlays the changes.
-    {
-        let db = canonical(&data);
-        turn(
-            &db,
-            S1,
-            5,
-            "seeded fact appended",
-            "2026-03-12T00:00:00.000Z",
-        );
-    }
+    turn(
+        &canonical(&data),
+        S1,
+        5,
+        "seeded fact appended",
+        "2026-03-12T00:00:00.000Z",
+    );
     assert_eq!(
-        compare(&s, &chats, "appended").await?[..4],
+        compare(&s, &v, &chats, "appended").await?[..4],
         [true, true, false, true]
     );
     {
         let db = canonical(&data);
-        db.execute(
-            "UPDATE conversation_parts SET content_json=?1 WHERE message_id=?2",
-            [
-                json!({"text":"seeded fact edited in two"}).to_string(),
-                format!("{S2}-turn-1-user"),
-            ],
-        )
-        .unwrap();
+        regenerate(&db, S2, 1, "seeded fact 1 in two, answered again", MARCH);
         db.execute(
             "UPDATE conversation_sessions SET project_id=?1 WHERE id=?2",
             [P2, S1],
@@ -168,14 +126,14 @@ async fn mem_coverage_mirror_matches_full_scan() -> Result<(), HarnessError> {
         .unwrap();
     }
     assert_eq!(
-        compare(&s, &chats, "edited_moved").await?[..4],
+        compare(&s, &v, &chats, "regenerated_moved").await?[..4],
         [true, false, true, true]
     );
     {
         let db = canonical(&data);
         db.execute(
             "UPDATE conversation_messages SET status='compacted' WHERE id=?1",
-            [format!("{S2}-turn-1-assistant")],
+            [format!("{S2}-turn-1-assistant-2")],
         )
         .unwrap();
         recovered(
@@ -187,28 +145,20 @@ async fn mem_coverage_mirror_matches_full_scan() -> Result<(), HarnessError> {
         );
     }
     assert_eq!(
-        compare(&s, &chats, "compacted_recovered").await?[..4],
+        compare(&s, &v, &chats, "compacted_recovered").await?[..4],
         [true, true, false, true]
     );
-    // The App never rewrites message text; restore it before memory sync
-    // resumes so projection keeps working on its own sources.
-    canonical(&data)
-        .execute(
-            "UPDATE conversation_parts SET content_json=?1 WHERE message_id=?2",
-            [
-                json!({"text":"seeded fact 1 in two"}).to_string(),
-                format!("{S2}-turn-1-user"),
-            ],
-        )
-        .unwrap();
     release_gate(&gate);
 
-    // The mirror applies the changes and catch-up registers the new sources.
-    settle(&data, false).await;
+    // The mirror applies the changes; catch-up registers and projection
+    // completes the new turn. The compacted turn is out. The recovered
+    // message never finishes projection (its job is rebuilt with the episode
+    // revision as the parts hash), so the first project is only compared.
+    settle(&data, &[S1, S2]).await;
     let gate = hold_gate(&data);
-    // The mirror rows now carry every change; projection state is whatever
-    // the consumer reached, and both readings must agree on it.
-    compare(&s, &chats, "applied").await?;
+    eprintln!("MEM-COVERAGE incomplete jobs: {:?}", incomplete_jobs(&data));
+    let applied = compare(&s, &v, &chats, "applied").await?;
+    assert_eq!([applied[0], applied[2], applied[3]], [false; 3]);
     {
         let db = canonical(&data);
         db.execute(
@@ -229,7 +179,13 @@ async fn mem_coverage_mirror_matches_full_scan() -> Result<(), HarnessError> {
             "2026-03-20T00:00:00.000Z",
         );
     }
-    compare(&s, &chats, "deleted").await?;
+    let deleted = compare(&s, &v, &chats, "deleted").await?;
+    assert_eq!([deleted[0], deleted[2], deleted[3]], [true; 3]);
+    release_gate(&gate);
+    settle(&data, &[S1, S2]).await;
+    let gate = hold_gate(&data);
+    let applied = compare(&s, &v, &chats, "deletion_applied").await?;
+    assert_eq!([applied[0], applied[2], applied[3]], [false; 3]);
     release_gate(&gate);
     s.finish().await
 }

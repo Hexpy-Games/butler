@@ -358,8 +358,12 @@ mod fts;
 
 #[path = "memory/coverage.rs"]
 mod coverage;
+#[path = "memory/coverage_restore.rs"]
+mod coverage_restore;
 #[path = "memory/coverage_scale.rs"]
 mod coverage_scale;
+#[path = "memory/coverage_seed.rs"]
+mod coverage_seed;
 #[path = "memory/coverage_support.rs"]
 mod coverage_support;
 

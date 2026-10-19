@@ -1,7 +1,8 @@
 //! MEM-COVERAGE-SCALE: at owner scale, recall reads projection coverage from
-//! the inventory mirror without scanning the canonical store, and returns
-//! the same coverage and results as the full scan, including a change the
-//! mirror has not applied yet.
+//! the inventory mirror without scanning the canonical store: with every
+//! source projected, with half of them still waiting for projection, and
+//! with a change the mirror has not applied yet. Coverage and results are
+//! asserted complete and equal to the full scan's where it finishes.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -9,29 +10,53 @@
     reason = "test assertions"
 )]
 
+use super::coverage_seed::{published, session, turn};
 use super::coverage_support::{
-    Variant, canonical, coverage, graph, hide_mirror, hold_gate, mirror_current, pending,
-    published, recall, release_gate, session, show_mirror, start, turn,
+    Variant, canonical, chats, coverage, graph, hide_mirror, hold_gate, mirror_current, pending,
+    recall_in, release_gate, show_mirror, start,
 };
 use butler_e2e::e2e::HarnessError;
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 
-const SESSION: &str = "coverage-scale";
-const PROJECT: &str = "coverage-scale-project";
-/// Canonical turns in the scale chat (each with a request and an answer).
+/// Projected chat and its project.
+const DONE: &str = "coverage-scale-done";
+const DONE_PROJECT: &str = "coverage-scale-done-project";
+/// Chat whose sources still wait for projection, in another project.
+const BACKLOG: &str = "coverage-scale-backlog";
+const BACKLOG_PROJECT: &str = "coverage-scale-backlog-project";
+/// Canonical turns in all (each with a request and an answer), half per chat.
 const TURNS: u64 = 10_000;
 /// Candidate selection (graph read stage) per recall, debug build, on a
-/// loaded machine. Reading the mirror measured 20-170 ms here (its inventory
-/// part about 2 ms); the full scan of this fixture measured 2.0-2.6 s.
+/// loaded machine; the full scan of the projected half is reported.
 const SELECTION_BUDGET_MS: f64 = 400.0;
+/// From seeding to a mirror current with the store, with catch-up
+/// registering the same sources at the same time.
+const BUILD_BUDGET: Duration = Duration::from_secs(120);
 const WORD: &str = "zephyrquartz";
 
-fn variant() -> Variant {
-    Variant {
-        prompt: "Coverage recall at owner scale.",
-        arguments: json!({"cue":WORD,"session_ids":[SESSION],"include_vector":false}),
-    }
+fn variants() -> Vec<Variant> {
+    let arguments = |extra: Value| {
+        let mut base = json!({"cue":WORD,"include_vector":false});
+        base.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        base
+    };
+    vec![
+        Variant {
+            prompt: "Coverage recall of the projected chat.",
+            arguments: arguments(json!({"session_ids":[DONE]})),
+        },
+        Variant {
+            prompt: "Coverage recall of both chats.",
+            arguments: arguments(json!({"session_ids":[DONE,BACKLOG]})),
+        },
+        Variant {
+            prompt: "Coverage recall of the projected project.",
+            arguments: arguments(json!({"project_filter":"selected","project_ids":[DONE_PROJECT]})),
+        },
+    ]
 }
 
 fn turns() -> u64 {
@@ -44,44 +69,49 @@ fn turns() -> u64 {
 fn seed(data: &std::path::Path, count: u64) {
     let mut db = canonical(data);
     let tx = db.transaction().unwrap();
-    session(&tx, SESSION, Some(PROJECT));
+    session(&tx, DONE, Some(DONE_PROJECT));
+    session(&tx, BACKLOG, Some(BACKLOG_PROJECT));
     for n in 1..=count {
+        let chat = if n % 2 == 1 { DONE } else { BACKLOG };
         let text = if n == 1 {
             format!("The archive word is {WORD}.")
         } else {
             format!("Scale fact number {n} about routine {}.", n % 97)
         };
-        let day = 1 + n % 28;
-        turn(
-            &tx,
-            SESSION,
-            n,
-            &text,
-            &format!("2026-02-{day:02}T00:00:00.000Z"),
-        );
+        let at = format!("2026-02-{:02}T00:00:00.000Z", 1 + n % 28);
+        turn(&tx, chat, n, &text, &at);
     }
     published(&tx);
     tx.commit().unwrap();
 }
 
-/// Completes the projection of every mirrored source: registered jobs are
-/// marked complete; unregistered sources get a completed chunk and job.
-fn project_everything(data: &std::path::Path) {
-    graph(data).execute_batch(r#"
-        UPDATE memory_projection_jobs SET semantic_graph_state='{"state":"complete"}'
-          WHERE json_extract(semantic_graph_state,'$.state')!='complete';
+/// Completes the projection of every mirrored source of the projected chat
+/// and leaves every source of the backlog chat waiting: its registered jobs
+/// pending, its other sources unregistered.
+fn project_done_chat(data: &std::path::Path) {
+    graph(data).execute(r#"
+        UPDATE memory_projection_jobs SET semantic_graph_state=CASE WHEN episode_id IN
+          (SELECT episode_id FROM memory_canonical_inventory WHERE session_id=?1)
+          THEN '{"state":"complete"}' ELSE '{"state":"pending"}' END
+        WHERE episode_id IN (SELECT episode_id FROM memory_canonical_inventory WHERE session_id IN (?1,?2))"#,
+        [DONE, BACKLOG],
+    ).unwrap();
+    graph(data).execute_batch(&format!(r#"
         INSERT INTO memory_chunks(memory_chunk_id,source_key,current_revision,origin_kind,status,source_hash,created_at,updated_at)
           SELECT episode_id,'conversation_turn:'||entity_id,revision,'user_input','active','seed','2026-02-01T00:00:00Z','2026-02-01T00:00:00Z'
-          FROM memory_canonical_inventory i WHERE eligible=1 AND covered=0
+          FROM memory_canonical_inventory i WHERE eligible=1 AND covered=0 AND session_id='{DONE}'
             AND NOT EXISTS(SELECT 1 FROM memory_chunks c WHERE c.memory_chunk_id=i.episode_id);
         INSERT INTO memory_projection_jobs(job_id,episode_id,revision,extraction_version,generation,extraction_model,reasoning_effort,observed_completion_job_ids,source_state,semantic_graph_state,episode_vectors_state,node_vectors_state,hot_cache_state,created_at)
-          SELECT 'scale-'||episode_id,episode_id,revision,'v3','synthetic','stub','low','[]','{"state":"complete"}','{"state":"complete"}','{"state":"complete"}','{"state":"complete"}','{"state":"complete"}','2026-02-01T00:00:00Z'
-          FROM memory_canonical_inventory WHERE eligible=1 AND covered=0;
-    "#).unwrap();
-    let uncovered: i64 = graph(data)
-        .query_row("SELECT COUNT(*) FROM memory_canonical_inventory WHERE eligible=1 AND covered=0 AND session_id=?1", [SESSION], |row| row.get(0))
-        .unwrap();
-    assert_eq!(uncovered, 0);
+          SELECT 'scale-'||episode_id,episode_id,revision,'v3','synthetic','stub','low','[]','{{"state":"complete"}}','{{"state":"complete"}}','{{"state":"complete"}}','{{"state":"complete"}}','{{"state":"complete"}}','2026-02-01T00:00:00Z'
+          FROM memory_canonical_inventory WHERE eligible=1 AND covered=0 AND session_id='{DONE}';
+    "#)).unwrap();
+    let uncovered = |chat: &str| -> i64 {
+        graph(data)
+            .query_row("SELECT COUNT(*) FROM memory_canonical_inventory WHERE eligible=1 AND covered=0 AND session_id=?1", [chat], |row| row.get(0))
+            .unwrap()
+    };
+    assert_eq!(uncovered(DONE), 0);
+    assert_eq!(uncovered(BACKLOG), i64::try_from(turns() / 2).unwrap());
 }
 
 fn episodes(output: &Value) -> Vec<Value> {
@@ -93,19 +123,21 @@ fn episodes(output: &Value) -> Vec<Value> {
         .collect()
 }
 
+fn complete() -> Value {
+    json!({"status":"complete",
+        "graph":{"state":"ok","candidates":1,"codes":[]},
+        "source":{"state":"ok","candidates":2,"codes":[]}})
+}
+
 #[tokio::test]
 async fn mem_coverage_scale_reads_the_mirror() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let count = turns();
-    let s = start("MEM-COVERAGE-SCALE", &[variant()]).await?;
+    let s = start("MEM-COVERAGE-SCALE", &variants()).await?;
     let data = s.sandbox.data.clone();
-    s.turn("general", variant().prompt).await?;
-    let seeded = Instant::now();
+    let chats = chats(&s, 4).await?;
+    s.turn("general", variants()[0].prompt).await?;
     seed(&data, count);
-    eprintln!(
-        "MEM-COVERAGE-SCALE seeded turns={count} ms={}",
-        seeded.elapsed().as_millis()
-    );
     let built = Instant::now();
     tokio::time::timeout(Duration::from_secs(600), async {
         while !mirror_current(&data) {
@@ -114,68 +146,63 @@ async fn mem_coverage_scale_reads_the_mirror() -> Result<(), HarnessError> {
     })
     .await
     .expect("inventory mirror was not built");
-    eprintln!(
-        "MEM-COVERAGE-SCALE mirror_build_ms={}",
-        built.elapsed().as_millis()
-    );
+    let build = built.elapsed();
     let gate = hold_gate(&data);
-    project_everything(&data);
+    project_done_chat(&data);
+    let v = variants();
 
-    let (mirror, mirror_ms) = recall(&s, &variant()).await?;
-    let phase = hide_mirror(&data);
-    let (full, full_ms) = recall(&s, &variant()).await?;
-    show_mirror(&data, &phase);
-    eprintln!(
-        "MEM-COVERAGE-SCALE turns={count} selection_ms mirror={mirror_ms:.1} full_scan={full_ms:.1}"
-    );
-    // Every source is projected: the mirror reading is complete.
-    assert_eq!(
-        coverage(&mirror),
-        json!({"status":"complete",
-            "graph":{"state":"ok","candidates":1,"codes":[]},
-            "source":{"state":"ok","candidates":2,"codes":[]}}),
-        "{mirror}"
-    );
-    assert_eq!(episodes(&mirror).len(), 1, "{mirror}");
+    let (projected, projected_ms) = recall_in(&s, &chats[0], &v[0]).await?;
+    assert_eq!(coverage(&projected), complete(), "{projected}");
+    assert_eq!(episodes(&projected).len(), 1, "{projected}");
     assert!(
-        mirror["output"]["results"].to_string().contains(WORD),
-        "registered source not recalled: {mirror}"
+        projected["output"]["results"].to_string().contains(WORD),
+        "{projected}"
     );
-    // The full scan reads the same stores; at owner scale its inventory
-    // runs into the candidate deadline and reports itself partial.
-    if full["output"]["coverage"]["source"]["codes"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|code| code == "ingestion_inventory_partial")
-    {
-        assert!(full_ms > SELECTION_BUDGET_MS);
-    } else {
-        assert_eq!(coverage(&mirror), coverage(&full));
-    }
-    assert_eq!(episodes(&mirror), episodes(&full));
+    let (backlog, backlog_ms) = recall_in(&s, &chats[1], &v[1]).await?;
+    assert!(
+        pending(&backlog),
+        "the waiting chat is not reported: {backlog}"
+    );
+    assert_eq!(
+        backlog["output"]["coverage"]["graph"]["codes"],
+        json!(["ingestion_pending"])
+    );
+    assert_eq!(episodes(&backlog), episodes(&projected));
+    let (project, project_ms) = recall_in(&s, &chats[2], &v[2]).await?;
+    assert_eq!(coverage(&project), complete(), "{project}");
+    assert_eq!(episodes(&project), episodes(&projected));
+
+    let phase = hide_mirror(&data);
+    let (full, full_ms) = recall_in(&s, &chats[3], &v[0]).await?;
+    show_mirror(&data, &phase);
+    assert_eq!(episodes(&full), episodes(&projected));
 
     // A turn the mirror has not applied yet is still reported.
+    let at = "2026-02-28T00:00:00.000Z";
     turn(
         &canonical(&data),
-        SESSION,
+        DONE,
         count + 1,
         &format!("Latest {WORD} note."),
-        "2026-02-28T00:00:00.000Z",
+        at,
     );
-    let (latest, latest_ms) = recall(&s, &variant()).await?;
-    eprintln!("MEM-COVERAGE-SCALE latest selection_ms={latest_ms:.1}");
+    let (latest, latest_ms) = recall_in(&s, &chats[0], &v[0]).await?;
     assert!(
         pending(&latest),
         "unprojected latest turn missing from coverage: {latest}"
     );
-    assert_eq!(episodes(&latest), episodes(&mirror));
+    assert_eq!(episodes(&latest), episodes(&projected));
+    eprintln!(
+        "MEM-COVERAGE-SCALE turns={count} build_ms={} selection_ms projected={projected_ms:.1} backlog={backlog_ms:.1} \
+         project_with_backlog={project_ms:.1} latest={latest_ms:.1} full_scan={full_ms:.1} full_scan_codes={}",
+        build.as_millis(),
+        full["output"]["coverage"]["source"]["codes"]
+    );
     if count >= TURNS {
-        assert!(mirror_ms < SELECTION_BUDGET_MS && latest_ms < SELECTION_BUDGET_MS);
-        assert!(
-            full_ms > SELECTION_BUDGET_MS,
-            "fixture too small to tell the paths apart"
-        );
+        assert!(build < BUILD_BUDGET, "mirror build took {build:?}");
+        for ms in [projected_ms, backlog_ms, project_ms, latest_ms] {
+            assert!(ms < SELECTION_BUDGET_MS, "selection took {ms} ms");
+        }
     }
     release_gate(&gate);
     s.finish().await

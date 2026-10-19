@@ -1,6 +1,5 @@
-//! Shared canonical seeding, memory-gate holding and recall calls for the
-//! inventory coverage scenarios. Seeds are written the way an external
-//! writer would: plain SQL against the agent's live stores.
+//! Memory-gate holding, mirror state and recall calls for the inventory
+//! coverage scenarios.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -16,7 +15,7 @@ use butler_e2e::e2e::{
     scenario::{Scenario, Setup},
 };
 use butler_platform::sqlite;
-use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
+use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -63,88 +62,6 @@ pub(super) fn graph(data: &Path) -> sqlite::Connection {
     let db = sqlite::open(graph_path(data).unwrap()).unwrap();
     db.busy_timeout(Duration::from_secs(10)).unwrap();
     db
-}
-
-pub(super) fn session(db: &Connection, id: &str, project: Option<&str>) {
-    db.execute(
-        "INSERT INTO conversation_sessions(id,project_id,gateway_origin,created_at,updated_at,status,schema_version) \
-         VALUES(?1,?2,'app','2026-01-01T00:00:00.000Z','2026-01-01T00:00:00.000Z','active',6)",
-        params![id, project],
-    )
-    .unwrap();
-}
-
-/// One delivered turn `n` of `session`: a user request and a public answer.
-pub(super) fn turn(db: &Connection, session: &str, n: u64, text: &str, at: &str) -> String {
-    let turn = format!("{session}-turn-{n}");
-    db.execute(
-        "INSERT INTO conversation_turns(id,session_id,seq,actor,status,started_at,completed_at) \
-         VALUES(?1,?2,?3,'user','complete',?4,?4)",
-        params![turn, session, n, at],
-    )
-    .unwrap();
-    for (index, role, origin, body) in [
-        (0, "user", "user_input", text.to_owned()),
-        (1, "assistant", "assistant_public", format!("Noted: {text}")),
-    ] {
-        let message = format!("{turn}-{role}");
-        db.execute(
-            "INSERT INTO conversation_messages(id,session_id,turn_id,seq,role,status,visibility,provenance,created_at,origin_kind) \
-             VALUES(?1,?2,?3,?4,?5,'complete','user','trusted',?6,?7)",
-            params![message, session, turn, n * 2 + index, role, at, origin],
-        )
-        .unwrap();
-        db.execute(
-            "INSERT INTO conversation_parts(id,message_id,part_index,kind,content_json,status) \
-             VALUES(?1,?2,0,'text',?3,'complete')",
-            params![
-                format!("{message}-part"),
-                message,
-                json!({"text": body}).to_string()
-            ],
-        )
-        .unwrap();
-    }
-    db.execute(
-        "INSERT INTO conversation_turn_outcomes(id,session_id,turn_id,generation,outcome,source_hash,request_message_id,\
-         public_assistant_message_id,evidence_refs_json,unresolved_obligations_json,created_at) \
-         VALUES(?1,?2,?3,1,'delivered','seed',?4,?5,'[]','[]',?6)",
-        params![format!("{turn}-outcome"), session, turn, format!("{turn}-user"), format!("{turn}-assistant"), at],
-    )
-    .unwrap();
-    published(db);
-    turn
-}
-
-/// Moves the public source revision, as the store's own writers do.
-pub(super) fn published(db: &Connection) {
-    db.execute(
-        "UPDATE conversation_public_source_state SET revision=revision+1 WHERE singleton=1",
-        [],
-    )
-    .unwrap();
-}
-
-/// A recovered standalone user message (imported history).
-pub(super) fn recovered(db: &Connection, session: &str, seq: u64, text: &str, at: &str) {
-    let message = format!("{session}-recovered-{seq}");
-    db.execute(
-        "INSERT INTO conversation_messages(id,session_id,turn_id,seq,role,status,visibility,provenance,created_at,origin_kind) \
-         VALUES(?1,?2,NULL,?3,'user','complete','user','imported',?4,'user_input')",
-        params![message, session, seq, at],
-    )
-    .unwrap();
-    db.execute(
-        "INSERT INTO conversation_parts(id,message_id,part_index,kind,content_json,status) \
-         VALUES(?1,?2,0,'text',?3,'complete')",
-        params![
-            format!("{message}-part"),
-            message,
-            json!({"text": text}).to_string()
-        ],
-    )
-    .unwrap();
-    published(db);
 }
 
 /// Holds the consolidation write gate: the memory consumer defers, so the
@@ -194,22 +111,25 @@ pub(super) fn mirror_current(data: &Path) -> bool {
 }
 
 /// Waits until the inventory mirror and catch-up reflect every committed
-/// store change and, when `projected`, every semantic job is complete.
-pub(super) async fn settle(data: &Path, projected: bool) {
+/// store change and every registered job of `projected` sessions is
+/// complete.
+pub(super) async fn settle(data: &Path, projected: &[&str]) {
+    let marks = vec!["?"; projected.len()].join(",");
+    let incomplete = format!(
+        "SELECT COUNT(*) FROM memory_projection_jobs j JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id \
+         WHERE c.conversation_session_id IN ({marks}) AND json_extract(j.semantic_graph_state,'$.state')!='complete'"
+    );
     tokio::time::timeout(Duration::from_secs(180), async {
         loop {
             let graph_path = graph_path(data).unwrap();
             let ready = mirror_current(data)
                 && super::super::memory_idle::catchup_checkpoint_current(data, &graph_path)
-                && (!projected
-                    || graph(data)
-                        .query_row(
-                            "SELECT COUNT(*) FROM memory_projection_jobs WHERE json_extract(semantic_graph_state,'$.state')!='complete'",
-                            [],
-                            |row| row.get::<_, i64>(0),
-                        )
-                        .unwrap()
-                        == 0);
+                && graph(data)
+                    .query_row(&incomplete, rusqlite::params_from_iter(projected), |row| {
+                        row.get::<_, i64>(0)
+                    })
+                    .unwrap()
+                    == 0;
             if ready {
                 return;
             }
@@ -218,6 +138,36 @@ pub(super) async fn settle(data: &Path, projected: bool) {
     })
     .await
     .expect("inventory mirror and projection did not settle");
+}
+
+/// Waits until the inventory mirror reflects every committed store change.
+pub(super) async fn mirror_settled(data: &Path) {
+    tokio::time::timeout(Duration::from_secs(180), async {
+        while !mirror_current(data) {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .expect("inventory mirror did not settle");
+}
+
+/// Jobs that never completed, with their windows' and last attempts'
+/// state, for the scenario log.
+pub(super) fn incomplete_jobs(data: &Path) -> Vec<String> {
+    let db = graph(data);
+    let mut statement = db
+        .prepare(
+            "SELECT c.source_key||' semantic='||COALESCE(json_extract(j.semantic_graph_state,'$.state'),'?')||' windows='||\
+             COALESCE((SELECT group_concat(w.state||'/'||COALESCE(w.error_code,'-')||'/'||w.attempt_count) FROM memory_projection_windows w WHERE w.job_id=j.job_id),'')\
+             FROM memory_projection_jobs j JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id \
+             WHERE json_extract(j.semantic_graph_state,'$.state')!='complete'",
+        )
+        .unwrap();
+    statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect()
 }
 
 /// Hides the mirror from recall (the next recall scans the whole store)
@@ -311,4 +261,41 @@ pub(super) fn pending(output: &Value) -> bool {
         .unwrap()
         .iter()
         .any(|code| code == "ingestion_pending")
+}
+
+/// Recalls every variant (each from its own chat) through the mirror and
+/// through a full scan of the same unchanged stores; returns whether each
+/// reported pending ingestion.
+pub(super) async fn compare(
+    s: &Scenario,
+    variants: &[Variant],
+    chats: &[String],
+    step: &str,
+) -> Result<Vec<bool>, HarnessError> {
+    let data = &s.sandbox.data;
+    let mut pending_by_variant = Vec::new();
+    for (variant, chat) in variants.iter().zip(chats) {
+        let (incremental, _) = recall_in(s, chat, variant).await?;
+        let phase = hide_mirror(data);
+        let (full, _) = recall_in(s, chat, variant).await?;
+        show_mirror(data, &phase);
+        assert_eq!(
+            coverage(&incremental),
+            coverage(&full),
+            "{step}: {} mirror coverage differs from the full scan",
+            variant.prompt
+        );
+        pending_by_variant.push(pending(&incremental));
+    }
+    eprintln!("MEM-COVERAGE {step} pending={pending_by_variant:?}");
+    Ok(pending_by_variant)
+}
+
+/// One chat per variant: each chat admits a bounded message rate.
+pub(super) async fn chats(s: &Scenario, count: usize) -> Result<Vec<String>, HarnessError> {
+    let mut chats = Vec::new();
+    for index in 0..count {
+        chats.push(chat(s, &format!("Coverage recall {index}")).await?);
+    }
+    Ok(chats)
 }
