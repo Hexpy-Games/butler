@@ -43,6 +43,9 @@ try {
   // Build a real native fixture instead of copying a system binary whose
   // architecture can be universal/arm64e on macOS. Keep all writer checks.
   execFileSync("cc", [fixtureSource, "-o", fixtureBinary]);
+  if (process.platform === "linux") {
+    execFileSync("cc", [fixtureSource, "-o", join(payload, "bin/butler-sandbox")]);
+  }
   put(join(payload, "native-agent-manifest.json"), JSON.stringify({ schema: "butler.native-agent-payload.v1",
     version: "0.0.21", platform: process.platform, architecture: process.arch, binary: "bin/butler-agent", resources: "resources" }));
   const archive = join(temporary, "agent.tar.gz");
