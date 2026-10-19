@@ -209,8 +209,11 @@ fn exchange_directories_swaps_both_trees_atomically() {
     fs::remove_dir_all(directory).unwrap();
 }
 
+// test-category: security
 #[test]
 fn no_follow_opens_refuse_a_symbolic_link() {
+    #[cfg(unix)]
+    super::contained::verify();
     let directory = scratch("no-follow");
     let target = directory.join("target");
     let link = directory.join("link");

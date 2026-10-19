@@ -9,9 +9,20 @@
 //! returns `None`. Renames that replace a file retry on Windows while
 //! another process briefly holds it ([`rename`]).
 
+mod inventory;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) use inventory::credential_roots;
+#[cfg(target_os = "macos")]
+pub(crate) use inventory::secret_pattern;
+pub use inventory::{SecretInventory, environment_data, secret_name};
+mod stage;
+pub use stage::stage_file;
 mod device;
 pub use device::same_device;
 mod contained_read;
+pub use contained_read::{open_contained, open_directory_no_follow};
+#[cfg(unix)]
+mod contained;
 mod exact_name;
 pub use exact_name::exact_entry_exists;
 mod fault;
@@ -474,22 +485,8 @@ pub fn path_is_within(target: &Path, root: &Path) -> bool {
 mod path_compare;
 pub use path_compare::{ambiguous_path, relative_path, windows_ambiguous_spelling};
 
-/// An equivalent native path spelling for public-path regression scenarios.
 #[cfg(feature = "test-support")]
-pub fn workspace_test_alias(path: &Path) -> PathBuf {
-    #[cfg(windows)]
-    {
-        let text = path.to_string_lossy().to_uppercase();
-        PathBuf::from(format!(r"\\?\{text}"))
-    }
-    #[cfg(not(windows))]
-    {
-        path.parent()
-            .unwrap_or(path)
-            .join(".")
-            .join(path.file_name().unwrap_or_default())
-    }
-}
+pub use fixture_links::workspace_test_alias;
 #[cfg(feature = "test-support")]
 pub mod fixture_links;
 #[cfg(feature = "test-support")]

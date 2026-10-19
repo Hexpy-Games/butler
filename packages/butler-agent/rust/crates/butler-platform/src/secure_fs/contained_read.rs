@@ -69,7 +69,7 @@ fn open_components(root: &Path, relative: &Path, write: bool) -> io::Result<File
     Err(io::Error::other("unsafe_output_path"))
 }
 #[cfg(windows)]
-fn windows_guard(path: &Path, directory: bool, write: bool) -> io::Result<File> {
+pub(super) fn windows_guard(path: &Path, directory: bool, write: bool) -> io::Result<File> {
     use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
     let mut options = std::fs::OpenOptions::new();
     options
@@ -89,4 +89,41 @@ fn windows_guard(path: &Path, directory: bool, write: bool) -> io::Result<File> 
         return Err(io::Error::other("output_regular_files_only"));
     }
     Ok(file)
+}
+
+/// Open a contained regular file using the shared credential policy. Unix
+/// follows only relative links under the pinned root. Windows retains the
+/// existing no-reparse-point component checks.
+pub fn open_contained(
+    root: &Path,
+    relative: &Path,
+    inventory: &crate::secure_fs::SecretInventory,
+) -> io::Result<File> {
+    #[cfg(unix)]
+    {
+        super::contained::open_file(root, relative, inventory)
+    }
+    #[cfg(windows)]
+    {
+        if relative
+            .components()
+            .any(|part| crate::secure_fs::secret_name(&part.as_os_str().to_string_lossy()))
+            || inventory.protects_path(&root.join(relative))
+        {
+            return Err(crate::secure_fs::inventory::denied());
+        }
+        open(root, relative, false)
+    }
+}
+
+/// Open a directory itself without following a final link. For pinning roots.
+pub fn open_directory_no_follow(root: &Path) -> io::Result<File> {
+    #[cfg(unix)]
+    {
+        super::contained::directory(root)
+    }
+    #[cfg(windows)]
+    {
+        windows_guard(root, true, false)
+    }
 }

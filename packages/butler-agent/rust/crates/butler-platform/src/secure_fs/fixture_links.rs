@@ -20,3 +20,20 @@ pub fn directory_alias(target: &Path, link: &Path) -> io::Result<()> {
     #[cfg(not(windows))]
     crate::secure_fs::symlink(target, link)
 }
+
+/// An equivalent native path spelling for public-path regression scenarios.
+#[cfg(feature = "test-support")]
+pub fn workspace_test_alias(path: &std::path::Path) -> std::path::PathBuf {
+    #[cfg(windows)]
+    {
+        let text = path.to_string_lossy().to_uppercase();
+        std::path::PathBuf::from(format!(r"\\?\{text}"))
+    }
+    #[cfg(not(windows))]
+    {
+        path.parent()
+            .unwrap_or(path)
+            .join(".")
+            .join(path.file_name().unwrap_or_default())
+    }
+}

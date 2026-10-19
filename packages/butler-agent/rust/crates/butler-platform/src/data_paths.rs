@@ -205,3 +205,14 @@ pub const OWNED_DIRECTORIES: &[&str] = &[
     APP_LOGS,
     COMPOSER_DRAFTS,
 ];
+
+/// Data-relative credential stores, including rotation temporaries and quarantine.
+pub const CREDENTIAL_ROOTS: &[&str] = &[
+    "auth",
+    "secrets",
+    SANDBOX_QUARANTINE,
+    LOCAL_AUTH_DIR,
+    FOLDER_SECRET_DIR,
+    PROVIDER_CREDENTIALS,
+    ENVIRONMENT,
+];
