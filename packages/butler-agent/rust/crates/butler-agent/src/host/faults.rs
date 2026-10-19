@@ -9,27 +9,24 @@ pub(in crate::host) use clock::clock;
 pub(in crate::host) use embedding::{embedding_manifest, embedding_sources, local_asset_sources};
 
 use crate::host::service::ingress::IngressError;
-use std::sync::{
-    OnceLock,
-    atomic::{AtomicUsize, Ordering},
-};
+use parking_lot::Mutex;
+use std::sync::OnceLock;
 
 /// Fail the requested number of interruption reports, then use real delivery.
 /// State is process-local; no data-directory marker is read or removed.
 pub(in crate::host) fn interruption_report() -> Result<(), IngressError> {
-    static REMAINING: OnceLock<AtomicUsize> = OnceLock::new();
+    static REMAINING: OnceLock<Mutex<usize>> = OnceLock::new();
     let remaining = REMAINING.get_or_init(|| {
-        AtomicUsize::new(
+        Mutex::new(
             std::env::var("BUTLER_E2E_INTERRUPT_REPORT_FAILURES")
                 .ok()
                 .and_then(|value| value.parse().ok())
                 .unwrap_or(0),
         )
     });
-    if remaining
-        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
-        .is_ok()
-    {
+    let mut remaining = remaining.lock();
+    if *remaining > 0 {
+        *remaining -= 1;
         Err(IngressError::new(
             "inbound_delivery_interrupted",
             "Injected transient delivery failure",
