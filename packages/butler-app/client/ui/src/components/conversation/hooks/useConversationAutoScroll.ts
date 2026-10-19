@@ -54,6 +54,7 @@ export function useConversationAutoScroll({
   scrollRef,
 }: UseConversationAutoScrollOptions): ConversationScrollState {
   const pinnedToBottomRef = useRef(true);
+  const observedScrollTopRef = useRef(0);
   const lastAutoScrolledChatRef = useRef<string | null>(null);
   const latestSeenMessageVersionRef = useRef(latestMessageVersion);
   const frameRef = useRef<number | null>(null);
@@ -86,6 +87,8 @@ export function useConversationAutoScroll({
       const element = scrollRef.current;
       if (!element) return;
       scrollConversationToBottom(element, virtualListHeight, options);
+      // Pins move immediately; their scroll event arrives on a later frame.
+      observedScrollTopRef.current = element.scrollTop;
       pinnedToBottomRef.current = true;
       latestSeenMessageVersionRef.current = latestMessageVersion;
       setIsAwayFromBottom(false);
@@ -111,6 +114,7 @@ export function useConversationAutoScroll({
   useEffect(() => {
     const element = scrollRef.current;
     if (!element) return;
+    observedScrollTopRef.current = element.scrollTop;
     const markUserScrollIntent = () => {
       lastUserScrollIntentAtRef.current = window.performance.now();
     };
@@ -146,20 +150,27 @@ export function useConversationAutoScroll({
     const markKeyboardScrollIntent = (event: KeyboardEvent) => {
       if (SCROLL_NAVIGATION_KEYS.has(event.key)) markUserScrollIntent();
     };
-    // Keyboard focus on a control above the bottom moves the reader there:
+    // Keyboard focus outside the viewport moves the reader there:
     // release the bottom lock so a later pin (a settling or streaming
     // conversation) does not pull the focused control out of view.
     const keepKeyboardFocusInView = (event: FocusEvent) => {
       const target = event.target;
       if (!(target instanceof Element) || !target.matches(":focus-visible")) return;
-      const contentBottom = target.getBoundingClientRect().bottom - element.getBoundingClientRect().top + element.scrollTop;
-      if (element.scrollHeight - contentBottom > BOTTOM_LOCK_THRESHOLD) releaseBottomLock();
+      // Native focus reveal can run before or after focusin. Reconstruct the
+      // pre-scroll rect when reveal precedes the pending scroll event.
+      const targetBounds = target.getBoundingClientRect();
+      const viewport = element.getBoundingClientRect();
+      const pendingScroll = element.scrollTop - observedScrollTopRef.current;
+      if (targetBounds.top + pendingScroll < viewport.top || targetBounds.bottom + pendingScroll > viewport.bottom) {
+        releaseBottomLock();
+      }
     };
     const recentUserScrollIntent = () =>
       pointerScrollActiveRef.current ||
       window.performance.now() - lastUserScrollIntentAtRef.current <=
         USER_SCROLL_INTENT_WINDOW_MS;
     const updatePinnedState = () => {
+      observedScrollTopRef.current = element.scrollTop;
       const distanceFromBottom = conversationDistanceFromBottom(element);
       const pinned =
         distanceFromBottom < BOTTOM_LOCK_THRESHOLD ||

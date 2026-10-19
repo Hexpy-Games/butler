@@ -11,7 +11,8 @@ pub(super) async fn model_waiting(
     request_id: &str,
     status: Status,
     model_ref: Option<&str>,
-) {
+    summary: Option<&str>,
+) -> Result<(), BtccError> {
     if matches!(status, Status::Started)
         && let Some(model_ref) = model_ref
     {
@@ -42,8 +43,29 @@ pub(super) async fn model_waiting(
         payload.insert("model".into(), Value::String(model_ref.into()));
         payload.insert("modelRef".into(), Value::String(model_ref.into()));
     }
+    let stored = summary.filter(|body| progress.thinking_capture() && !body.trim().is_empty());
+    let result = stored.map(|body| {
+        let id = result_identity(request_id, "thinking", "");
+        let title = crate::btcc::thinking::derive(&format!("{body}\n"))
+            .unwrap_or_else(|| "Thinking".into());
+        payload.insert("thinkingTitle".into(), title.into());
+        payload.insert("resultId".into(), id.clone().into());
+        payload.insert("resultByteLength".into(), body.len().into());
+        (body, id)
+    });
     event.payload = Some(payload);
-    let _ = progress.emit(event).await;
+    progress.emit(event).await?;
+    if let Some((body, id)) = result {
+        emit_output_chunks(
+            progress,
+            request_id,
+            &id,
+            &super::super::identity::digest(body),
+            body,
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 pub(super) async fn operation(

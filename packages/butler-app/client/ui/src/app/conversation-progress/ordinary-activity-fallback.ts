@@ -40,7 +40,7 @@ function dedupeOrdinaryOperations(rows: ProgressRow[], turnId: string): Progress
   const operations: ProgressRow[] = [];
   for (const row of mergeToolRows(rows)) {
     if (
-      row.bridge_phase !== "btcc_operation" ||
+      (row.bridge_phase !== "btcc_operation" && !(row.bridge_phase === "model_round_waiting" && row.thinking_title)) ||
       (row.turn_id !== undefined && row.turn_id.trim() !== turnId) ||
       row.work_block_id ||
       row.work_contract_id ||
