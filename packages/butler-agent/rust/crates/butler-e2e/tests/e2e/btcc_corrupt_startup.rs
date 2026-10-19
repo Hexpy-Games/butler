@@ -1,4 +1,5 @@
 //! Persisted corruption verdicts fail closed without opening the recorded file.
+mod shutdown;
 use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
@@ -114,10 +115,13 @@ async fn replaced_database(corrupt: bool) -> Result<(), HarnessError> {
     s.agent.terminate().await?;
     let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
     write_verdict(&path, false)?;
-    // Replace the file with an equal-size copy: the file ID, rather than size,
-    // must distinguish it on hosts that expose IDs. Modification time is also recorded.
+    // Restore a copy with an explicitly different mtime on every platform.
     let replacement = s.sandbox.root.join("replacement.sqlite");
     std::fs::copy(&path, &replacement)?;
+    std::fs::File::options()
+        .write(true)
+        .open(&replacement)?
+        .set_modified(std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000))?;
     std::fs::remove_file(&path)?;
     std::fs::rename(replacement, &path)?;
     if corrupt {
@@ -138,7 +142,18 @@ async fn replaced_database(corrupt: bool) -> Result<(), HarnessError> {
             log.contains("agent_btcc_storage_foreign_key_check_failed"),
             "{log}"
         );
-        assert_eq!(std::fs::read(&verdict)?, original);
+        let refreshed = std::fs::read(&verdict)?;
+        assert_ne!(
+            refreshed, original,
+            "failed recovery must refresh the verdict"
+        );
+        assert!(
+            String::from_utf8_lossy(&refreshed)
+                .starts_with("agent_btcc_storage_foreign_key_check_failed\n{")
+        );
+        let (_, next) = failed_start(&mut s, 3).await?;
+        assert!(!next.contains("activated_begin"), "{next}");
+        assert_eq!(std::fs::read(&verdict)?, refreshed);
         assert_eq!(digest(&path)?, before);
     } else {
         s.gw = s.agent.start_again().await?;

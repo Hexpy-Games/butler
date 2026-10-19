@@ -321,8 +321,11 @@ async fn btcc_verdict_recheck_preserves_reference_failure_and_repair() -> Result
         VALUES('reference','fixture','missing','reference','fixture','fixture','fixture','{}','{}','delivered',1,1)")?;
     drop(db);
     let verdict = path.with_extension("sqlite.corrupt");
-    // This verdict describes a different file, so full validation still runs.
-    super::btcc_corrupt_startup::write_verdict(&path, true)?;
+    // preview.12 persisted logical findings with rule details and no identity.
+    std::fs::write(
+        &verdict,
+        "agent_btcc_migration_reference_check_failed\nrule=turn_inbox orphan_count=1",
+    )?;
     s.gw = s.agent.start_again().await?;
     assert!(s.gw.healthy().await);
     let log = std::fs::read_to_string(s.sandbox.logs.join("agent-2.log"))?;

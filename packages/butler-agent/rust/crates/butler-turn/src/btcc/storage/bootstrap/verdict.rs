@@ -1,4 +1,4 @@
-//! Small durable sidecars; never updated on cancellation, shutdown or idle polls.
+//! Durable scan verdicts, with corruption identity sealed after writer shutdown.
 use super::{StorageError, StorageResult, error, io_error};
 use crate::btcc::StorageCode;
 use std::io::Read;
@@ -27,8 +27,8 @@ pub(super) fn corruption(error: &StorageError) -> bool {
     }
 }
 
-/// A legacy or unreadable identity is conservatively treated as the same file.
-/// Only a proven replacement may enter synchronous full recovery validation.
+/// Physical legacy verdicts fail closed; legacy logical findings need a recheck.
+/// A recorded identity permits recovery only after a proven replacement.
 pub(super) fn needs_recheck(path: &Path) -> StorageResult<bool> {
     let file = match std::fs::File::open(sidecar(path, "corrupt")) {
         Ok(file) => file,
@@ -38,17 +38,32 @@ pub(super) fn needs_recheck(path: &Path) -> StorageResult<bool> {
     let mut raw = String::new();
     file.take(4096).read_to_string(&mut raw).map_err(io_error)?;
     let (code, identity) = raw.split_once('\n').unwrap_or((&raw, ""));
-    if let Ok(recorded) = serde_json::from_str::<DatabaseIdentity>(identity)
-        && recorded != DatabaseIdentity::read(path)?
-    {
-        return Ok(true);
+    match serde_json::from_str::<DatabaseIdentity>(identity) {
+        Ok(recorded) if recorded != DatabaseIdentity::read(path)? => return Ok(true),
+        Err(_) if physical_code(code).is_none() => return Ok(true),
+        _ => {}
     }
-    let code = if code == StorageCode::AgentBtccStorageForeignKeyCheckFailed.as_str() {
-        StorageCode::AgentBtccStorageForeignKeyCheckFailed
-    } else {
-        StorageCode::AgentBtccStorageQuickCheckFailed
-    };
-    Err(error(code))
+    Err(error(
+        physical_code(code).unwrap_or(StorageCode::AgentBtccStorageQuickCheckFailed),
+    ))
+}
+
+fn physical_code(code: &str) -> Option<StorageCode> {
+    [
+        StorageCode::AgentBtccStorageQuickCheckFailed,
+        StorageCode::AgentBtccStorageForeignKeyCheckFailed,
+    ]
+    .into_iter()
+    .find(|candidate| candidate.as_str() == code)
+}
+
+/// Called only after the writer connection and its checkpoint worker have closed.
+pub(in crate::btcc::storage) fn refresh_after_close(path: &Path) {
+    if let Ok(raw) = std::fs::read_to_string(sidecar(path, "corrupt"))
+        && let Some(code) = physical_code(raw.lines().next().unwrap_or_default())
+    {
+        record_corruption(path, &Err(error(code)));
+    }
 }
 
 #[derive(serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -99,12 +114,16 @@ pub(super) fn record_corruption(path: &Path, result: &StorageResult<()>) {
         && corruption(error)
     {
         let write = (|| {
-            let identity = DatabaseIdentity::read(path)?;
-            let raw = serde_json::to_string(&identity)
-                .map_err(|error| io_error(std::io::Error::other(error)))?;
+            let raw = match DatabaseIdentity::read(path) {
+                Ok(identity) => serde_json::to_string(&identity)
+                    .map_err(|error| io_error(std::io::Error::other(error)))?,
+                Err(_) => String::new(),
+            };
+            let code = physical_code(error.code())
+                .unwrap_or(StorageCode::AgentBtccStorageQuickCheckFailed);
             atomic_write(
                 &sidecar(path, "corrupt"),
-                format!("{}\n{raw}", error.code()).as_bytes(),
+                format!("{code}\n{raw}").as_bytes(),
             )
         })();
         if let Err(write) = write {
@@ -113,8 +132,8 @@ pub(super) fn record_corruption(path: &Path, result: &StorageResult<()>) {
     }
 }
 
-/// Logical findings never trigger startup validation. A successful physical
-/// check retires any corruption marker, including legacy reference-only markers.
+/// Current logical findings use a separate sidecar. A successful physical check
+/// retires any corruption marker, including legacy reference-only markers.
 pub(in crate::btcc::storage) fn validated(
     path: &Path,
     failures: &[super::validate::ReferenceFailure],

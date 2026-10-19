@@ -102,8 +102,11 @@ async fn session_effects_without_plan_pass_scan_and_restart() -> Result<(), Harn
     assert!(!path.with_extension("sqlite.corrupt").exists());
     assert!(!path.with_extension("sqlite.findings").exists());
     s.agent.terminate().await?;
-    // A replacement verdict must clear after full validation without row repair.
-    crate::btcc_corrupt_startup::write_verdict(&path, true)?;
+    // The owner's legacy code-only verdict must also clear.
+    std::fs::write(
+        path.with_extension("sqlite.corrupt"),
+        "agent_btcc_migration_reference_check_failed",
+    )?;
     s.gw = s.agent.start_again().await?;
     assert!(s.gw.healthy().await);
     assert!(!path.with_extension("sqlite.corrupt").exists());
