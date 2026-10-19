@@ -3,10 +3,10 @@
 
 use std::collections::BTreeSet;
 
-use super::lookup::provider_auth_methods;
-use super::*;
+use super::{lookup::provider_auth_methods, *};
 
 mod image_admission;
+mod provider_truth;
 
 fn catalog() -> StaticCatalog {
     StaticCatalog::load().unwrap()
@@ -25,6 +25,7 @@ fn setup_providers(catalog: &StaticCatalog) -> BTreeSet<String> {
 #[test]
 fn every_static_model_has_a_tier_and_pricing() {
     for model in &catalog().models {
+        provider_truth::assert_lifecycle_suffix(model);
         assert!(model.tier.is_some(), "{} has no tier", model.model_ref);
         match &model.pricing {
             Some(ModelPricing::Published {
@@ -193,6 +194,7 @@ fn confirmed_routine_presets_and_openai_sol_metadata_are_pinned() {
         assert_eq!(claude.default_reasoning_effort, effort);
         assert_eq!(claude.reasoning_efforts, sol.reasoning_efforts, "{id}");
     }
+    provider_truth::assert_provider_truth(&catalog);
     let grok = find("xai/grok-4.6");
     assert!(grok.runtime_supported);
     assert_eq!(grok.status, "available");
