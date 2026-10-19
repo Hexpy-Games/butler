@@ -2,7 +2,6 @@ pub(super) mod cli_launcher;
 pub(super) mod configuration;
 pub(super) mod conversation_observer;
 pub(super) mod delivery;
-pub(super) mod developer_log;
 pub(crate) mod diagnostics;
 pub(super) mod entrypoint;
 pub(super) mod foreground_lease;
@@ -12,3 +11,8 @@ pub(super) mod instance_identity;
 pub(super) mod progress_publisher;
 pub(super) mod restart_handoff;
 pub(crate) mod shutdown_trace;
+
+pub(crate) mod data_ownership;
+pub(crate) mod data_reset;
+pub(crate) mod paths;
+pub(crate) mod purge_policy;

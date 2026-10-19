@@ -1,7 +1,6 @@
 //! Native monitor reads projected from Operations and existing BTCC owners.
 
 mod events;
-mod logs;
 mod quota;
 mod work_status;
 
@@ -14,8 +13,8 @@ use serde_json::{Value, json};
 use tokio::sync::broadcast;
 
 use butler_gateway::gateway::{
-    AppBoundWorkStatusFact, AppDeveloperLogsQuery, AppMonitorPage, AppMonitoringPort,
-    AppUsageMonitorQuery, ApplicationFuture, GatewayApplicationError,
+    AppBoundWorkStatusFact, AppMonitorPage, AppMonitoringPort, AppUsageMonitorQuery,
+    ApplicationFuture, GatewayApplicationError,
 };
 use butler_models::models::ModelCatalog;
 use butler_runtime::operations::{
@@ -135,11 +134,6 @@ impl AppMonitoringPort for AppMonitoring {
     fn system_events(&self, page: AppMonitorPage) -> ApplicationFuture<Value> {
         let root = self.data_root.clone();
         Box::pin(async move { Ok(events::read(&root, page)) })
-    }
-
-    fn developer_logs(&self, query: AppDeveloperLogsQuery) -> ApplicationFuture<Value> {
-        let root = self.data_root.clone();
-        Box::pin(async move { logs::read(&root, &query) })
     }
 
     fn provider_quota(

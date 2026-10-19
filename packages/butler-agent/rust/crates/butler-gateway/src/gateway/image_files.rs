@@ -32,7 +32,7 @@ pub struct AppImageFiles {
 impl AppImageFiles {
     pub fn new(data_root: &Path) -> Self {
         Self {
-            root: data_root.join("app-server/message-files"),
+            root: data_root.join(butler_platform::data_paths::MESSAGE_FILES),
             permits: Arc::new(Semaphore::new(1)),
             jobs: TaskTracker::new(),
             closing: Arc::new(Mutex::new(false)),

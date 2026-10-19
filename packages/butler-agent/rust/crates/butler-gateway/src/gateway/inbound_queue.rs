@@ -54,7 +54,9 @@ impl InboundQueue {
     }
 
     pub async fn enqueue_async(&self, envelope: JsonDocument) -> QueueResult<QueuedInboundEvent> {
-        self.blocking(move |queue| queue.enqueue_idempotent(envelope))
+        let mut metadata = Map::new();
+        capture_trace_context(&mut metadata)?;
+        self.blocking(move |queue| queue.enqueue_idempotent_with_metadata(envelope, metadata))
             .await
     }
 
@@ -65,7 +67,9 @@ impl InboundQueue {
         &self,
         envelope: JsonDocument,
     ) -> QueueResult<QueuedInboundEvent> {
-        self.blocking(move |queue| queue.publish(envelope, Map::new(), false))
+        let mut metadata = Map::new();
+        capture_trace_context(&mut metadata)?;
+        self.blocking(move |queue| queue.publish(envelope, metadata, false))
             .await
     }
 
@@ -75,6 +79,21 @@ impl InboundQueue {
     ) -> QueueResult<Option<QueuedInboundEvent>> {
         self.blocking(move |queue| queue.find_idempotent(&envelope))
             .await
+    }
+
+    /// The App claim the record of `event_id` delivers under, if it can
+    /// still deliver; see `storage::delivering_claim`.
+    pub async fn delivering_claim_async(
+        &self,
+        event_id: String,
+        claim: Option<String>,
+    ) -> QueueResult<Option<String>> {
+        self.blocking(move |queue| {
+            // The lane orders this read after any in-flight state transition.
+            let _guard = queue.lane.lock();
+            storage::delivering_claim(&queue.root, &event_id, claim.as_deref())
+        })
+        .await
     }
 
     pub async fn complete_async(
@@ -109,7 +128,7 @@ impl InboundQueue {
 
     pub fn new(butler_data: &Path) -> Self {
         Self {
-            root: butler_data.join("runtime/inbound-events"),
+            root: butler_data.join(butler_platform::data_paths::INBOUND),
             owner_id: format!("{}:{}", std::process::id(), uuid::Uuid::new_v4()),
             lane: Arc::new(Mutex::new(())),
             enqueue_wake: Arc::new(Notify::new()),
@@ -118,6 +137,14 @@ impl InboundQueue {
     }
 
     /// Wait exactly for the next durable deferral deadline, if one exists.
+    pub async fn cancel_pending_async(&self) -> QueueResult<()> {
+        self.blocking(move |queue| {
+            let _lane = queue.lane.lock();
+            storage::cancel_pending(&queue.root)
+        })
+        .await
+    }
+
     pub async fn next_deferred_delay(&self) -> QueueResult<Option<std::time::Duration>> {
         self.blocking(move |queue| storage::next_delay(&queue.root))
             .await
@@ -158,15 +185,18 @@ impl InboundQueue {
     fn publish(
         &self,
         envelope: JsonDocument,
-        metadata: Map<String, Value>,
+        mut metadata: Map<String, Value>,
         durable: bool,
     ) -> QueueResult<QueuedInboundEvent> {
+        capture_trace_context(&mut metadata)?;
         let timing = super::command_timing::CommandTiming::new("inbound_enqueue");
         let _guard = self.lane.lock();
         timing.mark("lock_acquired");
         let result = storage::enqueue_idempotent(&self.root, envelope, metadata, durable);
         timing.mark("record_published");
         if result.is_ok() {
+            // The record is visible before its enqueuer receives the receipt.
+            butler_platform::secure_fs::abort_point("inbound_enqueue_renamed");
             // Either this write or its reconstructing owner is already durable.
             self.enqueue_wake.notify_one();
         }
@@ -235,4 +265,17 @@ impl InboundQueue {
         let _guard = self.lane.lock();
         storage::recover_stale(&self.root, &self.owner_id, active)
     }
+}
+
+fn capture_trace_context(metadata: &mut Map<String, Value>) -> QueueResult<()> {
+    if !metadata.contains_key("traceContext") {
+        let context = butler_log::TraceContext::current();
+        if context.trace_id.is_some() {
+            let value = serde_json::to_value(context).map_err(|error| {
+                InboundQueueError::new(InboundQueueCode::InboundQueueIoFailed, error.to_string())
+            })?;
+            metadata.insert("traceContext".into(), value);
+        }
+    }
+    Ok(())
 }

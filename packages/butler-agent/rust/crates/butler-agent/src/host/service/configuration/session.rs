@@ -176,7 +176,8 @@ impl ServiceConfiguration {
     }
 
     fn pointer_path(&self) -> std::path::PathBuf {
-        self.data_root.join("config/session-id.txt")
+        self.data_root
+            .join(butler_platform::data_paths::SESSION_POINTER)
     }
 
     fn project_id_for(&self, workspace: &str) -> Option<String> {

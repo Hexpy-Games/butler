@@ -10,14 +10,12 @@ mod access;
 mod command_sandbox;
 mod logging;
 pub use command_sandbox::command_sandbox_enabled;
-pub use logging::startup_config as startup_log_config;
+pub use logging::{producer_config as producer_log_config, startup_config as startup_log_config};
 mod background_sources;
 mod composer_decoration;
 mod controls;
 mod conversation_background;
 mod default_model;
-mod diagnostics_reader;
-pub use diagnostics_reader::DiagnosticsSettingsReader;
 mod model;
 mod onboarding;
 pub(super) mod persistence;
@@ -292,6 +290,17 @@ impl super::AppApplication {
             .map_err(super::app_error)
     }
 
+    pub(super) async fn resolve_settings_projection(
+        &self,
+        settings: Value,
+    ) -> Result<Value, crate::gateway::GatewayApplicationError> {
+        let mut settings = self.resolve_background_sources(settings).await?;
+        if let Some(port) = &self.dependencies.data_reset {
+            settings["data_generation"] = port.generation().into();
+        }
+        Ok(settings)
+    }
+
     pub(super) async fn worker_profile_settings(
         &self,
     ) -> Result<Value, crate::gateway::GatewayApplicationError> {
@@ -305,7 +314,7 @@ impl super::AppApplication {
             .read(move |db| view::read(db, &subscribers, &facts, &now, &workspace_root))
             .await
             .map_err(super::app_error)?;
-        self.resolve_background_sources(view).await
+        self.resolve_settings_projection(view).await
     }
 
     pub(super) async fn update_settings_owned(
@@ -355,7 +364,7 @@ impl super::AppApplication {
         {
             return Ok((
                 wallpaper::source(&current),
-                self.resolve_background_sources(current).await?,
+                self.resolve_settings_projection(current).await?,
             ));
         }
         self.dependencies
@@ -370,7 +379,7 @@ impl super::AppApplication {
         let projection =
             update::project_after_refresh(&current, &prepared.patch, &refreshed, &workspace_root);
         let stored_projection = update::persistence_projection(&projection);
-        let projection = self.resolve_background_sources(projection).await?;
+        let projection = self.resolve_settings_projection(projection).await?;
         let event_payload = update::event_payload(&projection);
         let previous = wallpaper::source(&current);
         let wallpaper_event = wallpapers::change_payload(

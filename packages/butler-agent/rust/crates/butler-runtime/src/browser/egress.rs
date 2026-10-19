@@ -13,19 +13,21 @@
 //! one request per connection, so a reused proxy connection can never carry
 //! a request to another host.
 use super::public_url;
+use butler_log::http::{Connection, Purpose};
 use std::{
     io,
     net::{IpAddr, SocketAddr},
     time::Duration,
 };
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
+    io::AsyncWriteExt,
     net::{TcpListener, TcpStream},
 };
 use tokio_util::sync::CancellationToken;
+use tracing::Instrument;
+mod wire;
+use wire::{Head, read_head, relay, rewrite};
 
-const MAX_HEAD: usize = 64 * 1024;
-const HEAD_TIMEOUT: Duration = Duration::from_secs(30);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// A tunnel lives at most as long as an agent tab may stay idle.
 const MAX_TUNNEL: Duration = Duration::from_secs(600);
@@ -174,12 +176,12 @@ impl reqwest::dns::Resolve for PublicResolver {
 /// A fetch client behind the egress guard: public resolution, and every
 /// redirect hop re-checked. Hops carrying credentials stop, as before.
 pub fn guarded_client(
-    builder: reqwest::ClientBuilder,
+    builder: butler_log::http::ClientBuilder,
     fixtures: LoopbackFixtures,
-) -> reqwest::ClientBuilder {
+) -> butler_log::http::ClientBuilder {
     builder
         .dns_resolver(std::sync::Arc::new(PublicResolver))
-        .redirect(reqwest::redirect::Policy::custom(move |attempt| {
+        .redirect(butler_log::http::RedirectPolicy::custom(move |attempt| {
             if attempt.previous().len() >= 10 {
                 return attempt.error("too many redirects");
             }
@@ -240,27 +242,33 @@ impl EgressProxy {
         let address = listener.local_addr()?;
         let stop = CancellationToken::new();
         let token = stop.clone();
-        tokio::spawn(async move {
-            loop {
-                let accepted = tokio::select! {
-                    () = token.cancelled() => break,
-                    accepted = listener.accept() => accepted,
-                };
-                let Ok((client, peer)) = accepted else {
-                    continue;
-                };
-                if !peer.ip().is_loopback() {
-                    continue;
-                }
-                let token = token.clone();
-                tokio::spawn(async move {
-                    tokio::select! {
-                        () = token.cancelled() => {},
-                        _ = tokio::time::timeout(MAX_TUNNEL, serve(client, scope)) => {},
+        tokio::spawn(
+            async move {
+                loop {
+                    let accepted = tokio::select! {
+                        () = token.cancelled() => break,
+                        accepted = listener.accept() => accepted,
+                    };
+                    let Ok((client, peer)) = accepted else {
+                        continue;
+                    };
+                    if !peer.ip().is_loopback() {
+                        continue;
                     }
-                });
+                    let token = token.clone();
+                    tokio::spawn(
+                        async move {
+                            tokio::select! {
+                                () = token.cancelled() => {},
+                                _ = tokio::time::timeout(MAX_TUNNEL, serve(client, scope)) => {},
+                            }
+                        }
+                        .in_current_span(),
+                    );
+                }
             }
-        });
+            .in_current_span(),
+        );
         Ok(Self { address, stop })
     }
 
@@ -276,67 +284,11 @@ impl Drop for EgressProxy {
     }
 }
 
-struct Head {
-    method: String,
-    target: String,
-    version: String,
-    headers: Vec<(String, String)>,
-    rest: Vec<u8>,
-}
-
-async fn read_head<R: AsyncRead + Unpin>(stream: &mut R) -> Option<Head> {
-    let mut buffer = Vec::with_capacity(4096);
-    let mut chunk = [0_u8; 4096];
-    let end = loop {
-        if let Some(end) = buffer.windows(4).position(|w| w == b"\r\n\r\n") {
-            break end;
-        }
-        if buffer.len() > MAX_HEAD {
-            return None;
-        }
-        let read = tokio::time::timeout(HEAD_TIMEOUT, stream.read(&mut chunk))
-            .await
-            .ok()?
-            .ok()?;
-        if read == 0 {
-            return None;
-        }
-        buffer.extend_from_slice(&chunk[..read]);
-    };
-    let text = std::str::from_utf8(&buffer[..end]).ok()?;
-    let mut lines = text.split("\r\n");
-    let mut first = lines.next()?.splitn(3, ' ');
-    let (method, target) = (first.next()?, first.next()?);
-    let version = first.next().unwrap_or("");
-    let headers = lines
-        .filter_map(|line| line.split_once(':'))
-        .map(|(name, value)| (name.trim().to_owned(), value.trim().to_owned()))
-        .collect();
-    Some(Head {
-        method: method.into(),
-        target: target.into(),
-        version: version.into(),
-        headers,
-        rest: buffer[end + 4..].to_vec(),
-    })
-}
-
 async fn refuse(client: &mut TcpStream) {
     let _ = client
         .write_all(b"HTTP/1.1 403 Forbidden\r\nX-Butler-Egress: navigation_denied\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
         .await;
     let _ = client.shutdown().await;
-}
-
-async fn connect(addresses: &[SocketAddr]) -> Option<TcpStream> {
-    for address in addresses {
-        if let Ok(Ok(stream)) =
-            tokio::time::timeout(CONNECT_TIMEOUT, TcpStream::connect(address)).await
-        {
-            return Some(stream);
-        }
-    }
-    None
 }
 
 async fn serve(mut client: TcpStream, scope: Scope) {
@@ -358,48 +310,43 @@ async fn tunnel(mut client: TcpStream, head: Head, scope: Scope) {
     else {
         return refuse(&mut client).await;
     };
-    let addresses = if scope.content(&host, port, None) {
-        vec![SocketAddr::from(([127, 0, 0, 1], port))]
-    } else {
-        let Ok(addresses) = public_addresses(&host, port).await else {
-            return refuse(&mut client).await;
+    let log = Connection::new(&host, port, &Purpose::new("browser.egress"));
+    let result = async {
+        let addresses = destination(&host, port, None, scope).await?;
+        let mut upstream = match log.connect(&addresses, CONNECT_TIMEOUT).await {
+            Ok(stream) => stream,
+            Err(error) => {
+                let _ = client.write_all(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await;
+                return Err(error);
+            }
         };
-        addresses
-    };
-    let Some(mut upstream) = connect(&addresses).await else {
-        let _ = client
-            .write_all(
-                b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
-            )
-            .await;
-        return;
-    };
-    if client
-        .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
-        .await
-        .is_err()
-        || upstream.write_all(&head.rest).await.is_err()
+        client.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n").await?;
+        upstream.write_all(&head.rest).await?;
+        tokio::io::copy_bidirectional(&mut client, &mut upstream).await?;
+        Ok(())
+    }.await;
+    if result
+        .as_ref()
+        .is_err_and(|error| error.kind() == io::ErrorKind::PermissionDenied)
     {
-        return;
+        refuse(&mut client).await;
     }
-    let _ = tokio::io::copy_bidirectional(&mut client, &mut upstream).await;
+    log.finish(result);
 }
 
-/// Hop-by-hop and proxy headers never reach the other side.
-fn end_to_end(name: &str) -> bool {
-    !matches!(
-        name.to_ascii_lowercase().as_str(),
-        "connection" | "keep-alive" | "proxy-connection" | "proxy-authorization" | "te" | "upgrade"
-    )
-}
-
-fn rewrite(first_line: &str, headers: &[(String, String)]) -> Vec<u8> {
-    let mut out = format!("{first_line}\r\n");
-    for (name, value) in headers.iter().filter(|(name, _)| end_to_end(name)) {
-        out.push_str(&format!("{name}: {value}\r\n"));
+async fn destination(
+    host: &str,
+    port: u16,
+    path: Option<&str>,
+    scope: Scope,
+) -> io::Result<Vec<SocketAddr>> {
+    if scope.content(host, port, path) {
+        Ok(vec![SocketAddr::from(([127, 0, 0, 1], port))])
+    } else {
+        public_addresses(host, port)
+            .await
+            .map_err(|_| io::ErrorKind::PermissionDenied.into())
     }
-    out.push_str("Connection: close\r\n\r\n");
-    out.into_bytes()
 }
 
 async fn forward(mut client: TcpStream, head: Head, scope: Scope) {
@@ -409,19 +356,22 @@ async fn forward(mut client: TcpStream, head: Head, scope: Scope) {
     let (Some(host), Some(port)) = (url.host_str(), url.port_or_known_default()) else {
         return refuse(&mut client).await;
     };
+    let log = Connection::new(host, port, &Purpose::new("browser.egress"));
     if url.scheme() != "http" || !url.username().is_empty() || url.password().is_some() {
-        return refuse(&mut client).await;
+        refuse(&mut client).await;
+        return log.finish(Err(io::ErrorKind::PermissionDenied.into()));
     }
-    let addresses = if scope.content(host, port, Some(url.path())) {
-        vec![SocketAddr::from(([127, 0, 0, 1], port))]
-    } else {
-        match public_addresses(host, port).await {
-            Ok(addresses) => addresses,
-            Err(_) => return refuse(&mut client).await,
+    let upstream = match async {
+        let addresses = destination(host, port, Some(url.path()), scope).await?;
+        log.connect(&addresses, CONNECT_TIMEOUT).await
+    }
+    .await
+    {
+        Ok(stream) => stream,
+        Err(error) => {
+            refuse(&mut client).await;
+            return log.finish(Err(error));
         }
-    };
-    let Some(upstream) = connect(&addresses).await else {
-        return refuse(&mut client).await;
     };
     let mut path = url.path().to_owned();
     if let Some(query) = url.query() {
@@ -432,34 +382,5 @@ async fn forward(mut client: TcpStream, head: Head, scope: Scope) {
         &format!("{} {path} {}", head.method, head.version),
         &head.headers,
     );
-    relay(client, upstream, request, head.rest).await;
-}
-
-/// One request: its body flows up while the response head is rewritten to
-/// close the connection, then the response body flows down.
-async fn relay(client: TcpStream, upstream: TcpStream, request: Vec<u8>, body: Vec<u8>) {
-    let (mut client_read, mut client_write) = client.into_split();
-    let (mut upstream_read, mut upstream_write) = upstream.into_split();
-    let up = tokio::spawn(async move {
-        if upstream_write.write_all(&request).await.is_ok()
-            && upstream_write.write_all(&body).await.is_ok()
-        {
-            let _ = tokio::io::copy(&mut client_read, &mut upstream_write).await;
-        }
-    });
-    if let Some(head) = read_head(&mut upstream_read).await {
-        let first = format!("{} {} {}", head.method, head.target, head.version)
-            .trim_end()
-            .to_owned();
-        if client_write
-            .write_all(&rewrite(&first, &head.headers))
-            .await
-            .is_ok()
-            && client_write.write_all(&head.rest).await.is_ok()
-        {
-            let _ = tokio::io::copy(&mut upstream_read, &mut client_write).await;
-        }
-    }
-    let _ = client_write.shutdown().await;
-    up.abort();
+    log.finish(relay(client, upstream, request, head.rest).await);
 }

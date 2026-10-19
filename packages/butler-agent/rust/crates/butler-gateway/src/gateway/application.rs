@@ -1,6 +1,7 @@
 //! Durable application service behind the native App HTTP facade.
 
 mod assets;
+mod data_reset;
 pub use assets::AppAssetCommand;
 mod admission;
 mod admission_identity;
@@ -105,9 +106,9 @@ pub use contracts::*;
 use events::EventSubscribers;
 pub use model_catalog::{AppModelCatalogCommand, AppModelCatalogPort};
 pub use monitoring::{
-    AppBoundWorkStatusFact, AppDeveloperLogsQuery, AppMonitorPage, AppMonitoringPort,
-    AppUsageMonitorQuery, AppUsageMonitorView, AppWorkOperationalNoticeFact,
-    AppWorkStatusConversationFact, AppWorkerActivityQuery,
+    AppBoundWorkStatusFact, AppMonitorPage, AppMonitoringPort, AppUsageMonitorQuery,
+    AppUsageMonitorView, AppWorkOperationalNoticeFact, AppWorkStatusConversationFact,
+    AppWorkerActivityQuery,
 };
 pub(crate) use monitoring::{
     work_status as app_work_status, worker_activity as app_worker_activity,

@@ -133,12 +133,12 @@
   --page-container-gutter: clamp(var(--space-lg), 3vw, 40px);
   --neutral-white: #ffffff;
   --neutral-light-text-primary: #222326;
-  --neutral-light-text-secondary: #696d73;
-  --neutral-light-text-tertiary: #6d7279;
+  --neutral-light-text-secondary: #52565a;
+  --neutral-light-text-tertiary: #5a5e64;
   --neutral-light-text-disabled: #a7abb0;
   --neutral-light-placeholder: #6a6e74;
   --neutral-dark-text-secondary: #b5b8bd;
-  --neutral-dark-text-tertiary: #8b8f97;
+  --neutral-dark-text-tertiary: #a4a8ae;
   --neutral-dark-text-disabled: #5a5d64;
   --neutral-dark-icon-muted: #c5c7cb;
   --neutral-dark-placeholder: #969a9f;

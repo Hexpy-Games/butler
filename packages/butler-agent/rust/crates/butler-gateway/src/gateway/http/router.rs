@@ -9,6 +9,7 @@ use std::sync::Arc;
 #[derive(Clone, Copy)]
 pub(super) enum Handler {
     NotFound,
+    DataReset,
     Authority,
     Automations,
     Browser,
@@ -67,6 +68,18 @@ pub(super) enum Handler {
     #[cfg(feature = "e2e-fixtures")]
     LogWriter,
 }
+impl Handler {
+    pub(super) fn action(self, method: &axum::http::Method) -> Option<&'static str> {
+        use axum::http::Method;
+        match (self, method) {
+            (Self::Messages, &Method::POST) => Some("message.send"),
+            (Self::Cancel, &Method::POST) => Some("turn.cancel"),
+            (Self::Retry, &Method::POST) => Some("turn.retry"),
+            (Self::Controls, &Method::PATCH) => Some("session.controls"),
+            _ => None,
+        }
+    }
+}
 pub(super) fn routes() -> Router<Arc<HttpState>> {
     let mut router = Router::new();
     for (path, handler) in table() {
@@ -81,6 +94,7 @@ pub(crate) fn templates() -> Vec<&'static str> {
 const ROUTES: &[(&str, Handler)] = &[
     ("/authority-requests", Handler::Authority),
     ("/app-info", Handler::Shell),
+    ("/data/reset", Handler::DataReset),
     ("/archives", Handler::Shell),
     ("/artifacts", Handler::Artifacts),
     ("/authority-permissions", Handler::Authority),
@@ -110,7 +124,6 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/context-details", Handler::Subsessions),
     ("/credentials", Handler::Setup),
     ("/credentials/{id}", Handler::Setup),
-    ("/developer-logs", Handler::Monitors),
     ("/events", Handler::Events),
     ("/events/live", Handler::Live),
     ("/favicons", Handler::Favicons),
@@ -156,6 +169,8 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/logs/export", Handler::Logs),
     ("/logs/live", Handler::Logs),
     ("/logs/storage", Handler::Logs),
+    ("/logs/trace", Handler::Logs),
+    ("/logs/trace/{trace_id}", Handler::Logs),
     ("/mcp-capabilities", Handler::Mcp),
     ("/mcp-servers", Handler::Mcp),
     ("/mcp-servers/{id}", Handler::Mcp),

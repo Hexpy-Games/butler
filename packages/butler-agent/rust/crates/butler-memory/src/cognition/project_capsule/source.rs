@@ -191,7 +191,7 @@ pub(super) fn ensure_source_authority(
     let cognition_root = paths.cognition_root(data_root);
     let memory_root = paths.memory_root(data_root);
     let lock_path = paths.consolidation_lock(data_root);
-    let tasks_root = data_root.join("tasks");
+    let tasks_root = data_root.join(butler_platform::data_paths::TASKS);
     ensure_data_authority(
         data_root,
         &[

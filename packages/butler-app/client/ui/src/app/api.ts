@@ -493,14 +493,8 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (method === "GET" && url.pathname === "/system-events") {
     return await callBridge<T>(bridge, "listSystemEvents", paginationRequest(url.searchParams));
   }
-  if (method === "GET" && url.pathname === "/developer-logs") {
-    return await callBridge<T>(bridge, "listDeveloperLogs", {
-      ...paginationRequest(url.searchParams),
-      sessionId: url.searchParams.get("session_id") ?? url.searchParams.get("sessionId"),
-      turnId: url.searchParams.get("turn_id") ?? url.searchParams.get("turnId"),
-      kind: url.searchParams.get("kind") ?? undefined,
-      query: url.searchParams.get("query") ?? undefined,
-    });
+  if (url.pathname === "/logs" || url.pathname === "/logs/config" || url.pathname === "/logs/storage") {
+    return await callBridge<T>(bridge, "logs", { path: url.pathname + url.search, method, ...(options.body == null ? {} : { body: parseBody(options.body) }) });
   }
   if (method === "GET" && url.pathname === "/usage-monitor") {
     return await callBridge<T>(bridge, "getUsageMonitor", {

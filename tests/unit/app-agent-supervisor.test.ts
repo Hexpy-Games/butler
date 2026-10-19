@@ -1,9 +1,12 @@
 import { EventEmitter } from "node:events";
 import {
+  existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -1369,6 +1372,46 @@ test("supervisor records gateway resolution failures for setup diagnostics", asy
     const serialized = JSON.stringify(supervisor.diagnostics());
     expect(serialized).not.toContain("/Users/example");
     expect(serialized).not.toContain("private.env");
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("a pending full reset spawns without a token file and adopts the one the Agent writes", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-supervisor-reset-"));
+  try {
+    const butlerData = join(tempDir, "data");
+    mkdirSync(join(butlerData, "state"), { recursive: true });
+    writeFileSync(join(butlerData, "state", "full-reset.json"), "{}");
+    const seen: Array<string | null> = [];
+    const supervisor = createBundledAgentSupervisor({
+      butlerData,
+      resolveGateway: () => ({ command: "/runtime/butler-agent", args: ["gateway"], env: {}, commitActivation: () => undefined }),
+      spawnProcess: (_command, _args, options) => {
+        expect(existsSync(appLocalAuthPath(butlerData))).toBe(false);
+        expect(options.env.BUTLER_APP_LOCAL_AUTH_FILE).toBe(appLocalAuthPath(butlerData));
+        // The Agent applies the reset, then writes its own token.
+        rmSync(join(butlerData, "state", "full-reset.json"));
+        prepareAppLocalAuth({ butlerData, generateToken: () => "n".repeat(43) });
+        return new FakeChildProcess(9070, []);
+      },
+      healthCheck: () => true,
+      readinessCheck: (localAuth) => { seen.push(localAuth?.token ?? null); return localAuth?.token === "n".repeat(43); },
+      isPortAvailable: () => true,
+      findAvailablePort: (startPort) => startPort,
+      updatePort: () => undefined,
+      getPort: () => 18765,
+      getServerUrl: () => "http://127.0.0.1:18765/",
+      getRendererOrigin: () => "http://127.0.0.1:18765",
+      sleepMs: async () => undefined,
+      startupAttempts: 1,
+    });
+    await supervisor.ensureReady();
+    // Probes before the Agent wrote its token carry none; the next one re-reads the file.
+    expect(seen.at(-1)).toBe("n".repeat(43));
+    expect(seen.slice(0, -1).every((token) => token === null)).toBe(true);
+    expect(supervisor.authHeaders()).toEqual({ authorization: `Bearer ${"n".repeat(43)}` });
+    await supervisor.stop({ wait: true });
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

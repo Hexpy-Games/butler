@@ -1,3 +1,8 @@
+#![allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_types,
+    reason = "test crate HTTP drivers"
+)]
 //! All current scenarios share one integration-test link.
 mod acceptance_payload;
 mod access;
@@ -15,9 +20,12 @@ mod app_db_schema;
 mod app_state;
 mod app_storage_scale;
 mod ask_user;
+mod attachment_reach;
+mod attachment_types;
 mod authority_parallel_batch;
 mod authority_permissions;
 mod automation;
+mod briefing_effort;
 mod browser_agent;
 mod browser_approval;
 mod browser_batch;
@@ -58,6 +66,7 @@ mod durable_files;
 mod embed_download;
 mod error_library;
 mod favicons;
+mod full_reset;
 mod gateway_browser;
 #[path = "gateway_pairing.rs"]
 mod gateway_pairing;
@@ -117,6 +126,8 @@ mod prompt_history;
 mod prompt_history_cache;
 mod prompt_layout;
 mod queue_admission_shutdown;
+#[cfg(debug_assertions)]
+mod queue_claim_crash;
 mod queue_notifications;
 mod queue_pause;
 mod queue_shutdown;
@@ -234,3 +245,7 @@ mod web_speed;
 
 mod logs_request_completion;
 mod structured_logs;
+
+mod outbound_http;
+
+mod trace_spans;

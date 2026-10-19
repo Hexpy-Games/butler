@@ -6,6 +6,7 @@ mod export;
 mod files;
 mod index;
 mod layer;
+pub(crate) use layer::current_ids;
 mod patterns;
 mod query;
 mod record;
@@ -13,13 +14,19 @@ mod redaction;
 mod retention;
 mod segment;
 mod storage;
+mod trace;
+mod trace_context;
+pub(crate) use trace::valid_id as valid_trace_id;
+pub use trace::{Trace, TraceSpan};
+pub use trace_context::TraceContext;
 mod writer;
 
 pub use config::{Config, ConfigView, Preset};
 pub use query::{Page, Query};
 pub use record::Record;
 pub use redaction::{
-    Secret, redact_headers, redact_json, redact_log_line, redact_url, register_secret,
+    Secret, redact_headers, redact_json, redact_log_line, redact_url, register_endpoint,
+    register_ephemeral_secret, register_secret, register_secret_for,
 };
 pub use retention::{StorageView, StoreUsage};
 use std::{io, sync::OnceLock};

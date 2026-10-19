@@ -28,16 +28,13 @@ pub(super) fn render(definition: &Definition) -> String {
     }
     lines.push("  </array>".to_owned());
     for (key, name) in [
-        ("StandardOutPath", "stdout"),
-        ("StandardErrorPath", "stderr"),
+        ("StandardOutPath", super::STDOUT_LOG),
+        ("StandardErrorPath", super::STDERR_LOG),
     ] {
         lines.push(format!("  <key>{key}</key>"));
         lines.push(format!(
             "  <string>{}</string>",
-            xml(&definition
-                .working_dir
-                .join(format!("logs/butler-agent-service.{name}.log"))
-                .to_string_lossy())
+            xml(&definition.working_dir.join(name).to_string_lossy())
         ));
     }
     lines.push("  <key>EnvironmentVariables</key>".to_owned());

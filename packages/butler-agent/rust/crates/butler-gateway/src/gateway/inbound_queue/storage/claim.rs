@@ -42,6 +42,8 @@ pub(in crate::gateway::inbound_queue) fn claim(
         if !available(&record) || !eligible(&record) {
             continue;
         }
+        // The record is still pending and its enqueuer may hold a receipt.
+        butler_platform::secure_fs::abort_point("inbound_claim_staged");
         if fs::rename(&from, &to).is_err() {
             continue;
         }
@@ -65,6 +67,8 @@ pub(in crate::gateway::inbound_queue) fn claim(
         record.attempts = record.attempts.saturating_add(1);
         record.processing = Some(lease.clone());
         atomic_write(&to, &record)?;
+        // The lease is durable before its dispatch starts.
+        butler_platform::secure_fs::abort_point("inbound_claim_leased");
         result.push(ClaimedInboundEvent {
             record,
             path: to,

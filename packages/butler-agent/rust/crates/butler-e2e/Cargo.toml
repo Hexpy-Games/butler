@@ -13,7 +13,7 @@ publish.workspace = true
 [dependencies]
 butler-log = { path = "../butler-log", features = ["e2e-fixtures"] }
 butler-gateway = { path = "../butler-gateway", features = ["test-support"] }
-butler-runtime = { path = "../butler-runtime" }
+butler-runtime = { path = "../butler-runtime", features = ["test-support"] }
 butler-core = { path = "../butler-core" }
 butler-models = { path = "../butler-models" }
 butler-turn = { path = "../butler-turn", features = ["test-support"] }
@@ -23,6 +23,8 @@ butler-platform = { path = "../butler-platform", features = ["test-support"] }
 axum.workspace = true
 base64.workspace = true
 bytes.workspace = true
+h2.workspace = true
+http.workspace = true
 flate2.workspace = true
 chrono.workspace = true
 futures-util.workspace = true

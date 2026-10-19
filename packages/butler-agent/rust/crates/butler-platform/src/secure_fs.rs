@@ -9,6 +9,8 @@
 //! returns `None`. Renames that replace a file retry on Windows while
 //! another process briefly holds it ([`rename`]).
 
+mod device;
+pub use device::same_device;
 mod contained_read;
 mod exact_name;
 pub use exact_name::exact_entry_exists;
@@ -193,6 +195,22 @@ pub fn remove_tree(path: &Path) -> io::Result<()> {
     }
 }
 
+/// Removes a symbolic link itself, including a Windows directory link.
+pub fn unlink(path: &Path) -> io::Result<()> {
+    let metadata = fs::symlink_metadata(path)?;
+    if !metadata.file_type().is_symlink() {
+        return Err(io::Error::other("Expected a symbolic link"));
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::FileTypeExt;
+        if metadata.file_type().is_symlink_dir() {
+            return fs::remove_dir(path);
+        }
+    }
+    fs::remove_file(path)
+}
+
 /// Restricts an existing file to its owner; `None` without [`OWNER_ONLY`].
 pub fn restrict_file(path: &Path) -> Option<io::Result<()>> {
     sys::restrict_file(path)
@@ -246,7 +264,15 @@ pub fn no_follow(options: &mut OpenOptions) -> Option<&mut OpenOptions> {
 
 /// Reads a regular file below an anchored root, refusing symlink components.
 pub fn open_read_beneath(root: &Path, relative: &Path) -> io::Result<File> {
-    contained_read::open(root, relative)
+    contained_read::open(root, relative, false)
+}
+
+/// Truncates a regular file through an anchored handle, refusing every symlink
+/// component. Opens without truncation until the file type has been verified.
+pub fn truncate_file_beneath(root: &Path, relative: &Path) -> io::Result<()> {
+    let file = contained_read::open(root, relative, true)?;
+    file.set_len(0)?;
+    file.sync_all()
 }
 
 /// Opens the file at `path` for reading, refusing a symbolic link as the
@@ -278,6 +304,20 @@ pub fn sync_path(path: impl AsRef<Path>) -> io::Result<()> {
 /// is retried for up to a second there before the error is returned.
 pub fn rename(from: &Path, to: &Path) -> io::Result<()> {
     sys::rename(from, to)
+}
+
+/// Publishes a replacement file using native [`fs::rename`] semantics,
+/// preserving already open readers where supported. Windows retries confirmed
+/// sharing conflicts for up to a second and retains the native POSIX fallback.
+/// The caller must flush the prepared file first; unlike [`rename`], this does
+/// not request Windows write-through. `before_retry` runs after each backoff,
+/// immediately before another replacement attempt; an error aborts publication.
+pub fn replace_file(
+    from: &Path,
+    to: &Path,
+    before_retry: &mut dyn FnMut() -> io::Result<()>,
+) -> io::Result<()> {
+    sys::replace_file(from, to, before_retry)
 }
 
 /// A logical record key as a regular filename component. Unix keeps its

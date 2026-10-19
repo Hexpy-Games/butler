@@ -66,6 +66,7 @@ pub mod browser_transfer;
 pub mod command_launcher;
 pub mod command_sandbox;
 pub mod cpu;
+pub mod data_paths;
 pub mod desktop;
 pub mod fs_space;
 pub mod install_link;

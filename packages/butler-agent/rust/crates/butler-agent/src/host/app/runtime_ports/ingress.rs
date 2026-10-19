@@ -14,18 +14,36 @@ use butler_turn::btcc::PrincipalAuthority;
 pub(crate) struct AppIngress {
     queue: Arc<InboundQueue>,
     authority: Arc<PrincipalAuthority>,
+    reset: Arc<crate::host::service::data_reset::Control>,
 }
 
 impl AppIngress {
-    pub(crate) fn new(queue: Arc<InboundQueue>, authority: Arc<PrincipalAuthority>) -> Self {
-        Self { queue, authority }
+    pub(crate) fn new(
+        queue: Arc<InboundQueue>,
+        authority: Arc<PrincipalAuthority>,
+        reset: Arc<crate::host::service::data_reset::Control>,
+    ) -> Self {
+        Self {
+            queue,
+            authority,
+            reset,
+        }
     }
 }
 
 impl AppNativeIngress for AppIngress {
     fn enqueue(&self, turn: AppTurn) -> ApplicationFuture<EnqueueReceipt> {
         let queue = self.queue.clone();
+        let reset = self.reset.clone();
         Box::pin(async move {
+            if reset.resetting() {
+                return Err(GatewayApplicationError::Public {
+                    status: 503,
+                    code: "service_resetting".into(),
+                    message: "Service is resetting.".into(),
+                    source: None,
+                });
+            }
             let document = envelope(turn)?;
             let record = queue
                 .enqueue_async(document)
@@ -39,7 +57,16 @@ impl AppNativeIngress for AppIngress {
 
     fn find(&self, turn: AppTurn) -> ApplicationFuture<Option<EnqueueReceipt>> {
         let queue = self.queue.clone();
+        let reset = self.reset.clone();
         Box::pin(async move {
+            if reset.resetting() {
+                return Err(GatewayApplicationError::Public {
+                    status: 503,
+                    code: "service_resetting".into(),
+                    message: "Service is resetting.".into(),
+                    source: None,
+                });
+            }
             let document = envelope(turn)?;
             queue
                 .find_async(document)
@@ -49,6 +76,21 @@ impl AppNativeIngress for AppIngress {
                         queue_id: item.queue_id,
                     })
                 })
+                .map_err(GatewayApplicationError::internal_from)
+        })
+    }
+
+    fn delivering_claim(
+        &self,
+        message_id: String,
+        turn_attempt: u64,
+        claim: Option<String>,
+    ) -> ApplicationFuture<Option<String>> {
+        let queue = self.queue.clone();
+        Box::pin(async move {
+            queue
+                .delivering_claim_async(event_id(&message_id, turn_attempt), claim)
+                .await
                 .map_err(GatewayApplicationError::internal_from)
         })
     }
@@ -91,18 +133,18 @@ impl AppNativeIngress for AppIngress {
     }
 }
 
+/// The native event identity of one App message attempt.
+fn event_id(message_id: &str, turn_attempt: u64) -> String {
+    if turn_attempt > 1 {
+        format!("app-retry:{}:{message_id}:{turn_attempt}", message_id.len())
+    } else {
+        format!("app:{message_id}")
+    }
+}
+
 fn envelope(turn: AppTurn) -> Result<JsonDocument, GatewayApplicationError> {
     let canonical_event_id = format!("app:{}", turn.message_id);
-    let event_id = if turn.turn_attempt > 1 {
-        format!(
-            "app-retry:{}:{}:{}",
-            turn.message_id.len(),
-            turn.message_id,
-            turn.turn_attempt
-        )
-    } else {
-        canonical_event_id.clone()
-    };
+    let event_id = event_id(&turn.message_id, turn.turn_attempt);
     let mut value = json!({
         "eventId":event_id,
         "transport":"app",

@@ -29,9 +29,24 @@ fn path_arguments(call: &ModelRoundToolCall) -> Vec<String> {
     }
 }
 
+/// File observations retain their lexical spelling until attachment scope is
+/// classified. Other tools resolve links before admission.
+pub(super) async fn resolve(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+) -> Result<Option<ModelRoundToolCall>, BtccError> {
+    if matches!(
+        call.name.as_str(),
+        "read_file" | "list_files" | "grep_files"
+    ) {
+        return Ok(None);
+    }
+    resolve_paths(owner, call).await
+}
+
 /// `call` with each path respelled as `real_target` says, or None when every
 /// path already names its place.
-pub(super) async fn resolve(
+pub(super) async fn resolve_paths(
     owner: &GuidedTools,
     call: &ModelRoundToolCall,
 ) -> Result<Option<ModelRoundToolCall>, BtccError> {

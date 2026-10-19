@@ -47,6 +47,10 @@ async fn mig_01_pre_btcc_data_dir_is_refused_without_writes() -> Result<(), Harn
     assert!(!output.status.success(), "pre-BTCC data dir accepted");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
+        stderr.contains("storage_bootstrap_failed"),
+        "refusal code changed: {stderr}"
+    );
+    assert!(
         stderr.contains("legacy data folder is unsupported"),
         "refusal does not say the folder is unsupported: {stderr}"
     );

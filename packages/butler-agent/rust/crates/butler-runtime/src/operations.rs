@@ -5,7 +5,6 @@ use std::path::Path;
 
 mod conversation_metrics;
 mod cycle_metrics;
-mod developer_log;
 mod install;
 mod log_redaction;
 mod log_tail;
@@ -22,10 +21,6 @@ mod web_search_metrics;
 
 pub use conversation_metrics::{AdmissionMeasure, ConversationMetrics};
 pub use cycle_metrics::CycleMetrics;
-pub use developer_log::{
-    DeveloperDiagnosticsSettingsPort, DeveloperLogStore, DeveloperLogWriteAuthority,
-    OperationsDeveloperLogCapture,
-};
 pub use install::{
     Activated, AgentHome, BINARY, HomeLock, HomeRemoval, Installed, InstalledVersion,
     LauncherPaths, LauncherState, LauncherSync, RESOURCES, Switched, sha256_file, sha256_tree,

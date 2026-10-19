@@ -1,6 +1,7 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { useMemo } from "react";
 import { useMessageCopy } from "./useMessageCopy";
+import { useLiveMessageId } from "./useLiveMessageId";
 import { ACTIVE_TURN_STATES } from "@/app/constants.ts";
 import {
   activeTurnProgressSnapshot,
@@ -74,7 +75,7 @@ export function useMessageList(
   });
 
   const turnId = activeSnapshot?.turn_id ?? summary?.latest_progress?.turn_id;
-  const liveMessageId = showTurnActivity ? lastLiveMessageId(visibleMessages, turnId) : undefined;
+  const liveMessageId = useLiveMessageId(visibleMessages, turnId, showTurnActivity, progressRows, turnState);
   const separateTurnActivity = showTurnActivity && !liveMessageId;
   const itemCount = visibleMessages.length + (separateTurnActivity ? 1 : 0);
 
@@ -93,12 +94,4 @@ export function useMessageList(
     itemCount,
     ...copy,
   };
-}
-
-function lastLiveMessageId(messages: MessageRecord[], turnId?: string): string | undefined {
-  for (let index = messages.length - 1; index >= 0; index--) {
-    const message = messages[index]!;
-    if (message.role === "assistant" && (turnId ? message.turn_id === turnId : message.status === "streaming")) return message.id;
-  }
-  return undefined;
 }

@@ -238,9 +238,12 @@ fn settings(
     {
         return unavailable(locale, "model_unavailable");
     }
-    if !metadata.reasoning_efforts.contains(&reasoning_effort) {
-        return unavailable(locale, "reasoning_effort_unsupported");
-    }
+    // A stored effort the model no longer offers falls back to its default.
+    let reasoning_effort = if metadata.reasoning_efforts.contains(&reasoning_effort) {
+        reasoning_effort
+    } else {
+        metadata.default_reasoning_effort
+    };
     if !matches!(
         metadata.provider_id.as_str(),
         "openai"

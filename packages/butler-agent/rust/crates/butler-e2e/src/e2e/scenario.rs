@@ -93,6 +93,7 @@ pub struct Setup {
     access: Access,
     source: Source,
     env: Vec<(String, String)>,
+    unset_env: Vec<String>,
     model: Option<ModelChoice>,
     stub_credential: bool,
     record_into: Option<std::path::PathBuf>,
@@ -231,6 +232,7 @@ impl Setup {
             replay_only,
             extends,
             login_refresh,
+            unset_env,
         } = self;
         let app_now = sources::fixture_app_now(&env);
         let mut launch = Launch::new(&sandbox)?;
@@ -290,6 +292,9 @@ impl Setup {
         }
         for (key, value) in env {
             launch.set_env(&key, value);
+        }
+        for key in unset_env {
+            launch.unset_env(&key);
         }
         match fixture {
             Fixture::Ready => fixtures::ready(&sandbox.data, &choice.model, &app_now)?,

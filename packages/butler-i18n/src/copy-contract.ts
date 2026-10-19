@@ -492,7 +492,6 @@ export interface AppCopy {
     noSpecs: string;
     uiCrashed: string;
     panelCrashed: string;
-    copyDiagnostics: string;
     retry: string;
     reload: string;
     custom: string;
@@ -1280,7 +1279,7 @@ export interface AppCopy {
       downloadMeta: string; downloadedBytes: string; cancelled: string;
     };
     updateErrors: Record<"download" | "damaged" | "incompatible" | "storage" | "apply" | "generic", string>;
-    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "agentImport" | "paymentMethods" | "profiles" | "purchaseSites", string>;
+    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "fullReset" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "agentImport" | "paymentMethods" | "profiles" | "purchaseSites", string>;
     pageSectionDescriptions: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "learning" | "grants", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     grants: {
@@ -1292,6 +1291,11 @@ export interface AppCopy {
       targetUnknown: string; deletedChat: string; loadFailed: string; revokeFailed: string;
     };
     modelsAdvanced: { title: string; contents: string };
+    /** Settings > General > reset everything (desktop only); the user types `phrase` to confirm. */
+    fullReset: {
+      label: string; description: string; action: string; title: string; body: string; removed: string; kept: string;
+      field: (phrase: string) => string; phrase: string; confirm: string; mismatch: string; resetting: string; desktopOnly: string;
+    };
     memory: {
       reset: string; resetChatTitle: string; resetProfileTitle: string; resetProjectTitle: string;
       resetBody: string; resetProfileBody: string; resetProjectBody: string; removed: string; kept: string;
@@ -1319,7 +1323,6 @@ export interface AppCopy {
       mcpServers: string;
       skills: string;
       usageMonitor: string;
-      developerLogs: string;
       systemEvents: string;
       archives: string;
       about: string;
@@ -1451,7 +1454,6 @@ export interface AppCopy {
       bridgeMode: string;
       serverUrl: string;
       defaultProjectFolder: string;
-      diagnostics: string;
       appName: string;
       appVersion: string;
       appRepository: string;
@@ -1567,8 +1569,6 @@ export interface AppCopy {
       mcpServers: string;
       mcpSecrets: string;
       skills: string;
-      developerLogs: string;
-      developerLogsEmpty: string;
       searchSettings: string;
       searchProvider: string;
       searchProviderApiKey: (envVar: string) => string;
@@ -1581,42 +1581,59 @@ export interface AppCopy {
       desktopTray: string;
       developerMode: string;
     };
-    developerLogViewer: {
-      filters: {
-        allKinds: string;
-        modelTurn: string;
-        modelTurnError: string;
-      };
-      tabs: {
-        context: string;
-        request: string;
-        response: string;
-        metadata: string;
-      };
-      labels: {
-        sections: (count: number) => string;
-        contextChars: (count: string) => string;
-        responseChars: (count: string) => string;
-        liveConfig: string;
-        sectionCount: string;
-        references: string;
-        promptChars: string;
-        renderedPromptContext: string;
-        input: string;
-        text: string;
-        raw: string;
-        provider: string;
-        runtime: string;
-        routeReason: string;
-        project: string;
-        rawText: string;
-        secrets: string;
-        route: string;
-        included: string;
-        excluded: string;
-        redacted: string;
-        notRedacted: string;
-      };
+    logs: {
+      sections: { level: string; viewer: string; storage: string };
+      levelLabel: string;
+      levels: Record<"minimal" | "standard" | "detailed" | "full", string>;
+      levelMeta: Record<"minimal" | "standard" | "detailed" | "full", string>;
+      fullConfirmTitle: string;
+      fullConfirmBody: string;
+      fullConfirm: string;
+      fullActive: (minutes: number) => string;
+      turnOff: string;
+      freed: (size: string) => string;
+      categories: string;
+      categoriesChanged: (count: number) => string;
+      categoryInherit: string;
+      severity: Record<"error" | "warn" | "info" | "debug" | "trace", string>;
+      search: string;
+      filters: { level: string; source: string; category: string; period: string };
+      allLevels: string;
+      allSources: string;
+      allCategories: string;
+      sources: Record<"app" | "agent", string>;
+      periods: Record<"hour" | "day" | "week" | "all", string>;
+      live: string;
+      liveLost: string;
+      newLines: (count: number) => string;
+      empty: string;
+      loadFailed: string;
+      tabs: { request: string; response: string; json: string };
+      fields: Record<"time" | "message" | "level" | "category" | "process" | "event" | "duration" | "trace" | "span" | "chat" | "turn" | "error" | "method" | "url" | "status" | "headers" | "body", string>;
+      bodyUnavailable: string;
+      bodyFailed: string;
+      copy: string;
+      copied: string;
+      copyJson: string;
+      stores: Record<"app" | "main" | "debug" | "bodies", string>;
+      storeMeta: (used: string, limit: string, retention: string) => string;
+      retentionHours: (hours: number) => string;
+      retentionDays: (days: number) => string;
+      exportMenu: string;
+      exportTitle: string;
+      exportRange: string;
+      includeBodies: string;
+      exportAction: string;
+      exported: string;
+      exportFailed: string;
+      clearMenu: string;
+      clearTitle: string;
+      clearBody: string;
+      cleared: (size: string) => string;
+      clearFailed: string;
+      diagnosticsLabel: string;
+      diagnosticsDescription: string;
+      diagnosticsExport: string;
     };
     nativeNotifications: {
       status: {
@@ -1755,8 +1772,6 @@ export interface AppCopy {
       mcpArgs: string;
       mcpEnv: string;
       mcpHeaders: string;
-      developerLogSearch: string;
-      developerLogSession: string;
     };
     errors: {
       saveFailed: string;
@@ -1772,7 +1787,6 @@ export interface AppCopy {
       loadUpdates: string;
       checkUpdates: string;
       applyUpdate: string;
-      loadDeveloperLogs: string;
     };
     localModels: {
       apiKey: string;
@@ -2075,12 +2089,16 @@ export interface AppCopy {
     attachmentFailed: string;
     attachmentRetry: (names: string) => string;
     attachmentTooLarge: string;
+    attachmentEmpty: (names: string) => string;
     attachmentSizeLimit: (names: string, limit: string) => string;
     reconnecting: string;
     reconnectingShort: string;
     agentStopped: string;
     agentRestarting: string;
     agentRestartFailed: string;
+    /** A browser client saw the desktop app reset Butler. */
+    agentReset: string;
+    reconnect: string;
     agentStart: string;
     agentStartFailed: string;
     dashboardLoading: string;

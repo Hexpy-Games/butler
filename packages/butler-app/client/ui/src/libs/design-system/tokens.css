@@ -378,12 +378,15 @@
   /* Source color literals. Semantic tokens below must reference these. */
   --neutral-white: #ffffff;
   --neutral-light-text-primary: #222326;
-  --neutral-light-text-secondary: #696d73;
-  --neutral-light-text-tertiary: #6d7279;
+  --neutral-light-text-secondary: #52565a;
+  --neutral-light-text-tertiary: #5a5e64;
   --neutral-light-text-disabled: #a7abb0;
   --neutral-light-placeholder: #6a6e74;
   --neutral-dark-text-secondary: #b5b8bd;
-  --neutral-dark-text-tertiary: #8b8f97;
+  --neutral-dark-text-tertiary: #a4a8ae;
+  /* Windows dark shell text: acrylic lets a light desktop lift the shell. */
+  --neutral-dark-acrylic-text-secondary: #d2d4d7;
+  --neutral-dark-acrylic-text-tertiary: #d2d3d7;
   --neutral-dark-text-disabled: #5a5d64;
   --neutral-dark-icon-muted: #c5c7cb;
   --neutral-dark-placeholder: #969a9f;
@@ -730,6 +733,15 @@
   /* macOS Electron: thinner over the native "sidebar" vibrancy (AdaptiveShell, darwin). */
   --mac-sidebar-bg: rgba(255, 255, 255, 0.3);
   --windows-sidebar-bg: rgba(255, 255, 255, 0.85);
+  /* Shell text: secondary and tertiary text on the translucent shell, chosen
+     per platform like the shell layer (AdaptiveShell maps them in the sidebar
+     and the cards title row). */
+  --sidebar-text-secondary: var(--color-text-secondary);
+  --sidebar-text-tertiary: var(--color-text-tertiary);
+  --mac-sidebar-text-secondary: var(--color-text-secondary);
+  --mac-sidebar-text-tertiary: var(--color-text-tertiary);
+  --windows-sidebar-text-secondary: var(--color-text-secondary);
+  --windows-sidebar-text-tertiary: var(--color-text-tertiary);
   --sidebar-collapsed-bg: rgba(244, 245, 247, 0.18);
   /* Shell surfaces (frame="cards"): the one shell is the window material; cards are
      the workspace surface with one quiet edge. */
@@ -1158,6 +1170,15 @@
   --sidebar-bg: rgba(36, 37, 40, 0.72);
   --mac-sidebar-bg: rgba(36, 37, 40, 0.5);
   --windows-sidebar-bg: rgba(24, 25, 28, 0.46);
+  /* Shell text: secondary and tertiary text on the translucent shell, chosen
+     per platform like the shell layer (AdaptiveShell maps them in the sidebar
+     and the cards title row). */
+  --sidebar-text-secondary: var(--color-text-secondary);
+  --sidebar-text-tertiary: var(--color-text-tertiary);
+  --mac-sidebar-text-secondary: var(--color-text-secondary);
+  --mac-sidebar-text-tertiary: var(--color-text-tertiary);
+  --windows-sidebar-text-secondary: var(--neutral-dark-acrylic-text-secondary);
+  --windows-sidebar-text-tertiary: var(--neutral-dark-acrylic-text-tertiary);
   --sidebar-collapsed-bg: rgba(20, 21, 23, 0.18);
   /* Shell surfaces (frame="cards"): the one shell is the window material; cards are
      the workspace surface with one quiet edge. */
@@ -1340,6 +1361,15 @@
   --sidebar-bg: rgba(255, 255, 255, 0.52);
   --mac-sidebar-bg: rgba(255, 255, 255, 0.3);
   --windows-sidebar-bg: rgba(255, 255, 255, 0.85);
+  /* Shell text: secondary and tertiary text on the translucent shell, chosen
+     per platform like the shell layer (AdaptiveShell maps them in the sidebar
+     and the cards title row). */
+  --sidebar-text-secondary: var(--color-text-secondary);
+  --sidebar-text-tertiary: var(--color-text-tertiary);
+  --mac-sidebar-text-secondary: var(--color-text-secondary);
+  --mac-sidebar-text-tertiary: var(--color-text-tertiary);
+  --windows-sidebar-text-secondary: var(--color-text-secondary);
+  --windows-sidebar-text-tertiary: var(--color-text-tertiary);
   --sidebar-collapsed-bg: rgba(244, 245, 247, 0.18);
   /* Shell surfaces (frame="cards"): the one shell is the window material; cards are
      the workspace surface with one quiet edge. */
@@ -1486,6 +1516,9 @@
   --sidebar-bg: rgba(36, 37, 40, 0.98);
   --mac-sidebar-bg: rgba(36, 37, 40, 0.98);
   --windows-sidebar-bg: rgba(36, 37, 40, 0.98);
+  /* An opaque shell takes the global text tones. */
+  --windows-sidebar-text-secondary: var(--color-text-secondary);
+  --windows-sidebar-text-tertiary: var(--color-text-tertiary);
 }
 
 * {

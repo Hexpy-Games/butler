@@ -451,6 +451,54 @@ function subscribeLiveEvents({ cursor = 0 } = {}, handlers = {}) {
   };
 }
 
+/** A redacted log body (GET /logs/bodies/{ref}) as text. */
+async function readLogBody(reference) {
+  await ensureLocalServer();
+  const path = `/logs/bodies/${encodeURIComponent(String(reference ?? ""))}`;
+  const response = await fetch(new URL(path, await currentServerUrl()), { headers: await localAuthHeaders() });
+  if (!response.ok) {
+    const error = new Error(`Log body request failed with status ${response.status}.`);
+    error.status = response.status;
+    throw error;
+  }
+  return await response.text();
+}
+
+/** GET /logs/live: `log` events carry one record; `lagged` counts are skipped. */
+function subscribeLogs(handlers = {}) {
+  const abortController = new AbortController();
+  let closed = false;
+  const deliver = (value) => {
+    if (value && typeof value === "object") handlers.onRecord?.(value);
+  };
+  void (async () => {
+    try {
+      await ensureLocalServer();
+      const response = await fetch(new URL("/logs/live", await currentServerUrl()), {
+        headers: { accept: "text/event-stream", ...(await localAuthHeaders()) },
+        signal: abortController.signal,
+      });
+      if (!response.ok || !response.body) throw new Error(`Log stream failed with status ${response.status}.`);
+      const reader = response.body.getReader();
+      handlers.onOpen?.();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (!closed) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer = drainSseRecords(buffer + decoder.decode(value, { stream: true }), deliver);
+      }
+      if (!closed) throw new Error("Log stream ended.");
+    } catch (error) {
+      if (!closed && error?.name !== "AbortError") handlers.onError?.();
+    }
+  })();
+  return () => {
+    closed = true;
+    abortController.abort();
+  };
+}
+
 function messageCacheKey(chatId) {
   return `${messageCachePrefix}${encodeURIComponent(String(chatId || "general"))}`;
 }
@@ -640,6 +688,11 @@ const butlerApp = Object.freeze({
   platform: process.platform,
   startupIssue: process.argv.includes("--butler-legacy-data") ? "legacy-data" : null,
   recoverLegacyData: (action) => ipcRenderer.invoke("butler:legacy-data-recovery", action),
+  // Settings > General > reset everything. The phrase is checked in the renderer;
+  // main sends the request with the admin credential, then relaunches.
+  requestFullReset: ({ operationId } = {}) => ipcRenderer.invoke("butler:full-reset-request", { operationId }),
+  relaunchAfterFullReset: () => ipcRenderer.invoke("butler:full-reset-relaunch"),
+  fullResetFailed: process.argv.includes("--butler-full-reset-failed"),
   recordUiCrash: (input) => ipcRenderer.invoke("butler:ui-crash", input),
   recordWallpaperState: (line) => ipcRenderer.send("butler:wallpaper-state", line),
   readUiCrashLog: () => ipcRenderer.invoke("butler:ui-crash-log"),
@@ -1294,17 +1347,21 @@ const butlerApp = Object.freeze({
     const query = params.toString();
     return requestJson(query ? `/system-events?${query}` : "/system-events");
   },
-  listDeveloperLogs: ({ limit, offset, sessionId, turnId, kind, query: search } = {}) => {
-    const params = new URLSearchParams();
-    if (limit !== undefined) params.set("limit", String(limit));
-    if (offset !== undefined) params.set("offset", String(offset));
-    if (sessionId) params.set("session_id", sessionId);
-    if (turnId) params.set("turn_id", turnId);
-    if (kind) params.set("kind", kind);
-    if (search) params.set("query", search);
-    const query = params.toString();
-    return requestJson(query ? `/developer-logs?${query}` : "/developer-logs");
+  // Settings > Logs JSON routes (GET /logs, /logs/config, /logs/storage; PUT config; DELETE).
+  logs: ({ path, method = "GET", body } = {}) => {
+    const url = new URL(String(path ?? ""), "http://local");
+    if (!["/logs", "/logs/config", "/logs/storage"].includes(url.pathname)) {
+      throw new Error("Unsupported log route.");
+    }
+    return requestJson(url.pathname + url.search, {
+      method: String(method).toUpperCase(),
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
   },
+  readLogBody: ({ reference } = {}) => readLogBody(reference),
+  subscribeLogs: (handlers = {}) => subscribeLogs(handlers),
+  exportLogs: ({ since, includeBodies } = {}) =>
+    ipcRenderer.invoke("butler:export-logs", { since, includeBodies: includeBodies === true }),
   getUsageMonitor: ({ sessionId, sinceHours } = {}) => {
     const params = new URLSearchParams();
     if (sessionId) params.set("session_id", sessionId);

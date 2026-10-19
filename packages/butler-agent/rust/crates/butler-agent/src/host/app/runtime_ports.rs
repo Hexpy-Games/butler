@@ -1,5 +1,7 @@
 //! Required production App ports over existing native owners.
 
+mod data_reset;
+pub(crate) use data_reset::AppDataReset;
 mod admission;
 mod assets;
 mod context_read;

@@ -109,7 +109,7 @@ impl SearchProvider for CodexSubscriptionWebSearchProvider {
                 .header("originator", &self.originator)
                 .header(reqwest::header::USER_AGENT, &self.user_agent)
                 .json(&body);
-            let (status, bytes) = response_bytes(access, request, cancellation).await?;
+            let (status, bytes) = response_bytes(access, request.purpose(butler_log::http::Purpose::provider("openai", "web_search")), cancellation).await?;
             if !(200..300).contains(&status) {
                 return Err(WebAccessError::new(
                     WebAccessCode::WebSearchProviderFailed,
