@@ -58,6 +58,8 @@ pub struct AppHost {
     config: AppHostConfig,
     current: Mutex<Option<Running>>,
     starting: tokio::sync::Mutex<()>,
+    closing: tokio::sync::Mutex<()>,
+    shutdown: CancellationToken,
     attached: watch::Sender<Option<String>>,
     failed_at: Mutex<Option<Instant>>,
 }
@@ -68,6 +70,8 @@ impl AppHost {
             config,
             current: Mutex::new(None),
             starting: tokio::sync::Mutex::new(()),
+            closing: tokio::sync::Mutex::new(()),
+            shutdown: shutdown.clone(),
             attached: watch::Sender::new(None),
             failed_at: Mutex::new(None),
         });
@@ -75,7 +79,7 @@ impl AppHost {
         tokio::spawn(async move {
             shutdown.cancelled().await;
             if let Some(host) = weak.upgrade() {
-                host.end_now();
+                host.shutdown().await;
             }
         });
         host
@@ -144,6 +148,9 @@ impl AppHost {
     /// not; the caller then serves without it.
     pub async fn start(self: &Arc<Self>, credentials: HostCredentials) -> Result<(), &'static str> {
         let _start = self.starting.lock().await;
+        if self.shutdown.is_cancelled() {
+            return Err("app_unavailable");
+        }
         if self.running() && self.attached.borrow().is_some() {
             return Ok(());
         }
@@ -208,12 +215,14 @@ impl AppHost {
         let stop = CancellationToken::new();
         let (done, ended) = watch::channel(false);
         let stopping = stop.clone();
+        let shutdown = self.shutdown.clone();
         tokio::spawn(async move {
             let quit = async {
                 stopping.cancelled().await;
                 tokio::time::sleep(GRACE).await;
             };
             tokio::select! {
+                () = shutdown.cancelled() => {}
                 () = process.wait() => {}
                 () = quit => {}
             }
@@ -229,9 +238,17 @@ impl AppHost {
         Ok(ended)
     }
 
+    /// Service shutdown skips the graceful delay, then joins the killed tree.
+    pub async fn shutdown(&self) {
+        self.shutdown.cancel();
+        let _starting = self.starting.lock().await;
+        self.stop().await;
+    }
+
     /// Ends the current host: its channel is already closed, so it quits on
     /// its own; after the grace period its tree is killed. Waits until gone.
     pub async fn stop(&self) {
+        let _closing = self.closing.lock().await;
         let running = self
             .current
             .lock()
@@ -241,18 +258,6 @@ impl AppHost {
         if let Some(mut running) = running {
             running.stop.cancel();
             let _ = running.ended.wait_for(|ended| *ended).await;
-        }
-    }
-
-    /// Service shutdown: the tree is killed without waiting for it to quit.
-    fn end_now(&self) {
-        if let Some(running) = self
-            .current
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .take()
-        {
-            running.stop.cancel();
         }
     }
 }

@@ -65,7 +65,9 @@ where
 }
 
 fn state_path(data_root: &Path, id: &str) -> PathBuf {
-    data_root.join("state/scheduler").join(format!("{id}.json"))
+    data_root
+        .join(butler_platform::data_paths::SCHEDULER)
+        .join(format!("{id}.json"))
 }
 
 fn should_run(data_root: &Path, path: &Path, day: &str) -> Result<bool, crate::host::HostError> {

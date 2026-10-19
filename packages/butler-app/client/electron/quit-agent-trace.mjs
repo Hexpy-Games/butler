@@ -1,11 +1,12 @@
 import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
-import { agentLogPath, closeAgentLog, openAgentLog } from "./agent-log.mjs";
+import { AGENT_LOG, agentLogPath, closeAgentLog, openAgentLog } from "./agent-log.mjs";
 
 // Decode only structured phase lines, never expose arbitrary service output to UI.
 // With a writable data root, the Agent's stdout and stderr also go to its log
 // file, so a failure stays readable when the App was opened without a terminal.
 export function spawnTracedAgent(command, args, options, onPhase, dataRoot = null) {
+  if (dataRoot) options = { ...options, env: { ...(options.env ?? process.env), BUTLER_APP_AGENT_LOG: AGENT_LOG } };
   const stdio = Array.isArray(options.stdio) ? options.stdio : [options.stdio, options.stdio, options.stdio];
   const traced = stdio[0] === "pipe";
   const log = dataRoot ? openLog(dataRoot) : null;

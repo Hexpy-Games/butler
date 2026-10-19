@@ -80,6 +80,14 @@ fn windows_task_xml_roundtrip_and_foreign_detection() -> Result<(), Box<dyn std:
         .replace('\'', "''");
     assert!(script.contains(&format!("Set-Location -LiteralPath '{directory}';")));
     assert!(script.ends_with(";exit $LASTEXITCODE"));
+    assert!(
+        !script.contains("1>>"),
+        "native stdout must remain inherited"
+    );
+    assert!(
+        !script.contains("2>>"),
+        "native stderr must remain inherited"
+    );
     assert!(test_support::task_owned(&xml, &xml, SID));
     let scheduler = xml
         .replace("<RunLevel>LeastPrivilege</RunLevel>", "")

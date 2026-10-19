@@ -12,27 +12,39 @@ impl AppApplication {
     ) -> Result<MessageSendResult, GatewayApplicationError> {
         use tracing::Instrument;
         let queued = claim.queued_message_id.clone();
-        let context = self
+        let (context, queued_at) = self
             .storage
             .read(move |db| {
                 db.query_row(
-                    "SELECT trace_context_json FROM session_queued_messages WHERE id=?1",
+                    "SELECT trace_context_json, created_at FROM session_queued_messages WHERE id=?1",
                     [&queued],
-                    |row| row.get::<_, Option<String>>(0),
+                    |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, String>(1)?)),
                 )
                 .map_err(AppStorageError::sqlite)
             })
             .await
             .map_err(app_error)?;
-        let context: butler_log::TraceContext = context
+        let mut context: butler_log::TraceContext = context
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_else(butler_log::TraceContext::current);
-        self.start_turn_traced(claim, prepared)
-            .instrument(context.span("turn.queue"))
-            .await
+        context.chat_id = Some(claim.chat_id.clone());
+        let queue = context.root_span("turn.dequeue");
+        queue.record(
+            "started_at",
+            context.enqueued_at.as_deref().unwrap_or(&queued_at),
+        );
+        drop(queue);
+        async {
+            let result = self.start_turn_traced(claim, prepared).await;
+            if let Err(error) = &result {
+                tracing::error!(%error, "Turn dispatch failed");
+            }
+            result
+        }
+        .instrument(context.root_span("turn.dispatch"))
+        .await
     }
 
-    #[tracing::instrument(name = "turn.dispatch", skip_all, fields(chat_id = %claim.chat_id, turn_id = tracing::field::Empty, message_id = tracing::field::Empty), err)]
     async fn start_turn_traced(
         &self,
         claim: QueueClaim,

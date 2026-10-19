@@ -4,7 +4,6 @@ import { SessionBranchSeed } from "./SessionBranchSeed";
 import type { MessageRecord, TurnProgressSnapshot } from "@/app/types.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { MessageItem } from "./MessageItem";
-import { TurnActivityPanel } from "./TurnActivityPanel";
 import { TurnActivityMessage } from "./TurnActivityMessage";
 import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { useMessageList } from "./hooks/useMessageList";
@@ -40,8 +39,8 @@ function MessageListComponent({ messages, turnProgress, bottomReserve, isSending
     anchoredStewardProgress,
   } = useMessageList(displayMessages, summary, turnProgress, isSending);
 
-  const liveActivity = useMemo(() => <TurnActivityPanel rows={progressRows} state={turnState}
-    startedAt={turnStartedAt} turnId={turnId} />, [progressRows, turnState, turnStartedAt, turnId]);
+  const liveActivity = useMemo(() => ({ rows: progressRows, state: turnState, startedAt: turnStartedAt, turnId }),
+    [progressRows, turnState, turnStartedAt, turnId]);
   const enteringIds = useEnteringMessageIds(visibleMessages, activeChatId);
   const queue = useQueuedConversation(visibleMessages, activeChatId);
   const itemCount = messageItemCount + queue.items.length;

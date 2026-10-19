@@ -173,12 +173,6 @@ fn require_test_service(key: &SecretKey) -> std::io::Result<()> {
 
 #[cfg(not(target_os = "macos"))]
 pub(super) fn test_store(home: &Path) -> std::io::Result<SecretStore> {
-    #[cfg(windows)]
     let store = super::test_file::for_home(home);
-    #[cfg(not(windows))]
-    let store = {
-        let _ = home;
-        SecretStore::system()
-    };
     store.map_err(|_| std::io::Error::other("test secret store open failed"))
 }

@@ -48,7 +48,7 @@ impl AppApplication {
                 .map_err(|code| {
                     GatewayApplicationError::public(400, code, "Image could not be collected.")
                 })?;
-                let root = self.butler_data.join("app-server/assets");
+                let root = self.butler_data.join(butler_platform::data_paths::ASSETS);
                 self.storage
                     .execute(move |db| {
                         store::collect(db, &root, &session, &image, &alt, &nearby_text, &source_url)
@@ -63,7 +63,7 @@ impl AppApplication {
                 .map_err(app_error),
             AppAssetCommand::Read { id, width } => self.read_asset(id, width).await,
             AppAssetCommand::Sweep => {
-                let root = self.butler_data.join("app-server/assets");
+                let root = self.butler_data.join(butler_platform::data_paths::ASSETS);
                 self.storage
                     .execute(move |db| store::sweep(db, &root))
                     .await
@@ -78,7 +78,7 @@ impl AppApplication {
         id: String,
         width: Option<u32>,
     ) -> Result<Value, GatewayApplicationError> {
-        let root = self.butler_data.join("app-server/assets");
+        let root = self.butler_data.join(butler_platform::data_paths::ASSETS);
         let identity = id.clone();
         let hash = self
             .storage

@@ -1,5 +1,5 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { memo, useCallback, type ReactNode } from "react";
+import { memo, useCallback } from "react";
 import type { MessageRecord } from "@/app/types.ts";
 import { visibleSystemMessageText } from "@/app/system-event-message.ts";
 import { refreshSessionFileUrls } from "@/app/messageFileRefresh.ts";
@@ -21,12 +21,13 @@ import { MessageChangedFiles } from "./MessageChangedFiles";
 import { MessageAttachments } from "./MessageAttachments";
 import { UserMessageText } from "./UserMessageText";
 import { MessageImageContext, openMessageImage } from "./messageImages";
+import type { LiveTurnActivity } from "./TurnActivityPanel";
 import type { AssistantFooterMeta } from "./messageFooterMeta";
 import type { AnchoredStewardProgress } from "./stewardParentProgressProjection";
 
 interface MessageContentProps {
   message: MessageRecord;
-  liveActivity?: ReactNode;
+  liveActivity?: LiveTurnActivity;
   copied: boolean;
   footerMeta: AssistantFooterMeta | null;
   onCopyAssistantMessage?: (message: MessageRecord) => void;
@@ -51,8 +52,13 @@ function MessageContentComponent({
   return (
     <MessageImageContext.Provider value={openImage}>
       {message.role === "assistant" ? (
-        <AssistantMessageBody message={message} running={running} failureNotice={failureNotice}
-          stewardProgress={stewardProgress} refreshFileUrls={refreshFileUrls} />
+        <AssistantMessageBody message={message} running={running} liveActivity={liveActivity} failureNotice={failureNotice}
+          stewardProgress={stewardProgress} refreshFileUrls={refreshFileUrls} attachedParts={<>
+            <MessageArtifacts text={message.text} artifacts={artifacts} attachments={message.attachments ?? []}
+              refreshFileUrls={refreshFileUrls} />
+            <MessageChangedFiles files={message.changed_files ?? []} attachments={message.attachments ?? []}
+              artifacts={artifacts} text={message.text} />
+          </>} />
       ) : message.role === "user" ? (
         <UserMessageText key={message.id} text={message.text} contentParts={message.content_parts} />
       ) : (
@@ -61,23 +67,6 @@ function MessageContentComponent({
       {message.role !== "assistant" && (
         <MessageAttachments attachments={message.attachments ?? []} />
       )}
-      {message.role === "assistant" && (
-        <MessageArtifacts
-          text={message.text}
-          artifacts={artifacts}
-          attachments={message.attachments ?? []}
-          refreshFileUrls={refreshFileUrls}
-        />
-      )}
-      {message.role === "assistant" && (
-        <MessageChangedFiles
-          files={message.changed_files ?? []}
-          attachments={message.attachments ?? []}
-          artifacts={artifacts}
-          text={message.text}
-        />
-      )}
-      {liveActivity}
       {message.role === "assistant" && running && <AnswerDraftFooter turnId={message.turn_id} />}
       {message.role === "assistant" && !running && onCopyAssistantMessage && (
         <AssistantResponseFooter

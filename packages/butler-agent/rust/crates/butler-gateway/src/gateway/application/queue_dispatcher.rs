@@ -26,6 +26,9 @@ pub(super) struct QueueWake {
 }
 
 impl QueueWake {
+    pub(super) fn cancel(&self) {
+        self.cancellation.cancel();
+    }
     #[cfg(feature = "e2e-fixtures")]
     pub(super) async fn stopped(&self) {
         self.cancellation.cancelled().await;

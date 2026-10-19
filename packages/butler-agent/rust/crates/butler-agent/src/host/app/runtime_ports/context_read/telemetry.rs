@@ -38,7 +38,7 @@ impl Index {
     fn refresh_monitor(&mut self, root: &Path) {
         let mut monitor = std::mem::take(&mut self.monitor_tail);
         monitor.advance_json(
-            &root.join("metrics/context-monitor.jsonl"),
+            &root.join(butler_platform::data_paths::CONTEXT_METRICS),
             self,
             |index| index.monitors.clear(),
             Self::fold_monitor,

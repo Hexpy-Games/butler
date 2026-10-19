@@ -14,7 +14,7 @@ pub(super) fn auth_status(
     data_root: &Path,
     installation: &ResolvedInstallation,
 ) -> ExitCode {
-    let env_path = data_root.join(".env");
+    let env_path = data_root.join(butler_platform::data_paths::ENVIRONMENT);
     let environment = match path::read_private_environment(installation, data_root, &env_path) {
         Ok(environment) => environment,
         Err(error) => return report_error(command.name(), options.json, &error),
@@ -67,11 +67,14 @@ pub(super) async fn auth_logout(
             &CliError::invalid("auth logout requires --yes"),
         );
     }
-    let environment =
-        match path::read_private_environment(installation, data_root, &data_root.join(".env")) {
-            Ok(environment) => environment,
-            Err(error) => return report_error(command.name(), options.json, &error),
-        };
+    let environment = match path::read_private_environment(
+        installation,
+        data_root,
+        &data_root.join(butler_platform::data_paths::ENVIRONMENT),
+    ) {
+        Ok(environment) => environment,
+        Err(error) => return report_error(command.name(), options.json, &error),
+    };
     let profile = path::auth_profile_path(data_root, &environment);
     let Ok(profile) = path::safe_data_file(installation, data_root, &profile) else {
         return report_error(
@@ -104,7 +107,7 @@ pub(super) async fn auth_logout(
     let data = json!({
         "removed": removed,
         "profilePath": profile.display().to_string(),
-        "envPath": data_root.join(".env").display().to_string(),
+        "envPath": data_root.join(butler_platform::data_paths::ENVIRONMENT).display().to_string(),
         "apiKeyEnvUntouched": true,
         "redacted": true,
     });
