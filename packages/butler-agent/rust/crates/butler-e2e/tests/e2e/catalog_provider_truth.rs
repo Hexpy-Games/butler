@@ -88,7 +88,7 @@ async fn start() -> Result<(Scenario, Requests, Server), HarnessError> {
     Ok((s, requests, server))
 }
 
-async fn register(s: &Scenario, provider: &str, model: &str) -> Result<(), HarnessError> {
+async fn register(s: &Scenario, provider: &str, models: &[&str]) -> Result<String, HarnessError> {
     let saved =
         s.gw.post(
             "/credentials",
@@ -96,15 +96,21 @@ async fn register(s: &Scenario, provider: &str, model: &str) -> Result<(), Harne
         )
         .await?;
     assert_eq!(saved.status, 201, "{}", saved.text);
-    let reply =
-        s.gw.post(
-            "/model-catalog/registered-models",
-            json!({"provider_id":provider,
-        "model_id":model,"auth_type":"api_key","credential_id":saved.data()["credential"]["id"]}),
-        )
-        .await?;
-    assert_eq!(reply.status, 201, "{provider}/{model}: {}", reply.text);
-    Ok(())
+    let credential_id = saved.data()["credential"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    for model in models {
+        let reply =
+            s.gw.post(
+                "/model-catalog/registered-models",
+                json!({"provider_id":provider,
+            "model_id":model,"auth_type":"api_key","credential_id":credential_id}),
+            )
+            .await?;
+        assert_eq!(reply.status, 201, "{provider}/{model}: {}", reply.text);
+    }
+    Ok(credential_id)
 }
 
 async fn turn(
@@ -145,16 +151,16 @@ async fn turn(
 async fn provider_current_models_follow_their_wire_contracts() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, requests, _server) = start().await?;
-    reject_multi_agent(&s).await?;
     anthropic_models(&s, &requests).await?;
-    grok_model(&s, &requests).await?;
+    let xai_credential = grok_model(&s, &requests).await?;
+    reject_multi_agent(&s, &xai_credential).await?;
     qwen_model(&s, &requests).await?;
     s.finish().await
 }
 
 async fn anthropic_models(s: &Scenario, requests: &Requests) -> Result<(), HarnessError> {
+    register(s, "anthropic", &["claude-opus-4-7", "claude-sonnet-4-6"]).await?;
     for (model, effort) in [("claude-opus-4-7", "xhigh"), ("claude-sonnet-4-6", "max")] {
-        register(s, "anthropic", model).await?;
         for body in turn(s, &format!("anthropic/{model}"), effort, requests).await? {
             assert_eq!(body["model"], model);
             assert_eq!(body["thinking"]["type"], "adaptive");
@@ -173,8 +179,8 @@ async fn anthropic_models(s: &Scenario, requests: &Requests) -> Result<(), Harne
     Ok(())
 }
 
-async fn grok_model(s: &Scenario, requests: &Requests) -> Result<(), HarnessError> {
-    register(s, "xai", "grok-4.3").await?;
+async fn grok_model(s: &Scenario, requests: &Requests) -> Result<String, HarnessError> {
+    let credential_id = register(s, "xai", &["grok-4.3"]).await?;
     for body in turn(s, "xai/grok-4.3", "xhigh", requests).await? {
         assert_eq!(body["model"], "grok-4.3");
         assert_eq!(body["reasoning"]["effort"], "xhigh");
@@ -186,11 +192,11 @@ async fn grok_model(s: &Scenario, requests: &Requests) -> Result<(), HarnessErro
                 .all(|t| t["type"] == "function")
         );
     }
-    Ok(())
+    Ok(credential_id)
 }
 
 async fn qwen_model(s: &Scenario, requests: &Requests) -> Result<(), HarnessError> {
-    register(s, "qwen", "qwen3.6-plus").await?;
+    register(s, "qwen", &["qwen3.6-plus"]).await?;
     for (effort, enabled) in [("high", true), ("none", false)] {
         for body in turn(s, "qwen/qwen3.6-plus", effort, requests).await? {
             assert_eq!(body["model"], "qwen3.6-plus");
@@ -207,20 +213,13 @@ async fn qwen_model(s: &Scenario, requests: &Requests) -> Result<(), HarnessErro
     Ok(())
 }
 
-async fn reject_multi_agent(s: &Scenario) -> Result<(), HarnessError> {
-    let saved =
-        s.gw.post(
-            "/credentials",
-            json!({"provider_id":"xai","api_key":"e2e-placeholder"}),
-        )
-        .await?;
-    assert_eq!(saved.status, 201, "{}", saved.text);
+async fn reject_multi_agent(s: &Scenario, credential_id: &str) -> Result<(), HarnessError> {
     let reply =
         s.gw.post(
             "/model-catalog/registered-models",
             json!({"provider_id":"xai",
         "model_id":"grok-4.20-multi-agent","auth_type":"api_key",
-        "credential_id":saved.data()["credential"]["id"]}),
+        "credential_id":credential_id}),
         )
         .await?;
     assert_eq!(reply.status, 400, "{}", reply.text);
