@@ -5,6 +5,7 @@ import { type Page } from "playwright";
 import { LEGACY_FIRST_RUN_STORAGE_KEY, legacyFirstRunCompleteRecord } from "../../packages/butler-app/client/ui/src/app/onboarding";
 import { resolve } from "node:path";
 import { createNativeAppServer } from "../support/native-app-server";
+import { registerSecondModel } from "../support/second-stub-model.ts";
 
 function assert(value: unknown, message: string): asserts value {
   if (!value) throw new Error(message);
@@ -17,6 +18,10 @@ async function choose(page: Page, label: string, option: string) {
 const server = await createNativeAppServer({ uiRoot: resolve("packages/butler-app/client/ui/dist"), config: { user: { name: "Smoke", language: "en" } } });
 const browser = await launchSmokeBrowser();
 try {
+  await registerSecondModel(server);
+  const catalog = await server.api<{ registered_models: Array<{ model_id: string; model_ref: string }> }>("/model-catalog");
+  const stubB = catalog.registered_models.find((model) => model.model_id === "stub-b")?.model_ref;
+  assert(stubB, "the second stub model is registered");
   const context = await browser.newContext({ timezoneId: "Asia/Seoul", viewport: { width: 1440, height: 900 } });
   await server.signIn(context);
   const page = await context.newPage();
@@ -49,10 +54,14 @@ try {
   await page.getByPlaceholder("Prompt body").fill("Summarize the day");
   await choose(page, "Frequency", "Daily");
   await page.locator('input[type="time"]').fill("08:00");
+  await page.locator('[data-test-class="automation-model-trigger"]').click();
+  await page.getByText("Stub B", { exact: true }).last().click();
+  await page.locator('[data-test-class="automation-model-trigger"]').getByText("Stub B", { exact: true }).waitFor();
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await page.getByText("Start at login for your schedules. Settings → General.", { exact: true }).waitFor();
-  const data = await server.api<{ automations: Array<{ title: string; schedule: { kind: string; time: string; tz: string } }> }>("/automations");
+  const data = await server.api<{ automations: Array<{ title: string; model?: string | null; schedule: { kind: string; time: string; tz: string } }> }>("/automations");
   assert(data.automations.length === 1, "one complete schedule was saved");
+  assert(data.automations[0]?.model === stubB, `form saved the chosen model: ${data.automations[0]?.model}`);
   assert(JSON.stringify(data.automations[0]?.schedule) === JSON.stringify({ kind: "daily", time: "08:00", weekdays: [], tz: "Asia/Seoul" }), `form saved local 08:00 recurrence: ${JSON.stringify(data.automations[0]?.schedule)}`);
   await page.getByRole("button", { name: "Back to schedules", exact: true }).click();
   await page.getByText(/On · Every day at 8:00 AM · Next:/u).waitFor();
@@ -66,7 +75,7 @@ try {
   await page.getByText("예약 작업", { exact: true }).first().click();
   await page.getByText(/켜짐 · 매일 오전 8:00 · 다음:/u).waitFor();
   assert(await page.getByText("예약 작업을 위해 로그인 시 시작을 켜세요. 설정 → 일반.", { exact: true }).count() === 0, "login hint was not repeated");
-  console.log("Schedule UI smoke passed: local-time payload, localized list and one-time login hint");
+  console.log("Schedule UI smoke passed: local-time payload, chosen model, localized list and one-time login hint");
 } finally {
   await browser.close();
   await server.stop();
