@@ -13,6 +13,7 @@ export function AssistantStatusLabel({
   markKey,
   markTheme,
   state,
+  shimmer = true,
 }: {
   children: ReactNode;
   label: string;
@@ -20,6 +21,7 @@ export function AssistantStatusLabel({
   markKey?: string;
   markTheme: "dark" | "light";
   state: AssistantStatusVisualState;
+  shimmer?: boolean;
 }) {
   return (
     <MessageStatusLabel
@@ -33,7 +35,7 @@ export function AssistantStatusLabel({
           />
         </span>
       }
-      shimmer={state === "active"}
+      shimmer={state === "active" && shimmer}
       title={label}
     >
       {children}

@@ -238,6 +238,7 @@ fn project_simple_fields(
         "multiline_send_behavior",
         "appearance_theme",
         "collapse_message_box",
+        "show_thinking",
         "reduce_motion",
         "main_screen_theme",
         "main_screen_theme_preset",

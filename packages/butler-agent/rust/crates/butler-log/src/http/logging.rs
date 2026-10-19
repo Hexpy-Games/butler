@@ -29,7 +29,8 @@ pub(super) async fn ensure() {
     }
 }
 /// Bound the exit wait for the writer this boundary started. Service-owned
-/// writers retain their durable shutdown; no blocking task can outlive this wait.
+/// writers retain their durable shutdown. A stalled writer may finish on its
+/// own thread after this wait; it never holds the Tokio blocking pool alive.
 pub async fn shutdown() -> io::Result<()> {
     if STARTED.get().is_some()
         && let Some(log) = crate::global().cloned()

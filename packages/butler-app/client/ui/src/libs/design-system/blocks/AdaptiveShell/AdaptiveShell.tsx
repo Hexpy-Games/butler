@@ -11,6 +11,7 @@ import { ShellFrameContext, type ShellFrame } from "./shellFrame";
 import { adaptiveShellThemeClasses, type AdaptiveShellTheme } from "./theme";
 import { useSidebarTrackMotion } from "./useSidebarTrackMotion";
 import { useInspectorTrackMotion } from "./useInspectorTrackMotion";
+import { useInspectorInert } from "./useInspectorInert";
 
 export interface AdaptiveShellProps extends DsBaseProps<HTMLAttributes<HTMLDivElement>>, UnsafeStyleProps {
   /** Applies the theme token classes to the shell root. */
@@ -144,8 +145,10 @@ export function AdaptiveShellInspector({
   open,
   ...props
 }: DsBaseProps<HTMLAttributes<HTMLDivElement>> & { open: boolean }) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useInspectorInert(panelRef, open);
   return (
-    <div className={cn(styles.inspector, className)} data-open={open} data-slot="adaptive-shell-inspector" {...props}>
+    <div ref={panelRef} className={cn(styles.inspector, className)} data-open={open} data-slot="adaptive-shell-inspector" {...props}>
       {children}
     </div>
   );
