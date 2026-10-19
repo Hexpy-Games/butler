@@ -54,7 +54,13 @@ jobs:
         id: reuse
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 .github/scripts/agent-provenance.py reuse "$RUNNER_TEMP/reused-agent" darwin-arm64 static-ort release "${GITHUB_REF_NAME#v}"
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          # Same rule as the Agent build (butler-agent-cli/build.rs): a non-version ref builds <package version>-dev.
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            version="$(python3 -c 'import tomllib; print(tomllib.load(open("packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml", "rb"))["package"]["version"])')-dev"
+          fi
+          python3 .github/scripts/agent-provenance.py reuse "$RUNNER_TEMP/reused-agent" darwin-arm64 static-ort release "$version"
 
       - name: Read the pinned Rust toolchain
         id: toolchain
@@ -186,10 +192,6 @@ jobs:
             gh release create "$tag" "${files[@]}" --draft --title "$tag" "${notes_args[@]}"
           fi
 
-      - name: Prove Developer ID signing across the isolated HOME boundary
-        if: startsWith(github.ref_name, 'v0.1.0-preview.')
-        run: python3 .github/scripts/isolated.py python3 .github/scripts/macos-signing-profile-proof.py
-
       - name: Fetch the previous App release manifest
         env:
           GH_TOKEN: ${{ github.token }}
@@ -231,7 +233,7 @@ jobs:
       - name: Verify the native App release artifacts
         run: python3 .github/scripts/isolated.py bun run release:app:smoke -- --platform=darwin-arm64 --out dist/release/app
 
-      - name: Report signing, notarization and staple status
+      - name: Verify signing, notarization and staple
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -249,7 +251,10 @@ jobs:
           check spctl -a -vvv -t open --context context:primary-signature "$dmg"
           check xcrun stapler validate "$app"
           check xcrun stapler validate "$dmg"
-          check codesign --verify -R='=notarized' --check-notarization --verbose=2 "$BUTLER_NATIVE_AGENT_PAYLOAD/bin/butler-agent"
+          # The Agent's online ticket can lag; verify-agent retries before this check prints it.
+          agent="$BUTLER_NATIVE_AGENT_PAYLOAD/bin/butler-agent"
+          check deploy/macos/sign-and-notarize.sh verify-agent "$agent"
+          check codesign --verify -R='=notarized' --check-notarization --verbose=2 "$agent"
 
       - name: Preserve validated native App files for publication recovery
         uses: actions/upload-artifact@v4

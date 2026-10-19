@@ -34,12 +34,8 @@ Butler is in preview. Always download the newest preview from [GitHub Releases](
       1. Open the newest preview (at the top) on [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) and expand **Assets**.
       2. Download the macOS DMG (`butler-app-<version>-darwin-arm64.dmg`).
       3. Open the DMG and drag `Butler.app` into the Applications folder.
-      4. Open Butler once. macOS blocks it, because the preview is not notarized.
-      5. Open **System Settings → Privacy & Security**, scroll down, and choose **Open Anyway** next to Butler. Confirm with your password. You only need to do this once.
+      4. Open Butler. Butler is notarized by Apple. If macOS asks whether to open an app downloaded from the internet, choose **Open**.
     </Steps>
-    <Notice tone="info">
-      **Open Anyway** works on every supported macOS version. On macOS 14 or earlier, right-click → **Open** works too.
-    </Notice>
     <Notice tone="info" title="Verify the download (optional)">
       Download the DMG and its `.sha256` file into the same folder, then run `shasum -a 256 -c butler-app-*-darwin-arm64.dmg.sha256`. `OK` means the file matches the release.
     </Notice>
