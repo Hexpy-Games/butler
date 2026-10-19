@@ -43,7 +43,7 @@ pub(in crate::host) fn local_asset_sources(sources: &[String]) -> Result<(), &'s
         && !sources.iter().all(|source| local_source(source))
     {
         eprintln!(
-            "embed_asset_real_download_forbidden_in_stub: BUTLER_E2E_TIER=stub requires \
+            "embed_asset_real_download_forbidden_in_stub: BUTLER_E2E_EMBED_LOCAL_ONLY=1 requires \
              local BUTLER_E2E_EMBED_SOURCES or BUTLER_E2E_EMBED_MANIFEST; \
              supply cached assets with BUTLER_E2E_EMBEDDING_ASSETS"
         );
