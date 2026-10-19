@@ -1,5 +1,6 @@
 const REQUEST_ID_HEADERS: &[&str] = &[
     "openai-request-id",
+    "x-oai-request-id",
     "x-request-id",
     "request-id",
     "x-zai-request-id",
@@ -184,6 +185,7 @@ fn error(
     retryable: bool,
 ) -> ProviderRequestError {
     ProviderRequestError {
+        auth_type: None,
         code: code.into(),
         message: message.into(),
         provider: provider.into(),
@@ -270,9 +272,10 @@ fn normalized_code(
             .any(|term| message.contains(term)))
     {
         Some("provider_model_not_found")
-    } else if contains(
+    } else if quota::matches(
         &identity,
         &[
+            "usage_limit_exceeded",
             "insufficient_quota",
             "quota_exceeded",
             "quota_exhausted",
@@ -467,3 +470,5 @@ fn sanitize(value: &Value, depth: usize) -> Option<Value> {
     }
 }
 mod retry;
+
+mod quota;

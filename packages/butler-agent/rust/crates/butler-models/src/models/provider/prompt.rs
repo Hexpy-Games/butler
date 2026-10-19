@@ -235,6 +235,12 @@ fn observe_usage(
             request.cache_scope.unwrap_or("btcc-agent-loop")
         };
         provider.prompt_metrics.append(PromptUsageMetricInput {
+            billing_account: match &config.auth {
+                super::ProviderAuth::ChatGptPlan { registration, .. } => {
+                    Some(registration.as_str())
+                }
+                _ => None,
+            },
             model: usage.map_or(config.metadata.model_ref.as_str(), |usage| &usage.model),
             scope,
             prompt_tokens: usage.and_then(|usage| usage.prompt_tokens),

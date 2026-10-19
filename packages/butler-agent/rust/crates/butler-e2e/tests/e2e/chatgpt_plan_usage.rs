@@ -59,3 +59,9 @@ async fn siwc_14_legacy_migration_preserves_credentials_until_success() -> Resul
     assert_eq!(account(&s).await?["plan_notice_pending"], false);
     s.finish().await
 }
+
+mod limit;
+
+pub(super) mod windows;
+
+mod search;

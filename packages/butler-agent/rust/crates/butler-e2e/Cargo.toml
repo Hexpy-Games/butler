@@ -14,7 +14,7 @@ publish.workspace = true
 ring.workspace = true
 butler-log = { path = "../butler-log", features = ["e2e-fixtures"] }
 butler-gateway = { path = "../butler-gateway", features = ["test-support"] }
-butler-runtime = { path = "../butler-runtime" }
+butler-runtime = { path = "../butler-runtime", features = ["test-support"] }
 butler-core = { path = "../butler-core" }
 butler-models = { path = "../butler-models" }
 butler-turn = { path = "../butler-turn", features = ["test-support"] }

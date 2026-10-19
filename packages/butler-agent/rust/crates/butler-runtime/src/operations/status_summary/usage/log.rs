@@ -81,6 +81,7 @@ fn complete(start: i64, window: Window<'_>) -> bool {
 #[derive(Default)]
 pub(crate) struct UsageLogIndex {
     tail: LogTail,
+    pub(super) plan: super::plan::PlanUsageIndex,
     names: Names,
     slots: BTreeMap<i64, Slot>,
     by_scope: HashMap<Arc<str>, BTreeMap<i64, ScopeSlot>>,
@@ -97,6 +98,7 @@ impl UsageLogIndex {
             self,
             |index| {
                 index.rows.clear();
+                index.plan = Default::default();
                 index.slots.clear();
                 index.by_scope.clear();
                 index.all = None;
@@ -117,6 +119,7 @@ impl UsageLogIndex {
         let Ok(index) = u32::try_from(self.rows.len()) else {
             return;
         };
+        self.plan.push(&row, chrono::Utc::now().timestamp_millis());
         let start = slot_start(row.ts);
         self.session_totals = None;
         if let Some(all) = &mut self.all {
@@ -137,6 +140,26 @@ impl UsageLogIndex {
             .add(&row, pricing, &self.names);
         global.rows.push(index);
         self.rows.push(row);
+    }
+    pub(super) fn plan_usage(&self, account: &str, now: i64) -> Value {
+        self.plan.view(account, now, |start, end| {
+            let mut tokens = super::plan::PlanTokens::default();
+            if let Some(slot) = self.slots.get(&slot_start(start as f64)) {
+                for row in self.matching_rows(
+                    &slot.rows,
+                    Window {
+                        since_ts: Some(start as f64),
+                        until_ts: Some(end as f64),
+                        scope: None,
+                    },
+                ) {
+                    if super::plan::account(row) == Some(account) {
+                        tokens.add(row);
+                    }
+                }
+            }
+            tokens
+        })
     }
     pub(super) fn resolve_scope(
         &self,

@@ -122,7 +122,7 @@ export interface AppModelSummary {
   image_max_inline_bytes?: number;
 }
 
-export type ProviderAuthMethod = "api_key" | "codex_oauth";
+export type ProviderAuthMethod = "api_key" | "chatgpt_oauth" | "codex_oauth";
 
 /** Where a saved API key is kept (#217). */
 export type CredentialStorage =
@@ -370,7 +370,7 @@ export type WebSearchProviderSetting =
   | "brave"
   | "tavily"
   | "openai-web-search"
-  | "codex-subscription-web-search"
+  | "chatgpt-plan-web-search"
   | "disabled";
 
 export type WebSearchReaderBackendSetting =
@@ -1428,6 +1428,7 @@ export interface UsageMonitorView {
       providerId: string;
       source: "local_telemetry" | "provider_adapter";
       remaining: ProviderQuotaResultView;
+      butlerUsage?: ButlerUsageView | null;
       billing: {
         available: boolean;
         reason: string;
@@ -1453,24 +1454,34 @@ export interface UsageMonitorView {
 
 export type ProviderQuotaPlanKind = "subscription" | "api" | "unknown";
 export type ProviderQuotaSourceKind =
-  | "codex_app_server"
+  | "chatgpt_plan"
   | "zai_usage_query"
   | "provider_quota";
 export type ProviderQuotaReasonCode =
   | "provider_quota_pending"
   | "provider_quota_not_offered"
   | "provider_quota_fetch_failed"
-  | "provider_auth_not_applicable"
-  | "provider_auth_required"
-  | "provider_auth_surface_mismatch"
-  | "provider_executable_unavailable"
   | "provider_timeout"
   | "provider_response_malformed"
-  | "provider_auth_failure"
   | "provider_rpc_failure"
   | "provider_temporary_failure";
 
+export interface ButlerUsageWindow {
+  id: "hours_5" | "days_7" | "days_30";
+  requests: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+export interface ButlerUsageView {
+  account: "chatgpt_plan";
+  windows: ButlerUsageWindow[];
+  asOf: string;
+}
 export interface ProviderQuotaResultView {
+  estimated?: boolean;
+  planUsage?: { state: "in_use" | "limit_reached"; resetsAt: string | null } | null;
+  credits?: { hasCredits: boolean | null; unlimited: boolean | null; balance: string | null } | null;
   available: boolean;
   stale: boolean;
   sourceKind: ProviderQuotaSourceKind;

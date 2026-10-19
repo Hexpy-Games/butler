@@ -7,11 +7,12 @@
 //! values (marked stale), keeps the outcome of the latest poll in memory, and
 //! announces changed views to subscribers.
 
+mod persistence;
 mod poller;
 mod view;
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
@@ -19,7 +20,8 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
 use butler_models::models::{
-    ProviderClock, ProviderQuotaReading, ProviderQuotaSink, ProviderQuotaWindow,
+    CreditsReading, PlanLimitReading, ProviderClock, ProviderQuotaReading, ProviderQuotaSink,
+    ProviderQuotaWindow,
 };
 
 pub use poller::{ProviderQuotaFetcher, ProviderQuotaPoller, QuotaFetchFuture, QuotaPollTrigger};
@@ -94,6 +96,15 @@ pub struct ProviderQuotaView {
     pub fetched_at: Option<String>,
     /// Why no fresh quota is shown.
     pub reason: Option<QuotaUnavailableReason>,
+    /// Header windows are an undocumented estimate.
+    #[serde(default)]
+    pub estimated: bool,
+    /// Confirmed ChatGPT-plan state, independent of header availability.
+    #[serde(default)]
+    pub plan_usage: Option<PlanUsageView>,
+    /// Numeric-only header credit estimate.
+    #[serde(default)]
+    pub credits: Option<CreditsReading>,
 }
 
 /// A changed quota, published as the `provider_quota_updated` live event.
@@ -120,14 +131,26 @@ pub enum QuotaPollStatus {
     Disabled,
 }
 
+/// Confirmed plan use or a provider-reported usage limit.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanUsageView {
+    pub state: String,
+    pub resets_at: Option<String>,
+}
+
 #[derive(Default, Deserialize, Serialize)]
 struct PersistedQuota {
+    #[serde(default)]
+    plan_limit: BTreeMap<String, PlanLimitReading>,
     providers: BTreeMap<String, ProviderQuotaReading>,
 }
 
 /// Process-owned latest quota per provider.
 pub struct ProviderQuotaStore {
-    path: PathBuf,
+    persistence: persistence::Persistence,
+    plan_limits: Mutex<BTreeMap<String, PlanLimitReading>>,
+    chatgpt_active: std::sync::atomic::AtomicBool,
     readings: Mutex<BTreeMap<String, ProviderQuotaReading>>,
     statuses: Mutex<BTreeMap<String, QuotaPollStatus>>,
     updates: broadcast::Sender<ProviderQuotaUpdate>,
@@ -138,14 +161,15 @@ impl ProviderQuotaStore {
     /// Opens the store, loading the last persisted readings when present.
     pub fn open(data_root: &Path, clock: Arc<dyn ProviderClock>) -> Self {
         let path = data_root.join(FILE);
-        let readings = std::fs::read(&path)
+        let persisted = std::fs::read(&path)
             .ok()
             .and_then(|bytes| serde_json::from_slice::<PersistedQuota>(&bytes).ok())
-            .unwrap_or_default()
-            .providers;
+            .unwrap_or_default();
         Self {
-            path,
-            readings: Mutex::new(readings),
+            persistence: persistence::Persistence::new(path),
+            readings: Mutex::new(persisted.providers),
+            plan_limits: Mutex::new(persisted.plan_limit),
+            chatgpt_active: std::sync::atomic::AtomicBool::new(false),
             statuses: Mutex::new(BTreeMap::new()),
             updates: broadcast::channel(UPDATE_CAPACITY).0,
             clock,
@@ -154,13 +178,34 @@ impl ProviderQuotaStore {
 
     /// The provider's quota view: its latest reading, or why there is none.
     pub fn view(&self, provider_id: &str) -> ProviderQuotaView {
+        if provider_id == "openai"
+            && !self
+                .chatgpt_active
+                .load(std::sync::atomic::Ordering::Acquire)
+        {
+            return view::without_reading(provider_id, None);
+        }
         let reading = self.readings.lock().get(provider_id).cloned();
         let status = self.statuses.lock().get(provider_id).copied();
         let now = self.clock.now_epoch_millis();
-        reading.map_or_else(
+        let mut result = reading.map_or_else(
             || view::without_reading(provider_id, status),
             |reading| view::reading_view(&reading, status, now),
-        )
+        );
+        if provider_id == "openai"
+            && self
+                .chatgpt_active
+                .load(std::sync::atomic::Ordering::Acquire)
+        {
+            view::chatgpt_plan(&mut result, self.plan_limits.lock().get(provider_id));
+        }
+        result
+    }
+
+    /// Projects an active registration without fetching quota or writing disk.
+    pub fn set_chatgpt_active(&self, active: bool) {
+        self.chatgpt_active
+            .store(active, std::sync::atomic::Ordering::Release);
     }
 
     /// Providers with a reading, in id order.
@@ -217,11 +262,7 @@ impl ProviderQuotaStore {
     /// Announces the provider's view when what the App shows changed.
     fn announce_change(&self, provider_id: &str, before: &ProviderQuotaView) {
         let after = self.view(provider_id);
-        if before.available != after.available
-            || before.stale != after.stale
-            || before.reason != after.reason
-            || before.plan_kind != after.plan_kind
-        {
+        if before != &after {
             self.announce(provider_id, after);
         }
     }
@@ -269,15 +310,37 @@ impl ProviderQuotaStore {
     fn persist(&self, readings: &BTreeMap<String, ProviderQuotaReading>) {
         let persisted = PersistedQuota {
             providers: readings.clone(),
+            plan_limit: self.plan_limits.lock().clone(),
         };
-        // Best effort: the in-memory reading stays authoritative for this process.
-        if let Ok(value) = serde_json::to_value(&persisted) {
-            let _ = butler_core::configuration::write_json_atomic(&self.path, &value);
-        }
+        self.persistence.write(persisted);
     }
 }
 
 impl ProviderQuotaSink for ProviderQuotaStore {
+    fn plan_limit(&self, provider: &str, reading: Option<PlanLimitReading>) {
+        let before = self.view(provider);
+        self.set_chatgpt_active(true);
+        let changed = {
+            let mut limits = self.plan_limits.lock();
+            match (limits.get(provider), reading) {
+                (None, None) | (Some(_), Some(_)) => false,
+                (None, Some(reading)) => {
+                    limits.insert(provider.into(), reading);
+                    true
+                }
+                (Some(_), None) => {
+                    limits.remove(provider);
+                    true
+                }
+            }
+        };
+        if changed {
+            self.persist(&self.readings.lock());
+            self.announce(provider, self.view(provider));
+        } else {
+            self.announce_change(provider, &before);
+        }
+    }
     fn observe(&self, reading: ProviderQuotaReading) {
         let before = self.view(&reading.provider_id);
         self.store(reading, &before);
@@ -295,7 +358,8 @@ fn same_values(left: &ProviderQuotaReading, right: &ProviderQuotaReading) -> boo
             window.resets_at_ms.map(|ms| ms.div_euclid(60_000)),
         )
     };
-    left.plan_name == right.plan_name
+    left.credits == right.credits
+        && left.plan_name == right.plan_name
         && left.source == right.source
         && left.windows.len() == right.windows.len()
         && left

@@ -4,6 +4,8 @@ pub mod authorize;
 pub mod exchange;
 pub mod id_token;
 pub mod models;
+mod search;
+pub use search::finalize_search;
 pub mod refresh;
 pub mod revoke;
 pub mod store;

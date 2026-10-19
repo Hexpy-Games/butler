@@ -36,6 +36,10 @@ pub(super) fn record(
             prompt_sections: None,
         });
     provider.prompt_metrics.append(PromptUsageMetricInput {
+        billing_account: match &config.auth {
+            super::ProviderAuth::ChatGptPlan { registration, .. } => Some(registration.as_str()),
+            _ => None,
+        },
         model: usage
             .and_then(|usage| usage.get("model"))
             .and_then(Value::as_str)

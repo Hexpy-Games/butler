@@ -7,7 +7,7 @@ export const usageContext: ContextDetailsView = {
 
 export function quota(fields: Partial<ProviderQuotaResultView> = {}): ProviderQuotaResultView {
   return {
-    available: true, stale: false, sourceKind: "codex_app_server", sourceId: "codex", planKind: "subscription",
+    available: true, stale: false, sourceKind: "chatgpt_plan", sourceId: "codex", planKind: "subscription",
     planName: null, fetchedAt: "2026-09-28T05:05:00.000Z", reason: null,
     windows: [
       { id: "tokens-5-hour", usedPercent: 18, remainingPercent: 82, windowDurationMins: 300, resetsAt: "2026-09-28T09:00:00.000Z", expiresAt: null },

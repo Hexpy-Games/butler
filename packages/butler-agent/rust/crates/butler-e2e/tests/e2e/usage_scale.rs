@@ -359,3 +359,5 @@ fn assert_work_costs(view: &Value, expected: &Expected) {
     }
     assert!((view["cost"]["estimatedUsd"].as_f64().unwrap() - ROWS as f64 * unit_usd).abs() < 1e-8);
 }
+
+mod plan;

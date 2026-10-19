@@ -1,5 +1,5 @@
 //! USE — remaining subscription quota polled from the providers' usage
-//! endpoints (#241 follow-up): Codex `wham/usage` and the Z.AI Coding Plan
+//! endpoints (#241 follow-up): the Z.AI Coding Plan
 //! `quota/limit`, a rejected token's refresh, the failure views and the
 //! views before any reading.
 #![allow(
@@ -152,6 +152,7 @@ async fn use_06_fresh_data_folder_reports_pending_and_not_offered() -> Result<()
     butler_e2e::gate!();
     let s = Setup::new("USE-06")?
         .fixture(Fixture::Empty)
+        .without_credential()
         .quota_polling()
         .start()
         .await?;
@@ -181,6 +182,7 @@ async fn use_06_fresh_data_folder_reports_pending_and_not_offered() -> Result<()
     // The harness default: `BUTLER_PROVIDER_QUOTA_POLLING=0`.
     let off = Setup::new("USE-06-OFF")?
         .fixture(Fixture::Empty)
+        .without_credential()
         .start()
         .await?;
     for provider in ["zai"] {

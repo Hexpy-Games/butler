@@ -21,6 +21,8 @@ pub(super) struct UsageRow {
     /// The row's whole-millisecond time; rows without one are not priced.
     ts_ms: Option<i64>,
     pub(super) model: Arc<str>,
+    pub(super) auth_mode: Option<Arc<str>>,
+    pub(super) billing_account: Option<Arc<str>>,
     pub(super) scope: Arc<str>,
     pub(super) phase: Option<Arc<str>>,
     pub(super) prompt: f64,
@@ -102,6 +104,8 @@ impl UsageRow {
                 .map(|id| names.get(id)),
             ts_ms: event.get("ts").and_then(Value::as_i64),
             model: names.get(model),
+            auth_mode: event["authMode"].as_str().map(|s| names.get(s)),
+            billing_account: event["billingAccount"].as_str().map(|s| names.get(s)),
             scope: names.get(scope),
             phase,
             prompt,

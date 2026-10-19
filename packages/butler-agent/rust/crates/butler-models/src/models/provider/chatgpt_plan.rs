@@ -23,7 +23,7 @@ pub(super) const FORBIDDEN: &[&str] = &[
     "previous_response_id",
     "prompt_cache_options",
 ];
-pub(super) type Memo = Option<(String, String)>;
+pub(in crate::models) type Memo = Option<(String, String)>;
 pub(super) fn memo(config: &ProviderRequestConfig) -> Memo {
     if let ProviderAuth::ChatGptPlan { registration, .. } = &config.auth {
         Some((registration.clone(), config.wire_model.clone()))
@@ -98,7 +98,7 @@ pub(super) fn prepare(body: &mut Map<String, Value>, config: &ProviderRequestCon
         *tools = kept;
     }
 }
-pub(super) fn finalize(body: &mut Map<String, Value>, memo: &Memo) -> Option<String> {
+pub(in crate::models) fn finalize(body: &mut Map<String, Value>, memo: &Memo) -> Option<String> {
     let Some(key) = memo else {
         return None;
     };

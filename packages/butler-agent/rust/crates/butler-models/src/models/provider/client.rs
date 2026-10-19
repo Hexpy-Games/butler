@@ -145,6 +145,11 @@ impl ModelProvider {
                 {
                     super::redact::redact_local_error(&mut error, secret);
                 }
+                error.auth_type = match &config.auth {
+                    ProviderAuth::ChatGptPlan { .. } => Some("chatgpt_oauth".into()),
+                    ProviderAuth::ApiKey(_) => Some("api_key".into()),
+                    ProviderAuth::None => None,
+                };
                 error.endpoint = Some(safe_endpoint(&config.endpoint));
                 error.model = Some(config.wire_model.clone());
                 self.observations.failure(&error);

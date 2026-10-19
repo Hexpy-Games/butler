@@ -2,12 +2,14 @@
 //!
 //! Codex (`x-codex-{primary,secondary}-*`) and Anthropic unified
 //! (`anthropic-ratelimit-unified-{5h,7d}-*`) responses report how much of each
-//! rolling window is used; Codex logins (`wham/usage`) and the Z.AI Coding
-//! Plan (`quota/limit`) also answer a usage endpoint that Butler polls. Only
+//! rolling window is used; the Z.AI Coding Plan (`quota/limit`) also
+//! answers a usage endpoint that Butler polls. Only
 //! the parsed numbers leave this module; raw header values and bodies are
 //! never stored.
 
+mod credits;
 mod fetch;
+pub use credits::{CreditsReading, PlanLimitReading};
 mod lenient;
 mod zai_usage;
 
@@ -58,13 +60,15 @@ pub struct ProviderQuotaReading {
     /// Where the reading came from.
     #[serde(default)]
     pub source: ProviderQuotaSource,
+    /// Undocumented response-header credit estimate.
+    #[serde(default)]
+    pub credits: Option<CreditsReading>,
 }
 
 /// Whether Butler can read a provider's remaining quota by polling.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum QuotaSupport {
-    /// Butler polls the provider's usage endpoint (Codex logins, the Z.AI
-    /// Coding Plan).
+    /// Butler polls the provider's usage endpoint (the Z.AI Coding Plan).
     Polled,
     /// The provider offers no quota to read; the value says how it bills.
     NotOffered(QuotaBilling),
@@ -90,6 +94,8 @@ pub fn provider_quota_support(provider_id: &str) -> QuotaSupport {
 pub trait ProviderQuotaSink: Send + Sync {
     /// Called once per successful response that carried quota headers.
     fn observe(&self, reading: ProviderQuotaReading);
+    /// Records a confirmed plan-limit transition, independent of header estimates.
+    fn plan_limit(&self, _provider: &str, _reading: Option<PlanLimitReading>) {}
 }
 
 const FIVE_HOURS: u64 = 300;
@@ -113,7 +119,9 @@ pub fn parse_quota_headers(
             windows.push(window);
         }
     }
-    (!windows.is_empty()).then(|| ProviderQuotaReading {
+    let credits = credits::parse(headers);
+    (!windows.is_empty() || credits.is_some()).then(|| ProviderQuotaReading {
+        credits,
         provider_id: provider_id.to_owned(),
         windows,
         observed_at_ms: now_ms,

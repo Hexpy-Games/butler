@@ -15,7 +15,7 @@ export function UsageProviderRow({ provider }: { provider: UsageProvider }) {
     ?? catalog.models.find(item => item.provider_id === provider.providerId)?.provider_label
     ?? usageProviderName(provider.providerId);
   const quota = provider.remaining;
-  const displayName = quota.sourceKind === "codex_app_server" ? appCopy.composer.usage.codexProvider : name;
+  const displayName = quota.sourceKind === "chatgpt_plan" ? appCopy.composer.usage.codexProvider : name;
   const description = [displayName, quota.planKind !== "unknown" || quota.planName ? planLabel(quota.planKind, quota.planName) : null,
     quota.fetchedAt ? appCopy.composer.usage.checked(usageClock(Date.parse(quota.fetchedAt))) : null].filter(Boolean).join(" · ");
   if (!quota.available && quota.planKind === "api" && quota.reason?.code === "provider_quota_not_offered") {

@@ -130,6 +130,8 @@ pub struct PromptUsageAttribution<'a> {
 }
 
 pub struct PromptUsageMetricInput<'a> {
+    /// Opaque account key for completed ChatGPT-plan requests.
+    pub billing_account: Option<&'a str>,
     pub model: &'a str,
     pub scope: &'a str,
     pub prompt_tokens: Option<f64>,

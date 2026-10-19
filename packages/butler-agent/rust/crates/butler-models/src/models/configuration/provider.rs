@@ -314,6 +314,7 @@ fn provider_error_for(
     message: &str,
 ) -> Box<ProviderRequestError> {
     Box::new(ProviderRequestError {
+        auth_type: None,
         code: code.into(),
         message: message.into(),
         provider: provider.into(),

@@ -310,7 +310,10 @@ fn stream_error(event: &Value, provider: &str, api: &str) -> Box<ProviderRequest
     let identity = format!("{kind}:{code}").to_ascii_lowercase();
     let status = if let Some(status) = diagnostics::plan::stream_status(error) {
         status
-    } else if identity.contains("rate") || identity.contains("too_many_requests") {
+    } else if identity.contains("rate")
+        || identity.contains("too_many_requests")
+        || identity.contains("usage_limit_exceeded")
+    {
         429
     } else if identity.contains("unauthorized") || identity.contains("auth") {
         401

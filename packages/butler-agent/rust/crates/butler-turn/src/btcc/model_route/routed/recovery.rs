@@ -48,8 +48,20 @@ impl RoutedRound<'_> {
             self.clear_recovery(&mut cursor.recovery, cursor.attempt, route.retry_ceiling)
                 .await;
         }
-        self.fallback(route, &cursor.round_id, key, request.image_carrier)
-            .await?;
+        self.fallback(
+            route,
+            &cursor.round_id,
+            key,
+            request.image_carrier,
+            (
+                failure::code(&error),
+                match &error {
+                    ModelRoundError::Provider(e) => e.auth_type.as_deref(),
+                    _ => None,
+                },
+            ),
+        )
+        .await?;
         cursor.switch_candidate();
         Ok(())
     }
@@ -124,6 +136,7 @@ impl RoutedRound<'_> {
         key: &str,
         // Passthrough: image admission and attachment documents owned by butler-runtime.
         image: Option<&Value>,
+        failure: (&str, Option<&str>),
     ) -> Result<(), ModelRoundError> {
         if image.is_some() {
             return Err(ModelRoundError::ImageAdmission {
@@ -161,7 +174,7 @@ impl RoutedRound<'_> {
             self.turn_id,
             round,
             route.active_cursor,
-            &candidate.model_ref,
+            (&candidate.model_ref, failure),
         )
         .await;
         Ok(())

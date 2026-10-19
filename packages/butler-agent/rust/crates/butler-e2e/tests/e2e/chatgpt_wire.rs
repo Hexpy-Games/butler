@@ -127,6 +127,7 @@ async fn reply(State(state): State<Arc<Mutex<Script>>>, Json(body): Json<Value>)
             .into_response(),
         "403" => (
             StatusCode::FORBIDDEN,
+            [("x-oai-request-id", "siwc-plan-request-id")],
             Json(json!({"error":{"code":"subscription_sharing_user_not_eligible"}})),
         )
             .into_response(),
@@ -271,7 +272,19 @@ async fn siwc_13_terminal_and_admission_errors() -> Result<(), HarnessError> {
     ] {
         let stub = Stub::start(mode).await?;
         let s = stub.scenario(&format!("SIWC-13-{mode}")).await?;
+        s.gw.patch("/settings", json!({"diagnostics_enabled":true}))
+            .await?;
         let (_, turn) = s.turn("general", &stub.marker()).await?;
+        if mode == "403" {
+            let text = std::fs::read_to_string(
+                s.sandbox.data.join("app/developer-logs/model-turns.jsonl"),
+            )?;
+            let row: Value = serde_json::from_str(text.lines().last().unwrap())?;
+            assert_eq!(
+                row["response"]["raw"]["failure"]["providerRequestId"], "siwc-plan-request-id",
+                "{row}"
+            );
+        }
         assert_eq!(
             turn_state(&turn),
             if code.is_empty() {

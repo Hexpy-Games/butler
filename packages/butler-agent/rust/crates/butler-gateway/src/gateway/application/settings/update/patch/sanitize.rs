@@ -66,7 +66,7 @@ pub(super) fn sanitize(
                         for (key, value) in value {
                             match key.as_str() {
                                 "provider" if valid_web_provider(value) => {
-                                    patch.insert(key.clone(), value.clone());
+                                    patch.insert(key.clone(), normalized_web_provider(value));
                                 }
                                 "reader_backend" if valid_reader_backend(value) => {
                                     patch.insert(key.clone(), value.clone());
@@ -205,6 +205,7 @@ fn valid_web_provider(value: &Value) -> bool {
                 | "brave"
                 | "tavily"
                 | "openai-web-search"
+                | "chatgpt-plan-web-search"
                 | "codex-subscription-web-search"
                 | "disabled"
         )
@@ -310,4 +311,12 @@ fn sanitize_recall(
         output.insert("recall_judge_model".into(), json!(value));
     }
     Ok(())
+}
+
+fn normalized_web_provider(value: &Value) -> Value {
+    if value == "codex-subscription-web-search" {
+        json!("chatgpt-plan-web-search")
+    } else {
+        value.clone()
+    }
 }

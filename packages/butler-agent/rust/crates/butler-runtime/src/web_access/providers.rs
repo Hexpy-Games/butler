@@ -1,5 +1,5 @@
 mod brave;
-mod codex;
+mod chatgpt_plan;
 pub(super) mod contracts;
 mod duckduckgo;
 mod http;
@@ -16,7 +16,7 @@ use butler_models::models::ProviderAuth;
 
 use self::{
     brave::BraveWebSearchProvider,
-    codex::CodexSubscriptionWebSearchProvider,
+    chatgpt_plan::ChatGptPlanWebSearchProvider,
     contracts::{SearchInput, SearchOutput, SearchProvider, SearchResult},
     duckduckgo::DuckDuckGoHtmlSearchProvider,
     openai::OpenAIWebSearchProvider,
@@ -69,50 +69,69 @@ pub(super) async fn configured(
             ),
             None => ddg(),
         },
-        "codex-subscription-web-search" => match resolve_auth(access).await {
-            Ok(auth) => {
-                match CodexSubscriptionWebSearchProvider::from_auth(auth, model, api_base) {
-                    Ok(primary) => fallback(Box::new(primary), ddg()),
-                    Err(_) => ddg(),
-                }
-            }
-            Err(_) => ddg(),
-        },
-        "auto" => {
-            if let Some(key) = first_env(
-                access,
-                &["BUTLER_BRAVE_SEARCH_API_KEY", "BRAVE_SEARCH_API_KEY"],
-            )? {
-                fallback(
-                    Box::new(BraveWebSearchProvider::new(key, brave_base)),
-                    ddg(),
-                )
-            } else if let Some(key) =
-                first_env(access, &["BUTLER_TAVILY_API_KEY", "TAVILY_API_KEY"])?
-            {
-                fallback(
-                    Box::new(TavilyWebSearchProvider::new(key, tavily_base)),
-                    ddg(),
-                )
-            } else {
-                match resolve_auth(access).await {
-                    Ok(ProviderAuth::ApiKey(key)) => fallback(
-                        Box::new(OpenAIWebSearchProvider::new(&key, model, api_base)),
-                        ddg(),
-                    ),
-                    Ok(auth @ ProviderAuth::ChatGptPlan { .. }) => {
-                        match CodexSubscriptionWebSearchProvider::from_auth(auth, model, api_base) {
-                            Ok(primary) => fallback(Box::new(primary), ddg()),
-                            Err(_) => ddg(),
-                        }
-                    }
-                    _ => ddg(),
-                }
-            }
+        "chatgpt-plan-web-search" | "codex-subscription-web-search" => {
+            plan_provider(access, model).await
         }
+        "auto" => auto_provider(access, model, api_base, brave_base, tavily_base).await?,
         _ => ddg(),
     };
     Ok(provider)
+}
+
+fn ddg() -> Box<dyn SearchProvider> {
+    Box::new(DuckDuckGoHtmlSearchProvider::new(None))
+}
+async fn plan_provider(access: &WebAccess, model: Option<String>) -> Box<dyn SearchProvider> {
+    let Some(config) = access.configuration() else {
+        return ddg();
+    };
+    let Ok(private) = access.private_environment() else {
+        return ddg();
+    };
+    let Ok(auth) = config
+        .resolve_chatgpt_auth_for_web_search(&private, None)
+        .await
+    else {
+        return ddg();
+    };
+    plan_with_auth(auth, model)
+}
+fn plan_with_auth(auth: ProviderAuth, model: Option<String>) -> Box<dyn SearchProvider> {
+    match ChatGptPlanWebSearchProvider::from_auth(auth, model) {
+        Ok(primary) => fallback(Box::new(primary), ddg()),
+        Err(_) => ddg(),
+    }
+}
+async fn auto_provider(
+    access: &WebAccess,
+    model: Option<String>,
+    api_base: Option<String>,
+    brave_base: Option<String>,
+    tavily_base: Option<String>,
+) -> Result<Box<dyn SearchProvider>, WebAccessError> {
+    if let Some(key) = first_env(
+        access,
+        &["BUTLER_BRAVE_SEARCH_API_KEY", "BRAVE_SEARCH_API_KEY"],
+    )? {
+        return Ok(fallback(
+            Box::new(BraveWebSearchProvider::new(key, brave_base)),
+            ddg(),
+        ));
+    }
+    if let Some(key) = first_env(access, &["BUTLER_TAVILY_API_KEY", "TAVILY_API_KEY"])? {
+        return Ok(fallback(
+            Box::new(TavilyWebSearchProvider::new(key, tavily_base)),
+            ddg(),
+        ));
+    }
+    Ok(match resolve_auth(access).await {
+        Ok(ProviderAuth::ApiKey(key)) => fallback(
+            Box::new(OpenAIWebSearchProvider::new(&key, model, api_base)),
+            ddg(),
+        ),
+        Ok(auth @ ProviderAuth::ChatGptPlan { .. }) => plan_with_auth(auth, model),
+        _ => ddg(),
+    })
 }
 
 #[expect(
@@ -142,8 +161,8 @@ pub(super) fn status(access: &WebAccess) -> Result<Value, WebAccessError> {
         "tavily" => "duckduckgo-html",
         "openai-web-search" if openai_key => "openai-web-search-with-duckduckgo-html-fallback",
         "openai-web-search" => "duckduckgo-html",
-        "codex-subscription-web-search" => {
-            "codex-subscription-web-search-with-duckduckgo-html-fallback"
+        "chatgpt-plan-web-search" | "codex-subscription-web-search" => {
+            "chatgpt-plan-web-search-with-duckduckgo-html-fallback"
         }
         "auto" => "auto-web-search",
         _ => "duckduckgo-html",

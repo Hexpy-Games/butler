@@ -66,7 +66,8 @@ fn assert_quota(remaining: &Value, recorded: Option<&Recorded>) {
     assert_eq!(remaining["available"], true, "{remaining}");
     assert_eq!(remaining["stale"], false, "{remaining}");
     assert_eq!(remaining["planKind"], "subscription", "{remaining}");
-    assert_eq!(remaining["sourceKind"], "provider_quota", "{remaining}");
+    assert_eq!(remaining["sourceKind"], "chatgpt_plan", "{remaining}");
+    assert_eq!(remaining["estimated"], true);
     assert!(remaining["reason"].is_null(), "{remaining}");
     let windows = remaining["windows"].as_array().unwrap();
     assert!(windows.iter().all(|window| window["resetsAt"].is_string()));
@@ -147,7 +148,9 @@ async fn use_01_subscription_turn_reports_quota_usage_and_cost() -> Result<(), H
     assert_quota(quota.data(), recorded.as_ref());
     let event = live
         .wait_for(Duration::from_secs(10), |event| {
-            event["type"] == "provider_quota_updated" && event["payload"]["provider_id"] == "openai"
+            event["type"] == "provider_quota_updated"
+                && event["payload"]["provider_id"] == "openai"
+                && event["payload"]["remaining"]["sourceKind"] == "chatgpt_plan"
         })
         .await?;
     assert_quota(&event["payload"]["remaining"], recorded.as_ref());

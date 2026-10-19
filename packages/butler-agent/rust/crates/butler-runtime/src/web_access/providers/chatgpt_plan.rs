@@ -1,3 +1,6 @@
+mod memo;
+mod request;
+use request::request;
 use std::time::Instant;
 
 use futures_util::FutureExt;
@@ -10,38 +13,40 @@ use butler_models::models::ProviderAuth;
 
 use super::{
     contracts::{SearchInput, SearchOutput, SearchProvider, SearchResult, filter_results},
-    http::response_bytes,
     openai::join_endpoint,
     responses::{bounded_overview, results_from_response},
 };
 use crate::web_access::WebAccessCode;
 
-pub(super) struct CodexSubscriptionWebSearchProvider {
-    authorization: String,
+pub(super) struct ChatGptPlanWebSearchProvider {
+    authorization: zeroize::Zeroizing<String>,
+    registration: String,
     model: Option<String>,
-    api_base: Option<String>,
 }
 
-impl CodexSubscriptionWebSearchProvider {
+impl ChatGptPlanWebSearchProvider {
     pub(super) fn from_auth(
         auth: ProviderAuth,
         model: Option<String>,
-        api_base: Option<String>,
     ) -> Result<Self, WebAccessError> {
-        let ProviderAuth::ChatGptPlan { authorization, .. } = auth else {
+        let ProviderAuth::ChatGptPlan {
+            authorization,
+            registration,
+        } = auth
+        else {
             return Err(auth_missing());
         };
         Ok(Self {
-            authorization: authorization.to_string(),
+            authorization,
+            registration,
             model,
-            api_base,
         })
     }
 }
 
-impl SearchProvider for CodexSubscriptionWebSearchProvider {
+impl SearchProvider for ChatGptPlanWebSearchProvider {
     fn id(&self) -> &'static str {
-        "codex-subscription-web-search"
+        "chatgpt-plan-web-search"
     }
 
     fn search<'a>(
@@ -52,19 +57,18 @@ impl SearchProvider for CodexSubscriptionWebSearchProvider {
     ) -> futures_util::future::BoxFuture<'a, Result<SearchOutput, WebAccessError>> {
         async move {
             let started = Instant::now();
-            let model = codex_model(self.model.as_deref())?;
-            let environment_base = access.environment_value("BUTLER_CODEX_BASE_URL")?;
-            let base = self
-                .api_base
-                .as_deref()
-                .or(environment_base.as_deref())
-                .unwrap_or("https://chatgpt.com/backend-api");
-            let endpoint = codex_endpoint(base)?;
+            let configuration = access.configuration().ok_or_else(auth_missing)?;
+            let model = configuration.chatgpt_search_model(self.model.as_deref()).await.map_err(|_| auth_missing())?;
+            let key = (self.registration.clone(), model.clone());
+            memo::admit(access.data_root(), &key)?;
+
+            let base = configuration.chatgpt_api_base();
+            let endpoint = join_endpoint(base, "/responses")?;
             let mut tool = json!({"type":"web_search"});
             if !input.allowed_domains.is_empty() {
                 tool["filters"] = json!({"allowed_domains":input.allowed_domains});
             }
-            let body = json!({
+            let mut body = json!({
                 "model":model,
                 "instructions":"Use web search. Return one short source-backed overview with citations and the supporting sources.",
                 "input":[{"role":"user","content":[{"type":"input_text","text":input.query}]}],
@@ -74,20 +78,10 @@ impl SearchProvider for CodexSubscriptionWebSearchProvider {
                 "stream":true,
                 "store":false,
             });
-            let request = access
-                .client()
-                .post(endpoint)
-                .header(reqwest::header::CONTENT_TYPE, "application/json")
-                .header(reqwest::header::AUTHORIZATION, &self.authorization)
-                .header("openai-beta", "responses=experimental")
-                .json(&body);
-            let (status, bytes) = response_bytes(access, request, cancellation).await?;
-            if !(200..300).contains(&status) {
-                return Err(WebAccessError::new(
-                    WebAccessCode::WebSearchProviderFailed,
-                    format!("Codex web search failed with HTTP {status}."),
-                ));
+            if let Some(object) = body.as_object_mut() {
+                butler_models::models::chatgpt::finalize_search(object, &self.registration, &model);
             }
+            let bytes = request(access, endpoint, &body, &self.authorization, &key, cancellation).await?;
             let raw = String::from_utf8_lossy(&bytes);
             let (payload, answer) = parse_sse(&raw)?;
             let structured = results_from_response(&payload);
@@ -119,43 +113,8 @@ impl SearchProvider for CodexSubscriptionWebSearchProvider {
     }
 }
 
-fn codex_model(model: Option<&str>) -> Result<String, WebAccessError> {
-    let model = model
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            WebAccessError::new(
-                WebAccessCode::WebSearchProviderModelMissing,
-                "Codex subscription model is required; no model fallback is allowed.",
-            )
-        })?;
-    if model.to_ascii_lowercase().ends_with("-codex")
-        && model.strip_prefix("gpt-").is_some_and(|value| {
-            value
-                .split('-')
-                .next()
-                .is_some_and(|v| v.chars().all(|c| c.is_ascii_digit() || c == '.'))
-        })
-    {
-        Ok(model[..model.len() - "-codex".len()].to_owned())
-    } else {
-        Ok(model.to_owned())
-    }
-}
-
-fn codex_endpoint(base: &str) -> Result<Url, WebAccessError> {
-    let base = base.trim_end_matches('/');
-    let path = if base.ends_with("/codex/responses") {
-        ""
-    } else if base.ends_with("/codex") {
-        "/responses"
-    } else {
-        "/codex/responses"
-    };
-    join_endpoint(base, path)
-}
-
 fn parse_sse(raw: &str) -> Result<(Value, String), WebAccessError> {
+    let mut completed = false;
     let mut output = Vec::new();
     let mut completed_output = Vec::new();
     let mut annotations = Vec::new();
@@ -175,10 +134,10 @@ fn parse_sse(raw: &str) -> Result<(Value, String), WebAccessError> {
             continue;
         };
         match event.get("type").and_then(Value::as_str).unwrap_or("") {
-            "error" | "response.failed" => {
+            "error" | "response.failed" | "response.incomplete" => {
                 return Err(WebAccessError::new(
                     WebAccessCode::WebSearchProviderFailed,
-                    "Codex web search provider reported a failed response.",
+                    "ChatGPT plan web search provider reported a failed response.",
                 ));
             }
             "response.output_text.delta" => {
@@ -203,6 +162,7 @@ fn parse_sse(raw: &str) -> Result<(Value, String), WebAccessError> {
                 }
             }
             "response.completed" => {
+                completed = true;
                 if let Some(response) = event.get("response") {
                     if let Some(items) = response.get("output").and_then(Value::as_array) {
                         completed_output = items.clone();
@@ -214,6 +174,9 @@ fn parse_sse(raw: &str) -> Result<(Value, String), WebAccessError> {
             }
             _ => {}
         }
+    }
+    if !completed {
+        return Err(memo::failed());
     }
     output.extend(completed_output);
     if !annotations.is_empty() {
@@ -258,6 +221,6 @@ fn extract_urls(text: &str) -> Vec<String> {
 fn auth_missing() -> WebAccessError {
     WebAccessError::new(
         WebAccessCode::WebSearchProviderAuthMissing,
-        "Codex subscription login is required for web search.",
+        "ChatGPT plan login is required for web search.",
     )
 }

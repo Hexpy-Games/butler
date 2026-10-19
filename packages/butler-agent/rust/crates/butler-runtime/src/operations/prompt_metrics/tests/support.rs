@@ -45,6 +45,7 @@ impl PromptBudgetStateSource for BudgetSource {
 
 pub(super) fn input<'a>() -> PromptUsageMetricInput<'a> {
     PromptUsageMetricInput {
+        billing_account: None,
         model: "openai/gpt-5.5",
         scope: "프로필\nextract",
         prompt_tokens: Some(120.0),
