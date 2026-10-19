@@ -32,15 +32,18 @@ export function installAppLogging({ app, ipcMain, dataRoot, getVersion, readConf
       attrs: row.attrs ?? {} }, "app.renderer");
   });
   wrapHandlers(ipcMain);
-  let refreshing, refreshPending = false;
+  let refreshing, expiryRefresh, refreshPending = false, stopped = false;
   const refresh = () => {
-    if (!isWriter()) return Promise.resolve();
+    if (stopped || !isWriter()) return Promise.resolve();
     refreshPending = true;
     refreshing ??= (async () => {
       do {
         refreshPending = false;
         try {
           const config = await readConfig();
+          if (stopped) break;
+          clearTimeout(expiryRefresh);
+          expiryRefresh = fullExpiryTimer(config, refresh);
           if (config) writer.configure(config);
           else if ((await readSettings())?.diagnostics_enabled === false) {
             writer.configure({ effective: { level: "standard", category_levels: {} } });
@@ -70,7 +73,7 @@ export function installAppLogging({ app, ipcMain, dataRoot, getVersion, readConf
       const error = normalizeCrash(input, version);
       writer.record({ level: "ERROR", category: "app.ui", event: "ui.error", msg: appMessage("ui.error", error.scope), error }, "app.renderer");
     },
-    async quit() { await writer.quit(); },
+    async quit() { stopped = true; clearTimeout(expiryRefresh); await writer.quit(); },
     updater(updater) {
       updater.on("error", error => appLog("ERROR", "lifecycle", "update.failed", {}, { error: { message: error.message } }));
       for (const event of ["update-available", "update-not-available", "update-downloaded"]) updater.on(event, () => appLog("INFO", "lifecycle", `update.${event}`));
@@ -82,6 +85,12 @@ export function installAppLogging({ app, ipcMain, dataRoot, getVersion, readConf
       return child;
     },
   };
+}
+
+function fullExpiryTimer(config, refresh) {
+  const expiry = Date.parse(config?.full_expires_at);
+  if (config?.effective?.level !== "full" || !(expiry > Date.now())) return;
+  return setTimeout(refresh, expiry - Date.now()).unref();
 }
 
 function validateRenderer(row) {

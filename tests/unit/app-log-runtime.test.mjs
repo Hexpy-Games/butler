@@ -95,3 +95,25 @@ test("only the log owner refreshes on changes; IPC results do not become global 
     expect(detail).toContain('"body_ref"');
   } finally { await runtime.quit(); await rm(root, { recursive: true, force: true }); }
 });
+
+test("the known full expiry refreshes the agent fallback once", async () => {
+  const root = await mkdtemp(join(tmpdir(), "app-log-expiry-change-"));
+  const app = new EventEmitter(), ipcMain = new EventEmitter(), sender = {};
+  ipcMain.handle = () => {};
+  let reads = 0;
+  const runtime = installAppLogging({ app, ipcMain, dataRoot: root, getVersion: () => "1.0.0",
+    isSender: event => event.sender === sender,
+    readConfig: async () => ++reads === 1
+      ? { effective: { level: "full", category_levels: {} }, full_expires_at: new Date(Date.now() + 120).toISOString() }
+      : { effective: { level: "detailed", category_levels: {} } } });
+  try {
+    await runtime.refresh();
+    await new Promise(resolve => setTimeout(resolve, 230));
+    expect(reads).toBe(2);
+    ipcMain.emit("butler:app-log", { sender }, { level: "DEBUG", category: "http.client", event: "image.fetch", attrs: { marker: "agent-fallback" } });
+    await runtime.quit();
+    const dir = join(root, "logs/app/debug");
+    const text = (await Promise.all((await readdir(dir)).map(name => readFile(join(dir, name), "utf8")))).join("");
+    expect(text).toContain("agent-fallback");
+  } finally { await runtime.quit(); await rm(root, { recursive: true, force: true }); }
+});
