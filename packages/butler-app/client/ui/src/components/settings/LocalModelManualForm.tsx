@@ -1,6 +1,12 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { Input, SettingsField, Stack } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
+import { SettingsSwitch } from "./SettingsFormComponents";
+
+export interface LocalModelImageInput {
+  checked: boolean;
+  setChecked: (value: boolean) => void;
+}
 
 interface LocalModelManualFormProps {
   manualModelId: string;
@@ -9,6 +15,7 @@ interface LocalModelManualFormProps {
   setManualDisplayName: (value: string) => void;
   manualContext: string;
   setManualContext: (value: string) => void;
+  imageInput: LocalModelImageInput;
 }
 
 export function LocalModelManualForm({
@@ -18,6 +25,7 @@ export function LocalModelManualForm({
   setManualDisplayName,
   manualContext,
   setManualContext,
+  imageInput,
 }: LocalModelManualFormProps) {
   useAppLocale();
   const copy = appCopy.settings.localModels;
@@ -60,6 +68,12 @@ export function LocalModelManualForm({
             onChange={(event) => setManualContext(event.target.value)}
           />
         }
+      />
+      <SettingsSwitch
+        id="local-model-image-input"
+        label={copy.imageInput}
+        checked={imageInput.checked}
+        onChange={imageInput.setChecked}
       />
     </Stack>
   );
