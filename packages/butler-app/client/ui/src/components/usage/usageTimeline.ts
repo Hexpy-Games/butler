@@ -70,8 +70,9 @@ export function usageShare(value: number): string {
 /** The chat total split into its own calls and its delegated work; `null` when nothing was delegated. */
 export function usageParts(view: UsageMonitorView | null, bucket?: ReturnType<typeof usageTimeline>["buckets"][number]) {
   const roles = view?.model.byRole;
-  const delegatedAll = (roles?.steward?.totalTokens ?? 0) + (roles?.worker?.totalTokens ?? 0);
-  if (!view || delegatedAll <= 0) return null;
+  if (!view || !roles) return null;
+  const delegatedAll = Object.entries(roles).reduce((sum, [role, bucket]) => role === "main" ? sum : sum + bucket.totalTokens, 0);
+  if (delegatedAll <= 0) return null;
   const total = bucket ? bucket.total : view.model.totalTokens;
   const delegated = Math.min(total, bucket ? bucket.delegated : delegatedAll);
   const copy = appCopy.composer.usage;

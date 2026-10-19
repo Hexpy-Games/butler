@@ -1331,9 +1331,6 @@ export interface UsageSectionBucketView {
   estimatedTokens: number;
 }
 
-/** Who made a chat's model calls: the conversation itself or the work it delegated. */
-export type UsageRole = "main" | "steward" | "worker";
-
 export interface UsageMonitorView {
   /** Session views append the slot's delegated (steward + worker) total tokens. */
   timeline: { slotMinutes: 15; slots: ([number, number, number, number, number] | [number, number, number, number, number, number])[] };
@@ -1350,8 +1347,8 @@ export interface UsageMonitorView {
     byScopeUsage: Record<string, UsageTokenBucketView>;
     byModel: Record<string, UsageTokenBucketView>;
     bySection: Record<string, UsageSectionBucketView>;
-    /** Session views only: the chat's calls by role, delegated work included in the totals above. */
-    byRole?: Partial<Record<UsageRole, UsageTokenBucketView>>;
+    /** Session views only: the chat's calls by role ("main" = the chat itself; any other role is delegated work), included in the totals above. */
+    byRole?: Record<string, UsageTokenBucketView>;
   };
   webSearch: {
     requestCount: number;
