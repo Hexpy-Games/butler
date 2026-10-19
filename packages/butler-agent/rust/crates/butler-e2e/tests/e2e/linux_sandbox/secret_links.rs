@@ -9,7 +9,7 @@ fn environment(s: &Setup) -> HashMap<String, String> {
     ])
 }
 
-fn writable(s: &Setup, command: &str) -> Invocation {
+pub(super) fn writable(s: &Setup, command: &str) -> Invocation {
     let secrets = command_sandbox::discover_project_secrets(&s.sandbox.workspace).unwrap();
     let mut denied: Vec<_> = secrets.iter().map(PathBuf::as_path).collect();
     denied.push(&s.sandbox.data);
@@ -40,14 +40,22 @@ async fn sweep_quarantines_secret_target_links() -> Result<(), HarnessError> {
     butler_platform::secure_fs::symlink(&root.join("public"), &root.join("src/changed"))?;
     let outside = s.sandbox.home.join("ordinary");
     std::fs::write(&outside, "private-fixture")?;
-    let since = command_sandbox::discover_project_secrets(root)?;
+    std::fs::create_dir_all(s.sandbox.home.join(".config/gh"))?;
+    let public = s.sandbox.home.join("public-dir");
+    std::fs::create_dir_all(&public)?;
+    butler_platform::secure_fs::symlink(&root.join(".env"), &root.join("src/existing-secret"))?;
+    let since = command_sandbox::discover_project_secret_inventory(root)?;
     let command = format!(
-        "set -e; ln -s '{}' src/credential; ln -s '{}' src/profile; ln -s ../.env src/project; ln -s '{}' src/directory; rm src/changed; ln -s ../.env src/changed; ln -s ../public src/safe; ln -s '{}' src/.env-alias; ln -s '{}' src/indirect",
+        "set -e; ln -s '{}' src/credential; ln -s '{}' src/profile; ln -s ../.env src/project; ln -s '{}' src/directory; rm src/changed; ln -s ../.env src/changed; ln -s ../public src/safe; ln -s '{}' src/.env-alias; ln -s '{}' src/indirect; ln -s '{}' src/data-parent; ln -s '{}' src/auth-parent; ln -s '{}' src/public-dir; ln -s '{}' src/profile-parent; ln -s .. src/project-root",
         s.sandbox.data.join("auth/entry").display(),
         s.sandbox.data.join("profiles/login/entry").display(),
         s.sandbox.data.join("auth").display(),
         outside.display(),
         outside.display(),
+        s.sandbox.data.display(),
+        s.sandbox.home.join(".config").display(),
+        public.display(),
+        s.sandbox.data.join("profiles").display(),
     );
     let output = run(writable(&s, &command), root, &s.sandbox.home);
     assert!(output.status.success(), "link creation must complete");
@@ -59,11 +67,14 @@ async fn sweep_quarantines_secret_target_links() -> Result<(), HarnessError> {
     )?;
     let expected: Vec<_> = [
         ".env-alias",
+        "auth-parent",
         "changed",
         "credential",
+        "data-parent",
         "directory",
         "indirect",
         "profile",
+        "profile-parent",
         "project",
     ]
     .map(|name| root.join("src").join(name))
@@ -91,6 +102,13 @@ async fn sweep_quarantines_secret_target_links() -> Result<(), HarnessError> {
         std::fs::read_to_string(root.join(".env"))?,
         "private-fixture"
     );
+    for (name, target) in [
+        ("existing-secret", root.join(".env")),
+        ("public-dir", public),
+        ("project-root", PathBuf::from("..")),
+    ] {
+        assert_eq!(std::fs::read_link(root.join("src").join(name))?, target);
+    }
     s.sandbox.mark_success();
     Ok(())
 }
@@ -161,31 +179,49 @@ async fn credential_links_deny_reads_and_writes_during_run() -> Result<(), Harne
 }
 
 #[tokio::test]
-async fn unresolved_secret_named_link_refuses_launch() -> Result<(), HarnessError> {
+async fn unresolved_secret_named_link_launches_and_denies_later_target() -> Result<(), HarnessError>
+{
     butler_e2e::gate!();
     butler_e2e::skip_unless!(command_sandbox::linux_test_host(), "Linux secret links");
+    use std::{
+        io::{Read, Write},
+        process::Stdio,
+    };
     let mut s = Setup::new("LINUX-SECRET-LINK-UNRESOLVED")?;
-    butler_platform::secure_fs::symlink(
-        &s.sandbox.home.join("missing"),
-        &s.sandbox.workspace.join(".env"),
-    )?;
-    let invocation = command_sandbox::login_shell_contained(
-        "printf ran",
-        &environment(&s),
-        &[],
-        &[&s.sandbox.workspace],
-    )
-    .unwrap();
-    let output = run(invocation, &s.sandbox.workspace, &s.sandbox.home);
-    assert!(
-        !output.status.success(),
-        "unresolved secret target must refuse launch"
-    );
-    assert!(output.stdout.is_empty(), "command must not execute");
-    assert!(
-        String::from_utf8_lossy(&output.stderr)
-            .contains("secret symlink target cannot be resolved safely")
-    );
+    let root = &s.sandbox.workspace;
+    std::fs::create_dir_all(root.join("src"))?;
+    let target = root.join("src/missing");
+    butler_platform::secure_fs::symlink(Path::new("src/../src/missing"), &root.join(".env"))?;
+    for write_access in [false, true] {
+        for action in ["cat src/missing", "printf changed > src/missing"] {
+            let command = format!("printf 'ready\\n'; read signal; {action}");
+            let invocation = if write_access {
+                writable(&s, &command)
+            } else {
+                command_sandbox::login_shell_contained(&command, &environment(&s), &[], &[root])
+                    .unwrap()
+            };
+            let mut child = Command::new(invocation.program)
+                .args(invocation.arguments)
+                .current_dir(root)
+                .env("HOME", &s.sandbox.home)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()?;
+            let mut ready = [0; 6];
+            child.stdout.as_mut().unwrap().read_exact(&mut ready)?;
+            // Only create the object after the policy has been installed.
+            std::fs::write(&target, "private-fixture")?;
+            child.stdin.take().unwrap().write_all(b"continue\n")?;
+            let output = child.wait_with_output()?;
+            assert_eq!(&ready, b"ready\n");
+            assert!(!output.status.success(), "{output:?}");
+            assert!(output.stdout.is_empty(), "target contents escaped");
+            assert_eq!(std::fs::read_to_string(&target)?, "private-fixture");
+            std::fs::remove_file(&target)?;
+        }
+    }
     s.sandbox.mark_success();
     Ok(())
 }

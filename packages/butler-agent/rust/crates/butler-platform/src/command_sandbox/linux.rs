@@ -6,6 +6,7 @@ mod mountns;
 mod process;
 mod rediscovery;
 mod seccomp;
+pub(super) mod unresolved;
 
 use std::collections::HashMap;
 use std::os::unix::process::CommandExt;

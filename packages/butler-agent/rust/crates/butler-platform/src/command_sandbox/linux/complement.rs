@@ -131,9 +131,7 @@ pub(super) fn entry_aliases(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>, Error> 
     let mut targets = Vec::new();
     for path in &paths {
         if std::fs::symlink_metadata(path)?.file_type().is_symlink() {
-            targets.push(resolved_path(path).map_err(|error| {
-                format!("secret symlink target cannot be resolved safely: {error}")
-            })?);
+            targets.push(canonical_or_missing(path, &mut HashMap::new())?);
         }
     }
     let mut result = paths;
@@ -171,9 +169,18 @@ fn canonical_or_missing(
     let real = match resolved_path(path) {
         Ok(real) => real,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            if std::fs::read_link(path).is_ok() {
+                return Ok(super::unresolved::target(path)?);
+            }
             let parent = path.parent().ok_or("private root has no parent")?;
             let name = path.file_name().ok_or("private root has no name")?;
             canonical_or_missing(parent, resolved)?.join(name)
+        }
+        Err(error)
+            if error.kind() == std::io::ErrorKind::PermissionDenied
+                || error.raw_os_error() == Some(nix::libc::ELOOP) =>
+        {
+            super::unresolved::target(path)?
         }
         Err(error) => return Err(error.into()),
     };

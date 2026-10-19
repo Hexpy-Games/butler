@@ -104,7 +104,7 @@ async fn offline_generated_toolchains() -> Result<(), HarnessError> {
             }
             let command = fixture(tool, &root, &setup)?;
             let preparation = command_sandbox::prepare_project_write(&root, &setup.sandbox.data)?;
-            let inventory = command_sandbox::discover_project_secrets(&root)?;
+            let inventory = command_sandbox::discover_project_secret_inventory(&root)?;
             let invocation = invoke(&command, &root, &setup);
             let policy: Value = serde_json::from_str(&invocation.arguments[1])?;
             let output = run(invocation, &root, &setup.sandbox.home);
@@ -223,7 +223,7 @@ async fn fresh_git_init_is_quarantined_even_when_metadata_is_denied() -> Result<
     let mut setup = Setup::new("LINUX-FRESH-GIT")?;
     let root = &setup.sandbox.workspace;
     std::fs::create_dir_all(setup.sandbox.data.join("tmp/project-write"))?;
-    let inventory = command_sandbox::discover_project_secrets(root)?;
+    let inventory = command_sandbox::discover_project_secret_inventory(root)?;
     let output = run(
         invoke("git init --quiet", root, &setup),
         root,

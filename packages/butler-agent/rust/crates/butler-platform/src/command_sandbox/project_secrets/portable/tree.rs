@@ -5,6 +5,11 @@ use std::{
     io,
     path::{Path, PathBuf},
 };
+pub(in crate::command_sandbox) type LinkIdentity = (u64, OsString);
+pub(super) type Entry = (OsString, bool, Option<LinkIdentity>);
+type Links = Vec<(PathBuf, LinkIdentity)>;
+#[cfg(unix)]
+type Inventory = (Vec<PathBuf>, Links);
 pub(in crate::command_sandbox) const MAX_ENTRIES: usize = 200_000;
 pub(in crate::command_sandbox) const MAX_DEPTH: usize = 128;
 
@@ -12,7 +17,7 @@ trait Walker {
     type Directory;
     fn root(path: &Path) -> io::Result<Self::Directory>;
     fn child(parent: &Self::Directory, name: &OsStr) -> io::Result<Self::Directory>;
-    fn entries(dir: &Self::Directory) -> io::Result<Vec<(OsString, bool, bool)>>;
+    fn entries(dir: &Self::Directory, collect_links: bool) -> io::Result<Vec<Entry>>;
 }
 struct Native;
 impl Walker for Native {
@@ -23,31 +28,41 @@ impl Walker for Native {
     fn child(parent: &Self::Directory, name: &OsStr) -> io::Result<Self::Directory> {
         native::open_child(parent, name)
     }
-    fn entries(dir: &Self::Directory) -> io::Result<Vec<(OsString, bool, bool)>> {
+    fn entries(dir: &Self::Directory, collect_links: bool) -> io::Result<Vec<Entry>> {
         #[cfg(unix)]
-        return native::entries_with_links(dir);
+        return native::entries_with_links(dir, collect_links);
         #[cfg(windows)]
-        Ok(native::entries(dir)?
-            .into_iter()
-            .map(|(name, directory)| (name, directory, false))
-            .collect())
+        {
+            let _ = collect_links;
+            Ok(native::entries(dir)?
+                .into_iter()
+                .map(|(name, directory)| (name, directory, None))
+                .collect())
+        }
     }
 }
 
 pub(in crate::command_sandbox) fn walk(root: &Path, bounded: bool) -> io::Result<Vec<PathBuf>> {
-    Ok(scan(root, bounded)?.found)
+    Ok(scan(root, bounded, false)?.found)
 }
 
 #[cfg(unix)]
-pub(super) fn walk_for_sweep(root: &Path) -> io::Result<(Vec<PathBuf>, Vec<PathBuf>)> {
-    let walk = scan(root, false)?;
+pub(super) fn walk_for_sweep(root: &Path) -> io::Result<Inventory> {
+    let walk = scan(root, false, true)?;
     Ok((walk.found, walk.links))
 }
 
-fn scan(root: &Path, bounded: bool) -> io::Result<Walk> {
+#[cfg(unix)]
+pub(in crate::command_sandbox) fn inventory(root: &Path) -> io::Result<Inventory> {
+    let walk = scan(root, true, true)?;
+    Ok((walk.found, walk.links))
+}
+
+fn scan(root: &Path, bounded: bool, collect_links: bool) -> io::Result<Walk> {
     let dir = Native::root(root)?;
     let mut walk = Walk {
         bounded,
+        collect_links,
         visited: 0,
         found: Vec::new(),
         links: Vec::new(),
@@ -58,9 +73,10 @@ fn scan(root: &Path, bounded: bool) -> io::Result<Walk> {
 }
 struct Walk {
     bounded: bool,
+    collect_links: bool,
     visited: usize,
     found: Vec<PathBuf>,
-    links: Vec<PathBuf>,
+    links: Links,
 }
 impl Walk {
     fn visit<W: Walker>(
@@ -69,7 +85,7 @@ impl Walk {
         relative: &Path,
         depth: usize,
     ) -> io::Result<()> {
-        for (name, directory, symlink) in W::entries(dir)? {
+        for (name, directory, link) in W::entries(dir, self.collect_links)? {
             self.visited += 1;
             if self.bounded && self.visited > MAX_ENTRIES {
                 return Err(io::Error::other(
@@ -77,12 +93,12 @@ impl Walk {
                 ));
             }
             let path = relative.join(&name);
+            if let Some(identity) = link {
+                self.links.push((path.clone(), identity));
+            }
             if crate::command_sandbox::secret_name(&name.to_string_lossy()) {
                 self.found.push(path);
                 continue;
-            }
-            if !self.bounded && symlink {
-                self.links.push(path.clone());
             }
             if !directory {
                 continue;

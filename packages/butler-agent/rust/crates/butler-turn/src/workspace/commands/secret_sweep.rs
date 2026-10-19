@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use super::{CommandError, GuidedAccess, GuidedCommandInput, GuidedCommandOutput};
 
 pub(super) struct Prepared {
-    paths: Vec<PathBuf>,
+    paths: butler_platform::command_sandbox::ProjectSecretInventory,
     lease: Option<butler_platform::command_sandbox::ProjectWritePreparation>,
 }
 
@@ -41,7 +41,7 @@ impl std::ops::Deref for Prepared {
 pub(super) async fn before_run(input: &GuidedCommandInput) -> Result<Prepared, CommandError> {
     if input.access != GuidedAccess::ProjectWrite {
         return Ok(Prepared {
-            paths: Vec::new(),
+            paths: Default::default(),
             lease: None,
         });
     }
@@ -49,7 +49,7 @@ pub(super) async fn before_run(input: &GuidedCommandInput) -> Result<Prepared, C
     let data = input.butler_data.clone();
     tokio::task::spawn_blocking(move || {
         let lease = butler_platform::command_sandbox::prepare_project_write(&root, &data)?;
-        let paths = butler_platform::command_sandbox::discover_project_secrets(&root)?;
+        let paths = butler_platform::command_sandbox::discover_project_secret_inventory(&root)?;
         Ok(Prepared {
             paths,
             lease: Some(lease),

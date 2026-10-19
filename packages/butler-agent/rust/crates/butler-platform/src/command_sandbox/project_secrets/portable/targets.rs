@@ -5,22 +5,31 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub(super) struct SecretTargets(HashSet<PathBuf>);
+pub(super) struct SecretTargets {
+    roots: HashSet<PathBuf>,
+    credentials: HashSet<PathBuf>,
+}
 
 impl SecretTargets {
     pub(super) fn new(
         inventory: &[PathBuf],
         data: &Path,
         environment: &HashMap<String, String>,
-    ) -> io::Result<Self> {
+        known: &HashMap<PathBuf, PathBuf>,
+    ) -> Self {
         let mut environment = environment.clone();
         environment.insert("BUTLER_DATA".into(), data.to_string_lossy().into_owned());
         let paths = crate::command_sandbox::credentials::roots(&environment);
-        let mut roots = HashSet::new();
-        for path in paths.iter().chain(inventory) {
-            roots.insert(canonical_or_missing(path)?);
-        }
-        Ok(Self(roots))
+        // A bad entry protects its own name, never unrelated project links.
+        let resolve = |path: &PathBuf| canonical_or_missing(path).unwrap_or_else(|_| path.clone());
+        let credentials: HashSet<_> = paths.iter().map(resolve).collect();
+        let mut roots = credentials.clone();
+        roots.extend(
+            inventory
+                .iter()
+                .map(|path| known.get(path).cloned().unwrap_or_else(|| resolve(path))),
+        );
+        Self { roots, credentials }
     }
 
     pub(super) fn protects(&self, link: &Path) -> bool {
@@ -29,7 +38,11 @@ impl SecretTargets {
         let Ok(target) = link.canonicalize() else {
             return true;
         };
-        target.ancestors().any(|path| self.0.contains(path))
+        target.ancestors().any(|path| self.roots.contains(path))
+            || self
+                .credentials
+                .iter()
+                .any(|root| root.starts_with(&target))
             || target.components().any(|part| {
                 crate::command_sandbox::secret_name(&part.as_os_str().to_string_lossy())
             })
@@ -37,17 +50,11 @@ impl SecretTargets {
 }
 
 fn canonical_or_missing(path: &Path) -> io::Result<PathBuf> {
-    match path.canonicalize() {
-        Ok(real) => Ok(real),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            let parent = path
-                .parent()
-                .ok_or_else(|| io::Error::other("secret root has no parent"))?;
-            let name = path
-                .file_name()
-                .ok_or_else(|| io::Error::other("secret root has no name"))?;
-            Ok(canonical_or_missing(parent)?.join(name))
+    path.canonicalize().or_else(|error| {
+        if error.kind() == io::ErrorKind::NotFound {
+            crate::command_sandbox::linux::unresolved::target(path)
+        } else {
+            Err(error)
         }
-        Err(error) => Err(error),
-    }
+    })
 }

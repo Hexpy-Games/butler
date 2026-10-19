@@ -103,7 +103,7 @@ fn ledger_inventory_change_overflow_and_directory_rename() -> Result<(), Harness
     butler_e2e::gate!();
     butler_e2e::skip_unless!(!command_sandbox::POSIX_SHELL, "Windows ledger");
     let f = Fixture::new("WIN-LEDGER-INVALIDATION")?;
-    let before = command_sandbox::discover_project_secrets(&f.root)?;
+    let before = command_sandbox::discover_project_secret_inventory(&f.root)?;
     Ledger::admit(&f.root, &before)?;
     fs::create_dir_all(f.root.join("nested"))?;
     fs::write(f.root.join("nested/.env"), "private")?;
@@ -154,7 +154,7 @@ fn ledger_post_run_background_and_admission_wait() -> Result<(), HarnessError> {
     let outside = f.setup.sandbox.home.join("after-run-alias");
     fs::hard_link(f.root.join("public"), &outside)?;
     Ledger::pause_verify(&f.root, true)?;
-    let since = command_sandbox::discover_project_secrets(&f.root)?;
+    let since = command_sandbox::discover_project_secret_inventory(&f.root)?;
     // Returns while the verifier is deliberately blocked, proving post-run is background.
     assert_eq!(
         command_sandbox::sweep_new_secrets(&f.root, &since, &f.setup.sandbox.data)?,
@@ -208,7 +208,7 @@ fn ledger_replays_events_consumed_by_overlapping_sweep() -> Result<(), HarnessEr
     }
     fs::hard_link(&outside, f.root.join("alias"))?;
     assert_eq!(
-        command_sandbox::sweep_new_secrets(&f.root, &[], &f.setup.sandbox.data)?,
+        command_sandbox::sweep_new_secrets(&f.root, &Default::default(), &f.setup.sandbox.data)?,
         Vec::<PathBuf>::new()
     );
     assert_eq!(

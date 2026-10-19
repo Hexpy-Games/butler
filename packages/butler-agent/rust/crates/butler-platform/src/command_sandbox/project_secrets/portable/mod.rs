@@ -39,7 +39,7 @@ pub(super) fn discover_project_secrets(root: &Path) -> std::io::Result<Vec<PathB
 #[cfg(unix)]
 pub(super) fn sweep_new_secrets(
     root: &Path,
-    since: &[PathBuf],
+    since: &super::ProjectSecretInventory,
     data: &Path,
     environment: &std::collections::HashMap<String, String>,
 ) -> std::io::Result<Vec<PathBuf>> {
@@ -48,22 +48,40 @@ pub(super) fn sweep_new_secrets(
         .into_iter()
         .map(|relative| root.join(relative))
         .collect();
-    if !links.is_empty() {
-        // If an inventory root cannot be resolved, quarantine every link.
-        let targets = targets::SecretTargets::new(&found, data, environment);
-        for relative in links {
+    // Reuse pre-run targets for protected links that are still the same identity.
+    // Even when another link is new, no untouched project link is resolved.
+    let known: std::collections::HashMap<_, _> = links
+        .iter()
+        .filter(|(path, identity)| since.links.get(path) == Some(identity))
+        .filter_map(|(path, _)| {
+            since
+                .link_targets
+                .get(path)
+                .map(|target| (root.join(path), target.clone()))
+        })
+        .collect();
+    let changed: Vec<_> = links
+        .into_iter()
+        .filter(|(path, identity)| since.links.get(path) != Some(identity))
+        .collect();
+    let changed_paths: HashSet<_> = changed.iter().map(|(path, _)| root.join(path)).collect();
+    if !changed.is_empty() {
+        let targets = targets::SecretTargets::new(&found, data, environment, &known);
+        for (relative, _) in changed {
             let path = root.join(relative);
-            if targets
-                .as_ref()
-                .map_or(true, |targets| targets.protects(&path))
-            {
+            if targets.protects(&path) {
                 found.push(path);
             }
         }
     }
     found.sort();
     found.dedup();
-    quarantine_new(root, since, data, found)
+    let existing: Vec<_> = since
+        .iter()
+        .filter(|path| !changed_paths.contains(*path))
+        .cloned()
+        .collect();
+    quarantine_new(root, &existing, data, found)
 }
 
 pub(in crate::command_sandbox) fn quarantine_new(

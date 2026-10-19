@@ -4,6 +4,60 @@ use std::path::{Path, PathBuf};
 #[path = "project_secrets/portable/mod.rs"]
 pub(in crate::command_sandbox) mod portable;
 
+/// Pre-run protected names and no-follow link identities from one walk.
+#[derive(Default, Debug)]
+pub struct ProjectSecretInventory {
+    paths: Vec<PathBuf>,
+    #[cfg(target_os = "linux")]
+    links: std::collections::HashMap<PathBuf, portable::tree::LinkIdentity>,
+    #[cfg(target_os = "linux")]
+    link_targets: std::collections::HashMap<PathBuf, PathBuf>,
+}
+
+impl std::ops::Deref for ProjectSecretInventory {
+    type Target = [PathBuf];
+    fn deref(&self) -> &Self::Target {
+        &self.paths
+    }
+}
+
+/// Captures link identities in one no-follow walk. Protected aliases are
+/// resolved before execution so the sweep can reuse untouched targets.
+pub fn discover_project_secret_inventory(root: &Path) -> std::io::Result<ProjectSecretInventory> {
+    #[cfg(target_os = "linux")]
+    {
+        let (paths, links) = portable::tree::inventory(root)?;
+        let links: std::collections::HashMap<_, _> = links.into_iter().collect();
+        let link_targets = paths
+            .iter()
+            .filter(|path| links.contains_key(*path))
+            .map(|path| {
+                let absolute = root.join(path);
+                let target = absolute
+                    .canonicalize()
+                    .or_else(|error| {
+                        if error.kind() == std::io::ErrorKind::NotFound {
+                            super::linux::unresolved::target(&absolute)
+                        } else {
+                            Err(error)
+                        }
+                    })
+                    .unwrap_or(absolute);
+                (path.clone(), target)
+            })
+            .collect();
+        Ok(ProjectSecretInventory {
+            link_targets,
+            paths: paths.into_iter().map(|path| root.join(path)).collect(),
+            links,
+        })
+    }
+    #[cfg(not(target_os = "linux"))]
+    Ok(ProjectSecretInventory {
+        paths: discover_project_secrets(root)?,
+    })
+}
+
 /// Finds existing protected names with a bounded metadata-only walk.
 pub fn discover_project_secrets(root: &Path) -> std::io::Result<Vec<PathBuf>> {
     #[cfg(target_os = "linux")]
@@ -21,7 +75,7 @@ pub fn discover_project_secrets(root: &Path) -> std::io::Result<Vec<PathBuf>> {
 /// Call only after the contained process tree has been reaped.
 pub fn sweep_new_secrets(
     root: &Path,
-    since: &[PathBuf],
+    since: &ProjectSecretInventory,
     data: &Path,
 ) -> std::io::Result<Vec<PathBuf>> {
     sweep_new_secrets_with_environment(root, since, data, &std::env::vars().collect())
@@ -31,7 +85,7 @@ pub fn sweep_new_secrets(
 /// Call only after reaping descendants, from a blocking worker.
 pub fn sweep_new_secrets_with_environment(
     root: &Path,
-    since: &[PathBuf],
+    since: &ProjectSecretInventory,
     data: &Path,
     environment: &std::collections::HashMap<String, String>,
 ) -> std::io::Result<Vec<PathBuf>> {
