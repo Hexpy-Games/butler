@@ -128,12 +128,22 @@ jobs:
       - name: Smoke the installed archive
         shell: pwsh
         run: |
+          $env:PREVIEW_ROOT = Join-Path $env:RUNNER_TEMP 'windows-verify'
+          New-Item -ItemType Directory -Force "$env:PREVIEW_ROOT/logs" | Out-Null
           try { ./deploy/windows-preview-smoke.ps1 }
           finally {
             if ($env:WINDOWS_PREVIEW_TEMP_ROOT -and (Test-Path $env:WINDOWS_PREVIEW_TEMP_ROOT)) {
               . "$env:GITHUB_WORKSPACE/deploy/windows-job-tree.ps1"; Remove-JobTree $env:WINDOWS_PREVIEW_TEMP_ROOT
             }
           }
+      - name: Upload installed ZIP failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-windows-stub-logs
+          path: ${{ runner.temp }}/windows-verify/logs/
+          if-no-files-found: warn
+          retention-days: 14
 
   app-windows:
     name: Package unsigned Windows Squirrel App
