@@ -81,6 +81,21 @@ impl InboundQueue {
             .await
     }
 
+    /// The App claim the record of `event_id` delivers under, if it can
+    /// still deliver; see `storage::delivering_claim`.
+    pub async fn delivering_claim_async(
+        &self,
+        event_id: String,
+        claim: Option<String>,
+    ) -> QueueResult<Option<String>> {
+        self.blocking(move |queue| {
+            // The lane orders this read after any in-flight state transition.
+            let _guard = queue.lane.lock();
+            storage::delivering_claim(&queue.root, &event_id, claim.as_deref())
+        })
+        .await
+    }
+
     pub async fn complete_async(
         &self,
         item: ClaimedInboundEvent,
@@ -172,6 +187,8 @@ impl InboundQueue {
         let result = storage::enqueue_idempotent(&self.root, envelope, metadata, durable);
         timing.mark("record_published");
         if result.is_ok() {
+            // The record is visible before its enqueuer receives the receipt.
+            butler_platform::secure_fs::abort_point("inbound_enqueue_renamed");
             // Either this write or its reconstructing owner is already durable.
             self.enqueue_wake.notify_one();
         }
