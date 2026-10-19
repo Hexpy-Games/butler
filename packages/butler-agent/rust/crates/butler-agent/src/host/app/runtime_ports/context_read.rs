@@ -81,10 +81,7 @@ impl AppContextRead {
             )
             .with_source(error)
         })?;
-        lineage
-            .resolve()
-            .await
-            .map_err(butler_turn::btcc::BtccError::from)?;
+        lineage.resolve().await;
         Ok(Self {
             lineage,
             data_root,
@@ -106,6 +103,7 @@ impl AppContextReadPort for AppContextRead {
         let turn = query.turn_id.clone();
         let lineage = self.lineage.clone();
         Box::pin(async move {
+            let _read = lineage.read.lock().await;
             let (mut facts, native_summary) = tokio::try_join!(
                 async {
                     let refresh = (
@@ -119,10 +117,7 @@ impl AppContextReadPort for AppContextRead {
                     })
                     .await
                     .map_err(GatewayApplicationError::internal_from)?;
-                    lineage
-                        .resolve()
-                        .await
-                        .map_err(GatewayApplicationError::internal_from)?;
+                    lineage.resolve().await;
                     tokio::task::spawn_blocking(move || {
                         read_facts(&root, &budget, &usage, &telemetry, &query)
                     })

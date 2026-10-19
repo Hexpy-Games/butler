@@ -72,3 +72,46 @@ pub(crate) fn session(value: &Value, requests: u64, input: u64, output: u64) {
         );
     }
 }
+
+struct Clock;
+impl butler_models::models::ProviderClock for Clock {
+    fn now_epoch_millis(&self) -> i64 {
+        chrono::Utc::now().timestamp_millis() - 1000
+    }
+}
+pub(super) fn auxiliary(
+    data: &Path,
+    root: &str,
+    role: &str,
+    input: f64,
+    output: f64,
+) -> Result<(), HarnessError> {
+    use butler_models::models::{
+        PromptUsageAttribution, PromptUsageMetricInput, PromptUsageMetricSink,
+    };
+    let sink = butler_runtime::operations::PromptUsageMetrics::new(
+        data.to_owned(),
+        std::sync::Arc::new(Clock),
+    );
+    let mut attribution = PromptUsageAttribution::for_phase("planning");
+    attribution.root_session_id = Some(root);
+    attribution.role = Some(role);
+    sink.append(PromptUsageMetricInput {
+        model: "openai/gpt-6-luna",
+        scope: "smart-search-planning",
+        prompt_tokens: Some(input),
+        cached_tokens: 10.0,
+        total_tokens: Some(input + output),
+        cache_write_tokens: None,
+        prompt_cache_key: None,
+        prompt_cache_retention: None,
+        butler_data: None,
+        usage_attribution: Some(&attribution),
+        reasoning_tokens: None,
+        cache_write_1h_tokens: None,
+        auth_mode: None,
+        prefix_diagnostics: None,
+    })
+    .unwrap();
+    Ok(())
+}

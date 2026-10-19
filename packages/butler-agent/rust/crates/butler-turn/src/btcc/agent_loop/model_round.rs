@@ -48,8 +48,10 @@ pub(super) async fn run_model_round(
         &identity.round_id,
         Status::Started,
         Some(&started_model_ref),
+        None,
     )
-    .await;
+    .await
+    .map_err(AgentLoopError::Propagate)?;
     timing.mark("waiting_published");
     let round = Round {
         input,
@@ -320,8 +322,10 @@ async fn accept_response(
         round_id,
         Status::Completed,
         Some(&completed_model_ref),
+        response.reasoning_summary.take().as_deref(),
     )
-    .await;
+    .await
+    .map_err(AttemptError::Contract)?;
     if let Some(ordinal) = identify_response(response, response_item_id) {
         state.next_item_ordinal = state.next_item_ordinal.max(ordinal.saturating_add(1));
     }
@@ -357,7 +361,14 @@ async fn fail_round(
     } else {
         Status::Failed
     };
-    model_waiting(input.progress, round_id, status, Some(&failed_model_ref)).await;
+    let _ = model_waiting(
+        input.progress,
+        round_id,
+        status,
+        Some(&failed_model_ref),
+        None,
+    )
+    .await;
     map_attempt(original, input, iteration)
 }
 

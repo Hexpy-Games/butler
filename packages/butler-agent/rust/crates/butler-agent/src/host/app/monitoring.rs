@@ -55,7 +55,7 @@ impl AppMonitoring {
                 data_root,
             ),
             quota,
-            usage: Arc::new(UsageMonitor::with_owners(lineage.owners.clone())),
+            usage: lineage.monitor.clone(),
             lineage,
         }
     }
@@ -122,6 +122,7 @@ impl AppMonitoringPort for AppMonitoring {
             }
         }
         Box::pin(async move {
+            let _read = lineage.read.lock().await;
             let refresh = (root.clone(), catalog.clone(), monitor.clone());
             tokio::task::spawn_blocking(move || {
                 refresh
@@ -130,10 +131,7 @@ impl AppMonitoringPort for AppMonitoring {
             })
             .await
             .map_err(GatewayApplicationError::internal_from)?;
-            lineage
-                .resolve()
-                .await
-                .map_err(GatewayApplicationError::internal_from)?;
+            lineage.resolve().await;
             // The first read parses the usage log and every transcript:
             // keep that off the async workers.
             let mut view = tokio::task::spawn_blocking(move || {

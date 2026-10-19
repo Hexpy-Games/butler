@@ -114,6 +114,7 @@ pub(super) fn event_payload(projection: &Value) -> Map<String, Value> {
         "command_sandbox_enabled",
         "appearance_theme",
         "collapse_message_box",
+        "show_thinking",
         "reduce_motion",
         "main_screen_theme",
         "main_screen_theme_preset",

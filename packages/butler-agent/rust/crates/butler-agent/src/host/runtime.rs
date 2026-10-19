@@ -275,14 +275,13 @@ impl AgentRuntime {
             owners::workspace_services(&stores, &commands, &files, &host_environment, &paths);
         let work_service = Arc::new(DurableWorkService::new(work_repository));
         let inbound_queue = Arc::new(butler_gateway::gateway::InboundQueue::new(&paths.data_root));
-        let subsessions = Arc::new(butler_turn::btcc::SubsessionService::new(
+        let (subsessions, usage_lineage) = monitoring::session_usage_services(
             SqliteSubsessionRepository::new(stores.btcc.clone()),
             stores.bindings.clone(),
-            Arc::new(SubsessionQueue(inbound_queue.clone())),
+            inbound_queue.clone(),
             worker_profiles,
             work_service.clone(),
-            Arc::new(|| butler_models::models::ModelConfigurationClock::now_iso(&SystemIdentity)),
-        ));
+        );
         let restart_tool_journal =
             Arc::new(ToolJournalRepository::new(stores.btcc.clone(), now.clone()));
         let restart_effect_journal = Arc::new(StorageEffectJournal::new(stores.btcc.clone(), now));
@@ -347,13 +346,13 @@ impl AgentRuntime {
             mcp_client: mcp_client.clone(),
             profile: profile.clone(),
             monitoring: monitoring::open(
-                &paths.data_root,
-                &app_database_path,
+                (&paths.data_root, &app_database_path),
                 &environment.cognition_paths,
                 &models,
                 coordinator.clone(),
                 profile.clone(),
                 metric_files.clone(),
+                usage_lineage.clone(),
             ),
             session_worktrees: session_worktrees.clone(),
             web_access,
@@ -394,15 +393,7 @@ impl AgentRuntime {
             skills: skills.clone(),
             context_maintenance: context_maintenance.clone(),
         });
-        let assembly = btcc::assemble(&TurnFacadeDependencies {
-            preparation,
-            store: repositories.clone(),
-            agent,
-            messages: repositories.clone(),
-            progress: repositories.clone(),
-            readiness: repositories.clone(),
-            host: owner,
-        });
+        let assembly = assemble_runtime_turn(&repositories, preparation, agent, owner);
         startup.phase("runtime_ports");
         Self::finish_startup(Self {
             data_reset: process.data_reset,
@@ -419,6 +410,7 @@ impl AgentRuntime {
             context_compactions: repositories.context_compactions(),
             collation,
             progress,
+            thinking: repositories.thinking.clone(),
             answer_drafts: repositories.answer_drafts.clone(),
             conversations,
             image_files,
@@ -431,6 +423,7 @@ impl AgentRuntime {
             restart_tool_journal,
             restart_effect_journal,
             subsessions,
+            usage_lineage,
             work_streams,
             skills: skills.clone(),
             mcp_client,
@@ -458,4 +451,22 @@ impl AgentRuntime {
         );
         Ok(runtime)
     }
+}
+
+/// Bind durable storage and its process-local progress publishers to one turn runtime.
+fn assemble_runtime_turn(
+    repositories: &Arc<BtccRepositories>,
+    preparation: Arc<DefaultTurnPreparation>,
+    agent: Arc<dyn btcc::AgentLoop>,
+    host: Arc<dyn HostDependencies>,
+) -> btcc::BtccAssembly {
+    btcc::assemble(&TurnFacadeDependencies {
+        preparation,
+        store: repositories.clone(),
+        agent,
+        messages: repositories.clone(),
+        progress: repositories.clone(),
+        readiness: repositories.clone(),
+        host,
+    })
 }

@@ -7,6 +7,10 @@
 )]
 #[path = "usage_delegated/fixtures.rs"]
 pub(crate) mod fixtures;
+#[path = "usage_delegated/inheritance.rs"]
+mod inheritance;
+#[path = "usage_delegated/recovery.rs"]
+mod recovery;
 #[path = "usage_delegated/stub.rs"]
 mod stub;
 use butler_e2e::e2e::{HarnessError, cassette::Cassette, scenario::Setup};
@@ -30,11 +34,13 @@ async fn deleg_use_01_real_chat_steward_two_workers() -> Result<(), HarnessError
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         let view = s.gw.get("/session-view?session_id=general").await?;
-        if view.data()["steward_children"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|v| v["result"]["status"] == "success")
+        if view.data()["active_turn"].is_null()
+            && view.data()["latest_turn"]["state"] == "delivered"
+            && view.data()["steward_children"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|v| v["result"]["status"] == "success")
         {
             break;
         }
@@ -103,13 +109,17 @@ async fn deleg_use_02_no_double_count_or_child_rows() -> Result<(), HarnessError
     let s = Setup::new("DELEG-USE-02")?.start().await?;
     fixtures::append(
         &s.sandbox.data,
-        &[
-            fixtures::row(ROOT, Some(ROOT), Some("main"), 100, 20),
-            fixtures::row("usage-child", Some(ROOT), Some("specialist"), 200, 30),
-        ],
+        &[fixtures::row(ROOT, Some(ROOT), Some("main"), 100, 20), {
+            let mut row = fixtures::row("usage-child", Some(ROOT), Some("specialist"), 200, 30);
+            row["promptTokens"] = 400.into();
+            row
+        }],
     )?;
     let global = s.gw.get("/usage-monitor?since_hours=24").await?;
-    fixtures::model(&global.data()["model"], 2, 300, 50);
+    assert_eq!(global.data()["model"]["requestCount"], 2);
+    assert_eq!(global.data()["model"]["totalTokens"], 350.0);
+    assert_eq!(global.data()["model"]["promptTokens"], 500.0);
+    assert_eq!(global.data()["model"]["outputTokens"], 20.0);
     assert!(global.data()["model"]["byRole"].is_null());
     let rows = global.data()["topSessions"].as_array().unwrap();
     assert!(
@@ -125,8 +135,14 @@ async fn deleg_use_02_no_double_count_or_child_rows() -> Result<(), HarnessError
             <= 350.0
     );
     let child = s.gw.get("/usage-monitor?session_id=usage-child").await?;
-    fixtures::model(&child.data()["model"], 2, 300, 50);
-    assert_eq!(child.data()["timeline"]["slots"][0][5], 230.0);
+    assert_eq!(child.data()["model"], {
+        let mut model = global.data()["model"].clone();
+        model["byRole"] = child.data()["model"]["byRole"].clone();
+        model
+    });
+    assert_eq!(child.data()["timeline"]["slots"][0][5], 400.0);
+    let slot = &child.data()["timeline"]["slots"][0];
+    assert_eq!(slot[2].as_f64().unwrap() + slot[4].as_f64().unwrap(), 520.0);
     s.finish().await
 }
 #[tokio::test]

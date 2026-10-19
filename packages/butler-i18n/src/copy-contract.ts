@@ -763,6 +763,7 @@ export interface AppCopy {
     relocationDescription: (source: string, target: string) => string;
   };
   interfaceStatus: {
+    thinking: string;
     generalCategory: string;
     countSummary: (kind: "filesRead" | "files" | "matches" | "documents" | "results", count: string | number, truncated?: boolean) => string;
     bytes: (count: number) => string;
@@ -1475,6 +1476,7 @@ export interface AppCopy {
       model: string;
       reasoning: string;
       theme: string;
+      showThinking: string;
       conversationBackground: string; conversationOverlay: string; conversationPlain: string;
       wallpaper: string;
       wallpaperMotion: string;

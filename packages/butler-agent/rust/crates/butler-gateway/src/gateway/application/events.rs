@@ -26,12 +26,18 @@ pub(super) struct EventSubscribers {
 #[derive(Default)]
 struct SubscriberState {
     drafts: super::answer_drafts::Drafts,
+    thinking: super::thinking::Thinking,
     next_id: u64,
     listeners: HashMap<u64, Listener>,
     cursor_observer: Option<Arc<dyn Fn(u64) + Send + Sync>>,
 }
 
 impl EventSubscribers {
+    pub(super) fn set_thinking_enabled(&self, enabled: bool) {
+        self.inner.lock().thinking.enabled = enabled;
+        butler_turn::btcc::set_thinking_capture(enabled);
+    }
+
     pub(super) fn observe_cursor(&self, observer: Arc<dyn Fn(u64) + Send + Sync>) {
         self.inner.lock().cursor_observer = Some(observer);
     }
@@ -42,12 +48,29 @@ impl EventSubscribers {
         // Snapshot and registration share the publication lock, so no op can
         // slip between the snapshot and this listener becoming visible.
         listener(Arc::new(PublishedEvent::new(state.drafts.snapshot())));
+        for snapshot in state.thinking.snapshot() {
+            listener(Arc::new(PublishedEvent::new(snapshot)));
+        }
         state.listeners.insert(id, listener);
         drop(state);
         Box::new(Subscription {
             owner: Arc::downgrade(&self.inner),
             id,
         })
+    }
+
+    pub(super) fn publish_thinking(&self, payload: Value) {
+        let mut state = self.inner.lock();
+        let Some(payload) = state.thinking.update(payload) else {
+            return;
+        };
+        let event = Arc::new(PublishedEvent::new(super::answer_drafts::envelope(
+            "turn.thinking",
+            payload,
+        )));
+        for listener in state.listeners.values() {
+            listener(event.clone());
+        }
     }
 
     pub(super) fn publish_draft(&self, mut payload: Value) {
@@ -67,6 +90,15 @@ impl EventSubscribers {
     pub(super) fn publish(&self, event: &Arc<PublishedEvent>) {
         let (listeners, cursor_observer) = {
             let mut state = self.inner.lock();
+            state.thinking.finish(event.envelope());
+            if state.thinking.preference(event.envelope()) {
+                for snapshot in state.thinking.snapshot() {
+                    let snapshot = Arc::new(PublishedEvent::new(snapshot));
+                    for listener in state.listeners.values() {
+                        listener(snapshot.clone());
+                    }
+                }
+            }
             if let Some(end) = state.drafts.finish(event.envelope()) {
                 let end = Arc::new(PublishedEvent::new(end));
                 for listener in state.listeners.values() {

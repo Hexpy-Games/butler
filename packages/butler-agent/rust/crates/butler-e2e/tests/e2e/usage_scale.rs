@@ -188,6 +188,7 @@ async fn perf_use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), Harnes
     let mut expected = write_usage_log(&setup.sandbox.data, chrono_now())?;
     write_transcripts(&setup.sandbox.data, &mut expected)?;
     let s = setup.start().await?;
+    let memory = memory::PeakMemory::start(s.agent.pid().unwrap());
     delegated::seed(&s.sandbox.data)?;
     expected.recent_rows += delegated::ROWS;
 
@@ -353,6 +354,7 @@ async fn perf_use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), Harnes
     eprintln!(
         "USE-06 timings: 24h warm and session warm under {WARM:?}; all-time cold {cold:?}, warm {warm:?}"
     );
+    memory.measure();
     s.finish().await
 }
 

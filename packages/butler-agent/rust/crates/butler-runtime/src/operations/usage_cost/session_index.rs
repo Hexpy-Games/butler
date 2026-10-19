@@ -1,7 +1,7 @@
 //! Per-session usage folded incrementally from the append-only prompt-usage
 //! log: each read parses only the rows appended since the previous one.
 
-use crate::operations::UsageOwners;
+use crate::operations::{UsageOwners, UsageScope};
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::sync::Arc;
@@ -57,7 +57,7 @@ struct ScopeUsage {
 pub struct SessionUsageIndex {
     owners: Arc<UsageOwners>,
     tail: LogTail,
-    scopes: HashMap<String, ScopeUsage>,
+    scopes: HashMap<UsageScope, ScopeUsage>,
     prices: HashMap<String, Option<ModelPricing>>,
 }
 
@@ -120,7 +120,7 @@ impl SessionUsageIndex {
         let mut scope = ScopeUsage::default();
         let mut roles = BTreeMap::<String, UsageTotals>::new();
         for (member, role) in self.owners.members(&root) {
-            if let Some(value) = self.scopes.get(member.as_ref()) {
+            if let Some(value) = self.scopes.get(&member) {
                 scope.totals.merge(&value.totals);
                 roles
                     .entry(role.to_string())
@@ -176,7 +176,7 @@ impl SessionUsageIndex {
         let Ok(event) = serde_json::from_slice::<UsageEvent>(line) else {
             return;
         };
-        self.owners.observe(
+        let key = self.owners.observe(
             &event.scope,
             event.root_session_id.as_deref(),
             event.role.as_deref(),
@@ -188,7 +188,7 @@ impl SessionUsageIndex {
             .prices
             .entry(event.model.clone())
             .or_insert_with(|| pricing(&event.model));
-        let scope = self.scopes.entry(event.scope.clone()).or_default();
+        let scope = self.scopes.entry(key).or_default();
         scope.totals.add(&event, price.as_ref());
         if let Some(mode) = event.auth_mode {
             scope

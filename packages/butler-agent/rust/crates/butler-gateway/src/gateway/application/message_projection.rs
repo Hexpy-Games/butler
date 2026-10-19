@@ -90,7 +90,8 @@ fn is_activity(row: &Value) -> bool {
     };
     let kind = string(row, "kind");
     let bridge = string(row, "bridge_phase");
-    kind == Some("todo") && bridge == Some("btcc_work_ledger")
+    bridge == Some("model_round_waiting") && truthy_string(row, "thinking_title")
+        || kind == Some("todo") && bridge == Some("btcc_work_ledger")
         || bridge == Some("btcc_operation") && truthy_string(row, "semantic_block_id")
         || kind == Some("message")
             && !truthy_string(row, "work_block_id")
