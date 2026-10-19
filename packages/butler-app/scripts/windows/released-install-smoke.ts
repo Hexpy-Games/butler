@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFi
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
-import { freePort } from "../../../../tests/support/native-app-server.ts";
+import { freeGatewayPort, freePort } from "../../../../tests/support/native-app-server.ts";
 import { FIRST_RUN_CONSENT_VERSION } from "../../client/ui/src/app/onboarding.ts";
 import { assertShortcuts, bridge, ownedProcesses, ownedSurvivors, powershell, readJson, removeProfile, shortcutPaths, waitFor, waitForOwnedExit, type OwnedProcesses } from "./installer-smoke-support.ts";
 import { smokeProviderReply, type SmokeProviderCalls } from "./smoke-provider.ts";
@@ -27,7 +27,8 @@ const root = realpathSync.native(mkdtempSync(join(tmpdir(), "butler-released-e2e
 const data = join(root, "data");
 const owned: OwnedProcesses = new Map();
 const debugPort = await freePort();
-const agentPort = await freePort();
+// The Agent also binds its content origin on agentPort + 1.
+const agentPort = await freeGatewayPort();
 let page: ElectronPage | null = null;
 const calls: SmokeProviderCalls = { chat: 0, memory: 0, memorySpeakers: new Set<string>() };
 const downloads: DownloadsProof = { requests: 0 };
