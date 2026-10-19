@@ -128,6 +128,7 @@ async function runLocale(locale: "ko" | "en") {
           await page.getByText(appCopy.settings.saved, { exact: true }).waitFor({ state: "hidden" });
         }
         await screenshot(page, key, "conversation-input");
+        if (!before) await screenshot(page, key, "default-permission");
         await open(page, server.url, appCopy.settings.sections.models, width);
         if (!before) assert.deepEqual(await sectionIds(page), ["butler-model", "backup-models", "advanced-models"]);
         await screenshot(page, key, "butler-model");
@@ -137,9 +138,9 @@ async function runLocale(locale: "ko" | "en") {
           await page.getByRole("button", { name: fixture.command, exact: true }).waitFor();
           await section(page, "grants").getByText(appCopy.settings.grants.targetUnknown, { exact: true }).waitFor();
           assert.equal(await rows(page).count(), 12, "dedupe across same-title conversations");
-          assert.deepEqual(await sectionIds(page), ["remote-access", "permissions", "grants", "saved-keys", "security-advanced"]);
+          assert.deepEqual(await sectionIds(page), ["remote-access", "grants", "saved-keys", "security-advanced"]);
           assert.equal(await section(page, "grants").getByText(appCopy.settings.grants.conversations(2), { exact: false }).count(), 1);
-          await screenshot(page, key, "permissions"); await screenshot(page, key, "grants"); await screenshot(page, key, "saved-keys");
+          await screenshot(page, key, "grants"); await screenshot(page, key, "saved-keys");
           const overflow = await section(page, "grants").evaluate(node => node.scrollWidth > node.clientWidth + 1);
           assert.equal(overflow, false, key);
           const target = page.getByRole("button", { name: /^src\/one.ts\s+src\/two.ts$/u });
@@ -167,7 +168,7 @@ async function runLocale(locale: "ko" | "en") {
         await section(page, "device-pairing").waitFor();
         await section(page, "security-advanced").getByRole("button").click();
         await page.getByPlaceholder(appCopy.settings.security.hostPlaceholder).waitFor();
-        if (!before) assert.deepEqual(await sectionIds(page), ["remote-access", "device-pairing", "paired-devices", "permissions", "grants", "saved-keys", "security-advanced"]);
+        if (!before) assert.deepEqual(await sectionIds(page), ["remote-access", "device-pairing", "paired-devices", "grants", "saved-keys", "security-advanced"]);
         await screenshot(page, `${key}-enabled`, "remote-access");
         await screenshot(page, `${key}-enabled`, before ? "allowed-hosts" : "security-advanced");
         await remote.click();
@@ -189,7 +190,7 @@ async function runLocale(locale: "ko" | "en") {
           await page.getByRole("button", { name: fixture.command, exact: true }).waitFor();
           const refusedMessage = code === "loopback_required" ? appCopy.settings.security.hostOnly : code === "admin_credential_required" ? appCopy.settings.security.adminRequired : appCopy.settings.sectionState.error;
           await section(page, "remote-access").getByText(refusedMessage, { exact: true }).waitFor();
-          assert.deepEqual(await sectionIds(page), ["remote-access", "permissions", "grants", "saved-keys"]);
+          assert.deepEqual(await sectionIds(page), ["remote-access", "grants", "saved-keys"]);
           await screenshot(page, `${locale}-refused-${code}`, "remote-access");
         }
         responses.refusal = "";
@@ -226,7 +227,7 @@ async function runLocale(locale: "ko" | "en") {
         console.log(`revoke ${locale}`);
         await open(page, `${server.url}?settings=privacy`, appCopy.settings.sections.security, 1280);
         await page.goto(`${server.url}?settings=privacy`, { waitUntil: "domcontentloaded" });
-        await section(page, "permissions").waitFor();
+        await section(page, "grants").waitFor();
         const navigationSearch = page.getByRole("searchbox", { name: appCopy.settings.searchLabel });
         await navigationSearch.fill(locale === "ko" ? "개인정보" : "privacy");
         await page.getByRole("button", { name: appCopy.settings.sections.security, exact: true }).waitFor();

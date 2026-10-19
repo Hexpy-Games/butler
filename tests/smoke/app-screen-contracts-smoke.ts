@@ -58,6 +58,7 @@ async function assertInspectorContentStartsAtTop(page: Page): Promise<void> {
   assert(
     JSON.stringify(tabs) === JSON.stringify([
       appCopy.inspector.tabs.summary,
+      appCopy.inspector.tabs.tasks,
       appCopy.inspector.tabs.artifacts,
       appCopy.inspector.tabs.automations,
     ]),
