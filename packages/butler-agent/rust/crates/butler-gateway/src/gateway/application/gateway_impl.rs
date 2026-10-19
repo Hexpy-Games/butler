@@ -1,5 +1,4 @@
 use super::*;
-
 impl GatewayApplication for AppApplication {
     fn assets(&self, command: AppAssetCommand) -> ApplicationFuture<Value> {
         let this = self.clone_handle();
@@ -256,26 +255,21 @@ impl GatewayApplication for AppApplication {
     fn setup(&self) -> Result<Arc<dyn super::AppSetupPort>, GatewayApplicationError> {
         Ok(self.dependencies.setup.clone())
     }
+    fn data_reset(&self) -> Option<Arc<dyn crate::gateway::AppDataResetPort>> {
+        self.dependencies.data_reset.clone()
+    }
+    fn accept_full_reset(&self, input: Value) -> ApplicationFuture<Value> {
+        self.reset_data_owned(input)
+    }
     fn read_settings(&self) -> ApplicationFuture<serde_json::Value> {
-        let this = self.clone_handle();
-        Box::pin(async move { this.worker_profile_settings().await })
+        self.settings_read_owned()
     }
     fn update_settings(&self, input: serde_json::Value) -> ApplicationFuture<serde_json::Value> {
         let this = self.clone_handle();
         Box::pin(async move { this.update_settings_owned(input).await })
     }
-    fn list_mcp_servers(&self) -> ApplicationFuture<serde_json::Value> {
-        let client = self.dependencies.mcp_client.clone();
-        Box::pin(async move {
-            client.list_servers().map_err(|source| {
-                GatewayApplicationError::public(
-                    500,
-                    "mcp_registry_unavailable",
-                    "MCP server registry is unavailable.",
-                )
-                .with_source(source)
-            })
-        })
+    fn list_mcp_servers(&self) -> ApplicationFuture<Value> {
+        self.list_mcp_servers_owned()
     }
     fn list_mcp_capabilities(
         &self,

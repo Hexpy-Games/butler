@@ -1,3 +1,4 @@
+use butler_platform::data_paths;
 use serde::Serialize;
 use std::{
     fs, io,
@@ -52,7 +53,7 @@ pub(crate) fn timestamp(path: &Path) -> Option<String> {
 }
 pub(crate) fn usage(root: &Path) -> io::Result<StorageView> {
     let mut stores = Vec::new();
-    for source in ["agent", "app"] {
+    for &source in data_paths::OWNED_LOG_STORES {
         for (store, limit, retention_h) in STORES {
             let entries = files(&root.join(source).join(store))?;
             let bytes = entries

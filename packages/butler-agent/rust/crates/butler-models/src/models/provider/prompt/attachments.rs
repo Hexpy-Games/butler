@@ -1,11 +1,18 @@
 use std::path::{Path, PathBuf};
 
-use crate::models::ProviderPromptRequest;
+use crate::models::{
+    MAX_INLINE_BYTES, NotInlined, ProviderPromptRequest, decode_text, display_name, is_pdf,
+    is_text, listing_line, message_file_path, not_inlined_block,
+};
 use butler_turn::btcc::{AttachmentKind, AttachmentRef, ModelRoundError};
 
 const MAX_ATTACHMENT_TEXT_UNITS: usize = 24_000;
 const MAX_TOTAL_TEXT_UNITS: usize = 60_000;
-const MAX_ATTACHMENT_BYTES: u64 = 512_000;
+enum Content {
+    Inline(String),
+    NotInlined(NotInlined),
+    Skip,
+}
 
 pub(super) fn prompt(request: &ProviderPromptRequest<'_>) -> Result<String, ModelRoundError> {
     if request
@@ -30,85 +37,103 @@ pub(super) fn prompt(request: &ProviderPromptRequest<'_>) -> Result<String, Mode
     let root = data_root(request.butler_data);
     let mut context = String::from("## Attachments");
     for (index, attachment) in attachments.iter().enumerate() {
-        context.push_str("\n- ");
-        context.push_str(&name(attachment, index));
-        context.push_str(" (");
-        context.push_str(kind(&attachment.kind));
-        context.push_str(", ");
-        context.push_str(
-            attachment
-                .mime_type
-                .as_deref()
-                .map(butler_core::public_text::trim_js_whitespace)
-                .filter(|value| !value.is_empty())
-                .unwrap_or("application/octet-stream"),
-        );
-        context.push_str(", ");
-        context.push_str(&size(attachment.size_bytes));
-        context.push_str(", id: ");
-        context.push_str(&attachment.id);
-        context.push(')');
+        let path = path(attachment, &root);
+        context.push('\n');
+        context.push_str(&listing_line(attachment, index, path.as_deref()));
     }
     let mut remaining = MAX_TOTAL_TEXT_UNITS;
     for (index, attachment) in attachments.iter().enumerate() {
-        if remaining == 0 {
-            break;
-        }
-        let allowance = MAX_ATTACHMENT_TEXT_UNITS.min(remaining);
-        let Some(text) = content(attachment, &root, allowance) else {
-            continue;
+        let content = if remaining == 0 {
+            Content::NotInlined(NotInlined::Budget)
+        } else {
+            content(attachment, &root, MAX_ATTACHMENT_TEXT_UNITS.min(remaining))
         };
-        remaining = remaining.saturating_sub(text.encode_utf16().count());
-        context.push_str("\n\n### Attachment Content: ");
-        context.push_str(&name(attachment, index));
-        context.push_str("\nAttachment ID: ");
-        context.push_str(&attachment.id);
-        context.push_str("\n````text\n");
-        context.push_str(&text);
-        context.push_str("\n````");
+        match content {
+            Content::Inline(text) => {
+                remaining = remaining.saturating_sub(text.encode_utf16().count());
+                context.push_str(&format!(
+                    "\n\n### Attachment Content: {}\nAttachment ID: {}\n````text\n{text}\n````",
+                    display_name(attachment, index),
+                    attachment.id
+                ));
+            }
+            Content::NotInlined(reason) => {
+                let path = path(attachment, &root);
+                context.push_str("\n\n");
+                context.push_str(&not_inlined_block(
+                    attachment,
+                    index,
+                    path.as_deref(),
+                    reason,
+                ));
+            }
+            Content::Skip => {}
+        }
     }
     Ok(format!("{}\n\n{context}", request.prompt))
 }
 
-fn content(attachment: &AttachmentRef, root: &Path, max_units: usize) -> Option<String> {
-    if pdf(attachment) {
+fn content(attachment: &AttachmentRef, root: &Path, max_units: usize) -> Content {
+    if attachment.kind == AttachmentKind::Image {
+        return Content::Skip;
+    }
+    if is_pdf(attachment) {
         let Some(original) = path(attachment, root) else {
-            return Some(
+            return Content::Inline(
                 "[PDF attachment is unavailable; its contents have not been read.]".into(),
             );
         };
         let text_path = PathBuf::from(format!("{}.txt", original.display()));
-        return match std::fs::read_to_string(&text_path) {
-            Ok(text) => Some(format!(
+        return Content::Inline(match std::fs::read_to_string(&text_path) {
+            Ok(text) => format!(
                 "Full extracted text file (use a file-reading command for sections beyond this preview): {}\n{}",
                 text_path.display(),
                 trim_text(&text, max_units)
-            )),
-            Err(_) => Some(
-                "[PDF text extraction is unavailable; its contents have not been read.]".into(),
             ),
-        };
+            Err(_) => {
+                "[PDF text extraction is unavailable; its contents have not been read.]".into()
+            }
+        });
     }
-    if !text_attachment(attachment) {
-        return None;
+    if !is_text(attachment) {
+        return Content::NotInlined(NotInlined::Format);
     }
-    let path = path(attachment, root)?;
-    let metadata = std::fs::metadata(&path).ok()?;
-    if !metadata.is_file() || metadata.len() > MAX_ATTACHMENT_BYTES {
-        return None;
+    match read_text(attachment, root) {
+        Ok(bytes) => {
+            let text = decode_text(&bytes);
+            if butler_core::public_text::trim_js_whitespace(&text).is_empty() {
+                Content::Skip
+            } else {
+                Content::Inline(trim_text(&text, max_units))
+            }
+        }
+        Err(reason) => Content::NotInlined(reason),
     }
-    let bytes = std::fs::read(path).ok()?;
-    let decoded = String::from_utf8_lossy(&bytes).replace('\0', "");
-    if butler_core::public_text::trim_js_whitespace(&decoded).is_empty() {
-        None
-    } else {
-        Some(trim_text(&decoded, max_units))
+}
+fn read_text(a: &AttachmentRef, root: &Path) -> Result<Vec<u8>, NotInlined> {
+    use std::io::Read;
+    let path = path(a, root).ok_or(NotInlined::Unreadable)?;
+    let metadata = std::fs::metadata(&path).map_err(|_| NotInlined::Unreadable)?;
+    if !metadata.is_file() {
+        return Err(NotInlined::Unreadable);
     }
+    if metadata.len() > MAX_INLINE_BYTES {
+        return Err(NotInlined::TooLarge);
+    }
+    let capacity = usize::try_from(metadata.len()).map_err(|_| NotInlined::TooLarge)?;
+    let mut bytes = Vec::with_capacity(capacity);
+    std::fs::File::open(path)
+        .and_then(|f| f.take(MAX_INLINE_BYTES + 1).read_to_end(&mut bytes))
+        .map_err(|_| NotInlined::Unreadable)?;
+    if bytes.len() as u64 > MAX_INLINE_BYTES {
+        return Err(NotInlined::TooLarge);
+    }
+    Ok(bytes)
 }
 
 fn path(attachment: &AttachmentRef, root: &Path) -> Option<PathBuf> {
-    if message_file_id(&attachment.id) {
-        return Some(root.join("app-server/message-files").join(&attachment.id));
+    if let Some(path) = message_file_path(root, &attachment.id) {
+        return Some(path);
     }
     let path = Path::new(attachment.local_path.as_deref()?);
     (path.is_absolute() && path.exists()).then(|| path.to_owned())
@@ -180,103 +205,6 @@ fn data_root(explicit: Option<&str>) -> PathBuf {
         .or_else(|| std::env::var_os("BUTLER_DATA").map(PathBuf::from))
         .or_else(|| butler_platform::user_dirs::home_dir().map(|home| home.join(".butler")))
         .unwrap_or_else(|| PathBuf::from(".butler"))
-}
-
-fn message_file_id(value: &str) -> bool {
-    value.len() == 41
-        && value.starts_with("file-")
-        && value[5..]
-            .bytes()
-            .all(|value| value.is_ascii_hexdigit() || value == b'-')
-}
-
-fn text_attachment(attachment: &AttachmentRef) -> bool {
-    if attachment.kind == AttachmentKind::Document {
-        return true;
-    }
-    let mime = attachment
-        .mime_type
-        .as_deref()
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    if mime.starts_with("text/")
-        || [
-            "application/json",
-            "application/ld+json",
-            "application/markdown",
-            "application/xml",
-            "application/yaml",
-            "application/x-yaml",
-            "application/javascript",
-            "application/typescript",
-        ]
-        .contains(&mime.as_str())
-    {
-        return true;
-    }
-    let extension = Path::new(attachment.file_name.as_deref().unwrap_or_default())
-        .extension()
-        .and_then(|value| value.to_str())
-        .map(|value| format!(".{}", value.to_ascii_lowercase()))
-        .unwrap_or_default();
-    [
-        ".md",
-        ".markdown",
-        ".txt",
-        ".json",
-        ".jsonl",
-        ".yaml",
-        ".yml",
-        ".xml",
-        ".csv",
-        ".tsv",
-        ".js",
-        ".jsx",
-        ".ts",
-        ".tsx",
-        ".css",
-        ".html",
-    ]
-    .contains(&extension.as_str())
-}
-
-fn pdf(attachment: &AttachmentRef) -> bool {
-    attachment
-        .mime_type
-        .as_deref()
-        .and_then(|value| value.split(';').next())
-        .is_some_and(|value| value.trim().eq_ignore_ascii_case("application/pdf"))
-        || attachment
-            .file_name
-            .as_deref()
-            .is_some_and(|value| value.to_ascii_lowercase().ends_with(".pdf"))
-}
-
-fn name(attachment: &AttachmentRef, index: usize) -> String {
-    attachment
-        .file_name
-        .as_deref()
-        .map(butler_core::public_text::trim_js_whitespace)
-        .filter(|value| !value.is_empty())
-        .map(str::to_owned)
-        .unwrap_or_else(|| format!("attachment-{}", index + 1))
-}
-
-fn size(value: Option<f64>) -> String {
-    value
-        .filter(|value| value.is_finite())
-        .map(|value| format!("{} bytes", ryu_js::Buffer::new().format(value)))
-        .unwrap_or_else(|| "unknown size".into())
-}
-
-fn kind(value: &AttachmentKind) -> &'static str {
-    match value {
-        AttachmentKind::Image => "image",
-        AttachmentKind::Audio => "audio",
-        AttachmentKind::Video => "video",
-        AttachmentKind::Document => "document",
-        AttachmentKind::Binary => "binary",
-    }
 }
 
 fn failure(code: &str, message: &str) -> ModelRoundError {

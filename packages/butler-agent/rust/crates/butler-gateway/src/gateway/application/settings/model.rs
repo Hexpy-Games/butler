@@ -130,6 +130,13 @@ pub(super) fn available(facts: &AppSettingsFacts) -> std::borrow::Cow<'_, [AppMo
     Cow::Borrowed(&facts.registered_models)
 }
 
+pub(in crate::gateway::application) fn selectable_model_ref(
+    facts: &AppSettingsFacts,
+    model: &str,
+) -> Option<String> {
+    selectable(model, &available(facts)).map(|metadata| metadata.model_ref.clone())
+}
+
 pub(super) fn assert_selectable(
     model: &str,
     models: &[AppModelMetadata],

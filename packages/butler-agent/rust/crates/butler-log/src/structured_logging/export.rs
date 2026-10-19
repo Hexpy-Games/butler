@@ -1,4 +1,5 @@
 use super::{Config, Record, index::Block, query, retention, storage::Catalog};
+use butler_platform::data_paths;
 use serde_json::json;
 use std::{
     collections::BTreeSet,
@@ -42,7 +43,7 @@ pub(crate) fn export<W: Write + Seek>(
         )?;
     }
     if bodies {
-        for source in ["agent", "app"] {
+        for &source in data_paths::OWNED_LOG_STORES {
             for path in retention::files(&root.join(source).join("bodies"))? {
                 let name = path.strip_prefix(root).map_err(io::Error::other)?;
                 if !references.contains(name) {

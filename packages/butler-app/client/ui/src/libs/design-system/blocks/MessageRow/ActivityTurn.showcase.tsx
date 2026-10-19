@@ -21,17 +21,14 @@ function ActivityTurnRow({ locale, running = false }: ShowcaseRenderContext & { 
   const summary = ko ? `활동 · 완료 · 1개 기록` : "Activity · Completed · 1 record";
   const activity = <WorkActivityBlock density="compact" title={ko ? "활동 화면 확인" : "Review the activity surface"} />;
   return <MessageRow role="assistant">
-      {!running && <Stack gap="sm">
-        <Button variant="inline" text={summary} aria-expanded={expanded}
-          iconEnd={expanded ? <ChevronDown size="sm" /> : <ChevronRight size="sm" />}
+      <Stack gap="sm">
+        <Button variant="inline" text={running ? (ko ? "현재 · 작업 중 · 1개 기록" : "Current · Working · 1 record") : summary}
+          aria-expanded={expanded} iconEnd={expanded ? <ChevronDown size="sm" /> : <ChevronRight size="sm" />}
           onClick={() => setExpanded(!expanded)} />
-        {expanded && activity}
-      </Stack>}
+        {(running || expanded) && activity}
+      </Stack>
       <Typo.Body as="p">{ko ? "확인한 활동을 답변과 함께 표시합니다." : "The activity stays attached to the answer."}</Typo.Body>
-      {running ? <Stack gap="sm">
-        <Typo.Caption>{ko ? "현재 · 작업 중 · 1개 기록" : "Current · Working · 1 record"}</Typo.Caption>
-        {activity}
-        <Typo.Caption>{ko ? "응답 생성 중" : "Generating answer"}</Typo.Caption>
-      </Stack> : <AssistantFooterSample text={summary} time="9:09" labels={labels} />}
+      {running ? <Typo.Caption>{ko ? "응답 생성 중" : "Generating answer"}</Typo.Caption>
+        : <AssistantFooterSample text={summary} time="9:09" labels={labels} />}
     </MessageRow>;
 }

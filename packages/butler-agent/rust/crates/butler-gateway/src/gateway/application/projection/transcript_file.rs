@@ -189,7 +189,7 @@ fn spool_path(data: &std::path::Path, chat: &str, path: &std::path::Path) -> Pat
     hash.update(chat.as_bytes());
     hash.update([0]);
     hash.update(path.to_string_lossy().as_bytes());
-    data.join("transcript-projection-spool")
+    data.join(butler_platform::data_paths::TRANSCRIPT_PROJECTION_SPOOL)
         .join(format!("{:x}.json", hash.finalize()))
 }
 

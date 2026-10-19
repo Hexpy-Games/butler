@@ -88,7 +88,7 @@ impl TurnFacade {
         }
     }
 
-    #[tracing::instrument(name = "turn.run", skip_all, fields(chat_id = %request.peer.id, turn_id = %request.turn_id, model = tracing::field::Empty, status = tracing::field::Empty), err)]
+    #[tracing::instrument(name = "turn.run", skip_all, fields(trace_root = true, chat_id = %request.peer.id, turn_id = %request.turn_id, model = tracing::field::Empty, status = tracing::field::Empty), err)]
     pub(super) async fn run(&self, request: TurnRequest) -> Result<TurnOutcome, BtccError> {
         let execution = self.preparation.prepare(request).await?;
         let prepared = &execution.turn;

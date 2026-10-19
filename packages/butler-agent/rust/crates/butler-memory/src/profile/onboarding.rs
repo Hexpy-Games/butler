@@ -19,7 +19,7 @@ use super::presets::{PersonaLocale, PersonaPresets, safe_persona_preset_name};
 use crate::lenient::{self, Obj};
 use crate::profile::ProfileCode;
 
-pub(super) const STORAGE_LABEL: &str = "personalization/onboarding.json";
+pub(super) const STORAGE_LABEL: &str = butler_platform::data_paths::ONBOARDING;
 
 pub(super) fn read(data_root: &Path, now: &str) -> FirstChatOnboardingState {
     let Ok(bytes) = fs::read(data_root.join(STORAGE_LABEL)) else {

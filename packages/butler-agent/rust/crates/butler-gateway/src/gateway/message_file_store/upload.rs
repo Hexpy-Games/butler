@@ -8,12 +8,11 @@ use std::{
 use bytes::Bytes;
 use sha2::{Digest, Sha256};
 
-use super::names;
+use super::{classify, names};
 use crate::gateway::{
     AppFileWrite, AppIdentityClock, AppMessageFileSnapshot, GatewayApplicationError,
     MaterializedResponderFile,
 };
-use butler_core::public_text::trim_js_whitespace;
 use butler_runtime::context::{PdfTextError, extract_pdf_text, pdf_sidecar_text};
 
 const MAX_BYTES: usize = 10 * 1024 * 1024;
@@ -43,18 +42,7 @@ pub(super) fn write(
         ));
     }
     let safe_name = names::safe_name(&name).stored;
-    let mime_type = names::normalized_mime(mime_type.as_deref().unwrap_or(""), &safe_name);
-    let kind = names::kind(&mime_type, &safe_name);
-    if kind == "generic"
-        && mime_type != "application/pdf"
-        && !safe_name.to_lowercase().ends_with(".pdf")
-    {
-        return Err(public(
-            415,
-            "message_file_unsupported_type",
-            "Attachment file type is not supported.",
-        ));
-    }
+    let (kind, mime_type) = classify::classify(mime_type.as_deref(), &safe_name, &bytes);
     let id = format!("file-{}", clock.new_uuid());
     if !valid_id(&id) {
         return Err(GatewayApplicationError::internal());
@@ -130,9 +118,7 @@ fn valid_id(id: &str) -> bool {
 }
 
 fn is_pdf(file: &AppMessageFileSnapshot) -> bool {
-    trim_js_whitespace(file.mime_type.split(';').next().unwrap_or(""))
-        .eq_ignore_ascii_case("application/pdf")
-        || file.safe_name.to_lowercase().ends_with(".pdf")
+    file.mime_type == "application/pdf"
 }
 
 fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {

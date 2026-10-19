@@ -139,7 +139,7 @@ pub(crate) enum StopIntentError {
 
 /// Where the intent lives under DATA.
 pub(crate) fn stop_intent_path(data_root: &Path) -> PathBuf {
-    data_root.join("state/agent-stop-intent.json")
+    data_root.join(crate::host::service::paths::STOP_INTENT)
 }
 
 /// Writes `intent` with a temporary file and a rename, so a reader sees the

@@ -234,6 +234,10 @@ export async function auditTabOrder(page: Page, options: { maxStops?: number; wi
     stops += 1;
     // Focus may scroll a container; let its edge fades settle.
     await page.waitForTimeout(60);
+    // A ring that fades in (a box-shadow transition) is probed once drawn, not mid-transition.
+    await page.evaluate(() => Promise.all((document.activeElement?.getAnimations() ?? [])
+      .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
+      .map((animation) => animation.finished.catch(() => undefined))));
     const probe = await probeFocusRing(page);
     if (!probe) continue;
     visited.push(probe.label || probe.target.split(" > ").at(-1)!);

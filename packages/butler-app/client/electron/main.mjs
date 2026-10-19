@@ -19,6 +19,7 @@ import {
   nativeImage,
   nativeTheme,
   protocol,
+  session,
   shell,
 } from "electron";
 import { openExternalSignIn, openLink, installAppLinks } from "./browser/links.mjs";
@@ -127,6 +128,8 @@ import { createSessionFolderLauncher } from "./session-folder-launch.mjs";
 import { registerLogsExport } from "./logs-export.mjs";
 import { createBrowserHost } from "./browser/host-channel.mjs";
 import { isSecuritySenderOrigin, readAppLocalAdmin, requestSecurityRoute } from "./app-security-admin.mjs";
+import { clearAppOwnedData, relaunchAfterFullReset, requestFullReset } from "./app-full-reset.mjs";
+import { readRecordedDataGeneration, reconcileAppDataGeneration } from "./app-data-generation.mjs";
 import {
   APP_RENDERER_ORIGIN,
   APP_RENDERER_SCHEME,
@@ -2223,6 +2226,8 @@ async function createWindow() {
     scheduleTrayMenuRefresh();
   }
   if (mainWindow && !mainWindow.isDestroyed()) return mainWindow;
+  // Storage from data the Agent no longer has (a reset) is cleared before the renderer loads.
+  const dataGeneration = legacyDataBlocked || !agentReadyBeforeWindow() ? null : await reconcileWindowDataGeneration();
   if (process.env.BUTLER_APP_TEST_AUTO_CONNECT === "1") {
     rendererUrl = await testRendererConnection(serverUrl, appServerFetch);
     rendererOrigin = rendererOriginForUrl(rendererUrl);
@@ -2252,7 +2257,8 @@ async function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      additionalArguments: [appCacheBudgetArgument, ...(legacyDataBlocked ? ["--butler-legacy-data"] : [])],
+      additionalArguments: [appCacheBudgetArgument, ...(legacyDataBlocked ? ["--butler-legacy-data"] : []),
+        ...(dataGeneration?.resetFailed ? ["--butler-full-reset-failed"] : [])],
     },
   });
   mainWindow = win;
@@ -2636,6 +2642,81 @@ ipcMain.handle("butler:security-request", async (event, input) => {
     onRotated: () => bundledAgentSupervisor.reloadLocalAuth(),
   });
 });
+
+// Settings > General > reset everything. Main sends the request with the admin
+// credential; it relaunches only after the Agent accepted a reset.
+let fullResetAccepted = false;
+ipcMain.handle("butler:full-reset-request", async (event, input) => {
+  if (!isAppRendererSender(event)) return { ok: false, error: { schema: "butler.app.bridge-error.v1", code: "sender_not_allowed" } };
+  const result = await requestFullReset(input, {
+    ensureReady: ensureServer, fetch, serverUrl, authHeaders: appLocalAuthHeaders,
+    adminCredential: readAppLocalAdmin({ butlerData: butlerDataRoot }),
+  });
+  fullResetAccepted ||= result.ok;
+  return result;
+});
+
+ipcMain.handle("butler:full-reset-relaunch", async (event) => {
+  if (!isAppRendererSender(event) || !fullResetAccepted) return { ok: false, error: { schema: "butler.app.bridge-error.v1", code: "full_reset_not_accepted" } };
+  // Nothing restarts the Agent from here on (ensureServer refuses while quitting).
+  isQuitting = true;
+  const userDataPath = app.getPath("userData");
+  void relaunchAfterFullReset({
+    userDataPath,
+    previousGeneration: await readRecordedDataGeneration(userDataPath),
+    quiesceRenderer: async () => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      mainWindow.hide();
+      await mainWindow.webContents.loadURL("about:blank").catch(() => undefined);
+    },
+    stopAgent: stopAgentForFullReset,
+    clearSessions: clearAppSessions,
+    relaunch: () => {
+      restoreLaunchServerEnvironment(explicitServerUrl);
+      app.relaunch();
+      finalQuitAllowed = true;
+      app.quit();
+    },
+    log: (line) => console.warn(line),
+  });
+  return { ok: true };
+});
+
+function isAppRendererSender(event) {
+  return isSecuritySenderOrigin(event.senderFrame?.origin, { appOrigin: APP_RENDERER_ORIGIN, devOrigin: explicitUiUrl ? rendererOrigin : null });
+}
+
+async function stopAgentForFullReset() {
+  if (shouldUseAppAgentNativeServiceBridge()) return await agentServiceControl.stopAgentService({});
+  if (usesAppForegroundLifecycle) return await stopServerProcess({ reason: "full_reset" });
+  return await bundledAgentSupervisor.stop({ wait: true });
+}
+
+/** Renderer storage for every origin and the signed-in browser partition. */
+async function clearAppSessions() {
+  for (const target of [session.defaultSession, session.fromPartition("persist:butler-web")]) {
+    await target.clearStorageData();
+    await target.clearCache();
+  }
+}
+
+/** createWindow awaited the Agent in these modes, so asking it costs no wait. */
+function agentReadyBeforeWindow() {
+  return rendererUrl === serverUrl || usesAppForegroundLifecycle;
+}
+
+async function reconcileWindowDataGeneration() {
+  const userDataPath = app.getPath("userData");
+  return await reconcileAppDataGeneration({
+    userDataPath,
+    readGeneration: async () => {
+      const response = await appServerFetch("/app-info", { signal: AbortSignal.timeout(appServerProbeTimeoutMs) });
+      const body = await response.json().catch(() => null);
+      return response.ok && body?.protocol_version === appProtocolVersion ? body.data?.data_generation ?? null : null;
+    },
+    clearRendererStorage: () => clearAppOwnedData({ userDataPath, clearSessions: clearAppSessions }),
+  }).catch(() => null);
+}
 
 // Browser import: the native dialog picks the export file; its contents are
 // read only by the Agent and never reach the renderer.

@@ -125,7 +125,10 @@ pub(super) fn settings(
         });
     }
     Ok(SkillSettingsView {
-        storage_root: data.join("skills").to_string_lossy().into_owned(),
+        storage_root: data
+            .join(butler_platform::data_paths::SKILLS)
+            .to_string_lossy()
+            .into_owned(),
         core,
         user,
         projects: views,
@@ -176,7 +179,9 @@ pub(super) fn validation(
 }
 
 fn discover_projects(data: &Path) -> Result<Vec<String>, SkillError> {
-    let root = data.join("skills/projects");
+    let root = data
+        .join(butler_platform::data_paths::SKILLS)
+        .join("projects");
     let entries = match fs::read_dir(root) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -384,10 +389,13 @@ pub(super) fn safe_name(value: &str) -> String {
         .to_owned()
 }
 pub(super) fn user_dir(data: &Path) -> PathBuf {
-    data.join("skills/default")
+    data.join(butler_platform::data_paths::SKILLS)
+        .join("default")
 }
 pub(super) fn project_dir(data: &Path, id: &str) -> PathBuf {
-    data.join("skills/projects").join(safe_name(id))
+    data.join(butler_platform::data_paths::SKILLS)
+        .join("projects")
+        .join(safe_name(id))
 }
 fn core_dir(resources: &Path) -> PathBuf {
     resources.join("skills")

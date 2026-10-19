@@ -74,9 +74,16 @@ pub(in crate::gateway) fn serve(
         state.remote.apply(&state, exposure);
         browser_ports(&state);
         super::content::spawn(content_listener, state.clone(), shutdown.clone());
-        listeners::spawn(listener, state, shutdown)
+        let result = listeners::spawn(listener, state.clone(), shutdown)
             .await
-            .map_err(std::io::Error::other)?
+            .map_err(std::io::Error::other)?;
+        if let Some(headless) = &state.headless {
+            headless.shutdown().await;
+        }
+        if let Some(host) = &state.app_host {
+            host.shutdown().await;
+        }
+        result
     })
 }
 

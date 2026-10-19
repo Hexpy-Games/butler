@@ -64,6 +64,7 @@ pub(super) async fn run_until_stopped(
     let user_home = butler_platform::user_dirs::home_dir()
         .filter(|home| !home.as_os_str().is_empty())
         .ok_or_else(|| failure("native_home_unavailable", "User home is unavailable"))?;
+    crate::host::service::data_reset::recover(explicit_data, &user_home, &installation).await?;
     let mut config =
         support::capture_configuration(explicit_data, &user_home, &installation).await?;
     let listener = if config.app.enabled {
@@ -94,11 +95,28 @@ pub(super) async fn run_until_stopped(
         &mut instance,
     )
     .await;
-    let closed = structured_logs.close().await;
+    let closed = crate::host::service::shutdown_trace::measure(
+        "structured_logs_close",
+        structured_logs.close(),
+    )
+    .await;
+    // serve_initialized has joined App DB/artifact jobs, native dispatcher,
+    // BTCC/conversation/binding stores, memory/cognition, developer capture and
+    // transcript writer. Browser owners are joined by the HTTP listener;
+    // metrics have no independent writer. A close error forbids reset apply.
+    let reset = if result.is_ok() && closed.is_ok() {
+        crate::host::service::shutdown_trace::measure(
+            "data_reset_apply",
+            crate::host::service::data_reset::finish(config.data_root.clone()),
+        )
+        .await
+    } else {
+        Ok(())
+    };
     tokio::task::spawn_blocking(move || drop(instance))
         .await
         .map_err(|error| failure("native_service_instance_release_failed", error.to_string()))?;
-    result.and_then(|session| closed.map(|()| session))
+    result.and_then(|session| closed.and(reset).map(|()| session))
 }
 
 async fn serve_initialized(

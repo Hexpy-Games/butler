@@ -11,6 +11,7 @@
 | `shrink` | `boolean` | `false` keeps the item from shrinking |
 | `basis` | `auto`, `content`, `0`, `xs`, `sm`, `md`, `lg` | Flex basis; named sizes use `--layout-basis-*` (160/200/260/460px) |
 | `minWidth` | `0`, `auto` | `0` lets a flex item shrink below its content (truncation) |
+| `maxWidth` | `full`, `3/5`, `1/2`, `field` | Caps the item's share of its row; `field` caps a form field at `--layout-max-width-field` (320px) and lifts the cap once the row is narrower than `--layout-wrap-width-field` (560px), so a wrapped toolbar field spans the row |
 | `alignSelf` | `start`, `center`, `end`, `stretch`, `baseline` | Cross-axis alignment of this item |
 | `span` | `1`, `2`, `3`, `full` | Grid children only: columns to span |
 

@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tokio::sync::{Semaphore, oneshot};
 use tokio_util::task::TaskTracker;
 
-use butler_core::public_text::trim_js_whitespace;
+use butler_models::models::{NotInlined, display_name, listing_line, not_inlined_block};
 use butler_turn::btcc::{AttachmentKind, AttachmentRef};
 
 use super::{ContextError, ContextResult};
@@ -152,69 +152,43 @@ impl AttachmentContext {
     }
 }
 
-fn safe_name(attachment: &AttachmentRef, index: usize) -> String {
-    attachment
-        .file_name
-        .as_deref()
-        .map(trim_js_whitespace)
-        .filter(|name| !name.is_empty())
-        .map(str::to_owned)
-        .unwrap_or_else(|| format!("attachment-{}", index + 1))
-}
-
-fn kind_text(kind: &AttachmentKind) -> &'static str {
-    match kind {
-        AttachmentKind::Image => "image",
-        AttachmentKind::Audio => "audio",
-        AttachmentKind::Video => "video",
-        AttachmentKind::Document => "document",
-        AttachmentKind::Binary => "binary",
-    }
-}
-
 fn render_now(attachments: &[AttachmentRef], butler_data: &std::path::Path, title: &str) -> String {
-    let mut lines = Vec::with_capacity(1 + attachments.len() * 7);
-    lines.push(format!("## {title}"));
-    for (index, attachment) in attachments.iter().enumerate() {
-        let mime = attachment
-            .mime_type
-            .as_deref()
-            .map(trim_js_whitespace)
-            .filter(|mime| !mime.is_empty())
-            .unwrap_or("application/octet-stream");
-        let size = attachment
-            .size_bytes
-            .filter(|size| size.is_finite())
-            .map(|size| format!("{} bytes", ryu_js::Buffer::new().format_finite(size)))
-            .unwrap_or_else(|| "unknown size".into());
-        lines.push(format!(
-            "- {} ({}, {mime}, {size}, id: {})",
-            safe_name(attachment, index),
-            kind_text(&attachment.kind),
-            attachment.id
-        ));
+    let mut lines = vec![format!("## {title}")];
+    for (index, a) in attachments.iter().enumerate() {
+        let path = read::attachment_file_path(a, butler_data);
+        lines.push(listing_line(a, index, path.as_deref()));
     }
-    let mut remaining = 60_000;
-    for (index, attachment) in attachments.iter().enumerate() {
-        if remaining == 0 {
-            break;
-        }
-        let max_chars = 24_000.min(remaining);
-        let Some(text) = read::attachment_content(attachment, butler_data, max_chars) else {
+    let mut remaining = 60_000usize;
+    for (index, a) in attachments.iter().enumerate() {
+        if a.kind == AttachmentKind::Image {
             continue;
+        }
+        let content = if remaining == 0 {
+            read::Content::NotInlined(NotInlined::Budget)
+        } else {
+            read::attachment_content(a, butler_data, 24_000.min(remaining))
         };
-        if text.is_empty() {
-            continue;
+        match content {
+            read::Content::Inline(text) => {
+                remaining = remaining.saturating_sub(text.encode_utf16().count());
+                lines.extend([
+                    String::new(),
+                    format!("### Attachment Content: {}", display_name(a, index)),
+                    format!("Attachment ID: {}", a.id),
+                    "````text".into(),
+                    text,
+                    "````".into(),
+                ]);
+            }
+            read::Content::NotInlined(reason) => {
+                let path = read::attachment_file_path(a, butler_data);
+                lines.extend([
+                    String::new(),
+                    not_inlined_block(a, index, path.as_deref(), reason),
+                ]);
+            }
+            read::Content::Skip => {}
         }
-        remaining = remaining.saturating_sub(text.encode_utf16().count());
-        lines.extend([
-            String::new(),
-            format!("### Attachment Content: {}", safe_name(attachment, index)),
-            format!("Attachment ID: {}", attachment.id),
-            "````text".into(),
-            text,
-            "````".into(),
-        ]);
     }
     lines.join("\n")
 }

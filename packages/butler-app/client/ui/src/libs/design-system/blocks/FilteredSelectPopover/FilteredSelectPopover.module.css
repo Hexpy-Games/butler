@@ -100,9 +100,11 @@
   display: flex;
   min-width: 0;
   gap: var(--space-xs);
-  margin-top: var(--space-xs);
+  /* The row scrolls (overflow clips), so it keeps --focus-ring-room above the
+     chips; the margin gives that room back so the spacing is unchanged. */
+  margin-top: calc(var(--space-xs) - var(--focus-ring-room));
   overflow-x: auto;
-  padding: 0 var(--space-1) var(--space-1);
+  padding: var(--focus-ring-room) var(--space-1) var(--space-1);
   scrollbar-width: none;
 }
 
@@ -129,6 +131,30 @@
 .footerOptions [data-slot="button"][data-selected="true"] {
   background: var(--selection);
   color: var(--text-primary);
+}
+
+/* Touch chips grow to the 44px hit target; wider padding keeps short labels
+   pills instead of circles. */
+@media (width <= 640px) {
+  .filters
+    [data-slot="button"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ),
+  .footerOptions
+    [data-slot="button"]:not(
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
+    padding-inline: var(--space-md);
+  }
+}
+
+@media (pointer: coarse) {
+  .filters [data-slot="button"],
+  .footerOptions [data-slot="button"] {
+    padding-inline: var(--space-md);
+  }
 }
 
 .results {

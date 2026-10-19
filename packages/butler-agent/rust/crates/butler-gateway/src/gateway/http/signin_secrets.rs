@@ -9,7 +9,7 @@ use std::time::Duration;
 
 /// The product service; another data folder gets its own suffixed service so
 /// test and secondary folders never read or delete the owner's items.
-const SERVICE: &str = "com.hexpy.butler.signin";
+pub(super) const SERVICE: &str = "com.hexpy.butler.signin";
 const STORE_TIMEOUT: Duration = Duration::from_secs(20);
 
 pub(super) struct SignInSecrets {
@@ -42,12 +42,14 @@ fn unavailable() -> HttpError {
 pub(super) const PAYMENT_SERVICE: &str = "com.hexpy.butler.payment";
 /// Autofill profiles' service (birth date, passport and resident numbers).
 pub(super) const AUTOFILL_SERVICE: &str = "com.hexpy.butler.autofill";
+/// The autofill vault's service before the traveler migration.
+pub(super) const LEGACY_TRAVELER_SERVICE: &str = "com.hexpy.butler.traveler";
 
 fn service(root: &Path) -> String {
     service_in(root, SERVICE)
 }
 
-fn service_in(root: &Path, base: &str) -> String {
+pub(super) fn service_in(root: &Path, base: &str) -> String {
     use sha2::{Digest, Sha256};
     let default = butler_platform::user_dirs::home_dir().map(|home| home.join(".butler"));
     let resolve = |path: &Path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
@@ -130,7 +132,7 @@ pub(super) async fn get_in(
     let store = store(state).await?;
     let key = key_in(state, base, entry)?;
     if base == AUTOFILL_SERVICE {
-        let legacy = key_in(state, "com.hexpy.butler.traveler", entry)?;
+        let legacy = key_in(state, LEGACY_TRAVELER_SERVICE, entry)?;
         let migrated = state.signin_secrets.migrated.clone();
         let entry = entry.to_owned();
         return blocking(state, move || {

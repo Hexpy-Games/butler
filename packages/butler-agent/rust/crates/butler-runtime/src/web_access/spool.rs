@@ -30,7 +30,7 @@ impl TemporarySpool {
     pub(super) fn create(data_root: &Path) -> io::Result<(Self, std::fs::File)> {
         fs::create_dir_all(data_root)?;
         let root = data_root.canonical()?;
-        let tmp = root.join("tmp");
+        let tmp = root.join(butler_platform::data_paths::TEMPORARY);
         let spool_dir = tmp.join("web-access-spool");
         create_private_directory(&tmp)?;
         create_private_directory(&spool_dir)?;
