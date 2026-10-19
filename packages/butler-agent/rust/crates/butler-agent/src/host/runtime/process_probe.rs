@@ -40,6 +40,26 @@ impl CognitionCoordinationHost for SystemIdentity {
         butler_models::models::ModelConfigurationClock::now_epoch_millis(self)
     }
 
+    #[cfg(feature = "e2e-fixtures")]
+    fn write_wait_millis(
+        &self,
+        class: butler_memory::coordination::CognitionWaitClass,
+        purpose: Option<&str>,
+    ) -> i64 {
+        let default = match class {
+            butler_memory::coordination::CognitionWaitClass::Interactive => 5_000,
+            butler_memory::coordination::CognitionWaitClass::Background => 30_000,
+        };
+        if purpose != Some("projection") {
+            return default;
+        }
+        std::env::var("BUTLER_E2E_MEMORY_WRITE_WAIT_MS")
+            .ok()
+            .and_then(|value| value.parse::<i64>().ok())
+            .filter(|value| *value > 0)
+            .map_or(default, |value| value.min(default))
+    }
+
     fn now_iso(&self) -> String {
         butler_core::js_date::iso_from_system_time(std::time::SystemTime::now())
     }
