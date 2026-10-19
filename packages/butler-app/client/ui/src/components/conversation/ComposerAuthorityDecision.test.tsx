@@ -170,7 +170,10 @@ test("a structured request reads as a plain question with its examples in full, 
     const rendered = await renderDecision([{ ...renameCard, approval }]);
     expect(rendered.container.textContent).toContain("작업 폴더 밖에서 명령을 실행할까요?");
     const lines = rendered.container.querySelector('[data-slot="composer-decision-details"]')!;
-    expect(lines.querySelector("p")?.textContent).toBe(truncated ? `${command}…` : command);
+    // #836 shows outside-target paths before the command example.
+    expect([...lines.querySelectorAll("p")].map((line) => line.textContent)).toEqual([
+      "elsewhere", truncated ? `${command}…` : command,
+    ]);
     expect(rendered.container.querySelector('[data-test-class="approval-risk"][data-tone="danger"]')?.textContent)
       .toBe("위험 높음");
     expect(decisionButtons(rendered.container)).toEqual(["거절", "이번만 허용", ""]);

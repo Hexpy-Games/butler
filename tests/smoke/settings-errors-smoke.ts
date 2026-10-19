@@ -173,21 +173,23 @@ async function run(width: number, theme: string, locale: string, transport: stri
   }
   await capture(page, `${prefix}-skills-error`);
   await open("wallpaper");
-  await page.locator('[data-option="import-module"]').waitFor();
+  // Appearance has two pickers since #806; these cases cover the home-screen one.
+  const homePicker = '[data-test-class~="settings-main-screen-wallpaper-picker"]';
+  await page.locator(`${homePicker} [data-option="import-module"]`).waitFor();
   await capture(page, `${prefix}-wallpaper-default`);
   for (const errorCode of ["wallpaper_module_archive_invalid", "wallpaper_module_invalid", "wallpaper_module_request_invalid", "wallpaper_module_archive_too_large", "wallpaper_module_file_too_large", "wallpaper_module_exists", "unknown_module_error"]) {
     code = errorCode;
-    await rejectRequest(page, "/wallpaper-modules/import", () => page.locator('[data-option="import-module"] input').setInputFiles({ name: "bad.zip", mimeType: "application/zip", buffer: Buffer.from("invalid") }));
+    await rejectRequest(page, "/wallpaper-modules/import", () => page.locator(`${homePicker} [data-option="import-module"] input`).setInputFiles({ name: "bad.zip", mimeType: "application/zip", buffer: Buffer.from("invalid") }));
     if (!baseline) {
       const key = errorCode.includes("too_large") ? "moduleTooLarge" : errorCode.endsWith("exists") ? "moduleExists" : errorCode.startsWith("unknown") ? "moduleImportFailed" : "moduleInvalid";
-      await tileField(page, '[data-option="import-module"] > button', text(`settings.wallpaper.${key}`, locale)); cases++;
+      await tileField(page, `${homePicker} [data-option="import-module"] > button`, text(`settings.wallpaper.${key}`, locale)); cases++;
     }
   }
   await capture(page, `${prefix}-wallpaper-error`);
   if (!baseline) for (const errorCode of ["wallpaper_unsupported_type", "wallpaper_image_invalid", "wallpaper_dimensions_unsupported", "wallpaper_too_large"]) {
     code = errorCode;
-    await rejectRequest(page, "/wallpapers", () => page.locator('[data-option="upload"] input').setInputFiles({ name: "bad.png", mimeType: "image/png", buffer: Buffer.from("invalid") }));
-    await tileField(page, '[data-option="upload"] button', text(`settings.wallpaper.${errorCode === "wallpaper_too_large" ? "imageTooLarge" : "imageUnsupported"}`, locale)); cases++;
+    await rejectRequest(page, "/wallpapers", () => page.locator(`${homePicker} [data-option="upload"] input`).setInputFiles({ name: "bad.png", mimeType: "image/png", buffer: Buffer.from("invalid") }));
+    await tileField(page, `${homePicker} [data-option="upload"] button`, text(`settings.wallpaper.${errorCode === "wallpaper_too_large" ? "imageTooLarge" : "imageUnsupported"}`, locale)); cases++;
   }
   await capture(page, `${prefix}-image-error`);
   await open("project-wallpaper");
