@@ -1,5 +1,6 @@
 use super::*;
 
+// test-category: race
 #[test]
 fn stop_fence_blocks_reentry_until_persistence_outcome_allows_it() {
     let supervisor = TurnExecutionSupervisor::default();
@@ -19,12 +20,23 @@ fn stop_fence_blocks_reentry_until_persistence_outcome_allows_it() {
         .unwrap();
     let ticket = supervisor.install_stop("turn-1");
     assert!(permit.cancellation().is_cancelled());
-    supervisor.observe_stop_failure(&ticket);
-    drop(permit);
-    assert!(
+    assert_eq!(
         supervisor
             .enter("turn-1", TurnSemanticState::Admitted)
-            .is_err()
+            .err()
+            .unwrap()
+            .code(),
+        BtccCode::TurnCancelled.as_str()
+    );
+    supervisor.observe_stop_failure(&ticket);
+    drop(permit);
+    assert_eq!(
+        supervisor
+            .enter("turn-1", TurnSemanticState::Admitted)
+            .err()
+            .unwrap()
+            .code(),
+        BtccCode::TurnCancelled.as_str()
     );
 
     // A turn already finalizing may still deliver, then retires.
@@ -42,4 +54,21 @@ fn stop_fence_blocks_reentry_until_persistence_outcome_allows_it() {
     supervisor.observe_terminal("turn-1");
     drop(permit);
     assert_eq!(supervisor.registration_count(), 0);
+
+    let supervisor = TurnExecutionSupervisor::default();
+    let permit = supervisor
+        .enter("duplicate", TurnSemanticState::Admitted)
+        .unwrap();
+    let error = supervisor
+        .enter("duplicate", TurnSemanticState::Admitted)
+        .err()
+        .unwrap();
+    assert_eq!(error.code(), BtccCode::TurnFenced.as_str());
+    assert!(!permit.cancellation().is_cancelled());
+    drop(permit);
+    assert!(
+        supervisor
+            .enter("duplicate", TurnSemanticState::Admitted)
+            .is_ok()
+    );
 }
