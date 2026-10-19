@@ -3,6 +3,7 @@
 mod boundaries;
 mod latency;
 mod mount_aliases;
+mod npm_tarball;
 mod project_boundaries;
 mod project_write;
 mod reader_perf;

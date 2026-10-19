@@ -2,12 +2,13 @@
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { strict as assert } from "node:assert";
-import { mkdtempSync, mkdirSync, readdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser";
 import { captureAllowedHosts } from "../support/allowed-hosts-acceptance";
 import { createNativeAppServer } from "../support/native-app-server";
+import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 
 const securityOnly = process.env.BUTLER_BROWSER_UI_SECURITY_ONLY === "1";
 const securityCells = ["ko", "en"].flatMap(locale =>
@@ -25,7 +26,7 @@ runInNewContext(readFileSync("packages/butler-app/client/electron/preload.cjs", 
 assert(exposed.has("butlerApp"));
 assert(exposed.has("butlerBrowser"));
 
-const scratch = mkdtempSync(join(tmpdir(), "browser-ui-"));
+const scratch = realpathSync(mkdtempSync(join(tmpdir(), "browser-ui-")));
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE;
 if (!evidence) throw new Error("BUTLER_BROWSER_EVIDENCE is required");
@@ -44,6 +45,7 @@ let allowedHosts = ["one.example.com"];
 let contentHosts: string[] = [];
 const server = Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(request) {
   const path = new URL(request.url).pathname;
+  if (path === "/library" && request.method === "GET") return Response.json({ protocol_version: "butler.app.v1", data: { items: [] } });
   if (path === "/security") return Response.json({ protocol_version: "butler.app.v1", data: {
     remote_access_enabled: false, bind_addresses: [], lan_urls: [], allowed_hosts: allowedHosts, content_hosts: contentHosts,
   } });
@@ -87,7 +89,12 @@ try {
       await page.screenshot({ path: join(evidence, "harness-debug.png") });
       await page.locator('[data-test-class="browser-area"]').waitFor();
       const slot = page.locator('[data-slot="native-view-slot"]');
-      assert.equal(await slot.getAttribute("data-hidden"), state === "idle" ? null : "true");
+      if (state === "empty") {
+        // #715: the empty page renders NewTabPage internally, with no native view.
+        assert.equal(await page.locator('[data-slot="page-card"]').locator('[data-slot="native-view-slot"]').count(), 0);
+      } else {
+        assert.equal(await slot.getAttribute("data-hidden"), state === "idle" ? null : "true");
+      }
       await page.screenshot({ path: join(evidence, `harness-${locale}-${theme}-${state}.png`) });
       if (state === "idle") {
         await page.getByRole("button", { name: "Overlay", exact: true }).click();
@@ -98,11 +105,21 @@ try {
       }
       if (state === "disabled") assert.equal(await page.locator('[data-test-class="browser-entry"]').getAttribute("aria-disabled"), "true");
       if (state === "empty") {
-        const address = page.getByRole("textbox", { name: locale === "ko" ? "주소" : "Address", exact: true });
+        // #787: address suggestions expose the editing input as a combobox.
+        const address = page.getByRole("combobox", { name: locale === "ko" ? "주소" : "Address", exact: true });
         await address.waitFor();
         assert.equal(await address.evaluate((node) => node === document.activeElement), true);
         assert.equal(await page.getByRole("tab").count(), 1);
-        assert.equal(await page.locator('[data-slot="page-card-content"]').innerText(), "");
+        const appCopy = getAppCopy(locale === "ko" ? "ko-KR" : "en-US");
+        const content = page.locator('[data-slot="page-card-content"]');
+        for (const title of [appCopy.browser.bookmarks, appCopy.browser.recentScraps]) {
+          const sectionTitle = content.getByText(title, { exact: true });
+          await sectionTitle.waitFor();
+          assert.equal(await sectionTitle.isVisible(), true);
+        }
+        const emptyLines = content.getByText(appCopy.browser.emptyLibrary, { exact: true });
+        await emptyLines.nth(1).waitFor();
+        assert.equal(await emptyLines.count(), 2);
         assert.equal(await page.locator('[data-slot="browser-pane"]').evaluate((node) => getComputedStyle(node).outlineStyle), "none");
         assert.equal(await page.locator('[data-slot="page-card"]').getAttribute("data-holder"), "none");
         await page.getByRole("button", { name: locale === "ko" ? "탭 닫기" : "Close tab", exact: true }).click();
@@ -113,7 +130,7 @@ try {
       }
     }
     await page.goto(`http://127.0.0.1:${server.port}/?locale=${locale}&theme=${theme}`);
-    const address = page.getByRole("textbox", { name: locale === "ko" ? "주소" : "Address", exact: true });
+    const address = page.getByRole("combobox", { name: locale === "ko" ? "주소" : "Address", exact: true });
     await address.fill("https://example.com/fixture"); await address.press("Enter");
     assert.equal(await page.evaluate(async () => {
       const bridge = (window as unknown as { butlerBrowser: { call(op: string): Promise<{ keyboardFocused: boolean }> } }).butlerBrowser;
