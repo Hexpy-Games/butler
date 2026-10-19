@@ -106,6 +106,6 @@ export function readLogStorage(): Promise<LogStorageView> {
   return api<LogStorageView>("/logs/storage");
 }
 
-export function clearLogs(): Promise<{ freed_bytes: number }> {
-  return api<{ freed_bytes: number }>("/logs", { method: "DELETE" });
+export function clearLogs(): Promise<{ agent_freed_bytes: number }> {
+  return api<{ agent_freed_bytes: number }>("/logs", { method: "DELETE" });
 }
