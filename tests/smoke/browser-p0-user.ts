@@ -17,6 +17,7 @@ export async function visitUserSite(app: P0App, url: string, evidence?: string) 
   const id = await app.page.expression<string>(`window.butlerBrowser.call('create',${JSON.stringify({ url })})`);
   try {
     await waitFor(() => app.page.expression(`window.butlerBrowser.call('state').then(s=>s.tabs.some(t=>t.id===${JSON.stringify(id)}&&t.status==='idle'&&t.url===${JSON.stringify(url)}))`), "public USER navigation complete");
+    await waitFor(() => app.main.evaluate(`browserP0.productLoaded(${JSON.stringify(id)},${JSON.stringify(url)})`), "USER page loaded");
     await waitFor(() => app.main.evaluate(`browserP0.productView(${JSON.stringify(id)}).attached`), "USER native view attached");
     const load1 = loadavg()[0];
     const result = await app.main.evaluate<{ jpegBytes: number }>(`browserP0.productStep(${JSON.stringify(id)})`);

@@ -28,7 +28,16 @@ pub(super) fn ensure(connection: &mut Connection, now: &str) -> CognitionResult<
     migration::nullable_source_ids(connection)?;
     base::create(connection)?;
     base::ensure_historical_columns(connection)?;
-    migration::legacy_failures(connection, now)
+    migration::legacy_failures(connection, now)?;
+    migration::interrupted_failures(connection, now)
+}
+
+/// The recovery lease also upgrades already-indexed serving graphs.
+pub(super) fn recover_interrupted_failures(
+    connection: &mut Connection,
+    now: &str,
+) -> CognitionResult<()> {
+    migration::interrupted_failures(connection, now)
 }
 
 pub(super) fn ensure_column(
