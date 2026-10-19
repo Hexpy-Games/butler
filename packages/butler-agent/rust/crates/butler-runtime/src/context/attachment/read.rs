@@ -4,26 +4,16 @@ use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
-use butler_core::public_text::trim_js_whitespace;
+use butler_models::models::{
+    MAX_INLINE_BYTES, NotInlined, decode_text, is_pdf, is_text, message_file_path,
+};
 use butler_turn::btcc::{AttachmentKind, AttachmentRef};
 
 use super::clip;
 
-const MAX_ATTACHMENT_BYTES_TO_READ: u64 = 512_000;
 const PDF_MISSING: &str = "[PDF attachment is unavailable; its contents have not been read.]";
 const PDF_TEXT_MISSING: &str =
     "[PDF text extraction is unavailable; its contents have not been read.]";
-
-fn message_file_id(id: &str) -> bool {
-    let Some((prefix, suffix)) = id.get(..5).zip(id.get(5..)) else {
-        return false;
-    };
-    prefix.eq_ignore_ascii_case("file-")
-        && suffix.len() == 36
-        && suffix
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit() || byte == b'-')
-}
 
 fn lexical_absolute(path: &Path) -> Option<PathBuf> {
     let mut resolved = PathBuf::new();
@@ -46,13 +36,12 @@ fn lexical_absolute(path: &Path) -> Option<PathBuf> {
     Some(resolved)
 }
 
-fn attachment_file_path(attachment: &AttachmentRef, butler_data: &Path) -> Option<PathBuf> {
-    if message_file_id(&attachment.id) {
-        return Some(
-            butler_data
-                .join("app-server/message-files")
-                .join(&attachment.id),
-        );
+pub(super) fn attachment_file_path(
+    attachment: &AttachmentRef,
+    butler_data: &Path,
+) -> Option<PathBuf> {
+    if let Some(path) = message_file_path(butler_data, &attachment.id) {
+        return Some(path);
     }
     let local = Path::new(attachment.local_path.as_deref()?);
     if !local.is_absolute() {
@@ -62,107 +51,50 @@ fn attachment_file_path(attachment: &AttachmentRef, butler_data: &Path) -> Optio
     resolved.exists().then_some(resolved)
 }
 
-fn is_pdf(attachment: &AttachmentRef) -> bool {
-    attachment.mime_type.as_deref().is_some_and(|mime| {
-        trim_js_whitespace(mime.split(';').next().unwrap_or_default()).to_lowercase()
-            == "application/pdf"
-    }) || attachment
-        .file_name
-        .as_deref()
-        .is_some_and(|name| name.to_lowercase().ends_with(".pdf"))
+pub(super) enum Content {
+    Inline(String),
+    NotInlined(NotInlined),
+    Skip,
 }
 
-fn is_text(attachment: &AttachmentRef) -> bool {
-    if attachment.kind == AttachmentKind::Document {
-        return true;
+fn read_attachment_bytes(
+    attachment: &AttachmentRef,
+    butler_data: &Path,
+) -> Result<Vec<u8>, NotInlined> {
+    let path = attachment_file_path(attachment, butler_data).ok_or(NotInlined::Unreadable)?;
+    let metadata = fs::metadata(&path).map_err(|_| NotInlined::Unreadable)?;
+    if !metadata.is_file() {
+        return Err(NotInlined::Unreadable);
     }
-    let mime = attachment
-        .mime_type
-        .as_deref()
-        .unwrap_or_default()
-        .to_lowercase();
-    if mime.starts_with("text/")
-        || matches!(
-            mime.as_str(),
-            "application/json"
-                | "application/ld+json"
-                | "application/markdown"
-                | "application/xml"
-                | "application/yaml"
-                | "application/x-yaml"
-                | "application/javascript"
-                | "application/typescript"
-        )
-    {
-        return true;
+    if metadata.len() > MAX_INLINE_BYTES {
+        return Err(NotInlined::TooLarge);
     }
-    let name = attachment.file_name.as_deref().unwrap_or_default();
-    let name = name.rsplit('/').next().unwrap_or(name);
-    let extension = name
-        .rfind('.')
-        .filter(|index| *index > 0)
-        .map(|index| &name[index..])
-        .unwrap_or_default()
-        .to_lowercase();
-    matches!(
-        extension.as_str(),
-        ".md"
-            | ".markdown"
-            | ".txt"
-            | ".json"
-            | ".jsonl"
-            | ".yaml"
-            | ".yml"
-            | ".xml"
-            | ".csv"
-            | ".tsv"
-            | ".js"
-            | ".jsx"
-            | ".ts"
-            | ".tsx"
-            | ".css"
-            | ".html"
-    )
-}
-
-fn read_attachment_bytes(attachment: &AttachmentRef, butler_data: &Path) -> Option<Vec<u8>> {
-    let path = attachment_file_path(attachment, butler_data)?;
-    if message_file_id(&attachment.id) {
-        let root = lexical_absolute(&butler_data.join("app-server/message-files"))?;
-        let resolved = lexical_absolute(&path)?;
-        if !resolved.starts_with(&root) || resolved == root {
-            return None;
-        }
-    }
-    let metadata = fs::metadata(&path).ok()?;
-    if !metadata.is_file() || metadata.len() > MAX_ATTACHMENT_BYTES_TO_READ {
-        return None;
-    }
-    let mut bytes = Vec::with_capacity(usize::try_from(metadata.len()).unwrap_or(usize::MAX));
+    let capacity = usize::try_from(metadata.len()).map_err(|_| NotInlined::TooLarge)?;
+    let mut bytes = Vec::with_capacity(capacity);
     File::open(path)
-        .ok()?
-        .take(MAX_ATTACHMENT_BYTES_TO_READ + 1)
-        .read_to_end(&mut bytes)
-        .ok()?;
-    (bytes.len() <= usize::try_from(MAX_ATTACHMENT_BYTES_TO_READ).unwrap_or(usize::MAX))
-        .then_some(bytes)
+        .and_then(|f| f.take(MAX_INLINE_BYTES + 1).read_to_end(&mut bytes))
+        .map_err(|_| NotInlined::Unreadable)?;
+    if bytes.len() as u64 > MAX_INLINE_BYTES {
+        return Err(NotInlined::TooLarge);
+    }
+    Ok(bytes)
 }
 
 pub(super) fn attachment_content(
     attachment: &AttachmentRef,
     butler_data: &Path,
     max_chars: usize,
-) -> Option<String> {
+) -> Content {
     // VerifiedImagePayloadPort alone may read original image bytes.
     if attachment.kind == AttachmentKind::Image {
-        return None;
+        return Content::Skip;
     }
     if is_pdf(attachment) {
         let Some(original) = attachment_file_path(attachment, butler_data) else {
-            return Some(PDF_MISSING.into());
+            return Content::Inline(PDF_MISSING.into());
         };
         let sidecar = PathBuf::from(format!("{}.txt", original.display()));
-        return Some(
+        return Content::Inline(
             match File::open(&sidecar).and_then(|file| clip::from_reader(file, max_chars)) {
                 Ok(preview) => format!(
                     "Full extracted text file (use a file-reading command for sections beyond this preview): {}\n{}",
@@ -174,10 +106,12 @@ pub(super) fn attachment_content(
         );
     }
     if !is_text(attachment) {
-        return None;
+        return Content::NotInlined(NotInlined::Format);
     }
-    let bytes = read_attachment_bytes(attachment, butler_data)?;
-    let text = String::from_utf8_lossy(&bytes);
-    let without_nul = text.replace('\0', "");
-    clip::from_text(&without_nul, max_chars)
+    match read_attachment_bytes(attachment, butler_data) {
+        Ok(bytes) => clip::from_text(&decode_text(&bytes), max_chars)
+            .map(Content::Inline)
+            .unwrap_or(Content::Skip),
+        Err(reason) => Content::NotInlined(reason),
+    }
 }

@@ -64,12 +64,14 @@ export function useFileAttachments(
     const accepted: ComposerAttachment[] = [];
     const failed: string[] = [];
     const oversized: string[] = [];
+    const empty: string[] = [];
     setUploadingCount((count) => count + files.length);
     for (const file of files) {
       if (!isMountedRef.current || uploadEpochRef.current !== uploadEpoch)
         break;
-      if (file.size > ATTACHMENT_MAX_BYTES) {
-        oversized.push(file.name);
+      if (file.size === 0 || file.size > ATTACHMENT_MAX_BYTES) {
+        if (file.size === 0) empty.push(file.name);
+        else oversized.push(file.name);
         if (isMountedRef.current && uploadEpochRef.current === uploadEpoch) {
           setUploadingCount((count) => Math.max(0, count - 1));
         }
@@ -100,6 +102,12 @@ export function useFileAttachments(
     if (failed.length > 0) {
       notifyError(new Error(appCopy.feedback.attachmentRetry(failed.join(", "))), appCopy.feedback.attachmentFailed, {
         id: `attachment-${activeChatId}`,
+      });
+    }
+    if (empty.length > 0) {
+      const message = appCopy.feedback.attachmentEmpty(empty.join(", "));
+      notifyError(new Error(message), appCopy.feedback.attachmentFailed, {
+        id: `attachment-empty-${activeChatId}`, title: message,
       });
     }
     if (oversized.length > 0) {

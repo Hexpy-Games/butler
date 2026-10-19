@@ -1,5 +1,6 @@
 //! File-only App uploads, downloads, project originals, and outbound artifacts.
 
+mod classify;
 mod materialize;
 mod names;
 mod path;

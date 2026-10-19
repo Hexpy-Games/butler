@@ -98,7 +98,8 @@ async fn execute_effect(
     let decision =
         super::access::decision_for_kind(owner, call, &Value::Object(call.arguments.clone()), kind)
             .await
-            .map_err(ToolExecutionError::Integrity)?;
+            .map_err(ToolExecutionError::Integrity)?
+            .decision;
     if let Some(refusal) = admission_refusal(owner, call, decision).await? {
         return Ok(refusal);
     }
