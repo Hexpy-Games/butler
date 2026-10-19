@@ -10,7 +10,7 @@ import { resolve, join, dirname } from "node:path";
 import { getAppCopy } from "../../packages/butler-i18n/src";
 import { onboardingCompletedPatch } from "../../packages/butler-app/client/ui/src/app/onboarding";
 import { PROVIDER_CARDS } from "../../packages/butler-app/client/ui/src/app/setupProviders";
-import { createNativeAppServer } from "../support/native-app-server";
+import { AGENT_EXECUTABLE_NAME, createNativeAppServer } from "../support/native-app-server";
 import { firstRunElectron } from "../support/first-run-electron";
 import { firstRunStub } from "../support/first-run-stub";
 import { nativeSmokeRuntime } from "../support/native-smoke-runtime";
@@ -148,7 +148,7 @@ try {
   await page.locator('[data-test-class="workspace"]').waitFor();
 
   // Preserve the real helper stdout/exit path while replacing its provider/network work.
-  await main(`(()=>{process.env.BUTLER_NATIVE_AGENT_EXECUTABLE=${JSON.stringify(join(dirname(server.butlerData), "install/bin/butler-agent"))};const cp=process.getBuiltinModule('child_process');const spawn=cp.spawn;
+  await main(`(()=>{process.env.BUTLER_NATIVE_AGENT_EXECUTABLE=${JSON.stringify(join(dirname(server.butlerData), "install/bin", AGENT_EXECUTABLE_NAME))};const cp=process.getBuiltinModule('child_process');const spawn=cp.spawn;
     cp.spawn=function(command,args,options){if(args?.includes('oauth-login')){const child=spawn(process.execPath,
       ['-e',${JSON.stringify(`console.log(${JSON.stringify(helperUrl)});setInterval(()=>{},1000)`)}],
       {...options,env:{...options.env,ELECTRON_RUN_AS_NODE:'1'}});globalThis.providerAuthChild=child;process.once('exit',()=>child.kill('SIGTERM'));return child}return spawn(command,args,options)};
