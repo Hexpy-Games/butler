@@ -10,8 +10,8 @@ use butler_turn::conversation::{ConversationSession, ConversationSourceReader, S
 use indexmap::IndexSet;
 
 use super::{
-    CandidateKind, InventoryCandidate, RecallFilter, invalid_generation, read_canonical_inventory,
-    recovered_candidate, source_key, turn_candidate, unavailable,
+    CandidateKind, FaultScope, InventoryCandidate, RecallFilter, invalid_generation,
+    read_canonical_inventory, recovered_or_fault, source_key, turn_candidate, unavailable,
 };
 use crate::cognition::CognitionResult;
 use crate::cognition::graph::{GraphRecallReader, InventoryPhase, Uncovered};
@@ -105,6 +105,14 @@ fn incremental(
         partial: false,
     };
     let changed = pass.changes(state.mark.seq)?;
+    // Pruning drops the oldest rows first: while the watermark row is still
+    // there, every change after it was read.
+    if !reader
+        .source_change_holds(&state.mark)
+        .map_err(unavailable)?
+    {
+        return Ok(None);
+    }
     if !pass.partial {
         pass.fresh(&changed)?;
     }
@@ -209,7 +217,7 @@ impl Pass<'_> {
             if !self.session_admitted(&message.message.session_id)? {
                 continue;
             }
-            let candidate = recovered_candidate(&message)?;
+            let candidate = recovered_or_fault(&message)?;
             self.uncovered_entry(&candidate, true)?;
         }
         Ok(())
@@ -246,13 +254,18 @@ impl Pass<'_> {
     }
 
     fn stored_entry(&mut self, candidate: &InventoryCandidate) -> CognitionResult<()> {
-        if let Some(fault) = candidate.fault.as_ref().filter(|fault| fault.every_recall) {
+        let scope = candidate.fault.as_ref().map(|fault| fault.scope);
+        if let Some(fault) = &candidate.fault
+            && fault.scope == FaultScope::EveryRecall
+        {
             return Err(fault.error());
         }
         if !self.session_admitted(&candidate.session_id)? {
             return Ok(());
         }
-        if let Some(fault) = &candidate.fault {
+        if let Some(fault) = &candidate.fault
+            && scope == Some(FaultScope::AdmittedSession)
+        {
             return Err(fault.error());
         }
         self.uncovered_entry(candidate, false)
@@ -279,6 +292,9 @@ impl Pass<'_> {
         };
         if !admitted {
             return Ok(());
+        }
+        if let Some(fault) = &candidate.fault {
+            return Err(fault.error());
         }
         let Some(revision) = &eligible.revision else {
             return Err(invalid_generation());

@@ -21,14 +21,15 @@ use crate::cognition::sources::InventoryCandidate;
 pub(in crate::cognition) use rows::Uncovered;
 
 /// Row derivation and schema version; a change rebuilds the rows.
-const FORMAT: &str = "2";
+const FORMAT: &str = "3";
 
 const SCHEMA: &str = "
-CREATE TABLE IF NOT EXISTS memory_canonical_inventory(source_key TEXT PRIMARY KEY,kind TEXT NOT NULL,entity_id TEXT NOT NULL,session_id TEXT NOT NULL,request_message_id TEXT,assistant_message_id TEXT,eligible INTEGER NOT NULL,episode_id TEXT,revision TEXT,created_at_json TEXT NOT NULL,fault TEXT,fault_every_recall INTEGER NOT NULL DEFAULT 0,covered INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS memory_canonical_inventory(source_key TEXT PRIMARY KEY,kind TEXT NOT NULL,entity_id TEXT NOT NULL,session_id TEXT NOT NULL,request_message_id TEXT,assistant_message_id TEXT,eligible INTEGER NOT NULL,episode_id TEXT,revision TEXT,created_at_json TEXT NOT NULL,fault TEXT,fault_scope TEXT,covered INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS idx_canonical_inventory_episode ON memory_canonical_inventory(episode_id) WHERE episode_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_canonical_inventory_request ON memory_canonical_inventory(request_message_id) WHERE request_message_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_canonical_inventory_answer ON memory_canonical_inventory(assistant_message_id) WHERE assistant_message_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_canonical_inventory_uncovered ON memory_canonical_inventory(session_id,source_key) WHERE eligible=1 AND covered=0;
+CREATE INDEX IF NOT EXISTS idx_canonical_inventory_unreadable ON memory_canonical_inventory(session_id,source_key) WHERE eligible=1 AND covered=0 AND revision IS NULL;
 ";
 
 /// Whether the row's episode revision is completely projected; recall's

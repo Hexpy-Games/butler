@@ -176,6 +176,17 @@ async fn mem_coverage_scale_reads_the_mirror() -> Result<(), HarnessError> {
     let (full, full_ms) = recall_in(&s, &chats[3], &v[0]).await?;
     show_mirror(&data, &phase);
     assert_eq!(episodes(&full), episodes(&projected));
+    // The full scan reads the same stores; when it outruns the candidate
+    // deadline it can only report its inventory partial.
+    let cut = json!(["ingestion_inventory_partial"]);
+    if full["output"]["coverage"]["source"]["codes"] == cut {
+        assert_eq!(
+            full["output"]["coverage"]["graph"]["codes"][0], cut[0],
+            "{full}"
+        );
+    } else {
+        assert_eq!(coverage(&full), coverage(&projected), "{full}");
+    }
 
     // A turn the mirror has not applied yet is still reported.
     let at = "2026-02-28T00:00:00.000Z";

@@ -3,7 +3,9 @@
 //! the changes after the mirror's watermark), so a failed step only delays
 //! the mirror. An unchanged store reads two values and writes nothing.
 
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use parking_lot::Mutex;
 
 use super::blocking;
 use super::process::{Input, canonical_path, resolve_input_generation};
@@ -16,41 +18,79 @@ use crate::cognition::{
 use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire};
 use butler_turn::conversation::ConversationSourceReader;
 
-/// One step when the mirror may be behind; true while more steps remain.
-/// Without a canonical change or queued notice since the last finished step
-/// it reads nothing.
-pub(super) async fn run(input: &Input) -> bool {
-    if !input.inventory_due.swap(false, Ordering::AcqRel) {
-        return false;
+/// When the inventory mirror may be behind: at start, after a canonical
+/// change, after a queue head changed or was processed, and while a step
+/// left work or could not run.
+#[derive(Default)]
+pub(super) struct InventoryWake {
+    due: AtomicBool,
+    queue_head: Mutex<Option<String>>,
+}
+
+impl InventoryWake {
+    /// Due at start.
+    pub(super) fn started() -> Self {
+        Self {
+            due: AtomicBool::new(true),
+            queue_head: Mutex::new(None),
+        }
     }
-    match step(input).await {
-        Ok(more) => {
-            if more {
-                input.inventory_due.store(true, Ordering::Release);
-            }
-            more
+
+    pub(super) fn mark(&self) {
+        self.due.store(true, Ordering::Release);
+    }
+
+    /// A completion notice follows its canonical commit; a deferred head
+    /// that stays the same brings nothing new.
+    pub(super) fn queue_head(&self, head: Option<&str>, processed: bool) {
+        let mut last = self.queue_head.lock();
+        if processed || last.as_deref() != head {
+            self.mark();
         }
-        Err(error) => {
-            // Retried on the next poll, without spinning on this one.
-            butler_core::diagnostic!("[native-memory-inventory] {}", error.code());
-            input.inventory_due.store(true, Ordering::Release);
-            false
-        }
+        *last = head.map(str::to_owned);
     }
 }
 
-async fn step(input: &Input) -> CognitionResult<bool> {
+/// What one poll's inventory step did.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Step {
+    /// Nothing to do, or the mirror caught up.
+    Done,
+    /// Wrote a step and more remain.
+    More,
+    /// Could not run now (no generation, write lease busy, failed); retried
+    /// on a later poll.
+    Busy,
+}
+
+/// One step when the mirror may be behind. Without a reason to look since
+/// the last finished step it reads nothing.
+pub(super) async fn run(input: &Input) -> Step {
+    if !input.inventory.due.swap(false, Ordering::AcqRel) {
+        return Step::Done;
+    }
+    let step = step(input).await.unwrap_or_else(|error| {
+        butler_core::diagnostic!("[native-memory-inventory] {}", error.code());
+        Step::Busy
+    });
+    if step != Step::Done {
+        input.inventory.mark();
+    }
+    step
+}
+
+async fn step(input: &Input) -> CognitionResult<Step> {
     let owned = input.clone();
     let handle = match blocking::run(move || resolve_input_generation(&owned)).await {
         Ok(handle) => handle,
         Err(error) if error.code() == CognitionCode::MemoryGenerationUnavailable.as_str() => {
-            return Ok(false);
+            return Ok(Step::Busy);
         }
         Err(error) => return Err(error),
     };
     let (owned, generation) = (input.clone(), handle.clone());
     if !blocking::run(move || needed(&owned, &generation)).await? {
-        return Ok(false);
+        return Ok(Step::Done);
     }
     let lock = input.environment.consolidation_lock(&input.data_root);
     let Some(lease) = input
@@ -62,7 +102,7 @@ async fn step(input: &Input) -> CognitionResult<bool> {
         .await
         .map_err(crate::cognition::CognitionError::from)?
     else {
-        return Ok(false);
+        return Ok(Step::Busy);
     };
     let owned = input.clone();
     blocking::run(move || {
@@ -91,7 +131,7 @@ async fn step(input: &Input) -> CognitionResult<bool> {
         let released = lease
             .release(result.is_ok())
             .map_err(crate::cognition::CognitionError::from);
-        result.and_then(|more| released.map(|()| more))
+        result.and_then(|more| released.map(|()| if more { Step::More } else { Step::Done }))
     })
     .await
 }

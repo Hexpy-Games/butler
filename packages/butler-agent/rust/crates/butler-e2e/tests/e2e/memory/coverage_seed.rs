@@ -150,3 +150,28 @@ pub(super) fn restore(backup: &Path, store: &Path) {
     std::fs::copy(backup, store).unwrap();
     drop(sqlite::open(store).unwrap());
 }
+
+/// Logs about `changes` source changes on turn `turn` of `session` through
+/// the store's own triggers: tool messages added to the turn, then their
+/// status flipped back and forth.
+pub(super) fn churn(db: &Connection, session: &str, turn: &str, changes: usize) {
+    const MESSAGES: usize = 1_000;
+    db.execute_batch("BEGIN").unwrap();
+    for index in 0..MESSAGES {
+        db.execute(
+            "INSERT INTO conversation_messages(id,session_id,turn_id,seq,role,status,visibility,provenance,created_at,origin_kind) \
+             VALUES(?1,?2,?3,?4,'tool','complete','model','trusted','2026-02-10T00:00:00.000Z','internal_control')",
+            params![format!("{turn}-tool-{index}"), session, turn, 50_000 + index],
+        )
+        .unwrap();
+    }
+    for _ in 0..changes.div_ceil(MESSAGES) {
+        db.execute(
+            "UPDATE conversation_messages SET status=CASE status WHEN 'complete' THEN 'failed' ELSE 'complete' END \
+             WHERE turn_id=?1 AND role='tool'",
+            [turn],
+        )
+        .unwrap();
+    }
+    db.execute_batch("COMMIT").unwrap();
+}

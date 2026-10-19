@@ -2,13 +2,13 @@
 //! inventory of every recall, before any scope or time applies.
 
 use butler_turn::conversation::{
-    ConversationMessageWithParts, ConversationOriginKind, ConversationRole,
+    ConversationError, ConversationMessageWithParts, ConversationOriginKind, ConversationRole,
     ConversationSourceReader, ConversationStatus, RecallOutcomeRow, decode_message_scalars,
 };
 
 use super::super::identity::{RevisionTail, episode_revision, recovered_parts_hash};
 use super::{hash, unavailable};
-use crate::cognition::CognitionResult;
+use crate::cognition::{CognitionError, CognitionResult};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::cognition) enum CandidateKind {
@@ -33,14 +33,25 @@ pub(in crate::cognition) struct InventoryCandidate {
     pub fault: Option<SourceFault>,
 }
 
-/// A source the store could not read.
+/// A source whose stored data could not be read.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(in crate::cognition) struct SourceFault {
     pub message: String,
-    /// The full scan reads it for every recall (a recall outcome or a
-    /// recovered message page) rather than only once its session is
-    /// admitted (a turn's request and answer).
-    pub every_recall: bool,
+    pub scope: FaultScope,
+}
+
+/// Which recalls report a fault, as the full canonical scan reads it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::cognition) enum FaultScope {
+    /// Every recall: a recall outcome or recovered message page is read
+    /// before any scope applies.
+    EveryRecall,
+    /// A recall that admits the source's session: a turn's request and
+    /// answer are read once its session is in scope.
+    AdmittedSession,
+    /// A recall that admits the source by scope and time: a recovered
+    /// message's revision is computed last.
+    AdmittedInTime,
 }
 
 impl SourceFault {
@@ -50,6 +61,24 @@ impl SourceFault {
             self.message.clone(),
         )
     }
+}
+
+/// The message to keep for a source whose read failed with `error` when
+/// its stored data is unreadable; a store failure (busy, I/O, memory) is
+/// returned so the step retries instead.
+pub(in crate::cognition) fn fault_message(error: CognitionError) -> CognitionResult<String> {
+    let mut cause = std::error::Error::source(&error);
+    while let Some(current) = cause {
+        if let Some(store) = current.downcast_ref::<ConversationError>() {
+            return if store.is_unreadable_data() {
+                Ok(error.message())
+            } else {
+                Err(error)
+            };
+        }
+        cause = current.source();
+    }
+    Ok(error.message())
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -120,31 +149,63 @@ pub(in crate::cognition) fn turn(
     })
 }
 
-/// [`turn`], keeping a read failure as the candidate's fault.
+/// [`turn`], keeping unreadable stored data as the candidate's fault.
 pub(in crate::cognition) fn turn_or_fault(
     reader: &ConversationSourceReader,
     outcome: &RecallOutcomeRow,
-) -> InventoryCandidate {
-    turn(reader, outcome).unwrap_or_else(|error| InventoryCandidate {
-        request_message_id: outcome.request_message_id.clone(),
-        assistant_message_id: outcome.public_assistant_message_id.clone(),
-        ..faulted(
-            CandidateKind::Turn,
-            &outcome.turn_id,
-            &outcome.session_id,
-            error.message().clone(),
-            false,
-        )
-    })
+) -> CognitionResult<InventoryCandidate> {
+    match turn(reader, outcome) {
+        Ok(candidate) => Ok(candidate),
+        Err(error) => Ok(InventoryCandidate {
+            request_message_id: outcome.request_message_id.clone(),
+            assistant_message_id: outcome.public_assistant_message_id.clone(),
+            ..faulted(
+                CandidateKind::Turn,
+                &outcome.turn_id,
+                &outcome.session_id,
+                fault_message(error)?,
+                FaultScope::AdmittedSession,
+            )
+        }),
+    }
 }
 
-/// A source whose read failed with `error`.
+/// [`recovered`], keeping a failed revision as a fault reported where the
+/// recovered message is admitted.
+pub(in crate::cognition) fn recovered_or_fault(
+    message: &ConversationMessageWithParts,
+) -> CognitionResult<InventoryCandidate> {
+    match recovered(message) {
+        Ok(candidate) => Ok(candidate),
+        Err(error) => {
+            let id = &message.message.id;
+            let session = &message.message.session_id;
+            let scope = FaultScope::AdmittedInTime;
+            Ok(InventoryCandidate {
+                eligible: Some(EligibleSource {
+                    episode_id: message_episode_id(id)?,
+                    revision: None,
+                    created_at: vec![message.message.created_at.clone()],
+                }),
+                ..faulted(
+                    CandidateKind::Message,
+                    id,
+                    session,
+                    fault_message(error)?,
+                    scope,
+                )
+            })
+        }
+    }
+}
+
+/// A source whose stored data could not be read.
 pub(in crate::cognition) fn faulted(
     kind: CandidateKind,
     id: &str,
     session_id: &str,
     message: String,
-    every_recall: bool,
+    scope: FaultScope,
 ) -> InventoryCandidate {
     InventoryCandidate {
         kind,
@@ -153,10 +214,7 @@ pub(in crate::cognition) fn faulted(
         request_message_id: None,
         assistant_message_id: None,
         eligible: None,
-        fault: Some(SourceFault {
-            message,
-            every_recall,
-        }),
+        fault: Some(SourceFault { message, scope }),
     }
 }
 

@@ -4,12 +4,14 @@
 //! store cannot read is kept as a fault row, so one bad row never stops the
 //! mirror; recall reports it where the full scan would.
 
-use butler_turn::conversation::{ConversationSourceReader, SourceChangeKind, SourceChangeMark};
+use butler_turn::conversation::{
+    ConversationError, ConversationSourceReader, SourceChange, SourceChangeKind, SourceChangeMark,
+};
 use indexmap::{IndexMap, IndexSet};
 
 use super::{
-    CandidateKind, InventoryCandidate, faulted, recovered_candidate, source_key, turn_or_fault,
-    unavailable,
+    CandidateKind, FaultScope, InventoryCandidate, faulted, recovered_or_fault, source_key,
+    turn_or_fault, unavailable,
 };
 use crate::cognition::CognitionResult;
 use crate::cognition::graph::{GraphRepository, InventoryPhase, InventoryState, InventoryWrite};
@@ -70,7 +72,8 @@ pub(in crate::cognition) fn sync_needed(
     )
 }
 
-/// Applies one step in one transaction; true while more steps remain.
+/// Applies one step in one transaction; true while more steps remain. A
+/// store failure (busy, I/O) fails the step, which the next poll retries.
 pub(in crate::cognition) fn sync_step(
     graph: &mut GraphRepository,
     reader: &ConversationSourceReader,
@@ -79,7 +82,21 @@ pub(in crate::cognition) fn sync_step(
         return Ok(false);
     };
     graph.install_canonical_inventory()?;
-    let Some(state) = current(graph.canonical_inventory_state()?, reader, &identity)? else {
+    let state = current(graph.canonical_inventory_state()?, reader, &identity)?;
+    let write = match &state {
+        None => None,
+        Some(state) => match &state.phase {
+            InventoryPhase::Outcomes(cursor) => {
+                Some(build_outcomes(reader, state, cursor.as_deref())?)
+            }
+            InventoryPhase::Messages(cursor) => {
+                Some(build_messages(reader, state, cursor.as_deref())?)
+            }
+            InventoryPhase::Ready if state.mark.seq >= head.seq => return Ok(false),
+            InventoryPhase::Ready => apply_changes(graph, reader, state)?,
+        },
+    };
+    let Some(write) = write else {
         // Changes after `head` are applied once the build is done.
         graph.write_canonical_inventory(&InventoryWrite {
             reset: true,
@@ -92,12 +109,6 @@ pub(in crate::cognition) fn sync_step(
             },
         })?;
         return Ok(true);
-    };
-    let write = match &state.phase {
-        InventoryPhase::Outcomes(cursor) => build_outcomes(reader, &state, cursor.as_deref())?,
-        InventoryPhase::Messages(cursor) => build_messages(reader, &state, cursor.as_deref())?,
-        InventoryPhase::Ready if state.mark.seq >= head.seq => return Ok(false),
-        InventoryPhase::Ready => apply_changes(graph, reader, &state)?,
     };
     let more = write.state.phase != InventoryPhase::Ready || write.state.mark.seq < head.seq;
     graph.write_canonical_inventory(&write)?;
@@ -112,19 +123,13 @@ fn build_outcomes(
     let entries = reader
         .read_recall_outcome_entries(cursor, Some(PAGE))
         .map_err(unavailable)?;
-    let upserts = entries
-        .iter()
-        .map(|entry| match &entry.row {
-            Ok(outcome) => turn_or_fault(reader, outcome),
-            Err(error) => faulted(
-                CandidateKind::Turn,
-                &entry.turn_id,
-                &entry.session_id,
-                error.to_string(),
-                true,
-            ),
-        })
-        .collect();
+    let mut upserts = Vec::with_capacity(entries.len());
+    for entry in &entries {
+        upserts.push(match &entry.row {
+            Ok(outcome) => turn_or_fault(reader, outcome)?,
+            Err(error) => every_recall_fault(CandidateKind::Turn, &entry.turn_id, error)?,
+        });
+    }
     let phase = match entries.last() {
         Some(last) if entries.len() == PAGE => InventoryPhase::Outcomes(Some(last.id.clone())),
         _ => InventoryPhase::Messages(None),
@@ -142,7 +147,7 @@ fn build_messages(
         .map_err(unavailable)?;
     let mut upserts = Vec::with_capacity(ids.len());
     for id in &ids {
-        upserts.extend(recovered_row(reader, id));
+        upserts.extend(recovered_row(reader, id)?);
     }
     let phase = match ids.last() {
         Some(last) if ids.len() == PAGE => InventoryPhase::Messages(Some(last.clone())),
@@ -151,42 +156,46 @@ fn build_messages(
     Ok(build_write(state, upserts, phase))
 }
 
+/// A row the full scan reads for every recall, kept as a fault when its
+/// stored data is unreadable; a store failure fails the step.
+fn every_recall_fault(
+    kind: CandidateKind,
+    id: &str,
+    error: &ConversationError,
+) -> CognitionResult<InventoryCandidate> {
+    if !error.is_unreadable_data() {
+        return Err(unavailable(error.clone()));
+    }
+    Ok(faulted(
+        kind,
+        id,
+        "",
+        error.to_string(),
+        FaultScope::EveryRecall,
+    ))
+}
+
 /// The row of a recovered message; `None` when the message is no longer one.
-fn recovered_row(reader: &ConversationSourceReader, id: &str) -> Option<InventoryCandidate> {
+fn recovered_row(
+    reader: &ConversationSourceReader,
+    id: &str,
+) -> CognitionResult<Option<InventoryCandidate>> {
     match reader.read_recovered_source(id) {
-        Ok(message) => message.map(|message| {
-            recovered_candidate(&message).unwrap_or_else(|error| {
-                let session = &message.message.session_id;
-                faulted(
-                    CandidateKind::Message,
-                    id,
-                    session,
-                    error.message().clone(),
-                    true,
-                )
-            })
-        }),
-        Err(error) => Some(faulted(
-            CandidateKind::Message,
-            id,
-            "",
-            error.to_string(),
-            true,
-        )),
+        Ok(Some(message)) => recovered_or_fault(&message).map(Some),
+        Ok(None) => Ok(None),
+        Err(error) => every_recall_fault(CandidateKind::Message, id, &error).map(Some),
     }
 }
 
 /// The row of a turn; `None` when the turn has no outcome.
-fn turn_row(reader: &ConversationSourceReader, turn: &str) -> Option<InventoryCandidate> {
+fn turn_row(
+    reader: &ConversationSourceReader,
+    turn: &str,
+) -> CognitionResult<Option<InventoryCandidate>> {
     match reader.read_recall_outcome(turn) {
-        Ok(outcome) => outcome.map(|outcome| turn_or_fault(reader, &outcome)),
-        Err(error) => Some(faulted(
-            CandidateKind::Turn,
-            turn,
-            "",
-            error.to_string(),
-            true,
-        )),
+        Ok(Some(outcome)) => turn_or_fault(reader, &outcome).map(Some),
+        Ok(None) => Ok(None),
+        Err(error) => every_recall_fault(CandidateKind::Turn, turn, &error).map(Some),
     }
 }
 
@@ -207,22 +216,27 @@ fn build_write(
 }
 
 /// Re-reads every source the next changes name; a source that is gone or
-/// no longer qualifies loses its row.
+/// no longer qualifies loses its row. `None` when the log was pruned past
+/// the watermark while the changes were read: the mirror is rebuilt.
 fn apply_changes(
     graph: &GraphRepository,
     reader: &ConversationSourceReader,
     state: &InventoryState,
-) -> CognitionResult<InventoryWrite> {
+) -> CognitionResult<Option<InventoryWrite>> {
     let changes = reader
         .read_source_changes(state.mark.seq, CHANGES)
         .map_err(unavailable)?;
-    let mark = changes.last().map_or_else(
-        || state.mark.clone(),
-        |change| SourceChangeMark {
-            seq: change.seq,
-            key: format!("{}:{}", kind_name(change.kind), change.entity_id),
-        },
-    );
+    // Pruning drops the oldest rows first: while the watermark row is still
+    // there, every change after it was read.
+    if !reader
+        .source_change_holds(&state.mark)
+        .map_err(unavailable)?
+    {
+        return Ok(None);
+    }
+    let mark = changes
+        .last()
+        .map_or_else(|| state.mark.clone(), SourceChange::mark);
     let mut turns = IndexSet::new();
     let mut messages = IndexSet::new();
     for change in changes {
@@ -237,7 +251,7 @@ fn apply_changes(
     let mut upserts = IndexMap::new();
     let mut deletes = Vec::new();
     for turn in &turns {
-        match turn_row(reader, turn) {
+        match turn_row(reader, turn)? {
             Some(candidate) => upserts.insert(candidate.key(), candidate),
             None => {
                 deletes.push(source_key(CandidateKind::Turn, turn));
@@ -246,7 +260,7 @@ fn apply_changes(
         };
     }
     for message in &messages {
-        match recovered_row(reader, message) {
+        match recovered_row(reader, message)? {
             Some(candidate) => upserts.insert(candidate.key(), candidate),
             None => {
                 deletes.push(source_key(CandidateKind::Message, message));
@@ -254,7 +268,7 @@ fn apply_changes(
             }
         };
     }
-    Ok(InventoryWrite {
+    Ok(Some(InventoryWrite {
         reset: false,
         upserts: upserts.into_values().collect(),
         deletes,
@@ -262,12 +276,5 @@ fn apply_changes(
             mark,
             ..state.clone()
         },
-    })
-}
-
-fn kind_name(kind: SourceChangeKind) -> &'static str {
-    match kind {
-        SourceChangeKind::Turn => "turn",
-        SourceChangeKind::Message => "message",
-    }
+    }))
 }
