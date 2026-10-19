@@ -1,6 +1,6 @@
 //! USE-06 — the usage monitor at owner scale: tens of thousands of usage rows
 //! and hundreds of megabytes of transcripts answer in milliseconds once warm,
-//! the session view counts only its own session, and a window or session
+//! the session view includes all delegated work, and a window or session
 //! query resumes only changed transcript content.
 #![allow(
     clippy::unwrap_used,
@@ -9,6 +9,8 @@
     reason = "test assertions"
 )]
 
+#[path = "usage_scale/delegated.rs"]
+mod delegated;
 #[path = "usage_scale/memory.rs"]
 mod memory;
 #[path = "usage_scale/timeline.rs"]
@@ -186,6 +188,8 @@ async fn perf_use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), Harnes
     let mut expected = write_usage_log(&setup.sandbox.data, chrono_now())?;
     write_transcripts(&setup.sandbox.data, &mut expected)?;
     let s = setup.start().await?;
+    delegated::seed(&s.sandbox.data)?;
+    expected.recent_rows += delegated::ROWS;
 
     // The first window read indexes usage and transcript activity once;
     // every later read reuses those counters.
@@ -213,14 +217,15 @@ async fn perf_use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), Harnes
     let (first, session) = timed(&s.gw, "/usage-monitor?session_id=general").await?;
     butler_e2e::assert_wall_clock_budget!(first, COLD, "session cold");
     assert_eq!(session["filters"]["sessionId"], "general");
-    assert_eq!(session["model"]["requestCount"], SESSION_ROWS, "{session}");
+    delegated::assert_model(&session["model"], 0);
+    delegated::session_view(&s.gw).await?;
     assert_eq!(
         session["model"]["promptTokens"].as_f64(),
-        Some((SESSION_ROWS * 1_000) as f64)
+        Some(((SESSION_ROWS + delegated::GENERAL) * 1_000) as f64)
     );
     assert_eq!(session["tools"]["calls"], 7, "{}", session["tools"]);
     assert_eq!(session["tools"]["failures"], 3, "{}", session["tools"]);
-    assert_eq!(session["model"]["byScope"].as_object().unwrap().len(), 1);
+    assert_eq!(session["model"]["byScope"].as_object().unwrap().len(), 1 + delegated::GENERAL as usize);
     let (_, other) = timed(&s.gw, "/usage-monitor?session_id=other").await?;
     assert_eq!(
         other["model"]["requestCount"], OTHER_SESSION_ROWS,
@@ -237,7 +242,9 @@ async fn perf_use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), Harnes
     );
     let mut worst = Duration::ZERO;
     for _ in 0..5 {
-        worst = worst.max(timed(&s.gw, "/usage-monitor?session_id=general").await?.0);
+        let (took, again) = timed(&s.gw, "/usage-monitor?session_id=general").await?;
+        delegated::assert_model(&again["model"], 0);
+        worst = worst.max(took);
     }
     eprintln!("USE-06 session: cold {first:?}, warm worst {worst:?}");
     butler_e2e::assert_wall_clock_budget!(worst, WARM, "session warm");
@@ -263,8 +270,9 @@ async fn perf_use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), Harnes
     // cache hit, and a grown transcript costs only its new lines.
     let (cold, all) = timed(&s.gw, "/usage-monitor").await?;
     butler_e2e::assert_wall_clock_budget!(cold, COLD, "all-time cold");
-    assert_eq!(all["model"]["requestCount"], ROWS, "{all}");
+    assert_eq!(all["model"]["requestCount"], ROWS + delegated::ROWS, "{all}");
     assert_work_costs(&all, &expected);
+    assert!(day["topSessions"].as_array().unwrap().iter().all(|row| !row["sessionId"].as_str().unwrap().starts_with("scale-child-")), "child rows listed separately");
     assert_eq!(
         all["tools"]["calls"],
         expected.tool_calls + 40 * 3,
@@ -318,11 +326,11 @@ async fn perf_use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), Harnes
     drop(log);
     let (took, session) = timed(&s.gw, "/usage-monitor?session_id=general").await?;
     butler_e2e::assert_wall_clock_budget!(took, WARM, "session after an appended row");
-    assert_eq!(session["model"]["requestCount"], SESSION_ROWS + 1);
+    delegated::assert_model(&session["model"], 1);
     super::usage_timeline::assert_timeline(&session);
     assert_eq!(
         session["cost"]["byWork"]["conversation"]["requestCount"],
-        SESSION_ROWS + 1
+        SESSION_ROWS + delegated::GENERAL + 1
     );
     assert_eq!(session["cost"]["byWork"].as_object().unwrap().len(), 1);
     eprintln!(
@@ -346,7 +354,7 @@ fn assert_work_costs(view: &Value, expected: &Expected) {
         ("other", expected.other_rows),
         (
             "conversation",
-            ROWS - expected.memory_rows - expected.other_rows,
+            ROWS + delegated::ROWS - expected.memory_rows - expected.other_rows,
         ),
     ] {
         let bucket = &work[kind];
@@ -357,5 +365,5 @@ fn assert_work_costs(view: &Value, expected: &Expected) {
             "{bucket}"
         );
     }
-    assert!((view["cost"]["estimatedUsd"].as_f64().unwrap() - ROWS as f64 * unit_usd).abs() < 1e-8);
+    assert!((view["cost"]["estimatedUsd"].as_f64().unwrap() - (ROWS + delegated::ROWS) as f64 * unit_usd).abs() < 1e-8);
 }
