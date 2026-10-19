@@ -12,7 +12,7 @@ fn key(state: &HttpState) -> Result<String, HttpError> {
     state
         .security
         .token()
-        .map(|token| format!("butler-preview-v1:{token}"))
+        .map(|token| format!("butler-preview-v1:{token}:{}", super::port(state)))
         .ok_or_else(refused)
 }
 pub(in crate::gateway::http) fn url(
@@ -25,7 +25,7 @@ pub(in crate::gateway::http) fn url(
     }
     Ok(format!(
         "{origin}/__p/{}",
-        capability::sign(&key(state)?, id, 0, super::now())
+        capability::sign(&key(state)?, super::port(state), id, 0, super::now())
     ))
 }
 pub(super) async fn serve(
@@ -37,7 +37,8 @@ pub(super) async fn serve(
     }
     let cap =
         cookie(&request).ok_or_else(|| HttpError::public(404, "not_found", "Route not found."))?;
-    let (id, _) = capability::verify(&key(&state)?, &cap, super::now()).ok_or_else(refused)?;
+    let (id, _) = capability::verify(&key(&state)?, super::port(&state), &cap, super::now())
+        .ok_or_else(refused)?;
     let target = state.previews.target(&id).ok_or_else(refused)?;
     let websocket = request
         .headers()
@@ -88,7 +89,8 @@ fn bootstrap(state: &HttpState, request: &Request<Body>, cap: &str) -> Result<Re
     if request.method() != axum::http::Method::GET {
         return Err(refused());
     }
-    let (id, _) = capability::verify(&key(state)?, cap, super::now()).ok_or_else(refused)?;
+    let (id, _) = capability::verify(&key(state)?, super::port(state), cap, super::now())
+        .ok_or_else(refused)?;
     if state.previews.target(&id).is_none() {
         return Err(refused());
     }
@@ -235,6 +237,6 @@ pub(in crate::gateway::http) fn owner_id(
 ) -> Option<String> {
     let url = url::Url::parse(raw).ok()?;
     let cap = url.path().strip_prefix("/__p/")?;
-    let (id, _) = capability::verify(&key(state).ok()?, cap, super::now())?;
+    let (id, _) = capability::verify(&key(state).ok()?, super::port(state), cap, super::now())?;
     state.previews.owned(session, &id).then_some(id)
 }

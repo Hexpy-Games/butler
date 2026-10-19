@@ -37,6 +37,8 @@ struct SecurityView {
     remote_access_enabled: bool,
     /// Every address the gateway listens on, loopback first.
     bind_addresses: Vec<String>,
+    /// Bound content sockets, loopback first.
+    content_addresses: Vec<String>,
     /// Failed LAN binds, one entry per address; empty while access is off.
     bind_errors: Vec<super::listeners::BindError>,
     /// LAN and registered host URLs. Tunnel hosts work without LAN listeners.
@@ -184,11 +186,14 @@ fn view(state: &HttpState) -> Result<SecurityView, HttpError> {
     let remote = state.remote.snapshot();
     let mut bind_addresses = vec![state.remote.primary().to_string()];
     bind_addresses.extend(remote.lan_listeners.iter().map(ToString::to_string));
+    let mut content_addresses = vec![state.remote.content_addr().to_string()];
+    content_addresses.extend(remote.content_listeners.iter().map(ToString::to_string));
     let connection_code = None;
     let lan_urls = links::connection_urls(&remote, state.security.port());
     Ok(SecurityView {
         remote_access_enabled: remote.exposure.remote_access_enabled,
         bind_addresses,
+        content_addresses,
         bind_errors: remote.bind_errors,
         lan_urls,
         allowed_hosts: remote.exposure.allowed_hosts,
