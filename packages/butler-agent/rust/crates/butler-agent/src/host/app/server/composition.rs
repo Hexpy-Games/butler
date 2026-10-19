@@ -1,4 +1,5 @@
 //! Host composition of native App ports, separate from listener lifecycle.
+use super::super::runtime_ports::AppDataReset;
 use super::*;
 
 #[derive(Clone, Copy)]
@@ -27,6 +28,7 @@ pub(super) async fn dependencies(
     let readiness = AppReadiness::new(owners.receipt.clone(), listener_ready);
     Ok(AppApplicationDependencies {
         hooks: Some(runtime.hooks.clone()),
+        data_reset: Some(Arc::new(AppDataReset(runtime.data_reset.clone()))),
         service_shutdown: runtime.service_shutdown.clone(),
         updates: Arc::new(open_updates(data_root, installation)?),
         setup: Arc::new(setup),
@@ -35,6 +37,7 @@ pub(super) async fn dependencies(
         native_ingress: Arc::new(AppIngress::new(
             owners.queue.clone(),
             runtime.authority.clone(),
+            runtime.data_reset.clone(),
         )),
         native_assets: native_assets(runtime, data_root),
         executor_readiness: Arc::new(readiness),

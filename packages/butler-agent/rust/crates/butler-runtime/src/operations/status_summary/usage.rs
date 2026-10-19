@@ -61,17 +61,15 @@ impl UsageMonitor {
         self.log.lock().refresh(root, Some(pricing));
     }
 
-    /// Classify only returned sessions against the App's windowed run bindings.
-    /// With no runs, avoid walking usage rows entirely.
-    pub fn scheduled_sessions(
+    /// Classify returned sessions from their windowed usage turns. The App
+    /// supplies indexed schedule lookups; each session stops at its first
+    /// non-schedule turn, without copying or serializing the log's turn ids.
+    pub fn scheduled_sessions<E>(
         &self,
         view: &Value,
-        schedule_turns: &std::collections::HashSet<String>,
-    ) -> std::collections::HashSet<String> {
-        if schedule_turns.is_empty() {
-            return Default::default();
-        }
-        self.log.lock().scheduled_sessions(view, schedule_turns)
+        is_scheduled: impl FnMut(&str) -> Result<bool, E>,
+    ) -> Result<std::collections::HashSet<String>, E> {
+        self.log.lock().scheduled_sessions(view, is_scheduled)
     }
 
     /// The usage view of `session_id` (a runtime session id; all sessions

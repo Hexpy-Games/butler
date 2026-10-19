@@ -81,17 +81,18 @@ fn seed_runs(data: &Path, base: i64) -> Result<(), HarnessError> {
     for index in (0..ROW_COUNT).filter(|&i| scheduled(i)) {
         let id = format!("run-{index}");
         let turn = format!("turn-{index}");
-        let stamp = chrono::DateTime::from_timestamp_millis(timestamp(base, index))
-            .unwrap()
-            .to_rfc3339();
+        let stamp =
+            chrono::DateTime::from_timestamp_millis(timestamp(base, index) - 25 * 3_600_000)
+                .unwrap()
+                .to_rfc3339();
         let queued = count % 2 == 0;
         if queued {
             tx.execute("INSERT INTO session_queued_messages(id,chat_id,text,attachments_json,controls_json,state,turn_id,created_at,updated_at)
                 VALUES(?1,'general','Report','[]','{}','dispatched',?2,?3,?3)", [&id,&turn,&stamp])?;
             queued_count += 1;
         }
-        tx.execute("INSERT INTO app_automation_runs(id,automation_id,target_session_id,state,trigger,started_at,turn_id,queued_message_id)
-            VALUES(?1,'scale','general','delivered','scheduled',?2,?3,?4)",
+        tx.execute("INSERT INTO app_automation_runs(id,automation_id,target_session_id,state,trigger,started_at,completed_at,turn_id,queued_message_id)
+            VALUES(?1,'scale','general','delivered','scheduled',?2,?2,?3,?4)",
             rusqlite::params![id, stamp, (!queued).then_some(&turn), queued.then_some(&id)])?;
         count += 1;
     }

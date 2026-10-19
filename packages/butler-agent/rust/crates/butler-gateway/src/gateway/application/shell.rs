@@ -13,6 +13,7 @@ impl AppApplication {
         let settings = self.worker_profile_settings().await?;
         Ok(json!({
             "name": "Butler",
+            "data_generation": self.dependencies.data_reset.as_ref().map(|p| p.generation()),
             "version": version,
             "repository_url": "https://github.com/Hexpy-Games/butler",
             "protocol_version": crate::gateway::protocol::APP_PROTOCOL_VERSION,

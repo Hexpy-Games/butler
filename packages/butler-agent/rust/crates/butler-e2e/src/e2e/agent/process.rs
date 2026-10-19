@@ -197,3 +197,25 @@ pub fn read_all(dir: &Path) -> String {
     }
     out
 }
+
+impl Agent {
+    pub(super) fn dispatch_held(&self) -> bool {
+        self.launch
+            .env
+            .iter()
+            .any(|(key, value)| key == "BUTLER_E2E_HOLD_DISPATCH_READY" && value == "1")
+    }
+    /// A rejected cached token is a change signal, rather than a reason to
+    /// reread the credential file on every readiness poll.
+    pub(super) async fn refresh_rejected_token(&mut self, gateway: &super::Gateway) -> bool {
+        if let Ok(reply) = gateway.get("/health").await
+            && reply.status == 401
+            && let Some(token) = self.launch.data_folder_token()
+            && token != self.launch.token
+        {
+            self.launch.token = token;
+            return true;
+        }
+        false
+    }
+}

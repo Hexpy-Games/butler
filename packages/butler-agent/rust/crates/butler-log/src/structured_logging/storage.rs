@@ -6,6 +6,7 @@ use super::{
     retention,
     segment::{SEGMENT_BYTES, Segment},
 };
+use butler_platform::data_paths;
 use std::{collections::BTreeMap, io, path::PathBuf};
 
 pub(crate) type Catalog = BTreeMap<PathBuf, Vec<Block>>;
@@ -30,7 +31,9 @@ impl Storage {
         Self::open_mode(root, config, false)
     }
     fn open_mode(root: PathBuf, config: &Config, retention_owner: bool) -> io::Result<Self> {
-        butler_platform::secure_fs::create_private_dir_all(&root.join("agent/main"))?;
+        butler_platform::secure_fs::create_private_dir_all(
+            &root.join(data_paths::NATIVE_LOG_STORE).join("main"),
+        )?;
         let mut this = Self {
             root,
             catalog: Catalog::new(),
@@ -50,7 +53,7 @@ impl Storage {
         let _ = this.configure(config);
         // Pending verbose cleanup must not prevent startup or level reversion.
         if !this.cleanup_pending() {
-            for source in ["agent", "app"] {
+            for &source in data_paths::OWNED_LOG_STORES {
                 retention::prune(&this.root.join(source), &[])?;
             }
         }
@@ -67,7 +70,7 @@ impl Storage {
     fn discover(&mut self, repair: bool) -> io::Result<()> {
         self.catalog.retain(|p, _| p.exists());
         self.index_versions.retain(|p, _| p.exists());
-        for source in ["agent", "app"] {
+        for &source in data_paths::OWNED_LOG_STORES {
             for lane in ["main", "debug"] {
                 for path in retention::files(&self.root.join(source).join(lane))? {
                     if path.extension().is_none_or(|s| s != "jsonl")
@@ -127,7 +130,7 @@ impl Storage {
             self.bodies.close()?;
         }
         let mut freed = 0;
-        for source in ["agent", "app"] {
+        for &source in data_paths::OWNED_LOG_STORES {
             if !config.verbose() {
                 freed += retention::remove(&self.root.join(source).join("debug"))?;
             }
@@ -199,11 +202,13 @@ impl Storage {
             &mut self.main
         };
         if slot.is_none() {
-            *slot = Some(Segment::open(&self.root.join("agent").join(if debug {
-                "debug"
-            } else {
-                "main"
-            }))?);
+            *slot = Some(Segment::open(
+                &self.root.join(data_paths::NATIVE_LOG_STORE).join(if debug {
+                    "debug"
+                } else {
+                    "main"
+                }),
+            )?);
         }
         if let Some(segment) = slot
             && let Err(error) = segment.write(&row, &encoded.line)
@@ -252,7 +257,7 @@ impl Storage {
             .map(|s| s.path.clone())
             .chain(self.bodies.path().cloned())
             .collect::<Vec<_>>();
-        retention::prune(&self.root.join("agent"), &active)
+        retention::prune(&self.root.join(data_paths::NATIVE_LOG_STORE), &active)
     }
 
     pub(super) fn close(&mut self) -> io::Result<()> {
@@ -268,7 +273,7 @@ impl Storage {
     pub(super) fn clear(&mut self) -> io::Result<u64> {
         self.close()?;
         let mut bytes = 0;
-        for source in ["agent", "app"] {
+        for &source in data_paths::OWNED_LOG_STORES {
             for lane in ["main", "debug", "bodies"] {
                 bytes += retention::remove(&self.root.join(source).join(lane))?;
             }

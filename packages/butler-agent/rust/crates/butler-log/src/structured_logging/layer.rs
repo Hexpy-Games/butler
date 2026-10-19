@@ -107,6 +107,11 @@ where
                         .unwrap_or(Value::Null),
                 );
             }
+            if fields.0.get("trace_root") == Some(&Value::Bool(true))
+                && let Some(parent) = fields.0.insert("parent_span_id".into(), Value::Null)
+            {
+                fields.0.insert("follows_from".into(), parent);
+            }
             fields
                 .0
                 .entry("trace_id")
@@ -240,4 +245,19 @@ pub(crate) fn current_ids(row: &mut Record) {
             row.attrs["message_id"] = message;
         }
     });
+}
+
+/// Take the lifetime so explicit completion and span drop cannot both write it.
+pub(super) fn complete_current() -> Option<Record> {
+    use tracing_subscriber::registry::Registry;
+    tracing::Span::current()
+        .with_subscriber(|(id, dispatch)| {
+            let registry = dispatch.downcast_ref::<Registry>()?;
+            let span = registry.span(id)?;
+            let mut ext = span.extensions_mut();
+            let lifetime = ext.remove::<super::trace::Lifetime>()?;
+            let fields = ext.get_mut::<Fields>()?;
+            Some(lifetime.completion(&fields.0))
+        })
+        .flatten()
 }

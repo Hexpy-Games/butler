@@ -32,14 +32,12 @@ pub struct AppUsageMonitorQuery {
     pub until_ts: Option<f64>,
     /// An unbound selector may refer directly to a telemetry scope.
     pub usage_scope: Option<String>,
-    /// Schedule-run bindings for this window, read once by the App owner.
-    pub schedule_turns: std::collections::HashSet<String>,
 }
 
-/// Native usage projection plus schedule classification used by App metadata.
+/// Native usage projection and its index for lazy App schedule classification.
 pub struct AppUsageMonitorView {
     pub view: Value,
-    pub scheduled_sessions: std::collections::HashSet<String>,
+    pub monitor: std::sync::Arc<butler_runtime::operations::UsageMonitor>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -453,15 +451,12 @@ impl super::AppApplication {
         let this = self.clone_handle();
         Box::pin(async move {
             let id = query.session_id.clone();
-            let since = query.since_ts;
-            let (binding, schedule_turns) = this
+            let binding = this
                 .storage
                 .read(move |db| {
-                    let binding = id
-                        .as_deref()
+                    id.as_deref()
                         .map(|id| usage::runtime_session(db, id))
-                        .transpose()?;
-                    Ok((binding, usage::schedule_turns(db, since)?))
+                        .transpose()
                 })
                 .await
                 .map_err(super::app_error)?;
@@ -469,11 +464,11 @@ impl super::AppApplication {
                 query.runtime_session_id = Some(runtime);
                 query.usage_scope = scope;
             }
-            query.schedule_turns = schedule_turns;
             let mut view = this.dependencies.monitoring.usage_monitor(query).await?;
             this.storage
                 .read(move |db| {
-                    usage::enrich(db, &mut view.view, &view.scheduled_sessions)?;
+                    let scheduled = usage::scheduled_sessions(db, &view)?;
+                    usage::enrich(db, &mut view.view, &scheduled)?;
                     Ok(view.view)
                 })
                 .await

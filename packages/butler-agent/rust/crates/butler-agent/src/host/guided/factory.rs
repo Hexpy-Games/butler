@@ -236,17 +236,14 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                         .map(|cursor| cursor.call_id.clone()),
                     turn_guard: TurnGuard::new(&start.turn.context, semantic.authority.as_ref()),
                     current_user_message: start.turn.original_message.clone(),
-                    memory: CanonicalMemoryReadBinding {
-                        runtime_session_id: start.turn.session_id.clone(),
-                        turn_id: start.turn.turn_id.clone(),
-                        project_id: bound_project_id(
-                            policy.project_id.as_deref(),
-                            &start.turn.context,
-                        ),
-                    },
+                    memory: memory_binding(start.turn, policy.project_id.as_deref()),
                     project_id: policy.project_id.clone(),
                     project_folder: project_folder(&workspace, &phase),
                     project_sources: project_sources(&start.turn.context),
+                    attachment_files: super::attachment_files::from_context(
+                        &start.turn.context,
+                        &self.butler_data,
+                    ),
                     visible_names: surface.iter().map(|t| t.name.clone()).collect(),
                     authorized_names: phase.authorized_names.iter().cloned().collect(),
                     required_names: policy.required_tools.iter().cloned().collect(),
@@ -441,4 +438,15 @@ fn web_session(
             policy.usage_root().unwrap_or(&turn.session_id).into(),
             policy.usage_role().into(),
         )
+}
+
+fn memory_binding(
+    turn: &butler_turn::btcc::TurnRecord,
+    project_id: Option<&str>,
+) -> CanonicalMemoryReadBinding {
+    CanonicalMemoryReadBinding {
+        runtime_session_id: turn.session_id.clone(),
+        turn_id: turn.turn_id.clone(),
+        project_id: bound_project_id(project_id, &turn.context),
+    }
 }
