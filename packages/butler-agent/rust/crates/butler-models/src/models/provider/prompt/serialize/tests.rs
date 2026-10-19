@@ -46,6 +46,8 @@ fn config(model_ref: &str) -> ProviderRequestConfig {
 
 fn usage() -> PromptUsageAttribution<'static> {
     PromptUsageAttribution {
+        root_session_id: None,
+        role: None,
         turn_id: None,
         phase: None,
         round_index: None,

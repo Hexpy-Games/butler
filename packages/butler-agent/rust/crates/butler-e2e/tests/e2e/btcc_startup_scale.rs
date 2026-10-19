@@ -59,6 +59,9 @@ async fn btcc_startup_scale_ready() -> Result<(), HarnessError> {
         s.agent.terminate().await?;
     }
     let preparation_generation = if baseline_db.is_some() { 1 } else { 2 };
+    // Measure first adoption without a prior scan stamp, including when the
+    // preparation binary already supports background verification.
+    let _ = std::fs::remove_file(db_path.with_extension("sqlite.verified"));
     // A validated, migrated origin/main DB; no current verification sidecar.
     let db = Connection::open(&db_path)?;
     let version: i64 = db.pragma_query_value(None, "user_version", |row| row.get(0))?;
@@ -171,7 +174,7 @@ fn complete(data: &Path, rows: i64) -> Result<(), HarnessError> {
     Ok(())
 }
 
-fn seed(data: &Path, rows: i64) -> Result<(), HarnessError> {
+pub(super) fn seed(data: &Path, rows: i64) -> Result<(), HarnessError> {
     let mut db = Connection::open(data.join("agent-runtime/btcc.sqlite"))?;
     // These are terminal historical rows. No recovery/model work is required.
     for start in (0..rows).step_by(5_000) {

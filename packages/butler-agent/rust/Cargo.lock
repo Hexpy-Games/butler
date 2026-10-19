@@ -996,6 +996,8 @@ dependencies = [
 name = "butler-host"
 version = "0.1.0"
 dependencies = [
+ "arrow-array",
+ "arrow-schema",
  "base64 0.22.1",
  "butler-core",
  "butler-gateway",
@@ -1012,6 +1014,7 @@ dependencies = [
  "futures-util",
  "image",
  "indexmap 2.14.2",
+ "lancedb",
  "parking_lot",
  "regex",
  "reqwest 0.12.28",

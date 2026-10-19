@@ -13,6 +13,7 @@ mod messages;
 mod schema;
 mod sessions;
 mod source;
+mod source_changes;
 mod summaries;
 mod text_projection;
 mod turn_outcome;
@@ -36,7 +37,8 @@ pub use history_window::HistoryWindow;
 pub use source::{
     Archived, CanonicalMemoryReadBinding, ConversationScalar, ConversationSourceReader,
     MessageOrigins, PageOrder, PublicMemoryScope, PublicMemorySnapshot, PublicSessionRow,
-    RecallOutcomeRow, decode_message_scalars, scalar_for_part,
+    RecallOutcomeEntry, RecallOutcomeRow, SourceChange, SourceChangeKind, SourceChangeMark,
+    decode_message_scalars, scalar_for_part,
 };
 pub use text_projection::{ToolParts, text_for_message, text_for_part};
 pub use types::*;

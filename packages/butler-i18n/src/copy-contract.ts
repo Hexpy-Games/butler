@@ -1007,6 +1007,8 @@ export interface AppCopy {
     usage: {
       codexProvider: string;
       thisChat: string;
+      conversationPart: string;
+      delegatedPart: string;
       bucketUnit: (hours: number) => string;
       calls: (count: string) => string;
       requests: (count: string) => string;

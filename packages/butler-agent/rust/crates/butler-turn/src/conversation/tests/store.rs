@@ -355,6 +355,20 @@ fn migration_errors_are_atomic() {
     let mut db = rusqlite::Connection::open_in_memory().unwrap();
     let clock = TestClock::new();
     schema::ensure(&mut db, &clock).unwrap();
+    // A store from before the origin columns has no change log either.
+    let triggers: Vec<String> = db
+        .prepare(
+            "SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE '%source_change%'",
+        )
+        .unwrap()
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    for trigger in triggers {
+        db.execute_batch(&format!("DROP TRIGGER {trigger}"))
+            .unwrap();
+    }
     for name in [
         "origin_kind",
         "origin_ref",

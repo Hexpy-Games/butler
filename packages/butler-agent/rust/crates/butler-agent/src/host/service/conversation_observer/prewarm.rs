@@ -32,12 +32,17 @@ impl Prewarm {
         if !input.admitted
             || input.event_kind != "inbound.accepted"
             || !embedding.enabled()
-            || embedding.is_warm()
             || self
                 .probe
                 .as_ref()
                 .is_some_and(|probe| !probe.is_finished())
         {
+            return;
+        }
+        // A warm observation avoids the graph probe, but never the owner check:
+        // the child may have exited before the actor observes its exit.
+        if embedding.is_warm() {
+            embedding.start_loading();
             return;
         }
         let data_root = self.data_root.clone();
