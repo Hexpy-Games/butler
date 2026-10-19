@@ -327,6 +327,44 @@ fn logs_tracing_updates_filters_and_inherits_span_ids() -> Result<(), Box<dyn st
     for event in ["context.probe", "span.start", "span.end"] {
         assert_eq!(rows.iter().filter(|row| row.event == event).count(), 1);
     }
+    let context = butler_log::TraceContext {
+        trace_id: Some("abcdef0123456789abcdef0123456789".into()),
+        ..Default::default()
+    };
+    drop(context.span("worker.claim"));
+    drop(context.span("worker.finish"));
+    let trace = log.trace(context.trace_id.as_deref().unwrap())?;
+    assert_eq!(
+        trace
+            .spans
+            .iter()
+            .map(|s| s.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["worker.claim", "worker.finish"]
+    );
+    // Previously persisted access records used a child ID rather than the server ID.
+    let mut server = Record::new("INFO", "http.server", "span.end", "http.server");
+    server.trace_id = context.trace_id.clone();
+    server.span_id = Some("1234567890abcdef".into());
+    server.duration_ms = Some(3.0);
+    let mut access = server.clone();
+    access.event = "http.request".into();
+    access.span_id = Some("fedcba0987654321".into());
+    access.parent_span_id = server.span_id.clone();
+    access.attrs = json!({"method":"POST", "route":"/messages", "status":202});
+    log.record_reliable(server)?;
+    log.record_reliable(access)?;
+    let trace = log.trace(context.trace_id.as_deref().unwrap())?;
+    let inbound: Vec<_> = trace
+        .spans
+        .iter()
+        .filter(|s| s.category == "http.server")
+        .collect();
+    assert_eq!(inbound.len(), 1);
+    assert_eq!(inbound[0].name, "http.server");
+    assert_eq!(inbound[0].attrs["route"], "/messages");
+    assert_eq!(inbound[0].attrs["status"], 202);
+    assert!(inbound[0].has_details);
     log.shutdown().unwrap();
     fs::remove_dir_all(root).unwrap();
     Ok(())
