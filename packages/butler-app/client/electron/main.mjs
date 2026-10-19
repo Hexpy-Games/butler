@@ -651,6 +651,7 @@ async function recoverUnexpectedForegroundExit() {
     foregroundInstance = transitionAppForeground(foregroundInstance, "degraded");
     foregroundInstance = transitionAppForeground(foregroundInstance, "recovering");
     writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+    appLog("INFO", "lifecycle", "agent.restart", { reason: "unexpected_exit", phase: "requested" });
     await ensureServer();
     scheduleTrayMenuRefresh();
   } catch (error) {
@@ -662,6 +663,7 @@ async function recoverUnexpectedForegroundExit() {
 // `butler stop` / `butler restart` (CLI or MCP) leave an intent that the
 // supervisor reads when the Agent exits; these keep App state in step with it.
 function handleIntentionalAgentExit({ reason, respawnBy }) {
+  if (reason === "restart") appLog("INFO", "lifecycle", "agent.restart", { respawnBy, phase: "requested" });
   if (usesAppForegroundLifecycle && !isQuitting && foregroundInstance) {
     advanceForegroundInstance(
       reason === "stop" ? ["stopping", "stopped"] : ["degraded", "recovering"],
