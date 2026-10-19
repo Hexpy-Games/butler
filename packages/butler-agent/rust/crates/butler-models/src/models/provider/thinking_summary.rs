@@ -81,7 +81,11 @@ pub(super) fn extract(
         super::serialize::Carrier::Chat { .. } => return None,
     };
     let mut body = String::new();
-    for part in parts {
+    for (index, part) in parts.into_iter().enumerate() {
+        if index > 0 && matches!(carrier, super::serialize::Carrier::Responses) {
+            let remaining = (64 * 1024usize).saturating_sub(body.len());
+            body.push_str(&"\n\n"[..remaining.min(2)]);
+        }
         let remaining = (64 * 1024usize).saturating_sub(body.len());
         let mut end = part.len().min(remaining);
         while !part.is_char_boundary(end) {

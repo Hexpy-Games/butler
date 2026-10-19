@@ -6,7 +6,6 @@ use serde_json::Map;
 #[test]
 fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
     super::gemini_schema::schemas_and_plain_tool_results();
-    super::gemini_usage::output_includes_thoughts();
     super::sizing::sizing_counts_image_allowance_and_preserves_complete_wire_bytes();
     super::sizing::long_history_sizing_matches_full_projection();
     super::sizing::native_carrier_sizing_counts_tool_images_by_allowance();

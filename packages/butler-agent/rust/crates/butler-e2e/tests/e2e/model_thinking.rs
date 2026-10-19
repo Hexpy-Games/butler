@@ -138,12 +138,14 @@ async fn summary_case(provider: &'static str, show: bool) -> Result<(), HarnessE
     let expected = format!("**{FIRST}**\nDetails.\n**{SECOND}**\nMore details.\n");
     let live_expected = if provider == "openai" {
         format!(
-            "\n\nunfinished\n- **A** [link](https://example.org)\npartial\n\n**{}**\n\n**{FIRST}**\nDetails.\nExtra body.\n\n\n**Superseded**\nBody.\n\n**{SECOND}**\nMore details.",
+            "\n\nunfinished\n- **A** [link](https://example.org)\npartial\n\n**{}**\n\n**{FIRST}**\n\nDetails.\nExtra body.\n\n\n**Superseded**\nBody.\n\n**{SECOND}**\n\nMore details.",
             "😀".repeat(80)
         )
     } else {
         expected.clone()
     };
+    // The live stream emits a boundary before the first Responses part too.
+    let expected = live_expected.trim_start_matches("\n\n");
     if show {
         assert_eq!(second["payload"]["summary"], live_expected);
         assert!(expected.len() <= 16 * 1024);
@@ -169,7 +171,7 @@ async fn summary_case(provider: &'static str, show: bool) -> Result<(), HarnessE
         .await?;
     assert_eq!(
         snapshot["payload"].get("summary"),
-        show.then(|| json!(live_expected)).as_ref()
+        show.then(|| json!(&live_expected)).as_ref()
     );
     assert_eq!(
         reconnect
@@ -225,7 +227,7 @@ async fn summary_case(provider: &'static str, show: bool) -> Result<(), HarnessE
         assert!(!s.agent.logs().contains(heading));
     }
     if show {
-        durable::assert_saved(&s, turn, &expected).await?;
+        durable::assert_saved(&s, turn, expected).await?;
     } else {
         assert_no_durable_summary(&s)?;
     }
@@ -237,7 +239,7 @@ async fn summary_case(provider: &'static str, show: bool) -> Result<(), HarnessE
     drop((live, reconnect, ended));
     if show && provider == "openai" {
         s.restart().await?;
-        durable::assert_saved(&s, turn, &expected).await?;
+        durable::assert_saved(&s, turn, expected).await?;
     }
     s.finish().await
 }

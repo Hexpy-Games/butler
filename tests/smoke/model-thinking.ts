@@ -40,10 +40,11 @@ const blur = async (page: import("playwright").Page) => page.evaluate(async () =
 });
 const body = "**Planning the search**\nI will review the relevant sources.\n\n## Checking the results\nI am comparing the available evidence.";
 const finalBody = body + "\nMore streamed content.\nFinal stored content.";
+const firstTitle = "Reviewing the sources";
 const now = new Date().toISOString();
 const round = (id: string, stored = false) => ({ id, tool_call_id: id, turn_id: "thinking-turn", kind: "message", state: stored ? "delivered" : "running",
   bridge_phase: "model_round_waiting", safe_label: "응답 생성 중", created_at: now,
-  ...(stored ? { thinking_title: "Checking the results", tool_result_id: `result-${id}` } : {}) });
+  ...(stored ? { thinking_title: id === "first" ? firstTitle : "Checking the results", tool_result_id: `result-${id}` } : {}) });
 const operation = { id: "search", tool_call_id: "search", turn_id: "thinking-turn", kind: "used_tool", state: "delivered", bridge_phase: "btcc_operation",
   semantic_block_id: "tool-search", safe_tool_name: "web_search", safe_input_label: "공개 자료", safe_label: "검색", created_at: now };
 const liveRows = [round("first", true), operation, round("second")];
@@ -90,7 +91,8 @@ try {
       catalog_generation: "harness-model-catalog-v1", controls: { model: "openai/gpt-6-luna", reasoning_effort: "medium", access_mode: "full_access", plan_mode: false } } } });
     if (url.pathname.includes("/operations/") && url.pathname.endsWith("/output")) {
       outputFetches++;
-      return route.fulfill({ json: { ok: true, data: { content: finalBody, byte_end: finalBody.length, byte_length: finalBody.length, complete: true } } });
+      const content = url.pathname.includes("/operations/first/") ? `**${firstTitle}**\n\nThe sources are ready.` : finalBody;
+      return route.fulfill({ json: { ok: true, data: { content, byte_end: content.length, byte_length: content.length, complete: true } } });
     }
     if (url.pathname === "/personalization") return route.fulfill({ json: { ok: true, data: { persona: "", eol: "", persona_presets: [] } } });
     if (url.pathname === "/settings" && route.request().method() === "PATCH") {
@@ -104,6 +106,17 @@ try {
   for (const cell of cases) {
     if (process.env.BUTLER_THINKING_CASE && process.env.BUTLER_THINKING_CASE !== cell) continue;
     const theme = cell.split("-")[0];
+    const capture = async (stage: string) => {
+      await blur(page);
+      const geometry = await page.locator("[data-panel-layout]").evaluate(element => ({
+        scrollLeft: element.scrollLeft, inspectorOpen: element.getAttribute("data-right-open"),
+        width: element.clientWidth, viewport: innerWidth,
+        workspaceLeft: element.querySelector('[data-slot="adaptive-shell-workspace"]')!.getBoundingClientRect().left,
+      }));
+      assert.deepEqual(geometry, { scrollLeft: 0, inspectorOpen: "false", width: geometry.viewport, viewport: geometry.viewport, workspaceLeft: 0 });
+      assert.equal(await page.evaluate(() => document.activeElement === document.body), true, "capture without keyboard focus");
+      await page.screenshot({ path: join(evidence, `${stage}-${cell}.png`) });
+    };
     await page.setViewportSize({ width: cell.endsWith("mobile") ? 390 : 1440, height: 1000 });
     await page.goto(`${base}?visual=components&theme=${theme}&locale=ko`);
     await page.locator('[data-test-class~="message"]').first().waitFor();
@@ -130,7 +143,7 @@ try {
     await expandTimeline();
     if (before) {
       await blur(page);
-      await page.screenshot({ path: join(evidence, `baseline-${cell}.png`) });
+      await capture("baseline");
       continue;
     }
     await receive("Planning the search");
@@ -143,7 +156,7 @@ try {
     assert.equal(await page.getByRole("button", { name: "생각 요약" }).count(), 0);
     assert.equal(await page.getByRole("button", { name: /생각/u }).count(), 0);
     assert.equal(outputFetches, 0);
-    await page.screenshot({ path: join(evidence, `live-off-${cell}.png`) });
+    await capture("live-off");
     await page.evaluate(async () => {
       const { useButlerStore } = window.butlerThinkingHarness;
       const state = useButlerStore.getState(); state.setSettings({ ...state.settings, show_thinking: true });
@@ -151,23 +164,27 @@ try {
     await receive("Planning the search", body);
     const group = page.getByRole("button", { name: "2 생각, 1 검색", exact: true });
     await group.click();
+    // A row clipped by its group's reveal is not ready for CDP scrollIntoView.
+    // Wait for the reveal before clicking; otherwise Chromium scrolls the
+    // hidden-overflow shell toward its offscreen inspector on desktop.
+    await blur(page);
     const thinking = page.getByRole("button", { name: "Planning the search", exact: true });
     await thinking.click();
     await page.locator('[data-test-class="thinking-details"]').waitFor();
     assert.equal(outputFetches, 0, "live body must not fetch");
     await receive("Checking the results", body + "\nMore streamed content.");
     await blur(page);
-    assert.equal(await page.getByRole("button", { name: "Checking the results", exact: true }).count(), 2);
+    assert.equal(await page.getByRole("button", { name: "Checking the results", exact: true }).count(), 1);
     assert((await page.locator('[data-test-class="thinking-details"]').innerText()).includes("More streamed content."));
     const order = await page.locator('[data-test-class="turn-work-tool-detail-row"]').allTextContents();
-    assert(order[0].includes("Checking the results") && order[1].includes("공개 자료") && order[2].includes("Checking the results"));
-    await page.screenshot({ path: join(evidence, `live-on-expanded-${cell}.png`) });
+    assert(order[0].includes(firstTitle) && order[1].includes("공개 자료") && order[2].includes("Checking the results"));
+    await capture("live-on-expanded");
     await receive(null);
     await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
     assert((await status.innerText()).startsWith("응답 생성 중"));
     assert.equal(await page.locator('[data-slot="rolling-swap"] [data-motion="incoming"]').count(), 0);
     assert.equal(await page.locator('[data-test-class="assistant-status-label"] [data-shimmer="true"]').count(), 1);
-    assert.equal(await page.getByRole("button", { name: "Checking the results", exact: true }).count(), 2, "freeze until durable completion");
+    assert.equal(await page.getByRole("button", { name: "Checking the results", exact: true }).count(), 1, "freeze until durable completion");
     await page.evaluate(rows => {
       const state = window.butlerThinkingHarness.useButlerStore.getState();
       const progress = { turn_id: "thinking-turn", state: "running", safe_progress_rows: rows };
@@ -188,12 +205,13 @@ try {
     await expandTimeline();
     const pastGroup = page.getByRole("button", { name: "2 생각, 1 검색", exact: true });
     await pastGroup.click();
+    await blur(page);
     assert.equal(outputFetches, 0, "history bodies stay lazy");
     await page.getByRole("button", { name: "Checking the results", exact: true }).last().click();
     await page.waitForFunction(() => document.querySelector('[data-test-class="thinking-details"]')?.textContent?.includes("comparing the available evidence"));
     assert.equal(outputFetches, 1);
     await blur(page);
-    await page.screenshot({ path: join(evidence, `history-on-expanded-${cell}.png`) });
+    await capture("history-on-expanded");
     await page.evaluate(async () => {
       const { useButlerStore } = window.butlerThinkingHarness;
       const state = useButlerStore.getState(); state.setSettings({ ...state.settings, show_thinking: false });

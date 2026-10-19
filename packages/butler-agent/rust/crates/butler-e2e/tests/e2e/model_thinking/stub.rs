@@ -11,8 +11,9 @@ fn gemini(part: &Value, end: bool) -> String {
     frame(&json!({"candidates":[candidate],"modelVersion":"gemini-3.8-flash"}))
 }
 fn frames(stub: &Stub, first_index: u64, second_index: u64) -> (String, String, String) {
-    let a = format!("**{FIRST}**\nDetails.\n");
-    let b = format!("**{SECOND}**\nMore details.\n");
+    let gap = if stub.provider == "openai" { "\n\n" } else { "\n" };
+    let a = format!("**{FIRST}**{gap}Details.\n");
+    let b = format!("**{SECOND}**{gap}More details.\n");
     match stub.provider {
         "google" => (
             gemini(&json!({"text":a,"thought":true}), false),
@@ -61,7 +62,13 @@ fn frames(stub: &Stub, first_index: u64, second_index: u64) -> (String, String, 
                 summary_part(kind, second_index, b.trim_end()),
                 frame(&json!({"type":"response.output_text.delta","delta":"Done."}))
                     + &frame(
-                        &json!({"type":"response.completed","response":{"id":"resp_done","model":"gpt-5.5","status":"completed","output":[{"type":"reasoning","summary":if stub.raw { json!([]) } else { json!([{ "type":"summary_text", "text":format!("{a}{b}") }]) }},{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Done."}]}],"usage":{"input_tokens":10,"output_tokens":10,"total_tokens":20}}}),
+                        &json!({"type":"response.completed","response":{"id":"resp_done","model":"gpt-5.5","status":"completed","output":[{"type":"reasoning","summary":if stub.raw { json!([]) } else { json!([
+                            {"type":"summary_text","text":"unfinished\n- **A** [link](https://example.org)\npartial"},
+                            {"type":"summary_text","text":format!("**{}**", "😀".repeat(80))},
+                            {"type":"summary_text","text":format!("{}\nExtra body.\n", a.trim_end())},
+                            {"type":"summary_text","text":"**Superseded**\nBody."},
+                            {"type":"summary_text","text":b.trim_end()}
+                        ]) }},{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Done."}]}],"usage":{"input_tokens":10,"output_tokens":10,"total_tokens":20}}}),
                     ),
             )
         }
