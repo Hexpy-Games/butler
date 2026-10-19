@@ -17,6 +17,7 @@ mod discovery;
 mod environment;
 mod key_check;
 mod local_credentials;
+mod local_image_startup;
 mod logging;
 mod mcp;
 mod mutations;

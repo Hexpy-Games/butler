@@ -21,6 +21,7 @@ export function localModelPayload(
   manualContext: string,
   reasoningBudgetRatio?: number,
   apiKey?: string,
+  imageInput?: boolean,
 ): LocalModelRegistrationRequest {
   return {
     api_key: apiKey,
@@ -35,7 +36,13 @@ export function localModelPayload(
     max_output_tokens: sourceModel?.max_output_tokens,
     reasoning_budget_ratio: reasoningBudgetRatio,
     source: sourceModel ? "discovered" : "manual",
+    image_input: imageInput,
   };
+}
+
+/** The image input declaration to send: only a switch value that differs from where it started. */
+export function imageInputChange(initial: boolean, choice: boolean | undefined): boolean | undefined {
+  return choice === undefined || choice === initial ? undefined : choice;
 }
 
 export async function discoverLocalModels(

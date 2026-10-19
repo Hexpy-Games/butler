@@ -54,6 +54,21 @@ test("unknown capability refuses images with its own short reason", () => {
   setAppCopyLanguage("en-US");
 });
 
+test("an unknown local model points to its image input switch; a declared text-only one does not", () => {
+  setAppCopyLanguage("en-US");
+  const local = { provider_id: "local", platform: "ollama" as const };
+  const undeclared = composerImagePolicy(model({ ...local, image_input_support: "unknown" }));
+  expect(undeclared).toEqual({ accepts: false, blockedBy: "undeclared", mimeTypes: [] });
+  expect(composerImagePolicy(model(local)).blockedBy).toBe("undeclared");
+  expect(imageRefusal(png, undeclared)).toBe("undeclared");
+  expect(imageRefusalLabel("undeclared")).toBe("Turn on image input in Settings");
+  expect(composerImagePolicy(model({ ...local, image_input_support: "unsupported" })).blockedBy).toBe("model");
+  expect(composerImagePolicy(model({ ...local, image_input_support: "supported" })).accepts).toBe(true);
+  setAppCopyLanguage("ko-KR");
+  expect(imageRefusalLabel("undeclared")).toBe("설정 → 모델에서 이미지 입력을 켜세요");
+  setAppCopyLanguage("en-US");
+});
+
 test("refusal reasons: model, catalog MIME list (gif counts as png), inline byte limit", () => {
   const textOnly = composerImagePolicy(model({ image_input_support: "unsupported" }));
   expect(imageRefusal(png, textOnly)).toBe("model");

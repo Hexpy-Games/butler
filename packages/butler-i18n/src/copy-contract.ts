@@ -960,6 +960,7 @@ export interface AppCopy {
     attachImage: string;
     imagesUnsupported: string;
     imageSupportUnknown: string;
+    imageInputOff: string;
     imageTypeUnsupported: string;
     imageTooLarge: string;
     featureDrawer: string;
@@ -1858,6 +1859,7 @@ export interface AppCopy {
       modelId: string;
       displayName: string;
       maxContext: string;
+      imageInput: string;
       registeredLocalModels: string;
       customOpenAiCompatible: string;
       discoveredStatus: (count: number) => string;
