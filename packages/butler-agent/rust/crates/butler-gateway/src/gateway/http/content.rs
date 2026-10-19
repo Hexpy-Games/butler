@@ -32,7 +32,7 @@ pub(super) fn spawn(listener: TcpListener, state: Arc<HttpState>, closed: Cancel
     }));
 }
 pub(super) fn port(state: &HttpState) -> u16 {
-    state.remote.primary().port().saturating_add(1)
+    state.remote.content_addr().port()
 }
 fn now() -> u64 {
     std::time::SystemTime::now()
@@ -111,7 +111,7 @@ async fn serve(state: &HttpState, request: Request<Body>) -> Result<Response, Ht
         .ok_or_else(|| HttpError::public(404, "not_found", "Route not found."))?;
     let (cap, path) = path.split_once('/').ok_or_else(refused)?;
     let token = state.security.token().ok_or_else(refused)?;
-    let (id, revision) = capability::verify(&token, cap, now()).ok_or_else(refused)?;
+    let (id, revision) = capability::verify(&token, port(state), cap, now()).ok_or_else(refused)?;
     if let Some(id) = id.strip_prefix("message-file-") {
         return message_file::serve(state, id, revision, path).await;
     }
@@ -213,7 +213,7 @@ pub(super) async fn view(
         .ok_or_else(refused)?;
     let origin = view_origin(&state, &request)?;
     let token = state.security.token().ok_or_else(refused)?;
-    let cap = capability::sign(&token, &output.output_id, rev.revision, now());
+    let cap = capability::sign(&token, port(&state), &output.output_id, rev.revision, now());
     let mut url = url::Url::parse(&format!("{origin}/__o/{cap}/")).map_err(|_| refused())?;
     url.path_segments_mut()
         .map_err(|()| refused())?
@@ -297,7 +297,7 @@ pub(super) async fn check_view(
     }
     let rev = output.revisions.last().ok_or_else(refused)?;
     let token = state.security.token().ok_or_else(refused)?;
-    let cap = capability::sign(&token, &output.output_id, rev.revision, now());
+    let cap = capability::sign(&token, port(state), &output.output_id, rev.revision, now());
     let mut url = url::Url::parse(&format!("http://127.0.0.1:{}/__o/{cap}/", port(state)))
         .map_err(|_| refused())?;
     url.path_segments_mut()
