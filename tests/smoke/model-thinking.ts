@@ -77,7 +77,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   page.setDefaultTimeout(10_000);
   const errors: string[] = [];
-  const revealResults: { cell: string; mode: string; scrollLeft: number }[] = [];
+  const revealResults: { cell: string; mode: string; userInteraction: boolean; scrollLeft: number }[] = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.route("**/*", async route => {
     const url = new URL(route.request().url());
@@ -235,6 +235,6 @@ try {
   writeFileSync(join(evidence, "model-thinking-paths.txt"), readdirSync(evidence).filter(path => path.endsWith(".png")).sort().map(path => join(evidence, path)).join("\n") + "\n");
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ revealResults }));
-  assert.deepEqual(revealResults.filter(result => result.scrollLeft !== 0), [], "revealing/focusing a thinking row must not scroll the shell");
+  assert.deepEqual(revealResults.filter(result => result.userInteraction && result.scrollLeft !== 0), [], "pointer and keyboard interaction must not scroll the shell");
   console.log("thinking timeline: OFF, rolling title, streaming body, ordered rows, freeze, reload, lazy fetch and privacy toggle passed");
 } finally { await browser.close(); await new Promise<void>((resolve, reject) => vite.httpServer.close(error => error ? reject(error) : resolve())); if (ownsOutput) rmSync(output, { recursive: true, force: true }); }

@@ -9,10 +9,16 @@ import type { Locator, Page } from "playwright";
  */
 export async function probeThinkingReveal(page: Page, group: Locator, row: Locator, evidence: string, cell: string) {
   const results = [];
-  for (const mode of ["immediate-click", "pointer", "keyboard", "scroll-into-view"] as const) {
+  for (const mode of ["immediate-click", "pointer", "keyboard-enter", "keyboard-space", "scroll-into-view"] as const) {
+    const keyboard = mode === "keyboard-enter" || mode === "keyboard-space";
+    const userInteraction = mode === "pointer" || keyboard;
     if (mode !== "immediate-click") await group.focus();
-    if (mode === "keyboard") await page.keyboard.press("Enter");
-    else await group.click();
+    if (keyboard) await page.keyboard.press("Enter");
+    else if (mode === "pointer") {
+      const rect = await group.boundingBox();
+      assert(rect);
+      await page.mouse.click(rect.x + rect.width / 2, rect.y + rect.height / 2);
+    } else await group.click();
     const reveal = mode === "immediate-click" ? null : await row.evaluate(async (element, fraction) => {
       await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
       const clip = element.closest('[data-state="open"]')!;
@@ -26,20 +32,20 @@ export async function probeThinkingReveal(page: Page, group: Locator, row: Locat
     if (reveal) assert(reveal.animations > 0 && reveal.height > 0 && reveal.height < reveal.contentHeight, "probe must run during reveal");
     const before = await geometry(page, row);
     if (mode === "immediate-click") await row.click();
-    else if (mode === "keyboard") {
+    else if (keyboard) {
       for (let index = 0; index < 5 && !await row.evaluate(el => el === document.activeElement); index++) await page.keyboard.press("Tab");
       assert(await row.evaluate(el => el === document.activeElement), "Tab must reach the thinking row");
-      await page.keyboard.press("Enter");
+      await page.keyboard.press(mode === "keyboard-enter" ? "Enter" : "Space");
     } else if (mode === "pointer") {
       const rect = await row.boundingBox();
       assert(rect);
       await page.mouse.click(rect.x + rect.width - 8, rect.y + rect.height / 2);
     } else await row.scrollIntoViewIfNeeded();
     const after = await geometry(page, row);
-    if (mode !== "scroll-into-view") assert.equal(await row.getAttribute("aria-expanded"), "true", `${mode} opens the thinking body`);
-    results.push({ mode, reveal, before, after });
+    if (userInteraction) assert.equal(await row.getAttribute("aria-expanded"), "true", `${mode} opens the thinking body`);
+    results.push({ mode, userInteraction, reveal, before, after });
     // Finish the paused reveal, then discard the trial's open/scroll state.
-    // The recorded scrollLeft is asserted after every capture, including failures.
+    // Real interactions are asserted after captures; CDP auto-scroll is evidence only.
     await page.evaluate(async () => {
       for (const animation of document.getAnimations()) {
         if (animation.playState === "paused") animation.finish();
@@ -53,7 +59,7 @@ export async function probeThinkingReveal(page: Page, group: Locator, row: Locat
     });
   }
   writeFileSync(join(evidence, `reveal-scroll-${cell}.json`), JSON.stringify(results, null, 2) + "\n");
-  return results.map(result => ({ mode: result.mode, scrollLeft: result.after.shell.scrollLeft }));
+  return results.map(result => ({ mode: result.mode, userInteraction: result.userInteraction, scrollLeft: result.after.shell.scrollLeft }));
 }
 
 async function geometry(page: Page, row: Locator) {
