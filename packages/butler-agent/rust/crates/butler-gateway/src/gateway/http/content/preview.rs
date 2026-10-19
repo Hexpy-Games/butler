@@ -12,7 +12,7 @@ fn key(state: &HttpState) -> Result<String, HttpError> {
     state
         .security
         .token()
-        .map(|token| format!("butler-preview-v1:{token}:{}", super::port(state)))
+        .map(|token| format!("butler-preview-v1:{token}"))
         .ok_or_else(refused)
 }
 pub(in crate::gateway::http) fn url(

@@ -14,6 +14,7 @@ pub(in crate::gateway) fn serve(
     config: GatewayConfig,
     shutdown: CancellationToken,
     local_addr: SocketAddr,
+    content_addr: SocketAddr,
 ) -> JoinHandle<std::io::Result<()>> {
     tokio::spawn(async move {
         let devices = prepare_devices(application.clone(), shutdown.clone(), local_addr).await?;
@@ -22,7 +23,6 @@ pub(in crate::gateway) fn serve(
             allowed_hosts: config.allowed_hosts.clone(),
             content_hosts: config.content_hosts.clone(),
         };
-        let content_addr = content_listener.local_addr()?;
         let remote =
             listeners::RemoteAccess::new(local_addr, content_addr, config.allowed_hosts.clone());
         let app_host = app_host(config.headless_browser.as_ref(), &shutdown);

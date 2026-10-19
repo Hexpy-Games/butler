@@ -18,6 +18,8 @@ pub struct GatewayConfig {
     /// `name:port`); their `http`/`https` origins are allowed too.
     pub allowed_hosts: Vec<String>,
     pub content_hosts: Vec<String>,
+    /// Preferred content listener port; absent uses the main port plus one.
+    pub content_port: Option<u16>,
     pub output_data: Option<std::path::PathBuf>,
     /// Read-only native browser source dependencies.
     pub browser_import: butler_platform::browser_transfer::ImportDependencies,
@@ -68,6 +70,7 @@ impl Default for GatewayConfig {
             dev_cors_origin: None,
             allowed_hosts: Vec::new(),
             content_hosts: Vec::new(),
+            content_port: None,
             output_data: None,
             browser_import: Default::default(),
             remote_access_enabled: false,
@@ -134,7 +137,7 @@ pub async fn serve_gateway(
 ) -> std::io::Result<GatewayServer> {
     validate_content_hosts(&mut config)?;
     let local_addr = listener.local_addr()?;
-    let content_listener = bind_content(local_addr).await?;
+    let content_listener = bind_content(local_addr, config.content_port).await?;
     let content_addr = content_listener.local_addr()?;
     let shutdown = CancellationToken::new();
     let task = http::serve(
@@ -144,6 +147,7 @@ pub async fn serve_gateway(
         config,
         shutdown.clone(),
         local_addr,
+        content_addr,
     );
     Ok(GatewayServer {
         local_addr,
@@ -180,8 +184,8 @@ fn validate_content_hosts(config: &mut GatewayConfig) -> std::io::Result<()> {
 }
 
 /// Keep the main listener's interface even when its adjacent port is unavailable.
-async fn bind_content(primary: SocketAddr) -> std::io::Result<TcpListener> {
-    let preferred = primary.port().checked_add(1);
+async fn bind_content(primary: SocketAddr, preferred: Option<u16>) -> std::io::Result<TcpListener> {
+    let preferred = preferred.or_else(|| primary.port().checked_add(1));
     let error_kind = if let Some(port) = preferred {
         match TcpListener::bind(SocketAddr::new(primary.ip(), port)).await {
             Ok(listener) => return Ok(listener),
@@ -202,7 +206,7 @@ async fn bind_content(primary: SocketAddr) -> std::io::Result<TcpListener> {
     let bound = listener.local_addr()?;
     butler_core::diagnostic!(
         "[gateway] content port fallback: kind={error_kind:?} preferred_port={} bound_port={}",
-        u32::from(primary.port()) + 1,
+        preferred.map_or(u32::from(primary.port()) + 1, u32::from),
         bound.port()
     );
     Ok(listener)

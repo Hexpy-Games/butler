@@ -136,6 +136,21 @@ async fn foreign_listener_on_content_port() -> Result<(), HarnessError> {
         admin(&s).view().await?["content_addresses"][0],
         format!("127.0.0.1:{q}")
     );
+    let ui =
+        s.gw.http()
+            .get(format!("{}/", s.gw.base))
+            .bearer_auth(&s.gw.token)
+            .send()
+            .await?;
+    assert_eq!(ui.status(), 200);
+    let csp = ui.headers()["content-security-policy"].to_str().unwrap();
+    let frames = csp.split("frame-src ").nth(1).unwrap();
+    assert!(frames.contains(&format!("http://127.0.0.1:{q}")), "{csp}");
+    assert!(frames.contains(&format!("http://localhost:{q}")), "{csp}");
+    assert!(
+        !frames.contains(&format!("http://127.0.0.1:{}", p + 1)),
+        "{csp}"
+    );
     content(
         &url,
         &format!("http://127.0.0.1:{p}"),
@@ -216,5 +231,39 @@ async fn capability_bound_to_content_port() -> Result<(), HarnessError> {
     assert_eq!(reqwest::get(old).await?.status(), 403);
     assert_eq!(reqwest::get(fresh).await?.status(), 200);
     assert_eq!(foreign.hits.load(Ordering::Relaxed), 0);
+    s.finish().await
+}
+
+#[tokio::test]
+async fn permission_denied_content_port_falls_back() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let probe = TcpListener::bind("127.0.0.1:1");
+    butler_e2e::skip_unless!(
+        probe
+            .as_ref()
+            .is_err_and(|error| error.kind() == std::io::ErrorKind::PermissionDenied),
+        "OS permits the privileged port or refuses it for another reason"
+    );
+    eprintln!("privileged port probe: PermissionDenied; running fallback scenario");
+    let s = Setup::new("CONTENT-PERMISSION")?
+        .stub_cassette(super::browser_outputs::stub::cassette()?)
+        .env("BUTLER_APP_CONTENT_PORT", "1")
+        .start()
+        .await?;
+    let path = publish(&s).await?;
+    let url = view(&s.gw, &path).await?;
+    let addresses = admin(&s).view().await?;
+    let address: std::net::SocketAddr = addresses["content_addresses"][0]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_eq!(address.ip(), std::net::Ipv4Addr::LOCALHOST);
+    assert_ne!(address.port(), 1);
+    assert_eq!(
+        url.origin().ascii_serialization(),
+        format!("http://{address}")
+    );
+    content(&url, &s.gw.base, "127.0.0.1:1").await?;
     s.finish().await
 }

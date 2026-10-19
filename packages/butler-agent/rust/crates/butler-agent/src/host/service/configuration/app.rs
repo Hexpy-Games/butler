@@ -128,6 +128,8 @@ impl AppServiceConfiguration {
             })
             .unwrap_or_else(|| "127.0.0.1".to_owned());
         let env_port = env::var("BUTLER_APP_SERVER_PORT").ok();
+        let content_port =
+            env_trimmed("BUTLER_APP_CONTENT_PORT").and_then(|value| value.parse().ok());
         let cli_port = argv_port();
         let harness_port = env_port.is_some() || cli_port.is_some();
         let port = normalize_port(
@@ -173,6 +175,7 @@ impl AppServiceConfiguration {
                 let mut gateway =
                     gateway_config(LocalAuthConfig::required(token), settings, admin.ok());
                 gateway.headless_browser = headless;
+                gateway.content_port = content_port;
                 gateway
             },
             credential_errors,
@@ -216,6 +219,7 @@ impl AppServiceConfiguration {
             dev_cors_origin: self.gateway.dev_cors_origin.clone(),
             allowed_hosts: self.gateway.allowed_hosts.clone(),
             content_hosts: self.gateway.content_hosts.clone(),
+            content_port: self.gateway.content_port,
             output_data: self.gateway.output_data.clone(),
             browser_import: self.gateway.browser_import.clone(),
             remote_access_enabled: self.gateway.remote_access_enabled,
@@ -298,6 +302,7 @@ fn gateway_config(
             .filter(|name| !name.is_empty())
             .collect(),
         content_hosts: settings.content_hosts,
+        content_port: None,
         output_data: None,
         browser_import: Default::default(),
         remote_access_enabled: settings.remote_access_enabled,
