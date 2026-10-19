@@ -14,8 +14,8 @@ pub mod mxc_policy;
 mod project_secrets;
 pub use credentials::secret_name;
 pub use project_secrets::{
-    ProjectSecretInventory, discover_project_secret_inventory, discover_project_secrets,
-    prewarm_project, sweep_new_secrets, sweep_new_secrets_with_environment,
+    ProjectEntries, discover_project_entries, discover_project_secrets, prewarm_project,
+    sweep_new_secrets,
 };
 mod environment;
 pub use environment::tool_environment;

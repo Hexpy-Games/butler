@@ -116,7 +116,7 @@ async fn uniform_project_write_tier_matrix() -> Result<(), HarnessError> {
         );
     }
     assert!(!root.join("negated").exists());
-    let since = command_sandbox::discover_project_secret_inventory(&root)?;
+    let since = command_sandbox::discover_project_entries(&root)?;
     let command = if mounted {
         "echo new > .env.new; echo nested > sub/.env"
     } else {
@@ -178,7 +178,7 @@ async fn generated_directory_crash_recovery_and_top_level_sweep() -> Result<(), 
         std::fs::read_to_string(root.join("kept/output"))?,
         "complete"
     );
-    let before = command_sandbox::discover_project_secret_inventory(root)?;
+    let before = command_sandbox::discover_project_entries(root)?;
     // Cleanup must include depth zero even on L (e.g. externally planted names).
     std::fs::write(root.join(".env"), "top")?;
     std::fs::create_dir(root.join(".git"))?;
@@ -203,7 +203,7 @@ async fn project_fallback_to_l_keeps_declared_directories() -> Result<(), Harnes
     // by name: this project falls back to Tier L even on an M host.
     butler_platform::secure_fs::symlink(&root.join("visible.txt"), &root.join(".env.link"))?;
     let preparation = command_sandbox::prepare_project_write(&root, &setup.sandbox.data)?;
-    let inventory = command_sandbox::discover_project_secret_inventory(&root)?;
+    let inventory = command_sandbox::discover_project_entries(&root)?;
     let invocation = invoke(
         "echo complete > target/output; cat .env.link",
         &root,
@@ -269,7 +269,7 @@ fn measure_secret_project(setup: &Setup, root: &Path, layout: &str) -> Result<()
     let (mut setup_times, mut teardown_times, mut tier) = (Vec::new(), Vec::new(), String::new());
     for _ in 0..5 {
         let start = Instant::now();
-        let inventory = command_sandbox::discover_project_secret_inventory(root)?;
+        let inventory = command_sandbox::discover_project_entries(root)?;
         assert_eq!(inventory.len(), 5000);
         // Like guided commands, deny the data folder and the inventory too.
         let mut denied = vec![setup.sandbox.data.as_path()];

@@ -1,14 +1,10 @@
-//! Metadata-only discovery; post-run link resolution never reads target contents.
-#[cfg(unix)]
-mod identity;
+//! Metadata-only project discovery. Never follow symlinks or enter secret dirs.
 #[cfg(unix)]
 #[path = "quarantine_unix.rs"]
 mod quarantine;
 #[cfg(windows)]
 #[path = "quarantine_windows.rs"]
 mod quarantine;
-#[cfg(unix)]
-mod targets;
 pub(in crate::command_sandbox) mod tree;
 #[cfg(unix)]
 pub(in crate::command_sandbox) mod unix;
@@ -33,51 +29,45 @@ pub(super) fn discover_project_secrets(root: &Path) -> std::io::Result<Vec<PathB
         .collect())
 }
 
-/// Moves new secret names and unsafe ordinary-named links into a private
-/// data-folder quarantine. The inventory identifies existing protected names;
-/// a conservative ctime cutoff identifies new or changed links.
+/// Moves secret names absent from the pre-run inventory into a private
+/// data-folder quarantine. Filesystem timestamps may precede wall-clock launch
+/// time by a clock tick, so the inventory is the authority for new names.
 /// Directories the walk cannot inspect are quarantined whole. One failed move
 /// never leaves later entries in place: all are attempted, then it reports.
 #[cfg(unix)]
 pub(super) fn sweep_new_secrets(
     root: &Path,
-    since: &super::ProjectSecretInventory,
+    since: &super::ProjectEntries,
     data: &Path,
-    environment: &std::collections::HashMap<String, String>,
 ) -> std::io::Result<Vec<PathBuf>> {
-    let (found, links) = tree::walk_for_sweep(root, since)?;
-    let mut found: Vec<_> = found
-        .into_iter()
-        .map(|relative| root.join(relative))
+    let (names, links) = tree::entries(root, false)?;
+    let mut found: Vec<_> = names.into_iter().map(|path| root.join(path)).collect();
+    let inventory = crate::secure_fs::SecretInventory::cached(data);
+    let mut targets: Vec<_> = inventory
+        .paths()
+        .iter()
+        .chain(found.iter())
+        .filter_map(|path| crate::secure_fs::canonicalize(path).ok())
         .collect();
-    // A deliberate user-created old link into private scratch is an accepted
-    // residual. Sandboxed links and swapped intermediate links have fresh ctime.
-    if links.is_empty() {
-        return quarantine_new(root, since, data, found);
-    }
-    let mut targets = targets::SecretTargets::new(&found, data, environment, root, &since.writable);
-    let mut changed_paths = HashSet::new();
-    for (relative, _) in links {
-        let path = root.join(relative);
-        // Resolve only new or changed links after reaping.
-        // Missing targets retain their lexical destination and ancestor identity.
+    targets.extend(inventory.paths().iter().cloned());
+    let existing: HashSet<_> = since.links.iter().collect();
+    for path in links.into_iter().map(|path| root.join(path)) {
+        if existing.contains(&path) {
+            continue;
+        }
         let target = crate::command_sandbox::linux::complement::resolved_path(&path)
             .or_else(|_| crate::command_sandbox::linux::unresolved::target(&path));
-        let unsafe_link = targets.writable_indirection(&path, target.as_deref().ok())
-            || target.as_ref().is_ok_and(|target| targets.protects(target));
-        changed_paths.insert(path.clone());
-        if unsafe_link {
+        if target.is_ok_and(|target| {
+            targets
+                .iter()
+                .any(|root| crate::secure_fs::path_is_within(&target, root))
+        }) {
             found.push(path);
         }
     }
     found.sort();
     found.dedup();
-    let existing: Vec<_> = since
-        .iter()
-        .filter(|path| !changed_paths.contains(*path))
-        .cloned()
-        .collect();
-    quarantine_new(root, &existing, data, found)
+    quarantine_new(root, since, data, found)
 }
 
 pub(in crate::command_sandbox) fn quarantine_new(

@@ -8,6 +8,7 @@
 pub(super) mod delegation;
 mod migration;
 mod paths;
+mod security;
 mod stub;
 use butler_e2e::e2e::{
     HarnessError,

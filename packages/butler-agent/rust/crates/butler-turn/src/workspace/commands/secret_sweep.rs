@@ -4,25 +4,13 @@ use std::path::{Path, PathBuf};
 use super::{CommandError, GuidedAccess, GuidedCommandInput, GuidedCommandOutput};
 
 pub(super) struct Prepared {
-    paths: butler_platform::command_sandbox::ProjectSecretInventory,
+    paths: butler_platform::command_sandbox::ProjectEntries,
     lease: Option<butler_platform::command_sandbox::ProjectWritePreparation>,
 }
 
 impl Prepared {
-    fn sweep(
-        self,
-        root: &Path,
-        data: &Path,
-        environment: &std::collections::HashMap<String, String>,
-    ) -> std::io::Result<Vec<PathBuf>> {
-        let scratch = super::environment::Scratch::new(data, true);
-        let paths = self.paths.with_writable_roots(&scratch.writable_roots());
-        let result = butler_platform::command_sandbox::sweep_new_secrets_with_environment(
-            root,
-            &paths,
-            data,
-            environment,
-        );
+    fn sweep(self, root: &Path, data: &Path) -> std::io::Result<Vec<PathBuf>> {
+        let result = butler_platform::command_sandbox::sweep_new_secrets(root, &self.paths, data);
         if let Some(lease) = self.lease {
             lease.release();
         }
@@ -51,7 +39,7 @@ pub(super) async fn before_run(input: &GuidedCommandInput) -> Result<Prepared, C
     let data = input.butler_data.clone();
     tokio::task::spawn_blocking(move || {
         let lease = butler_platform::command_sandbox::prepare_project_write(&root, &data)?;
-        let paths = butler_platform::command_sandbox::discover_project_secret_inventory(&root)?;
+        let paths = butler_platform::command_sandbox::discover_project_entries(&root)?;
         Ok(Prepared {
             paths,
             lease: Some(lease),
@@ -82,10 +70,13 @@ pub(super) async fn after_run(
     let root = input.workspace_root.clone();
     let data = input.butler_data.clone();
     let environment = input.host_environment.clone();
-    let swept = tokio::task::spawn_blocking(move || since.sweep(&root, &data, &environment))
-        .await
-        .map_err(|error| CommandError::io(std::io::Error::other(error)))
-        .and_then(|result| result.map_err(CommandError::io));
+    let swept = tokio::task::spawn_blocking(move || {
+        butler_platform::secure_fs::SecretInventory::for_environment(&data, &environment);
+        since.sweep(&root, &data)
+    })
+    .await
+    .map_err(|error| CommandError::io(std::io::Error::other(error)))
+    .and_then(|result| result.map_err(CommandError::io));
 
     let violations = match swept {
         Ok(paths) => paths,

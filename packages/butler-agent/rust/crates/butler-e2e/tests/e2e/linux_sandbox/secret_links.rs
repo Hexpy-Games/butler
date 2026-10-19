@@ -45,7 +45,7 @@ async fn sweep_quarantines_secret_target_links() -> Result<(), HarnessError> {
     std::fs::create_dir_all(&public)?;
     butler_platform::secure_fs::symlink(&root.join(".env"), &root.join("src/existing-secret"))?;
     tokio::time::sleep(Duration::from_millis(1100)).await;
-    let since = command_sandbox::discover_project_secret_inventory(root)?;
+    let since = command_sandbox::discover_project_entries(root)?;
     let command = format!(
         "set -e; ln -s '{}' src/credential; ln -s '{}' src/profile; ln -s ../.env src/project; ln -s '{}' src/directory; rm src/changed; ln -s ../.env src/changed; ln -s ../public src/safe; ln -s '{}' src/.env-alias; ln -s '{}' src/indirect; ln -s '{}' src/data-parent; ln -s '{}' src/auth-parent; ln -s '{}' src/public-dir; ln -s '{}' src/profile-parent; ln -s .. src/project-root; ln -s missing src/dangling; ln -s loop src/loop",
         s.sandbox.data.join("auth/entry").display(),
@@ -60,22 +60,29 @@ async fn sweep_quarantines_secret_target_links() -> Result<(), HarnessError> {
     );
     let output = run(writable(&s, &command), root, &s.sandbox.home);
     assert!(output.status.success(), "link creation must complete");
-    let moved = command_sandbox::sweep_new_secrets_with_environment(
-        root,
-        &since,
-        &s.sandbox.data,
-        &environment(&s),
-    )?;
+    butler_platform::secure_fs::SecretInventory::for_environment(&s.sandbox.data, &environment(&s));
+    for name in [
+        "credential",
+        "profile",
+        "project",
+        "directory",
+        "changed",
+        "indirect",
+        "data-parent",
+        "auth-parent",
+        "profile-parent",
+    ] {
+        let result =
+            super::secret_changes::read(root, &s.sandbox.data, &format!("src/{name}")).await;
+        assert_eq!(result["ok"], false);
+    }
+    let moved = command_sandbox::sweep_new_secrets(root, &since, &s.sandbox.data)?;
     let expected: Vec<_> = [
         ".env-alias",
-        "auth-parent",
-        "changed",
         "credential",
-        "data-parent",
         "directory",
         "indirect",
         "profile",
-        "profile-parent",
         "project",
     ]
     .map(|name| root.join("src").join(name))
@@ -107,6 +114,7 @@ async fn sweep_quarantines_secret_target_links() -> Result<(), HarnessError> {
         ("dangling", PathBuf::from("missing")),
         ("loop", PathBuf::from("loop")),
         ("existing-secret", root.join(".env")),
+        ("changed", PathBuf::from("../.env")),
         ("public-dir", public),
         ("project-root", PathBuf::from("..")),
     ] {

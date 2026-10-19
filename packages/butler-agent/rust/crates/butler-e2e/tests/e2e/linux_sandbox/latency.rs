@@ -18,7 +18,7 @@ fn launch(
     butler_platform::process_control::isolate_group(&mut command);
     let started = Instant::now();
     if inventory {
-        let secrets = command_sandbox::discover_project_secret_inventory(cwd).unwrap();
+        let secrets = command_sandbox::discover_project_entries(cwd).unwrap();
         assert!(secrets.is_empty());
     }
     let mut child = command.spawn().unwrap();

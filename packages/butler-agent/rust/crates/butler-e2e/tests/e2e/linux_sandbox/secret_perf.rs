@@ -63,8 +63,7 @@ fn measure(link_count: usize) -> Result<(), HarnessError> {
     let mut sweep = Vec::new();
     for index in 0..21 {
         let started = Instant::now();
-        let secrets = command_sandbox::discover_project_secret_inventory(root)?
-            .with_writable_roots(&[&scratch]);
+        let secrets = command_sandbox::discover_project_entries(root)?;
         discover.push(started.elapsed());
         assert_eq!(&*secrets, std::slice::from_ref(&protected));
         let since = secrets;
