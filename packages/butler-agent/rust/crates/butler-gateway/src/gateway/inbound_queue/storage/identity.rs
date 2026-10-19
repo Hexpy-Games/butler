@@ -111,6 +111,36 @@ pub(in crate::gateway::inbound_queue) fn find_idempotent(
     Ok(Some(canonical))
 }
 
+fn claim_of(record: &QueuedInboundEvent) -> Option<String> {
+    identity(&record.envelope)
+        .ok()?
+        .routing_hints?
+        .app_queue_claim_id
+}
+
+/// The App claim under which the record of `event_id` will deliver: the
+/// unfailed record carrying `claim`, else the live (pending or processing)
+/// canonical record. A failed record delivers nothing further.
+pub(in crate::gateway::inbound_queue) fn delivering_claim(
+    root: &Path,
+    event_id: &str,
+    claim: Option<&str>,
+) -> QueueResult<Option<String>> {
+    let canonical = find_queue_id(root, &canonical_id(event_id))?;
+    if let Some(claim) = claim {
+        let carrying = match &canonical {
+            Some((record, state)) if claim_of(record).as_deref() == Some(claim) => Some(*state),
+            _ => find_queue_id(root, &reconciliation_id(event_id, claim))?.map(|(_, state)| state),
+        };
+        if carrying.is_some_and(|state| state != "failed") {
+            return Ok(Some(claim.to_owned()));
+        }
+    }
+    Ok(canonical
+        .filter(|(_, state)| matches!(*state, "pending" | "processing"))
+        .and_then(|(record, _)| claim_of(&record)))
+}
+
 pub(in crate::gateway::inbound_queue) fn enqueue_idempotent(
     root: &Path,
     envelope: JsonDocument,

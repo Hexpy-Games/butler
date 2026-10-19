@@ -1,6 +1,6 @@
 //! Exact-claim dispatch recovery outside the admission service.
 
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::json;
 
 use super::*;
@@ -52,7 +52,7 @@ impl AppApplication {
             } else {
                 false
             };
-            if (!expired && !dead) || retained {
+            if (!expired && !dead) || retained || self.adopt_native(&row, &now).await? {
                 continue;
             }
             let timestamp = now.clone();
@@ -64,6 +64,78 @@ impl AppApplication {
         }
         Ok(())
     }
+
+    /// A dispatch whose durable native record can still deliver keeps the
+    /// claim that record carries, now owned here. Only a dispatch that never
+    /// reached the native queue (or whose record failed) is queued again:
+    /// a new claim for a surviving record would run the message twice and
+    /// fence the surviving record's result out of the turn.
+    async fn adopt_native(
+        &self,
+        row: &ExpiredClaim,
+        now: &str,
+    ) -> Result<bool, GatewayApplicationError> {
+        if row.turn_id.is_none() {
+            return Ok(false);
+        }
+        let (id, prior) = (row.id.clone(), row.claim_id.clone());
+        let dispatched = self
+            .storage
+            .read(move |db| dispatched_attempt(db, &id, prior.as_deref()))
+            .await
+            .map_err(app_error)?;
+        let Some((message_id, attempt)) = dispatched else {
+            return Ok(false);
+        };
+        let Some(claim) = self
+            .dependencies
+            .native_ingress
+            .delivering_claim(message_id, attempt, row.claim_id.clone())
+            .await?
+        else {
+            return Ok(false);
+        };
+        let lease = self
+            .dependencies
+            .identity_clock
+            .iso_after_millis(super::queue::SESSION_QUEUE_LEASE_MILLIS as u64);
+        let (id, prior, owner, now) = (
+            row.id.clone(),
+            row.claim_id.clone(),
+            self.queue_owner.clone(),
+            now.to_owned(),
+        );
+        self.storage
+            .execute(move |db| {
+                db.execute_cached(ADOPT_SQL, params![claim, owner, lease, now, id, prior])
+                    .map_err(AppStorageError::sqlite)
+            })
+            .await
+            .map_err(app_error)?;
+        Ok(true)
+    }
+}
+
+/// Unchanged since read: a concurrent settlement or claim wins.
+const ADOPT_SQL: &str = "UPDATE session_queued_messages SET claim_id=?1,claim_owner=?2,\
+    lease_expires_at=?3,updated_at=?4 WHERE id=?5 AND state='dispatching' AND claim_id IS ?6";
+
+/// The App message and attempt a linked dispatch handed to the native queue.
+fn dispatched_attempt(
+    db: &Connection,
+    id: &str,
+    claim: Option<&str>,
+) -> Result<Option<(String, u64)>, AppStorageError> {
+    db.query_row_cached(
+        "SELECT q.dispatched_message_id,t.attempt FROM session_queued_messages q \
+         JOIN turns t ON t.id=q.turn_id \
+         WHERE q.id=?1 AND q.state='dispatching' AND q.claim_id IS ?2",
+        params![id, claim],
+        |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, u64>(1)?)),
+    )
+    .optional()
+    .map_err(AppStorageError::sqlite)
+    .map(|row| row.and_then(|(message, attempt)| Some((message?, attempt))))
 }
 
 struct ExpiredClaim {
