@@ -111,7 +111,8 @@ try {
   const oldPid = readJson(join(data, "app/runtime/foreground/instance.json"))!.app_pid;
   const oldBinary = agentPath(from);
   const oldHash = digest(oldBinary);
-  const oldApp: OwnedProcesses = new Map(owned.has(oldPid) ? [[oldPid, owned.get(oldPid)!]] : []);
+  assert.ok(owned.has(oldPid), "Running App is not an owned process");
+  const oldApp: OwnedProcesses = new Map([[oldPid, owned.get(oldPid)!]]);
   phase = "Settings update";
   await settingsUpdate();
   await waitForOwnedExit(oldApp, "old App quit");

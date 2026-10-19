@@ -106,7 +106,6 @@ try {
   page?.close();
   ownedProcesses(data, owned);
   for (const { pid } of ownedSurvivors(owned)) { try { process.kill(pid, "SIGKILL"); } catch {} }
-  await waitForOwnedExit(owned, "released smoke process cleanup");
   if (!uninstalled && existsSync(updater)) run(updater, ["--uninstall", "--silent"]);
   server.stop(true);
   removeProfile(root, env);

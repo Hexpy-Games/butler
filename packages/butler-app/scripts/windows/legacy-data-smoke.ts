@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
-import { alive, bridge, click, ownedProcesses, ownedSurvivors, ownedDiagnostics, powershell, readJson, waitFor, waitForOwnedExit, type OwnedProcesses } from "./installer-smoke-support.ts";
+import { bridge, click, ownedProcesses, ownedSurvivors, ownedDiagnostics, powershell, readJson, waitFor, waitForOwnedExit, type OwnedProcesses } from "./installer-smoke-support.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
 
 if (process.platform !== "win32" || process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_ENVIRONMENT !== "github-hosted") {
@@ -67,7 +67,7 @@ try {
   renameSync(data, join(home, ".butler-0.0.20"));
   await click(page, "Restart");
   page.close(); page = null;
-  await waitFor(() => !alive(app.pid!), "legacy App quit for restart");
+  await waitFor(() => app.exitCode !== null || app.signalCode !== null, "legacy App quit for restart");
   await waitFor(() => existsSync(join(data, "app/runtime/foreground/instance.json")), "fresh Agent instance");
   ownedProcesses(data, owned);
   page = await electronPage(debugPort);
