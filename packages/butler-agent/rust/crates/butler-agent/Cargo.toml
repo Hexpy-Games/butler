@@ -62,6 +62,9 @@ url.workspace = true
 rmcp.workspace = true
 
 [dev-dependencies]
+arrow-array.workspace = true
+arrow-schema.workspace = true
+lancedb.workspace = true
 butler-platform = { path = "../butler-platform", features = ["test-support"] }
 butler-ledger = { path = "../butler-ledger", features = ["test-support"] }
 butler-runtime = { path = "../butler-runtime", features = ["test-support"] }
