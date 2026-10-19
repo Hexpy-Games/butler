@@ -17,7 +17,7 @@ use crate::cognition::{
         RecallMention, RelationshipState,
     },
     recall::{GraphExpansion, RankedEpisode, RecallRequest, RecallVectorMatches},
-    sources::{CanonicalInventory, read_canonical_inventory},
+    sources::{CoverageRead, inventory_coverage},
 };
 use butler_turn::conversation::ConversationSourceReader;
 
@@ -74,14 +74,15 @@ pub(super) fn run(request: RecallSelectionInput<'_>) -> CognitionResult<Selectio
     } = request;
     let (fts, fts_partial) = fallback::candidates(&request)?;
     let raw = lexical_sources(&request)?;
-    let inventory: CanonicalInventory = read_canonical_inventory(
+    let inventory = inventory_coverage(CoverageRead {
+        graph,
         canonical,
         input,
-        candidate_deadline,
+        deadline_at: candidate_deadline,
         parse_date,
         compare_locale,
         now_millis,
-    )?;
+    })?;
     let coverage = graph.projection_coverage(input, &inventory)?;
     let vector_current = vector_matches
         .map(|matches| graph.current_vector_matches(input, generation, matches, parse_date))

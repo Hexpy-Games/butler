@@ -22,7 +22,7 @@ async fn active_cancellation_kills_and_reaps_child() {
         data_root: PathBuf::new(),
         executable: PathBuf::new(),
         next_id: AtomicU64::new(1),
-        warm: AtomicBool::new(false),
+        readiness: WorkerReadiness::default(),
         enabled: AtomicBool::new(true),
         release: AtomicBool::new(false),
         release_signal: Notify::new(),
@@ -75,6 +75,8 @@ async fn active_cancellation_kills_and_reaps_child() {
 // test-category: race
 #[tokio::test]
 async fn readiness_lifecycle_keeps_one_load_until_release() {
+    prewarm_tests::regressions().await;
+    readiness_tests::prewarm_survives_unobserved_worker_exit().await;
     readiness_tests::readiness_timeout_leaves_load_for_later_waiter().await;
     readiness_tests::concurrent_readiness_waiters_share_one_load().await;
     readiness_tests::switching_off_interrupts_readiness_and_reaps_loading_worker().await;

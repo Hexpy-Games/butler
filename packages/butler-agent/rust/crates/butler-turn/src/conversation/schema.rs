@@ -2,7 +2,7 @@ use rusqlite::Connection;
 
 use super::{ConversationError, ConversationIdentityClock, ConversationResult};
 
-pub(super) const VERSION: u64 = 5;
+pub(super) const VERSION: u64 = 7;
 
 const SQL: &str = r"
 CREATE TABLE IF NOT EXISTS conversation_sessions (
@@ -146,9 +146,48 @@ fn migrate(
                 .map_err(ConversationError::sqlite)?;
         }
     }
+    // The change log triggers read the origin columns added above.
+    drop_older_change_log(connection)?;
+    connection
+        .execute_batch(super::source_changes::SQL)
+        .map_err(ConversationError::sqlite)?;
     connection.execute(
         "INSERT OR IGNORE INTO conversation_schema_migrations (version, applied_at) VALUES (?1, ?2)",
         rusqlite::params![VERSION, clock.now_iso()],
     ).map_err(ConversationError::sqlite)?;
     Ok(())
+}
+
+/// Drops a change log of an earlier shape (no row token) and every change
+/// trigger, so the current log and triggers replace them. Readers of the old
+/// log no longer find their watermark row and rebuild.
+fn drop_older_change_log(connection: &Connection) -> ConversationResult<()> {
+    let current: bool = connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('conversation_source_changes') WHERE name='token')",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(ConversationError::sqlite)?;
+    if current {
+        return Ok(());
+    }
+    let triggers = connection
+        .prepare(
+            "SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE '%source_change%'",
+        )
+        .and_then(|mut statement| {
+            statement
+                .query_map([], |row| row.get::<_, String>(0))?
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .map_err(ConversationError::sqlite)?;
+    for trigger in triggers {
+        connection
+            .execute_batch(&format!("DROP TRIGGER IF EXISTS \"{trigger}\""))
+            .map_err(ConversationError::sqlite)?;
+    }
+    connection
+        .execute_batch("DROP TABLE IF EXISTS conversation_source_changes")
+        .map_err(ConversationError::sqlite)
 }

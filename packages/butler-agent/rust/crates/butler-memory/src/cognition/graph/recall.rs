@@ -301,7 +301,7 @@ impl GraphRecallReader {
     pub(in crate::cognition) fn projection_coverage(
         &self,
         input: &RecallRequest,
-        inventory: &crate::cognition::sources::CanonicalInventory,
+        inventory: &crate::cognition::sources::InventoryCoverage,
     ) -> CognitionResult<ProjectionCoverage> {
         coverage::graph(self.connection()?, input, inventory)
     }

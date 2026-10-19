@@ -101,8 +101,14 @@ impl WebSession {
         let gate = self.lock_planning().await;
         let first_search = !self.first_search_consumed();
         let plan_result = if first_search {
-            match planning::create_plan(&self.access, input, &self.original_request(), cancellation)
-                .await
+            match planning::create_plan(
+                &self.access,
+                input,
+                &self.original_request(),
+                self.usage_attribution.as_ref(),
+                cancellation,
+            )
+            .await
             {
                 Ok(result) => result,
                 Err(error) => {
