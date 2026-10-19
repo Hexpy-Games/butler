@@ -57,8 +57,10 @@ try {
   assert.equal(powershell("Test-Path 'HKCU:\\Software\\Classes\\butler'", env), "False");
   for (const folder of [env.HOME, data, env.LOCALAPPDATA, env.APPDATA, dirname(shortcuts[1]!)]) mkdirSync(folder, { recursive: true });
   writeFileSync(join(data, "sentinel.txt"), "released data retained\n");
+  // Setup's auto-launched App runs the day's scheduled cycle before the smoke connects; a briefing
+  // needs both a model and a reasoning effort then (the later updateSettings uses the same values).
   writeFileSync(join(data, "butler.config.json"), JSON.stringify({ user: { name: "E2E", language: "en" },
-    metrics: { enabled: false }, system: { defaultModel: "openai/gpt-6-luna" } }));
+    metrics: { enabled: false }, system: { defaultModel: "openai/gpt-6-luna" }, reasoning_effort: "low" }));
   const now = new Date().toISOString();
   mkdirSync(join(data, "personalization"), { recursive: true });
   writeFileSync(join(data, "personalization/onboarding.json"), JSON.stringify({ schema: "butler.first_chat_onboarding.v1",
