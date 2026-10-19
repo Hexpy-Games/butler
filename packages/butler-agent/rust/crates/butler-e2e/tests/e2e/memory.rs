@@ -369,3 +369,6 @@ mod coverage_support;
 
 #[path = "memory/model_choice.rs"]
 mod model_choice;
+
+#[path = "memory/lock_retry.rs"]
+mod lock_retry;
