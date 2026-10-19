@@ -60,6 +60,8 @@ pub(super) fn verify() {
     );
     // Remove the alias itself before recursive scratch cleanup.
     remove_alias(&link);
+    #[cfg(target_os = "linux")]
+    identity_aliases_are_quarantined(&temp);
     fs::remove_dir_all(temp).unwrap();
 }
 #[cfg(unix)]
@@ -99,4 +101,50 @@ fn win32_trimmed_names_are_swept_as_named(
     assert_eq!(swept, [project.join("sub.").join(".env")]);
     assert!(!verbatim.join(".env").exists());
     fs::remove_dir(&verbatim).unwrap();
+}
+
+/// Hard links provide distinct canonical paths with identical (dev, ino),
+/// without mount privileges. Exercise the production sweep's identity contract.
+#[cfg(target_os = "linux")]
+fn identity_aliases_are_quarantined(temp: &std::path::Path) {
+    use butler_platform::command_sandbox::sweep_new_secrets_with_environment;
+    use std::{collections::HashMap, os::unix::fs::MetadataExt};
+    let project = temp.join("identity-project");
+    let outside = temp.join("identity-outside");
+    let data = temp.join("identity-data");
+    fs::create_dir_all(&project).unwrap();
+    fs::create_dir_all(&outside).unwrap();
+    let writable = outside.join("scratch");
+    let credential = outside.join("login");
+    let protected = project.join(".env");
+    for path in [&writable, &credential, &protected] {
+        fs::write(path, "complete-private").unwrap();
+    }
+    let before = discover_project_secret_inventory(&project)
+        .unwrap()
+        .with_writable_roots(&[&writable]);
+    let mut expected = Vec::new();
+    for (index, path) in [&writable, &credential, &protected].into_iter().enumerate() {
+        let alias = outside.join(format!("alias{index}"));
+        fs::hard_link(path, &alias).unwrap();
+        let a = fs::metadata(path).unwrap();
+        let b = fs::metadata(&alias).unwrap();
+        assert_eq!((a.dev(), a.ino()), (b.dev(), b.ino()));
+        assert_ne!(
+            fs::canonicalize(path).unwrap(),
+            fs::canonicalize(&alias).unwrap()
+        );
+        let link = project.join(format!("link{index}"));
+        make_alias(&alias, &link);
+        expected.push(link);
+    }
+    let environment = HashMap::from([("CODEX_AUTH_JSON".into(), credential.display().to_string())]);
+    let moved = sweep_new_secrets_with_environment(&project, &before, &data, &environment).unwrap();
+    assert_eq!(moved, expected);
+    for path in expected {
+        assert!(fs::symlink_metadata(path).is_err());
+    }
+    for path in [&writable, &credential, &protected] {
+        assert_eq!(fs::read_to_string(path).unwrap(), "complete-private");
+    }
 }

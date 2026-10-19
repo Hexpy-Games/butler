@@ -71,11 +71,9 @@ async fn sweep_quarantines_secret_target_links() -> Result<(), HarnessError> {
         "auth-parent",
         "changed",
         "credential",
-        "dangling",
         "data-parent",
         "directory",
         "indirect",
-        "loop",
         "profile",
         "profile-parent",
         "project",
@@ -106,6 +104,8 @@ async fn sweep_quarantines_secret_target_links() -> Result<(), HarnessError> {
         "private-fixture"
     );
     for (name, target) in [
+        ("dangling", PathBuf::from("missing")),
+        ("loop", PathBuf::from("loop")),
         ("existing-secret", root.join(".env")),
         ("public-dir", public),
         ("project-root", PathBuf::from("..")),

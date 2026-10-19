@@ -1,5 +1,7 @@
 //! Metadata-only discovery; post-run link resolution never reads target contents.
 #[cfg(unix)]
+mod identity;
+#[cfg(unix)]
 #[path = "quarantine_unix.rs"]
 mod quarantine;
 #[cfg(windows)]
@@ -54,13 +56,11 @@ pub(super) fn sweep_new_secrets(
         let path = root.join(relative);
         let changed = since.started.is_none_or(|started| ctime >= started);
         // Resolve all links after reaping. Old scratch aliases are never trusted.
-        // Unresolvable new links cannot be proven safe for a later reader.
-        let target = crate::command_sandbox::linux::complement::resolved_path(&path);
+        // Missing targets retain their lexical destination and ancestor identity.
+        let target = crate::command_sandbox::linux::complement::resolved_path(&path)
+            .or_else(|_| crate::command_sandbox::linux::unresolved::target(&path));
         let unsafe_link = targets.writable_indirection(&path, target.as_deref().ok())
-            || (changed
-                && target
-                    .as_ref()
-                    .map_or(true, |target| targets.protects(target)));
+            || (changed && target.as_ref().is_ok_and(|target| targets.protects(target)));
         if changed || unsafe_link {
             changed_paths.insert(path.clone());
         }

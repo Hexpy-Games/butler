@@ -92,3 +92,64 @@ async fn guided_sweep_quarantines_all_scratch_indirections() -> Result<(), Harne
     s.sandbox.mark_success();
     Ok(())
 }
+
+#[tokio::test]
+async fn guided_sweep_keeps_ordinary_dangling_links() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(command_sandbox::linux_test_host(), "Linux dangling links");
+    use butler_turn::workspace::{Commands, GuidedAccess, GuidedCommandInput};
+    let mut s = Setup::new("LINUX-DANGLING-LINKS")?;
+    let root = &s.sandbox.workspace;
+    std::fs::create_dir_all(root.join("src"))?;
+    std::fs::create_dir_all(s.sandbox.home.join(".config/gh"))?;
+    let command = format!(
+        "set -e; ln -s missing/deep/file src/safe; ln -s '{}' src/credential; ln -s \"$TMPDIR/missing/deep\" src/tmp; ln -s \"$XDG_CACHE_HOME/missing/deep\" src/cache; ln -s \"$BUTLER_ARTIFACTS_DIR/missing/deep\" src/artifact",
+        s.sandbox.home.join(".config/gh/missing/deep").display(),
+    );
+    let owner = Commands::new();
+    let result = owner
+        .submit_guided(GuidedCommandInput {
+            command,
+            cwd: None,
+            workspace_root: root.clone(),
+            butler_data: s.sandbox.data.clone(),
+            timeout_ms: Some(10_000.0),
+            access: GuidedAccess::ProjectWrite,
+            host_environment: HashMap::from([
+                ("HOME".into(), s.sandbox.home.display().to_string()),
+                ("PATH".into(), std::env::var("PATH").unwrap()),
+            ]),
+            abort: tokio_util::sync::CancellationToken::new(),
+        })
+        .unwrap()
+        .await
+        .unwrap();
+    owner.close().await;
+    let output = result.unwrap();
+    std::fs::remove_file(output.payload_source.path)?;
+    assert_eq!(output.summary.exit_code, Some(0));
+    let expected: Vec<_> = ["artifact", "cache", "credential", "tmp"]
+        .map(|name| root.join("src").join(name))
+        .into();
+    assert_eq!(output.summary.sandbox_violation, expected);
+    for path in &expected {
+        assert!(std::fs::symlink_metadata(path).is_err());
+    }
+    assert_eq!(
+        std::fs::read_link(root.join("src/safe"))?,
+        Path::new("missing/deep/file")
+    );
+    let quarantine = std::fs::read_dir(s.sandbox.data.join("sandbox-quarantine"))?
+        .next()
+        .unwrap()?
+        .path();
+    for path in expected {
+        assert!(
+            std::fs::symlink_metadata(quarantine.join(path.strip_prefix(root).unwrap()))?
+                .file_type()
+                .is_symlink()
+        );
+    }
+    s.sandbox.mark_success();
+    Ok(())
+}

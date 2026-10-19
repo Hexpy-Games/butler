@@ -1,16 +1,26 @@
 //! Canonical secret inventory for the post-reap sweep; no content opens.
+use super::identity::{Coordinate, Identities};
 use std::{
     collections::{HashMap, HashSet},
     io,
     path::{Path, PathBuf},
 };
 
+#[derive(Clone, Copy, Default)]
+struct Membership {
+    protected: bool,
+    writable: bool,
+    project: bool,
+}
+
 pub(super) struct SecretTargets {
-    roots: HashSet<PathBuf>,
-    credentials: HashSet<PathBuf>,
-    writable: Vec<PathBuf>,
-    project: PathBuf,
-    writable_ancestors: HashMap<PathBuf, bool>,
+    roots: HashSet<Coordinate>,
+    credential_ancestors: HashSet<Coordinate>,
+    writable: HashSet<Coordinate>,
+    project: Coordinate,
+    identities: Identities,
+    ancestors: HashMap<PathBuf, Membership>,
+    indirections: HashMap<PathBuf, bool>,
 }
 
 impl SecretTargets {
@@ -25,35 +35,74 @@ impl SecretTargets {
         environment.insert("BUTLER_DATA".into(), data.to_string_lossy().into_owned());
         let paths = crate::command_sandbox::credentials::roots(&environment);
         // A bad entry protects its own name, never unrelated project links.
-        let resolve = |path: &PathBuf| canonical_or_missing(path).unwrap_or_else(|_| path.clone());
-        let credentials: HashSet<_> = paths.iter().map(resolve).collect();
-        let mut roots = credentials.clone();
-        roots.extend(inventory.iter().map(resolve));
-        let project = resolve(&project.to_path_buf());
-        let writable = writable
+        let resolve =
+            |path: &Path| canonical_or_missing(path).unwrap_or_else(|_| path.to_path_buf());
+        let mut identities = Identities::default();
+        let credentials: Vec<_> = paths.iter().map(|path| resolve(path)).collect();
+        let roots = credentials
             .iter()
-            .map(resolve)
-            .filter(|path| !path.starts_with(&project))
+            .chain(inventory)
+            .map(|path| identities.coordinate(&resolve(path)))
             .collect();
-        Self {
+        let credential_ancestors = credentials
+            .iter()
+            .flat_map(|path| path.ancestors())
+            .map(|path| identities.coordinate(path))
+            .collect();
+        let project = identities.coordinate(&resolve(project));
+        let writable_roots = writable
+            .iter()
+            .map(|path| identities.coordinate(&resolve(path)))
+            .collect();
+        let mut result = Self {
             roots,
-            credentials,
-            writable,
+            credential_ancestors,
+            writable: writable_roots,
             project,
-            writable_ancestors: HashMap::new(),
+            identities,
+            ancestors: HashMap::new(),
+            indirections: HashMap::new(),
+        };
+        // Project-local write grants must not classify ordinary project links
+        // as scratch, even when the grant uses another mount view.
+        for path in writable {
+            let path = resolve(path);
+            if result.membership(&path).project {
+                let coordinate = result.identities.coordinate(&path);
+                result.writable.remove(&coordinate);
+            }
         }
+        result.ancestors.clear();
+        result
     }
 
-    /// Every link is judged against writable roots, including old user links:
-    /// sandbox code can retarget their descendants without changing the link.
-    pub(super) fn writable_target(&self, target: &Path) -> bool {
-        !target.starts_with(&self.project)
-            && self.writable.iter().any(|root| target.starts_with(root))
+    /// One stat per uncached path, and one ancestor walk per shared chain,
+    /// entirely after reaping. Mount path spelling never establishes containment.
+    fn membership(&mut self, path: &Path) -> Membership {
+        if let Some(known) = self.ancestors.get(path) {
+            return *known;
+        }
+        let mut member = path
+            .parent()
+            .map(|parent| self.membership(parent))
+            .unwrap_or_default();
+        let coordinate = self.identities.coordinate(path);
+        member.protected |= self.roots.contains(&coordinate);
+        member.writable |= self.writable.contains(&coordinate);
+        member.project |= coordinate == self.project;
+        if coordinate == self.project {
+            member.writable = false;
+        }
+        self.ancestors.insert(path.to_path_buf(), member);
+        member
+    }
+
+    fn writable_target(&mut self, target: &Path) -> bool {
+        self.membership(target).writable
     }
 
     /// A final target may have escaped scratch through a newly planted link.
-    /// Check the link text's ancestors too, caching shared parents only within
-    /// this post-reap judgment. Never carry this cache across commands.
+    /// Inspect the link text's ancestors as well as the final target.
     pub(super) fn writable_indirection(&mut self, link: &Path, target: Option<&Path>) -> bool {
         if self.writable.is_empty() {
             return false;
@@ -65,13 +114,10 @@ impl SecretTargets {
             return true;
         };
         let raw = link.parent().unwrap_or(Path::new("/")).join(text);
-        if self.writable_target(&raw) {
-            return true;
-        }
         let mut visited = Vec::new();
         let mut writable = false;
         for ancestor in raw.ancestors().skip(1) {
-            if let Some(known) = self.writable_ancestors.get(ancestor) {
+            if let Some(known) = self.indirections.get(ancestor) {
                 writable = *known;
                 break;
             }
@@ -81,17 +127,17 @@ impl SecretTargets {
                 break;
             }
         }
-        // Each cached answer includes all ancestors, so siblings stop at their
-        // shared parent without repeating path resolutions or ancestor lookups.
         for path in visited {
-            self.writable_ancestors.insert(path, writable);
+            self.indirections.insert(path, writable);
         }
         writable
     }
 
-    pub(super) fn protects(&self, target: &Path) -> bool {
-        target.ancestors().any(|path| self.roots.contains(path))
-            || self.credentials.iter().any(|root| root.starts_with(target))
+    pub(super) fn protects(&mut self, target: &Path) -> bool {
+        self.membership(target).protected
+            || self
+                .credential_ancestors
+                .contains(&self.identities.coordinate(target))
             || target.components().any(|part| {
                 crate::command_sandbox::secret_name(&part.as_os_str().to_string_lossy())
             })

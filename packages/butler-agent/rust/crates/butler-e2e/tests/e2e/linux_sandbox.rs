@@ -2,6 +2,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
 mod boundaries;
 mod latency;
+mod mount_aliases;
 mod project_boundaries;
 mod project_write;
 mod scratch_links;
