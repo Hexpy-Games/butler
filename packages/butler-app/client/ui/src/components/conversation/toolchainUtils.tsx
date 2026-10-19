@@ -1,3 +1,5 @@
+import { ThinkingDetails } from "./ThinkingDetails";
+import { AiChip, RollingSwap } from "@/butler-ds";
 import { type WorkActivityToolItem } from "@/butler-ds";
 import { appCopy, getAppCopy, getAppLocale, interfaceProgressLabel } from "@/app/copy.ts";
 import { isVisibleToolActivity } from "@/app/conversation-progress";
@@ -46,11 +48,11 @@ export function workActivityToolsFromRows(
       (row.safe_tool_name && WORK_BOOKKEEPING_TOOL_NAMES.has(row.safe_tool_name))
     ))
     .map((row, rowIndex) => ({
-    id: `${row.id}:${rowIndex}`,
-    icon: activityIcon(row),
-    title: toolchainSummaryLabel(row),
-    summaryLabel: toolchainGroupLabel(row),
-    details: toolDetails(row, turnId),
+    id: row.thinking_title ? `thinking:${row.tool_call_id}` : `${row.id}:${rowIndex}`,
+    icon: row.thinking_title ? <AiChip size="md" /> : activityIcon(row),
+    title: row.thinking_title ? <RollingSwap itemKey={row.thinking_title}>{row.thinking_title}</RollingSwap> : toolchainSummaryLabel(row),
+    summaryLabel: row.thinking_title ? appCopy.interfaceStatus.thinking : toolchainGroupLabel(row),
+    details: row.thinking_title ? (row.thinking_body || row.tool_result_id ? <ThinkingDetails text={row.thinking_body} turnId={turnId} requestId={row.tool_call_id} resultId={row.tool_result_id} /> : undefined) : toolDetails(row, turnId),
     ...toolchainAfter(row, rows, turnId),
     }));
 }

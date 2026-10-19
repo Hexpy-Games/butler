@@ -68,6 +68,12 @@ test("settings cache preserves an explicit custom palette draft", () => {
 });
 
 test("settings defaults carry the gateway's default wallpaper", () => {
+  expect(EMPTY_SETTINGS.show_thinking).toBe(false);
+  expect(settingsWithDefaults({}).show_thinking).toBe(false);
+  expect(settingsWithDefaults({ show_thinking: "true" }).show_thinking).toBe(false);
+  installLocalStorage();
+  writeCachedSettings({ ...EMPTY_SETTINGS, show_thinking: true });
+  expect(readCachedSettings().show_thinking).toBe(true);
   expect(EMPTY_SETTINGS.conversation_background).toEqual({ source: { kind: "live", module: "butler.riso-print" }, overlay: 70 });
   expect(EMPTY_SETTINGS.wallpaper).toEqual({
     source: {

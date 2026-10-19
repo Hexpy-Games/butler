@@ -20,6 +20,7 @@ use crate::btcc::StorageCode;
 pub struct BtccRepositories {
     pub(super) storage: BtccStorage,
     /// Ephemeral draft delivery shared by repository clones.
+    pub thinking: crate::btcc::AnswerDraftPublisher,
     pub answer_drafts: crate::btcc::AnswerDraftPublisher,
     pub(super) continuation_limits: Option<TurnContinuationBudgetLimits>,
 }
@@ -209,6 +210,9 @@ impl CanonicalMessageStore for BtccRepositories {
     }
 }
 impl ProgressEventRepository for BtccRepositories {
+    fn model_thinking(&self, payload: serde_json::Value) {
+        self.thinking.publish(payload);
+    }
     fn answer_blocks_draft(&self, payload: serde_json::Value) {
         self.answer_drafts.publish(payload);
     }
@@ -253,6 +257,7 @@ impl BtccRepositories {
         Self {
             storage,
             continuation_limits,
+            thinking: Default::default(),
             answer_drafts: Default::default(),
         }
     }

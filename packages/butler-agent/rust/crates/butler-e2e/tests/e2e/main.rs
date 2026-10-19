@@ -108,6 +108,7 @@ mod memory_import;
 mod memory_model_cleanup;
 mod memory_wiring;
 mod migration;
+mod model_thinking;
 mod monitoring_scale;
 mod onboarding;
 mod onboarding_form;

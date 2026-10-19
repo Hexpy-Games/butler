@@ -117,7 +117,11 @@ fn responses(
     }
     body.insert("tool_choice".into(), choice(request.tool_choice).into());
     if let Some(reasoning) = reasoning::effort(request) {
-        body.insert("reasoning".into(), serde_json::json!({"effort":reasoning}));
+        let mut value = serde_json::json!({"effort":reasoning});
+        if config.metadata.provider_id == "openai" {
+            value["summary"] = "auto".into();
+        }
+        body.insert("reasoning".into(), value);
     }
     if let Some(response_id) = request
         .continuation
@@ -302,7 +306,7 @@ fn gemini(request: &ModelRoundRequest<'_>) -> Value {
     }
     generation.insert(
         "thinkingConfig".into(),
-        serde_json::json!({"thinkingLevel":reasoning::gemini_level(request.reasoning_effort)}),
+        serde_json::json!({"thinkingLevel":reasoning::gemini_level(request.reasoning_effort),"includeThoughts":true}),
     );
     if !generation.is_empty() {
         body.insert("generationConfig".into(), generation.into());

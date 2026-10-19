@@ -64,6 +64,20 @@ impl StreamProjection {
         text: &str,
         reasoning: bool,
     ) {
+        self.project(observer, text, reasoning, true);
+    }
+
+    pub(super) fn internal(&mut self, observer: Option<&dyn ProviderStreamObserver>, text: &str) {
+        self.project(observer, text, true, false);
+    }
+
+    fn project(
+        &mut self,
+        observer: Option<&dyn ProviderStreamObserver>,
+        text: &str,
+        reasoning: bool,
+        summary: bool,
+    ) {
         let Some(observer) = observer.filter(|_| !text.is_empty()) else {
             return;
         };
@@ -71,6 +85,7 @@ impl StreamProjection {
         observer.event(&serde_json::json!({
             "type": if reasoning { "reasoning_delta" } else { "text_delta" },
             "streamId": self.id, "sequence": self.sequence, "textDelta": text,
+            "display": if reasoning && summary { "summary" } else { "internal" },
             "target": "final_candidate", "charCount": text.encode_utf16().count(),
         }));
     }

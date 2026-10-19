@@ -327,6 +327,9 @@ pub struct ModelRoundResult {
     /// Providers without such a distinction leave this false; Work review still applies.
     #[serde(default)]
     pub nonfinal: bool,
+    /// Display summary, consumed once at acceptance, excluded from replay/context storage.
+    #[serde(skip)]
+    pub reasoning_summary: Option<String>,
     pub text: Option<String>,
     #[serde(default)]
     pub tool_calls: Vec<ModelRoundToolCall>,
