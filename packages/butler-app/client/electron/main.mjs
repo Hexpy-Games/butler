@@ -345,10 +345,6 @@ autoUpdater.on("before-quit-for-update", () => {
   isQuitting = true;
   finalQuitAllowed = true;
 });
-if (process.env.BUTLER_E2E_TIER === "stub" && process.env.BUTLER_APP_SMOKE_DEBUG_PORT) {
-  app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
-  app.commandLine.appendSwitch("remote-debugging-port", process.env.BUTLER_APP_SMOKE_DEBUG_PORT);
-}
 app.commandLine.appendSwitch("disable-gpu-process-crash-limit");
 const explicitElectronUserDataDir = process.env.BUTLER_APP_ELECTRON_USER_DATA_DIR?.trim();
 let openAIOAuthLoginSession = null;
