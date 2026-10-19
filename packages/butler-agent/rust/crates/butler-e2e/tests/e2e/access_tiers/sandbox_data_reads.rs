@@ -1,7 +1,14 @@
-//! Exercise the shared guided caller on Linux and macOS, including data aliases.
+//! Exercise the shared guided caller on every enforced sandbox host, including
+//! data aliases and the App gateway credentials kept in the data folder.
 use super::*;
+use butler_platform::data_paths::{
+    FOLDER_SECRET, GATEWAY_CREDENTIAL_DIRS, LOCAL_ADMIN, LOCAL_AUTH,
+};
 use butler_turn::workspace::{Commands, GuidedAccess, GuidedCommandInput};
-use std::{collections::HashMap, path::Path};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 use tokio_util::sync::CancellationToken;
 
 async fn command(
@@ -36,6 +43,35 @@ async fn command(
     Ok((output.summary.exit_code, stdout))
 }
 
+/// Writes each gateway credential under `data` with its change lock
+/// (`<name>.lock`) and a rotation temporary named like
+/// `secure_fs::unique_temporary` names them, plus an ordinary file one level
+/// above each credential folder. Returns both sets, `data`-relative.
+fn gateway_fixtures(data: &Path) -> Result<(Vec<PathBuf>, Vec<PathBuf>), HarnessError> {
+    let mut private = Vec::new();
+    for credential in [LOCAL_AUTH, LOCAL_ADMIN, FOLDER_SECRET] {
+        let credential = PathBuf::from(credential);
+        let name = credential.file_name().unwrap().to_string_lossy();
+        let lock = credential.with_file_name(format!("{name}.lock"));
+        let rotation = credential.with_file_name(format!(".{name}.1.0.0.tmp"));
+        for path in [credential, lock, rotation] {
+            std::fs::create_dir_all(data.join(&path).parent().unwrap())?;
+            std::fs::write(data.join(&path), "private-gateway-fixture")?;
+            private.push(path);
+        }
+    }
+    let mut neighbours = Vec::new();
+    for folder in GATEWAY_CREDENTIAL_DIRS {
+        let neighbour = Path::new(folder)
+            .parent()
+            .unwrap()
+            .join("ordinary-neighbour.txt");
+        std::fs::write(data.join(&neighbour), "complete-data-fixture")?;
+        neighbours.push(neighbour);
+    }
+    Ok((private, neighbours))
+}
+
 #[tokio::test]
 async fn contained_commands_allow_data_reads_and_keep_writes_and_credentials_denied()
 -> Result<(), HarnessError> {
@@ -57,13 +93,19 @@ async fn contained_commands_allow_data_reads_and_keep_writes_and_credentials_den
         let auth = data.join("auth/provider.json");
         std::fs::create_dir_all(auth.parent().unwrap())?;
         std::fs::write(&auth, "private-auth-fixture")?;
+        let (gateway, neighbours) = gateway_fixtures(data)?;
         let alias = setup.sandbox.workspace.join("data-alias");
         butler_platform::secure_fs::symlink(data, &alias)?;
-        for path in [&file, &alias.join("ordinary.txt")] {
+        let mut readable = vec![file, alias.join("ordinary.txt")];
+        for neighbour in neighbours {
+            readable.push(alias.join(&neighbour));
+            readable.push(data.join(neighbour));
+        }
+        for path in &readable {
             let (status, stdout) =
                 command(&owner, &setup, data, format!("cat '{}'", path.display())).await?;
-            assert_eq!(status, Some(0));
-            assert_eq!(stdout, b"complete-data-fixture");
+            assert_eq!(status, Some(0), "{}", path.display());
+            assert_eq!(stdout, b"complete-data-fixture", "{}", path.display());
         }
         let target = data.join("denied-write.txt");
         let (status, _) = command(
@@ -75,10 +117,15 @@ async fn contained_commands_allow_data_reads_and_keep_writes_and_credentials_den
         .await?;
         assert_ne!(status, Some(0));
         assert!(!target.exists());
-        for private in [&credential, &auth, &alias.join("auth/provider.json")] {
+        let mut denied = vec![credential.clone(), auth, alias.join("auth/provider.json")];
+        for relative in gateway {
+            denied.push(alias.join(&relative));
+            denied.push(data.join(relative));
+        }
+        for private in &denied {
             let (status, stdout) =
                 command(&owner, &setup, data, format!("cat '{}'", private.display())).await?;
-            assert_ne!(status, Some(0));
+            assert_ne!(status, Some(0), "{}", private.display());
             assert!(stdout.is_empty(), "credential output must remain empty");
         }
         std::fs::remove_file(alias)?;
