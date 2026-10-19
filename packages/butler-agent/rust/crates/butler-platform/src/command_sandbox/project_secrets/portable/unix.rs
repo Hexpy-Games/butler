@@ -33,17 +33,14 @@ pub(super) fn kind(parent: impl AsFd, name: &OsStr) -> io::Result<FileType> {
 
 /// Names and directory flags of one directory, read before any is changed.
 pub(in crate::command_sandbox) fn entries(dir: &OwnedFd) -> io::Result<Vec<(OsString, bool)>> {
-    read_entries(dir, |name, kind, _| (name, kind == FileType::Directory))
+    read_entries(dir, |name, kind| (name, kind == FileType::Directory))
 }
 
 /// Only the post-run walk stats links. Launch discovery uses directory-entry
 /// types and adds no per-link syscalls. ctime uses the kernel realtime clock.
-pub(super) fn entries_with_links(
-    dir: &OwnedFd,
-    collect_links: bool,
-) -> io::Result<Vec<super::tree::Entry>> {
-    read_entries(dir, |name, kind, _| {
-        let changed = if collect_links && kind == FileType::Symlink {
+pub(super) fn entries_with_links(dir: &OwnedFd) -> io::Result<Vec<super::tree::Entry>> {
+    read_entries(dir, |name, kind| {
+        let changed = if kind == FileType::Symlink {
             let stat = statat(dir, name.as_os_str(), AtFlags::SYMLINK_NOFOLLOW)?;
             Some(
                 std::time::UNIX_EPOCH
@@ -61,10 +58,7 @@ pub(super) fn entries_with_links(
     .collect()
 }
 
-fn read_entries<T>(
-    dir: &OwnedFd,
-    project: impl Fn(OsString, FileType, u64) -> T,
-) -> io::Result<Vec<T>> {
+fn read_entries<T>(dir: &OwnedFd, project: impl Fn(OsString, FileType) -> T) -> io::Result<Vec<T>> {
     let mut entries = Vec::new();
     for entry in Dir::read_from(dir)? {
         let entry = entry?;
@@ -76,7 +70,7 @@ fn read_entries<T>(
             FileType::Unknown => kind(dir, name)?,
             kind => kind,
         };
-        entries.push(project(name.to_os_string(), kind, entry.ino()));
+        entries.push(project(name.to_os_string(), kind));
     }
     Ok(entries)
 }
