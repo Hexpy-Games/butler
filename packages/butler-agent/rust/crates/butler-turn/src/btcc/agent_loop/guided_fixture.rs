@@ -93,6 +93,7 @@ impl TurnContextProjection for BorrowedContext<'_> {
         Box::pin(async move {
             observe_scope(invocation, "context").await;
             Ok(ContextProjection {
+                compacted_through: None,
                 messages: ContextMessages::Transport,
                 bounded_continuation: None,
                 provider_body_admission: None,

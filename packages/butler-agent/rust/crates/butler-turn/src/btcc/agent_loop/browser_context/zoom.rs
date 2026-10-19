@@ -1,13 +1,14 @@
 //! Close-ups are for looking: only the newest per tab keeps its pixels, and none
 //! outlives a newer observation of that tab.
 use super::super::contracts::{ModelRoundMessage, ModelRoundRole};
-use super::field;
+use super::{field, prune::Stale};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
 const ZOOM: &str = "butler.browser-zoom.v1";
 
-pub(super) fn supersede(messages: &mut [ModelRoundMessage]) {
+pub(super) fn plan(messages: &[ModelRoundMessage]) -> Vec<Stale> {
+    let mut stale = Vec::new();
     let mut newest: HashMap<String, usize> = HashMap::new();
     let mut zooms = Vec::new();
     for (index, message) in messages.iter().enumerate() {
@@ -31,12 +32,14 @@ pub(super) fn supersede(messages: &mut [ModelRoundMessage]) {
     }
     for (index, tab) in zooms {
         if newest.get(&tab) != Some(&index)
-            && let Some(message) = messages.get_mut(index)
+            && let Some(message) = messages.get(index)
         {
-            message.content = json!({"ok":true,"output":{"schema":ZOOM,"tab":tab,"status":"superseded",
+            let stub = json!({"ok":true,"output":{"schema":ZOOM,"tab":tab,"status":"superseded",
                 "recovery":"An older close-up. Zoom again on the newest observation if you need to look closer."}})
             .to_string()
             .into();
+            stale.push(Stale::new(index, message, stub));
         }
     }
+    stale
 }
