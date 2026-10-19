@@ -44,6 +44,16 @@ pub struct EnqueueReceipt {
 pub trait AppNativeIngress: Send + Sync + 'static {
     fn enqueue(&self, turn: AppTurn) -> ApplicationFuture<EnqueueReceipt>;
     fn find(&self, turn: AppTurn) -> ApplicationFuture<Option<EnqueueReceipt>>;
+    /// The claim an unfailed durable native record of this message attempt
+    /// delivers under: the one carrying `claim`, else a live one.
+    fn delivering_claim(
+        &self,
+        _message_id: String,
+        _turn_attempt: u64,
+        _claim: Option<String>,
+    ) -> ApplicationFuture<Option<String>> {
+        Box::pin(async { Ok(None) })
+    }
     fn enqueue_cancel(&self, _cancel: AppCancellation) -> ApplicationFuture<EnqueueReceipt> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
@@ -155,20 +165,6 @@ pub trait AppBranchSummarizer: Send + Sync + 'static {
         input: AppBranchSummaryInput,
         cancellation: tokio_util::sync::CancellationToken,
     ) -> ApplicationFuture<AppBranchSummary>;
-}
-
-#[derive(Clone, Debug)]
-pub struct AppSessionTitleInput {
-    pub text: String,
-    pub model_ref: String,
-}
-
-pub trait AppSessionTitleGenerator: Send + Sync + 'static {
-    fn generate(
-        &self,
-        input: AppSessionTitleInput,
-        cancellation: tokio_util::sync::CancellationToken,
-    ) -> ApplicationFuture<String>;
 }
 
 #[derive(Clone, Debug)]
@@ -399,6 +395,8 @@ pub trait AppContextReadPort: Send + Sync {
     fn read(&self, query: AppContextReadQuery) -> ApplicationFuture<AppContextReadFacts>;
 }
 
+mod session_titles;
+pub use session_titles::{AppSessionTitleGenerator, AppSessionTitleInput};
 mod subsessions;
 pub use subsessions::{
     AppSessionViewPage, AppSubsessionPort, AppTaskGraphQuery, AppWorkerActivitySourcePage,
