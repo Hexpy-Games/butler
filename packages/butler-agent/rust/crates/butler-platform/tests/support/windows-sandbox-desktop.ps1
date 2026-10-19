@@ -121,7 +121,7 @@ public static class ButlerDesktop {
                     $item.languageMatrix=$matrixLine[0].Substring('WINDOWS_LANGUAGE_MATRIX='.Length) | ConvertFrom-Json
                 }
                 if ($item.exitCode -ne 0 -or $output -notmatch 'test result: ok\. 1 passed; 0 failed' -or $output -match 'SKIP|skipping|BUNDLE_SETUP_COMPLETE') { throw 'row_failed' }
-                if ($row -eq 14 -and $output -notmatch 'Windows MXC added p50 latency.*enforced=true') { throw 'latency_budget_not_enforced' }
+                if ($row -eq 14 -and $output -notmatch 'Windows MXC added p95 latency.*enforced=true') { throw 'latency_budget_not_enforced' }
                 if ($row -eq 15 -and $output -notmatch 'contained=true authority_count=0') { throw 'permission_card_appeared' }
                 $item.status = 'PASS'
             } finally {

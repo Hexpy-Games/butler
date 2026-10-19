@@ -63,7 +63,8 @@ try {
     assert.ok(stopped.steps.slice(first).every((step:any)=>step.status==='not_dispatched'));
     assert.ok(stopped.steps.slice(0,first).every((step:any)=>step.status==='completed' && step.still_file));
   }
-  const budgets={noop:15,act:50,stop:100},failures:string[]=[],operationP95:Record<string,number>={};
+  // Micro watch (noop): half of the 20 ms per-tool-call overhead budget; act/stop stay user-facing.
+  const budgets={noop:10,act:50,stop:100},failures:string[]=[],operationP95:Record<string,number>={};
   for(const [name,samples]of Object.entries(latencies)) {
     const sorted=samples.map(row=>row.ms).sort((a,b)=>a-b),p95=sorted[Math.ceil(sorted.length*.95)-1]!;operationP95[name]=p95;
     if(p95>budgets[name as keyof typeof budgets])failures.push(`${name} p95 ${p95} exceeds ${budgets[name as keyof typeof budgets]}`);

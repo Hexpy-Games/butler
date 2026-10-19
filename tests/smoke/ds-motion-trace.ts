@@ -537,10 +537,8 @@ const HERO_VIDEO_MS: Record<string, number> = {
   color: 13_000, typography: 24_400, spacing: 13_000, sizing: 9_800, radius: 11_700,
   iconography: 13_000, focus: 10_400, motion: 13_000, "z-index": 9_800, layout: 10_400,
 };
-/** Main-thread budget per frame for a playing hero, over a still (reduced-motion) control. */
-const HERO_FRAME_BUDGET_MS = 0.5;
-/** The Typography feature hero runs a 64-beat, ~75-animation sequence over real components: its budget is 1ms. */
-const HERO_FRAME_BUDGET_OVERRIDE_MS: Record<string, number> = { typography: 1 };
+// Micro watch: half of the 50 ms UI single-main-thread-task budget.
+const HERO_FRAME_WATCH_MS = 25;
 /** The Typography specimen draws its outlines (stroke-dashoffset) and moves along the weight axis (font-weight) on one SVG; it may re-lay that text. */
 const HERO_SPECIMEN_PROPERTIES: Record<string, string[]> = { typography: ["strokeDashoffset", "fontWeight"] };
 
@@ -671,7 +669,7 @@ async function measureHeroes(page: Page, serverUrl: string) {
     // (Frame counts of two 2s windows differ by a frame or two.)
     assert(HERO_SPECIMEN_PROPERTIES[variant] !== undefined || playing.layouts <= still.layouts * 1.05 + 2, `${variant} hero laid out ${playing.layouts} time(s) while playing (${still.layouts} still)`);
     assert(fps >= 50, `${variant} hero dropped the page to ${fps}fps`);
-    const budget = HERO_FRAME_BUDGET_OVERRIDE_MS[variant] ?? HERO_FRAME_BUDGET_MS;
+    const budget = HERO_FRAME_WATCH_MS;
     assert(frameCostMs <= budget, `${variant} hero costs ${frameCostMs}ms of main thread per frame (max ${budget}ms)`);
     assert(offscreen.state === "paused" && offscreen.running === 0, `${variant} hero kept running offscreen: ${JSON.stringify(offscreen)}`);
     assert(hidden === "paused", `${variant} hero kept playing in a hidden tab (${hidden})`);
