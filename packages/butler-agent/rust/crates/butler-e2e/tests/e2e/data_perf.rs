@@ -7,6 +7,7 @@
 )]
 
 use super::app_storage_scale::seed as app;
+use crate::owner_scale::{APP_BLOB_BYTES, APP_DATABASE_BYTES};
 use crate::{btcc_scale as btcc, transcript_scale as transcripts};
 #[path = "support/btcc_validation_probe.rs"]
 mod btcc_validation_probe;
@@ -42,7 +43,7 @@ async fn perf_terminal_history_idle_and_turn_wal() -> Result<(), HarnessError> {
     s.agent.terminate().await?;
     app::seed_owner_scale(
         &Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?,
-        3_000,
+        APP_BLOB_BYTES,
     );
     seed_extra_app(&s.sandbox.data)?;
     btcc::seed(&s.sandbox.data)?;
@@ -304,10 +305,9 @@ fn seed_extra_app(data: &std::path::Path) -> Result<(), HarnessError> {
         SELECT 'historical.fixture','','{}','2026-01-01' FROM n;
         COMMIT; PRAGMA wal_checkpoint(TRUNCATE);",
     )?;
-    eprintln!(
-        "PERF-APP database_bytes={}",
-        std::fs::metadata(data.join("app-server/butler-client.sqlite"))?.len()
-    );
+    let bytes = std::fs::metadata(data.join("app-server/butler-client.sqlite"))?.len();
+    eprintln!("PERF-APP database_bytes={bytes}");
+    assert!(APP_DATABASE_BYTES.contains(&bytes), "App bytes: {bytes}");
     Ok(())
 }
 
