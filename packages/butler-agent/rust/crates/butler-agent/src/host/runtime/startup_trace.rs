@@ -48,6 +48,36 @@ pub(crate) enum Correction {
     Finished(Instant),
 }
 
+impl Correction {
+    pub(crate) fn deadline(self, original: Instant) -> Instant {
+        use crate::host::service::entrypoint::STARTUP_TIMEOUT;
+        let grace = std::time::Duration::from_secs(180) + STARTUP_TIMEOUT;
+        let (deadline, budget, state) = match self {
+            Self::Pending => (original, STARTUP_TIMEOUT, "pending"),
+            Self::Validating(start) => (start + grace, grace, "validating"),
+            Self::Running(start) => (start + grace, grace, "correcting"),
+            Self::Finished(end) => (
+                original.max(end + STARTUP_TIMEOUT),
+                STARTUP_TIMEOUT,
+                "finished",
+            ),
+        };
+        if std::env::var("BUTLER_STARTUP_TRACE").as_deref() == Ok("1") {
+            butler_core::diagnostic!(
+                "[native-startup] phase=readiness state={state} budget_ms={}",
+                budget.as_millis()
+            );
+        }
+        deadline
+    }
+
+    pub(crate) fn publish(self, timing: &CorrectionSender) {
+        // Trace every transition even when the watch receiver coalesces updates.
+        self.deadline(Instant::now() + crate::host::service::entrypoint::STARTUP_TIMEOUT);
+        timing.send_replace(self);
+    }
+}
+
 pub(crate) type CorrectionSender = tokio::sync::watch::Sender<Correction>;
 
 pub(crate) type AppStartup<'a> = (

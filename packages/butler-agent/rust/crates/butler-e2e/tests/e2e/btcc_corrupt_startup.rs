@@ -185,3 +185,27 @@ async fn btcc_replaced_verdict_runs_full_validation_and_keeps_on_failure()
     butler_e2e::gate!();
     replaced_database(true).await
 }
+
+#[tokio::test]
+async fn unflagged_start_keeps_normal_readiness_deadline() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut s = Setup::new("BTCC-UNFLAGGED-DEADLINE")?
+        .env("BUTLER_STARTUP_TRACE", "1")
+        .start()
+        .await?;
+    s.agent.terminate().await?;
+    s.gw = s.agent.start_again().await?;
+    assert!(s.gw.healthy().await);
+    for generation in [1, 2] {
+        let log = std::fs::read_to_string(s.sandbox.logs.join(format!("agent-{generation}.log")))?;
+        assert!(
+            log.contains("phase=readiness state=pending budget_ms=90000"),
+            "ordinary startup must retain its 90 s deadline: {log}"
+        );
+        assert!(
+            !log.contains("phase=readiness state=validating"),
+            "unflagged and fresh starts must not receive recovery grace: {log}"
+        );
+    }
+    s.finish().await
+}

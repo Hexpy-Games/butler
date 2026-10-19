@@ -44,13 +44,7 @@ async fn wait_ready(
 ) -> bool {
     let original = std::time::Instant::now() + STARTUP_TIMEOUT;
     loop {
-        let deadline = match *timing.borrow_and_update() {
-            Correction::Pending => original,
-            Correction::Validating(start) | Correction::Running(start) => {
-                start + Duration::from_secs(180) + STARTUP_TIMEOUT
-            }
-            Correction::Finished(end) => original.max(end + STARTUP_TIMEOUT),
-        };
+        let deadline = timing.borrow_and_update().deadline(original);
         tokio::select! {
             biased;
             _ = &mut ready => return true,

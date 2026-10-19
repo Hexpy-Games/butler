@@ -58,6 +58,10 @@ async fn owner_scale_recovery_validation_outlives_readiness_deadline() -> Result
     let elapsed = started.elapsed();
     let log = std::fs::read_to_string(s.sandbox.logs.join("agent-2.log"))?;
     assert!(log.contains("full_validation_begin"), "{log}");
+    assert!(
+        log.contains("phase=readiness state=validating budget_ms=270000"),
+        "full recovery validation must receive bounded grace: {log}"
+    );
     assert!(log.contains("storage_bootstrap_failed"), "{log}");
     assert!(
         log.contains("agent_btcc_storage_foreign_key_check_failed"),

@@ -6,8 +6,12 @@ use std::path::Path;
 use tokio_util::sync::CancellationToken;
 
 /// Fail closed on a matching verdict before opening or mutating the database.
-pub fn begin_storage_startup(path: &Path) -> StorageResult<String> {
+pub fn begin_storage_startup(
+    path: &Path,
+    on_full_validation: impl FnOnce(),
+) -> StorageResult<String> {
     if verdict::needs_recheck(path)? {
+        on_full_validation();
         return super::read_activated_storage_manifest(path);
     }
     validate::activated::read(path, false, CancellationToken::new(), false)
