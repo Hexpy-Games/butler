@@ -36,21 +36,11 @@ const S6: &str = "coverage-s6";
 const P1: &str = "coverage-p1";
 const P2: &str = "coverage-p2";
 const MARCH: &str = "2026-03-10T00:00:00.000Z";
-/// Sessions whose jobs a drain does not wait for: the recovered message's
-/// job never completes (see [`Pending`]).
-const NEVER_COMPLETE: &[&str] = &[S5];
-
 /// Pending ingestion per variant: both seeded chats, the first project,
-/// unassigned seeded chats, March, every chat. "Every chat" is always
-/// pending: it includes the recall chats, whose own turns are not projected
+/// unassigned seeded chats, March, every chat, recovered chat. "Every chat"
+/// is always pending: it includes recall chats, whose own turns are not projected
 /// while the gate is held.
-///
-/// The recovered chat (the sixth variant) is only compared with the full
-/// scan. Its message's job never completes on main: it is rebuilt with the
-/// episode revision as the parts hash (`sources/planner.rs:278`,
-/// `completion/consumer/process.rs:433`), so the registered-job check keeps
-/// it pending. Assert its value too once that is fixed.
-type Pending = [bool; 5];
+type Pending = [bool; 6];
 
 fn variants() -> Vec<Variant> {
     let variant = |prompt, arguments| Variant { prompt, arguments };
@@ -127,7 +117,7 @@ async fn step(
 ) -> Result<(), HarnessError> {
     change(&canonical(&s.sandbox.data));
     let pending = compare(s, &variants(), chats, name).await?;
-    assert_eq!(pending[..5], expected, "{name}");
+    assert_eq!(pending, expected, "{name}");
     Ok(())
 }
 
@@ -140,7 +130,7 @@ fn execute(db: &rusqlite::Connection, sql: &str, id: &str) {
 async fn first_changes(s: &Scenario, chats: &[String]) -> Result<(), HarnessError> {
     let t = true;
     let f = false;
-    step(s, chats, "appended", [t, t, f, t, t], |db| {
+    step(s, chats, "appended", [t, t, f, t, t, f], |db| {
         turn(
             db,
             S1,
@@ -150,7 +140,7 @@ async fn first_changes(s: &Scenario, chats: &[String]) -> Result<(), HarnessErro
         );
     })
     .await?;
-    step(s, chats, "regenerated_moved", [t, f, t, t, t], |db| {
+    step(s, chats, "regenerated_moved", [t, f, t, t, t, f], |db| {
         regenerate(db, S2, 1, "seeded fact 1 in two, answered again", MARCH);
         db.execute(
             "UPDATE conversation_sessions SET project_id=?1 WHERE id=?2",
@@ -159,7 +149,7 @@ async fn first_changes(s: &Scenario, chats: &[String]) -> Result<(), HarnessErro
         .unwrap();
     })
     .await?;
-    step(s, chats, "compacted_recovered", [t, f, f, t, t], |db| {
+    step(s, chats, "compacted_recovered", [t, f, f, t, t, t], |db| {
         let answer = format!("{S2}-turn-1-assistant-2");
         execute(
             db,
@@ -189,11 +179,11 @@ async fn second_changes(
     let (t, f) = (true, false);
     let data = &s.sandbox.data;
     let part = "UPDATE conversation_parts SET content_json='{\"text\":\"seeded fact 2 in two, edited\"}' WHERE message_id=?1";
-    step(s, chats, "part_edited", [t, f, t, t, t], |db| {
+    step(s, chats, "part_edited", [t, f, t, t, t, f], |db| {
         execute(db, part, &format!("{S2}-turn-2-assistant"));
     })
     .await?;
-    step(s, chats, "status_changed", [f, f, f, f, t], |db| {
+    step(s, chats, "status_changed", [f, f, f, f, t, f], |db| {
         execute(
             db,
             "UPDATE conversation_turns SET status='running' WHERE id=?1",
@@ -201,12 +191,12 @@ async fn second_changes(
         );
     })
     .await?;
-    let gate = apply(data, gate, NEVER_COMPLETE).await;
-    step(s, chats, "p1_appended", [f, t, f, f, t], |db| {
+    let gate = apply(data, gate, &[]).await;
+    step(s, chats, "p1_appended", [f, t, f, f, t, f], |db| {
         turn(db, S4, 1, "seeded fact in four", "2026-02-20T00:00:00.000Z");
     })
     .await?;
-    step(s, chats, "outcome_deleted", [f, f, f, f, t], |db| {
+    step(s, chats, "outcome_deleted", [f, f, f, f, t, f], |db| {
         execute(
             db,
             "DELETE FROM conversation_turn_outcomes WHERE turn_id=?1",
@@ -214,17 +204,17 @@ async fn second_changes(
         );
     })
     .await?;
-    let gate = apply(data, gate, NEVER_COMPLETE).await;
-    step(s, chats, "session_appended", [f, t, f, f, t], |db| {
+    let gate = apply(data, gate, &[]).await;
+    step(s, chats, "session_appended", [f, t, f, f, t, f], |db| {
         session(db, S6, Some(P1));
         turn(db, S6, 1, "seeded fact in six", "2026-02-21T00:00:00.000Z");
     })
     .await?;
-    step(s, chats, "session_deleted", [f, f, f, f, t], |db| {
+    step(s, chats, "session_deleted", [f, f, f, f, t, f], |db| {
         execute(db, "DELETE FROM conversation_sessions WHERE id=?1", S6);
     })
     .await?;
-    step(s, chats, "recovered_attached", [f, f, f, f, t], |db| {
+    step(s, chats, "recovered_attached", [f, f, f, f, t, f], |db| {
         db.execute(
             "UPDATE conversation_messages SET turn_id=?1 WHERE id=?2",
             [format!("{S5}-turn-1"), format!("{S5}-recovered-10")],
@@ -233,6 +223,33 @@ async fn second_changes(
     })
     .await?;
     Ok(gate)
+}
+
+/// A completed standalone projection stays complete without idle writes or
+/// repeated source-change notices after the consumer is free to poll.
+async fn idle(s: &Scenario, gate: sqlite::Connection) -> sqlite::Connection {
+    let data = &s.sandbox.data;
+    release_gate(&gate);
+    drop(gate);
+    drain(data, &[]).await;
+    let db = graph(data);
+    let version = || {
+        db.pragma_query_value::<u64, _>(None, "data_version", |row| row.get(0))
+            .unwrap()
+    };
+    let before = version();
+    let changes = s.agent.logs().matches("memory_source_changed").count();
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    let writes = version() - before;
+    let further_changes = s.agent.logs().matches("memory_source_changed").count() - changes;
+    assert_eq!(writes, 0, "projection graph wrote while idle");
+    assert_eq!(further_changes, 0, "source changed repeatedly while idle");
+    assert!(
+        incomplete_jobs(data).is_empty(),
+        "projection became pending"
+    );
+    eprintln!("MEM-COVERAGE idle_seconds=5 graph_writes={writes} source_changes={further_changes}");
+    hold_gate(data)
 }
 
 #[tokio::test]
@@ -254,26 +271,27 @@ async fn mem_coverage_mirror_matches_full_scan() -> Result<(), HarnessError> {
          DELETE FROM memory_canonical_inventory;",
     ).unwrap();
     let (first, _) = recall(&s, &variants()[0]).await?;
-    let gate = apply(&data, gate, NEVER_COMPLETE).await;
+    let gate = apply(&data, gate, &[]).await;
     let (rebuilt, _) = recall(&s, &variants()[0]).await?;
     assert_eq!(
         coverage(&first),
         coverage(&rebuilt),
         "recall before the mirror was built"
     );
-    step(&s, &chats, "settled", [f, f, f, f, t], |_| {}).await?;
+    step(&s, &chats, "settled", [f, f, f, f, t, f], |_| {}).await?;
     // Each phase drains its own recall turns before the next one starts.
-    let gate = apply(&data, gate, NEVER_COMPLETE).await;
+    let gate = apply(&data, gate, &[]).await;
     first_changes(&s, &chats).await?;
 
     // The mirror applies the changes; catch-up registers the new turn.
-    let gate = apply(&data, gate, NEVER_COMPLETE).await;
+    let gate = apply(&data, gate, &[]).await;
+    let gate = idle(&s, gate).await;
     eprintln!("MEM-COVERAGE incomplete jobs: {:?}", incomplete_jobs(&data));
-    step(&s, &chats, "applied", [f, f, f, f, t], |_| {}).await?;
+    step(&s, &chats, "applied", [f, f, f, f, t, f], |_| {}).await?;
     let gate = second_changes(&s, &chats, gate).await?;
-    let gate = apply(&data, gate, NEVER_COMPLETE).await;
-    step(&s, &chats, "second_applied", [f, f, f, f, t], |_| {}).await?;
-    step(&s, &chats, "deleted", [t, f, t, t, t], |db| {
+    let gate = apply(&data, gate, &[]).await;
+    step(&s, &chats, "second_applied", [f, f, f, f, t, f], |_| {}).await?;
+    step(&s, &chats, "deleted", [t, f, t, t, t, f], |db| {
         execute(
             db,
             "UPDATE conversation_sessions SET status='deleted' WHERE id=?1",
@@ -293,8 +311,8 @@ async fn mem_coverage_mirror_matches_full_scan() -> Result<(), HarnessError> {
         );
     })
     .await?;
-    let gate = apply(&data, gate, NEVER_COMPLETE).await;
-    step(&s, &chats, "deletion_applied", [f, f, f, f, t], |_| {}).await?;
+    let gate = apply(&data, gate, &[]).await;
+    step(&s, &chats, "deletion_applied", [f, f, f, f, t, f], |_| {}).await?;
     release_gate(&gate);
     s.finish().await
 }
