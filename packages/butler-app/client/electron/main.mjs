@@ -2643,7 +2643,7 @@ ipcMain.handle("butler:security-request", async (event, input) => {
   });
 });
 
-// Settings > Memory > reset everything. Main sends the request with the admin
+// Settings > General > reset everything. Main sends the request with the admin
 // credential; it relaunches only after the Agent accepted a reset.
 let fullResetAccepted = false;
 ipcMain.handle("butler:full-reset-request", async (event, input) => {

@@ -2,7 +2,7 @@ import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { APP_ADMIN_HEADER } from "./app-security-admin.mjs";
 
-// Settings > Memory > reset everything (desktop only). Main sends the request
+// Settings > General > reset everything (desktop only). Main sends the request
 // with the admin credential, then stops the Agent (the Agent moves its data
 // away while it shuts down), clears the App's own storage and relaunches.
 

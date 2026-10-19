@@ -1290,7 +1290,7 @@ export interface AppCopy {
       targetUnknown: string; deletedChat: string; loadFailed: string; revokeFailed: string;
     };
     modelsAdvanced: { title: string; contents: string };
-    /** Settings > Memory > reset everything (desktop only); the user types `phrase` to confirm. */
+    /** Settings > General > reset everything (desktop only); the user types `phrase` to confirm. */
     fullReset: {
       action: string; title: string; body: string; removed: string; kept: string;
       field: (phrase: string) => string; phrase: string; confirm: string; mismatch: string; resetting: string; desktopOnly: string;

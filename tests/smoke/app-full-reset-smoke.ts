@@ -1,4 +1,4 @@
-// Settings > Memory > reset everything, against the stub native gateway. No model calls.
+// Settings > General > reset everything, against the stub native gateway. No model calls.
 // The desktop bridge is the real preload with a stubbed ipcRenderer; the relaunch is
 // simulated by a reload that sees a new data generation and pending onboarding.
 import { strict as assert } from "node:assert";
@@ -34,7 +34,7 @@ async function installDesktopBridge(page: Page, handle: NativeAppServerHandle) {
   }, { code, url: handle.url, headers: handle.authHeaders });
 }
 
-async function openMemory(page: Page) {
+async function openSettings(page: Page) {
   const settings = page.getByRole("button", { name: "설정", exact: true });
   if (!await settings.isVisible()) await page.getByRole("button", { name: "사이드바 보기", exact: true }).click();
   await settings.click();
@@ -67,8 +67,8 @@ try {
   await page.evaluate((keys) => { for (const key of keys) localStorage.setItem(key, "{}"); }, SENTINELS);
 
   // Web and LAN clients: present but disabled, with the reason as a tooltip.
-  await openMemory(page);
-  await page.getByRole("button", { name: "기억", exact: true }).click();
+  await openSettings(page);
+  await page.getByRole("button", { name: "일반", exact: true }).click();
   const section = page.locator('[data-settings-section-id="full-reset"]');
   const webButton = section.getByRole("button");
   await webButton.waitFor();
@@ -79,8 +79,9 @@ try {
 
   // Desktop: the typed phrase gates the destructive button.
   await installDesktopBridge(page, server);
-  await page.getByRole("button", { name: "일반", exact: true }).click();
+  // Re-open General so the section renders with the desktop bridge.
   await page.getByRole("button", { name: "기억", exact: true }).click();
+  await page.getByRole("button", { name: "일반", exact: true }).click();
   const desktopButton = section.getByRole("button", { name: "초기화", exact: true });
   assert.equal(await desktopButton.getAttribute("aria-disabled"), null, "the desktop app can reset");
   await desktopButton.click();

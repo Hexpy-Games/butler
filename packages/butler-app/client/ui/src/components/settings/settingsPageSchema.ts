@@ -27,7 +27,6 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "memory-model", kind: "form", fields: ["memory-model"] },
     { id: "profile-memory", kind: "status", fields: [] },
     { id: "project-memory", kind: "status", fields: ["memory-project"] },
-    { id: "full-reset", kind: "status", fields: [] },
   ],
   general: [
     { id: "language-region", kind: "form", fields: ["language", "timezone"] },
@@ -39,6 +38,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "app-behavior", kind: "form", fields: ["desktop-tray", "rerun-setup"] },
     { id: "search-provider", kind: "form", fields: ["search-provider", "search-api-key"] },
     { id: "search-behavior", kind: "form", fields: ["search-reader", "search-planning", "search-depth"] },
+    { id: "full-reset", kind: "status", fields: [] },
   ],
   appearance: [
     { id: "theme", kind: "form", fields: ["theme", "translucent-sidebar"] },
