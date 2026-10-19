@@ -48,7 +48,7 @@ async function scenario(fixture: Fixture, death: Death, retries: number) {
   const mainPort = await freePort();
   // Open log is recorded, not shown: no Finder/Explorer window opens on the machine running this.
   const opened = join(fixture.root, `shell-open-${death}.jsonl`);
-  const env: Record<string, string> = { ...fixture.env, BUTLER_APP_SMOKE_DEBUG_PORT: String(debugPort), BUTLER_TEST_SHELL_OPEN_LOG: opened };
+  const env: Record<string, string> = { ...fixture.env, BUTLER_TEST_SHELL_OPEN_LOG: opened };
   const openRequests = () => { try { return readFileSync(opened, "utf8").trim().split("\n").filter(Boolean).map((line) => JSON.parse(line)); } catch { return []; } };
   const profile = env.BUTLER_APP_ELECTRON_USER_DATA_DIR!;
   let original: ChildProcess | undefined;
@@ -116,7 +116,7 @@ async function scenario(fixture: Fixture, death: Death, retries: number) {
     // The previous death's progress record would satisfy this one's readiness wait.
     rmSync(join(foreground, "startup-progress.json"), { force: true });
     if (death === "failed") writeFileSync(config, "{invalid config");
-    original = spawnElectron(executable, [`--inspect=${mainPort}`, ...smokeBrowserArgs(), ...(nativeExecutable ? [] : [directory])], { env, relaunches: true });
+    original = spawnElectron(executable, [`--inspect=${mainPort}`, `--remote-debugging-port=${debugPort}`, "--remote-debugging-address=127.0.0.1", ...smokeBrowserArgs(), ...(nativeExecutable ? [] : [directory])], { env, relaunches: true });
     appPid = original.pid!;
     discovery = setInterval(discoverOwnedGroups, 100);
     if (death !== "failed") await induce();
