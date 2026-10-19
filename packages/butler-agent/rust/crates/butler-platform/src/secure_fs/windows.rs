@@ -29,6 +29,8 @@ const SHARING_ERRORS: [i32; 2] = [32, 33];
 /// How often, and how far apart, a refused rename is retried.
 const RENAME_ATTEMPTS: u32 = 10;
 const RENAME_BACKOFF: std::time::Duration = std::time::Duration::from_millis(20);
+const REPLACEMENT_ATTEMPTS: u32 = 20;
+const REPLACEMENT_BACKOFF: std::time::Duration = std::time::Duration::from_millis(50);
 
 pub(super) fn current_metadata(path: &Path) -> io::Result<Metadata> {
     // FindFirstFile attributes may lag prior NTFS writes. A metadata-only
@@ -227,6 +229,32 @@ pub(super) fn rename(from: &Path, to: &Path) -> io::Result<()> {
     }
 }
 
+pub(super) fn replace_file(
+    from: &Path,
+    to: &Path,
+    before_retry: &mut dyn FnMut() -> io::Result<()>,
+) -> io::Result<()> {
+    let from = move_path(from)?;
+    let to = move_path(to)?;
+    let mut attempt = 1;
+    loop {
+        // Retain std's FileRenameInfoEx/POSIX fallback for delete-shared
+        // readers, including a reader of an unlinked hard-link alias.
+        let result = fs::rename(&from, &to);
+        match result {
+            Err(error)
+                if attempt < REPLACEMENT_ATTEMPTS
+                    && replacement_is_transient(&error, &from, &to) =>
+            {
+                attempt += 1;
+                std::thread::sleep(REPLACEMENT_BACKOFF);
+                before_retry()?;
+            }
+            result => return result,
+        }
+    }
+}
+
 /// Canonicalize only the parent: the destination need not exist, and a
 /// rename must move a link itself. std canonicalization keeps the extended
 /// path prefix so MoveFileExW works beyond MAX_PATH even in test executables.
@@ -247,13 +275,54 @@ fn move_path(path: &Path) -> io::Result<PathBuf> {
     Ok(fs::canonicalize(parent)?.join(name))
 }
 
-/// Another process has the file open without sharing its deletion (access
-/// denied is also what a file pending deletion reports).
+/// MoveFileEx reports ACCESS_DENIED for a delete-sharing conflict on the
+/// destination. Confirm it with DELETE-only opens; ACL denials and read-only
+/// files must not be treated as transient permission failures.
+fn replacement_is_transient(error: &io::Error, from: &Path, to: &Path) -> bool {
+    match error.raw_os_error() {
+        Some(code) if SHARING_ERRORS.contains(&code) => true,
+        Some(5) => delete_sharing_conflict(from, to),
+        _ => false,
+    }
+}
+
 fn is_transient(error: &io::Error) -> bool {
     error.kind() == io::ErrorKind::PermissionDenied
         || error
             .raw_os_error()
             .is_some_and(|code| SHARING_ERRORS.contains(&code))
+}
+
+fn delete_sharing_conflict(from: &Path, to: &Path) -> bool {
+    if !current_metadata(to)
+        .is_ok_and(|metadata| !metadata.is_file() || !metadata.permissions().readonly())
+    {
+        return false;
+    }
+    let mut conflict = false;
+    for path in [from, to] {
+        // Request DELETE without deleting anything. Share all access, and
+        // inspect reparse entries themselves. Every probe handle closes here,
+        // before the next rename attempt or its backoff.
+        let result = OpenOptions::new()
+            .read(true)
+            .access_mode(0x0001_0000)
+            .share_mode(7)
+            .custom_flags(0x0220_0000)
+            .open(path);
+        match result {
+            Ok(_) => {}
+            Err(error)
+                if error
+                    .raw_os_error()
+                    .is_some_and(|code| SHARING_ERRORS.contains(&code)) =>
+            {
+                conflict = true;
+            }
+            Err(_) => return false,
+        }
+    }
+    conflict
 }
 
 /// Clears the read-only attribute of every file and directory under `root`.
