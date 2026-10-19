@@ -40,6 +40,7 @@ pub(super) struct Cache {
 }
 struct Root {
     canonical: PathBuf,
+    revision: u64,
     mount: Option<u64>,
     device: u64,
     directories: HashMap<PathBuf, Arc<File>>,
@@ -81,6 +82,7 @@ impl Root {
             return Err(denied());
         }
         Ok(Self {
+            revision: inventory.revision(),
             canonical,
             mount: mount_id(&first)?,
             device: metadata.dev(),
@@ -99,7 +101,11 @@ impl Cache {
         inventory: &SecretInventory,
         extra: &[PathBuf],
     ) -> io::Result<File> {
-        if !self.roots.contains_key(root) {
+        if self
+            .roots
+            .get(root)
+            .is_none_or(|cached| cached.revision != inventory.revision())
+        {
             self.roots
                 .insert(root.to_path_buf(), Root::new(root, inventory, extra)?);
         }

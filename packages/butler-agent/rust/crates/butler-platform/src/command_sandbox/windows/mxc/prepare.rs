@@ -208,7 +208,7 @@ fn save_policy(
     fs::create_dir_all(&directory)?;
     let path = directory.join(format!("{id}.json"));
     let lease = super::recovery::claim(&path)?;
-    let scratch = data.join("tmp/project-write").join(&id);
+    let scratch = data.join(crate::data_paths::PROJECT_WRITE_TMP).join(&id);
     fs::create_dir(&scratch)?;
     let mut scratch_guard = ScratchGuard(Some(scratch.clone()));
     let mut request = plan.build(invocation, 'Z', timeout, &physical(&scratch)?)?;

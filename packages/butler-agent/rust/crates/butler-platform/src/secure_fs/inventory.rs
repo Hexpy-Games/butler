@@ -13,7 +13,10 @@ use std::{
     fs::Metadata,
     io,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, OnceLock, Weak},
+    sync::{
+        Arc, Mutex, OnceLock, Weak,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
 type ResolvedRoots = HashMap<PathBuf, (Option<FileId>, PathBuf)>;
@@ -25,6 +28,7 @@ pub struct SecretInventory {
     identities: Arc<Mutex<HashSet<FileId>>>,
     canonical: Arc<Mutex<ResolvedRoots>>,
     roots: Mutex<HashMap<PathBuf, Weak<RootPin>>>,
+    revision: Arc<AtomicU64>,
     leases: Option<Mutex<Vec<Arc<RootPin>>>>,
     #[cfg(unix)]
     hard_links: Arc<hard_links::Cache>,
@@ -50,6 +54,7 @@ impl SecretInventory {
             identities: Arc::new(Mutex::new(identities)),
             canonical: Arc::default(),
             roots: Mutex::new(HashMap::new()),
+            revision: Arc::default(),
             leases: None,
             #[cfg(unix)]
             hard_links: Arc::default(),
@@ -64,6 +69,7 @@ impl SecretInventory {
             identities: self.identities.clone(),
             canonical: self.canonical.clone(),
             roots: Mutex::default(),
+            revision: self.revision.clone(),
             leases: Some(Mutex::default()),
             #[cfg(unix)]
             hard_links: self.hard_links.clone(),
@@ -106,6 +112,8 @@ impl SecretInventory {
     /// Refresh at request/turn admission, never for every path component.
     /// Retain old identities too: renaming a credential store does not unprotect it.
     pub fn refresh(&self) {
+        #[cfg(unix)]
+        self.hard_links.retry_errors();
         if let (Ok(mut identities), Ok(mut canonical)) =
             (self.identities.lock(), self.canonical.lock())
         {
@@ -122,9 +130,17 @@ impl SecretInventory {
                 {
                     let resolved = std::fs::canonicalize(path).unwrap_or_else(|_| path.clone());
                     canonical.insert(path.clone(), (id, resolved));
+                    self.revision.fetch_add(1, Ordering::Release);
+                    #[cfg(unix)]
+                    self.hard_links.invalidate();
                 }
             }
         }
+    }
+
+    #[cfg(unix)]
+    pub(super) fn revision(&self) -> u64 {
+        self.revision.load(Ordering::Acquire)
     }
 
     /// Cached canonical spellings, recomputed only when a root identity changes.

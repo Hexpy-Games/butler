@@ -6,19 +6,36 @@ use std::{
     fs,
     os::unix::fs::MetadataExt,
     path::PathBuf,
-    sync::{Mutex, RwLock},
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    sync::{
+        Mutex, RwLock,
+        atomic::{AtomicU64, Ordering},
+    },
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 const MAX_ENTRIES: usize = 4096;
-const TTL: Duration = Duration::from_millis(250);
 
 #[derive(Debug, Default)]
 pub(super) struct Cache {
     snapshot: RwLock<Option<Snapshot>>,
     refresh: Mutex<()>,
+    revision: AtomicU64,
 }
 impl Cache {
+    pub(super) fn invalidate(&self) {
+        self.revision.fetch_add(1, Ordering::Release);
+    }
+
+    pub(super) fn retry_errors(&self) {
+        if self
+            .snapshot
+            .read()
+            .is_ok_and(|slot| slot.as_ref().is_some_and(|s| s.incomplete))
+        {
+            self.invalidate();
+        }
+    }
+
     pub(super) fn permits(&self, roots: &[PathBuf], metadata: &fs::Metadata) -> bool {
         let Some(id) = secure_fs::identity(metadata).id else {
             return false;
@@ -33,7 +50,7 @@ impl Cache {
         if let Some(allowed) = self.lookup(id, metadata) {
             return allowed;
         }
-        let snapshot = Snapshot::build(roots);
+        let snapshot = Snapshot::build(roots, self.revision.load(Ordering::Acquire));
         let allowed = !snapshot.files.contains(&id);
         if let Ok(mut slot) = self.snapshot.write() {
             *slot = Some(snapshot);
@@ -48,9 +65,10 @@ impl Cache {
             metadata.ctime().try_into().ok()?,
             metadata.ctime_nsec().try_into().ok()?,
         );
-        // A newly linked credential must be checked immediately, even during the
-        // TTL. Ordinary nlink>1 files predate the snapshot and take the O(1) path.
-        if snapshot.built.elapsed() >= TTL || changed >= snapshot.started {
+        // Changed inodes are checked immediately. Unchanged nlink>1 files
+        // take the O(1) path; credential root changes invalidate the snapshot.
+        if snapshot.revision != self.revision.load(Ordering::Acquire) || changed >= snapshot.started
+        {
             return None;
         }
         Some(!snapshot.files.contains(&id))
@@ -61,16 +79,18 @@ impl Cache {
 struct Snapshot {
     files: HashSet<FileId>,
     started: Duration,
-    built: Instant,
+    revision: u64,
+    incomplete: bool,
 }
 impl Snapshot {
-    fn build(roots: &[PathBuf]) -> Self {
+    fn build(roots: &[PathBuf], revision: u64) -> Self {
         let mut snapshot = Self {
             files: HashSet::new(),
+            revision,
+            incomplete: false,
             started: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default(),
-            built: Instant::now(),
         };
         let mut directories = HashSet::new();
         let mut pending = roots.to_vec();
@@ -85,8 +105,12 @@ impl Snapshot {
             // just like overflow: this scan is defense in depth, while the
             // launch link check, REFER policy, and fd walk enforce admission.
             // All failures are retried on refresh, never cached permanently.
-            let Ok(metadata) = fs::metadata(&path) else {
-                continue;
+            let metadata = match fs::metadata(&path) {
+                Ok(metadata) => metadata,
+                Err(error) => {
+                    snapshot.incomplete |= error.kind() != std::io::ErrorKind::NotFound;
+                    continue;
+                }
             };
             let Some(id) = secure_fs::identity(&metadata).id else {
                 continue;
@@ -99,9 +123,14 @@ impl Snapshot {
                 continue;
             }
             let Ok(children) = fs::read_dir(path) else {
+                snapshot.incomplete = true;
                 continue;
             };
-            for child in children.flatten() {
+            for child in children {
+                let Ok(child) = child else {
+                    snapshot.incomplete = true;
+                    continue;
+                };
                 if pending.len() + visited >= MAX_ENTRIES {
                     break;
                 }

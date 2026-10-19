@@ -33,5 +33,53 @@ pub(super) fn verify() {
         .read_to_string(&mut replacement)
         .unwrap();
     assert_eq!(replacement, "replacement");
+    refreshed_cache(&temp);
+    retried_inventory(&temp);
     fs::remove_dir_all(temp).unwrap();
+}
+
+fn refreshed_cache(temp: &std::path::Path) {
+    let root = temp.join("cached-project");
+    let home = temp.join("home");
+    fs::create_dir_all(root.join("sub")).unwrap();
+    fs::create_dir_all(&home).unwrap();
+    fs::write(root.join("sub/file"), "complete-public").unwrap();
+    let inventory = SecretInventory::new(
+        &temp.join("data"),
+        &std::collections::HashMap::from([("HOME".into(), home.to_string_lossy().into_owned())]),
+    );
+    let cache = secure_fs::ContainedReadCache::default();
+    let path = std::path::Path::new("sub/file");
+    let mut text = String::new();
+    cache
+        .open(&root, path, &inventory)
+        .unwrap()
+        .read_to_string(&mut text)
+        .unwrap();
+    assert_eq!(text, "complete-public");
+    secure_fs::symlink(&root.join("sub"), &home.join(".ssh")).unwrap();
+    inventory.refresh();
+    assert!(cache.open(&root, path, &inventory).is_err());
+}
+
+fn retried_inventory(temp: &std::path::Path) {
+    let root = temp.join("retry-project");
+    let data = temp.join("retry-data");
+    let locked = data.join("auth/locked");
+    fs::create_dir_all(&root).unwrap();
+    fs::create_dir_all(&locked).unwrap();
+    fs::write(locked.join("credential"), "private-fixture").unwrap();
+    fs::hard_link(locked.join("credential"), root.join("alias")).unwrap();
+    fs::write(root.join("public"), "complete-public").unwrap();
+    fs::hard_link(root.join("public"), root.join("public-link")).unwrap();
+    let inventory = SecretInventory::new(&data, &Default::default());
+    secure_fs::set_file_mode(&locked, secure_fs::FileMode::from_bits(0))
+        .unwrap()
+        .unwrap();
+    let first = secure_fs::open_contained(&root, std::path::Path::new("public-link"), &inventory);
+    secure_fs::restrict_directory(&locked).unwrap();
+    let mut content = String::new();
+    first.unwrap().read_to_string(&mut content).unwrap();
+    assert_eq!(content, "complete-public");
+    assert!(secure_fs::open_contained(&root, std::path::Path::new("alias"), &inventory).is_err());
 }
