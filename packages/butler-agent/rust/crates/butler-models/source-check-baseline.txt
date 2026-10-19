@@ -3,7 +3,7 @@
 # Entries may only shrink or disappear; new entries need review.
 src/mcp_client/catalog.rs	search	122
 src/mcp_client/session.rs	run_session_inner	83
-src/models/configuration/provider.rs	ModelConfiguration::resolve_request	110
+src/models/configuration/provider.rs	ModelConfiguration::resolve_request	95
 src/models/provider/prompt/serialize.rs	responses	92
 src/models/provider/prompt/serialize/compatible.rs	chat	95
 src/models/provider/serialize/stable.rs	identity	138

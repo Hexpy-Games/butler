@@ -2,7 +2,8 @@
 use super::*;
 
 pub(super) struct PreparedHttp<'a> {
-    pub body: serde_json::Value,
+    pub body: Option<serde_json::Value>,
+    pub capability_revision: Option<String>,
     pub http: reqwest::RequestBuilder,
     pub serialized_bytes: usize,
     pub admission: request_admission::PreparedRequestAdmission<'a>,
@@ -23,6 +24,7 @@ impl ModelProvider {
         let (carrier, mode, api) = route;
         let serialize::PreparedBody {
             mut body,
+            capability_revision,
             continuation,
             thinking_binding,
         } = serialize::body_with_visual(request, config, carrier).await?;
@@ -43,16 +45,23 @@ impl ModelProvider {
                 &error.to_string(),
             )))
         })?;
-        let provider_cache_identity =
+        let mut provider_cache_identity =
             serialize::provider_cache_identity(&body, &serialized, request, config)?;
+        if let (Some(identity), Some(revision)) =
+            (&mut provider_cache_identity, &capability_revision)
+        {
+            identity["capabilityMemoRevision"] = revision.clone().into();
+        }
         let serialized = Bytes::from(serialized);
         let physical_admission =
             self.admission(request, config, &body, serialized.clone(), carrier)?;
+        let body = capability_revision.as_ref().map(|_| body);
         let serialized_bytes = serialized.len();
         let http = self.round_request(config, mode, carrier, serialized);
         let trace = super::super::request_trace::RequestTrace::round(self, prefix, request).await?;
         Ok(PreparedHttp {
             body,
+            capability_revision,
             http,
             serialized_bytes,
             admission: physical_admission,
@@ -114,6 +123,7 @@ impl ModelProvider {
             response,
             prepared: PreparedResponse {
                 body: prepared.body,
+                capability_revision: prepared.capability_revision,
                 carrier,
                 continuation: prepared.continuation,
                 thinking_binding: prepared.thinking_binding,

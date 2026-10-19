@@ -98,9 +98,9 @@ pub(super) fn prepare(body: &mut Map<String, Value>, config: &ProviderRequestCon
         *tools = kept;
     }
 }
-pub(super) fn finalize(body: &mut Map<String, Value>, memo: &Memo) {
+pub(super) fn finalize(body: &mut Map<String, Value>, memo: &Memo) -> Option<String> {
     let Some(key) = memo else {
-        return;
+        return None;
     };
     body.insert("store".into(), false.into());
     body.insert("stream".into(), true.into());
@@ -126,7 +126,7 @@ pub(super) fn finalize(body: &mut Map<String, Value>, memo: &Memo) {
     }
     body.entry("text")
         .or_insert_with(|| json!({"verbosity":"medium"}));
-    recovery::apply(body, key);
+    Some(recovery::apply(body, key))
 }
 
 /// A route migration or a learned capability removal starts a new cache prefix.

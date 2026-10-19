@@ -109,7 +109,16 @@ pub(super) fn wire_model(
     parsed: &crate::models::ParsedModelRef,
     auth: crate::models::ProviderAuthMode,
 ) -> String {
-    if metadata.provider_id == "openai" && auth != crate::models::ProviderAuthMode::ChatGptPlan {
+    let alias = metadata.aliases.iter().flatten().any(|alias| {
+        alias == &parsed.model_id
+            || alias.split_once('/').is_some_and(|(provider, model)| {
+                provider == parsed.provider_id && model == parsed.model_id
+            })
+    });
+    if metadata.provider_id == "openai"
+        && auth != crate::models::ProviderAuthMode::ChatGptPlan
+        && !alias
+    {
         parsed.model_id.clone()
     } else {
         metadata.model_id.clone()

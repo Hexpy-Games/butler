@@ -1,30 +1,6 @@
 //! Request-local registered-credential selection.
 use super::*;
 impl ModelConfiguration {
-    pub(super) async fn resolve_selected_auth(
-        &self,
-        root: &Path,
-        read: &ModelConfigurationRead,
-        metadata: &crate::models::ModelProviderMetadata,
-        registered: Option<&RegisteredHostedModelConfig>,
-        dynamic_auth: Option<ProviderAuth>,
-        rejected: Option<&str>,
-    ) -> Result<ProviderAuth, Box<ProviderRequestError>> {
-        if let Some(auth @ ProviderAuth::ChatGptPlan { .. }) = dynamic_auth
-            && registered.is_none_or(|r| r.auth_type == ProviderAuthMethod::ChatGptOauth)
-        {
-            return Ok(auth);
-        }
-        self.resolve_auth(
-            root,
-            read,
-            &metadata.provider_id,
-            &metadata.model_ref,
-            registered,
-            rejected,
-        )
-        .await
-    }
     pub(super) async fn resolve_auth(
         &self,
         root: &Path,

@@ -309,51 +309,16 @@ async fn missing_registration_credential_and_provider_mismatch_are_rejected() {
 }
 
 #[tokio::test]
-async fn prompt_resolution_preserves_explicit_precedence_and_dynamic_discovery() {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    let server = tokio::spawn(async move {
-        let bodies = [
-            r#"{"data":[{"id":"gpt-5.6-luna"},{"id":"gpt-5.5-codex"},{"id":"gpt-5.6-astra"},{"id":"not-selectable"}]}"#,
-            r#"{"data":[{"id":"gpt-5.6-luna"},{"id":"gpt-5.5-codex"},{"id":"gpt-5.6-astra"},{"id":"not-selectable"}]}"#,
-            r#"{"data":[{"id":"gpt-.5-codex"},{"id":"gpt-5.-codex"},{"id":"gpt-5..6-codex"},{"id":"gpt-5.4-codex"}]}"#,
-            r#"{"data":[{"id":"gpt-5-codex-😀😀"},{"id":"gpt-5-codex-aaaaa"}]}"#,
-            r#"{"data":[{"id":"gpt-5.5-codex-100"},{"id":"gpt-5.6-codex-99"}]}"#,
-        ];
-        for body in bodies {
-            let (mut stream, _) = listener.accept().await.unwrap();
-            let mut request = vec![0; 4096];
-            let count = stream.read(&mut request).await.unwrap();
-            let request = String::from_utf8_lossy(&request[..count]);
-            assert!(request.starts_with("GET /v1/models HTTP/1.1\r\n"));
-            assert!(
-                request
-                    .to_ascii_lowercase()
-                    .contains("authorization: bearer discovery-key")
-            );
-            stream
-                .write_all(
-                    format!(
-                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                        body.len()
-                    )
-                    .as_bytes(),
-                )
-                .await
-                .unwrap();
-        }
-    });
-    let fixture = Fixture::new("dynamic-openai");
+async fn prompt_resolution_preserves_explicit_precedence_and_static_alias() {
+    let fixture = Fixture::new("static-openai-alias");
     fixture.write(
         "butler.config.json",
-        &json!({"system":{"openaiModel":"auto:codex-latest","openaiReasoningEffort":"low"}}),
+        &json!({"system":{"openaiModel":"gpt-6-astra","openaiReasoningEffort":"low"}}),
     );
     let owner = fixture.owner(ModelConfigurationEnvironment {
         openai_api_key: Some("discovery-key".into()),
-        openai_base_url: Some(format!("http://{address}/v1")),
-        openai_model: Some(" auto:codex-latest ".into()),
+        openai_base_url: Some("http://127.0.0.1:9/v1".into()),
+        openai_model: Some(" gpt-6-luna ".into()),
         openai_reasoning_effort: Some("high".into()),
         ..Default::default()
     });
@@ -375,7 +340,7 @@ async fn prompt_resolution_preserves_explicit_precedence_and_dynamic_discovery()
         })
         .await
         .unwrap();
-    let configured_dynamic = owner
+    let configured = owner
         .resolve(ProviderConfigRequest {
             rejected_authorization: None,
             model_ref: "",
@@ -383,36 +348,8 @@ async fn prompt_resolution_preserves_explicit_precedence_and_dynamic_discovery()
         })
         .await
         .unwrap();
-    let malformed_versions = owner
-        .resolve(ProviderConfigRequest {
-            rejected_authorization: None,
-            model_ref: "openai/auto:codex-latest",
-            butler_data: None,
-        })
-        .await
-        .unwrap();
-    let unicode_tie = owner
-        .resolve(ProviderConfigRequest {
-            rejected_authorization: None,
-            model_ref: "openai/auto:codex-latest",
-            butler_data: None,
-        })
-        .await
-        .unwrap();
-    let first_version_pattern = owner
-        .resolve(ProviderConfigRequest {
-            rejected_authorization: None,
-            model_ref: "openai/auto:codex-latest",
-            butler_data: None,
-        })
-        .await
-        .unwrap();
-    server.await.unwrap();
-    assert_eq!(config.wire_model, "gpt-5.6-astra");
-    assert_eq!(configured_dynamic.wire_model, "gpt-5.6-astra");
-    assert_eq!(malformed_versions.wire_model, "gpt-5.4-codex");
-    assert_eq!(unicode_tie.wire_model, "gpt-5-codex-aaaaa");
-    assert_eq!(first_version_pattern.wire_model, "gpt-5.6-codex-99");
+    assert_eq!(config.wire_model, "gpt-6-astra");
+    assert_eq!(configured.wire_model, "gpt-6-luna");
     assert_eq!(
         config.prompt_reasoning_effort,
         Some(crate::models::ReasoningEffort::High)

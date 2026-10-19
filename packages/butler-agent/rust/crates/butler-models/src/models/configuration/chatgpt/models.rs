@@ -48,13 +48,9 @@ impl ModelConfiguration {
         if !super::signed_in(&raw) || !super::plan_enabled(&raw) {
             return Ok(None);
         }
-        self.chatgpt_models_for(&registration, None).await
+        self.chatgpt_models_for(&registration).await
     }
-    pub(in crate::models::configuration) async fn chatgpt_models_for(
-        &self,
-        registration: &str,
-        authorization: Option<&mut zeroize::Zeroizing<String>>,
-    ) -> Result<Option<Vec<Model>>, Error> {
+    async fn chatgpt_models_for(&self, registration: &str) -> Result<Option<Vec<Model>>, Error> {
         let mut state = self.chatgpt_models.inner.lock().await;
         let path = self.data_root.join("cache/chatgpt-models.json");
         if !state.loaded {
@@ -81,23 +77,12 @@ impl ModelConfiguration {
         let due = state
             .attempted_at
             .is_none_or(|at| now.saturating_sub(at) >= 21_600_000);
-        if stale && due {
+        if state.cached.is_none() || (stale && due) {
             state.attempted_at = Some(now);
-            let model_request = authorization.is_some();
-            let outcome = if let Some(authorization) = authorization {
-                self.fetch_chatgpt_models(authorization).await
-            } else {
-                match self.chatgpt_auth(None).await {
-                    Ok(mut token) => self.fetch_chatgpt_models(&mut token).await,
-                    Err(code) => Err(code),
-                }
+            let outcome = match self.chatgpt_auth(None).await {
+                Ok(mut token) => self.fetch_chatgpt_models(&mut token).await,
+                Err(code) => Err(code),
             };
-            if model_request
-                && let Err(code) = outcome.as_ref()
-                && (*code == "provider_auth_refresh_unavailable" || code.starts_with("chatgpt_"))
-            {
-                return Err(*code);
-            }
             if let Ok(models) = outcome {
                 let cached = Cached {
                     schema_version: 1,

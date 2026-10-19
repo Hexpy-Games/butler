@@ -52,27 +52,47 @@ pub(super) fn requested_output_tokens(
     .and_then(Value::as_f64)
 }
 
+#[cfg(any(test, feature = "test-support"))]
 pub(super) fn body_with_continuation(
     request: &ModelRoundRequest<'_>,
     config: &ProviderRequestConfig,
     carrier: Carrier,
 ) -> Result<(Value, Option<LegacyProjection>), butler_turn::btcc::ModelRoundError> {
+    prepare_body(request, config, carrier).map(|prepared| (prepared.body, prepared.continuation))
+}
+
+fn prepare_body(
+    request: &ModelRoundRequest<'_>,
+    config: &ProviderRequestConfig,
+    carrier: Carrier,
+) -> Result<PreparedBody, butler_turn::btcc::ModelRoundError> {
     let mut continuation = (matches!(carrier, Carrier::Responses)
         && config.metadata.provider_id == "openai")
         .then(|| continuation::prepare(request))
         .transpose()?
         .flatten();
+    let mut capability_revision = None;
     let body = match carrier {
-        Carrier::Responses => responses(request, config, continuation.as_mut())?,
+        Carrier::Responses => {
+            let (body, revision) = responses(request, config, continuation.as_mut())?;
+            capability_revision = revision;
+            body
+        }
         Carrier::Anthropic => anthropic(request, config),
         Carrier::Gemini => gemini(request),
         Carrier::Chat { stream } => chat(request, &config.metadata, &config.wire_model, stream)?,
     };
-    Ok((body, continuation.map(|value| value.successful)))
+    Ok(PreparedBody {
+        body,
+        capability_revision,
+        continuation: continuation.map(|value| value.successful),
+        thinking_binding: None,
+    })
 }
 
 pub(super) struct PreparedBody {
     pub body: Value,
+    pub capability_revision: Option<String>,
     pub continuation: Option<LegacyProjection>,
     pub thinking_binding: Option<super::anthropic_thinking::Binding>,
 }
@@ -83,7 +103,12 @@ pub(super) async fn body_with_visual(
     config: &ProviderRequestConfig,
     carrier: Carrier,
 ) -> Result<PreparedBody, butler_turn::btcc::ModelRoundError> {
-    let (mut body, continuation) = body_with_continuation(request, config, carrier)?;
+    let PreparedBody {
+        mut body,
+        continuation,
+        capability_revision,
+        ..
+    } = prepare_body(request, config, carrier)?;
     super::visual::apply(&mut body, request, carrier).await?;
     if matches!(carrier, Carrier::Anthropic) {
         super::anthropic_cache::apply(
@@ -98,6 +123,7 @@ pub(super) async fn body_with_visual(
         .then(|| super::anthropic_thinking::enforce(&mut body));
     Ok(PreparedBody {
         body,
+        capability_revision,
         continuation,
         thinking_binding,
     })
@@ -107,7 +133,7 @@ fn responses(
     request: &ModelRoundRequest<'_>,
     config: &ProviderRequestConfig,
     continuation: Option<&mut LegacyPreparation>,
-) -> Result<Value, butler_turn::btcc::ModelRoundError> {
+) -> Result<(Value, Option<String>), butler_turn::btcc::ModelRoundError> {
     let mut body = response_controls(request, config);
     if !request.tools.is_empty() {
         body.insert(
@@ -136,8 +162,8 @@ fn responses(
         body = stable::order(body, stable, request.instructions)?;
     }
     body.insert("stream".into(), true.into());
-    super::chatgpt_plan::finalize(&mut body, &super::chatgpt_plan::memo(config));
-    Ok(Value::Object(body))
+    let revision = super::chatgpt_plan::finalize(&mut body, &super::chatgpt_plan::memo(config));
+    Ok((Value::Object(body), revision))
 }
 
 fn response_controls(

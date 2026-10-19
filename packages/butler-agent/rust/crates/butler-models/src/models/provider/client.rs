@@ -23,7 +23,8 @@ type RoundFuture<'a> = std::pin::Pin<
 >;
 
 struct PreparedResponse {
-    body: serde_json::Value,
+    body: Option<serde_json::Value>,
+    capability_revision: Option<String>,
     carrier: serialize::Carrier,
     continuation: Option<super::continuation::LegacyProjection>,
     identity: Option<serde_json::Value>,
@@ -108,7 +109,12 @@ impl ModelProvider {
             .await;
         let prefix = (!sent.prepared.prefix.is_null()).then_some(&sent.prepared.prefix);
         if let Err(ModelRoundError::Provider(error)) = &mut sent.response
-            && retry.decide(&config, error, &sent.prepared.body)
+            && retry.decide(
+                &config,
+                error,
+                sent.prepared.body.as_ref(),
+                sent.prepared.capability_revision.as_deref(),
+            )
         {
             self.record_failed_usage(&request, &config, prefix)?;
             return Box::pin(self.run(request, local_stream, include_usage, retry)).await;

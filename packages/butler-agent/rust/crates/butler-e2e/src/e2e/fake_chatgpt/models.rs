@@ -16,6 +16,10 @@ pub(super) async fn list(State(state): State<Arc<Authority>>, headers: HeaderMap
         faults.models_401 -= 1;
         return StatusCode::UNAUTHORIZED.into_response();
     }
+    if faults.models_503 > 0 {
+        faults.models_503 -= 1;
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    }
     drop(faults);
     if !headers
         .get("authorization")

@@ -28,6 +28,7 @@ pub struct Faults {
     pub invalid_client: bool,
     pub refresh_reused: bool,
     pub models_401: usize,
+    pub models_503: usize,
     pub subject: Option<String>,
 }
 #[derive(Clone)]

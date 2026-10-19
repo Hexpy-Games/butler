@@ -84,22 +84,7 @@ impl ModelConfiguration {
                 "Model configuration could not be read.",
             )
         })?;
-        let configured_openai_request =
-            butler_core::public_text::trim_js_whitespace(request.model_ref).is_empty();
         let requested = effective_model(request.model_ref, &read, &self.environment);
-        let requested_model = parse_model_ref(&requested);
-        let (requested, dynamic_auth) = if (configured_openai_request
-            && requested == dynamic::AUTO_CODEX_LATEST)
-            || (!configured_openai_request
-                && requested_model.provider_id == "openai"
-                && requested_model.model_id == dynamic::AUTO_CODEX_LATEST)
-        {
-            let (model, auth) =
-                dynamic::resolve(self, &root, &read, request.rejected_authorization).await?;
-            (model, Some(auth))
-        } else {
-            (requested, None)
-        };
         let parsed = parse_model_ref(&requested);
         let metadata = read
             .catalog
@@ -136,12 +121,12 @@ impl ModelConfiguration {
             ));
         }
         let auth = self
-            .resolve_selected_auth(
+            .resolve_auth(
                 &root,
                 &read,
-                &metadata,
+                &metadata.provider_id,
+                &metadata.model_ref,
                 registered.as_ref(),
-                dynamic_auth,
                 request.rejected_authorization,
             )
             .await?;

@@ -1,41 +1,33 @@
 use super::*;
-use butler_models::models::{
-    ModelCatalog, ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,
-    ProviderConfigRequest, ProviderRequestConfigPort,
-};
-struct Clock;
-impl ModelConfigurationClock for Clock {
-    fn now_iso(&self) -> String {
-        chrono::Utc::now().to_rfc3339()
-    }
-    fn now_epoch_millis(&self) -> i64 {
-        chrono::Utc::now().timestamp_millis()
-    }
-}
-pub(super) async fn auto_offline(s: &Scenario) -> Result<(), HarnessError> {
-    let owner = ModelConfiguration::new(
-        s.sandbox.data.clone(),
-        ModelConfigurationEnvironment {
-            chatgpt_api_base_url: Some("http://127.0.0.1:9/v1".into()),
-            ..Default::default()
-        },
-        Arc::new(Clock),
-        Arc::new(ModelCatalog::new().unwrap()),
-        Arc::new(butler_core::locale::LocaleCollation::new("en-US").unwrap()),
-        butler_models::models::provider_http_client()?,
-        Arc::new(butler_core::configuration::ConfigurationWrites::new()),
-    )
-    .unwrap();
-    for _ in 0..2 {
-        let config = owner
-            .resolve(ProviderConfigRequest {
-                model_ref: "openai/auto:codex-latest",
-                butler_data: None,
-                rejected_authorization: None,
-            })
-            .await
-            .map_err(|e| butler_e2e::e2e::harness_error(e.code))?;
-        assert_eq!(config.wire_model, "gpt-6-luna");
+pub(super) async fn unreadable_registration(s: &Scenario) -> Result<(), HarnessError> {
+    let path = s.sandbox.data.join("auth/chatgpt.json");
+    let saved = std::fs::read(&path)?;
+    std::fs::remove_file(&path)?;
+    std::fs::create_dir(&path)?;
+    let catalog = s.gw.get("/model-catalog").await?;
+    std::fs::remove_dir(&path)?;
+    std::fs::write(&path, saved)?;
+    assert_eq!(catalog.status, 200);
+    let providers = catalog.data()["providers"].as_array().unwrap();
+    assert!(providers.len() > 1);
+    assert!(
+        providers
+            .iter()
+            .find(|p| p["provider_id"] == "openai")
+            .unwrap()["chatgpt_plan_models"]
+            .is_null()
+    );
+    let registered = catalog.data()["registered_models"].as_array().unwrap();
+    assert_ne!(registered.as_slice(), &[] as &[Value]);
+    for model in registered {
+        assert_eq!(
+            model["availability"],
+            if model["auth_type"] == "chatgpt_oauth" {
+                "sign_in_required"
+            } else {
+                "ready"
+            }
+        );
     }
     Ok(())
 }

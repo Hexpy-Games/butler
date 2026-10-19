@@ -242,10 +242,30 @@ impl AppModelCatalog {
         catalog: &T,
     ) -> Result<Value, GatewayApplicationError> {
         let mut value = catalog_value(catalog)?;
-        self.configuration
+        if self
+            .configuration
             .chatgpt_catalog(&mut value)
             .await
-            .map_err(|_| GatewayApplicationError::internal())?;
+            .is_err()
+        {
+            if let Some(providers) = value["providers"].as_array_mut() {
+                for provider in providers {
+                    if provider["provider_id"] == "openai" || provider["id"] == "openai" {
+                        provider["chatgpt_plan_models"] = Value::Null;
+                    }
+                }
+            }
+            if let Some(models) = value["registered_models"].as_array_mut() {
+                for model in models {
+                    model["availability"] = if model["auth_type"] == "chatgpt_oauth" {
+                        "sign_in_required"
+                    } else {
+                        "ready"
+                    }
+                    .into();
+                }
+            }
+        }
         Ok(value)
     }
 

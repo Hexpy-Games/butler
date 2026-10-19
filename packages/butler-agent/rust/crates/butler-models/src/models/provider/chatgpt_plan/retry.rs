@@ -13,7 +13,8 @@ impl Retry {
         &mut self,
         config: &ProviderRequestConfig,
         error: &mut ProviderRequestError,
-        body: &Value,
+        body: Option<&Value>,
+        body_revision: Option<&str>,
     ) -> bool {
         let ProviderAuth::ChatGptPlan { authorization, .. } = &config.auth else {
             return false;
@@ -25,7 +26,10 @@ impl Retry {
         let Some(key) = memo(config) else {
             return false;
         };
-        if recovery::rejected(error, body, &key, self.recovered) {
+        let (Some(body), Some(revision)) = (body, body_revision) else {
+            return false;
+        };
+        if recovery::rejected(error, body, &key, self.recovered, revision) {
             self.recovered = true;
             return true;
         }

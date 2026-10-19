@@ -78,6 +78,7 @@ pub(in crate::models::provider) fn rejected(
     body: &Value,
     key: &Key,
     retried: bool,
+    body_revision: &str,
 ) -> bool {
     if error.status_code != Some(400)
         || error.provider_error_code.as_deref()
@@ -102,11 +103,13 @@ pub(in crate::models::provider) fn rejected(
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             let entries = memo.entry(key.clone()).or_default();
-            if entries.contains(&removal) {
+            if entries.contains(&removal) && body_revision == revision_of(entries) {
                 error.code = "provider_unsupported_capability".into();
                 return false;
             }
-            entries.push(removal);
+            if !entries.contains(&removal) {
+                entries.push(removal);
+            }
             true
         }
         result => {
@@ -119,13 +122,14 @@ pub(in crate::models::provider) fn rejected(
         }
     }
 }
-pub(super) fn apply(body: &mut Map<String, Value>, key: &Key) {
+pub(super) fn apply(body: &mut Map<String, Value>, key: &Key) -> String {
     let entries = MEMO
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .get(key)
         .cloned()
         .unwrap_or_default();
+    let revision = revision_of(&entries);
     let mut raw = Value::Object(std::mem::take(body));
     for entry in entries {
         match entry {
@@ -138,6 +142,7 @@ pub(super) fn apply(body: &mut Map<String, Value>, key: &Key) {
         }
     }
     *body = raw.as_object_mut().map(std::mem::take).unwrap_or_default();
+    revision
 }
 fn remove(value: &mut Value, path: &[Part]) {
     let Some((last, parents)) = path.split_last() else {
@@ -187,16 +192,20 @@ fn remove_tool(tools: &mut Vec<Value>, identity: &str) {
 }
 
 pub(super) fn revision(key: &Key) -> String {
-    use sha2::{Digest, Sha256};
     let entries = MEMO
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .get(key)
         .cloned()
         .unwrap_or_default();
+    revision_of(&entries)
+}
+
+fn revision_of(entries: &[Removal]) -> String {
+    use sha2::{Digest, Sha256};
     format!(
         "{:x}",
-        Sha256::digest(serde_json::to_vec(&entries).unwrap_or_default())
+        Sha256::digest(serde_json::to_vec(entries).unwrap_or_default())
     )
 }
 

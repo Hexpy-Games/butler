@@ -57,6 +57,7 @@ async fn attempt(
     let (carrier, mode, api) = crate::models::provider::client::carrier(&config);
     let serialize::PromptWire {
         body,
+        capability_revision,
         cache_retention,
     } = serialize::body(&request, &config, carrier)?;
     let serialized = butler_core::json::stringify(&body).map_err(|error| {
@@ -87,7 +88,12 @@ async fn attempt(
     let response = match response {
         Ok(value) => value,
         Err(ModelRoundError::Provider(mut error)) => {
-            if retry.decide(&config, &mut error, &body) {
+            if retry.decide(
+                &config,
+                &mut error,
+                Some(&body),
+                capability_revision.as_deref(),
+            ) {
                 return Box::pin(attempt(provider, request, effective_model, retry)).await;
             }
             error.endpoint = Some(crate::models::provider::client::safe_endpoint(

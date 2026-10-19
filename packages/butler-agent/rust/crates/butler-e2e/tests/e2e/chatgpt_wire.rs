@@ -5,6 +5,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
+mod concurrent;
 mod models;
 use axum::{
     Json, Router,
@@ -25,6 +26,8 @@ struct Script {
     mode: String,
     requests: Vec<Value>,
     removed: Option<String>,
+    originals: Arc<tokio::sync::Barrier>,
+    retried: Arc<tokio::sync::Notify>,
 }
 struct Stub {
     base: String,
@@ -45,9 +48,18 @@ impl Stub {
             mode: mode.into(),
             requests: Vec::new(),
             removed: None,
+            originals: Arc::new(tokio::sync::Barrier::new(2)),
+            retried: Arc::new(tokio::sync::Notify::new()),
         }));
         let router = Router::new()
-            .route("/v1/responses", post(reply))
+            .route(
+                "/v1/responses",
+                if mode == "concurrent" {
+                    post(concurrent::reply)
+                } else {
+                    post(reply)
+                },
+            )
             .route_layer(axum::middleware::from_fn(
                 butler_e2e::e2e::chatgpt_wire::validate,
             ))
@@ -195,6 +207,7 @@ async fn siwc_10_one_401_refresh_and_retry() -> Result<(), HarnessError> {
 #[tokio::test]
 async fn siwc_12_randomized_unsupported_capabilities() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    concurrent::rounds().await?;
     for mode in ["tool", "field", "input", "twice"] {
         let stub = Stub::start(mode).await?;
         let s = stub.scenario(&format!("SIWC-12-{mode}")).await?;
@@ -283,14 +296,41 @@ async fn siwc_15_discovery_visibility_registration_and_offline_cache() -> Result
     let authority = s.authority.as_ref().unwrap();
     authority.models(vec![
         json!({"slug":"gpt-6-luna","display_name":"Luna","visibility":"list"}),
+        json!({"slug":"gpt-6-astra","display_name":"Astra","visibility":"list"}),
         json!({"slug":"gpt-6-sol","display_name":"Sol","visibility":"hide"}),
         json!({"slug":"unlisted-catalog-model","display_name":"Unknown","visibility":"list"}),
     ]);
     authority.faults(butler_e2e::e2e::fake_chatgpt::Faults {
         models_401: 1,
+        models_503: 1,
         ..Default::default()
     });
-    let catalog = s.gw.get("/model-catalog").await?;
+    let config_path = s.sandbox.data.join("butler.config.json");
+    let mut config: Value = serde_json::from_slice(&std::fs::read(&config_path)?)?;
+    config["system"]
+        .as_object_mut()
+        .unwrap()
+        .remove("defaultModel");
+    config["models"] = json!({"registered":[
+        {"provider_id":"openai","model_id":"gpt-6-luna","auth_type":"chatgpt_oauth"},
+        {"provider_id":"openai","model_id":"gpt-6-astra","auth_type":"chatgpt_oauth"},
+        {"provider_id":"openai","model_id":"gpt-6-sol","auth_type":"chatgpt_oauth"}
+    ]});
+    std::fs::write(&config_path, serde_json::to_vec(&config)?)?;
+    let unknown = s.gw.get("/model-catalog").await?;
+    assert_eq!(unknown.status, 200);
+    assert!(unknown.body["error"].is_null());
+    assert!(!unknown.text.contains("provider_model_unavailable"));
+    assert!(
+        unknown.data()["providers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["provider_id"] == "openai")
+            .unwrap()["chatgpt_plan_models"]
+            .is_null()
+    );
+    // The catalog's 401 refreshes once, then its retry receives 503.
     assert_eq!(
         authority
             .seen()
@@ -298,6 +338,17 @@ async fn siwc_15_discovery_visibility_registration_and_offline_cache() -> Result
             .filter(|r| r.path == "models")
             .count(),
         2
+    );
+    assert_eq!(s.provider.as_ref().unwrap().requests(), [] as [Value; 0]);
+    let catalog = s.gw.get("/model-catalog").await?;
+    assert_eq!(catalog.status, 200);
+    assert_eq!(
+        authority
+            .seen()
+            .iter()
+            .filter(|r| r.path == "models")
+            .count(),
+        3
     );
     assert_eq!(
         authority
@@ -314,7 +365,23 @@ async fn siwc_15_discovery_visibility_registration_and_offline_cache() -> Result
         .iter()
         .find(|p| p["provider_id"] == "openai")
         .unwrap();
-    assert_eq!(provider["chatgpt_plan_models"], json!(["gpt-6-luna"]));
+    assert_eq!(
+        provider["chatgpt_plan_models"],
+        json!(["gpt-6-luna", "gpt-6-astra"])
+    );
+    let registered = catalog.data()["registered_models"].as_array().unwrap();
+    assert_eq!(registered.len(), 3);
+    for model in registered {
+        assert_eq!(model["auth_type"], "chatgpt_oauth");
+        assert_eq!(
+            model["availability"],
+            if model["model_id"] == "gpt-6-sol" {
+                "not_in_plan"
+            } else {
+                "ready"
+            }
+        );
+    }
     let refused =
         s.gw.post(
             "/model-catalog/registered-models",
@@ -322,16 +389,6 @@ async fn siwc_15_discovery_visibility_registration_and_offline_cache() -> Result
         )
         .await?;
     assert_eq!(refused.error_code(), Some("model_not_in_chatgpt_plan"));
-    let config_path = s.sandbox.data.join("butler.config.json");
-    let mut config: Value = serde_json::from_slice(&std::fs::read(&config_path)?)?;
-    config["models"] = json!({"registered":[{"provider_id":"openai","model_id":"gpt-6-sol","auth_type":"codex_oauth"}]});
-    std::fs::write(&config_path, serde_json::to_vec(&config)?)?;
-    let catalog = s.gw.get("/model-catalog").await?;
-    assert_eq!(
-        catalog.data()["registered_models"][0]["availability"],
-        "not_in_plan"
-    );
-    models::auto_offline(&s).await?;
     let fetched = authority
         .seen()
         .iter()
@@ -358,7 +415,10 @@ async fn siwc_15_discovery_visibility_registration_and_offline_cache() -> Result
         .iter()
         .find(|p| p["provider_id"] == "openai")
         .unwrap();
-    assert_eq!(provider["chatgpt_plan_models"], json!(["gpt-6-luna"]));
+    assert_eq!(
+        provider["chatgpt_plan_models"],
+        json!(["gpt-6-luna", "gpt-6-astra"])
+    );
     assert_eq!(
         s.authority
             .as_ref()
@@ -369,5 +429,6 @@ async fn siwc_15_discovery_visibility_registration_and_offline_cache() -> Result
             .count(),
         fetched
     );
+    models::unreadable_registration(&s).await?;
     s.finish().await
 }

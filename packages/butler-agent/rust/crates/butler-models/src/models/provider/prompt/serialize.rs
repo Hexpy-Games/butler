@@ -5,12 +5,13 @@ use crate::models::{
 };
 use butler_turn::btcc::ModelRoundError;
 
-use super::super::{ProviderAuthMode, serialize::Carrier};
+use super::super::{ProviderAuthMode, chatgpt_plan, serialize::Carrier};
 
 mod compatible;
 
 pub(super) struct PromptWire {
     pub body: Value,
+    pub capability_revision: Option<String>,
     pub cache_retention: Option<PromptCacheRetention>,
 }
 
@@ -24,7 +25,7 @@ pub(super) fn body(
         .copied()
         .or(config.prompt_reasoning_effort);
     let prompt = super::attachments::prompt(request)?;
-    let (body, _, cache_retention) = match carrier {
+    let (body, capability_revision, cache_retention) = match carrier {
         Carrier::Responses if config.metadata.provider_id == "openai" => responses(
             request,
             config,
@@ -54,6 +55,7 @@ pub(super) fn body(
     };
     Ok(PromptWire {
         body,
+        capability_revision,
         cache_retention,
     })
 }
@@ -171,10 +173,10 @@ fn responses(
     }
     body.insert("input".into(), input);
     super::super::chatgpt_plan::prepare(&mut body, config);
-    super::super::chatgpt_plan::finalize(&mut body, &super::super::chatgpt_plan::memo(config));
+    let revision = chatgpt_plan::finalize(&mut body, &chatgpt_plan::memo(config));
     Ok((
         Value::Object(body),
-        key,
+        revision,
         if codex || explicit {
             None
         } else {
