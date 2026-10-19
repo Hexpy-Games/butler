@@ -93,6 +93,27 @@ try {
   await app.page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="library-page"]')));
   assert.equal(await app.page.expression(`Boolean(document.querySelector('${pane}'))`), false);
   await app.shot("en-dark-library");
+  // #1188: the window shrinks to its minimum, and the Browser's tab strip and toolbar still fit there.
+  for (const locale of ["ko", "en"]) for (const theme of ["light", "dark"]) {
+    await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: locale, appearance_theme: theme }) });
+    await app.main(`${app.win}.setContentSize(1440,900)`);
+    await app.page.reload(); await shellReady(app, locale);
+    // The compact window closed the sidebar; reopen it to reach the Browser entry.
+    if (await app.page.expression("document.querySelector('[data-test-class=mac-window]').getAttribute('data-left-open') === 'false'")) {
+      await app.click(getAppCopy(locale === "ko" ? "ko-KR" : "en-US").titlebar.showLeftPanel);
+    }
+    await app.click(locale === "ko" ? "브라우저" : "Browser"); await app.call("activate", { id: first });
+    await waitBrowser(() => app.page.expression(`Boolean(document.querySelector('${pane}'))`), "Browser hub pane");
+    await app.main(`${app.win}.setSize(1,1)`);
+    await waitBrowser(() => app.page.expression("innerWidth === 344 && innerHeight === 320"), "window at its minimum size");
+    assert.deepEqual(await app.main(`${app.win}.getMinimumSize()`), [344, 320]);
+    await nativeAligned(app);
+    const clipped = await app.page.expression<string[]>(`[...document.querySelectorAll('${pane} [data-slot=browser-toolbar] :is(button,input), ${pane} [role=tab]')]
+      .filter(n => n.getBoundingClientRect().width > 0).flatMap(n => { const r = n.getBoundingClientRect(), hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight && n.contains(hit) ? [] : [n.getAttribute('aria-label') || n.textContent]; })`);
+    assert.deepEqual(clipped, [], "Browser tab strip and toolbar fit the minimum window");
+    await app.shot(`${locale}-${theme}-minimum-hub`);
+  }
   writeFileSync(join(evidence, "shell-result.json"), JSON.stringify({ ok: true, elapsedMs: Date.now() - started, facts }, null, 2));
 } catch (error) {
   writeFileSync(join(evidence, "shell-failure.json"), JSON.stringify({ error: String(error), dom: await app.page.expression("({text:document.body.innerText,lang:document.documentElement.lang})").catch(() => null) }));

@@ -2248,8 +2248,9 @@ async function createWindow() {
     show: false,
     width: 960,
     height: 710,
-    minWidth: 320,
-    minHeight: 480,
+    // Width: the compact Browser toolbar's minimum (nav, narrow address, More, insets); 320 tall keeps a page area.
+    minWidth: 344,
+    minHeight: 320,
     title: appDisplayName,
     icon: appIconForWindow(),
     frame: isLinux ? false : undefined,
