@@ -1,7 +1,7 @@
 // Offline chat harness: one live line, DS motion, unchanged fallback and cleanup.
 // test-category: race
 import assert from "node:assert/strict";
-import { assertThinkingPinned, probeThinkingReveal } from "../support/model-thinking-scroll";
+import { assertStreamingFocusReleased, assertThinkingPinned, probeThinkingReveal } from "../support/model-thinking-scroll";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -167,7 +167,7 @@ try {
     await receive("Planning the search", body);
     const group = page.getByRole("button", { name: "2 생각, 1 검색", exact: true });
     const thinking = page.getByRole("button", { name: "Planning the search", exact: true });
-    for (const result of await probeThinkingReveal(page, group, thinking, evidence, cell)) revealResults.push({ cell, ...result });
+    for (const result of await probeThinkingReveal(page, group, thinking, evidence, cell, () => receive("Planning the search", body + "\nMore streamed content."))) revealResults.push({ cell, ...result });
     await assertThinkingPinned(page, `${cell} after keyboard reveal`);
     await group.click();
     await blur(page);
@@ -191,6 +191,12 @@ try {
       await blur(page);
       await assertThinkingPinned(page, `${cell} overflow stream ${lines}`);
     }
+    await assertStreamingFocusReleased(page, group, async () => {
+      for (const lines of [45, 50]) {
+        await receive("Checking the results", body + "\n\nStreaming paragraph.".repeat(lines));
+        await page.waitForFunction(count => (document.querySelector('[data-test-class="thinking-details"]')?.textContent?.match(/Streaming paragraph\./gu) ?? []).length === count, lines);
+      }
+    }, evidence, cell);
     await receive(null);
     await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
     assert((await status.innerText()).startsWith("응답 생성 중"));

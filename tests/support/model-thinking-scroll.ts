@@ -15,7 +15,7 @@ export async function assertThinkingPinned(page: Page, label: string) {
 /** Exercise pointer, native Tab focus and Playwright's scroll-into-view separately.
  * Each trial starts from the same closed group; cleanup never changes its result.
  */
-export async function probeThinkingReveal(page: Page, group: Locator, row: Locator, evidence: string, cell: string) {
+export async function probeThinkingReveal(page: Page, group: Locator, row: Locator, evidence: string, cell: string, stream: () => Promise<void>) {
   const results = [];
   for (const mode of ["immediate-click", "pointer", "keyboard-enter", "keyboard-space", "scroll-into-view"] as const) {
     const keyboard = mode === "keyboard-enter" || mode === "keyboard-space";
@@ -59,6 +59,11 @@ export async function probeThinkingReveal(page: Page, group: Locator, row: Locat
         if (animation.playState === "paused") animation.finish();
       }
     });
+    if (userInteraction) {
+      await assertThinkingPinned(page, `${cell} ${mode} expansion`);
+      await stream();
+      await assertThinkingPinned(page, `${cell} ${mode} streaming`);
+    }
     await group.evaluate(el => (el as HTMLElement).click());
     await page.evaluate(async () => {
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
@@ -84,4 +89,47 @@ async function geometry(page: Page, row: Locator) {
     return { shell: describe(shell), inspector: describe(shell.querySelector('[data-slot="adaptive-shell-inspector"]')!),
       row: describe(element), focused: element === document.activeElement, ancestors };
   });
+}
+
+/** Cover native reverse Tab and focusin preceding the browser's reveal scroll. */
+export async function assertStreamingFocusReleased(page: Page, target: Locator,
+  stream: () => Promise<void>, evidence: string, cell: string) {
+  for (const mode of ["native-shift-tab", "focus-before-scroll"]) {
+    await page.keyboard.press("ArrowLeft");
+    await assertThinkingPinned(page, `${cell} before ${mode}`);
+    const outside = await target.evaluate(element => {
+      const scroll = element.closest('[data-test-class~="conversation-scroll"]')!;
+      const outside = element.getBoundingClientRect().bottom < scroll.getBoundingClientRect().top;
+      const anchor = document.createElement("span");
+      anchor.tabIndex = -1;
+      // The setup anchor must not itself release follow or trigger fade reveal.
+      anchor.addEventListener("focusin", event => event.stopPropagation());
+      element.after(anchor);
+      anchor.focus({ preventScroll: true });
+      anchor.addEventListener("blur", () => anchor.remove(), { once: true });
+      return outside;
+    });
+    assert(outside, "reverse Tab target must start above the viewport");
+    await assertThinkingPinned(page, `${cell} ${mode} setup retains follow`);
+    await page.screenshot({ path: join(evidence, `focus-before-${mode}-${cell}.png`) });
+    if (mode === "native-shift-tab") await page.keyboard.press("Shift+Tab");
+    else await target.evaluate(element => {
+      // Explicitly hold native reveal until after focusin to pin the ordering race.
+      (element as HTMLElement).focus({ preventScroll: true });
+      element.scrollIntoView({ block: "nearest" });
+    });
+    assert(await target.evaluate(element => element === document.activeElement), `${mode} reaches the offscreen control`);
+    await page.locator('[data-test-class="scroll-to-bottom-button"]').waitFor();
+    await stream();
+    await page.waitForTimeout(200);
+    assert(await target.evaluate(element => {
+      const bounds = element.getBoundingClientRect();
+      const viewport = element.closest('[data-test-class~="conversation-scroll"]')!.getBoundingClientRect();
+      return element === document.activeElement && bounds.top >= viewport.top && bounds.bottom <= viewport.bottom;
+    }), `${mode}: streamed chunks must keep the focused control visible`);
+    assert.equal(await page.locator('[data-test-class="scroll-to-bottom-button"]').count(), 1, "follow remains released after streaming");
+    await page.screenshot({ path: join(evidence, `focus-after-${mode}-${cell}.png`) });
+    await page.locator('[data-test-class="scroll-to-bottom-button"]').click();
+    await assertThinkingPinned(page, `${cell} resumed`);
+  }
 }

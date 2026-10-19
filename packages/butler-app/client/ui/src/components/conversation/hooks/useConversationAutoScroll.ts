@@ -111,6 +111,7 @@ export function useConversationAutoScroll({
   useEffect(() => {
     const element = scrollRef.current;
     if (!element) return;
+    let observedScrollTop = element.scrollTop;
     const markUserScrollIntent = () => {
       lastUserScrollIntentAtRef.current = window.performance.now();
     };
@@ -146,22 +147,27 @@ export function useConversationAutoScroll({
     const markKeyboardScrollIntent = (event: KeyboardEvent) => {
       if (SCROLL_NAVIGATION_KEYS.has(event.key)) markUserScrollIntent();
     };
-    // Keyboard focus that scrolls away from the bottom moves the reader there:
+    // Keyboard focus outside the viewport moves the reader there:
     // release the bottom lock so a later pin (a settling or streaming
     // conversation) does not pull the focused control out of view.
     const keepKeyboardFocusInView = (event: FocusEvent) => {
       const target = event.target;
       if (!(target instanceof Element) || !target.matches(":focus-visible")) return;
-      // A control can be far above the content end while everything still fits.
-      if (conversationDistanceFromBottom(element) < BOTTOM_LOCK_THRESHOLD) return;
-      const contentBottom = target.getBoundingClientRect().bottom - element.getBoundingClientRect().top + element.scrollTop;
-      if (element.scrollHeight - contentBottom > BOTTOM_LOCK_THRESHOLD) releaseBottomLock();
+      // Native focus reveal can run before or after focusin. Reconstruct the
+      // pre-scroll rect when reveal precedes the pending scroll event.
+      const targetBounds = target.getBoundingClientRect();
+      const viewport = element.getBoundingClientRect();
+      const pendingScroll = element.scrollTop - observedScrollTop;
+      if (targetBounds.top + pendingScroll < viewport.top || targetBounds.bottom + pendingScroll > viewport.bottom) {
+        releaseBottomLock();
+      }
     };
     const recentUserScrollIntent = () =>
       pointerScrollActiveRef.current ||
       window.performance.now() - lastUserScrollIntentAtRef.current <=
         USER_SCROLL_INTENT_WINDOW_MS;
     const updatePinnedState = () => {
+      observedScrollTop = element.scrollTop;
       const distanceFromBottom = conversationDistanceFromBottom(element);
       const pinned =
         distanceFromBottom < BOTTOM_LOCK_THRESHOLD ||
