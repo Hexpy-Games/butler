@@ -18,10 +18,6 @@ startupTiming("entry");
 app.commandLine.appendSwitch("disable-domain-blocking-for-3d-apis");
 app.once("will-finish-launching", () => startupTiming("will_finish_launching"));
 app.setName("Butler");
-if (process.env.BUTLER_E2E_TIER === "stub" && process.env.BUTLER_APP_SMOKE_DEBUG_PORT) {
-  app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
-  app.commandLine.appendSwitch("remote-debugging-port", process.env.BUTLER_APP_SMOKE_DEBUG_PORT);
-}
 const backgroundLaunch = process.argv.some((arg) =>
   ["--squirrel-install", "--squirrel-updated", "--squirrel-uninstall", "--squirrel-obsolete",
     "--butler-menu-bar-helper", "--butler-quit-main-ui",
