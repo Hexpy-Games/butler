@@ -23,6 +23,7 @@ export const AppearanceSettings = memo(function AppearanceSettings() {
   const draft = useSettingsUIStore(useShallow((state) => state.draft && ({
     appearance_theme: state.draft.appearance_theme,
     translucent_sidebar: state.draft.translucent_sidebar,
+    show_thinking: state.draft.show_thinking,
   })));
   const update = useSettingsUIStore((state) => state.update);
   const setSettings = useButlerStore((state) => state.setSettings);
@@ -69,6 +70,12 @@ export const AppearanceSettings = memo(function AppearanceSettings() {
       </SettingsSection>
       <SettingsSection id="conversation" kind="form" title={sections.conversation}
         description={settingsCopy.pageSectionDescriptions.conversation}>
+        <SettingsSwitch
+          settingId="show-thinking"
+          label={fields.showThinking}
+          checked={draft.show_thinking}
+          onChange={(value) => update({ show_thinking: value }, setSettings)}
+        />
         <ConversationBackgroundSettings />
       </SettingsSection>
       <SettingsSection

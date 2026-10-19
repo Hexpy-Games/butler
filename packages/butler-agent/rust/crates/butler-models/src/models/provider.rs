@@ -16,6 +16,7 @@ mod route;
 mod serialize;
 mod sizing;
 mod stream_usage;
+mod thinking_summary;
 mod visual;
 mod visual_capability;
 

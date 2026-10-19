@@ -75,13 +75,26 @@ pub(crate) fn add(blocks: &mut Vec<Block>, row: &Record, offset: u64, len: u64, 
     }
 }
 pub(crate) fn save(path: &Path, blocks: &[Block]) -> io::Result<()> {
+    save_mode(path, blocks, true)
+}
+/// Publish live producer records without adding fsync to request completion.
+/// The segment itself is synced separately when an ERROR batch requires it.
+pub(crate) fn publish(path: &Path, blocks: &[Block]) -> io::Result<()> {
+    save_mode(path, blocks, false)
+}
+fn save_mode(path: &Path, blocks: &[Block], durable: bool) -> io::Result<()> {
     let tmp = path.with_extension("idx.tmp");
     let mut file = super::files::create(&tmp, false)?;
     serde_json::to_writer(&mut file, blocks)?;
     file.flush()?;
-    super::files::sync(&file)?;
+    if durable {
+        super::files::sync(&file)?;
+    }
     butler_platform::secure_fs::rename(&tmp, &path.with_extension("idx"))?;
-    super::files::sync_parent(path)
+    if durable {
+        super::files::sync_parent(path)?;
+    }
+    Ok(())
 }
 pub(crate) fn load(path: &Path) -> io::Result<Vec<Block>> {
     Ok(serde_json::from_reader(BufReader::new(File::open(

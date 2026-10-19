@@ -70,6 +70,7 @@ export const EMPTY_SETTINGS: SettingsView = {
   composer_decoration: { theme: "none", character: true },
   translucent_sidebar: true,
   smart_grouping_enabled: true,
+  show_thinking: false,
   diagnostics_enabled: false,
   command_sandbox_enabled: true,
   command_sandbox_available: false,
