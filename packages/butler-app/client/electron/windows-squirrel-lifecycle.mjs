@@ -98,6 +98,9 @@ export function removeWindowsOperationalState({
 }
 
 export function executeWindowsSquirrelLaunch(plan, {
+  shellRegistrationDisabled,
+  squirrelInstallPresent,
+  profileOwnsDataRoot,
   manageShortcut,
   setLoginItemSettings = () => {},
   registerProtocol = () => true,
@@ -105,6 +108,16 @@ export function executeWindowsSquirrelLaunch(plan, {
   cleanupOperationalState = () => [],
 } = {}) {
   if (!plan?.handled) return { handled: false, event: null };
+  if (shellRegistrationDisabled !== false || squirrelInstallPresent !== true) {
+    return {
+      handled: true,
+      event: plan.event,
+      shellRegistration: "skipped",
+      shortcutAction: null,
+      operationalStateRemoved: false,
+    };
+  }
+  let operationalStateRemoved = false;
   if (plan.removeOperationalState) {
     setLoginItemSettings({
       openAtLogin: false,
@@ -115,7 +128,10 @@ export function executeWindowsSquirrelLaunch(plan, {
     if (unregisterProtocol(plan.protocol, plan.stubLauncher, []) === false) {
       throw windowsSquirrelError("windows_squirrel_protocol_unregister_failed");
     }
-    cleanupOperationalState();
+    if (profileOwnsDataRoot === true) {
+      cleanupOperationalState();
+      operationalStateRemoved = true;
+    }
   } else if (plan.registerProtocol) {
     if (registerProtocol(plan.protocol, plan.stubLauncher, []) === false) {
       throw windowsSquirrelError("windows_squirrel_protocol_register_failed");
@@ -138,8 +154,9 @@ export function executeWindowsSquirrelLaunch(plan, {
   return {
     handled: true,
     event: plan.event,
+    shellRegistration: "done",
     shortcutAction: plan.shortcutAction,
-    operationalStateRemoved: plan.removeOperationalState,
+    operationalStateRemoved,
   };
 }
 

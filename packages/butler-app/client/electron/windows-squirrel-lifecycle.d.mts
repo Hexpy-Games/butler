@@ -49,7 +49,10 @@ export function removeWindowsOperationalState(input: {
 
 export function executeWindowsSquirrelLaunch(
   plan: WindowsSquirrelLaunch,
-  adapters?: {
+  options?: {
+    shellRegistrationDisabled?: boolean;
+    squirrelInstallPresent?: boolean;
+    profileOwnsDataRoot?: boolean;
     manageShortcut?: (input: {
       action: "create" | "remove";
       name: string;
@@ -65,6 +68,7 @@ export function executeWindowsSquirrelLaunch(
   handled: boolean;
   event: string | null;
   shortcutAction?: "create" | "remove" | null;
+  shellRegistration?: "done" | "skipped";
   operationalStateRemoved?: boolean;
 };
 

@@ -1,3 +1,4 @@
+// test-category: security
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -61,6 +62,9 @@ describe("Windows Squirrel lifecycle", () => {
     });
     const calls: Array<[string, unknown]> = [];
     const result = executeWindowsSquirrelLaunch(plan, {
+      shellRegistrationDisabled: false,
+      squirrelInstallPresent: true,
+      profileOwnsDataRoot: true,
       manageShortcut: (input: unknown) => {
         calls.push(["shortcut", input]);
         return true;
@@ -80,6 +84,7 @@ describe("Windows Squirrel lifecycle", () => {
       event: "--squirrel-uninstall",
       shortcutAction: "remove",
       operationalStateRemoved: true,
+      shellRegistration: "done",
     });
     expect(calls.map(([kind]) => kind)).toEqual([
       "login",
@@ -95,6 +100,71 @@ describe("Windows Squirrel lifecycle", () => {
       "C:\\Users\\dev\\.butler",
     );
   });
+
+  test.each([
+    { shellRegistrationDisabled: true, squirrelInstallPresent: true },
+    { shellRegistrationDisabled: false, squirrelInstallPresent: false },
+    { squirrelInstallPresent: true },
+    { shellRegistrationDisabled: false },
+    {},
+  ])("shell registration gates fail closed: %j", (gates) => {
+    for (const event of ["--squirrel-install", "--squirrel-updated", "--squirrel-uninstall"]) {
+      const calls: string[] = [];
+      const plan = resolveWindowsSquirrelLaunch({
+        platform: "win32", argv: ["Butler.exe", event],
+        execPath: "C:\\butler-app\\app-1.0.0\\Butler.exe",
+      });
+      const result = executeWindowsSquirrelLaunch(plan, {
+        ...gates,
+        profileOwnsDataRoot: true,
+        manageShortcut: () => { calls.push("shortcut"); return true; },
+        setLoginItemSettings: () => { calls.push("login"); },
+        registerProtocol: () => { calls.push("register"); return true; },
+        unregisterProtocol: () => { calls.push("unregister"); return true; },
+        cleanupOperationalState: () => { calls.push("cleanup"); return []; },
+      });
+      expect(calls).toEqual([]);
+      expect(result).toEqual({
+        handled: true, event, shellRegistration: "skipped",
+        shortcutAction: null, operationalStateRemoved: false,
+      });
+      expect(executeWindowsSquirrelLaunch(plan)).toEqual(result);
+    }
+  });
+
+  test.each([false, undefined])(
+    "uninstall keeps install registration cleanup independent of data ownership: %j",
+    (profileOwnsDataRoot) => {
+      const plan = resolveWindowsSquirrelLaunch({
+        platform: "win32", argv: ["Butler.exe", "--squirrel-uninstall"],
+        execPath: "C:\\butler-app\\app-1.0.0\\Butler.exe",
+      });
+      const calls: Array<[string, unknown]> = [];
+      const result = executeWindowsSquirrelLaunch(plan, {
+        shellRegistrationDisabled: false,
+        squirrelInstallPresent: true,
+        profileOwnsDataRoot,
+        setLoginItemSettings: (settings) => { calls.push(["login", settings]); },
+        unregisterProtocol: (...args) => { calls.push(["protocol", args]); return true; },
+        manageShortcut: (shortcut) => { calls.push(["shortcut", shortcut]); return true; },
+        cleanupOperationalState: () => { calls.push(["cleanup", true]); return []; },
+      });
+      expect(result).toEqual({
+        handled: true, event: "--squirrel-uninstall", shellRegistration: "done",
+        shortcutAction: "remove", operationalStateRemoved: false,
+      });
+      expect(calls).toEqual([
+        ["login", {
+          openAtLogin: false, path: plan.stubLauncher, args: [], name: WINDOWS_APP_USER_MODEL_ID,
+        }],
+        ["protocol", ["butler", plan.stubLauncher, []]],
+        ["shortcut", {
+          action: "remove", name: "Butler.lnk", target: plan.stubLauncher,
+          workingDirectory: plan.shortcutWorkingDirectory,
+        }],
+      ]);
+    },
+  );
 
   test("operational cleanup uses bounded idempotent removals", () => {
     const removed: string[] = [];
@@ -122,6 +192,9 @@ describe("Windows Squirrel lifecycle", () => {
       execPath: "C:\\app-0.0.18\\Butler.exe",
     });
     expect(executeWindowsSquirrelLaunch(obsolete, {
+      shellRegistrationDisabled: false,
+      squirrelInstallPresent: true,
+      profileOwnsDataRoot: true,
       manageShortcut: () => {
         throw new Error("must not run");
       },
