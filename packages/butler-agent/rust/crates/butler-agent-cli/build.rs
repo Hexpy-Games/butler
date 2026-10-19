@@ -27,6 +27,7 @@ fn output(root: &Path, arguments: &[&str]) -> Option<String> {
 }
 
 fn main() {
+    build_support::pack_relative_relocations();
     if let Err(error) = build_support::embed_application_manifest() {
         eprintln!("cannot embed agent application manifest: {error}");
         std::process::exit(1);
