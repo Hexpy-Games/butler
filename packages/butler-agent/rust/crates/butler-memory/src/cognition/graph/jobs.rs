@@ -188,7 +188,8 @@ pub(super) fn pending_semantic(
          WHERE w.state IN ('pending','planned') AND w.owner_nonce IS NULL
            AND (w.state='planned' OR w.output_json IS NOT NULL OR (
              SELECT COUNT(DISTINCT a.invocation_ref) FROM memory_projection_attempts a
-             WHERE a.window_ref=w.window_ref AND a.provider_invoked=1
+             WHERE a.window_ref=w.window_ref AND a.provider_invoked=1 AND a.state='failed'
+               AND a.error_code NOT IN ('memory_write_busy','memory_projection_outcome_unknown')
                AND a.recovery_revision IS w.recovery_revision) < 3)
            AND (w.next_attempt_at IS NULL OR w.next_attempt_at<=?1)
          GROUP BY j.job_id

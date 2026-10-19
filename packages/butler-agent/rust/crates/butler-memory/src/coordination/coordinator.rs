@@ -95,10 +95,10 @@ impl CognitionWriteCoordinator {
         mut request: CognitionWriteAcquire,
         wait_class: CognitionWaitClass,
     ) -> CoordinationResult<Option<CognitionWriteLease>> {
-        let budget = match wait_class {
-            CognitionWaitClass::Interactive => 5_000,
-            CognitionWaitClass::Background => 30_000,
-        };
+        let budget = self
+            .inner
+            .host
+            .write_wait_millis(wait_class, request.purpose.as_deref());
         let bounded_deadline = self.inner.host.now_epoch_millis().saturating_add(budget) as f64;
         request.deadline_at_epoch_ms = Some(request.deadline_at_epoch_ms.map_or(
             bounded_deadline,
