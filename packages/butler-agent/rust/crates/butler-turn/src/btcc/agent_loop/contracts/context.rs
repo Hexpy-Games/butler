@@ -92,6 +92,8 @@ pub enum ContextRebase {
 
 /// The context port's projection of one round.
 pub struct ContextProjection {
+    /// First semantic message not covered by the active rolling summary.
+    pub compacted_through: Option<usize>,
     pub messages: ContextMessages,
     pub bounded_continuation: Option<BoundedContinuationEnvelope>,
     pub provider_body_admission: Option<Box<dyn super::super::ports::ProviderBodyAdmissionPort>>,

@@ -15,7 +15,7 @@ use butler_e2e::e2e::{
 };
 use serde_json::{Value, json};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     sync::{Arc, Mutex},
 };
 
@@ -149,38 +149,36 @@ fn result<'a>(body: &'a Value, id: &str) -> Option<&'a Value> {
         .find(|b| b["type"] == "tool_result" && b["tool_use_id"] == id)
 }
 fn step(body: &Value) -> Option<Value> {
-    let steps = [
+    let mut steps = vec![
         (
-            "toolu_describe",
+            "toolu_describe".to_owned(),
             "tool_describe",
             json!({"ids":["native:browser_open","native:browser_observe"]}),
         ),
         (
-            "toolu_open",
+            "toolu_open".to_owned(),
             "tool_call",
             json!({"id":"native:browser_open","arguments":{"url":"https://example.com/"}}),
         ),
-        (
-            "toolu_observe_1",
-            "tool_call",
-            json!({"id":"native:browser_observe","arguments":{"tab":"t1"}}),
-        ),
-        (
-            "toolu_observe_2",
-            "tool_call",
-            json!({"id":"native:browser_observe","arguments":{"tab":"t1"}}),
-        ),
-        (
-            "toolu_describe_2",
-            "tool_describe",
-            json!({"ids":["native:browser_screenshot"]}),
-        ),
     ];
+    steps.extend((1..=14).map(|index| {
+        (
+            format!("toolu_observe_{index}"),
+            "tool_call",
+            json!({"id":"native:browser_observe","arguments":{"tab":"t1"}}),
+        )
+    }));
+    steps.push((
+        "toolu_describe_2".to_owned(),
+        "tool_describe",
+        json!({"ids":["native:browser_screenshot"]}),
+    ));
     steps
         .into_iter()
         .find(|(id, _, _)| result(body, id).is_none())
         .map(|(id, name, input)| json!({"type":"tool_use","id":id,"name":name,"input":input}))
 }
+
 async fn reply(
     State(stub): State<Arc<Mutex<Stub>>>,
     Json(body): Json<Value>,
@@ -302,17 +300,25 @@ async fn anthropic_thinking_history_survives_browser_rewrite() -> Result<(), Har
         verify(body, &minted).unwrap();
         assert!(!body.to_string().contains("butler_binding"));
     }
-    let r4 = bodies
+    let prune_index = bodies
         .iter()
-        .find(|b| result(b, "toolu_observe_1").is_some())
+        .position(|body| {
+            result(body, "toolu_observe_1").is_some_and(|old| {
+                let text = old["content"]
+                    .as_str()
+                    .or_else(|| old["content"][0]["text"].as_str())
+                    .unwrap();
+                serde_json::from_str::<Value>(text).unwrap()["output"]["status"] == "superseded"
+            })
+        })
         .unwrap();
-    let r5 = bodies
-        .iter()
-        .find(|b| result(b, "toolu_observe_2").is_some())
-        .unwrap();
-    let r6 = bodies
-        .iter()
-        .find(|b| result(b, "toolu_describe_2").is_some())
+    let r4 = &bodies[prune_index - 1];
+    let r5 = &bodies[prune_index];
+    let r6 = &bodies[prune_index + 1];
+    let newest_id = (1..=14)
+        .rev()
+        .map(|i| format!("toolu_observe_{i}"))
+        .find(|id| result(r5, id).is_some())
         .unwrap();
     let old = result(r5, "toolu_observe_1").unwrap();
     let text = old["content"]
@@ -321,7 +327,7 @@ async fn anthropic_thinking_history_survives_browser_rewrite() -> Result<(), Har
         .unwrap();
     let output: Value = serde_json::from_str(text)?;
     assert_eq!(output["output"]["status"], "superseded", "{old}");
-    let newest = result(r5, "toolu_observe_2").unwrap();
+    let newest = result(r5, &newest_id).unwrap();
     let image = newest["content"]
         .as_array()
         .unwrap()
@@ -334,15 +340,21 @@ async fn anthropic_thinking_history_survives_browser_rewrite() -> Result<(), Har
             "../../fixtures/browser-route/observation.jpg"
         ))
     );
-    for (body, expected) in [
-        (r5, vec!["sig-1", "sig-2", "sig-3"]),
-        (r6, vec!["sig-1", "sig-2", "sig-3", "sig-5"]),
-    ] {
-        assert_eq!(
-            signatures(body).into_iter().collect::<BTreeSet<_>>(),
-            expected.into_iter().map(str::to_owned).collect()
-        );
-    }
+    let previous = signatures(r4);
+    let minted_before_prune = format!("sig-{prune_index}");
+    assert!(
+        !signatures(r5).contains(&minted_before_prune),
+        "reasoning bound to rewritten prefix is removed"
+    );
+    assert!(
+        previous.iter().any(|sig| signatures(r5).contains(sig)),
+        "unaffected signed reasoning survives prune"
+    );
+    let after_prune = format!("sig-{}", prune_index + 1);
+    assert!(
+        signatures(r6).contains(&after_prune),
+        "append-only next request preserves new reasoning"
+    );
     let mut invalid = r5.clone();
     let message = invalid["messages"]
         .as_array_mut()
@@ -351,12 +363,12 @@ async fn anthropic_thinking_history_survives_browser_rewrite() -> Result<(), Har
         .find(|m| {
             m["content"]
                 .as_array()
-                .is_some_and(|c| c.iter().any(|b| b["id"] == "toolu_observe_2"))
+                .is_some_and(|c| c.iter().any(|b| b["id"] == newest_id))
         })
         .unwrap();
     message["content"].as_array_mut().unwrap().insert(
         0,
-        json!({"type":"thinking","thinking":"","signature":"sig-4"}),
+        json!({"type":"thinking","thinking":"","signature":minted_before_prune}),
     );
     assert!(
         verify(&invalid, &minted)
