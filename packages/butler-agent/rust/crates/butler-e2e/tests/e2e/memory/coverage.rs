@@ -15,11 +15,12 @@
 
 use super::coverage_seed::{recovered, regenerate, session, turn};
 use super::coverage_support::{
-    Variant, canonical, chats, compare, coverage, graph, hold_gate, incomplete_jobs, recall,
-    release_gate, settle, start,
+    Variant, apply, canonical, chats, compare, coverage, drain, graph, hold_gate, incomplete_jobs,
+    recall, release_gate, start,
 };
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::scenario::Scenario;
+use butler_platform::sqlite;
 use serde_json::json;
 use std::path::Path;
 
@@ -35,6 +36,9 @@ const S6: &str = "coverage-s6";
 const P1: &str = "coverage-p1";
 const P2: &str = "coverage-p2";
 const MARCH: &str = "2026-03-10T00:00:00.000Z";
+/// Sessions whose jobs a drain does not wait for: the recovered message's
+/// job never completes (see [`Pending`]).
+const NEVER_COMPLETE: &[&str] = &[S5];
 
 /// Pending ingestion per variant: both seeded chats, the first project,
 /// unassigned seeded chats, March, every chat. "Every chat" is always
@@ -174,9 +178,16 @@ async fn first_changes(s: &Scenario, chats: &[String]) -> Result<(), HarnessErro
 }
 
 /// Edits, status changes, outcome and session deletes and a recovered
-/// message gaining a turn, while the mirror is held behind.
-async fn second_changes(s: &Scenario, chats: &[String]) -> Result<(), HarnessError> {
+/// message gaining a turn, while the mirror is held behind. The mirror
+/// applies the changes between groups that do not depend on each other's
+/// overlay, so no drain carries more than three steps' recall turns.
+async fn second_changes(
+    s: &Scenario,
+    chats: &[String],
+    gate: sqlite::Connection,
+) -> Result<sqlite::Connection, HarnessError> {
     let (t, f) = (true, false);
+    let data = &s.sandbox.data;
     let part = "UPDATE conversation_parts SET content_json='{\"text\":\"seeded fact 2 in two, edited\"}' WHERE message_id=?1";
     step(s, chats, "part_edited", [t, f, t, t, t], |db| {
         execute(db, part, &format!("{S2}-turn-2-assistant"));
@@ -190,6 +201,7 @@ async fn second_changes(s: &Scenario, chats: &[String]) -> Result<(), HarnessErr
         );
     })
     .await?;
+    let gate = apply(data, gate, NEVER_COMPLETE).await;
     step(s, chats, "p1_appended", [f, t, f, f, t], |db| {
         turn(db, S4, 1, "seeded fact in four", "2026-02-20T00:00:00.000Z");
     })
@@ -202,6 +214,7 @@ async fn second_changes(s: &Scenario, chats: &[String]) -> Result<(), HarnessErr
         );
     })
     .await?;
+    let gate = apply(data, gate, NEVER_COMPLETE).await;
     step(s, chats, "session_appended", [f, t, f, f, t], |db| {
         session(db, S6, Some(P1));
         turn(db, S6, 1, "seeded fact in six", "2026-02-21T00:00:00.000Z");
@@ -218,7 +231,8 @@ async fn second_changes(s: &Scenario, chats: &[String]) -> Result<(), HarnessErr
         )
         .unwrap();
     })
-    .await
+    .await?;
+    Ok(gate)
 }
 
 #[tokio::test]
@@ -230,8 +244,7 @@ async fn mem_coverage_mirror_matches_full_scan() -> Result<(), HarnessError> {
     s.turn("general", "Coverage recall over every chat.")
         .await?;
     seed(&data);
-    let projected = [S1, S2, S3];
-    settle(&data, &[S1, S2, S3, S5]).await;
+    drain(&data, &[]).await;
     let (t, f) = (true, false);
 
     // Migration: an existing store whose mirror was never built.
@@ -241,9 +254,7 @@ async fn mem_coverage_mirror_matches_full_scan() -> Result<(), HarnessError> {
          DELETE FROM memory_canonical_inventory;",
     ).unwrap();
     let (first, _) = recall(&s, &variants()[0]).await?;
-    release_gate(&gate);
-    settle(&data, &projected).await;
-    let gate = hold_gate(&data);
+    let gate = apply(&data, gate, NEVER_COMPLETE).await;
     let (rebuilt, _) = recall(&s, &variants()[0]).await?;
     assert_eq!(
         coverage(&first),
@@ -251,18 +262,16 @@ async fn mem_coverage_mirror_matches_full_scan() -> Result<(), HarnessError> {
         "recall before the mirror was built"
     );
     step(&s, &chats, "settled", [f, f, f, f, t], |_| {}).await?;
+    // Each phase drains its own recall turns before the next one starts.
+    let gate = apply(&data, gate, NEVER_COMPLETE).await;
     first_changes(&s, &chats).await?;
-    release_gate(&gate);
 
     // The mirror applies the changes; catch-up registers the new turn.
-    settle(&data, &projected).await;
-    let gate = hold_gate(&data);
+    let gate = apply(&data, gate, NEVER_COMPLETE).await;
     eprintln!("MEM-COVERAGE incomplete jobs: {:?}", incomplete_jobs(&data));
     step(&s, &chats, "applied", [f, f, f, f, t], |_| {}).await?;
-    second_changes(&s, &chats).await?;
-    release_gate(&gate);
-    settle(&data, &projected).await;
-    let gate = hold_gate(&data);
+    let gate = second_changes(&s, &chats, gate).await?;
+    let gate = apply(&data, gate, NEVER_COMPLETE).await;
     step(&s, &chats, "second_applied", [f, f, f, f, t], |_| {}).await?;
     step(&s, &chats, "deleted", [t, f, t, t, t], |db| {
         execute(
@@ -284,9 +293,7 @@ async fn mem_coverage_mirror_matches_full_scan() -> Result<(), HarnessError> {
         );
     })
     .await?;
-    release_gate(&gate);
-    settle(&data, &projected).await;
-    let gate = hold_gate(&data);
+    let gate = apply(&data, gate, NEVER_COMPLETE).await;
     step(&s, &chats, "deletion_applied", [f, f, f, f, t], |_| {}).await?;
     release_gate(&gate);
     s.finish().await

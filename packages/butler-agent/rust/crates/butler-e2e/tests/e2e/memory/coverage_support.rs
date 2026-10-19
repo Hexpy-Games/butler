@@ -114,10 +114,36 @@ pub(super) fn mirror_current(data: &Path) -> bool {
 /// store change and every registered job of `projected` sessions is
 /// complete.
 pub(super) async fn settle(data: &Path, projected: &[&str]) {
-    let marks = vec!["?"; projected.len()].join(",");
+    settle_jobs(data, "IN", projected).await;
+}
+
+/// [`settle`] for every registered job except those of `excluded` sessions.
+/// The projection serves jobs round-robin, so one job's windows wait behind
+/// every other open job: draining a phase's own recall turns keeps the next
+/// phase from inheriting them.
+pub(super) async fn drain(data: &Path, excluded: &[&str]) {
+    settle_jobs(data, "NOT IN", excluded).await;
+}
+
+/// Releases `gate` so the consumer applies the held changes, drains (see
+/// [`drain`]) and holds the gate again. Nothing is in flight when the gate
+/// is taken back, so the hold interrupts no extraction.
+pub(super) async fn apply(
+    data: &Path,
+    gate: sqlite::Connection,
+    excluded: &[&str],
+) -> sqlite::Connection {
+    release_gate(&gate);
+    drop(gate);
+    drain(data, excluded).await;
+    hold_gate(data)
+}
+
+async fn settle_jobs(data: &Path, membership: &str, sessions: &[&str]) {
+    let marks = vec!["?"; sessions.len()].join(",");
     let incomplete = format!(
         "SELECT COUNT(*) FROM memory_projection_jobs j JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id \
-         WHERE c.conversation_session_id IN ({marks}) AND json_extract(j.semantic_graph_state,'$.state')!='complete'"
+         WHERE c.conversation_session_id {membership} ({marks}) AND json_extract(j.semantic_graph_state,'$.state')!='complete'"
     );
     tokio::time::timeout(Duration::from_secs(180), async {
         loop {
@@ -125,7 +151,7 @@ pub(super) async fn settle(data: &Path, projected: &[&str]) {
             let ready = mirror_current(data)
                 && super::super::memory_idle::catchup_checkpoint_current(data, &graph_path)
                 && graph(data)
-                    .query_row(&incomplete, rusqlite::params_from_iter(projected), |row| {
+                    .query_row(&incomplete, rusqlite::params_from_iter(sessions), |row| {
                         row.get::<_, i64>(0)
                     })
                     .unwrap()
