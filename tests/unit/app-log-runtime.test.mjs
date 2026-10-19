@@ -1,7 +1,7 @@
 // test-category: security
 import { test, expect } from "bun:test";
 import { EventEmitter } from "node:events";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { installAppLogging } from "../../packages/butler-app/client/electron/log/runtime.mjs";
@@ -164,4 +164,30 @@ test("live gateway events refresh logging only on log settings changes and clear
     await tick();
     expect(refreshes).toBe(6);
   } finally { stop(); controller.close(); }
+});
+
+
+test("committed lower settings delete bodies even before the agent logger applies the level", async () => {
+  const root = await mkdtemp(join(tmpdir(), "app-log-committed-level-"));
+  const app = new EventEmitter(), ipcMain = new EventEmitter(), handlers = new Map(), sender = {};
+  ipcMain.handle = (name, handler) => handlers.set(name, handler);
+  let settings = { diagnostics_enabled: true, log_level: "full", log_category_levels: {} };
+  const stale = { effective: { level: "full", category_levels: {} }, full_expires_at: new Date(Date.now() + 3600_000).toISOString() };
+  const runtime = installAppLogging({ app, ipcMain, dataRoot: root, getVersion: () => "1.0.0",
+    readConfig: async () => stale, readSettings: async () => settings, isSender: event => event.sender === sender });
+  ipcMain.handle("capture", () => {});
+  const bodies = join(root, "logs/app/bodies");
+  try {
+    await runtime.refresh();
+    await handlers.get("capture")({ sender }, "before-commit");
+    await new Promise(resolve => setTimeout(resolve, 200));
+    expect((await readdir(bodies)).length).toBeGreaterThan(0);
+    settings = { ...settings, log_level: "standard" };
+    await runtime.refresh();
+    expect(await stat(bodies).catch(() => null)).toBeNull();
+    await handlers.get("capture")({ sender }, "after-commit");
+    await new Promise(resolve => setTimeout(resolve, 200));
+    expect(await stat(bodies).catch(() => null)).toBeNull();
+    expect(stale.effective.level).toBe("full");
+  } finally { await runtime.quit(); await rm(root, { recursive: true, force: true }); }
 });

@@ -40,14 +40,11 @@ export function installAppLogging({ app, ipcMain, dataRoot, getVersion, readConf
       do {
         refreshPending = false;
         try {
-          const config = await readConfig();
+          const config = committedConfig(await readConfig(), await readSettings?.());
           if (stopped) break;
           clearTimeout(expiryRefresh);
           expiryRefresh = fullExpiryTimer(config, refresh);
           if (config) writer.configure(config);
-          else if ((await readSettings())?.diagnostics_enabled === false) {
-            writer.configure({ effective: { level: "standard", category_levels: {} } });
-          }
           await writer.flush();
         } catch { /* Keep last effective level while reconnecting; full still expires locally. */ }
       } while (refreshPending);
@@ -85,6 +82,16 @@ export function installAppLogging({ app, ipcMain, dataRoot, getVersion, readConf
       return child;
     },
   };
+}
+
+// Settings commit before the logger worker applies them. Never restore a stale full level.
+function committedConfig(view, settings) {
+  if (!settings) return view;
+  const enabled = settings.diagnostics_enabled !== false;
+  return { ...view, effective: {
+    level: enabled ? settings.log_level ?? view?.effective?.level ?? "standard" : "standard",
+    category_levels: enabled ? settings.log_category_levels ?? view?.effective?.category_levels ?? {} : {},
+  }, full_expires_at: enabled ? settings.log_full?.expires_at ?? view?.full_expires_at : null };
 }
 
 function fullExpiryTimer(config, refresh) {
