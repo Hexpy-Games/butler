@@ -73,10 +73,11 @@ export function usageParts(view: UsageMonitorView | null, bucket?: ReturnType<ty
   if (!view || !roles) return null;
   const delegatedAll = Object.entries(roles).reduce((sum, [role, bucket]) => role === "main" ? sum : sum + bucket.totalTokens, 0);
   if (delegatedAll <= 0) return null;
-  const total = bucket ? bucket.total : view.model.totalTokens;
-  const delegated = Math.min(total, bucket ? bucket.delegated : delegatedAll);
+  // Both parts share one basis: byRole totals for the chat, the slot's prompt + output for a bar.
+  const [main, delegated] = bucket ? [bucket.total - bucket.delegated, bucket.delegated] : [roles.main?.totalTokens ?? 0, delegatedAll];
+  const total = main + delegated;
   const copy = appCopy.composer.usage;
   const part = (id: string, label: string, value: number) =>
     ({ id, label, value: total > 0 ? `${usageTokens(value)} · ${usageShare(value / total)}` : usageTokens(value) });
-  return [part("main", copy.conversationPart, total - delegated), part("delegated", copy.delegatedPart, delegated)];
+  return [part("main", copy.conversationPart, main), part("delegated", copy.delegatedPart, delegated)];
 }
