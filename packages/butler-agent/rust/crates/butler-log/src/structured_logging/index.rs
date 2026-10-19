@@ -40,9 +40,10 @@ impl Block {
         self.len += len;
         self.levels |= 1 << severity(&row.level);
         for (kind, id) in [
-            ("trace", &row.trace_id),
-            ("turn", &row.turn_id),
-            ("chat", &row.chat_id),
+            ("trace", row.trace_id.as_deref()),
+            ("turn", row.turn_id.as_deref()),
+            ("chat", row.chat_id.as_deref()),
+            ("message", row.attrs["message_id"].as_str()),
         ] {
             if let Some(id) = id {
                 for bit in bits(kind, id) {

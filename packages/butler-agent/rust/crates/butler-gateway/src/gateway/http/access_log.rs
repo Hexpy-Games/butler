@@ -44,8 +44,13 @@ pub(super) async fn finish(
         "<unmatched>"
     };
     let mut row = butler_log::Record::new(level, "http.server", "http.request", "Gateway request");
-    row.duration_ms = Some(start.elapsed().as_secs_f64() * 1000.0);
-    row.attrs =
-        serde_json::json!({"method":method.as_str(),"route":route,"status":status.as_u16()});
+    let context = butler_log::TraceContext::current();
+    row.trace_id = context.trace_id;
+    row.parent_span_id = context.span_id;
+    row.span_id = Some(uuid::Uuid::new_v4().simple().to_string()[..16].into());
+    let elapsed = start.elapsed();
+    row.duration_ms = Some(elapsed.as_secs_f64() * 1000.0);
+    let started_at = chrono::Utc::now() - chrono::Duration::from_std(elapsed).unwrap_or_default();
+    row.attrs = serde_json::json!({"method":method.as_str(),"route":route,"status":status.as_u16(),"start":started_at.to_rfc3339_opts(chrono::SecondsFormat::Micros,true)});
     let _ = log.record_written(row).await;
 }

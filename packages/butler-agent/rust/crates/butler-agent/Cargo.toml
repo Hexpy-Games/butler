@@ -51,6 +51,7 @@ serde_json.workspace = true
 rusqlite.workspace = true
 sha2.workspace = true
 sha1.workspace = true
+tracing.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 tz-rs.workspace = true

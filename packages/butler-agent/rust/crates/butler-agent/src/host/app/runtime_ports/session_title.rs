@@ -104,7 +104,7 @@ async fn title_round(
             image_manifests: &[],
             verified_image_payload: None,
             butler_data: None,
-            usage_attribution: None,
+            usage_attribution: Some(&butler_turn::btcc::UsageAttribution::background("title")),
             cache_scope: None,
             stable_provider_cache_prefix: None,
             route_context: None,
