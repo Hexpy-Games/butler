@@ -5,7 +5,6 @@ use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
 };
-use std::time::Instant;
 
 fn previous_initialize(fresh: &FreshStorage<'_>, db: &mut Connection) {
     schema::create_current(db).unwrap();
@@ -55,8 +54,7 @@ fn metadata(db: &Connection) -> Vec<(String, String)> {
     .unwrap()
 }
 
-fn sample(root: &Path, previous: bool) -> (f64, usize, sqlite::Connection) {
-    let started = Instant::now();
+fn sample(root: &Path, previous: bool) -> (usize, sqlite::Connection) {
     let path = root.join(format!("{}.sqlite", uuid::Uuid::new_v4()));
     let temp = path.with_extension("tmp");
     let id = manifest_id();
@@ -90,40 +88,24 @@ fn sample(root: &Path, previous: bool) -> (f64, usize, sqlite::Connection) {
     butler_platform::secure_fs::sync_path(&temp).unwrap();
     fresh.publish_and_activate().unwrap();
     remove_temp(&temp).unwrap();
-    let elapsed = started.elapsed().as_secs_f64() * 1000.0;
     assert_eq!(read_activated_storage_manifest(&path).unwrap(), id);
     let db = sqlite::open(&path).unwrap();
     validate::readiness(&db, &id).unwrap();
-    (elapsed, commits.load(Ordering::SeqCst), db)
+    (commits.load(Ordering::SeqCst), db)
 }
 
 /// Pins the persisted schema and metadata alongside publication regression.
 pub(super) fn fresh_schema_and_metadata_commit_once() {
     let root = std::env::temp_dir().join(format!("btcc-commits-{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(&root).unwrap();
-    let mut before = Vec::new();
-    let mut after = Vec::new();
-    let mut previous_commits = None;
-    for _ in 0..20 {
-        let (old_ms, old_commits, old) = sample(&root, true);
-        let (new_ms, new_commits, new) = sample(&root, false);
-        // One schema+metadata commit, plus migration's independent commit.
-        assert_eq!(new_commits, 2);
-        assert!(old_commits > new_commits);
-        assert_eq!(*previous_commits.get_or_insert(old_commits), old_commits);
-        assert_eq!(snapshot(&old), snapshot(&new));
-        assert_eq!(metadata(&old), metadata(&new));
-        assert_eq!(metadata(&new).len(), 2);
-        before.push(old_ms);
-        after.push(new_ms);
-    }
-    before.sort_by(f64::total_cmp);
-    after.sort_by(f64::total_cmp);
-    eprintln!(
-        "20 fresh bootstraps: median before={:.3}ms after={:.3}ms; commits before={} after=2 (schema+metadata=1, migration=1)",
-        f64::midpoint(before[9], before[10]),
-        f64::midpoint(after[9], after[10]),
-        previous_commits.unwrap()
-    );
+    let (old_commits, old) = sample(&root, true);
+    let (new_commits, new) = sample(&root, false);
+    // One schema+metadata commit, plus migration's independent commit.
+    assert_eq!(new_commits, 2);
+    assert!(old_commits > new_commits);
+    assert_eq!(old_commits, 82);
+    assert_eq!(snapshot(&old), snapshot(&new));
+    assert_eq!(metadata(&old), metadata(&new));
+    assert_eq!(metadata(&new).len(), 2);
     fs::remove_dir_all(root).unwrap();
 }
