@@ -6,7 +6,7 @@ This file holds the standing repository and agent rules. Each feedback-log entry
 
 - **Tests:** E2E first in `packages/butler-agent/rust/crates/butler-e2e`, stub tier. Non-E2E tests require `// test-category: <category>`: `race`, `security`, `pure-logic` or `format-pin`. Source-check ratchets `source-check-tests.txt`; counts may only go down. UI behavior uses harness/smoke tests, no unit tests or screen recordings.
 - **Code shape:** files ≤500 lines, production functions ≤80 lines. OS-specific code only in `butler-platform`; no unsafe code. Keep code readable and minimal; never game checks.
-- **Owner-scale performance:** design and verify against App DB ~1.3 GB, 600+ chats/~300k events, BTCC DB ~7 GB, 2,440 transcripts/1.5 GB (largest 290 MB), and metrics >300 MB. No full scans on request paths, blocking I/O on Tokio workers (use `spawn_blocking`), or per-poll whole-file reads. Idle work must be change-driven.
+- **Owner-scale performance:** design and verify against App DB ~1.3 GB, 600+ chats/~300k events, BTCC DB ~1 GB, 2,440 transcripts/1.5 GB (largest 290 MB), and metrics >300 MB. No full scans on request paths, blocking I/O on Tokio workers (use `spawn_blocking`), or per-poll whole-file reads. Idle work must be change-driven.
 - **E2E auth:** stub/replay only; authorized live cassette recording uses only `openai/gpt-6-luna` with the owner's `~/.butler-e2e-auth` profile.
 - **UI copy:** a few words, disabled state with tooltip, or brief toast; no banners. Korean: “예약 작업” (never “자동화”), “버틀러”. English: “schedule”.
 - **Security:** never print tokens or widen access defaults. Approval cards show the exact action.

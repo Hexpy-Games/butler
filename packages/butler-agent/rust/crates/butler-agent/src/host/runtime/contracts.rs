@@ -49,6 +49,7 @@ pub(crate) struct AgentRuntime {
     pub inbound_queue: Arc<butler_gateway::gateway::InboundQueue>,
     pub restart_tool_journal: Arc<butler_turn::btcc::ToolJournalRepository>,
     pub restart_effect_journal: Arc<butler_turn::btcc::StorageEffectJournal>,
+    pub usage_lineage: Arc<butler_runtime::operations::UsageLineage>,
     pub subsessions: Arc<butler_turn::btcc::SubsessionService>,
     pub work_streams: Arc<WorkStreams>,
     pub skills: Arc<Skills>,
@@ -61,7 +62,7 @@ pub(crate) struct AgentRuntime {
 }
 
 impl AgentRuntime {
-    pub(crate) async fn close(self) -> Result<(), BtccError> {
+    pub(crate) async fn close(&self) -> Result<(), BtccError> {
         crate::host::service::shutdown_trace::measure(
             "embedding_acquisition",
             self.memory_acquisition.close(),

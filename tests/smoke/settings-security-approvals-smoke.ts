@@ -1,7 +1,8 @@
 // Public UI -> isolated Rust gateway, existing authority storage, stub models only.
 import { strict as assert } from "node:assert";
-import { mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { type Page, type Route } from "playwright";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { createNativeAppServer } from "../support/native-app-server.ts";
@@ -57,7 +58,9 @@ async function open(page: Page, url: string, name: string, width: number) {
 
 async function runLocale(locale: "ko" | "en") {
     setAppCopyLanguage(locale);
-    const server = await createNativeAppServer({ uiRoot: resolve(before ? ".tmp/security-before-ui" : "packages/butler-app/client/ui/dist"), config: { user: { name: "Smoke", language: locale } }, env: { BUTLER_APP_FOREGROUND_LEASE: "0" } });
+    // Start after the daily scheduler boundary regardless of the host clock or timezone.
+    const timezone = new Date().getUTCHours() < 12 ? "Etc/GMT-12" : "UTC";
+    const server = await createNativeAppServer({ dailyJobs: "due", uiRoot: resolve(before ? ".tmp/security-before-ui" : "packages/butler-app/client/ui/dist"), config: { user: { name: "Smoke", language: locale } }, env: { BUTLER_APP_FOREGROUND_LEASE: "0", TZ: timezone } });
     const { secret } = JSON.parse(readFileSync(join(server.butlerData, "app/runtime/auth/local-admin.json"), "utf8"));
     const fixture = await seedApprovalFixture(server);
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
@@ -111,6 +114,12 @@ async function runLocale(locale: "ko" | "en") {
       assert.equal(listed.permissions.length, 13);
       assert.equal(listed.permissions.filter(g => g.target === fixture.command).length, 2);
       assert(listed.permissions.some(g => g.session_title === "Files review"));
+      const startupCycle = join(server.butlerData, "state/scheduler/consolidation-cycle.json");
+      const deadline = Date.now() + 30_000;
+      while (!existsSync(startupCycle) && Date.now() < deadline) await delay(100);
+      assert(existsSync(startupCycle), "startup consolidation must finish before Settings interactions");
+      // The scheduled startup briefing is intentional (#1242); Settings must add no model calls.
+      const modelCallsBeforeSettings = server.stubModelCalls.length;
       for (const theme of ["light", "dark"]) for (const width of [1280, 375]) {
         await freshPage(width);
         await server.api("/settings", { method: "PATCH", headers: adminHeaders, body: JSON.stringify({ appearance_theme: theme }) });
@@ -128,6 +137,7 @@ async function runLocale(locale: "ko" | "en") {
           await page.getByText(appCopy.settings.saved, { exact: true }).waitFor({ state: "hidden" });
         }
         await screenshot(page, key, "conversation-input");
+        if (!before) await screenshot(page, key, "default-permission");
         await open(page, server.url, appCopy.settings.sections.models, width);
         if (!before) assert.deepEqual(await sectionIds(page), ["butler-model", "backup-models", "advanced-models"]);
         await screenshot(page, key, "butler-model");
@@ -137,9 +147,9 @@ async function runLocale(locale: "ko" | "en") {
           await page.getByRole("button", { name: fixture.command, exact: true }).waitFor();
           await section(page, "grants").getByText(appCopy.settings.grants.targetUnknown, { exact: true }).waitFor();
           assert.equal(await rows(page).count(), 12, "dedupe across same-title conversations");
-          assert.deepEqual(await sectionIds(page), ["remote-access", "permissions", "grants", "saved-keys", "security-advanced"]);
+          assert.deepEqual(await sectionIds(page), ["remote-access", "grants", "saved-keys", "security-advanced"]);
           assert.equal(await section(page, "grants").getByText(appCopy.settings.grants.conversations(2), { exact: false }).count(), 1);
-          await screenshot(page, key, "permissions"); await screenshot(page, key, "grants"); await screenshot(page, key, "saved-keys");
+          await screenshot(page, key, "grants"); await screenshot(page, key, "saved-keys");
           const overflow = await section(page, "grants").evaluate(node => node.scrollWidth > node.clientWidth + 1);
           assert.equal(overflow, false, key);
           const target = page.getByRole("button", { name: /^src\/one.ts\s+src\/two.ts$/u });
@@ -167,7 +177,7 @@ async function runLocale(locale: "ko" | "en") {
         await section(page, "device-pairing").waitFor();
         await section(page, "security-advanced").getByRole("button").click();
         await page.getByPlaceholder(appCopy.settings.security.hostPlaceholder).waitFor();
-        if (!before) assert.deepEqual(await sectionIds(page), ["remote-access", "device-pairing", "paired-devices", "permissions", "grants", "saved-keys", "security-advanced"]);
+        if (!before) assert.deepEqual(await sectionIds(page), ["remote-access", "device-pairing", "paired-devices", "grants", "saved-keys", "security-advanced"]);
         await screenshot(page, `${key}-enabled`, "remote-access");
         await screenshot(page, `${key}-enabled`, before ? "allowed-hosts" : "security-advanced");
         await remote.click();
@@ -189,7 +199,7 @@ async function runLocale(locale: "ko" | "en") {
           await page.getByRole("button", { name: fixture.command, exact: true }).waitFor();
           const refusedMessage = code === "loopback_required" ? appCopy.settings.security.hostOnly : code === "admin_credential_required" ? appCopy.settings.security.adminRequired : appCopy.settings.sectionState.error;
           await section(page, "remote-access").getByText(refusedMessage, { exact: true }).waitFor();
-          assert.deepEqual(await sectionIds(page), ["remote-access", "permissions", "grants", "saved-keys"]);
+          assert.deepEqual(await sectionIds(page), ["remote-access", "grants", "saved-keys"]);
           await screenshot(page, `${locale}-refused-${code}`, "remote-access");
         }
         responses.refusal = "";
@@ -226,7 +236,7 @@ async function runLocale(locale: "ko" | "en") {
         console.log(`revoke ${locale}`);
         await open(page, `${server.url}?settings=privacy`, appCopy.settings.sections.security, 1280);
         await page.goto(`${server.url}?settings=privacy`, { waitUntil: "domcontentloaded" });
-        await section(page, "permissions").waitFor();
+        await section(page, "grants").waitFor();
         const navigationSearch = page.getByRole("searchbox", { name: appCopy.settings.searchLabel });
         await navigationSearch.fill(locale === "ko" ? "개인정보" : "privacy");
         await page.getByRole("button", { name: appCopy.settings.sections.security, exact: true }).waitFor();
@@ -265,11 +275,12 @@ async function runLocale(locale: "ko" | "en") {
         }
         assert.equal(await page.getByText("INTERNAL TEST MESSAGE", { exact: true }).count(), 0);
       }
-      assert.equal(server.stubModelCalls.length, 0);
+      assert.equal(server.stubModelCalls.length, modelCallsBeforeSettings);
+      console.log(JSON.stringify({ locale, modelCallsBeforeSettings, modelCallsAfterSettings: server.stubModelCalls.length, settingsModelCalls: server.stubModelCalls.length - modelCallsBeforeSettings }));
     } catch (error) { console.error(error); await page.screenshot({ path: join(output, `${locale}-failure.png`), animations: "allow", timeout: 10_000 }); console.error(error); throw error; }
     finally { releaseLoading(); try { await page.unrouteAll({ behavior: "ignoreErrors" }); await page.goto("about:blank", { waitUntil: "commit" }); await page.close(); } finally { await server.stop(); } }
 }
 try {
   for (const locale of ["ko", "en"] as const) await runLocale(locale);
-  console.log(JSON.stringify({ ok: true, before, locales: ["ko", "en"], widths: [375, 1280], screenshots: screenshots.length, modelCalls: 0 }));
+  console.log(JSON.stringify({ ok: true, before, locales: ["ko", "en"], widths: [375, 1280], screenshots: screenshots.length, settingsModelCalls: 0 }));
 } finally { await browser.close(); }

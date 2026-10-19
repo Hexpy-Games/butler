@@ -9,7 +9,7 @@ pub use health::{
 };
 pub(super) use health::{migrate_current, stamp_verified, verify_correction};
 pub(super) use validate::ReferenceFailure;
-pub(super) use verdict::validated;
+pub(super) use verdict::{refresh_after_close, validated};
 mod validate;
 
 use crate::btcc::StorageCode;
@@ -17,7 +17,7 @@ use butler_platform::sqlite;
 use std::fs;
 use std::path::Path;
 
-use rusqlite::params;
+use rusqlite::{Connection, TransactionBehavior, params};
 use serde_json::{Value, json};
 
 use super::{StorageError, StorageResult, migration, schema};
@@ -96,17 +96,29 @@ impl FreshStorage<'_> {
     /// fresh-install migration receipt, then syncs it.
     fn prepare(&self) -> StorageResult<()> {
         let mut db = sqlite::open(self.temp).map_err(StorageError::sqlite)?;
-        schema::create_current(&db).map_err(StorageError::sqlite)?;
-        migration::apply(&mut db).map_err(StorageError::sqlite)?;
-        db.execute_batch(METADATA_SCHEMA)
+        self.initialize(&mut db)?;
+        db.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
             .map_err(StorageError::sqlite)?;
-        validate::empty_canonical_database(&db)?;
-        db.execute(
+        db.close()
+            .map_err(|(_, error)| StorageError::sqlite(error))?;
+        butler_platform::secure_fs::sync_path(self.temp).map_err(io_error)
+    }
+
+    /// Groups schema and bootstrap metadata into one durable commit. Migration
+    /// retains its separate transaction; validate committed state afterward.
+    fn initialize(&self, db: &mut Connection) -> StorageResult<()> {
+        let tx = db
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(StorageError::sqlite)?;
+        schema::create_current(&tx).map_err(StorageError::sqlite)?;
+        tx.execute_batch(METADATA_SCHEMA)
+            .map_err(StorageError::sqlite)?;
+        validate::empty_canonical_database(&tx)?;
+        tx.execute(
             "INSERT INTO agent_storage_migration_receipt (singleton,manifest_id,receipt_json) VALUES (1,?1,?2)",
             params![self.id, self.receipt().to_string()],
         )
         .map_err(StorageError::sqlite)?;
-        validate::receipt(&db, self.id)?;
         let marker = json!({
             "schema": "butler.agent-btcc-storage-activation.v1",
             "manifestId": self.id,
@@ -115,17 +127,15 @@ impl FreshStorage<'_> {
             "firstActivatedAt": self.now_iso,
             "activatedAt": self.now_iso,
         });
-        db.execute(
+        tx.execute(
             "INSERT INTO agent_storage_activation_marker (singleton,manifest_id,marker_json) VALUES (1,?1,?2)",
             params![self.id, marker.to_string()],
         )
         .map_err(StorageError::sqlite)?;
-        validate::readiness(&db, self.id)?;
-        db.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
-            .map_err(StorageError::sqlite)?;
-        db.close()
-            .map_err(|(_, error)| StorageError::sqlite(error))?;
-        butler_platform::secure_fs::sync_path(self.temp).map_err(io_error)
+        tx.commit().map_err(StorageError::sqlite)?;
+        migration::apply(db).map_err(StorageError::sqlite)?;
+        validate::receipt(db, self.id)?;
+        validate::readiness(db, self.id)
     }
 
     /// The fresh-install receipt. A fresh source has no rows or claims:
@@ -169,7 +179,9 @@ impl FreshStorage<'_> {
 /// Full offline validation for recovery. Logical findings retain a diagnostic
 /// verdict; only physical/schema failures refuse activation. No rows are repaired.
 pub fn read_activated_storage_manifest(path: &Path) -> StorageResult<String> {
-    validate::read_activated(path)
+    let result = validate::read_activated(path);
+    verdict::record_corruption(path, &result.as_ref().map(|_| ()).map_err(Clone::clone));
+    result
 }
 
 fn remove_temp(temp: &Path) -> StorageResult<()> {
@@ -205,6 +217,7 @@ fn publish(temp: &Path, path: &Path, before_publish: impl FnOnce()) -> std::io::
 
 #[cfg(test)]
 pub(super) fn publication_regression() {
+    transaction_tests::fresh_schema_and_metadata_commit_once();
     let root = std::env::temp_dir().join(format!("bootstrap-race-{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(&root).unwrap();
     let temp = root.join("prepared");
@@ -224,5 +237,19 @@ pub(super) fn publication_regression() {
     let id = bootstrap_fresh_storage(&target, "fence", "test", "2026-09-30T00:00:00Z").unwrap();
     assert_eq!(read_activated_storage_manifest(&target).unwrap(), id);
     assert_eq!(fs::read(&peer_temp).unwrap(), b"peer still preparing");
+    // The code-only fallback must remain durable when metadata is unavailable.
+    let missing = root.join("missing.sqlite");
+    verdict::record_corruption(
+        &missing,
+        &Err(error(StorageCode::AgentBtccStorageQuickCheckFailed)),
+    );
+    assert_eq!(
+        fs::read_to_string(missing.with_extension("sqlite.corrupt")).unwrap(),
+        "agent_btcc_storage_quick_check_failed\n"
+    );
+    assert!(verdict::needs_recheck(&missing).is_err());
     fs::remove_dir_all(root).unwrap();
 }
+
+#[cfg(test)]
+mod transaction_tests;

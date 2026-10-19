@@ -1,18 +1,25 @@
 name: Native macOS release
 on:
   workflow_call:
+    inputs:
+      verify_only:
+        description: Build, sign, notarize, staple and verify without publishing anything
+        type: boolean
+        default: false
 permissions:
   contents: write
   actions: read
 jobs:
   native-release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.verify_only
     name: Build and publish native macOS arm64 artifacts
     runs-on: macos-15
     # Holds the Apple signing secrets; restricted to v* tags (docs: packages/butler-app/scripts/README.md).
     environment: deploy
     env:
       BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
+      # Every signing step, including the App's sign-app, refuses ad-hoc or missing identities.
+      BUTLER_SIGN_REQUIRED: "1"
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -47,7 +54,13 @@ jobs:
         id: reuse
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 .github/scripts/agent-provenance.py reuse "$RUNNER_TEMP/reused-agent" darwin-arm64 static-ort release "${GITHUB_REF_NAME#v}"
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          # Same rule as the Agent build (butler-agent-cli/build.rs): a non-version ref builds <package version>-dev.
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            version="$(python3 -c 'import tomllib; print(tomllib.load(open("packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml", "rb"))["package"]["version"])')-dev"
+          fi
+          python3 .github/scripts/agent-provenance.py reuse "$RUNNER_TEMP/reused-agent" darwin-arm64 static-ort release "$version"
 
       - name: Read the pinned Rust toolchain
         id: toolchain
@@ -103,7 +116,6 @@ jobs:
       # After every third-party install step: keychain and notary key exist only from here on.
       - name: Set up macOS code signing
         env:
-          BUTLER_SIGN_REQUIRED: "1"
           APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
           APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
@@ -116,9 +128,7 @@ jobs:
         timeout-minutes: 60
         run: |
           deploy/macos/sign-and-notarize.sh agent "$BUTLER_NATIVE_AGENT_PAYLOAD/bin/butler-agent"
-          notarized=1
-          if [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-preview\..+$ ]]; then notarized=0; fi
-          echo "BUTLER_AGENT_NOTARIZED=$notarized" >> "$GITHUB_ENV"
+          echo "BUTLER_AGENT_NOTARIZED=1" >> "$GITHUB_ENV"
 
       - name: Select the versioned Agent archive path
         run: |
@@ -150,6 +160,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish Butler Agent GitHub Release files
+        if: ${{ !inputs.verify_only }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -180,10 +191,6 @@ jobs:
           else
             gh release create "$tag" "${files[@]}" --draft --title "$tag" "${notes_args[@]}"
           fi
-
-      - name: Prove Developer ID signing across the isolated HOME boundary
-        if: startsWith(github.ref_name, 'v0.1.0-preview.')
-        run: python3 .github/scripts/isolated.py python3 .github/scripts/macos-signing-profile-proof.py
 
       - name: Fetch the previous App release manifest
         env:
@@ -226,6 +233,35 @@ jobs:
       - name: Verify the native App release artifacts
         run: python3 .github/scripts/isolated.py bun run release:app:smoke -- --platform=darwin-arm64 --out dist/release/app
 
+      - name: Verify signing, notarization and staple
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          dmgs=(dist/release/app/butler-app-*-darwin-arm64.dmg)
+          [ "${#dmgs[@]}" -eq 1 ] || { echo "Expected one App DMG, got ${#dmgs[@]}" >&2; exit 1; }
+          dmg=${dmgs[0]}
+          mount="$RUNNER_TEMP/butler-notarization-report"
+          mkdir -p "$mount"
+          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount" >/dev/null
+          trap 'hdiutil detach "$mount" >/dev/null' EXIT
+          app="$mount/Butler.app"
+          # Same policy as sign-and-notarize.sh: Apple's ticket service can lag or drop a request.
+          check() {
+            local i
+            printf '\n$ %s\n' "$*"
+            for i in 1 2 3; do
+              if "$@" 2>&1; then return 0; fi
+              if [ "$i" -lt 3 ]; then echo "(attempt $i/3 failed; retrying)"; sleep 15; fi
+            done
+            return 1
+          }
+          check codesign --verify --deep --strict --verbose=2 "$app"
+          check spctl -a -vvv -t exec "$app"
+          check spctl -a -vvv -t open --context context:primary-signature "$dmg"
+          check xcrun stapler validate "$app"
+          check xcrun stapler validate "$dmg"
+          check codesign --verify -R=notarized --check-notarization --verbose=2 "$BUTLER_NATIVE_AGENT_PAYLOAD/bin/butler-agent"
+
       - name: Preserve validated native App files for publication recovery
         uses: actions/upload-artifact@v4
         with:
@@ -234,6 +270,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish native App GitHub Release files
+        if: ${{ !inputs.verify_only }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

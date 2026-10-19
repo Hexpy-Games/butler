@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
 
-use super::{MemorySyncPoll, catchup, paused};
+use super::{MemorySyncPoll, catchup, inventory, paused};
 mod cache;
 mod index_retirement;
 mod projection;
@@ -112,12 +112,14 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
     let root = input.environment.memory_root(&input.data_root);
     let mut processed = false;
     let mut queued = false;
+    let mut head = None;
     let mut queue_error = None;
     let queue_root = root.clone();
     match super::blocking::run(move || super::super::queue::peek(&queue_root)).await {
         Ok(Some(entry)) => {
             queued = true;
             let request: SyncRequest = crate::lenient::view(&entry);
+            head = request.job_id.valid().cloned();
             match process_entry(&input, &root, &request).await {
                 Ok(did_process) => processed = did_process,
                 Err(error) => queue_error = Some(error),
@@ -132,6 +134,10 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
     if queued {
         input.catchup_at.lock().take();
     }
+    input.inventory.queue_head(head.as_deref(), processed);
+    // The inventory mirror is independent of the queue and catch-up; their
+    // failures must not keep it behind.
+    let indexing = inventory::run(&input).await;
     let caught_up = match catchup::run_if_due(&input).await {
         Ok(caught_up) => caught_up,
         Err(catchup_error) => match queue_error {
@@ -146,13 +152,15 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
         return Err(error);
     }
     let projected = projection::process(&input).await?;
-    Ok(if processed || caught_up || projected {
-        MemorySyncPoll::Processed
-    } else if queued {
-        MemorySyncPoll::Deferred
-    } else {
-        MemorySyncPoll::Idle
-    })
+    Ok(
+        if processed || caught_up || indexing == inventory::Step::More || projected {
+            MemorySyncPoll::Processed
+        } else if queued || indexing == inventory::Step::Busy {
+            MemorySyncPoll::Deferred
+        } else {
+            MemorySyncPoll::Idle
+        },
+    )
 }
 
 /// Registers the conversation turn a v3 request names once its completion

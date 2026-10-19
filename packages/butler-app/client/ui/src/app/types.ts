@@ -118,6 +118,8 @@ export interface AppModelSummary {
   credential_masked_value?: string;
   /** Catalog image capability; absent means unknown. */
   image_input_support?: "supported" | "unsupported" | "unknown";
+  /** Where image capability came from, e.g. "provider_catalog", "provider_discovery", or "user" (the user's declaration). */
+  image_capability_source?: string;
   image_accepted_mime_types?: string[];
   image_max_inline_bytes?: number;
 }
@@ -221,6 +223,8 @@ export interface LocalModelRegistrationRequest extends LocalModelDiscoveryReques
   max_output_tokens?: number;
   reasoning_budget_ratio?: number;
   source?: "discovered" | "manual";
+  /** The user's image input declaration; absent keeps the stored one. */
+  image_input?: boolean;
 }
 
 export interface LocalModelRegistrationResult {
@@ -1337,7 +1341,8 @@ export interface UsageSectionBucketView {
 }
 
 export interface UsageMonitorView {
-  timeline: { slotMinutes: 15; slots: [number, number, number, number, number][] };
+  /** Session views append the slot's delegated tokens (prompt + output of every role other than "main"), on the same basis as prompt + output above. */
+  timeline: { slotMinutes: 15; slots: ([number, number, number, number, number] | [number, number, number, number, number, number])[] };
   topSessions: { sessionId: string; title: string | null; kind: "chat" | "schedule" | "butler"; totalTokens: number; requests: number; lastUsedMs: number | null }[];
   previousPeriod: { totalTokens: number } | null;
   filters: {
@@ -1351,6 +1356,8 @@ export interface UsageMonitorView {
     byScopeUsage: Record<string, UsageTokenBucketView>;
     byModel: Record<string, UsageTokenBucketView>;
     bySection: Record<string, UsageSectionBucketView>;
+    /** Session views only: the chat's calls by role ("main" = the chat itself; any other role is delegated work), included in the totals above. */
+    byRole?: Record<string, UsageTokenBucketView>;
   };
   webSearch: {
     requestCount: number;

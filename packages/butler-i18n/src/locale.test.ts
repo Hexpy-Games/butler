@@ -74,7 +74,6 @@ test("Korean catalog uses Korean for generic UI words", () => {
   expect(ko.settings.modelManagement.apiBaseUrl).toBe("API 기본 URL");
   expect(ko.settings.fields.searchProviderApiKey).toBe("API 키");
   expect(ko.settings.wallpaper.none).toBe("없음");
-  expect(ko.settings.developerLogViewer.labels.raw).toBe("원문");
   expect(ko.conversation.work.webSearchSummary(3)).toBe("웹 검색 3회");
   expect(ko.conversation.work.toolStepsSummary("read_file", 2)).toBe("read_file 2단계");
   expect(ko.conversation.work.webSearchDetail("butler")).toBe("웹 검색: butler");

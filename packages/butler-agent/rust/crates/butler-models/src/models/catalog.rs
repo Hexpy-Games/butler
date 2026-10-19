@@ -2,6 +2,7 @@ mod defaults;
 mod facts;
 mod generation;
 mod local;
+mod local_image;
 mod lookup;
 mod presets;
 mod pricing;
@@ -23,7 +24,8 @@ pub use defaults::{
 };
 pub use facts::{ImageLimitField, ImageLimitSources, ModelTier};
 pub use local::{
-    LocalModelConfig, LocalModelPlatform, LocalModelSource, normalize_local_model_config,
+    LocalImageDiscovery, LocalModelConfig, LocalModelPlatform, LocalModelSource,
+    normalize_local_model_config,
 };
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use lookup::model_identity_key;

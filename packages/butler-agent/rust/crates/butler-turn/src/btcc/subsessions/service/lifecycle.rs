@@ -113,8 +113,12 @@ impl SubsessionService {
         summary: String,
         failure_code: Option<String>,
     ) -> Result<(), BtccError> {
-        self.bind_result_work(session, turn, failure_code.as_deref())
-            .await?;
+        // Cancellation can precede the child's first execution. Validate an
+        // existing binding, but never create execution authority for a stop.
+        if status != "cancelled" || self.work.bound_work_for_turn(turn.into()).await?.is_some() {
+            self.bind_result_work(session, turn, failure_code.as_deref())
+                .await?;
+        }
         if status == "cancelled" {
             self.work
                 .abandon_bound_work_for_turn(turn.to_owned())

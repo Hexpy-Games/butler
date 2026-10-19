@@ -36,9 +36,9 @@ export function usageTimeline(view: UsageMonitorView | null, maxBars: number) {
     toMs: view ? view.filters.untilTs ?? now : undefined,
   });
   const buckets = grouped.buckets.map((bucket) => {
-    const [requests = 0, prompt = 0, cached = 0, output = 0] = bucket.values;
+    const [requests = 0, prompt = 0, cached = 0, output = 0, delegated = 0] = bucket.values;
     return {
-      ...bucket, requests, prompt, cached, output, total: prompt + output,
+      ...bucket, requests, prompt, cached, output, delegated, total: prompt + output,
       key: String(bucket.startMs),
       label: usageBucketLabel(bucket.startMs, bucket.endMs, now, grouped.stepHours),
       valueText: `${usageTokens(prompt + output)} ${appCopy.composer.usage.tokens}`,
@@ -65,4 +65,27 @@ export function usageReadout(view: UsageMonitorView | null, bucket?: ReturnType<
 export function usageShare(value: number): string {
   if (value > 0 && value < 0.01) return appCopy.composer.usage.tinyShare;
   return new Intl.NumberFormat(getAppLocale(), { style: "percent", maximumFractionDigits: 1 }).format(value);
+}
+
+/**
+ * The chat total split into its own calls and its delegated work; `null` when nothing was delegated.
+ * `requests` adds each part's request count for the whole chat; a bar's slots carry no per-part count.
+ */
+export function usageParts(view: UsageMonitorView | null, bucket?: ReturnType<typeof usageTimeline>["buckets"][number], requests = false) {
+  const roles = view?.model.byRole;
+  if (!view || !roles) return null;
+  const sum = (field: "totalTokens" | "requestCount") =>
+    Object.entries(roles).reduce((total, [role, part]) => role === "main" ? total : total + part[field], 0);
+  const delegatedAll = sum("totalTokens");
+  if (delegatedAll <= 0) return null;
+  // Both parts share one basis: byRole totals for the chat, the slot's prompt + output for a bar.
+  const [main, delegated] = bucket ? [bucket.total - bucket.delegated, bucket.delegated] : [roles.main?.totalTokens ?? 0, delegatedAll];
+  const counts = requests && !bucket ? [roles.main?.requestCount ?? 0, sum("requestCount")] : null;
+  const total = main + delegated;
+  const copy = appCopy.composer.usage;
+  const count = new Intl.NumberFormat(getAppLocale());
+  const part = (id: string, label: string, value: number, calls?: number) => ({ id, label, value: [
+    usageTokens(value), total > 0 ? usageShare(value / total) : null, calls === undefined ? null : copy.requests(count.format(calls)),
+  ].filter(Boolean).join(" · ") });
+  return [part("main", copy.conversationPart, main, counts?.[0]), part("delegated", copy.delegatedPart, delegated, counts?.[1])];
 }

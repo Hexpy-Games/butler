@@ -18,6 +18,11 @@ on:
         options: [self, hosted]
         default: self
         description: Windows build host (select a release tag as the ref)
+      macos_signing_check:
+        description: On a branch ref, build, sign, notarize and staple macOS without publishing
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -46,6 +51,14 @@ jobs:
     needs: integration-proof
     if: ${{ !inputs.reuse_run_id && startsWith(github.ref, 'refs/tags/v') }}
     uses: ./.github/workflows/release-macos.yml
+    secrets: inherit
+
+  # Tag runs never take this path; their native-release job does the same checks.
+  macos-signing-check:
+    if: ${{ inputs.macos_signing_check && !inputs.reuse_run_id && !startsWith(github.ref, 'refs/tags/') }}
+    uses: ./.github/workflows/release-macos.yml
+    with:
+      verify_only: true
     secrets: inherit
 
   agent-linux-x64:

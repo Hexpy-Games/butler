@@ -1,16 +1,28 @@
 //! Canonical Conversation inventory in source scan order, with bounded page storage.
 
+mod candidate;
+mod coverage;
+mod filter;
+mod sync;
+
 use std::{cmp::Ordering, collections::HashSet};
 
 use indexmap::IndexMap;
 
-use crate::cognition::recall::{RecallProjectFilter, RecallRequest, RecallScope, RecallTimeBasis};
+pub(in crate::cognition) use candidate::{
+    CandidateKind, EligibleSource, FaultScope, InventoryCandidate, SourceFault, faulted,
+    recovered_or_fault, source_key, turn as turn_candidate, turn_or_fault,
+};
+pub(in crate::cognition) use coverage::{CoverageRead, InventoryCoverage, inventory_coverage};
+pub(in crate::cognition) use filter::RecallFilter;
+pub(in crate::cognition) use sync::{sync_needed, sync_step};
+
+use crate::cognition::recall::RecallRequest;
 use crate::cognition::{
     CognitionError, CognitionResult, MEMORY_SOURCE_WINDOW_BYTES, split_historical_source_spans,
 };
 use butler_turn::conversation::{
-    ConversationMessageWithParts, ConversationOriginKind, ConversationRole,
-    ConversationSourceReader, ConversationStatus, decode_message_scalars,
+    ConversationOriginKind, ConversationSourceReader, decode_message_scalars,
 };
 
 use super::identity::{RevisionTail, episode_revision, projection_hash, recovered_parts_hash};
@@ -68,9 +80,8 @@ pub(in crate::cognition) fn read_canonical_inventory(
     };
     let mut scan = Scan {
         reader,
-        input,
+        filter: RecallFilter { input, parse_date },
         deadline_at,
-        parse_date,
         now_millis: &mut now_millis,
         entries: Vec::new(),
         exclusions: IndexMap::new(),
@@ -124,9 +135,8 @@ pub(in crate::cognition) fn read_canonical_inventory(
 
 struct Scan<'a> {
     reader: &'a ConversationSourceReader,
-    input: &'a RecallRequest,
+    filter: RecallFilter<'a>,
     deadline_at: i64,
-    parse_date: &'a dyn Fn(&str) -> f64,
     now_millis: &'a mut dyn FnMut() -> i64,
     entries: Vec<CanonicalInventoryEntry>,
     exclusions: IndexMap<String, usize>,
@@ -139,44 +149,6 @@ impl Scan<'_> {
     }
     fn exclude(&mut self, code: &str) {
         *self.exclusions.entry(code.to_owned()).or_default() += 1;
-    }
-    fn in_scope(&self, session: &str, project: Option<&str>) -> bool {
-        if self.input.scope == RecallScope::CurrentSession
-            && session != self.input.runtime.session_id
-        {
-            return false;
-        }
-        if self.input.scope == RecallScope::CurrentProject
-            && project != self.input.runtime.project_id.as_deref()
-        {
-            return false;
-        }
-        if !self.input.session_ids.is_empty()
-            && !self.input.session_ids.iter().any(|id| id == session)
-        {
-            return false;
-        }
-        if self.input.project_filter == RecallProjectFilter::Unassigned && project.is_some() {
-            return false;
-        }
-        if self.input.project_filter == RecallProjectFilter::Selected
-            && !project.is_some_and(|id| self.input.project_ids.iter().any(|project| project == id))
-        {
-            return false;
-        }
-        true
-    }
-    fn time_contains(&self, created: &str) -> bool {
-        let Some(time) = self
-            .input
-            .time
-            .as_ref()
-            .filter(|time| time.basis == RecallTimeBasis::Conversation)
-        else {
-            return true;
-        };
-        let value = (self.parse_date)(created);
-        value >= (self.parse_date)(&time.from) && value < (self.parse_date)(&time.to)
     }
     fn recovered_page(
         &mut self,
@@ -198,16 +170,13 @@ impl Scan<'_> {
                 .reader
                 .read_session(&message.message.session_id)
                 .map_err(unavailable)?;
-            if session.as_ref().is_none_or(|session| {
-                session.status == "deleted"
-                    || !self.in_scope(&session.id, session.project_id.as_deref())
-            }) || (self.parse_date)(&message.message.created_at)
-                > (self.parse_date)(&self.input.as_of)
+            if !self.filter.session_admitted(session.as_ref())
+                || self.filter.after_cutoff(&message.message.created_at)
             {
                 self.exclude("scope_or_time");
                 continue;
             }
-            if !self.time_contains(&message.message.created_at) {
+            if !self.filter.time_contains(&message.message.created_at) {
                 continue;
             }
             let scalars = decode_message_scalars(&message);
@@ -216,7 +185,7 @@ impl Scan<'_> {
                 continue;
             }
             let source_hash = recovered_parts_hash(&message).map_err(unavailable)?;
-            let episode_id = hash(&("canonical-conversation-message", &message.message.id))?;
+            let episode_id = candidate::message_episode_id(&message.message.id)?;
             self.entries.push(entry(
                 &episode_id,
                 &scalars,
@@ -231,23 +200,15 @@ impl Scan<'_> {
         &mut self,
         outcome: &butler_turn::conversation::RecallOutcomeRow,
     ) -> CognitionResult<()> {
-        if !self.session_in_scope(&outcome.session_id)? {
+        let session = self
+            .reader
+            .read_session(&outcome.session_id)
+            .map_err(unavailable)?;
+        if !self.filter.session_admitted(session.as_ref()) {
             self.exclude("scope_or_session");
             return Ok(());
         }
-        let turn = self
-            .reader
-            .read_turn(&outcome.turn_id)
-            .map_err(unavailable)?;
-        if turn.as_ref().is_none_or(|turn| {
-            turn.id != outcome.turn_id
-                || turn.session_id != outcome.session_id
-                || !matches!(turn.status.as_str(), "complete" | "failed" | "aborted")
-        }) {
-            self.exclude("turn_not_terminal");
-            return Ok(());
-        }
-        let messages = match self.turn_messages(outcome)? {
+        let messages = match candidate::turn_messages(self.reader, outcome)? {
             Ok(messages) => messages,
             Err(Some(exclusion)) => {
                 self.exclude(exclusion);
@@ -255,7 +216,11 @@ impl Scan<'_> {
             }
             Err(None) => return Ok(()),
         };
-        if !self.turn_in_time(&messages) {
+        if !self.filter.turn_in_time(
+            messages
+                .iter()
+                .map(|message| message.message.created_at.as_str()),
+        ) {
             return Ok(());
         }
         let scalars = messages
@@ -266,12 +231,9 @@ impl Scan<'_> {
             self.exclude("source_text_missing");
             return Ok(());
         }
-        let episode_id = hash(&("canonical-conversation-turn", &outcome.turn_id))?;
+        let episode_id = candidate::turn_episode_id(&outcome.turn_id)?;
         if !outcome.generation.is_finite() {
-            return Err(CognitionError::new(
-                CognitionCode::MemorySourceUnavailable,
-                "invalid_generation",
-            ));
+            return Err(invalid_generation());
         }
         self.entries.push(entry(
             &episode_id,
@@ -280,91 +242,10 @@ impl Scan<'_> {
         )?);
         Ok(())
     }
+}
 
-    fn session_in_scope(&self, session_id: &str) -> CognitionResult<bool> {
-        let session = self.reader.read_session(session_id).map_err(unavailable)?;
-        Ok(session.as_ref().is_some_and(|session| {
-            session.status != "deleted" && self.in_scope(&session.id, session.project_id.as_deref())
-        }))
-    }
-
-    /// The turn's request and public answer; `Err` with the exclusion code
-    /// when one is ineligible (or `None` when there is no request).
-    fn turn_messages(
-        &self,
-        outcome: &butler_turn::conversation::RecallOutcomeRow,
-    ) -> CognitionResult<Result<Vec<ConversationMessageWithParts>, Option<&'static str>>> {
-        let read = |id: Option<&str>| {
-            id.map(|id| self.reader.read_message(id))
-                .transpose()
-                .map_err(unavailable)
-                .map(Option::flatten)
-        };
-        let request = read(outcome.request_message_id.as_deref())?;
-        let assistant = read(outcome.public_assistant_message_id.as_deref())?;
-        let unknown = |message: &Option<ConversationMessageWithParts>| {
-            message.as_ref().is_some_and(|message| {
-                message.message.origin_kind == ConversationOriginKind::Unknown
-            })
-        };
-        if request.as_ref().is_none_or(|message| {
-            message.message.role != ConversationRole::User
-                || !matches!(
-                    message.message.status,
-                    ConversationStatus::Complete | ConversationStatus::Compacted
-                )
-                || message.message.origin_kind != ConversationOriginKind::UserInput
-        }) {
-            return Ok(Err(Some(if unknown(&request) {
-                "unknown_origin"
-            } else {
-                "request_ineligible"
-            })));
-        }
-        if outcome.public_assistant_message_id.is_some()
-            && assistant.as_ref().is_none_or(|message| {
-                message.message.role != ConversationRole::Assistant
-                    || message.message.status != ConversationStatus::Complete
-                    || message.message.origin_kind != ConversationOriginKind::AssistantPublic
-            })
-        {
-            return Ok(Err(Some(if unknown(&assistant) {
-                "unknown_origin"
-            } else {
-                "assistant_ineligible"
-            })));
-        }
-        let Some(request) = request else {
-            return Ok(Err(None));
-        };
-        Ok(Ok([Some(request), assistant]
-            .into_iter()
-            .flatten()
-            .collect()))
-    }
-
-    /// Whether any message was observed by the recall's cutoff and, for a
-    /// conversation-time window, inside it.
-    fn turn_in_time(&self, messages: &[ConversationMessageWithParts]) -> bool {
-        let observed = messages
-            .iter()
-            .filter(|message| {
-                (self.parse_date)(&message.message.created_at)
-                    <= (self.parse_date)(&self.input.as_of)
-            })
-            .collect::<Vec<_>>();
-        if observed.is_empty() {
-            return false;
-        }
-        !self
-            .input
-            .time
-            .as_ref()
-            .is_some_and(|time| time.basis == RecallTimeBasis::Conversation)
-            || observed
-                .iter()
-                .any(|message| self.time_contains(&message.message.created_at))
-    }
+pub(in crate::cognition) fn invalid_generation() -> CognitionError {
+    CognitionError::new(CognitionCode::MemorySourceUnavailable, "invalid_generation")
 }
 
 fn entry(

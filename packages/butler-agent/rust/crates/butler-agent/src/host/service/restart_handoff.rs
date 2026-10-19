@@ -141,7 +141,7 @@ async fn record_offline_terminal(
 }
 
 async fn handoff_manifest(path: PathBuf) -> Result<String, crate::host::HostError> {
-    tokio::task::spawn_blocking(move || begin_storage_startup(&path))
+    tokio::task::spawn_blocking(move || begin_storage_startup(&path, || {}))
         .await
         .map_err(|source| {
             crate::host::HostError::new("restart_handoff_journal_unavailable").with_source(source)

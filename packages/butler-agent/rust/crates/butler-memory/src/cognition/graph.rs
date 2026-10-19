@@ -5,6 +5,7 @@ mod cache_quantum;
 mod cache_validation;
 mod cache_work;
 mod candidates;
+mod canonical_inventory;
 mod consolidate;
 pub(in crate::cognition) mod episode_fts;
 mod failure;
@@ -45,6 +46,9 @@ use super::{CognitionError, CognitionResult};
 use crate::cognition::CognitionCode;
 pub(in crate::cognition) use cache_quantum::{CacheWindow, ClaimedCacheJob};
 pub(in crate::cognition) use candidates::VectorHit;
+pub(in crate::cognition) use canonical_inventory::{
+    InventoryPhase, InventoryState, InventoryWrite, Uncovered,
+};
 pub(in crate::cognition) use consolidate::GraphConsolidateMetrics;
 pub(in crate::cognition) use internal_supersession::InternalSupersessionInput;
 pub use jobs::{GraphProgress, JobOutcome};
@@ -101,6 +105,7 @@ impl GraphRepository {
         &mut self,
         input: ClaimProjectionWindowInput<'_>,
     ) -> CognitionResult<()> {
+        schema::recover_interrupted_failures(self.connection_mut()?, input.now)?;
         let tx = self.connection_mut()?.transaction().map_err(db_error)?;
         projection::recover_interrupted(&tx, &input)?;
         tx.commit().map_err(db_error)

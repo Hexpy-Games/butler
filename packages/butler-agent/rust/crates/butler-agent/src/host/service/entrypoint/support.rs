@@ -90,10 +90,14 @@ pub(super) fn failure(code: impl Into<String>, message: impl Into<String>) -> Bt
 pub(super) async fn close_runtime(runtime: Arc<AgentRuntime>) -> Result<(), BtccError> {
     match Arc::try_unwrap(runtime) {
         Ok(runtime) => runtime.close().await,
-        Err(_) => Err(failure(
-            "native_runtime_owner_leaked",
-            "Native runtime has an owner after service shutdown",
-        )),
+        Err(runtime) => {
+            // A leaked Arc must not bypass producer drain and final storage close.
+            let _ = runtime.close().await;
+            Err(failure(
+                "native_runtime_owner_leaked",
+                "Native runtime has an owner after service shutdown",
+            ))
+        }
     }
 }
 
