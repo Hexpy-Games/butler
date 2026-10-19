@@ -16,7 +16,11 @@ pub(super) async fn execute(
     workspace: &WorkspaceFiles,
     input: CapabilityInvocation<'_>,
 ) -> Result<Value, CapabilityError> {
-    let workspace = &workspace.request();
+    let request = match input.workspace_reference.and_then(|r| r.read_inventory()) {
+        Some(inventory) => workspace.request_with_inventory(input.butler_data, inventory),
+        None => workspace.request(),
+    };
+    let workspace = &request;
     let started = Instant::now();
     let args = match parse_args(input.call) {
         Ok(value) => value,

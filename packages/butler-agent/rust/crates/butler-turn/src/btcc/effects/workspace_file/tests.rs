@@ -95,6 +95,7 @@ async fn observed_write_precedes_registered_rejection_and_reconcile_is_conservat
     std::fs::create_dir(&root).unwrap();
     let adapter = WorkspaceFileEffectAdapter::new(
         EffectFileScope {
+            inventory: None,
             workspace: root.clone(),
             butler_data: root.join("data"),
             protected_roots: vec![],

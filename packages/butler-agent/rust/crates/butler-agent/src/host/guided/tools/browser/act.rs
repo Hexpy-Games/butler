@@ -11,7 +11,7 @@ pub(super) async fn execute(
     if let Some(refused) = act_refusal(owner, invocation, &client, &mut args).await {
         return finish_batch(&args, refused);
     }
-    let staged = match upload::resolve(owner, &mut args).await {
+    let staged = match upload::resolve(owner, occurrence, &mut args).await {
         Ok(staged) => staged,
         Err(refused) => return finish_batch(&args, refused),
     };

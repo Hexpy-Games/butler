@@ -92,7 +92,7 @@ pub(super) fn windows_guard(path: &Path, directory: bool, write: bool) -> io::Re
 }
 
 /// Open a contained regular file using the shared credential policy. Unix
-/// follows only relative links under the pinned root. Windows retains the
+/// follows only links that remain under the pinned root. Windows retains the
 /// existing no-reparse-point component checks.
 pub fn open_contained(
     root: &Path,
@@ -142,6 +142,15 @@ pub struct ContainedReadCache {
     inner: std::sync::Mutex<super::contained::Cache>,
 }
 impl ContainedReadCache {
+    /// Start another request with the same host policy and no directory fds.
+    pub fn fresh(&self) -> Self {
+        Self {
+            policies: std::sync::Mutex::new(
+                self.policies.lock().map(|p| p.clone()).unwrap_or_default(),
+            ),
+            ..Self::default()
+        }
+    }
     /// Use an explicitly supplied host policy for this request.
     pub fn with_inventory(
         data: &Path,

@@ -6,6 +6,9 @@ pub(super) fn io_reason(error: &std::io::Error) -> &'static str {
     if error.to_string() == "contained_read_refused" {
         return "safety_refused";
     }
+    if error.to_string() == "path_escape" {
+        return "path_escape";
+    }
     if error.to_string() == "not_a_file" {
         return "not_a_file";
     }

@@ -193,6 +193,7 @@ impl GuidedCommand {
                 resolved_cwd.to_string_lossy().into_owned(),
                 result,
                 output::OutputOrigin {
+                    inventory: scope.workspace_reference.and_then(|r| r.read_inventory()),
                     args,
                     workspace: &root,
                     data_root: scope.butler_data,
@@ -208,7 +209,17 @@ impl GuidedCommand {
             .await;
         }
         let data = scope.butler_data.to_path_buf();
-        let before = Some(self.jobs.run(move || artifacts::snapshot(&data)).await?);
+        let inventory = scope.workspace_reference.and_then(|r| r.read_inventory());
+        let before = Some(
+            self.jobs
+                .run(move || {
+                    let inventory = inventory.unwrap_or_else(|| {
+                        butler_platform::secure_fs::SecretInventory::cached(&data)
+                    });
+                    artifacts::snapshot(&data, &inventory)
+                })
+                .await?,
+        );
         let started = std::time::SystemTime::now();
         let input = GuidedCommandInput {
             command: command.to_owned(),
@@ -234,6 +245,7 @@ impl GuidedCommand {
             },
             spooled,
             output::OutputOrigin {
+                inventory: scope.workspace_reference.and_then(|r| r.read_inventory()),
                 args,
                 workspace: &root,
                 data_root: scope.butler_data,

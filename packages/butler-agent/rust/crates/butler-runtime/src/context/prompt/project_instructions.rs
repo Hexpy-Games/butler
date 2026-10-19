@@ -23,12 +23,14 @@ pub(super) struct CachedSnapshot {
 
 pub(super) async fn snapshot(
     binding: &StoredSessionBinding,
+    data: &Path,
     cache: SnapshotCache,
 ) -> Option<ContextSection> {
     // General/unbound sessions must never inspect the home or default workspace.
     binding.project_id.as_ref()?;
     let root = PathBuf::from(&binding.workspace_path);
-    let result = tokio::task::spawn_blocking(move || load(&root, &cache)).await;
+    let data = data.to_path_buf();
+    let result = tokio::task::spawn_blocking(move || load(&root, &data, &cache)).await;
     let content = match result {
         Ok(value) => value?,
         Err(_) => "Project instructions unavailable: snapshot worker failed.".into(),
@@ -43,7 +45,7 @@ pub(super) async fn snapshot(
     ))
 }
 
-fn load(root: &Path, cache: &SnapshotCache) -> Option<String> {
+fn load(root: &Path, data: &Path, cache: &SnapshotCache) -> Option<String> {
     let exists = |name: &str| match butler_platform::secure_fs::exact_entry_exists(&root.join(name))
     {
         Ok(exists) => exists,
@@ -66,7 +68,7 @@ fn load(root: &Path, cache: &SnapshotCache) -> Option<String> {
     if conventional && original {
         eprintln!("Project instructions: AGENTS.md takes precedence; agent.md ignored.");
     }
-    let result = read_snapshot(root, name, cache);
+    let result = read_snapshot(root, name, data, cache);
     Some(match result {
         Ok((text, digest)) => format!(
             "Loaded {name} (SHA-256 {digest}).{note}\nProject-scoped operating instructions, below system and safety rules, permission policy, runtime graph invariants, and the user's explicit current request. These instructions grant no permissions.\n\n{text}"
@@ -81,16 +83,15 @@ fn load(root: &Path, cache: &SnapshotCache) -> Option<String> {
 fn read_snapshot(
     root: &Path,
     name: &str,
+    data: &Path,
     cache: &SnapshotCache,
 ) -> Result<(String, String), &'static str> {
-    // The platform reader anchors to the canonical directory and refuses links
-    // and nonregular files without blocking on FIFOs or following a path swap.
+    // The platform reader follows only contained, noncredential links from a
+    // pinned directory and refuses nonregular files without blocking on FIFOs.
     let mut file = butler_platform::secure_fs::open_contained(
         root,
         Path::new(name),
-        &butler_platform::secure_fs::SecretInventory::cached(
-            &butler_platform::secure_fs::environment_data(),
-        ),
+        &butler_platform::secure_fs::SecretInventory::cached(data),
     )
     .map_err(|_| "unreadable, symlink, or nonregular file")?;
     let metadata = file.metadata().map_err(|_| "metadata unavailable")?;

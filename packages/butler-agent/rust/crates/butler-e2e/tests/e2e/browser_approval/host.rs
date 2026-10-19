@@ -194,8 +194,17 @@ pub(super) fn cassette(turns: &[(String, Vec<Value>)]) -> Result<Cassette, Harne
     cassette.exchanges.clear();
     let stub = super::super::browser_usage::stub::response;
     for (turn, (request, calls)) in turns.iter().enumerate() {
-        let describe =
-            json!({"ids":["native:browser_observe","native:browser_act","native:image_collect"]});
+        let mut ids = vec![
+            "native:browser_observe",
+            "native:browser_act",
+            "native:image_collect",
+        ];
+        for id in calls.iter().filter_map(|call| call["id"].as_str()) {
+            if !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+        let describe = json!({"ids":ids});
         let mut round = Vec::new();
         let mut items = vec![("tool_describe", describe)];
         items.extend(calls.iter().map(|call| ("tool_call", call.clone())));

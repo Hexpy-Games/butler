@@ -5,14 +5,13 @@ use std::{
     sync::{Arc, OnceLock, Weak},
 };
 type Key = (PathBuf, String);
-#[derive(Default)]
 struct State {
+    data: PathBuf,
     files: Mutex<HashMap<PathBuf, bool>>,
 }
 /// Releases unused copies when the bound turn ends, including cancellation.
 pub struct StageScope {
-    key: Key,
-    state: Arc<State>,
+    _state: Arc<State>,
 }
 fn registry() -> &'static Mutex<HashMap<Key, Weak<State>>> {
     static REGISTRY: OnceLock<Mutex<HashMap<Key, Weak<State>>>> = OnceLock::new();
@@ -22,11 +21,25 @@ impl StageScope {
     /// Establish staging ownership before the turn can dispatch tools.
     pub fn new(data: &Path, turn: &str) -> Self {
         let key = (data.to_path_buf(), turn.to_owned());
-        let state = Arc::new(State::default());
+        let state = Arc::new(State {
+            data: data.to_path_buf(),
+            files: Mutex::default(),
+        });
         if let Ok(mut registry) = registry().lock() {
-            registry.insert(key.clone(), Arc::downgrade(&state));
+            registry.retain(|_, state| state.strong_count() > 0);
+            registry.insert(key, Arc::downgrade(&state));
         }
-        Self { key, state }
+        Self { _state: state }
+    }
+    /// Keep ownership while an admitted blocking operation finishes, even if
+    /// the caller cancels before its worker starts or produces its result.
+    pub fn for_operation(data: &Path, turn: &str) -> Option<Self> {
+        let state = registry()
+            .lock()
+            .ok()?
+            .get(&(data.to_path_buf(), turn.to_owned()))?
+            .upgrade()?;
+        Some(Self { _state: state })
     }
 }
 pub(super) fn register(data: &Path, turn: &str, path: &Path) {
@@ -52,13 +65,10 @@ pub fn handoff_staged(path: &Path) {
         }
     }
 }
-impl Drop for StageScope {
+impl Drop for State {
     fn drop(&mut self) {
-        if let Ok(mut registry) = registry().lock() {
-            registry.remove(&self.key);
-        }
-        let mut staged = StagedFiles::new(&self.key.0);
-        if let Ok(mut files) = self.state.files.lock() {
+        let mut staged = StagedFiles::new(&self.data);
+        if let Ok(mut files) = self.files.lock() {
             for (path, handed) in files.drain() {
                 if !handed {
                     staged.push(path);

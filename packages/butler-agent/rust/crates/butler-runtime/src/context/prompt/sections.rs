@@ -308,9 +308,12 @@ impl PromptAssembler {
                 &feedback.scope_kind,
             ));
         }
-        if let Some(instructions) =
-            super::project_instructions::snapshot(input.binding, self.project_instructions.clone())
-                .await
+        if let Some(instructions) = super::project_instructions::snapshot(
+            input.binding,
+            &self.paths.data_root,
+            self.project_instructions.clone(),
+        )
+        .await
         {
             live.push(instructions);
         }

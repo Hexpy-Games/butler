@@ -74,7 +74,9 @@ impl WorkspaceFiles {
     pub fn request(&self) -> Self {
         Self {
             inner: self.inner.clone(),
-            cache: Some(Arc::default()),
+            cache: Some(Arc::new(
+                self.cache.as_ref().map(|c| c.fresh()).unwrap_or_default(),
+            )),
         }
     }
     /// A request using the supplied host environment's credential policy.

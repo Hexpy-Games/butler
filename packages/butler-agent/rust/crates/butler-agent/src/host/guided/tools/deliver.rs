@@ -16,15 +16,31 @@ pub(super) async fn execute(
     let workspace = owner.active_workspace_path();
     let data = owner.binding.butler_data.clone();
     let turn = owner.binding.turn_id.clone();
+    let inventory = owner
+        .binding
+        .workspace_reference
+        .as_ref()
+        .and_then(|r| r.read_inventory());
+    let lease = secure_fs::StageScope::for_operation(&data, &turn);
     let files = call.arguments.get("files").cloned().unwrap_or(Value::Null);
-    let result =
-        tokio::task::spawn_blocking(move || collect(&workspace, &data, &turn, &files)).await;
+    let result = tokio::task::spawn_blocking(move || {
+        let _lease = lease;
+        collect(&workspace, &data, &turn, &files, inventory)
+    })
+    .await;
     encoded(&result.unwrap_or_else(|_| unavailable("")))
 }
 fn unavailable(path: &str) -> Value {
     json!({"ok":false,"error":"deliver_file_unavailable","path":path,"message":UNAVAILABLE})
 }
-fn collect(workspace: &Path, data: &Path, turn: &str, files: &Value) -> Value {
+fn collect(
+    workspace: &Path,
+    data: &Path,
+    turn: &str,
+    files: &Value,
+    inventory: Option<std::sync::Arc<secure_fs::SecretInventory>>,
+) -> Value {
+    let inventory = inventory.unwrap_or_else(|| secure_fs::SecretInventory::cached(data));
     let Some(files) = files.as_array().filter(|f| !f.is_empty() && f.len() <= 12) else {
         return unavailable("");
     };
@@ -32,7 +48,7 @@ fn collect(workspace: &Path, data: &Path, turn: &str, files: &Value) -> Value {
     let mut delivered = Vec::new();
     for item in files {
         let path = item["path"].as_str().unwrap_or("");
-        let Some(mut artifact) = checked(workspace, data, turn, path) else {
+        let Some(mut artifact) = checked(workspace, data, turn, path, &inventory) else {
             return unavailable(path);
         };
         let title = item["title"]
@@ -47,11 +63,17 @@ fn collect(workspace: &Path, data: &Path, turn: &str, files: &Value) -> Value {
     }
     json!({"ok":true,"delivered":delivered,"artifacts":artifacts})
 }
-fn checked(workspace: &Path, data: &Path, turn: &str, label: &str) -> Option<Value> {
+fn checked(
+    workspace: &Path,
+    data: &Path,
+    turn: &str,
+    label: &str,
+    inventory: &secure_fs::SecretInventory,
+) -> Option<Value> {
     let label = label.replace('\\', "/");
     let artifact = label.starts_with("artifacts/");
     let raw_root = if artifact { data } else { workspace };
-    let root = std::fs::canonicalize(raw_root).ok()?;
+    let root = inventory.canonical_root(raw_root).ok()?;
     let path = Path::new(&label);
     let relative = if path.is_absolute() {
         path.strip_prefix(raw_root)
@@ -69,8 +91,7 @@ fn checked(workspace: &Path, data: &Path, turn: &str, label: &str) -> Option<Val
     {
         return None;
     }
-    let inventory = butler_platform::secure_fs::SecretInventory::cached(data);
-    let file = secure_fs::open_contained(&root, relative, &inventory).ok()?;
+    let file = secure_fs::open_contained(&root, relative, inventory).ok()?;
     let metadata = file.metadata().ok()?;
     if !metadata.is_file() || metadata.len() > MAX_BYTES {
         return None;

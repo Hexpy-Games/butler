@@ -52,7 +52,16 @@ pub(super) async fn publish(
         return super::dispatch::encoded(&json!({"ok":false,"error":"tool_not_admitted"}));
     }
     let store = OutputStore::new(&owner.binding.butler_data);
-    let result = tokio::task::spawn_blocking(move || store.publish(request)).await;
+    let inventory = owner
+        .binding
+        .workspace_reference
+        .as_ref()
+        .and_then(|r| r.read_inventory());
+    let result = tokio::task::spawn_blocking(move || match inventory {
+        Some(inventory) => store.publish_with_inventory(request, &inventory),
+        None => store.publish(request),
+    })
+    .await;
     let value = match result {
         Ok(Ok((output, new_blobs))) => {
             let revision = output.revisions.last().map_or(0, |r| r.revision);

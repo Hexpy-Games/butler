@@ -12,6 +12,7 @@ use super::path_guard::{MutationGuardInput, resolve_workspace_mutation_guard};
 /// Where effect file writes may land.
 #[derive(Clone, Debug)]
 pub struct EffectFileScope {
+    pub inventory: Option<Arc<butler_platform::secure_fs::SecretInventory>>,
     pub workspace: PathBuf,
     pub butler_data: PathBuf,
     pub protected_roots: Vec<PathBuf>,
@@ -234,7 +235,13 @@ pub async fn observe_effect_file(target: &GuardedEffectFile) -> EffectFileObserv
 }
 
 fn open_target(target: &GuardedEffectFile) -> std::io::Result<std::fs::File> {
-    super::contained_reader::open(
+    let cache = target.scope.inventory.as_ref().map(|i| {
+        butler_platform::secure_fs::ContainedReadCache::with_inventory(
+            &target.scope.butler_data,
+            i.clone(),
+        )
+    });
+    super::contained_reader::open_cached(
         &target.scope.workspace,
         &target.absolute.to_string_lossy(),
         if target.scope.contained {
@@ -243,5 +250,6 @@ fn open_target(target: &GuardedEffectFile) -> std::io::Result<std::fs::File> {
             super::PathForm::RelativeOrAbsolute
         },
         &target.scope.butler_data,
+        cache.as_ref(),
     )
 }

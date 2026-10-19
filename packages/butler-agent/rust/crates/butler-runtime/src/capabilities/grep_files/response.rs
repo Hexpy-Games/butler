@@ -230,7 +230,9 @@ pub(super) fn success(
 
 fn candidate_hint(reason: Option<&str>) -> &'static str {
     match reason {
-        Some("safety_refused") => "Choose an ordinary workspace file outside credential stores.",
+        Some("safety_refused" | "path_escape") => {
+            "Choose an ordinary workspace file outside credential stores."
+        }
         Some("not_found") => "Restart discovery or choose an existing file.",
         Some("not_a_file" | "not_a_directory") => "Choose an existing regular file.",
         Some("max_bytes_per_file") => "Use read_file with line ranges.",

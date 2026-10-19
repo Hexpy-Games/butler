@@ -275,18 +275,22 @@ async fn reader_supports_deep_absolute_links_and_recreated_symlink_root() -> Res
         );
     }
     let inventory = butler_platform::secure_fs::SecretInventory::cached(&s.sandbox.data);
-    let pin = inventory.pin_root(root)?;
+    let first = inventory.for_turn();
+    let _pin = first.pin_root(root)?;
     let old = root.with_extension("old");
     std::fs::rename(root, &old)?;
     std::fs::create_dir(root)?;
     std::fs::write(root.join("new"), "complete-new")?;
-    assert_eq!(read(&alias, &s.sandbox.data, "new").await["ok"], false);
-    drop(pin);
-    let _next = inventory.pin_root(root)?;
-    assert_eq!(
-        read(&alias, &s.sandbox.data, "new").await["content"],
-        "complete-new"
-    );
+    assert!(butler_platform::secure_fs::open_contained(root, Path::new("new"), &first).is_err());
+    let second = inventory.for_turn();
+    let _next = second.pin_root(root)?;
+    let mut content = String::new();
+    std::io::Read::read_to_string(
+        &mut butler_platform::secure_fs::open_contained(root, Path::new("new"), &second)?,
+        &mut content,
+    )?;
+    assert_eq!(content, "complete-new");
+    assert!(butler_platform::secure_fs::open_contained(root, Path::new("new"), &first).is_err());
     s.sandbox.mark_success();
     Ok(())
 }
@@ -323,6 +327,7 @@ async fn grep_and_edit_readback_refuse_credential_hard_link_content() -> Result<
     assert_eq!(result.reason, Some("safety_refused"));
     assert!(result.matches.is_empty());
     let scope = butler_turn::workspace::EffectFileScope {
+        inventory: None,
         workspace: root.clone(),
         butler_data: s.sandbox.data.clone(),
         protected_roots: Vec::new(),

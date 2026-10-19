@@ -131,6 +131,7 @@ async fn redelivery_of_hard_linked_package_replaces_drawer_and_consumes_stage()
         .flat_map(|request| request["input"].as_array().into_iter().flatten())
         .filter_map(|item| item["output"].as_str())
         .filter_map(|output| serde_json::from_str::<Value>(output).ok())
+        .map(|result| result.get("output").cloned().unwrap_or(result))
         .any(|output| {
             output["matches"]
                 .as_array()
@@ -140,9 +141,18 @@ async fn redelivery_of_hard_linked_package_replaces_drawer_and_consumes_stage()
         grep_ok,
         "grep must return the hard-linked package content: {tool_results}"
     );
-    assert!(
-        tool_results.contains("output_id"),
-        "publication must succeed: {tool_results}"
+    let publications = requests.last().unwrap()["input"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|item| item["output"].as_str())
+        .filter_map(|output| serde_json::from_str::<Value>(output).ok())
+        .map(|result| result.get("output").cloned().unwrap_or(result))
+        .filter(|output| output["output_id"].is_string())
+        .count();
+    assert_eq!(
+        publications, 2,
+        "both the nlink>1 file and its edited version must publish: {tool_results}"
     );
     s.finish().await?;
     server.abort();

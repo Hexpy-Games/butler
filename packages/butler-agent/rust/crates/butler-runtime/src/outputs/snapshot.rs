@@ -47,8 +47,11 @@ pub(super) struct Snapshot {
     pub source: String,
     pub kind: OutputKind,
 }
-pub(super) fn collect(request: &PublishRequest, data: &Path) -> std::io::Result<Snapshot> {
-    let root = std::fs::canonicalize(&request.workspace)?;
+pub(super) fn collect(
+    request: &PublishRequest,
+    inventory: &secure_fs::SecretInventory,
+) -> std::io::Result<Snapshot> {
+    let root = inventory.canonical_root(&request.workspace)?;
     let requested = Path::new(&request.path);
     let rel = if requested.is_absolute() {
         requested
@@ -68,7 +71,6 @@ pub(super) fn collect(request: &PublishRequest, data: &Path) -> std::io::Result<
     };
     let mut files = BTreeMap::new();
     let mut size = 0;
-    let inventory = butler_platform::secure_fs::SecretInventory::cached(data);
     let mut skipped = Vec::new();
     visit(
         &root,
@@ -76,7 +78,7 @@ pub(super) fn collect(request: &PublishRequest, data: &Path) -> std::io::Result<
         &source,
         &mut files,
         &mut size,
-        &inventory,
+        inventory,
         &mut skipped,
     )?;
     let entry = request.entry.clone().unwrap_or_else(|| {

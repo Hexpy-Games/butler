@@ -143,10 +143,11 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 budget,
                 source_revision,
             } = self.preparation.prepare(&start).await?;
-            let (workspace_path, root_pins) =
+            let (workspace_path, root_pins, inventory) =
                 self.resolved_workspace(&workspace, &mut phase).await?;
             let consent = workspace.consent();
             let workspace = butler_turn::workspace::WorkspaceReference::new(&workspace_path);
+            workspace.set_read_inventory(inventory.clone());
             if let Some(consent) = consent {
                 workspace.set_consent(consent);
             }
@@ -198,6 +199,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                         contained: false,
                     },
                     butler_turn::workspace::EffectFileScope {
+                        inventory: Some(inventory.clone()),
                         workspace: workspace_path.clone(),
                         butler_data: self.butler_data.clone(),
                         protected_roots: self.protected_ledger_roots.clone(),

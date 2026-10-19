@@ -45,9 +45,9 @@ struct File {
     modified: std::time::SystemTime,
 }
 
-pub(super) fn snapshot(data: &Path) -> Snapshot {
+pub(super) fn snapshot(data: &Path, inventory: &secure_fs::SecretInventory) -> Snapshot {
     Snapshot(
-        scan(data)
+        scan(data, inventory)
             .into_iter()
             .map(|file| (file.relative, file.fingerprint))
             .collect(),
@@ -61,6 +61,7 @@ pub(super) fn publish(
     cwd: &Path,
     before: Option<&Snapshot>,
     success: bool,
+    inventory: &secure_fs::SecretInventory,
 ) -> Publication {
     let requested = args
         .get("output_paths")
@@ -81,7 +82,7 @@ pub(super) fn publish(
         };
     }
     if requested > 0 {
-        return declared(args, data, workspace, cwd, requested);
+        return declared(args, data, workspace, cwd, requested, inventory);
     }
     let Some(before) = before else {
         return Publication {
@@ -92,7 +93,7 @@ pub(super) fn publish(
     };
     Publication {
         requested: 0,
-        artifacts: scan(data)
+        artifacts: scan(data, inventory)
             .into_iter()
             .filter(|file| file.size > 0 && before.0.get(&file.relative) != Some(&file.fingerprint))
             .take(MAX_ARTIFACTS)
@@ -108,6 +109,7 @@ fn declared(
     workspace: &Path,
     cwd: &Path,
     requested: usize,
+    inventory: &secure_fs::SecretInventory,
 ) -> Publication {
     let generated = data.join("artifacts/generated");
     if fs::create_dir_all(&generated).is_err() {
@@ -117,7 +119,7 @@ fn declared(
             error: None,
         };
     }
-    let root = canonical(&generated);
+    let root = inventory.canonical_root(&generated).unwrap_or(generated);
     let data_root = canonical(data);
     if !root.starts_with(&data_root) {
         return Publication {
@@ -126,7 +128,9 @@ fn declared(
             error: None,
         };
     }
-    let workspace_root = canonical(workspace);
+    let workspace_root = inventory
+        .canonical_root(workspace)
+        .unwrap_or_else(|_| workspace.to_path_buf());
     let mut artifacts = Vec::new();
     let mut seen = HashSet::new();
     for source in args
@@ -142,10 +146,12 @@ fn declared(
         let Some(candidate) = source_path(source, data, cwd, &root) else {
             continue;
         };
-        let Some((real, bytes)) = verified_source(&candidate, &workspace_root, &root, data) else {
+        let Some((real, bytes)) =
+            verified_source(&candidate, &workspace_root, &root, data, inventory)
+        else {
             continue;
         };
-        let published = publish_file(&root, &real, &bytes);
+        let published = publish_file(&root, &real, &bytes, inventory);
         let Some(published) = published else { continue };
         let published = canonical(&published);
         if !published.starts_with(&root) {
@@ -224,15 +230,15 @@ fn verified_source(
     workspace: &Path,
     generated: &Path,
     data: &Path,
+    inventory: &secure_fs::SecretInventory,
 ) -> Option<(PathBuf, Vec<u8>)> {
     use std::io::Read;
-    let inventory = butler_platform::secure_fs::SecretInventory::cached(data);
     let scratch = data.join(butler_platform::data_paths::PROJECT_WRITE_TMP);
     let root = [workspace, generated, &scratch]
         .into_iter()
         .find(|root| path.starts_with(root))?;
     let relative = path.strip_prefix(root).ok()?;
-    let file = secure_fs::open_contained(root, relative, &inventory).ok()?;
+    let file = secure_fs::open_contained(root, relative, inventory).ok()?;
     let before = file.metadata().ok()?;
     if before.len() == 0 || before.len() > MAX_BYTES {
         return None;
@@ -245,7 +251,12 @@ fn verified_source(
     Some((path.to_path_buf(), bytes))
 }
 
-fn publish_file(root: &Path, source: &Path, bytes: &[u8]) -> Option<PathBuf> {
+fn publish_file(
+    root: &Path,
+    source: &Path,
+    bytes: &[u8],
+    inventory: &secure_fs::SecretInventory,
+) -> Option<PathBuf> {
     let hash = format!("{:x}", Sha256::digest(bytes));
     let directory = root.join("published").join(hash);
     fs::create_dir_all(&directory).ok()?;
@@ -262,7 +273,8 @@ fn publish_file(root: &Path, source: &Path, bytes: &[u8]) -> Option<PathBuf> {
         if !stat.is_file() || stat.file_type().is_symlink() || stat.len() != bytes.len() as u64 {
             return None;
         }
-        return (read_published(root, &destination)?.as_slice() == bytes).then_some(destination);
+        return (read_published(root, &destination, inventory)?.as_slice() == bytes)
+            .then_some(destination);
     }
     secure_fs::replace_private(
         &destination,
@@ -270,7 +282,7 @@ fn publish_file(root: &Path, source: &Path, bytes: &[u8]) -> Option<PathBuf> {
         std::convert::identity,
     )
     .ok()?;
-    (read_published(root, &destination)?.as_slice() == bytes).then_some(destination)
+    (read_published(root, &destination, inventory)?.as_slice() == bytes).then_some(destination)
 }
 
 fn safe_name(source: &str) -> String {
@@ -293,16 +305,15 @@ fn safe_name(source: &str) -> String {
     clean.chars().take(120).collect()
 }
 
-fn scan(data: &Path) -> Vec<File> {
+fn scan(data: &Path, inventory: &secure_fs::SecretInventory) -> Vec<File> {
     let root = data.join("artifacts/generated");
     if !root.exists() {
         return Vec::new();
     }
-    let root = canonical(&root);
+    let root = inventory.canonical_root(&root).unwrap_or(root);
     let mut result = Vec::new();
     let mut count = 0;
     let collator = LocaleCollation::new("en-US").ok();
-    let inventory = butler_platform::secure_fs::SecretInventory::cached(data);
     visit(
         &root,
         &root,
@@ -310,7 +321,7 @@ fn scan(data: &Path) -> Vec<File> {
         &mut count,
         &mut result,
         collator.as_ref(),
-        &inventory,
+        inventory,
     );
     result
 }
@@ -451,14 +462,13 @@ fn declared_file(path: &Path, stat: &fs::Metadata, label: String) -> Artifact {
     }
 }
 
-fn read_published(root: &Path, path: &Path) -> Option<Vec<u8>> {
+fn read_published(
+    root: &Path,
+    path: &Path,
+    inventory: &secure_fs::SecretInventory,
+) -> Option<Vec<u8>> {
     use std::io::Read;
-    let data = (0..Path::new(butler_platform::data_paths::ARTIFACTS)
-        .components()
-        .count())
-        .try_fold(root, |path, _| path.parent())?;
-    let inventory = butler_platform::secure_fs::SecretInventory::cached(data);
-    let file = secure_fs::open_contained(root, path.strip_prefix(root).ok()?, &inventory).ok()?;
+    let file = secure_fs::open_contained(root, path.strip_prefix(root).ok()?, inventory).ok()?;
     let mut bytes = Vec::new();
     file.take(MAX_BYTES + 1).read_to_end(&mut bytes).ok()?;
     (bytes.len() as u64 <= MAX_BYTES).then_some(bytes)

@@ -25,7 +25,11 @@ pub fn stage_file(
     super::create_private_dir_all(&base)?;
     let key = format!(
         "{:x}",
-        Sha256::digest([scope.as_bytes(), source.as_os_str().as_encoded_bytes()].concat())
+        Sha256::new()
+            .chain_update(scope.len().to_le_bytes())
+            .chain_update(scope.as_bytes())
+            .chain_update(source.as_os_str().as_encoded_bytes())
+            .finalize()
     );
     let used = total(&base)?;
     let directory = base.join(key);
@@ -104,6 +108,14 @@ impl StagedFiles {
         for path in self.paths.drain(..) {
             remove_staged(&self.data, &path);
         }
+    }
+    /// Transfer a blocking worker's cleanup ownership into its caller.
+    pub fn append(&mut self, mut other: Self) -> io::Result<()> {
+        if self.data != other.data {
+            return Err(io::Error::other("staging_scope_mismatch"));
+        }
+        self.paths.append(&mut other.paths);
+        Ok(())
     }
     /// Register a successfully created stage.
     pub fn push(&mut self, path: PathBuf) {

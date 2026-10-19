@@ -19,12 +19,13 @@ use std::{
 /// Credential paths and inode identities shared for a data directory.
 #[derive(Debug)]
 pub struct SecretInventory {
-    paths: Vec<PathBuf>,
-    identities: Mutex<HashSet<FileId>>,
-    canonical: Mutex<HashMap<PathBuf, (Option<FileId>, PathBuf)>>,
+    paths: Arc<Vec<PathBuf>>,
+    identities: Arc<Mutex<HashSet<FileId>>>,
+    canonical: Arc<Mutex<HashMap<PathBuf, (Option<FileId>, PathBuf)>>>,
     roots: Mutex<HashMap<PathBuf, Weak<RootPin>>>,
+    leases: Option<Mutex<Vec<Arc<RootPin>>>>,
     #[cfg(unix)]
-    hard_links: hard_links::Cache,
+    hard_links: Arc<hard_links::Cache>,
 }
 
 impl SecretInventory {
@@ -43,13 +44,28 @@ impl SecretInventory {
             })
             .collect();
         Self {
-            paths,
-            identities: Mutex::new(identities),
-            canonical: Mutex::default(),
+            paths: Arc::new(paths),
+            identities: Arc::new(Mutex::new(identities)),
+            canonical: Arc::default(),
             roots: Mutex::new(HashMap::new()),
+            leases: None,
             #[cfg(unix)]
-            hard_links: hard_links::Cache::default(),
+            hard_links: Arc::default(),
         }
+    }
+
+    /// Share credential refreshes, but give each turn its own root identity fence.
+    /// Overlapping turns may select different incarnations of the same path.
+    pub fn for_turn(self: &Arc<Self>) -> Arc<Self> {
+        Arc::new(Self {
+            paths: self.paths.clone(),
+            identities: self.identities.clone(),
+            canonical: self.canonical.clone(),
+            roots: Mutex::default(),
+            leases: Some(Mutex::default()),
+            #[cfg(unix)]
+            hard_links: self.hard_links.clone(),
+        })
     }
 
     /// Reuse one inventory for the same credential policy and data directory.
@@ -91,7 +107,7 @@ impl SecretInventory {
         if let (Ok(mut identities), Ok(mut canonical)) =
             (self.identities.lock(), self.canonical.lock())
         {
-            for path in &self.paths {
+            for path in self.paths.iter() {
                 let id = std::fs::metadata(path)
                     .ok()
                     .and_then(|metadata| secure_fs::identity(&metadata).id);
@@ -159,6 +175,11 @@ impl SecretInventory {
             _file: file,
         });
         roots.insert(root.to_path_buf(), Arc::downgrade(&pin));
+        // Only a turn scope retains descriptors. An admitted blocking reader
+        // keeps its turn policy alive until it finishes, including cancellation.
+        if let Some(leases) = &self.leases {
+            leases.lock().map_err(|_| denied())?.push(pin.clone());
+        }
         Ok(pin)
     }
 
@@ -167,7 +188,8 @@ impl SecretInventory {
         self.hard_links.permits(&self.paths, metadata)
     }
 
-    pub(crate) fn canonical_root(&self, root: &Path) -> io::Result<PathBuf> {
+    /// Resolve a user-selected root, retaining the spelling of an active pin.
+    pub fn canonical_root(&self, root: &Path) -> io::Result<PathBuf> {
         let roots = self.roots.lock().map_err(|_| denied())?;
         if roots.get(root).and_then(Weak::upgrade).is_some() {
             return Ok(root.to_path_buf());
