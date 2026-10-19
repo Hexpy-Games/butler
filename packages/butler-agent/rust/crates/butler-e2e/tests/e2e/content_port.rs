@@ -309,6 +309,97 @@ async fn trusted_dev_origin_rejects_content_port() -> Result<(), HarnessError> {
     Ok(())
 }
 
+#[tokio::test]
+async fn trusted_host_rejects_content_port_at_startup() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut reservation = Sandbox::new("CONTENT-HOST-PORT")?;
+    let reserved = Launch::new(&reservation)?;
+    let port = reserved.port;
+    let host = format!("name.example:{port}");
+    let setup = Setup::new("CONTENT-HOST-ORIGIN")?.env("BUTLER_APP_CONTENT_PORT", port.to_string());
+    std::fs::create_dir_all(setup.sandbox.data.join("gateways"))?;
+    std::fs::write(
+        setup.sandbox.data.join("gateways/app.json"),
+        json!({"config": {"allowedHosts": [host]}}).to_string(),
+    )?;
+    assert_startup_rejected(setup, &format!("://{host}")).await?;
+    reservation.mark_success();
+    Ok(())
+}
+
+#[tokio::test]
+async fn trusted_hosts_cannot_be_patched_onto_content_port() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup =
+        Setup::new("CONTENT-HOST-PATCH")?.stub_cassette(super::browser_outputs::stub::cassette()?);
+    std::fs::create_dir_all(setup.sandbox.data.join("gateways"))?;
+    std::fs::write(
+        setup.sandbox.data.join("gateways/app.json"),
+        json!({"config": {"allowedHosts": ["existing.example"]}}).to_string(),
+    )?;
+    let s = setup.start().await?;
+    let app = admin(&s);
+    let before = app.view().await?;
+    let addr: std::net::SocketAddr = before["content_addresses"][0]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let settings = s.gw.get("/settings").await?.data().clone();
+    let saved = std::fs::read(s.agent.launch.data.join("gateways/app.json"))?;
+    for name in ["localhost", "name.example", "192.168.1.5"] {
+        let host = format!("{name}:{}", addr.port());
+        let reply = app
+            .send(
+                reqwest::Method::PATCH,
+                "/settings",
+                Some(json!({"user": {"timezone": "Asia/Seoul"}, "security": {
+                    "remote_access_enabled": true,
+                    "allowed_hosts": [host],
+                    "content_hosts": ["content.example"]
+                }})),
+                &[],
+            )
+            .await?;
+        assert_eq!(reply.status, 400, "{}", reply.text);
+        assert_eq!(reply.error_code(), Some("invalid_settings_request"));
+        assert!(
+            reply.body["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains(&format!(
+                    "content port must use a separate origin from http://{host}"
+                ))
+                || reply.body["error"]["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains(&format!(
+                        "content port must use a separate origin from https://{host}"
+                    )),
+            "{}",
+            reply.text
+        );
+        assert_eq!(app.view().await?, before);
+        assert_eq!(s.gw.get("/settings").await?.data(), &settings);
+        assert_eq!(
+            std::fs::read(s.agent.launch.data.join("gateways/app.json"))?,
+            saved
+        );
+    }
+    let allowed = format!("name.example:{}", s.agent.launch.port);
+    let reply = app
+        .send(
+            reqwest::Method::PATCH,
+            "/settings",
+            Some(json!({"security": {"allowed_hosts": [allowed]}})),
+            &[],
+        )
+        .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    assert_eq!(app.view().await?["allowed_hosts"], json!([allowed]));
+    s.finish().await
+}
+
 async fn assert_startup_rejected(setup: Setup, expected: &str) -> Result<(), HarnessError> {
     match setup
         .stub_cassette(super::browser_outputs::stub::cassette()?)

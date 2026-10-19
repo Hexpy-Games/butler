@@ -214,6 +214,20 @@ impl GatewaySecurity {
         page.response_with_status(status)
     }
 
+    /// Check proposed trusted hosts against the stored content listener.
+    pub(super) fn validate_content_origin(
+        &self,
+        content_addr: SocketAddr,
+        allowed_hosts: &[String],
+    ) -> std::io::Result<()> {
+        RequestPolicy::validate_content_origin(
+            self.local_addr,
+            content_addr,
+            allowed_hosts,
+            self.dev_origins.as_deref(),
+        )
+    }
+
     /// Answers `allowed_hosts` and the LAN authorities from now on.
     pub(super) fn set_hosts(&self, allowed_hosts: &[String], lan_authorities: &[String]) {
         let policy = RequestPolicy::new(

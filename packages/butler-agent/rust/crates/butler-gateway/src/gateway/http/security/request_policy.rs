@@ -104,7 +104,7 @@ impl RequestPolicy {
         policy
     }
 
-    /// Content must not share an authority with any trusted browser origin.
+    /// No trusted browser origin may use the bound content port, on any host.
     pub(in crate::gateway) fn validate_content_origin(
         local_addr: SocketAddr,
         content_addr: SocketAddr,
@@ -112,12 +112,11 @@ impl RequestPolicy {
         dev_origins: Option<&str>,
     ) -> std::io::Result<()> {
         let api = Self::new(local_addr, allowed_hosts, dev_origins, &[]);
-        let content = Self::new(content_addr, &[], None, &[]);
         for origin in api.local_origins.iter().chain(&api.remote_origins) {
-            let authority = url::Url::parse(origin)
+            let port = url::Url::parse(origin)
                 .ok()
-                .and_then(|url| Some(format!("{}:{}", url.host()?, url.port_or_known_default()?)));
-            if authority.is_some_and(|authority| content.hosts.contains(&authority)) {
+                .and_then(|url| url.port_or_known_default());
+            if port == Some(content_addr.port()) {
                 return Err(std::io::Error::other(format!(
                     "content port must use a separate origin from {origin}"
                 )));
