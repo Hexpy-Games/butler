@@ -141,19 +141,27 @@ async fn redelivery_of_hard_linked_package_replaces_drawer_and_consumes_stage()
         grep_ok,
         "grep must return the hard-linked package content: {tool_results}"
     );
-    let publications = requests.last().unwrap()["input"]
-        .as_array()
-        .unwrap()
+    let publications: std::collections::BTreeSet<_> = requests
         .iter()
+        .flat_map(|request| request["input"].as_array().into_iter().flatten())
         .filter_map(|item| item["output"].as_str())
         .filter_map(|output| serde_json::from_str::<Value>(output).ok())
         .map(|result| result.get("output").cloned().unwrap_or(result))
-        .filter(|output| output["output_id"].is_string())
-        .count();
+        .filter_map(|result| {
+            Some((
+                result["output_id"].as_str()?.to_owned(),
+                result["revision"].as_u64()?,
+            ))
+        })
+        .collect();
     assert_eq!(
-        publications, 2,
-        "both the nlink>1 file and its edited version must publish: {tool_results}"
+        publications.len(),
+        2,
+        "both package versions must publish: {tool_results}"
     );
+    let publications: Vec<_> = publications.into_iter().collect();
+    assert_eq!(publications[0].0, publications[1].0);
+    assert_eq!((publications[0].1, publications[1].1), (1, 2));
     s.finish().await?;
     server.abort();
     Ok(())
