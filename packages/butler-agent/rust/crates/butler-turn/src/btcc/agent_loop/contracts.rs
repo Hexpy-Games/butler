@@ -14,6 +14,7 @@ use super::guided_types::{FinalSynthesis, PromptImages, RoundRequestOptions};
 use crate::btcc::BtccCode;
 
 mod context;
+mod usage_attribution;
 pub use context::*;
 
 /// The model admitted for a turn, as persisted in `TurnRecord::model_selection`.
@@ -283,6 +284,12 @@ pub struct ModelRoundRequest<'a> {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UsageAttribution {
+    /// Root chat runtime session id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage_root: Option<String>,
+    /// Writing session role.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage_role: Option<String>,
     /// Runtime-owned request classification; absent in older durable rows.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_kind: Option<String>,
@@ -295,20 +302,6 @@ pub struct UsageAttribution {
     pub reasoning_effort: Option<ReasoningEffort>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub round_index: Option<u32>,
-}
-
-impl UsageAttribution {
-    /// A model operation outside a turn, classified independently of its destination.
-    pub fn background(phase: &str) -> Self {
-        Self {
-            session_kind: Some("background".into()),
-            turn_id: String::new(),
-            prompt_diagnostics: None,
-            phase: phase.into(),
-            reasoning_effort: None,
-            round_index: None,
-        }
-    }
 }
 
 /// Whether the model may answer without a tool call.
