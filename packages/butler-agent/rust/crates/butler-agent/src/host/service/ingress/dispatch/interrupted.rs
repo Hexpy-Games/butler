@@ -282,17 +282,7 @@ pub(super) async fn report(
         None => action::crash_interrupted(item, &envelope, &binding)?,
     };
     #[cfg(feature = "e2e-fixtures")]
-    if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
-        && let Some(data) = std::env::var_os("BUTLER_DATA")
-        && tokio::fs::remove_file(std::path::PathBuf::from(data).join("e2e-interrupt-report"))
-            .await
-            .is_ok()
-    {
-        return Err(IngressError::new(
-            "inbound_delivery_interrupted",
-            "Injected transient delivery failure",
-        ));
-    }
+    crate::host::faults::interruption_report()?;
     if delivery.deliver(binding.session_id.clone(), report).await? {
         Ok(())
     } else {

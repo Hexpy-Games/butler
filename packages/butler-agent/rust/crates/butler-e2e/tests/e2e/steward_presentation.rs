@@ -227,6 +227,8 @@ async fn stopped_steward_projects_terminal_state_and_publishes_change() -> Resul
             assert!(own.data()["active_turn"].is_null());
             assert_ne!(own.data()["waiting_for_children"], true);
             assert_eq!(own.data()["latest_turn"]["cancellable"], false);
+            assert_eq!(own.data()["latest_turn"]["state"], "cancelled");
+            assert_eq!(own.data()["latest_turn"]["retryable"], false);
             break;
         }
         assert!(Instant::now() < deadline, "{own:?}\n{}", s.agent.logs());
@@ -262,6 +264,20 @@ async fn stopped_steward_projects_terminal_state_and_publishes_change() -> Resul
         "stop confirmation to event/navigation: {} ms",
         confirmed.elapsed().as_millis()
     );
+    let view = s.gw.get("/session-view?session_id=general").await?;
+    let child = &view.data()["steward_children"][0];
+    assert_eq!(child["status"], "cancelled", "{child}");
+    assert_eq!(child["result"]["status"], "cancelled", "{child}");
+    assert_eq!(child["latest_turn"]["state"], "cancelled", "{child}");
+    assert_eq!(child["terminal"], true, "{child}");
+    for line in s
+        .agent
+        .logs()
+        .lines()
+        .filter(|line| line.contains("code=turn_cancelled") || line.contains("interrupted=1"))
+    {
+        eprintln!("{line}");
+    }
     script.release.notify_one();
     s.finish().await?;
     server.abort();
