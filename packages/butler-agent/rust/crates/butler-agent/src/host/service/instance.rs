@@ -443,6 +443,7 @@ fn open_lock(path: &Path, create: bool) -> Result<File, crate::host::HostError> 
         .parent()
         .ok_or_else(|| "service_lock_path_invalid".to_owned())?;
     if create {
+        super::data_ownership::initialize_for_lock(parent)?;
         secure_fs::create_private_dir_all(parent).map_err(|source| {
             crate::host::HostError::new("service_lock_directory_unavailable").with_source(source)
         })?;
@@ -473,11 +474,11 @@ fn open_lock(path: &Path, create: bool) -> Result<File, crate::host::HostError> 
 }
 
 fn instance_lock_path(data_root: &Path) -> PathBuf {
-    data_root.join("state/butler-agent-native-service.lock")
+    data_root.join(crate::host::service::paths::INSTANCE_LOCK)
 }
 
 fn admission_lock_path(data_root: &Path) -> PathBuf {
-    data_root.join("state/butler-agent-native-service-start.lock")
+    data_root.join(crate::host::service::paths::ADMISSION_LOCK)
 }
 
 #[cfg(test)]

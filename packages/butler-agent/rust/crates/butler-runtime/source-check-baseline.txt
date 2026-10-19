@@ -29,7 +29,6 @@ src/context/tool_output.rs	ToolOutput::new	84
 src/context/tool_output/budget.rs	budget	152
 src/context/tool_output/evidence.rs	read	106
 src/context/tool_output/reader.rs	read	116
-src/operations/developer_log/capture/entry.rs	terminal_entry	147
 src/operations/status_summary/context.rs	read_context_for_session	87
 src/operations/status_summary/health.rs	read_health	83
 src/web_access/html/extraction.rs	markdown_from_html	89

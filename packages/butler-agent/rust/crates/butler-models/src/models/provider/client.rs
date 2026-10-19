@@ -3,8 +3,8 @@ mod dispatch;
 
 use std::sync::Arc;
 
+use butler_log::http::Client;
 use bytes::Bytes;
-use reqwest::Client;
 
 use butler_turn::btcc::{ModelRoundError, ModelRoundPort, ModelRoundRequest, ModelRoundResult};
 
@@ -28,6 +28,7 @@ struct PreparedResponse {
     identity: Option<serde_json::Value>,
     prefix: serde_json::Value,
     thinking_binding: Option<super::anthropic_thinking::Binding>,
+    summary: bool,
 }
 
 pub struct ModelProvider {
@@ -42,6 +43,7 @@ pub struct ModelProvider {
     visual_capability: Option<Arc<dyn ProviderVisualCapabilityPort>>,
     local_streaming: LocalStreaming,
     stream_usage: super::stream_usage::StreamUsage,
+    summaries: super::thinking_summary::Summaries,
     pub(super) quota: Option<Arc<dyn crate::models::ProviderQuotaSink>>,
 }
 
@@ -66,6 +68,7 @@ impl ModelProvider {
             visual_capability: None,
             local_streaming: LocalStreaming::default(),
             stream_usage: super::stream_usage::StreamUsage::default(),
+            summaries: Default::default(),
             quota: None,
         }
     }
@@ -91,6 +94,7 @@ impl ModelProvider {
         request: ModelRoundRequest<'_>,
         local_stream: bool,
         include_usage: bool,
+        include_summary: bool,
     ) -> Result<ModelRoundResult, ModelRoundError> {
         let config = self.round_config(&request).await?;
         let (carrier, mode, api) =
@@ -98,9 +102,16 @@ impl ModelProvider {
                 .carrier(&config, carrier(&config), local_stream);
         let include_usage = include_usage && self.stream_usage.supported(&config);
         let prepared = self
-            .prepare_http(&request, &config, (carrier, mode, api), include_usage)
+            .prepare_http(
+                &request,
+                &config,
+                (carrier, mode, api),
+                include_usage,
+                include_summary,
+            )
             .await?;
-        let watch = StreamWatch::new(request.stream_observer);
+        let watch = StreamWatch::new(request.stream_observer)
+            .with_summary(prepared.summary, request.round_id);
         let sent = self
             .dispatch(&request, &config, (carrier, mode, api), &watch, prepared)
             .await;
@@ -108,11 +119,20 @@ impl ModelProvider {
         let response = match sent.response {
             Ok(value) => value,
             Err(ModelRoundError::Provider(error))
+                if sent.prepared.summary
+                    && super::thinking_summary::rejected(&error)
+                    && config.metadata.provider_id == "openai" =>
+            {
+                self.summaries.refuse(&config);
+                self.record_failed_usage(&request, &config, prefix)?;
+                return Box::pin(self.run(request, local_stream, include_usage, false)).await;
+            }
+            Err(ModelRoundError::Provider(error))
                 if include_usage && super::stream_usage::rejected(carrier, &error) =>
             {
                 self.stream_usage.refuse(&config);
                 self.record_failed_usage(&request, &config, prefix)?;
-                return Box::pin(self.run(request, local_stream, false)).await;
+                return Box::pin(self.run(request, local_stream, false, include_summary)).await;
             }
             Err(ModelRoundError::Provider(error))
                 if local_stream
@@ -175,6 +195,10 @@ impl ModelProvider {
             request,
             prepared.continuation,
         );
+        if prepared.summary {
+            result.reasoning_summary =
+                super::thinking_summary::extract(result.raw.as_ref(), prepared.carrier);
+        }
         if let Some(binding) = &prepared.thinking_binding {
             super::anthropic_thinking::bind(&mut result, binding);
         }
@@ -216,7 +240,7 @@ impl ModelProvider {
         mode: transport::ResponseMode,
         carrier: super::serialize::Carrier,
         body: Bytes,
-    ) -> reqwest::RequestBuilder {
+    ) -> butler_log::http::RequestBuilder {
         let mut http = self
             .client
             .post(super::route::stream_endpoint(&config.endpoint, mode))
@@ -282,7 +306,7 @@ impl ModelProvider {
         endpoint: url::Url,
     ) -> RoundFuture<'a> {
         Box::pin(async move {
-            let result = self.run(request, false, true).await;
+            let result = self.run(request, false, true, true).await;
             if result.is_ok() {
                 self.local_streaming.refuse(&endpoint);
             }
@@ -413,6 +437,6 @@ impl ModelRoundPort for ModelProvider {
             dyn std::future::Future<Output = Result<ModelRoundResult, ModelRoundError>> + Send + 'a,
         >,
     > {
-        Box::pin(self.run(request, true, true))
+        Box::pin(self.run(request, true, true, true))
     }
 }

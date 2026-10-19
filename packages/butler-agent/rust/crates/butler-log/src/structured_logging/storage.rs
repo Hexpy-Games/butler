@@ -6,12 +6,15 @@ use super::{
     retention,
     segment::{SEGMENT_BYTES, Segment},
 };
+use butler_platform::data_paths;
 use std::{collections::BTreeMap, io, path::PathBuf};
 
 pub(crate) type Catalog = BTreeMap<PathBuf, Vec<Block>>;
 pub(crate) struct Storage {
     pub root: PathBuf,
     pub catalog: Catalog,
+    retention_owner: bool,
+    index_versions: BTreeMap<PathBuf, (u64, Option<std::time::SystemTime>)>,
     main: Option<Segment>,
     debug: Option<Segment>,
     last_ts: String,
@@ -22,10 +25,20 @@ pub(crate) struct Storage {
 }
 impl Storage {
     pub(super) fn open(root: PathBuf, config: &Config) -> io::Result<Self> {
-        butler_platform::secure_fs::create_private_dir_all(&root.join("agent/main"))?;
+        Self::open_mode(root, config, true)
+    }
+    pub(super) fn producer(root: PathBuf, config: &Config) -> io::Result<Self> {
+        Self::open_mode(root, config, false)
+    }
+    fn open_mode(root: PathBuf, config: &Config, retention_owner: bool) -> io::Result<Self> {
+        butler_platform::secure_fs::create_private_dir_all(
+            &root.join(data_paths::NATIVE_LOG_STORE).join("main"),
+        )?;
         let mut this = Self {
             root,
             catalog: Catalog::new(),
+            retention_owner,
+            index_versions: BTreeMap::new(),
             main: None,
             debug: None,
             last_ts: String::new(),
@@ -34,10 +47,13 @@ impl Storage {
             write_errors: [None, None],
             written: [false, false],
         };
+        if !retention_owner {
+            return Ok(this);
+        }
         let _ = this.configure(config);
         // Pending verbose cleanup must not prevent startup or level reversion.
         if !this.cleanup_pending() {
-            for source in ["agent", "app"] {
+            for &source in data_paths::OWNED_LOG_STORES {
                 retention::prune(&this.root.join(source), &[])?;
             }
         }
@@ -53,21 +69,37 @@ impl Storage {
     }
     fn discover(&mut self, repair: bool) -> io::Result<()> {
         self.catalog.retain(|p, _| p.exists());
-        for source in ["agent", "app"] {
+        self.index_versions.retain(|p, _| p.exists());
+        for &source in data_paths::OWNED_LOG_STORES {
             for lane in ["main", "debug"] {
                 for path in retention::files(&self.root.join(source).join(lane))? {
                     if path.extension().is_none_or(|s| s != "jsonl")
-                        || self.catalog.contains_key(&path)
+                        || self
+                            .main
+                            .iter()
+                            .chain(self.debug.iter())
+                            .any(|s| s.path == path)
                     {
                         continue;
                     }
-                    let blocks = if path.with_extension("idx").exists() {
+                    let version = std::fs::metadata(path.with_extension("idx"))
+                        .ok()
+                        .map(|m| (m.len(), m.modified().ok()));
+                    if self.catalog.contains_key(&path)
+                        && version.as_ref() == self.index_versions.get(&path)
+                    {
+                        continue;
+                    }
+                    let blocks = if version.is_some() {
                         index::load(&path)?
                     } else if repair {
                         index::rebuild(&path, source)?
                     } else {
                         continue;
                     };
+                    if let Some(version) = version {
+                        self.index_versions.insert(path.clone(), version);
+                    }
                     self.catalog.insert(path, blocks);
                 }
             }
@@ -82,6 +114,10 @@ impl Storage {
         self.cleanup.is_some()
     }
     pub(super) fn cleanup(&mut self) -> io::Result<u64> {
+        if !self.retention_owner {
+            self.cleanup = None;
+            return Ok(0);
+        }
         let Some(config) = self.cleanup.clone() else {
             return Ok(0);
         };
@@ -94,7 +130,7 @@ impl Storage {
             self.bodies.close()?;
         }
         let mut freed = 0;
-        for source in ["agent", "app"] {
+        for &source in data_paths::OWNED_LOG_STORES {
             if !config.verbose() {
                 freed += retention::remove(&self.root.join(source).join("debug"))?;
             }
@@ -166,11 +202,13 @@ impl Storage {
             &mut self.main
         };
         if slot.is_none() {
-            *slot = Some(Segment::open(&self.root.join("agent").join(if debug {
-                "debug"
-            } else {
-                "main"
-            }))?);
+            *slot = Some(Segment::open(
+                &self.root.join(data_paths::NATIVE_LOG_STORE).join(if debug {
+                    "debug"
+                } else {
+                    "main"
+                }),
+            )?);
         }
         if let Some(segment) = slot
             && let Err(error) = segment.write(&row, &encoded.line)
@@ -190,6 +228,9 @@ impl Storage {
                     self.write_errors[lane] = Some(error.to_string());
                     return Err(error);
                 }
+                if !self.retention_owner {
+                    index::publish(&s.path, &s.blocks)?;
+                }
                 self.catalog.insert(s.path.clone(), s.blocks.clone());
                 if self.written[lane] {
                     self.write_errors[lane] = None;
@@ -203,6 +244,9 @@ impl Storage {
         Ok(())
     }
     pub(super) fn prune(&mut self) -> io::Result<()> {
+        if !self.retention_owner {
+            return Ok(());
+        }
         if self.cleanup_pending() {
             let _ = self.cleanup();
         }
@@ -213,9 +257,18 @@ impl Storage {
             .map(|s| s.path.clone())
             .chain(self.bodies.path().cloned())
             .collect::<Vec<_>>();
-        retention::prune(&self.root.join("agent"), &active)
+        retention::prune(&self.root.join(data_paths::NATIVE_LOG_STORE), &active)
     }
 
+    /// Batches already published their index; defer durable finalization and
+    /// retention to the service. Body frames are written without buffering.
+    pub(super) fn close_producer(&mut self) -> io::Result<()> {
+        self.bodies = Bodies::default();
+        for segment in [self.main.take(), self.debug.take()].into_iter().flatten() {
+            segment.close_written()?;
+        }
+        Ok(())
+    }
     pub(super) fn close(&mut self) -> io::Result<()> {
         self.bodies.close()?;
         if let Some(s) = self.main.take() {
@@ -229,7 +282,7 @@ impl Storage {
     pub(super) fn clear(&mut self) -> io::Result<u64> {
         self.close()?;
         let mut bytes = 0;
-        for source in ["agent", "app"] {
+        for &source in data_paths::OWNED_LOG_STORES {
             for lane in ["main", "debug", "bodies"] {
                 bytes += retention::remove(&self.root.join(source).join(lane))?;
             }

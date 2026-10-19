@@ -77,7 +77,7 @@ pub(super) async fn run(root: PathBuf, state: watch::Sender<MemoryModelProgress>
     let result = if complete(&root.join(MODEL_ROOT), &manifest.assets) {
         cleanup_complete_staging(&root, &root.join(MODEL_ROOT))
     } else {
-        match reqwest::Client::builder()
+        match butler_log::http::external(butler_log::http::Purpose::new("embedding_download"))
             .connect_timeout(Duration::from_secs(15))
             .read_timeout(Duration::from_secs(30))
             .build()

@@ -1,3 +1,6 @@
+mod data_reset;
+mod reset_secrets;
+pub use reset_secrets::reset_browser_secret_keys;
 mod assets;
 mod authority;
 mod authority_permissions;
@@ -131,19 +134,43 @@ async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -
         .extensions()
         .get::<axum::extract::MatchedPath>()
         .cloned();
+    let action = request
+        .extensions()
+        .get::<router::Handler>()
+        .and_then(|h| h.action(&method));
     let admitted = access_log::Admission::default();
     let mut request = request;
     request.extensions_mut().insert(admitted.clone());
-    let response = dispatch_inner(state, request).await;
-    access_log::finish(
-        &method,
-        route.as_ref(),
-        &admitted,
-        response.status(),
-        started,
-    )
-    .await;
-    response
+    use tracing::Instrument;
+    let context = request
+        .headers()
+        .get("traceparent")
+        .and_then(|h| h.to_str().ok())
+        .and_then(butler_log::TraceContext::from_traceparent)
+        .unwrap_or_default();
+    let level = if matches!(method, Method::GET | Method::HEAD | Method::OPTIONS) {
+        "DEBUG"
+    } else {
+        "INFO"
+    };
+    let span = context.http_span(level);
+    async {
+        let response = dispatch_inner(state, request).await;
+        if admitted.is_granted() {
+            tracing::Span::current().record("action", action);
+        }
+        access_log::finish(
+            &method,
+            route.as_ref(),
+            &admitted,
+            response.status(),
+            started,
+        )
+        .await;
+        response
+    }
+    .instrument(span)
+    .await
 }
 
 async fn dispatch_inner(state: Arc<HttpState>, request: Request<Body>) -> Response {

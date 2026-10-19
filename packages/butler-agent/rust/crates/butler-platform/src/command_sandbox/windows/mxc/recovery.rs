@@ -37,7 +37,7 @@ fn reconcile_scratch(data: &Path) -> io::Result<()> {
     for entry in entries {
         let entry = entry?;
         let policy = data
-            .join("sandbox/policies")
+            .join(crate::data_paths::SANDBOX_POLICIES)
             .join(entry.file_name())
             .with_extension("json");
         if !policy.exists() && available(&policy)? {
@@ -49,7 +49,7 @@ fn reconcile_scratch(data: &Path) -> io::Result<()> {
 }
 
 pub(super) fn reconcile_policies(data: &Path) -> std::io::Result<()> {
-    let directory = data.join("sandbox/policies");
+    let directory = data.join(crate::data_paths::SANDBOX_POLICIES);
     let entries = match fs::read_dir(&directory) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {

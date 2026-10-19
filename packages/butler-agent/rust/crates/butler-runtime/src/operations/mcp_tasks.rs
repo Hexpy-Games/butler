@@ -52,7 +52,7 @@ pub fn read_mcp_task(data_root: &Path, task_id: &str) -> McpTaskInfo {
 }
 
 pub fn read_mcp_task_list(data_root: &Path, filter: Option<&str>) -> Vec<McpTaskInfo> {
-    let Ok(entries) = std::fs::read_dir(data_root.join("tasks")) else {
+    let Ok(entries) = std::fs::read_dir(data_root.join(butler_platform::data_paths::TASKS)) else {
         return Vec::new();
     };
     let mut tasks = entries
@@ -67,7 +67,7 @@ pub fn read_mcp_task_list(data_root: &Path, filter: Option<&str>) -> Vec<McpTask
 }
 
 pub fn read_mcp_task_counts(data_root: &Path) -> McpTaskCounts {
-    let tasks_root = data_root.join("tasks");
+    let tasks_root = data_root.join(butler_platform::data_paths::TASKS);
     let Ok(entries) = std::fs::read_dir(&tasks_root) else {
         return McpTaskCounts::default();
     };
@@ -88,7 +88,7 @@ pub fn read_mcp_task_projects(
     data_root: &Path,
     home: &Path,
 ) -> std::io::Result<Vec<McpTaskProject>> {
-    let tasks_root = data_root.join("tasks");
+    let tasks_root = data_root.join(butler_platform::data_paths::TASKS);
     let entries = match std::fs::read_dir(&tasks_root) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -142,7 +142,7 @@ pub fn read_mcp_task_projects(
 }
 
 pub fn cleanup_plan(data_root: &Path, now_ms: f64) -> std::io::Result<McpTaskCleanupPlan> {
-    let tasks_root = data_root.join("tasks");
+    let tasks_root = data_root.join(butler_platform::data_paths::TASKS);
     let entries = match std::fs::read_dir(&tasks_root) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -204,7 +204,9 @@ fn safe_task_id(task_id: &str) -> bool {
 }
 
 fn task_directory(data_root: &Path, task_id: &str) -> PathBuf {
-    data_root.join("tasks").join(task_id)
+    data_root
+        .join(butler_platform::data_paths::TASKS)
+        .join(task_id)
 }
 
 fn numeric_task_id(task_id: &str) -> Option<f64> {

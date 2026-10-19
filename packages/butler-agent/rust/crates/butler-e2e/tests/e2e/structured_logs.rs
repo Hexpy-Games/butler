@@ -35,12 +35,13 @@ async fn logs_records_gateway_requests_at_standard() -> Result<(), HarnessError>
         json!({"reduce_motion":true}),
     )
     .await?;
+    assert_eq!(s.gw.get("/settings").await?.status, 200);
     let r = s.gw.get("/logs?category=http.server").await?;
     assert_eq!(r.status, 200, "{}", r.text);
     let rows = r.data()["rows"].as_array().unwrap();
     let row = rows
         .iter()
-        .find(|r| r["attrs"]["method"] == "PATCH")
+        .find(|r| r["event"] == "span.end" && r["attrs"]["method"] == "PATCH")
         .unwrap();
     for field in [
         "ts",
@@ -53,8 +54,12 @@ async fn logs_records_gateway_requests_at_standard() -> Result<(), HarnessError>
     ] {
         assert!(!row[field].is_null(), "{field}: {row}");
     }
-    assert_eq!(row["event"], "http.request");
+    assert_eq!(row["event"], "span.end");
     assert_eq!(row["process"], "agent");
+    assert_eq!(row["attrs"]["route"], "/settings");
+    assert_eq!(row["attrs"]["status"], 200);
+    assert!(row["duration_ms"].as_f64().unwrap() >= 0.0);
+    assert!(rows.iter().all(|r| r["attrs"]["method"] != "GET"));
     assert!(row.get("content").is_none());
     assert!(!r.text.contains("should-never-be-written"));
     s.finish().await
@@ -414,3 +419,6 @@ async fn logs_use_router_templates_for_ids() -> Result<(), HarnessError> {
 
 #[path = "structured_logs_completion.rs"]
 mod completion;
+
+#[path = "structured_logs_cli.rs"]
+mod cli;

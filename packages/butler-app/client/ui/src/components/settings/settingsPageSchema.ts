@@ -38,11 +38,12 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "app-behavior", kind: "form", fields: ["desktop-tray", "rerun-setup"] },
     { id: "search-provider", kind: "form", fields: ["search-provider", "search-api-key"] },
     { id: "search-behavior", kind: "form", fields: ["search-reader", "search-planning", "search-depth"] },
+    { id: "full-reset", kind: "form", fields: ["full-reset"] },
   ],
   appearance: [
     { id: "theme", kind: "form", fields: ["theme", "translucent-sidebar"] },
     { id: "home-screen", kind: "form", fields: ["main-screen-wallpaper", "main-screen-motion", "main-screen-battery"] },
-    { id: "conversation", kind: "form", fields: ["conversation-background"] },
+    { id: "conversation", kind: "form", fields: ["show-thinking", "conversation-background"] },
     { id: "message-box", kind: "form", fields: ["collapse-message-box", "composer-decoration", "composer-character"] },
     { id: "accessibility", kind: "form", fields: ["reduce-motion"] },
   ],
@@ -83,7 +84,12 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "usage-prompt-sections", kind: "list", fields: [] },
     { id: "usage-tools", kind: "list", fields: [] },
   ],
-  logs: [{ id: "developer-logs", kind: "list", fields: [] }],
+  logs: [
+    { id: "logs-level", kind: "form", fields: ["log-level"] },
+    { id: "logs-viewer", kind: "list", fields: [] },
+    { id: "logs-storage", kind: "status", fields: [] },
+    { id: "developer-context-estimates", kind: "list", fields: [] },
+  ],
   browser: [
     { id: "browser-history", kind: "form", fields: ["browser-history"] },
     { id: "sign-ins", kind: "list", fields: [] },
@@ -92,20 +98,20 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "profiles", kind: "list", fields: [] },
     { id: "purchase-sites", kind: "form", fields: [] },
   ],
-  // Remote-only controls hide when refused. Authority, keys and diagnostics stay visible.
+  // Remote-only controls hide when refused. Authority and keys stay visible.
   security: [
     { id: "remote-access", kind: "form", fields: ["remote-access-enabled", "lan-urls"] },
     { id: "device-pairing", kind: "form", fields: ["pairing-code"], optional: true },
     { id: "paired-devices", kind: "list", fields: [], optional: true },
     { id: "grants", kind: "list", fields: [] },
     { id: "saved-keys", kind: "list", fields: [] },
-    { id: "diagnostics", kind: "form", fields: ["diagnostics"] },
     { id: "security-advanced", kind: "form", fields: ["allowed-hosts"], optional: true },
   ],
   system: [{ id: "system-events", kind: "list", fields: [] }],
   archives: [{ id: "archives", kind: "list", fields: [] }],
   about: [
     { id: "app-info", kind: "info", fields: ["app-name", "app-version", "app-repository", "app-protocol"] },
+    { id: "diagnostics", kind: "form", fields: ["diagnostics-export"] },
     { id: "developer", kind: "form", fields: ["developer-mode"] },
   ],
 };

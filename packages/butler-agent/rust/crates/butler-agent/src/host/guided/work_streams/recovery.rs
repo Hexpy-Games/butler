@@ -55,7 +55,10 @@ impl Store {
                     return Err(error("work_stream_recovery_invalid"));
                 }
                 write_atomic(
-                    &self.root.join("work-streams").join(record_name(&id)),
+                    &self
+                        .root
+                        .join(butler_platform::data_paths::WORK_STREAMS)
+                        .join(record_name(&id)),
                     &after,
                 )?;
             }

@@ -4,6 +4,14 @@
 //! decides the home directory everywhere; `USERPROFILE`, the Windows home,
 //! is the fallback.
 
+mod protected;
+
+/// Home and known user folders (including redirected platform folders).
+/// Callers canonicalize these, including missing suffixes, before comparison.
+pub fn protected_user_folders() -> Vec<PathBuf> {
+    protected::folders()
+}
+
 use std::env;
 use std::path::{Path, PathBuf};
 

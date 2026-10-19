@@ -82,7 +82,8 @@ CI_CONSUMERS = (
     (('licenses',), (
         '.github/scripts/test-*.py', '.github/scripts/ds-approval.py',
         '.github/scripts/cargo-artifact-cache.py', '.github/scripts/agent-provenance.py',
-        '.github/scripts/integration-proof.py', '.github/scripts/check-gate.py',
+        '.github/scripts/integration-proof.py', '.github/scripts/recover-release.py',
+        '.github/scripts/check-gate.py',
         '.github/scripts/ci-check-selected.py', '.github/scripts/cargo-target-release.py',
         '.github/scripts/runner_cache.py', '.github/scripts/ci-changes.py',
         '.github/scripts/ci_policy.py', '.github/scripts/ci_parts.py',
@@ -267,9 +268,9 @@ ARTIFACTS = {
     'linux-perf-archive': ['perf-rust-linux-x64'],
     'macos-perf-archive': ['perf-rust-darwin-arm64'],
     'linux-arm64-perf-archive': ['perf-rust-linux-arm64'],
-    'linux-native': ['agent-payload-linux-x64', 'agent-perf-fixture-linux-x64'],
-    'macos-native': ['agent-payload-darwin-arm64', 'agent-perf-fixture-darwin-arm64'],
-    'linux-arm64-native': ['agent-payload-linux-arm64', 'agent-perf-fixture-linux-arm64'],
+    'linux-native': ['agent-payload-linux-x64'],
+    'macos-native': ['agent-payload-darwin-arm64'],
+    'linux-arm64-native': ['agent-payload-linux-arm64'],
     'macos-updates': ['macos-update-agent-builds'],
     'install-x64': ['agent-linux-x64', 'butler-npm-x64'], 'install-arm64': ['agent-linux-arm64'],
     'install-macos': ['agent-darwin-arm64'],
@@ -317,6 +318,16 @@ def reuse_inputs(repository, pr, workflow, branch, current, job_inputs, receipts
     except (subprocess.CalledProcessError, ValueError, OSError, KeyError, TypeError) as error:
         print(f'Reuse unavailable ({type(error).__name__}); unmatched checks will run.')
     return reuse, job_reuse
+
+
+def couple_perf_native(job_reuse):
+    # Perf consumes a fixture produced in its own run. Reuse the pair only
+    # when both jobs passed; a partial pair must execute together.
+    for platform in ('linux', 'linux-arm64', 'macos'):
+        pair = (platform + '-native', platform + '-perf')
+        if not all(name in job_reuse for name in pair):
+            for name in pair:
+                job_reuse.pop(name, None)
 
 
 def main_base(workflow):
@@ -379,6 +390,8 @@ def select(event, workflow):
             print(f'Reuse unavailable ({type(error).__name__}); unmatched checks will run.')
             receipts = []
     reuse, job_reuse = reuse_inputs(repository, pr.get('number'), workflow, branch, current, job_inputs, receipts) if smoke_pr or candidate else ({}, {})
+    if candidate and workflow == 'rust-quality.yml':
+        couple_perf_native(job_reuse)
     parts, part_reuse, part_artifacts = ci_parts.select(workflow, job_inputs, receipts or []) if candidate else ({}, {}, [])
     outputs = {group: str(group in required and group not in reuse).lower() for group in GROUPS}
     jobs = {name: name not in job_reuse for name in job_inputs}

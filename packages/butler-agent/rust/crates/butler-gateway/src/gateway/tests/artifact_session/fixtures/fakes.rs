@@ -62,15 +62,13 @@ impl crate::gateway::AppMonitoringPort for TestMonitoring {
     fn system_events(&self, _: crate::gateway::AppMonitorPage) -> ApplicationFuture<Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
-    fn developer_logs(&self, _: crate::gateway::AppDeveloperLogsQuery) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::internal()) })
-    }
 }
 
 pub(super) fn test_dependencies() -> AppApplicationDependencies {
     let root =
         std::env::temp_dir().join(format!("butler-artifact-skills-{}", uuid::Uuid::new_v4()));
     AppApplicationDependencies {
+        data_reset: None,
         hooks: None,
         service_shutdown: tokio_util::sync::CancellationToken::new(),
         updates: Arc::new(

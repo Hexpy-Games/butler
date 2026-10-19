@@ -83,7 +83,7 @@ impl AppSettingsMutation {
             destinations.push("butler.config.json");
         }
         if environment_key.is_some() {
-            destinations.push(".env");
+            destinations.push(butler_platform::data_paths::ENVIRONMENT);
         }
         let root = self.validated_root(&destinations)?;
 

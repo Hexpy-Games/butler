@@ -70,7 +70,10 @@ impl Store {
                 + 1;
             map.insert("record_generation".into(), json!(generation));
             write_atomic(
-                &self.root.join("work-streams").join(record_name(id)),
+                &self
+                    .root
+                    .join(butler_platform::data_paths::WORK_STREAMS)
+                    .join(record_name(id)),
                 &record,
             )
         })

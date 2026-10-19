@@ -57,11 +57,17 @@ pub(super) async fn gated_kind(
         .gated_effect())
 }
 
+/// Keep the filesystem classification used for admission through execution.
+pub(super) struct ClassifiedAccess {
+    pub decision: AccessDecision,
+    pub scope: TargetScope,
+}
+
 pub(super) async fn decision(
     owner: &GuidedTools,
     call: &ModelRoundToolCall,
     args: &Value,
-) -> Result<AccessDecision, BtccError> {
+) -> Result<ClassifiedAccess, BtccError> {
     decision_for_kind(owner, call, args, kind(owner, call).await?).await
 }
 pub(super) async fn decision_for_kind(
@@ -69,13 +75,13 @@ pub(super) async fn decision_for_kind(
     call: &ModelRoundToolCall,
     args: &Value,
     kind: CapabilityKind,
-) -> Result<AccessDecision, BtccError> {
+) -> Result<ClassifiedAccess, BtccError> {
     let scope = if needs_scope(&owner.binding.access_mode, kind) {
         target_scope(owner, call, args).await?
     } else {
         TargetScope::NoTarget
     };
-    Ok(decide(
+    let decision = decide(
         &owner.binding.access_mode,
         AccessRequest {
             kind,
@@ -87,7 +93,8 @@ pub(super) async fn decision_for_kind(
             scope,
             taint: owner.taint(),
         },
-    ))
+    );
+    Ok(ClassifiedAccess { decision, scope })
 }
 async fn target_scope(
     owner: &GuidedTools,
@@ -102,11 +109,13 @@ async fn target_scope(
     let project = consented.then(|| root.clone());
     let data = owner.binding.butler_data.clone();
     let protected = owner.binding.protected_ledger_roots.clone();
+    let attachments = owner.binding.attachment_files.clone();
     let installation = owner.binding.installation_root.clone();
     let args = args.clone();
     let name = call.name.clone();
     tokio::task::spawn_blocking(move || {
         let roots = ScopeRoots {
+            attachments: &attachments,
             project: project.as_deref(),
             butler_data: &data,
             protected_ledger_roots: &protected,

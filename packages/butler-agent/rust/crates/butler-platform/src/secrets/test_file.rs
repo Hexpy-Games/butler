@@ -1,9 +1,12 @@
-//! Test-support system-store substitute. Never opens Credential Manager.
+//! Temporary system-store substitute; Windows encrypts fixture values with DPAPI.
 use super::{Inner, SecretError, SecretKey, SecretStore, SecretText, file::FileSecrets};
+#[cfg(windows)]
 use base64::{Engine, engine::general_purpose::STANDARD};
 use std::path::Path;
 use std::sync::Arc;
+#[cfg(windows)]
 use windows_dpapi::{Scope, decrypt_data, encrypt_data};
+#[cfg(windows)]
 use zeroize::Zeroizing;
 
 pub(super) struct TestSecrets(FileSecrets);
@@ -34,6 +37,7 @@ fn invalid_path() -> SecretError {
 }
 
 impl TestSecrets {
+    #[cfg(windows)]
     pub(super) fn get(&self, key: &SecretKey) -> Result<Option<SecretText>, SecretError> {
         self.0
             .get(key)?
@@ -53,6 +57,7 @@ impl TestSecrets {
             .transpose()
     }
 
+    #[cfg(windows)]
     pub(super) fn set(&self, key: &SecretKey, secret: &str) -> Result<(), SecretError> {
         let encrypted = Zeroizing::new(
             encrypt_data(secret.as_bytes(), Scope::User, None).map_err(|_| {
@@ -60,6 +65,16 @@ impl TestSecrets {
             })?,
         );
         self.0.set(key, &STANDARD.encode(&*encrypted))
+    }
+
+    #[cfg(not(windows))]
+    pub(super) fn get(&self, key: &SecretKey) -> Result<Option<SecretText>, SecretError> {
+        self.0.get(key)
+    }
+
+    #[cfg(not(windows))]
+    pub(super) fn set(&self, key: &SecretKey, secret: &str) -> Result<(), SecretError> {
+        self.0.set(key, secret)
     }
 
     pub(super) fn delete(&self, key: &SecretKey) -> Result<bool, SecretError> {

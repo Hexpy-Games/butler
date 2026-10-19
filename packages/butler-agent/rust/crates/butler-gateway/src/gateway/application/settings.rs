@@ -1,27 +1,26 @@
 //! App-owned global and per-session execution-control resolution.
 
-use butler_platform::sqlite;
-use std::{path::Path, sync::Arc};
+use std::sync::Arc;
 
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::Connection;
 use serde_json::{Value, json};
 
 mod access;
 mod command_sandbox;
 mod logging;
 pub use command_sandbox::command_sandbox_enabled;
-pub use logging::startup_config as startup_log_config;
+pub use logging::{producer_config as producer_log_config, startup_config as startup_log_config};
 mod background_sources;
 mod composer_decoration;
 mod controls;
 mod conversation_background;
 mod default_model;
-mod diagnostics_reader;
-pub use diagnostics_reader::DiagnosticsSettingsReader;
 mod model;
 mod onboarding;
 pub(super) mod persistence;
 mod plan_continuation;
+mod readonly;
+pub use readonly::{diagnostics_enabled_readonly, stored_ui_language_readonly};
 mod session;
 mod storage_helpers;
 mod update;
@@ -39,6 +38,7 @@ use controls::{
     Controls, append_controls_event, controls_json, global_settings, has_message_override,
     inherited_controls, merge_message_controls,
 };
+pub(super) use model::selectable_model_ref;
 use model::{
     assert_selectable, available as available_models, normalize as normalize_controls,
     normalized_fallback, parse_reasoning,
@@ -47,51 +47,6 @@ use persistence::{read_json, revision, safe_local_session_id, write_json};
 use storage_helpers::{invalid_resolution, parse_access, safe_integer};
 
 const SETTINGS_KEY: &str = "settings";
-
-/// Read the App-owned preference without starting or mutating the App service.
-/// Missing or unreadable settings leave diagnostics disabled.
-pub fn diagnostics_enabled_readonly(database_path: &Path) -> bool {
-    let Ok(db) = sqlite::open_with_flags(database_path, OpenFlags::SQLITE_OPEN_READ_ONLY) else {
-        return false;
-    };
-    read_json(&db, SETTINGS_KEY)
-        .ok()
-        .flatten()
-        .and_then(|settings| settings.get("diagnostics_enabled").and_then(Value::as_bool))
-        == Some(true)
-}
-
-/// Stored App language, without creating a database or selecting a fallback.
-pub fn stored_ui_language_readonly(
-    database_path: &Path,
-) -> Result<Option<String>, crate::gateway::GatewayApplicationError> {
-    stored_ui_language(database_path)
-        .map_err(crate::gateway::GatewayApplicationError::internal_from)
-}
-
-fn stored_ui_language(database_path: &Path) -> Result<Option<String>, AppStorageError> {
-    if !database_path.exists() {
-        return Ok(None);
-    }
-    let db = sqlite::open_with_flags(database_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(AppStorageError::sqlite)?;
-    let exists: bool = db
-        .query_row(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='app_settings')",
-            [],
-            |row| row.get(0),
-        )
-        .map_err(AppStorageError::sqlite)?;
-    if !exists {
-        return Ok(None);
-    }
-    Ok(read_json(&db, SETTINGS_KEY)?.and_then(|settings| {
-        settings
-            .get("language")
-            .and_then(Value::as_str)
-            .map(str::to_owned)
-    }))
-}
 
 pub(super) struct ResolvedControls {
     pub resolution: ControlResolution,
@@ -281,6 +236,21 @@ pub(super) fn resolution_from_persisted(value: &str) -> Result<ControlResolution
 }
 
 impl super::AppApplication {
+    pub(super) async fn initialize_thinking_preference(
+        &self,
+    ) -> Result<(), crate::gateway::GatewayApplicationError> {
+        let enabled = self
+            .storage
+            .read(|db| {
+                Ok(read_json(db, SETTINGS_KEY)?
+                    .is_some_and(|settings| settings["show_thinking"] == true))
+            })
+            .await
+            .map_err(super::app_error)?;
+        self.subscribers.set_thinking_enabled(enabled);
+        Ok(())
+    }
+
     pub(super) async fn briefing_language(
         &self,
     ) -> Result<String, crate::gateway::GatewayApplicationError> {
@@ -289,6 +259,17 @@ impl super::AppApplication {
             .read(move |db| Ok(controls::global_settings_readonly(db, &facts)?.language))
             .await
             .map_err(super::app_error)
+    }
+
+    pub(super) async fn resolve_settings_projection(
+        &self,
+        settings: Value,
+    ) -> Result<Value, crate::gateway::GatewayApplicationError> {
+        let mut settings = self.resolve_background_sources(settings).await?;
+        if let Some(port) = &self.dependencies.data_reset {
+            settings["data_generation"] = port.generation().into();
+        }
+        Ok(settings)
     }
 
     pub(super) async fn worker_profile_settings(
@@ -304,7 +285,7 @@ impl super::AppApplication {
             .read(move |db| view::read(db, &subscribers, &facts, &now, &workspace_root))
             .await
             .map_err(super::app_error)?;
-        self.resolve_background_sources(view).await
+        self.resolve_settings_projection(view).await
     }
 
     pub(super) async fn update_settings_owned(
@@ -354,7 +335,7 @@ impl super::AppApplication {
         {
             return Ok((
                 wallpaper::source(&current),
-                self.resolve_background_sources(current).await?,
+                self.resolve_settings_projection(current).await?,
             ));
         }
         self.dependencies
@@ -369,7 +350,7 @@ impl super::AppApplication {
         let projection =
             update::project_after_refresh(&current, &prepared.patch, &refreshed, &workspace_root);
         let stored_projection = update::persistence_projection(&projection);
-        let projection = self.resolve_background_sources(projection).await?;
+        let projection = self.resolve_settings_projection(projection).await?;
         let event_payload = update::event_payload(&projection);
         let previous = wallpaper::source(&current);
         let wallpaper_event = wallpapers::change_payload(

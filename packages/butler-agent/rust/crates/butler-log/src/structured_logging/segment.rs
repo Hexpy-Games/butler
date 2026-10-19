@@ -57,6 +57,9 @@ impl Segment {
         }
         Ok(())
     }
+    pub(super) fn close_written(mut self) -> io::Result<()> {
+        self.flush(false)
+    }
     pub(super) fn close(mut self) -> io::Result<()> {
         self.flush(true)?;
         index::save(&self.path, &self.blocks)

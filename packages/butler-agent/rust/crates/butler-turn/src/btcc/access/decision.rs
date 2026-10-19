@@ -120,7 +120,7 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
         CommandMutation {
             sandbox: CommandSandbox::Disabled,
         } if auto => Ask(GrantUse::Honor),
-        FileRead if first && project => Allow,
+        FileRead if first && (project || request.scope == TargetScope::Attachment) => Allow,
         // A folder switch within the consented folder or its repository.
         FolderSwitch | CommandObservation { sandboxed: true } if project => Allow,
         CommandObservation { sandboxed: false } | CommandMutation { .. }

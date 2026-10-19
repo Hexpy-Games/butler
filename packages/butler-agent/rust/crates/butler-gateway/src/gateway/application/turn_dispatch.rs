@@ -10,12 +10,55 @@ impl AppApplication {
         claim: QueueClaim,
         prepared: ResolvedAppAdmission,
     ) -> Result<MessageSendResult, GatewayApplicationError> {
+        use tracing::Instrument;
+        let queued = claim.queued_message_id.clone();
+        let (context, queued_at) = self
+            .storage
+            .read(move |db| {
+                db.query_row(
+                    "SELECT trace_context_json, created_at FROM session_queued_messages WHERE id=?1",
+                    [&queued],
+                    |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, String>(1)?)),
+                )
+                .map_err(AppStorageError::sqlite)
+            })
+            .await
+            .map_err(app_error)?;
+        let mut context: butler_log::TraceContext = context
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_else(butler_log::TraceContext::current);
+        context.chat_id = Some(claim.chat_id.clone());
+        let queue = context.root_span("turn.dequeue");
+        queue.record(
+            "started_at",
+            context.enqueued_at.as_deref().unwrap_or(&queued_at),
+        );
+        drop(queue);
+        async {
+            let result = self.start_turn_traced(claim, prepared).await;
+            if let Err(error) = &result {
+                tracing::error!(%error, "Turn dispatch failed");
+            }
+            result
+        }
+        .instrument(context.root_span("turn.dispatch"))
+        .await
+    }
+
+    async fn start_turn_traced(
+        &self,
+        claim: QueueClaim,
+        prepared: ResolvedAppAdmission,
+    ) -> Result<MessageSendResult, GatewayApplicationError> {
         self.ensure_dispatch_open(&claim).await?;
         let queue_replay = self.claimed_dispatch(&claim).await?.is_some();
         let (message_id, turn_id) = match self.admit_claimed_turn(&claim, prepared).await {
             Ok(linked) => linked,
             Err(error) => return Err(self.dispatch_error(&claim, error).await?),
         };
+        tracing::Span::current()
+            .record("turn_id", &turn_id)
+            .record("message_id", &message_id);
         #[cfg(feature = "e2e-fixtures")]
         self.hold_queue_admission(&message_id).await?;
         self.ensure_dispatch_open(&claim).await?;

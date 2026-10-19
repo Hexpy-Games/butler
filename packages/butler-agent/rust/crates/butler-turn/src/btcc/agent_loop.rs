@@ -20,6 +20,7 @@ mod progress;
 pub(crate) use progress::{authority_batch, authority_cancellation_events};
 mod state;
 mod stream_relay;
+mod thinking_line;
 mod tool_batch;
 mod turn_binding;
 
@@ -89,9 +90,8 @@ pub use operation_result_replay::{
     OperationResultRuntime, OperationResultRuntimeFactory, OperationResultScope, ReplayMode,
     latest_work_anchor_indices,
 };
-#[cfg(any(test, feature = "test-support"))]
 pub(crate) use ports::NoopModelRoundObserver;
-#[cfg(any(test, feature = "test-support"))]
+/// The round observer for turns nothing observes.
 pub static NOOP_MODEL_ROUND_OBSERVER: NoopModelRoundObserver = NoopModelRoundObserver;
 pub use ports::{
     AgentLoopObserver, ContextProjectionError, ModelRoundError, ModelRoundObserver, ModelRoundPort,

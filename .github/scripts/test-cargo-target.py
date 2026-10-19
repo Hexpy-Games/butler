@@ -20,6 +20,9 @@ spec = importlib.util.spec_from_file_location('snapshots', Path(__file__).with_n
 snapshots = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(snapshots)
 cache = snapshots.cache
+# Cache namespaces reject every linked ancestor. Keep test roots under the
+# canonical temp dir: macOS's default TMPDIR sits under the /var link.
+tempfile.tempdir = os.path.realpath(tempfile.gettempdir())
 
 
 class TargetSnapshot(unittest.TestCase):

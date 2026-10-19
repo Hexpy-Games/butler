@@ -1,5 +1,5 @@
 use rusqlite::{OptionalExtension, params};
-use serde_json::json;
+use serde_json::{Value, json};
 
 use super::{
     AutomationRunListView, AutomationRunResult, AutomationRunSummary,
@@ -195,12 +195,14 @@ impl AppApplication {
         }).await.map_err(app_error)
     }
 
+    #[tracing::instrument(name = "schedule.run", parent = None, skip_all, fields(run_id, chat_id = %row.target_id, status = tracing::field::Empty))]
     async fn send_automation(
         &self,
         row: &AutomationRow,
         run_id: &str,
         trigger: &str,
     ) -> DispatchResult {
+        let model = self.automation_model_override(row.model.as_deref());
         let request = MessageSendRequest {
             expected_project_id: None,
             content_parts: None,
@@ -208,7 +210,7 @@ impl AppApplication {
             text: Some(json!(row.prompt)),
             client_message_id: Some(json!(format!("automation-{}-{run_id}", row.id))),
             attachments: None,
-            model: None,
+            model,
             reasoning_effort: None,
             // The schedule's own access, whatever the conversation's mode (#237).
             access_mode: Some(json!(settings::access_mode_name(&row.access))),
@@ -222,7 +224,7 @@ impl AppApplication {
                 unattended: trigger == "scheduled",
             }),
         };
-        match self
+        let result = match self
             .send(SendMessageCommand {
                 request,
                 chat_id: row.target_id.clone(),
@@ -251,7 +253,18 @@ impl AppApplication {
                 safe_error: Some("automation_dispatch_failed".into()),
                 turn_id: None,
             },
+        };
+        if result.state == "failed" {
+            tracing::error!(category = "schedule", event = "schedule.failed", reason = ?result.safe_error, "Schedule run failed");
         }
+        result
+    }
+
+    /// The schedule's stored model, read from the current settings snapshot only.
+    /// Without a snapshot or a selectable model the run follows the chat's model.
+    fn automation_model_override(&self, model: Option<&str>) -> Option<Value> {
+        let facts = self.dependencies.settings_facts.snapshot().ok()?;
+        settings::selectable_model_ref(&facts, model?).map(Value::String)
     }
 
     async fn complete_fresh_run(

@@ -1,5 +1,10 @@
 //! Immutable model catalog snapshots and source-compatible token estimation.
 
+mod attachment_text;
+pub use attachment_text::{
+    MAX_INLINE_BYTES, NotInlined, decode_text, display_name, is_pdf, is_text, listing_line,
+    message_file_path, not_inlined_block,
+};
 mod catalog;
 mod configuration;
 mod diagnostics;
@@ -91,7 +96,7 @@ pub use configuration::{
     CredentialMigrationFailure, CredentialMigrationReport, CredentialStoreError,
     CredentialStorePolicy, CredentialStoreView, DeletedCredential, FileOverride, SecretBackend,
     SecretStoreFacts, SecretStoreMode, StoreReason, credential_file_summary,
-    credential_store_policy,
+    credential_store_policy, reset_secret_keys,
 };
 pub use configuration::{
     DiscoveredLocalModel, HostedModelMutation, LocalModelMutation, McpModelTarget,
