@@ -390,6 +390,27 @@ impl GuidedTurnFactoryAdapter {
     ) -> Result<PathBuf, BtccError> {
         let path = workspace.get().map_err(|e| error(e.code()))?;
         phase.execution_policy.workspace_path = path.to_string_lossy().into_owned();
+        if phase.execution_policy.access_mode != butler_turn::btcc::AccessMode::FullAccess {
+            let data = self.butler_data.clone();
+            let root = path.clone();
+            tokio::task::spawn_blocking(move || {
+                let inventory = butler_platform::secure_fs::SecretInventory::cached(&data);
+                inventory.pin_root(&root)?;
+                for relative in [
+                    butler_platform::data_paths::ARTIFACTS,
+                    butler_platform::data_paths::PROJECT_WRITE_CACHE,
+                    "tmp/project-write",
+                ] {
+                    let path = data.join(relative);
+                    butler_platform::secure_fs::create_private_dir_all(&path)?;
+                    inventory.pin_root(&path)?;
+                }
+                Ok::<_, std::io::Error>(())
+            })
+            .await
+            .map_err(|_| error("workspace_unavailable"))?
+            .map_err(|_| error("workspace_unavailable"))?;
+        }
         if matches!(
             butler_gateway::gateway::command_sandbox_enabled(
                 self.monitoring.app_database_path.clone()

@@ -27,6 +27,7 @@ pub(crate) enum Leaf {
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct GuardInput<'a> {
+    pub butler_data: Option<&'a Path>,
     pub root: &'a Path,
     pub requested: &'a str,
     pub path_form: PathForm,
@@ -36,6 +37,7 @@ pub(crate) struct GuardInput<'a> {
 
 #[derive(Clone, Copy)]
 pub(crate) struct MutationGuardInput<'a> {
+    pub butler_data: Option<&'a Path>,
     pub root: &'a Path,
     pub requested: &'a str,
     pub path_form: PathForm,
@@ -193,6 +195,7 @@ fn admit_contained(
     resolved: &Resolved,
     protected_roots: &[PathBuf],
     path_form: PathForm,
+    data: Option<&Path>,
 ) -> bool {
     let Resolved {
         root_real,
@@ -211,7 +214,7 @@ fn admit_contained(
         out.reason = Some("path_escape");
         return false;
     };
-    if looks_sensitive(&relative.to_string_lossy()) {
+    if looks_sensitive(&relative.to_string_lossy()) || sensitive_absolute(absolute, data) {
         out.reason = Some("sensitive_path_blocked");
         return false;
     }
@@ -226,7 +229,13 @@ pub(crate) fn resolve_workspace_path_guard(input: GuardInput<'_>) -> std::io::Re
     let Some(resolved) = resolved else {
         return Ok(out);
     };
-    if !admit_contained(&mut out, &resolved, input.protected_roots, input.path_form) {
+    if !admit_contained(
+        &mut out,
+        &resolved,
+        input.protected_roots,
+        input.path_form,
+        input.butler_data,
+    ) {
         return Ok(out);
     }
     let Resolved {
@@ -256,6 +265,7 @@ pub(crate) fn resolve_workspace_path_guard(input: GuardInput<'_>) -> std::io::Re
             },
             input.protected_roots,
             input.path_form,
+            input.butler_data,
         )
     {
         return Ok(out);
@@ -310,7 +320,13 @@ pub(crate) fn resolve_workspace_mutation_guard(
         out.reason = Some("program_directory_read_only");
         return Ok(out);
     }
-    if !admit_contained(&mut out, &resolved, input.protected_roots, input.path_form) {
+    if !admit_contained(
+        &mut out,
+        &resolved,
+        input.protected_roots,
+        input.path_form,
+        input.butler_data,
+    ) {
         return Ok(out);
     }
     let Resolved {
@@ -326,6 +342,7 @@ pub(crate) fn resolve_workspace_mutation_guard(
                 &real,
                 &installation,
                 input.path_form,
+                input.butler_data,
             )?;
         }
         Err(_) if input.leaf == Leaf::MayBeMissing => {
@@ -333,6 +350,10 @@ pub(crate) fn resolve_workspace_mutation_guard(
             let parent_real = realpath_or_nearest(parent);
             if installation.contains(&parent_real) {
                 out.reason = Some("program_directory_read_only");
+            } else if input.path_form.contained()
+                && sensitive_absolute(&parent_real, input.butler_data)
+            {
+                out.reason = Some("sensitive_path_blocked");
             } else if input.path_form.contained()
                 && inside_relative(&root_real, &parent_real).is_none()
             {
@@ -357,9 +378,13 @@ fn existing_target_rejection(
     real: &Path,
     installation: &Installation,
     path_form: PathForm,
+    data: Option<&Path>,
 ) -> std::io::Result<Option<&'static str>> {
     if installation.contains(real) {
         return Ok(Some("program_directory_read_only"));
+    }
+    if path_form.contained() && sensitive_absolute(real, data) {
+        return Ok(Some("sensitive_path_blocked"));
     }
     if path_form.contained() && inside_relative(root_real, real).is_none() {
         return Ok(Some("symlink_escape"));
@@ -459,4 +484,10 @@ pub(crate) fn lexical_absolute(path: &Path) -> std::io::Result<PathBuf> {
         }
     }
     Ok(clean)
+}
+
+fn sensitive_absolute(path: &Path, data: Option<&Path>) -> bool {
+    let fallback = butler_platform::secure_fs::environment_data();
+    butler_platform::secure_fs::SecretInventory::cached(data.unwrap_or(&fallback))
+        .protects_path(path)
 }

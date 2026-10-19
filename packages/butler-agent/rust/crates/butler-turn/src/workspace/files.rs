@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{io::Read, path::PathBuf};
 
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -8,6 +8,7 @@ use super::path_guard::{GuardInput, resolve_workspace_path_guard, safe_cursor_pa
 /// A window read of one workspace file.
 #[derive(Debug)]
 pub struct ReadFileInput {
+    pub butler_data: PathBuf,
     pub root: PathBuf,
     pub path: String,
     pub path_form: super::PathForm,
@@ -54,8 +55,6 @@ fn failure(path: &str, error: &str, message: &str, hint: &str) -> Value {
 enum ReadStage {
     /// The first metadata check of the admitted path.
     Inspect,
-    /// The metadata re-check right before reading.
-    Recheck,
     /// Reading the file bytes.
     Read,
 }
@@ -89,16 +88,6 @@ fn io_failure(path: &str, error: &std::io::Error, stage: ReadStage) -> Value {
                 retry
             },
         ),
-        ReadStage::Recheck => failure(
-            path,
-            code,
-            if absent {
-                not_found
-            } else {
-                "The requested file could not be inspected before reading."
-            },
-            retry,
-        ),
         ReadStage::Read => failure(
             path,
             code,
@@ -119,8 +108,9 @@ pub(super) fn read_one_blocking(input: &ReadFileInput) -> std::io::Result<Worksp
         Ok(file) => file,
         Err(failure) => return Ok(WorkspaceFileRead::failed(failure)),
     };
-    let data = match std::fs::read(&file) {
-        Ok(value) => value,
+    let mut data = Vec::new();
+    match file.take(u64::MAX).read_to_end(&mut data) {
+        Ok(_) => {}
         Err(error) => {
             return Ok(WorkspaceFileRead::failed(io_failure(
                 &input.path,
@@ -128,7 +118,7 @@ pub(super) fn read_one_blocking(input: &ReadFileInput) -> std::io::Result<Worksp
                 ReadStage::Read,
             )));
         }
-    };
+    }
     let read = BytesRead {
         sha256: format!("{:x}", Sha256::digest(&data)),
         bytes_read: data.len(),
@@ -140,10 +130,11 @@ pub(super) fn read_one_blocking(input: &ReadFileInput) -> std::io::Result<Worksp
     Ok(read_window(input, &text, read))
 }
 
-/// The admitted regular file behind the requested path, checked twice so a
-/// path swapped for a non-file between the checks is refused.
-fn admitted_file(input: &ReadFileInput) -> std::io::Result<Result<PathBuf, Value>> {
+/// The admitted regular file descriptor. Contained reads walk the original
+/// request from the pinned root; bytes never come from a later path reopen.
+fn admitted_file(input: &ReadFileInput) -> std::io::Result<Result<std::fs::File, Value>> {
     let guard = resolve_workspace_path_guard(GuardInput {
+        butler_data: Some(&input.butler_data),
         root: &input.root,
         requested: &input.path,
         path_form: input.path_form,
@@ -160,30 +151,26 @@ fn admitted_file(input: &ReadFileInput) -> std::io::Result<Result<PathBuf, Value
             &input.path,
         )));
     };
-    let checks = [
-        (
-            ReadStage::Inspect,
-            "The requested path is not a regular file.",
-            "Choose a regular file path returned by list_files.",
-        ),
-        (
-            ReadStage::Recheck,
-            "The requested path is no longer a regular file.",
-            "Restart discovery and choose a regular file path returned by list_files.",
-        ),
-    ];
-    for (stage, message, hint) in checks {
-        let metadata = match std::fs::symlink_metadata(file) {
-            Ok(value) => value,
-            Err(error) => {
-                return Ok(Err(io_failure(&input.path, &error, stage)));
-            }
-        };
-        if !metadata.is_file() {
-            return Ok(Err(failure(&input.path, "not_a_file", message, hint)));
-        }
+    let opened = if input.path_form.contained() {
+        super::contained_reader::open(
+            &input.root,
+            &input.path,
+            input.path_form,
+            &input.butler_data,
+        )
+    } else {
+        std::fs::File::open(file)
+    };
+    match opened {
+        Ok(file) if file.metadata()?.is_file() => Ok(Ok(file)),
+        Ok(_) => Ok(Err(failure(
+            &input.path,
+            "not_a_file",
+            "Choose a regular file.",
+            "Restart discovery.",
+        ))),
+        Err(error) => Ok(Err(io_failure(&input.path, &error, ReadStage::Read))),
     }
-    Ok(Ok(file.to_path_buf()))
 }
 
 /// Digest and size of the bytes read; failures after the read report them.

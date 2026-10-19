@@ -111,20 +111,7 @@ pub(super) async fn execute(
         } else {
             None
         };
-        let mut read = workspace
-            .read_one(ReadFileInput {
-                root: root.clone(),
-                path: request.path.clone(),
-                path_form: super::arguments::path_form(&input),
-                protected_roots: super::arguments::read_protected_roots(&input),
-                start_line: request.start_line,
-                limit_lines: request.limit_lines,
-                max_bytes: request.max_bytes,
-                offset_bytes: offset,
-            })
-            .await
-            .map_err(owner_error)?
-            .map_err(guard_io_error)?;
+        let mut read = read_request(workspace, &input, &root, request, offset).await?;
         total_input += read.bytes_read;
         if let Some(value) = &cursor {
             if index == cursor_index && read.sha256.as_deref() != Some(&value.file_sha256) {
@@ -278,4 +265,28 @@ fn pending(path: &str) -> Value {
 }
 fn cursor_error(error: &str, message: &str, hint: &str) -> Value {
     json!({ "ok": false, "error": error, "message": message, "recovery_hint": hint })
+}
+
+async fn read_request(
+    workspace: &WorkspaceFiles,
+    input: &CapabilityInvocation<'_>,
+    root: &std::path::Path,
+    request: &Request,
+    offset: Option<usize>,
+) -> Result<WorkspaceFileRead, CapabilityError> {
+    workspace
+        .read_one(ReadFileInput {
+            butler_data: input.butler_data.to_path_buf(),
+            root: root.to_path_buf(),
+            path: request.path.clone(),
+            path_form: super::arguments::path_form(input),
+            protected_roots: super::arguments::read_protected_roots(input),
+            start_line: request.start_line,
+            limit_lines: request.limit_lines,
+            max_bytes: request.max_bytes,
+            offset_bytes: offset,
+        })
+        .await
+        .map_err(owner_error)?
+        .map_err(guard_io_error)
 }

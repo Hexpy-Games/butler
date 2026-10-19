@@ -142,14 +142,10 @@ fn declared(
         let Some(candidate) = source_path(source, data, cwd, &root) else {
             continue;
         };
-        let Some((real, bytes)) = verified_source(&candidate, &workspace_root, &root) else {
+        let Some((real, bytes)) = verified_source(&candidate, &workspace_root, &root, data) else {
             continue;
         };
-        let published = if real.starts_with(&root) {
-            Some(real)
-        } else {
-            publish_file(&root, &real, &bytes)
-        };
+        let published = publish_file(&root, &real, &bytes);
         let Some(published) = published else { continue };
         let published = canonical(&published);
         if !published.starts_with(&root) {
@@ -223,35 +219,30 @@ fn source_path(source: &str, data: &Path, cwd: &Path, generated: &Path) -> Optio
     })
 }
 
-fn verified_source(path: &Path, workspace: &Path, generated: &Path) -> Option<(PathBuf, Vec<u8>)> {
-    let link = fs::symlink_metadata(path).ok()?;
-    if !link.is_file() || link.file_type().is_symlink() || link.len() == 0 || link.len() > MAX_BYTES
-    {
+fn verified_source(
+    path: &Path,
+    workspace: &Path,
+    generated: &Path,
+    data: &Path,
+) -> Option<(PathBuf, Vec<u8>)> {
+    use std::io::Read;
+    let inventory = butler_platform::secure_fs::SecretInventory::cached(data);
+    let scratch = data.join("tmp/project-write");
+    let root = [workspace, generated, &scratch]
+        .into_iter()
+        .find(|root| path.starts_with(root))?;
+    let relative = path.strip_prefix(root).ok()?;
+    let file = secure_fs::open_contained(root, relative, &inventory).ok()?;
+    let before = file.metadata().ok()?;
+    if before.len() == 0 || before.len() > MAX_BYTES {
         return None;
     }
-    let real = butler_platform::secure_fs::canonicalize(path).ok()?;
-    if !real.starts_with(workspace) && !real.starts_with(generated) {
+    let mut bytes = Vec::new();
+    file.take(MAX_BYTES + 1).read_to_end(&mut bytes).ok()?;
+    if bytes.len() as u64 > MAX_BYTES {
         return None;
     }
-    // Copies land in a folder later commands read; never publish project
-    // metadata or secrets that the command itself could not read.
-    if real.strip_prefix(workspace).is_ok_and(|relative| {
-        relative.components().any(|part| {
-            butler_platform::command_sandbox::secret_name(&part.as_os_str().to_string_lossy())
-        })
-    }) {
-        return None;
-    }
-    let before = fs::symlink_metadata(&real).ok()?;
-    if !before.is_file() || before.file_type().is_symlink() {
-        return None;
-    }
-    let bytes = fs::read(&real).ok()?;
-    let after = fs::symlink_metadata(&real).ok()?;
-    if bytes.len() as u64 != before.len() || !same_file(&before, &after) {
-        return None;
-    }
-    Some((real, bytes))
+    Some((path.to_path_buf(), bytes))
 }
 
 fn publish_file(root: &Path, source: &Path, bytes: &[u8]) -> Option<PathBuf> {
@@ -271,7 +262,7 @@ fn publish_file(root: &Path, source: &Path, bytes: &[u8]) -> Option<PathBuf> {
         if !stat.is_file() || stat.file_type().is_symlink() || stat.len() != bytes.len() as u64 {
             return None;
         }
-        return (fs::read(&destination).ok()?.as_slice() == bytes).then_some(destination);
+        return (read_published(root, &destination)?.as_slice() == bytes).then_some(destination);
     }
     secure_fs::replace_private(
         &destination,
@@ -279,7 +270,7 @@ fn publish_file(root: &Path, source: &Path, bytes: &[u8]) -> Option<PathBuf> {
         std::convert::identity,
     )
     .ok()?;
-    (fs::read(&destination).ok()?.as_slice() == bytes).then_some(destination)
+    (read_published(root, &destination)?.as_slice() == bytes).then_some(destination)
 }
 
 fn safe_name(source: &str) -> String {
@@ -311,7 +302,16 @@ fn scan(data: &Path) -> Vec<File> {
     let mut result = Vec::new();
     let mut count = 0;
     let collator = LocaleCollation::new("en-US").ok();
-    visit(&root, &root, 0, &mut count, &mut result, collator.as_ref());
+    let inventory = butler_platform::secure_fs::SecretInventory::cached(data);
+    visit(
+        &root,
+        &root,
+        0,
+        &mut count,
+        &mut result,
+        collator.as_ref(),
+        &inventory,
+    );
     result
 }
 
@@ -322,6 +322,7 @@ fn visit(
     count: &mut usize,
     out: &mut Vec<File>,
     collator: Option<&LocaleCollation>,
+    inventory: &butler_platform::secure_fs::SecretInventory,
 ) {
     if depth > MAX_DEPTH || *count >= MAX_FILES {
         return;
@@ -344,7 +345,15 @@ fn visit(
             continue;
         };
         if kind.is_dir() {
-            visit(root, &entry.path(), depth + 1, count, out, collator);
+            visit(
+                root,
+                &entry.path(),
+                depth + 1,
+                count,
+                out,
+                collator,
+                inventory,
+            );
             continue;
         }
         if !kind.is_file() {
@@ -357,13 +366,13 @@ fn visit(
         if !real.starts_with(root) {
             continue;
         }
-        let Ok(stat) = fs::symlink_metadata(&real) else {
+        let Ok(relative) = real.strip_prefix(root) else {
             continue;
         };
-        if !stat.is_file() || stat.file_type().is_symlink() {
+        let Ok(file) = secure_fs::open_contained(root, relative, inventory) else {
             continue;
-        }
-        let Ok(relative) = real.strip_prefix(root) else {
+        };
+        let Ok(stat) = file.metadata() else {
             continue;
         };
         let modified = stat.modified().unwrap_or(std::time::UNIX_EPOCH);
@@ -431,13 +440,6 @@ fn file_id(stat: &fs::Metadata) -> String {
         .map(|id| format!("{}:{}", id.device, id.inode))
         .unwrap_or_default()
 }
-/// The same file with the same length and modification time.
-fn same_file(left: &fs::Metadata, right: &fs::Metadata) -> bool {
-    let (left_identity, right_identity) = (secure_fs::identity(left), secure_fs::identity(right));
-    left_identity.id == right_identity.id
-        && left.len() == right.len()
-        && left_identity.modified == right_identity.modified
-}
 
 fn declared_file(path: &Path, stat: &fs::Metadata, label: String) -> Artifact {
     Artifact {
@@ -447,4 +449,14 @@ fn declared_file(path: &Path, stat: &fs::Metadata, label: String) -> Artifact {
         size_bytes: stat.len(),
         modified_at: iso(stat.modified().unwrap_or(std::time::UNIX_EPOCH)),
     }
+}
+
+fn read_published(root: &Path, path: &Path) -> Option<Vec<u8>> {
+    use std::io::Read;
+    let data = root.parent()?.parent()?;
+    let inventory = butler_platform::secure_fs::SecretInventory::cached(data);
+    let file = secure_fs::open_contained(root, path.strip_prefix(root).ok()?, &inventory).ok()?;
+    let mut bytes = Vec::new();
+    file.take(MAX_BYTES + 1).read_to_end(&mut bytes).ok()?;
+    (bytes.len() as u64 <= MAX_BYTES).then_some(bytes)
 }

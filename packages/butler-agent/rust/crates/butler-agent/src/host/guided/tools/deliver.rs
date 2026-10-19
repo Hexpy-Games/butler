@@ -61,31 +61,20 @@ fn checked(workspace: &Path, data: &Path, label: &str) -> Option<Value> {
     if relative.as_os_str().is_empty() || label.contains('\0') {
         return None;
     }
-    let mut target = root.clone();
-    for part in relative.components() {
-        if !matches!(part, Component::Normal(_)) {
-            return None;
-        }
-        target.push(part);
-        if std::fs::symlink_metadata(&target)
-            .ok()?
-            .file_type()
-            .is_symlink()
-        {
-            return None;
-        }
-    }
-    if !std::fs::canonicalize(&target).ok()?.starts_with(&root) {
+    if relative
+        .components()
+        .any(|part| !matches!(part, Component::Normal(_)))
+    {
         return None;
     }
-    let file = secure_fs::open_read_beneath(&root, relative).ok()?;
+    let inventory = butler_platform::secure_fs::SecretInventory::cached(data);
+    let file = secure_fs::open_contained(&root, relative, &inventory).ok()?;
     let metadata = file.metadata().ok()?;
     if !metadata.is_file() || metadata.len() > MAX_BYTES {
         return None;
     }
+    let target = secure_fs::stage_file(data, relative, file, MAX_BYTES).ok()?;
     let source = relative.to_str()?.replace('\\', "/");
-    Some(
-        json!({"path":if artifact { source.clone() } else { target.to_str()?.to_owned() },
-        "source":source,"deliverable":true,"size_bytes":metadata.len(),"mime_type":super::super::journal::mime_for(&label)}),
-    )
+    Some(json!({"path":target.to_str()?.to_owned(),
+        "source":source,"deliverable":true,"size_bytes":metadata.len(),"mime_type":super::super::journal::mime_for(&label)}))
 }

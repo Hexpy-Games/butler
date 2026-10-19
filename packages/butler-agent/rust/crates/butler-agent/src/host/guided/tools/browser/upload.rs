@@ -1,5 +1,5 @@
 //! `upload` steps take only regular files inside the conversation workspace; the
-//! App receives the canonical path. Every upload is always confirmed by the owner.
+//! App receives a private copy made from the validated file descriptor. Every upload is always confirmed by the owner.
 use super::super::GuidedTools;
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
@@ -11,10 +11,8 @@ fn canonical(path: &Path) -> std::io::Result<PathBuf> {
 const MAX_BYTES: u64 = 100 * 1024 * 1024;
 /// Butler state that shares the general chat's data-dir workspace.
 const INTERNAL: &[&str] = &[
-    "auth",
     "app",
     "agent-runtime",
-    "secrets",
     "memory",
     "project-ledger",
     "browser",
@@ -38,7 +36,8 @@ pub(super) async fn resolve(owner: &GuidedTools, args: &mut Value) -> Result<(),
     for step in steps.iter_mut().filter(|step| step["action"] == "upload") {
         let raw = step["value"].as_str().unwrap_or("").to_owned();
         let root = root.clone();
-        let path = tokio::task::spawn_blocking(move || workspace_file(&root, &raw))
+        let data = owner.binding.butler_data.clone();
+        let path = tokio::task::spawn_blocking(move || workspace_file(&root, &data, &raw))
             .await
             .unwrap_or(Err("workspace_unavailable"))
             .map_err(|reason| json!({"status":"not_dispatched","reason":reason,
@@ -48,16 +47,22 @@ pub(super) async fn resolve(owner: &GuidedTools, args: &mut Value) -> Result<(),
     Ok(())
 }
 
-fn workspace_file(root: &Path, raw: &str) -> Result<String, &'static str> {
+fn workspace_file(root: &Path, data: &Path, raw: &str) -> Result<String, &'static str> {
     if raw.trim().is_empty() {
         return Err("upload_path_required");
     }
     let root = canonical(root).map_err(|_| "workspace_unavailable")?;
     // Canonical paths resolve `..` and links before the containment check.
-    let path = canonical(&root.join(raw)).map_err(|_| "upload_file_not_found")?;
+    let path = root.join(raw);
     let Ok(relative) = path.strip_prefix(&root) else {
         return Err("upload_outside_workspace");
     };
+    if Path::new(raw)
+        .components()
+        .any(|part| matches!(part, std::path::Component::ParentDir))
+    {
+        return Err("upload_outside_workspace");
+    }
     // Never offer credentials, keys or Butler's own state, even with approval.
     let relative = relative.to_string_lossy();
     let first = relative.split(['/', '\\']).next().unwrap_or("");
@@ -69,13 +74,19 @@ fn workspace_file(root: &Path, raw: &str) -> Result<String, &'static str> {
     {
         return Err("upload_sensitive_file");
     }
-    let metadata = path.metadata().map_err(|_| "upload_file_not_found")?;
+    let inventory = butler_platform::secure_fs::SecretInventory::cached(data);
+    let file =
+        butler_platform::secure_fs::open_contained(&root, Path::new(relative.as_ref()), &inventory)
+            .map_err(|_| "upload_sensitive_file")?;
+    let metadata = file.metadata().map_err(|_| "upload_file_not_found")?;
     if !metadata.is_file() {
         return Err("upload_not_a_file");
     }
     if metadata.len() > MAX_BYTES {
         return Err("upload_too_large");
     }
+    let path = butler_platform::secure_fs::stage_file(data, &path, file, MAX_BYTES)
+        .map_err(|_| "upload_file_unavailable")?;
     path.to_str()
         .map(str::to_owned)
         .ok_or("upload_path_invalid")

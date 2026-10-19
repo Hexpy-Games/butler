@@ -29,6 +29,7 @@ pub struct GrepMatch {
 
 /// A listed file to search within deadline and budgets.
 pub struct GrepCandidate {
+    pub butler_data: PathBuf,
     pub root: PathBuf,
     pub path_form: super::PathForm,
     pub protected_roots: Vec<PathBuf>,
@@ -118,10 +119,10 @@ fn read_bounded(input: &GrepCandidate) -> Result<Vec<u8>, GrepRead> {
     if input.bytes > cap {
         return Err(GrepRead::skipped_unread("max_bytes_per_file"));
     }
-    let absolute = input.root.join(&input.path);
-    let absolute = if input.path_form == super::PathForm::Contained {
+    if input.path_form.contained() {
         let guard =
             super::path_guard::resolve_workspace_path_guard(super::path_guard::GuardInput {
+                butler_data: Some(&input.butler_data),
                 root: &input.root,
                 requested: &input.path,
                 path_form: input.path_form,
@@ -132,24 +133,22 @@ fn read_bounded(input: &GrepCandidate) -> Result<Vec<u8>, GrepRead> {
         if let Some(reason) = guard.reason {
             return Err(GrepRead::skipped_unread(reason));
         }
-        guard.real.unwrap_or(absolute)
-    } else {
-        absolute
-    };
-    match std::fs::symlink_metadata(&absolute) {
-        Ok(metadata) if !metadata.is_file() => return Err(GrepRead::skipped_unread("symlink")),
-        Ok(metadata) if metadata.len() > cap => {
-            return Err(GrepRead::skipped_unread("max_bytes_per_file"));
-        }
-        Ok(_) => {}
-        Err(_) => return Err(GrepRead::skipped_after_read("io_error", 0)),
     }
-    if Instant::now() >= input.deadline {
-        return Err(GrepRead::skipped_unread("elapsed_ms"));
+    let file = super::contained_reader::open(
+        &input.root,
+        &input.path,
+        input.path_form,
+        &input.butler_data,
+    )
+    .map_err(|_| GrepRead::skipped_after_read("io_error", 0))?;
+    if file
+        .metadata()
+        .map_err(|_| GrepRead::skipped_unread("io_error"))?
+        .len()
+        > cap
+    {
+        return Err(GrepRead::skipped_unread("max_bytes_per_file"));
     }
-    let Ok(file) = std::fs::File::open(&absolute) else {
-        return Err(GrepRead::skipped_after_read("io_error", 0));
-    };
     // A file can grow after lstat. Bound the native allocation at the declared cap.
     let mut bytes = Vec::new();
     if file.take(cap + 1).read_to_end(&mut bytes).is_err() {

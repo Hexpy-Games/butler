@@ -103,7 +103,10 @@ impl OutputStore {
         if request.title.chars().count() > 200 {
             return Err(error("output_title_too_long"));
         }
-        let snapshot = super::snapshot::collect(&request)?;
+        let snapshot = super::snapshot::collect(
+            &request,
+            self.root.parent().ok_or_else(|| error("data_root"))?,
+        )?;
         let id = self.publication_id(&request.session_id, &snapshot.source)?;
         let path = self.manifest(&id)?;
         let mut output = if path.exists() {

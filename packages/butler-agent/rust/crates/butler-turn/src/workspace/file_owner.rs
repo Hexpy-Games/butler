@@ -129,6 +129,7 @@ impl WorkspaceFiles {
     ) -> Result<std::io::Result<GuardResult>, FileOwnerError> {
         self.run(move || {
             resolve_workspace_path_guard(GuardInput {
+                butler_data: None,
                 root: &root,
                 requested: &path,
                 path_form,

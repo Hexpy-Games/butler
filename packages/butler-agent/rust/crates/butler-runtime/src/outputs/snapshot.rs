@@ -46,7 +46,7 @@ pub(super) struct Snapshot {
     pub source: String,
     pub kind: OutputKind,
 }
-pub(super) fn collect(request: &PublishRequest) -> std::io::Result<Snapshot> {
+pub(super) fn collect(request: &PublishRequest, data: &Path) -> std::io::Result<Snapshot> {
     let root = std::fs::canonicalize(&request.workspace)?;
     let requested = Path::new(&request.path);
     let rel = if requested.is_absolute() {
@@ -67,7 +67,8 @@ pub(super) fn collect(request: &PublishRequest) -> std::io::Result<Snapshot> {
     };
     let mut files = BTreeMap::new();
     let mut size = 0;
-    visit(&root, base, &source, &mut files, &mut size)?;
+    let inventory = butler_platform::secure_fs::SecretInventory::cached(data);
+    visit(&root, base, &source, &mut files, &mut size, &inventory)?;
     let entry = request.entry.clone().unwrap_or_else(|| {
         if metadata.is_file() {
             source
@@ -101,12 +102,25 @@ fn visit(
     path: &Path,
     files: &mut BTreeMap<String, Vec<u8>>,
     size: &mut u64,
+    inventory: &butler_platform::secure_fs::SecretInventory,
 ) -> std::io::Result<()> {
+    let source_relative = path
+        .strip_prefix(root)
+        .map_err(|_| error("unsafe_output_path"))?;
+    if source_relative.components().any(|part| {
+        butler_platform::command_sandbox::secret_name(&part.as_os_str().to_string_lossy())
+    }) || inventory.protects_path(path)
+    {
+        return Ok(());
+    }
     checked(root, path)?;
     let metadata = std::fs::symlink_metadata(path)?;
+    if inventory.protects_metadata(&metadata) {
+        return Ok(());
+    }
     if metadata.is_dir() {
         for child in std::fs::read_dir(path)? {
-            visit(root, base, &child?.path(), files, size)?;
+            visit(root, base, &child?.path(), files, size, inventory)?;
         }
         return Ok(());
     }
@@ -119,10 +133,11 @@ fn visit(
     let relative_file = path
         .strip_prefix(root)
         .map_err(|_| error("unsafe_output_path"))?;
-    let mut file = secure_fs::open_read_beneath(root, relative_file)?;
-    if !file.metadata()?.is_file() {
-        return Err(error("output_regular_files_only"));
-    }
+    let mut file = match secure_fs::open_contained(root, relative_file, inventory) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => return Ok(()),
+        Err(error) => return Err(error),
+    };
     let mut bytes = Vec::new();
     (&mut file)
         .take(100_000_001 - *size)
