@@ -18,13 +18,13 @@ const selected = process.argv[2] || "all";
 assert(["all", "version", "policy", "normal", "renderer", "gpu-crash", "gpu-hang", "load", "baseline", "soak"].includes(selected));
 const rows: Row[] = [];
 const evidence: Record<string, unknown> = {};
-// Reviewed against https://releases.electronjs.org/schedule on 2026-10-06.
+// Reviewed against https://releases.electronjs.org/schedule on 2026-10-20.
 // A stale support snapshot fails closed; refresh it for subsequent upgrades.
 const pin = JSON.parse(readFileSync("packages/butler-app/client/electron/package.json", "utf8")).devDependencies.electron;
 const major = Number(pin.split(".")[0]);
 const now = Date.now();
-const support = major >= 42 && major <= 44 && now < Date.parse("2026-10-20T00:00:00Z");
-rows.push({ test: "version", metric: "build Electron pin", value: pin, budget: "42–44; support snapshot expires 2026-10-20", status: support ? "PASS" : "FAIL", attribution: "Version policy", mitigation: "Refresh official schedule and upgrade Electron" });
+const support = major >= 43 && major <= 45 && now < Date.parse("2027-01-05T00:00:00Z");
+rows.push({ test: "version", metric: "build Electron pin", value: pin, budget: "43–45; support snapshot expires 2027-01-05", status: support ? "PASS" : "FAIL", attribution: "Version policy", mitigation: "Refresh official schedule and upgrade Electron" });
 let invalidWindow = false;
 let quietTimeout = false;
 let app: Awaited<ReturnType<typeof launchP0App>> | undefined;

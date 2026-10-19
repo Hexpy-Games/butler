@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
@@ -26,22 +26,113 @@ export async function waitFor(check: () => boolean | Promise<boolean>, label: st
   throw new Error(`Timed out: ${label}`);
 }
 
-export function ownedProcesses(data: string, owned: Set<number>) {
-  const instance = readJson(join(data, "app/runtime/foreground/instance.json"));
-  const helperPath = join(data, "updates/app-install.pid");
-  if (existsSync(helperPath)) {
-    const helper = Number(readFileSync(helperPath, "utf8"));
-    if (Number.isInteger(helper) && helper > 0) owned.add(helper);
+export type OwnedProcesses = Map<number, { created?: number; notAfter: number }>;
+export type ProcessSnapshot = {
+  pid: number; parentPid: number; created: number;
+  name: string | null; path: string | null; commandLine: string | null;
+};
+
+/** Resolve identities and descendants without mutating the input registry or snapshot. */
+export function resolveOwnedProcesses(owned: ReadonlyMap<number, { created?: number; notAfter: number }>, rows: readonly ProcessSnapshot[]): OwnedProcesses {
+  const live = new Map(rows.map(row => [row.pid, row]));
+  const children = new Map<number, ProcessSnapshot[]>();
+  for (const row of rows) {
+    const siblings = children.get(row.parentPid) ?? [];
+    siblings.push(row);
+    children.set(row.parentPid, siblings);
   }
-  for (const pid of [instance?.app_pid, instance?.agent_host_pid]) {
-    if (Number.isInteger(pid) && pid > 0) owned.add(pid);
+  const matched: OwnedProcesses = new Map();
+  const queue: ProcessSnapshot[] = [];
+  for (const [pid, identity] of owned) {
+    const row = live.get(pid);
+    if (!row || !(identity.created === undefined ? row.created <= identity.notAfter : row.created === identity.created)) continue;
+    matched.set(pid, { ...identity, created: row.created });
+    queue.push(row);
   }
-  for (const pid of [...owned]) {
-    const tree = powershell(`$all = @(Get-CimInstance Win32_Process); $ids = @(${pid}); do {
-      $next = @($all | Where-Object { $_.ParentProcessId -in $ids -and $_.ProcessId -notin $ids } | ForEach-Object { $_.ProcessId })
-      $ids += $next
-    } while ($next.Count); ConvertTo-Json -Compress -InputObject @($ids)`);
-    for (const child of JSON.parse(tree)) owned.add(child);
+  for (let i = 0; i < queue.length; i++) {
+    const parent = queue[i];
+    for (const child of children.get(parent.pid) ?? []) {
+      if (matched.has(child.pid) || child.created < parent.created) continue;
+      matched.set(child.pid, { created: child.created, notAfter: child.created });
+      queue.push(child);
+    }
+  }
+  return matched;
+}
+
+function processSnapshot(filter?: string): ProcessSnapshot[] {
+  return JSON.parse(powershell(`ConvertTo-Json -Compress -InputObject @(Get-CimInstance Win32_Process ${filter ? `-Filter '${filter}'` : ""} |
+    ForEach-Object { @{ pid = $_.ProcessId; parentPid = $_.ParentProcessId;
+      created = ([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds();
+      name = $_.Name; path = $_.ExecutablePath; commandLine = $_.CommandLine } })`));
+}
+
+function applySnapshot(owned: OwnedProcesses, rows: ProcessSnapshot[]): ProcessSnapshot[] {
+  const matched = resolveOwnedProcesses(owned, rows);
+  owned.clear();
+  for (const [pid, identity] of matched) owned.set(pid, identity);
+  return rows.filter(row => matched.has(row.pid));
+}
+
+/**
+ * A file's mtime bounds only the write that first named a PID; later rewrites naming the same PID
+ * (e.g. a "stopped" state) must not move that bound past an exit and admit a reused PID.
+ */
+export function fileRootBounds(previous: ReadonlyMap<number, number> | undefined, pids: readonly unknown[], mtimeMs: number) {
+  const bounds = new Map<number, number>();
+  for (const pid of pids) {
+    if (Number.isInteger(pid) && (pid as number) > 0) bounds.set(pid as number, previous?.get(pid as number) ?? mtimeMs);
+  }
+  return bounds;
+}
+
+const fileRoots = new WeakMap<OwnedProcesses, Map<string, Map<number, number>>>();
+
+function recordFileRoots(path: string, owned: OwnedProcesses, pids: (value: string) => unknown[]) {
+  const seen = fileRoots.get(owned) ?? new Map<string, Map<number, number>>();
+  fileRoots.set(owned, seen);
+  if (!existsSync(path)) { seen.delete(path); return; }
+  const bounds = fileRootBounds(seen.get(path), pids(readFileSync(path, "utf8")), statSync(path).mtimeMs);
+  seen.set(path, bounds);
+  for (const [pid, notAfter] of bounds) if (!owned.has(pid)) owned.set(pid, { notAfter });
+}
+
+export function ownedProcesses(data: string, owned: OwnedProcesses) {
+  recordFileRoots(join(data, "updates/app-install.pid"), owned, value => [Number(value)]);
+  recordFileRoots(join(data, "app/runtime/foreground/instance.json"), owned, value => {
+    try {
+      const instance = JSON.parse(value);
+      return [instance?.app_pid, instance?.agent_host_pid];
+    } catch { return []; }
+  });
+  applySnapshot(owned, processSnapshot());
+}
+
+/** Avoid CIM entirely once all tracked PIDs stop responding; otherwise verify identity. */
+export function ownedSurvivors(owned: OwnedProcesses): ProcessSnapshot[] {
+  for (const pid of owned.keys()) if (!alive(pid)) owned.delete(pid);
+  if (!owned.size) return [];
+  const filter = [...owned.keys()].map(pid => `ProcessId = ${pid}`).join(" OR ");
+  return applySnapshot(owned, processSnapshot(filter));
+}
+
+export function ownedDiagnostics(owned: OwnedProcesses) {
+  return ownedSurvivors(owned).map(row => ({
+    pid: row.pid, parentPid: row.parentPid, created: new Date(row.created).toISOString(),
+    name: row.name, path: row.path,
+    type: row.commandLine?.match(/(?:^|\s)--type=([a-zA-Z0-9_-]+)(?=\s|$)/u)?.[1] ?? null,
+  }));
+}
+
+export async function waitForOwnedExit(owned: OwnedProcesses, label: string, discover?: () => void) {
+  try {
+    await waitFor(() => {
+      discover?.();
+      return ownedSurvivors(owned).length === 0;
+    }, label);
+  } catch (error) {
+    console.error(JSON.stringify({ label, owned: ownedDiagnostics(owned) }));
+    throw error;
   }
 }
 
