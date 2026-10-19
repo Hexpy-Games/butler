@@ -16,7 +16,7 @@ fn settings_records(data: &Path) -> Result<Vec<Value>, HarnessError> {
         if path.extension().is_some_and(|ext| ext == "jsonl") {
             for line in fs::read_to_string(path)?.lines() {
                 let row: Value = serde_json::from_str(line)?;
-                if row["event"] == "http.request"
+                if row["event"] == "span.end"
                     && row["attrs"]["method"] == "PATCH"
                     && row["attrs"]["route"] == "/settings"
                 {
