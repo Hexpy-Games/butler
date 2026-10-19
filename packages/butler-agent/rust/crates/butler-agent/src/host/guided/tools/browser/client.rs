@@ -55,7 +55,7 @@ impl Client {
         })
     }
     pub(super) async fn waiting(&self, tab: &Value, value: bool, signal: &CancellationToken) {
-        self.call("tab.waiting", tab, &json!({"value":value}), signal)
+        self.send("tab.waiting", tab, &json!({"value":value}), signal)
             .await;
     }
     pub(super) async fn call(
@@ -65,6 +65,13 @@ impl Client {
         args: &Value,
         signal: &CancellationToken,
     ) -> Value {
+        let mut result = self.send(op, tab, args, signal).await;
+        if op.starts_with("tab.") && result["reason"] == "not_your_tab" {
+            super::recovery::attach(self, tab, &mut result, signal).await;
+        }
+        result
+    }
+    async fn send(&self, op: &str, tab: &Value, args: &Value, signal: &CancellationToken) -> Value {
         let call_id = uuid::Uuid::new_v4().to_string();
         let request = self
             .client

@@ -52,11 +52,8 @@ pub(super) fn prepare<'a>(
     call: &ModelRoundToolCall,
 ) -> PreparedCall<'a> {
     let tool = tools.iter().find(|tool| tool.name == call.name);
-    let parsed = serde_json::from_str::<Value>(&call.raw_arguments)
-        .ok()
-        .and_then(|value| value.as_object().cloned());
-    let (arguments, validation) = match (tool, parsed) {
-        (None, _) => (
+    let (arguments, validation) = match tool {
+        None => (
             call.arguments.clone(),
             Some(tool_error(
                 "tool_unavailable",
@@ -72,25 +69,7 @@ pub(super) fn prepare<'a>(
                 None,
             )),
         ),
-        (Some(_), None) => (
-            call.arguments.clone(),
-            Some(tool_error(
-                "invalid_arguments",
-                format!(
-                    "Tool arguments must be a JSON object matching this schema: {}",
-                    serde_json::to_string(&tool.map(|t| &t.parameters)).unwrap_or_default()
-                ),
-                None,
-            )),
-        ),
-        (Some(tool), Some(arguments)) => {
-            let error = if tool.handler_validates_arguments == Some(true) {
-                None
-            } else {
-                validate_required(&tool.parameters, &arguments)
-            };
-            (arguments, error)
-        }
+        Some(tool) => prepare_arguments(tool, call),
     };
     PreparedCall {
         call: ModelRoundToolCall {
@@ -248,6 +227,13 @@ async fn publish_result(
 
 fn enrich_rejection(result: &mut ToolResult, prepared: &PreparedCall<'_>) {
     if result
+        .error
+        .as_ref()
+        .is_some_and(|error| error.code == "invalid_arguments")
+    {
+        return;
+    }
+    if result
         .output
         .as_ref()
         .and_then(|output| output.field("error").ok().flatten())
@@ -352,26 +338,26 @@ pub(super) async fn execute_concurrent<'a>(
     results.into_iter().collect()
 }
 
-fn validate_required(
-    // Passthrough: tool arguments/results/schemas, shaped by each tool.
-    schema: &Map<String, Value>,
-    // Passthrough: tool arguments/results/schemas, shaped by each tool.
-    arguments: &Map<String, Value>,
-) -> Option<ToolError> {
-    let required = schema.get("required").and_then(Value::as_array)?;
-    for field in required.iter().filter_map(Value::as_str) {
-        if !arguments.contains_key(field) {
-            return Some(tool_error(
-                "invalid_arguments",
-                format!(
-                    "Missing required field: {field}. Supply it using this tool schema: {}",
-                    serde_json::to_string(schema).unwrap_or_default()
-                ),
-                Some(field.into()),
-            ));
-        }
+fn prepare_arguments(
+    tool: &ModelRoundTool,
+    call: &ModelRoundToolCall,
+) -> (Map<String, Value>, Option<ToolError>) {
+    use crate::btcc::tool_arguments::{decode_object, normalize_then_validate};
+    let parsed = decode_object(&call.raw_arguments)
+        .map(Value::Object)
+        .unwrap_or(Value::Null);
+    if tool.handler_validates_arguments == Some(true)
+        && let Some(arguments) = parsed.as_object()
+    {
+        return (arguments.clone(), None);
     }
-    None
+    match normalize_then_validate(&call.name, &Value::Object(tool.parameters.clone()), &parsed) {
+        Ok(arguments) => (arguments, None),
+        Err((message, field)) => (
+            call.arguments.clone(),
+            Some(tool_error("invalid_arguments", message, Some(field))),
+        ),
+    }
 }
 
 fn resolved_failure(output: &JsonDocument) -> Result<Option<ToolError>, BtccError> {

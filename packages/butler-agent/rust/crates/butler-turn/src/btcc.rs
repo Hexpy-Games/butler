@@ -10,12 +10,14 @@ pub mod agent_loop;
 mod authority;
 mod capability_handoff;
 mod thinking;
+mod tool_arguments;
 pub use authority::questions::{
     AnsweredQuestion, QuestionBinding, QuestionKind, QuestionOption, UserQuestion,
     UserQuestionAnswer, UserQuestionResponse, UserQuestions,
 };
 pub use capability_handoff::{CapabilityHandoff, CapabilityHandoffCode, RequestedCapabilityAction};
 pub use thinking::set_capture as set_thinking_capture;
+pub use tool_arguments::{decode_object, normalize_then_validate, validate_native_arguments};
 mod continuation_budget;
 mod contracts;
 pub mod effects;

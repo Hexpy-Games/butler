@@ -1,3 +1,5 @@
+mod arguments;
+use arguments::object as jsonish;
 use butler_core::public_text::fixed_regex;
 use std::{collections::HashSet, sync::LazyLock};
 
@@ -24,12 +26,14 @@ pub(super) fn decode(
     let calls = if let Some(calls) = structured.filter(|calls| !calls.is_empty()) {
         calls
             .iter()
-            .filter_map(|value| {
+            .enumerate()
+            .filter_map(|(index, value)| {
                 let name = normalize(value.pointer("/function/name")?.as_str()?, &allowed)?;
                 let mut call = super::call(
                     value.get("id"),
                     Some(&Value::String(name)),
                     value.pointer("/function/arguments"),
+                    index,
                 )?;
                 call.origin = Some(ToolCallOrigin::Native);
                 Some(call)
@@ -49,7 +53,17 @@ pub(super) fn decode(
     };
     let attempted = structured.map_or_else(|| call_bodies(raw).len(), Vec::len);
     if attempted > calls.len() || (raw.contains("<tool_call>") && calls.is_empty()) {
-        names.push("invalid or oversized tool call: use the native tool schema".into());
+        let invalid: Vec<_> = call_bodies(raw)
+            .into_iter()
+            .enumerate()
+            .filter(|(index, body)| parse_body(body, &allowed, index + 1).is_none())
+            .map(|(_, body)| rejected_note(body, &allowed))
+            .collect();
+        if invalid.is_empty() {
+            names.push("invalid or oversized tool call: use the native tool schema".into());
+        } else {
+            names.extend(invalid);
+        }
     }
     names.sort();
     names.dedup();
@@ -64,10 +78,10 @@ pub(super) fn rejected_text_calls(text: &str, request: &ModelRoundRequest<'_>) -
         .collect::<HashSet<_>>();
     let mut names = standalone_names(text, &allowed);
     for (index, body) in call_bodies(text).into_iter().enumerate() {
-        names.push(parse_body(body, &allowed, index).map_or_else(
-            || "invalid or oversized text tool call".into(),
-            |call| call.name,
-        ));
+        names.push(
+            parse_body(body, &allowed, index)
+                .map_or_else(|| rejected_note(body, &allowed), |call| call.name),
+        );
     }
     names.sort();
     names.dedup();
@@ -90,12 +104,7 @@ fn parse_body(body: &str, allowed: &HashSet<&str>, index: usize) -> Option<Model
     if body.is_empty() || body.len() > 20_000 {
         return None;
     }
-    static CALL: LazyLock<Regex> = LazyLock::new(|| {
-        fixed_regex(
-            r"(?is)^call\s*:\s*([A-Za-z_][A-Za-z0-9_.-]*(?::[A-Za-z_][A-Za-z0-9_.-]*)*)\s*(.*)$",
-        )
-    });
-    let (name, arguments) = if let Some(captures) = CALL.captures(body) {
+    let (name, arguments) = if let Some(captures) = call_pattern().captures(body) {
         let name = normalize(captures.get(1)?.as_str(), allowed)?;
         if !allowed.is_empty() && !allowed.contains(name.as_str()) {
             return None;
@@ -132,7 +141,12 @@ fn parse_body(body: &str, allowed: &HashSet<&str>, index: usize) -> Option<Model
             .or_else(|| function.and_then(|value| value.get("args")))
             .cloned()
             .unwrap_or_else(|| Value::Object(Map::new()));
-        (name, arguments.as_object().cloned().unwrap_or_default())
+        let arguments = if let Some(raw) = arguments.as_str() {
+            butler_turn::btcc::decode_object(raw)?
+        } else {
+            arguments.as_object()?.clone()
+        };
+        (name, arguments)
     };
     let raw = butler_core::json::stringify(&Value::Object(arguments.clone())).ok()?;
     Some(ModelRoundToolCall {
@@ -148,26 +162,6 @@ fn object_in(value: &str) -> Option<Map<String, Value>> {
     let start = value.find('{')?;
     let end = value.rfind('}')?;
     jsonish(&value[start..=end])
-}
-
-fn jsonish(value: &str) -> Option<Map<String, Value>> {
-    let value = butler_core::public_text::trim_js_whitespace(value);
-    if value.is_empty() || value.len() > 8_000 || !value.starts_with('{') || !value.ends_with('}') {
-        return None;
-    }
-    serde_json::from_str::<Value>(value)
-        .ok()
-        .and_then(|value| value.as_object().cloned())
-        .or_else(|| {
-            static KEYS: LazyLock<Regex> =
-                LazyLock::new(|| fixed_regex(r"([{,]\s*)([A-Za-z_][A-Za-z0-9_-]*)\s*:"));
-            static COMMAS: LazyLock<Regex> = LazyLock::new(|| fixed_regex(r",\s*([}\]])"));
-            let normalized = KEYS.replace_all(value, "$1\"$2\":");
-            let normalized = COMMAS.replace_all(&normalized, "$1");
-            serde_json::from_str::<Value>(&normalized)
-                .ok()
-                .and_then(|value| value.as_object().cloned())
-        })
 }
 
 fn normalize(value: &str, allowed: &HashSet<&str>) -> Option<String> {
@@ -377,4 +371,38 @@ fn first<'a>(text: &'a str, start: usize, markers: &[&'a str]) -> Option<(usize,
                 .map(|index| (start + index, *marker))
         })
         .min_by_key(|(index, _)| *index)
+}
+
+fn rejected_note(body: &str, allowed: &HashSet<&str>) -> String {
+    let readable = call_pattern()
+        .captures(body.trim())
+        .and_then(|captures| {
+            captures
+                .get(1)
+                .and_then(|name| normalize(name.as_str(), allowed))
+        })
+        .or_else(|| {
+            jsonish(body).and_then(|value| {
+                value
+                    .get("name")
+                    .or_else(|| value.get("tool_name"))
+                    .or_else(|| value.get("tool"))
+                    .or_else(|| value.get("function").filter(|f| f.is_string()))
+                    .or_else(|| value.get("function").and_then(|f| f.get("name")))
+                    .and_then(Value::as_str)
+                    .and_then(|name| normalize(name, allowed))
+            })
+        });
+    readable
+        .map(|name| format!("{name} (arguments were not one JSON object)"))
+        .unwrap_or_else(|| "invalid or oversized text tool call".into())
+}
+
+fn call_pattern() -> &'static Regex {
+    static CALL: LazyLock<Regex> = LazyLock::new(|| {
+        fixed_regex(
+            r"(?is)^call\s*:\s*([A-Za-z_][A-Za-z0-9_.-]*(?::[A-Za-z_][A-Za-z0-9_.-]*)*)\s*(.*)$",
+        )
+    });
+    &CALL
 }

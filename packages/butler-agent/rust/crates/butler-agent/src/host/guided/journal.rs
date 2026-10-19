@@ -58,7 +58,7 @@ impl JournalPort for GuidedJournal {
         Box::pin(async move {
             self.check_turn(invocation)?;
             Ok(TextCallDisposition::Continue(format!(
-                "You wrote these tool names as text: {}. They were not executed. Use the selected native tool-call definitions and schema-valid arguments, or answer directly when no tool is needed.",
+                "These tool calls were written as text and were not run: {}. Call the tool through the tool-call channel with one JSON object of arguments that matches its schema, or answer directly when no tool is needed.",
                 names.join(", ")
             )))
         })
