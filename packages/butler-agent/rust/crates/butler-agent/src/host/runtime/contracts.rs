@@ -62,7 +62,7 @@ pub(crate) struct AgentRuntime {
 }
 
 impl AgentRuntime {
-    pub(crate) async fn close(self) -> Result<(), BtccError> {
+    pub(crate) async fn close(&self) -> Result<(), BtccError> {
         crate::host::service::shutdown_trace::measure(
             "embedding_acquisition",
             self.memory_acquisition.close(),

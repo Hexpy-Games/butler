@@ -70,10 +70,12 @@ pub(crate) fn prepare_fresh_btcc_storage(
 pub(crate) fn prepare_btcc_storage(
     butler_data: &Path,
     runtime_version: &str,
+    on_full_validation: impl FnOnce(),
 ) -> Result<FreshStorageBootstrap, FreshStorageError> {
     let path = butler_data.join(butler_platform::data_paths::BTCC_DB);
     if path.exists() {
-        let manifest_id = begin_storage_startup(&path).map_err(FreshStorageError::Storage)?;
+        let manifest_id =
+            begin_storage_startup(&path, on_full_validation).map_err(FreshStorageError::Storage)?;
         return Ok(FreshStorageBootstrap { path, manifest_id });
     }
     prepare_fresh_btcc_storage(butler_data, runtime_version)

@@ -200,6 +200,7 @@ mod memory_stubs;
 #[path = "support/schedule_cassette.rs"]
 mod schedule_cassette;
 
+mod btcc_corrupt_startup;
 mod btcc_cutover;
 #[path = "support/btcc_scale.rs"]
 mod btcc_scale;
