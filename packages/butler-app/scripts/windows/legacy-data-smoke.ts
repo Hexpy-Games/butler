@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
-import { alive, bridge, click, ownedProcesses, powershell, readJson, waitFor } from "./installer-smoke-support.ts";
+import { alive, bridge, click, ownedProcesses, ownedSurvivors, ownedDiagnostics, powershell, readJson, waitFor, waitForOwnedExit, type OwnedProcesses } from "./installer-smoke-support.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
 
 if (process.platform !== "win32" || process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_ENVIRONMENT !== "github-hosted") {
@@ -19,7 +19,7 @@ assert.ok(existsSync(executable), "Portable Butler executable is missing");
 const root = mkdtempSync(join(tmpdir(), "butler-legacy-e2e-"));
 const home = join(root, "home");
 const data = join(home, ".butler");
-const owned = new Set<number>();
+const owned: OwnedProcesses = new Map();
 const debugPort = await freePort();
 const agentPort = await freePort();
 const env = { ...windowsPowerShellEnvironment(), HOME: home, USERPROFILE: home, BUTLER_DATA: data,
@@ -39,7 +39,6 @@ try {
   const original = snapshot(data);
   const app = launchInstalledApp(executable, debugPort, env, owned);
   assert.ok(app.pid, "Desktop did not spawn");
-  owned.add(app.pid);
   ownedProcesses(data, owned);
   page = await electronPage(debugPort);
   phase = "recovery copy";
@@ -80,7 +79,7 @@ try {
   phase = "recovery quit";
   await page.expression("setTimeout(() => window.butlerApp.quitApp({confirmed:true}), 50); true");
   page.close(); page = null;
-  await waitFor(() => [...owned].every(pid => !alive(pid)), "recovery App and Agent stopped");
+  await waitForOwnedExit(owned, "recovery App and Agent stopped");
   assert.equal(protocolRegistry(), registryBefore, "Protocol registry changed");
   console.log(JSON.stringify({ ok: true, legacyDataPreserved: true, recoveryCopy: ["ko", "en"],
     folderAction: true, restartToFreshAgent: true, protocolRegistryUnchanged: true, leftoverProcesses: 0,
@@ -91,14 +90,14 @@ try {
   console.error(JSON.stringify({ phase, page: await page?.diagnostics(),
     startup: readJson(join(data, "app/runtime/foreground/startup-progress.json")),
     failure: readJson(join(data, "app/runtime/foreground/startup-failure.json")),
-    owned: [...owned].map(pid => ({ pid, alive: alive(pid) })) }));
+    owned: ownedDiagnostics(owned) }));
   throw error;
 } finally {
   page?.close();
   ownPortableProcesses();
   ownedProcesses(data, owned);
-  for (const pid of owned) if (alive(pid)) { try { process.kill(pid, "SIGKILL"); } catch {} }
-  await waitFor(() => [...owned].every(pid => !alive(pid)), "legacy smoke process cleanup");
+  for (const { pid } of ownedSurvivors(owned)) { try { process.kill(pid, "SIGKILL"); } catch {} }
+  await waitForOwnedExit(owned, "legacy smoke process cleanup");
   await waitFor(() => closeOpenedFolder() === 0, "legacy folder window closed");
   rmSync(root, { recursive: true, force: true });
   assert.equal(protocolRegistry(), registryBefore, "Protocol registry changed during legacy smoke");
@@ -109,8 +108,8 @@ function ownPortableProcesses() {
   // This unique extracted executable belongs only to this disposable test.
   const pids = JSON.parse(powershell(`ConvertTo-Json -Compress -InputObject @(
     Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $env:BUTLER_LEGACY_EXECUTABLE } |
-      ForEach-Object { $_.ProcessId })`, { ...env, BUTLER_LEGACY_EXECUTABLE: executable }));
-  for (const pid of pids) owned.add(pid);
+      ForEach-Object { @{ pid = $_.ProcessId; created = ([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds() } })`, { ...env, BUTLER_LEGACY_EXECUTABLE: executable }));
+  for (const { pid, created } of pids) owned.set(pid, { created, notAfter: created });
 }
 
 function closeOpenedFolder(): number {

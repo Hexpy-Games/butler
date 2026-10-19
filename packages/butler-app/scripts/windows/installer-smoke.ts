@@ -9,7 +9,7 @@ import { dirname, join, resolve } from "node:path";
 import { electronProfilePage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
 import { FIRST_RUN_CONSENT_VERSION } from "../../client/ui/src/app/onboarding.ts";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
-import { alive, assertShortcuts, bridge, click, ownedProcesses, powershell, preserveInstallerLogs, readJson, removeProfile, shortcutPaths, versionProcesses, waitFor } from "./installer-smoke-support.ts";
+import { alive, assertShortcuts, bridge, click, ownedProcesses, ownedSurvivors, powershell, preserveInstallerLogs, readJson, removeProfile, shortcutPaths, versionProcesses, waitFor, waitForOwnedExit, type OwnedProcesses } from "./installer-smoke-support.ts";
 import { smokeProviderReply } from "./smoke-provider.ts";
 import { proveReleasedDownloads, releasedDownloadsReply, type DownloadsProof } from "./released-downloads-smoke.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
@@ -25,7 +25,7 @@ assert.match(from, /^0\.1\.0-preview\.\d+$/u);
 assert.match(to, /^0\.1\.0-preview\.\d+$/u);
 const root = realpathSync.native(mkdtempSync(join(tmpdir(), "butler-installer-e2e-")));
 const data = join(root, "data");
-const owned = new Set<number>();
+const owned: OwnedProcesses = new Map();
 let page: ElectronPage | null = null;
 let devToolsEndpoint: string | null = null;
 const calls = { chat: 0, memory: 0, memorySpeakers: new Set<string>() };
@@ -107,12 +107,14 @@ try {
   await stubChat(session.id);
   phase = "shell features";
   await shellFeatures(session.id);
+  ownedProcesses(data, owned);
   const oldPid = readJson(join(data, "app/runtime/foreground/instance.json"))!.app_pid;
   const oldBinary = agentPath(from);
   const oldHash = digest(oldBinary);
+  const oldApp: OwnedProcesses = new Map(owned.has(oldPid) ? [[oldPid, owned.get(oldPid)!]] : []);
   phase = "Settings update";
   await settingsUpdate();
-  await waitFor(() => !alive(oldPid), "old App quit");
+  await waitForOwnedExit(oldApp, "old App quit");
   page.close(); page = null;
   await waitFor(() => readJson(join(data, "app/runtime/foreground/instance.json"))?.app_pid !== oldPid &&
     readJson(join(data, "app/runtime/foreground/instance.json"))?.state === "ready", "replacement foreground Agent");
@@ -129,7 +131,7 @@ try {
   ownedProcesses(data, owned);
   await page.expression("setTimeout(() => window.butlerApp.quitApp({confirmed:true}), 50); true");
   page.close(); page = null;
-  await waitFor(() => [...owned].every(pid => !alive(pid)), "owned App/Agent shutdown");
+  await waitForOwnedExit(owned, "owned App/Agent shutdown");
   run(updater, ["--uninstall", "--silent"]);
   uninstalled = true;
   await waitFor(() => !existsSync(stub) && !existsSync(agentPath(to)), "uninstalled App removed");
@@ -174,11 +176,14 @@ async function cleanupInstaller() {
       const started = powershell(`$process = Get-Process -Id $env:BUTLER_INSTALLER_SETUP_PID -ErrorAction SilentlyContinue
         if ($process) { $process.StartTime.ToUniversalTime().ToString('o') }`,
       { ...env, BUTLER_INSTALLER_SETUP_PID: String(capture!.setup_pid) });
-      if (started === capture!.started_at) owned.add(capture!.setup_pid);
+      if (started === capture!.started_at) {
+        const created = Date.parse(started);
+        owned.set(capture!.setup_pid, { created, notAfter: created });
+      }
     }
     ownedProcesses(data, owned);
-    for (const pid of owned) if (alive(pid)) { try { process.kill(pid, "SIGKILL"); } catch {} }
-    await waitFor(() => [...owned].every(pid => !alive(pid)), "failed installer owned process cleanup");
+    for (const { pid } of ownedSurvivors(owned)) { try { process.kill(pid, "SIGKILL"); } catch {} }
+    await waitForOwnedExit(owned, "failed installer owned process cleanup");
     if (!uninstalled && existsSync(updater)) run(updater, ["--uninstall", "--silent"]);
   } catch (error) { errors.push(error); }
   for (const action of [
@@ -232,7 +237,7 @@ async function oneClickLaunch() {
   ownedProcesses(data, owned);
   await page.expression("setTimeout(() => window.butlerApp.quitApp({confirmed:true}), 50); true");
   page.close(); page = null;
-  await waitFor(() => [...owned].every(pid => !alive(pid)), "normal installation App quit");
+  await waitForOwnedExit(owned, "normal installation App quit");
   run(updater, ["--uninstall", "--silent"]);
   await waitFor(() => !existsSync(stub), "normal installation removed");
   console.log("PASS normal Setup installs and automatically launches the healthy App");
@@ -352,7 +357,7 @@ async function windowCloseAndRelaunch(sessionId: string) {
   // Windows X uses the normal Quit path, including foreground Agent shutdown.
   await page!.expression(`setTimeout(() => ${closeButton}.click(), 50); true`);
   page!.close(); page = null;
-  await waitFor(() => [...owned].every(pid => !alive(pid)), "window close shuts down App and Agent");
+  await waitForOwnedExit(owned, "window close shuts down App and Agent");
   const stopped = readJson(join(data, "app/runtime/foreground/instance.json"))!;
   assert.equal(stopped.state, "stopped"); assert.equal(stopped.clean_exit, true);
   const exit = readJson(join(data, "app/runtime/foreground/last-exit.json"))!;
