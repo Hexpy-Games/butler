@@ -1,13 +1,17 @@
 //! Provider history only: journaled observations and receipts remain immutable.
 use super::contracts::{ModelRoundMessage, ModelRoundRole, ModelRoundToolCall};
 use serde_json::{Value, json};
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
+mod prune;
+use prune::Stale;
+pub(super) use prune::{BrowserPrune, prune};
 mod summary;
 mod zoom;
 
-// Text snapshots collapse immediately: cached stale snapshots still cost tokens
-// and occupy the window. Only the cycle being replaced invalidates the prefix.
-const STALE_FULL_BUDGET_BYTES: usize = 0;
+// Stale browser results stay byte-identical until their estimated size passes
+// the budget; one prune then stubs every stale result since the previous prune.
+// Gemini and Anthropic reuse a cache entry only where an earlier request ended,
+// so rewriting one stale result per round would miss the cache every round.
 
 struct Cycle {
     obs_index: usize,
@@ -19,15 +23,15 @@ struct Cycle {
 struct History {
     tabs: HashMap<String, Vec<Cycle>>,
     latest_acts: HashMap<String, usize>,
-    acts: Vec<(usize, ModelRoundToolCall, Value)>,
+    acts: Vec<(usize, String, ModelRoundToolCall, Value)>,
 }
 
-fn history(messages: &mut [ModelRoundMessage]) -> History {
+fn history(messages: &[ModelRoundMessage]) -> History {
     let mut calls = HashMap::new();
     let mut tabs: HashMap<String, Vec<Cycle>> = HashMap::new();
     let mut latest_acts = HashMap::new();
     let mut acts = Vec::new();
-    for (index, message) in messages.iter_mut().enumerate() {
+    for (index, message) in messages.iter().enumerate() {
         for call in message.tool_calls.iter().flatten() {
             if let Some(call) = browser_call(call) {
                 calls.insert(call.id.clone(), call);
@@ -45,10 +49,10 @@ fn history(messages: &mut [ModelRoundMessage]) -> History {
         {
             continue;
         }
-        let Ok(mut value) = serde_json::from_str::<Value>(&message.content) else {
+        let Ok(value) = serde_json::from_str::<Value>(&message.content) else {
             continue;
         };
-        let Some(output) = value.get_mut("output") else {
+        let Some(output) = value.get("output") else {
             continue;
         };
         let observation = field(output, "schema") == "butler.browser-observation.v1";
@@ -56,7 +60,6 @@ fn history(messages: &mut [ModelRoundMessage]) -> History {
         if !observation && !action {
             continue;
         }
-        message.image_attachments.clear();
         let Some(tab) = field(output, "tab")
             .as_str()
             .or_else(|| call?.arguments.get("tab")?.as_str())
@@ -66,16 +69,11 @@ fn history(messages: &mut [ModelRoundMessage]) -> History {
         };
         if observation {
             let call = call.filter(|call| call.name == "browser_act");
-            open_cycle(&mut tabs, message, &mut value, (index, tab), call);
-        } else {
-            if strip_desktop_stills(output) {
-                message.content = value.to_string().into();
-            }
-            if let Some(call) = call {
-                attach_act(&mut tabs, &tab, index, call, field(&value, "output"));
-                latest_acts.insert(tab, index);
-                acts.push((index, call.clone(), value));
-            }
+            open_cycle(&mut tabs, &value, (index, tab), call);
+        } else if let Some(call) = call {
+            attach_act(&mut tabs, &tab, index, call, field(&value, "output"));
+            latest_acts.insert(tab.clone(), index);
+            acts.push((index, tab, call.clone(), value));
         }
     }
     History {
@@ -89,18 +87,14 @@ fn history(messages: &mut [ModelRoundMessage]) -> History {
 /// also acted on the source cycle.
 fn open_cycle(
     tabs: &mut HashMap<String, Vec<Cycle>>,
-    message: &mut ModelRoundMessage,
-    value: &mut Value,
+    value: &Value,
     (index, tab): (usize, String),
     act: Option<&ModelRoundToolCall>,
 ) {
     if let Some(call) = act
-        && let Some(output) = value.get_mut("output")
+        && let Some(output) = value.get("output")
         && output.get("action").is_some()
     {
-        if strip_desktop_stills(output) {
-            message.content = value.to_string().into();
-        }
         attach_act(
             tabs,
             &tab,
@@ -119,60 +113,51 @@ fn open_cycle(
     }
 }
 
-pub(super) fn supersede(messages: &mut [ModelRoundMessage]) {
+fn plan(messages: &[ModelRoundMessage]) -> Vec<Stale> {
     let History {
         tabs,
         latest_acts,
         acts,
     } = history(messages);
+    let mut stale = Vec::new();
     for (tab, cycles) in &tabs {
-        let mut budget = STALE_FULL_BUDGET_BYTES;
         for (cycle, next) in cycles.iter().zip(cycles.iter().skip(1)).rev() {
-            let Some(message) = messages.get_mut(cycle.obs_index) else {
+            let Some(message) = messages.get(cycle.obs_index) else {
                 continue;
             };
-            // A stub never changes once written: rewriting it would move the
-            // provider prefix to this point on every later round.
-            if is_superseded(&message.content) {
-                continue;
+            if !is_superseded(&message.content) {
+                stale.push(Stale::new(
+                    cycle.obs_index,
+                    message,
+                    replace_observation(cycle, tab, &next.obs_id),
+                ));
             }
-            if message.content.len() <= budget {
-                budget -= message.content.len();
-                continue;
-            }
-            replace_observation(message, cycle, tab, &next.obs_id);
-            message.image_attachments.clear();
         }
     }
-    for (index, call, value) in acts {
-        let Some(message) = messages.get_mut(index) else {
+    for (index, tab, call, value) in acts {
+        let Some(message) = messages.get(index) else {
             continue;
         };
-        if latest_acts.get(
-            call.arguments
-                .get("tab")
-                .and_then(Value::as_str)
-                .unwrap_or_default(),
-        ) == Some(&index)
-            || is_superseded(&message.content)
-        {
+        if latest_acts.get(&tab) == Some(&index) || is_superseded(&message.content) {
             continue;
         }
         let output = field(&value, "output");
-        message.content = json!({"ok":field(&value, "ok"),"output":{"schema":"butler.browser-action.v1","obs":call.arguments.get("observation"),"status":field(output, "status"),"steps":summary::steps(output),"superseded":true}}).to_string().into();
+        let stub = json!({"ok":field(&value, "ok"),"output":{"schema":"butler.browser-action.v1","obs":call.arguments.get("observation"),"status":field(output, "status"),"steps":summary::steps(output),"superseded":true}}).to_string().into();
+        stale.push(Stale::new(index, message, stub));
     }
-    zoom::supersede(messages);
+    stale.extend(zoom::plan(messages));
+    stale
 }
 
 /// `superseded_by` names the observation that replaced this one (the next
 /// cycle of the tab), so the stub is final when written.
-fn replace_observation(message: &mut ModelRoundMessage, cycle: &Cycle, tab: &str, next: &str) {
-    message.content = json!({"ok":true,"output":{"schema":"butler.browser-observation.v1",
+fn replace_observation(cycle: &Cycle, tab: &str, next: &str) -> Arc<str> {
+    json!({"ok":true,"output":{"schema":"butler.browser-observation.v1",
         "obs":cycle.obs_id,"status":"superseded","acted":cycle.acted.join("; "),
         "tab":tab,"superseded_by":next,
         "recovery":"This is replaced history, not a tool failure or lost observation. Use the newest observation of this tab. Call browser_observe again if fresh state is needed; continue the unfinished page interaction."}})
     .to_string()
-    .into();
+    .into()
 }
 
 fn attach_act(

@@ -75,8 +75,11 @@ async fn browser_batch_observes_after_keyboard_and_path_steps() -> Result<(), Ha
         .iter()
         .filter(|item| item["output"].to_string().contains("input_image"))
         .count();
-    assert_eq!(images, 1, "only the newest observation keeps pixels");
-    assert!(last.to_string().contains("superseded_by"));
+    assert_eq!(images, 3, "under-budget observations retain their pixels");
+    for previous in &requests[1..] {
+        let input = previous["input"].as_array().unwrap();
+        assert_eq!(&last["input"].as_array().unwrap()[..input.len()], input);
+    }
     let latest = act_output(&requests[requests.len() - 2]);
     assert_eq!(latest["output"]["obs"], "obs-3");
     assert_eq!(latest["output"]["action"]["status"], "interrupted");

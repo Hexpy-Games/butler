@@ -39,6 +39,7 @@ impl TurnContextProjection for Context {
                 )))
             } else {
                 Ok(ContextProjection {
+                    compacted_through: None,
                     messages: super::ContextMessages::Transport,
                     bounded_continuation: None,
                     provider_body_admission: None,
@@ -132,6 +133,8 @@ async fn failed_round(failure: Failure, cleanup_error: bool) -> (AgentLoopError,
         .await
         .unwrap();
     let mut state = State {
+        browser_prune: Default::default(),
+        compacted_through: 0,
         messages: vec![super::ModelRoundMessage::user("hello".into(), None)],
         tool_results: vec![],
         provider_continuation: None,

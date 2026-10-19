@@ -41,6 +41,7 @@ mod browser_long;
 mod browser_naver;
 mod browser_outputs;
 mod browser_parallel;
+mod browser_prefix;
 mod browser_preview;
 mod browser_round2;
 mod browser_selection;
