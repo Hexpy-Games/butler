@@ -64,6 +64,7 @@ mod durable_files;
 mod embed_download;
 mod error_library;
 mod favicons;
+mod full_reset;
 mod gateway_browser;
 #[path = "gateway_pairing.rs"]
 mod gateway_pairing;

@@ -74,3 +74,21 @@ fn mcp_save_error(
     };
     GatewayApplicationError::public(status, code, error.to_string()).with_source(error)
 }
+
+impl super::AppApplication {
+    pub(super) fn list_mcp_servers_owned(
+        &self,
+    ) -> crate::gateway::ApplicationFuture<serde_json::Value> {
+        let client = self.dependencies.mcp_client.clone();
+        Box::pin(async move {
+            client.list_servers().map_err(|source| {
+                GatewayApplicationError::public(
+                    500,
+                    "mcp_registry_unavailable",
+                    "MCP server registry is unavailable.",
+                )
+                .with_source(source)
+            })
+        })
+    }
+}

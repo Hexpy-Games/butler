@@ -78,9 +78,9 @@ impl Logger {
             ));
         }
         let storage = if owner {
-            Storage::open(data.join("logs"), &config)?
+            Storage::open(data.join(butler_platform::data_paths::LOGS), &config)?
         } else {
-            Storage::producer(data.join("logs"), &config)?
+            Storage::producer(data.join(butler_platform::data_paths::LOGS), &config)?
         };
         let initial_full = config.level == Preset::Full;
         let config = if initial_full {

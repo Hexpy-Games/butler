@@ -28,7 +28,7 @@ impl WorkRecordReader {
     /// A reader over the Butler data directory.
     pub fn new(butler_data: &Path) -> Self {
         Self {
-            tasks: butler_data.join("tasks"),
+            tasks: butler_data.join(butler_platform::data_paths::TASKS),
         }
     }
 

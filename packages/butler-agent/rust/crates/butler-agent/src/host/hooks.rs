@@ -37,7 +37,7 @@ impl Dispatcher {
         shutdown: CancellationToken,
     ) -> Self {
         let hooks = Arc::new(Hooks {
-            path: data.join("hooks.json"),
+            path: data.join(butler_platform::data_paths::HOOKS),
             home: butler_platform::user_dirs::home_dir().unwrap_or_else(|| data.clone()),
             environment: butler_platform::command_sandbox::tool_environment(environment),
             events: AtomicU8::new(0),

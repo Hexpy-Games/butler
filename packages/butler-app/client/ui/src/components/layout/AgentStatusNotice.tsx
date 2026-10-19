@@ -18,14 +18,18 @@ export function AgentStatusNotice({ notice }: { notice: AgentNotice }) {
       .finally(() => setStarting(false));
   };
   const restarting = notice === "restarting";
+  // After a reset this browser session is gone; reloading leads to the connection screen.
+  const reset = notice === "reset";
   return (
     <Box paddingX="md" paddingY="sm" role="status" aria-live="polite"
       data-test-class="agent-status-notice">
       <Notice
-        tone={restarting ? "info" : notice === "stopped" ? "warning" : "error"}
+        tone={restarting || reset ? "info" : notice === "stopped" ? "warning" : "error"}
         icon={restarting ? <Spinner /> : <CircleAlert size="lg" />}
         message={agentNoticeLabel(notice)}
-        action={restarting ? undefined : (
+        action={restarting ? undefined : reset ? (
+          <Button size="sm" variant="outline" onClick={() => window.location.reload()}>{appCopy.feedback.reconnect}</Button>
+        ) : (
           <Button size="sm" variant="outline" disabled={starting} onClick={start}>
             {notice === "stopped" ? appCopy.feedback.agentStart : appCopy.feedback.retry}
           </Button>

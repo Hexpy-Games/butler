@@ -18,7 +18,7 @@ pub(super) fn cleanup_old_tasks(
     data_root: &Path,
     installation: &ResolvedInstallation,
 ) -> Result<usize, crate::host::HostError> {
-    let tasks_root = data_root.join("tasks");
+    let tasks_root = data_root.join(butler_platform::data_paths::TASKS);
     validate_under_data(data_root, &tasks_root, installation)?;
     let lock_path = data_root.join(LOCK_RELATIVE_PATH);
     let lock_parent = lock_path

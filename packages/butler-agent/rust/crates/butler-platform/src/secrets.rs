@@ -24,7 +24,7 @@ use zeroize::Zeroizing;
 use crate::secure_fs;
 
 mod file;
-#[cfg(all(windows, feature = "test-support"))]
+#[cfg(all(not(target_os = "macos"), feature = "test-support"))]
 mod test_file;
 #[cfg(feature = "test-support")]
 mod test_keychain;
@@ -262,7 +262,7 @@ pub struct SecretStore {
 #[derive(Clone)]
 enum Inner {
     System(Arc<keyring_core::CredentialStore>),
-    #[cfg(all(windows, feature = "test-support"))]
+    #[cfg(all(not(target_os = "macos"), feature = "test-support"))]
     TestFile(Arc<test_file::TestSecrets>),
     File(Arc<file::FileSecrets>),
 }
@@ -283,7 +283,7 @@ impl SecretStore {
     /// its [`SecretError::AccessDenied`]. May block, and on a desktop may ask
     /// the user to unlock the store.
     pub fn system() -> Result<Self, SecretError> {
-        #[cfg(all(windows, feature = "test-support"))]
+        #[cfg(all(not(target_os = "macos"), feature = "test-support"))]
         if let Some(path) = std::env::var_os("BUTLER_TEST_SECRET_STORE") {
             return test_file::open(Path::new(&path));
         }
@@ -320,7 +320,7 @@ impl SecretStore {
                 Err(keyring_core::Error::NoEntry) => Ok(None),
                 Err(error) => Err(store_error(error)),
             },
-            #[cfg(all(windows, feature = "test-support"))]
+            #[cfg(all(not(target_os = "macos"), feature = "test-support"))]
             Inner::TestFile(file) => file.get(key),
             Inner::File(file) => file.get(key),
         }
@@ -332,7 +332,7 @@ impl SecretStore {
             Inner::System(store) => entry(store.as_ref(), key)?
                 .set_password(secret)
                 .map_err(store_error),
-            #[cfg(all(windows, feature = "test-support"))]
+            #[cfg(all(not(target_os = "macos"), feature = "test-support"))]
             Inner::TestFile(file) => file.set(key, secret),
             Inner::File(file) => file.set(key, secret),
         }
@@ -346,7 +346,7 @@ impl SecretStore {
                 Err(keyring_core::Error::NoEntry) => Ok(false),
                 Err(error) => Err(store_error(error)),
             },
-            #[cfg(all(windows, feature = "test-support"))]
+            #[cfg(all(not(target_os = "macos"), feature = "test-support"))]
             Inner::TestFile(file) => file.delete(key),
             Inner::File(file) => file.delete(key),
         }
