@@ -46,7 +46,9 @@ async fn wait_ready(
     loop {
         let deadline = match *timing.borrow_and_update() {
             Correction::Pending => original,
-            Correction::Running(start) => start + Duration::from_secs(180) + STARTUP_TIMEOUT,
+            Correction::Validating(start) | Correction::Running(start) => {
+                start + Duration::from_secs(180) + STARTUP_TIMEOUT
+            }
             Correction::Finished(end) => original.max(end + STARTUP_TIMEOUT),
         };
         tokio::select! {

@@ -1,4 +1,5 @@
 //! Persisted corruption verdicts fail closed without opening the recorded file.
+mod recovery;
 mod shutdown;
 use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use rusqlite::Connection;
@@ -12,6 +13,14 @@ use std::{
 const CORRUPTION: &str = "agent_btcc_storage_quick_check_failed";
 
 pub(super) fn write_verdict(path: &Path, different: bool) -> Result<(), HarnessError> {
+    std::fs::write(
+        path.with_extension("sqlite.corrupt"),
+        verdict_contents(path, different, CORRUPTION)?,
+    )?;
+    Ok(())
+}
+
+fn verdict_contents(path: &Path, different: bool, code: &str) -> Result<String, HarnessError> {
     let metadata = std::fs::metadata(path)?;
     let identity = butler_platform::secure_fs::identity(&metadata);
     let raw = serde_json::json!({
@@ -19,11 +28,7 @@ pub(super) fn write_verdict(path: &Path, different: bool) -> Result<(), HarnessE
         "modified": identity.modified.map(|time| (time.seconds, time.nanoseconds)),
         "file_id": identity.id.map(|id| (id.device, id.inode)),
     });
-    std::fs::write(
-        path.with_extension("sqlite.corrupt"),
-        format!("{CORRUPTION}\n{raw}"),
-    )?;
-    Ok(())
+    Ok(format!("{code}\n{raw}"))
 }
 
 fn digest(path: &Path) -> Result<(u64, String), HarnessError> {

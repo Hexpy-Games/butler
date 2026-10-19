@@ -51,6 +51,13 @@ async fn corruption_during_writes_and_active_turn_seals_final_identity() -> Resu
     drop(db);
     let _ = std::fs::remove_file(path.with_extension("sqlite.verified"));
     std::fs::remove_file(&marker)?;
+    let release = s.sandbox.root.join("scan-release");
+    s.agent
+        .launch
+        .set_env("BUTLER_E2E_HOLD_POINT", "btcc_validation");
+    s.agent
+        .launch
+        .set_env("BUTLER_E2E_HOLD_RELEASE", release.to_string_lossy());
     s.gw = s.agent.start_again().await?;
     s.provider()?.set_pacing(Pacing {
         scale: 1.0,
@@ -64,6 +71,11 @@ async fn corruption_during_writes_and_active_turn_seals_final_identity() -> Resu
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     assert_eq!(s.provider()?.served(), 1, "turn must be streaming");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !release.with_extension("held").exists() && Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(release.with_extension("held").exists(), "scan must be held");
     let reader = Connection::open(&path)?;
     reader.execute_batch("BEGIN; SELECT COUNT(*) FROM btcc_records")?;
     let writer = Connection::open(&path)?;
@@ -71,27 +83,42 @@ async fn corruption_during_writes_and_active_turn_seals_final_identity() -> Resu
     let started = Instant::now();
     let mut writes = 0;
     let verdict = path.with_extension("sqlite.corrupt");
-    while !verdict.exists() && started.elapsed() < Duration::from_secs(15) {
+    while std::fs::metadata(path.with_extension("sqlite-wal"))?.len() <= 16_777_216
+        && started.elapsed() < Duration::from_secs(15)
+    {
         writer.execute(
             "INSERT INTO btcc_records VALUES(?1,'fixture','fixture',?2)",
             rusqlite::params![format!("concurrent-{writes}"), "x".repeat(1_000_000)],
         )?;
         writes += 1;
-        tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    assert!(verdict.exists(), "background scan must report corruption");
-    assert!(std::fs::metadata(path.with_extension("sqlite-wal"))?.len() > 16_384_000);
-    let scan_verdict = std::fs::read(&verdict)?;
+    assert!(
+        std::fs::metadata(path.with_extension("sqlite-wal"))?.len() > 16_777_216,
+        "WAL must grow past the checkpoint ceiling before releasing validation"
+    );
+    // External commits do not invoke the agent's WAL hook. Release both handles
+    // before validation resumes, leaving the drain commit to checkpoint the WAL.
     drop(reader);
     drop(writer);
+    assert!(
+        !verdict.exists(),
+        "scan cannot finish before handle release"
+    );
+    let scan_verdict =
+        verdict_contents(&path, false, "agent_btcc_storage_foreign_key_check_failed")?;
+    std::fs::write(&release, b"release")?;
     while s.agent.is_running() && started.elapsed() < Duration::from_secs(20) {
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     assert!(!s.agent.is_running());
     assert!(s.agent.reap().is_some_and(|status| !status.success()));
+    let final_verdict = std::fs::read_to_string(&verdict)?;
+    let (code, final_identity) = final_verdict.split_once('\n').unwrap_or_default();
+    assert_eq!(code, "agent_btcc_storage_foreign_key_check_failed");
+    let (_, scan_identity) = scan_verdict.split_once('\n').unwrap_or_default();
     assert_ne!(
-        std::fs::read(&verdict)?,
-        scan_verdict,
+        serde_json::from_str::<serde_json::Value>(final_identity)?,
+        serde_json::from_str::<serde_json::Value>(scan_identity)?,
         "shutdown checkpoint must change the recorded identity"
     );
     let log = std::fs::read_to_string(s.sandbox.logs.join("agent-2.log"))?;

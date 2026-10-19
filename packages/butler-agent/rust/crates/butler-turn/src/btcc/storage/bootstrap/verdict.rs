@@ -57,7 +57,7 @@ fn physical_code(code: &str) -> Option<StorageCode> {
     .find(|candidate| candidate.as_str() == code)
 }
 
-/// Called only after the writer connection and its checkpoint worker have closed.
+/// Called after the writer and checkpoint worker have attempted to close.
 pub(in crate::btcc::storage) fn refresh_after_close(path: &Path) {
     if let Ok(raw) = std::fs::read_to_string(sidecar(path, "corrupt"))
         && let Some(code) = physical_code(raw.lines().next().unwrap_or_default())

@@ -39,10 +39,11 @@ impl Trace {
     }
 }
 
-/// In-process correction timing survives removal of the external progress sidecar.
+/// In-process storage timing survives removal of the external progress sidecar.
 #[derive(Clone, Copy)]
 pub(crate) enum Correction {
     Pending,
+    Validating(Instant),
     Running(Instant),
     Finished(Instant),
 }

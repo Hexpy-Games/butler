@@ -140,6 +140,9 @@ async fn open_btcc(
             eprintln!("Sandbox startup reconciliation failed: {error}");
         }
         trace.phase("sandbox_reconcile");
+        timing.send_replace(super::startup_trace::Correction::Validating(
+            std::time::Instant::now(),
+        ));
         let bootstrap = prepare_btcc_storage(&root, crate::host::build_info::current().version)
             .map_err(|e| error("storage_bootstrap_failed", e))?;
         // Only an accepted data folder receives the sandbox probe hint.

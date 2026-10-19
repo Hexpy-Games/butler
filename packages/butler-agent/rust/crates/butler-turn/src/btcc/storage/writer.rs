@@ -94,9 +94,7 @@ pub(super) fn close(
     let closed = connection
         .close()
         .map_err(|(_, error)| StorageError::sqlite(error));
-    if closed.is_ok()
-        && let Some(path) = path
-    {
+    if let Some(path) = path {
         bootstrap::refresh_after_close(&path);
     }
     checkpoint
