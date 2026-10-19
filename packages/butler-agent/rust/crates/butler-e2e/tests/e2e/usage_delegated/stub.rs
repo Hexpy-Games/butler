@@ -4,8 +4,8 @@ use butler_e2e::e2e::{HarnessError, matching, sanitize::Placeholders};
 use serde_json::{Value, json};
 use std::{collections::HashMap, fmt::Write, sync::{Arc, Mutex}};
 #[derive(Default)]
-pub struct Script { steps: Mutex<HashMap<String, usize>>, pub calls: Mutex<Vec<(String,u64,u64)>> }
-pub async fn start() -> Result<(String, Arc<Script>, tokio::task::JoinHandle<()>), HarnessError> {
+pub(super) struct Script { steps: Mutex<HashMap<String, usize>>, pub(super) calls: Mutex<Vec<(String,u64,u64)>> }
+pub(super) async fn start() -> Result<(String, Arc<Script>, tokio::task::JoinHandle<()>), HarnessError> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let url = format!("http://{}/codex", listener.local_addr()?);
     let script = Arc::new(Script::default());
