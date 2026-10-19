@@ -110,7 +110,8 @@ impl ModelProvider {
                 include_summary,
             )
             .await?;
-        let watch = StreamWatch::new(request.stream_observer).with_summary(prepared.summary);
+        let watch = StreamWatch::new(request.stream_observer)
+            .with_summary(prepared.summary, request.round_id);
         let sent = self
             .dispatch(&request, &config, (carrier, mode, api), &watch, prepared)
             .await;
@@ -194,6 +195,10 @@ impl ModelProvider {
             request,
             prepared.continuation,
         );
+        if prepared.summary {
+            result.reasoning_summary =
+                super::thinking_summary::extract(result.raw.as_ref(), prepared.carrier);
+        }
         if let Some(binding) = &prepared.thinking_binding {
             super::anthropic_thinking::bind(&mut result, binding);
         }

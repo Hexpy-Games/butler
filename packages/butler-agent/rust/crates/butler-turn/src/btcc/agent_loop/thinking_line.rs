@@ -8,7 +8,9 @@ const TAIL_BYTES: usize = 16 * 1024;
 #[derive(Default)]
 pub(super) struct ThinkingLine {
     stream: Option<String>,
+    round_id: String,
     tail: String,
+    body: String,
     shown: Option<String>,
     summary_shown: String,
     summary_pending: bool,
@@ -25,6 +27,7 @@ impl ThinkingLine {
     }
     pub(super) async fn push(
         &mut self,
+        round_id: String,
         stream: String,
         text: &str,
         progress: &dyn AgentLoopProgress,
@@ -33,12 +36,20 @@ impl ThinkingLine {
             self.clear(progress).await;
             *self = Self {
                 stream: Some(stream),
+                round_id,
                 ..Self::default()
             };
         }
         if self.closed {
             return;
         }
+        let mut end = text
+            .len()
+            .min((64 * 1024usize).saturating_sub(self.body.len()));
+        while !text.is_char_boundary(end) {
+            end -= 1;
+        }
+        self.body.push_str(&text[..end]);
         if text.len() >= TAIL_BYTES {
             self.tail.clear();
         }
@@ -46,7 +57,7 @@ impl ThinkingLine {
         let retained = tail(&self.tail, TAIL_BYTES - text.len()).len();
         self.tail.drain(..self.tail.len() - retained);
         self.tail.push_str(text);
-        self.summary_pending = self.tail != self.summary_shown;
+        self.summary_pending = self.body != self.summary_shown;
         self.pending =
             derive(tail(&self.tail, 4096)).filter(|line| Some(line) != self.shown.as_ref());
         if self
@@ -67,9 +78,14 @@ impl ThinkingLine {
                 self.last = Some(Instant::now());
             }
             let _ = progress
-                .model_thinking(stream.clone(), self.shown.clone(), Some(self.tail.clone()))
+                .model_thinking(
+                    self.round_id.clone(),
+                    stream.clone(),
+                    self.shown.clone(),
+                    Some(self.body.clone()),
+                )
                 .await;
-            self.summary_shown.clone_from(&self.tail);
+            self.summary_shown.clone_from(&self.body);
             self.summary_pending = false;
             self.summary_last = Some(Instant::now());
         }
@@ -77,12 +93,15 @@ impl ThinkingLine {
     pub(super) async fn clear(&mut self, progress: &dyn AgentLoopProgress) {
         self.pending = None;
         self.tail.clear();
+        self.body.clear();
         self.summary_pending = false;
         self.closed = true;
         if (self.shown.take().is_some() || !self.summary_shown.is_empty())
             && let Some(stream) = &self.stream
         {
-            let _ = progress.model_thinking(stream.clone(), None, None).await;
+            let _ = progress
+                .model_thinking(self.round_id.clone(), stream.clone(), None, None)
+                .await;
         }
         self.summary_shown.clear();
     }
@@ -97,62 +116,4 @@ fn tail(text: &str, bytes: usize) -> &str {
     }
     &text[start..]
 }
-fn heading(line: &str) -> Option<&str> {
-    let line = line.trim();
-    if let Some(rest) = line.strip_prefix("**") {
-        return rest.strip_suffix("**").filter(|rest| !rest.is_empty());
-    }
-    let rest = line.trim_start_matches('#');
-    (rest.len() != line.len() && rest.starts_with(char::is_whitespace)).then_some(rest)
-}
-fn derive(tail: &str) -> Option<String> {
-    let complete = tail.rsplit_once('\n').map_or("", |(complete, _)| complete);
-    let line = tail
-        .lines()
-        .rev()
-        .find_map(heading)
-        .or_else(|| complete.lines().rev().find(|line| !line.trim().is_empty()))?;
-    let plain = strip_markdown(line);
-    let collapsed = plain.split_whitespace().collect::<Vec<_>>().join(" ");
-    let mut units = 0;
-    let capped: String = collapsed
-        .chars()
-        .take_while(|c| {
-            units += c.len_utf16();
-            units <= 120
-        })
-        .collect();
-    (!capped.is_empty()).then_some(capped)
-}
-fn strip_markdown(line: &str) -> String {
-    let mut plain = String::new();
-    let mut chars = line
-        .trim()
-        .trim_start_matches(['#', '>', '-', '+'])
-        .chars()
-        .peekable();
-    while let Some(c) = chars.next() {
-        if matches!(c, '*' | '_' | '`' | '~' | '[' | ']') {
-            continue;
-        }
-        if c == '(' && plain.ends_with(|c: char| !c.is_whitespace()) {
-            let rest: String = chars.clone().collect();
-            if rest.starts_with("http://") || rest.starts_with("https://") {
-                for c in chars.by_ref() {
-                    if c == ')' {
-                        break;
-                    }
-                }
-                continue;
-            }
-        }
-        if c == '\\' {
-            if let Some(next) = chars.next() {
-                plain.push(next);
-            }
-        } else {
-            plain.push(c);
-        }
-    }
-    plain
-}
+use crate::btcc::thinking::derive;

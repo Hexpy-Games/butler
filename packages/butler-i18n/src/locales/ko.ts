@@ -758,7 +758,7 @@ export const koKrCopy: AppCopy = {
 rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으로 정리했습니다.`, relocationDescription: (source, target) => `${source} 대화를 ${target}(으)로 이동합니다. 대화 기록과 기존 파일은 보존되며, 이후 작업은 새 소속의 작업 폴더와 프로젝트 지식을 사용합니다. 진행 중인 작업이 있으면 완료한 뒤 이동할 수 있습니다.`,
   },
   interfaceStatus: {
-    thinkingSummary: "생각 요약",
+    thinking: "생각",
     generalCategory: "일반",
     countSummary: (kind, count, truncated) => `${({ filesRead: "파일 읽기", files: "파일 목록", matches: "검색 결과", documents: "문서 목록", results: "조회 결과" })[kind]} · ${count}${kind === "matches" ? "건" : "개"}${truncated ? " · 일부 결과" : ""}`,
     bytes: (count) => `${count.toLocaleString("ko-KR")}바이트`,

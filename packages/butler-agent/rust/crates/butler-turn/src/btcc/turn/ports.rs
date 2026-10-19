@@ -113,9 +113,15 @@ pub trait AgentLoopProgress: Send + Sync {
     /// Publishes one progress event.
     fn emit(&self, event: crate::btcc::RuntimeTurnEventInput) -> PortFuture<'_, ()>;
 
+    /// Whether this App turn may store display summaries at round completion.
+    fn thinking_capture(&self) -> bool {
+        false
+    }
+
     /// Ephemeral user-facing summary line. Never append durable events or log its text.
     fn model_thinking(
         &self,
+        _round_id: String,
         _stream_id: String,
         _line: Option<String>,
         _summary: Option<String>,

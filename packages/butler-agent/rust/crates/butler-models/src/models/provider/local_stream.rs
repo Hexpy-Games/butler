@@ -82,6 +82,7 @@ pub(super) struct StreamWatch<'a> {
     streamed: AtomicBool,
     tools_observed: AtomicBool,
     summary: bool,
+    round_id: Option<&'a str>,
 }
 
 impl<'a> StreamWatch<'a> {
@@ -91,11 +92,13 @@ impl<'a> StreamWatch<'a> {
             streamed: AtomicBool::new(false),
             tools_observed: AtomicBool::new(false),
             summary: false,
+            round_id: None,
         }
     }
 
-    pub(super) fn with_summary(mut self, summary: bool) -> Self {
+    pub(super) fn with_summary(mut self, summary: bool, round_id: Option<&'a str>) -> Self {
         self.summary = summary;
+        self.round_id = round_id;
         self
     }
 
@@ -164,9 +167,12 @@ impl ProviderStreamObserver for StreamWatch<'_> {
             self.streamed.store(true, Ordering::Release);
         }
         if let Some(inner) = self.inner {
-            if event["type"] == "reasoning_delta" && !self.summary {
+            if event["type"] == "reasoning_delta" {
                 let mut event = event.clone();
-                event["display"] = "internal".into();
+                if !self.summary {
+                    event["display"] = "internal".into();
+                }
+                event["roundId"] = self.round_id.into();
                 inner.event(&event);
             } else {
                 inner.event(event);

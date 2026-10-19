@@ -728,7 +728,7 @@ export interface AppCopy {
     relocationDescription: (source: string, target: string) => string;
   };
   interfaceStatus: {
-    thinkingSummary: string;
+    thinking: string;
     generalCategory: string;
     countSummary: (kind: "filesRead" | "files" | "matches" | "documents" | "results", count: string | number, truncated?: boolean) => string;
     bytes: (count: number) => string;

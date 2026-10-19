@@ -61,6 +61,7 @@ pub(super) fn decode(
     retain_rejected_text(&mut continuation, text.as_deref(), &text_tool_call_names);
     ModelRoundResult {
         nonfinal: nonfinal(&response, carrier),
+        reasoning_summary: None,
         text,
         tool_calls: calls,
         text_tool_call_names,

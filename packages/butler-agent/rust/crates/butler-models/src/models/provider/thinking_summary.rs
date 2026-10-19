@@ -49,3 +49,45 @@ pub(super) fn requested(body: &serde_json::Value, provider: &str) -> bool {
         _ => false,
     }
 }
+
+/// Extract only provider-documented display summaries, never raw reasoning.
+pub(super) fn extract(
+    response: Option<&serde_json::Value>,
+    carrier: super::serialize::Carrier,
+) -> Option<String> {
+    let value = response?;
+    let parts = match carrier {
+        super::serialize::Carrier::Responses => value["output"]
+            .as_array()?
+            .iter()
+            .filter(|v| v["type"] == "reasoning")
+            .flat_map(|v| v["summary"].as_array().into_iter().flatten())
+            .filter(|v| v["type"] == "summary_text")
+            .filter_map(|v| v["text"].as_str())
+            .collect::<Vec<_>>(),
+        super::serialize::Carrier::Anthropic => value["content"]
+            .as_array()?
+            .iter()
+            .filter(|v| v["type"] == "thinking")
+            .filter_map(|v| v["thinking"].as_str())
+            .collect(),
+        super::serialize::Carrier::Gemini => value
+            .pointer("/candidates/0/content/parts")?
+            .as_array()?
+            .iter()
+            .filter(|v| v["thought"].as_bool() == Some(true))
+            .filter_map(|v| v["text"].as_str())
+            .collect(),
+        super::serialize::Carrier::Chat { .. } => return None,
+    };
+    let mut body = String::new();
+    for part in parts {
+        let remaining = (64 * 1024usize).saturating_sub(body.len());
+        let mut end = part.len().min(remaining);
+        while !part.is_char_boundary(end) {
+            end -= 1;
+        }
+        body.push_str(&part[..end]);
+    }
+    (!body.trim().is_empty()).then_some(body)
+}

@@ -61,7 +61,7 @@ fn frames(stub: &Stub, first_index: u64, second_index: u64) -> (String, String, 
                 summary_part(kind, second_index, b.trim_end()),
                 frame(&json!({"type":"response.output_text.delta","delta":"Done."}))
                     + &frame(
-                        &json!({"type":"response.completed","response":{"id":"resp_done","model":"gpt-5.5","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Done."}]}],"usage":{"input_tokens":10,"output_tokens":10,"total_tokens":20}}}),
+                        &json!({"type":"response.completed","response":{"id":"resp_done","model":"gpt-5.5","status":"completed","output":[{"type":"reasoning","summary":if stub.raw { json!([]) } else { json!([{ "type":"summary_text", "text":format!("{a}{b}") }]) }},{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Done."}]}],"usage":{"input_tokens":10,"output_tokens":10,"total_tokens":20}}}),
                     ),
             )
         }
@@ -80,7 +80,17 @@ async fn reply(State(stub): State<Stub>, Json(body): Json<Value>) -> Response {
     if stub.provider == "google" && round > 1 {
         return (
             [("content-type", "text/event-stream")],
-            gemini(&json!({"text":"Done."}), true),
+            (if stub
+                .final_summary
+                .load(std::sync::atomic::Ordering::Relaxed)
+            {
+                gemini(
+                    &json!({"text":"**Finishing the answer**\nFinal details.\n","thought":true}),
+                    false,
+                )
+            } else {
+                String::new()
+            }) + &gemini(&json!({"text":"Done."}), true),
         )
             .into_response();
     }
@@ -184,6 +194,7 @@ pub(super) async fn setup_refusal(
         gate: Arc::new(Notify::new()),
         finish_gate: Arc::new(Notify::new()),
         requests: Default::default(),
+        final_summary: Default::default(),
     };
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let base = format!("http://{}/v1", listener.local_addr()?);

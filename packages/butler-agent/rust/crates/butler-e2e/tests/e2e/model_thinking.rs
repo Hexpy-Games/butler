@@ -1,4 +1,4 @@
-//! Provider summaries travel through the real gateway without durable progress.
+//! Opt-in timeline summaries use one round-end output; default stays ephemeral.
 #![allow(clippy::unwrap_used, reason = "E2E assertions")]
 use axum::{
     Json, Router,
@@ -32,6 +32,7 @@ struct Stub {
     gate: Arc<Notify>,
     finish_gate: Arc<Notify>,
     requests: Arc<Mutex<Vec<Value>>>,
+    final_summary: Arc<std::sync::atomic::AtomicBool>,
 }
 struct Server(tokio::task::JoinHandle<()>);
 impl Drop for Server {
@@ -40,6 +41,7 @@ impl Drop for Server {
     }
 }
 
+mod durable;
 mod stub;
 use stub::{setup, setup_refusal};
 
@@ -60,7 +62,7 @@ fn row_counts(s: &Scenario) -> Result<(i64, i64), HarnessError> {
     ))
 }
 async fn summary_case(provider: &'static str, show: bool) -> Result<(), HarnessError> {
-    let (s, stub, _server) = setup(provider, false).await?;
+    let (mut s, stub, _server) = setup(provider, false).await?;
     let saved = if show {
         s.gw.patch("/settings", json!({"show_thinking":true}))
             .await?
@@ -130,10 +132,20 @@ async fn summary_case(provider: &'static str, show: bool) -> Result<(), HarnessE
             "latest pending heading wins"
         );
     }
-    assert_eq!(before, row_counts(&s)?, "thinking must not write rows");
+    assert_eq!(before, row_counts(&s)?, "deltas must not write rows");
+    durable::assert_chunks(&s, 0)?;
+    assert!(second["payload"]["round_id"].is_string());
     let expected = format!("**{FIRST}**\nDetails.\n**{SECOND}**\nMore details.\n");
+    let live_expected = if provider == "openai" {
+        format!(
+            "\n\nunfinished\n- **A** [link](https://example.org)\npartial\n\n**{}**\n\n**{FIRST}**\nDetails.\nExtra body.\n\n\n**Superseded**\nBody.\n\n**{SECOND}**\nMore details.",
+            "😀".repeat(80)
+        )
+    } else {
+        expected.clone()
+    };
     if show {
-        assert_eq!(second["payload"]["summary"], expected);
+        assert_eq!(second["payload"]["summary"], live_expected);
         assert!(expected.len() <= 16 * 1024);
     } else {
         for event in live
@@ -157,7 +169,7 @@ async fn summary_case(provider: &'static str, show: bool) -> Result<(), HarnessE
         .await?;
     assert_eq!(
         snapshot["payload"].get("summary"),
-        show.then(|| json!(expected)).as_ref()
+        show.then(|| json!(live_expected)).as_ref()
     );
     assert_eq!(
         reconnect
@@ -207,16 +219,26 @@ async fn summary_case(provider: &'static str, show: bool) -> Result<(), HarnessE
     );
     let messages = s.gw.messages("general").await?;
     for heading in [FIRST, SECOND] {
-        assert!(!json!(messages).to_string().contains(heading));
+        if !show {
+            assert!(!json!(messages).to_string().contains(heading));
+        }
         assert!(!s.agent.logs().contains(heading));
     }
-    assert_no_durable_summary(&s)?;
+    if show {
+        durable::assert_saved(&s, turn, &expected).await?;
+    } else {
+        assert_no_durable_summary(&s)?;
+    }
     assert_wire(&stub);
     eprintln!(
         "{provider}: show={show}; opt_in_summary_bytes={:?}; durable rows {before:?} unchanged; reconnect snapshots=1; gated delivery verified",
         show.then_some(expected.len())
     );
     drop((live, reconnect, ended));
+    if show && provider == "openai" {
+        s.restart().await?;
+        durable::assert_saved(&s, turn, &expected).await?;
+    }
     s.finish().await
 }
 fn assert_no_durable_summary(s: &Scenario) -> Result<(), HarnessError> {
@@ -259,6 +281,16 @@ fn assert_wire(stub: &Stub) {
                 .iter()
                 .find(|c| c["role"] == "model")
                 .unwrap();
+            let mut context = requests[1].clone();
+            for content in context["contents"].as_array_mut().unwrap() {
+                if let Some(parts) = content["parts"].as_array_mut() {
+                    parts.retain(|part| part["thought"] != true);
+                }
+            }
+            assert!(
+                !context.to_string().contains(FIRST),
+                "summary leaked outside provider-native replay"
+            );
             assert_eq!(
                 replay["parts"],
                 json!([
@@ -286,7 +318,7 @@ async fn responses_summary_is_live_only() -> Result<(), HarnessError> {
     summary_case("openai", false).await
 }
 #[tokio::test]
-async fn full_summary_is_opt_in_live_only() -> Result<(), HarnessError> {
+async fn full_summary_is_opt_in_durable() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     summary_case("google", true).await
 }
@@ -305,6 +337,8 @@ async fn responses_internal_reasoning_never_reaches_app() -> Result<(), HarnessE
     stub.finish_gate.notify_one();
     let (_, turn) = s.turn("general", "Reply briefly.").await?;
     assert_eq!(turn["state"], "delivered");
+    assert_no_durable_summary(&s)?;
+    durable::assert_chunks(&s, 0)?;
     assert!(
         !live
             .snapshot()
@@ -336,4 +370,50 @@ async fn openai_summary_rejection_resends_once_and_is_remembered() -> Result<(),
         assert!(request["reasoning"].get("summary").is_none());
     }
     s.finish().await
+}
+
+#[tokio::test]
+async fn anthropic_summary_persists_only_when_enabled() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    summary_case("anthropic", true).await
+}
+#[tokio::test]
+async fn responses_summary_persists_only_when_enabled() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    summary_case("openai", true).await
+}
+#[tokio::test]
+async fn capture_toggle_applies_at_round_end() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, stub, _server) = setup("google", false).await?;
+    s.gw.patch("/settings", json!({"show_thinking":true}))
+        .await?;
+    let live = LiveEvents::subscribe(&s.gw, 0).await?;
+    s.gw.say("general", "Reply briefly.").await?;
+    let event = live
+        .wait_for(WAIT, |e| {
+            e["type"] == "turn.thinking" && e["payload"]["line"] == SECOND
+        })
+        .await?;
+    s.gw.patch("/settings", json!({"show_thinking":false}))
+        .await?;
+    stub.gate.notify_one();
+    stub.finish_gate.notify_one();
+    live.wait_turn(
+        &s.gw,
+        "general",
+        event["payload"]["turn_id"].as_str().unwrap(),
+        &["delivered"],
+        WAIT,
+    )
+    .await?;
+    assert_no_durable_summary(&s)?;
+    drop(live);
+    s.finish().await
+}
+
+#[tokio::test]
+async fn summaries_interleave_across_durable_rounds() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    durable::two_rounds().await
 }

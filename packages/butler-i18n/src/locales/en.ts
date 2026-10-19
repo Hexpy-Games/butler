@@ -761,7 +761,7 @@ export const enUsCopy: AppCopy = {
 rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${title}.`, relocationDescription: (source, target) => `Move ${source} to ${target}. Conversation history and existing files are preserved. Future work will use the new workspace and project knowledge. Active work must finish before moving.`,
   },
   interfaceStatus: {
-    thinkingSummary: "Thinking summary",
+    thinking: "Thinking",
     generalCategory: "General",
     countSummary: (kind, count, truncated) => `${({ filesRead: "Files read", files: "Files", matches: "Matches", documents: "Documents", results: "Results" })[kind]} · ${count}${truncated ? " · Partial results" : ""}`,
     bytes: (count) => `${count.toLocaleString("en-US")} bytes`,

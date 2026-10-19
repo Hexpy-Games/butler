@@ -974,6 +974,8 @@ export interface ProgressRow {
   safe_tool_name?: string;
   safe_input_label?: string;
   tool_call_id?: string;
+  thinking_title?: string;
+  thinking_body?: string;
   tool_result_id?: string;
   tool_result_byte_length?: number;
   bridge_phase?: string;
@@ -1664,6 +1666,11 @@ export interface TimelineEvent {
     event_id?: string;
     /** `settings.updated`: the changed settings subset. */
     settings?: Record<string, unknown>;
+    /** Ephemeral `turn.thinking` display summary, scoped to one model round. */
+    round_id?: string;
+    stream_id?: string;
+    line?: string | null;
+    summary?: string;
     tainted?: boolean;
     /** `automation.run`: the run's conversation and its safe error code. */
     target_session_id?: string;

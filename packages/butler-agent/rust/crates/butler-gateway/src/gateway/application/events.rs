@@ -35,6 +35,7 @@ struct SubscriberState {
 impl EventSubscribers {
     pub(super) fn set_thinking_enabled(&self, enabled: bool) {
         self.inner.lock().thinking.enabled = enabled;
+        butler_turn::btcc::set_thinking_capture(enabled);
     }
 
     pub(super) fn observe_cursor(&self, observer: Arc<dyn Fn(u64) + Send + Sync>) {

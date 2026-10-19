@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import type { TimelineEvent } from "./types";
 
-type State = { lines: Record<string, string>; summaries: Record<string, { stream: string; text: string }> };
+type Summary = { round: string; title: string; text: string };
+type State = { lines: Record<string, string>; summaries: Record<string, Summary[]> };
 export const useModelThinking = create<State>(() => ({ lines: {}, summaries: {} }));
 const terminal = new Set(["delivered", "failed", "cancelled", "runtime_fault"]);
 
@@ -23,15 +24,25 @@ export function receiveModelThinking(event: TimelineEvent): boolean {
   const turn = payload.turn_id;
   if (typeof payload.line === "string" && payload.line || typeof payload.summary === "string" && payload.summary) {
     const line = typeof payload.line === "string" ? payload.line : undefined;
-    const summary = typeof payload.summary === "string" && payload.summary.trim()
-      ? { stream: String(payload.stream_id ?? ""), text: payload.summary } : undefined;
+    const text = typeof payload.summary === "string" ? payload.summary : "";
+    const round = typeof payload.round_id === "string" ? payload.round_id : "";
     useModelThinking.setState(state => {
       const lines = { ...state.lines }, summaries = { ...state.summaries };
       if (line) lines[turn] = line; else delete lines[turn];
-      if (summary) summaries[turn] = summary; else delete summaries[turn];
+      if (text.trim() && round) {
+        const previous = summaries[turn] ?? [];
+        const summary = { round, title: line ?? "", text };
+        const index = previous.findIndex(item => item.round === round);
+        summaries[turn] = index < 0 ? [...previous, summary] : previous.map((item, i) => i === index ? summary : item);
+      }
       return { lines, summaries };
     });
-  } else forget(turn);
+  } else {
+    // A provider closes before its durable Completed event. Keep the row and body.
+    useModelThinking.setState(state => {
+      const lines = { ...state.lines }; delete lines[turn]; return { lines };
+    });
+  }
   return true;
 }
 export function reconcileModelThinking(event: TimelineEvent) {

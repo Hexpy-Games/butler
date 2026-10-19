@@ -46,6 +46,7 @@ impl Thinking {
         let enabled = event.payload["settings"]["show_thinking"] == true;
         let changed = enabled != self.enabled;
         self.enabled = enabled;
+        butler_turn::btcc::set_thinking_capture(enabled);
         changed
     }
     pub(super) fn apply(&mut self, payload: &Value) {

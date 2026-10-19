@@ -1,3 +1,4 @@
+import { useThinkingRows } from "./useThinkingRows";
 import { memo } from "react";
 import { useAppLocale } from "@/app/copy.ts";
 import type { ProgressRow } from "@/app/types.ts";
@@ -14,7 +15,7 @@ export const CompletedTurnActivity = memo(function CompletedTurnActivity({
   turnState?: string;
 }) {
   useAppLocale();
-  const activities = projectTurnActivity(rows ?? [], turnId).phaseActivities;
+  const activities = projectTurnActivity(useThinkingRows(rows ?? [], turnId), turnId).phaseActivities;
   if (activities.length === 0) return null;
   return (
     <TurnActivityTimeline

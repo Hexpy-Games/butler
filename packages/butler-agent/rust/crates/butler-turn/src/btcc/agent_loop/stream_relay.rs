@@ -32,6 +32,7 @@ enum Relayed {
         text: String,
     },
     Thinking {
+        round_id: String,
         stream_id: String,
         text: String,
     },
@@ -81,10 +82,13 @@ impl ProviderStreamObserver for RelayObserver {
             return;
         }
         if event["type"] == "reasoning_delta" && event["display"] == "summary" {
-            if let (Some(stream), Some(text)) =
-                (event["streamId"].as_str(), event["textDelta"].as_str())
-            {
+            if let (Some(round), Some(stream), Some(text)) = (
+                event["roundId"].as_str(),
+                event["streamId"].as_str(),
+                event["textDelta"].as_str(),
+            ) {
                 let _ = self.sender.send(Relayed::Thinking {
+                    round_id: round.into(),
                     stream_id: stream.into(),
                     text: text.into(),
                 });
@@ -340,8 +344,12 @@ async fn forward_tools(
     let mut text = Vec::new();
     for item in batch {
         match item {
-            Relayed::Thinking { stream_id, text } => {
-                thinking.push(stream_id, &text, progress).await;
+            Relayed::Thinking {
+                round_id,
+                stream_id,
+                text,
+            } => {
+                thinking.push(round_id, stream_id, &text, progress).await;
             }
             Relayed::ClearThinking => thinking.clear(progress).await,
             Relayed::Tool(event) => {
