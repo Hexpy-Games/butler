@@ -2379,6 +2379,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     attachmentFailed: "Could not attach the file.",
     attachmentRetry: (names) => `${names} — Check your connection, then select the file again.`,
     attachmentTooLarge: "The file exceeds the attachment size limit.",
+    attachmentEmpty: (names) => `${names} — File is empty.`,
     attachmentSizeLimit: (names, limit) => `${names} — Reduce each file to ${limit} or less, or select another file.`,
     reconnecting: "Live connection lost. Reconnecting automatically. The displayed work status may be out of date.",
     reconnectingShort: "Reconnecting to live updates",

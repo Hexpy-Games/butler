@@ -20,6 +20,8 @@ mod app_db_schema;
 mod app_state;
 mod app_storage_scale;
 mod ask_user;
+mod attachment_reach;
+mod attachment_types;
 mod authority_parallel_batch;
 mod authority_permissions;
 mod automation;

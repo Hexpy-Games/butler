@@ -2090,6 +2090,7 @@ export interface AppCopy {
     attachmentFailed: string;
     attachmentRetry: (names: string) => string;
     attachmentTooLarge: string;
+    attachmentEmpty: (names: string) => string;
     attachmentSizeLimit: (names: string, limit: string) => string;
     reconnecting: string;
     reconnectingShort: string;

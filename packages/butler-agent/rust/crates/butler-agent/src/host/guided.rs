@@ -1,5 +1,6 @@
 pub(super) mod active_plan;
 pub(super) mod activity;
+pub(super) mod attachment_files;
 pub(super) mod authority_handoff;
 pub(super) mod catalog;
 pub(super) mod cognition_prompt;
