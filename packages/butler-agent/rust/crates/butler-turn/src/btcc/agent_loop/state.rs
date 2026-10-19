@@ -17,7 +17,11 @@ pub(super) const CURRENT_USER_REQUEST: &str = "current_user_request";
 
 /// The mutable transcript and bookkeeping of one agent-loop execution.
 pub(super) struct State {
+    // Within a turn, already-sent messages are append-only between compactions.
+    // Stale browser results are stubbed in one batch only when over budget.
     pub messages: Vec<ModelRoundMessage>,
+    pub browser_prune: super::browser_context::BrowserPrune,
+    pub compacted_through: usize,
     pub tool_results: Vec<ToolResult>,
     /// Provider continuation handle echoed on the next request (passthrough JSON).
     pub provider_continuation: Option<Value>,
@@ -44,6 +48,8 @@ impl State {
         prompt.continuation_item_id = Some("turn-item-0".into());
         Self {
             messages: vec![prompt],
+            browser_prune: Default::default(),
+            compacted_through: 0,
             tool_results: Vec::new(),
             provider_continuation: None,
             next_item_ordinal: 1,
@@ -87,6 +93,21 @@ impl State {
             .map(|result| result.name.clone())
             .collect();
         Self {
+            browser_prune: super::browser_context::BrowserPrune {
+                watermark: restored
+                    .extensions
+                    .get("browserPruneWatermark")
+                    .and_then(Value::as_u64)
+                    .and_then(|v| usize::try_from(v).ok())
+                    .unwrap_or(0),
+                ..Default::default()
+            },
+            compacted_through: restored
+                .extensions
+                .get("browserPruneFloor")
+                .and_then(Value::as_u64)
+                .and_then(|v| usize::try_from(v).ok())
+                .unwrap_or(0),
             messages: restored.messages,
             tool_results: restored.tool_results,
             provider_continuation: restored.provider_continuation,
