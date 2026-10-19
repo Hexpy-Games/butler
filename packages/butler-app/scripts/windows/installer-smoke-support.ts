@@ -74,12 +74,27 @@ function applySnapshot(owned: OwnedProcesses, rows: ProcessSnapshot[]): ProcessS
   return rows.filter(row => matched.has(row.pid));
 }
 
-function recordFileRoots(path: string, owned: OwnedProcesses, pids: (value: string) => number[]) {
-  if (!existsSync(path)) return;
-  const notAfter = statSync(path).mtimeMs;
-  for (const pid of pids(readFileSync(path, "utf8"))) {
-    if (Number.isInteger(pid) && pid > 0 && !owned.has(pid)) owned.set(pid, { notAfter });
+/**
+ * A file's mtime bounds only the write that first named a PID; later rewrites naming the same PID
+ * (e.g. a "stopped" state) must not move that bound past an exit and admit a reused PID.
+ */
+export function fileRootBounds(previous: ReadonlyMap<number, number> | undefined, pids: readonly unknown[], mtimeMs: number) {
+  const bounds = new Map<number, number>();
+  for (const pid of pids) {
+    if (Number.isInteger(pid) && (pid as number) > 0) bounds.set(pid as number, previous?.get(pid as number) ?? mtimeMs);
   }
+  return bounds;
+}
+
+const fileRoots = new WeakMap<OwnedProcesses, Map<string, Map<number, number>>>();
+
+function recordFileRoots(path: string, owned: OwnedProcesses, pids: (value: string) => unknown[]) {
+  const seen = fileRoots.get(owned) ?? new Map<string, Map<number, number>>();
+  fileRoots.set(owned, seen);
+  if (!existsSync(path)) { seen.delete(path); return; }
+  const bounds = fileRootBounds(seen.get(path), pids(readFileSync(path, "utf8")), statSync(path).mtimeMs);
+  seen.set(path, bounds);
+  for (const [pid, notAfter] of bounds) if (!owned.has(pid)) owned.set(pid, { notAfter });
 }
 
 export function ownedProcesses(data: string, owned: OwnedProcesses) {

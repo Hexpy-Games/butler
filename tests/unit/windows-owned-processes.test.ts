@@ -1,6 +1,6 @@
 // test-category: pure-logic
 import { expect, test } from "bun:test";
-import { resolveOwnedProcesses, type OwnedProcesses, type ProcessSnapshot } from "../../packages/butler-app/scripts/windows/installer-smoke-support.ts";
+import { fileRootBounds, resolveOwnedProcesses, type OwnedProcesses, type ProcessSnapshot } from "../../packages/butler-app/scripts/windows/installer-smoke-support.ts";
 
 function row(pid: number, parentPid: number, created: number): ProcessSnapshot {
   return { pid, parentPid, created, name: "process.exe", path: null, commandLine: null };
@@ -42,4 +42,16 @@ test("matched identities retain their exact creation time and original bound", (
   expect(resolved.get(10)).toEqual({ created: 123, notAfter: 200 });
   expect(resolveOwnedProcesses(resolved, [row(10, 0, 123)]).get(10)).toEqual({ created: 123, notAfter: 200 });
   expect(resolveOwnedProcesses(resolved, [row(10, 0, 124)]).size).toBe(0);
+});
+
+test("a file rewrite naming the same PID keeps the bound of the write that first named it", () => {
+  const first = fileRootBounds(undefined, [10, null, 0], 100);
+  expect([...first]).toEqual([[10, 100]]);
+  const rewritten = fileRootBounds(first, [10, 20], 300);
+  expect([...rewritten]).toEqual([[10, 100], [20, 300]]);
+  // A reused PID 10 created after the App exited (t=200) stays unowned after the rewrite.
+  const owned: OwnedProcesses = new Map([[10, { notAfter: rewritten.get(10)! }]]);
+  expect(resolveOwnedProcesses(owned, [row(10, 0, 200)]).size).toBe(0);
+  // Once the file stops naming a PID, a later write naming it again gets a fresh bound.
+  expect(fileRootBounds(fileRootBounds(rewritten, [20], 400), [10], 500).get(10)).toBe(500);
 });
