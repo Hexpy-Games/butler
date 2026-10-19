@@ -11,6 +11,8 @@
 
 #[path = "usage_scale/delegated.rs"]
 mod delegated;
+#[path = "usage_scale/lock.rs"]
+mod lock;
 #[path = "usage_scale/memory.rs"]
 mod memory;
 #[path = "usage_scale/timeline.rs"]
@@ -354,7 +356,9 @@ async fn perf_use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), Harnes
     eprintln!(
         "USE-06 timings: 24h warm and session warm under {WARM:?}; all-time cold {cold:?}, warm {warm:?}"
     );
-    memory.measure();
+    // Linux PSS baseline 217,244,672; peak 306,479,104; delta 89,234,432
+    // (prior USE-06 run). Fixed growth ceiling is that measured delta * 1.5.
+    memory.finish(133_851_648);
     s.finish().await
 }
 

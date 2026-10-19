@@ -103,9 +103,9 @@ impl AppContextReadPort for AppContextRead {
         let turn = query.turn_id.clone();
         let lineage = self.lineage.clone();
         Box::pin(async move {
-            let _read = lineage.read.lock().await;
             let (mut facts, native_summary) = tokio::try_join!(
                 async {
+                    let read = lineage.read.clone().lock_owned().await;
                     let refresh = (
                         root.clone(),
                         budget.clone(),
@@ -119,7 +119,9 @@ impl AppContextReadPort for AppContextRead {
                     .map_err(GatewayApplicationError::internal_from)?;
                     lineage.resolve().await;
                     tokio::task::spawn_blocking(move || {
-                        read_facts(&root, &budget, &usage, &telemetry, &query)
+                        let session = usage.lock().session_usage(&query.runtime_session_id);
+                        drop(read);
+                        read_facts(&root, &budget, session, &telemetry, &query)
                     })
                     .await
                     .map_err(GatewayApplicationError::internal_from)?
@@ -136,14 +138,14 @@ impl AppContextReadPort for AppContextRead {
 fn read_facts(
     root: &Path,
     budget: &ContextBudgetOwner,
-    usage: &Mutex<SessionUsageIndex>,
+    session: SessionUsage,
     telemetry: &Mutex<telemetry::Index>,
     query: &AppContextReadQuery,
 ) -> Result<AppContextReadFacts, GatewayApplicationError> {
     let snapshot = budget
         .snapshot_blocking()
         .map_err(GatewayApplicationError::internal_from)?;
-    let (telemetry, session) = read_telemetry(root, usage, telemetry, query);
+    let telemetry = telemetry.lock().read_shared_prompt(root, query);
     let evaluated = snapshot.evaluate_working(&WorkingContextBudgetInput {
         model_ref: Some(query.model_ref.clone()),
         working_context_tokens: 0.0,
@@ -201,17 +203,6 @@ fn read_facts(
 fn configured_text(path: &Path) -> bool {
     std::fs::read_to_string(path)
         .is_ok_and(|value| !butler_core::public_text::trim_js_whitespace(&value).is_empty())
-}
-
-fn read_telemetry(
-    root: &Path,
-    usage: &Mutex<SessionUsageIndex>,
-    telemetry: &Mutex<telemetry::Index>,
-    query: &AppContextReadQuery,
-) -> (Telemetry, SessionUsage) {
-    let session = usage.lock().session_usage(&query.runtime_session_id);
-    let mut telemetry = telemetry.lock();
-    (telemetry.read_shared_prompt(root, query), session)
 }
 
 fn refresh_usage(

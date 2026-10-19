@@ -35,6 +35,7 @@ struct State {
     unknown: HashSet<String>,
     generation: u64,
     scopes: HashMap<Arc<str>, Vec<Member>>,
+    stamped: HashSet<UsageScope>,
 }
 impl UsageOwners {
     /// Register each row's explicit owner independently of other rows of its scope.
@@ -47,14 +48,18 @@ impl UsageOwners {
                 root: Arc::from(root),
                 role: role.clone(),
             };
-            let members = state.members.entry(Arc::from(root)).or_default();
-            if !members.iter().any(|(member, _)| member == &key) {
-                members.push((key.clone(), role.clone()));
+            if state.stamped.insert(key.clone()) {
+                state
+                    .members
+                    .entry(Arc::from(root))
+                    .or_default()
+                    .push((key.clone(), role.clone()));
+                state
+                    .scopes
+                    .entry(Arc::from(scope))
+                    .or_default()
+                    .push((key.clone(), role.clone()));
                 state.generation = state.generation.wrapping_add(1);
-            }
-            let scopes = state.scopes.entry(Arc::from(scope)).or_default();
-            if !scopes.iter().any(|(member, _)| member == &key) {
-                scopes.push((key.clone(), Arc::from(role.as_ref())));
             }
             // Session aliases remain useful even with exclusively stamped rows.
             if scope.starts_with("btcc-guided:") && !state.owner.contains_key(scope) {
@@ -76,15 +81,14 @@ impl UsageOwners {
             UsageScope::Stamped { root, .. } => format!("btcc-guided:{root}"),
         }
     }
-    fn recheck_self_roots(&self) {
+    fn recheck(&self, children: HashSet<String>) {
         let mut state = self.state.lock();
-        let scopes: Vec<_> = state
-            .owner
-            .iter()
-            .filter(|(scope, (root, _))| scope.strip_prefix("btcc-guided:") == Some(root.as_ref()))
-            .map(|(scope, _)| scope.to_string())
-            .collect();
-        state.unknown.extend(scopes);
+        for child in children {
+            let scope = format!("btcc-guided:{child}");
+            if state.owner.contains_key(scope.as_str()) {
+                state.unknown.insert(scope);
+            }
+        }
     }
     /// Changes invalidate windowed session totals without rescanning log rows.
     pub fn generation(&self) -> u64 {
@@ -152,7 +156,7 @@ pub struct UsageLineage {
     pub owners: Arc<UsageOwners>,
     pub monitor: Arc<crate::operations::UsageMonitor>,
     /// Serialize refresh, relation resolution and projection across readers.
-    pub read: tokio::sync::Mutex<()>,
+    pub read: Arc<tokio::sync::Mutex<()>>,
     repository: SqliteSubsessionRepository,
     links: tokio::sync::Mutex<Links>,
     watermark: Mutex<Option<i64>>,
@@ -165,7 +169,7 @@ impl UsageLineage {
         Self {
             monitor: Arc::new(crate::operations::UsageMonitor::with_owners(owners.clone())),
             owners,
-            read: tokio::sync::Mutex::new(()),
+            read: Arc::new(tokio::sync::Mutex::new(())),
             repository,
             links: tokio::sync::Mutex::new(HashMap::new()),
             watermark: Mutex::new(None),
@@ -188,10 +192,18 @@ impl UsageLineage {
     async fn try_resolve(&self) -> Result<(), StorageError> {
         let mut links = self.links.lock().await;
         let watermark = self.repository.relation_watermark().await?;
-        if self.watermark.lock().as_ref() != Some(&watermark) {
-            links.retain(|_, link| link.is_some());
-            self.owners.recheck_self_roots();
-            *self.watermark.lock() = Some(watermark);
+        let previous = self.watermark.lock().unwrap_or(0);
+        if watermark != previous {
+            let rows = self
+                .repository
+                .parent_links_since(previous, watermark)
+                .await?;
+            let mut changed = HashSet::new();
+            for (child, parent, role) in rows {
+                changed.insert(child.clone());
+                links.insert(child, Some((parent, role)));
+            }
+            self.owners.recheck(affected_scopes(&links, changed));
         }
         let unknown = self.owners.unknown();
         let children = unknown
@@ -209,6 +221,7 @@ impl UsageLineage {
             };
             self.owners.install(&scope, &root, role);
         }
+        *self.watermark.lock() = Some(watermark);
         Ok(())
     }
     async fn load_ancestors(
@@ -270,4 +283,23 @@ fn legacy_root(id: &str, links: &Links, roots: &mut HashMap<String, String>) -> 
         roots.insert(node.into(), root.clone());
     }
     root
+}
+
+/// Traverse cached descendants without re-querying unrelated negative lookups.
+fn affected_scopes(links: &Links, mut changed: HashSet<String>) -> HashSet<String> {
+    let mut children: HashMap<&str, Vec<&str>> = HashMap::new();
+    for (child, link) in links {
+        if let Some((parent, _)) = link {
+            children.entry(parent).or_default().push(child);
+        }
+    }
+    let mut pending: Vec<_> = changed.iter().cloned().collect();
+    while let Some(parent) = pending.pop() {
+        for child in children.get(parent.as_str()).into_iter().flatten() {
+            if changed.insert((*child).into()) {
+                pending.push((*child).into());
+            }
+        }
+    }
+    changed
 }

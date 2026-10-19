@@ -35,7 +35,7 @@ pub async fn read_usage_tool(
     lineage: Arc<crate::operations::UsageLineage>,
     catalog: Arc<ModelCatalog>,
 ) -> Value {
-    let _read = lineage.read.lock().await;
+    let read = lineage.read.clone().lock_owned().await;
     let root = data_root.to_path_buf();
     let monitor = lineage.monitor.clone();
     let refresh = (root.clone(), monitor.clone(), catalog.clone());
@@ -57,13 +57,14 @@ pub async fn read_usage_tool(
             quota: &crate::operations::unavailable_quota_view,
             quota_providers: Vec::new(),
         };
-        monitor.read_prepared_at(
+        monitor.read_prepared_at_releasing(
             &root,
             Some(&session),
             None,
             since_ts,
             (chrono::Utc::now().timestamp_millis() + 1) as f64,
             Some(&sources),
+            read,
         )
     })
     .await

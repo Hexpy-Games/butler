@@ -31,9 +31,14 @@ impl UsageLogIndex {
             .filter_map(|item| item["sessionId"].as_str())
         {
             let guided = format!("btcc-guided:{id}");
-            let rows = [id, guided.as_str()]
+            let own = UsageScope::Stamped {
+                scope: guided.as_str().into(),
+                root: id.into(),
+                role: "main".into(),
+            };
+            let rows = [UsageScope::legacy(id), UsageScope::legacy(&guided), own]
                 .into_iter()
-                .flat_map(|scope| self.scope_slots(&UsageScope::legacy(scope), window))
+                .flat_map(|scope| self.scope_slots(&scope, window))
                 .flat_map(|(_, slot)| self.matching_rows(&slot.rows, window));
             let mut turns = HashSet::new();
             let mut all_scheduled = true;
