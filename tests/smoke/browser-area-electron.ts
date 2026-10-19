@@ -3,7 +3,7 @@ import { spawnElectron, stopElectronChild } from "../support/electron-child";
 /** Public Browser area on an isolated, real Electron App and stub gateway. */
 import { type ChildProcess } from "node:child_process";
 import { strict as assert } from "node:assert";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, watch, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { cpus, loadavg, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { electronPage, type ElectronPage as Page } from "../support/electron-page-cdp";
@@ -42,20 +42,22 @@ async function stopApp() {
   if (child) await stopElectronChild(child);
 }
 
+type QuitEvent = { event: string; at: number; code: number; windows: number; contents: string[] };
+/** The App's recorded quit, if it came after `requested`: the previous launch's record also ends in "quit". */
+function quitAfter(requested: number): QuitEvent | undefined {
+  try {
+    const last = (JSON.parse(readFileSync(join(evidence!, "quit-events.json"), "utf8")) as QuitEvent[]).at(-1);
+    return last?.event === "quit" && last.at >= requested ? last : undefined;
+  } catch { return undefined; } // Not written yet, or read mid-rewrite.
+}
+
 async function quitAndStop(page: Page) {
-  const quit = new Promise<{ code: number; windows: number; contents: string[] }>((done, fail) => {
-    const timer = setTimeout(() => { watcher.close(); fail(new Error("Timed out: App quit event")); }, 30_000);
-    const watcher = watch(evidence!, (_event, file) => {
-      if (file !== "quit-events.json") return;
-      try {
-        const last = JSON.parse(readFileSync(join(evidence!, "quit-events.json"), "utf8")).at(-1);
-        if (last?.event !== "quit") return;
-        watcher.close();clearTimeout(timer);done(last);
-      } catch { /* A later change notification observes the complete write. */ }
-    });
-  });
+  const requested = Date.now();
   await page.expression("window.butlerApp.quitApp({confirmed:true})");
-  const result = await quit;
+  // Polled: Bun's fs.watch on Linux can drop the notification of the last quick rewrite (#684).
+  let result: QuitEvent | undefined;
+  await waitUntil(async () => { result = quitAfter(requested); return result !== undefined; }, "App quit event");
+  assert.ok(result);
   assert.equal(result.code, 0);assert.equal(result.windows, 0);assert.deepEqual(result.contents, []);
   quits.push(result);
   writeFileSync(join(evidence!, "verified-quits.json"), JSON.stringify(quits, null, 2));
