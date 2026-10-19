@@ -12,7 +12,8 @@ pub(super) fn has_recoverable_windows(connection: &Connection) -> CognitionResul
     connection
         .query_row(
             "SELECT EXISTS(SELECT 1 FROM memory_projection_windows \
-             WHERE state IN ('running','planned') AND owner_nonce IS NOT NULL)",
+             WHERE state IN ('running','planned') AND owner_nonce IS NOT NULL) \
+             OR NOT EXISTS(SELECT 1 FROM memory_state WHERE key='projection_contention_recovery')",
             [],
             |row| row.get(0),
         )

@@ -105,6 +105,7 @@ impl GraphRepository {
         &mut self,
         input: ClaimProjectionWindowInput<'_>,
     ) -> CognitionResult<()> {
+        schema::recover_interrupted_failures(self.connection_mut()?, input.now)?;
         let tx = self.connection_mut()?.transaction().map_err(db_error)?;
         projection::recover_interrupted(&tx, &input)?;
         tx.commit().map_err(db_error)

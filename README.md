@@ -82,7 +82,7 @@ On first launch, choose the interface language on the welcome screen, accept the
 
 ### macOS first open
 
-macOS preview builds are signed but not notarized, so Gatekeeper shows a prompt on first open. Try to open Butler once, then choose **System Settings → Privacy & Security → Open Anyway** (works on every supported macOS version). On macOS 14 or earlier, right-click **Butler → Open** also works.
+macOS builds, previews included, are Developer ID signed and notarized by Apple, so Butler opens like any downloaded app: macOS asks once to confirm opening an app from the internet.
 
 ### Windows
 

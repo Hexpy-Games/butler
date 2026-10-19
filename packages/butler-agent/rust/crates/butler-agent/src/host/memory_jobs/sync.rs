@@ -58,7 +58,7 @@ impl MemorySync {
             fresh,
         } = startup;
         let changes = observe_changes(data_root, paths).await?;
-        let clock: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
+        let clock: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(sync_now_iso);
         if active_memory_descriptor_exists(data_root, paths).map_err(error)? {
             resolve_active_generation(data_root, paths).map_err(error)?;
         }
@@ -119,6 +119,15 @@ impl MemorySync {
         self.registration.close().await;
         joined
     }
+}
+
+/// Controlled fixture clocks advance durable retry deadlines as well as App time.
+fn sync_now_iso() -> String {
+    #[cfg(feature = "e2e-fixtures")]
+    if std::env::var_os("BUTLER_E2E_APP_CLOCK_ADDRESS").is_some() {
+        return crate::host::app::schedule_clock::clock().now_iso();
+    }
+    SystemIdentity.now_iso()
 }
 
 /// Recovery of unfinished semantic/vector work keeps its existing backoff cap.

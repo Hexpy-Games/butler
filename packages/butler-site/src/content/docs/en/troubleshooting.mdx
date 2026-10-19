@@ -63,7 +63,7 @@ If a `code` in `errors` is `bundled_agent_version_missing`, the app could not re
   ]}
 >
   <TabPanel value="macos">
-    The Butler app is not notarized by Apple, so macOS may block it the first time you open it. Choose **Open Anyway** in **System Settings → Privacy & Security**.
+    The Butler app is notarized by Apple, so it opens like other apps. If macOS asks whether to open an app downloaded from the internet, choose **Open**.
   </TabPanel>
   <TabPanel value="windows">
     Windows preview builds are unsigned. If SmartScreen appears, choose **More info**, then **Run anyway**, but only when you trust the source of the build. The installer is `ButlerSetup-<version>-x64.exe` on [GitHub Releases](https://github.com/Hexpy-Games/butler/releases).

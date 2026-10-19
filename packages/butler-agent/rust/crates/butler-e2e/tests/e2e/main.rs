@@ -49,6 +49,7 @@ mod browser_signin;
 mod browser_speed;
 mod browser_usage;
 mod cassette_lint;
+mod catalog_provider_truth;
 mod cli_launcher;
 mod cli_remote;
 mod cli_reply_language;
@@ -60,6 +61,7 @@ mod conversation_background;
 mod credential_store;
 mod credentials;
 mod custom_model_errors;
+mod custom_model_images;
 mod default_model;
 mod downloads_live;
 mod durable_configuration;
@@ -218,6 +220,8 @@ mod memory_profile_reset;
 mod memory_reset;
 mod memory_wiring_more;
 mod native_worker_ownership;
+#[path = "support/owner_scale.rs"]
+mod owner_scale;
 mod project_artifacts;
 mod project_instructions;
 mod project_workspace;
@@ -253,5 +257,6 @@ mod outbound_http;
 
 mod trace_spans;
 
+mod content_port;
 mod turn_fenced_cancel;
 mod usage_delegated;
