@@ -128,6 +128,8 @@ impl CognitionWriteCoordinator {
             let remaining = request.deadline_at_epoch_ms.unwrap_or(f64::INFINITY)
                 - self.inner.host.now_epoch_millis() as f64;
             if remaining <= 0.0 {
+                #[cfg(feature = "e2e-fixtures")]
+                super::wait_observation::expired(&request).await?;
                 return Ok(None);
             }
             let wait = if remaining.is_nan() {

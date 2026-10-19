@@ -93,6 +93,7 @@ fn persisted_policy_is_used_by_the_next_claim() {
 // test-category: race
 #[test]
 fn abandoned_unknown_invocation_is_deferred_before_next_selection() {
+    only_dead_process_unknown_invocations_spend_the_cap();
     let mut connection = database();
     connection.execute("UPDATE memory_projection_windows SET state='running',attempt_count=1,owner_pid=7,owner_nonce='old',started_at='x'",[]).unwrap();
     connection.execute("INSERT INTO memory_projection_attempts VALUES('intent','window','job',1,'invocation_intent',NULL,NULL,NULL,NULL,'x','provider_intent',0,0,'old',NULL)",[]).unwrap();
@@ -148,4 +149,52 @@ fn abandoned_unknown_invocation_is_deferred_before_next_selection() {
         .unwrap()
         .is_some()
     );
+}
+
+fn only_dead_process_unknown_invocations_spend_the_cap() {
+    for (dead, intent, known) in [
+        (true, true, false),
+        (false, true, false),
+        (true, false, false),
+        (true, true, true),
+    ] {
+        let mut db = database();
+        for attempt in 1..=4 {
+            let nonce = format!("owner-{attempt}");
+            db.execute("UPDATE memory_projection_windows SET state='running',attempt_count=?1,owner_pid=7,owner_nonce=?2,next_attempt_at=NULL", rusqlite::params![attempt,nonce]).unwrap();
+            if intent {
+                db.execute("INSERT INTO memory_projection_attempts(attempt_ref,window_ref,job_id,attempt_count,state,recorded_at,attempt_kind,provider_invoked,outcome_known,invocation_ref) VALUES(?1,'window','job',?2,'invocation_intent','x','provider_intent',0,?3,?1)", rusqlite::params![nonce,attempt,i64::from(known)]).unwrap();
+            }
+            let active = HashSet::new();
+            let input = ClaimProjectionWindowInput {
+                job_id: Some("job"),
+                now: "2026-01-02T00:00:00.000Z",
+                owner_pid: if dead { 8 } else { 7 },
+                owner_nonce: "new",
+                active_owners: &active,
+                process_status: &|_| CognitionProcessStatus::DefinitelyDead,
+            };
+            let tx = db.transaction().unwrap();
+            super::recover_interrupted(&tx, &input).unwrap();
+            tx.commit().unwrap();
+            let charged = dead && intent && !known;
+            assert_eq!(
+                super::failed_provider_attempt_count(&db, "window", None).unwrap(),
+                if charged { attempt } else { 0 }
+            );
+            let state: String = db
+                .query_row("SELECT state FROM memory_projection_windows", [], |r| {
+                    r.get(0)
+                })
+                .unwrap();
+            assert_eq!(
+                state,
+                if charged && attempt >= 3 {
+                    "failed"
+                } else {
+                    "pending"
+                }
+            );
+        }
+    }
 }

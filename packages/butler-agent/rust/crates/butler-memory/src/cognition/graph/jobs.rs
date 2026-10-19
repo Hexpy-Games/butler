@@ -181,19 +181,18 @@ pub(super) fn pending_semantic(
     now: &str,
 ) -> CognitionResult<Option<PendingSemanticJob>> {
     connection.query_row(
-        "SELECT j.job_id,c.conversation_session_id,c.source_key,c.source_hash,j.extraction_version
+        &format!("SELECT j.job_id,c.conversation_session_id,c.source_key,c.source_hash,j.extraction_version
          FROM memory_projection_windows w
          JOIN memory_projection_jobs j ON j.job_id=w.job_id
          JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision
          WHERE w.state IN ('pending','planned') AND w.owner_nonce IS NULL
            AND (w.state='planned' OR w.output_json IS NOT NULL OR (
              SELECT COUNT(DISTINCT a.invocation_ref) FROM memory_projection_attempts a
-             WHERE a.window_ref=w.window_ref AND a.provider_invoked=1 AND a.state='failed'
-               AND a.error_code NOT IN ('memory_write_busy','memory_projection_outcome_unknown')
+             WHERE a.window_ref=w.window_ref AND {charged}
                AND a.recovery_revision IS w.recovery_revision) < 3)
            AND (w.next_attempt_at IS NULL OR w.next_attempt_at<=?1)
          GROUP BY j.job_id
-         ORDER BY j.last_served_at IS NOT NULL,j.last_served_at,j.created_at,j.job_id LIMIT 1",
+         ORDER BY j.last_served_at IS NOT NULL,j.last_served_at,j.created_at,j.job_id LIMIT 1", charged=super::projection::CHARGED_PROVIDER_ATTEMPT),
         [now],
         |row| Ok(PendingSemanticJob {
             job_id: row.get(0)?, session_id: row.get(1)?, source_key: row.get(2)?,

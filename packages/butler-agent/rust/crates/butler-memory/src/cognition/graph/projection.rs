@@ -11,6 +11,12 @@ use crate::cognition::extraction::ExtractInput;
 use crate::cognition::{CognitionError, CognitionResult};
 use crate::coordination::CognitionProcessStatus;
 
+// `a` is the attempts alias at every call site. An interrupted invocation is
+// charged only when recovery proved its process dead; live contention is free.
+pub(super) const CHARGED_PROVIDER_ATTEMPT: &str = "a.provider_invoked=1 AND \
+    ((a.state='failed' AND a.error_code NOT IN ('memory_write_busy','memory_projection_outcome_unknown')) \
+    OR a.state='interrupted')";
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::cognition) enum PreviousWindowState {
     Pending,
@@ -167,7 +173,7 @@ fn select_window(
         LEFT JOIN memory_projection_model_policy p ON p.id=1 \
         WHERE w.state IN ('pending','planned') AND w.owner_nonce IS NULL \
         AND (w.state='planned' OR w.output_json IS NOT NULL OR (SELECT COUNT(DISTINCT a.invocation_ref) \
-        FROM memory_projection_attempts a WHERE a.window_ref=w.window_ref AND a.provider_invoked=1 AND a.state='failed' AND a.error_code NOT IN ('memory_write_busy','memory_projection_outcome_unknown') \
+        FROM memory_projection_attempts a WHERE a.window_ref=w.window_ref AND {CHARGED_PROVIDER_ATTEMPT} \
         AND a.recovery_revision IS w.recovery_revision)<3) AND (w.next_attempt_at IS NULL OR w.next_attempt_at<=?1) {} \
         ORDER BY j.last_served_at IS NOT NULL,j.last_served_at,j.created_at,j.job_id,w.ordinal LIMIT 1",
         if job_id.is_some() {
@@ -247,8 +253,6 @@ pub(super) fn recover_interrupted(
                 })
             },
         ).map_err(db_error)?;
-        let exhausted =
-            failed_provider_attempt_count(tx, &window, state.recovery_revision.as_deref())? >= 3;
         let kind = if state.normalized_plan.is_some() {
             "apply"
         } else if state.output_json.is_some() {
@@ -256,7 +260,11 @@ pub(super) fn recover_interrupted(
         } else {
             "unknown"
         };
-        tx.execute("INSERT OR IGNORE INTO memory_projection_attempts(attempt_ref,window_ref,job_id,attempt_count,state,error_code,input_sha256,output_json,provider_evidence_json,recorded_at,attempt_kind,provider_invoked,outcome_known,recovery_revision) VALUES(?1,?2,?3,?4,'interrupted','memory_projection_interrupted',?5,?6,?7,?8,?9,0,0,?10)",params![format!("{window}:attempt:{}:interrupted",state.attempt_count),window,job,state.attempt_count,state.input_sha256,state.output_json,state.provider_evidence_json,input.now,kind,state.recovery_revision]).map_err(db_error)?;
+        let charged =
+            dead_elsewhere && kind == "unknown" && unresolved_invocation(tx, &window, &nonce)?;
+        tx.execute("INSERT OR IGNORE INTO memory_projection_attempts(attempt_ref,window_ref,job_id,attempt_count,state,error_code,input_sha256,output_json,provider_evidence_json,recorded_at,attempt_kind,provider_invoked,outcome_known,recovery_revision,invocation_ref) VALUES(?1,?2,?3,?4,'interrupted','memory_projection_interrupted',?5,?6,?7,?8,?9,?10,0,?11,?12)",params![format!("{window}:attempt:{}:interrupted",state.attempt_count),window,job,state.attempt_count,state.input_sha256,state.output_json,state.provider_evidence_json,input.now,kind,i64::from(charged),state.recovery_revision,nonce]).map_err(db_error)?;
+        let exhausted =
+            failed_provider_attempt_count(tx, &window, state.recovery_revision.as_deref())? >= 3;
         let retry = interrupted_retry(tx, &window, &nonce, input.now, state.attempt_count)?;
         let (state, code, next) = if state.normalized_plan.is_some() {
             ("planned", "memory_projection_interrupted", Some(input.now))
@@ -290,25 +298,29 @@ fn interrupted_retry(
     now: &str,
     attempts: i64,
 ) -> CognitionResult<String> {
-    let unknown=connection.query_row("SELECT EXISTS(SELECT 1 FROM memory_projection_attempts started WHERE window_ref=?1 AND invocation_ref=?2 AND outcome_known=0 AND NOT EXISTS(SELECT 1 FROM memory_projection_attempts settled WHERE settled.window_ref=started.window_ref AND settled.invocation_ref=started.invocation_ref AND settled.outcome_known=1))",params![window,nonce],|row|row.get::<_,bool>(0)).map_err(db_error)?;
-    if unknown {
+    if unresolved_invocation(connection, window, nonce)? {
         super::failure::retry_at(now, attempts)
     } else {
         Ok(now.to_owned())
     }
 }
 
-// Only recorded failures spend the provider budget. Successful stages and
-// abandoned calls are replayable; neither proves a model failure. In particular,
-// the saved stage precedes provisional meaning, whose changes and window marker
-// commit atomically (apply::commit_meaning). Final apply and completion are also
-// atomic, so an interrupted owner can resume without applying either twice.
+fn unresolved_invocation(
+    connection: &Connection,
+    window: &str,
+    nonce: &str,
+) -> CognitionResult<bool> {
+    connection.query_row("SELECT EXISTS(SELECT 1 FROM memory_projection_attempts started WHERE window_ref=?1 AND invocation_ref=?2 AND state='invocation_intent' AND outcome_known=0 AND NOT EXISTS(SELECT 1 FROM memory_projection_attempts settled WHERE settled.window_ref=started.window_ref AND settled.invocation_ref=started.invocation_ref AND settled.outcome_known=1))",params![window,nonce],|row|row.get::<_,bool>(0)).map_err(db_error)
+}
+
+// Saved stages resume without a new call. Only provider failures and unresolved
+// invocations from a definitely dead process spend the cap.
 pub(super) fn failed_provider_attempt_count(
     tx: &Connection,
     window: &str,
     recovery: Option<&str>,
 ) -> CognitionResult<i64> {
-    tx.query_row("SELECT COUNT(DISTINCT invocation_ref) FROM memory_projection_attempts WHERE window_ref=?1 AND provider_invoked=1 AND state='failed' AND error_code NOT IN ('memory_write_busy','memory_projection_outcome_unknown') AND recovery_revision IS ?2",params![window,recovery],|r|r.get(0)).map_err(db_error)
+    tx.query_row(&format!("SELECT COUNT(DISTINCT a.invocation_ref) FROM memory_projection_attempts a WHERE a.window_ref=?1 AND {CHARGED_PROVIDER_ATTEMPT} AND a.recovery_revision IS ?2"),params![window,recovery],|r|r.get(0)).map_err(db_error)
 }
 fn parse<T: serde::de::DeserializeOwned>(value: &str) -> CognitionResult<T> {
     serde_json::from_str(value).map_err(json_error)
