@@ -87,6 +87,22 @@ async fn turn_trace_complete_and_traceparent_joins_trace() -> Result<(), Harness
         .iter()
         .find(|s| s["category"] == "http.server" && s["attrs"]["route"] == "/messages")
         .unwrap();
+    let records =
+        s.gw.get(&format!("/logs?category=http.server&trace_id={trace_id}"))
+            .await?;
+    let rows = records.data()["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 2, "HTTP records per inbound request: {rows:?}");
+    assert_eq!(
+        rows.iter().filter(|r| r["event"] == "span.start").count(),
+        1
+    );
+    let completion = rows.iter().find(|r| r["event"] == "span.end").unwrap();
+    assert_eq!(completion["attrs"]["method"], "POST");
+    assert_eq!(completion["attrs"]["route"], "/messages");
+    assert_eq!(completion["attrs"]["status"], 202);
+    assert_eq!(completion["attrs"]["action"], "message.send");
+    assert!(completion["duration_ms"].as_f64().unwrap() >= 0.0);
+    eprintln!("TRACE-01 inbound_http_records_per_request={}", rows.len());
     let admission = spans.iter().find(|s| s["name"] == "turn.admit").unwrap();
     assert!(
         gateway["start_offset_ms"].as_f64().unwrap()

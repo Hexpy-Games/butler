@@ -37,6 +37,9 @@ impl Lifetime {
         let _ = log.record(self.row.clone());
     }
     pub(super) fn finish(&self, log: &Logger, fields: &Map<String, Value>) {
+        let _ = log.record(self.completion(fields));
+    }
+    pub(super) fn completion(&self, fields: &Map<String, Value>) -> Record {
         let mut row = with_fields(self.row.clone(), fields);
         row.event = "span.end".into();
         if let Some(start) = fields.get("started_at").and_then(Value::as_str) {
@@ -55,7 +58,7 @@ impl Lifetime {
         if row.attrs["status"] == "error" {
             row.level = "ERROR".into();
         }
-        let _ = log.record(row);
+        row
     }
 }
 fn with_fields(mut row: Record, fields: &Map<String, Value>) -> Record {

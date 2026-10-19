@@ -41,6 +41,15 @@ impl TraceContext {
             ..Self::default()
         })
     }
+    /// Complete the current span and wait for its row to reach the writer.
+    /// Dropping the span afterwards will not emit a second completion.
+    pub async fn finish_current_span() {
+        if let Some(row) = super::layer::complete_current()
+            && let Some(log) = super::global()
+        {
+            let _ = log.record_written(row).await;
+        }
+    }
     pub fn http_span(&self, level: &str) -> tracing::Span {
         let trace_id = self
             .trace_id
@@ -50,7 +59,8 @@ impl TraceContext {
             parent_span_id = self.span_id.as_deref(), turn_id = self.turn_id.as_deref(),
             chat_id = self.chat_id.as_deref(), message_id = self.message_id.as_deref(),
             method = tracing::field::Empty, route = tracing::field::Empty,
-            status = tracing::field::Empty, action = tracing::field::Empty)
+            status = tracing::field::Empty, action = tracing::field::Empty,
+            start = tracing::field::Empty, access_log = tracing::field::Empty)
     }
     pub fn span(&self, name: &'static str) -> tracing::Span {
         let trace_id = self
