@@ -13,7 +13,6 @@
 # cleanup logs one line and exits 0, so PR CI and local builds stay ad-hoc.
 # Every release (preview or stable) is Developer ID signed, notarized and
 # stapled; BUTLER_SIGN_REQUIRED=1 refuses ad-hoc or missing identities.
-# Apple can't notarize ad-hoc signatures, so notarize skips identity "-".
 #   BUTLER_SIGN_IDENTITY  certificate SHA-1 or name ("-" = ad-hoc self-test)
 #   BUTLER_SIGN_KEYCHAIN  keychain holding the identity (optional)
 #   BUTLER_SIGN_HOME      runner HOME whose keychain search list setup changed (set by CI setup)
@@ -258,10 +257,6 @@ sign_dmg() {
 
 notarize() {
   local path=${1%/} work sub out status id i
-  if adhoc; then
-    log "ad-hoc identity; skipping notarization and stapling of $(basename "$path")"
-    return 0
-  fi
   if [ -z "${BUTLER_NOTARY_KEY_PATH:-}" ] || [ -z "${BUTLER_NOTARY_KEY_ID:-}" ] ||
     [ -z "${BUTLER_NOTARY_ISSUER_ID:-}" ]; then
     die "notary API key env is incomplete"
