@@ -1,7 +1,8 @@
 // Public UI -> isolated Rust gateway, existing authority storage, stub models only.
 import { strict as assert } from "node:assert";
-import { mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { type Page, type Route } from "playwright";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { createNativeAppServer } from "../support/native-app-server.ts";
@@ -57,7 +58,9 @@ async function open(page: Page, url: string, name: string, width: number) {
 
 async function runLocale(locale: "ko" | "en") {
     setAppCopyLanguage(locale);
-    const server = await createNativeAppServer({ uiRoot: resolve(before ? ".tmp/security-before-ui" : "packages/butler-app/client/ui/dist"), config: { user: { name: "Smoke", language: locale } }, env: { BUTLER_APP_FOREGROUND_LEASE: "0" } });
+    // Start after the daily scheduler boundary regardless of the host clock or timezone.
+    const timezone = new Date().getUTCHours() < 12 ? "Etc/GMT-12" : "UTC";
+    const server = await createNativeAppServer({ uiRoot: resolve(before ? ".tmp/security-before-ui" : "packages/butler-app/client/ui/dist"), config: { user: { name: "Smoke", language: locale } }, env: { BUTLER_APP_FOREGROUND_LEASE: "0", TZ: timezone } });
     const { secret } = JSON.parse(readFileSync(join(server.butlerData, "app/runtime/auth/local-admin.json"), "utf8"));
     const fixture = await seedApprovalFixture(server);
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
@@ -111,6 +114,12 @@ async function runLocale(locale: "ko" | "en") {
       assert.equal(listed.permissions.length, 13);
       assert.equal(listed.permissions.filter(g => g.target === fixture.command).length, 2);
       assert(listed.permissions.some(g => g.session_title === "Files review"));
+      const startupCycle = join(server.butlerData, "state/scheduler/consolidation-cycle.json");
+      const deadline = Date.now() + 30_000;
+      while (!existsSync(startupCycle) && Date.now() < deadline) await delay(100);
+      assert(existsSync(startupCycle), "startup consolidation must finish before Settings interactions");
+      // The scheduled startup briefing is intentional (#1242); Settings must add no model calls.
+      const modelCallsBeforeSettings = server.stubModelCalls.length;
       for (const theme of ["light", "dark"]) for (const width of [1280, 375]) {
         await freshPage(width);
         await server.api("/settings", { method: "PATCH", headers: adminHeaders, body: JSON.stringify({ appearance_theme: theme }) });
@@ -266,11 +275,12 @@ async function runLocale(locale: "ko" | "en") {
         }
         assert.equal(await page.getByText("INTERNAL TEST MESSAGE", { exact: true }).count(), 0);
       }
-      assert.equal(server.stubModelCalls.length, 0);
+      assert.equal(server.stubModelCalls.length, modelCallsBeforeSettings);
+      console.log(JSON.stringify({ locale, modelCallsBeforeSettings, modelCallsAfterSettings: server.stubModelCalls.length, settingsModelCalls: server.stubModelCalls.length - modelCallsBeforeSettings }));
     } catch (error) { console.error(error); await page.screenshot({ path: join(output, `${locale}-failure.png`), animations: "allow", timeout: 10_000 }); console.error(error); throw error; }
     finally { releaseLoading(); try { await page.unrouteAll({ behavior: "ignoreErrors" }); await page.goto("about:blank", { waitUntil: "commit" }); await page.close(); } finally { await server.stop(); } }
 }
 try {
   for (const locale of ["ko", "en"] as const) await runLocale(locale);
-  console.log(JSON.stringify({ ok: true, before, locales: ["ko", "en"], widths: [375, 1280], screenshots: screenshots.length, modelCalls: 0 }));
+  console.log(JSON.stringify({ ok: true, before, locales: ["ko", "en"], widths: [375, 1280], screenshots: screenshots.length, settingsModelCalls: 0 }));
 } finally { await browser.close(); }
