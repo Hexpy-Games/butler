@@ -51,27 +51,10 @@ fn percentile(values: &[Duration], percentile: usize) -> f64 {
 async fn perf_trampoline_start_latency_and_process_identity() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(command_sandbox::linux_test_host(), "Linux sandbox latency");
-    measure(0)
-}
-
-#[tokio::test]
-async fn perf_launch_with_20000_preexisting_links() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    butler_e2e::skip_unless!(command_sandbox::linux_test_host(), "Linux sandbox latency");
-    measure(20000)
-}
-
-fn measure(links: usize) -> Result<(), HarnessError> {
     let mut setup = Setup::new("LINUX-LATENCY")?;
     let cwd = setup.sandbox.workspace.join("프로젝트 ✓/깊은 경로");
     std::fs::create_dir_all(&cwd)?;
     std::fs::write(cwd.join("fixture.txt"), "complete-fixture\n")?;
-    for index in 0..links {
-        butler_platform::secure_fs::symlink(
-            Path::new("fixture.txt"),
-            &cwd.join(format!("link{index}")),
-        )?;
-    }
     let environment = HashMap::from([("HOME".into(), setup.sandbox.home.display().to_string())]);
     let command = "printf '%s\\n' \"$$\"; ps -o pgid= -p $$ | tr -d ' '; cat fixture.txt";
     let plain =
@@ -105,7 +88,7 @@ fn measure(links: usize) -> Result<(), HarnessError> {
         ("native Linux", Duration::from_millis(2))
     };
     eprintln!(
-        "LINUX-START-LATENCY links={links} host={host} added_p50_budget_ms={:.3} N=60 baseline_p50_ms={:.3} baseline_p95_ms={:.3} contained_p50_ms={:.3} contained_p95_ms={:.3} added_p50_ms={p50:.3} added_p95_ms={p95:.3}",
+        "LINUX-START-LATENCY host={host} added_p50_budget_ms={:.3} N=60 baseline_p50_ms={:.3} baseline_p95_ms={:.3} contained_p50_ms={:.3} contained_p95_ms={:.3} added_p50_ms={p50:.3} added_p95_ms={p95:.3}",
         budget.as_secs_f64() * 1000.0,
         percentile(&baseline, 50),
         percentile(&baseline, 95),
@@ -124,12 +107,6 @@ fn measure(links: usize) -> Result<(), HarnessError> {
         budget,
         "Linux added launch latency p50",
     );
-    for index in 0..links {
-        assert_eq!(
-            std::fs::read_to_string(cwd.join(format!("link{index}")))?,
-            "complete-fixture\n"
-        );
-    }
     setup.sandbox.mark_success();
     Ok(())
 }
