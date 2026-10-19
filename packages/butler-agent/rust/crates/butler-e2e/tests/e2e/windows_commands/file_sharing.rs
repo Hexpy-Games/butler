@@ -24,6 +24,15 @@ async fn release_after_publication_starts(
                 tokio::time::sleep(Duration::from_millis(350)).await;
                 if let Some(path) = external_save {
                     fs::write(path, "external save\n")?;
+                    // Keep denying replacement until the edit re-checks and drops its staging
+                    // file, so no rename can follow an unchecked save.
+                    while fs::read_dir(directory)?.any(|entry| {
+                        entry.is_ok_and(|entry| {
+                            entry.path().extension().is_some_and(|ext| ext == "tmp")
+                        })
+                    }) {
+                        tokio::time::sleep(Duration::from_millis(5)).await;
+                    }
                 }
                 break;
             }
