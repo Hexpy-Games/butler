@@ -254,7 +254,7 @@ jobs:
           # The Agent's online ticket can lag; verify-agent retries before this check prints it.
           agent="$BUTLER_NATIVE_AGENT_PAYLOAD/bin/butler-agent"
           check deploy/macos/sign-and-notarize.sh verify-agent "$agent"
-          check codesign --verify -R='=notarized' --check-notarization --verbose=2 "$agent"
+          check codesign --verify -R=notarized --check-notarization --verbose=2 "$agent"
 
       - name: Preserve validated native App files for publication recovery
         uses: actions/upload-artifact@v4

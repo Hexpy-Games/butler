@@ -335,7 +335,7 @@ verify_agent() {
   local i
   assert_signed "$1"
   for i in 1 2 3; do
-    if codesign --verify -R='=notarized' --check-notarization "$1"; then return 0; fi
+    if codesign --verify -R=notarized --check-notarization "$1"; then return 0; fi
     sleep 15
   done
   die "agent has no notarization ticket: $1"

@@ -10,6 +10,13 @@ work=$(mktemp -d)
 mount=$work/mounted
 trap 'if [ -d "$mount/Butler.app" ]; then hdiutil detach "$mount"; fi; chmod -R u+w "$work"; rm -rf "$work"' EXIT
 
+# Every code requirement passed to codesign must parse, or the release check fails.
+requirements=$(grep -o -- '-R=[^ ]*' "$script" | cut -c4-)
+[ -n "$requirements" ] || { echo "no code requirement found" >&2; exit 1; }
+while IFS= read -r requirement; do
+  csreq -r="$requirement" -t > /dev/null || { echo "invalid code requirement: $requirement" >&2; exit 1; }
+done <<< "$requirements"
+
 out=$(env -u BUTLER_SIGN_IDENTITY "$script" sign-app "$work/none.app")
 grep -q 'skipping sign-app' <<< "$out" || { echo "no-identity mode did not skip" >&2; exit 1; }
 
