@@ -21,7 +21,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { onboardingCompletedPatch } from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
-import { markDailyJobsDone } from "./daily-job-markers.ts";
 
 export type StubModelRequest = { stream: boolean; messages: unknown[]; body: Record<string, unknown> };
 
@@ -31,9 +30,6 @@ export type NativeAppServerOptions = {
   config?: Record<string, unknown>;
   /** Marks first-chat onboarding complete before launch. Default true. */
   onboardingComplete?: boolean;
-  /** Default "done-today" pre-marks today's 04:00 jobs done in the gateway's local day so the scheduled briefing (#1242) cannot call the model mid-smoke at a time-of-day-dependent moment.
-   * "due" leaves them to run on the first tick after 04:00. */
-  dailyJobs?: "done-today" | "due";
   stubReply?: (request: StubModelRequest) => string | Promise<string>;
   /** Offline provider deltas, paced by the scenario. */
   stubTextStream?: (request: StubModelRequest) => AsyncIterable<string>;
@@ -351,7 +347,6 @@ function spawnLoggedGateway(command: string, args: string[],
 export async function createNativeAppServer(options: NativeAppServerOptions = {}): Promise<NativeAppServerHandle> {
   const scratch = mkdtempSync(join(tmpdir(), "butler-native-smoke-"));
   const butlerData = options.butlerData ?? join(scratch, "data");
-  const timeZone = options.env?.TZ ?? process.env.TZ;
   const home = join(scratch, "home");
   const installation = join(scratch, "install");
   const resources = join(installation, "resources");
@@ -385,7 +380,6 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
 
   const port = await freeGatewayPort();
   const logPath = join(scratch, "gateway.log");
-  if (options.dailyJobs !== "due") markDailyJobsDone(butlerData, timeZone);
   const gateway = spawnLoggedGateway(
     join(installation, "bin/butler-agent"),
     ["--installation-root", installation, "--resource-root", resources],
@@ -406,7 +400,6 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
         BUTLER_E2E_TIER: "stub",
         BUTLER_E2E_EMBED_SOURCES: "http://127.0.0.1:9",
         ...(options.devOrigins?.length ? { BUTLER_APP_DEV_ORIGIN: options.devOrigins.join(",") } : {}),
-        ...(timeZone !== undefined ? { TZ: timeZone } : {}),
         ...options.env,
       },
     },
