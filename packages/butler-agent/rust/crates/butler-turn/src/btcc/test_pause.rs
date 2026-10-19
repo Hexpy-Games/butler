@@ -1,9 +1,14 @@
-//! Named process barriers, compiled only for test-support builds.
+//! Named process barriers, compiled only for e2e-fixtures builds.
+#![allow(
+    clippy::unwrap_used,
+    clippy::panic,
+    reason = "E2E barrier setup must fail loudly"
+)]
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[allow(
     clippy::disallowed_methods,
-    reason = "test-support loopback barrier protocol"
+    reason = "e2e-fixtures loopback barrier protocol"
 )]
 pub async fn reach(point: &str, turn_id: &str) {
     let Ok(address) = std::env::var("BUTLER_TEST_PAUSE_ADDR") else {
