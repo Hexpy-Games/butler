@@ -22,11 +22,12 @@ const SAVE_NEW: &str = "Remember this instruction: always format dates as YYYY-M
 async fn fragmented_compaction_releases_write_lease_and_cancels_on_shutdown()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (setup, remember, _) = setup()?;
+    let (setup, remember, code) = setup()?;
     let release = setup.sandbox.root.join("compact-release");
     let mut s = setup.env("BUTLER_MEMORY_SYNC_TRACE", "1").start().await?;
     assert_eq!(s.turn("general", &remember).await?.1["state"], "delivered");
     memory_stubs::text_complete(&s.sandbox.data, 1).await?;
+    let saved = instruction(&s, &format!("The user's bike lock code is {code}.")).await?;
     batch::recall(&s, "general", ASK).await?;
     memory_stubs::vectors_complete(&s.sandbox.data, 2).await?;
     assert_eq!(s.turn("general", SAVE_OLD).await?.1["state"], "delivered");
@@ -57,10 +58,7 @@ async fn fragmented_compaction_releases_write_lease_and_cancels_on_shutdown()
     let forgotten = s.gw.send(reqwest::Method::DELETE, &format!("/memory/instructions/{}", old["handle"].as_str().unwrap()), Some(json!({"expected_revision":old["revision"], "project_id":null, "operation_id":uuid::Uuid::new_v4().to_string()}).to_string())).await?;
     assert_eq!(forgotten.status, 200, "{}", forgotten.text);
     let forget_ms = started.elapsed().as_millis();
-    assert_eq!(
-        s.gw.get("/memory/instructions").await?.data()["instructions"],
-        json!([latest.clone()])
-    );
+    assert_instructions(&s, &saved, &latest).await?;
     assert!(!release.exists(), "compaction hold was released");
     assert!(!s.agent.current_logs().await?.contains("compact_ms="));
     let started = Instant::now();
@@ -112,10 +110,7 @@ async fn fragmented_compaction_releases_write_lease_and_cancels_on_shutdown()
         assert_eq!(&after["rows"][key], row, "compaction lost or changed {key}");
     }
     assert_rows_and_latest(&s.sandbox.data, &after)?;
-    assert_eq!(
-        s.gw.get("/memory/instructions").await?.data()["instructions"],
-        json!([latest])
-    );
+    assert_instructions(&s, &saved, &latest).await?;
     eprintln!(
         "COMPACTION fragments_before={} rows_before={} rows_after={} write_ms={write_ms} forget_ms={forget_ms} shutdown_ms={} held_until_shutdown=true latest_content=true",
         before["fragments"],
@@ -165,6 +160,21 @@ async fn instruction(s: &Scenario, text: &str) -> Result<Value, HarnessError> {
         .find(|row| row["text"] == text)
         .unwrap_or_else(|| panic!("missing {text}: {}", list.text))
         .clone())
+}
+
+async fn assert_instructions(
+    s: &Scenario,
+    saved: &Value,
+    latest: &Value,
+) -> Result<(), HarnessError> {
+    let list = s.gw.get("/memory/instructions").await?;
+    assert_eq!(list.status, 200, "{}", list.text);
+    let mut actual = list.data()["instructions"].as_array().unwrap().clone();
+    let mut expected = vec![saved.clone(), latest.clone()];
+    actual.sort_by_key(|row| row["handle"].as_str().unwrap().to_owned());
+    expected.sort_by_key(|row| row["handle"].as_str().unwrap().to_owned());
+    assert_eq!(actual, expected);
+    Ok(())
 }
 
 async fn inspect(command: &str, data: &Path) -> Result<Value, HarnessError> {

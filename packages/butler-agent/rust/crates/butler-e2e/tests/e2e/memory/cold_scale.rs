@@ -102,12 +102,12 @@ fn seed_history(data: &Path) -> Result<(), HarnessError> {
     crate::btcc_scale::seed(data)
 }
 
-fn assert_complete(result: &Value, code: &str, count: usize) {
+fn assert_complete(result: &Value, code: &str, conversations: usize) {
     let output = &result["output"];
     assert_eq!(output["coverage"]["vectors"]["state"], "ok", "{result}");
     assert_eq!(output["status"], "complete", "{result}");
     let results = output["results"].as_array().unwrap();
-    assert_eq!(results.len(), count, "{result}");
+    super::assert_saved_instruction(result, code, conversations);
     assert!(output["next_cursor"].is_null(), "{result}");
     assert!(
         results.iter().any(|item| item.to_string().contains(code)
@@ -212,7 +212,7 @@ async fn restart_keeps_worker_and_deferred_vectors_idle_until_demand() -> Result
     assert_complete(&first, &code, 3);
     memory_stubs::vectors_complete(&s.sandbox.data, 4).await?;
     eprintln!(
-        "RESTART-DEFERRED startup_workers=0 idle_pending=1 demand_pending=0 complete_results=3"
+        "RESTART-DEFERRED startup_workers=0 idle_pending=1 demand_pending=0 complete_results=4"
     );
     s.finish().await
 }
