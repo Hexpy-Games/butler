@@ -14,9 +14,6 @@ type Edges = BTreeMap<String, BTreeSet<String>>;
 
 pub(super) fn check(root: &Path) -> Result<bool, String> {
     let crates = workspace_crates(&root.join("crates"))?;
-    if crates.is_empty() {
-        return Ok(false);
-    }
     let idents: BTreeSet<_> = crates.iter().map(|(ident, _)| ident.clone()).collect();
     let mut errors = BTreeSet::new();
     let (modules, owner) = load_crates(&crates, &mut errors)?;
@@ -43,6 +40,16 @@ pub(super) fn check(root: &Path) -> Result<bool, String> {
         let mut visited = BTreeSet::new();
         if cycle(source, source, &edges, &mut path, &mut visited) {
             errors.insert(format!("domain dependency cycle: {}", path.join(" -> ")));
+        }
+    }
+    for entry in crate::targets::workspace_roots(root)? {
+        if crates.iter().any(|(_, library)| library == &entry) {
+            continue;
+        }
+        for module in modules::load(&entry)? {
+            for error in references::References::collect(&module, &idents).errors {
+                errors.insert(format!("{}: {error}", module.file.display()));
+            }
         }
     }
     report(&modules, &domains, &edges, &errors);

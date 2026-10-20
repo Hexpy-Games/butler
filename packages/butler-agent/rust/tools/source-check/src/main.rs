@@ -5,6 +5,8 @@ mod function_length;
 mod model_literals;
 mod modules;
 mod platform_boundary;
+mod reachability;
+mod targets;
 mod test_count;
 mod wall_clock;
 
