@@ -124,10 +124,10 @@ fn commit(root: &Path, first: Job, state: &Mutex<State>) {
     }
     let result = batch.commit();
     for job in completed {
-        let outcome = result
-            .as_ref()
-            .map(|()| ())
-            .map_err(|_| GatewayApplicationError::internal());
+        let outcome = match &result {
+            Ok(()) => Ok(()),
+            Err(_) => Err(GatewayApplicationError::internal()),
+        };
         let _ = job.done.send(outcome);
     }
 }

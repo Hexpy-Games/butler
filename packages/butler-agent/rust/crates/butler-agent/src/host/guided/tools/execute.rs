@@ -375,7 +375,7 @@ async fn finish(
     result: Option<&JsonDocument>,
 ) -> Result<(), ToolExecutionError> {
     if let Some(result) = result {
-        super::browser::wait_files(owner, result).await?;
+        super::browser::durability::wait(owner, result).await?;
     }
     owner
         .journal

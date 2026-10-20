@@ -79,7 +79,14 @@ impl PrivateFileBatch {
             None => {
                 for path in &self.paths {
                     let temporary = unique_temporary(path);
-                    rename(path, &temporary)?;
+                    let mut options = OpenOptions::new();
+                    options.write(true).create_new(true);
+                    let _ = owner_only(&mut options);
+                    drop(options.open(&temporary)?);
+                    if let Err(error) = rename(path, &temporary) {
+                        let _ = fs::remove_file(&temporary);
+                        return Err(error);
+                    }
                     if let Err(error) = rename(&temporary, path) {
                         let _ = fs::remove_file(&temporary);
                         return Err(error);

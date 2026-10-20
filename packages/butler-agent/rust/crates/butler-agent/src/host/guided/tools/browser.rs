@@ -1,8 +1,7 @@
 //! Conversation-owned browser tools; web content cannot select authority or owners.
 mod assets;
-mod durability;
-pub(super) use durability::wait as wait_files;
 mod authority;
+pub(super) mod durability;
 pub(super) use assets::lookup_assets;
 mod client;
 mod dialog;
