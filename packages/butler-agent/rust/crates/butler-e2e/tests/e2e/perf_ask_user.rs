@@ -39,7 +39,7 @@ async fn pending(name: &str) -> Result<(Scenario, String, Value), HarnessError> 
 }
 
 #[tokio::test]
-async fn perf_ask_user_pending_question_session_view_p95_under_150ms() -> Result<(), HarnessError> {
+async fn perf_ask_user_pending_question_session_view_p95() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, turn, question) = pending("ASK-USER-PERF").await?;
     scale::seed_history(&s, &question).await?;
