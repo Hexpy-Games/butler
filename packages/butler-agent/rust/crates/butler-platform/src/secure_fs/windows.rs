@@ -14,7 +14,7 @@ pub(super) fn discard_cached_pages(_: &File) -> Option<io::Result<()>> {
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::replace_retry::{DeleteProbe, SHARING_ERRORS, replacement_retry_allowed};
+use super::replace_retry::{DeleteProbe, replacement_retry_allowed};
 use super::{ExchangeError, FileIdentity, FileMode, FileTime, Writability};
 mod acl;
 
@@ -25,9 +25,6 @@ pub(super) const FILE_IDS: bool = false;
 pub(super) const DIRECTORY_SYNC: bool = false;
 pub(super) const ATOMIC_EXCHANGE: bool = false;
 
-/// How often, and how far apart, a refused rename is retried.
-const RENAME_ATTEMPTS: u32 = 10;
-const RENAME_BACKOFF: std::time::Duration = std::time::Duration::from_millis(20);
 const REPLACEMENT_ATTEMPTS: u32 = 20;
 const REPLACEMENT_BACKOFF: std::time::Duration = std::time::Duration::from_millis(50);
 
@@ -219,9 +216,12 @@ pub(super) fn rename(from: &Path, to: &Path) -> io::Result<()> {
         // The safe wrapper calls MoveFileExW with REPLACE_EXISTING | WRITE_THROUGH.
         let result = atomicwrites::replace_atomic(&from, &to);
         match result {
-            Err(error) if attempt < RENAME_ATTEMPTS && is_transient(&error) => {
+            Err(error)
+                if attempt < REPLACEMENT_ATTEMPTS
+                    && replacement_is_transient(&error, &from, &to) =>
+            {
                 attempt += 1;
-                std::thread::sleep(RENAME_BACKOFF);
+                std::thread::sleep(REPLACEMENT_BACKOFF);
             }
             result => return result,
         }
@@ -284,31 +284,28 @@ fn move_path(path: &Path) -> io::Result<PathBuf> {
     Ok(fs::canonicalize(parent)?.join(name))
 }
 
-fn replacement_is_transient(error: &io::Error, from: &Path, to: &Path) -> bool {
+pub(super) fn replacement_is_transient(error: &io::Error, from: &Path, to: &Path) -> bool {
     replacement_retry_allowed(error.raw_os_error(), || delete_probes(from, to))
 }
 
-fn is_transient(error: &io::Error) -> bool {
-    error.kind() == io::ErrorKind::PermissionDenied
-        || error
-            .raw_os_error()
-            .is_some_and(|code| SHARING_ERRORS.contains(&code))
-}
-
-/// DELETE-only reopens of both files, or `None` for a read-only target.
+/// Probe source DELETE and target DELETE, or parent FILE_ADD_FILE for creation.
+/// Read-only targets and metadata failures do not permit retry.
 fn delete_probes(from: &Path, to: &Path) -> Option<[DeleteProbe; 2]> {
-    if !current_metadata(to)
-        .is_ok_and(|metadata| !metadata.is_file() || !metadata.permissions().readonly())
-    {
-        return None;
-    }
-    Some([("source", from), ("target", to)].map(|(role, path)| {
-        // Request DELETE without deleting anything. Share all access, and
+    let (target, access) = match current_metadata(to) {
+        Ok(metadata) if metadata.is_file() && metadata.permissions().readonly() => return None,
+        Ok(_) => (to, 0x0001_0000),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            (to.parent().unwrap_or(Path::new(".")), 0x0000_0002)
+        }
+        Err(_) => return None,
+    };
+    Some([("source", from, 0x0001_0000), ("target", target, access)].map(|(role, path, access)| {
+        // Share all access without changing the probed entry, and
         // inspect reparse entries themselves. Every probe handle closes here,
         // before the next rename attempt or its backoff.
         let result = OpenOptions::new()
             .read(true)
-            .access_mode(0x0001_0000)
+            .access_mode(access)
             .share_mode(7)
             .custom_flags(0x0220_0000)
             .open(path);
