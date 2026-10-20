@@ -16,11 +16,9 @@ export function SecurityRemoteAccessFields({
 }) {
   const copy = appCopy.settings.security;
   const codes = [...new Set(view.bind_errors?.map(({ code }) => code))];
-  const firstCode = codes[0];
+  const firstCode = codes.find((code) => code && Object.hasOwn(copy.bindErrors, code)) ?? "bind_failed";
   const bindError = codes.length > 0
-    ? firstCode && Object.hasOwn(copy.bindErrors, firstCode)
-      ? copy.bindErrors[firstCode as keyof typeof copy.bindErrors]
-      : copy.bindErrors.bind_failed
+    ? copy.bindErrors[firstCode as keyof typeof copy.bindErrors]
     : undefined;
   return (
     <>
@@ -51,7 +49,7 @@ export function SecurityRemoteAccessFields({
                 </Stack>
               ))}
             </Stack>
-          ) : (
+          ) : bindError ? null : (
             <Typo.Caption tone="secondary">{copy.noAddresses}</Typo.Caption>
           )}
         />

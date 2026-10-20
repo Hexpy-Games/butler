@@ -73,7 +73,8 @@ async function verify(language: "ko" | "en", ip: string) {
     if (beforeUi) assert.equal(await field.getByRole("alert").count(), 0);
     else {
       assert.equal(view.bind_errors.find(error => error.address === `${ip}:${server.port}`)?.code, "address_in_use");
-      await field.getByRole("alert").getByText(language === "ko" ? "포트 사용 중" : "Port in use", { exact: true }).waitFor();
+      await field.getByRole("alert").getByText(copy.settings.security.bindErrors.address_in_use, { exact: true }).waitFor();
+      assert.equal(await field.getByText(copy.settings.security.noAddresses, { exact: true }).count(), 0);
     }
     assert.equal(await toggle.isChecked(), true);
     if (language === "ko") await capture(page);
