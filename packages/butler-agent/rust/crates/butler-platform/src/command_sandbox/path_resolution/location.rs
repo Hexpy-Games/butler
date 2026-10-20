@@ -3,6 +3,35 @@
 use super::{PathCandidate, PathSyntax, lexical, words::Word};
 use std::path::{Path, PathBuf};
 
+/// Windows shells accept a few directory operands attached to the builtin.
+/// Other attached spellings may change location, but have unknown semantics.
+pub(super) fn expand_attached(tokens: &mut Vec<Word>, syntax: PathSyntax) -> bool {
+    if syntax == PathSyntax::Posix {
+        return false;
+    }
+    let single = tokens.len() == 1;
+    let Some(first) = tokens.first_mut() else {
+        return false;
+    };
+    let lower = first.text.to_ascii_lowercase();
+    let suffix = ["chdir", "cd"].into_iter().find_map(|name| {
+        lower
+            .strip_prefix(name)
+            .filter(|tail| tail.starts_with(['.', '/']))
+    });
+    let Some(suffix) = suffix else { return false };
+    if !["..", "/"].contains(&suffix) || !single {
+        return true;
+    }
+    let operand = Word {
+        text: suffix.to_owned(),
+        ..Default::default()
+    };
+    first.text = "cd".to_owned();
+    tokens.push(operand);
+    false
+}
+
 type Position = (Option<PathBuf>, Option<PathBuf>);
 
 pub(super) struct Directories {

@@ -150,6 +150,7 @@ async fn registered_guard_followup_regressions() -> Result<(), HarnessError> {
         "cd src; printf ordinary",
         "cd src\nprintf ordinary",
         "cargo build",
+        "cargo build && ls target/debug",
         "npm run build",
         r#"git commit -m "x""#,
         "cd src && make",
@@ -222,7 +223,7 @@ async fn foreign_location_guard_followup() -> Result<(), HarnessError> {
     Ok(())
 }
 
-fn common_tool_path() -> String {
+pub(super) fn common_tool_path() -> String {
     let output = std::process::Command::new("rustc")
         .args(["--print", "sysroot"])
         .output()

@@ -5,6 +5,7 @@ mod auto;
 mod command_guard;
 mod command_guard_fallback;
 mod command_guard_followup;
+mod command_guard_strict;
 mod link_targets;
 pub(super) use authority::{approve, assert_counts, delivered, paused};
 mod sandbox_data_reads;

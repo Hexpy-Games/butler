@@ -101,11 +101,14 @@ pub fn screen_paths_with(
     };
     let mut directories = location::Directories::new(cwd);
     let mut filesystem_stable = true;
+    let mut links_possible = false;
     for segment in words::segments(command, syntax) {
-        let tokens = words::expand(&segment.text, env, syntax);
+        let mut tokens = words::expand(&segment.text, env, syntax);
+        let unknown_location = location::expand_attached(&mut tokens, syntax);
         result.complete &= tokens.iter().all(|word| word.known);
         let name = command_name(&tokens);
-        let opaque = opaque(&name, &tokens) || tokens.iter().any(|word| !word.known);
+        let opaque =
+            unknown_location || opaque(&name, &tokens) || tokens.iter().any(|word| !word.known);
         if opaque {
             result.complete = false;
         }
@@ -118,7 +121,7 @@ pub fn screen_paths_with(
                         || !Path::new(&word.text)
                             .components()
                             .any(|part| part == Component::ParentDir)))
-                .then(|| resolve(&word.text, directories.current.as_deref()))
+                .then(|| resolve(&word.text, directories.current.as_deref(), !links_possible))
                 .flatten(),
                 text: word.text.clone(),
                 glob: word.glob,
@@ -134,6 +137,7 @@ pub fn screen_paths_with(
             syntax,
         );
         filesystem_stable &= location;
+        links_possible |= !preserves_links(&name);
         result.complete &= directories.current.is_some();
         let index = usize::from(!opaque && segment.carries_directory() && tokens.len() > 1);
         let fallback = tokens
@@ -168,6 +172,31 @@ fn record_candidates(
             .zip(tokens)
             .filter_map(|(path, word)| word.path.then_some(path)),
     );
+}
+
+// This is intentionally small: arbitrary programs (including build scripts
+// and archive extractors) may create links. These operations cannot create a
+// symlink; mkdir -p can follow existing links, which resolution still checks.
+fn preserves_links(name: &str) -> bool {
+    [
+        "cd",
+        "chdir",
+        "pushd",
+        "popd",
+        "push-location",
+        "pop-location",
+        "set-location",
+        "sl",
+        "echo",
+        "printf",
+        "true",
+        "false",
+        "test",
+        "[",
+        "mkdir",
+        "touch",
+    ]
+    .contains(&name)
 }
 
 fn command_name(tokens: &[words::Word]) -> String {
@@ -211,6 +240,11 @@ fn opaque(name: &str, tokens: &[words::Word]) -> bool {
             "catch",
             "finally",
             "trap",
+            "shopt",
+            "setopt",
+            "unsetopt",
+            "enable",
+            "extglob",
             "alias",
             "unalias",
             "set",
@@ -273,13 +307,13 @@ pub fn resolve_path_token(
     if !word.known {
         return None;
     }
-    resolve(&word.text, Some(cwd))
+    resolve(&word.text, Some(cwd), true)
 }
 
 /// Resolve components in lookup order, before applying each parent traversal.
 /// Missing suffixes are useful lexical candidates, but cannot establish a
 /// parent: they might be links created by an earlier command in this script.
-fn resolve(candidate: &str, cwd: Option<&Path>) -> Option<PathBuf> {
+fn resolve(candidate: &str, cwd: Option<&Path>, allow_missing_parent: bool) -> Option<PathBuf> {
     let path = Path::new(candidate);
     let path = if path.is_absolute() || candidate.as_bytes().get(1..3) == Some(b":/") {
         path.to_path_buf()
@@ -288,7 +322,8 @@ fn resolve(candidate: &str, cwd: Option<&Path>) -> Option<PathBuf> {
     };
     let mut result = PathBuf::new();
     let mut existing = true;
-    for part in path.components() {
+    let mut parts = path.components().peekable();
+    while let Some(part) = parts.next() {
         match part {
             Component::CurDir => {}
             Component::ParentDir => {
@@ -303,6 +338,9 @@ fn resolve(candidate: &str, cwd: Option<&Path>) -> Option<PathBuf> {
                     match crate::secure_fs::canonicalize(&result) {
                         Ok(real) => result = real,
                         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                            if !allow_missing_parent && parts.peek().is_some() {
+                                return None;
+                            }
                             existing = false;
                         }
                         Err(_) => return None,
