@@ -2,11 +2,12 @@
 //! This guard is not an OS sandbox and cannot interpret arbitrary programs.
 use super::{CommandScope, GuidedCommand, active_root, error, ledger_guard};
 use butler_core::json::JsonDocument;
+use butler_platform::command_sandbox::{PathCandidate, PathScreen, screen_paths};
 use butler_platform::secure_fs::Canonical as _;
 use butler_turn::btcc::BtccError;
 use butler_turn::workspace::{Commands, looks_sensitive};
 use serde_json::{Map, Value, json};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 impl GuidedCommand {
     pub(crate) async fn check_paths(
@@ -24,15 +25,20 @@ impl GuidedCommand {
             .to_owned();
         let data = scope.butler_data.to_path_buf();
         let installation = scope.installation_root.map(Path::to_path_buf);
-        let home = self.host_environment.get("HOME").map(PathBuf::from);
+        let host = self.host_environment.clone();
         let path_form = super::directory_path_form(scope.contained_reads);
+        let registered = scope.execution == super::CommandExecution::Registered;
         timing.mark("before_job");
         let rejected = self.jobs.run(move || {
             let timing = super::timing::CommandTiming::new("guard_work");
             let cwd = Commands::guarded_directory_in_scope(&root, requested.as_deref(), path_form)?;
             timing.mark("cwd_done");
-            let denied = sensitive(&command, &cwd, &data, home.as_deref())
-                .or_else(|| ledger_guard::guard(&command, &cwd, &root, &data, installation.as_deref(), home.as_deref()));
+            let environment = Commands::tool_environment(&host, &data)?;
+            let home = butler_platform::command_sandbox::resolve_path_token("~", &cwd, &environment);
+            let paths = screen_paths(&command, &cwd, &environment);
+            // No match means no lexical rejection, never proof that a program is safe.
+            let denied = sensitive(&paths, &cwd, &data, &host)
+                .or_else(|| registered.then(|| ledger_guard::guard((&command, &paths), &cwd, &root, &data, installation.as_deref(), home.as_deref())).flatten());
             timing.mark("guard_done");
             Ok::<_, butler_turn::workspace::CommandError>(denied.map(|denied| json!({
                 "ok":false,"command":command,"cwd":cwd.to_string_lossy(),"exit_code":1,
@@ -49,46 +55,45 @@ impl GuidedCommand {
     }
 }
 
-fn sensitive(command: &str, cwd: &Path, data: &Path, home: Option<&Path>) -> Option<Value> {
+fn sensitive(
+    paths: &PathScreen,
+    cwd: &Path,
+    data: &Path,
+    environment: &std::collections::HashMap<String, String>,
+) -> Option<Value> {
     let denied = |target: &str| {
         json!({"error":"protected_path", "message":"Credential paths are protected.",
         "protected_path":target,
         "next":[{"action":"Use credential tools for credentials; inspect ordinary files with normal approval."}]})
     };
+    let inventory = butler_platform::secure_fs::SecretInventory::for_environment(data, environment);
+    let mut credentials = inventory.resolved_paths();
+    credentials.extend(inventory.paths().iter().cloned());
     for directory in [
         cwd.to_path_buf(),
         cwd.canonical().unwrap_or_else(|_| cwd.to_path_buf()),
     ] {
-        if looks_sensitive(&directory.to_string_lossy()) {
+        if looks_sensitive(&directory.to_string_lossy()) || inventory.protects_path(&directory) {
             return Some(denied(&directory.to_string_lossy()));
         }
     }
-    let credentials: Vec<_> = butler_platform::data_paths::GATEWAY_CREDENTIAL_DIRS
-        .iter()
-        .map(|path| ledger_guard::real_or_nearest(&data.join(path)))
-        .collect();
-    for raw in butler_platform::command_sandbox::path_tokens(command) {
-        let token = butler_platform::command_sandbox::normalize_path_token(raw);
-        if looks_sensitive(&token) || names_any(&token, cwd, data, home, &credentials) {
-            return Some(denied(raw));
+    for candidate in &paths.candidates {
+        let resolved = PathCandidate {
+            text: candidate.text.clone(),
+            glob: candidate.glob,
+            path: candidate.path.as_deref().map(ledger_guard::real_or_nearest),
+        };
+        if looks_sensitive(&candidate.text)
+            || resolved
+                .path
+                .as_ref()
+                .is_some_and(|path| looks_sensitive(&path.to_string_lossy()))
+            || credentials
+                .iter()
+                .any(|root| resolved.could_access(root) || candidate.could_access(root))
+        {
+            return Some(denied(&candidate.text));
         }
     }
     None
-}
-
-/// Whether `token`, resolved like the Ledger guard resolves paths, names one
-/// of the credential folders `credentials` (real paths) or a path beneath one.
-fn names_any(
-    token: &str,
-    cwd: &Path,
-    data: &Path,
-    home: Option<&Path>,
-    credentials: &[PathBuf],
-) -> bool {
-    ledger_guard::resolve(token, cwd, data, home).is_some_and(|path| {
-        let path = ledger_guard::real_or_nearest(&path);
-        credentials
-            .iter()
-            .any(|credential| butler_platform::secure_fs::path_is_within(&path, credential))
-    })
 }

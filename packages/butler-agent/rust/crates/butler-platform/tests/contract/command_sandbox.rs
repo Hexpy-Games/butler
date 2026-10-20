@@ -13,6 +13,8 @@ use butler_platform::command_sandbox::{
 };
 
 use super::scratch;
+#[path = "path_resolution.rs"]
+mod path_resolution;
 
 // Pin the Windows invocation plan on Linux too; native E2Es verify cmd parsing.
 #[path = "../../src/command_sandbox/windows/cmd.rs"]
@@ -46,6 +48,7 @@ fn read_only_commands_run_sandboxed_or_are_refused() {
     }
     #[cfg(target_os = "linux")]
     butler_platform::command_sandbox::verify_mount_plan_contract().unwrap();
+    path_resolution::verify();
     timeout_markers_require_both_code_and_trailing_marker();
     super::project_secrets::verify();
     cmd_arguments_remain_verbatim();

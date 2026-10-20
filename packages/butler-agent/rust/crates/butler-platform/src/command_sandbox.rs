@@ -22,6 +22,11 @@ pub use environment::tool_environment;
 mod operators;
 mod output;
 pub use output::CommandOutputDecoder;
+mod path_resolution;
+pub use path_resolution::lexical as lexical_path;
+pub use path_resolution::{
+    PathCandidate, PathScreen, PathSyntax, resolve_path_token, screen_paths, screen_paths_with,
+};
 mod path_candidates;
 pub use path_candidates::path_tokens;
 

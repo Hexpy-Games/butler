@@ -121,6 +121,10 @@ impl GuidedCommand {
         } else {
             args.get("timeout_ms").and_then(Value::as_f64)
         };
+        if let Some(rejected) = self.check_paths(args, &scope).await? {
+            timing.mark("refused");
+            return Ok(rejected);
+        }
         if registered {
             timing.mark("before_cwd_job");
             let guarded_root = root.clone();
@@ -134,10 +138,6 @@ impl GuidedCommand {
                 .await?
                 .map_err(BtccError::from)?;
             timing.mark("before_guard");
-            if let Some(rejected) = self.check_paths(args, &scope).await? {
-                timing.mark("refused");
-                return Ok(rejected);
-            }
             let before_git = registered_artifacts::snapshot(
                 &self.commands,
                 &root,
