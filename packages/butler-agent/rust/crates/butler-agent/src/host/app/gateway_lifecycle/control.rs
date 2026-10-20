@@ -41,7 +41,7 @@ pub(crate) struct GatewayControlServer {
     task: Option<JoinHandle<()>>,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ControlRequest {
     schema: String,
@@ -159,7 +159,7 @@ impl GatewayControlServer {
 
 async fn serve_one(
     stream: &mut TcpStream,
-    context: &ControlContext,
+    context: &Arc<ControlContext>,
 ) -> Result<(), crate::host::HostError> {
     let read = read_frame::<ControlRequest>(stream);
     #[cfg(feature = "e2e-fixtures")]
@@ -168,7 +168,14 @@ async fn serve_one(
         crate::host::service::shutdown_trace::event("control_request_timeout");
         crate::host::HostError::new("gateway_control_request_timeout").with_source(source)
     })??;
-    let result = if request_is_valid(&request, context) {
+    let validation_request = request.clone();
+    let validation_context = Arc::clone(context);
+    let valid = tokio::task::spawn_blocking(move || {
+        request_is_valid(&validation_request, &validation_context)
+    })
+    .await
+    .unwrap_or(false);
+    let result = if valid {
         run(&request, context).await
     } else {
         json!({"ok":false,"error":{"code":"gateway_control_identity_invalid","message":"Gateway control identity could not be verified"}})

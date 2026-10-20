@@ -42,6 +42,9 @@
 //!    whose start time was compared through it, stays open, so the id cannot
 //!    name another process in between.
 
+#[cfg(feature = "test-support")]
+mod fixture_identity;
+
 mod locale;
 pub use locale::system_locale;
 
@@ -179,7 +182,14 @@ pub enum IdentityError {
 /// exited, including an unreaped zombie. Instance records persist it, so
 /// the format is pinned.
 pub fn process_start(pid: u32) -> Result<Option<String>, IdentityError> {
-    sys::process_start(pid)
+    #[cfg(feature = "test-support")]
+    {
+        fixture_identity::probe(pid, "start", sys::process_start(pid))
+    }
+    #[cfg(not(feature = "test-support"))]
+    {
+        sys::process_start(pid)
+    }
 }
 
 /// The executable process `pid` runs: canonical on macOS, as
@@ -187,6 +197,17 @@ pub fn process_start(pid: u32) -> Result<Option<String>, IdentityError> {
 /// Windows (without a needless `\\?\` prefix). `None` when no process has
 /// the id.
 pub fn process_executable(pid: u32) -> Result<Option<String>, IdentityError> {
+    #[cfg(feature = "test-support")]
+    {
+        fixture_identity::probe(pid, "executable", executable_identity(pid))
+    }
+    #[cfg(not(feature = "test-support"))]
+    {
+        executable_identity(pid)
+    }
+}
+
+fn executable_identity(pid: u32) -> Result<Option<String>, IdentityError> {
     sys::process_executable(pid)?
         .map(|path| {
             crate::process_names::canonical_identity(path.into())

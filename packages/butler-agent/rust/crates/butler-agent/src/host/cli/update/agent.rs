@@ -76,7 +76,7 @@ async fn run_service(context: &Context, options: &Options) -> Result<Value, CliE
         manifest: options.manifest.clone(),
         channel: options.channel.clone(),
         dry_run: options.dry_run,
-        protected: context.protected_executables(),
+        protected: context.protected_executables().await,
     };
     let result = if options.check && !options.dry_run {
         service.check(&request).await
@@ -100,16 +100,16 @@ async fn finish_activation(
         .as_str()
         .unwrap_or_default()
         .to_owned();
-    let before = context.running_record();
+    let before = context.running_record().await;
     if options.no_restart {
-        value["launchers"] = context.refresh_launchers();
+        value["launchers"] = context.refresh_launchers().await;
         value["service"] = json!({"wasRunning": null, "restarted": false});
         return Ok(());
     }
     // The launchers follow the restart: a failed one leaves them as they were.
     match context.restart_if_running(&dir).await {
         Ok(service) => {
-            value["launchers"] = context.refresh_launchers();
+            value["launchers"] = context.refresh_launchers().await;
             value["service"] = service;
             Ok(())
         }

@@ -48,7 +48,8 @@ pub(crate) async fn record_helper_terminal(
         }
     };
     if crate::host::service::instance::instance_is_locked(data_root)? {
-        let record = crate::host::service::instance::read_record(data_root)?
+        let record = crate::host::service::instance::read_record_async(data_root)
+            .await?
             .ok_or("restart_handoff_owner_ambiguous")?;
         if !crate::host::service::instance::process_matches(&record)? {
             return Err("restart_handoff_owner_ambiguous".into());
@@ -72,9 +73,12 @@ pub(crate) async fn record_helper_terminal(
             return online;
         }
     }
-    if crate::host::service::instance::read_record(data_root)?.is_some_and(|record| {
-        crate::host::service::instance::process_matches(&record).unwrap_or(true)
-    }) {
+    if crate::host::service::instance::read_record_async(data_root)
+        .await?
+        .is_some_and(|record| {
+            crate::host::service::instance::process_matches(&record).unwrap_or(true)
+        })
+    {
         return Err("restart_handoff_owner_ambiguous".into());
     }
     record_offline_terminal(data_root, installation, intent_id, state).await
