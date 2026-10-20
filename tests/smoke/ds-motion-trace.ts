@@ -670,6 +670,7 @@ async function measureHeroes(page: Page, serverUrl: string) {
     // (Frame counts of two 2s windows differ by a frame or two.)
     assert(HERO_SPECIMEN_PROPERTIES[variant] !== undefined || playing.layouts <= still.layouts * 1.05 + 2, `${variant} hero laid out ${playing.layouts} time(s) while playing (${still.layouts} still)`);
     assert(fps >= HERO_MIN_FPS, `${variant} hero dropped the page to ${fps}fps`);
+    if (frameCostMs > 5) console.warn(`${variant} hero frame-cost watch: ${frameCostMs}ms > 5ms`);
     const budget = HERO_FRAME_WATCH_MS;
     assert(frameCostMs <= budget, `${variant} hero costs ${frameCostMs}ms of main thread per frame (max ${budget}ms)`);
     assert(offscreen.state === "paused" && offscreen.running === 0, `${variant} hero kept running offscreen: ${JSON.stringify(offscreen)}`);

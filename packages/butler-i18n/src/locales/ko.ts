@@ -1978,6 +1978,12 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       remoteAccessDescription: "같은 네트워크의 기기에서 연결 코드를 입력해 접속합니다.",
       addresses: "접속 주소",
       noAddresses: "네트워크 주소 없음",
+      bindErrors: {
+        address_in_use: "포트 사용 중",
+        permission_denied: "포트 권한 없음",
+        address_unavailable: "주소 사용 불가",
+        bind_failed: "주소 열기 실패",
+      },
       copyAddress: "주소 복사",
       copied: "복사됨",
       code: "코드",

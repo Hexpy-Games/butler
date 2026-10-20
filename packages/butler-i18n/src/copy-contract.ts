@@ -1698,6 +1698,12 @@ export interface AppCopy {
       remoteAccessDescription: string;
       addresses: string;
       noAddresses: string;
+      bindErrors: {
+        address_in_use: string;
+        permission_denied: string;
+        address_unavailable: string;
+        bind_failed: string;
+      };
       copyAddress: string;
       copied: string;
       code: string;
