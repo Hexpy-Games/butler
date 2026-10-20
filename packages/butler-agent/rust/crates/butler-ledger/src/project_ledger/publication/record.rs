@@ -4,7 +4,7 @@ mod head;
 mod proof;
 mod update;
 
-use std::fs;
+use crate::project_ledger::publication::timing::fs;
 use std::path::{Path, PathBuf};
 
 use butler_turn::btcc::ResolvedProjectWorkScope;
@@ -14,29 +14,28 @@ use super::contracts::{
     ProjectWorkTarget,
 };
 
-pub(super) use head::{ProjectWorkHead, observe_core_head, observe_head, revalidate_target};
+pub(super) use head::{ProjectWorkHead, observe_core_head, observe_expected, revalidate_target};
 
 pub(super) fn resolve_scope(
     data_root: &Path,
     scope: ResolvedProjectWorkScope,
 ) -> Result<ResolvedProjectWorkScope, ProjectWorkPublicationError> {
-    let actual =
-        butler_platform::secure_fs::canonicalize(&scope.ledger_root).map_err(|source| {
-            ProjectWorkPublicationError::adapter("project_work_scope_unavailable")
-                .with_source(source)
-        })?;
+    let _phase =
+        crate::project_ledger::publication::timing::Phase::new("publication_resolve_scope");
+    let actual = fs::canonicalize(&scope.ledger_root).map_err(|source| {
+        ProjectWorkPublicationError::adapter("project_work_scope_unavailable").with_source(source)
+    })?;
     if !crate::project_ledger::active_reference::safe_id(&scope.ledger_project_id) {
         return Err(ProjectWorkPublicationError::adapter(
             "project_work_scope_mismatch",
         ));
     }
-    let expected =
-        butler_platform::secure_fs::canonicalize(data_root.join("project-ledger/projects"))
-            .map_err(|source| {
-                ProjectWorkPublicationError::adapter("project_work_scope_unavailable")
-                    .with_source(source)
-            })?
-            .join(&scope.ledger_project_id);
+    let expected = fs::canonicalize(data_root.join("project-ledger/projects"))
+        .map_err(|source| {
+            ProjectWorkPublicationError::adapter("project_work_scope_unavailable")
+                .with_source(source)
+        })?
+        .join(&scope.ledger_project_id);
     if actual != expected
         || actual.file_name().and_then(|name| name.to_str()) != Some(&scope.ledger_project_id)
     {
@@ -78,6 +77,7 @@ pub(super) fn capture(
     updates: &[ProjectLedgerRecordUpdate],
     collation: &butler_core::locale::LocaleCollation,
 ) -> Result<(ProjectWorkHead, Vec<ProjectWorkTarget>), ProjectWorkPublicationError> {
+    let _phase = crate::project_ledger::publication::timing::Phase::new("publication_capture");
     let mut addressed = Vec::with_capacity(updates.len() * 2);
     for update in updates {
         addressed.push(target(scope, update)?);
@@ -205,6 +205,7 @@ pub(super) fn materialize(
     scope: &ResolvedProjectWorkScope,
     updates: &[ProjectLedgerRecordUpdate],
 ) -> Result<(), ProjectWorkPublicationError> {
+    let _phase = crate::project_ledger::publication::timing::Phase::new("publication_materialize");
     for update in updates {
         let target = target(scope, update)?;
         let relative = relative(scope, &target.path)?;
@@ -241,7 +242,7 @@ pub(super) fn record_path(
     let mut path = root.to_path_buf();
     for part in relative.split('/') {
         path.push(part);
-        if path.exists()
+        if fs::exists(&path)
             && fs::symlink_metadata(&path)
                 .map_err(|source| {
                     ProjectWorkPublicationError::io("project_ledger_record_io_error")

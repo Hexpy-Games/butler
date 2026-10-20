@@ -1,4 +1,4 @@
-use std::fs;
+use crate::project_ledger::publication::timing::fs;
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
@@ -155,12 +155,12 @@ pub(super) fn record_files(root: &Path) -> Result<Vec<PathBuf>, ProjectLedgerRea
     let mut files = Vec::with_capacity(entries.len() + 1);
     files.push(project);
     files.extend(entries);
-    files.retain(|path| path.exists());
+    files.retain(|path| fs::exists(path));
     Ok(files)
 }
 
 fn list_files(root: &Path, files: &mut Vec<PathBuf>) -> Result<(), ProjectLedgerReadError> {
-    if !root.exists() {
+    if !fs::exists(root) {
         return Ok(());
     }
     for entry in fs::read_dir(root).map_err(record_io)? {
@@ -220,7 +220,7 @@ fn record_path(root: &Path, relative: &str) -> Result<PathBuf, ProjectLedgerRead
     let mut cursor = root.to_path_buf();
     for component in Path::new(relative).components() {
         cursor.push(component);
-        if cursor.exists()
+        if fs::exists(&cursor)
             && fs::symlink_metadata(&cursor)
                 .map_err(record_io)?
                 .file_type()

@@ -5,6 +5,7 @@ mod generic;
 mod init;
 mod occurrence;
 mod record;
+pub(crate) mod timing;
 mod transaction;
 
 use std::future::Future;
@@ -23,6 +24,9 @@ pub use generic::{LedgerEffectError, LedgerEffectReconciliation, LedgerEffectReq
 #[cfg(test)]
 pub(super) use init::process_may_be_alive;
 pub(super) use init::with_mutation_claim;
+pub(super) use transaction::claim::read_generation;
+#[cfg(test)]
+pub(super) use transaction::tests::interrupted_publications_recover_without_exposing_partial_records;
 
 pub(super) use generic::{apply as apply_record_effect, reconcile as reconcile_record_effect};
 
@@ -30,6 +34,31 @@ pub(super) use generic::{apply as apply_record_effect, reconcile as reconcile_re
 /// occurrence already on disk is reconciled and resumed; a new one prepares
 /// its updates, is admitted, and applied.
 pub(super) async fn publish<F, Fut>(
+    data_root: std::path::PathBuf,
+    fs_permits: Arc<Semaphore>,
+    collation: Arc<butler_core::locale::LocaleCollation>,
+    scope: ResolvedProjectWorkScope,
+    identity: ProjectWorkOperationIdentity,
+    prepare_updates: F,
+) -> Result<ProjectWorkPublicationOutcome, ProjectWorkPublicationError>
+where
+    F: FnOnce() -> Fut + Send + 'static,
+    Fut: Future<Output = Result<Option<Vec<ProjectLedgerRecordUpdate>>, ProjectWorkPublicationError>>
+        + Send
+        + 'static,
+{
+    timing::measure(publish_inner(
+        data_root,
+        fs_permits,
+        collation,
+        scope,
+        identity,
+        prepare_updates,
+    ))
+    .await
+}
+
+async fn publish_inner<F, Fut>(
     data_root: std::path::PathBuf,
     fs_permits: Arc<Semaphore>,
     collation: Arc<butler_core::locale::LocaleCollation>,
@@ -205,9 +234,10 @@ async fn fs_phase<T: Send + 'static>(
     let permit = permits.acquire_owned().await.map_err(|source| {
         ProjectWorkPublicationError::Owner("project_ledger_closed").with_source(source)
     })?;
+    let measurement = timing::current();
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
-        phase()
+        timing::on_worker(measurement, phase)
     })
     .await
     .map_err(|source| {
