@@ -33,11 +33,10 @@ use crate::cognition::{
 use crate::coordination::CognitionWriteCoordinator;
 use butler_turn::conversation::ConversationSourceReader;
 
-/// FTS maintenance advances the consumer without admitting deferred vectors.
+/// Progress from cache refresh or bounded FTS maintenance.
 #[derive(Default)]
 pub(in crate::cognition) struct CacheAdvance {
     pub processed: bool,
-    pub text_advanced: bool,
 }
 
 /// Advances one cache job and bounded FTS maintenance for an active or building
@@ -153,7 +152,6 @@ fn run_claimed(step: &CacheStep, handle: &MemoryGenerationHandle) -> CognitionRe
         graph.close()?;
         return Ok(CacheAdvance {
             processed: indexed,
-            text_advanced: false,
         });
     };
     let writer = JobWriter {
@@ -184,7 +182,6 @@ fn run_claimed(step: &CacheStep, handle: &MemoryGenerationHandle) -> CognitionRe
         closed?;
         Ok(CacheAdvance {
             processed: true,
-            text_advanced: true,
         })
     })
 }

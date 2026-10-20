@@ -174,4 +174,3 @@ pub(super) async fn memory_wakes() {
     eprintln!("VERIFY-WAKES load/verify/verify per process: {deltas:?}");
     assert_eq!(deltas, [1, 0, 0, 1, 0, 0]);
 }
-

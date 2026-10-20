@@ -298,7 +298,8 @@ async fn mem_daily_window_defers_vectors_until_on_demand_load() -> Result<(), Ha
 }
 
 #[tokio::test]
-async fn mem_aged_vectors_stay_deferred_through_text_work_until_recall() -> Result<(), HarnessError> {
+async fn mem_aged_vectors_stay_deferred_through_text_work_until_recall() -> Result<(), HarnessError>
+{
     butler_e2e::gate!();
     let (setup, remember, _) = setup("MEM-AGE-BATCH")?;
     let s = setup.start().await?;

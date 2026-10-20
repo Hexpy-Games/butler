@@ -40,8 +40,7 @@ impl WorkerReadiness {
 
     /// True only when a cold worker becomes warm; verification is already warm.
     pub(super) fn publish(&self, ready: bool) -> bool {
-        self
-            .state
+        self.state
             .swap(if ready { WARM } else { COLD }, Ordering::AcqRel)
             == COLD
             && ready

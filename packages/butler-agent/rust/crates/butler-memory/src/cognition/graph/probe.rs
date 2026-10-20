@@ -37,4 +37,3 @@ pub(super) fn has_vector_work(connection: &Connection, now: &str) -> CognitionRe
         )
         .map_err(db_error)
 }
-
