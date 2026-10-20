@@ -57,7 +57,24 @@ pub(super) fn spawn(
 #[derive(Clone, Debug, Serialize)]
 pub(super) struct BindError {
     address: SocketAddr,
+    code: &'static str,
     error: String,
+}
+
+impl BindError {
+    fn new(address: SocketAddr, error: std::io::Error) -> Self {
+        let code = match error.kind() {
+            std::io::ErrorKind::AddrInUse => "address_in_use",
+            std::io::ErrorKind::PermissionDenied => "permission_denied",
+            std::io::ErrorKind::AddrNotAvailable => "address_unavailable",
+            _ => "bind_failed",
+        };
+        Self {
+            address,
+            code,
+            error: error.to_string(),
+        }
+    }
 }
 
 /// What remote access currently exposes.
@@ -176,20 +193,18 @@ impl RemoteAccess {
                         let content_listener = match bind(content_address) {
                             Ok(listener) => listener,
                             Err(error) => {
-                                bound.bind_errors.push(BindError {
-                                    address: content_address,
-                                    error: error.to_string(),
-                                });
+                                bound
+                                    .bind_errors
+                                    .push(BindError::new(content_address, error));
                                 continue;
                             }
                         };
                         match content_listener.local_addr() {
                             Ok(address) => bound.content_listeners.push(address),
                             Err(error) => {
-                                bound.bind_errors.push(BindError {
-                                    address: content_address,
-                                    error: error.to_string(),
-                                });
+                                bound
+                                    .bind_errors
+                                    .push(BindError::new(content_address, error));
                                 continue;
                             }
                         }
@@ -198,10 +213,7 @@ impl RemoteAccess {
                         bound.lan_listeners.push(address);
                     }
                     Err(error) => {
-                        bound.bind_errors.push(BindError {
-                            address,
-                            error: error.to_string(),
-                        });
+                        bound.bind_errors.push(BindError::new(address, error));
                         continue;
                     }
                 }
