@@ -387,9 +387,9 @@ fn bound_turn<'a>(
             start
                 .turn
                 .context
-                .pointer("/executionPolicy/subsession/parentTurnId")
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_owned),
+                .pointer("/executionPolicy/subsession")
+                .filter(|value| value.is_object())
+                .map(|_| start.turn.session_id.clone()),
         ),
         progress: start.progress,
         base: start.base,

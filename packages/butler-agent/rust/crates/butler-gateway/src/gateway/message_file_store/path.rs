@@ -49,19 +49,39 @@ impl AllowedPaths {
             }
             // Pin the root and open the leaf in one contained descriptor walk.
             for root in &self.roots {
-                let Ok(relative) = selected.strip_prefix(root) else {
+                let container = if root == &selected {
+                    root.parent()?
+                } else {
+                    root.as_path()
+                };
+                let Ok(relative) = selected.strip_prefix(container) else {
                     continue;
                 };
                 let inventory = butler_platform::secure_fs::SecretInventory::cached(root);
                 if let Ok(file) =
-                    butler_platform::secure_fs::open_contained(root, relative, &inventory)
+                    butler_platform::secure_fs::open_contained(container, relative, &inventory)
                 {
+                    if root == &selected && !exact_file(&selected, &file) {
+                        continue;
+                    }
                     return Some((selected, file));
                 }
             }
         }
         None
     }
+}
+
+// A file-scoped grant authorizes that regular leaf, not links to its siblings.
+fn exact_file(path: &Path, file: &std::fs::File) -> bool {
+    let (Ok(expected), Ok(opened)) = (std::fs::symlink_metadata(path), file.metadata()) else {
+        return false;
+    };
+    let expected_id = butler_platform::secure_fs::identity(&expected).id;
+    expected.is_file()
+        && !expected.file_type().is_symlink()
+        && expected_id.is_some()
+        && expected_id == butler_platform::secure_fs::identity(&opened).id
 }
 
 fn absolute(path: &Path, cwd: &Path) -> PathBuf {

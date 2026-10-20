@@ -4,12 +4,13 @@ use crate::gateway::{
     GatewayApplicationError,
     application::{app_error, storage::AppStorageError},
 };
-use rusqlite::OptionalExtension;
 use std::path::PathBuf;
+mod ownership;
+use ownership::Owner;
 
 /// Inventory is loaded once; filesystem notifications refresh only changed owners.
 #[derive(Clone, Default)]
-pub(super) struct Index(std::collections::HashMap<PathBuf, (String, String)>);
+pub(super) struct Index(std::collections::HashMap<PathBuf, (Owner, String)>);
 impl Index {
     pub(super) async fn load(context: &ProjectionContext) -> Result<Self, GatewayApplicationError> {
         let data = context.butler_data.clone();
@@ -42,22 +43,8 @@ impl Index {
         };
         let value: serde_json::Value =
             serde_json::from_str(&identity).map_err(std::io::Error::other)?;
-        let turn = if let Some(turn) = value.get("turn").and_then(|v| v.as_str()) {
-            value
-                .get("parent_turn")
-                .and_then(|v| v.as_str())
-                .unwrap_or(turn)
-                .to_owned()
-        } else {
-            let (turn, session): (String, Option<String>) =
-                serde_json::from_value(value).map_err(std::io::Error::other)?;
-            if session.is_some() {
-                legacy_owner(data, &turn)?.unwrap_or(turn)
-            } else {
-                turn
-            }
-        };
-        self.0.insert(path, (turn, identity));
+        let owner = ownership::decode(data, value)?;
+        self.0.insert(path, (owner, identity));
         Ok(())
     }
     pub(super) async fn cleanup(
@@ -76,30 +63,40 @@ impl Index {
     ) -> Result<(), GatewayApplicationError> {
         let data = context.butler_data.clone();
         let mut index = self.clone();
-        *self = tokio::task::spawn_blocking(move || {
+        let (index, entries) = tokio::task::spawn_blocking(move || {
             for path in paths {
                 index.refresh(&data, path)?;
             }
-            Ok::<_, std::io::Error>(index)
+            let entries = index
+                .0
+                .iter()
+                .map(|(path, (owner, identity))| {
+                    Ok((
+                        path.clone(),
+                        ownership::resolve(&data, owner)?,
+                        identity.clone(),
+                    ))
+                })
+                .collect::<std::io::Result<Vec<_>>>()?;
+            Ok::<_, std::io::Error>((index, entries))
         })
         .await
         .map_err(GatewayApplicationError::internal_from)?
         .map_err(GatewayApplicationError::internal_from)?;
-        let entries: Vec<_> = self
-            .0
-            .iter()
-            .map(|(path, (turn, identity))| (path.clone(), turn.clone(), identity.clone()))
-            .collect();
-        let obsolete = context.storage.inspect(move |db| {
-            let mut obsolete = Vec::new();
-            for (path, turn, identity) in entries {
-                let resumable: Option<bool> = db.query_row(
-                    "SELECT state NOT IN ('delivered','failed','cancelled') AND (state<>'runtime_fault' OR retryable<>0) FROM turns WHERE id=?1",
-                    [&turn], |row| row.get(0)).optional().map_err(AppStorageError::sqlite)?;
-                if resumable != Some(true) { obsolete.push((path, identity)); }
-            }
-            Ok(obsolete)
-        }).await.map_err(app_error)?;
+        *self = index;
+        let obsolete = context
+            .storage
+            .inspect(move |db| {
+                let mut obsolete = Vec::new();
+                for (path, turn, identity) in entries {
+                    if ownership::expired(db, turn)? {
+                        obsolete.push((path, identity));
+                    }
+                }
+                Ok(obsolete)
+            })
+            .await
+            .map_err(app_error)?;
         let removed = tokio::task::spawn_blocking(move || {
             let mut removed = Vec::new();
             for (path, identity) in obsolete {
@@ -117,29 +114,6 @@ impl Index {
         }
         Ok(())
     }
-}
-
-// Resolve pre-upgrade worker records through indexed delegation ownership.
-fn legacy_owner(data: &std::path::Path, turn: &str) -> std::io::Result<Option<String>> {
-    let path = data.join(butler_platform::data_paths::BTCC_DB);
-    if !path.exists() {
-        return Ok(None);
-    }
-    let db =
-        rusqlite::Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .map_err(std::io::Error::other)?;
-    let mut owner = turn.to_owned();
-    let mut seen = std::collections::HashSet::new();
-    while seen.insert(owner.clone()) {
-        let parent: Option<String> = db.query_row(
-            "SELECT r.parent_turn_id FROM btcc_subsession_delegations d JOIN btcc_session_relations r ON r.relation_id=d.relation_id WHERE d.child_turn_id=?1",
-            [&owner], |row| row.get(0)).optional().map_err(std::io::Error::other)?;
-        match parent {
-            Some(parent) => owner = parent,
-            None => return Ok(Some(owner)),
-        }
-    }
-    Err(std::io::Error::other("invalid_handoff_owner"))
 }
 
 pub(super) async fn materialize(
@@ -190,4 +164,20 @@ pub(super) async fn held() -> Result<bool, GatewayApplicationError> {
         }
     }
     Ok(false)
+}
+
+/// Publish the same structured metadata used by retained message projections immediately.
+pub(super) fn record_delivery(
+    db: &rusqlite::Connection,
+    candidate: &super::final_candidate::FinalCandidate,
+    now: &str,
+) -> Result<serde_json::Map<String, serde_json::Value>, AppStorageError> {
+    let mut payload =
+        serde_json::Map::from_iter([("safeLabel".into(), serde_json::json!("Completed"))]);
+    if let Some(delivery) = &candidate.delivery_metadata {
+        db.execute("INSERT INTO app_terminal_turn_projections(turn_id,chat_id,terminal_state,progress_rows_json,delivery_metadata_json,source_event_high_water,compacted_at) VALUES(?1,?2,'delivered','[]',?3,0,?4) ON CONFLICT(turn_id) DO UPDATE SET delivery_metadata_json=excluded.delivery_metadata_json",
+            rusqlite::params![candidate.turn_id,candidate.chat_id,serde_json::Value::Object(delivery.clone()).to_string(),now]).map_err(AppStorageError::sqlite)?;
+        payload.extend(delivery.clone());
+    }
+    Ok(payload)
 }

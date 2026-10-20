@@ -303,9 +303,6 @@ fn subsession_json(value: &SubsessionMetadata) -> Value {
     if let Some(root) = &value.root_session_id {
         out.insert("rootSessionId".into(), root.clone().into());
     }
-    if let Some(turn) = &value.parent_turn_id {
-        out.insert("parentTurnId".into(), turn.clone().into());
-    }
     out.insert("relationId".into(), value.relation_id.clone().into());
     out.insert("delegationId".into(), value.delegation_id.clone().into());
     out.insert("taskId".into(), value.task_id.clone().into());

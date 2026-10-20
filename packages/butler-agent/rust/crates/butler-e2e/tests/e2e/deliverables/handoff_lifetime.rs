@@ -19,8 +19,12 @@ async fn cancelled_deliverables_do_not_exhaust_handoff_quota() -> Result<(), Har
     for index in 0..1100 {
         let prompt = format!("Deliver then request a change {index}");
         *script.prompt.lock().unwrap() = prompt.clone();
-        *script.steps.lock().unwrap() = [deliver("report.md", "Report"),
-            call("run_command", json!({"command":"printf changed > changed.txt","state_effect":"mutation","summary":"Write a file"})), done()].into();
+        *script.steps.lock().unwrap() = [
+            call("tool_search", json!({"query":"deliver_files run_command","limit":50})),
+            call("tool_describe", json!({"ids":["native:deliver_files","native:run_command"]})),
+            call("tool_call", json!({"id":"native:deliver_files","arguments":{"files":[{"path":"report.md","title":"Report"}]}})),
+            call("tool_call", json!({"id":"native:run_command","arguments":{"command":"printf changed > changed.txt","state_effect":"mutation","summary":"Write a file"}})), done()
+        ].into();
         let accepted = s.gw.say("general", &prompt).await?;
         let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
         s.gw.wait_turn(
@@ -54,7 +58,11 @@ async fn cancelled_deliverables_do_not_exhaust_handoff_quota() -> Result<(), Har
         }
     }
     *script.prompt.lock().unwrap() = "Deliver successfully".into();
-    *script.steps.lock().unwrap() = [deliver("report.md", "Report"), done()].into();
+    *script.steps.lock().unwrap() = [
+        call("tool_search", json!({"query":"deliver_files","limit":1})),
+        call("tool_describe", json!({"ids":["native:deliver_files"]})),
+        call("tool_call", json!({"id":"native:deliver_files","arguments":{"files":[{"path":"report.md","title":"Report"}]}})), done()
+    ].into();
     s.turn("general", "Deliver successfully").await?;
     let message = last(&s).await?;
     let attachments = message["attachments"].as_array().unwrap();

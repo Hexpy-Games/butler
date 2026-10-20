@@ -36,7 +36,7 @@ type Key = (PathBuf, String);
 struct State {
     data: PathBuf,
     turn: String,
-    parent_turn: Option<String>,
+    child_session: Option<String>,
     files: Mutex<HashMap<PathBuf, bool>>,
 }
 /// Releases unused copies when the bound turn ends, including cancellation.
@@ -49,12 +49,12 @@ fn registry() -> &'static Mutex<HashMap<Key, Weak<State>>> {
 }
 impl StageScope {
     /// Establish staging ownership before the turn can dispatch tools.
-    pub fn new(data: &Path, turn: &str, parent_turn: Option<String>) -> Self {
+    pub fn new(data: &Path, turn: &str, child_session: Option<String>) -> Self {
         let key = (data.to_path_buf(), turn.to_owned());
         let state = Arc::new(State {
             data: data.to_path_buf(),
             turn: turn.to_owned(),
-            parent_turn,
+            child_session,
             files: Mutex::default(),
         });
         if let Ok(mut registry) = registry().lock() {
@@ -101,7 +101,7 @@ pub fn handoff_staged(path: &Path, turn: &str) -> io::Result<PathBuf> {
     {
         let durable = state.data.join(crate::data_paths::MESSAGE_HANDOFFS);
         if path.starts_with(&durable) {
-            super::handoff::adopt(path, &state.turn, state.parent_turn.as_deref())?;
+            super::handoff::adopt(path, &state.turn, state.child_session.as_deref())?;
             return Ok(path.to_path_buf());
         }
         if !path.starts_with(state.data.join(crate::data_paths::READER_STAGING)) {
@@ -111,8 +111,12 @@ pub fn handoff_staged(path: &Path, turn: &str) -> io::Result<PathBuf> {
             .files
             .lock()
             .map_err(|_| io::Error::other("staging_unavailable"))?;
-        let destination =
-            super::handoff::promote(&state.data, &state.turn, state.parent_turn.as_deref(), path)?;
+        let destination = super::handoff::promote(
+            &state.data,
+            &state.turn,
+            state.child_session.as_deref(),
+            path,
+        )?;
         if let Some(handed) = files.get_mut(path) {
             *handed = true;
         }

@@ -175,10 +175,7 @@ fn apply(
             &input.turn_id,
             apply.now,
         )?;
-        let mut completion_payload = object_value(&json!({"safeLabel":"Completed"}))?;
-        if let Some(delivery) = input.delivery_metadata.as_ref() {
-            completion_payload.extend(delivery.clone());
-        }
+        let completion_payload = super::handoffs::record_delivery(&tx, input, apply.now)?;
         super::final_turn_events::append_if_missing(
             &tx,
             apply.subscribers,

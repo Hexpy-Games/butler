@@ -4,7 +4,7 @@ use super::*;
 pub(super) fn promote(
     data: &Path,
     turn: &str,
-    parent_turn: Option<&str>,
+    child_session: Option<&str>,
     source: &Path,
 ) -> io::Result<PathBuf> {
     let relative = source
@@ -22,7 +22,7 @@ pub(super) fn promote(
         super::super::create_private_dir(&temporary)?;
         let result = (|| {
             super::super::hold_point("message_handoff_owner", || false)?;
-            adopt(&temporary.join("copy"), turn, parent_turn)?;
+            adopt(&temporary.join("copy"), turn, child_session)?;
             super::super::sync_directory(&temporary).unwrap_or(Ok(()))?;
             super::super::rename(&temporary, &directory)
         })();
@@ -54,7 +54,7 @@ pub(super) fn promote(
     if size.saturating_add(source.metadata()?.len()) > MAX_TOTAL {
         return Err(io::Error::other("handoff_limit_exceeded"));
     }
-    adopt(&destination, turn, parent_turn)?;
+    adopt(&destination, turn, child_session)?;
     super::super::rename(source, &destination)?;
     super::super::sync_directory(&directory).unwrap_or(Ok(()))?;
     super::super::sync_directory(&root).unwrap_or(Ok(()))?;
@@ -65,12 +65,13 @@ pub(super) fn promote(
 }
 
 /// Parent closeout takes ownership of selected worker files before publication.
-pub(super) fn adopt(path: &Path, turn: &str, parent_turn: Option<&str>) -> io::Result<()> {
+pub(super) fn adopt(path: &Path, turn: &str, child_session: Option<&str>) -> io::Result<()> {
     let directory = path
         .parent()
         .ok_or_else(|| io::Error::other("invalid_handoff"))?;
-    let identity = serde_json::to_vec(&serde_json::json!({"turn":turn,"parent_turn":parent_turn}))
-        .map_err(io::Error::other)?;
+    let identity =
+        serde_json::to_vec(&serde_json::json!({"turn":turn,"child_session":child_session}))
+            .map_err(io::Error::other)?;
     super::super::replace_private(
         &directory.join(".turn"),
         |file| {

@@ -34,7 +34,6 @@ pub(crate) struct SubsessionProjectContext {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SubsessionMetadata {
     pub root_session_id: Option<String>,
-    pub parent_turn_id: Option<String>,
     pub relation_id: String,
     pub delegation_id: String,
     pub task_id: String,
@@ -77,7 +76,6 @@ pub(crate) fn read_subsession_metadata(
     };
     Ok(Some(SubsessionMetadata {
         root_session_id: optional_text(object, "root_session_id"),
-        parent_turn_id: optional_text(object, "parent_turn_id"),
         relation_id,
         delegation_id,
         task_id,
