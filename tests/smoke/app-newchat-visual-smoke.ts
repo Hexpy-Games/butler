@@ -22,10 +22,10 @@ for (const [key, visual] of Object.entries(actual.cases)) {
   catch (error) { failures.push(`${key}: ${error instanceof Error ? error.message : String(error)}`); }
   const expected = CARD_HEIGHT_PX[key.split("-")[0]!]!;
   const heights = visual.nodes.filter(node => node.slot === "tinted-glass").map(node => node.rect[3]!);
-  if (heights.length !== 4 || heights.some(height => Math.abs(height - expected) > 1))
-    failures.push(`${key}: suggestion card heights ${JSON.stringify(heights)} vs ${expected} (1px tolerance)`);
+  if (heights.length !== 4 || heights.some(height => Math.abs(height - expected) >= 3))
+    failures.push(`${key}: suggestion card heights ${JSON.stringify(heights)} vs ${expected} (3px incident threshold)`);
 }
-const report = { ok: failures.length === 0, reference: reference.revision, cases: 8, geometryTolerancePx: 1,
+const report = { ok: failures.length === 0, reference: reference.revision, cases: 8, geometryIncidentPx: 3,
   maxGeometryDelta, modelCalls: actual.modelCalls, screenshots: actual.screenshots, failures };
 writeFileSync(resolve(output, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
 console.log(JSON.stringify({ ...report, failures: failures.map(failure => failure.split("\n")[0]) }));

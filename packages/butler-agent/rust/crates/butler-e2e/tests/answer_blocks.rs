@@ -101,7 +101,11 @@ fn answer_blocks_stream_byte_splits_and_item_validation() -> Result<(), Box<dyn 
     let unread_chart = serde_json::json!({"v":1,"blocks":[{"type":"chart","kind":"line","x":["A"],
         "series":[{"name":"S","values":[1]}],"source":"https://unread.example/chart","checked":"2026-10-12T11:55:00Z"}]});
     requests.push(serde_json::json!({"spec":unread_chart,"images":[],"sources":[],"now":"2026-10-12T12:00:00Z","stream":true}));
+    requests.push(serde_json::json!({"spec":{},"images":[],"sources":[],"now":"2026-10-12T12:00:00Z","perf":true}));
     let mut results = run_stream_requests(&requests)?;
+    let large = results.pop().ok_or("no large-stream result")?;
+    eprintln!("24 KB parser: {large}");
+    assert_eq!(large["items"], 48);
     let chart = results.pop().ok_or("no results")?;
     let chart_ops = chart["ops"].as_array().ok_or("ops missing")?;
     assert!(
@@ -136,17 +140,6 @@ fn answer_blocks_stream_byte_splits_and_item_validation() -> Result<(), Box<dyn 
             .filter_map(|r| r["splits"].as_u64())
             .sum::<u64>()
     );
-    Ok(())
-}
-
-#[test]
-fn answer_blocks_stream_24kb_budget() -> Result<(), Box<dyn std::error::Error>> {
-    butler_e2e::gate!();
-    let results = run_stream_requests(&[
-        serde_json::json!({"spec":{},"images":[],"sources":[],"now":"2026-10-12T12:00:00Z","perf":true}),
-    ])?;
-    eprintln!("24 KB parser: {}", results[0]);
-    assert_eq!(results[0]["items"], 48);
     Ok(())
 }
 

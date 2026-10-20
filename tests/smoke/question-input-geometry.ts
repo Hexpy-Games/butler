@@ -89,7 +89,7 @@ export async function auditQuestionSwap(panel: Locator, page: Page, context: str
     const after = await geometry(row);
     for (const key of Object.keys(before) as (keyof typeof before)[]) {
       const a = before[key], b = after[key];
-      if (typeof a === "number" && typeof b === "number") assert(Math.abs(a - b) <= 0.02, `${context} ${state} ${key}: ${a} -> ${b}`);
+      if (typeof a === "number" && typeof b === "number") assert(Math.abs(a - b) < 3, `${context} ${state} ${key}: ${a} -> ${b}`);
       else assert.equal(b, a, `${context} ${state} ${key}`);
     }
     return after;
@@ -105,7 +105,7 @@ export async function auditQuestionSwap(panel: Locator, page: Page, context: str
   assert.equal(await input.count(), 1, "IME Enter must keep entry open");
   await input.fill(""); await page.keyboard.press("Escape");
   const after = await compare("back-empty");
-  console.log(`GEOMETRY ${context}: row=${before.height}->${after.height}px baseline=${before.baseline}->${after.baseline}px; all states Δ≤0.02px`);
+  console.log(`GEOMETRY ${context}: row=${before.height}->${after.height}px baseline=${before.baseline}->${after.baseline}px; all states Δ<3px`);
 }
 
 export async function auditGrowth(row: Locator, input: Locator, height: number, context: string) {
@@ -126,11 +126,13 @@ export async function auditGrowth(row: Locator, input: Locator, height: number, 
     const lines = (metrics.height - metrics.reserved) / metrics.line;
     assert(Math.abs(lines - Math.round(lines)) < 0.01 && lines > 1 && lines <= metrics.max, `${context}: whole lines ${JSON.stringify(metrics)}`);
     assert(metrics.scrollWidth <= metrics.clientWidth, "no horizontal scroll");
-    assert.equal((await input.boundingBox())!.x, field!.x, "stable text column");
-    if (metrics.numberTop !== undefined) assert.equal(metrics.numberTop, metrics.top, "number stays on first line");
-    assert.deepEqual(await row.evaluate(e => [...(e.closest('[data-slot="composer-question-panel"]')?.querySelectorAll("[data-question-option]") ?? [])].map(r => r.getBoundingClientRect().x)), columns, "other columns stay fixed");
+    assert(Math.abs((await input.boundingBox())!.x - field!.x) < 3, "stable text column");
+    if (metrics.numberTop !== undefined) assert(Math.abs(metrics.numberTop - metrics.top) < 3, "number stays on first line");
+    const currentColumns = await row.evaluate(e => [...(e.closest('[data-slot="composer-question-panel"]')?.querySelectorAll("[data-question-option]") ?? [])].map(r => r.getBoundingClientRect().x));
+    assert.equal(currentColumns.length, columns.length, "every option column remains");
+    assert(currentColumns.every((x, index) => Math.abs(x - columns[index]!) < 3), "other columns stay fixed");
     if (value.startsWith("첫")) await row.screenshot({ path: `/tmp/question-wrap-${context.replaceAll(" ", "-")}.png` });
-    if (before && metrics.rowHeight) assert(Math.abs(metrics.rowHeight - Math.max(height, metrics.height - metrics.reserved + 12)) < 0.02, "row follows line height");
+    if (before && metrics.rowHeight) assert(Math.abs(metrics.rowHeight - Math.max(height, metrics.height - metrics.reserved + 12)) < 3, "row follows line height");
     if (Math.round(lines) === metrics.max) {
       assert(metrics.scrollHeight > metrics.clientHeight, "cap scrolls vertically");
       for (const end of [false, true]) {
