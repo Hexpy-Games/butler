@@ -12,7 +12,7 @@ runs:
         python-version: '3.12'
         update-environment: false
     - name: Expose Python tools on PATH
-      shell: '"${{ steps.python.outputs.python-path }}" {0}'
+      shell: ${{ steps.python.outputs.python-path }} {0}
       run: |
         import os
         from pathlib import Path

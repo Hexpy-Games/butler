@@ -22,13 +22,19 @@ class HostLinks(unittest.TestCase):
     # test-category: security
     def test_release_python_path_step_exports_only_tool_directories(self):
         action = SCRIPTS.parents[3] / '.github/actions/release-python/action.yml'
-        program = textwrap.dedent(action.read_text().split('      run: |\n', 1)[1])
+        source = action.read_text()
+        program = textwrap.dedent(source.split('      run: |\n', 1)[1])
+        template = next(line.strip()[7:] for line in source.splitlines() if line.strip().startswith('shell: ')).strip("'")
+        template = template.replace('${{ steps.python.outputs.python-path }}', sys.executable)
         with tempfile.TemporaryDirectory() as directory:
             path_file = Path(directory) / 'paths'
             env_file = Path(directory) / 'environment'
             env = dict(os.environ, GITHUB_PATH=str(path_file), GITHUB_ENV=str(env_file),
                        PKG_CONFIG_PATH='/inherited/search')
-            subprocess.run([sys.executable, '-c', program], env=env, check=True)
+            script = Path(directory) / 'path-step.py'
+            script.write_text(program)
+            executable, arguments = template.split(' ', 1)
+            subprocess.run([executable, arguments.format(str(script))], env=env, check=True)
             paths = path_file.read_text().splitlines()
             self.assertIn(str(Path(sys.executable).parent), paths)
             self.assertTrue(all(Path(path).is_dir() for path in paths))
