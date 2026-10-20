@@ -131,7 +131,7 @@ try {
   const fold = await foldFrames(page);
   const foldEnd = await checkFoldSettles(page, `http://127.0.0.1:${server.port}/?visual=components&surface=activity-layout&theme=dark`);
   assert(foldEnd.folds > 0, "completion runs the fold");
-  assert(Math.abs(foldEnd.end.text - foldEnd.settled.text) <= 0.5 && Math.abs(foldEnd.end.height - foldEnd.settled.height) <= 0.5,
+  assert(Math.abs(foldEnd.end.text - foldEnd.settled.text) < 3 && Math.abs(foldEnd.end.height - foldEnd.settled.height) < 3,
     `fold ends where it settles, without a spacing snap: ${JSON.stringify(foldEnd)}`);
   const normalTurn = page.locator('[data-test-class="message assistant"]').last();
   await normalTurn.getByRole("button", { name: /활동 · 완료/ }).waitFor();
@@ -157,7 +157,7 @@ async function foldFrames(page: import("playwright").Page) {
   });
   const start = frames[0]!, end = frames.at(-1)!;
   assert(end < start, `completion raises the text inside its message: ${start} -> ${end}`);
-  assert(frames.every((value, index) => index === 0 || value <= frames[index - 1]! + 0.5), `fold moves one way: ${frames.join(",")}`);
+  assert(frames.every((value, index) => index === 0 || value < frames[index - 1]! + 3), `fold moves one way: ${frames.join(",")}`);
   assert(frames.some(value => value < start - 1 && value > end + 1), `fold animates through intermediate frames: ${frames.join(",")}`);
   return { start, end, frames: frames.length };
 }

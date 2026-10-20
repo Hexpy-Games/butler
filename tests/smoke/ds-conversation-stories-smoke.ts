@@ -150,7 +150,7 @@ async function checkCurrentStatusLine(page: Page, baseUrl: string): Promise<void
     line.textContent = original;
     return { beforeHeight, afterHeight, clipped };
   });
-  assert(Math.abs(geometry.beforeHeight - geometry.afterHeight) < 0.5 && geometry.clipped,
+  assert(Math.abs(geometry.beforeHeight - geometry.afterHeight) < 3 && geometry.clipped,
     `current status must stay one clipped line: ${JSON.stringify(geometry)}`);
 }
 

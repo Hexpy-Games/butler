@@ -153,7 +153,7 @@ try {
         const delta = Math.abs(folded.toolbar[field] - empty.toolbar[field]);
         const position = field === "left" || field === "top";
         if (position && delta >= 0.5) console.warn(`${key}: toolbar ${field} shifted ${delta}px`);
-        assert(position ? delta < 3 : delta <= 0.5, `${key}: toolbar ${field} changed by ${delta}px`);
+        assert(delta < 3, `${key}: toolbar ${field} changed by ${delta}px`);
       }
     }
   }

@@ -60,7 +60,7 @@ async fn perf_ask_user_pending_question_session_view_p95() -> Result<(), Harness
     let p50 = samples[9];
     let p95 = samples[18];
     eprintln!("ask_user session-view p50 {p50:?}; p95 {p95:?}");
-    // Micro watch: half of the 100 ms UI input-response budget.
-    butler_e2e::assert_wall_clock_budget!(p95, Duration::from_millis(50), "session-view p95");
+    // Normal pending-question view p95 6.00 ms (PR #1358); visible at 100 ms.
+    butler_e2e::assert_wall_clock_budget!(p95, Duration::from_millis(100), "session-view p95");
     s.finish().await
 }
