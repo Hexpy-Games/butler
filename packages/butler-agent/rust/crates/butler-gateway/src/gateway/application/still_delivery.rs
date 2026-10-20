@@ -100,8 +100,8 @@ fn mutate(db: &Connection, command: C) -> Result<Value, AppStorageError> {
             step,
             reason,
         } => fail(db, &id, &session, step, &reason)?,
-        C::Recover { reason } => {
-            db.execute("UPDATE browser_still_deliveries SET state='pending',reason=?1 WHERE state='pending' OR (state='failed' AND reason IN ('gateway_restarted','browser_host_restarted'))", [reason])
+        C::SettlePending { reason } => {
+            db.execute("UPDATE browser_still_deliveries SET state='failed',reason=?1 WHERE state='pending'", [reason])
                 .map_err(AppStorageError::sqlite)?;
         }
         C::Read { .. } | C::Attach { .. } => {

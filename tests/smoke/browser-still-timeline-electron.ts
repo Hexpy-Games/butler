@@ -71,7 +71,7 @@ try {
       const admin = JSON.parse(await Bun.file(join(app.gateway.butlerData, "app/runtime/auth/local-admin.json")).text()).secret;
       await app.gateway.api("/internal/browser-host/stills", { method: "POST", headers: { "x-butler-admin": admin }, body: JSON.stringify({ act_id: raw.browser_stills.act_id, session: "general", tab: id, step: 1, reason: "capture_failed" }) });
       const copy = getAppCopy(appLocaleFromLanguage(caseLanguage)).browser;
-      const label = copy.stillUnavailable;
+      const label = copy.stillFailure.capture_failed;
       await waitBrowser(() => app.page.expression(`document.querySelector('[data-test-class=browser-step-still] [aria-disabled=true]')?.textContent.includes(${JSON.stringify(label)})`), "failed still is disabled");
       const reads = await app.main<number>("globalThis.timelineReads");
       assert.ok(reads > 0, "CDP observes real bridge requests");

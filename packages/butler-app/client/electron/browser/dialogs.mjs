@@ -1,6 +1,5 @@
 import { settleStill } from "./guarded-bitmap.mjs";
-import { enqueueStill } from "./still-delivery.mjs";
-import { drainStills } from "./still-delivery.mjs";
+import { enqueueStill, drainStills } from "./still-delivery.mjs";
 import { shortId } from "./ids.mjs";
 import { browserEvent } from "./events.mjs";
 

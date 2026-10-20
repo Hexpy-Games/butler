@@ -137,11 +137,25 @@ async fn browser_still_delivery_orders_late_uploads_and_recovers_full_queue()
         assert_eq!(response.bytes().await?.as_ref(), still_bytes());
     }
     drop(stream);
+    let until = tokio::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        let lost = s.gw.get(&path).await?.data().clone();
+        if lost["complete"] == true {
+            assert_eq!(lost["steps"][1]["state"], "failed");
+            assert_eq!(lost["steps"][1]["reason"], "browser_host_lost");
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < until,
+            "host loss must settle pending receipts"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
     s.crash_and_restart().await?;
     let recovered = s.gw.get(&path).await?.data().clone();
     assert_eq!(recovered["steps"][0]["state"], "attached");
-    assert_eq!(recovered["steps"][1]["state"], "pending");
-    assert_eq!(recovered["steps"][1]["reason"], "gateway_restarted");
+    assert_eq!(recovered["steps"][1]["state"], "failed");
+    assert_eq!(recovered["steps"][1]["reason"], "browser_host_lost");
     assert_eq!(recovered["steps"][2]["state"], "attached");
     let started = std::time::Instant::now();
     let raw =
@@ -165,7 +179,7 @@ async fn browser_still_delivery_orders_late_uploads_and_recovers_full_queue()
     );
     assert_eq!(
         raw.data()["browser_stills"]["steps"][1]["reason"],
-        "gateway_restarted"
+        "browser_host_lost"
     );
 
     let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
@@ -255,8 +269,11 @@ async fn browser_still_shutdown_recovers_active_and_further_pending_stills()
     assert_eq!(after["steps"].as_array().unwrap().len(), 3);
     for (index, step) in after["steps"].as_array().unwrap().iter().enumerate() {
         assert_eq!(step["step"], index);
-        assert_eq!(step["state"], "pending");
-        assert_eq!(step["reason"], "gateway_restarted");
+        assert_eq!(step["state"], "failed");
+        assert!(matches!(
+            step["reason"].as_str(),
+            Some("gateway_restarted" | "browser_host_lost")
+        ));
     }
     s.finish().await
 }

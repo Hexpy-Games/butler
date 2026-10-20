@@ -1,0 +1,6 @@
+{
+  "single": "{\"status\":\"ok\",\"tab\":\"t\",\"steps\":[{\"status\":\"completed\",\"hit\":{\"role\":\"wait\",\"name\":\"\",\"frame\":\"\"}}],\"url\":\"https://example.com/a\",\"epoch\":1,\"completed\":1}",
+  "multi": "{\"status\":\"ok\",\"tab\":\"t\",\"steps\":[{\"status\":\"completed\",\"hit\":{\"role\":\"wait\",\"name\":\"\",\"frame\":\"\"}},{\"status\":\"completed\",\"hit\":{\"role\":\"wait\",\"name\":\"\",\"frame\":\"\"}}],\"url\":\"https://example.com/a\",\"epoch\":1,\"completed\":2}",
+  "dialog": "{\"status\":\"dialog_pending\",\"tab\":\"t\",\"url\":\"https://example.com/a\",\"epoch\":1,\"dialog\":{\"id\":\"d\",\"epoch\":1,\"type\":\"confirm\",\"message\":\"Confirm\",\"deadline\":1000,\"untrusted\":true},\"steps\":[{\"status\":\"unknown\",\"reason\":\"dialog_pending\",\"hit\":{\"role\":\"wait\",\"name\":\"\",\"frame\":\"\"}},{\"status\":\"not_dispatched\",\"reason\":\"previous_step_failed\"}]}",
+  "navigation": "{\"status\":\"ok\",\"tab\":\"t\",\"steps\":[{\"status\":\"completed\",\"hit\":{\"role\":\"navigation\",\"name\":\"https://example.com/b\",\"frame\":\"\"}}],\"url\":\"https://example.com/b\",\"epoch\":2,\"completed\":1}"
+}

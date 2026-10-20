@@ -43,7 +43,7 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     }
     if let Some(refused) = dispatch(&state, frame, count, deadline, &id, sender)? {
         if op == "tab.act" {
-            super::still_delivery::finish(&state, &id, &session, &mut json!({}), false).await?;
+            super::still_delivery::finish(&state, &id, &session, &mut json!({})).await?;
         }
         return Ok(refused);
     }
@@ -59,12 +59,11 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
             Err(_) => json!({"status":"unknown","reason":"timeout"}),
         }
     };
-    let awaiting_host = result["reason"] == "browser_host_lost" || state.shutdown.is_cancelled();
     fence_result(&state, &session, &op, tab, &mut result)?;
     super::signed_in::recheck(&sent, &mut result);
     finish_result(&state, &session, &op, &sent, &mut result).await?;
     if op == "tab.act" {
-        super::still_delivery::finish(&state, &id, &session, &mut result, awaiting_host).await?;
+        super::still_delivery::finish(&state, &id, &session, &mut result).await?;
     }
     response(count, result)
 }
@@ -257,6 +256,7 @@ pub(super) async fn events(state: Arc<HttpState>, value: Value) -> Result<Respon
         .ok_or_else(|| error(400, "invalid_snapshot"))?;
     let (handed_back, handovers) = {
         let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
+        hub.still_backlog = value["still_backlog"].as_u64().unwrap_or(0);
         let handovers = hub.tabs.handovers(tabs);
         let changed: Vec<Value> = tabs
             .iter()

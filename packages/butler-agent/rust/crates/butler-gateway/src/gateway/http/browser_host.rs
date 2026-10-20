@@ -88,6 +88,10 @@ struct Inner {
     vault_fills: HashMap<String, pay::VaultFill>,
     /// The attached host is the hidden App host (no window, no user there).
     hidden: bool,
+    /// Durable evidence still owned by this host, including queued captures.
+    still_backlog: u64,
+    /// The previous host is settling and exiting before another host can attach.
+    retiring: bool,
     /// The App asked for the channel while the hidden host was busy.
     app_waiting: bool,
     /// Counts attaches; a stream's end clears only its own attach.
@@ -98,6 +102,7 @@ impl Inner {
     fn detach(&mut self) {
         self.host = None;
         self.hidden = false;
+        self.still_backlog = 0;
         self.app_waiting = false;
         self.generation += 1;
         self.pending.clear();

@@ -20,22 +20,17 @@ pub(super) async fn finish(
     id: &str,
     session: &str,
     result: &mut Value,
-    awaiting_host: bool,
 ) -> Result<(), HttpError> {
     let steps = result["steps"].as_array();
-    let awaiting = if awaiting_host {
-        (0..10).collect()
-    } else {
-        steps
-            .map(|steps| {
-                steps
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(i, step)| (step["status"] == "completed").then_some(i))
-                    .collect()
-            })
-            .unwrap_or_default()
-    };
+    let awaiting = steps
+        .map(|steps| {
+            steps
+                .iter()
+                .enumerate()
+                .filter_map(|(i, step)| (step["status"] == "completed").then_some(i))
+                .collect()
+        })
+        .unwrap_or_default();
     let failures = (0..10)
         .map(|index| {
             let reason = steps

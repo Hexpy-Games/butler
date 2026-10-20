@@ -50,13 +50,13 @@ export function BrowserStepStill({ turnId, callId, resultId, content }: { turnId
       if (!delivery || !pending) { settled(); return; }
       // Bound observation of an unavailable host; a future mount reads its durable state again.
       const until = Date.now() + 60_000;
-      while (active && delivery && !delivery.complete && pending && Date.now() < until) {
+      while (active && delivery && !delivery.complete && delivery.steps.some(step => step.state === "pending") && pending && Date.now() < until) {
         delivery = await api<Delivery>(`/browser-stills/${encodeURIComponent(delivery.act_id)}?session_id=${encodeURIComponent(pending.session)}&wait=1`, {
           signal: AbortSignal.any([controller.signal, AbortSignal.timeout(Math.max(1, until - Date.now()))]),
         });
         apply(delivery.steps);
       }
-      if (delivery.complete) settled();
+      if (delivery.complete || delivery.steps.every(step => step.state !== "pending")) settled();
     };
     const settled = () => {
       complete = true; unsubscribe?.(); window.removeEventListener("focus", refresh);
@@ -94,7 +94,7 @@ export function BrowserStepStill({ turnId, callId, resultId, content }: { turnId
       return <Tooltip key={item.step ?? index} label={failed ? reason : undefined}>
         <Clickable variant="text" stretch disabled={!shot} aria-label={appCopy.conversation.imageViewer.viewImage(appCopy.browser.still)} onClick={() => openImageViewer(shots, selected)}>
           <Stack grow minWidth="0"><MediaFrame src={shot?.src} alt={appCopy.browser.still} aspect="16:10" placeholder>
-            {!shot && <Caption>{failed ? appCopy.browser.stillUnavailable : appCopy.browser.stillPending}</Caption>}
+            {!shot && <Caption>{failed ? reason : appCopy.browser.stillPending}</Caption>}
           </MediaFrame></Stack>
         </Clickable>
       </Tooltip>;

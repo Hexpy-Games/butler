@@ -31,7 +31,7 @@ pub enum AppBrowserStillCommand {
         step: usize,
         reason: String,
     },
-    Recover {
+    SettlePending {
         reason: String,
     },
 }

@@ -1,28 +1,14 @@
 // test-category: race
-// Execute origin/main's actual act implementation and this branch with identical
-// stubbed renderer events; strip only desktop evidence, as the provider boundary does.
+// Main model-visible results, generated once at 817f21fd9 from origin/main.
+// Strip only desktop evidence, as the provider boundary does.
 import { test, expect, mock } from "bun:test";
 import { EventEmitter } from "node:events";
 import { resolve } from "node:path";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 mock.module("electron", () => ({ app: { on() {} }, BrowserWindow: class {}, WebContentsView: class {}, ipcMain: { on() {}, handle() {} }, nativeImage: {}, session: {}, powerMonitor: {}, clipboard: {}, dialog: {} }));
 const directory = resolve("packages/butler-app/client/electron/browser");
-async function fromRevision(revision: string) {
-  const result = Bun.spawnSync(["git", "show", `${revision}:packages/butler-app/client/electron/browser/act.mjs`]);
-  expect(result.exitCode).toBe(0);
-  const source = result.stdout.toString().replace(/from "(\.\/[^"]+)"/gu, (_, file) => `from "${pathToFileURL(resolve(directory, file)).href}"`);
-  const scratch = await mkdtemp(resolve(tmpdir(), "act-main-"));
-  try {
-    const file = resolve(scratch, "act.mjs");
-    await writeFile(file, source);
-    return await import(file);
-  } finally { await rm(scratch, { recursive: true, force: true }); }
-}
-const main = await fromRevision("origin/main");
-const branch = process.env.BUTLER_ACT_REVISION ? await fromRevision(process.env.BUTLER_ACT_REVISION)
-  : await import(pathToFileURL(resolve(directory, "act.mjs")).href);
+const golden = await Bun.file(new URL("../fixtures/browser-act-main.json", import.meta.url)).json();
+const branch = await import(pathToFileURL(resolve(directory, "act.mjs")).href);
 function subject(ending: string) {
   const tab: any = { id: "t", epoch: 1, url: "https://example.com/a", owner: "conversation:s", holder: "agent" };
   const contents: any = new EventEmitter();
@@ -52,7 +38,7 @@ for (const ending of ["single", "multi", "dialog", "navigation"]) test(`model ac
     await tab.stillCapture;
     return JSON.stringify(result, (key, value) => ["still", "still_file", "still_pending"].includes(key) ? undefined : value);
   };
-  expect(await run(branch)).toBe(await run(main));
+  expect(await run(branch)).toBe(golden[ending]);
 });
 
 test("dialog answer sends its still through the durable delivery callback", async () => {

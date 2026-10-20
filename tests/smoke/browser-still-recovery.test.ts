@@ -1,12 +1,18 @@
 // test-category: race
+import { EventEmitter } from "node:events";
 import { createRequire } from "node:module";
 import { test, expect, mock } from "bun:test";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-mock.module("../../packages/butler-app/client/electron/browser/stills.mjs", () => ({ stepStill: async () => ({ mime: "image/jpeg", base64: "YWJj" }) }));
-mock.module("../../packages/butler-app/client/electron/browser/output-check.mjs", () => ({ checkOutput() {}, closeOutputChecks() {} }));
-mock.module("../../packages/butler-app/client/electron/browser/reader-render.mjs", () => ({ renderReader() {}, closeReaderRenders() {} }));
+mock.module("electron", () => ({ app: { on() {} }, BrowserWindow: class {}, WebContentsView: class {}, ipcMain: { on() {}, handle() {} }, nativeImage: {}, session: {}, powerMonitor: {}, clipboard: {}, dialog: {} }));
+function captureTab() {
+  const contents = new EventEmitter();
+  const image: any = { resize: () => image, toBitmap: () => Buffer.alloc(4), toJPEG: () => Buffer.from("abc"), isEmpty: () => false };
+  Object.assign(contents, { debugger: new EventEmitter(), isDestroyed: () => false, isLoading: () => false,
+    capturePage: async () => image, executeJavaScriptInIsolatedWorld: async () => true });
+  return { epoch: 1, owner: "conversation:s", holder: "agent", view: { webContents: contents } };
+}
 const require = createRequire(import.meta.url);
 const { drainStills, enqueueStill } = require("../../packages/butler-app/client/electron/browser/still-delivery.mjs");
 
@@ -21,7 +27,7 @@ test("a refused close does not cancel further input", async () => {
 
 test("delivery failure retains captured bytes instead of reporting upload_failed", async () => {
   const values: any[] = [];
-  const tab: any = { epoch: 1, owner: "conversation:s", holder: "agent" };
+  const tab: any = captureTab();
   enqueueStill(tab, 0, 1, async (value: any) => { values.push(value); throw Error("offline"); });
   await drainStills(tab);
   expect(values.some(value => value.reason === "upload_failed")).toBe(false);
@@ -92,7 +98,7 @@ test("quit deadline spools active-act pixels and every queued still for the next
   const { createStillOutbox } = require("../../packages/butler-app/client/electron/browser/still-outbox.mjs");
   const directory = await mkdtemp(join(tmpdir(), "still-quit-"));
   const queue = createStillOutbox({ directory, send: async () => { throw Error("offline"); }, retryMs: [] });
-  const tab: any = { epoch: 1, owner: "conversation:s", holder: "agent", activeAct: new Promise(() => {}) };
+  const tab: any = { ...captureTab(), activeAct: new Promise(() => {}) };
   try {
     await queue.reserve({ id: "a", session: "s", tab: "t", args: { steps: [{}, {}, {}] } });
     for (let step = 0; step < 3; step++) enqueueStill(tab, step, 1, (value: any) => queue.deliver("a", value));

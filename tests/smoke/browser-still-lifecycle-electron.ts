@@ -42,7 +42,7 @@ try {
           beginDialog(browser,tab,{type:'confirm',message:'First'},()=>{});
           tab.pendingBatch=[{status:'unknown',reason:'dialog_pending'}];
         }
-        pending=(mode==='act'?actBatch(tab,args,'s1'):mode==='answer'?answerDialog(browser,tab,{dialog:tab.dialog.id,accept:true}):mode==='comparison'?comparisonThumbnail(tab):stepStill(tab))
+        pending=(mode==='act'?actBatch(tab,{...args,deliverStill:value=>{delivered.push(value)}},'s1'):mode==='answer'?answerDialog(browser,tab,{dialog:tab.dialog.id,accept:true}):mode==='comparison'?comparisonThumbnail(tab):stepStill(tab))
           .then(result=>{value=result;image=Boolean(['still','comparison'].includes(mode)?result:result.steps[0].still);settled=true});
         await ready;
         if(ending==='navigation')await contents.loadURL('data:text/html,<title>After</title><body style="background:lime">After');
@@ -56,8 +56,8 @@ try {
         }
         await new Promise(done=>setImmediate(done));
         const releasedByEvent=settled;
-        release?.();await pending;await tab.stillCapture;await new Promise(done=>setImmediate(done));
-        rows.push({stage,ending,mode,requested,settled:releasedByEvent,title:contents.isDestroyed()?'':contents.getTitle(),image,listeners:listeners(),baseline,stale,status:value?.status,stepStatus:value?.steps?.[0]?.status,reason:value?.steps?.[0]?.reason});
+        release?.();await pending;await tab.stillCapture;await Promise.all([...(tab.stillJobs??[])].map(job=>job.promise));await new Promise(done=>setImmediate(done));
+        rows.push({stage,ending,mode,requested,settled:releasedByEvent,title:contents.isDestroyed()?'':contents.getTitle(),image:mode==='act'?delivered.some(value=>value.still):image,listeners:listeners(),baseline,stale,status:value?.status,stepStatus:value?.steps?.[0]?.status,reason:value?.steps?.[0]?.reason});
       } finally {
         if(!contents.isDestroyed()){contents.executeJavaScriptInIsolatedWorld=originalPaint;contents.capturePage=originalCapture;}
         release?.();await pending;if(!window.isDestroyed())window.destroy();
@@ -93,7 +93,7 @@ try {
       const originalPaint=contents.executeJavaScriptInIsolatedWorld.bind(contents);
       const events=['did-start-navigation','render-process-gone','destroyed'];
       const listeners=()=>[...events.map(name=>contents.listenerCount(name)),dbg.listenerCount('message'),tab.dialogWaiters?.size??0];
-      let requested=0,stale=false,timer;
+      let requested=0,stale=false,timer;const delivered=[];
       const tab={id:'dialog-tab',epoch:1,url:'about:blank',owner:'conversation:s1',holder:'agent',agent:true,
         view:{webContents:contents},afterCapture:()=>{stale=true}};
       const browser={publish(){},sync(){},detach(){},close(){}};
@@ -121,16 +121,16 @@ try {
         const prepared=await prepareBatch(tab,args);args.prepared_steps=prepared.steps;
         const started=Date.now();
         const value=await Promise.race([
-          mode==='act'?actBatch(tab,args,'s1'):mode==='answer'?answerDialog(browser,tab,{dialog:tab.dialog.id,accept:true}):mode==='comparison'?comparisonThumbnail(tab):stepStill(tab),
+          mode==='act'?actBatch(tab,{...args,deliverStill:value=>{delivered.push(value)}},'s1'):mode==='answer'?answerDialog(browser,tab,{dialog:tab.dialog.id,accept:true}):mode==='comparison'?comparisonThumbnail(tab):stepStill(tab),
           new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Dialog blocked the still wait')),5000)}),
         ]);
-        if(mode==='act')await tab.stillCapture;
+        if(mode==='act'){await tab.stillCapture;await Promise.all([...(tab.stillJobs??[])].map(job=>job.promise))}
         clearTimeout(timer);
         const elapsedMs=Date.now()-started;
         if(!tab.dialog)throw Error('The real page dialog did not open');
         const existingImage=Boolean(await (mode==='comparison'?comparisonThumbnail(tab):stepStill(tab)));
         const existingRequested=requested;
-        const row={mode,source,waiting:tab.waiting,pending:Boolean(tab.pendingBatch),nextDialog:value?.dialog?.message,requested,image:Boolean(['still','comparison'].includes(mode)?value:value.steps[0].still),
+        const row={mode,source,waiting:tab.waiting,pending:Boolean(tab.pendingBatch),nextDialog:value?.dialog?.message,requested,image:mode==='act'?delivered.some(value=>value.still):Boolean(['still','comparison'].includes(mode)?value:value.steps[0].still),
           status:value?.status,reason:value?.steps?.[0]?.reason,existingImage,existingRequested,
           listeners:listeners(),baseline,elapsedMs};
         contents.executeJavaScriptInIsolatedWorld=originalPaint;
@@ -159,6 +159,7 @@ try {
       assert.equal(result.status, "dialog_pending");
       assert.equal(result.pending, true);
       assert.equal(result.reason, "dialog_pending");
+      assert.equal(result.nextDialog, "Paint wait");
     } else if (result.mode === "answer") {
       assert.equal(result.status, "dialog_pending");
       assert.equal(result.pending, true, "the batch is retained for the pending dialog");
@@ -172,7 +173,7 @@ try {
     const {stepStill,comparisonThumbnail}=require(${JSON.stringify(resolve("packages/butler-app/client/electron/browser/stills.mjs"))});
     const window=new BrowserWindow({show:true,webPreferences:{backgroundThrottling:false}}),contents=window.webContents;
     const tab={id:'comparison',epoch:1,holder:'agent',url:'about:blank',frameAttachPromises:new Map(),frameSessions:new Map(),view:{webContents:contents}};
-    let captures=0;
+    let captures=0;const delivered=[];
     const original=contents.capturePage.bind(contents);
     const originalWorld=contents.executeJavaScriptInIsolatedWorld.bind(contents);
     try {

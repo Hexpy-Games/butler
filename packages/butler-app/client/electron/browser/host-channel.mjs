@@ -5,7 +5,7 @@ import { closeReaderRenders, renderReader } from "./reader-render.mjs";
 
 // Dedicated main-only SSE. Credentials and page diagnostics never reach a renderer.
 // `onClosed` (the hidden host): a lost channel ends the host instead of reconnecting.
-export function createBrowserHost({ fetch, adminCredential, executeBrowser, resetBrowser, snapshot, enabled = () => true, onClosed, stillDirectory, onStillDelivered }) {
+export function createBrowserHost({ fetch, adminCredential, executeBrowser, resetBrowser, snapshot, enabled = () => true, onClosed, stillDirectory, replayDirectories, onStillDelivered }) {
   let controller = null;
   let reconnect = null;
   let running = false;
@@ -16,7 +16,7 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
     stateFlush = stateFlush.catch(() => {}).then(async () => {
       if (running && controller && !controller.signal.aborted && snapshot && revision!==published) {
         const current=revision;
-        const response=await request("/internal/browser-host/events", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tabs: snapshot().tabs }) });
+        const response=await request("/internal/browser-host/events", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tabs: snapshot().tabs, still_backlog: stills.pending }) });
         if(response.ok) published=current;
       }
     });
@@ -24,41 +24,15 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
   };
   const request = (path, init = {}) => fetch(path, { ...init, signal: controller.signal,
     headers: { "x-butler-admin": adminCredential(), ...init.headers } });
-  const stills = createStillOutbox({ directory: stillDirectory, send: async value => {
+  const stills = createStillOutbox({ directory: stillDirectory, replayDirectories, onChanged: () => { revision++; if (running) void flushState().catch(() => {}); }, send: async value => {
     // SSE reconnection must not cancel an independent evidence upload.
     const response = await fetch("/internal/browser-host/stills", { method: "POST",
       signal: AbortSignal.timeout(5000), headers: { "x-butler-admin": adminCredential(), "content-type": "application/json" },
       body: JSON.stringify(value) });
-    if (!response.ok) throw Error("still_upload_failed");
+    if (!response.ok) throw Object.assign(Error("still_upload_failed"), { status: response.status });
     onStillDelivered?.({ id: value.act_id, session: value.session });
   } });
-  async function execute(frame) {
-    await flushState();
-    let result;
-    const evidence = frame.op === "tab.act";
-    try {
-      if (evidence) {
-        try { await stills.reserve(frame); }
-        catch (error) { result = { status: "not_dispatched", reason: error.message === "still_storage_full" ? "still_storage_full" : "still_storage_unavailable" }; }
-      }
-      result ??= frame.op === "output.check" ? await checkOutput(frame.args, frame.lease)
-        : frame.op === "reader.render" ? await renderReader(frame.args)
-          : await executeBrowser?.({ ...frame, deliverStill: value => stills.deliver(frame.id, value) })
-            ?? { status: "unknown", reason: "unsupported_op" };
-    }
-    catch (error) {
-      // Keep the cause: an executor error is otherwise invisible to diagnosis.
-      console.error(`[browser] ${frame.op} failed:`, error?.stack ?? String(error));
-      result = { status: "unknown", reason: "executor_error" };
-    }
-    if (evidence) await stills.finish(frame.id, result);
-    await flushState();
-    // Media and rendered pages carry bounded bytes on their own routes.
-    const results = frame.op === "tab.image_collect" ? "images" : ["reader.render", "tab.read"].includes(frame.op) ? "renders" : "results";
-    await request(`/internal/browser-host/${results}/${encodeURIComponent(frame.id)}`, {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(result),
-    });
-  }
+  const execute = createExecutor({ flushState, stills, executeBrowser, request });
   async function connect() {
     resetBrowser?.();
     controller = new AbortController();published=-1;
@@ -89,38 +63,14 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
     if (running && onClosed) { running = false; onClosed(); }
     else if (running) reconnect = setTimeout(connect, 1000);
   }
-  /** The fill password, once per token; never logged, never returned to Rust. */
-  async function credential(token, origin) {
-    const unavailable = { error: "credential_unavailable" };
-    if (!running || !controller || !/^[0-9a-f]{32}$/u.test(token) || typeof origin !== "string") return unavailable;
-    try {
-      const response = await request(`/internal/browser-host/credentials/${token}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ origin }) });
-      if (!response.ok) return response.status === 403 ? { error: "origin_mismatch" } : unavailable;
-      const value = await response.json();
-      return typeof value?.password === "string" ? { password: value.password } : unavailable;
-    } catch { return unavailable; }
-  }
   const history = createVisitQueue(async visits => {
     const response = await request("/internal/browser-host/visits", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ visits }) });
     if (!response.ok) throw new Error("history_unavailable");
   });
-  /** A saved card's or profile's values, once per token, for the exact origins
-   * the token binds; never logged, never returned to Rust. */
-  async function vault(token, origin, frameOrigins) {
-    const unavailable = { error: "vault_unavailable" };
-    if (!running || !controller || !/^[0-9a-f]{32}$/u.test(token) || typeof origin !== "string" || !Array.isArray(frameOrigins)) return unavailable;
-    try {
-      const response = await request(`/internal/browser-host/vault/${token}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ origin, frame_origins: frameOrigins }) });
-      if (!response.ok) return response.status === 403 ? { error: "origin_mismatch" } : unavailable;
-      const values = await response.json();
-      return values && typeof values === "object" && !Array.isArray(values) ? { values } : unavailable;
-    } catch { return unavailable; }
-  }
   return {
     history,
     flushStills: () => stills.flush(),
-    credential,
-    vault,
+    ...createSecrets(request, () => running && controller),
     start() { if (!running && enabled()) { running = true; void connect(); } },
     changed() {
       revision++;
@@ -128,4 +78,61 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
     },
     stop() { stills.stop(); clearTimeout(stateTimer); running = false; clearTimeout(reconnect); controller?.abort(); resetBrowser?.(); closeOutputChecks(); closeReaderRenders(); },
   };
+}
+
+function createExecutor({ flushState, stills, executeBrowser, request }) {
+  return async function execute(frame) {
+    await flushState();
+    let result;
+    const evidence = frame.op === "tab.act";
+    try {
+      if (evidence) {
+        try { await stills.reserve(frame); }
+        catch (error) { result = { status: "not_dispatched", reason: error.message === "still_storage_full" ? "still_storage_full" : "still_storage_unavailable" }; }
+      }
+      result ??= frame.op === "output.check" ? await checkOutput(frame.args, frame.lease)
+        : frame.op === "reader.render" ? await renderReader(frame.args)
+          : await executeBrowser?.({ ...frame, deliverStill: value => stills.deliver(frame.id, value) })
+            ?? { status: "unknown", reason: "unsupported_op" };
+    }
+    catch (error) {
+      // Keep the cause: an executor error is otherwise invisible to diagnosis.
+      console.error(`[browser] ${frame.op} failed:`, error?.stack ?? String(error));
+      result = { status: "unknown", reason: "executor_error" };
+    }
+    if (evidence) await stills.finish(frame.id, result);
+    await flushState();
+    // Media and rendered pages carry bounded bytes on their own routes.
+    const results = frame.op === "tab.image_collect" ? "images" : ["reader.render", "tab.read"].includes(frame.op) ? "renders" : "results";
+    await request(`/internal/browser-host/${results}/${encodeURIComponent(frame.id)}`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(result),
+    });
+  };
+}
+
+function createSecrets(request, available) {
+  /** The fill password, once per token; never logged, never returned to Rust. */
+  async function credential(token, origin) {
+    const unavailable = { error: "credential_unavailable" };
+    if (!available() || !/^[0-9a-f]{32}$/u.test(token) || typeof origin !== "string") return unavailable;
+    try {
+      const response = await request(`/internal/browser-host/credentials/${token}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ origin }) });
+      if (!response.ok) return response.status === 403 ? { error: "origin_mismatch" } : unavailable;
+      const value = await response.json();
+      return typeof value?.password === "string" ? { password: value.password } : unavailable;
+    } catch { return unavailable; }
+  }
+  /** A saved card's or profile's values, once per token, for the exact origins
+   * the token binds; never logged, never returned to Rust. */
+  async function vault(token, origin, frameOrigins) {
+    const unavailable = { error: "vault_unavailable" };
+    if (!available() || !/^[0-9a-f]{32}$/u.test(token) || typeof origin !== "string" || !Array.isArray(frameOrigins)) return unavailable;
+    try {
+      const response = await request(`/internal/browser-host/vault/${token}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ origin, frame_origins: frameOrigins }) });
+      if (!response.ok) return response.status === 403 ? { error: "origin_mismatch" } : unavailable;
+      const values = await response.json();
+      return values && typeof values === "object" && !Array.isArray(values) ? { values } : unavailable;
+    } catch { return unavailable; }
+  }
+  return { credential, vault };
 }
