@@ -62,7 +62,7 @@ pub(super) struct BindError {
 }
 
 impl BindError {
-    fn new(address: SocketAddr, error: std::io::Error) -> Self {
+    fn new(address: SocketAddr, error: &std::io::Error) -> Self {
         let code = match error.kind() {
             std::io::ErrorKind::AddrInUse => "address_in_use",
             std::io::ErrorKind::PermissionDenied => "permission_denied",
@@ -195,7 +195,7 @@ impl RemoteAccess {
                             Err(error) => {
                                 bound
                                     .bind_errors
-                                    .push(BindError::new(content_address, error));
+                                    .push(BindError::new(content_address, &error));
                                 continue;
                             }
                         };
@@ -204,7 +204,7 @@ impl RemoteAccess {
                             Err(error) => {
                                 bound
                                     .bind_errors
-                                    .push(BindError::new(content_address, error));
+                                    .push(BindError::new(content_address, &error));
                                 continue;
                             }
                         }
@@ -213,7 +213,7 @@ impl RemoteAccess {
                         bound.lan_listeners.push(address);
                     }
                     Err(error) => {
-                        bound.bind_errors.push(BindError::new(address, error));
+                        bound.bind_errors.push(BindError::new(address, &error));
                         continue;
                     }
                 }
