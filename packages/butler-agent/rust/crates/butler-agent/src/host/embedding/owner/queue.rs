@@ -37,9 +37,8 @@ pub(super) struct Pending {
     pub(super) id: u64,
     pub(super) frame: Vec<u8>,
     pub(super) bytes: usize,
-    pub(super) cold_start_allowed: bool,
-    /// Background maintenance: a worker it starts runs at background priority.
-    pub(super) background: bool,
+    /// Retain the scheduling class for cold admission and worker priority.
+    pub(super) request_class: EmbeddingRequestClass,
     /// Only interactive checked query embeddings may finish after abandonment.
     pub(super) interactive_query: bool,
     pub(super) mode: EmbeddingMode,

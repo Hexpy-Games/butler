@@ -174,11 +174,15 @@ async fn ensure_initialized(
         if inner.shutdown.is_cancelled() {
             return Err(error(CognitionCode::EmbedOwnerClosed));
         }
-        if !item.cold_start_allowed {
+        if !matches!(
+            item.request_class,
+            EmbeddingRequestClass::Interactive | EmbeddingRequestClass::Background
+        ) {
             return Err(error(CognitionCode::EmbedWorkerCold));
         }
         let started = Instant::now();
-        *child = Some(spawn_worker(&inner.executable, &inner.data_root, item.background).await?);
+        let background = item.request_class == EmbeddingRequestClass::Background;
+        *child = Some(spawn_worker(&inner.executable, &inner.data_root, background).await?);
         if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
             butler_core::diagnostic!(
                 "[embedding-worker] spawn_ms={:.3}",

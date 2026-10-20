@@ -212,11 +212,7 @@ impl EmbeddingOwner {
             requested_texts,
             resplit,
             max_embeddings,
-            cold_start_allowed: matches!(
-                request.request_class,
-                EmbeddingRequestClass::Interactive | EmbeddingRequestClass::Background
-            ),
-            background: request.request_class == EmbeddingRequestClass::Background,
+            request_class: request.request_class,
             interactive_query,
             cancellation: admitted_cancel.clone(),
             deadline,
