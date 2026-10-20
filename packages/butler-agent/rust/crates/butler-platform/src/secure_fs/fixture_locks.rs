@@ -47,7 +47,7 @@ $ErrorActionPreference = 'Stop'
 $share = [IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete
 $file = [IO.File]::Open($env:BUTLER_MAPPING_FILE, 'Open', 'Read', $share)
 $map = [IO.MemoryMappedFiles.MemoryMappedFile]::CreateFromFile(
-    $file, $null, 0, [IO.MemoryMappedFiles.MemoryMappedFileAccess]::Read,
+    $file, [NullString]::Value, 0, [IO.MemoryMappedFiles.MemoryMappedFileAccess]::Read,
     [IO.HandleInheritability]::None, $true)
 $view = $map.CreateViewAccessor(0, 0, [IO.MemoryMappedFiles.MemoryMappedFileAccess]::Read)
 [IO.File]::WriteAllText($env:BUTLER_MAPPING_READY, 'ready')
@@ -62,7 +62,7 @@ $view = $map.CreateViewAccessor(0, 0, [IO.MemoryMappedFiles.MemoryMappedFileAcce
             .spawn()?;
         let mut holder = MappedView { child };
         let started = Instant::now();
-        while !ready.exists() {
+        while std::fs::read_to_string(&ready).ok().as_deref() != Some("ready") {
             if holder.child.try_wait()?.is_some() {
                 return Err(io::Error::other(
                     "mapped-view holder exited before readiness",
@@ -76,7 +76,6 @@ $view = $map.CreateViewAccessor(0, 0, [IO.MemoryMappedFiles.MemoryMappedFileAcce
             }
             std::thread::sleep(Duration::from_millis(5));
         }
-        std::fs::remove_file(ready)?;
         Ok(holder)
     }
     #[cfg(not(windows))]
