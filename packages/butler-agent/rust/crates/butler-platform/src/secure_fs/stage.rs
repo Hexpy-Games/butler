@@ -9,8 +9,8 @@ use std::{
 const MAX_TOTAL: u64 = 256 * 1024 * 1024;
 static CHANGES: Mutex<()> = Mutex::new(());
 
-/// Discard copies owned by the previous process. Call once after acquiring
-/// the Agent instance lock, on a blocking worker, before admitting turns.
+/// Discard all process-owned copies under the Agent instance lock. Call on a
+/// blocking worker before admission or after producers and consumers stop.
 pub fn reset_reader_staging(data: &Path) -> io::Result<()> {
     let _lock = CHANGES
         .lock()
@@ -104,7 +104,7 @@ pub struct StagedFiles {
     paths: Vec<PathBuf>,
 }
 mod lifecycle;
-pub use lifecycle::{StageScope, handoff_staged};
+pub use lifecycle::{ReaderStaging, StageScope, handoff_staged};
 impl StagedFiles {
     /// Track only stages created by this operation.
     pub fn new(data: &Path) -> Self {

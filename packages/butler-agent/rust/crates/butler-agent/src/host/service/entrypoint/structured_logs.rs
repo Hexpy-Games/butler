@@ -81,11 +81,7 @@ pub(super) async fn run_until_stopped(
         holds_foreground_lease(foreground_lease),
     )
     .await?;
-    let data = config.data_root.clone();
-    tokio::task::spawn_blocking(move || butler_platform::secure_fs::reset_reader_staging(&data))
-        .await
-        .map_err(io)?
-        .map_err(io)?;
+    let staging = reader_staging(config.data_root.clone()).await?;
     let port = listener
         .as_ref()
         .and_then(|listener| listener.local_addr().ok())
@@ -105,11 +101,15 @@ pub(super) async fn run_until_stopped(
         structured_logs.close(),
     )
     .await;
+    let cleared = tokio::task::spawn_blocking(move || staging.cleanup())
+        .await
+        .map_err(io)?
+        .map_err(io);
     // serve_initialized has joined App DB/artifact jobs, native dispatcher,
     // BTCC/conversation/binding stores, memory/cognition, developer capture and
     // transcript writer. Browser owners are joined by the HTTP listener;
     // metrics have no independent writer. A close error forbids reset apply.
-    let reset = if result.is_ok() && closed.is_ok() {
+    let reset = if result.is_ok() && closed.is_ok() && cleared.is_ok() {
         crate::host::service::shutdown_trace::measure(
             "data_reset_apply",
             crate::host::service::data_reset::finish(config.data_root.clone()),
@@ -121,7 +121,16 @@ pub(super) async fn run_until_stopped(
     tokio::task::spawn_blocking(move || drop(instance))
         .await
         .map_err(|error| failure("native_service_instance_release_failed", error.to_string()))?;
-    result.and_then(|session| closed.and(reset).map(|()| session))
+    result.and_then(|session| closed.and(cleared).and(reset).map(|()| session))
+}
+
+async fn reader_staging(
+    data: std::path::PathBuf,
+) -> Result<butler_platform::secure_fs::ReaderStaging, BtccError> {
+    tokio::task::spawn_blocking(move || butler_platform::secure_fs::ReaderStaging::new(data))
+        .await
+        .map_err(io)?
+        .map_err(io)
 }
 
 async fn serve_initialized(

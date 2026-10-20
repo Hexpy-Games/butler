@@ -1,6 +1,6 @@
 //! Process lifetime and shutdown cleanup contracts for private reader copies.
 use super::{fs, scratch};
-use butler_platform::secure_fs::{self, StageScope, StagedFiles};
+use butler_platform::secure_fs::{self, ReaderStaging, StageScope, StagedFiles};
 
 // test-category: security
 #[test]
@@ -33,6 +33,7 @@ fn rejected_blocking_cleanup_still_removes_owned_stages() {
     let temp = scratch("staging-shutdown");
     let source = temp.join("source");
     fs::write(&source, "complete").unwrap();
+    let process = ReaderStaging::new(temp.clone()).unwrap();
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let handle = runtime.handle().clone();
     runtime.shutdown_background();
@@ -55,5 +56,23 @@ fn rejected_blocking_cleanup_still_removes_owned_stages() {
         drop(scope);
         assert!(!path.exists(), "rejected cleanup must run synchronously");
     }
+    let scope = StageScope::new(&temp, "handoff");
+    let path = secure_fs::stage_file(
+        &temp,
+        "handoff",
+        &source,
+        fs::File::open(&source).unwrap(),
+        1024,
+    )
+    .unwrap();
+    secure_fs::handoff_staged(&path);
+    drop(scope);
+    assert!(path.exists(), "materialization owns the handed-off copy");
+    drop(process);
+    assert!(
+        !path.exists(),
+        "process shutdown also reclaims unconsumed handoffs"
+    );
+    assert_eq!(fs::read_to_string(source).unwrap(), "complete");
     fs::remove_dir_all(temp).unwrap();
 }

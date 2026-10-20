@@ -4,6 +4,33 @@ use std::{
     collections::HashMap,
     sync::{Arc, OnceLock, Weak},
 };
+/// Owns all reader copies for one Agent process, under its instance lock.
+/// Normal shutdown closes this after joining producers and materializers;
+/// dropping a cancelled shutdown also removes copies synchronously.
+pub struct ReaderStaging {
+    data: Option<PathBuf>,
+}
+impl ReaderStaging {
+    /// Discard previous-process copies before admitting any turn.
+    pub fn new(data: PathBuf) -> io::Result<Self> {
+        reset_reader_staging(&data)?;
+        Ok(Self { data: Some(data) })
+    }
+    /// Finish on a blocking worker, before releasing the instance lock.
+    pub fn cleanup(mut self) -> io::Result<()> {
+        self.data
+            .take()
+            .map_or(Ok(()), |data| reset_reader_staging(&data))
+    }
+}
+impl Drop for ReaderStaging {
+    fn drop(&mut self) {
+        if let Some(data) = self.data.take() {
+            let _ = reset_reader_staging(&data);
+        }
+    }
+}
+
 type Key = (PathBuf, String);
 struct State {
     data: PathBuf,
