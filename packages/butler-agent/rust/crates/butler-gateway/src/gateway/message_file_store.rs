@@ -8,6 +8,7 @@ mod snapshot;
 #[cfg(test)]
 mod tests;
 mod upload;
+mod upload_cache;
 
 use parking_lot::Mutex;
 use std::{
@@ -32,6 +33,7 @@ pub struct AppMessageFiles {
     permits: Arc<Semaphore>,
     jobs: TaskTracker,
     closing: Arc<Mutex<bool>>,
+    uploads: Arc<Mutex<upload_cache::Cache>>,
 }
 
 impl AppMessageFiles {
@@ -42,6 +44,7 @@ impl AppMessageFiles {
             permits: Arc::new(Semaphore::new(2)),
             jobs: TaskTracker::new(),
             closing: Arc::new(Mutex::new(false)),
+            uploads: Arc::default(),
         }
     }
 
@@ -127,10 +130,12 @@ impl AppMessageFileStorage for AppMessageFiles {
         bytes: Bytes,
         name: String,
     ) -> ApplicationFuture<MaterializedResponderFile> {
-        self.run_file_job(move |root, _| upload::replace_still(root, file, &bytes, name))
+        let uploads = self.uploads.clone();
+        self.run_file_job(move |root, _| upload::replace_still(root, file, &bytes, name, &uploads))
     }
     fn write_upload(&self, input: AppFileWrite) -> ApplicationFuture<MaterializedResponderFile> {
-        self.run_file_job(move |root, clock| upload::write(root, clock, input))
+        let uploads = self.uploads.clone();
+        self.run_file_job(move |root, clock| upload::write(root, clock, input, &uploads))
     }
 
     fn prepare_uploaded(&self, file: AppMessageFileSnapshot) -> ApplicationFuture<()> {

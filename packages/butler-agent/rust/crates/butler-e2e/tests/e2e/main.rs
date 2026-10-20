@@ -259,4 +259,5 @@ mod trace_spans;
 
 mod content_port;
 mod turn_fenced_cancel;
+mod upload_content;
 mod usage_delegated;

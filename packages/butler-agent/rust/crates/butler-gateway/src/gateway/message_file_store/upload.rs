@@ -8,12 +8,13 @@ use std::{
 use bytes::Bytes;
 use sha2::{Digest, Sha256};
 
-use super::{classify, names};
+use super::{classify, names, upload_cache};
 use crate::gateway::{
     AppFileWrite, AppIdentityClock, AppMessageFileSnapshot, GatewayApplicationError,
     MaterializedResponderFile,
 };
 use butler_runtime::context::{PdfTextError, extract_pdf_text, pdf_sidecar_text};
+use parking_lot::Mutex;
 
 const MAX_BYTES: usize = 10 * 1024 * 1024;
 
@@ -21,6 +22,7 @@ pub(super) fn write(
     root: &Path,
     clock: &dyn AppIdentityClock,
     input: AppFileWrite,
+    cache: &Mutex<upload_cache::Cache>,
 ) -> Result<MaterializedResponderFile, GatewayApplicationError> {
     let AppFileWrite {
         name,
@@ -60,8 +62,18 @@ pub(super) fn write(
         storage_name: id.clone(),
         created_at: clock.now_iso(),
     };
+    // Non-image attachments grant exact-path file-read authority only when
+    // their inode has no aliases. Images are carried as pixels and excluded
+    // from that grant; only those immutable payloads may share an inode.
+    let shareable = kind == "image";
+    if shareable && cache.lock().reuse(root, &file.sha256, &file.id, &bytes) {
+        return Ok(file);
+    }
     fs::create_dir_all(root).map_err(internal)?;
-    replace_private(root.join(id), &bytes, "message_upload").map_err(internal)?;
+    replace_private(root.join(&id), &bytes, "message_upload").map_err(internal)?;
+    if shareable {
+        cache.lock().remember(file.sha256.clone(), id, bytes.len());
+    }
     drop(bytes);
     Ok(file)
 }
@@ -147,6 +159,7 @@ pub(super) fn replace_still(
     file: AppMessageFileSnapshot,
     bytes: &Bytes,
     name: String,
+    cache: &Mutex<upload_cache::Cache>,
 ) -> Result<MaterializedResponderFile, GatewayApplicationError> {
     if !file.safe_name.starts_with("browser-step-")
         || file.mime_type != "image/jpeg"
@@ -155,6 +168,7 @@ pub(super) fn replace_still(
         return Err(GatewayApplicationError::internal());
     }
     let path = file_path(root, &file)?;
+    cache.lock().replacing(&file.sha256, &file.id);
     replace_private(path, bytes, "browser_still").map_err(internal)?;
     Ok(MaterializedResponderFile {
         title: None,

@@ -16,6 +16,31 @@ use super::scratch;
 
 // test-category: security
 #[test]
+fn linked_private_payload_keeps_permissions_and_survives_atomic_replacement() {
+    let directory = scratch("linked-private");
+    let source = directory.join("source");
+    let alias = directory.join("alias");
+    replace_private(&source, |file| file.write_all(b"original"), |error| error).unwrap();
+    butler_platform::secure_fs::link_private(&source, &alias).unwrap();
+    assert_eq!(fs::read(&alias).unwrap(), b"original");
+    assert_eq!(is_private(&alias), Some(true));
+    assert!(butler_platform::secure_fs::link_private(&source, &alias).is_err());
+    replace_private(&source, |file| file.write_all(b"newest"), |error| error).unwrap();
+    assert_eq!(fs::read(&source).unwrap(), b"newest");
+    assert_eq!(fs::read(&alias).unwrap(), b"original");
+    let link = directory.join("symlink");
+    match symlink(&source, &link) {
+        Ok(()) => assert!(
+            butler_platform::secure_fs::link_private(&link, &directory.join("refused")).is_err()
+        ),
+        Err(_) if cfg!(windows) => {}
+        Err(error) => panic!("cannot create fixture link: {error}"),
+    }
+    fs::remove_dir_all(directory).unwrap();
+}
+
+// test-category: security
+#[test]
 fn replace_private_swaps_in_a_complete_owner_only_file() {
     let directory = scratch("replace");
     let path = directory.join("config.json");

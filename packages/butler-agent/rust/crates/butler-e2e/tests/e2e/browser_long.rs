@@ -124,6 +124,7 @@ async fn browser_long_run_keeps_newest_pixels_and_bounded_requests() -> Result<(
         maximum <= early + newest + byte_limit * 3 / 8,
         "max request {maximum} exceeds first observation + newest + stale guard"
     );
+    assert_uploaded_pixels(&s).await?;
     s.finish().await
 }
 
@@ -328,4 +329,48 @@ fn cassette() -> Result<Cassette, HarnessError> {
     );
     cassette.exchanges.push(done);
     Ok(cassette)
+}
+
+async fn assert_uploaded_pixels(
+    s: &butler_e2e::e2e::scenario::Scenario,
+) -> Result<(), HarnessError> {
+    // The provider's visual projection removes image.file from its text part.
+    // Check the durable upload identities, including the final capture, instead.
+    let files = {
+        let db = rusqlite::Connection::open_with_flags(
+            s.sandbox.data.join("app-server/butler-client.sqlite"),
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )?;
+        let mut query = db.prepare(
+            "SELECT id FROM message_files WHERE safe_name='browser-observation.jpg' ORDER BY rowid",
+        )?;
+        query
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?
+    };
+    assert_eq!(
+        files.len(),
+        OBSERVATIONS + 2,
+        "every pictured observation and capture has a file"
+    );
+    let unique: std::collections::HashSet<_> = files.iter().collect();
+    assert_eq!(
+        unique.len(),
+        files.len(),
+        "uploads retain distinct identities"
+    );
+    for file in files {
+        let response =
+            s.gw.http()
+                .get(format!("{}/message-files/{file}", s.gw.base))
+                .bearer_auth(&s.gw.token)
+                .send()
+                .await?;
+        assert_eq!(response.status(), 200);
+        assert_eq!(
+            response.bytes().await?.as_ref(),
+            include_bytes!("../../fixtures/browser-route/observation.jpg")
+        );
+    }
+    Ok(())
 }
