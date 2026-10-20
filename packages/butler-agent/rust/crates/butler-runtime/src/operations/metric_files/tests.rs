@@ -27,8 +27,10 @@ impl Drop for Scratch {
     }
 }
 
+// test-category: security
 #[test]
 fn retention_drops_bad_and_old_rows_and_marks_kept_rows_private() {
+    retention::assert_changed_live_file_aborts_without_publication();
     let scratch = Scratch::new();
     let files = MetricFiles::new(scratch.0.clone());
     let path = scratch.0.join("metrics/context-monitor.jsonl");
@@ -88,6 +90,7 @@ fn retention_drops_bad_and_old_rows_and_marks_kept_rows_private() {
     assert_eq!(rows[2]["rawTextStored"], false);
 }
 
+// test-category: format-pin
 #[test]
 fn prune_observer_appends_the_existing_metric_shape() {
     let scratch = Scratch::new();
@@ -115,6 +118,7 @@ fn prune_observer_appends_the_existing_metric_shape() {
     );
 }
 
+// test-category: race
 #[test]
 fn concurrent_append_and_retention_preserve_every_record() {
     const WRITERS: usize = 4;
@@ -126,7 +130,7 @@ fn concurrent_append_and_retention_preserve_every_record() {
     let mut writers = Vec::new();
 
     for writer_id in 0..WRITERS {
-        let files = Arc::clone(&files);
+        let files = MetricFiles::new(scratch.0.clone());
         let barrier = Arc::clone(&barrier);
         let completed = Arc::clone(&completed);
         writers.push(thread::spawn(move || {
@@ -142,7 +146,7 @@ fn concurrent_append_and_retention_preserve_every_record() {
         }));
     }
 
-    let retaining_files = Arc::clone(&files);
+    let retaining_files = MetricFiles::new(scratch.0.clone());
     let retaining_barrier = Arc::clone(&barrier);
     let retention = thread::spawn(move || {
         retaining_barrier.wait();
@@ -184,4 +188,12 @@ fn concurrent_append_and_retention_preserve_every_record() {
         .collect();
     assert_eq!(rows.len(), WRITERS * ROWS_PER_WRITER);
     assert_eq!(ids.len(), rows.len());
+    for writer in 0..WRITERS {
+        let sequences: Vec<_> = rows
+            .iter()
+            .filter(|row| row["writer"] == writer)
+            .map(|row| row["sequence"].as_u64().unwrap())
+            .collect();
+        assert_eq!(sequences, (0..ROWS_PER_WRITER as u64).collect::<Vec<_>>());
+    }
 }
