@@ -228,7 +228,7 @@ async fn second_changes(
 
 /// A completed standalone projection stays complete without idle writes or
 /// repeated source-change notices after the consumer is free to poll.
-async fn idle(s: &Scenario, gate: sqlite::Connection) -> sqlite::Connection {
+pub(super) async fn idle(s: &Scenario, gate: sqlite::Connection) -> sqlite::Connection {
     let data = &s.sandbox.data;
     release_gate(&gate);
     drop(gate);

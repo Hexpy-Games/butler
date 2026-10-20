@@ -67,3 +67,21 @@ pub(super) fn assert_notice_current(
 fn changed() -> CognitionError {
     CognitionError::new(CognitionCode::MemorySourceChanged, "memory_source_changed")
 }
+
+/// A pending standalone job may hold hash metadata written by an older planner.
+/// Refresh it under the claim lease, after re-planning the canonical revision.
+pub(super) fn refresh_source_hash(state: &State, now: &str) -> CognitionResult<()> {
+    if let ProjectionSourceNotice::Conversation(
+        notice @ crate::cognition::CognitionConversationSourceNotice::Standalone { .. },
+    ) = &state.input.notice
+    {
+        let revision = state.graph.job_revision(&state.input.job_id)?;
+        state.graph.refresh_conversation_source_hash(
+            &state.canonical,
+            notice.borrowed(),
+            &revision,
+            now,
+        )?;
+    }
+    Ok(())
+}

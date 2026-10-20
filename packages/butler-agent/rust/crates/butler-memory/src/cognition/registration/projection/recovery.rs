@@ -13,7 +13,7 @@ impl CognitionRegistrationService {
         handle: MemoryGenerationHandle,
         target: MemoryGenerationTarget,
         cancellation: CancellationToken,
-    ) -> CognitionResult<()> {
+    ) -> CognitionResult<bool> {
         let deps = self.projection.as_ref().ok_or_else(|| {
             CognitionError::new(
                 CognitionCode::CognitionProjectionUnconfigured,
@@ -71,7 +71,7 @@ impl CognitionRegistrationService {
                 Ok(lease) => tokio::task::spawn_blocking(move || {
                     let result = recovery.run(&lease, &lock);
                     let released = lease.release(result.is_ok()).map_err(CognitionError::from);
-                    result.and(released)
+                    result.and_then(|repaired| released.map(|()| repaired))
                 })
                 .await
                 .map_err(join_error)
@@ -105,7 +105,7 @@ impl Recovery {
         &self,
         lease: &crate::coordination::CognitionWriteLease,
         lock: &std::path::Path,
-    ) -> CognitionResult<()> {
+    ) -> CognitionResult<bool> {
         lease.assert_for_path(lock).map_err(CognitionError::from)?;
         assert_mutation_authority(
             &self.data_root,
@@ -114,6 +114,19 @@ impl Recovery {
             &self.handle,
         )?;
         let mut graph = GraphRepository::open(&self.handle.graph_path)?;
+        let canonical_path = self
+            .handle
+            .canonical_snapshot_path
+            .clone()
+            .unwrap_or_else(|| {
+                self.handle
+                    .source_root
+                    .join("runtime/conversation-store.sqlite")
+            });
+        let canonical =
+            ConversationSourceReader::open(&canonical_path).map_err(CognitionError::from)?;
+        let repaired = graph.repair_standalone_hashes(&canonical, &(self.clock)())?;
+        canonical.close().map_err(CognitionError::from)?;
         let nonce = self.host.new_uuid();
         let now = (self.clock)();
         // Snapshot after the write lease. Claims register their owner while
@@ -130,6 +143,6 @@ impl Recovery {
             },
         );
         let closed = graph.close();
-        result.and(closed)
+        result.and(closed).map(|()| repaired)
     }
 }

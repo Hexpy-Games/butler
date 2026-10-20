@@ -354,9 +354,8 @@ pub(super) async fn project_next(
         Err(error) if error.code() == "memory_generation_unavailable" => return Ok((false, None)),
         Err(error) => return Err(error),
     };
-    // Recovery takes the write lease, so it runs only when a window is held
-    // by an owner that may have died.
-    if input.probe.recoverable_windows(&handle.graph_path).await? {
+    // Recovery also advances bounded, once-only graph data repairs.
+    let repaired = if input.probe.recoverable_windows(&handle.graph_path).await? {
         input
             .registration
             .recover_semantic_windows(
@@ -370,14 +369,16 @@ pub(super) async fn project_next(
                     }),
                 input.shutdown.child_token(),
             )
-            .await?;
-    }
+            .await?
+    } else {
+        false
+    };
     let pending = input
         .probe
         .pending_job(&handle.graph_path, &(input.clock)())
         .await?;
     let Some(pending) = pending else {
-        return Ok((false, Some(handle)));
+        return Ok((repaired, Some(handle)));
     };
     let job_id = pending.job_id.clone();
     let owned = input.clone();
@@ -427,14 +428,7 @@ fn pending_notice(
             extraction_version: pending.extraction_version,
         })
     } else if let Some(message_id) = pending.source_key.strip_prefix("conversation_message:") {
-        ProjectionSourceNotice::Conversation(CognitionConversationSourceNotice::Standalone {
-            session_id: pending
-                .session_id
-                .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?,
-            message_id: message_id.into(),
-            source_hash: pending.source_hash,
-            extraction_version: pending.extraction_version,
-        })
+        projection::standalone_notice(input, handle, &pending, message_id)?
     } else if let Some((kind, record_id)) = pending.source_key.split_once(':')
         && matches!(kind, "task_report" | "explicit_record")
     {

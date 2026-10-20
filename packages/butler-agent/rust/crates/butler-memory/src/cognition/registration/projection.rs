@@ -236,6 +236,7 @@ async fn claim_window(
     let now = (operation.clock)();
     operation
         .write(move |state| {
+            notice::refresh_source_hash(state, &now)?;
             let claim = state.graph.claim_projection_window(
                 crate::cognition::graph::ClaimProjectionWindowInput {
                     job_id: Some(&state.input.job_id),

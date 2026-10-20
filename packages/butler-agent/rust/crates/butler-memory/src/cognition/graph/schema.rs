@@ -2,6 +2,7 @@
 
 mod base;
 mod migration;
+mod source_hash;
 
 use rusqlite::{Connection, OptionalExtension};
 

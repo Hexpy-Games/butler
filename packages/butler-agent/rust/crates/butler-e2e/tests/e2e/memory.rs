@@ -372,3 +372,6 @@ mod model_choice;
 
 #[path = "memory/lock_retry.rs"]
 mod lock_retry;
+
+#[path = "memory/standalone_upgrade.rs"]
+mod standalone_upgrade;

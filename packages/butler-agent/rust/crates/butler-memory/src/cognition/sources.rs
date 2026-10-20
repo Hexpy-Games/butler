@@ -12,7 +12,9 @@ mod types;
 
 pub use context::read_prior_public_context;
 pub use hydration::hydrate_conversation_source;
-pub(in crate::cognition) use identity::projection_hash as projection_hash_for_graph;
+pub(in crate::cognition) use identity::{
+    projection_hash as projection_hash_for_graph, recovered_parts_hash,
+};
 pub(in crate::cognition) use inventory::{
     CandidateKind, CoverageRead, EligibleSource, FaultScope, InventoryCandidate, InventoryCoverage,
     SourceFault, inventory_coverage, read_canonical_inventory,
