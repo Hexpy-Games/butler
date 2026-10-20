@@ -8,9 +8,10 @@
 //! reports it instead of pretending: an option or builder it cannot apply
 //! returns `None`. Renames that replace a file retry on Windows while
 //! another process briefly holds it ([`rename`]).
-
 mod device;
 pub use device::same_device;
+mod read_retry;
+pub use read_retry::{read_replaced_file, read_retry_allowed};
 mod contained_read;
 mod exact_name;
 pub use exact_name::exact_entry_exists;

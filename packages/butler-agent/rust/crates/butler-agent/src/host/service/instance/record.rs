@@ -17,7 +17,7 @@ pub(super) fn read_record_at(
     if fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
         return Err("native_service_instance_ambiguous: invalid instance record".into());
     }
-    let bytes = match fs::read(path) {
+    let bytes = match secure_fs::read_replaced_file(path) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(_) => return Err("native_service_instance_record_unreadable".into()),
@@ -177,4 +177,14 @@ pub(super) fn cancel_staged_write(path: &Path, nonce: &str) -> io::Result<()> {
     super::super::shutdown_trace::event("instance_release:staged_write_cancelled");
     super::record_fault::cancel_rename();
     Ok(())
+}
+
+/// Retrying native reads must never sleep on a Tokio worker.
+pub(crate) async fn read_record_async(
+    data_root: &Path,
+) -> Result<Option<InstanceRecord>, crate::host::HostError> {
+    let data_root = data_root.to_path_buf();
+    tokio::task::spawn_blocking(move || super::read_record(&data_root))
+        .await
+        .map_err(crate::host::HostError::from_error)?
 }

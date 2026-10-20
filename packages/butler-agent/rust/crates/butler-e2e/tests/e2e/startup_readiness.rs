@@ -25,6 +25,7 @@ async fn held_restart(label: &str) -> Result<Scenario, HarnessError> {
     s.agent.terminate().await?;
     assert!(s.agent.exit_status(old_pid).unwrap().success());
     s.agent.launch.set_env("BUTLER_E2E_TIER", "stub");
+    s.agent.launch.set_env("BUTLER_SHUTDOWN_TRACE", "1");
     s.agent.launch.set_env("BUTLER_E2E_HOLD_APP_STARTUP", "1");
     let pid = s.agent.start_process()?;
     assert_ne!(old_pid, pid);
@@ -180,8 +181,32 @@ async fn runtime_readiness_waits_for_inbound_poll_loop() -> Result<(), HarnessEr
 async fn stalled_startup_exits_at_agent_deadline() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = held_restart("SVC-01-STARTUP-DEADLINE").await?;
+    // Contend the real record lock so asynchronous Drop cannot win by luck.
+    let record_lock = butler_platform::instance::InstanceLock::try_exclusive(
+        std::fs::OpenOptions::new().read(true).write(true).open(
+            s.sandbox
+                .data
+                .join("state/butler-agent-native-service-record.lock"),
+        )?,
+    )
+    .map_err(std::io::Error::other)?;
     let began = Instant::now();
     let deadline = began + Duration::from_secs(95);
+    loop {
+        let log = s.agent.current_logs().await?;
+        if log.contains("phase=instance_release:begin") {
+            break;
+        }
+        assert!(s.agent.is_running(), "{log}");
+        assert!(
+            Instant::now() < deadline,
+            "startup did not release its guard"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    tokio::time::sleep(Duration::from_millis(250)).await;
+    let returned_before_release = s.agent.current_logs().await?.contains("phase=stop_settled");
+    drop(record_lock);
     while s.agent.is_running() {
         assert!(
             Instant::now() < deadline,
@@ -203,5 +228,18 @@ async fn stalled_startup_exits_at_agent_deadline() -> Result<(), HarnessError> {
         began.elapsed().as_millis()
     );
     drop(reserved);
+    assert!(instance_record(&s.sandbox.data).is_none(), "{log}");
+    s.agent.launch.remove_env("BUTLER_E2E_HOLD_APP_STARTUP");
+    s.gw = s.agent.start_again().await?;
+    let restarted = s.agent.current_logs().await?;
+    assert!(!restarted.contains("code=unclean_exit"), "{restarted}");
+    eprintln!("startup release: record removed; next start has no unclean_exit");
+    assert!(
+        !returned_before_release,
+        "until_ready returned before record release completed: {log}"
+    );
+    let removed = log.find("phase=instance_release:removed").unwrap();
+    let settled = log.find("phase=stop_settled").unwrap();
+    assert!(removed < settled, "{log}");
     s.finish().await
 }

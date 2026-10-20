@@ -26,7 +26,7 @@ pub(crate) async fn running_app_endpoint(
 ) -> Result<Option<String>, crate::host::HostError> {
     let deadline = std::time::Instant::now() + patience;
     loop {
-        let Some(record) = control::verified_instance(data_root, installation)? else {
+        let Some(record) = control::verified_instance_async(data_root, installation).await? else {
             return Ok(None);
         };
         if record.state == "ready" || std::time::Instant::now() >= deadline {
@@ -78,7 +78,9 @@ pub(crate) async fn memory_status(
     data_root: &std::path::Path,
     installation: &ResolvedInstallation,
 ) -> Option<Value> {
-    let record = control::verified_instance(data_root, installation).ok()??;
+    let record = control::verified_instance_async(data_root, installation)
+        .await
+        .ok()??;
     crate::host::app::gateway_lifecycle::memory_status(&record)
         .await
         .ok()

@@ -202,7 +202,7 @@ pub(super) async fn existing(
     }
     let deadline = Instant::now() + Duration::from_secs(10);
     while lease(root)?.is_none() {
-        match super::lifecycle::active_service(root) {
+        match super::lifecycle::active_service_async(root).await {
             Ok(Some(record)) => return Ok(Some(record)),
             Ok(None) => {}
             Err(error) if error.message().contains("DATA lock has no record") => {}

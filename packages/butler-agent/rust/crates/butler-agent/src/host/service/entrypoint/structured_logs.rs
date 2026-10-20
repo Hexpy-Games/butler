@@ -115,7 +115,7 @@ pub(super) async fn run_until_stopped(
     } else {
         Ok(())
     };
-    tokio::task::spawn_blocking(move || drop(instance))
+    tokio::task::spawn_blocking(move || instance.release())
         .await
         .map_err(|error| failure("native_service_instance_release_failed", error.to_string()))?;
     result.and_then(|session| closed.and(reset).map(|()| session))
