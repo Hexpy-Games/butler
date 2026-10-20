@@ -177,7 +177,9 @@ test.skipIf(!supportedHost)("prepare-native-agent lays out a supplied prebuilt b
   chmodSync(prebuilt, 0o755);
   const result = prepare({ BUTLER_NATIVE_AGENT_EXECUTABLE: prebuilt });
   expect(result.status, result.stderr).toBe(0);
-  expect(log()).toBe("");
+  expect(log()).toBe(
+    `python3 ${resolve("packages/butler-agent/rust/scripts/check_host_links.py")} --platform darwin ${prebuilt}\n`,
+  );
   expect(result.stdout).toContain(`(prebuilt, cargo build skipped): ${prebuilt}`);
   expectPayload(payload, prebuilt, result.stdout);
 });

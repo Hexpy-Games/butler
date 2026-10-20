@@ -46,9 +46,7 @@ jobs:
             packages/butler-app/client/ui/package-lock.json
 
       - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+        uses: ./.github/actions/release-python
 
       - name: Look for an exact-commit release Agent
         id: reuse

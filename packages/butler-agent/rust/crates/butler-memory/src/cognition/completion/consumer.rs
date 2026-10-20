@@ -144,6 +144,12 @@ impl MemorySyncConsumer {
         self
     }
 
+    /// Stop background execution with its owner, retaining durable queued work.
+    pub fn with_cancellation(mut self, parent: &CancellationToken) -> Self {
+        self.shutdown = parent.child_token();
+        self
+    }
+
     /// Processes the next queue entry or projection step.
     pub async fn poll_once(&self) -> CognitionResult<MemorySyncPoll> {
         self.poll_with(false, self.shutdown.clone()).await
@@ -175,12 +181,14 @@ impl MemorySyncConsumer {
         cancellation: CancellationToken,
     ) -> CognitionResult<MemorySyncPoll> {
         let permit = tokio::select! {
-            permit = self.admission.clone().acquire_owned() => permit.map_err(|source| closed().with_source(source))?,
+            biased;
+            () = self.shutdown.cancelled() => return Err(closed()),
             () = cancellation.cancelled() => return Err(closed()),
+            permit = self.admission.clone().acquire_owned() => permit.map_err(|source| closed().with_source(source))?,
         };
         let token = {
             let closing = self.closing.lock();
-            if *closing {
+            if *closing || self.shutdown.is_cancelled() || cancellation.is_cancelled() {
                 return Err(closed());
             }
             self.tasks.token()
@@ -248,7 +256,7 @@ impl MemorySyncConsumer {
             .map_err(|source| closed().with_source(source))?;
         let token = {
             let closing = self.closing.lock();
-            if *closing || cancellation.is_cancelled() {
+            if *closing || self.shutdown.is_cancelled() || cancellation.is_cancelled() {
                 return Err(closed());
             }
             self.tasks.token()

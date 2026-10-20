@@ -17,7 +17,7 @@ use std::path::Path;
 const NOW: &str = "2026-10-02T04:01:00.000Z";
 const NEXT_DAY: &str = "2026-10-03T04:01:00.000Z";
 
-fn briefing_task(request: &Value) -> bool {
+pub(super) fn briefing_task(request: &Value) -> bool {
     let raw = request["input"]
         .as_str()
         .or_else(|| request["input"][0]["content"][0]["text"].as_str())
@@ -30,7 +30,7 @@ fn briefing_task(request: &Value) -> bool {
     })
 }
 
-fn briefing(request: &Value) -> Option<ResponseRecord> {
+pub(super) fn briefing(request: &Value) -> Option<ResponseRecord> {
     if !briefing_task(request) {
         return None;
     }
@@ -115,7 +115,7 @@ async fn until(mut ready: impl FnMut() -> bool) {
     .expect("daily consolidation did not publish its completion marker");
 }
 
-fn general_briefing(data: &Path) -> Option<Value> {
+pub(super) fn general_briefing(data: &Path) -> Option<Value> {
     let root = data.join("cognition/consolidation/briefings");
     std::fs::read_dir(root)
         .ok()?

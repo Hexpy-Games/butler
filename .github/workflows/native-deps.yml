@@ -43,12 +43,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        env:
-          # Process scope only; the runner service policy remains unchanged.
-          PSExecutionPolicyPreference: Bypass
-        with:
-          python-version: '3.12'
+      - uses: ./.github/actions/release-python
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.99.0

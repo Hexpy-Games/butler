@@ -75,7 +75,11 @@ impl Tally {
     fn count(
         &mut self,
         outcome: Result<String, BriefingGenerationError>,
+        cancellation: &CancellationToken,
     ) -> Result<Option<String>, BriefingGenerationError> {
+        // Cancellation at any boundary (provider or publication admission)
+        // leaves this phase unfinished rather than tallying an ordinary error.
+        ensure_active(cancellation)?;
         match outcome {
             Ok(path) => {
                 self.generated += 1;
@@ -159,7 +163,7 @@ impl BriefingGenerationService {
         };
         let mut tally = Tally::default();
         let general = self.run_one(context(None), &mut tally.usage).await;
-        tally.general = tally.count(general)?;
+        tally.general = tally.count(general, cancellation)?;
         for project in &input.projects {
             ensure_active(cancellation)?;
             if project.recent_session_titles.is_empty() && project.ledger_event_summary.is_empty() {
@@ -167,7 +171,7 @@ impl BriefingGenerationService {
                 continue;
             }
             let written = self.run_one(context(Some(project)), &mut tally.usage).await;
-            if let Some(path) = tally.count(written)? {
+            if let Some(path) = tally.count(written, cancellation)? {
                 tally.projects.push(path);
             }
         }
@@ -192,6 +196,25 @@ impl BriefingGenerationService {
         usage: &mut Usage,
     ) -> Result<String, BriefingGenerationError> {
         ensure_active(context.cancellation)?;
+        let path = write::artifact_path(
+            &self.data_root,
+            &context.now.format("%Y-%m-%d").to_string(),
+            context.project.map(|project| project.id.as_str()),
+        );
+        let stored_path = path.clone();
+        let run_id = context.run_id.to_owned();
+        let published =
+            tokio::task::spawn_blocking(move || write::published_for_run(&stored_path, &run_id))
+                .await
+                .map_err(|failure| {
+                    error(
+                        BriefingGenerationCode::NewChatBriefingWriteFailed,
+                        failure.to_string(),
+                    )
+                })??;
+        if published {
+            return Ok(path.to_string_lossy().into_owned());
+        }
         let reply = self.ask_model(&context, usage).await?;
         let artifact = artifact::from_model(
             &reply,
@@ -205,11 +228,6 @@ impl BriefingGenerationService {
                 reasoning: context.reasoning.as_str(),
             },
         )?;
-        let path = write::artifact_path(
-            &self.data_root,
-            &context.now.format("%Y-%m-%d").to_string(),
-            context.project.map(|project| project.id.as_str()),
-        );
         self.commit(&context, &path, &artifact).await?;
         Ok(path.to_string_lossy().into_owned())
     }

@@ -1,0 +1,25 @@
+name: Prepare release Python
+description: Expose the selected Python tools without package-search environment exports
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      id: python
+      env:
+        # Process scope only; the runner service policy remains unchanged.
+        PSExecutionPolicyPreference: Bypass
+      with:
+        python-version: '3.12'
+        update-environment: false
+    - name: Expose Python tools on PATH
+      shell: ${{ steps.python.outputs.python-path }} {0}
+      run: |
+        import os
+        from pathlib import Path
+        import sys
+
+        directory = Path(sys.executable).parent
+        with open(os.environ['GITHUB_PATH'], 'a', encoding='utf-8') as output:
+            for path in (directory, directory / 'Scripts'):
+                if path.is_dir():
+                    output.write(str(path) + '\n')
