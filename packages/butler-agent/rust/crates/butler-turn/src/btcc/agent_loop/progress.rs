@@ -117,7 +117,7 @@ pub(super) async fn operation(
     // The transcript row and its output exist only as these events: a failed
     // append fails the caller rather than leaving the row silently incomplete.
     progress.emit(event).await?;
-    if matches!(status, Status::Completed)
+    if matches!(status, Status::Completed | Status::Failed)
         && let (Some(body), Some((result_id, result_sha256))) = (encoded, result_ref)
     {
         emit_output_chunks(progress, call_id, &result_id, &result_sha256, body).await?;

@@ -6,6 +6,15 @@ pub(super) async fn approved(
     script: &Arc<Script>,
     command: &str,
 ) -> Result<Value, HarnessError> {
+    approved_with_timeout(s, script, command, None).await
+}
+
+pub(super) async fn approved_with_timeout(
+    s: &Scenario,
+    script: &Arc<Script>,
+    command: &str,
+    timeout_ms: Option<u64>,
+) -> Result<Value, HarnessError> {
     let prompt = format!("Inspect command: {command}");
     script.rounds.lock().unwrap().insert(
         prompt.clone(),
@@ -13,7 +22,7 @@ pub(super) async fn approved(
             "guard",
             "run_command",
             &json!({"command":command,
-            "summary":"Inspect files", "state_effect":"read_only",
+            "summary":"Inspect files", "state_effect":"read_only", "timeout_ms":timeout_ms.unwrap_or(30_000),
             "cwd":s.sandbox.workspace.to_string_lossy()}),
         )],
     );
@@ -26,11 +35,38 @@ pub(super) async fn approved(
     let results = outputs(s, "general", &id, script, &prompt).await?;
     assert_eq!(results.len(), 1);
     let value: Value = serde_json::from_str(&results[0])?;
-    Ok(value
+    let body = value
         .get("output")
         .filter(|v| v.is_object())
-        .cloned()
-        .unwrap_or(value))
+        .unwrap_or(&value);
+    let refusal = matches!(
+        body["error"].as_str(),
+        Some("protected_path" | "command_path_unknown")
+    );
+    let diagnostic = body["stderr"]
+        .as_str()
+        .is_some_and(|reason| !reason.is_empty());
+    if refusal || body["ok"] == false && diagnostic {
+        assert_eq!(body["command"], command);
+        assert!(
+            body["stderr"]
+                .as_str()
+                .is_some_and(|reason| !reason.is_empty())
+        );
+        assert!(!body.to_string().contains("credential-fixture"));
+        let rows = tool_rows(&s.gw.messages("general").await?, &id);
+        assert_eq!(rows.len(), 1);
+        let visible = s.gw.operation_output(&id, &rows[0]).await?;
+        let shown: Value = serde_json::from_str(&visible)?;
+        let shown = shown
+            .get("output")
+            .filter(|v| v.is_object())
+            .unwrap_or(&shown);
+        assert_eq!(shown["command"], command);
+        assert_eq!(shown["stderr"], body["stderr"]);
+        assert!(!visible.contains("credential-fixture"));
+    }
+    Ok(body.clone())
 }
 
 #[tokio::test]
