@@ -79,6 +79,11 @@ fn workspace_file(
         .map_err(|_| "workspace_unavailable")?;
     // The descriptor walk checks links; the turn keeps its selected root spelling.
     let path = root.join(raw);
+    // Keep the established classification order; this path never supplies upload bytes.
+    let real = std::fs::canonicalize(&path).map_err(|_| "upload_file_not_found")?;
+    let real_relative = real
+        .strip_prefix(&root)
+        .map_err(|_| "upload_outside_workspace")?;
     let Ok(relative) = path.strip_prefix(&root) else {
         return Err("upload_outside_workspace");
     };
@@ -90,13 +95,7 @@ fn workspace_file(
     }
     // Never offer credentials, keys or Butler's own state, even with approval.
     let relative = relative.to_string_lossy();
-    let first = relative.split(['/', '\\']).next().unwrap_or("");
-    if butler_turn::workspace::looks_sensitive(&relative)
-        || relative
-            .split(['/', '\\'])
-            .any(|part| part.starts_with('.'))
-        || INTERNAL.contains(&first)
-    {
+    if sensitive_path(&relative) || sensitive_path(&real_relative.to_string_lossy()) {
         return Err("upload_sensitive_file");
     }
     let file =
@@ -134,13 +133,7 @@ fn refusal(root: &Path, path: &Path, error: &std::io::Error) -> &'static str {
         let Ok(relative) = real.strip_prefix(root) else {
             return "upload_outside_workspace";
         };
-        let relative = relative.to_string_lossy();
-        if butler_turn::workspace::looks_sensitive(&relative)
-            || relative
-                .split(['/', '\\'])
-                .any(|part| part.starts_with('.'))
-            || INTERNAL.contains(&relative.split(['/', '\\']).next().unwrap_or(""))
-        {
+        if sensitive_path(&relative.to_string_lossy()) {
             return "upload_sensitive_file";
         }
     }
@@ -150,4 +143,12 @@ fn refusal(root: &Path, path: &Path, error: &std::io::Error) -> &'static str {
         std::io::ErrorKind::PermissionDenied => "upload_sensitive_file",
         _ => "upload_file_unavailable",
     }
+}
+
+fn sensitive_path(relative: &str) -> bool {
+    butler_turn::workspace::looks_sensitive(relative)
+        || relative
+            .split(['/', '\\'])
+            .any(|part| part.starts_with('.'))
+        || INTERNAL.contains(&relative.split(['/', '\\']).next().unwrap_or(""))
 }
