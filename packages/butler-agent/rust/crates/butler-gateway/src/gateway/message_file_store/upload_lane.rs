@@ -94,7 +94,7 @@ fn drain(root: &Path, state: &Mutex<State>) {
 }
 
 fn commit(root: &Path, first: Job, state: &Mutex<State>) {
-    let mut batch = butler_platform::secure_fs::PrivateFileBatch::new(root);
+    let mut batch = butler_platform::secure_fs::fresh::PrivateFileBatch::new(root);
     let mut completed = Vec::new();
     let directory = std::fs::create_dir_all(root);
     let mut next = Some(first);
