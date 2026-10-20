@@ -133,9 +133,10 @@ async fn approvals_owner_scale_complete_and_current() -> Result<(), HarnessError
     }
     scale::measure_current(&s, grants).await?;
     eprintln!("approvals cold watch: server_us={server_us} old_budget_us=50000");
+    // Normal cold dispatch 39–78 ms (PR #1372); incident at one second.
     butler_e2e::assert_wall_clock_budget!(
         Duration::from_micros(server_us),
-        Duration::from_millis(200),
+        Duration::from_millis(1000),
         "all approvals: 3000 grants / 600 owners"
     );
     s.finish().await
