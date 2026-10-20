@@ -26,6 +26,7 @@ mod authority_parallel_batch;
 mod authority_permissions;
 mod automation;
 mod briefing_effort;
+mod briefing_shutdown;
 mod browser_agent;
 mod browser_approval;
 mod browser_batch;

@@ -30,7 +30,7 @@ pub(in crate::host) struct DailyCognitionJobs {
     coordinator: Arc<CognitionWriteCoordinator>,
     consumer: Arc<MemorySyncConsumer>,
     capsules: Arc<ProjectCapsuleService>,
-    generic: CycleService,
+    phases: CyclePhases,
     legacy: LegacySessionSync,
 }
 
@@ -91,8 +91,9 @@ impl DailyCognitionJobs {
             date_parser,
             paths.clone(),
         ));
-        let phases = Arc::new(CyclePhases {
-            metrics: cycle_metrics.clone(),
+        let phases = CyclePhases {
+            briefing_at: SystemTime::now().into(),
+            metrics: cycle_metrics,
             briefing,
             profile: Arc::new(ProfileConsolidation {
                 rules: feedback_rules(&data_root, &paths, coordinator.clone()),
@@ -104,22 +105,14 @@ impl DailyCognitionJobs {
             )),
             knowhow,
             health: feedback_health(&data_root, &paths, coordinator.clone()),
-        });
-        let generic = CycleService::new(
-            data_root.clone(),
-            paths.clone(),
-            coordinator.clone(),
-            Arc::new(SystemIdentity),
-            phases,
-            cycle_metrics,
-        );
+        };
         Self {
             data_root,
             paths,
             coordinator,
             consumer,
             capsules,
-            generic,
+            phases,
             legacy,
         }
     }
@@ -153,6 +146,8 @@ impl DailyCognitionJobs {
 
     pub(in crate::host) async fn consolidation_cycle(
         &self,
+        run_id: String,
+        started_ms: i64,
         cancellation: &CancellationToken,
     ) -> Result<(), crate::host::HostError> {
         if cancellation.is_cancelled() {
@@ -169,21 +164,17 @@ impl DailyCognitionJobs {
             // Unit retry/failure state remains durable and visible in health.
             butler_core::diagnostic!("[memory-vector-batch] {}", error.code());
         }
-        let now: chrono::DateTime<chrono::Utc> = SystemTime::now().into();
-        let run_id = format!(
-            "cr_scheduled_{}_{}",
-            now.format("%Y%m%d%H%M%S"),
-            uuid::Uuid::new_v4().simple()
-        );
         let generic = self
-            .generic
+            .generic_cycle(started_ms)?
             .run(RunCycle {
                 run_id: Some(run_id),
+                resume: true,
                 cancellation: cancellation.clone(),
                 ..RunCycle::default()
             })
             .await
             .map_err(|error| error.code().to_owned())?;
+        // Contention counts as done for today, but must not skip configured maintenance.
         let configured = self.run_configured(cancellation).await?;
         let generic_ok = matches!(
             generic.status,
@@ -207,6 +198,20 @@ impl DailyCognitionJobs {
         } else {
             Err("scheduled_consolidation_completed_with_errors".into())
         }
+    }
+
+    fn generic_cycle(&self, started_ms: i64) -> Result<CycleService, crate::host::HostError> {
+        let mut phases = self.phases.clone();
+        phases.briefing_at = chrono::DateTime::from_timestamp_millis(started_ms)
+            .ok_or("scheduler_intent_invalid")?;
+        Ok(CycleService::new(
+            self.data_root.clone(),
+            self.paths.clone(),
+            self.coordinator.clone(),
+            Arc::new(SystemIdentity),
+            Arc::new(phases),
+            self.phases.metrics.clone(),
+        ))
     }
 
     async fn run_configured(
