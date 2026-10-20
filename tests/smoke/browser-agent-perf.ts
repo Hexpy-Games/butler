@@ -3,6 +3,7 @@ import { strict as assert } from "node:assert";
 import { loadavg } from "node:os";
 import { join } from "node:path";
 import { writeFileSync } from "node:fs";
+import { expectBrowserStills } from "../support/browser-still-delivery";
 import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
 import { browserStub, describeBrowser, bridgeBrowser, latestBrowser } from "../support/browser-agent-stub";
 const evidence=process.env.BUTLER_BROWSER_EVIDENCE;assert.ok(evidence);
@@ -26,7 +27,7 @@ try {
   const admin=JSON.parse(await Bun.file(join(app.gateway.butlerData,"app/runtime/auth/local-admin.json")).text()).secret as string;
   const rows=[];
   for(let index=0;index<30;index++) {
-    const before=performance.now(),loadAverage1m=loadavg()[0];
+      const before=performance.now(),loadAverage1m=loadavg()[0];
     const value=await app.gateway.api<any>("/internal/browser/calls",{method:"POST",headers:{"x-butler-admin":admin},body:JSON.stringify({op:"tab.observe",session:"general",tab,args:{}})});
     const wallMs=performance.now()-before;
     assert.equal(value.status,"ok");assert.equal(value.totals.interactive+value.totals.below_fold,200);
@@ -40,7 +41,8 @@ try {
   writeFileSync(join(evidence,"observe-perf.json"),JSON.stringify({p95,rows,budgetMs:250,overBudget:p95>250,reportOnly},null,2));
   console.log(JSON.stringify({p95,loadAverage1m:loadavg()[0],reportOnly}));if(!reportOnly) assert.ok(p95<=250,`observe p95 ${p95} exceeds 250ms`);
   const stopProofs:unknown[]=[];
-  const latencies:Record<string,Array<{ms:number;loadAverage1m:number}>>={noop:[],act:[],stop:[]};
+  const acts:Array<Parameters<typeof expectBrowserStills>[1]>=[];
+  const latencies:Record<string,Array<{ms:number;loadAverage1m:number;settleMs?:number;overheadMs?:number}>>={noop:[],act:[],stop:[]};
   const call=(op:string,args:unknown={},call_id?:string)=>app.gateway.api<any>("/internal/browser/calls",{method:"POST",headers:{"x-butler-admin":admin},body:JSON.stringify({op,session:"general",tab,args,call_id})});
   for(let n=0;n<30;n++) {
     let start=performance.now(),loadAverage1m=loadavg()[0];
@@ -49,30 +51,43 @@ try {
     const o=await call('tab.observe'),args={observation:o.obs,steps:[{action:'click',ref:o.nodes[0].ref}]};
     const prepared=await call('tab.prepare',args);assert.equal(prepared.status,'ok');
     start=performance.now();loadAverage1m=loadavg()[0];
-    const act=await call('tab.act',{...args,prepared_steps:prepared.steps});latencies.act.push({ms:performance.now()-start,loadAverage1m});
-    assert.equal(act.steps.length,1);assert.equal(act.steps[0].status,'completed');assert.ok(act.steps[0].still_file);
+    const act=await call('tab.act',{...args,prepared_steps:prepared.steps});
+    const ms=performance.now()-start;assert.ok(Number.isFinite(act.settleMs)&&act.settleMs>=0&&act.settleMs<=ms,'each act exposes its measured settle wait');
+    latencies.act.push({ms,settleMs:act.settleMs,overheadMs:ms-act.settleMs,loadAverage1m});
+    assert.equal(act.steps.length,1);assert.equal(act.steps[0].status,'completed');acts.push(act);
     const batch={...args,steps:Array.from({length:10},()=>args.steps[0])};
     const batchPrepared=await call('tab.prepare',batch);assert.equal(batchPrepared.status,'ok');
     const callId=crypto.randomUUID(),pending=call('tab.act',{...batch,prepared_steps:batchPrepared.steps},callId);
     await waitBrowser(()=>app.main<boolean>(`Boolean(globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab)}).busy)`),'active batch before stop');
     start=performance.now();loadAverage1m=loadavg()[0];
     const stop=await call('tab.cancel',{call_id:callId});latencies.stop.push({ms:performance.now()-start,loadAverage1m});assert.equal(stop.status,'ok');
-    const stopped=await pending;stopProofs.push(stopped);assert.equal(stopped.steps.length,10);
+    const stopped=await pending;stopProofs.push(stopped);acts.push(stopped);assert.equal(stopped.steps.length,10);
     const first=stopped.steps.findIndex((step:any)=>step.status==='not_dispatched');
     assert.ok(first>=0,'stop fences undispatched steps');
     assert.ok(stopped.steps.slice(first).every((step:any)=>step.status==='not_dispatched'));
-    assert.ok(stopped.steps.slice(0,first).every((step:any)=>step.status==='completed' && step.still_file));
+    assert.ok(stopped.steps.slice(0,first).every((step:any)=>step.status==='completed'));
   }
-  const budgets={act:50,stop:100},failures:string[]=[],operationP95:Record<string,number>={};
+  const stills=[];
+  for(const act of acts) stills.push(await expectBrowserStills(app.gateway,act));
+  assert.equal(stills.length,acts.length,"every act checked for complete still delivery");
+  // Owner rule: fail only on a >=1.5x regression against main. Main's act p95 was 82.13 ms
+  // (load ~5) in the #694 A/B on the owner Mac, so act fails above 1.5 x 82.13 ms.
+  const MAIN_ACT_P95_MS=82.13,ACT_REGRESSION_FACTOR=1.5;
+  const budgets={actRegression:MAIN_ACT_P95_MS*ACT_REGRESSION_FACTOR,stop:100},failures:string[]=[],operationP95:Record<string,number>={};
   // Micro watch: half of the 20 ms per-tool-call overhead budget.
   const noopWatchMs=10;
   for(const [name,samples]of Object.entries(latencies)) {
     const sorted=samples.map(row=>row.ms).sort((a,b)=>a-b),p95=sorted[Math.ceil(sorted.length*.95)-1]!;operationP95[name]=p95;
-    if(name!=="noop" && p95>budgets[name as keyof typeof budgets])failures.push(`${name} p95 ${p95} exceeds ${budgets[name as keyof typeof budgets]}`);
+    if(name==="stop" && p95>budgets.stop)failures.push(`${name} p95 ${p95} exceeds ${budgets.stop}`);
   }
-  writeFileSync(join(evidence,'operation-perf.json'),JSON.stringify({operationP95,latencies,stopProofs,budgets,noopWatchMs,failures,reportOnly},null,2));
+  const quantiles=(values:number[])=>{const sorted=values.sort((a,b)=>a-b);return {p50:sorted[Math.ceil(sorted.length*.5)-1]!,p95:sorted[Math.ceil(sorted.length*.95)-1]!}};
+  const actOverhead=quantiles(latencies.act!.map(row=>row.overheadMs!)),actTotal=quantiles(latencies.act!.map(row=>row.ms));
+  // Watches (printed, never failing): per-tool-call overhead (total minus measured settle) and total act p95.
+  const actOverheadWatchMs=20,actTotalWatchMs=50;
+  if(actTotal.p95>budgets.actRegression)failures.push(`act p95 ${actTotal.p95} exceeds ${budgets.actRegression}ms (${ACT_REGRESSION_FACTOR}x main ${MAIN_ACT_P95_MS}ms)`);
+  console.log(JSON.stringify({actOverhead,actOverheadWatchMs,actOverheadOverWatch:actOverhead.p95>actOverheadWatchMs,actTotal,actTotalWatchMs,actTotalOverWatch:actTotal.p95>actTotalWatchMs,loadAverage1m:loadavg()[0]}));
+  writeFileSync(join(evidence,'operation-perf.json'),JSON.stringify({actOverhead,actOverheadWatchMs,actTotal,actTotalWatchMs,operationP95,latencies,stopProofs,stills,budgets,noopWatchMs,failures,reportOnly},null,2));
   if(!reportOnly) {
     assert.deepEqual(failures,[],'browser operation budgets');
-    assert.ok(operationP95.noop!<=noopWatchMs,`noop p95 ${operationP95.noop} exceeds ${noopWatchMs}ms watch`);
   }
 }finally{await app.stop()}

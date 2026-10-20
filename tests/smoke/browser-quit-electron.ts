@@ -21,7 +21,7 @@ import { shellReady } from "../support/browser-shell-acceptance";
 import { discoverOwnedGroups, killAdoptedProcessGroups, spawnElectron, stopElectronChild } from "../support/electron-child";
 import { electronMain } from "../support/electron-main-cdp";
 import { freePort } from "../support/native-app-server";
-import { smokeBrowserArgs } from "../support/smoke-browser-args";
+import { smokeElectronArgs } from "../support/smoke-browser";
 import { ownedProcessGroupAlive } from "../../packages/butler-app/client/electron/butler-platform/process-group.mjs";
 import { quitFixture } from "./app-quit-fixture";
 
@@ -101,7 +101,7 @@ type QuitFixture = Awaited<ReturnType<typeof quitFixture>>;
 async function launchQuitApp(quit: QuitFixture, onLine: (line: string) => void = () => {}) {
   const inspector = await freePort();
   // The profile belongs to the fixture root, so a restart reuses it and cleanup removes it.
-  const child = spawnElectron(process.env.BUTLER_SMOKE_ELECTRON_EXECUTABLE!, [`--inspect=${inspector}`, ...smokeBrowserArgs(), electronRoot], {
+  const child = spawnElectron(process.env.BUTLER_SMOKE_ELECTRON_EXECUTABLE!, [`--inspect=${inspector}`, ...smokeElectronArgs(), electronRoot], {
     env: { ...quit.env, BUTLER_TEST_SHELL_OPEN_LOG: openLog }, cleanupPaths: [],
     onOutput: chunk => { for (const line of String(chunk).split("\n")) onLine(line.trim()); } });
   await waitBrowser(async () => { try { return (await quit.api("/runtime-readiness")).btcc_executor_ready === true; } catch { return false; } }, "Agent ready");

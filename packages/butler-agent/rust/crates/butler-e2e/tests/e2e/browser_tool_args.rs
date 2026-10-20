@@ -37,7 +37,7 @@ fn script() -> Vec<Value> {
     messages
 }
 
-async fn run(messages: Vec<Value>) -> Result<(Vec<Value>, Vec<Value>), HarnessError> {
+pub(super) async fn run(messages: Vec<Value>) -> Result<(Vec<Value>, Vec<Value>), HarnessError> {
     let server = FakeServer::local_models(ChatBehavior {
         script: messages,
         refuse_stream: true,
@@ -261,6 +261,7 @@ async fn representations_and_schema_errors() -> Result<(), HarnessError> {
             "tab.observe",
             "tab.observe",
             "tab.prepare",
+            "tab.observe",
             "tab.observe"
         ]
     );
@@ -270,34 +271,39 @@ async fn representations_and_schema_errors() -> Result<(), HarnessError> {
     let step = &ops[3]["args"]["steps"][0];
     assert_eq!(step["click_count"], 2);
     assert_eq!(step["commits"], false);
-    assert_eq!(step["value"], "123");
+    assert_eq!(
+        step["value"], 123,
+        "already-typed handler values stay intact"
+    );
     assert_eq!(step["extra"], true);
     assert_eq!(ops[3]["args"]["observe"], false);
-    for (round, field, problem) in [
-        (5, "tab", "required argument \"tab\" (string) is missing"),
-        (6, "tab", "\"tab\" must be string, not boolean true"),
-        (7, "scope", "\"scope\" must be one of"),
-        (9, "region", "\"region\" must be array"),
-        (10, "region", "\"region\" must have exactly 4 items"),
-        (11, "region[2]", "\"region[2]\" must be number"),
-        (
-            12,
-            "revision",
-            "required argument \"revision\" (integer or null) is missing",
-        ),
-    ] {
-        let error = output(&requests[round]);
-        assert_eq!(error["ok"], false, "{error}");
-        assert_eq!(error["error"]["code"], "invalid_arguments", "{error}");
-        assert_eq!(error["error"]["field"], field, "{error}");
-        assert!(
-            error["error"]["message"]
-                .as_str()
-                .unwrap()
-                .contains(problem),
-            "{error}"
-        );
+    // Null and boolean tabs reach the handler's ownership fence, rather than
+    // becoming missing/type errors in the direct dispatcher.
+    for round in [5, 6] {
+        let result = output(&requests[round]);
+        assert_eq!(result["output"]["reason"], "not_your_tab", "{result}");
+        assert_eq!(result["output"]["your_tabs"], json!(["t1"]), "{result}");
     }
+    assert_eq!(ops[4]["args"]["scope"], "invalid");
+    assert_eq!(output(&requests[7])["output"]["status"], "ok");
+    // All three malformed regions reach the handler's vision admission rule.
+    // The JSON-in-string region is decoded even though its length is invalid.
+    for round in [9, 10, 11] {
+        let result = output(&requests[round]);
+        assert_eq!(result["output"]["status"], "unavailable", "{result}");
+        assert_eq!(result["output"]["reason"], "vision_required", "{result}");
+    }
+    let error = output(&requests[12]);
+    assert_eq!(error["ok"], false, "{error}");
+    assert_eq!(error["error"]["code"], "invalid_arguments", "{error}");
+    assert_eq!(error["error"]["field"], "revision", "{error}");
+    assert!(
+        error["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("required argument \"revision\" (integer or null) is missing"),
+        "{error}"
+    );
     assert!(
         output(&requests[12])["error"]["message"]
             .as_str()

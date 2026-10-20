@@ -32,6 +32,7 @@ mod handle;
 mod hooks;
 mod internal_continuation;
 mod library;
+mod still_delivery;
 pub use library::{AppLibraryChange, AppLibraryCommand, AppLibraryQuery};
 mod signins;
 pub use signins::*;

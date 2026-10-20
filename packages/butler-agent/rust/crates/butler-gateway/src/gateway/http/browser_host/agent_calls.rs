@@ -38,12 +38,12 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     let (sender, receiver) = oneshot::channel();
     let tab = frame["tab"].as_str().map(str::to_owned);
     let sent = json!({"args":{"policy":frame["args"]["policy"],"entry_id":frame["args"]["entry_id"],"fill_token":frame["args"]["fill_token"],"kind":frame["args"]["kind"],"item_id":frame["args"]["item_id"]},"tab":frame["tab"],"turn_id":frame["turn_id"]});
-    if let Some(refused) = dispatch(&state, frame, count, deadline, &id, sender)? {
+    if let Some(refused) = dispatch_reserved(&state, frame, count, deadline, &id, sender).await? {
         return Ok(refused);
     }
     let _pending = PendingCall {
         state: state.clone(),
-        id,
+        id: id.clone(),
     };
     let (mut result, answered) = tokio::select! {
         () = state.shutdown.cancelled() => (json!({"status":"unknown","reason":"browser_host_lost"}), false),
@@ -61,6 +61,9 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     }
     super::signed_in::recheck(&sent, &mut result);
     finish_result(&state, &session, &op, &sent, &mut result).await?;
+    if op == "tab.act" {
+        super::still_delivery::finish(&state, &id, &session, &mut result).await?;
+    }
     response(count, result)
 }
 
@@ -120,6 +123,33 @@ async fn signed_in_call(
     }
     super::fill::prepare(state, frame, &tab).await
 }
+/// A reservation is settled even when dispatch returns a transport error.
+async fn dispatch_reserved(
+    state: &Arc<HttpState>,
+    frame: Value,
+    count: usize,
+    deadline: u64,
+    id: &str,
+    sender: oneshot::Sender<Value>,
+) -> Result<Option<Response>, HttpError> {
+    let act = frame["op"] == "tab.act";
+    let session = frame["session"].as_str().unwrap_or_default().to_owned();
+    if act {
+        super::still_delivery::reserve(state, id, &frame).await?;
+    }
+    let dispatched = dispatch(state, frame, count, deadline, id, sender);
+    if act && !matches!(dispatched, Ok(None)) {
+        super::still_delivery::finish(
+            state,
+            id,
+            &session,
+            &mut json!({"reason":"dispatch_interrupted"}),
+        )
+        .await?;
+    }
+    dispatched
+}
+
 fn dispatch(
     state: &Arc<HttpState>,
     mut frame: Value,
@@ -272,6 +302,7 @@ pub(super) async fn events(state: Arc<HttpState>, value: Value) -> Result<Respon
         .ok_or_else(|| error(400, "invalid_snapshot"))?;
     let (handed_back, handovers) = {
         let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
+        hub.still_backlog = value["still_backlog"].as_u64().unwrap_or(0);
         let handovers = hub.tabs.handovers(tabs);
         let changed: Vec<Value> = tabs
             .iter()
@@ -285,6 +316,7 @@ pub(super) async fn events(state: Arc<HttpState>, value: Value) -> Result<Respon
         hub.tabs
             .replace(tabs)
             .map_err(|_| error(400, "invalid_snapshot"))?;
+        super::hidden::hand_over(&state, &mut hub);
         (changed, handovers)
     };
     state.browser.2.notify_waiters();
@@ -310,6 +342,10 @@ pub(in crate::gateway::http) async fn close_owner(
 }
 
 pub(super) async fn still(state: Arc<HttpState>, mut value: Value) -> Result<Response, HttpError> {
+    if value.get("act_id").is_some() {
+        let result = super::still_delivery::upload(&state, &value).await?;
+        return super::super::json(StatusCode::OK, result);
+    }
     let session = value["session"].as_str().unwrap_or("").to_owned();
     {
         let hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;

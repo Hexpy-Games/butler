@@ -9,7 +9,6 @@
     "accept"
   ],
   "covered": {
-    "task": "newsletter",
     "reject": "newsletter"
   },
   "success": {
