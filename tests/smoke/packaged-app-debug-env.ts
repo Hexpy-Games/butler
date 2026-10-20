@@ -25,9 +25,11 @@ async function prepareShell(): Promise<string> {
   const existing = process.env.BUTLER_DEBUG_ENV_SMOKE_BUNDLE;
   if (existing) {
     const bundle = join(temporary, "Butler.app");
-    // Reuse the packaged shell, preserving this smoke's missing-Agent startup path.
+    // Reuse the packaged shell, preserving this smoke's missing-Agent startup path. Keep the
+    // bundle's relative framework links as they are: rewritten to absolute links into the
+    // source bundle, the copy's renderer crashes before the startup window loads.
     const agent = join(resolve(existing), "Contents/Resources/bundled-agent");
-    cpSync(resolve(existing), bundle, { recursive: true, filter: path => path !== agent });
+    cpSync(resolve(existing), bundle, { recursive: true, verbatimSymlinks: true, filter: path => path !== agent });
     return join(bundle, "Contents/MacOS/Butler");
   }
   const source = stageElectronPackageSource(root, join(temporary, "source"));
