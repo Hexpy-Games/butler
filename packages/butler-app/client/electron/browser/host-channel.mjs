@@ -24,14 +24,7 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
   };
   const request = (path, init = {}) => fetch(path, { ...init, signal: controller.signal,
     headers: { "x-butler-admin": adminCredential(), ...init.headers } });
-  const stills = createStillOutbox({ directory: stillDirectory, replayDirectories, onChanged: () => { revision++; if (running) void flushState().catch(() => {}); }, send: async value => {
-    // SSE reconnection must not cancel an independent evidence upload.
-    const response = await fetch("/internal/browser-host/stills", { method: "POST",
-      signal: AbortSignal.timeout(5000), headers: { "x-butler-admin": adminCredential(), "content-type": "application/json" },
-      body: JSON.stringify(value) });
-    if (!response.ok) throw Object.assign(Error("still_upload_failed"), { status: response.status });
-    onStillDelivered?.({ id: value.act_id, session: value.session });
-  } });
+  const stills = createStillOutbox({ directory: stillDirectory, replayDirectories, onChanged: () => { revision++; if (running) void flushState().catch(() => {}); }, send: value => uploadStill(fetch, adminCredential, value, onStillDelivered) });
   const execute = createExecutor({ flushState, stills, executeBrowser, request });
   async function connect() {
     resetBrowser?.();
@@ -135,4 +128,17 @@ function createSecrets(request, available) {
     } catch { return unavailable; }
   }
   return { credential, vault };
+}
+
+async function uploadStill(fetch, credential, value, onDelivered) {
+  // SSE reconnection must not cancel an independent evidence upload.
+  const response = await fetch("/internal/browser-host/stills", { method: "POST",
+    signal: AbortSignal.timeout(5000), headers: { "x-butler-admin": credential(), "content-type": "application/json" },
+    body: JSON.stringify(value) });
+  if (!response.ok) {
+    const code = await response.json().then(value => value.error?.code).catch(() => undefined);
+    const reason = typeof code === "string" && /^[a-z_]{1,64}$/u.test(code) ? code : "still_upload_failed";
+    throw Object.assign(Error(reason), { status: response.status });
+  }
+  onDelivered?.({ id: value.act_id, session: value.session });
 }

@@ -20,7 +20,7 @@ try {
       const contents=window.webContents,dbg=contents.debugger;
       const events=['did-start-navigation','render-process-gone','destroyed'];
       const listeners=()=>[...events.map(name=>contents.listenerCount(name)),dbg.listenerCount('message'),tab.dialogWaiters?.size??0];
-      let release, pending, value;
+      let release, pending, value;const delivered=[];
       const tab={id:'lifecycle-tab',epoch:1,url:'about:blank',owner:'conversation:s1',holder:'agent',view:{webContents:contents}};
       const browser={publish(){},sync(){}};
       const originalPaint=contents.executeJavaScriptInIsolatedWorld.bind(contents);

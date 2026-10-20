@@ -233,3 +233,34 @@ async fn without_a_usable_electron_the_headless_browser_serves() -> Result<(), H
     assert_eq!(profiles(&s), 0, "the failed host left no profile");
     s.finish().await
 }
+
+#[tokio::test]
+async fn hidden_outbox_backlog_blocks_retirement_until_drained() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(hidden_app(), "BUTLER_E2E_BROWSER_BACKEND=hidden-app not set");
+    let s = setup("BROWSER-HIDDEN-OUTBOX")?
+        .env("BUTLER_BROWSER_HEADLESS", "off")
+        .start().await?;
+    let admin = admin(&s);
+    let url = publish(&s).await?;
+    let opened = open(&admin, "general", &url).await?;
+    assert_eq!(opened["status"], "ok");
+    assert_eq!(call(&admin, "general", "tab.observe", &opened["tab"], json!({})).await?["status"], "ok");
+    // No tabs, calls or turn can keep this host busy: only its durable backlog.
+    for count in [3, 0] {
+        let response = admin.send(reqwest::Method::POST, "/internal/browser-host/events",
+            Some(json!({"tabs":[],"still_backlog":count})), &[]).await?;
+        assert_eq!(response.status, 200);
+        if count > 0 {
+            let busy = attach_app(&admin).await?;
+            assert_eq!(busy.status(), 409);
+            assert!(busy.text().await?.contains("browser_host_busy"));
+            assert_eq!(profiles(&s), 1, "backlog keeps the host alive");
+        }
+    }
+    host_gone(&s, Duration::from_secs(15)).await;
+    let stream = attach_app(&admin).await?;
+    assert_eq!(stream.status(), 200, "drained host hands over");
+    drop(stream);
+    s.finish().await
+}

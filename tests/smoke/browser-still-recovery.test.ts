@@ -1,7 +1,7 @@
 // test-category: race
 import { EventEmitter } from "node:events";
 import { createRequire } from "node:module";
-import { test, expect, mock } from "bun:test";
+import { test, expect, mock, spyOn } from "bun:test";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -113,4 +113,33 @@ test("quit deadline spools active-act pixels and every queued still for the next
     expect(received.every(value => value.still.base64 === "YWJj")).toBe(true);
     next.stop();
   } finally { queue.stop(); await rm(directory, { recursive: true, force: true }); }
+});
+
+test("host treats a gateway 409 as a final ack and logs its safe reason", async () => {
+  const { createBrowserHost } = require("../../packages/butler-app/client/electron/browser/host-channel.mjs");
+  const directory = await mkdtemp(join(tmpdir(), "still-rejected-"));
+  let channel: ReadableStreamDefaultController<Uint8Array>, done: () => void;
+  const replied = new Promise<void>(resolve => { done = resolve; });
+  const messages: string[] = [];
+  const log = spyOn(console, "error").mockImplementation(value => { messages.push(String(value)); });
+  const host = createBrowserHost({ stillDirectory: directory, adminCredential: () => "stub",
+    executeBrowser: async (frame: any) => {
+      await frame.deliverStill({ step: 0, still: { mime: "image/jpeg", base64: "YWJj" } });
+      return { status: "ok", steps: [{ status: "completed" }] };
+    },
+    fetch: async (path: string) => {
+      if (path === "/internal/browser-host") return new Response(new ReadableStream({ start(controller) {
+        channel = controller;
+        controller.enqueue(new TextEncoder().encode('data: {"id":"a","op":"tab.act","session":"s","tab":"t","args":{"steps":[{}]}}\n\n'));
+      } }));
+      if (path.endsWith("/stills")) return Response.json({ error: { code: "still_settled" } }, { status: 409 });
+      if (path.includes("/results/")) done();
+      return Response.json({});
+    },
+  });
+  try {
+    host.start(); await replied; await host.flushStills();
+    expect(await readdir(directory)).toEqual([]);
+    expect(messages.some(value => value.includes("409 still_settled"))).toBe(true);
+  } finally { log.mockRestore(); host.stop(); channel!.close(); await rm(directory, { recursive: true, force: true }); }
 });

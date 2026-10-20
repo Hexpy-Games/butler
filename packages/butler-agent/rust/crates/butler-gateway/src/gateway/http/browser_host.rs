@@ -406,6 +406,18 @@ async fn register_host(
         let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
         hidden::admit(state, &mut hub, launch)?;
     }
+    loop {
+        let changed = state.browser.2.notified();
+        tokio::pin!(changed);
+        changed.as_mut().enable();
+        if !state.browser.0.lock().map_err(|_| HttpError::Internal)?.retiring {
+            break;
+        }
+        tokio::select! {
+            () = changed => (),
+            () = state.shutdown.cancelled() => return Err(error(503, "gateway_closing")),
+        }
+    }
     let generation = {
         let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
         hub.host = Some(sender);

@@ -70,7 +70,7 @@ pub(super) fn admit(
         return Err(error(409, "browser_host_busy"));
     }
     retire(state, hub);
-    Err(error(409, "browser_host_busy"))
+    Ok(())
 }
 
 /// Ends the hidden host: its channel closes (it quits on its own) and its
@@ -157,7 +157,7 @@ pub(super) async fn ensure(state: &Arc<HttpState>, frame: Option<&Value>) {
             .pins
             .get(session)
             .is_some_and(|(pinned, backend)| pinned == turn && *backend == Backend::Headless);
-        if hub.host.is_some() || on_headless {
+        if hub.host.is_some() || hub.retiring || on_headless {
             return;
         }
         let (Some(token), Some(admin)) = (state.security.token(), state.security.admin()) else {

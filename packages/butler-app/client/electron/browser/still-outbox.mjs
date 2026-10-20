@@ -141,13 +141,13 @@ class StillOutbox {
     try {
       await this.send({ act_id: record.id, session: record.session, tab: record.tab, step: entry.step, ...entry.value });
     } catch (error) {
-      if (!(error.status >= 400 && error.status < 500)) {
+      if (!Number.isInteger(error.status) || error.status >= 500) {
         const attempt = entry.attempts ?? 0;
         entry.attempts = attempt + 1;
         entry.retryAt = this.retryMs.length ? Date.now() + this.retryMs[Math.min(attempt, this.retryMs.length - 1)] : Infinity;
         return;
       }
-      console.error(`[browser] still rejected: HTTP ${error.status}`);
+      console.error(`[browser] still rejected: HTTP ${error.status} ${error.message}`);
     }
     await this.acknowledge(record, entry);
   }
