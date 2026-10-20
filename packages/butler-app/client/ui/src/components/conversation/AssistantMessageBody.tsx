@@ -54,6 +54,11 @@ export function AssistantMessageBody({ message, running, liveActivity, failureNo
           </div>
         )}
         {attachedParts}
+        {message.limitation_codes?.includes("message_file_unavailable") && (
+          <Tag ariaLabel={appCopy.conversation.attachmentUnavailable}>
+            {appCopy.conversation.attachmentUnavailable}
+          </Tag>
+        )}
       </MessageLiveGroup>
     </>
   );

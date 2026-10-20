@@ -71,12 +71,34 @@ pub(super) async fn collect(
         })
         .collect::<Vec<_>>();
     let outputs = std::mem::take(&mut artifacts.outputs);
+    let artifacts = artifacts::with_changed_files(artifacts.finish(), &changed_files, workspace);
     Ok(JournalCloseout {
         outputs,
-        artifacts: artifacts::with_changed_files(artifacts.finish(), &changed_files, workspace),
+        artifacts,
         changed_files,
         answer_blocks,
     })
+}
+
+pub(super) async fn handoff(
+    mut closeout: JournalCloseout,
+    turn: &str,
+) -> Result<JournalCloseout, BtccError> {
+    let turn = turn.to_owned();
+    closeout.artifacts = tokio::task::spawn_blocking(move || {
+        for artifact in &mut closeout.artifacts {
+            if let Some(path) = &artifact.staged_path {
+                let durable =
+                    butler_platform::secure_fs::handoff_staged(std::path::Path::new(path), &turn)?;
+                artifact.staged_path = Some(durable.to_string_lossy().into_owned());
+            }
+        }
+        Ok::<_, std::io::Error>(closeout.artifacts)
+    })
+    .await
+    .map_err(|error| BtccError::relayed("deliverable_handoff_failed", error.to_string()))?
+    .map_err(|error| BtccError::relayed("deliverable_handoff_failed", error.to_string()))?;
+    Ok(closeout)
 }
 
 fn invalid(error: butler_core::json::JsonError) -> BtccError {

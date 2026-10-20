@@ -38,6 +38,7 @@ async fn source_artifact_is_stored_once_with_original_metadata() {
     let files = owner
         .materialize(ArtifactMaterializationRequest {
             allowed_roots: vec![root.clone()],
+            file_grants: Vec::new(),
             candidates: vec![candidate.clone(), candidate],
             existing_content_keys: Vec::new(),
         })
@@ -156,6 +157,7 @@ async fn interrupted_write(point: &str) {
             owner
                 .materialize(ArtifactMaterializationRequest {
                     allowed_roots: vec![root.clone()],
+                    file_grants: Vec::new(),
                     candidates: vec![ArtifactFileCandidate {
                         title: None,
                         source_label: None,

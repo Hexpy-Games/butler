@@ -17,3 +17,10 @@ impl ProjectionOwner {
         notifications::settlement_listener(&self.inner)
     }
 }
+
+impl Drop for Inner {
+    fn drop(&mut self) {
+        self.watcher.get_mut().take();
+        let _ = self.sender.try_send(Command::Close);
+    }
+}

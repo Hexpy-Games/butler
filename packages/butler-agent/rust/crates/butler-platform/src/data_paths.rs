@@ -35,6 +35,8 @@ pub const OUTPUTS: &str = "outputs";
 pub const DOWNLOADS: &str = "downloads";
 /// Store directories created by Rust storage writers.
 pub const MESSAGE_FILES: &str = "app-server/message-files";
+/// Durable deliverable copies awaiting App attachment commit.
+pub const MESSAGE_HANDOFFS: &str = "app-server/message-files/.handoffs";
 /// Captured message asset images.
 pub const ASSETS: &str = "app-server/assets";
 /// Generated artifact files.
@@ -120,6 +122,10 @@ pub const LOG_EXPORTS: &str = "log-exports";
 pub const TOOL_CACHE: &str = "cache/tools";
 /// Project-write command cache state.
 pub const PROJECT_WRITE_CACHE: &str = "cache/project-write";
+/// Project-write temporary files.
+pub const PROJECT_WRITE_TMP: &str = "tmp/project-write";
+/// Private validated reader copies, inaccessible to commands.
+pub const READER_STAGING: &str = "tmp/reader-staging";
 /// Paths whose first component Butler creates itself.
 pub const OWNED_PATHS: &[&str] = &[
     LEGACY_SCHEDULES,
@@ -204,4 +210,15 @@ pub const OWNED_DIRECTORIES: &[&str] = &[
     APP_HOST_BROWSER,
     APP_LOGS,
     COMPOSER_DRAFTS,
+];
+
+/// Data-relative credential stores, including rotation temporaries and quarantine.
+pub const CREDENTIAL_ROOTS: &[&str] = &[
+    "auth",
+    "secrets",
+    SANDBOX_QUARANTINE,
+    LOCAL_AUTH_DIR,
+    FOLDER_SECRET_DIR,
+    PROVIDER_CREDENTIALS,
+    ENVIRONMENT,
 ];

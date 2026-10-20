@@ -11,8 +11,8 @@ use sha2::{Digest, Sha256};
 
 use super::{names, path::AllowedPaths};
 use crate::gateway::{
-    AppIdentityClock, ArtifactMaterializationRequest, GatewayApplicationError,
-    MaterializedResponderFile,
+    AppIdentityClock, ArtifactMaterializationRequest, ArtifactMaterializationResult,
+    GatewayApplicationError, MaterializedResponderFile,
 };
 
 const MAX_BYTES: usize = 10 * 1024 * 1024;
@@ -41,10 +41,12 @@ impl Drop for Staging {
 
 pub(super) fn run(
     root: &Path,
+    data: &Path,
     clock: &dyn AppIdentityClock,
     request: &ArtifactMaterializationRequest,
-) -> Result<Vec<MaterializedResponderFile>, GatewayApplicationError> {
-    let paths = AllowedPaths::new(&request.allowed_roots).map_err(internal)?;
+) -> Result<ArtifactMaterializationResult, GatewayApplicationError> {
+    let paths =
+        AllowedPaths::new(data, &request.allowed_roots, &request.file_grants).map_err(internal)?;
     let mut seen = HashSet::new();
     let mut keys: HashSet<Vec<u16>> = request
         .existing_content_keys
@@ -52,9 +54,13 @@ pub(super) fn run(
         .map(|key| key.encode_utf16().collect())
         .collect();
     let mut pending = Vec::new();
+    let mut unavailable = false;
     let mut staging = Staging(None);
     for candidate in &request.candidates {
-        let Some(path) = paths.first_readable(candidate, &seen) else {
+        let Some((path, file)) = paths.first_readable(candidate, &seen) else {
+            if candidate.deliverable && !paths.already_seen(candidate, &seen) {
+                unavailable = true;
+            }
             continue;
         };
         seen.insert(path.clone());
@@ -77,7 +83,7 @@ pub(super) fn run(
             &name.stored,
         );
         let kind = names::kind(&mime, &name.stored);
-        let (size, digest, bytes) = read_and_hash(&path, pending.len() < MAX_FILES)?;
+        let (size, digest, bytes) = read_and_hash(file, pending.len() < MAX_FILES)?;
         if size == 0 && !candidate.deliverable {
             continue;
         }
@@ -104,7 +110,10 @@ pub(super) fn run(
         });
     }
 
-    publish_files(root, clock, pending)
+    Ok(ArtifactMaterializationResult {
+        files: publish_files(root, clock, pending)?,
+        unavailable,
+    })
 }
 
 fn stage(
@@ -190,10 +199,9 @@ fn content_key(name: &[u16], mime: &str, size: u64, digest: &str) -> Vec<u16> {
 }
 
 fn read_and_hash(
-    path: &Path,
+    mut file: File,
     buffer: bool,
 ) -> Result<(u64, String, Option<Vec<u8>>), GatewayApplicationError> {
-    let mut file = File::open(path).map_err(internal)?;
     let mut digest = Sha256::new();
     let mut size = 0_u64;
     let mut bytes = buffer.then(Vec::new);

@@ -2,7 +2,12 @@
 use super::*;
 use std::{io::Read, process::Stdio, time::Instant};
 
-fn launch(invocation: &Invocation, cwd: &Path, home: &Path) -> (Duration, Duration) {
+fn launch(
+    invocation: &Invocation,
+    cwd: &Path,
+    home: &Path,
+    inventory: bool,
+) -> (Duration, Duration) {
     let mut command = Command::new(&invocation.program);
     command
         .args(&invocation.arguments)
@@ -12,6 +17,10 @@ fn launch(invocation: &Invocation, cwd: &Path, home: &Path) -> (Duration, Durati
         .stderr(Stdio::piped());
     butler_platform::process_control::isolate_group(&mut command);
     let started = Instant::now();
+    if inventory {
+        let secrets = command_sandbox::discover_project_entries(cwd).unwrap();
+        assert!(secrets.is_empty());
+    }
     let mut child = command.spawn().unwrap();
     let pid = child.id();
     // The first built-in printf signals that policy setup and shell startup
@@ -57,11 +66,11 @@ async fn perf_trampoline_start_latency_and_process_identity() -> Result<(), Harn
     let (mut baseline_complete, mut contained_complete) = (Vec::new(), Vec::new());
     for index in 0..60 {
         let (a, b) = if index % 2 == 0 {
-            let b = launch(&sandbox, &cwd, &setup.sandbox.home);
-            (launch(&plain, &cwd, &setup.sandbox.home), b)
+            let b = launch(&sandbox, &cwd, &setup.sandbox.home, true);
+            (launch(&plain, &cwd, &setup.sandbox.home, false), b)
         } else {
-            let a = launch(&plain, &cwd, &setup.sandbox.home);
-            (a, launch(&sandbox, &cwd, &setup.sandbox.home))
+            let a = launch(&plain, &cwd, &setup.sandbox.home, false);
+            (a, launch(&sandbox, &cwd, &setup.sandbox.home, true))
         };
         baseline.push(a.0);
         contained.push(b.0);

@@ -158,7 +158,8 @@ async function auditScrolledFades(page: Page, cell: Cell, screen: string, scope:
         if (element.dataset.scrollFade === "x") element.scrollLeft = far;
         else element.scrollTop = far;
       }, { scroller, edge });
-      await page.waitForTimeout(120);
+      await page.waitForFunction(({ scroller, edge }) => Number.parseFloat(getComputedStyle(document.querySelector(scroller)!)
+        .getPropertyValue(`--scroll-fade-${edge}`)) > 0, { scroller, edge });
       const faded = await page.evaluate(({ scroller, edge }) => Number.parseFloat(getComputedStyle(document.querySelector(scroller)!)
         .getPropertyValue(`--scroll-fade-${edge}`)) > 0, { scroller, edge });
       assert(faded, `${screen}: ${scroller} scrolled away from its ${edge} has no ${edge} fade`);

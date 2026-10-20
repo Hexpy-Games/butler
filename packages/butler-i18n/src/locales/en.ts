@@ -943,6 +943,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       checked: (time) => `Checked ${time}`,
     },
     stoppedStatus: "Stopped",
+    attachmentUnavailable: "Attachment unavailable",
     fileChanges: {
       regionLabel: "Changed files",
       title: "File changes",

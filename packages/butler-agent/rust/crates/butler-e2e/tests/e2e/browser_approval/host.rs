@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 pub(super) const PUBLIC: &str = "https://shop.example.test/";
 pub(super) const ACCOUNT: &str = "https://account.example.test/";
 
-pub(super) struct Host {
+pub(crate) struct Host {
     frames: Arc<Mutex<Vec<Value>>>,
     task: tokio::task::JoinHandle<()>,
 }
@@ -23,7 +23,7 @@ impl Drop for Host {
 
 impl Host {
     /// Attaches the host and publishes the public and signed-in tabs.
-    pub(super) async fn attach(s: &Scenario) -> Result<Self, HarnessError> {
+    pub(crate) async fn attach(s: &Scenario) -> Result<Self, HarnessError> {
         let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
         let mut stream = reqwest::Client::new()
             .get(format!("{}/internal/browser-host", s.gw.base))
@@ -60,7 +60,20 @@ impl Host {
                 if op.starts_with("use.") {
                     continue;
                 }
-                seen.lock().unwrap().push(frame.clone());
+                let mut recorded = frame.clone();
+                if op == "tab.act" {
+                    let uploaded: Vec<_> = frame["args"]["steps"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter(|step| step["action"] == "upload")
+                        .map(|step| {
+                            std::fs::read_to_string(step["value"].as_str().unwrap()).unwrap()
+                        })
+                        .collect();
+                    recorded["uploaded_content"] = json!(uploaded);
+                }
+                seen.lock().unwrap().push(recorded);
                 let id = frame["id"].as_str().unwrap_or("").to_owned();
                 let _ = admin
                     .send(
@@ -88,6 +101,16 @@ impl Host {
             .unwrap()
             .iter()
             .filter_map(|frame| frame["op"].as_str().map(str::to_owned))
+            .collect()
+    }
+
+    pub(super) fn uploads(&self) -> Vec<String> {
+        self.frames
+            .lock()
+            .unwrap()
+            .iter()
+            .flat_map(|frame| frame["uploaded_content"].as_array().into_iter().flatten())
+            .filter_map(|value| value.as_str().map(str::to_owned))
             .collect()
     }
 
@@ -139,6 +162,10 @@ fn respond(op: &str, frame: &Value) -> Value {
 /// What the executor resolves for a step: role and name, and the payment,
 /// upload, submit and POST-form facts of its target.
 fn facts(step: &Value) -> Value {
+    if step["action"] == "upload" {
+        return json!({"hit":{"role":"input","name":"Upload","ref":step["ref"],"frame":"fixture"},
+            "payment":false,"upload":true,"submit":false,"frame_payment":false,"form_post":false,"addons":[]});
+    }
     if matches!(step["action"].as_str(), Some("type" | "press")) {
         return json!({"keyboard":true,"deferred":true,"hit":{"role":"focus","name":"","frame":""},
             "payment":false,"upload":false,"submit":false,"frame_payment":false,"addons":[]});
@@ -167,8 +194,17 @@ pub(super) fn cassette(turns: &[(String, Vec<Value>)]) -> Result<Cassette, Harne
     cassette.exchanges.clear();
     let stub = super::super::browser_usage::stub::response;
     for (turn, (request, calls)) in turns.iter().enumerate() {
-        let describe =
-            json!({"ids":["native:browser_observe","native:browser_act","native:image_collect"]});
+        let mut ids = vec![
+            "native:browser_observe",
+            "native:browser_act",
+            "native:image_collect",
+        ];
+        for id in calls.iter().filter_map(|call| call["id"].as_str()) {
+            if !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+        let describe = json!({"ids":ids});
         let mut round = Vec::new();
         let mut items = vec![("tool_describe", describe)];
         items.extend(calls.iter().map(|call| ("tool_call", call.clone())));

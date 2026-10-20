@@ -5,6 +5,7 @@ use super::super::path_guard::GuardResult;
 
 /// Where a mutation may write.
 pub struct MutationContext {
+    pub butler_data: PathBuf,
     pub root: PathBuf,
     pub path_form: crate::workspace::PathForm,
     pub installation_root: Option<PathBuf>,
@@ -71,6 +72,7 @@ pub enum MutationCommand {
 }
 
 pub(crate) struct GuardedPath {
+    pub read_scope: Option<std::sync::Arc<(PathBuf, PathBuf)>>,
     pub public: String,
     pub absolute: PathBuf,
     pub real: PathBuf,

@@ -123,6 +123,7 @@ fn path(
     leaf: Leaf,
 ) -> std::io::Result<Result<GuardedPath, super::super::path_guard::GuardResult>> {
     let guard = resolve_workspace_mutation_guard(MutationGuardInput {
+        butler_data: Some(&context.butler_data),
         root: &context.root,
         requested,
         path_form: context.path_form,
@@ -141,6 +142,10 @@ fn path(
         Err(_) => absolute.to_string_lossy().replace('\\', "/"),
     };
     Ok(Ok(GuardedPath {
+        read_scope: context
+            .path_form
+            .contained()
+            .then(|| std::sync::Arc::new((context.root.clone(), context.butler_data.clone()))),
         public: if public.is_empty() {
             ".".into()
         } else {

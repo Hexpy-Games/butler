@@ -89,11 +89,11 @@ pub use application::{
     AppUsageMonitorQuery, AppUsageMonitorView, AppWorkOperationalNoticeFact, AppWorkProgress,
     AppWorkStatusConversationFact, AppWorkStreamQuery, AppWorkStreamReader,
     AppWorkStreamTurnOutcome, AppWorkerActivityQuery, AppWorkerActivitySourcePage,
-    AppWorkspaceMode, ArtifactFileCandidate, ArtifactMaterializationRequest, ClaimedNativeSnapshot,
-    EnqueueReceipt, MaterializedResponderFile, MemoryEventSink, OperationOutputChunk,
-    OperationOutputView, ProjectSnapshot, ResolvedNativeAssets, TranscriptExport,
-    VisualAdmissionRequest, project_task_graphs, task_graph_label, task_graph_model_label,
-    task_graph_response,
+    AppWorkspaceMode, ArtifactFileCandidate, ArtifactMaterializationRequest,
+    ArtifactMaterializationResult, ClaimedNativeSnapshot, EnqueueReceipt,
+    MaterializedResponderFile, MemoryEventSink, OperationOutputChunk, OperationOutputView,
+    ProjectSnapshot, ResolvedNativeAssets, TranscriptExport, VisualAdmissionRequest,
+    project_task_graphs, task_graph_label, task_graph_model_label, task_graph_response,
 };
 pub use application::{
     AppCardInput, AppProfileInput, AppSignInCommand, AppSignInUpsert, AppVaultCommand,
