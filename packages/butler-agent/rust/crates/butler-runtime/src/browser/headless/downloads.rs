@@ -23,7 +23,8 @@ pub type PortFuture = Pin<Box<dyn Future<Output = Result<Value, String>> + Send>
 pub trait DownloadPort: Send + Sync {
     /// `{workspace_path, turn_id, message_id}` for the conversation.
     fn prepare(&self, session: String) -> PortFuture;
-    /// Publishes `downloads/<filename>` as a session output: `{output_id, view}`.
+    /// Publishes `downloads/<filename>` as a session output: `{output_id, view}`,
+    /// or `{skipped_files}` when the file is refused as a credential.
     fn publish(
         &self,
         session: String,
