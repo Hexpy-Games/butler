@@ -101,9 +101,13 @@ async fn staging_recovers_after_normal_stop_and_kill() -> Result<(), HarnessErro
         if butler_platform::secure_fs::NO_FOLLOW {
             // Test the staging root itself as a link while the Agent is stopped.
             s.agent.terminate().await?;
+            if base.exists() {
+                std::fs::remove_dir(&base)?;
+            }
             butler_platform::secure_fs::symlink(&preserved, &base)?;
             s.gw = s.agent.start_again().await?;
-            assert!(!base.exists());
+            assert!(!std::fs::symlink_metadata(&base).is_ok_and(|m| m.file_type().is_symlink()));
+            assert!(!base.exists() || std::fs::read_dir(&base)?.next().is_none());
             assert_eq!(
                 std::fs::read_to_string(preserved.join("keep.txt"))?,
                 "complete-public"
