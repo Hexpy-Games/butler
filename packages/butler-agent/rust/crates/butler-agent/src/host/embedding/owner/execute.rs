@@ -130,8 +130,12 @@ async fn drain_query(
         tokio::select! {
             biased;
             result = &mut response => return result,
-            () = tokio::time::sleep_until(deadline) =>
-                return Err(error(CognitionCode::EmbedRequestDeadline)),
+            () = tokio::time::sleep_until(deadline) => {
+                if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+                    butler_core::diagnostic!("[embedding-worker] drain_end=deadline");
+                }
+                return Err(error(CognitionCode::EmbedRequestDeadline));
+            },
             () = &mut notified => {},
         }
     }

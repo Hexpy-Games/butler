@@ -25,17 +25,22 @@ impl Trace {
     }
 
     pub(super) async fn drain(&mut self) -> Result<u64, HarnessError> {
+        let tail = self.until("draining query grace_ms=").await?;
+        Ok(tail.split_whitespace().next().unwrap().parse().unwrap())
+    }
+
+    async fn until(&mut self, marker: &str) -> Result<String, HarnessError> {
         tokio::time::timeout(Duration::from_secs(10), async {
             loop {
                 self.file.read_to_string(&mut self.text).await?;
-                if let Some((_, tail)) = self.text.split_once("draining query grace_ms=") {
-                    return Ok(tail.split_whitespace().next().unwrap().parse().unwrap());
+                if let Some((_, tail)) = self.text.split_once(marker) {
+                    return Ok(tail.to_owned());
                 }
                 tokio::time::sleep(Duration::from_millis(2)).await;
             }
         })
         .await
-        .expect("query must reach its post-send deadline")
+        .expect("native worker must reach the expected drain boundary")
     }
 }
 
@@ -93,8 +98,9 @@ async fn expired_query_grace_kills_and_reaps_a_wedged_worker() -> Result<(), Har
         let grace = trace.drain().await?;
         let pid = worker(&s)?;
         let elapsed = reaped(pid, Duration::from_millis(grace + 200)).await?;
-        // A queued request would preempt grace; this case must exercise expiry.
-        assert!(elapsed + Duration::from_millis(20) >= Duration::from_millis(grace));
+        // Require the actual expiry branch, rather than inferring it from a
+        // minimum duration that a queued request could race with.
+        trace.until("drain_end=deadline").await?;
         eprintln!(
             "DRAIN-EXPIRY grace_ms={grace} reaped_ms={}",
             elapsed.as_millis()
@@ -128,7 +134,11 @@ async fn owner_close_during_query_drain_reaps_without_waiting_for_grace() -> Res
         process_start(pid).unwrap().is_none(),
         "close left a draining child"
     );
-    assert!(started.elapsed() < Duration::from_millis(grace));
+    butler_e2e::assert_wall_clock_budget!(
+        started.elapsed(),
+        Duration::from_millis(grace),
+        "owner close must interrupt the drain grace"
+    );
     eprintln!(
         "DRAIN-CLOSE grace_ms={grace} shutdown_ms={}",
         started.elapsed().as_millis()
@@ -160,7 +170,11 @@ async fn recall_arriving_during_drain_keeps_its_own_deadline() -> Result<(), Har
         wait_output(&s, first_request).await?;
         let release_after_preemption = async {
             let elapsed = reaped(pid, Duration::from_millis(grace)).await?;
-            assert!(elapsed < Duration::from_millis(grace));
+            butler_e2e::assert_wall_clock_budget!(
+                elapsed,
+                Duration::from_millis(grace),
+                "new recall must preempt the drain grace"
+            );
             std::fs::write(&release, b"")?;
             eprintln!(
                 "DRAIN-ARRIVAL grace_ms={grace} preempt_ms={}",
