@@ -208,9 +208,7 @@ async fn run(
         }
         let events = std::mem::take(&mut *pending.lock());
         if events.handoffs {
-            if let Err(error) = handoffs.cleanup(&context, events.handoff_paths).await {
-                eprintln!("[gateway] handoff cleanup failed: {error}");
-            }
+            handoffs.cleanup(&context, events.handoff_paths).await;
         }
         for file in events.paths {
             work.enqueue(file);

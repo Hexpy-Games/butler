@@ -64,6 +64,15 @@ impl Index {
         &mut self,
         context: &ProjectionContext,
         paths: std::collections::HashSet<PathBuf>,
+    ) {
+        if let Err(error) = self.sweep(context, paths).await {
+            eprintln!("[gateway] handoff cleanup failed: {error}");
+        }
+    }
+    async fn sweep(
+        &mut self,
+        context: &ProjectionContext,
+        paths: std::collections::HashSet<PathBuf>,
     ) -> Result<(), GatewayApplicationError> {
         let data = context.butler_data.clone();
         let mut index = self.clone();
