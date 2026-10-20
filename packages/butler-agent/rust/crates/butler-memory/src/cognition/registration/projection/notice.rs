@@ -57,7 +57,6 @@ pub(super) fn assert_notice_current(
                 &state.handle.source_root.join("cognition/memory"),
                 source_kind,
                 record_id,
-                expected,
             )?;
             if owner.revision != *expected
                 || owner.content_hash != *content_hash
