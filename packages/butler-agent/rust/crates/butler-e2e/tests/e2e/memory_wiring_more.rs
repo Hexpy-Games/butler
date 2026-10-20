@@ -24,7 +24,7 @@ mod forget;
 #[path = "memory_rules/fts_pending.rs"]
 mod fts_pending;
 #[path = "memory_rules/support.rs"]
-mod support;
+pub(super) mod support;
 use support::{new_chat, read_json, until};
 
 fn correction_stub() -> Result<(Cassette, String, String, String), HarnessError> {
