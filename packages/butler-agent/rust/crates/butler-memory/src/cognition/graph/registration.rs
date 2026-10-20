@@ -162,7 +162,7 @@ fn upsert_chunk(
     connection.execute(
         "INSERT INTO memory_chunks(memory_chunk_id,source_key,current_revision,conversation_session_id,conversation_turn_id,conversation_start,conversation_end,project_id,origin_kind,status,source_hash,created_at,updated_at) \
          VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,'active',?10,?11,?11) \
-         ON CONFLICT(source_key) DO UPDATE SET current_revision=excluded.current_revision,updated_at=excluded.updated_at, \
+         ON CONFLICT(source_key) DO UPDATE SET current_revision=excluded.current_revision,source_hash=excluded.source_hash,updated_at=excluded.updated_at, \
          summary=CASE WHEN memory_chunks.current_revision!=excluded.current_revision THEN '' ELSE memory_chunks.summary END, \
          summary_status=CASE WHEN memory_chunks.current_revision!=excluded.current_revision THEN 'pending' ELSE memory_chunks.summary_status END",
         params![input.plan.episode_id,input.plan.source_key,input.plan.revision,input.plan.session_id,input.plan.turn_id,input.plan.conversation_start,input.plan.conversation_end,project_id,input.plan.origin_kind,input.plan.source_hash,now],

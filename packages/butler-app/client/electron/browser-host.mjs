@@ -4,6 +4,7 @@
 // icon, runs the App's own executor over the App's browser-host channel, and
 // quits when the Agent closes that channel (idle reap, the App taking over,
 // or the Agent ending).
+import { join, dirname } from "node:path";
 import { createRequire } from "node:module";
 import { handOffUserLaunches, hideFromDock } from "./butler-platform/app-handoff.mjs";
 
@@ -51,6 +52,7 @@ async function serve() {
   const request = (path, init = {}) => fetch(new URL(path, url), { ...init,
     headers: { authorization: `Bearer ${token}`, "x-butler-browser-host": launch, ...init.headers } });
   const host = createBrowserHost({
+    stillDirectory: join(dirname(profile), "still-outbox"),
     fetch: request,
     adminCredential: () => admin,
     executeBrowser: frame => browser.execute(frame),

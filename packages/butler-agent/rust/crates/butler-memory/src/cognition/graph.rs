@@ -26,6 +26,7 @@ mod recall_index;
 mod registration;
 mod schema;
 mod source_stats;
+pub(in crate::cognition) mod source_validity;
 mod stage_state;
 mod stages;
 mod typed_lifecycle;
