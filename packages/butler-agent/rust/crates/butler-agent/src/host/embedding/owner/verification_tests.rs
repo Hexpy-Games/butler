@@ -208,5 +208,25 @@ pub(super) async fn cancelled_inference_keeps_ready_transition() {
         "consumer missed the completed load"
     );
     assert!(!owner.take_ready_transition(), "load was admitted twice");
+    for _ in 0..3 {
+        let result = owner
+            .embed(
+                EmbeddingRequest {
+                    texts: vec!["Deferred vector unit".into()],
+                    mode: EmbeddingMode::CheckedCls,
+                    resplit: true,
+                    max_embeddings: Some(1),
+                    request_class: EmbeddingRequestClass::WarmBackground,
+                    deadline_at_epoch_ms: None,
+                },
+                CancellationToken::new(),
+            )
+            .await;
+        // The deliberately absent replacement executable would report
+        // unavailable if any cold worker spawn were attempted.
+        assert_eq!(result.err().unwrap().code(), "embed_worker_cold");
+    }
+    assert_eq!(wakes.load(Ordering::Relaxed), 1, "drain loaded a model");
+    eprintln!("DRAIN-LOADS on_demand=1 cold_requests=3 extra_loads=0 extra_spawns=0");
     owner.close().await.unwrap();
 }

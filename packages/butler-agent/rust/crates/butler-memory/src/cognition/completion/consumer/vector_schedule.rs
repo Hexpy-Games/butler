@@ -17,9 +17,8 @@ pub(super) async fn admit(
     let Some(generation) = generation else {
         return Ok(false);
     };
-    // A recall can time out and reap its worker while semantic work holds the
-    // consumer. Retain the completed load's admission until the vector drain
-    // finishes, rather than depending on a later snapshot of worker warmth.
+    // Retain a completed load until the warm consumer can admit its drain.
+    // This latch permits draining only; every request remains warm-only.
     if input
         .embedding
         .as_ref()
@@ -70,7 +69,10 @@ pub(super) async fn process(
     text_advanced: bool,
 ) -> CognitionResult<bool> {
     // Without the memory model, pending units are the later backfill queue; no probes.
-    if let Some(embedding) = input.embedding.as_ref().filter(|owner| owner.enabled())
+    if let Some(embedding) = input
+        .embedding
+        .as_ref()
+        .filter(|owner| owner.enabled() && owner.is_warm())
         && admit(input, generation, text_advanced).await?
     {
         super::process::vector::process(input, embedding.as_ref()).await

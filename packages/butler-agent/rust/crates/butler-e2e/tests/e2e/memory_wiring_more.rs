@@ -29,17 +29,6 @@ use support::{new_chat, read_json, until};
 
 fn correction_stub() -> Result<(Cassette, String, String, String), HarnessError> {
     let mut cassette = Cassette::load("MEM-01")?;
-    // Keep the recorded capture on the current instruction schema, with the
-    // default always lifetime used by the original durable rule.
-    let kind = ArgsMutation::Edits(vec![(
-        r#""kind":"rule""#.into(),
-        r#""kind":"instruction""#.into(),
-    )]);
-    for exchange in &mut cassette.exchanges {
-        for chunk in &mut exchange.response.chunks {
-            chunk.text = mutate_chunk(&chunk.text, &kind);
-        }
-    }
     let save = cassette.exchanges[0].request.key.user_request.clone();
     let correction = "Correction: my bike lock code is now 8642, replacing the previous code. Use your explicit memory tool to correct the remembered rule.".to_owned();
     let mut corrected = cassette.exchanges.clone();
@@ -233,7 +222,20 @@ async fn wiring_more_correction_supersedes_previous_rule_in_next_prompt() -> Res
     assert!(archived["text"].as_str().unwrap().contains("5317"));
     assert_eq!(archived["binding"]["revision"], old["revision"]);
     support::projection(&s.sandbox.data, &latest).await;
-    support::vectors(&s.sandbox.data).await;
+    let expected_vectors = support::rule_vectors(&s.sandbox.data, &latest);
+    assert_ne!(expected_vectors, [] as [(String, String, String); 0]);
+    assert!(
+        expected_vectors
+            .iter()
+            .any(|(_, text, _)| text.contains("8642"))
+    );
+    assert!(
+        expected_vectors
+            .iter()
+            .all(|(_, text, _)| !text.contains("5317"))
+    );
+    // A killed worker leaves vectors deferred until the next on-demand load.
+    // Graph/cache projection above must already contain the complete correction.
     s.restart().await?;
     let rules = s.sandbox.data.join("cognition/memory/rules");
     let index = std::fs::read_to_string(rules.join("INDEX.md"))?;
@@ -273,6 +275,20 @@ async fn wiring_more_correction_supersedes_previous_rule_in_next_prompt() -> Res
     .await?;
     // Ordinary turns leave vectors deferred; this recall starts the owned batch.
     support::conversation_vectors(&s.sandbox.data, &greeting_turn).await;
+    support::vectors(&s.sandbox.data).await;
+    let completed = support::rule_vectors(&s.sandbox.data, &latest);
+    assert_eq!(completed.len(), expected_vectors.len());
+    for ((id, text, state), (expected_id, expected_text, _)) in
+        completed.iter().zip(&expected_vectors)
+    {
+        assert_eq!((id, text), (expected_id, expected_text));
+        assert_eq!(state, "complete");
+    }
+    eprintln!(
+        "CORRECTION-VECTORS current_units={} latest=8642 complete={}",
+        expected_vectors.len(),
+        completed.len()
+    );
     assert_eq!(recalled["ok"], true, "{recalled}");
     let typed = support::typed_evidence(&recalled);
     assert!(

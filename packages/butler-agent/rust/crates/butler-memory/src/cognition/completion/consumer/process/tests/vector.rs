@@ -1,5 +1,4 @@
 //! Serving-label receipt pin through the real vector stage and recall adapter.
-use super::cold::ColdEmbeddings;
 use super::*;
 use crate::cognition::generation_vectors::compatibility;
 use crate::cognition::graph::GraphRepository;
@@ -191,11 +190,7 @@ async fn adopted_stage_pins_serving_receipts_and_refuses_other_assets() {
         "oldest age is inclusive"
     );
     graph.close().unwrap();
-    assert!(
-        !super::super::vector::process(&input, &ColdEmbeddings)
-            .await
-            .unwrap()
-    );
+    super::cold::drain_refusals(&input, &generation).await;
     let db = Connection::open(&generation.graph_path).unwrap();
     let state: (String, u32, Option<String>) = db
         .query_row(
