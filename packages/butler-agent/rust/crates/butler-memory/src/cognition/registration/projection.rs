@@ -255,7 +255,8 @@ async fn settle_failure(
             let code = match assert_current(state, &clock()) {
                 Ok(()) => code,
                 Err(error)
-                    if crate::cognition::graph::source_validity::is_invalid(error.code()) =>
+                    if crate::cognition::graph::source_validity::is_invalid(error.code())
+                        || error.code() == "memory_write_busy" =>
                 {
                     error.code()
                 }

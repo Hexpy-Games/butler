@@ -378,3 +378,5 @@ mod standalone_upgrade;
 
 #[path = "memory/orphaned.rs"]
 mod orphaned;
+#[path = "memory/typed_pending.rs"]
+mod typed_pending;

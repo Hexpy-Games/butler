@@ -38,6 +38,12 @@ pub(super) async fn next(
                         .settle_invalid_source(&state.input.job_id, error.code(), &now)
                         .map(|progress| Next::Settled(Box::new(progress)));
                 }
+                Err(error) if error.code() == "memory_write_busy" => {
+                    return state
+                        .graph
+                        .defer_unavailable_source(&state.input.job_id, &now)
+                        .map(|progress| Next::Settled(Box::new(progress)));
+                }
                 result => result?,
             }
             let claim = state

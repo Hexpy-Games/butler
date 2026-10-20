@@ -3,7 +3,7 @@
 use super::{CognitionResult, State};
 use crate::cognition::CognitionCode;
 use crate::cognition::{
-    CognitionError, assert_conversation_source_current, sources::read_typed_record,
+    CognitionError, assert_conversation_source_current, sources::read_projection_record,
 };
 
 #[derive(Clone)]
@@ -52,13 +52,13 @@ pub(super) fn assert_notice_current(
             if expected != revision {
                 return Err(changed());
             }
-            let owner = read_typed_record(
+            let owner = read_projection_record(
                 &state.handle.source_root,
                 &state.handle.source_root.join("cognition/memory"),
                 source_kind,
                 record_id,
-            )?
-            .ok_or_else(changed)?;
+                expected,
+            )?;
             if owner.revision != *expected
                 || owner.content_hash != *content_hash
                 || owner.operation_id != *operation_id

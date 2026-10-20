@@ -32,8 +32,8 @@ pub use typed::{
     ingest_task_outcome_memory, list_chat_instructions, list_remembered_rules,
 };
 pub(in crate::cognition) use typed::{
-    TypedMemoryLifecycle, TypedMemoryRecord, hydrate_typed_source, read_typed_memory_lifecycle,
-    read_typed_record,
+    TypedMemoryLifecycle, TypedMemoryRecord, hydrate_typed_source, read_projection_record,
+    read_typed_memory_lifecycle, read_typed_record,
 };
 pub(in crate::cognition) use typed_plan::{TypedPlan, TypedSpan, prepare as prepare_typed_source};
 pub use types::{

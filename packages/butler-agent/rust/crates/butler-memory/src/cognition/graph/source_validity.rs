@@ -33,6 +33,25 @@ pub(in crate::cognition) fn needs_revalidation(
 }
 
 impl GraphRepository {
+    /// Pace unavailable sources without claiming or spending a provider attempt.
+    pub(in crate::cognition) fn defer_unavailable_source(
+        &mut self,
+        job: &str,
+        now: &str,
+    ) -> CognitionResult<GraphProgress> {
+        let retry = super::failure::retry_at(now, 1)?;
+        let tx = self.connection_mut()?.transaction().map_err(db_error)?;
+        tx.execute(
+            "UPDATE memory_projection_windows SET next_attempt_at=?2,error_code='memory_write_busy' \
+             WHERE job_id=?1 AND state IN ('pending','planned') AND owner_nonce IS NULL \
+             AND (next_attempt_at IS NULL OR next_attempt_at<=?3)",
+            params![job, retry, now],
+        ).map_err(db_error)?;
+        jobs::refresh_semantic_state(&tx, job, now)?;
+        tx.commit().map_err(db_error)?;
+        jobs::progress(self.connection()?, job)
+    }
+
     /// The caller has checked canonical authority under the write lease. Only
     /// unowned, due windows are retired; live claims retain their nonce owner.
     pub(in crate::cognition) fn settle_invalid_source(
