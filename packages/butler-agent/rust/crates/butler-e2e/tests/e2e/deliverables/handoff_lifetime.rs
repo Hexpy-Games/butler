@@ -34,13 +34,7 @@ async fn cancelled_deliverables_do_not_exhaust_handoff_quota() -> Result<(), Har
         ].into();
         let accepted = s.gw.say("general", &prompt).await?;
         let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
-        s.gw.wait_turn(
-            "general",
-            &turn,
-            &["waiting_for_form"],
-            Duration::from_secs(30),
-        )
-        .await?;
+        wait_state(&s, &turn, "waiting_for_form").await?;
         let cards = s.gw.approval_requests("general").await?;
         assert_eq!(cards.len(), 1);
         assert_eq!(cards[0]["approval"]["risk"], "high");
@@ -51,10 +45,7 @@ async fn cancelled_deliverables_do_not_exhaust_handoff_quota() -> Result<(), Har
             s.gw.post(&format!("/turns/{turn}/cancel"), json!({}))
                 .await?;
         assert_eq!(stop.status, 202, "{stop:?}");
-        let terminal =
-            s.gw.wait_terminal("general", &turn, Duration::from_secs(30))
-                .await?;
-        assert_eq!(terminal["state"], "cancelled", "{terminal}");
+        wait_state(&s, &turn, "cancelled").await?;
         wait_for(|| std::fs::read_dir(&root).is_ok_and(|mut entries| entries.next().is_none()))
             .await;
         assert_empty(&root)?;
@@ -69,8 +60,20 @@ async fn cancelled_deliverables_do_not_exhaust_handoff_quota() -> Result<(), Har
     }
     *script.prompt.lock().unwrap() = "Deliver successfully".into();
     *script.steps.lock().unwrap() = [deliver("report.md", "Report"), done()].into();
-    s.turn("general", "Deliver successfully").await?;
-    let message = last(&s).await?;
+    let accepted = s.gw.say("general", "Deliver successfully").await?;
+    let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    wait_state(&s, &turn, "delivered").await?;
+    let view = s.gw.get("/session-view?session_id=general").await?;
+    let message = view.data()["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| {
+            message["turn_id"] == turn
+                && message["role"] == "assistant"
+                && message["status"] == "delivered"
+        })
+        .unwrap();
     let attachments = message["attachments"].as_array().unwrap();
     assert_eq!(attachments.len(), 1, "{message}");
     assert_eq!(
@@ -87,6 +90,27 @@ async fn cancelled_deliverables_do_not_exhaust_handoff_quota() -> Result<(), Har
     s.finish().await?;
     server.abort();
     Ok(())
+}
+
+// The legacy /turns collection is bounded; current state comes from the session projection.
+async fn wait_state(s: &Scenario, turn: &str, expected: &str) -> Result<(), HarnessError> {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let view = s.gw.get("/session-view?session_id=general").await?;
+        assert_eq!(view.status, 200, "{view:?}");
+        let found = ["active_turn", "latest_turn"].iter().any(|key| {
+            let row = &view.data()[key];
+            row["id"] == turn && row["state"] == expected
+        });
+        if found {
+            return Ok(());
+        }
+        assert!(
+            Instant::now() < deadline,
+            "turn {turn} did not reach {expected}"
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
 }
 
 #[tokio::test]
