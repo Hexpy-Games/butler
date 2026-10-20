@@ -414,4 +414,10 @@ fn visible_result(input: &FinalCandidate, files: &[MaterializedResponderFile]) -
         || !input.changed_files.is_empty()
         || input.plan.is_some()
         || input.answer_blocks.is_some()
+        || input.delivery_metadata.as_ref().is_some_and(|metadata| {
+            metadata
+                .get("limitation_codes")
+                .and_then(Value::as_array)
+                .is_some_and(|codes| !codes.is_empty())
+        })
 }

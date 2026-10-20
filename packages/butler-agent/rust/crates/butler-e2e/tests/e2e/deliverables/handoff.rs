@@ -71,7 +71,7 @@ async fn restart(crash: bool) -> Result<(), HarnessError> {
 }
 
 #[tokio::test]
-async fn missing_handoff_is_visible_and_deleted_turn_is_reclaimed() -> Result<(), HarnessError> {
+async fn materialize_missing_handoff_preserves_other_attachments() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (url, script, server) = stub::start().await?;
     let setup = Setup::new("DELIVERABLE-MISSING-HANDOFF")?
@@ -82,27 +82,37 @@ async fn missing_handoff_is_visible_and_deleted_turn_is_reclaimed() -> Result<()
         .env("BUTLER_E2E_HOLD_POINT", "message_attachment")
         .env("BUTLER_E2E_HOLD_RELEASE", release.to_str().unwrap());
     *script.prompt.lock().unwrap() = "Deliver the file.".into();
-    *script.steps.lock().unwrap() = [deliver("report.md", "Report"), done()].into();
+    *script.steps.lock().unwrap() = [call("deliver_files", json!({"files":[{"path":"report.md","title":"Report"},{"path":"kept.md","title":"Kept"}]})), done()].into();
+    std::fs::write(setup.sandbox.data.join("kept.md"), "Still attached")?;
     std::fs::write(setup.sandbox.data.join("report.md"), "Available original")?;
     let mut s = setup.start().await?;
     let accepted = s.gw.say("general", "Deliver the file.").await?;
     let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
     wait_for(|| release.with_extension("held").exists()).await;
     let staged = copies(&s.sandbox.data)?;
-    assert_eq!(staged.len(), 1);
+    assert_eq!(staged.len(), 2);
+    let expected = std::fs::read_to_string(&staged[1])?;
     std::fs::remove_file(&staged[0])?;
     std::fs::write(&release, "release")?;
     s.gw.wait_terminal("general", &turn, Duration::from_secs(30))
         .await?;
     let message = last(&s).await?;
+    assert_eq!(message["text"], "Done.", "{message}");
     assert!(
-        message["text"]
-            .as_str()
+        message["limitation_codes"]
+            .as_array()
             .unwrap()
-            .contains("Attachment unavailable."),
+            .contains(&json!("message_file_unavailable")),
         "{message}"
     );
-    assert!(message["attachments"].as_array().is_none_or(Vec::is_empty));
+    let attachments = message["attachments"].as_array().unwrap();
+    assert_eq!(attachments.len(), 1, "{message}");
+    assert_eq!(
+        s.gw.get(attachments[0]["url"].as_str().unwrap())
+            .await?
+            .text,
+        expected
+    );
     // A crash after owner deletion but before cleanup is recovered at startup.
     s.agent.terminate().await?;
     let orphan = s.sandbox.data.join(MESSAGE_HANDOFFS).join("abandoned-turn");
@@ -112,8 +122,22 @@ async fn missing_handoff_is_visible_and_deleted_turn_is_reclaimed() -> Result<()
         serde_json::to_vec(&("deleted-turn", Option::<String>::None))?,
     )?;
     std::fs::write(orphan.join("copy"), "Abandoned")?;
+    let incomplete = s.sandbox.data.join(MESSAGE_HANDOFFS).join("ownerless");
+    let temporary = s
+        .sandbox
+        .data
+        .join(MESSAGE_HANDOFFS)
+        .join(".handoff.interrupted.tmp");
+    std::fs::create_dir_all(&incomplete)?;
+    std::fs::create_dir_all(&temporary)?;
+    std::fs::write(
+        temporary.join(".turn"),
+        r#"{"turn":"still-running","parent_turn":null}"#,
+    )?;
     s.gw = s.agent.start_again().await?;
     wait_for(|| !orphan.exists()).await;
+    assert!(!incomplete.exists());
+    assert!(!temporary.exists());
     s.finish().await?;
     server.abort();
     Ok(())
@@ -144,14 +168,14 @@ async fn deleted_turn_handoff_is_reclaimed_without_restart() -> Result<(), Harne
     s.finish().await
 }
 
-async fn wait_for(condition: impl Fn() -> bool) {
+pub(super) async fn wait_for(condition: impl Fn() -> bool) {
     let deadline = Instant::now() + Duration::from_secs(30);
     while !condition() {
         assert!(Instant::now() < deadline, "handoff condition timed out");
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
 }
-fn assert_empty(root: &Path) -> std::io::Result<()> {
+pub(super) fn assert_empty(root: &Path) -> std::io::Result<()> {
     assert!(!root.exists() || std::fs::read_dir(root)?.next().is_none());
     Ok(())
 }

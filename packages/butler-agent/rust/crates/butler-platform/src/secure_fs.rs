@@ -17,8 +17,8 @@ pub(crate) use inventory::secret_pattern;
 pub use inventory::{RootPin, SecretInventory, environment_data, secret_name};
 mod stage;
 pub use stage::{
-    ReaderStaging, StageScope, StagedFiles, handoff_staged, remove_staged, reset_reader_staging,
-    stage_file,
+    ReaderStaging, StageScope, StagedFiles, handoff_staged, reclaim_handoff, remove_staged,
+    reset_reader_staging, stage_file,
 };
 mod device;
 pub use device::same_device;

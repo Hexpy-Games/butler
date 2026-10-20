@@ -116,6 +116,12 @@ impl AppArtifactMaterializer for AppMessageFiles {
         &self,
         request: ArtifactMaterializationRequest,
     ) -> ApplicationFuture<Vec<MaterializedResponderFile>> {
+        self.run_file_job(move |root, clock| Ok(materialize::run(root, clock, &request)?.files))
+    }
+    fn materialize_with_limitations(
+        &self,
+        request: ArtifactMaterializationRequest,
+    ) -> ApplicationFuture<crate::gateway::ArtifactMaterializationResult> {
         self.run_file_job(move |root, clock| materialize::run(root, clock, &request))
     }
 }

@@ -7,6 +7,7 @@
 )]
 pub(super) mod delegation;
 mod handoff;
+mod handoff_lifetime;
 mod migration;
 mod paths;
 mod security;

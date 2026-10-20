@@ -387,7 +387,7 @@ fn bound_turn<'a>(
             start
                 .turn
                 .context
-                .pointer("/executionPolicy/subsession/rootSessionId")
+                .pointer("/executionPolicy/subsession/parentTurnId")
                 .and_then(serde_json::Value::as_str)
                 .map(str::to_owned),
         ),

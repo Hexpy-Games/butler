@@ -93,12 +93,6 @@ pub trait AppAdmissionAuthority: Send + Sync + 'static {
     ) -> ApplicationFuture<MaterializedResponderFile>;
     fn admit_visual(&self, request: VisualAdmissionRequest) -> ApplicationFuture<Value>;
 }
-pub trait AppArtifactMaterializer: Send + Sync + 'static {
-    fn materialize(
-        &self,
-        request: ArtifactMaterializationRequest,
-    ) -> ApplicationFuture<Vec<MaterializedResponderFile>>;
-}
 pub trait AppMessageFileStorage: Send + Sync + 'static {
     fn replace_browser_still(
         &self,

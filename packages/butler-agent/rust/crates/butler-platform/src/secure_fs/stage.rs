@@ -105,7 +105,7 @@ pub struct StagedFiles {
 }
 mod handoff;
 mod lifecycle;
-pub use lifecycle::{ReaderStaging, StageScope, handoff_staged};
+pub use lifecycle::{ReaderStaging, StageScope, handoff_staged, reclaim_handoff};
 impl StagedFiles {
     /// Track only stages created by this operation.
     pub fn new(data: &Path) -> Self {

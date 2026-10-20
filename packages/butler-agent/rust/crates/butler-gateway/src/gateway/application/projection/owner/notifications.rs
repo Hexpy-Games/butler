@@ -6,6 +6,7 @@ pub(super) struct Pending {
     pub paths: HashSet<String>,
     pub terminal: bool,
     pub handoffs: bool,
+    pub handoff_paths: HashSet<std::path::PathBuf>,
     pub overflow: bool,
 }
 

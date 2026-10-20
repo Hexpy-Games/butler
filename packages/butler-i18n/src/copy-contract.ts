@@ -289,6 +289,7 @@ interface ConversationCopy {
   };
   work: ConversationWorkCopy;
   stoppedStatus: string;
+  attachmentUnavailable: string;
   fileChanges: {
     regionLabel: string;
     title: string;

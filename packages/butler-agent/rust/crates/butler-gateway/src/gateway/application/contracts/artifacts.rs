@@ -31,3 +31,30 @@ pub struct MaterializedResponderFile {
     pub storage_name: String,
     pub created_at: String,
 }
+
+/// Successful files and unavailable declarations are reported independently.
+#[derive(Default)]
+pub struct ArtifactMaterializationResult {
+    pub files: Vec<MaterializedResponderFile>,
+    pub unavailable: bool,
+}
+
+pub trait AppArtifactMaterializer: Send + Sync + 'static {
+    fn materialize_with_limitations(
+        &self,
+        request: ArtifactMaterializationRequest,
+    ) -> ApplicationFuture<ArtifactMaterializationResult> {
+        let job = self.materialize(request);
+        Box::pin(async move {
+            Ok(ArtifactMaterializationResult {
+                files: job.await?,
+                unavailable: false,
+            })
+        })
+    }
+
+    fn materialize(
+        &self,
+        request: ArtifactMaterializationRequest,
+    ) -> ApplicationFuture<Vec<MaterializedResponderFile>>;
+}

@@ -13,6 +13,7 @@ pub struct ReaderStaging {
 impl ReaderStaging {
     /// Discard previous-process copies before admitting any turn.
     pub fn new(data: PathBuf) -> io::Result<Self> {
+        super::handoff::recover(&data)?;
         reset_reader_staging(&data)?;
         Ok(Self { data: Some(data) })
     }
@@ -35,7 +36,7 @@ type Key = (PathBuf, String);
 struct State {
     data: PathBuf,
     turn: String,
-    session: Option<String>,
+    parent_turn: Option<String>,
     files: Mutex<HashMap<PathBuf, bool>>,
 }
 /// Releases unused copies when the bound turn ends, including cancellation.
@@ -48,12 +49,12 @@ fn registry() -> &'static Mutex<HashMap<Key, Weak<State>>> {
 }
 impl StageScope {
     /// Establish staging ownership before the turn can dispatch tools.
-    pub fn new(data: &Path, turn: &str, session: Option<String>) -> Self {
+    pub fn new(data: &Path, turn: &str, parent_turn: Option<String>) -> Self {
         let key = (data.to_path_buf(), turn.to_owned());
         let state = Arc::new(State {
             data: data.to_path_buf(),
             turn: turn.to_owned(),
-            session,
+            parent_turn,
             files: Mutex::default(),
         });
         if let Ok(mut registry) = registry().lock() {
@@ -100,7 +101,7 @@ pub fn handoff_staged(path: &Path, turn: &str) -> io::Result<PathBuf> {
     {
         let durable = state.data.join(crate::data_paths::MESSAGE_HANDOFFS);
         if path.starts_with(&durable) {
-            super::handoff::adopt(path, &state.turn, state.session.as_deref())?;
+            super::handoff::adopt(path, &state.turn, state.parent_turn.as_deref())?;
             return Ok(path.to_path_buf());
         }
         if !path.starts_with(state.data.join(crate::data_paths::READER_STAGING)) {
@@ -111,7 +112,7 @@ pub fn handoff_staged(path: &Path, turn: &str) -> io::Result<PathBuf> {
             .lock()
             .map_err(|_| io::Error::other("staging_unavailable"))?;
         let destination =
-            super::handoff::promote(&state.data, &state.turn, state.session.as_deref(), path)?;
+            super::handoff::promote(&state.data, &state.turn, state.parent_turn.as_deref(), path)?;
         if let Some(handed) = files.get_mut(path) {
             *handed = true;
         }
@@ -139,4 +140,21 @@ impl Drop for State {
         }
         drop(staged);
     }
+}
+
+/// Serialize reclamation with promotion/adoption, fencing ownership changes.
+pub fn reclaim_handoff(path: &Path, identity: &str) -> io::Result<bool> {
+    let _changes = CHANGES
+        .lock()
+        .map_err(|_| io::Error::other("staging_unavailable"))?;
+    let current = match std::fs::read_to_string(path.join(".turn")) {
+        Ok(value) => value,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(true),
+        Err(error) => return Err(error),
+    };
+    if current != identity {
+        return Ok(false);
+    }
+    super::super::remove_tree(path)?;
+    Ok(true)
 }

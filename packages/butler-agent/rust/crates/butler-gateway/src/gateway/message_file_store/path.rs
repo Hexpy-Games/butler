@@ -10,23 +10,15 @@ use crate::gateway::ArtifactFileCandidate;
 pub(super) struct AllowedPaths {
     cwd: PathBuf,
     roots: Vec<PathBuf>,
-    canonical: Vec<PathBuf>,
 }
 
 impl AllowedPaths {
     pub(super) fn new(roots: &[PathBuf]) -> std::io::Result<Self> {
         let cwd = std::env::current_dir()?;
         let roots: Vec<_> = roots.iter().map(|root| absolute(root, &cwd)).collect();
-        let canonical = roots
-            .iter()
-            .map(|root| {
-                butler_platform::secure_fs::canonicalize(root).unwrap_or_else(|_| root.clone())
-            })
-            .collect();
         Ok(Self {
             cwd: cwd.clone(),
             roots,
-            canonical,
         })
     }
 
@@ -47,7 +39,7 @@ impl AllowedPaths {
         &self,
         candidate: &ArtifactFileCandidate,
         seen: &HashSet<PathBuf>,
-    ) -> Option<PathBuf> {
+    ) -> Option<(PathBuf, std::fs::File)> {
         for original in &candidate.candidate_paths {
             let original = absolute(original, &self.cwd);
             let selected = original;
@@ -55,17 +47,17 @@ impl AllowedPaths {
             {
                 continue;
             }
-            let Ok(metadata) = std::fs::symlink_metadata(&selected) else {
-                continue;
-            };
-            if !metadata.is_file() || metadata.file_type().is_symlink() {
-                continue;
-            }
-            let Ok(real) = butler_platform::secure_fs::canonicalize(&selected) else {
-                continue;
-            };
-            if self.canonical.iter().any(|root| real.starts_with(root)) {
-                return Some(real);
+            // Pin the root and open the leaf in one contained descriptor walk.
+            for root in &self.roots {
+                let Ok(relative) = selected.strip_prefix(root) else {
+                    continue;
+                };
+                let inventory = butler_platform::secure_fs::SecretInventory::cached(root);
+                if let Ok(file) =
+                    butler_platform::secure_fs::open_contained(root, relative, &inventory)
+                {
+                    return Some((selected, file));
+                }
             }
         }
         None

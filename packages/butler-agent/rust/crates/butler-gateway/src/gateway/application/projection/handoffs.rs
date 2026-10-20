@@ -7,110 +7,159 @@ use crate::gateway::{
 use rusqlite::OptionalExtension;
 use std::path::PathBuf;
 
-async fn sweep(context: &ProjectionContext) -> Result<(), GatewayApplicationError> {
-    let root = context
-        .butler_data
-        .join(butler_platform::data_paths::MESSAGE_HANDOFFS);
-    let entries = tokio::task::spawn_blocking(move || inventory(root))
+/// Inventory is loaded once; filesystem notifications refresh only changed owners.
+#[derive(Clone, Default)]
+pub(super) struct Index(std::collections::HashMap<PathBuf, (String, String)>);
+impl Index {
+    pub(super) async fn load(context: &ProjectionContext) -> Result<Self, GatewayApplicationError> {
+        let data = context.butler_data.clone();
+        tokio::task::spawn_blocking(move || {
+            let root = data.join(butler_platform::data_paths::MESSAGE_HANDOFFS);
+            let mut index = Self::default();
+            if root.exists() {
+                for entry in std::fs::read_dir(root)? {
+                    index.refresh(&data, entry?.path())?;
+                }
+            }
+            Ok::<_, std::io::Error>(index)
+        })
         .await
         .map_err(GatewayApplicationError::internal_from)?
-        .map_err(GatewayApplicationError::internal_from)?;
-    for page in entries.chunks(64) {
-        let page = page.to_vec();
-        let obsolete = context
-            .storage
-            .inspect(move |db| {
-                let mut obsolete = Vec::new();
-                for (path, turn, session) in page {
-                    let state: Option<String> = db
-                        .query_row("SELECT state FROM turns WHERE id=?1", [&turn], |row| {
-                            row.get(0)
-                        })
-                        .optional()
-                        .map_err(AppStorageError::sqlite)?;
-                    let expired = if let Some(session) = session {
-                        super::super::sessions::identity::resolve_owner(db, &session)?.is_none()
-                    } else {
-                        state.is_none() || state.as_deref() == Some("delivered")
-                    };
-                    if expired {
-                        obsolete.push(path);
-                    }
-                }
-                Ok(obsolete)
-            })
-            .await
-            .map_err(app_error)?;
-        tokio::task::spawn_blocking(move || {
-            for path in obsolete {
-                butler_platform::secure_fs::remove_tree(&path)?;
+        .map_err(GatewayApplicationError::internal_from)
+    }
+    fn refresh(&mut self, data: &std::path::Path, path: PathBuf) -> std::io::Result<()> {
+        self.0.remove(&path);
+        if path
+            .file_name()
+            .is_some_and(|name| name.to_string_lossy().starts_with(".handoff."))
+        {
+            return Ok(());
+        }
+        let identity = match std::fs::read_to_string(path.join(".turn")) {
+            Ok(value) => value,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error),
+        };
+        let value: serde_json::Value =
+            serde_json::from_str(&identity).map_err(std::io::Error::other)?;
+        let turn = if let Some(turn) = value.get("turn").and_then(|v| v.as_str()) {
+            value
+                .get("parent_turn")
+                .and_then(|v| v.as_str())
+                .unwrap_or(turn)
+                .to_owned()
+        } else {
+            let (turn, session): (String, Option<String>) =
+                serde_json::from_value(value).map_err(std::io::Error::other)?;
+            if session.is_some() {
+                legacy_owner(data, &turn)?.unwrap_or(turn)
+            } else {
+                turn
             }
-            Ok::<_, std::io::Error>(())
+        };
+        self.0.insert(path, (turn, identity));
+        Ok(())
+    }
+    pub(super) async fn cleanup(
+        &mut self,
+        context: &ProjectionContext,
+        paths: std::collections::HashSet<PathBuf>,
+    ) -> Result<(), GatewayApplicationError> {
+        let data = context.butler_data.clone();
+        let mut index = self.clone();
+        *self = tokio::task::spawn_blocking(move || {
+            for path in paths {
+                index.refresh(&data, path)?;
+            }
+            Ok::<_, std::io::Error>(index)
         })
         .await
         .map_err(GatewayApplicationError::internal_from)?
         .map_err(GatewayApplicationError::internal_from)?;
+        let entries: Vec<_> = self
+            .0
+            .iter()
+            .map(|(path, (turn, identity))| (path.clone(), turn.clone(), identity.clone()))
+            .collect();
+        let obsolete = context.storage.inspect(move |db| {
+            let mut obsolete = Vec::new();
+            for (path, turn, identity) in entries {
+                let resumable: Option<bool> = db.query_row(
+                    "SELECT state NOT IN ('delivered','failed','cancelled') AND (state<>'runtime_fault' OR retryable<>0) FROM turns WHERE id=?1",
+                    [&turn], |row| row.get(0)).optional().map_err(AppStorageError::sqlite)?;
+                if resumable != Some(true) { obsolete.push((path, identity)); }
+            }
+            Ok(obsolete)
+        }).await.map_err(app_error)?;
+        let removed = tokio::task::spawn_blocking(move || {
+            let mut removed = Vec::new();
+            for (path, identity) in obsolete {
+                if butler_platform::secure_fs::reclaim_handoff(&path, &identity)? {
+                    removed.push(path);
+                }
+            }
+            Ok::<_, std::io::Error>(removed)
+        })
+        .await
+        .map_err(GatewayApplicationError::internal_from)?
+        .map_err(GatewayApplicationError::internal_from)?;
+        for path in removed {
+            self.0.remove(&path);
+        }
+        Ok(())
     }
-    Ok(())
 }
 
-fn inventory(root: PathBuf) -> std::io::Result<Vec<(PathBuf, String, Option<String>)>> {
-    let mut entries = Vec::new();
-    let directories = match std::fs::read_dir(root) {
-        Ok(entries) => entries,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(entries),
-        Err(error) => return Err(error),
-    };
-    for entry in directories {
-        let entry = entry?;
-        if !entry.file_type()?.is_dir() {
-            continue;
-        }
-        let path = entry.path();
-        match std::fs::read_to_string(path.join(".turn")) {
-            Ok(identity) => {
-                let (turn, session) =
-                    serde_json::from_str(&identity).map_err(std::io::Error::other)?;
-                entries.push((path, turn, session));
-            }
-            // A producer may not have published the identity yet.
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error),
+// Resolve pre-upgrade worker records through indexed delegation ownership.
+fn legacy_owner(data: &std::path::Path, turn: &str) -> std::io::Result<Option<String>> {
+    let path = data.join(butler_platform::data_paths::BTCC_DB);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let db =
+        rusqlite::Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(std::io::Error::other)?;
+    let mut owner = turn.to_owned();
+    let mut seen = std::collections::HashSet::new();
+    while seen.insert(owner.clone()) {
+        let parent: Option<String> = db.query_row(
+            "SELECT r.parent_turn_id FROM btcc_subsession_delegations d JOIN btcc_session_relations r ON r.relation_id=d.relation_id WHERE d.child_turn_id=?1",
+            [&owner], |row| row.get(0)).optional().map_err(std::io::Error::other)?;
+        match parent {
+            Some(parent) => owner = parent,
+            None => return Ok(Some(owner)),
         }
     }
-    Ok(entries)
+    Err(std::io::Error::other("invalid_handoff_owner"))
 }
 
 pub(super) async fn materialize(
     context: &ProjectionContext,
     candidate: &mut super::final_candidate::FinalCandidate,
 ) -> Result<Vec<crate::gateway::MaterializedResponderFile>, GatewayApplicationError> {
-    match context
+    let result = context
         .dependencies
         .artifact_materializer
-        .materialize(candidate.materialization.clone())
-        .await
-    {
-        Ok(files) => Ok(files),
-        Err(GatewayApplicationError::Public { ref code, .. })
-            if code == "message_file_unavailable" =>
+        .materialize_with_limitations(candidate.materialization.clone())
+        .await?;
+    if result.unavailable {
+        let metadata = candidate
+            .delivery_metadata
+            .get_or_insert_with(Default::default);
+        metadata.insert(
+            "delivery_state".into(),
+            serde_json::json!("delivered_with_limitations"),
+        );
+        let codes = metadata
+            .entry("limitation_codes".to_owned())
+            .or_insert_with(|| serde_json::json!([]));
+        if let Some(codes) = codes.as_array_mut()
+            && !codes.iter().any(|code| code == "message_file_unavailable")
         {
-            if !candidate.text.is_empty() {
-                candidate.text.push_str("\n\n");
-            }
-            candidate.text.push_str("Attachment unavailable.");
-            candidate.delivery_metadata = Some(
-                serde_json::from_value(serde_json::json!({
-                    "delivery_state":"delivered_with_limitations",
-                    "limitation_codes":["message_file_unavailable"],
-                    "limitations":["Attachment unavailable."]
-                }))
-                .map_err(GatewayApplicationError::internal_from)?,
-            );
-            Ok(Vec::new())
+            codes.push(serde_json::json!("message_file_unavailable"));
         }
-        Err(error) => Err(error),
     }
+    Ok(result.files)
 }
 
 /// A fixture barrier leaves final transcript projection pending without blocking shutdown.
@@ -132,10 +181,4 @@ pub(super) async fn held() -> Result<bool, GatewayApplicationError> {
         }
     }
     Ok(false)
-}
-
-pub(super) async fn cleanup(context: &ProjectionContext) {
-    if let Err(error) = sweep(context).await {
-        eprintln!("[gateway] handoff cleanup failed: {error}");
-    }
 }
