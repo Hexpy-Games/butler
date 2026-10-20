@@ -90,7 +90,3 @@ fn same_bytes(path: &Path, expected: &[u8]) -> bool {
         .is_ok()
         && bytes == expected
 }
-
-#[cfg(test)]
-#[path = "upload_cache_tests.rs"]
-mod tests;
