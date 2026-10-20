@@ -3,7 +3,8 @@
 //!
 //! Every write adds a fragment and a version, so an unmaintained table grows
 //! without bound and every search pays for each fragment it opens. Callers
-//! hold the memory write lease.
+//! run physical maintenance after releasing the memory write lease. Lance
+//! publishes replacement fragments atomically without changing logical rows.
 
 use lancedb::{
     Table,
@@ -13,6 +14,9 @@ use lancedb::{
     },
     table::{OptimizeAction, OptimizeOptions},
 };
+
+#[cfg(feature = "e2e-fixtures")]
+mod fixtures;
 
 /// Fragments a table may hold before writers compact it.
 pub(super) const FRAGMENT_LIMIT: usize = 32;
@@ -52,12 +56,20 @@ pub(super) async fn compact_if_fragmented(table: &Table) -> lancedb::Result<bool
     if fragments <= FRAGMENT_LIMIT {
         return Ok(false);
     }
-    table
-        .optimize(OptimizeAction::Compact {
-            options: Default::default(),
-            remap_options: None,
-        })
-        .await?;
+    let started = std::time::Instant::now();
+    let action = OptimizeAction::Compact {
+        options: Default::default(),
+        remap_options: None,
+    };
+    #[cfg(feature = "e2e-fixtures")]
+    let (action, _hold) = fixtures::instrument(action);
+    table.optimize(action).await?;
+    if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+        butler_core::diagnostic!(
+            "[memory-vector] compact_ms={:.3}",
+            started.elapsed().as_secs_f64() * 1000.0
+        );
+    }
     Ok(true)
 }
 

@@ -29,14 +29,28 @@ pub(super) fn select(
 ) -> CognitionResult<SemanticSelection> {
     let admitted = input.admitted_channels.clone().unwrap_or_default();
     let mut channels = Vec::new();
+    let started = std::time::Instant::now();
     if admitted.graph || admitted.lexical || admitted.explicit {
         channels.extend(aliases::select(db, input)?);
     }
+    if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+        butler_core::diagnostic!(
+            "[memory-recall] alias_ms={:.3}",
+            started.elapsed().as_secs_f64() * 1000.0
+        );
+    }
+    let started = std::time::Instant::now();
     let mut lexical_partial = false;
     if admitted.lexical || admitted.explicit {
         let (selected, partial) = lexical::select(db, input, deadline_at, &mut now_millis)?;
         channels.extend(selected);
         lexical_partial = partial;
+    }
+    if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+        butler_core::diagnostic!(
+            "[memory-recall] lexical_ms={:.3}",
+            started.elapsed().as_secs_f64() * 1000.0
+        );
     }
     if admitted.vector {
         channels.extend(vectors::select(db, input, vector_nodes)?);
