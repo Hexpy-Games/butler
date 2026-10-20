@@ -14,6 +14,7 @@ pub(super) fn discard_cached_pages(_: &File) -> Option<io::Result<()>> {
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use super::replace_retry::{DeleteProbe, replacement_retry_allowed};
 use super::{ExchangeError, FileIdentity, FileMode, FileTime, Writability};
 mod acl;
 
@@ -24,8 +25,6 @@ pub(super) const FILE_IDS: bool = false;
 pub(super) const DIRECTORY_SYNC: bool = false;
 pub(super) const ATOMIC_EXCHANGE: bool = false;
 
-/// `ERROR_SHARING_VIOLATION` and `ERROR_LOCK_VIOLATION`.
-const SHARING_ERRORS: [i32; 2] = [32, 33];
 const REPLACEMENT_ATTEMPTS: u32 = 20;
 const REPLACEMENT_BACKOFF: std::time::Duration = std::time::Duration::from_millis(50);
 
@@ -285,24 +284,17 @@ fn move_path(path: &Path) -> io::Result<PathBuf> {
     Ok(fs::canonicalize(parent)?.join(name))
 }
 
-/// ACCESS_DENIED can be a sharing or mapped-view conflict even when DELETE
-/// opens succeed. Only confirmed permission failures stop the bounded retry.
 pub(super) fn replacement_is_transient(error: &io::Error, from: &Path, to: &Path) -> bool {
-    match error.raw_os_error() {
-        Some(code) if SHARING_ERRORS.contains(&code) => true,
-        Some(5) => replacement_delete_allowed(from, to),
-        _ => false,
-    }
+    replacement_retry_allowed(error.raw_os_error(), || delete_probes(from, to))
 }
 
-fn replacement_delete_allowed(from: &Path, to: &Path) -> bool {
-    let Ok((target, access)) = super::replacement_access::target_probe(current_metadata(to), to)
-    else {
-        return false;
-    };
-    let mut allowed = true;
-    for (role, path, access) in [("source", from, 0x0001_0000), ("target", target, access)] {
-        // Probe DELETE, or parent FILE_ADD_FILE for creation. Share all access, and
+/// Probe source DELETE and target DELETE, or parent FILE_ADD_FILE for creation.
+/// Read-only targets and metadata failures do not permit retry.
+fn delete_probes(from: &Path, to: &Path) -> Option<[DeleteProbe; 2]> {
+    let (target, access) =
+        super::replacement_access::target_probe(current_metadata(to), to).ok()?;
+    Some([("source", from, 0x0001_0000), ("target", target, access)].map(|(role, path, access)| {
+        // Share all access without changing the probed entry, and
         // inspect reparse entries themselves. Every probe handle closes here,
         // before the next rename attempt or its backoff.
         let result = OpenOptions::new()
@@ -319,11 +311,8 @@ fn replacement_delete_allowed(from: &Path, to: &Path) -> bool {
                 "command_file_error phase=rename os_code=Some(5) probe=delete role={role} probe_os_code={os_code:?}"
             );
         }
-        // A successful DELETE open rules out a DACL denial. A sharing
-        // violation also permits retry; any other probe failure is final.
-        allowed &= result.is_ok() || os_code.is_some_and(|code| SHARING_ERRORS.contains(&code));
-    }
-    allowed
+        result.map(drop).map_err(|_| os_code)
+    }))
 }
 
 /// Clears the read-only attribute of every file and directory under `root`.
