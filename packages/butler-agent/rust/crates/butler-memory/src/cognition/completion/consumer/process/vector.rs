@@ -297,16 +297,6 @@ async fn embed_request(
     units: &[ClaimedVectorUnit],
 ) -> CognitionResult<crate::cognition::EmbeddingResult> {
     let deadline = epoch_ms().saturating_add(30_000);
-    let request_class = if input.daily_batch
-        || input.target.is_some()
-        || input
-            .vector_batch
-            .load(std::sync::atomic::Ordering::Acquire)
-    {
-        EmbeddingRequestClass::Background
-    } else {
-        EmbeddingRequestClass::WarmBackground
-    };
     let embedded = embedding
         .embed(
             EmbeddingRequest {
@@ -317,7 +307,7 @@ async fn embed_request(
                 mode: EmbeddingMode::CheckedCls,
                 resplit: true,
                 max_embeddings: Some(EMBED_TEXTS),
-                request_class,
+                request_class: EmbeddingRequestClass::WarmBackground,
                 deadline_at_epoch_ms: Some(deadline),
             },
             input.shutdown.child_token(),

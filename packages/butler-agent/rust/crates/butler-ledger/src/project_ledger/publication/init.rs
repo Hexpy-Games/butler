@@ -245,6 +245,7 @@ fn release(path: &Path, owner: &MutationClaim) -> Result<(), ProjectWorkPublicat
     if stored.claim_id != owner.claim_id {
         return Err(ProjectWorkPublicationError::Uncertain { source: None });
     }
+    super::transaction::claim::advance_generation(path, &owner.claim_id)?;
     fs::remove_file(path).map_err(|source| io().with_source(source))
 }
 

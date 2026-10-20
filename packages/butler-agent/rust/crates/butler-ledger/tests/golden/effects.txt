@@ -218,11 +218,10 @@ Ok(
 
 ##### files
 --- file runtime/mutation-lock-shards/*.sqlite3
-index sqlite_autoindex_active_lock_1: 
-table active_lock: CREATE TABLE active_lock(lock_key TEXT PRIMARY KEY, ownership_token TEXT NOT NULL, owner_id TEXT NOT NULL, acquired_at TEXT NOT NULL, renewed_at TEXT NOT NULL)
-table shard_fence: CREATE TABLE shard_fence(singleton INTEGER PRIMARY KEY CHECK(singleton=1), generation INTEGER NOT NULL)
-fence generations: 2
-held locks: 0
+SQLite write-reservation mutex
+persistent tables: 0
+--- file project-ledger/projects/.project-ledger-locks/demo.generation
+"<sha:6>"
 --- file project-ledger/projects/demo/decisions/dec-7.md
 ---
 schema: "project-ledger.decision.v1"

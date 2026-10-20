@@ -317,3 +317,15 @@ pub(crate) fn retained_graph_rows(data: &Path) -> Vec<Vec<String>> {
     })
     .collect()
 }
+
+/// Current corrected units, ordered so completion preserves exact content and count.
+pub(crate) fn rule_vectors(data: &Path, rule: &Value) -> Vec<(String, String, String)> {
+    let db = butler_platform::sqlite::open_with_flags(
+        graph(data),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap();
+    db.prepare("SELECT u.unit_id,u.projection_text,u.state FROM memory_vector_units u JOIN memory_projection_jobs j ON j.job_id=u.job_id JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision WHERE c.source_key=?1 AND c.current_revision=?2 AND c.status='active' ORDER BY u.unit_id").unwrap()
+        .query_map(rusqlite::params![format!("explicit_record:{}",rule["record_id"].as_str().unwrap()),rule["revision"].as_str().unwrap()], |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?)))
+        .unwrap().map(Result::unwrap).collect()
+}

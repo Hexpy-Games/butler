@@ -2,8 +2,10 @@
 
 pub(in crate::project_ledger::publication) mod claim;
 mod commit;
+#[cfg(test)]
+pub(super) mod tests;
 
-use std::fs;
+use crate::project_ledger::publication::timing::fs;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -80,6 +82,7 @@ pub(super) fn reconcile(
     data_root: &Path,
     occurrence: &Occurrence,
 ) -> Result<Reconciled, ProjectWorkPublicationError> {
+    let _phase = crate::project_ledger::publication::timing::Phase::new("publication_reconcile");
     let attempt = latest(occurrence)?;
     let paths = paths(data_root, attempt);
     if let Some(receipt) = read_receipt(&paths, occurrence, attempt)? {
@@ -92,7 +95,9 @@ pub(super) fn reconcile(
         return Ok(Reconciled::NotAppliedWithReceipt);
     }
     let Some(journal) = read_journal(&paths, occurrence, attempt)? else {
-        if paths.candidate.exists() || claim::path(Path::new(&occurrence.ledger_root)).exists() {
+        if fs::exists(&paths.candidate)
+            || fs::exists(claim::path(Path::new(&occurrence.ledger_root)))
+        {
             return Err(ProjectWorkPublicationError::Uncertain { source: None });
         }
         write_receipt(&paths, occurrence, attempt, ReceiptStatus::NotApplied, None)?;
@@ -106,10 +111,7 @@ pub(super) fn reconcile(
         }
         JournalStatus::Prepared => {
             if same_logical(
-                &record::observe_head(
-                    Path::new(&occurrence.ledger_root),
-                    &journal.base.record_paths,
-                )?,
+                &record::observe_expected(Path::new(&occurrence.ledger_root), &journal.base)?,
                 &journal.base,
             ) {
                 Ok(Reconciled::Ready)
@@ -125,10 +127,8 @@ pub(super) fn reconcile(
                 .candidate_head
                 .as_ref()
                 .ok_or(ProjectWorkPublicationError::Uncertain { source: None })?;
-            let active = record::observe_head(
-                Path::new(&occurrence.ledger_root),
-                &journal.base.record_paths,
-            )?;
+            let active =
+                record::observe_expected(Path::new(&occurrence.ledger_root), &journal.base)?;
             if !same_head(&active, candidate) {
                 return Err(ProjectWorkPublicationError::Uncertain { source: None });
             }
@@ -152,6 +152,7 @@ pub(super) fn apply(
     updates: Option<&[ProjectLedgerRecordUpdate]>,
     collation: &butler_core::locale::LocaleCollation,
 ) -> Result<Vec<ProjectWorkTarget>, ProjectWorkPublicationError> {
+    let _phase = crate::project_ledger::publication::timing::Phase::new("publication_apply");
     let attempt = latest(occurrence)?;
     let paths = paths(data_root, attempt);
     let existing = read_journal(&paths, occurrence, attempt)?;
@@ -162,7 +163,7 @@ pub(super) fn apply(
         for target in &attempt.target_preconditions {
             record::revalidate_target(scope, target)?;
         }
-        let active = record::observe_head(&scope.ledger_root, &attempt.expected_base.record_paths)?;
+        let active = record::observe_expected(&scope.ledger_root, &attempt.expected_base)?;
         if !same_logical(&active, &attempt.expected_base) {
             write_receipt(&paths, occurrence, attempt, ReceiptStatus::NotApplied, None)?;
             return Err(ProjectWorkPublicationError::NotApplied);
@@ -181,17 +182,16 @@ pub(super) fn apply(
             let updates = updates.ok_or(ProjectWorkPublicationError::Uncertain { source: None })?;
             commit::prepare(scope, occurrence, attempt, &paths, updates, collation)?
         };
-        commit::promote(&mut journal, &paths)?;
+        let active = commit::promote(&mut journal, &paths)?;
         let candidate = journal
             .candidate_head
             .clone()
             .ok_or(ProjectWorkPublicationError::Uncertain { source: None })?;
-        let active = record::observe_head(&scope.ledger_root, &journal.base.record_paths)?;
         if !same_head(&active, &candidate) {
             return Err(ProjectWorkPublicationError::Uncertain { source: None });
         }
-        journal.status = JournalStatus::Observed;
-        occurrence::atomic_json(&paths.journal, &journal)?;
+        // Promoted already records the verified head. The receipt is the
+        // durable observation; another journal rewrite adds no recovery state.
         write_receipt(
             &paths,
             occurrence,
@@ -247,14 +247,18 @@ fn read_receipt(
         || receipt.attempt_number != attempt.number
         || receipt.request_sha256 != attempt.request_sha256
         || receipt.publication_id != attempt.publication_id
-        || receipt.base_head.schema != "butler.btcc-project-ledger-head.v1"
+        || !matches!(
+            receipt.base_head.schema.as_str(),
+            "butler.btcc-project-ledger-head.v1" | "butler.btcc-project-ledger-head.v2"
+        )
         || receipt.base_head.storage_authority.is_some()
         || receipt.base_head.project_root != occurrence.ledger_root
         || receipt.base_head.record_paths != attempt.expected_base.record_paths
+        || receipt.base_head.schema != attempt.expected_base.schema
         || !same_head(&receipt.base_head, &attempt.expected_base)
         || (receipt.status == ReceiptStatus::Observed) != receipt.candidate_head.is_some()
         || receipt.candidate_head.as_ref().is_some_and(|head| {
-            head.schema != "butler.btcc-project-ledger-head.v1"
+            head.schema != receipt.base_head.schema
                 || head.project_root != occurrence.ledger_root
                 || head.record_paths != attempt.expected_base.record_paths
                 || head.storage_authority.is_some()
@@ -270,6 +274,7 @@ fn read_journal(
     occurrence: &Occurrence,
     attempt: &Attempt,
 ) -> Result<Option<Journal>, ProjectWorkPublicationError> {
+    let _phase = crate::project_ledger::publication::timing::Phase::new("publication_read_journal");
     let Some(journal): Option<Journal> = read_json(&paths.journal)? else {
         return Ok(None);
     };
@@ -279,8 +284,12 @@ fn read_journal(
         || Path::new(&journal.candidate_root) != paths.candidate
         || Path::new(&journal.journal_path) != paths.journal
         || Path::new(&journal.claim_path) != claim::path(Path::new(&occurrence.ledger_root))
+        || journal.base.schema != attempt.expected_base.schema
         || !same_head(&journal.base, &attempt.expected_base)
-        || journal.base.schema != "butler.btcc-project-ledger-head.v1"
+        || !matches!(
+            journal.base.schema.as_str(),
+            "butler.btcc-project-ledger-head.v1" | "butler.btcc-project-ledger-head.v2"
+        )
         || journal.base.storage_authority.is_some()
         || journal.base.project_root != occurrence.ledger_root
         || journal.base.record_paths != attempt.expected_base.record_paths
@@ -292,7 +301,12 @@ fn read_journal(
                 | JournalStatus::Observed
         ) != journal.candidate_head.is_some()
         || journal.candidate_head.as_ref().is_some_and(|head| {
-            head.schema != "project-ledger.source-head.v1"
+            head.schema
+                != if journal.base.schema.ends_with(".v1") {
+                    "project-ledger.source-head.v1"
+                } else {
+                    "project-ledger.source-head.v2"
+                }
                 || head.project_root != journal.candidate_root
                 || head.record_paths != attempt.expected_base.record_paths
                 || head.storage_authority.as_deref() != Some("project-ledger-record-set-v1")
@@ -324,8 +338,10 @@ fn write_receipt(
     status: ReceiptStatus,
     candidate_head: Option<ProjectWorkHead>,
 ) -> Result<(), ProjectWorkPublicationError> {
+    let _phase =
+        crate::project_ledger::publication::timing::Phase::new("publication_write_receipt");
     let candidate_head = candidate_head.map(|mut head| {
-        head.schema = "butler.btcc-project-ledger-head.v1".into();
+        head.schema.clone_from(&attempt.expected_base.schema);
         head.project_root.clone_from(&occurrence.ledger_root);
         head.storage_authority = None;
         head
@@ -346,6 +362,7 @@ fn write_receipt(
 }
 
 fn cleanup(journal: &Journal, paths: &Paths) -> Result<(), ProjectWorkPublicationError> {
+    let _phase = crate::project_ledger::publication::timing::Phase::new("publication_cleanup");
     claim::release_if_owned(
         Path::new(&journal.claim_path),
         Path::new(&journal.canonical_root),

@@ -48,7 +48,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"rule\",\"item_id\":\"fc_03c4b036d57785f7016ab9a107109487d09c405f402508bd5e\",\"obfuscation\":\"O4Pm9fHg6g6v\",\"output_index\":1,\"sequence_number\":8}\n\n"
+        "text": "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"instruction\",\"item_id\":\"fc_03c4b036d57785f7016ab9a107109487d09c405f402508bd5e\",\"obfuscation\":\"O4Pm9fHg6g6v\",\"output_index\":1,\"sequence_number\":8}\n\n"
       },
       {
         "delay_ms": 0,
@@ -200,11 +200,11 @@
       },
       {
         "delay_ms": 52,
-        "text": "event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"kind\\\":\\\"rule\\\",\\\"text\\\":\\\"The user's bike lock code is {{NONCE}}.\\\",\\\"source\\\":\\\"User explicitly requested in this conversation that their bike lock code be saved for future conversations.\\\"}\",\"item_id\":\"fc_03c4b036d57785f7016ab9a107109487d09c405f402508bd5e\",\"output_index\":1,\"sequence_number\":46}\n\n"
+        "text": "event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"kind\\\":\\\"instruction\\\",\\\"text\\\":\\\"The user's bike lock code is {{NONCE}}.\\\",\\\"source\\\":\\\"User explicitly requested in this conversation that their bike lock code be saved for future conversations.\\\"}\",\"item_id\":\"fc_03c4b036d57785f7016ab9a107109487d09c405f402508bd5e\",\"output_index\":1,\"sequence_number\":46}\n\n"
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_03c4b036d57785f7016ab9a107109487d09c405f402508bd5e\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"kind\\\":\\\"rule\\\",\\\"text\\\":\\\"The user's bike lock code is {{NONCE}}.\\\",\\\"source\\\":\\\"User explicitly requested in this conversation that their bike lock code be saved for future conversations.\\\"}\",\"call_id\":\"call_44glOc5zo3gYlABYocp7h5hj\",\"name\":\"update_explicit_memory\"},\"output_index\":1,\"sequence_number\":47}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_03c4b036d57785f7016ab9a107109487d09c405f402508bd5e\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"kind\\\":\\\"instruction\\\",\\\"text\\\":\\\"The user's bike lock code is {{NONCE}}.\\\",\\\"source\\\":\\\"User explicitly requested in this conversation that their bike lock code be saved for future conversations.\\\"}\",\"call_id\":\"call_44glOc5zo3gYlABYocp7h5hj\",\"name\":\"update_explicit_memory\"},\"output_index\":1,\"sequence_number\":47}\n\n"
       },
       {
         "delay_ms": 126,

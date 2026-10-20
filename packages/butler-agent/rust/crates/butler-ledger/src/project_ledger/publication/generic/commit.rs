@@ -95,6 +95,14 @@ fn present(path: &Path) -> Result<bool, LedgerEffectError> {
 
 pub(super) fn remove_directory(path: &Path) -> Result<(), LedgerEffectError> {
     match fs::remove_dir_all(path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => return Err(LedgerEffectError::Uncertain { source: None }),
+    }
+    // CLI mutations inside a private candidate also own a generation fence.
+    // Its metadata lives beside the tree, so remove it with the candidate.
+    let generation = super::super::transaction::claim::path(path).with_extension("generation");
+    match fs::remove_file(generation) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(_) => Err(LedgerEffectError::Uncertain { source: None }),
