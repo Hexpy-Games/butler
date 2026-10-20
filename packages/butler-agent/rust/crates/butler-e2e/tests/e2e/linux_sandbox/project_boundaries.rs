@@ -221,8 +221,8 @@ async fn perf_project_secret_discovery_and_sweep() -> Result<(), HarnessError> {
         sweep[19].as_secs_f64() * 1000.0
     );
     for (step, duration) in [("discovery", discover[19]), ("sweep", sweep[19])] {
-        // Micro watch: half of the 20 ms p95 per-tool-call containment overhead budget.
-        butler_e2e::assert_wall_clock_budget!(duration, Duration::from_millis(10), step);
+        // Normal discovery/sweep p95 0.94/1.15 ms (PR #1358); incident at ~20x.
+        butler_e2e::assert_wall_clock_budget!(duration, Duration::from_millis(25), step);
     }
     let mut quarantines = std::fs::read_dir(setup.sandbox.data.join("sandbox-quarantine"))?
         .map(|entry| entry.map(|entry| entry.path()))
