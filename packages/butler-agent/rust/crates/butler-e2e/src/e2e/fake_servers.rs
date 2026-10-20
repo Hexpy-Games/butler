@@ -61,6 +61,7 @@ pub const OAUTH_ACCOUNT_ID: &str = "e2e-account-0001";
 #[derive(Clone, Debug)]
 pub struct ChatBehavior {
     pub answer: String,
+    pub script: Vec<Value>,
     /// Refuse `stream: true` with HTTP 400, as servers without streaming do.
     pub refuse_stream: bool,
     /// Delay before each streamed chunk.
@@ -85,6 +86,7 @@ impl Default for ChatBehavior {
     fn default() -> Self {
         Self {
             answer: "Local models stream their answers word by word.".into(),
+            script: Vec::new(),
             refuse_stream: false,
             chunk_delay: Duration::from_millis(150),
             omit_done: false,
@@ -106,6 +108,7 @@ enum StreamEnd {
 }
 
 mod local_capabilities;
+mod scripted;
 pub use local_capabilities::{LocalCapabilities, carries_image};
 mod favicons;
 mod mcp;
@@ -261,7 +264,8 @@ async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
             if streams_before > 0 && is_stream_request(&seen) {
                 tokio::time::sleep(state.chat.hold_later_streams).await;
             }
-            chat_completion(&state.chat, &seen.body, streams_before == 0)
+            scripted::response(&state, &seen.body)
+                .unwrap_or_else(|| chat_completion(&state.chat, &seen.body, streams_before == 0))
         }
         (Kind::ProviderModels, &Method::GET, "/v1/models") => provider_models(&seen.headers),
         (Kind::OauthToken, &Method::POST, "/oauth/token") => json_response(200, &oauth_tokens()),

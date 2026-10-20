@@ -99,9 +99,10 @@ pub(super) fn perf(context: &AnswerBlocksContext<'_>) -> Value {
     let mut normalized = spec.clone();
     answer_blocks::normalize(&mut normalized);
     assert_eq!(reconstruct(&ops), normalized["blocks"]);
+    // Micro watch: half of the 20 ms per-round Agent overhead budget (PERF-02).
     butler_e2e::assert_wall_clock_budget!(
         elapsed,
-        std::time::Duration::from_millis(1),
+        std::time::Duration::from_millis(10),
         "24KB parser"
     );
     json!({"bytes":bytes.len(),"micros":elapsed.as_micros(),"items":48,"ops":ops.len()})
