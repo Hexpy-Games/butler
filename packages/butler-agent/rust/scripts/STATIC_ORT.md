@@ -69,7 +69,9 @@ protobuf, abseil and re2 package directories must be inside the build stage.
 The recorded producer stage, platform roots, Python prefix and cache digest
 allow the same check after SDK relocation. Release preparation also refuses Rust dependency environment
 switches and Rust link-search overrides. `--fingerprint` and `--protoc-only`
-remain inspection/tool-only modes. Cargo's pinned protoc is unchanged; ORT
+remain inspection/tool-only modes. Release CI exposes its selected Python on PATH
+without setup-python package-search environment exports; inherited overrides
+still fail preflight. Cargo's pinned protoc is unchanged; ORT
 builds the protoc matching its own vendored protobuf.
 
 `check_host_links.py` checks Mach-O dylib loads and LC_RPATH, and ELF NEEDED

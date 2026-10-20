@@ -2,6 +2,8 @@
 """Security checks for native search isolation and shipped loader metadata."""
 import importlib.util
 import os
+import subprocess
+import textwrap
 from pathlib import Path
 import sys
 import tempfile
@@ -17,6 +19,21 @@ spec.loader.exec_module(recipe)
 
 
 class HostLinks(unittest.TestCase):
+    # test-category: security
+    def test_release_python_path_step_exports_only_tool_directories(self):
+        action = SCRIPTS.parents[3] / '.github/actions/release-python/action.yml'
+        program = textwrap.dedent(action.read_text().split('      run: |\n', 1)[1])
+        with tempfile.TemporaryDirectory() as directory:
+            path_file = Path(directory) / 'paths'
+            env_file = Path(directory) / 'environment'
+            env = dict(os.environ, GITHUB_PATH=str(path_file), GITHUB_ENV=str(env_file),
+                       PKG_CONFIG_PATH='/inherited/search')
+            subprocess.run([sys.executable, '-c', program], env=env, check=True)
+            paths = path_file.read_text().splitlines()
+            self.assertIn(str(Path(sys.executable).parent), paths)
+            self.assertTrue(all(Path(path).is_dir() for path in paths))
+            self.assertFalse(env_file.exists())
+
     # test-category: security
     def test_macho_loader_metadata(self):
         import check_host_links as guard
