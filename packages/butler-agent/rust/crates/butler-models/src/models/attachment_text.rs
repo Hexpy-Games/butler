@@ -155,12 +155,29 @@ pub fn decode_text(bytes: &[u8]) -> Cow<'_, str> {
     decode_unicode_text(bytes)
         .unwrap_or_else(|| Cow::Owned(String::from_utf8_lossy(bytes).replace('\0', "")))
 }
-pub fn message_file_path(butler_data: &Path, id: &str) -> Option<PathBuf> {
+pub fn message_file_path(butler_data: &Path, attachment: &AttachmentRef) -> Option<PathBuf> {
+    let id = &attachment.id;
     let suffix = id.strip_prefix("file-")?;
-    (suffix.len() == 36 && suffix.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')).then(|| {
+    if suffix.len() != 36 || !suffix.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-') {
+        return None;
+    }
+    let upload = format!("{id}.upload");
+    // The admitted metadata selects the storage generation, never an arbitrary
+    // path. Both generations remain rooted in this data owner's file directory.
+    let storage = if attachment
+        .local_path
+        .as_deref()
+        .and_then(|path| Path::new(path).file_name())
+        .is_some_and(|name| name == upload.as_str())
+    {
+        upload.as_str()
+    } else {
+        id.as_str()
+    };
+    Some(
         butler_data
             .join("app-server")
             .join("message-files")
-            .join(id)
-    })
+            .join(storage),
+    )
 }

@@ -336,8 +336,12 @@ async fn anthropic_thinking_history_survives_browser_rewrite() -> Result<(), Har
         .unwrap();
     assert_eq!(
         image["source"]["data"],
-        STANDARD.encode(include_bytes!(
-            "../../fixtures/browser-route/observation.jpg"
+        STANDARD.encode(super::browser_long::frame_bytes(
+            newest_id
+                .strip_prefix("toolu_observe_")
+                .unwrap()
+                .parse()
+                .unwrap()
         ))
     );
     let previous = signatures(r4);

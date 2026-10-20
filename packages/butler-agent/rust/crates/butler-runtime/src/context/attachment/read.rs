@@ -40,7 +40,7 @@ pub(super) fn attachment_file_path(
     attachment: &AttachmentRef,
     butler_data: &Path,
 ) -> Option<PathBuf> {
-    if let Some(path) = message_file_path(butler_data, &attachment.id) {
+    if let Some(path) = message_file_path(butler_data, attachment) {
         return Some(path);
     }
     let local = Path::new(attachment.local_path.as_deref()?);

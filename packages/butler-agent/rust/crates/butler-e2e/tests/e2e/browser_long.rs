@@ -380,7 +380,7 @@ async fn assert_uploaded_pixels(
     Ok(())
 }
 
-fn frame_bytes(index: usize) -> Vec<u8> {
+pub(super) fn frame_bytes(index: usize) -> Vec<u8> {
     let mut bytes = include_bytes!("../../fixtures/browser-route/observation.jpg").to_vec();
     // JPEG decoders ignore bytes after EOI. Retain valid, complete pixels while
     // requiring a distinct durable payload for every observation and capture.

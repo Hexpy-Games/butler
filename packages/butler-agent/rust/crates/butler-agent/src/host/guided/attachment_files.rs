@@ -14,7 +14,7 @@ pub(super) fn from_context(context: &serde_json::Value, data: &Path) -> Vec<Path
         if attachment.kind == AttachmentKind::Image {
             continue;
         }
-        let Some(path) = message_file_path(data, &attachment.id) else {
+        let Some(path) = message_file_path(data, &attachment) else {
             continue;
         };
         if is_pdf(&attachment) {

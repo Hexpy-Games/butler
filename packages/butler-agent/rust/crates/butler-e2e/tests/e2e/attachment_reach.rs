@@ -87,7 +87,7 @@ async fn attachment_reads_skip_approval_only_for_this_turn() -> Result<(), Harne
                 call(
                     "traversal",
                     "read_file",
-                    &json!({"requests":[{"path":format!("{}/../{}", traversal_path.display(), other["file_id"].as_str().unwrap())}]}),
+                    &json!({"requests":[{"path":format!("{}/../{}", traversal_path.display(), other_path.file_name().unwrap().to_string_lossy())}]}),
                 ),
             ],
             vec![traversal],

@@ -132,7 +132,7 @@ fn read_text(a: &AttachmentRef, root: &Path) -> Result<Vec<u8>, NotInlined> {
 }
 
 fn path(attachment: &AttachmentRef, root: &Path) -> Option<PathBuf> {
-    if let Some(path) = message_file_path(root, &attachment.id) {
+    if let Some(path) = message_file_path(root, attachment) {
         return Some(path);
     }
     let path = Path::new(attachment.local_path.as_deref()?);
