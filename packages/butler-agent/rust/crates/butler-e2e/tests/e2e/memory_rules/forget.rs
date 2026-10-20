@@ -26,14 +26,14 @@ pub(super) fn stub() -> Result<Cassette, HarnessError> {
             &mut cassette,
             user,
             "update_explicit_memory",
-            &json!({"kind":"rule","text":format!("The user's bike lock code is {text}."),"source":user}),
+            &json!({"kind":"instruction","text":format!("The user's bike lock code is {text}."),"source":user}),
         );
     }
     support::add_call(
         &mut cassette,
         CORRECT,
         "update_explicit_memory",
-        &json!({"kind":"rule","text":"The user's bike lock code is 6401.","source":CORRECT,"replaces":"{{TARGET}}"}),
+        &json!({"kind":"instruction","text":"The user's bike lock code is 6401.","source":CORRECT,"replaces":"{{TARGET}}"}),
     );
     support::add_call(
         &mut cassette,
