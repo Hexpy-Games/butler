@@ -9,6 +9,16 @@ use std::{
 const MAX_TOTAL: u64 = 256 * 1024 * 1024;
 static CHANGES: Mutex<()> = Mutex::new(());
 
+/// Discard copies owned by the previous process. Call once after acquiring
+/// the Agent instance lock, on a blocking worker, before admitting turns.
+pub fn reset_reader_staging(data: &Path) -> io::Result<()> {
+    let _lock = CHANGES
+        .lock()
+        .map_err(|_| io::Error::other("staging_unavailable"))?;
+    let base = data.join(crate::data_paths::READER_STAGING);
+    super::remove_tree(&base)
+}
+
 /// Copy from the validated handle, atomically replacing the previous copy of
 /// this source. The source identity is independent of its changing contents.
 pub fn stage_file(
@@ -129,15 +139,25 @@ impl Drop for StagedFiles {
         if paths.is_empty() {
             return;
         }
-        let cleanup = move || {
-            for path in paths {
-                remove_staged(&data, &path);
-            }
-        };
+        // A rejected blocking task drops its closure during runtime shutdown.
+        // Keep cleanup in a guard so that path also removes the copies.
+        let cleanup = Cleanup { data, paths };
         if let Ok(runtime) = tokio::runtime::Handle::try_current() {
-            runtime.spawn_blocking(cleanup);
+            runtime.spawn_blocking(move || drop(cleanup));
         } else {
-            cleanup();
+            drop(cleanup);
+        }
+    }
+}
+
+struct Cleanup {
+    data: PathBuf,
+    paths: Vec<PathBuf>,
+}
+impl Drop for Cleanup {
+    fn drop(&mut self) {
+        for path in &self.paths {
+            remove_staged(&self.data, path);
         }
     }
 }

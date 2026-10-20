@@ -6,8 +6,8 @@ mod mountns;
 mod process;
 mod rediscovery;
 mod seccomp;
-pub(super) mod unresolved;
 mod timing;
+pub(super) mod unresolved;
 #[cfg(feature = "test-support")]
 pub use mountns::verify_mount_plan_contract;
 

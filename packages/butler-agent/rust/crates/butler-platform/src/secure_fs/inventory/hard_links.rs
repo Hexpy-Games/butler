@@ -92,11 +92,22 @@ impl Snapshot {
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default(),
         };
+        let budget = MAX_ENTRIES / roots.len().max(1);
+        for root in roots {
+            snapshot.scan(root, budget);
+        }
+
+        // Overflow retains the bounded evidence instead of denying unrelated
+        // package-store links. Refresh retries errors and newly created stores.
+        snapshot
+    }
+
+    fn scan(&mut self, root: &std::path::Path, budget: usize) {
         let mut directories = HashSet::new();
-        let mut pending = roots.to_vec();
+        let mut pending = vec![root.to_path_buf()];
         let mut visited = 0;
         while let Some(path) = pending.pop() {
-            if visited >= MAX_ENTRIES {
+            if visited >= budget {
                 break;
             }
             visited += 1;
@@ -108,7 +119,7 @@ impl Snapshot {
             let metadata = match fs::metadata(&path) {
                 Ok(metadata) => metadata,
                 Err(error) => {
-                    snapshot.incomplete |= error.kind() != std::io::ErrorKind::NotFound;
+                    self.incomplete |= error.kind() != std::io::ErrorKind::NotFound;
                     continue;
                 }
             };
@@ -116,29 +127,26 @@ impl Snapshot {
                 continue;
             };
             if !metadata.is_dir() {
-                snapshot.files.insert(id);
+                self.files.insert(id);
                 continue;
             }
             if !directories.insert(id) {
                 continue;
             }
             let Ok(children) = fs::read_dir(path) else {
-                snapshot.incomplete = true;
+                self.incomplete = true;
                 continue;
             };
             for child in children {
                 let Ok(child) = child else {
-                    snapshot.incomplete = true;
+                    self.incomplete = true;
                     continue;
                 };
-                if pending.len() + visited >= MAX_ENTRIES {
+                if pending.len() + visited >= budget {
                     break;
                 }
                 pending.push(child.path());
             }
         }
-        // Overflow retains the bounded evidence instead of denying unrelated
-        // package-store links. Refresh retries errors and newly created stores.
-        snapshot
     }
 }

@@ -81,6 +81,11 @@ pub(super) async fn run_until_stopped(
         holds_foreground_lease(foreground_lease),
     )
     .await?;
+    let data = config.data_root.clone();
+    tokio::task::spawn_blocking(move || butler_platform::secure_fs::reset_reader_staging(&data))
+        .await
+        .map_err(io)?
+        .map_err(io)?;
     let port = listener
         .as_ref()
         .and_then(|listener| listener.local_addr().ok())

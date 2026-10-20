@@ -16,7 +16,9 @@ pub(crate) use inventory::credential_roots;
 pub(crate) use inventory::secret_pattern;
 pub use inventory::{RootPin, SecretInventory, environment_data, secret_name};
 mod stage;
-pub use stage::{StageScope, StagedFiles, handoff_staged, remove_staged, stage_file};
+pub use stage::{
+    StageScope, StagedFiles, handoff_staged, remove_staged, reset_reader_staging, stage_file,
+};
 mod device;
 pub use device::same_device;
 mod contained_read;

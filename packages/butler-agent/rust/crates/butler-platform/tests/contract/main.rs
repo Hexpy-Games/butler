@@ -17,6 +17,7 @@ mod process_control;
 mod project_secrets;
 mod secrets;
 mod secure_fs;
+mod staging;
 #[cfg(windows)]
 mod windows_language;
 

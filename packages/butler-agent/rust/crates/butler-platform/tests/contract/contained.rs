@@ -35,6 +35,7 @@ pub(super) fn verify() {
     assert_eq!(replacement, "replacement");
     refreshed_cache(&temp);
     retried_inventory(&temp);
+    bounded_roots(&temp);
     fs::remove_dir_all(temp).unwrap();
 }
 
@@ -82,4 +83,35 @@ fn retried_inventory(temp: &std::path::Path) {
     first.unwrap().read_to_string(&mut content).unwrap();
     assert_eq!(content, "complete-public");
     assert!(secure_fs::open_contained(&root, std::path::Path::new("alias"), &inventory).is_err());
+}
+
+fn bounded_roots(temp: &std::path::Path) {
+    let home = temp.join("bounded-home");
+    let root = temp.join("bounded-project");
+    fs::create_dir_all(&root).unwrap();
+    // Both overflowing roots used to exhaust the shared stack budget before
+    // the earlier credential roots could contribute any evidence.
+    for store in [".kube", ".config/gcloud"] {
+        let path = home.join(store);
+        fs::create_dir_all(&path).unwrap();
+        for n in 0..4096 {
+            fs::write(path.join(n.to_string()), "cache").unwrap();
+        }
+    }
+    for (n, store) in [".ssh", ".gnupg", ".aws"].iter().enumerate() {
+        let path = home.join(store).join("credential");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "private-fixture").unwrap();
+        fs::hard_link(path, root.join(n.to_string())).unwrap();
+    }
+    let inventory = SecretInventory::new(
+        &temp.join("bounded-data"),
+        &std::collections::HashMap::from([("HOME".into(), home.to_string_lossy().into_owned())]),
+    );
+    for n in 0..3 {
+        assert!(
+            secure_fs::open_contained(&root, std::path::Path::new(&n.to_string()), &inventory)
+                .is_err()
+        );
+    }
 }
