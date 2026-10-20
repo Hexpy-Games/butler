@@ -13,10 +13,11 @@ impl GuidedTurnFactoryAdapter {
         phase: &mut butler_turn::btcc::GuidedPhaseSelection,
     ) -> Result<WorkspaceResolution, BtccError> {
         let path = workspace.get().map_err(|e| error(e.code()))?;
-        let path = tokio::task::spawn_blocking(move || std::fs::canonicalize(path))
-            .await
-            .map_err(|_| error("workspace_unavailable"))?
-            .map_err(|_| error("workspace_unavailable"))?;
+        let path =
+            tokio::task::spawn_blocking(move || butler_platform::secure_fs::canonicalize(path))
+                .await
+                .map_err(|_| error("workspace_unavailable"))?
+                .map_err(|_| error("workspace_unavailable"))?;
         phase.execution_policy.workspace_path = path.to_string_lossy().into_owned();
         let data = self.butler_data.clone();
         let inventory = tokio::task::spawn_blocking(move || {

@@ -249,3 +249,65 @@ async fn materialize_keeps_project_root_when_a_parent_directory_is_swapped()
     server.abort();
     Ok(())
 }
+
+/// A credential-named write stays a changed file but is never offered for
+/// download; publishing it reports the refusal instead of failing.
+#[tokio::test]
+async fn credential_named_write_is_reported_and_never_published() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let path = "keys/fixture.key";
+    assert!(
+        std::path::Path::new(path).components().any(
+            |part| butler_platform::secure_fs::secret_name(&part.as_os_str().to_string_lossy())
+        ),
+        "fixture must match the shared credential-name rule"
+    );
+    let (url, script, server) = stub::start().await?;
+    let setup = Setup::new("DELIVERABLE-SECRET-NAME")?
+        .stub_cassette(Cassette::load("TOOL-01")?)
+        .access(butler_e2e::e2e::scenario::Access::FullAccess)
+        .env("BUTLER_CODEX_BASE_URL", &url);
+    *script.steps.lock().unwrap() = [
+        write(path, "private-fixture"),
+        call("output_publish", json!({"path":path,"title":"Key"})),
+        done(),
+    ]
+    .into();
+    let s = setup.start().await?;
+    let (_, turn) = run_turn(&s, &script, "Write the key.").await?;
+    assert_eq!(turn["state"], "delivered", "{turn}");
+    let message = last(&s).await?;
+    let changed = message["changed_files"].as_array().unwrap();
+    assert_eq!(changed.len(), 1, "{message}");
+    assert!(message.get("artifacts").is_none(), "{message}");
+    assert!(message.get("attachments").is_none(), "{message}");
+    assert!(
+        message["limitation_codes"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("message_file_unavailable")),
+        "{message}"
+    );
+    let published = script
+        .requests
+        .lock()
+        .unwrap()
+        .iter()
+        .flat_map(|request| request["input"].as_array().cloned().unwrap_or_default())
+        .filter_map(|item| serde_json::from_str::<Value>(item["output"].as_str()?).ok())
+        .map(|result| result.get("output").cloned().unwrap_or(result))
+        .find(|result| result.get("skipped_files").is_some())
+        .unwrap();
+    assert_eq!(published["published"], false, "{published}");
+    assert!(published.get("output_id").is_none(), "{published}");
+    let skipped = published["skipped_files"].as_array().unwrap();
+    assert_eq!(skipped.len(), 1, "{published}");
+    assert_eq!(
+        std::path::Path::new(skipped[0].as_str().unwrap()),
+        std::path::Path::new(path)
+    );
+    assert_eq!(documents(&s).await?, Vec::<Value>::new());
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}

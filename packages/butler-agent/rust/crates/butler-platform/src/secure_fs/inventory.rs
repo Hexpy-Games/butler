@@ -128,7 +128,8 @@ impl SecretInventory {
                     .get(path)
                     .is_none_or(|(previous, _)| *previous != id)
                 {
-                    let resolved = std::fs::canonicalize(path).unwrap_or_else(|_| path.clone());
+                    let resolved =
+                        crate::secure_fs::canonicalize(path).unwrap_or_else(|_| path.clone());
                     canonical.insert(path.clone(), (id, resolved));
                     self.revision.fetch_add(1, Ordering::Release);
                     #[cfg(unix)]
@@ -213,7 +214,7 @@ impl SecretInventory {
             return Ok(root.to_path_buf());
         }
         drop(roots);
-        std::fs::canonicalize(root)
+        crate::secure_fs::canonicalize(root)
     }
 
     pub(crate) fn verify_root(

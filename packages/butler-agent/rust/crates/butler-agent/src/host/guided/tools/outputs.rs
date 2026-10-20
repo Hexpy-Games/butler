@@ -63,6 +63,9 @@ pub(super) async fn publish(
     })
     .await;
     let value = match result {
+        Ok(Ok((output, _))) if output.revisions.is_empty() => {
+            json!({"published":false,"skipped_files":output.skipped_files})
+        }
         Ok(Ok((output, new_blobs))) => {
             let revision = output.revisions.last().map_or(0, |r| r.revision);
             let check = check(owner, invocation, &json!({"output_id":output.output_id})).await;

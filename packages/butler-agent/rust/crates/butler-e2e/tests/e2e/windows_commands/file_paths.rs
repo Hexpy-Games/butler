@@ -383,14 +383,32 @@ async fn run(access: Access) -> Result<(), HarnessError> {
                 .unwrap();
             let changed = answer["changed_files"].as_array().unwrap();
             assert_eq!(changed.len(), 1, "Committed file must surface: {answer}");
-            let artifacts = answer["artifacts"].as_array().unwrap();
-            assert_eq!(
-                artifacts.len(),
-                1,
-                "Committed file must be downloadable: {answer}"
-            );
-            assert!(artifacts[0]["file_id"].is_string());
-            assert!(artifacts[0]["url"].is_string());
+            // Credential-named files are never offered for download; the
+            // answer reports the refusal instead.
+            let credential = Path::new(target.as_str().unwrap())
+                .components()
+                .any(|part| {
+                    butler_platform::secure_fs::secret_name(&part.as_os_str().to_string_lossy())
+                });
+            if credential {
+                assert!(answer.get("artifacts").is_none(), "{answer}");
+                assert!(
+                    answer["limitation_codes"]
+                        .as_array()
+                        .unwrap()
+                        .contains(&json!("message_file_unavailable")),
+                    "Refused file must be reported: {answer}"
+                );
+            } else {
+                let artifacts = answer["artifacts"].as_array().unwrap();
+                assert_eq!(
+                    artifacts.len(),
+                    1,
+                    "Committed file must be downloadable: {answer}"
+                );
+                assert!(artifacts[0]["file_id"].is_string());
+                assert!(artifacts[0]["url"].is_string());
+            }
         }
         butler_e2e::assert_wall_clock_budget!(elapsed, Duration::from_secs(5), case.tool);
         eprintln!(

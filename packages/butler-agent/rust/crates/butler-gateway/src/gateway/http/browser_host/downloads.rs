@@ -87,6 +87,9 @@ async fn publish(
         .map_err(|_| HttpError::Internal)?
         .map_err(|_| error(400, "download_publication_failed"))?
         .0;
+    if output.revisions.is_empty() {
+        return Ok(json!({"skipped_files":output.skipped_files}));
+    }
     state
         .application
         .browser_download_published(output.clone())

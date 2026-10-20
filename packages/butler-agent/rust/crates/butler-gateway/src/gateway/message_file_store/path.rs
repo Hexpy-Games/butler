@@ -46,11 +46,13 @@ impl AllowedPaths {
         })
     }
 
+    /// `Err(true)` when a candidate path was refused rather than absent.
     pub(super) fn first_readable(
         &self,
         candidate: &ArtifactFileCandidate,
         seen: &HashSet<PathBuf>,
-    ) -> Option<(PathBuf, std::fs::File)> {
+    ) -> Result<(PathBuf, std::fs::File), bool> {
+        let mut refused = false;
         for original in &candidate.candidate_paths {
             let original = absolute(original, &self.cwd);
             let selected = original;
@@ -65,22 +67,21 @@ impl AllowedPaths {
             // File grants never override the containment of a configured project/data root.
             let (root, exact) = match directory {
                 Some(root) => (root.as_path(), false),
-                None if self.file_grants.contains(&selected) => (selected.parent()?, true),
+                None if self.file_grants.contains(&selected) => {
+                    (selected.parent().ok_or(refused)?, true)
+                }
                 None => continue,
             };
             let Ok(relative) = selected.strip_prefix(root) else {
                 continue;
             };
-            if let Ok(file) =
-                butler_platform::secure_fs::open_contained(root, relative, &self.inventory)
-            {
-                if exact && !exact_file(&selected, &file) {
-                    continue;
-                }
-                return Some((selected, file));
+            match butler_platform::secure_fs::open_contained(root, relative, &self.inventory) {
+                Ok(file) if exact && !exact_file(&selected, &file) => {}
+                Ok(file) => return Ok((selected, file)),
+                Err(error) => refused |= error.kind() == std::io::ErrorKind::PermissionDenied,
             }
         }
-        None
+        Err(refused)
     }
 }
 
