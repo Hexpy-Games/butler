@@ -54,14 +54,9 @@ where
         .as_i64()
         .ok_or("scheduler_intent_invalid")?;
     let result = operation(run_id, started).await;
-    // Shutdown and unavailable admission leave the same intent recoverable.
-    // Ordinary failures retain the existing once-per-local-day policy.
-    if result.is_err()
-        && (cancellation.is_cancelled()
-            || result
-                .as_ref()
-                .is_err_and(|error| error.message() == "memory_write_busy"))
-    {
+    // Shutdown leaves the same intent recoverable. Other outcomes retain
+    // the existing once-per-local-day policy, including writer contention.
+    if result.is_err() && cancellation.is_cancelled() {
         return result.map(|()| true);
     }
     marker["lastRunDate"] = json!(day);

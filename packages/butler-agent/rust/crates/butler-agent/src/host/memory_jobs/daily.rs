@@ -174,13 +174,11 @@ impl DailyCognitionJobs {
             })
             .await
             .map_err(|error| error.code().to_owned())?;
-        if generic.status == CycleStatus::LockHeld {
-            return Err("memory_write_busy".into());
-        }
+        // Contention counts as done for today, but must not skip configured maintenance.
         let configured = self.run_configured(cancellation).await?;
         let generic_ok = matches!(
             generic.status,
-            CycleStatus::Completed | CycleStatus::DeferredRateLimited
+            CycleStatus::Completed | CycleStatus::DeferredRateLimited | CycleStatus::LockHeld
         );
         let completed = generic_ok && configured.exit_code == 0;
         butler_core::diagnostic!(

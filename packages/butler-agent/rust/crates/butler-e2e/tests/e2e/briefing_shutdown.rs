@@ -287,7 +287,7 @@ async fn settled(s: &Scenario) -> Result<(), HarnessError> {
             Instant::now() < deadline,
             "startup daily tick never settled"
         );
-        tokio::time::sleep(Duration::from_millis(25)).await;
+        tokio::task::yield_now().await;
     }
 }
 
@@ -359,3 +359,6 @@ async fn briefing_shutdown_keeps_published_targets_when_resuming_phase() -> Resu
     eprintln!("BRIEFING-TARGETS completed=2 interrupted=1 requests=3");
     s.finish().await
 }
+
+#[path = "briefing_shutdown/lock_held.rs"]
+mod lock_held;
