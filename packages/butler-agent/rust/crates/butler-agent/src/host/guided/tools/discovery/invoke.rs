@@ -3,7 +3,8 @@
 use super::{GuidedTools, bridge_error, encoded, projection, text};
 use butler_core::json::JsonDocument;
 use butler_core::tool_protocol::ToolName;
-use butler_runtime::capabilities::{describe_native, validate_native_arguments};
+use butler_runtime::capabilities::describe_native;
+use butler_turn::btcc::normalize_then_validate;
 use butler_turn::btcc::{BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 use serde_json::{Value, json};
 
@@ -73,57 +74,23 @@ pub(super) async fn run(
             error.to_string(),
         ))
     })?;
-    if description.get("enabled") != Some(&Value::Bool(true)) {
-        let reason = description
-            .get("disabled_reason")
-            .and_then(Value::as_str)
-            .unwrap_or("Tool is disabled.");
-        let alternatives = if description.get("category").and_then(Value::as_str) == Some("search")
-        {
-            vec!["tool_search", "web_read"]
-        } else {
-            vec!["tool_search"]
-        };
-        let next_action = "Treat this as a recoverable tool-selection result, not an app failure. Reach the same goal with an enabled alternative; if none can, continue with what is available and name the missing capability once in the result.";
-        let recovery =
-            json!({"reason":reason,"alternatives":alternatives,"next_action":next_action});
-        let mut error = bridge_error("disabled_tool", reason);
-        error["error"]["id"] = Value::String(id.into());
-        error["error"]["reason"] = Value::String(reason.into());
-        error["error"]["alternatives"] = json!(alternatives);
-        error["error"]["next_action"] = Value::String(next_action.into());
-        error["error"]["recovery"] = recovery;
+    if let Some(error) = native_admission(owner, &description, id, name) {
         return encoded(&error);
     }
-    // Source permits an already authorized current tool without a prior describe.
-    if !owner.binding.authorized_names.contains(name)
-        && !owner.state.lock().described_ids.contains(id)
-    {
-        let mut error = bridge_error(
-            "tool_not_described",
-            &format!("Tool must be described before invocation: {id}"),
-        );
-        error["error"]["id"] = Value::String(id.into());
-        error["error"]["next_action"] = Value::String("Call tool_describe for this exact catalog id, inspect the schema, then retry tool_call with schema-valid arguments.".into());
-        return encoded(&error);
-    }
-    if matches!(
-        ToolName::parse(name),
-        Some(ToolName::ToolSearch | ToolName::ToolDescribe | ToolName::ToolCall)
-    ) {
-        return encoded(&bridge_error(
-            "forbidden_bridge_target",
-            "Bridge tools cannot recursively invoke bridge tools.",
-        ));
-    }
-    if let Err((message, path)) =
-        validate_native_arguments(&Value::Object(args.clone()), &description["schema"])
-    {
-        let mut error = bridge_error("invalid_tool_arguments", &message);
-        error["error"]["id"] = Value::String(id.into());
-        error["error"]["path"] = Value::String(path);
-        return encoded(&error);
-    }
+    let normalized = if tool.definition["handlerValidatesArguments"] == true {
+        args.clone()
+    } else {
+        match normalize_then_validate(name, &description["schema"], &Value::Object(args.clone())) {
+            Ok(arguments) => arguments,
+            Err((message, path)) => {
+                let mut error = bridge_error("invalid_arguments", &message);
+                error["error"]["id"] = Value::String(id.into());
+                error["error"]["field"] = Value::String(path.clone());
+                error["error"]["path"] = Value::String(path);
+                return encoded(&error);
+            }
+        }
+    };
     let raw_arguments =
         butler_core::json::stringify(&Value::Object(args.clone())).map_err(|error| {
             ToolExecutionError::Integrity(BtccError::relayed(
@@ -134,10 +101,21 @@ pub(super) async fn run(
     let inner = ModelRoundToolCall {
         id: call.id.clone(),
         name: name.into(),
-        arguments: args.clone(),
+        arguments: normalized,
         raw_arguments,
         origin: call.origin,
     };
+    invoke_native(owner, invocation, &inner, outer_call_id, id).await
+}
+
+async fn invoke_native(
+    owner: &GuidedTools,
+    invocation: GuidedInvocation<'_>,
+    inner: &ModelRoundToolCall,
+    outer_call_id: &str,
+    id: &str,
+) -> Result<JsonDocument, ToolExecutionError> {
+    let name = inner.name.as_str();
     // Dispatch through the existing guarded domain owner. Never recurse into
     // ToolPort::execute: that would create a second journal occurrence.
     let result = if name == ToolName::ReadOperationResults {
@@ -155,7 +133,7 @@ pub(super) async fn run(
             ))
         })?
     } else {
-        native_result(owner, invocation, &inner, outer_call_id).await?
+        native_result(owner, invocation, inner, outer_call_id).await?
     };
     attach_bridge_invocation(
         &result,
@@ -195,48 +173,55 @@ async fn run_mcp(
         }
         Err(error) => return encoded(&underlying(id, error.code)),
     };
-    if description.get("enabled") != Some(&Value::Bool(true)) {
-        let reason = description
-            .get("disabled_reason")
-            .and_then(Value::as_str)
-            .unwrap_or("MCP tool is disabled.");
-        let alternatives = ["tool_search", "list_mcp_capabilities"];
-        let mut error = bridge_error("disabled_tool", reason);
-        error["error"]["id"] = Value::String(id.into());
-        error["error"]["reason"] = Value::String(reason.into());
-        error["error"]["alternatives"] = json!(alternatives);
-        error["error"]["next_action"] = Value::String(
-            "Treat this as a recoverable tool-selection result. Choose an enabled alternative or continue with available evidence.".into(),
-        );
+    if let Some(error) = mcp_admission(owner, &description, id, &parsed.tool_name) {
         return encoded(&error);
     }
-    if !owner.binding.visible_names.contains(&parsed.tool_name)
-        && !owner.state.lock().described_ids.contains(id)
-    {
-        let mut error = bridge_error(
-            "tool_not_described",
-            &format!("Tool must be described before invocation: {id}"),
-        );
-        error["error"]["id"] = Value::String(id.into());
-        error["error"]["next_action"] = Value::String(
-            "Call tool_describe for this exact catalog id, inspect the schema, then retry tool_call with schema-valid arguments.".into(),
-        );
-        return encoded(&error);
-    }
+    invoke_mcp(
+        owner,
+        invocation,
+        call,
+        outer_call_id,
+        id,
+        args,
+        &description,
+    )
+    .await
+}
+
+async fn invoke_mcp(
+    owner: &GuidedTools,
+    invocation: GuidedInvocation<'_>,
+    call: &ModelRoundToolCall,
+    outer_call_id: &str,
+    id: &str,
+    args: &serde_json::Map<String, Value>,
+    description: &Value,
+) -> Result<JsonDocument, ToolExecutionError> {
+    let Some(parsed) = butler_models::mcp_client::parse_mcp_catalog_id(id) else {
+        return encoded(&bridge_error(
+            "unknown_tool_catalog_id",
+            "Unknown tool catalog id.",
+        ));
+    };
     let schema = description
         .get("schema")
         .cloned()
         .unwrap_or_else(|| json!({}));
-    if let Err((message, path)) = validate_native_arguments(&Value::Object(args.clone()), &schema) {
-        let mut error = bridge_error("invalid_tool_arguments", &message);
-        error["error"]["id"] = Value::String(id.into());
-        error["error"]["path"] = Value::String(path);
-        return encoded(&error);
-    }
+    let normalized =
+        match normalize_then_validate(&parsed.tool_name, &schema, &Value::Object(args.clone())) {
+            Ok(arguments) => arguments,
+            Err((message, path)) => {
+                let mut error = bridge_error("invalid_arguments", &message);
+                error["error"]["id"] = Value::String(id.into());
+                error["error"]["field"] = Value::String(path.clone());
+                error["error"]["path"] = Value::String(path);
+                return encoded(&error);
+            }
+        };
     let inner_arguments = serde_json::from_value::<serde_json::Map<String, Value>>(json!({
         "server_id":parsed.server_id,
         "tool_name":parsed.tool_name,
-        "arguments":args,
+        "arguments":normalized,
     }))
     .map_err(|error| {
         ToolExecutionError::Integrity(BtccError::relayed(
@@ -343,4 +328,93 @@ async fn native_result(
         }
         Err(error) => Err(error),
     }
+}
+
+fn native_admission(
+    owner: &GuidedTools,
+    description: &Value,
+    id: &str,
+    name: &str,
+) -> Option<Value> {
+    if description.get("enabled") != Some(&Value::Bool(true)) {
+        let reason = description
+            .get("disabled_reason")
+            .and_then(Value::as_str)
+            .unwrap_or("Tool is disabled.");
+        let alternatives = if description.get("category").and_then(Value::as_str) == Some("search")
+        {
+            vec!["tool_search", "web_read"]
+        } else {
+            vec!["tool_search"]
+        };
+        let next_action = "Treat this as a recoverable tool-selection result, not an app failure. Reach the same goal with an enabled alternative; if none can, continue with what is available and name the missing capability once in the result.";
+        let recovery =
+            json!({"reason":reason,"alternatives":alternatives,"next_action":next_action});
+        let mut error = bridge_error("disabled_tool", reason);
+        error["error"]["id"] = Value::String(id.into());
+        error["error"]["reason"] = Value::String(reason.into());
+        error["error"]["alternatives"] = json!(alternatives);
+        error["error"]["next_action"] = Value::String(next_action.into());
+        error["error"]["recovery"] = recovery;
+        return Some(error);
+    }
+    // Source permits an already authorized current tool without a prior describe.
+    if !owner.binding.authorized_names.contains(name)
+        && !owner.state.lock().described_ids.contains(id)
+    {
+        let mut error = bridge_error(
+            "tool_not_described",
+            &format!("Tool must be described before invocation: {id}"),
+        );
+        error["error"]["id"] = Value::String(id.into());
+        error["error"]["next_action"] = Value::String("Call tool_describe for this exact catalog id, inspect the schema, then retry tool_call with schema-valid arguments.".into());
+        return Some(error);
+    }
+    if matches!(
+        ToolName::parse(name),
+        Some(ToolName::ToolSearch | ToolName::ToolDescribe | ToolName::ToolCall)
+    ) {
+        return Some(bridge_error(
+            "forbidden_bridge_target",
+            "Bridge tools cannot recursively invoke bridge tools.",
+        ));
+    }
+    None
+}
+
+fn mcp_admission(
+    owner: &GuidedTools,
+    description: &Value,
+    id: &str,
+    tool_name: &str,
+) -> Option<Value> {
+    if description.get("enabled") != Some(&Value::Bool(true)) {
+        let reason = description
+            .get("disabled_reason")
+            .and_then(Value::as_str)
+            .unwrap_or("MCP tool is disabled.");
+        let alternatives = ["tool_search", "list_mcp_capabilities"];
+        let mut error = bridge_error("disabled_tool", reason);
+        error["error"]["id"] = Value::String(id.into());
+        error["error"]["reason"] = Value::String(reason.into());
+        error["error"]["alternatives"] = json!(alternatives);
+        error["error"]["next_action"] = Value::String(
+            "Treat this as a recoverable tool-selection result. Choose an enabled alternative or continue with available evidence.".into(),
+        );
+        return Some(error);
+    }
+    if !owner.binding.visible_names.contains(tool_name)
+        && !owner.state.lock().described_ids.contains(id)
+    {
+        let mut error = bridge_error(
+            "tool_not_described",
+            &format!("Tool must be described before invocation: {id}"),
+        );
+        error["error"]["id"] = Value::String(id.into());
+        error["error"]["next_action"] = Value::String(
+            "Call tool_describe for this exact catalog id, inspect the schema, then retry tool_call with schema-valid arguments.".into(),
+        );
+        return Some(error);
+    }
+    None
 }

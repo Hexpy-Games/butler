@@ -56,12 +56,13 @@ pub(super) fn dispatch(
             },
         );
     }
+    let reply = super::PendingReply::agent(sender, &frame);
     if host.try_send(frame).is_err() {
         // A failed control delivery closes the stream; the App resets on loss.
         hub.detach();
         return Err(error(429, "browser_busy"));
     }
-    hub.pending.insert(id, sender);
+    hub.pending.insert(id, reply);
     Ok(())
 }
 pub(super) fn release(hub: &mut Inner, id: &str) {

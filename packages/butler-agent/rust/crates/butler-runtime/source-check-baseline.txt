@@ -2,7 +2,6 @@
 # Split a function and regenerate: cargo run -p butler-source-check -- --bless .
 # Entries may only shrink or disappear; new entries need review.
 src/capabilities/catalog/bridge.rs	search_native	101
-src/capabilities/catalog/validation.rs	validate	165
 src/capabilities/edit_file.rs	execute	89
 src/capabilities/edit_file/normalize.rs	batch	87
 src/capabilities/edit_file/result.rs	batch_result	112
