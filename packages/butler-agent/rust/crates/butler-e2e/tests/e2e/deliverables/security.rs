@@ -166,3 +166,86 @@ async fn redelivery_of_hard_linked_package_replaces_drawer_and_consumes_stage()
     server.abort();
     Ok(())
 }
+
+#[tokio::test]
+async fn materialize_keeps_project_root_when_a_parent_directory_is_swapped()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(butler_platform::secure_fs::NO_FOLLOW, "directory links");
+    let (url, script, server) = stub::start().await?;
+    let setup = Setup::new("MATERIALIZE-CONTAINED-PROJECT")?
+        .stub_cassette(Cassette::load("TOOL-01")?)
+        .env("BUTLER_CODEX_BASE_URL", &url);
+    let credential = setup.sandbox.data.join("auth/login");
+    std::fs::create_dir_all(credential.parent().unwrap())?;
+    std::fs::write(&credential, "private-fixture")?;
+    let release = setup.sandbox.root.join("materialize-release");
+    let folder = setup.sandbox.root.join("project-base");
+    std::fs::create_dir(&folder)?;
+    let setup = setup
+        .env("BUTLER_E2E_HOLD_POINT", "message_attachment")
+        .env("BUTLER_E2E_HOLD_RELEASE", release.to_str().unwrap());
+    let mut s = setup.start().await?;
+    let chat = super::super::project_workspace::bind_project(&mut s, &folder).await?;
+    let db = butler_platform::sqlite::open_with_flags(
+        s.sandbox.data.join("app-server/butler-client.sqlite"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?;
+    let project: String = db.query_row(
+        "SELECT p.workspace_path FROM projects p JOIN chats c ON c.project_id=p.id WHERE c.id=?1",
+        [&chat],
+        |row| row.get(0),
+    )?;
+    drop(db);
+    *script.prompt.lock().unwrap() = "Write working notes".into();
+    *script.steps.lock().unwrap() = [
+        write("section/nested/report.txt", "Admitted bytes"),
+        write("hard-link.txt", "Working notes"),
+        write("safe.txt", "Complete safe notes"),
+        done(),
+    ]
+    .into();
+    let accepted = s.gw.say(&chat, "Write working notes").await?;
+    let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
+    super::handoff::wait_for(|| release.with_extension("held").exists()).await;
+    let project = std::path::PathBuf::from(project);
+    let outside = s.sandbox.home.join("outside-files");
+    std::fs::create_dir_all(outside.join("nested"))?;
+    std::fs::write(outside.join("nested/report.txt"), "Outside bytes")?;
+    std::fs::rename(project.join("section"), project.join("saved-section"))?;
+    butler_platform::secure_fs::symlink(&outside, &project.join("section"))?;
+    std::fs::remove_file(project.join("hard-link.txt"))?;
+    std::fs::hard_link(&credential, project.join("hard-link.txt"))?;
+    std::fs::write(&release, "release")?;
+    s.gw.wait_terminal(&chat, &turn, std::time::Duration::from_secs(30))
+        .await?;
+    let messages = s.gw.messages(&chat).await?;
+    let message = messages
+        .iter()
+        .find(|message| {
+            message["turn_id"] == turn
+                && message["role"] == "assistant"
+                && message["status"] == "delivered"
+        })
+        .unwrap();
+    assert_eq!(message["text"], "Done.");
+    let attachments = message["attachments"].as_array().unwrap();
+    assert_eq!(attachments.len(), 1, "{message}");
+    assert_eq!(
+        s.gw.get(attachments[0]["url"].as_str().unwrap())
+            .await?
+            .text,
+        "Complete safe notes"
+    );
+    assert_eq!(
+        std::fs::read_to_string(project.join("saved-section/nested/report.txt"))?,
+        "Admitted bytes"
+    );
+    assert_eq!(
+        std::fs::read_to_string(outside.join("nested/report.txt"))?,
+        "Outside bytes"
+    );
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}

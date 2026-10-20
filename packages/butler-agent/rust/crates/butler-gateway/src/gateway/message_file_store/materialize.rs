@@ -41,10 +41,12 @@ impl Drop for Staging {
 
 pub(super) fn run(
     root: &Path,
+    data: &Path,
     clock: &dyn AppIdentityClock,
     request: &ArtifactMaterializationRequest,
 ) -> Result<ArtifactMaterializationResult, GatewayApplicationError> {
-    let paths = AllowedPaths::new(&request.allowed_roots).map_err(internal)?;
+    let paths =
+        AllowedPaths::new(data, &request.allowed_roots, &request.file_grants).map_err(internal)?;
     let mut seen = HashSet::new();
     let mut keys: HashSet<Vec<u16>> = request
         .existing_content_keys

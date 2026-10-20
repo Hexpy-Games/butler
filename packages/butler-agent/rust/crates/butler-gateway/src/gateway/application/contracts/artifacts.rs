@@ -3,6 +3,7 @@ use super::*;
 #[derive(Clone, Debug)]
 pub struct ArtifactMaterializationRequest {
     pub allowed_roots: Vec<PathBuf>,
+    pub file_grants: Vec<PathBuf>,
     pub candidates: Vec<ArtifactFileCandidate>,
     pub existing_content_keys: Vec<String>,
 }

@@ -27,6 +27,7 @@ use super::{
 
 /// App SQLite remains with AppApplication; this owner holds only bounded file jobs.
 pub struct AppMessageFiles {
+    data_root: PathBuf,
     root: PathBuf,
     clock: Arc<dyn AppIdentityClock>,
     permits: Arc<Semaphore>,
@@ -37,6 +38,7 @@ pub struct AppMessageFiles {
 impl AppMessageFiles {
     pub fn new(data_root: &Path, clock: Arc<dyn AppIdentityClock>) -> Self {
         Self {
+            data_root: data_root.to_path_buf(),
             root: data_root.join(butler_platform::data_paths::MESSAGE_FILES),
             clock,
             permits: Arc::new(Semaphore::new(2)),
@@ -116,13 +118,17 @@ impl AppArtifactMaterializer for AppMessageFiles {
         &self,
         request: ArtifactMaterializationRequest,
     ) -> ApplicationFuture<Vec<MaterializedResponderFile>> {
-        self.run_file_job(move |root, clock| Ok(materialize::run(root, clock, &request)?.files))
+        let data = self.data_root.clone();
+        self.run_file_job(move |root, clock| {
+            Ok(materialize::run(root, &data, clock, &request)?.files)
+        })
     }
     fn materialize_with_limitations(
         &self,
         request: ArtifactMaterializationRequest,
     ) -> ApplicationFuture<crate::gateway::ArtifactMaterializationResult> {
-        self.run_file_job(move |root, clock| materialize::run(root, clock, &request))
+        let data = self.data_root.clone();
+        self.run_file_job(move |root, clock| materialize::run(root, &data, clock, &request))
     }
 }
 

@@ -10,15 +10,26 @@ use crate::gateway::ArtifactFileCandidate;
 pub(super) struct AllowedPaths {
     cwd: PathBuf,
     roots: Vec<PathBuf>,
+    file_grants: HashSet<PathBuf>,
+    inventory: std::sync::Arc<butler_platform::secure_fs::SecretInventory>,
 }
 
 impl AllowedPaths {
-    pub(super) fn new(roots: &[PathBuf]) -> std::io::Result<Self> {
+    pub(super) fn new(
+        data: &Path,
+        roots: &[PathBuf],
+        file_grants: &[PathBuf],
+    ) -> std::io::Result<Self> {
         let cwd = std::env::current_dir()?;
         let roots: Vec<_> = roots.iter().map(|root| absolute(root, &cwd)).collect();
         Ok(Self {
+            inventory: butler_platform::secure_fs::SecretInventory::cached(data),
             cwd: cwd.clone(),
             roots,
+            file_grants: file_grants
+                .iter()
+                .map(|path| absolute(path, &cwd))
+                .collect(),
         })
     }
 
@@ -43,29 +54,30 @@ impl AllowedPaths {
         for original in &candidate.candidate_paths {
             let original = absolute(original, &self.cwd);
             let selected = original;
-            if seen.contains(&selected) || !self.roots.iter().any(|root| selected.starts_with(root))
-            {
+            if seen.contains(&selected) {
                 continue;
             }
-            // Pin the root and open the leaf in one contained descriptor walk.
-            for root in &self.roots {
-                let container = if root == &selected {
-                    root.parent()?
-                } else {
-                    root.as_path()
-                };
-                let Ok(relative) = selected.strip_prefix(container) else {
+            let directory = self
+                .roots
+                .iter()
+                .filter(|root| selected.starts_with(root))
+                .max_by_key(|root| root.components().count());
+            // File grants never override the containment of a configured project/data root.
+            let (root, exact) = match directory {
+                Some(root) => (root.as_path(), false),
+                None if self.file_grants.contains(&selected) => (selected.parent()?, true),
+                None => continue,
+            };
+            let Ok(relative) = selected.strip_prefix(root) else {
+                continue;
+            };
+            if let Ok(file) =
+                butler_platform::secure_fs::open_contained(root, relative, &self.inventory)
+            {
+                if exact && !exact_file(&selected, &file) {
                     continue;
-                };
-                let inventory = butler_platform::secure_fs::SecretInventory::cached(root);
-                if let Ok(file) =
-                    butler_platform::secure_fs::open_contained(container, relative, &inventory)
-                {
-                    if root == &selected && !exact_file(&selected, &file) {
-                        continue;
-                    }
-                    return Some((selected, file));
                 }
+                return Some((selected, file));
             }
         }
         None
@@ -80,8 +92,9 @@ fn exact_file(path: &Path, file: &std::fs::File) -> bool {
     let expected_id = butler_platform::secure_fs::identity(&expected).id;
     expected.is_file()
         && !expected.file_type().is_symlink()
-        && expected_id.is_some()
-        && expected_id == butler_platform::secure_fs::identity(&opened).id
+        && (!butler_platform::secure_fs::FILE_IDS
+            || expected_id.is_some()
+                && expected_id == butler_platform::secure_fs::identity(&opened).id)
 }
 
 fn absolute(path: &Path, cwd: &Path) -> PathBuf {
