@@ -248,3 +248,16 @@ async fn reset_06_external_store_refused_without_journal() -> Result<(), Harness
     assert_eq!(generation(&s).await?, before);
     s.finish().await
 }
+
+#[tokio::test]
+async fn fresh_custom_root_is_owned_and_resettable_in_first_session() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup =
+        unowned_setup("RESET-FRESH-CUSTOM")?.fixture(butler_e2e::e2e::scenario::Fixture::Empty);
+    assert!(std::fs::read_dir(&setup.sandbox.data)?.next().is_none());
+    let s = setup.start().await?;
+    assert!(s.sandbox.data.join("state/data-root-owner.json").is_file());
+    let reply = request(&s, &nonce(&s).await?).await?;
+    assert_eq!(reply.status, 202, "{}", reply.text);
+    s.finish().await
+}
