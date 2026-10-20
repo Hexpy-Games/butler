@@ -4,7 +4,7 @@ use serde_json::{Map, Value};
 type Violation = (String, String);
 
 pub fn validate_native_arguments(args: &Value, schema: &Value) -> Result<(), Violation> {
-    validate(args, schema, "$", "")
+    validate(args, schema, "$", "", true)
 }
 
 pub(super) fn validate(
@@ -12,6 +12,7 @@ pub(super) fn validate(
     schema: &Value,
     path: &str,
     tool: &str,
+    strict: bool,
 ) -> Result<(), Violation> {
     let Some(rule) = schema.as_object() else {
         return Ok(());
@@ -33,7 +34,7 @@ pub(super) fn validate(
             path.into(),
         ));
     }
-    variants(value, schema, path, tool)?;
+    variants(value, schema, path, tool, strict)?;
     let types = rule.get("type").map_or_else(Vec::new, |kind| match kind {
         Value::String(name) => vec![name.as_str()],
         Value::Array(names) => names.iter().filter_map(Value::as_str).collect(),
@@ -51,9 +52,9 @@ pub(super) fn validate(
         ));
     }
     if let Some(items) = value.as_array() {
-        array(items, schema, path, tool)?;
+        array(items, schema, path, tool, strict)?;
     } else if let Some(fields) = value.as_object() {
-        object(fields, schema, path, tool)?;
+        object(fields, schema, path, tool, strict)?;
     } else if let Some(number) = value.as_f64() {
         for (key, op, bad) in [("minimum", ">=", true), ("maximum", "<=", false)] {
             if let Some(bound) = schema.get(key).and_then(Value::as_f64)
@@ -68,12 +69,18 @@ pub(super) fn validate(
     Ok(())
 }
 
-fn variants(value: &Value, schema: &Value, path: &str, tool: &str) -> Result<(), Violation> {
+fn variants(
+    value: &Value,
+    schema: &Value,
+    path: &str,
+    tool: &str,
+    strict: bool,
+) -> Result<(), Violation> {
     for (name, exclusive) in [("oneOf", true), ("anyOf", false)] {
         if let Some(variants) = schema.get(name).and_then(Value::as_array) {
             let results: Vec<_> = variants
                 .iter()
-                .map(|rule| validate(value, rule, path, tool))
+                .map(|rule| validate(value, rule, path, tool, strict))
                 .collect();
             let matched = results.iter().filter(|r| r.is_ok()).count();
             if matched == 0 {
@@ -101,15 +108,19 @@ fn object(
     schema: &Value,
     path: &str,
     tool: &str,
+    strict: bool,
 ) -> Result<(), Violation> {
     let properties = schema.get("properties").and_then(Value::as_object);
     required_fields(fields, schema, path, tool)?;
     if let Some(properties) = properties {
         for (name, rule) in properties {
             if let Some(value) = fields.get(name) {
-                validate(value, rule, &child(path, name), tool)?;
+                validate(value, rule, &child(path, name), tool, strict)?;
             }
         }
+    }
+    if !strict {
+        return Ok(());
     }
     for (name, value) in fields
         .iter()
@@ -119,7 +130,9 @@ fn object(
             Some(Value::Bool(false)) => {
                 return Err((unexpected(tool, name, properties), child(path, name)));
             }
-            Some(rule @ Value::Object(_)) => validate(value, rule, &child(path, name), tool)?,
+            Some(rule @ Value::Object(_)) => {
+                validate(value, rule, &child(path, name), tool, strict)?;
+            }
             _ => (),
         }
     }
@@ -134,7 +147,13 @@ fn child(path: &str, name: &str) -> String {
     }
 }
 
-fn array(items: &[Value], schema: &Value, path: &str, tool: &str) -> Result<(), Violation> {
+fn array(
+    items: &[Value],
+    schema: &Value,
+    path: &str,
+    tool: &str,
+    strict: bool,
+) -> Result<(), Violation> {
     let min = schema.get("minItems").and_then(Value::as_u64);
     let max = schema.get("maxItems").and_then(Value::as_u64);
     let length = u64::try_from(items.len()).unwrap_or(u64::MAX);
@@ -150,7 +169,7 @@ fn array(items: &[Value], schema: &Value, path: &str, tool: &str) -> Result<(), 
     }
     if let Some(rule) = schema.get("items") {
         for (index, item) in items.iter().enumerate() {
-            validate(item, rule, &format!("{path}[{index}]"), tool)?;
+            validate(item, rule, &format!("{path}[{index}]"), tool, strict)?;
         }
     }
     Ok(())

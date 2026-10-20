@@ -342,7 +342,7 @@ fn prepare_arguments(
     tool: &ModelRoundTool,
     call: &ModelRoundToolCall,
 ) -> (Map<String, Value>, Option<ToolError>) {
-    use crate::btcc::tool_arguments::{decode_object, normalize_then_validate};
+    use crate::btcc::tool_arguments::{decode_object, normalize_direct_arguments};
     let parsed = decode_object(&call.raw_arguments)
         .map(Value::Object)
         .unwrap_or(Value::Null);
@@ -351,7 +351,7 @@ fn prepare_arguments(
     {
         return (arguments.clone(), None);
     }
-    match normalize_then_validate(&call.name, &Value::Object(tool.parameters.clone()), &parsed) {
+    match normalize_direct_arguments(&call.name, &Value::Object(tool.parameters.clone()), &parsed) {
         Ok(arguments) => (arguments, None),
         Err((message, field)) => (
             call.arguments.clone(),

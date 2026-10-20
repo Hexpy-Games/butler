@@ -12,9 +12,27 @@ pub fn normalize_then_validate(
     schema: &Value,
     args: &Value,
 ) -> Result<Map<String, Value>, (String, String)> {
-    let value = normalize::arguments(tool, schema, args);
+    normalize_and_validate(tool, schema, args, true)
+}
+
+/// Direct calls tolerate extra keys; missing required fields still get typo hints.
+pub fn normalize_direct_arguments(
+    tool: &str,
+    schema: &Value,
+    args: &Value,
+) -> Result<Map<String, Value>, (String, String)> {
+    normalize_and_validate(tool, schema, args, false)
+}
+
+fn normalize_and_validate(
+    tool: &str,
+    schema: &Value,
+    args: &Value,
+    strict: bool,
+) -> Result<Map<String, Value>, (String, String)> {
+    let value = normalize::arguments(tool, schema, args, strict);
     let result = if value.is_object() {
-        validate::validate(&value, schema, "$", tool)
+        validate::validate(&value, schema, "$", tool, strict)
     } else {
         Err(("arguments must be one JSON object".into(), "$".into()))
     };

@@ -17,7 +17,9 @@ pub use authority::questions::{
 };
 pub use capability_handoff::{CapabilityHandoff, CapabilityHandoffCode, RequestedCapabilityAction};
 pub use thinking::set_capture as set_thinking_capture;
-pub use tool_arguments::{decode_object, normalize_then_validate, validate_native_arguments};
+pub use tool_arguments::{
+    decode_object, normalize_direct_arguments, normalize_then_validate, validate_native_arguments,
+};
 mod continuation_budget;
 mod contracts;
 pub mod effects;

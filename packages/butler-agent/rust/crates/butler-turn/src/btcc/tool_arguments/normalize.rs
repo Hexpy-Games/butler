@@ -22,7 +22,7 @@ fn unfence(text: &str) -> &str {
     }
 }
 
-pub(super) fn arguments(tool: &str, schema: &Value, args: &Value) -> Value {
+pub(super) fn arguments(tool: &str, schema: &Value, args: &Value, strict: bool) -> Value {
     let mut value = if let Some(text) = args.as_str() {
         serde_json::from_str(unfence(text))
             .ok()
@@ -38,18 +38,19 @@ pub(super) fn arguments(tool: &str, schema: &Value, args: &Value) -> Value {
         && (["arguments", "args", "parameters", "params", "input"].contains(&name.as_str())
             || name == tool)
         && inner.is_object()
+        && validate(&value, schema, "$", tool, strict).is_err()
     {
         let mut candidate = inner.clone();
-        normalize(&mut candidate, schema);
-        if validate(&candidate, schema, "$", tool).is_ok() {
+        normalize(&mut candidate, schema, strict);
+        if validate(&candidate, schema, "$", tool, strict).is_ok() {
             value = candidate;
         }
     }
-    normalize(&mut value, schema);
+    normalize(&mut value, schema, strict);
     value
 }
 
-fn normalize(value: &mut Value, schema: &Value) {
+fn normalize(value: &mut Value, schema: &Value, strict: bool) {
     if let Some(variants) = schema
         .get("oneOf")
         .or_else(|| schema.get("anyOf"))
@@ -59,8 +60,8 @@ fn normalize(value: &mut Value, schema: &Value) {
             .iter()
             .filter_map(|rule| {
                 let mut candidate = value.clone();
-                normalize(&mut candidate, rule);
-                validate(&candidate, rule, "$", "")
+                normalize(&mut candidate, rule, strict);
+                validate(&candidate, rule, "$", "", strict)
                     .is_ok()
                     .then_some(candidate)
             })
@@ -71,43 +72,45 @@ fn normalize(value: &mut Value, schema: &Value) {
             *value = first.clone();
         }
     }
-    if validate(value, schema, "$", "").is_err()
+    if validate(value, schema, "$", "", strict).is_err()
         && let Some(mut candidate) = representation(value, schema)
         && {
-            normalize_children(&mut candidate, schema);
-            validate(&candidate, schema, "$", "").is_ok()
+            normalize_children(&mut candidate, schema, strict);
+            validate(&candidate, schema, "$", "", strict).is_ok()
         }
     {
         *value = candidate;
     }
-    normalize_children(value, schema);
+    normalize_children(value, schema, strict);
 }
 
-fn normalize_children(value: &mut Value, schema: &Value) {
+fn normalize_children(value: &mut Value, schema: &Value, strict: bool) {
     if let Some(fields) = value.as_object_mut() {
-        normalize_fields(fields, schema);
+        normalize_fields(fields, schema, strict);
     } else if let Some(items) = value.as_array_mut()
         && let Some(rule) = schema.get("items")
     {
         for item in items {
-            normalize(item, rule);
+            normalize(item, rule, strict);
         }
     }
 }
 
-fn normalize_fields(fields: &mut Map<String, Value>, schema: &Value) {
+fn normalize_fields(fields: &mut Map<String, Value>, schema: &Value, strict: bool) {
     let properties = schema.get("properties").and_then(Value::as_object);
     fields.retain(|name, value| {
-        let rule = properties
-            .and_then(|p| p.get(name))
-            .or_else(|| schema.get("additionalProperties").filter(|r| r.is_object()));
+        let rule = properties.and_then(|p| p.get(name)).or_else(|| {
+            strict
+                .then(|| schema.get("additionalProperties").filter(|r| r.is_object()))
+                .flatten()
+        });
         let Some(rule) = rule else {
             return true;
         };
         if value.is_null() && has_type(rule) && !allows(rule, "null") {
             return false;
         }
-        normalize(value, rule);
+        normalize(value, rule, strict);
         true
     });
 }

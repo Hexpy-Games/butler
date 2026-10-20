@@ -15,7 +15,6 @@ mod open;
 mod pay;
 mod preview;
 mod reached;
-mod recovery;
 pub(super) use reached::discover as discover_reached;
 mod signin;
 mod upload;

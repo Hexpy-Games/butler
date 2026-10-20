@@ -118,22 +118,16 @@ async fn normalization_and_recovery() -> Result<(), HarnessError> {
     let result = output(&requests[5]);
     let recovery = &result["output"];
     assert_eq!(recovery["reason"], "not_your_tab", "{recovery}");
-    assert_eq!(recovery["tabs"][0]["tab"], "t1", "{recovery}");
+    assert_eq!(recovery["your_tabs"], json!(["t1"]), "{recovery}");
     assert_eq!(
         recovery["recovery"],
-        "No tab of this conversation has id t9. Use a tab id listed in tabs, or open the page with browser_open first."
+        "No tab of this conversation has that id. Retry with one of your_tabs copied exactly (never shorten or retype an id), or call browser_tabs."
     );
     assert_eq!(
         ops.iter()
             .map(|op| op["op"].as_str().unwrap())
             .collect::<Vec<_>>(),
-        [
-            "tab.open",
-            "tab.observe",
-            "tab.observe",
-            "tabs.list",
-            "tab.observe"
-        ]
+        ["tab.open", "tab.observe", "tab.observe", "tab.observe"]
     );
     let history = requests.last().unwrap()["messages"].as_array().unwrap();
     for original in script().iter().take(5) {
@@ -158,6 +152,7 @@ async fn serve_host(
     let mut buffer = String::new();
     let mut ops = Vec::new();
     let mut observations = 0;
+    let mut page = "Page text";
     loop {
         let frame = super::browser_delegation::next_frame(&mut stream, &mut buffer).await?;
         let op = frame["op"].as_str().unwrap();
@@ -182,11 +177,15 @@ async fn serve_host(
             }
             "tab.observe" => {
                 observations += 1;
-                json!({"status":"ok","tab":"t1","obs":format!("o{observations}"),"text":"Page text","url":"https://example.com/"})
+                json!({"status":"ok","tab":"t1","obs":format!("o{observations}"),"text":page,"url":"https://example.com/"})
+            }
+            "tab.prepare" if frame["args"]["steps"][0]["action"] == "back" => {
+                json!({"status":"ok","tab":"t1","url":"https://example.com/","steps":[{"hit":{"role":"navigation","name":"Back"}}]})
             }
             "tab.prepare" => json!({"status":"refused","reason":"stale_ref"}),
-            "tabs.list" => {
-                json!({"status":"ok","tabs":[{"id":"t1","url":"https://example.com/","title":"Page"}]})
+            "tab.act" => {
+                page = "Previous page";
+                json!({"status":"ok","tab":"t1","completed":1,"steps":[{"status":"completed"}]})
             }
             _ => panic!("unexpected browser op {op}"),
         };
@@ -220,7 +219,7 @@ async fn representations_and_schema_errors() -> Result<(), HarnessError> {
         ("browser_observe", json!({"tab":"t1","look":"never"})),
         (
             "browser_act",
-            json!({"tab":"t1","observation":"o2","observe":"false","steps":"[{\"action\":\"click\",\"ref\":\"f0-e1\",\"click_count\":\"2\",\"commits\":\"false\",\"value\":123}]"}),
+            json!({"tab":"t1","observation":"o2","observe":"false","steps":"[{\"action\":\"click\",\"ref\":\"f0-e1\",\"click_count\":\"2\",\"commits\":\"false\",\"value\":123,\"extra\":true}]"}),
         ),
         ("browser_observe", json!({"tab":null})),
         ("browser_observe", json!({"tab":true})),
@@ -242,13 +241,28 @@ async fn representations_and_schema_errors() -> Result<(), HarnessError> {
         .as_object_mut()
         .unwrap()
         .remove("id");
+    messages.push(json!({"role":"assistant","content":null,"tool_calls":[{"id":"extra_bridge","type":"function",
+        "function":{"name":"tool_call","arguments":json!({"id":"native:browser_observe","arguments":{"tab":"t1","extra":true}}).to_string()}}]}));
     messages.push(json!({"role":"assistant","content":"Finished."}));
     let (requests, ops) = run(messages).await?;
+    assert_eq!(output(&requests[8])["output"]["status"], "ok");
+    let bridge_error = output(&requests[13]);
+    assert_eq!(
+        bridge_error["error"]["code"], "invalid_arguments",
+        "{bridge_error}"
+    );
+    assert_eq!(bridge_error["error"]["field"], "extra", "{bridge_error}");
     assert_eq!(
         ops.iter()
             .map(|op| op["op"].as_str().unwrap())
             .collect::<Vec<_>>(),
-        ["tab.open", "tab.observe", "tab.observe", "tab.prepare"]
+        [
+            "tab.open",
+            "tab.observe",
+            "tab.observe",
+            "tab.prepare",
+            "tab.observe"
+        ]
     );
     assert_eq!(ops[0]["args"]["signed_in"], false);
     assert!(ops[0]["args"].get("results").is_none());
@@ -257,12 +271,12 @@ async fn representations_and_schema_errors() -> Result<(), HarnessError> {
     assert_eq!(step["click_count"], 2);
     assert_eq!(step["commits"], false);
     assert_eq!(step["value"], "123");
+    assert_eq!(step["extra"], true);
     assert_eq!(ops[3]["args"]["observe"], false);
     for (round, field, problem) in [
         (5, "tab", "required argument \"tab\" (string) is missing"),
         (6, "tab", "\"tab\" must be string, not boolean true"),
         (7, "scope", "\"scope\" must be one of"),
-        (8, "extra", "\"extra\" is not an argument"),
         (9, "region", "\"region\" must be array"),
         (10, "region", "\"region\" must have exactly 4 items"),
         (11, "region[2]", "\"region[2]\" must be number"),
@@ -324,7 +338,7 @@ async fn text_arguments_and_readable_decoder_feedback() -> Result<(), HarnessErr
 }
 
 #[tokio::test]
-async fn deferred_tab_recovery_delimits_page_labels() -> Result<(), HarnessError> {
+async fn deferred_wrong_tab_preserves_gateway_recovery() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut messages = script().into_iter().take(1).collect::<Vec<_>>();
     for (index, (name, args)) in [
@@ -350,18 +364,125 @@ async fn deferred_tab_recovery_delimits_page_labels() -> Result<(), HarnessError
         ops.iter()
             .map(|op| op["op"].as_str().unwrap())
             .collect::<Vec<_>>(),
-        ["tab.open", "tabs.list"]
+        ["tab.open"]
     );
     let result = output(requests.last().unwrap());
     assert_eq!(result["output"]["reason"], "not_your_tab", "{result}");
-    let tab = &result["output"]["tabs"][0];
-    assert_eq!(tab["tab"], "t1", "{result}");
-    assert!(tab.get("url").is_none(), "{result}");
-    assert!(tab.get("title").is_none(), "{result}");
+    assert_eq!(result["output"]["your_tabs"], json!(["t1"]), "{result}");
     assert_eq!(
-        tab["untrusted_content"]["url"], "https://example.com/",
+        result["output"]["recovery"],
+        "No tab of this conversation has that id. Retry with one of your_tabs copied exactly (never shorten or retype an id), or call browser_tabs.",
         "{result}"
     );
-    assert_eq!(tab["untrusted_content"]["title"], "Page", "{result}");
     Ok(())
+}
+
+async fn repeated_idless_observe(text: bool) -> Result<(), HarnessError> {
+    let observe = if text {
+        json!({"role":"assistant","content":"<tool_call>{\"name\":\"browser_observe\",\"arguments\":{\"tab\":\"t1\",\"look\":\"never\"}}</tool_call>"})
+    } else {
+        json!({"role":"assistant","content":null,"tool_calls":[{"type":"function",
+            "function":{"name":"browser_observe","arguments":"{\"tab\":\"t1\",\"look\":\"never\"}"}}]})
+    };
+    let mut messages = script().into_iter().take(1).collect::<Vec<_>>();
+    messages.push(observe.clone());
+    messages.push(json!({"role":"assistant","content":null,"tool_calls":[{"id":"back","type":"function",
+        "function":{"name":"browser_act","arguments":json!({"tab":"t1","observation":"o1","observe":false,"steps":[{"action":"back"}]}).to_string()}}]}));
+    messages.push(observe);
+    messages.push(json!({"role":"assistant","content":"Finished."}));
+    let (requests, ops) = run(messages).await?;
+    assert_eq!(
+        ops.iter()
+            .map(|op| op["op"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        [
+            "tab.open",
+            "tab.observe",
+            "tab.prepare",
+            "tab.act",
+            "tab.observe"
+        ]
+    );
+    let first = output(&requests[2]);
+    let second = output(&requests[4]);
+    assert_eq!(first["output"]["obs"], "o1", "{first}");
+    assert_eq!(second["output"]["obs"], "o2", "{second}");
+    assert_eq!(
+        first["output"]["untrusted_content"]["text"], "Page text",
+        "{first}"
+    );
+    assert_eq!(
+        second["output"]["untrusted_content"]["text"], "Previous page",
+        "{second}"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn repeated_idless_structured_observe() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    repeated_idless_observe(false).await
+}
+
+#[tokio::test]
+async fn repeated_idless_text_observe() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    repeated_idless_observe(true).await
+}
+
+#[tokio::test]
+async fn valid_free_form_wrappers_reach_mcp_intact() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let arguments = [
+        json!({"input":{"count":"2"}}),
+        json!({"echo":{"count":"2"}}),
+    ];
+    let calls = [
+        ("tool_describe", json!({"ids":["mcp:e2e:echo"]})),
+        (
+            "tool_call",
+            json!({"id":"mcp:e2e:echo","arguments":arguments[0]}),
+        ),
+        (
+            "tool_call",
+            json!({"id":"mcp:e2e:echo","arguments":arguments[1]}),
+        ),
+    ];
+    let mut messages: Vec<_> = calls.into_iter().enumerate().map(|(index,(name,args))| json!({
+        "role":"assistant","content":null,"tool_calls":[{"id":format!("free_form_{index}"),"type":"function",
+        "function":{"name":name,"arguments":args.to_string()}}]
+    })).collect();
+    messages.push(json!({"role":"assistant","content":"Finished."}));
+    let model = FakeServer::local_models(ChatBehavior {
+        script: messages,
+        refuse_stream: true,
+        local_capabilities: LocalCapabilities {
+            ollama: Some(vec!["completion".into(), "tools".into()]),
+            ..Default::default()
+        },
+        ..Default::default()
+    })
+    .await?;
+    let mcp = FakeServer::mcp_http().await?;
+    let s = super::setup_local_models::with_local_server("FREE-FORM-ARGS", &model).await?;
+    super::setup_local_models::use_local_model(&s, &model.base_url).await?;
+    let added =
+        s.gw.post(
+            "/mcp-servers",
+            json!({"id":"e2e","display_name":"Echo", "enabled":true,
+        "transport":"http","url":format!("{}/mcp",mcp.base_url)}),
+        )
+        .await?;
+    assert_eq!(added.status, 201, "{}", added.text);
+    assert!(super::mcp::healthy(&super::mcp::probe(&s).await?));
+    s.turn("general", "Echo the supplied objects.").await?;
+    let received: Vec<Value> = mcp
+        .seen()
+        .iter()
+        .filter_map(|seen| serde_json::from_str::<Value>(&seen.body).ok())
+        .filter(|request| request["method"] == "tools/call")
+        .map(|request| request["params"]["arguments"].clone())
+        .collect();
+    assert_eq!(received, arguments);
+    s.finish().await
 }

@@ -150,7 +150,8 @@ fn parse_body(body: &str, allowed: &HashSet<&str>, index: usize) -> Option<Model
     };
     let raw = butler_core::json::stringify(&Value::Object(arguments.clone())).ok()?;
     Some(ModelRoundToolCall {
-        id: format!("local_text_call_{index}"),
+        // Persisted with the accepted round, so replay keeps the same journal identity.
+        id: format!("local_text_call_{index}_{}", uuid::Uuid::new_v4()),
         name,
         arguments,
         raw_arguments: raw,

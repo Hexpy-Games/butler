@@ -42,8 +42,7 @@ async fn browser_batch_observes_after_keyboard_and_path_steps() -> Result<(), Ha
             "tab.observe",
             "tab.prepare",
             "tab.act",
-            "tab.observe",
-            "tabs.list"
+            "tab.observe"
         ],
         "each observe:true batch is followed by exactly one observation"
     );
@@ -92,7 +91,6 @@ async fn browser_batch_observes_after_keyboard_and_path_steps() -> Result<(), Ha
         json!(["fixture"]),
         "a mistyped tab id is corrected from the conversation's own tabs"
     );
-    assert_eq!(mistyped["output"]["tabs"][0]["tab"], "fixture");
     s.finish().await
 }
 
@@ -172,9 +170,6 @@ async fn serve_host(
                 }).collect::<Vec<_>>()})
             }
             "tab.act" => act(&frame, &steps),
-            "tabs.list" => {
-                json!({"status":"ok","tabs":[{"id":"fixture","url":"https://example.com","title":"Page"}]})
-            }
             _ => panic!("unexpected browser op {op}"),
         };
         if op == "tab.act" {

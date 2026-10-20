@@ -10,7 +10,8 @@ pub(super) fn call(
     let id = id
         .and_then(Value::as_str)
         .map(str::to_owned)
-        .unwrap_or_else(|| format!("local_call_{index}"));
+        // Accepted rounds persist this id with the decoded call; replay never regenerates it.
+        .unwrap_or_else(|| format!("local_call_{index}_{}", uuid::Uuid::new_v4()));
     let name = name?.as_str()?.to_owned();
     let raw = arguments
         .and_then(Value::as_str)
