@@ -113,6 +113,7 @@ mod memory_idle;
 mod memory_import;
 mod memory_model_cleanup;
 mod memory_wiring;
+mod metric_retention;
 mod migration;
 mod model_thinking;
 mod monitoring_scale;
@@ -177,6 +178,7 @@ mod token_cache;
 #[path = "support/token_metrics.rs"]
 mod token_metrics;
 mod tools;
+mod tools_direct_args;
 mod tools_effects;
 mod turn;
 mod turn_continuation;

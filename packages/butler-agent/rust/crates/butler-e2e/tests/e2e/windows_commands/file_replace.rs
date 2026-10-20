@@ -1,5 +1,5 @@
 //! Native rename-replace refusals: a read-only target is final, and the
-//! retry decision for every refusal code and DELETE-probe outcome.
+//! retry decision for every refusal code and source/target or source/parent probe.
 use super::capability_stub::{self as provider, Case};
 use butler_e2e::e2e::{
     HarnessError,
@@ -36,6 +36,12 @@ fn replace_retry_follows_rename_code_and_delete_probes() -> Result<(), HarnessEr
         (Some(5), Some([OK, Err(Some(2))]), false),
         (Some(5), Some([Err(None), OK]), false),
         (Some(5), None, false),
+        // First creation probes source DELETE and parent FILE_ADD_FILE.
+        (Some(5), Some([OK, Err(Some(32))]), true),
+        (Some(5), Some([Err(Some(33)), OK]), true),
+        (Some(5), Some([Err(Some(2)), OK]), false),
+        (Some(5), Some([OK, Err(Some(3))]), false),
+        (Some(5), Some([OK, Err(None)]), false),
     ] {
         assert_eq!(
             replacement_retry_allowed(rename, probed(probes)),

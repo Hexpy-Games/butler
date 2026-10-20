@@ -115,7 +115,7 @@ fn normalize_fields(fields: &mut Map<String, Value>, schema: &Value, strict: boo
     });
 }
 
-fn has_type(schema: &Value) -> bool {
+pub(super) fn has_type(schema: &Value) -> bool {
     schema.get("type").is_some()
         || ["oneOf", "anyOf"].iter().any(|key| {
             schema
@@ -125,7 +125,7 @@ fn has_type(schema: &Value) -> bool {
         })
 }
 
-fn allows(schema: &Value, kind: &str) -> bool {
+pub(super) fn allows(schema: &Value, kind: &str) -> bool {
     schema
         .get("type")
         .is_some_and(|t| t == kind || t.as_array().is_some_and(|ts| ts.iter().any(|t| t == kind)))

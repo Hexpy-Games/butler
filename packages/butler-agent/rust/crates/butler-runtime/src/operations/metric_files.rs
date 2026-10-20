@@ -1,8 +1,8 @@
 //! Operations-owned append and retention for the fixed metric files.
 
-use parking_lot::{Mutex, MutexGuard};
+use parking_lot::Mutex;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufRead, BufReader, BufWriter, Write};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -13,6 +13,8 @@ use crate::context::{
     CompactionMetricEvent, ContextCompactionMetricSink, ContextError, ContextResult,
     PruneMetricObserver, PruneToolOutputResult,
 };
+
+mod retention;
 
 const METRIC_FILES: [MetricFile; 4] = [
     MetricFile::ContextMonitor,
@@ -51,19 +53,20 @@ impl MetricFile {
 
 /// Shared per-runtime access to the fixed Operations metric files.
 ///
-/// Clones share four fixed locks. Appends and retention therefore serialize for
-/// the same file without coordinating unrelated files or using a global table.
+/// Stable sidecar locks coordinate independent instances and processes. Retention
+/// streams outside the append lock, then verifies EOF and publishes under it.
+/// Call these synchronous file operations from blocking workers.
 #[derive(Clone)]
 pub struct MetricFiles {
     data_root: PathBuf,
-    locks: [Arc<Mutex<()>>; 4],
+    retention: [Arc<Mutex<Option<retention::Snapshot>>>; 4],
 }
 
 impl MetricFiles {
     pub fn new(data_root: PathBuf) -> Self {
         Self {
             data_root,
-            locks: std::array::from_fn(|_| Arc::new(Mutex::new(()))),
+            retention: std::array::from_fn(|_| Arc::new(Mutex::new(None))),
         }
     }
 
@@ -72,7 +75,7 @@ impl MetricFiles {
     }
 
     pub(crate) fn append(&self, file: MetricFile, bytes: &[u8]) -> io::Result<()> {
-        let _guard = self.lock(file);
+        let _guard = self.file_lock(file, "append")?;
         let directory = self.metric_directory();
         fs::create_dir_all(&directory)?;
         let mut options = OpenOptions::new();
@@ -110,73 +113,24 @@ impl MetricFiles {
         now_ms: f64,
         max_age_ms: f64,
     ) -> io::Result<MetricRetentionStats> {
-        let _guard = self.lock(file);
-        let path = self.metric_directory().join(file.file_name());
-        let source = match File::open(&path) {
-            Ok(source) => source,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                return Ok(MetricRetentionStats::default());
-            }
-            Err(error) => return Err(error),
-        };
-
-        let temporary_path = temporary_path(&path);
-        let output = open_private_temporary(&temporary_path)?;
-        let mut cleanup = TemporaryPath::new(temporary_path.clone());
-        let mut reader = BufReader::new(source);
-        let mut writer = BufWriter::new(output);
-        let threshold = now_ms - max_age_ms;
-        let mut stats = MetricRetentionStats::default();
-        let mut record = Vec::new();
-
-        loop {
-            record.clear();
-            if reader.read_until(b'\n', &mut record)? == 0 {
-                break;
-            }
-            if is_blank_record(&record) {
-                continue;
-            }
-
-            stats.scanned += 1;
-            let Ok(mut value) = serde_json::from_slice::<Value>(&record) else {
-                stats.parse_errors += 1;
-                continue;
-            };
-            let timestamp = value
-                .get("ts")
-                .and_then(Value::as_f64)
-                .filter(|timestamp| timestamp.is_finite());
-            let Some(timestamp) = timestamp else {
-                stats.parse_errors += 1;
-                continue;
-            };
-            if timestamp < threshold {
-                stats.deleted += 1;
-                continue;
-            }
-
-            let Some(object) = value.as_object_mut() else {
-                stats.parse_errors += 1;
-                continue;
-            };
-            object.insert("rawTextStored".into(), Value::Bool(false));
-            serde_json::to_writer(&mut writer, &value).map_err(json_write_error)?;
-            writer.write_all(b"\n")?;
-            stats.kept += 1;
-        }
-
-        writer.flush()?;
-        writer.get_ref().sync_all()?;
-        drop(writer);
-        butler_platform::secure_fs::rename(&temporary_path, &path)?;
-        butler_platform::secure_fs::sync_directory(&self.metric_directory()).unwrap_or(Ok(()))?;
-        cleanup.commit();
-        Ok(stats)
+        let mut snapshot = self.retention[file.index()].lock();
+        retention::retain(self, file, now_ms - max_age_ms, &mut snapshot)
     }
 
-    fn lock(&self, file: MetricFile) -> MutexGuard<'_, ()> {
-        self.locks[file.index()].lock()
+    fn file_lock(
+        &self,
+        file: MetricFile,
+        lane: &str,
+    ) -> io::Result<butler_platform::instance::InstanceLock> {
+        let directory = self.metric_directory();
+        butler_platform::secure_fs::create_private_dir_all(&directory)?;
+        let mut options = OpenOptions::new();
+        options.read(true).write(true).create(true).truncate(false);
+        butler_platform::secure_fs::owner_only(&mut options);
+        butler_platform::secure_fs::no_follow(&mut options);
+        let lock = options.open(directory.join(format!(".{}.{lane}.lock", file.file_name())))?;
+        butler_platform::secure_fs::restrict_open_file(&lock).unwrap_or(Ok(()))?;
+        butler_platform::instance::InstanceLock::exclusive(lock)
     }
 
     fn metric_directory(&self) -> PathBuf {
@@ -298,14 +252,6 @@ impl Drop for TemporaryPath {
             let _ = fs::remove_file(&self.path);
         }
     }
-}
-
-fn json_write_error(error: serde_json::Error) -> io::Error {
-    io::Error::other(error)
-}
-
-fn is_blank_record(record: &[u8]) -> bool {
-    std::str::from_utf8(record).is_ok_and(|text| text.trim().is_empty())
 }
 
 #[cfg(test)]

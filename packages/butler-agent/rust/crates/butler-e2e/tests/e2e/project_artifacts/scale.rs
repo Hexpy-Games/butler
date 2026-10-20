@@ -137,7 +137,7 @@ fn seed_history(db: &Connection) {
 }
 
 #[tokio::test]
-async fn many_matches_page_completely_at_owner_scale() -> Result<(), HarnessError> {
+async fn perf_many_matches_page_completely_at_owner_scale() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("PROJECT-ARTIFACT-PAGES")?
         .stub_cassette(stub::cassette()?)
