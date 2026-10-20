@@ -22,13 +22,16 @@ async fn upload_checks_content_refusals_and_consumes_stages() -> Result<(), Harn
             upload("missing"),
             upload("node_modules"),
             upload("alias"),
+            upload("../outside.txt"),
             call("browser_act", json!({"tab":"pub","observation":"obs-1","steps":[
-                {"action":"upload","ref":"e1","value":"report.txt"},
+                {"action":"upload","ref":"e1","value":"sub/../report.txt"},
                 {"action":"upload","ref":"e1","value":"node_modules/pkg/index.txt"}]})),
         ],
     )])?);
     let data = setup.sandbox.data.clone();
     std::fs::create_dir_all(data.join("auth"))?;
+    std::fs::create_dir_all(data.join("sub"))?;
+    std::fs::write(data.parent().unwrap().join("outside.txt"), "outside bytes")?;
     std::fs::create_dir_all(data.join("node_modules/pkg"))?;
     std::fs::write(data.join("auth/login"), "private-fixture")?;
     std::fs::hard_link(data.join("auth/login"), data.join("alias"))?;
@@ -61,6 +64,7 @@ async fn upload_checks_content_refusals_and_consumes_stages() -> Result<(), Harn
         "upload_file_not_found",
         "upload_not_a_file",
         "upload_sensitive_file",
+        "upload_outside_workspace",
     ] {
         assert!(history.contains(reason), "{reason} missing from results");
     }

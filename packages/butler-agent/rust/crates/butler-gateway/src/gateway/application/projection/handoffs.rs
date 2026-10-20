@@ -19,7 +19,7 @@ impl Index {
             let mut index = Self::default();
             if root.exists() {
                 for entry in std::fs::read_dir(root)? {
-                    index.refresh(&data, entry?.path())?;
+                    index.refresh(entry?.path())?;
                 }
             }
             Ok::<_, std::io::Error>(index)
@@ -28,7 +28,7 @@ impl Index {
         .map_err(GatewayApplicationError::internal_from)?
         .map_err(GatewayApplicationError::internal_from)
     }
-    fn refresh(&mut self, data: &std::path::Path, path: PathBuf) -> std::io::Result<()> {
+    fn refresh(&mut self, path: PathBuf) -> std::io::Result<()> {
         self.0.remove(&path);
         if path
             .file_name()
@@ -43,7 +43,7 @@ impl Index {
         };
         let value: serde_json::Value =
             serde_json::from_str(&identity).map_err(std::io::Error::other)?;
-        let owner = ownership::decode(data, value)?;
+        let owner = ownership::decode(value)?;
         self.0.insert(path, (owner, identity));
         Ok(())
     }
@@ -65,7 +65,7 @@ impl Index {
         let mut index = self.clone();
         let (index, entries) = tokio::task::spawn_blocking(move || {
             for path in paths {
-                index.refresh(&data, path)?;
+                index.refresh(path)?;
             }
             let entries = index
                 .0

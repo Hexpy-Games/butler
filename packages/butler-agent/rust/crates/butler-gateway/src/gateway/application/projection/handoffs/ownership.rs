@@ -23,38 +23,20 @@ fn database(data: &Path) -> io::Result<Connection> {
     )
     .map_err(io::Error::other)
 }
-pub(super) fn decode(data: &Path, value: serde_json::Value) -> io::Result<Owner> {
-    if let Some(turn) = value.get("turn").and_then(|v| v.as_str()) {
-        return Ok(
-            if let Some(session) = value.get("child_session").and_then(|v| v.as_str()) {
-                Owner::Child(session.into(), turn.into())
-            } else {
-                Owner::Turn(
-                    value
-                        .get("parent_turn")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or(turn)
-                        .into(),
-                )
-            },
-        );
+pub(super) fn decode(value: serde_json::Value) -> io::Result<Owner> {
+    if !value.is_object() {
+        return Err(io::Error::other("invalid_handoff_owner"));
     }
-    let (turn, session): (String, Option<String>) =
-        serde_json::from_value(value).map_err(io::Error::other)?;
-    if session.is_some() {
-        let child: Option<String> = database(data)?
-            .query_row(
-                "SELECT session_id FROM btcc_turns WHERE turn_id=?1",
-                [&turn],
-                |row| row.get(0),
-            )
-            .optional()
-            .map_err(io::Error::other)?;
-        if let Some(child) = child {
-            return Ok(Owner::Child(child, turn));
-        }
+    #[derive(serde::Deserialize)]
+    struct Record {
+        turn: String,
+        child_session: Option<String>,
     }
-    Ok(Owner::Turn(turn))
+    let record: Record = serde_json::from_value(value).map_err(io::Error::other)?;
+    Ok(match record.child_session {
+        Some(session) => Owner::Child(session, record.turn),
+        None => Owner::Turn(record.turn),
+    })
 }
 
 pub(super) fn resolve(data: &Path, owner: &Owner) -> io::Result<Option<Resolved>> {
@@ -162,7 +144,7 @@ pub(super) fn expired(db: &Connection, owner: Option<Resolved>) -> Result<bool, 
                 return Ok(true);
             };
             let queued: Option<(Option<String>, String)> = db.query_row(
-                "SELECT turn_id,status FROM session_queued_messages WHERE chat_id=?1 AND client_message_id=?2",
+                "SELECT turn_id,state FROM session_queued_messages WHERE chat_id=?1 AND client_message_id=?2",
                 params![chat,client], |row| Ok((row.get(0)?,row.get(1)?))).optional().map_err(AppStorageError::sqlite)?;
             match queued {
                 Some((Some(turn), _)) => {

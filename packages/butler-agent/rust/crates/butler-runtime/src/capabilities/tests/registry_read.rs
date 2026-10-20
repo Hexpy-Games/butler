@@ -1,8 +1,9 @@
 use super::*;
 
-// test-category: pure-logic
+// test-category: security
 #[tokio::test]
 async fn registered_read_preserves_bom_line_endings_errors_and_continuation() {
+    contained_read_file_refusals_preserve_guard_fields_and_safe_explanations().await;
     let fixture = Fixture::new();
     assert_eq!(
         fixture.capabilities.registered_names(),
@@ -69,4 +70,87 @@ async fn registered_read_preserves_bom_line_endings_errors_and_continuation() {
         .await;
     assert_eq!(input_alias["files"][0]["error"], "invalid_utf8");
     fixture.files.close().await;
+}
+
+async fn contained_read_file_refusals_preserve_guard_fields_and_safe_explanations() {
+    let fixture = Fixture::new();
+    let outside = Fixture::new();
+    fixture.write(".env", b"private-fixture");
+    outside.write("outside.txt", b"outside");
+    let protected = fixture.root.join("ledger");
+    std::fs::create_dir_all(&protected).unwrap();
+    std::fs::write(protected.join("record"), b"ledger").unwrap();
+    std::fs::create_dir(fixture.root.join("folder")).unwrap();
+    let mut cases = vec![
+        (
+            "../outside.txt",
+            "path_escape",
+            "The requested path is outside the permitted scope.",
+        ),
+        (
+            ".env",
+            "sensitive_path_blocked",
+            "The requested path contains sensitive or credential files.",
+        ),
+        (
+            "ledger/record",
+            "protected_path",
+            "Project Ledger paths require dedicated tools.",
+        ),
+        ("folder", "not_a_file", "The requested path is a directory."),
+        (
+            "missing.txt",
+            "not_found",
+            "The requested path was not found.",
+        ),
+    ];
+    if secure_fs::NO_FOLLOW {
+        secure_fs::symlink(
+            &outside.root.join("outside.txt"),
+            &fixture.root.join("link"),
+        )
+        .unwrap();
+        cases.push((
+            "link",
+            "symlink_escape",
+            "The requested path is outside the permitted scope.",
+        ));
+    }
+    for (path, code, message) in cases {
+        let call = json!({"arguments":{"requests":[{"path":path}]}});
+        let result = fixture
+            .capabilities
+            .invoke(
+                "read_file",
+                CapabilityInvocation {
+                    contained: true,
+                    call: &call,
+                    workspace_reference: None,
+                    workspace_path: Some(&fixture.root),
+                    butler_data: &fixture.root,
+                    protected_ledger_roots: std::slice::from_ref(&protected),
+                    allowed_tools_and_effects: None,
+                    mutation_scope: None,
+                    installation_root: None,
+                },
+            )
+            .await
+            .unwrap();
+        let file = &result["files"][0];
+        assert_eq!(file["error"], code, "{result}");
+        assert_eq!(file["message"], message, "{result}");
+        assert_eq!(file["workspace_root"], json!(fixture.root), "{result}");
+        assert_eq!(file["guard"]["workspace_root"], json!(fixture.root));
+        assert_eq!(file["guard"]["ok"], false);
+        assert_ne!(file["recovery_hint"].as_str().unwrap(), "");
+        for field in ["message", "recovery_hint"] {
+            let text = file[field].as_str().unwrap();
+            assert!(!text.contains(".env") && !text.contains(outside.root.to_str().unwrap()));
+        }
+        let guard_message = file["guard"]["message"].as_str().unwrap();
+        assert!(!guard_message.contains(".env"));
+        assert!(!guard_message.contains(outside.root.to_str().unwrap()));
+    }
+    fixture.files.close().await;
+    outside.files.close().await;
 }

@@ -161,7 +161,7 @@ fn admitted_file(
             cache,
             &input.protected_roots,
         )
-        .map_err(|error| io_failure(&input.path, &error, ReadStage::Read)));
+        .map_err(|error| contained_rejection(input, &error)));
     }
     let guard = resolve_workspace_path_guard(GuardInput {
         butler_data: Some(&input.butler_data),
@@ -201,6 +201,32 @@ fn admitted_file(
         ))),
         Err(error) => Ok(Err(io_failure(&input.path, &error, ReadStage::Read))),
     }
+}
+
+// Admission stays with the descriptor walk; only refused reads need the legacy
+// guard's public shape. Never interpolate an OS error or resolved secret path.
+fn contained_rejection(input: &ReadFileInput, error: &std::io::Error) -> Value {
+    let reason = super::path_messages::io_reason(error);
+    if let Ok(mut guard) = resolve_workspace_path_guard(GuardInput {
+        butler_data: Some(&input.butler_data),
+        root: &input.root,
+        requested: &input.path,
+        path_form: input.path_form,
+        allow_directories: false,
+        protected_roots: &input.protected_roots,
+    }) {
+        if matches!(reason, "sensitive_path_blocked" | "safety_refused") {
+            guard.reason = Some(reason);
+            guard.protected = false;
+        } else if guard.reason.is_none() && !matches!(reason, "io_error" | "invalid_path") {
+            guard.reason = Some(reason);
+            guard.protected = reason == "protected_path";
+        }
+        if guard.reason.is_some() {
+            return super::path_messages::read_rejection(&guard, &input.path);
+        }
+    }
+    io_failure(&input.path, error, ReadStage::Read)
 }
 
 /// Digest and size of the bytes read; failures after the read report them.

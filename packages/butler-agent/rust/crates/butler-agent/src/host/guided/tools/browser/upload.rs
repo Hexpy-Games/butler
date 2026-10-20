@@ -78,21 +78,15 @@ fn workspace_file(
         .canonical_root(root)
         .map_err(|_| "workspace_unavailable")?;
     // The descriptor walk checks links; the turn keeps its selected root spelling.
-    let path = root.join(raw);
+    let path = butler_platform::tool_paths::lexical(&root.join(raw));
+    let relative = path
+        .strip_prefix(&root)
+        .map_err(|_| "upload_outside_workspace")?;
     // Keep the established classification order; this path never supplies upload bytes.
     let real = std::fs::canonicalize(&path).map_err(|_| "upload_file_not_found")?;
     let real_relative = real
         .strip_prefix(&root)
         .map_err(|_| "upload_outside_workspace")?;
-    let Ok(relative) = path.strip_prefix(&root) else {
-        return Err("upload_outside_workspace");
-    };
-    if Path::new(raw)
-        .components()
-        .any(|part| matches!(part, std::path::Component::ParentDir))
-    {
-        return Err("upload_outside_workspace");
-    }
     // Never offer credentials, keys or Butler's own state, even with approval.
     let relative = relative.to_string_lossy();
     if sensitive_path(&relative) || sensitive_path(&real_relative.to_string_lossy()) {

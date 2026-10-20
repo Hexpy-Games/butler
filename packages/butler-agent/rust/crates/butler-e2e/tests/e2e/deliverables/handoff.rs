@@ -119,7 +119,7 @@ async fn materialize_missing_handoff_preserves_other_attachments() -> Result<(),
     std::fs::create_dir_all(&orphan)?;
     std::fs::write(
         orphan.join(".turn"),
-        serde_json::to_vec(&("deleted-turn", Option::<String>::None))?,
+        serde_json::to_vec(&json!({"turn":"deleted-turn","child_session":null}))?,
     )?;
     std::fs::write(orphan.join("copy"), "Abandoned")?;
     let incomplete = s.sandbox.data.join(MESSAGE_HANDOFFS).join("ownerless");
@@ -132,7 +132,7 @@ async fn materialize_missing_handoff_preserves_other_attachments() -> Result<(),
     std::fs::create_dir_all(&temporary)?;
     std::fs::write(
         temporary.join(".turn"),
-        r#"{"turn":"still-running","parent_turn":null}"#,
+        r#"{"turn":"still-running","child_session":null}"#,
     )?;
     s.gw = s.agent.start_again().await?;
     wait_for(|| !orphan.exists()).await;
@@ -157,7 +157,7 @@ async fn deleted_turn_handoff_is_reclaimed_without_restart() -> Result<(), Harne
     std::fs::create_dir_all(&orphan)?;
     std::fs::write(
         orphan.join(".turn"),
-        serde_json::to_vec(&("abandoned", Option::<String>::None))?,
+        serde_json::to_vec(&json!({"turn":"abandoned","child_session":null}))?,
     )?;
     std::fs::write(orphan.join("copy"), "Never attached")?;
     let deleted =
