@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use butler_platform::instance::{self as platform, StopError};
 
 use super::InstanceRecord;
-use crate::host::service::instance_identity::identity_error;
+use crate::host::service::instance_identity::{identity_error, identity_unavailable_after_exit};
 
 /// How a stop reached the instance.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -98,7 +98,12 @@ pub(crate) fn remove_shutdown_flag(data_root: &Path) -> io::Result<()> {
 /// started when the record says; otherwise it has exited
 /// (`native_service_process_exited`).
 pub(crate) fn force_stop(record: &InstanceRecord) -> Result<(), crate::host::HostError> {
-    platform::terminate(record.pid, &record.process_start).map_err(stop_error)
+    match platform::terminate(record.pid, &record.process_start) {
+        Err(StopError::Identity(error)) if identity_unavailable_after_exit(record.pid, &error) => {
+            Err("native_service_process_exited".into())
+        }
+        other => other.map_err(stop_error),
+    }
 }
 
 fn stop_error(error: StopError) -> crate::host::HostError {

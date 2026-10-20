@@ -15,7 +15,7 @@ use serde_json::Value;
 
 use super::managed::{is_managed, is_pid_managed, restart_instance};
 use super::{
-    StopReport, acquire_admission, active_service, log_file, resolve_data_root,
+    StopReport, acquire_admission, active_service_async, log_file, resolve_data_root,
     service_configuration, start_replacement, stop_service_admitted,
 };
 use crate::host::ResolvedInstallation;
@@ -203,7 +203,7 @@ async fn restart_once(
         .await
         .map_err(precondition_failure)?;
     service_instance::refuse_live_legacy_process(data_root).map_err(precondition_failure)?;
-    let active = match active_service(data_root) {
+    let active = match active_service_async(data_root).await {
         Ok(Some(active)) => active,
         Ok(None) => {
             return Err((
@@ -240,7 +240,7 @@ async fn restart_once(
     let started = start_replacement(installation, &config, admission, &stopped)
         .await
         .map_err(|error| ("start_failed", error.to_string()))?;
-    let active = match active_service(data_root) {
+    let active = match active_service_async(data_root).await {
         Ok(Some(active)) => active,
         Ok(None) => {
             return Err((

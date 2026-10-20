@@ -115,7 +115,7 @@ fn plan(context: &Context, options: &Options) -> (Value, String) {
 
 /// Stops the service if one runs, so no process holds files being removed.
 async fn stop_service(context: &Context) -> Result<bool, CliError> {
-    match service::running_instance(&context.data_root) {
+    match service::running_instance_async(&context.data_root).await {
         Ok(None) => Ok(false),
         Ok(Some(_)) => service::stop_running(context.installation.clone(), &context.data_root)
             .await
@@ -139,7 +139,10 @@ async fn hold_data(
     let guard = service::admit(&context.installation, &context.data_root)
         .await
         .map_err(|error| CliError::failed("service_busy", error.message().to_owned()))?;
-    if matches!(service::running_instance(&context.data_root), Ok(Some(_))) {
+    if matches!(
+        service::running_instance_async(&context.data_root).await,
+        Ok(Some(_))
+    ) {
         return Err(CliError::failed(
             "service_running",
             "the service started again; stop it and retry",

@@ -21,6 +21,27 @@ pub(super) fn artifact_path(root: &Path, date: &str, project_id: Option<&str>) -
     }
 }
 
+/// Publication is the per-target completion record, including the gap before
+/// the phase checkpoint commits. Only the same logical run may reuse it.
+pub(super) fn published_for_run(
+    path: &Path,
+    run_id: &str,
+) -> Result<bool, BriefingGenerationError> {
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(io_error(error)),
+    };
+    Ok(
+        serde_json::from_slice::<serde_json::Value>(&bytes).is_ok_and(|artifact| {
+            artifact
+                .pointer("/source/consolidation_run_id")
+                .and_then(serde_json::Value::as_str)
+                == Some(run_id)
+        }),
+    )
+}
+
 pub(super) fn write(path: &Path, artifact: &impl Serialize) -> Result<(), BriefingGenerationError> {
     let parent = path.parent().ok_or_else(|| {
         error(

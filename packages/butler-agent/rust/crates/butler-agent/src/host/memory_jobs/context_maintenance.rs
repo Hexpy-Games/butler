@@ -173,7 +173,7 @@ async fn run_daily_jobs(
         minute,
         now_ms,
         cancellation,
-        daily.session_sync(cancellation),
+        |_, _| daily.session_sync(cancellation),
     ))
     .await
     {
@@ -189,7 +189,7 @@ async fn run_daily_jobs(
         minute,
         now_ms,
         cancellation,
-        daily.consolidation_cycle(cancellation),
+        |run_id, started| daily.consolidation_cycle(run_id, started, cancellation),
     )
     .await
     {

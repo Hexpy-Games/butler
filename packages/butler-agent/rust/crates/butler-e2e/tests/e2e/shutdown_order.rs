@@ -20,6 +20,8 @@ use std::time::{Duration, Instant};
 
 #[path = "shutdown_order/diagnostics.rs"]
 mod diagnostics;
+#[path = "shutdown_order/memory.rs"]
+mod memory;
 
 #[tokio::test]
 async fn gateway_port_pair_stays_reserved_between_processes() -> Result<(), HarnessError> {
@@ -87,13 +89,15 @@ async fn stop_interrupts_a_thirty_second_stream_before_closing_storage() -> Resu
     while s.agent.is_running() {
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
+    let exit_elapsed = started.elapsed();
+    diagnostics::print_shutdown(&s);
     butler_e2e::assert_wall_clock_budget!(
-        started.elapsed(),
+        exit_elapsed,
         Duration::from_secs(8),
         "stop exceeded grace"
     );
     assert!(s.agent.reap().unwrap().success());
-    eprintln!("stream shutdown: {:?}", started.elapsed());
+    eprintln!("stream shutdown: {exit_elapsed:?}");
     assert!(!s.agent.logs().contains("app_sqlite_owner_closed"));
     assert!(
         instance_record(&s.sandbox.data).is_none(),
@@ -290,6 +294,10 @@ async fn control_read_shutdown(order: &str) -> Result<(), HarnessError> {
 }
 
 async fn streaming_scenario(id: &str) -> Result<(Scenario, String), HarnessError> {
+    streaming_with_setup(Setup::new(id)?).await
+}
+
+async fn streaming_with_setup(setup: Setup) -> Result<(Scenario, String), HarnessError> {
     let mut cassette = Cassette::load("TURN-03")?;
     cassette.exchanges.truncate(1);
     let prompt = cassette.exchanges[0].request.key.user_request.clone();
@@ -312,7 +320,11 @@ async fn streaming_scenario(id: &str) -> Result<(Scenario, String), HarnessError
             30_000 / delayed as u64
         };
     }
-    let s = Setup::new(id)?.stub_cassette(cassette).start().await?;
+    let s = setup
+        .env("BUTLER_SHUTDOWN_TRACE", "1")
+        .stub_cassette(cassette)
+        .start()
+        .await?;
     s.provider()?.set_pacing(Pacing {
         scale: 1.0,
         cap_ms: 30_000,

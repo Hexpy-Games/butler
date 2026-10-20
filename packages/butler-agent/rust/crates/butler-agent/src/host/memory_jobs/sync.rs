@@ -37,6 +37,7 @@ pub(in crate::host) struct MemorySyncStartup<'a> {
     pub paths: &'a CognitionPathEnvironment,
     pub unclean_previous_exit: bool,
     pub fresh: Option<FreshMemoryGeneration>,
+    pub stop: &'a CancellationToken,
 }
 
 impl MemorySync {
@@ -56,7 +57,9 @@ impl MemorySync {
             paths,
             unclean_previous_exit,
             fresh,
+            stop,
         } = startup;
+        let shutdown = stop.child_token();
         let changes = observe_changes(data_root, paths).await?;
         let clock: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(sync_now_iso);
         if active_memory_descriptor_exists(data_root, paths).map_err(error)? {
@@ -84,19 +87,19 @@ impl MemorySync {
             coordinator,
             clock,
         )
+        .with_cancellation(&shutdown)
         .with_instruction_owner(instruction_owner)
         .with_unclean_start(unclean_previous_exit);
         let consumer = consumer.with_embedding(embedding);
         let consumer = Arc::new(consumer);
-        let shutdown = CancellationToken::new();
-        let task = tokio::spawn(poll(
+        let task = tokio::spawn(trace_poll(poll(
             consumer.clone(),
             data_root.to_path_buf(),
             paths.clone(),
             shutdown.clone(),
             fresh,
             changes,
-        ));
+        )));
         Ok(Self {
             consumer,
             registration,
@@ -119,6 +122,11 @@ impl MemorySync {
         self.registration.close().await;
         joined
     }
+}
+
+async fn trace_poll(work: impl std::future::Future<Output = ()>) {
+    work.await;
+    crate::host::service::shutdown_trace::event("memory_sync_stopped");
 }
 
 /// Controlled fixture clocks advance durable retry deadlines as well as App time.
@@ -253,6 +261,9 @@ async fn poll_delay(
         Ok(true) => consumer.poll_once().await,
         Err(error) => Err(error),
     };
+    if shutdown.is_cancelled() {
+        return None;
+    }
     let outcome = match &result {
         Ok(MemorySyncPoll::Processed) => "processed",
         Ok(MemorySyncPoll::Idle) => "idle",

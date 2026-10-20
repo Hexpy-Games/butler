@@ -52,3 +52,14 @@ pub(super) fn verified_instance(
         (true, None) => Err("native_service_instance_ambiguous: DATA lock has no record".into()),
     }
 }
+
+pub(super) async fn verified_instance_async(
+    data_root: &Path,
+    installation: &ResolvedInstallation,
+) -> Result<Option<InstanceRecord>, crate::host::HostError> {
+    let data_root = data_root.to_path_buf();
+    let installation = installation.clone();
+    tokio::task::spawn_blocking(move || verified_instance(&data_root, &installation))
+        .await
+        .map_err(crate::host::HostError::from_error)?
+}

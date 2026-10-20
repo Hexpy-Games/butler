@@ -65,6 +65,7 @@ const binaryName = requestedPlatform === "win32" ? "butler-agent.exe" : "butler-
 if (requestedPlatform === "darwin") verifyMacDependencyClosure(sourceBinary);
 if (requestedPlatform === "linux") verifyLinuxDependencyClosure(sourceBinary, requestedArch);
 if (requestedPlatform === "win32") verifyWindowsDependencyClosure(sourceBinary);
+if (["darwin", "linux"].includes(requestedPlatform)) verifyHostLinks(sourceBinary);
 const sourceSha256 = createHash("sha256").update(readFileSync(sourceBinary)).digest("hex");
 process.stdout.write(
   `Native Butler Agent binary (${prebuiltBinary ? "prebuilt, cargo build skipped" : "built from source"}): ${sourceBinary}\n` +
@@ -82,6 +83,7 @@ if (["linux", "win32"].includes(requestedPlatform)) {
   accessSync(helper, constants.X_OK);
   if (requestedPlatform === "linux") verifyLinuxDependencyClosure(helper, requestedArch);
   else verifyWindowsDependencyClosure(helper);
+  if (requestedPlatform === "linux") verifyHostLinks(helper);
   copyFileSync(helper, join(binaryRoot, helperName));
 }
 run(process.execPath, [join(scriptDir, "prepare-process-links.mjs"), join(binaryRoot, binaryName)], rustRoot);
@@ -193,6 +195,13 @@ function run(command, args, cwd, env = process.env) {
   if (result.status === 0) return result.stdout.trim();
   const output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
   throw new Error(`${command} ${args.join(" ")} failed${output ? `:\n${output}` : ""}`);
+}
+
+function verifyHostLinks(binary) {
+  const output = run(process.env.PYTHON3 || "python3", [
+    join(rustRoot, "scripts", "check_host_links.py"), "--platform", requestedPlatform, binary,
+  ], rustRoot);
+  process.stdout.write(`${output}\n`);
 }
 
 function verifyMacDependencyClosure(binary) {

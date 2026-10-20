@@ -1,5 +1,6 @@
 """Byte-producing static ORT build recipe; placement and verification live separately."""
 import os
+import pathlib
 import shutil
 import signal
 import subprocess
@@ -33,6 +34,47 @@ def terminate_group(process):
         process.wait()
 
 
+ISOLATION_DEFINES = (
+    "FETCHCONTENT_TRY_FIND_PACKAGE_MODE=NEVER",
+    "CMAKE_FIND_USE_PACKAGE_REGISTRY=OFF",
+    "CMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF",
+    # Source archives have no Git checkout metadata or Git-based dependencies.
+    "CMAKE_DISABLE_FIND_PACKAGE_Git=ON",
+    # Abseil defaults this unused test-source hint to a host directory.
+    "ABSL_LOCAL_GOOGLETEST_DIR=",
+)
+SEARCH_ENV = {
+    "CMAKE_PREFIX_PATH", "CMAKE_INCLUDE_PATH", "CMAKE_LIBRARY_PATH", "CMAKE_PROGRAM_PATH",
+    "CMAKE_FRAMEWORK_PATH", "CMAKE_APPBUNDLE_PATH", "CMAKE_TOOLCHAIN_FILE",
+    "PKG_CONFIG_PATH", "PKG_CONFIG_LIBDIR", "PKG_CONFIG_SYSROOT_DIR", "LIBRARY_PATH",
+    "CPATH", "C_INCLUDE_PATH", "CPLUS_INCLUDE_PATH", "OBJC_INCLUDE_PATH",
+    "LDFLAGS", "CPPFLAGS", "CFLAGS", "CXXFLAGS", "LD_LIBRARY_PATH",
+}
+
+
+def build_environment(stage, cmake, ninja, target, inherited):
+    """Remove inherited search redirects; preserve the Windows developer shell."""
+    env = {key: value for key, value in inherited.items()
+           if key.upper() not in SEARCH_ENV
+           and (key.upper() == "DEVELOPER_DIR" or not key.upper().endswith(("_ROOT", "_DIR")))
+           and not key.upper().startswith("DYLD_")}
+    tools = [str(ninja.parent), str(cmake.parent)]
+    if target == "windows-x64":
+        tools.append(inherited.get("PATH", ""))
+    else:
+        tools.extend([str(pathlib.Path(sys.executable).parent), "/usr/bin", "/bin", "/usr/sbin", "/sbin"])
+    if target.startswith("linux-"):
+        for key, default in (("CC", "cc"), ("CXX", "c++")):
+            compiler = shutil.which(inherited.get(key, default), path=inherited.get("PATH", ""))
+            if not compiler:
+                fail(f"Static ORT compiler {key} could not be resolved")
+            env[key] = str(pathlib.Path(compiler).absolute())
+    empty = stage / "empty-pkg-config"
+    empty.mkdir(exist_ok=True)
+    env.update(PATH=os.pathsep.join(tools), PKG_CONFIG_LIBDIR=str(empty), PYTHONUNBUFFERED="1")
+    return env
+
+
 def run_build(stage, source, cmake, ninja, eigen, target, lock):
     spec = TARGETS[target]
     if target == "windows-x64" and not shutil.which("cl"):
@@ -42,10 +84,15 @@ def run_build(stage, source, cmake, ninja, eigen, target, lock):
     log = stage / "static-ort-build.log"
     flags = [
         "onnxruntime_BUILD_UNIT_TESTS=OFF", "onnxruntime_BUILD_SHARED_LIB=OFF",
-        "onnxruntime_MINIMAL_BUILD=OFF", *spec["cmake_defines"],
+        "onnxruntime_MINIMAL_BUILD=OFF", *spec["cmake_defines"], *ISOLATION_DEFINES,
         f"Python_EXECUTABLE={sys.executable}", f"Python3_EXECUTABLE={sys.executable}",
         f"FETCHCONTENT_SOURCE_DIR_EIGEN={eigen}",
     ]
+    if target == "windows-x64":
+        patch = source / "cmake/external/git.Win32.2.41.03.patch/patch.exe"
+        if not patch.is_file():
+            fail(f"Pinned build tool missing: {patch}")
+        flags.append(f"Patch_EXECUTABLE={patch}")
     args = [
         sys.executable, str(source / "tools/ci_build/build.py"),
         "--build_dir", str(build_root), "--config", "Release", "--update", "--build",
@@ -54,9 +101,7 @@ def run_build(stage, source, cmake, ninja, eigen, target, lock):
         "--cmake_generator", "Ninja", "--cmake_path", str(cmake),
         "--cmake_extra_defines", *flags,
     ]
-    env = dict(os.environ)
-    env["PATH"] = f"{ninja.parent}{os.pathsep}{cmake.parent}{os.pathsep}{env.get('PATH', '')}"
-    env["PYTHONUNBUFFERED"] = "1"
+    env = build_environment(stage, cmake, ninja, target, os.environ)
     with log.open("w") as output:
         process = subprocess.Popen(
             args, cwd=source, env=env, stdout=output, stderr=subprocess.STDOUT,
@@ -79,7 +124,7 @@ def run_build(stage, source, cmake, ninja, eigen, target, lock):
     with log.open("a") as output:
         re2 = subprocess.Popen(
             [str(cmake), "--build", str(build_root / "Release"), "--target", "re2", "--parallel", parallel],
-            stdout=output, stderr=subprocess.STDOUT, start_new_session=True,
+            stdout=output, stderr=subprocess.STDOUT, env=env, start_new_session=True,
         )
         try:
             re2.wait(timeout=10 * 60)
