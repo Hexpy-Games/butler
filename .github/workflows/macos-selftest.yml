@@ -1,0 +1,17 @@
+name: macOS self-test
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    name: no-identity and ad-hoc self-test
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: python3 .github/scripts/isolated.py bun install --frozen-lockfile --ignore-scripts
+      - run: python3 .github/scripts/isolated.py deploy/macos/selftest.sh
