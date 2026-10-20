@@ -223,7 +223,7 @@ impl SecretInventory {
         metadata: &Metadata,
     ) -> io::Result<()> {
         if self.protects_path(root) || self.protects_metadata(metadata) {
-            return Err(denied());
+            return Err(sensitive());
         }
         if let Some(id) = secure_fs::identity(metadata).id {
             let roots = self.roots.lock().map_err(|_| denied())?;
@@ -235,6 +235,10 @@ impl SecretInventory {
         }
         Ok(())
     }
+}
+
+pub(crate) fn sensitive() -> io::Error {
+    io::Error::new(io::ErrorKind::PermissionDenied, "sensitive_path_blocked")
 }
 
 pub(crate) fn denied() -> io::Error {

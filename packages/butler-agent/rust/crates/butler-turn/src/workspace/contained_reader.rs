@@ -32,7 +32,11 @@ pub(super) fn open_protected(
     {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
-            "contained_read_refused",
+            if requested.is_absolute() {
+                "absolute_path_not_allowed"
+            } else {
+                "parent_traversal_not_allowed"
+            },
         ));
     }
     if !form.contained() {
@@ -44,7 +48,7 @@ pub(super) fn open_protected(
     } else {
         requested
     };
-    match cache {
+    let result = match cache {
         Some(cache) => cache.open_for_data(root, &relative, data, protected),
         None => secure_fs::ContainedReadCache::default().open_protected(
             root,
@@ -52,5 +56,34 @@ pub(super) fn open_protected(
             &SecretInventory::cached(data),
             protected,
         ),
+    };
+    result.map_err(|error| legacy_refusal(root, path, form, data, protected, error))
+}
+
+// The fd walk owns admission; classification on failure preserves established wire codes.
+fn legacy_refusal(
+    root: &Path,
+    path: &str,
+    form: PathForm,
+    data: &Path,
+    protected: &[std::path::PathBuf],
+    error: io::Error,
+) -> io::Error {
+    if error.to_string() == "sensitive_path_blocked" {
+        return error;
     }
+    if let Ok(guard) =
+        super::path_guard::resolve_workspace_path_guard(super::path_guard::GuardInput {
+            butler_data: Some(data),
+            root,
+            requested: path,
+            path_form: form,
+            allow_directories: false,
+            protected_roots: protected,
+        })
+        && let Some(reason) = guard.reason
+    {
+        return io::Error::new(error.kind(), reason);
+    }
+    error
 }

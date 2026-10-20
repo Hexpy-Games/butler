@@ -64,7 +64,12 @@ fn io_failure(path: &str, error: &std::io::Error, stage: ReadStage) -> Value {
     let code = super::path_messages::io_reason(error);
     if matches!(
         code,
-        "permission_denied" | "invalid_path" | "safety_refused" | "not_a_file" | "path_escape"
+        "permission_denied"
+            | "invalid_path"
+            | "safety_refused"
+            | "sensitive_path_blocked"
+            | "not_a_file"
+            | "path_escape"
     ) {
         let (message, hint) = super::path_messages::explanation(code);
         let message = if code == "invalid_path" {

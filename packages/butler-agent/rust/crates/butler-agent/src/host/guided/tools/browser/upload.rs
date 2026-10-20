@@ -101,14 +101,7 @@ fn workspace_file(
     }
     let file =
         butler_platform::secure_fs::open_contained(&root, Path::new(relative.as_ref()), &inventory)
-            .map_err(|error| match error.kind() {
-                std::io::ErrorKind::NotFound => "upload_file_not_found",
-                std::io::ErrorKind::InvalidInput | std::io::ErrorKind::NotADirectory => {
-                    "upload_not_a_file"
-                }
-                std::io::ErrorKind::PermissionDenied => "upload_sensitive_file",
-                _ => "upload_file_unavailable",
-            })?;
+            .map_err(|error| refusal(&root, &path, &error))?;
     let metadata = file.metadata().map_err(|_| "upload_file_not_found")?;
     if !metadata.is_file() {
         return Err("upload_not_a_file");
@@ -132,5 +125,29 @@ fn recovery(reason: &str) -> &'static str {
         "upload_not_a_file" => "Choose a regular file, rather than a directory or special file.",
         "upload_sensitive_file" => "Choose an ordinary workspace file outside credential stores.",
         _ => "Use one existing workspace file of at most 100 MB. No steps were dispatched.",
+    }
+}
+
+// Classification never supplies the file: only the descriptor walk can admit bytes.
+fn refusal(root: &Path, path: &Path, error: &std::io::Error) -> &'static str {
+    if let Ok(real) = std::fs::canonicalize(path) {
+        let Ok(relative) = real.strip_prefix(root) else {
+            return "upload_outside_workspace";
+        };
+        let relative = relative.to_string_lossy();
+        if butler_turn::workspace::looks_sensitive(&relative)
+            || relative
+                .split(['/', '\\'])
+                .any(|part| part.starts_with('.'))
+            || INTERNAL.contains(&relative.split(['/', '\\']).next().unwrap_or(""))
+        {
+            return "upload_sensitive_file";
+        }
+    }
+    match error.kind() {
+        std::io::ErrorKind::NotFound => "upload_file_not_found",
+        std::io::ErrorKind::InvalidInput | std::io::ErrorKind::NotADirectory => "upload_not_a_file",
+        std::io::ErrorKind::PermissionDenied => "upload_sensitive_file",
+        _ => "upload_file_unavailable",
     }
 }

@@ -110,7 +110,7 @@ pub fn open_contained(
             .any(|part| crate::secure_fs::secret_name(&part.as_os_str().to_string_lossy()))
             || inventory.protects_path(&root.join(relative))
         {
-            return Err(crate::secure_fs::inventory::denied());
+            return Err(crate::secure_fs::inventory::sensitive());
         }
         open(root, relative, false)
     }
@@ -148,7 +148,8 @@ impl ContainedReadCache {
             policies: std::sync::Mutex::new(
                 self.policies.lock().map(|p| p.clone()).unwrap_or_default(),
             ),
-            ..Self::default()
+            #[cfg(unix)]
+            inner: std::sync::Mutex::default(),
         }
     }
     /// Use an explicitly supplied host policy for this request.
@@ -161,7 +162,8 @@ impl ContainedReadCache {
                 data.to_path_buf(),
                 inventory,
             )])),
-            ..Self::default()
+            #[cfg(unix)]
+            inner: std::sync::Mutex::default(),
         }
     }
     /// Capture host policy once, off the per-file environment lookup path.

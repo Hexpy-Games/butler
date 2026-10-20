@@ -2,7 +2,7 @@
 //! a process: a later command cannot reuse an earlier command's path decisions.
 use crate::{
     secure_fs,
-    secure_fs::inventory::{SecretInventory, denied},
+    secure_fs::inventory::{SecretInventory, denied, sensitive},
 };
 use rustix::fs::{AtFlags, FileType, Mode, OFlags, open, openat, readlinkat, statat};
 use std::{
@@ -156,15 +156,7 @@ impl Walk<'_> {
             return Ok(None);
         }
         self.names.push(component);
-        if secure_fs::secret_name(&component.to_string_lossy())
-            || self
-                .root
-                .protected
-                .iter()
-                .any(|root| self.names.starts_with(root))
-        {
-            return Err(denied());
-        }
+        self.check_name(component)?;
         let intermediate = !self.pending.is_empty();
         if intermediate && let Some(file) = self.root.directories.get(&self.names) {
             self.parents.push(file.clone());
@@ -180,8 +172,10 @@ impl Walk<'_> {
             }
         };
         let metadata = file.metadata()?;
+        if self.inventory.protects_metadata(&metadata) {
+            return Err(sensitive());
+        }
         if metadata.dev() != self.root.device
-            || self.inventory.protects_metadata(&metadata)
             || secure_fs::identity(&metadata)
                 .id
                 .is_some_and(|id| self.root.protected_ids.contains(&id))
@@ -194,7 +188,7 @@ impl Walk<'_> {
                 return Err(io::Error::new(io::ErrorKind::InvalidInput, "not_a_file"));
             }
             if metadata.nlink() > 1 && !self.inventory.permits_hard_link(&metadata) {
-                return Err(denied());
+                return Err(sensitive());
             }
             return Ok(Some(file));
         }
@@ -211,6 +205,30 @@ impl Walk<'_> {
         }
         self.parents.push(file);
         Ok(None)
+    }
+
+    fn check_name(&self, component: &OsStr) -> io::Result<()> {
+        if secure_fs::secret_name(&component.to_string_lossy()) {
+            return Err(sensitive());
+        }
+        if self
+            .root
+            .protected
+            .iter()
+            .any(|root| self.names.starts_with(root))
+        {
+            return Err(
+                if self
+                    .inventory
+                    .protects_path(&self.root.canonical.join(&self.names))
+                {
+                    sensitive()
+                } else {
+                    denied()
+                },
+            );
+        }
+        Ok(())
     }
 
     fn expand(&mut self, text: &Path) -> io::Result<()> {

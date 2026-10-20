@@ -118,6 +118,7 @@ fn visit(
     inventory: &butler_platform::secure_fs::SecretInventory,
     skipped: &mut Vec<String>,
 ) -> std::io::Result<()> {
+    checked(root, path)?;
     let source_relative = path
         .strip_prefix(root)
         .map_err(|_| error("unsafe_output_path"))?;
@@ -128,7 +129,6 @@ fn visit(
         skipped.push(source_relative.to_string_lossy().into_owned());
         return Ok(());
     }
-    checked(root, path)?;
     let metadata = std::fs::symlink_metadata(path)?;
     if inventory.protects_metadata(&metadata) {
         skipped.push(source_relative.to_string_lossy().into_owned());

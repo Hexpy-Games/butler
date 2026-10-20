@@ -230,7 +230,7 @@ pub(super) fn success(
 
 fn candidate_hint(reason: Option<&str>) -> &'static str {
     match reason {
-        Some("safety_refused" | "path_escape") => {
+        Some("safety_refused" | "sensitive_path_blocked" | "path_escape") => {
             "Choose an ordinary workspace file outside credential stores."
         }
         Some("not_found") => "Restart discovery or choose an existing file.",

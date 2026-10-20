@@ -7,6 +7,7 @@ pub(in crate::command_sandbox) mod portable;
 /// Pre-run names from the existing directory-entry walk. No identity,
 /// timestamp, target resolution or credential-tree walk is performed here.
 #[derive(Debug)]
+#[cfg_attr(not(target_os = "linux"), derive(Default))]
 pub struct ProjectEntries {
     protected: Vec<PathBuf>,
     #[cfg(target_os = "linux")]
@@ -81,7 +82,7 @@ pub fn sweep_with_inventory(
     #[cfg(windows)]
     {
         let _ = inventory;
-        return super::windows::mxc::ledger::sweep(root, since, data);
+        super::windows::mxc::ledger::sweep(root, since, data)
     }
     #[cfg(not(any(target_os = "linux", windows)))]
     {
@@ -100,6 +101,7 @@ pub fn prewarm_project(root: &Path) {
     let _ = root;
 }
 
+#[cfg(target_os = "linux")]
 impl Default for ProjectEntries {
     fn default() -> Self {
         Self {
