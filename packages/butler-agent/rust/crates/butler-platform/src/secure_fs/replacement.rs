@@ -1,7 +1,9 @@
-//! Durable private-file publication, with a staging file owned by this call.
+//! Durable private-file publication, with staging or fresh final names.
+mod fresh;
 use super::{
     OWNER_ONLY, owner_only, rename, restrict_file, sync_directory, timing, unique_temporary,
 };
+pub use fresh::PrivateFileBatch;
 use std::{
     fs::{self, File, OpenOptions},
     io,

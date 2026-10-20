@@ -1,5 +1,5 @@
 //! Durable publication of fresh private names, with a shared directory flush.
-use super::{
+use super::super::{
     OWNER_ONLY, owner_only, rename, restrict_file, sync_directory, timing, unique_temporary,
 };
 use std::{
