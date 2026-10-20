@@ -15,6 +15,16 @@ pub(super) async fn start(
     let installed = s.agent.launch.binary.clone();
     let head = s.sandbox.root.join("startup-head-agent");
     executable::copy(&installed, &head)?;
+    // The shared seed intentionally leaves 100 turns for App retention. Settle
+    // those with the existing helper before comparing identical persisted data.
+    executable::copy(&PathBuf::from(&baseline), &installed)?;
+    s.gw = s.agent.start_again().await?;
+    crate::app_storage_scale::wait_retention_settled(s).await;
+    crate::data_perf::assert_app(&s.sandbox.data)?;
+    assert!(
+        usage::embedding_children(s.agent.pid().unwrap())?.is_none_or(|workers| workers.is_empty())
+    );
+    s.agent.terminate().await?;
     let mut elapsed = 0;
     for round in 1..=5 {
         for (name, binary) in [("main", PathBuf::from(&baseline)), ("head", head.clone())] {
