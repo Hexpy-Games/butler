@@ -83,8 +83,7 @@ fn workspace_file(
         .strip_prefix(&root)
         .map_err(|_| "upload_outside_workspace")?;
     // Keep the established classification order; this path never supplies upload bytes.
-    let real =
-        butler_platform::secure_fs::canonicalize(&path).map_err(|_| "upload_file_not_found")?;
+    let real = std::fs::canonicalize(&path).map_err(|_| "upload_file_not_found")?;
     let real_relative = real
         .strip_prefix(&root)
         .map_err(|_| "upload_outside_workspace")?;
@@ -124,7 +123,7 @@ fn recovery(reason: &str) -> &'static str {
 
 // Classification never supplies the file: only the descriptor walk can admit bytes.
 fn refusal(root: &Path, path: &Path, error: &std::io::Error) -> &'static str {
-    if let Ok(real) = butler_platform::secure_fs::canonicalize(path) {
+    if let Ok(real) = std::fs::canonicalize(path) {
         let Ok(relative) = real.strip_prefix(root) else {
             return "upload_outside_workspace";
         };

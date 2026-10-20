@@ -94,16 +94,7 @@ pub(super) fn collect(
     });
     relative(&entry)?;
     if !files.contains_key(&entry) {
-        // A refused entry leaves nothing to publish; the refusal is the result.
-        let entry_source = base
-            .strip_prefix(&root)
-            .map_err(|_| error("unsafe_output_path"))?
-            .join(&entry);
-        if !skipped.iter().any(|path| entry_source.starts_with(path)) {
-            return Err(error("output_entry_not_found"));
-        }
-        files.clear();
-        size = 0;
+        return Err(error("output_entry_not_found"));
     }
     Ok(Snapshot {
         skipped,
