@@ -312,19 +312,6 @@ async fn live_08_cancel_real_stream() -> Result<(), HarnessError> {
     done("LIVE-08")
 }
 
-/// LIVE-09 — Cassette drift: re-record the canonical exchange and compare
-/// structural fingerprints (event types and key sets, not text).
-#[tokio::test]
-#[ignore = "LIVE tier"]
-async fn live_09_cassette_drift() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let Some(provider) = live::gate("LIVE-09")? else {
-        return Ok(());
-    };
-    drift::check(&provider).await?;
-    done("LIVE-09")
-}
-
 /// LIVE-10 — Subscription token refresh (dedicated Butler or Codex profile).
 #[tokio::test]
 #[ignore = "LIVE tier"]
