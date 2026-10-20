@@ -14,7 +14,7 @@ pub(super) fn creates(tokens: &[Word]) -> bool {
     }
     let name = program.text.to_ascii_lowercase();
     let name = name.trim_end_matches(".exe");
-    let arguments = &tokens[1..];
+    let arguments = tokens.get(1..).unwrap_or_default();
     match name {
         "ln" | "link" | "rsync" | "tar" | "bsdtar" | "unzip" | "7z" | "cpio" | "pax" | "mklink" => {
             true
@@ -31,10 +31,10 @@ pub(super) fn creates(tokens: &[Word]) -> bool {
             ["symboliclink", "junction", "hardlink"].contains(&value)
         }),
         // Programs that run a command given in their own arguments.
-        "xargs" => (1..tokens.len()).any(|index| creates(&tokens[index..])),
+        "xargs" => (1..tokens.len()).any(|index| tokens.get(index..).is_some_and(creates)),
         "find" => tokens.iter().enumerate().any(|(index, word)| {
             ["-exec", "-execdir", "-ok", "-okdir"].contains(&word.text.as_str())
-                && creates(&tokens[index + 1..])
+                && tokens.get(index + 1..).is_some_and(creates)
         }),
         _ => inline_code(name, arguments),
     }
