@@ -75,6 +75,7 @@ pub(super) async fn prepare(
         butler_data: scope.butler_data.to_path_buf(),
         workspace,
         contained_reads: scope.contained_reads,
+        full_access: scope.full_access,
         root_identity,
         cwd,
         cwd_identity,
@@ -101,6 +102,7 @@ struct CommandEffectAdapter {
     butler_data: PathBuf,
     workspace: PathBuf,
     contained_reads: bool,
+    full_access: bool,
     root_identity: PathBuf,
     cwd: PathBuf,
     cwd_identity: PathBuf,
@@ -234,6 +236,7 @@ impl CommandEffectAdapter {
                         butler_data: &self.butler_data,
                         execution: super::CommandExecution::Registered,
                         contained_reads: self.contained_reads,
+                        full_access: self.full_access,
                         abort: signal.clone(),
                         allowed_tools_and_effects: self.allowed_tools_and_effects.as_deref(),
                         installation_root: self.installation_root.as_deref(),
@@ -253,8 +256,13 @@ impl CommandEffectAdapter {
                     workspace_reference: None,
                     workspace_path: &self.workspace,
                     butler_data: &self.butler_data,
-                    execution: super::CommandExecution::Registered,
+                    execution: if self.project_write {
+                        super::CommandExecution::ProjectWrite
+                    } else {
+                        super::CommandExecution::Registered
+                    },
                     contained_reads: self.contained_reads,
+                    full_access: self.full_access,
                     abort: signal.clone(),
                     allowed_tools_and_effects: self.allowed_tools_and_effects.as_deref(),
                     installation_root: self.installation_root.as_deref(),
