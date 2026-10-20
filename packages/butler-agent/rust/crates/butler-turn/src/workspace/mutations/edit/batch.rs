@@ -91,6 +91,7 @@ fn snapshot_files(edits: &[GuardedEdit], failures: &mut Vec<EditFailure>) -> Fil
 fn snapshot_file(edit: &GuardedEdit) -> Result<(Snapshot, String), EditFailure> {
     let key = &edit.path.public;
     let path = super::super::contracts::GuardedPath {
+        read_scope: edit.path.read_scope.clone(),
         public: key.clone(),
         absolute: edit.path.absolute.clone(),
         real: edit.path.real.clone(),

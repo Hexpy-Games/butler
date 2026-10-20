@@ -432,6 +432,7 @@ pub(super) fn guarded_directory(
         return Ok(root.to_path_buf());
     }
     let result = resolve_workspace_path_guard(GuardInput {
+        butler_data: None,
         root,
         requested,
         path_form,

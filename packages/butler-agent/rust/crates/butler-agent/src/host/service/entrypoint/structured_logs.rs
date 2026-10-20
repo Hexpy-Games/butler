@@ -83,6 +83,7 @@ pub(super) async fn run_until_stopped(
     crate::host::service::data_reset::initialize_owned(&config, &user_home, journal_seen).await?;
     config = support::initialize_credentials(config).await?;
     report_credential_errors(&config, logs);
+    let staging = reader_staging(config.data_root.clone()).await?;
     let port = listener
         .as_ref()
         .and_then(|listener| listener.local_addr().ok())
@@ -102,6 +103,13 @@ pub(super) async fn run_until_stopped(
         structured_logs.close(),
     )
     .await;
+    if let Err(error) = tokio::task::spawn_blocking(move || staging.cleanup())
+        .await
+        .map_err(io)
+        .and_then(|result| result.map_err(io))
+    {
+        eprintln!("[agent] reader staging cleanup failed; startup will retry: {error}");
+    }
     // serve_initialized has joined App DB/artifact jobs, native dispatcher,
     // BTCC/conversation/binding stores, memory/cognition, developer capture and
     // transcript writer. Browser owners are joined by the HTTP listener;
@@ -119,6 +127,15 @@ pub(super) async fn run_until_stopped(
         .await
         .map_err(|error| failure("native_service_instance_release_failed", error.to_string()))?;
     result.and_then(|session| closed.and(reset).map(|()| session))
+}
+
+async fn reader_staging(
+    data: std::path::PathBuf,
+) -> Result<butler_platform::secure_fs::ReaderStaging, BtccError> {
+    tokio::task::spawn_blocking(move || butler_platform::secure_fs::ReaderStaging::new(data))
+        .await
+        .map_err(io)?
+        .map_err(io)
 }
 
 async fn serve_initialized(

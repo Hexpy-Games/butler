@@ -10,8 +10,9 @@ use sha2::{Digest, Sha256};
 use super::path_guard::{MutationGuardInput, resolve_workspace_mutation_guard};
 
 /// Where effect file writes may land.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct EffectFileScope {
+    pub inventory: Option<Arc<butler_platform::secure_fs::SecretInventory>>,
     pub workspace: PathBuf,
     pub butler_data: PathBuf,
     pub protected_roots: Vec<PathBuf>,
@@ -104,6 +105,7 @@ impl EffectFileError {
 
 #[derive(Clone, Debug)]
 pub struct GuardedEffectFile {
+    scope: Arc<EffectFileScope>,
     absolute: PathBuf,
     identity: PathBuf,
 }
@@ -124,8 +126,9 @@ pub async fn guard_effect_file(
     let scope = scope.clone();
     let path = path.to_owned();
     tokio::task::spawn_blocking(move || {
-        let protected = scope.protected_roots;
+        let protected = scope.protected_roots.clone();
         let guarded = resolve_workspace_mutation_guard(MutationGuardInput {
+            butler_data: Some(&scope.butler_data),
             root: &scope.workspace,
             requested: &path,
             path_form: if scope.contained {
@@ -143,7 +146,11 @@ pub async fn guard_effect_file(
         }
         let identity = guarded.real.clone().or_else(|| guarded.absolute.clone());
         match (guarded.absolute, identity) {
-            (Some(absolute), Some(identity)) => Ok(GuardedEffectFile { absolute, identity }),
+            (Some(absolute), Some(identity)) => Ok(GuardedEffectFile {
+                scope: Arc::new(scope),
+                absolute,
+                identity,
+            }),
             _ => Err(EffectFileError::ContainmentUnavailable { source: None }),
         }
     })
@@ -163,7 +170,10 @@ pub async fn read_effect_edit_target(
         if !metadata.file_type().is_file() {
             return Err(EffectFileError::EditTargetNotRegularFile);
         }
-        let bytes = std::fs::read(&guarded.absolute).map_err(EffectFileError::edit_target)?;
+        let mut bytes = Vec::new();
+        open_target(&guarded)
+            .and_then(|mut file| file.read_to_end(&mut bytes))
+            .map_err(EffectFileError::edit_target)?;
         if bytes.iter().take(4096).any(|byte| *byte == 0) {
             return Err(EffectFileError::EditTargetBinary);
         }
@@ -178,6 +188,7 @@ pub async fn read_effect_edit_target(
 
 /// Observes the target's size and digest.
 pub async fn observe_effect_file(target: &GuardedEffectFile) -> EffectFileObservation {
+    let target = target.clone();
     let path = target.absolute.clone();
     tokio::task::spawn_blocking(move || {
         let observed = (|| -> std::io::Result<EffectFileObservation> {
@@ -187,7 +198,7 @@ pub async fn observe_effect_file(target: &GuardedEffectFile) -> EffectFileObserv
                     EffectFileError::WriteTargetNotFile,
                 ));
             }
-            let mut file = std::fs::File::open(&path)?;
+            let mut file = open_target(&target)?;
             let mut chunk = vec![0_u8; 64 * 1024];
             let mut bytes = 0_usize;
             let mut sha256 = Sha256::new();
@@ -221,4 +232,24 @@ pub async fn observe_effect_file(target: &GuardedEffectFile) -> EffectFileObserv
     .unwrap_or_else(|error| {
         EffectFileObservation::Unavailable(EffectFileError::write_target(error))
     })
+}
+
+fn open_target(target: &GuardedEffectFile) -> std::io::Result<std::fs::File> {
+    let cache = target.scope.inventory.as_ref().map(|i| {
+        butler_platform::secure_fs::ContainedReadCache::with_inventory(
+            &target.scope.butler_data,
+            i.clone(),
+        )
+    });
+    super::contained_reader::open_cached(
+        &target.scope.workspace,
+        &target.absolute.to_string_lossy(),
+        if target.scope.contained {
+            super::PathForm::Contained
+        } else {
+            super::PathForm::RelativeOrAbsolute
+        },
+        &target.scope.butler_data,
+        cache.as_ref(),
+    )
 }

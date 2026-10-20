@@ -97,6 +97,13 @@ fn classify(
         return TargetScope::Attachment;
     }
     let real = realpath_or_nearest(&absolute);
+    let inventory = butler_platform::secure_fs::SecretInventory::cached(roots.butler_data);
+    if inventory.protects_path(&absolute)
+        || inventory.protects_path(&real)
+        || std::fs::metadata(&real).is_ok_and(|meta| inventory.protects_metadata(&meta))
+    {
+        return TargetScope::Protected;
+    }
     let Some(project) = project else {
         return TargetScope::Outside;
     };

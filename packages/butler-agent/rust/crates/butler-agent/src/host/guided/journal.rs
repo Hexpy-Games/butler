@@ -114,6 +114,18 @@ impl JournalPort for GuidedJournal {
             let pending = result.output.as_ref().is_some_and(|value| {
                 value.field("authority_pending").ok().flatten() == Some("true")
             });
+            if pending {
+                // The binding ends at suspension; preserve completed declarations
+                // before its transient reader scope is released.
+                let workspace = invocation
+                    .turn
+                    .context
+                    .pointer("/executionPolicy/workspacePath")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("");
+                let closeout = closeout::collect(&self.journal, &self.turn_id, workspace).await?;
+                closeout::handoff(closeout, &self.turn_id).await?;
+            }
             Ok(pending.then_some(ToolOutcome::Suspend(SuspensionReason::AuthorityPending)))
         })
     }
@@ -141,16 +153,18 @@ impl JournalPort for GuidedJournal {
                 .and_then(serde_json::Value::as_str)
                 == Some("steward");
             if result.is_none() && !workers {
-                return Ok(closeout::without_pictured(own));
+                return closeout::handoff(closeout::without_pictured(own), &self.turn_id).await;
             }
             let child = self
                 .subsessions
                 .delivered_files(invocation.turn.session_id.clone(), result, workers)
                 .await
                 .map_err(BtccError::from)?;
-            Ok(closeout::without_pictured(closeout::merge_files(
-                child, own,
-            )))
+            closeout::handoff(
+                closeout::without_pictured(closeout::merge_files(child, own)),
+                &self.turn_id,
+            )
+            .await
         })
     }
 }

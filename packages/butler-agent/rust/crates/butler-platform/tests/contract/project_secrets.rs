@@ -1,7 +1,7 @@
 //! Filesystem boundary contract for the portable post-run sweep.
 use super::{fs, scratch};
 use butler_platform::command_sandbox::{
-    discover_project_secrets, project_write_mechanism, sweep_new_secrets,
+    discover_project_entries, project_write_mechanism, sweep_new_secrets,
 };
 
 fn credential_names_preserve_ascii_case_and_unicode_boundaries() {
@@ -26,11 +26,11 @@ pub(super) fn verify() {
     fs::write(project.join(".env"), "existing").unwrap();
     let link = project.join("alias");
     make_alias(&outside, &link);
-    let before = discover_project_secrets(&project).unwrap();
+    let before = discover_project_entries(&project).unwrap();
     fs::write(project.join("sub/.env.local"), "new").unwrap();
     let swept = sweep_new_secrets(&project, &before, &data).unwrap();
     if ["landlock", "mxc_base_container"].contains(&project_write_mechanism()) {
-        assert_eq!(before, [project.join(".env")]);
+        assert_eq!(&*before, &[project.join(".env")]);
         assert_eq!(swept, [project.join("sub/.env.local")]);
         assert!(!project.join("sub/.env.local").exists());
         let run = fs::read_dir(data.join("sandbox-quarantine"))
@@ -50,7 +50,7 @@ pub(super) fn verify() {
         #[cfg(windows)]
         win32_trimmed_names_are_swept_as_named(&project, &before, &data);
     } else {
-        assert_eq!(before, [] as [std::path::PathBuf; 0]);
+        assert!(before.is_empty());
         assert_eq!(swept, [] as [std::path::PathBuf; 0]);
     }
     assert_eq!(fs::read_to_string(outside.join(".env")).unwrap(), "outside");
@@ -89,7 +89,7 @@ fn remove_alias(link: &std::path::Path) {
 #[cfg(windows)]
 fn win32_trimmed_names_are_swept_as_named(
     project: &std::path::Path,
-    before: &[std::path::PathBuf],
+    before: &butler_platform::command_sandbox::ProjectEntries,
     data: &std::path::Path,
 ) {
     let verbatim = fs::canonicalize(project).unwrap().join("sub.");

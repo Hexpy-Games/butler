@@ -113,6 +113,7 @@ pub enum WorkspaceListOutcome {
 pub(super) fn list_blocking(input: &WorkspaceListInput) -> std::io::Result<WorkspaceListOutcome> {
     let timing = super::file_timing::Timing::new("list_files");
     let mut guard = resolve_workspace_path_guard(GuardInput {
+        butler_data: None,
         root: &input.root,
         requested: &input.requested_root,
         path_form: input.path_form,
@@ -120,14 +121,7 @@ pub(super) fn list_blocking(input: &WorkspaceListInput) -> std::io::Result<Works
         protected_roots: &input.protected_roots,
     })?;
     timing.mark("root_guarded");
-    let not_directory = match guard.accepted() {
-        Some((absolute, selected)) => {
-            !std::fs::symlink_metadata(absolute)?.is_dir()
-                || !std::fs::symlink_metadata(selected)?.is_dir()
-        }
-        None => false,
-    };
-    if not_directory {
+    if !guard_is_directory(&guard)? {
         guard.reason = Some("not_a_directory");
     }
     let Some((_, root_path)) = guard.accepted() else {
@@ -373,4 +367,12 @@ impl Walk<'_> {
 
 fn utf16_cmp(left: &str, right: &str) -> std::cmp::Ordering {
     left.encode_utf16().cmp(right.encode_utf16())
+}
+
+fn guard_is_directory(guard: &super::path_guard::GuardResult) -> std::io::Result<bool> {
+    match guard.accepted() {
+        Some((absolute, selected)) => Ok(std::fs::symlink_metadata(absolute)?.is_dir()
+            && std::fs::symlink_metadata(selected)?.is_dir()),
+        None => Ok(true),
+    }
 }

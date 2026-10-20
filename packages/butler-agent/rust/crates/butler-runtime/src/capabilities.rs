@@ -46,6 +46,19 @@ pub struct CapabilityInvocation<'a> {
     pub installation_root: Option<&'a std::path::Path>,
 }
 
+impl CapabilityInvocation<'_> {
+    /// Each tool request gets fresh directory fds under its admitted turn policy.
+    fn workspace_request(&self, owner: &WorkspaceFiles) -> WorkspaceFiles {
+        match self
+            .workspace_reference
+            .and_then(butler_turn::workspace::WorkspaceReference::read_inventory)
+        {
+            Some(inventory) => owner.request_with_inventory(self.butler_data, inventory),
+            None => owner.request(),
+        }
+    }
+}
+
 /// A file or skill capability failed. `code()` is the tool-result code (the
 /// capability's own, or the workspace guard's reason); the source keeps the
 /// underlying I/O, owner or JSON error.

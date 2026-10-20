@@ -6,7 +6,7 @@ use super::*;
 const RELAY: &str = "\nDeliver this to the user as your answer, outcome first. Its open or unconfirmed items are work, not caveats: settle any that one quick lookup can settle, and keep only what still matters to the user's next decision, once, in one line. Never forward a limitations list, per-item unconfirmed tags or columns, lines about what was not re-checked or what the result does not prove or guarantee, or how the work was recorded.";
 
 /// The result identity of one child turn: each turn has at most one result.
-pub(crate) fn turn_result_id(session: &str, turn: &str) -> String {
+pub fn turn_result_id(session: &str, turn: &str) -> String {
     format!(
         "result-{}",
         crate::btcc::digest_identity(&format!("btcc.subsession.result.v1\0{session}\0{turn}"))

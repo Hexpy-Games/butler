@@ -29,6 +29,7 @@ pub struct GrepMatch {
 
 /// A listed file to search within deadline and budgets.
 pub struct GrepCandidate {
+    pub butler_data: PathBuf,
     pub root: PathBuf,
     pub path_form: super::PathForm,
     pub protected_roots: Vec<PathBuf>,
@@ -88,8 +89,11 @@ fn matches_line(matcher: &Regex, line: &str, units: &mut Vec<u16>) -> bool {
 
 /// Reads one listed candidate within the deadline and byte cap and returns
 /// its matching lines with context.
-pub(super) fn read_candidate(input: &GrepCandidate) -> GrepRead {
-    let bytes = match read_bounded(input) {
+pub(super) fn read_candidate(
+    input: &GrepCandidate,
+    cache: Option<&butler_platform::secure_fs::ContainedReadCache>,
+) -> GrepRead {
+    let bytes = match read_bounded(input, cache) {
         Ok(bytes) => bytes,
         Err(skipped) => return skipped,
     };
@@ -110,7 +114,10 @@ pub(super) fn read_candidate(input: &GrepCandidate) -> GrepRead {
 
 /// The candidate's bytes, re-checking type, size and deadline around the
 /// read; a file that grew past the cap after `lstat` is refused.
-fn read_bounded(input: &GrepCandidate) -> Result<Vec<u8>, GrepRead> {
+fn read_bounded(
+    input: &GrepCandidate,
+    cache: Option<&butler_platform::secure_fs::ContainedReadCache>,
+) -> Result<Vec<u8>, GrepRead> {
     if Instant::now() >= input.deadline {
         return Err(GrepRead::skipped_unread("elapsed_ms"));
     }
@@ -118,10 +125,10 @@ fn read_bounded(input: &GrepCandidate) -> Result<Vec<u8>, GrepRead> {
     if input.bytes > cap {
         return Err(GrepRead::skipped_unread("max_bytes_per_file"));
     }
-    let absolute = input.root.join(&input.path);
-    let absolute = if input.path_form == super::PathForm::Contained {
+    if input.path_form.contained() && !butler_platform::secure_fs::FILE_IDS {
         let guard =
             super::path_guard::resolve_workspace_path_guard(super::path_guard::GuardInput {
+                butler_data: Some(&input.butler_data),
                 root: &input.root,
                 requested: &input.path,
                 path_form: input.path_form,
@@ -132,25 +139,28 @@ fn read_bounded(input: &GrepCandidate) -> Result<Vec<u8>, GrepRead> {
         if let Some(reason) = guard.reason {
             return Err(GrepRead::skipped_unread(reason));
         }
-        guard.real.unwrap_or(absolute)
-    } else {
-        absolute
-    };
-    match std::fs::symlink_metadata(&absolute) {
-        Ok(metadata) if !metadata.is_file() => return Err(GrepRead::skipped_unread("symlink")),
-        Ok(metadata) if metadata.len() > cap => {
-            return Err(GrepRead::skipped_unread("max_bytes_per_file"));
+    }
+    if !input.path_form.contained() {
+        match std::fs::symlink_metadata(input.root.join(&input.path)) {
+            Ok(metadata) if !metadata.is_file() => return Err(GrepRead::skipped_unread("symlink")),
+            Ok(metadata) if metadata.len() > cap => {
+                return Err(GrepRead::skipped_unread("max_bytes_per_file"));
+            }
+            Ok(_) => {}
+            Err(_) => return Err(GrepRead::skipped_after_read("io_error", 0)),
         }
-        Ok(_) => {}
-        Err(_) => return Err(GrepRead::skipped_after_read("io_error", 0)),
     }
-    if Instant::now() >= input.deadline {
-        return Err(GrepRead::skipped_unread("elapsed_ms"));
-    }
-    let Ok(file) = std::fs::File::open(&absolute) else {
-        return Err(GrepRead::skipped_after_read("io_error", 0));
-    };
-    // A file can grow after lstat. Bound the native allocation at the declared cap.
+    let file = super::contained_reader::open_protected(
+        &input.root,
+        &input.path,
+        input.path_form,
+        &input.butler_data,
+        cache,
+        &input.protected_roots,
+    )
+    .map_err(|error| refusal(input, &error))?;
+    // Contained opens already verify the file type. The bounded read
+    // below also rejects growth past the cap without a redundant metadata call.
     let mut bytes = Vec::new();
     if file.take(cap + 1).read_to_end(&mut bytes).is_err() {
         return Err(GrepRead::skipped_after_read("io_error", 0));
@@ -165,6 +175,30 @@ fn read_bounded(input: &GrepCandidate) -> Result<Vec<u8>, GrepRead> {
         ));
     }
     Ok(bytes)
+}
+
+// Preserve the guard's original reason and the reader's existing generic I/O code.
+fn refusal(input: &GrepCandidate, error: &std::io::Error) -> GrepRead {
+    if input.path_form == super::PathForm::Contained
+        && let Ok(guard) =
+            super::path_guard::resolve_workspace_path_guard(super::path_guard::GuardInput {
+                butler_data: Some(&input.butler_data),
+                root: &input.root,
+                requested: &input.path,
+                path_form: input.path_form,
+                allow_directories: false,
+                protected_roots: &input.protected_roots,
+            })
+        && let Some(reason) = guard.reason
+    {
+        return GrepRead::skipped_unread(reason);
+    }
+    let reason = match error.to_string().as_str() {
+        "sensitive_path_blocked" => "sensitive_path_blocked",
+        "contained_read_refused" => "safety_refused",
+        _ => "io_error",
+    };
+    GrepRead::skipped_after_read(reason, 0)
 }
 
 /// Collects matching lines with their context until the match count or the

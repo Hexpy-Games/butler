@@ -49,15 +49,11 @@ pub(super) async fn execute(
     workspace: &WorkspaceFiles,
     input: CapabilityInvocation<'_>,
 ) -> Result<Value, CapabilityError> {
+    let workspace = &input.workspace_request(workspace);
     let started = Instant::now();
-    let args = match arguments::parse(input.call) {
-        Ok(args) => args,
-        Err((code, detail)) => {
-            return Ok(json!({"ok":false,"error":code,"detail":detail,
-            "message":"Tool arguments must be a JSON object.",
-            "recovery_hint":"Retry grep_files with pattern and bounded root/glob options.",
-            "evidence_capability_receipts":evidence::grep_limitation(code)}));
-        }
+    let args = match args::call_arguments(input.call) {
+        Ok(value) => value,
+        Err(failure) => return Ok(failure),
     };
     let workspace_root = arguments::root(&input, &args)?
         .to_string_lossy()

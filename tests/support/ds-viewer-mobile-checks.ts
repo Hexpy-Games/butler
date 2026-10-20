@@ -143,7 +143,10 @@ async function assertTitlebar(page: Page, label: string): Promise<void> {
 async function openDrawer(page: Page, label: string) {
   await page.getByRole("button", { name: "Open navigation" }).click();
   await page.waitForFunction((drawer) => getComputedStyle(document.querySelector(drawer)!).visibility === "visible", DRAWER);
-  await settle(page);
+  // A wall-clock delay can finish before Chromium advances a transition under load.
+  await page.locator(DRAWER).evaluate(async (element) => {
+    await Promise.all(element.getAnimations().map((animation) => animation.finished));
+  });
   const state = await drawerState(page);
   assert(state.visible, `${label}: drawer did not open`);
   return state;
