@@ -17,6 +17,16 @@ pub(super) async fn admit(
     let Some(generation) = generation else {
         return Ok(false);
     };
+    // A recall can time out and reap its worker while semantic work holds the
+    // consumer. Retain the completed load's admission until the vector drain
+    // finishes, rather than depending on a later snapshot of worker warmth.
+    if input
+        .embedding
+        .as_ref()
+        .is_some_and(|owner| owner.take_ready_transition())
+    {
+        input.vector_batch.store(true, Ordering::Release);
+    }
     if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
         butler_core::diagnostic!(
             "[memory-sync-trace] vector warm={} batch={} text_advanced={text_advanced}",

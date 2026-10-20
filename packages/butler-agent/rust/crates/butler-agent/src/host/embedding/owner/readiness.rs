@@ -8,40 +8,57 @@ const VERIFYING: u8 = 2;
 /// One atomic observation prevents a readiness caller from combining warmth
 /// from before a failed verification with verification completion after it.
 #[derive(Default)]
-pub(super) struct WorkerReadiness(AtomicU8);
+pub(super) struct WorkerReadiness {
+    state: AtomicU8,
+    pending: AtomicBool,
+}
 
 impl WorkerReadiness {
     pub(super) fn is_warm(&self) -> bool {
-        self.0.load(Ordering::Acquire) != COLD
+        self.state.load(Ordering::Acquire) != COLD
     }
 
     fn is_ready(&self) -> bool {
-        self.0.load(Ordering::Acquire) == WARM
+        self.state.load(Ordering::Acquire) == WARM
     }
 
     pub(super) fn clear(&self) {
-        self.0.store(COLD, Ordering::Release);
+        self.state.store(COLD, Ordering::Release);
+    }
+
+    pub(super) fn take_ready_transition(&self) -> bool {
+        self.pending.swap(false, Ordering::AcqRel)
+    }
+
+    pub(super) fn revoke(&self) {
+        self.clear();
+        self.take_ready_transition();
     }
 
     pub(super) fn begin_verification(&self) {
         let _ = self
-            .0
+            .state
             .compare_exchange(WARM, VERIFYING, Ordering::AcqRel, Ordering::Acquire);
     }
 
     pub(super) fn finish_verification(&self) {
         // Off/close may already have revoked warmth while the exchange ran.
         let _ = self
-            .0
+            .state
             .compare_exchange(VERIFYING, WARM, Ordering::AcqRel, Ordering::Acquire);
     }
 
     /// True only when a cold worker becomes warm; verification is already warm.
     pub(super) fn publish(&self, ready: bool) -> bool {
-        self.0
+        let transitioned = self
+            .state
             .swap(if ready { WARM } else { COLD }, Ordering::AcqRel)
             == COLD
-            && ready
+            && ready;
+        if transitioned {
+            self.pending.store(true, Ordering::Release);
+        }
+        transitioned
     }
 }
 

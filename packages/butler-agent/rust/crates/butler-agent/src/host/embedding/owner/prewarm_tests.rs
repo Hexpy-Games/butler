@@ -210,6 +210,10 @@ pub(super) async fn regressions() {
     type Case = std::pin::Pin<Box<dyn std::future::Future<Output = ()>>>;
     let cases: Vec<(&str, Case)> = vec![
         (
+            "ready transition survives cancelled inference",
+            Box::pin(verification_tests::cancelled_inference_keeps_ready_transition()),
+        ),
+        (
             "background vector candidates during healthy verification",
             Box::pin(verification_tests::background_candidates()),
         ),

@@ -60,6 +60,12 @@ pub trait CognitionEmbeddingPort: Send + Sync {
         true
     }
 
+    /// Consume a completed model load even if the worker subsequently became cold.
+    /// The projection owner uses this event to retain an admitted vector drain.
+    fn take_ready_transition(&self) -> bool {
+        false
+    }
+
     /// The user's memory-model choice: false means no model load, query or vector work.
     fn enabled(&self) -> bool {
         true

@@ -174,3 +174,39 @@ pub(super) async fn memory_wakes() {
     eprintln!("VERIFY-WAKES load/verify/verify per process: {deltas:?}");
     assert_eq!(deltas, [1, 0, 0, 1, 0, 0]);
 }
+
+pub(super) async fn cancelled_inference_keeps_ready_transition() {
+    let (owner, mut gate, mut reader, wakes) = owner(&[ready_response(1), ready_response(2)]);
+    load(&owner, &mut gate, &mut reader).await;
+    let cancellation = CancellationToken::new();
+    let work = owner.embed(
+        EmbeddingRequest {
+            texts: vec!["An explicit instruction".into()],
+            mode: EmbeddingMode::CheckedCls,
+            resplit: true,
+            max_embeddings: Some(1),
+            request_class: EmbeddingRequestClass::WarmInteractive,
+            deadline_at_epoch_ms: None,
+        },
+        cancellation.clone(),
+    );
+    tokio::pin!(work);
+    assert!(futures_util::poll!(work.as_mut()).is_pending());
+    received(&mut reader).await;
+    cancellation.cancel();
+    assert_eq!(work.await.err().unwrap().code(), "embed_request_cancelled");
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while owner.is_warm() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(wakes.load(Ordering::Relaxed), 1);
+    assert!(
+        owner.take_ready_transition(),
+        "consumer missed the completed load"
+    );
+    assert!(!owner.take_ready_transition(), "load was admitted twice");
+    owner.close().await.unwrap();
+}
