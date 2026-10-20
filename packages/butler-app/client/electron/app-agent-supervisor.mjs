@@ -52,14 +52,15 @@ export function fullResetPending({ butlerData }) {
 
 export function prepareAppLocalAuth({
   butlerData,
+  readOnly = false,
   now = () => new Date(),
   generateToken = () => randomBytes(32).toString("base64url"),
 }) {
   const path = appLocalAuthPath(butlerData);
   const existing = readAppLocalAuth({ butlerData });
   if (existing) return existing;
-  // Nothing is created in a data folder being reset; the token is read once the Agent writes it.
-  if (fullResetPending({ butlerData })) return { filePath: path, created: false, token: null };
+  // Refused or resetting data folders are read-only; reuse a token only if one exists.
+  if (readOnly || fullResetPending({ butlerData })) return { filePath: path, created: false, token: null };
   const token = generateToken();
   if (typeof token !== "string" || token.length < 32) {
     throw new Error("App local auth token generation failed");
@@ -110,6 +111,7 @@ export function buildBundledAgentSupervisorEnv({
 
 export function createBundledAgentSupervisor({
   butlerData,
+  readOnly = false,
   resolveGateway,
   spawnProcess,
   healthCheck,
@@ -209,7 +211,7 @@ export function createBundledAgentSupervisor({
   }
 
   async function ensureReadyOnce() {
-    localAuth = localAuth ?? prepareAppLocalAuth({ butlerData });
+    localAuth = localAuth ?? prepareAppLocalAuth({ butlerData, readOnly });
     if (explicitServerUrl) {
       await waitForExplicitServerReady();
       return;
@@ -401,7 +403,7 @@ export function createBundledAgentSupervisor({
     childSpawnError = null;
     childInstance = null;
     attached = null;
-    localAuth = localAuth ?? prepareAppLocalAuth({ butlerData });
+    localAuth = localAuth ?? prepareAppLocalAuth({ butlerData, readOnly });
     onGatewayStarting(gateway);
     const env = buildBundledAgentSupervisorEnv({
       baseEnv,
@@ -833,7 +835,7 @@ export function createBundledAgentSupervisor({
   }
 
   function authHeaders() {
-    localAuth = localAuth ?? prepareAppLocalAuth({ butlerData });
+    localAuth = localAuth ?? prepareAppLocalAuth({ butlerData, readOnly });
     return localAuth.token
       ? { authorization: `Bearer ${localAuth.token}` }
       : {};
