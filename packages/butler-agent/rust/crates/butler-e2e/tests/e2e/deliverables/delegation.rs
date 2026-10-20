@@ -47,14 +47,6 @@ async fn worker_deliverables_and_published_outputs_belong_to_parent() -> Result<
     let items = outputs.data()["items"].as_array().unwrap();
     assert_eq!(items.len(), 1, "{outputs:?}");
     assert_eq!(items[0]["session"], "general");
-    let handoffs = s
-        .sandbox
-        .data
-        .join(butler_platform::data_paths::MESSAGE_HANDOFFS);
-    super::handoff::wait_for(|| {
-        std::fs::read_dir(&handoffs).is_ok_and(|mut entries| entries.next().is_none())
-    })
-    .await;
     s.finish().await?;
     server.abort();
     Ok(())

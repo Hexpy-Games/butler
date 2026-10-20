@@ -11,7 +11,6 @@ mod delivery;
 mod final_candidate;
 mod final_result;
 mod final_turn_events;
-mod handoffs;
 mod non_final;
 pub(in crate::gateway::application) use non_final::row_from_runtime_event;
 pub(super) use non_final::{
@@ -186,14 +185,14 @@ async fn project_final(
     checkpoint: Option<Checkpoint>,
 ) -> Result<bool, GatewayApplicationError> {
     let candidate = load_final_candidate(context, stored_chat, &outbound).await?;
-    let Some(mut candidate) = candidate else {
+    let Some(candidate) = candidate else {
         return discard_final(context, &outbound, checkpoint).await;
     };
-    #[cfg(feature = "e2e-fixtures")]
-    if handoffs::held().await? {
-        return Ok(false);
-    }
-    let files = handoffs::materialize(context, &mut candidate).await?;
+    let files = context
+        .dependencies
+        .artifact_materializer
+        .materialize(candidate.materialization.clone())
+        .await?;
     let reply_id = format!("message-{}", context.dependencies.identity_clock.new_uuid());
     adopt_outputs(
         context,

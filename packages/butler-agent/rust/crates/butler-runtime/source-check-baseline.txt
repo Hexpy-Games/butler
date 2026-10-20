@@ -5,12 +5,12 @@ src/capabilities/catalog/bridge.rs	search_native	101
 src/capabilities/edit_file.rs	execute	89
 src/capabilities/edit_file/normalize.rs	batch	87
 src/capabilities/edit_file/result.rs	batch_result	112
-src/capabilities/grep_files.rs	execute	107
+src/capabilities/grep_files.rs	execute	111
 src/capabilities/grep_files/args.rs	normalize	94
 src/capabilities/grep_files/response.rs	success	192
 src/capabilities/grep_files/search.rs	execute	121
 src/capabilities/list_files.rs	execute	149
-src/capabilities/read_file.rs	execute	208
+src/capabilities/read_file.rs	execute	228
 src/capabilities/write_file.rs	execute	130
 src/context/compaction.rs	compact_transcript	188
 src/context/conversation/format.rs	compile_prompt_material_context_plan	110

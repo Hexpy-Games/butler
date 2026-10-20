@@ -294,24 +294,3 @@ async fn in_flight_edit_waits_for_next_turn() -> Result<(), HarnessError> {
     assert!(run(&s, &chat).await?.contains("IN_FLIGHT_NEW_CONTENT"));
     s.finish().await
 }
-
-#[tokio::test]
-async fn instruction_hard_link_refuses_credential_content() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    butler_e2e::skip_unless!(
-        butler_platform::secure_fs::FILE_IDS,
-        "Unix credential identities"
-    );
-    let setup = setup("INSTRUCTIONS-credential-link")?;
-    let root = setup.sandbox.workspace.clone();
-    let auth = setup.sandbox.data.join("auth/login");
-    fs::create_dir_all(auth.parent().unwrap())?;
-    fs::write(&auth, "CREDENTIAL_CONTENT_SENTINEL")?;
-    fs::hard_link(auth, root.join("AGENTS.md"))?;
-    let s = setup.start().await?;
-    let chat = project(&s, &root).await?;
-    let text = run(&s, &chat).await?;
-    assert!(!text.contains("CREDENTIAL_CONTENT_SENTINEL"));
-    assert!(text.contains("AGENTS.md not loaded"), "{text}");
-    s.finish().await
-}

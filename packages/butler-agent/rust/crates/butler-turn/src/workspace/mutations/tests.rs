@@ -64,7 +64,6 @@ async fn batch_retains_first_commit_and_reports_second_external_change() {
     .collect();
     let command = MutationCommand::Edit(EditMutation {
         context: MutationContext {
-            butler_data: root.clone(),
             root: root.clone(),
             path_form: crate::workspace::PathForm::RelativeOrAbsolute,
             installation_root: None,
@@ -102,7 +101,6 @@ fn exclusive_create_race_keeps_external_bytes_and_cleans_temp() {
     let absolute = root.join("target.txt");
     let snapshot = io::observe(
         GuardedPath {
-            read_scope: None,
             public: "target.txt".into(),
             absolute: absolute.clone(),
             real: absolute.clone(),
@@ -126,7 +124,6 @@ fn exclusive_create_race_keeps_external_bytes_and_cleans_temp() {
     assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
     let snapshot = io::observe(
         GuardedPath {
-            read_scope: None,
             public: "target.txt".into(),
             absolute: absolute.clone(),
             real: absolute.clone(),
@@ -152,7 +149,6 @@ async fn close_drains_running_and_queued_mutations_after_callers_drop() {
     std::fs::write(root.join("first.txt"), b"one").unwrap();
     std::fs::write(root.join("second.txt"), b"two").unwrap();
     let context = || MutationContext {
-        butler_data: root.clone(),
         root: root.clone(),
         path_form: crate::workspace::PathForm::RelativeOrAbsolute,
         installation_root: None,
@@ -254,7 +250,6 @@ fn sync_failure_and_link_fallback() {
     let prepare = || {
         let before = io::observe(
             GuardedPath {
-                read_scope: None,
                 public: "new.txt".into(),
                 absolute: target.clone(),
                 real: target.clone(),

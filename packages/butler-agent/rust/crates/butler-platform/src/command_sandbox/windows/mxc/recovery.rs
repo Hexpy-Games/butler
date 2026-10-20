@@ -28,7 +28,7 @@ fn available(policy: &Path) -> io::Result<bool> {
     }
 }
 fn reconcile_scratch(data: &Path) -> io::Result<()> {
-    let root = data.join(crate::data_paths::PROJECT_WRITE_TMP);
+    let root = data.join("tmp/project-write");
     let entries = match fs::read_dir(&root) {
         Ok(entries) => entries,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
@@ -57,7 +57,7 @@ pub(super) fn reconcile_policies(data: &Path) -> std::io::Result<()> {
         }
         Err(error) => return Err(error),
     };
-    let scratch_root = data.join(crate::data_paths::PROJECT_WRITE_TMP);
+    let scratch_root = data.join("tmp/project-write");
     for entry in entries {
         if let Err(error) = reconcile_policy(entry, &scratch_root) {
             eprintln!("sandbox policy reconciliation failed: {error}");

@@ -11,11 +11,11 @@ src/host/cli/oauth_login.rs	run_native_oauth_login_with_data	129
 src/host/guided/activity.rs	new_group	99
 src/host/guided/activity/content.rs	content	160
 src/host/guided/activity/snapshot.rs	restore	97
-src/host/guided/command.rs	GuidedCommand::execute_observation	155
+src/host/guided/command.rs	GuidedCommand::execute_observation	166
 src/host/guided/command/evidence.rs	capability_receipts	85
-src/host/guided/command/output.rs	from_streams	171
+src/host/guided/command/output.rs	from_streams	175
 src/host/guided/command/output/assemble.rs	assemble	139
-src/host/guided/factory.rs	<GuidedTurnFactoryAdapter as GuidedTurnFactory>::bind_pre_model	183
+src/host/guided/factory.rs	<GuidedTurnFactoryAdapter as GuidedTurnFactory>::bind_pre_model	195
 src/host/guided/file_effects/edit.rs	decode	115
 src/host/guided/file_effects/edit.rs	recover	149
 src/host/guided/file_effects/edit/legacy.rs	recover	90

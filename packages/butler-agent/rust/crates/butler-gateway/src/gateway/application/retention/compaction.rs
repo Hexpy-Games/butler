@@ -259,7 +259,7 @@ fn upsert_projection(
          VALUES(?1,?2,?3,?4,?5,?6,datetime('now')) \
          ON CONFLICT(turn_id) DO UPDATE SET \
             terminal_state=excluded.terminal_state,\
-            delivery_metadata_json=COALESCE(app_terminal_turn_projections.delivery_metadata_json,excluded.delivery_metadata_json),\
+            delivery_metadata_json=excluded.delivery_metadata_json,\
             source_event_high_water=excluded.source_event_high_water,\
             compacted_at=excluded.compacted_at",
         params![turn, chat, state, rows, delivery, target],

@@ -940,7 +940,6 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       checked: (time) => `${time} 확인`,
     },
     stoppedStatus: "중지됨",
-    attachmentUnavailable: "첨부 파일을 찾을 수 없음",
     fileChanges: {
       regionLabel: "변경된 파일",
       title: "파일 변경",

@@ -15,32 +15,14 @@ pub(super) async fn execute(
 ) -> Result<JsonDocument, ToolExecutionError> {
     let workspace = owner.active_workspace_path();
     let data = owner.binding.butler_data.clone();
-    let turn = owner.binding.turn_id.clone();
-    let inventory = owner
-        .binding
-        .workspace_reference
-        .as_ref()
-        .and_then(butler_turn::workspace::WorkspaceReference::read_inventory);
-    let lease = secure_fs::StageScope::for_operation(&data, &turn);
     let files = call.arguments.get("files").cloned().unwrap_or(Value::Null);
-    let result = tokio::task::spawn_blocking(move || {
-        let _lease = lease;
-        collect(&workspace, &data, &turn, &files, inventory)
-    })
-    .await;
+    let result = tokio::task::spawn_blocking(move || collect(&workspace, &data, &files)).await;
     encoded(&result.unwrap_or_else(|_| unavailable("")))
 }
 fn unavailable(path: &str) -> Value {
     json!({"ok":false,"error":"deliver_file_unavailable","path":path,"message":UNAVAILABLE})
 }
-fn collect(
-    workspace: &Path,
-    data: &Path,
-    turn: &str,
-    files: &Value,
-    inventory: Option<std::sync::Arc<secure_fs::SecretInventory>>,
-) -> Value {
-    let inventory = inventory.unwrap_or_else(|| secure_fs::SecretInventory::cached(data));
+fn collect(workspace: &Path, data: &Path, files: &Value) -> Value {
     let Some(files) = files.as_array().filter(|f| !f.is_empty() && f.len() <= 12) else {
         return unavailable("");
     };
@@ -48,7 +30,7 @@ fn collect(
     let mut delivered = Vec::new();
     for item in files {
         let path = item["path"].as_str().unwrap_or("");
-        let Some(mut artifact) = checked(workspace, data, turn, path, &inventory) else {
+        let Some(mut artifact) = checked(workspace, data, path) else {
             return unavailable(path);
         };
         let title = item["title"]
@@ -63,17 +45,11 @@ fn collect(
     }
     json!({"ok":true,"delivered":delivered,"artifacts":artifacts})
 }
-fn checked(
-    workspace: &Path,
-    data: &Path,
-    turn: &str,
-    label: &str,
-    inventory: &secure_fs::SecretInventory,
-) -> Option<Value> {
+fn checked(workspace: &Path, data: &Path, label: &str) -> Option<Value> {
     let label = label.replace('\\', "/");
     let artifact = label.starts_with("artifacts/");
     let raw_root = if artifact { data } else { workspace };
-    let root = inventory.canonical_root(raw_root).ok()?;
+    let root = std::fs::canonicalize(raw_root).ok()?;
     let path = Path::new(&label);
     let relative = if path.is_absolute() {
         path.strip_prefix(raw_root)
@@ -85,21 +61,31 @@ fn checked(
     if relative.as_os_str().is_empty() || label.contains('\0') {
         return None;
     }
-    if relative
-        .components()
-        .any(|part| !matches!(part, Component::Normal(_)))
-    {
+    let mut target = root.clone();
+    for part in relative.components() {
+        if !matches!(part, Component::Normal(_)) {
+            return None;
+        }
+        target.push(part);
+        if std::fs::symlink_metadata(&target)
+            .ok()?
+            .file_type()
+            .is_symlink()
+        {
+            return None;
+        }
+    }
+    if !std::fs::canonicalize(&target).ok()?.starts_with(&root) {
         return None;
     }
-    let file = secure_fs::open_contained(&root, relative, inventory).ok()?;
+    let file = secure_fs::open_read_beneath(&root, relative).ok()?;
     let metadata = file.metadata().ok()?;
     if !metadata.is_file() || metadata.len() > MAX_BYTES {
         return None;
     }
-    let target = secure_fs::stage_file(data, turn, &root.join(relative), file, MAX_BYTES).ok()?;
     let source = relative.to_str()?.replace('\\', "/");
     Some(
-        json!({"path":source,"staged_path":target.to_str()?.to_owned(),
+        json!({"path":if artifact { source.clone() } else { target.to_str()?.to_owned() },
         "source":source,"deliverable":true,"size_bytes":metadata.len(),"mime_type":super::super::journal::mime_for(&label)}),
     )
 }

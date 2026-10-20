@@ -22,13 +22,6 @@ pub fn relative_path(target: &Path, root: &Path) -> Option<PathBuf> {
     }
 }
 
-/// Component-wise containment after the caller resolves file-system aliases.
-/// Windows comparisons ignore case and normalize a needless verbatim prefix;
-/// Unix comparisons retain case. A sibling with a shared string prefix is out.
-pub fn path_is_within(target: &Path, root: &Path) -> bool {
-    is_within(target, root)
-}
-
 // Containment checks need no allocation for an unused relative suffix.
 pub(super) fn is_within(target: &Path, root: &Path) -> bool {
     #[cfg(windows)]

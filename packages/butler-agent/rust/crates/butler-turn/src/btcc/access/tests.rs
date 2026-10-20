@@ -473,7 +473,6 @@ fn contained_read_rechecks_swapped_secret() {
         let files = WorkspaceFiles::new(1);
         let result = files
             .read_one(ReadFileInput {
-                butler_data: data.clone(),
                 root: root.clone(),
                 path: "a.txt".into(),
                 path_form: PathForm::Contained,

@@ -30,7 +30,6 @@ pub(super) struct OutputOrigin<'a> {
     pub workspace: &'a Path,
     pub data_root: &'a Path,
     pub started: SystemTime,
-    pub inventory: Option<Arc<butler_platform::secure_fs::SecretInventory>>,
 }
 
 pub(super) struct RegisteredContext<'a> {
@@ -154,7 +153,6 @@ async fn from_streams(
         workspace,
         data_root: butler_data,
         started,
-        inventory,
     } = origin;
     let StreamPayload {
         summary,
@@ -284,13 +282,18 @@ async fn from_streams(
                 None,
             )
         } else {
-            let origin = GeneratedOrigin {
-                data,
-                workspace: workspace_owned,
-                cwd,
-                inventory,
-            };
-            let publication = origin.publish(jobs, args_copy, before, success).await?;
+            let publication = jobs
+                .run(move || {
+                    artifacts::publish(
+                        &args_copy,
+                        &data,
+                        &workspace_owned,
+                        &cwd,
+                        before.as_ref(),
+                        success,
+                    )
+                })
+                .await?;
             let count = publication.artifacts.len();
             (
                 publication.artifacts,
@@ -318,37 +321,4 @@ async fn from_streams(
 
 fn error(code: &'static str) -> BtccError {
     BtccError::relayed(code, code)
-}
-
-/// Owned paths and policy cross the blocking boundary as one publication context.
-struct GeneratedOrigin {
-    data: PathBuf,
-    workspace: PathBuf,
-    cwd: PathBuf,
-    inventory: Option<Arc<butler_platform::secure_fs::SecretInventory>>,
-}
-impl GeneratedOrigin {
-    async fn publish(
-        self,
-        jobs: &CommandJobs,
-        args: Map<String, Value>,
-        before: Option<Snapshot>,
-        success: bool,
-    ) -> Result<artifacts::Publication, BtccError> {
-        jobs.run(move || {
-            let inventory = self
-                .inventory
-                .unwrap_or_else(|| butler_platform::secure_fs::SecretInventory::cached(&self.data));
-            artifacts::publish(
-                &args,
-                &self.data,
-                &self.workspace,
-                &self.cwd,
-                before.as_ref(),
-                success,
-                &inventory,
-            )
-        })
-        .await
-    }
 }

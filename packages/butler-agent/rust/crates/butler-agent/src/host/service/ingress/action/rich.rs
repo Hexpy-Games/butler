@@ -30,9 +30,6 @@ pub(super) fn artifacts(source: &[FinalArtifact]) -> Vec<Value> {
             if let Some(value) = text(&artifact.safe_path_label) {
                 projected.insert("safePathLabel".into(), value.into());
             }
-            if let Some(value) = artifact.staged_path.as_deref().and_then(text) {
-                projected.insert("stagedPath".into(), value.into());
-            }
             if let Some(value) = artifact.mime_type.as_deref().and_then(text) {
                 projected.insert("mimeType".into(), value.into());
             }

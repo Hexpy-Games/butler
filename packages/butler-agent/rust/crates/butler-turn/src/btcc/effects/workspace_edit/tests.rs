@@ -31,7 +31,6 @@ pub(crate) async fn edit_input_prepared_edit_and_receipt_are_byte_stable() {
     std::fs::write(root.join("a.txt"), "after").unwrap();
     let adapter = WorkspaceFileEditEffectAdapter::new(
         crate::workspace::EffectFileScope {
-            inventory: None,
             workspace: root.clone(),
             butler_data: root.join("data"),
             protected_roots: vec![],

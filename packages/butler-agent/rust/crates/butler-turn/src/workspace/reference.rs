@@ -6,11 +6,7 @@ use std::sync::Arc;
 /// and whether the user consented to it as the project folder when the
 /// session moved its folder (`None`: the session's own project rule applies).
 #[derive(Clone, Debug)]
-pub struct WorkspaceReference(
-    Arc<Mutex<ReferenceState>>,
-    Arc<Mutex<Option<bool>>>,
-    Arc<Mutex<Option<Arc<butler_platform::secure_fs::SecretInventory>>>>,
-);
+pub struct WorkspaceReference(Arc<Mutex<ReferenceState>>, Arc<Mutex<Option<bool>>>);
 
 #[derive(Debug)]
 enum ReferenceState {
@@ -44,7 +40,6 @@ impl WorkspaceReference {
         Self(
             Arc::new(Mutex::new(ReferenceState::Path(resolve(path)))),
             Arc::default(),
-            Arc::default(),
         )
     }
 
@@ -53,18 +48,7 @@ impl WorkspaceReference {
         Self(
             Arc::new(Mutex::new(ReferenceState::Unavailable(code))),
             Arc::default(),
-            Arc::default(),
         )
-    }
-
-    /// Bind the credential policy and root pins selected for this turn.
-    pub fn set_read_inventory(&self, inventory: Arc<butler_platform::secure_fs::SecretInventory>) {
-        *self.2.lock() = Some(inventory);
-    }
-
-    /// The selected turn's contained-reader policy.
-    pub fn read_inventory(&self) -> Option<Arc<butler_platform::secure_fs::SecretInventory>> {
-        self.2.lock().clone()
     }
 
     /// The current path.

@@ -174,19 +174,14 @@ pub(super) async fn read(
         ));
     }
     let read = workspace
-        .read_one(window_input(
-            root,
-            input.butler_data,
-            path,
-            &input.call["arguments"],
-        ))
+        .read_one(window_input(root, path, &input.call["arguments"]))
         .await
         .map_err(|error| CapabilityError::caused("skills_io_failed", error))?
         .map_err(|error| CapabilityError::caused("skills_io_failed", error))?;
     Ok(read.result)
 }
 
-fn window_input(root: &Path, data: &Path, path: &str, args: &Value) -> ReadFileInput {
+fn window_input(root: &Path, path: &str, args: &Value) -> ReadFileInput {
     let start_line = args
         .get("start_line")
         .and_then(Value::as_u64)
@@ -204,7 +199,6 @@ fn window_input(root: &Path, data: &Path, path: &str, args: &Value) -> ReadFileI
         .filter(|n| (1..=262_144).contains(n))
         .unwrap_or(65_536);
     ReadFileInput {
-        butler_data: data.to_path_buf(),
         root: PathBuf::from(root),
         path: path.to_owned(),
         path_form: PathForm::RelativeOnly,

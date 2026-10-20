@@ -9,8 +9,6 @@
 )]
 
 mod command_sandbox;
-#[cfg(unix)]
-mod contained;
 mod instance;
 mod mxc_policy;
 mod process_control;

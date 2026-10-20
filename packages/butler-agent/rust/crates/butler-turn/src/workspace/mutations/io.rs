@@ -1,6 +1,6 @@
 use butler_platform::secure_fs::Canonical as _;
 use std::fs::{self, OpenOptions};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use butler_platform::secure_fs::{self, FileMode, Writability};
@@ -74,18 +74,7 @@ pub(super) fn observe(path: GuardedPath, parent: Parent) -> Result<Snapshot, Mut
             "target_not_regular_file",
         ));
     }
-    let mut file = match &path.read_scope {
-        Some(scope) => super::super::contained_reader::open(
-            &scope.0,
-            &path.absolute.to_string_lossy(),
-            super::super::PathForm::Contained,
-            &scope.1,
-        ),
-        None => fs::File::open(&path.absolute),
-    }
-    .map_err(|error| failure::io("observe_read", Some(path.public.clone()), &error))?;
-    let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes)
+    let bytes = fs::read(&path.absolute)
         .map_err(|error| failure::io("observe_read", Some(path.public.clone()), &error))?;
     let mode = secure_fs::file_mode(&metadata);
     Ok(Snapshot {
@@ -286,7 +275,6 @@ fn verify_unchanged(prepared: &Prepared) -> Result<(), MutationFailure> {
     let path = prepared.before.path.public.clone();
     let current = observe(
         GuardedPath {
-            read_scope: prepared.before.path.read_scope.clone(),
             public: path.clone(),
             absolute: prepared.before.path.absolute.clone(),
             real: prepared.before.path.real.clone(),

@@ -933,7 +933,6 @@ dependencies = [
  "lancedb",
  "notify",
  "regex",
- "regress",
  "reqwest 0.12.28",
  "rusqlite",
  "serde",

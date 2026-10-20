@@ -261,9 +261,6 @@ pub struct FinalArtifact {
     pub kind: ArtifactKind,
     pub title: String,
     pub safe_path_label: String,
-    /// Private reader copy, consumed when the responder attachment is copied.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub staged_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mime_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
