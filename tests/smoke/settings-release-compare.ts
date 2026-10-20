@@ -14,6 +14,9 @@ const output = resolve(process.env.BUTLER_SETTINGS_COMPARISON ?? ".tmp/settings-
 const temporary = mkdtempSync(join(tmpdir(), "settings-preview8-"));
 const revision = execFileSync("git", ["rev-parse", "v0.1.0-preview.8^{commit}"], { encoding: "utf8" }).trim();
 const sections = ["General", "Appearance", "Personalization", "Memory", "Models", "Updates", "Usage", "Privacy", "Security", "System events", "Archives", "About", "MCP", "Skills", "Server"];
+// Sections a stage lacks by design: preview.8 predates Memory, and #566
+// (4bcad4e75) folded Privacy into Security.
+const absentSections: Record<string, readonly string[]> = { before: ["Memory"], after: ["Privacy"] };
 const report: unknown[] = [];
 
 async function capture(page: Page, directory: string, name: string) {
@@ -57,7 +60,7 @@ async function matrix(uiRoot: string, stage: string) {
             await settings.click();
             const button = page.getByRole("button", { name: section, exact: true });
             if (!await button.count()) {
-              assert(stage === "before" && section === "Memory", `${stage}: missing ${section}`);
+              assert(absentSections[stage]?.includes(section), `${stage}: missing ${section}`);
               report.push({ stage, name, section, present: false });
               continue;
             }
