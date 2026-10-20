@@ -18,8 +18,7 @@ import { spanPieces } from "../../packages/butler-app/client/ui/src/libs/design-
 import { FIXTURE_TRACE_ID, fixtureTrace, fixtureTraceRow } from "./settings-trace-fixture";
 
 const cases = ["1280-light", "1280-dark", "390-light", "390-dark"];
-// One process per case: in a shared Bun process the third case loses its Chromium pipe (#1263).
-if (await runSmokeCases(cases, "BUTLER_TRACE_CASE", import.meta.path, { isolate: true, timeoutMs: 240_000 })) process.exit(0);
+if (await runSmokeCases(cases, "BUTLER_TRACE_CASE", import.meta.path)) process.exit(0);
 const selected = process.env.BUTLER_TRACE_CASE;
 const shots = resolve(process.env.BUTLER_TRACE_SHOTS ?? ".tmp/settings-trace");
 mkdirSync(shots, { recursive: true });

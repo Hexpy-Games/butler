@@ -44,6 +44,8 @@ fn read_only_commands_run_sandboxed_or_are_refused() {
         butler_platform::command_sandbox::windows_recovery_contract();
         butler_platform::command_sandbox::windows_shell_file_contract();
     }
+    #[cfg(target_os = "linux")]
+    butler_platform::command_sandbox::verify_mount_plan_contract().unwrap();
     timeout_markers_require_both_code_and_trailing_marker();
     super::project_secrets::verify();
     cmd_arguments_remain_verbatim();

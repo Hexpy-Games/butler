@@ -1,4 +1,5 @@
 import { launchSmokeBrowser, smokeBrowserArgs } from "./smoke-browser.ts";
+import { gotoNetworkQuiet } from "./network-quiet.ts";
 import { webkit, type Browser, type BrowserContext, type Page } from "playwright";
 
 // DS Viewer on phones (shared by the viewer smoke and the static ds-site smoke): the app's
@@ -166,7 +167,7 @@ export const REFLOW_PAGES = [
 export async function assertReflow(page: Page, url: (params: Record<string, string>) => string, label: string,
   pages: readonly string[] = REFLOW_PAGES): Promise<void> {
   for (const pageId of pages) {
-    await page.goto(url({ page: pageId }), { waitUntil: "networkidle" });
+    await gotoNetworkQuiet(page, url({ page: pageId }));
     await page.locator(`[data-ds-page="${pageId}"]`).waitFor({ state: "attached" });
     await settle(page, 300);
     const overflow = await sideways(page);
@@ -179,7 +180,7 @@ export async function assertMobileViewer(page: Page, url: (params: Record<string
   pages: readonly string[] = REFLOW_PAGES): Promise<void> {
   await assertReflow(page, url, label, pages);
 
-  await page.goto(url({ page: "overview" }), { waitUntil: "networkidle" });
+  await gotoNetworkQuiet(page, url({ page: "overview" }));
   await page.locator("[data-ds-overview]").waitFor({ state: "visible" });
   await settle(page, 300);
   const closed = await drawerState(page);
@@ -279,7 +280,7 @@ export async function assertMobileViewer(page: Page, url: (params: Record<string
 
 /** Reduced motion: the drawer fades in place (no slide, no push). */
 export async function assertReducedMotionDrawer(page: Page, url: (params: Record<string, string>) => string, label: string): Promise<void> {
-  await page.goto(url({ page: "overview" }), { waitUntil: "networkidle" });
+  await gotoNetworkQuiet(page, url({ page: "overview" }));
   await page.locator("[data-ds-overview]").waitFor({ state: "visible" });
   const state = await openDrawer(page, `${label} reduced`);
   const still = (transform: string) => transform === "none" || transform === "matrix(1, 0, 0, 1, 0, 0)";

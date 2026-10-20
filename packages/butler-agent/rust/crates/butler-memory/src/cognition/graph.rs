@@ -307,6 +307,16 @@ impl GraphRepository {
         })
     }
 
+    /// A fresh, consistent view for multi-query readers while writers advance.
+    pub(in crate::cognition) fn open_read_snapshot(path: &Path) -> CognitionResult<Self> {
+        let graph = Self::open_readonly(path)?;
+        graph
+            .connection()?
+            .execute_batch("BEGIN")
+            .map_err(db_error)?;
+        Ok(graph)
+    }
+
     pub(super) fn ensure_schema(&mut self, now: &str) -> CognitionResult<()> {
         schema::ensure(self.connection_mut()?, now)
     }
@@ -466,5 +476,11 @@ impl Drop for GraphRepository {
 }
 
 pub(super) fn db_error(error: rusqlite::Error) -> CognitionError {
-    CognitionError::new(CognitionCode::MemoryGraphUnavailable, error.to_string()).with_source(error)
+    let code = match error.sqlite_error_code() {
+        Some(rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked) => {
+            CognitionCode::MemoryWriteBusy
+        }
+        _ => CognitionCode::MemoryGraphUnavailable,
+    };
+    CognitionError::new(code, error.to_string()).with_source(error)
 }

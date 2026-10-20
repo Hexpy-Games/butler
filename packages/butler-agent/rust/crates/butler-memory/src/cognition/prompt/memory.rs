@@ -117,7 +117,9 @@ fn read_generation_hot_cache(
     if entries.is_empty() {
         return Ok(None);
     }
-    let graph = GraphRepository::open_readonly(&generation.graph_path)?;
+    // Validate every entry against one fresh graph snapshot. Background writes
+    // must not turn an already published cache into an absent prompt section.
+    let graph = GraphRepository::open_read_snapshot(&generation.graph_path)?;
     let Ok(canonical) = ConversationSourceReader::open(&conversation_store_path(data_root)) else {
         graph.close()?;
         return Ok(None);
@@ -147,9 +149,9 @@ fn project_entries(
     canonical: &ConversationSourceReader,
     entries: &[HotCacheEntryView],
 ) -> CognitionResult<Option<String>> {
-    let Some(before_revision) = graph.hot_cache_graph_revision()? else {
+    if graph.hot_cache_graph_revision()?.is_none() {
         return Ok(None);
-    };
+    }
     let project = project.map(butler_core::public_text::trim_js_whitespace);
     let now = chrono::Utc::now().to_rfc3339();
     let selected = entries
@@ -186,9 +188,7 @@ fn project_entries(
             "[model_interpretation/{class}; current_state_requires_verification]\n{summary}"
         ));
     }
-    if graph.hot_cache_graph_revision()? != Some(before_revision)
-        || resolve_active_generation(data_root, environment)?.generation_id
-            != generation.generation_id
+    if resolve_active_generation(data_root, environment)?.generation_id != generation.generation_id
     {
         return Ok(None);
     }

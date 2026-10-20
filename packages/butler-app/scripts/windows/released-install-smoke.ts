@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFi
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
-import { freePort } from "../../../../tests/support/native-app-server.ts";
+import { freeGatewayPort, freePort } from "../../../../tests/support/native-app-server.ts";
 import { FIRST_RUN_CONSENT_VERSION } from "../../client/ui/src/app/onboarding.ts";
 import { assertShortcuts, bridge, ownedProcesses, ownedSurvivors, powershell, readJson, removeProfile, shortcutPaths, waitFor, waitForOwnedExit, type OwnedProcesses } from "./installer-smoke-support.ts";
 import { smokeProviderReply, type SmokeProviderCalls } from "./smoke-provider.ts";
@@ -27,7 +27,8 @@ const root = realpathSync.native(mkdtempSync(join(tmpdir(), "butler-released-e2e
 const data = join(root, "data");
 const owned: OwnedProcesses = new Map();
 const debugPort = await freePort();
-const agentPort = await freePort();
+// The Agent also binds its content origin on agentPort + 1.
+const agentPort = await freeGatewayPort();
 let page: ElectronPage | null = null;
 const calls: SmokeProviderCalls = { chat: 0, memory: 0, memorySpeakers: new Set<string>() };
 const downloads: DownloadsProof = { requests: 0 };
@@ -56,14 +57,20 @@ try {
   assert.equal(powershell("Test-Path 'HKCU:\\Software\\Classes\\butler'", env), "False");
   for (const folder of [env.HOME, data, env.LOCALAPPDATA, env.APPDATA, dirname(shortcuts[1]!)]) mkdirSync(folder, { recursive: true });
   writeFileSync(join(data, "sentinel.txt"), "released data retained\n");
+  // Setup's auto-launched App runs the day's scheduled cycle before the smoke connects; a briefing
+  // needs both a model and a reasoning effort then (the later updateSettings uses the same values).
   writeFileSync(join(data, "butler.config.json"), JSON.stringify({ user: { name: "E2E", language: "en" },
-    metrics: { enabled: false }, system: { defaultModel: "openai/gpt-6-luna" } }));
+    metrics: { enabled: false }, system: { defaultModel: "openai/gpt-6-luna" }, reasoning_effort: "low" }));
   const now = new Date().toISOString();
   mkdirSync(join(data, "personalization"), { recursive: true });
   writeFileSync(join(data, "personalization/onboarding.json"), JSON.stringify({ schema: "butler.first_chat_onboarding.v1",
     status: "complete", gateway: "any", fields: {}, skipped_fields: [], created_at: now, updated_at: now, completed_at: now }));
   run(installer, []);
   await waitFor(() => existsSync(updater), "released one-click install");
+  // The auto-launched App runs the day's scheduled cycle (the briefing under test) at startup;
+  // let it record that run before the debug relaunch quits it.
+  await waitFor(() => Date.parse(readJson(join(data, "state/scheduler/consolidation-cycle.json"))?.lastRunAt) >= started,
+    "auto-launched scheduled cycle recorded");
   await relaunchInstalledAppForDebugging(join(installed, "Butler.exe"), debugPort, env, owned);
   page = await electronPage(debugPort);
   assert.equal((await bridge(page, "getAppInfo")).version, version);

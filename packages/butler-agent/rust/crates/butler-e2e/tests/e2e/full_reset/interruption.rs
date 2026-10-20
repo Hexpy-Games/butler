@@ -88,15 +88,13 @@ async fn reset_02_mid_move_kill9_resumes() -> Result<(), HarnessError> {
     let setup = setup("RESET-02-MOVE")?;
     let release = setup.sandbox.root.join("move-release");
     let mut s = setup
+        .env("BUTLER_E2E_RESET_STOP_DELAY_MS", "100")
         .env("BUTLER_E2E_HOLD_POINT", "data_reset.move")
         .env("BUTLER_E2E_HOLD_RELEASE", release.display().to_string())
         .start()
         .await?;
     let before = generation(&s).await?;
     assert_eq!(request(&s, &nonce(&s).await?).await?.status, 202);
-    // Signal only our own child; the apply window keeps DATA ownership.
-    let pid = s.agent.pid().unwrap();
-    butler_platform::instance::request_stop(pid).expect("stop child");
     let deadline = Instant::now() + Duration::from_secs(10);
     while !release.with_extension("held").exists() {
         assert!(Instant::now() < deadline, "apply boundary not reached");

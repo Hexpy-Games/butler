@@ -25,7 +25,7 @@ pub(super) async fn get(
 
 /// `PATCH /settings`. A `security` object is taken out and validated first:
 /// only a local admin client may send one, and a refused or invalid one
-/// changes nothing. It applies after the other fields, to the listeners and
+/// changes nothing. Validated exposure applies after the other fields, to the listeners and
 /// the gateway settings file.
 pub(super) async fn patch(
     state: Arc<HttpState>,
@@ -46,13 +46,22 @@ pub(super) async fn patch(
     };
     let only_security =
         security.is_some() && input.as_object().is_some_and(serde_json::Map::is_empty);
+    let _change = if security.is_some() {
+        Some(state.remote.changes.lock().await)
+    } else {
+        None
+    };
+    let exposure = security
+        .map(|patch| security_settings::prepare(&state, patch))
+        .transpose()?
+        .flatten();
     let mut settings = if only_security {
         state.application.read_settings().await?
     } else {
         state.application.update_settings(input).await?
     };
-    if let Some(patch) = security {
-        security_settings::apply(&state, patch).await?;
+    if let Some(exposure) = exposure {
+        security_settings::apply(&state, exposure).await?;
     }
     security_settings::add_to_settings(&state, client.as_ref(), &mut settings);
     json(

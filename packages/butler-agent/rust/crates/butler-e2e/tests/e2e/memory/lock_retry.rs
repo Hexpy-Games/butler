@@ -15,6 +15,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[path = "lock_retry/graph_busy.rs"]
+mod graph_busy;
+
 #[tokio::test]
 async fn mem_projection_lock_retry() -> Result<(), HarnessError> {
     butler_e2e::gate!();

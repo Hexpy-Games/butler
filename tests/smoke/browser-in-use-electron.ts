@@ -10,7 +10,7 @@ const evidence = process.env.BUTLER_BROWSER_EVIDENCE; assert.ok(evidence);
 mkdirSync(evidence, { recursive: true });
 const stub = browserStub();
 const app = await browserAgentApp(evidence, stub.handler);
-type Tab = { id: string; owner: string; holder: string; inUse?: boolean; waiting: boolean };
+type Tab = { id: string; owner: string; holder: string; sticky?: boolean; inUse?: boolean; waiting: boolean };
 const state = () => app.call<{ tabs: Tab[] }>("state");
 // Subscribe through the production preload, including a new subscription after reload.
 const rendererState = () => app.page.expression<{ tabs: Tab[] }>(`(() => {
@@ -143,10 +143,23 @@ try {
   assert.equal((await state()).tabs.some(item => item.inUse), false, "closed tab has no use");
   await unblock(); await closedCall; await cleared("tab closed");
   const revoked = await app.call<string>("create", { owner: "conversation:general", profile: "signed_out" });
+  const originalHolder = (await state()).tabs.find(item => item.id === revoked)!.holder;
   await app.main(`globalThis.browserAgentSubject.execute({op:'use.revoked',session:'other',tab:${JSON.stringify(revoked)},args:{}})`);
-  assert.ok((await state()).tabs.some(item => item.id === revoked), "revocation respects the owner");
+  const unchanged = (await state()).tabs.find(item => item.id === revoked); assert.ok(unchanged, "revocation respects the owner");
+  assert.equal(unchanged.holder, originalHolder, "another session cannot change the holder");
+  // #747: revocation hands non-agent tabs back to the user and closes only agent tabs.
   await app.main(`globalThis.browserAgentSubject.execute({op:'use.revoked',session:'general',tab:${JSON.stringify(revoked)},args:{}})`);
-  assert.ok(!(await state()).tabs.some(item => item.id === revoked), "policy revocation closes the exact tab");
+  const handedBack = (await state()).tabs.find(item => item.id === revoked); assert.ok(handedBack, "non-agent tab stays open");
+  assert.equal(handedBack.holder, "user"); assert.equal(handedBack.sticky, true);
+  const revokedAgent = await app.call<string>("create", { owner: "conversation:general", profile: "signed_out", agent: true });
+  await app.main(`globalThis.browserAgentSubject.execute({op:'use.revoked',session:'other',tab:${JSON.stringify(revokedAgent)},args:{}})`);
+  assert.ok((await state()).tabs.some(item => item.id === revokedAgent), "agent tab revocation respects the owner");
+  const beforeRevocation = (await state()).tabs.map(item => item.id);
+  await app.main(`globalThis.browserAgentSubject.execute({op:'use.revoked',session:'general',tab:${JSON.stringify(revokedAgent)},args:{}})`);
+  const afterRevocation = (await state()).tabs;
+  assert.deepEqual(afterRevocation.map(item => item.id), beforeRevocation.filter(id => id !== revokedAgent), "policy revocation closes the exact agent tab");
+  const retained = afterRevocation.find(item => item.id === revoked); assert.ok(retained, "non-agent tab survives agent revocation");
+  assert.equal(retained.holder, "user"); assert.equal(retained.sticky, true);
   await cleared("policy revocation");
   writeFileSync(join(evidence, "usage.json"), JSON.stringify({ trace, frames: await app.main("globalThis.browserUseFrames") }, null, 2));
   console.log(JSON.stringify({ status: "passed", cases: trace.length }));

@@ -47,8 +47,10 @@ mod browser_round2;
 mod browser_selection;
 mod browser_signin;
 mod browser_speed;
+mod browser_tool_args;
 mod browser_usage;
 mod cassette_lint;
+mod catalog_provider_truth;
 mod cli_launcher;
 mod cli_remote;
 mod cli_reply_language;
@@ -256,5 +258,6 @@ mod outbound_http;
 
 mod trace_spans;
 
+mod content_port;
 mod turn_fenced_cancel;
 mod usage_delegated;
