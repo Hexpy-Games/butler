@@ -53,6 +53,10 @@ pub struct CognitionWriteLease {
 }
 
 impl CognitionWriteCoordinator {
+    pub(crate) fn host(&self) -> Arc<dyn CognitionCoordinationHost> {
+        self.inner.host.clone()
+    }
+
     /// A coordinator for this process.
     pub fn new(host: Arc<dyn CognitionCoordinationHost>) -> CoordinationResult<Self> {
         let pid = host.process_id();
