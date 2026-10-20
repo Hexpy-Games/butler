@@ -1,4 +1,7 @@
-//! Pending reset recovery acquires DATA before credentials, records, logs or stores.
+//! Existing reset journals recover under DATA ownership before configuration reads.
+//! Without a journal, startup stays read-only through the main-port bind, then
+//! acquires the instance (marking empty roots), rechecks recovery and migrates
+//! ownership before credentials, logs or stores are initialized.
 use super::{
     apply, cleanup,
     journal::{self, Phase, TRASH_PREFIX},
@@ -13,14 +16,15 @@ pub(crate) async fn recover(
     explicit: Option<&str>,
     home: &Path,
     installation: &ResolvedInstallation,
-) -> Result<(), butler_turn::btcc::BtccError> {
+) -> Result<bool, butler_turn::btcc::BtccError> {
     let root = super::super::configuration::requested_data(explicit, home);
     let default = super::super::configuration::default_data(home);
     let installation = installation.clone();
-    let legacy = tokio::task::spawn_blocking(move || recover_owned(&root, &default, &installation))
-        .await
-        .map_err(error)?
-        .map_err(error)?;
+    let (legacy, journal_seen) =
+        tokio::task::spawn_blocking(move || recover_owned(&root, &default, &installation))
+            .await
+            .map_err(error)?
+            .map_err(error)?;
     if let Some(root) = legacy {
         return Err(butler_turn::btcc::BtccError::relayed(
             "storage_bootstrap_failed",
@@ -28,24 +32,25 @@ pub(crate) async fn recover(
                 .to_string(),
         ));
     }
-    Ok(())
+    Ok(journal_seen)
 }
 
 fn recover_owned(
     requested: &Path,
     default: &Path,
     installation: &ResolvedInstallation,
-) -> io::Result<Option<PathBuf>> {
+) -> io::Result<(Option<PathBuf>, bool)> {
     let root = installation
         .validate_data_root(requested)
         .map_err(io::Error::other)?;
     match fs::symlink_metadata(root.join(journal::JOURNAL)) {
         Ok(_) => {}
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            return Ok(
+            return Ok((
                 crate::host::runtime::storage_bootstrap::is_unsupported_legacy_data(&root)
                     .then_some(root),
-            );
+                false,
+            ));
         }
         Err(e) => return Err(e),
     }
@@ -94,25 +99,27 @@ fn recover_owned(
             .map_err(io::Error::other)?;
     }
     journal::generation(&root)?;
-    Ok::<_, io::Error>(None)
+    Ok((None, true))
 }
 
 /// The caller holds the instance lock; no other service can publish reset intent.
 pub(crate) async fn initialize_owned(
     config: &crate::host::ServiceConfiguration,
     home: &Path,
+    journal_seen: bool,
 ) -> Result<(), butler_turn::btcc::BtccError> {
     let root = config.data_root.clone();
     let requested = config.requested_data_root.clone();
     let default = super::super::configuration::default_data(home);
     tokio::task::spawn_blocking(move || {
         // A live writer that publishes after our read-only check owns DATA.
-        // If it crashes before applying, refuse startup until recovery runs.
-        if journal::load(&root)?
-            .is_some_and(|j| matches!(j.phase, Phase::Requested | Phase::RollingBack))
+        // Any new journal requires another start: configuration may predate reset.
+        if journal::load(&root)?.is_some_and(|j| {
+            !journal_seen || matches!(j.phase, Phase::Requested | Phase::RollingBack)
+        })
         {
             return Err(io::Error::other(
-                "Reset recovery required before opening stores",
+                "Reset journal changed during startup; restart to recover before reading configuration",
             ));
         }
         super::super::data_ownership::migrate(&root, &requested, &default)
