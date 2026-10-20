@@ -72,6 +72,7 @@ impl MemoryStartup<'_> {
                         paths: cognition_paths,
                         unclean_previous_exit: paths.unclean_previous_exit,
                         fresh: self.fresh,
+                        stop: self.stop,
                     },
                     coordinator,
                     provider,
