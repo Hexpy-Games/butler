@@ -4,17 +4,28 @@ use butler_e2e::e2e::HarnessError;
 use butler_platform::process_control::usage;
 use std::time::{Duration, Instant};
 
+// Share the production deadline arithmetic without linking the memory engine.
+#[path = "../../../../butler-memory/src/cognition/memory_recall/budget.rs"]
+mod recall_budget;
+
+// Option A headroom chosen by the owner, not a measurement: observed fallback
+// assembly is about 10 ms. Keep the derived (3,000 + 200) ms line and 5 s total.
+const FALLBACK_ASSEMBLY_ALLOWANCE: Duration = Duration::from_millis(200);
+
 const ASK: &str = "What is my bike lock code? Call recall_memory with cue bike lock code.";
 
 #[tokio::test]
 async fn first_recall_after_start_uses_vector_lane() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (setup, remember, code) = batch::setup_with_provider_delay("MEM-COLD-RECALL", 2_500)?;
-    let mut s = setup.start().await?;
+    let mut s = setup.env("BUTLER_MEMORY_SYNC_TRACE", "1").start().await?;
     assert_eq!(s.turn("general", &remember).await?.1["state"], "delivered");
     memory_stubs::text_complete(&s.sandbox.data, 1).await?;
     batch::recall(&s, "general", ASK).await?;
     memory_stubs::vectors_complete(&s.sandbox.data, 2).await?;
+    // Persist three conversation sources alongside the saved instruction.
+    batch::recall(&s, "general", ASK).await?;
+    memory_stubs::vectors_complete(&s.sandbox.data, 3).await?;
     let (_, persisted) = memory_stubs::unit_states(&s.sandbox.data)?;
     assert!(persisted > 0);
     s.agent.terminate().await?;
@@ -28,7 +39,7 @@ async fn first_recall_after_start_uses_vector_lane() -> Result<(), HarnessError>
         min_ms: 0,
     });
     if let Some(workers) = usage::embedding_children(s.agent.pid().unwrap())? {
-        assert!(workers.is_empty(), "startup must not load the model");
+        assert!(workers.is_empty(), "startup spawned an embedding worker");
     }
     let started = Instant::now();
     let first = batch::recall(&s, "general", ASK).await?;
@@ -51,12 +62,7 @@ async fn first_recall_after_start_uses_vector_lane() -> Result<(), HarnessError>
         first["output"]["coverage"]["vectors"]["state"], "ok",
         "{first}"
     );
-    // The explicit record and both completed conversation turns remain present.
-    assert_eq!(
-        first["output"]["results"].as_array().unwrap().len(),
-        3,
-        "{first}"
-    );
+    assert_saved_instruction(&first, &code, 3);
     assert!(first["output"]["next_cursor"].is_null(), "{first}");
     assert!(
         first["output"]["results"]
@@ -85,7 +91,7 @@ async fn first_recall_after_start_uses_vector_lane() -> Result<(), HarnessError>
     }
     // The first recall also creates a conversation turn. Settle that new work
     // before measuring an otherwise idle warm follow-up.
-    memory_stubs::vectors_complete(&s.sandbox.data, 3).await?;
+    memory_stubs::vectors_complete(&s.sandbox.data, 4).await?;
     assert_loaded_idle(&s).await?;
     s.provider()?.set_pacing(Default::default());
     let started = Instant::now();
@@ -99,11 +105,7 @@ async fn first_recall_after_start_uses_vector_lane() -> Result<(), HarnessError>
         warm["output"]["coverage"]["vectors"]["state"], "ok",
         "{warm}"
     );
-    assert_eq!(
-        warm["output"]["results"].as_array().unwrap().len(),
-        4,
-        "{warm}"
-    );
+    assert_saved_instruction(&warm, &code, 4);
     assert!(warm["output"]["next_cursor"].is_null(), "{warm}");
     assert!(
         warm["output"]["results"]
@@ -132,6 +134,43 @@ fn recall_tool_ms(data: &std::path::Path) -> i64 {
     (chrono::DateTime::parse_from_rfc3339(&end).unwrap()
         - chrono::DateTime::parse_from_rfc3339(&start).unwrap())
     .num_milliseconds()
+}
+
+fn assert_saved_instruction(result: &serde_json::Value, code: &str, conversations: usize) {
+    let results = result["output"]["results"].as_array().unwrap();
+    assert_eq!(results.len(), conversations + 1, "{result}");
+    let mut identities = std::collections::HashSet::new();
+    let mut explicit = Vec::new();
+    for row in results {
+        assert!(identities.insert(row["episode_ref"].as_str().unwrap()));
+        let evidence = row["evidence"].as_array().unwrap();
+        assert!(!evidence.is_empty(), "{row}");
+        for source in evidence {
+            assert_eq!(source["source_resolved"], true, "{source}");
+            assert_eq!(source["read_args"]["source_ref"], source["source_ref"]);
+        }
+        if evidence
+            .iter()
+            .any(|source| source["source_kind"] == "explicit_record")
+        {
+            explicit.push(row);
+        } else {
+            assert!(
+                evidence
+                    .iter()
+                    .all(|source| source["source_kind"] == "conversation")
+            );
+        }
+    }
+    assert_eq!(explicit.len(), 1, "{result}");
+    let saved = explicit[0];
+    let text = format!("The user's bike lock code is {code}.");
+    assert_eq!(saved["summary"], text);
+    let evidence = saved["evidence"].as_array().unwrap();
+    assert_eq!(evidence.len(), 1);
+    assert_eq!(evidence[0]["source_kind"], "explicit_record");
+    assert_eq!(evidence[0]["excerpt"], text);
+    assert_eq!(evidence[0]["support"]["node_ref"], saved["episode_ref"]);
 }
 
 async fn assert_loaded_idle(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), HarnessError> {
@@ -168,11 +207,14 @@ async fn slow_model_load_leaves_complete_text_fallback_within_capped_wait()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (setup, remember, code) = batch::setup("MEM-SLOW-RECALL")?;
-    let mut s = setup.start().await?;
+    let mut s = setup.env("BUTLER_MEMORY_SYNC_TRACE", "1").start().await?;
     assert_eq!(s.turn("general", &remember).await?.1["state"], "delivered");
     memory_stubs::text_complete(&s.sandbox.data, 1).await?;
     batch::recall(&s, "general", ASK).await?;
     memory_stubs::vectors_complete(&s.sandbox.data, 2).await?;
+    // Persist three conversation sources alongside the saved instruction.
+    batch::recall(&s, "general", ASK).await?;
+    memory_stubs::vectors_complete(&s.sandbox.data, 3).await?;
     s.agent.terminate().await?;
     // Existing owner-death fixture holds native initialization indefinitely.
     let barrier = s.sandbox.root.join("held-model-load");
@@ -199,21 +241,21 @@ async fn slow_model_load_leaves_complete_text_fallback_within_capped_wait()
         result["output"]["coverage"]["vectors"]["state"], "unavailable",
         "{result}"
     );
-    assert_eq!(
-        result["output"]["results"].as_array().unwrap().len(),
-        3,
-        "{result}"
-    );
+    assert_saved_instruction(&result, &code, 3);
     assert!(result["output"]["next_cursor"].is_null(), "{result}");
     assert!(
         result["output"]["results"].to_string().contains(&code),
         "{result}"
     );
-    eprintln!("SLOW-RECALL tool_ms={tool_ms} answer_ms={turn_ms} complete_results=3");
+    eprintln!("SLOW-RECALL tool_ms={tool_ms} answer_ms={turn_ms} complete_results=4");
     butler_e2e::assert_wall_clock_budget!(
         Duration::from_millis(tool_ms.try_into().unwrap()),
-        Duration::from_secs(3),
-        "capped readiness leaves text fallback time",
+        Duration::from_millis(
+            (recall_budget::TOTAL_MS - recall_budget::TEXT_RESERVE_MS)
+                .try_into()
+                .unwrap(),
+        ) + FALLBACK_ASSEMBLY_ALLOWANCE,
+        "vector deadline plus text fallback assembly",
     );
     butler_e2e::assert_wall_clock_budget!(
         Duration::from_millis(turn_ms.try_into().unwrap()),
@@ -226,3 +268,15 @@ async fn slow_model_load_leaves_complete_text_fallback_within_capped_wait()
     eprintln!("SLOW-RECALL load_continues=true");
     s.finish().await
 }
+
+#[path = "cold_overrun.rs"]
+mod overrun;
+
+#[path = "drain_bounds.rs"]
+mod drain_bounds;
+
+#[path = "cold_scale.rs"]
+mod scale;
+
+#[path = "compaction.rs"]
+mod compaction;

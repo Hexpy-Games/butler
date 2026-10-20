@@ -32,13 +32,13 @@ async fn active_cancellation_kills_and_reaps_child() {
         shutdown: CancellationToken::new(),
     };
     let cancellation = CancellationToken::new();
-    let (sender, _) = oneshot::channel();
+    let (sender, _receiver) = oneshot::channel();
     let item = Pending {
         id: 1,
         frame: b"{}\n".to_vec(),
         bytes: 3,
-        cold_start_allowed: true,
-        background: false,
+        request_class: EmbeddingRequestClass::Interactive,
+        interactive_query: false,
         mode: EmbeddingMode::LegacyMean,
         requested_texts: 1,
         resplit: false,

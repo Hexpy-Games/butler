@@ -224,7 +224,7 @@ impl MemoryRecall {
             data_root: self.data_root.clone(),
             environment: self.environment.clone(),
             input,
-            deadline_at: (self.clock)() + 5_000,
+            deadline_at: (self.clock)() + super::budget::TOTAL_MS,
             initialization_ms: 0,
             caller_cancel,
             parse_date: self.parse_date.clone(),

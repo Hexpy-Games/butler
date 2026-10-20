@@ -73,7 +73,11 @@ pub(super) async fn create_live_stream(
             state.push_reconcile(high_water);
         }
         state.finish_replay(current_high_water);
-        state.push_chunk(Bytes::from_static(HEARTBEAT.as_bytes()), current_high_water);
+        // Queued content already keeps the connection alive. A heartbeat must
+        // never evict that content or force an otherwise unnecessary reconnect.
+        if state.output.len() < MAX_BUFFERED_EVENTS {
+            state.push_chunk(Bytes::from_static(HEARTBEAT.as_bytes()), current_high_water);
+        }
     }
 
     Ok(LiveEventStream {
@@ -136,7 +140,7 @@ impl LiveState {
                 }
                 self.draft_queue.push_back(event.frame());
             } else {
-                self.push_draft(event.frame());
+                self.push_chunk(event.frame(), self.high_water);
             }
             return self.waker.take();
         }
@@ -167,20 +171,11 @@ impl LiveState {
             }
         }
         for frame in std::mem::take(&mut self.draft_queue) {
-            self.push_draft(frame);
+            self.push_chunk(frame, self.high_water);
         }
         self.replaying = false;
         self.replay_queue.clear();
         self.replay_overflowed = false;
-    }
-
-    fn push_draft(&mut self, frame: Bytes) {
-        // A slow draft reader must resubscribe for a complete snapshot rather
-        // than continue after losing units from the bounded output buffer.
-        if self.output.len() >= MAX_BUFFERED_EVENTS {
-            self.delivery = DeliveryState::Resubscribe;
-        }
-        self.push_chunk(frame, self.high_water);
     }
 
     fn push_output(&mut self, id: u64, frame: Bytes, high_water: u64) {
@@ -210,6 +205,10 @@ impl LiveState {
     fn push_chunk(&mut self, chunk: Bytes, high_water: u64) {
         if self.output.len() >= MAX_BUFFERED_EVENTS {
             self.output.clear();
+            // The discarded queue may include ephemeral draft operations.
+            // Durable reconciliation alone cannot restore them: resubscribe
+            // for the complete current draft snapshot as well.
+            self.delivery = DeliveryState::Resubscribe;
             let event = AppEventEnvelope {
                 protocol_version: APP_PROTOCOL_VERSION.to_owned(),
                 id: high_water,
