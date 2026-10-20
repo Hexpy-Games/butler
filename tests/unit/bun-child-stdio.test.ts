@@ -13,6 +13,7 @@ async function exitWithExtraPipe(): Promise<void> {
   const code = await new Promise<number | null>((resolve, reject) => {
     child.once("error", reject);
     child.once("exit", resolve);
+    if (child.exitCode !== null || child.signalCode !== null) resolve(child.exitCode);
   });
   expect(code).toBe(0);
 }
