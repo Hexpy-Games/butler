@@ -16,7 +16,13 @@ async fn cancelled_deliverables_do_not_exhaust_handoff_quota() -> Result<(), Har
     let s = setup.start().await?;
     let host = Host::attach(&s).await?;
     let started = Instant::now();
+    let mut message_window = Instant::now();
     for index in 0..1100 {
+        // Respect the production message quota without retrying refused requests.
+        if index > 0 && index % 50 == 0 {
+            tokio::time::sleep_until((message_window + Duration::from_secs(60)).into()).await;
+            message_window = Instant::now();
+        }
         let prompt = format!("Deliver then request a change {index}");
         *script.prompt.lock().unwrap() = prompt.clone();
         *script.steps.lock().unwrap() = [
