@@ -150,6 +150,7 @@ async function checkCurrentStatusLine(page: Page, baseUrl: string): Promise<void
     line.textContent = original;
     return { beforeHeight, afterHeight, clipped };
   });
+  console.log(JSON.stringify({ check: "status-line-height", deltaPx: Math.abs(geometry.beforeHeight - geometry.afterHeight), incidentPx: 3 }));
   assert(Math.abs(geometry.beforeHeight - geometry.afterHeight) < 3 && geometry.clipped,
     `current status must stay one clipped line: ${JSON.stringify(geometry)}`);
 }

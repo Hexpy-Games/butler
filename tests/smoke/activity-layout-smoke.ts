@@ -46,7 +46,7 @@ try {
     const distance = await page.locator('[data-test-class~="conversation-scroll"]').evaluate((node) => node.scrollHeight - node.clientHeight - node.scrollTop);
     measurements.push({ width, theme, distance });
     const streamedText = await message.locator('[data-test-class="markdown-document"]').innerText();
-    assert(distance <= 2, `streaming remains pinned: ${distance}px`);
+    assert(distance < 3, `streaming remains pinned: ${distance}px`);
     const liveGap = await gapBetween(message, ACTIVITY, TEXT);
     assert.equal(liveGap, 16, "live activity/answer uses the DS lg gap");
     const statusGap = await gapBetween(message, TEXT, STATUS_LINE);

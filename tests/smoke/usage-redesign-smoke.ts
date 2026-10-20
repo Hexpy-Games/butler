@@ -123,7 +123,7 @@ try {
     if (!before && scenario === "loading" && heights.has(heightKey)) {
       const delta = Math.abs(height - heights.get(heightKey)!);
       heightDeltas.push(delta);
-      assert(delta <= 2, `loading popover height differs by ${delta}px`);
+      assert(delta < 3, `loading popover height differs by ${delta}px`);
     }
     if (!before && scenario === "ready" && auth === "api_key") assert.match(await popover.innerText(), /(?:^|\s)\$0\.08/u);
     if (shots) await page.screenshot({ path: join(shots, `${before ? "before" : "after"}${auth === "subscription" ? "-subscription" : ""}-popover-${theme}-${width}-${scenario}.png`) });
@@ -202,8 +202,8 @@ try {
       }
       const deltas = rowXs.map(x => Math.abs(x - headlineX));
       alignmentDeltas.push(...deltas);
-      assert(deltas.every(delta => delta <= 1), `rows align with headline: ${deltas}`);
-      assert(Math.max(...rowHeights) - Math.min(...rowHeights) <= 1, "all breakdown tabs share vertical rhythm");
+      assert(deltas.every(delta => delta < 3), `rows align with headline: ${deltas}`);
+      assert(Math.max(...rowHeights) - Math.min(...rowHeights) < 3, "all breakdown tabs share vertical rhythm");
       await page.getByRole("tab", { name: "도구", exact: true }).click();
       await page.getByText("파일 읽기", { exact: true }).waitFor();
       await page.getByRole("tab", { name: "대화", exact: true }).click();

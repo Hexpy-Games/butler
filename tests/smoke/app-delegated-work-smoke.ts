@@ -159,6 +159,7 @@ async function checkWorkBlockTail(page: Page, width: number): Promise<ToggleMoti
   await tail.waitFor();
   await page.emulateMedia({ reducedMotion: null });
   for (const motion of [openJump, closeJump]) {
+    console.log(JSON.stringify({ check: "delegated-status-drift", driftPx: motion.inside, incidentPx: 3 }));
     assert(motion.inside < 3, `the status line stays put inside the card: ${JSON.stringify(motion)}`);
     assert(motion.step <= Math.max(1, motion.travel * 0.75), `the card follows the motion instead of snapping: ${JSON.stringify(motion)}`);
   }
