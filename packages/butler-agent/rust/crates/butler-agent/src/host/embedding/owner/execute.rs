@@ -1,6 +1,22 @@
 //! Owner-controlled loading and cancellable inference.
 use super::*;
 
+// WSL x86_64, BGE-M3 quantized, 2026-10-20: three newly loaded sessions per
+// input; 512 ASCII bytes / 473 tokens took 267.151–272.619 ms, and four
+// 128-byte queries took 221.576–231.672 ms. Reserve twice the rounded-up worst
+// inference: 2 * ceil(272.619) = 546 ms. The measured envelope is <=512 total
+// input bytes and <=4 vectors; larger work keeps kill-at-deadline, not a longer
+// grace. This changes worker retention only, never the request or its content.
+const QUERY_DRAIN_GRACE: Duration = Duration::from_millis(2 * 273);
+
+pub(super) fn drainable_query(request: &EmbeddingRequest) -> bool {
+    request.request_class == EmbeddingRequestClass::Interactive
+        && request.mode == EmbeddingMode::CheckedCls
+        && request.resplit
+        && request.max_embeddings.is_some_and(|limit| limit <= 4)
+        && request.texts.iter().map(String::len).sum::<usize>() <= 512
+}
+
 pub(super) async fn run_item(
     inner: &Inner,
     child: &mut Option<WorkerChild>,
@@ -37,8 +53,7 @@ pub(super) async fn run_item(
         biased;
         () = inner.shutdown.cancelled() => Err(error(CognitionCode::EmbedOwnerClosed)),
         () = release_requested(inner) => Err(error(CognitionCode::EmbedRequestCancelled)),
-        result = tokio::time::timeout(WORKER_RESPONSE_TIMEOUT, exchange_owned(process, item)) =>
-            result.unwrap_or_else(|_| Err(error(CognitionCode::EmbedWorkerUnavailable))),
+        result = exchange_owned(inner, process, item) => result,
     };
     match outcome {
         Ok(result) => result.map(Some),
@@ -50,9 +65,10 @@ pub(super) async fn run_item(
     }
 }
 
-// Caller deadlines bound waiting, not the lifetime of an already-sent request.
-// Drain its frame before admitting another request; otherwise stdout loses sync.
+// Drain only sent interactive queries. Every other request retains the normal
+// kill-at-deadline/cancellation policy, including checked projection batches.
 async fn exchange_owned(
+    inner: &Inner,
     process: &mut WorkerChild,
     item: &Pending,
 ) -> CognitionResult<CognitionResult<EmbeddingResult>> {
@@ -69,13 +85,55 @@ async fn exchange_owned(
         () = item.cancellation.cancelled() => {
             // A live caller can explicitly cancel. A dropped receiver has only
             // abandoned its result, so finish this sent request for the owner.
-            if !item.response.is_closed() {
+            if !item.interactive_query || !item.response.is_closed() {
                 return Err(error(CognitionCode::EmbedRequestCancelled));
             }
-            response.await
         }
-        () = deadline_wait(item.deadline) => response.await,
-        result = &mut response => result,
+        () = deadline_wait(item.deadline) => {
+            if !item.interactive_query {
+                return Err(error(CognitionCode::EmbedRequestDeadline));
+            }
+        }
+        result = &mut response => return result,
+    }
+    drain_query(inner, item, response).await
+}
+
+async fn drain_query(
+    inner: &Inner,
+    item: &Pending,
+    response: impl std::future::Future<Output = CognitionResult<CognitionResult<EmbeddingResult>>>,
+) -> CognitionResult<CognitionResult<EmbeddingResult>> {
+    tokio::pin!(response);
+    // An early drop gets at most one grace too; a late cancellation cannot
+    // restart the clock after the original deadline.
+    let start = item
+        .deadline
+        .unwrap_or_else(Instant::now)
+        .min(Instant::now());
+    let deadline = start + QUERY_DRAIN_GRACE;
+    if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+        butler_core::diagnostic!(
+            "[embedding-worker] draining query grace_ms={}",
+            QUERY_DRAIN_GRACE.as_millis()
+        );
+    }
+    loop {
+        let notified = inner.notify.notified();
+        tokio::pin!(notified);
+        notified.as_mut().enable();
+        // Grace never holds up newly admitted work. Register before checking
+        // the queue so admission cannot be lost between this check and select.
+        if inner.state.lock().has_waiting() {
+            return Err(error(CognitionCode::EmbedRequestDeadline));
+        }
+        tokio::select! {
+            biased;
+            result = &mut response => return result,
+            () = tokio::time::sleep_until(deadline) =>
+                return Err(error(CognitionCode::EmbedRequestDeadline)),
+            () = &mut notified => {},
+        }
     }
 }
 

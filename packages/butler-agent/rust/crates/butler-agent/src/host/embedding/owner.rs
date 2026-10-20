@@ -38,8 +38,6 @@ mod prewarm_tests;
 #[cfg(test)]
 mod readiness_tests;
 #[cfg(test)]
-mod sent_tests;
-#[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod verification_tests;
@@ -188,6 +186,7 @@ impl EmbeddingOwner {
         let requested_texts = request.texts.len();
         let resplit = request.resplit;
         let max_embeddings = request.max_embeddings;
+        let interactive_query = execute::drainable_query(&request);
         let wire = WorkerRequest {
             id,
             op: WorkerOperation::Embed,
@@ -218,6 +217,7 @@ impl EmbeddingOwner {
                 EmbeddingRequestClass::Interactive | EmbeddingRequestClass::Background
             ),
             background: request.request_class == EmbeddingRequestClass::Background,
+            interactive_query,
             cancellation: admitted_cancel.clone(),
             deadline,
             response: PendingResponse::Embedding(sender),

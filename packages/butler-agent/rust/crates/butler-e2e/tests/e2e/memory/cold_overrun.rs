@@ -32,7 +32,19 @@ async fn expired_embed_after_load_keeps_one_warm_worker() -> Result<(), HarnessE
         )
     };
     let before = counts(&s.agent.current_logs().await?);
-    let first = batch::recall(&s, "general", ASK).await?;
+    let pid = s.agent.pid().unwrap();
+    let mut trace = super::drain_bounds::Trace::open(&s, 2).await?;
+    let release_during_grace = async {
+        trace.drain().await?;
+        assert!(release.with_extension("held").exists());
+        let held = usage::embedding_children(pid)?;
+        if let Some(workers) = &held {
+            assert_eq!(workers.len(), 1, "deadline reaped the loaded worker");
+        }
+        std::fs::write(&release, b"")?;
+        Ok::<_, HarnessError>(held)
+    };
+    let (first, held) = tokio::try_join!(batch::recall(&s, "general", ASK), release_during_grace)?;
     let first_ms = recall_tool_ms(&s.sandbox.data);
     assert!(
         release.with_extension("held").exists(),
@@ -46,16 +58,11 @@ async fn expired_embed_after_load_keeps_one_warm_worker() -> Result<(), HarnessE
     assert_saved_instruction(&first, &code, 3);
     assert!(first["output"]["next_cursor"].is_null(), "{first}");
     assert!(first_ms < super::recall_budget::TOTAL_MS, "{first_ms} ms");
-    let pid = s.agent.pid().unwrap();
-    let held = usage::embedding_children(pid)?;
-    if let Some(workers) = &held {
-        assert_eq!(workers.len(), 1, "deadline reaped the loaded worker");
-    }
+    assert_eq!(usage::embedding_children(pid)?, held);
     assert_eq!(
         counts(&s.agent.current_logs().await?),
         (before.0 + 1, before.1 + 1)
     );
-    std::fs::write(&release, b"")?;
     // Draining the abandoned response must leave the protocol synchronized for
     // background work and the next query, with every new conversation indexed.
     memory_stubs::vectors_complete(&s.sandbox.data, 4).await?;

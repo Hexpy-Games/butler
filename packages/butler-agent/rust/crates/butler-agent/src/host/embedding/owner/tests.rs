@@ -1,7 +1,6 @@
 use super::*;
 use std::{process::Stdio, time::Duration};
 
-// test-category: race
 #[tokio::test]
 async fn active_cancellation_kills_and_reaps_child() {
     let mut child = butler_platform::process_control::test_support::slow_line_peer(
@@ -40,6 +39,7 @@ async fn active_cancellation_kills_and_reaps_child() {
         bytes: 3,
         cold_start_allowed: true,
         background: false,
+        interactive_query: false,
         mode: EmbeddingMode::LegacyMean,
         requested_texts: 1,
         resplit: false,
@@ -68,7 +68,6 @@ async fn active_cancellation_kills_and_reaps_child() {
             .is_none(),
         "cancelled child must be reaped"
     );
-    sent_tests::abandoned_sent_request_is_bounded_by_close_and_worker_timeout().await;
 }
 
 /// Readiness contract: deadline cancellation and concurrent callers share the

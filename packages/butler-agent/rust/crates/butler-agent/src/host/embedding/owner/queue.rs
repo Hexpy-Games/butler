@@ -40,6 +40,8 @@ pub(super) struct Pending {
     pub(super) cold_start_allowed: bool,
     /// Background maintenance: a worker it starts runs at background priority.
     pub(super) background: bool,
+    /// Only interactive checked query embeddings may finish after abandonment.
+    pub(super) interactive_query: bool,
     pub(super) mode: EmbeddingMode,
     pub(super) requested_texts: usize,
     pub(super) resplit: bool,
@@ -76,6 +78,13 @@ impl PendingResponse {
 }
 
 impl QueueState {
+    pub(super) fn has_waiting(&self) -> bool {
+        self.interactive
+            .iter()
+            .chain(&self.background)
+            .any(|item| !item.cancellation.is_cancelled() && !expired(item.deadline))
+    }
+
     pub(super) fn release(&mut self, bytes: usize) {
         self.queued_requests = self.queued_requests.saturating_sub(1);
         self.queued_bytes = self.queued_bytes.saturating_sub(bytes);

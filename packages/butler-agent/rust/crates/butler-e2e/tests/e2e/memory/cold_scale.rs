@@ -8,6 +8,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[path = "startup_ab.rs"]
+mod startup_ab;
+
 #[tokio::test]
 async fn first_recall_after_restart_owner_scale_is_complete() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -22,9 +25,7 @@ async fn first_recall_after_restart_owner_scale_is_complete() -> Result<(), Harn
     s.agent.terminate().await?;
     seed_history(&s.sandbox.data)?;
     let transcripts = crate::transcript_scale::seed(&s.sandbox.data)?;
-    let started = Instant::now();
-    s.gw = s.agent.start_again().await?;
-    let startup_ms = started.elapsed().as_millis();
+    let startup_ms = startup_ab::start(&mut s, &transcripts).await?;
     if let Some(workers) = usage::embedding_children(s.agent.pid().unwrap())? {
         assert!(workers.is_empty(), "startup spawned an embedding worker");
     }

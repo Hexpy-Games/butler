@@ -101,6 +101,7 @@ impl EmbeddingOwner {
                 bytes: 0,
                 cold_start_allowed: true,
                 background: false,
+                interactive_query: false,
                 mode: EmbeddingMode::CheckedCls,
                 requested_texts: 0,
                 resplit: false,

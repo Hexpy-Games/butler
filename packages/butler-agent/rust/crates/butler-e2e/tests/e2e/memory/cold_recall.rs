@@ -8,7 +8,8 @@ use std::time::{Duration, Instant};
 #[path = "../../../../butler-memory/src/cognition/memory_recall/budget.rs"]
 mod recall_budget;
 
-// Assembly after a deadline is observed is measured separately from vector work.
+// Option A headroom chosen by the owner, not a measurement: observed fallback
+// assembly is about 10 ms. Keep the derived (3,000 + 200) ms line and 5 s total.
 const FALLBACK_ASSEMBLY_ALLOWANCE: Duration = Duration::from_millis(200);
 
 const ASK: &str = "What is my bike lock code? Call recall_memory with cue bike lock code.";
@@ -270,6 +271,9 @@ async fn slow_model_load_leaves_complete_text_fallback_within_capped_wait()
 
 #[path = "cold_overrun.rs"]
 mod overrun;
+
+#[path = "drain_bounds.rs"]
+mod drain_bounds;
 
 #[path = "cold_scale.rs"]
 mod scale;
