@@ -291,8 +291,14 @@ pub(super) fn replacement_is_transient(error: &io::Error, from: &Path, to: &Path
 /// Probe source DELETE and target DELETE, or parent FILE_ADD_FILE for creation.
 /// Read-only targets and metadata failures do not permit retry.
 fn delete_probes(from: &Path, to: &Path) -> Option<[DeleteProbe; 2]> {
-    let (target, access) =
-        super::replacement_access::target_probe(current_metadata(to), to).ok()?;
+    let (target, access) = match current_metadata(to) {
+        Ok(metadata) if metadata.is_file() && metadata.permissions().readonly() => return None,
+        Ok(_) => (to, 0x0001_0000),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            (to.parent().unwrap_or(Path::new(".")), 0x0000_0002)
+        }
+        Err(_) => return None,
+    };
     Some([("source", from, 0x0001_0000), ("target", target, access)].map(|(role, path, access)| {
         // Share all access without changing the probed entry, and
         // inspect reparse entries themselves. Every probe handle closes here,
