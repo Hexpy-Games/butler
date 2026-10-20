@@ -23,6 +23,7 @@ pub(super) async fn run(
             // Stop execution first, retaining durable state and publication.
             // A user cancel alone owns cancellation and the queue pause.
             btcc.interrupt_turn(&turn_id);
+            crate::host::service::shutdown_trace::event("stream_interrupt");
             run.await.map_err(|_| interrupted())
         }
     }
