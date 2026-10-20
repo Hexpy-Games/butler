@@ -324,7 +324,7 @@ async fn grep_and_edit_readback_refuse_credential_hard_link_content() -> Result<
         .await
         .unwrap();
     assert!(result.skipped);
-    assert_eq!(result.reason, Some("safety_refused"));
+    assert_eq!(result.reason, Some("sensitive_path_blocked"));
     assert!(result.matches.is_empty());
     let scope = butler_turn::workspace::EffectFileScope {
         inventory: None,
