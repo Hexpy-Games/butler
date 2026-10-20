@@ -146,7 +146,7 @@ impl EmbeddingOwner {
     /// (Windows refuses to delete files a live process holds).
     pub(crate) async fn disable(&self) {
         self.inner.enabled.store(false, Ordering::Release);
-        self.inner.readiness.revoke();
+        self.inner.readiness.clear();
         self.inner.release.store(true, Ordering::Release);
         self.inner.release_signal.notify_waiters();
         self.inner.released.send_replace(false);
@@ -249,10 +249,6 @@ impl CognitionEmbeddingPort for EmbeddingOwner {
         self.enabled() && self.inner.readiness.is_warm()
     }
 
-    fn take_ready_transition(&self) -> bool {
-        self.enabled() && self.inner.readiness.take_ready_transition()
-    }
-
     fn enabled(&self) -> bool {
         self.inner.enabled.load(Ordering::Acquire)
     }
@@ -316,7 +312,7 @@ impl Inner {
             return;
         }
         state.closed = true;
-        self.readiness.revoke();
+        self.readiness.clear();
         for pending in state.interactive.drain(..) {
             pending
                 .response
@@ -379,7 +375,7 @@ async fn run_actor(inner: Arc<Inner>) {
 async fn run_loop(inner: &Inner, child: &mut Option<WorkerChild>, signal_memory_work: impl Fn()) {
     loop {
         if inner.release.swap(false, Ordering::AcqRel) {
-            inner.readiness.revoke();
+            inner.readiness.clear();
             kill_and_reap(child).await;
         }
         inner.released.send_replace(child.is_none());

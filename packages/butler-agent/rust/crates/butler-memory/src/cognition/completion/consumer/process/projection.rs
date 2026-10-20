@@ -5,11 +5,7 @@ use crate::cognition::CognitionResult;
 pub(super) async fn process(input: &Input) -> CognitionResult<bool> {
     let (projected, generation) = super::project_next(input).await?;
     let cached = super::cache::process(input, generation.as_ref()).await?;
-    let vectorized = super::super::vector_schedule::process(
-        input,
-        generation.as_ref(),
-        projected || cached.text_advanced,
-    )
-    .await?;
+    let vectorized =
+        super::super::vector_schedule::process(input, generation.as_ref()).await?;
     Ok(projected || cached.processed || vectorized)
 }

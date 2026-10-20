@@ -1,7 +1,6 @@
 //! Serving-label receipt pin through the real vector stage and recall adapter.
 use super::*;
 use crate::cognition::generation_vectors::compatibility;
-use crate::cognition::graph::GraphRepository;
 use crate::cognition::{
     CognitionConversationSourceNotice, CognitionEmbeddingPort, EmbeddingFuture, EmbeddingIdentity,
     EmbeddingRequest, EmbeddingResult, GenerationVectorAdapter, MemoryGenerationHandle,
@@ -176,20 +175,6 @@ async fn adopted_stage_pins_serving_receipts_and_refuses_other_assets() {
     crate::cognition::generation_vectors::cosine_distance_preserves_semantic_relevance().await;
     let fixture = Fixture::new();
     let (input, generation) = setup(&fixture).await;
-    let graph = GraphRepository::open_readonly(&generation.graph_path).unwrap();
-    assert!(
-        !graph.vector_batch_due("2000-01-01T00:00:00Z", 1).unwrap(),
-        "at cap stays deferred"
-    );
-    assert!(
-        graph.vector_batch_due("2000-01-01T00:00:00Z", 0).unwrap(),
-        "above cap is due"
-    );
-    assert!(
-        graph.vector_batch_due(NOW, 1).unwrap(),
-        "oldest age is inclusive"
-    );
-    graph.close().unwrap();
     super::cold::drain_refusals(&input, &generation).await;
     let db = Connection::open(&generation.graph_path).unwrap();
     let state: (String, u32, Option<String>) = db

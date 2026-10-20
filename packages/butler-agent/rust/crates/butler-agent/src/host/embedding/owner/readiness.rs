@@ -10,7 +10,6 @@ const VERIFYING: u8 = 2;
 #[derive(Default)]
 pub(super) struct WorkerReadiness {
     state: AtomicU8,
-    pending: AtomicBool,
 }
 
 impl WorkerReadiness {
@@ -24,15 +23,6 @@ impl WorkerReadiness {
 
     pub(super) fn clear(&self) {
         self.state.store(COLD, Ordering::Release);
-    }
-
-    pub(super) fn take_ready_transition(&self) -> bool {
-        self.pending.swap(false, Ordering::AcqRel)
-    }
-
-    pub(super) fn revoke(&self) {
-        self.clear();
-        self.take_ready_transition();
     }
 
     pub(super) fn begin_verification(&self) {
@@ -50,15 +40,11 @@ impl WorkerReadiness {
 
     /// True only when a cold worker becomes warm; verification is already warm.
     pub(super) fn publish(&self, ready: bool) -> bool {
-        let transitioned = self
+        self
             .state
             .swap(if ready { WARM } else { COLD }, Ordering::AcqRel)
             == COLD
-            && ready;
-        if transitioned {
-            self.pending.store(true, Ordering::Release);
-        }
-        transitioned
+            && ready
     }
 }
 

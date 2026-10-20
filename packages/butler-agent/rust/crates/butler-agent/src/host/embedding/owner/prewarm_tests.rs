@@ -188,7 +188,7 @@ async fn off_and_shutdown_prevent_replacement() {
             if off {
                 assert!(futures_util::poll!(disable.as_mut()).is_pending());
                 assert_eq!(work.await.err().unwrap().code(), "embed_worker_cold");
-                // Reproduce publication after disable's revoke, from an actor
+                // Reproduce publication after disable cleared warmth, from an actor
                 // that had observed enabled before the switch to off.
                 owner.inner.readiness.publish(true);
             } else {
@@ -202,14 +202,12 @@ async fn off_and_shutdown_prevent_replacement() {
             assert!(futures_util::poll!(release.as_mut()).is_pending());
             disable.await;
             owner.enable();
-            assert!(!owner.take_ready_transition(), "off retained a stale load");
         }
         assert!(
             child.is_none(),
             "interrupted verification reaps without respawn"
         );
         assert!(!owner.is_warm());
-        assert!(!owner.take_ready_transition());
         owner.close().await.unwrap();
     }
 }
@@ -219,10 +217,6 @@ pub(super) async fn regressions() {
     // the other verification, admission, or shutdown failures.
     type Case = std::pin::Pin<Box<dyn std::future::Future<Output = ()>>>;
     let cases: Vec<(&str, Case)> = vec![
-        (
-            "ready transition survives cancelled inference",
-            Box::pin(verification_tests::cancelled_inference_keeps_ready_transition()),
-        ),
         (
             "background vector candidates during healthy verification",
             Box::pin(verification_tests::background_candidates()),

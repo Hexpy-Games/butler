@@ -251,7 +251,7 @@ async fn mem_05_vector_batch_finds_chat_a_fact_by_paraphrase_in_chat_b() -> Resu
 }
 
 #[tokio::test]
-async fn mem_daily_window_drains_vectors_with_one_load() -> Result<(), HarnessError> {
+async fn mem_daily_window_defers_vectors_until_on_demand_load() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (setup, remember, _) = setup("MEM-DAILY-BATCH")?;
     let mut s = setup.start().await?;
@@ -298,7 +298,7 @@ async fn mem_daily_window_drains_vectors_with_one_load() -> Result<(), HarnessEr
 }
 
 #[tokio::test]
-async fn mem_max_age_drains_on_new_text_work() -> Result<(), HarnessError> {
+async fn mem_aged_vectors_stay_deferred_through_text_work_until_recall() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (setup, remember, _) = setup("MEM-AGE-BATCH")?;
     let s = setup.start().await?;
@@ -307,7 +307,7 @@ async fn mem_max_age_drains_on_new_text_work() -> Result<(), HarnessError> {
     let db = rusqlite::Connection::open(graph).unwrap();
     db.execute("UPDATE memory_projection_jobs SET created_at='2000-01-01T00:00:00Z' WHERE job_id IN (SELECT job_id FROM memory_vector_units WHERE state='pending')", []).unwrap();
     drop(db);
-    // Age is checked on new text work, never by an idle timer.
+    // New text work leaves aged vectors deferred until on-demand recall.
     let (_, turn) = s
         .turn("general", "I will read a book this evening.")
         .await?;

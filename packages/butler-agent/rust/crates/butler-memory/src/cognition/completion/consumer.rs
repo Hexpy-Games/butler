@@ -8,7 +8,6 @@ mod inventory;
 mod probe;
 mod process;
 mod vector_schedule;
-pub use vector_schedule::{VECTOR_BACKLOG_CAP, VECTOR_MAX_AGE_HOURS};
 
 use parking_lot::Mutex;
 use std::{path::PathBuf, sync::Arc, sync::atomic::AtomicBool, time::Instant};
