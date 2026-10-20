@@ -16,6 +16,8 @@ mod exact_name;
 pub use exact_name::exact_entry_exists;
 mod fault;
 mod replacement;
+#[cfg(windows)]
+mod replacement_access;
 mod timing;
 pub use fault::{abort_point, checkpoint as fault_checkpoint, hold_point, write as fault_write};
 pub use replacement::{replace_private, replace_private_reconstructible};
@@ -495,4 +497,4 @@ pub mod fixture_links;
 #[cfg(feature = "test-support")]
 pub mod fixture_locks;
 mod path_identity;
-pub use path_identity::{same_file, same_metadata};
+pub use path_identity::{same_file, same_metadata, same_open_file};

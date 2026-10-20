@@ -287,7 +287,7 @@ fn move_path(path: &Path) -> io::Result<PathBuf> {
 
 /// ACCESS_DENIED can be a sharing or mapped-view conflict even when DELETE
 /// opens succeed. Only confirmed permission failures stop the bounded retry.
-fn replacement_is_transient(error: &io::Error, from: &Path, to: &Path) -> bool {
+pub(super) fn replacement_is_transient(error: &io::Error, from: &Path, to: &Path) -> bool {
     match error.raw_os_error() {
         Some(code) if SHARING_ERRORS.contains(&code) => true,
         Some(5) => replacement_delete_allowed(from, to),
@@ -296,19 +296,18 @@ fn replacement_is_transient(error: &io::Error, from: &Path, to: &Path) -> bool {
 }
 
 fn replacement_delete_allowed(from: &Path, to: &Path) -> bool {
-    if !current_metadata(to)
-        .is_ok_and(|metadata| !metadata.is_file() || !metadata.permissions().readonly())
-    {
+    let Ok((target, access)) = super::replacement_access::target_probe(current_metadata(to), to)
+    else {
         return false;
-    }
+    };
     let mut allowed = true;
-    for (role, path) in [("source", from), ("target", to)] {
-        // Request DELETE without deleting anything. Share all access, and
+    for (role, path, access) in [("source", from, 0x0001_0000), ("target", target, access)] {
+        // Probe DELETE, or parent FILE_ADD_FILE for creation. Share all access, and
         // inspect reparse entries themselves. Every probe handle closes here,
         // before the next rename attempt or its backoff.
         let result = OpenOptions::new()
             .read(true)
-            .access_mode(0x0001_0000)
+            .access_mode(access)
             .share_mode(7)
             .custom_flags(0x0220_0000)
             .open(path);

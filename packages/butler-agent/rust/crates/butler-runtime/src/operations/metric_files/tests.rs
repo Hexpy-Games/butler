@@ -30,6 +30,7 @@ impl Drop for Scratch {
 // test-category: security
 #[test]
 fn retention_drops_bad_and_old_rows_and_marks_kept_rows_private() {
+    retention::assert_changed_live_file_aborts_without_publication();
     let scratch = Scratch::new();
     let files = MetricFiles::new(scratch.0.clone());
     let path = scratch.0.join("metrics/context-monitor.jsonl");

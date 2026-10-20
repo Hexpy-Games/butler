@@ -58,10 +58,12 @@ pub(super) fn retain(
     }
     // A failed pass must never leave an earlier cache entry valid.
     *snapshot = None;
-    let mut pass = Pass::new(path, threshold);
+    let mut pass = Pass::new(path, threshold)?;
     loop {
         let publication = files.file_lock(file, "append")?;
-        let end = butler_platform::secure_fs::current_metadata(&pass.path)?.len();
+        let Some(end) = pass.current_end()? else {
+            return Ok(MetricRetentionStats::default());
+        };
         if end == pass.position {
             pass.publish()?;
             *snapshot = Some(Snapshot {
@@ -85,6 +87,7 @@ struct Pass {
     // Close a failed output before its cleanup removes the temporary file.
     output: Option<BufWriter<File>>,
     temporary: TemporaryPath,
+    source: Option<File>,
     position: u64,
     threshold: f64,
     earliest: f64,
@@ -92,8 +95,9 @@ struct Pass {
 }
 
 impl Pass {
-    fn new(path: PathBuf, threshold: f64) -> Self {
-        Self {
+    fn new(path: PathBuf, threshold: f64) -> io::Result<Self> {
+        Ok(Self {
+            source: Some(File::open(&path)?),
             temporary: TemporaryPath::new(temporary_path(&path)),
             path,
             output: None,
@@ -101,11 +105,30 @@ impl Pass {
             threshold,
             earliest: f64::INFINITY,
             stats: MetricRetentionStats::default(),
+        })
+    }
+
+    fn source(&self) -> io::Result<&File> {
+        self.source
+            .as_ref()
+            .ok_or_else(|| io::Error::other("retention source is closed"))
+    }
+
+    fn current_end(&self) -> io::Result<Option<u64>> {
+        let source = self.source()?;
+        let end = match butler_platform::secure_fs::current_metadata(&self.path) {
+            Ok(metadata) => metadata.len(),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        if end < self.position || !butler_platform::secure_fs::same_open_file(source, &self.path)? {
+            return Ok(None);
         }
+        Ok(Some(end))
     }
 
     fn scan(&mut self, end: u64) -> io::Result<()> {
-        let mut source = File::open(&self.path)?;
+        let mut source = self.source()?.try_clone()?;
         source.seek(SeekFrom::Start(self.position))?;
         let mut reader = BufReader::new(source.take(end - self.position));
         let mut record = Vec::new();
@@ -117,6 +140,12 @@ impl Pass {
             }
             self.record(&record)?;
             self.position += bytes as u64;
+        }
+        if self.position != end {
+            return Err(io::Error::new(
+                io::ErrorKind::Interrupted,
+                "metric file shrank during retention",
+            ));
         }
         Ok(())
     }
@@ -182,11 +211,46 @@ impl Pass {
             return Ok(());
         };
         drop(writer);
-        // scan() has closed every source handle before Windows replacement.
-        butler_platform::secure_fs::rename(&self.temporary.path, &self.path)?;
+        drop(self.source.take());
+        butler_platform::secure_fs::replace_file(&self.temporary.path, &self.path, &mut || Ok(()))?;
         butler_platform::secure_fs::sync_directory(self.path.parent().unwrap_or(Path::new(".")))
             .unwrap_or(Ok(()))?;
         self.temporary.commit();
         Ok(())
+    }
+}
+
+#[cfg(test)]
+pub(super) fn assert_changed_live_file_aborts_without_publication() {
+    for replace in [false, true] {
+        let root = std::env::temp_dir().join(uuid::Uuid::new_v4().to_string());
+        fs::create_dir(&root).unwrap();
+        let path = root.join("events.jsonl");
+        fs::write(&path, b"{\"ts\":1}\n").unwrap();
+        let mut pass = Pass::new(path.clone(), 2.0).unwrap();
+        let end = pass.current_end().unwrap().unwrap();
+        pass.scan(end).unwrap();
+        pass.flush().unwrap();
+        let replacement = b"{\"ts\":3}\n";
+        if replace {
+            let staged = root.join("replacement");
+            fs::write(&staged, replacement).unwrap();
+            butler_platform::secure_fs::replace_file(&staged, &path, &mut || Ok(())).unwrap();
+        } else {
+            File::options()
+                .write(true)
+                .open(&path)
+                .unwrap()
+                .set_len(0)
+                .unwrap();
+        }
+        assert_eq!(pass.current_end().unwrap(), None);
+        drop(pass);
+        assert_eq!(
+            fs::read(&path).unwrap(),
+            if replace { replacement.as_slice() } else { b"" }
+        );
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
+        fs::remove_dir_all(root).unwrap();
     }
 }

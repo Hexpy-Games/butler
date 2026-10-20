@@ -87,3 +87,21 @@ $view = $map.CreateViewAccessor(0, 0, [IO.MemoryMappedFiles.MemoryMappedFileAcce
         ))
     }
 }
+
+/// Classifies ACCESS_DENIED using native permission probes, without needing an
+/// antivirus or mapped-view race to produce that error deterministically.
+pub fn access_denied_rename_is_transient(from: &Path, to: &Path) -> Option<bool> {
+    #[cfg(windows)]
+    {
+        Some(super::sys::replacement_is_transient(
+            &io::Error::from_raw_os_error(5),
+            from,
+            to,
+        ))
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (from, to);
+        None
+    }
+}
