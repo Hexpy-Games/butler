@@ -177,6 +177,7 @@ mod token_cache;
 #[path = "support/token_metrics.rs"]
 mod token_metrics;
 mod tools;
+mod tools_direct_args;
 mod tools_effects;
 mod turn;
 mod turn_continuation;
