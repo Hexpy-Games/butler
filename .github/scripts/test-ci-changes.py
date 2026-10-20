@@ -43,6 +43,7 @@ class Paths(unittest.TestCase):
             'notes.md': set(),
             '.github/pull_request_template.md': set(),
             '.github/workflows/windows.yml': {'rust', 'ui', 'package'},
+            'packages/butler-agent/rust/scripts/check_host_links.py': {'rust', 'package', 'install', 'linux-package', 'signing'},
             'new-build-config.ini': set(changes.GROUPS) - {'workflows'},
         }
         workflow = (ROOT.parent / 'workflows/rust-quality.yml').read_text()
@@ -52,6 +53,12 @@ class Paths(unittest.TestCase):
         for path, expected in cases.items():
             with self.subTest(path=path):
                 self.assertEqual(changes.categories(path), expected)
+
+    # test-category: pure-logic
+    def test_release_python_invalidates_native_consumers(self):
+        path = '.github/actions/release-python/action.yml'
+        self.assertTrue(changes.windows_native(path))
+        self.assertTrue(set(changes.NATIVE_CI).issubset(changes.categories(path)))
 
     # test-category: pure-logic
     def test_github_inputs_follow_consumers_and_unknowns_fail_closed(self):

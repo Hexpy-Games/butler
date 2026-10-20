@@ -187,6 +187,14 @@ function packagePlatform(input: {
   normalizeMacBundle(input.root, appBundle);
   verifyMacBundleIcon(appReleaseIconPath(input.root), appBundle);
   signMacBundle(input.root, appBundle);
+  const hostLinks = spawnSync(process.env.PYTHON3 || "python3", [
+    join(input.root, "packages/butler-agent/rust/scripts/check_host_links.py"),
+    "--platform", "darwin", appBundle,
+  ], { encoding: "utf8" });
+  if (hostLinks.status !== 0) {
+    throw new Error(`App host-link guard failed: ${hostLinks.stderr || hostLinks.error || hostLinks.stdout}`);
+  }
+  process.stdout.write(hostLinks.stdout);
   const nativeClosure = closureFromNativeMacBundle(appBundle, input.manifest);
   verifyNativeMacBundle(appBundle, nativeClosure);
   runMacSigning(input.root, "notarize", appBundle);

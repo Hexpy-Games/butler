@@ -123,16 +123,18 @@ runs:
           $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         }
-        $binary = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/${{ inputs.profile }}/butler-agent.exe"
-        # A runner has development DLLs installed. Refuse a dependency they hide.
-        $ErrorActionPreference = 'Continue'
-        $imports = & dumpbin /dependents $binary
-        $ErrorActionPreference = 'Stop'
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        $imports | Write-Output
-        foreach ($line in $imports) {
-          if ($line.Trim() -match '(?i)^(onnxruntime|vcruntime|msvcp|concrt|ucrtbase).*\.dll$') {
-            throw 'Agent has an unpackaged runtime dependency'
+        foreach ($name in @('butler-agent.exe', 'butler-sandbox.exe')) {
+          $binary = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/${{ inputs.profile }}/$name"
+          # A runner has development DLLs installed. Refuse a dependency they hide.
+          $ErrorActionPreference = 'Continue'
+          $imports = & dumpbin /dependents $binary
+          $ErrorActionPreference = 'Stop'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $imports | Write-Output
+          foreach ($line in $imports) {
+            if ($line.Trim() -match '(?i)^(onnxruntime|vcruntime|msvcp|concrt|ucrtbase).*\.dll$') {
+              throw "${binary}: $($line.Trim()): unpackaged runtime dependency"
+            }
           }
         }
     - name: Upload Cargo build timings
