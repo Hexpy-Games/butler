@@ -88,10 +88,12 @@ async fn ensure_initialized(
         }
         let started = Instant::now();
         *child = Some(spawn_worker(&inner.executable, &inner.data_root, item.background).await?);
-        butler_core::diagnostic!(
-            "[embedding-worker] spawn_ms={:.3}",
-            started.elapsed().as_secs_f64() * 1000.0
-        );
+        if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+            butler_core::diagnostic!(
+                "[embedding-worker] spawn_ms={:.3}",
+                started.elapsed().as_secs_f64() * 1000.0
+            );
+        }
         inner.released.send_replace(false);
     }
     if let Some(process) = child.as_mut().filter(|process| !process.initialized) {

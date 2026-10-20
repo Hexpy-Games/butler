@@ -110,7 +110,7 @@ impl AgentRuntime {
             embedding.clone(),
         )
         .await?;
-        let (memory_sync, memory_acquisition) = boundary::MemoryStartup {
+        let memory_sync = boundary::MemoryStartup {
             observer: &observer,
             work_streams: &work_streams,
             stores: &stores,
@@ -126,6 +126,8 @@ impl AgentRuntime {
             vectors.clone(),
         )
         .await?;
+        let memory_acquisition =
+            memory_bootstrap::acquisition(&paths.data_root, &embedding, &memory_sync).await;
         startup.phase("defaults_observer_and_memory_consumer");
         let capsule_service = Arc::new(ProjectCapsuleService::new(
             paths.data_root.clone(),

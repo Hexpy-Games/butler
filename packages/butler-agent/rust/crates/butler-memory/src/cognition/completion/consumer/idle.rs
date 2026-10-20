@@ -24,10 +24,7 @@ impl MemorySyncConsumer {
         let vector_admitted = enabled
             && (self.target.is_some()
                 || self.vector_batch.load(Ordering::Acquire)
-                || self
-                    .embedding
-                    .as_ref()
-                    .is_some_and(|owner| owner.background_ready()));
+                || self.embedding.as_ref().is_some_and(|owner| owner.is_warm()));
         let vectors = vector_admitted && self.probe.vector_work(graph, future).await?;
         Ok((semantic || vectors).then_some(backoff))
     }

@@ -33,10 +33,12 @@ pub(super) fn select(
     if admitted.graph || admitted.lexical || admitted.explicit {
         channels.extend(aliases::select(db, input)?);
     }
-    butler_core::diagnostic!(
-        "[memory-recall] alias_ms={:.3}",
-        started.elapsed().as_secs_f64() * 1000.0
-    );
+    if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+        butler_core::diagnostic!(
+            "[memory-recall] alias_ms={:.3}",
+            started.elapsed().as_secs_f64() * 1000.0
+        );
+    }
     let started = std::time::Instant::now();
     let mut lexical_partial = false;
     if admitted.lexical || admitted.explicit {
@@ -44,10 +46,12 @@ pub(super) fn select(
         channels.extend(selected);
         lexical_partial = partial;
     }
-    butler_core::diagnostic!(
-        "[memory-recall] lexical_ms={:.3}",
-        started.elapsed().as_secs_f64() * 1000.0
-    );
+    if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+        butler_core::diagnostic!(
+            "[memory-recall] lexical_ms={:.3}",
+            started.elapsed().as_secs_f64() * 1000.0
+        );
+    }
     if admitted.vector {
         channels.extend(vectors::select(db, input, vector_nodes)?);
     }

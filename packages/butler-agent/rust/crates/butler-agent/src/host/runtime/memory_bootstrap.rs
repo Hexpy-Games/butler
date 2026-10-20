@@ -83,14 +83,12 @@ pub(super) fn rule_owner(
 pub(super) async fn acquisition(
     data_root: &std::path::Path,
     embedding: &Arc<EmbeddingOwner>,
-    environment: &CognitionPathEnvironment,
     memory_sync: &crate::host::memory_jobs::sync::MemorySync,
 ) -> Arc<crate::host::embedding::worker::assets::Acquisition> {
     use crate::host::embedding::worker::assets::{Acquisition, ModelOwners};
     let owners = ModelOwners {
         owner: embedding.clone(),
         consumer: memory_sync.consumer(),
-        paths: environment.clone(),
     };
     Arc::new(Acquisition::open(data_root.to_path_buf(), owners).await)
 }

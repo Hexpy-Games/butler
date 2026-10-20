@@ -10,7 +10,7 @@ const ASK: &str = "What is my bike lock code? Call recall_memory with cue bike l
 async fn first_recall_after_start_uses_vector_lane() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (setup, remember, code) = batch::setup_with_provider_delay("MEM-COLD-RECALL", 2_500)?;
-    let mut s = setup.start().await?;
+    let mut s = setup.env("BUTLER_MEMORY_SYNC_TRACE", "1").start().await?;
     assert_eq!(s.turn("general", &remember).await?.1["state"], "delivered");
     memory_stubs::text_complete(&s.sandbox.data, 1).await?;
     batch::recall(&s, "general", ASK).await?;
@@ -32,10 +32,7 @@ async fn first_recall_after_start_uses_vector_lane() -> Result<(), HarnessError>
         min_ms: 0,
     });
     if let Some(workers) = usage::embedding_children(s.agent.pid().unwrap())? {
-        assert!(
-            workers.len() <= 1,
-            "startup preparation shares the single owner"
-        );
+        assert!(workers.is_empty(), "startup spawned an embedding worker");
     }
     let started = Instant::now();
     let first = batch::recall(&s, "general", ASK).await?;
@@ -175,7 +172,7 @@ async fn slow_model_load_leaves_complete_text_fallback_within_capped_wait()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (setup, remember, code) = batch::setup("MEM-SLOW-RECALL")?;
-    let mut s = setup.start().await?;
+    let mut s = setup.env("BUTLER_MEMORY_SYNC_TRACE", "1").start().await?;
     assert_eq!(s.turn("general", &remember).await?.1["state"], "delivered");
     memory_stubs::text_complete(&s.sandbox.data, 1).await?;
     batch::recall(&s, "general", ASK).await?;
@@ -240,3 +237,6 @@ async fn slow_model_load_leaves_complete_text_fallback_within_capped_wait()
 
 #[path = "cold_scale.rs"]
 mod scale;
+
+#[path = "compaction.rs"]
+mod compaction;

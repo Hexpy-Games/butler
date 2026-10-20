@@ -15,6 +15,9 @@ use lancedb::{
     table::{OptimizeAction, OptimizeOptions},
 };
 
+#[cfg(feature = "e2e-fixtures")]
+mod fixtures;
+
 /// Fragments a table may hold before writers compact it.
 pub(super) const FRAGMENT_LIMIT: usize = 32;
 /// Versions kept for rollback: the newest ones, plus any that carry a tag.
@@ -54,16 +57,19 @@ pub(super) async fn compact_if_fragmented(table: &Table) -> lancedb::Result<bool
         return Ok(false);
     }
     let started = std::time::Instant::now();
-    table
-        .optimize(OptimizeAction::Compact {
-            options: Default::default(),
-            remap_options: None,
-        })
-        .await?;
-    butler_core::diagnostic!(
-        "[memory-vector] compact_ms={:.3}",
-        started.elapsed().as_secs_f64() * 1000.0
-    );
+    let action = OptimizeAction::Compact {
+        options: Default::default(),
+        remap_options: None,
+    };
+    #[cfg(feature = "e2e-fixtures")]
+    let (action, _hold) = fixtures::instrument(action);
+    table.optimize(action).await?;
+    if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+        butler_core::diagnostic!(
+            "[memory-vector] compact_ms={:.3}",
+            started.elapsed().as_secs_f64() * 1000.0
+        );
+    }
     Ok(true)
 }
 

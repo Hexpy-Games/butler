@@ -176,11 +176,10 @@ impl GenerationVectorStore {
         let Some(root) = root else {
             return Ok(());
         };
-        // An independent handle keeps maintenance from publishing an older
-        // in-memory dataset over the serving writer's handle. Reads on every
-        // handle still check the latest committed manifest.
-        let connection = lance_store::connect(&root).await.map_err(unavailable)?;
-        let table = match lance_store::open(&connection, TABLE).await {
+        // Use the serving handle, as vector optimize does. In LanceDB 0.27.2
+        // DatasetConsistencyWrapper::update cannot replace a newer cached
+        // version with an older one; reads also check the committed manifest.
+        let table = match lance_store::shared(&root, TABLE).await {
             Ok(table) => table,
             Err(lancedb::Error::TableNotFound { .. }) => return Ok(()),
             Err(source) => return Err(unavailable(source)),

@@ -33,7 +33,7 @@ pub(super) async fn admit(
         || input
             .embedding
             .as_ref()
-            .is_some_and(|embedding| embedding.background_ready())
+            .is_some_and(|embedding| embedding.is_warm())
     {
         return Ok(true);
     }

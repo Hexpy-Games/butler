@@ -190,10 +190,12 @@ pub(crate) async fn search_generation_vectors(
     };
     let started = std::time::Instant::now();
     let table = VectorTable::open(data_root, generation).await?;
-    butler_core::diagnostic!(
-        "[memory-vector] lance_open_ms={:.3}",
-        started.elapsed().as_secs_f64() * 1000.0
-    );
+    if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+        butler_core::diagnostic!(
+            "[memory-vector] lance_open_ms={:.3}",
+            started.elapsed().as_secs_f64() * 1000.0
+        );
+    }
     let started = std::time::Instant::now();
     for kind in [VectorKind::Node, VectorKind::Episode] {
         if kind == VectorKind::Episode
@@ -216,10 +218,12 @@ pub(crate) async fn search_generation_vectors(
             VectorKind::Episode => result.episodes = ranked,
         }
     }
-    butler_core::diagnostic!(
-        "[memory-vector] search_ms={:.3}",
-        started.elapsed().as_secs_f64() * 1000.0
-    );
+    if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+        butler_core::diagnostic!(
+            "[memory-vector] search_ms={:.3}",
+            started.elapsed().as_secs_f64() * 1000.0
+        );
+    }
     Ok(result)
 }
 

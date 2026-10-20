@@ -12,7 +12,7 @@ use std::{
 async fn first_recall_after_restart_owner_scale_is_complete() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (setup, remember, code) = batch::setup("MEM-COLD-SCALE")?;
-    let mut s = setup.start().await?;
+    let mut s = setup.env("BUTLER_MEMORY_SYNC_TRACE", "1").start().await?;
     assert_eq!(s.turn("general", &remember).await?.1["state"], "delivered");
     memory_stubs::text_complete(&s.sandbox.data, 1).await?;
     batch::recall(&s, "general", ASK).await?;
@@ -25,6 +25,9 @@ async fn first_recall_after_restart_owner_scale_is_complete() -> Result<(), Harn
     let started = Instant::now();
     s.gw = s.agent.start_again().await?;
     let startup_ms = started.elapsed().as_millis();
+    if let Some(workers) = usage::embedding_children(s.agent.pid().unwrap())? {
+        assert!(workers.is_empty(), "startup spawned an embedding worker");
+    }
     let started = Instant::now();
     let first = batch::recall(&s, "general", ASK).await?;
     let turn_ms = started.elapsed().as_millis();
@@ -172,11 +175,10 @@ async fn idle(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), HarnessErro
 }
 
 #[tokio::test]
-async fn restart_preparation_keeps_deferred_vectors_idle() -> Result<(), HarnessError> {
+async fn restart_keeps_worker_and_deferred_vectors_idle_until_demand() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    use tokio::io::AsyncReadExt;
     let (setup, remember, code) = batch::setup("MEM-RESTART-DEFERRED")?;
-    let mut s = setup.start().await?;
+    let mut s = setup.env("BUTLER_MEMORY_SYNC_TRACE", "1").start().await?;
     assert_eq!(s.turn("general", &remember).await?.1["state"], "delivered");
     memory_stubs::text_complete(&s.sandbox.data, 1).await?;
     batch::recall(&s, "general", ASK).await?;
@@ -184,8 +186,8 @@ async fn restart_preparation_keeps_deferred_vectors_idle() -> Result<(), Harness
     batch::recall(&s, "general", ASK).await?;
     memory_stubs::vectors_complete(&s.sandbox.data, 3).await?;
     s.agent.terminate().await?;
-    // A crash can leave a committed vector whose unit receipt still needs
-    // recovery. Preparation must not turn that deferred work into an idle drain.
+    // A crash can leave a committed vector whose unit receipt needs recovery.
+    // Startup must leave both the worker and that deferred work idle.
     let graph = memory_stubs::graph_path(&s.sandbox.data)?;
     let db = rusqlite::Connection::open(graph)?;
     assert_eq!(db.execute("UPDATE memory_vector_units SET state='pending' WHERE unit_id=(SELECT unit_id FROM memory_vector_units WHERE state='complete' ORDER BY unit_id LIMIT 1)", [])?, 1);
@@ -193,30 +195,24 @@ async fn restart_preparation_keeps_deferred_vectors_idle() -> Result<(), Harness
     let before = memory_stubs::unit_states(&s.sandbox.data)?;
     assert_eq!(before.0, 1);
     s.gw = s.agent.start_again().await?;
-    let mut log = tokio::fs::File::open(s.sandbox.logs.join("agent-2.log")).await?;
-    tokio::time::timeout(Duration::from_secs(90), async {
-        let mut appended = String::new();
-        loop {
-            log.read_to_string(&mut appended).await?;
-            if appended.contains("[embedding-worker] ready") {
-                let startup = appended.find("[native-butler] ready").unwrap();
-                let spawn = appended.find("[embedding-worker] spawn_ms=").unwrap();
-                assert!(
-                    startup < spawn,
-                    "preparation ran before service readiness: {appended}"
-                );
-                return Ok::<_, std::io::Error>(());
-            }
-            tokio::time::sleep(Duration::from_millis(50)).await;
+    for _ in 0..2 {
+        if let Some(workers) = usage::embedding_children(s.agent.pid().unwrap())? {
+            assert!(workers.is_empty(), "startup spawned an embedding worker");
         }
-    })
-    .await
-    .expect("startup prepares the persisted vector generation")?;
-    super::assert_loaded_idle(&s).await?;
+        assert!(
+            !s.agent
+                .current_logs()
+                .await?
+                .contains("[embedding-worker] ready")
+        );
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
     assert_eq!(memory_stubs::unit_states(&s.sandbox.data)?, before);
     let first = batch::recall(&s, "general", ASK).await?;
     assert_complete(&first, &code, 3);
     memory_stubs::vectors_complete(&s.sandbox.data, 4).await?;
-    eprintln!("RESTART-DEFERRED prepared=true idle_pending=1 demand_pending=0 complete_results=3");
+    eprintln!(
+        "RESTART-DEFERRED startup_workers=0 idle_pending=1 demand_pending=0 complete_results=3"
+    );
     s.finish().await
 }

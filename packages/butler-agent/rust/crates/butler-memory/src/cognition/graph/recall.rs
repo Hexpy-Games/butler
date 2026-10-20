@@ -60,18 +60,11 @@ impl GraphRecallReader {
         vectors::current(self.connection()?, input, generation, matches, parse_date)
     }
     pub(in crate::cognition) fn open(path: &Path) -> CognitionResult<Self> {
-        Self::open_with_timeout(path, Duration::from_millis(5_000))
-    }
-
-    /// Speculative preparation must never wait behind a graph writer.
-    pub(in crate::cognition) fn try_open(path: &Path) -> CognitionResult<Self> {
-        Self::open_with_timeout(path, Duration::ZERO)
-    }
-
-    fn open_with_timeout(path: &Path, timeout: Duration) -> CognitionResult<Self> {
         let connection =
             sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(db_error)?;
-        connection.busy_timeout(timeout).map_err(db_error)?;
+        connection
+            .busy_timeout(Duration::from_millis(5_000))
+            .map_err(db_error)?;
         connection
             .pragma_update(None, "query_only", "ON")
             .map_err(db_error)?;

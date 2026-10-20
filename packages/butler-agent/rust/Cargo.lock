@@ -912,6 +912,7 @@ dependencies = [
 name = "butler-e2e"
 version = "0.0.0"
 dependencies = [
+ "arrow-array",
  "axum",
  "base64 0.22.1",
  "butler-core",
@@ -929,6 +930,7 @@ dependencies = [
  "hmac 0.12.1",
  "http",
  "image",
+ "lancedb",
  "notify",
  "regex",
  "reqwest 0.12.28",

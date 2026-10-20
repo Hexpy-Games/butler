@@ -62,13 +62,7 @@ impl MemoryStartup<'_> {
         provider: Arc<butler_models::models::ModelProvider>,
         embedding: Arc<crate::host::EmbeddingOwner>,
         vector: Arc<butler_memory::cognition::GenerationVectorAdapter>,
-    ) -> Result<
-        (
-            MemorySync,
-            Arc<crate::host::embedding::worker::assets::Acquisition>,
-        ),
-        BtccError,
-    > {
+    ) -> Result<MemorySync, BtccError> {
         let opened = match super::stores::check_startup(self.stop) {
             Err(error) => Err(error),
             Ok(()) => {
@@ -81,7 +75,7 @@ impl MemoryStartup<'_> {
                     },
                     coordinator,
                     provider,
-                    embedding.clone(),
+                    embedding,
                     vector,
                 )
                 .await
@@ -98,14 +92,7 @@ impl MemoryStartup<'_> {
             self.stores,
         )
         .await?;
-        let acquisition = super::memory_bootstrap::acquisition(
-            &paths.data_root,
-            &embedding,
-            cognition_paths,
-            &owner,
-        )
-        .await;
-        Ok((owner, acquisition))
+        Ok(owner)
     }
 }
 

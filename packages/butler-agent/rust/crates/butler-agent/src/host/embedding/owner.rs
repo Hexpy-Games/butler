@@ -61,8 +61,6 @@ struct Inner {
     executable: PathBuf,
     next_id: AtomicU64,
     readiness: WorkerReadiness,
-    /// Preparation loads the model; actual demand admits deferred vector work.
-    background_admitted: AtomicBool,
     /// The user's memory-model choice with the model present; off starts no child.
     enabled: AtomicBool,
     /// A switch to off asks the actor to reap a live child.
@@ -91,7 +89,6 @@ impl EmbeddingOwner {
             executable,
             next_id: AtomicU64::new(1),
             readiness: WorkerReadiness::default(),
-            background_admitted: AtomicBool::new(false),
             enabled: AtomicBool::new(false),
             release: AtomicBool::new(false),
             release_signal: Notify::new(),
@@ -149,9 +146,6 @@ impl EmbeddingOwner {
     /// (Windows refuses to delete files a live process holds).
     pub(crate) async fn disable(&self) {
         self.inner.enabled.store(false, Ordering::Release);
-        self.inner
-            .background_admitted
-            .store(false, Ordering::Release);
         self.inner.readiness.clear();
         self.inner.release.store(true, Ordering::Release);
         self.inner.release_signal.notify_waiters();
@@ -224,11 +218,7 @@ impl EmbeddingOwner {
             deadline,
             response: PendingResponse::Embedding(sender),
         };
-        let admits_background = pending.cold_start_allowed;
         self.inner.enqueue(pending, request.request_class)?;
-        if admits_background {
-            self.inner.admit_background();
-        }
         let _guard = AdmissionGuard {
             inner: self.inner.clone(),
             id,
@@ -257,10 +247,6 @@ impl Drop for EmbeddingOwner {
 impl CognitionEmbeddingPort for EmbeddingOwner {
     fn is_warm(&self) -> bool {
         self.enabled() && self.inner.readiness.is_warm()
-    }
-
-    fn background_ready(&self) -> bool {
-        self.is_warm() && self.inner.background_admitted.load(Ordering::Acquire)
     }
 
     fn enabled(&self) -> bool {
@@ -410,7 +396,7 @@ async fn run_loop(inner: &Inner, child: &mut Option<WorkerChild>, signal_memory_
             let ready = inner.enabled.load(Ordering::Acquire)
                 && !inner.shutdown.is_cancelled()
                 && child.as_ref().is_some_and(|process| process.initialized);
-            if inner.readiness.publish(ready) && inner.background_admitted.load(Ordering::Acquire) {
+            if inner.readiness.publish(ready) {
                 signal_memory_work();
             }
             if ready && child.as_ref().and_then(|process| process.child.id()) != previous_worker {
