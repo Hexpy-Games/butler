@@ -4,7 +4,7 @@ import importlib.util
 import os
 import subprocess
 import textwrap
-from pathlib import Path, PureWindowsPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import sys
 import tempfile
 import types
@@ -139,6 +139,74 @@ class HostLinks(unittest.TestCase):
                                          stage, 'windows-x64', roots, WindowsPath('C:/Python'))
 
     # test-category: security
+    def test_running_python_install_roots(self):
+        class PosixPath(PurePosixPath):
+            def resolve(self):
+                return self
+
+        class WindowsPath(PureWindowsPath):
+            def resolve(self):
+                return self
+
+        fixtures = (
+            (PosixPath, 'linux-x64', '/opt/hostedtoolcache/Python/3.12.15/x64/bin/python'),
+            (PosixPath, 'linux-arm64', '/opt/hostedtoolcache/Python/3.12.15/arm64/bin/python'),
+            (PosixPath, 'macos-arm64', '/Library/Frameworks/Python.framework/Versions/3.12/bin/python'),
+            (WindowsPath, 'windows-x64', 'C:/hostedtoolcache/windows/Python/3.12.10/x64/python.exe'),
+            (WindowsPath, 'windows-x64', 'C:/Users/builder/AppData/Local/Programs/Python/Python312/python.exe'),
+        )
+        for path_type, target, executable in fixtures:
+            parent = path_type(executable).parent
+            install = parent.parent if parent.name == 'bin' else parent
+            # Distinct prefixes ensure the real executable root is tested too.
+            base, prefix = install / 'base', install / 'venv'
+            with self.subTest(executable=executable), \
+                    patch.object(recipe, 'pathlib', types.SimpleNamespace(Path=path_type)), \
+                    patch.object(recipe.os.path, 'realpath', return_value=executable), \
+                    patch.object(recipe.sys, 'executable', executable), \
+                    patch.object(recipe.sys, 'base_prefix', str(base)), \
+                    patch.object(recipe.sys, 'prefix', str(prefix)):
+                stage = path_type('C:/stage' if target == 'windows-x64' else '/stage')
+                self.assertEqual(recipe.python_install_roots(), [install, base, prefix])
+                for key in ('PYTHON_EXECUTABLE', 'Python_EXECUTABLE', 'Python3_EXECUTABLE', '_Python3_EXECUTABLE'):
+                    for root in (install, base, prefix):
+                        recipe.check_cmake_cache(f'{key}:FILEPATH={root / path_type(executable).name}',
+                                                 stage, target, [stage])
+                    unrelated = install.parent / 'unrelated-python' / path_type(executable).name
+                    with self.assertRaisesRegex(RuntimeError, key):
+                        recipe.check_cmake_cache(f'{key}:FILEPATH={unrelated}', stage, target, [stage])
+                with self.assertRaisesRegex(RuntimeError, 'outside allowed'):
+                    recipe.check_cmake_cache(f'X_LIBRARY:FILEPATH={install / "host.a"}', stage, target, [stage])
+
+    # test-category: security
+    def test_python_executable_symlink_uses_resolved_install(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            executable = root / 'install/bin/python'
+            executable.parent.mkdir(parents=True)
+            executable.touch()
+            link = root / 'python'
+            link.symlink_to(executable)
+            with patch.object(recipe.sys, 'executable', str(link)):
+                self.assertIn(root / 'install', recipe.python_install_roots())
+
+    # test-category: security
+    def test_cache_reports_every_violation(self):
+        stage = Path('/stage')
+        entries = ('protobuf_DIR:PATH=', 're2_DIR:PATH=relative/package',
+                   'PYTHON_EXECUTABLE:FILEPATH=/unrelated/bin/python',
+                   'X_LIBRARIES:STRING=/unrelated/first.a;/unrelated/second.a')
+        with self.assertRaises(RuntimeError) as error:
+            recipe.check_cmake_cache('\n'.join(entries), stage, 'linux-x64', [stage], [Path('/build-python')])
+        self.assertEqual(str(error.exception).splitlines(), [
+            'CMake cache violations:',
+            'CMakeCache protobuf_DIR=: outside allowed roots',
+            'CMakeCache re2_DIR=relative/package: outside allowed roots',
+            'CMakeCache PYTHON_EXECUTABLE=/unrelated/bin/python: outside allowed roots',
+            'CMakeCache X_LIBRARIES=/unrelated/first.a: outside allowed roots',
+            'CMakeCache X_LIBRARIES=/unrelated/second.a: outside allowed roots'])
+
+    # test-category: security
     def test_windows_patch_is_pinned_before_build(self):
         with tempfile.TemporaryDirectory() as directory:
             stage = Path(directory)
@@ -215,7 +283,7 @@ class HostLinks(unittest.TestCase):
                 library.write_bytes(b'archive')
             cache = release / 'CMakeCache.txt'
             python = str(Path(directory) / 'python/bin/python3')
-            cache.write_text(f'X_DIR:PATH={stage}/sources\nPython_EXECUTABLE:FILEPATH={python}\n' + '\n'.join((
+            cache.write_text(f'X_DIR:PATH={stage}/sources\nPYTHON_EXECUTABLE:FILEPATH={python}\n' + '\n'.join((
                 'onnxruntime_BUILD_UNIT_TESTS:BOOL=OFF', 'onnxruntime_BUILD_SHARED_LIB:BOOL=OFF',
                 'onnxruntime_MINIMAL_BUILD:BOOL=OFF')))
             prebuilt.create_deps_alias(release.parent)
@@ -224,7 +292,7 @@ class HostLinks(unittest.TestCase):
             (stage / 'complete.json').write_text(json.dumps({
                 'build_stage': str(stage), 'cmake_cache_sha256': recipe.sha256(cache),
                 'build_roots': [str(root) for root in recipe.cache_allowed_roots(stage, 'linux-x64')],
-                'python_prefix': str(Path(python).parent.parent)}))
+                'python_prefix': [str(Path(python).parent.parent)]}))
             marker = stage / 'complete.json'
             recorded = json.loads(marker.read_text())
             for missing in ('build_stage', 'build_roots', 'python_prefix'):
@@ -236,6 +304,14 @@ class HostLinks(unittest.TestCase):
             stage.rename(restored)
             with patch.object(recipe.sys, 'executable', '/different/python/bin/python3'):
                 recipe.verified_outputs(restored / 'build/Release', 'linux-x64')
+                marker = restored / 'complete.json'
+                recorded['python_prefix'] = str(Path(python).parent.parent)
+                marker.write_text(json.dumps(recorded))
+                recipe.verified_outputs(restored / 'build/Release', 'linux-x64')
+                recorded['python_prefix'] = ['/different/python']
+                marker.write_text(json.dumps(recorded))
+                with self.assertRaisesRegex(RuntimeError, 'PYTHON_EXECUTABLE'):
+                    recipe.verified_outputs(restored / 'build/Release', 'linux-x64')
             cache = restored / 'build/Release/CMakeCache.txt'
             cache.write_text(cache.read_text() + '\nX_LIBRARY:FILEPATH=/tmp/host.a')
             with self.assertRaisesRegex(RuntimeError, 'CMake cache digest mismatch'):

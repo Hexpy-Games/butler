@@ -209,9 +209,18 @@ def cache_allowed_roots(stage, target):
     return roots
 
 
+def python_install_roots():
+    """Trust only the interpreter running the build, including a virtualenv's base."""
+    executable_dir = pathlib.Path(os.path.realpath(sys.executable)).parent
+    install = executable_dir.parent if executable_dir.name.lower() in ("bin", "scripts") else executable_dir
+    return list(dict.fromkeys([install, pathlib.Path(sys.base_prefix).resolve(), pathlib.Path(sys.prefix).resolve()]))
+
+
 def check_cmake_cache(text, stage, target, roots=None, python_prefix=None):
     roots = cache_allowed_roots(stage, target) if roots is None else roots
-    python_prefix = python_prefix or pathlib.Path(sys.executable).resolve().parent.parent
+    python_roots = python_install_roots() if python_prefix is None else (
+        list(python_prefix) if isinstance(python_prefix, (list, tuple)) else [python_prefix])
+    violations = []
     package_keys = {"protobuf_DIR", "Protobuf_DIR", "absl_DIR", "re2_DIR"}
     suffix = re.compile(r"(?:_DIR|_INCLUDE_DIRS?|_LIBRARY|_LIBRARIES|_LIBRARY_RELEASE|_EXECUTABLE)$")
     for line in text.splitlines():
@@ -223,16 +232,19 @@ def check_cmake_cache(text, stage, target, roots=None, python_prefix=None):
             continue
         for item in value.split(";"):
             if not item and key in package_keys:
-                fail(f"CMakeCache {key}={item}: outside allowed roots")
+                violations.append(f"CMakeCache {key}={item}: outside allowed roots")
             if not item or item.endswith("-NOTFOUND") or item == "NOTFOUND":
                 continue
             path = pathlib.Path(item)
             allowed = [stage.resolve()] if key in package_keys else roots
-            if "Python" in key and key.endswith("_EXECUTABLE"):
-                allowed = [*allowed, python_prefix]
+            if "PYTHON" in key.upper() and key.endswith("_EXECUTABLE"):
+                allowed = [*allowed, *python_roots]
             if (path.is_absolute() or key in package_keys) and (
                     not path.is_absolute() or not any(path.resolve().is_relative_to(root) for root in allowed)):
-                fail(f"CMakeCache {key}={item}: outside allowed roots")
+                violations.append(f"CMakeCache {key}={item}: outside allowed roots")
+
+    if violations:
+        fail("CMake cache violations:\n" + "\n".join(violations))
 
 
 def verified_outputs(lib_path, target):
@@ -262,7 +274,8 @@ def verified_outputs(lib_path, target):
             fail("SDK marker lacks producer roots")
         stage = pathlib.Path(recorded.get("build_stage"))
         roots = [pathlib.Path(root) for root in recorded.get("build_roots")]
-        python_prefix = pathlib.Path(recorded.get("python_prefix"))
+        prefixes = recorded["python_prefix"]
+        python_prefix = [pathlib.Path(root) for root in (prefixes if isinstance(prefixes, list) else [prefixes])]
     check_cmake_cache(settings, stage, target, roots, python_prefix)
     for setting in (
         *spec["cmake_cache"],
@@ -394,7 +407,7 @@ def prepare_cache(cache_root, fingerprint, lock, target, build_only, require_pre
                     "fingerprint": fingerprint, "host": identity, "target": target,
                     "build_stage": str(stage.resolve()),
                     "build_roots": [str(root) for root in cache_allowed_roots(stage, target)],
-                    "python_prefix": str(pathlib.Path(sys.executable).resolve().parent.parent),
+                    "python_prefix": [str(root) for root in python_install_roots()],
                     "cmake_cache_sha256": sha256(lib_path / "CMakeCache.txt"),
                     "lock_sha256": hashlib.sha256(json.dumps(lock, sort_keys=True).encode()).hexdigest(),
                     "libraries": outputs,

@@ -52,7 +52,8 @@ class NativeDeps(unittest.TestCase):
             path.write_bytes(name.encode())
         (release / 'CMakeCache.txt').write_text('\n'.join((
             'onnxruntime_BUILD_UNIT_TESTS:BOOL=OFF', 'onnxruntime_BUILD_SHARED_LIB:BOOL=OFF',
-            'onnxruntime_MINIMAL_BUILD:BOOL=OFF')))
+            'onnxruntime_MINIMAL_BUILD:BOOL=OFF',
+            f'PYTHON_EXECUTABLE:FILEPATH={sys.executable}')))
         for name, filename in recipe.archive_names(target).items():
             path = stage / 'downloads' / filename
             path.parent.mkdir(exist_ok=True)
@@ -73,6 +74,8 @@ class NativeDeps(unittest.TestCase):
             complete = recipe.prepare_cache(cache, self.fingerprint, self.lock, 'linux-x64', False, False)
             build.assert_called_once()
         recipe.adopt(complete, self.fingerprint, self.lock, 'linux-x64')
+        marker = json.loads((complete / 'complete.json').read_text())
+        self.assertEqual(marker['python_prefix'], [str(root) for root in recipe.python_install_roots()])
         return complete
 
     def serve(self, archive):
