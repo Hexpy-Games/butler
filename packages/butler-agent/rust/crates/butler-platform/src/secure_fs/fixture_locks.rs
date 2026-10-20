@@ -2,6 +2,10 @@
 use std::{fs::File, io, path::Path};
 
 #[cfg(windows)]
+const FILE_SHARE_READ: u32 = 1;
+#[cfg(windows)]
+const FILE_SHARE_WRITE: u32 = 2;
+#[cfg(windows)]
 const FILE_SHARE_DELETE: u32 = 4;
 #[cfg(windows)]
 const GENERIC_READ: u32 = 0x8000_0000;
@@ -16,7 +20,10 @@ pub fn deny_delete(path: &Path) -> io::Result<File> {
     #[cfg(windows)]
     {
         use std::os::windows::fs::OpenOptionsExt;
-        File::options().read(true).share_mode(3).open(path)
+        File::options()
+            .read(true)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .open(path)
     }
     #[cfg(not(windows))]
     File::open(path)
@@ -53,7 +60,7 @@ pub fn pending_delete(path: &Path) -> io::Result<Option<File>> {
             File::options()
                 .read(true)
                 .access_mode(GENERIC_READ | DELETE)
-                .share_mode(7)
+                .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
                 .custom_flags(FILE_FLAG_DELETE_ON_CLOSE)
                 .open(path)?,
         );

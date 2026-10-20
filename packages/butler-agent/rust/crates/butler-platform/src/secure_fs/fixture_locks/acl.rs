@@ -6,6 +6,9 @@ use windows_permissions::{
     wrappers,
 };
 
+const READ_CONTROL: u32 = 0x0002_0000;
+const WRITE_DAC: u32 = 0x0004_0000;
+
 struct Restore {
     file: File,
     original: LocalBox<SecurityDescriptor>,
@@ -34,7 +37,7 @@ impl Drop for Restore {
 pub(super) fn with_read_denied<T>(path: &Path, action: impl FnOnce() -> T) -> io::Result<T> {
     let file = File::options()
         .read(true)
-        .access_mode(0x0006_0000)
+        .access_mode(READ_CONTROL | WRITE_DAC)
         .open(path)?;
     let original = wrappers::GetSecurityInfo(
         &file,

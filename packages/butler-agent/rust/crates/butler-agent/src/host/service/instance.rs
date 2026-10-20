@@ -259,9 +259,13 @@ impl Drop for InstanceGuard {
             release_record_at(&path, &installation, &nonce, true);
             drop(lock);
         };
-        // Startup errors and cancellation may drop the guard on a runtime worker.
-        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
-            runtime.spawn_blocking(release);
+        // Finish before cancellation returns or the runtime shuts down. A
+        // multi-thread worker hands its other tasks off while release blocks.
+        // block_in_place is unsupported on current-thread runtimes.
+        if tokio::runtime::Handle::try_current().is_ok_and(|runtime| {
+            runtime.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread
+        }) {
+            tokio::task::block_in_place(release);
         } else {
             release();
         }

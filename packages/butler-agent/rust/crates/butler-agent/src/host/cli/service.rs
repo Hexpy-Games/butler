@@ -142,11 +142,12 @@ pub(crate) async fn run_native_service_cli(
         action,
         Action::RegisterLogin | Action::UnregisterLogin | Action::LoginStatus
     ) {
+        let json = options.json;
         return tokio::task::spawn_blocking(move || {
             registration::run(action, &installation, data.as_deref(), &options)
         })
         .await
-        .unwrap_or(ExitCode::FAILURE);
+        .unwrap_or_else(|error| report_error(action.name(), json, &error.to_string()));
     }
     if options.if_absent && lifecycle::already_running_async(data.as_deref(), &installation).await {
         if !options.quiet {
