@@ -148,7 +148,7 @@ async fn owner_close_during_query_drain_reaps_without_waiting_for_grace() -> Res
 }
 
 #[tokio::test]
-async fn recall_arriving_during_drain_keeps_its_own_deadline() -> Result<(), HarnessError> {
+async fn recall_arriving_during_drain_reuses_the_loaded_worker() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, code, release) = prepare("MEM-DRAIN-ARRIVAL", true).await?;
     let chat =
@@ -165,27 +165,21 @@ async fn recall_arriving_during_drain_keeps_its_own_deadline() -> Result<(), Har
     let arriving = async {
         let grace = trace.drain().await?;
         let pid = worker(&s)?;
-        // Start after the first tool's complete fallback has reached the
-        // provider, so each call's output is observed independently.
         wait_output(&s, first_request).await?;
-        let release_after_preemption = async {
-            let elapsed = reaped(pid, Duration::from_millis(grace)).await?;
-            butler_e2e::assert_wall_clock_budget!(
-                elapsed,
-                Duration::from_millis(grace),
-                "new recall must preempt the drain grace"
-            );
+        let mut queued = Trace::open(&s, 2).await?;
+        let release_after_arrival = async {
+            queued.until("queued class=Interactive texts=1").await?;
+            // Keep inference held while the admitted query waits, exposing any
+            // queue-driven reap before allowing the original reply to drain.
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            assert_eq!(worker(&s)?, pid, "queued recall reaped the loaded worker");
             std::fs::write(&release, b"")?;
-            eprintln!(
-                "DRAIN-ARRIVAL grace_ms={grace} preempt_ms={}",
-                elapsed.as_millis()
-            );
             Ok::<_, HarnessError>(())
         };
-        let (second, ()) =
-            tokio::try_join!(batch::recall(&s, &chat, ASK), release_after_preemption)?;
-        assert_saved_instruction(&second, &code, 3);
-        assert!(second["output"]["next_cursor"].is_null());
+        let (second, ()) = tokio::try_join!(batch::recall(&s, &chat, ASK), release_after_arrival)?;
+        super::scale::assert_complete(&second, &code, 3);
+        assert_eq!(worker(&s)?, pid);
+        assert_one_load(&s).await?;
         let tool_ms = recall_tool_ms(&s.sandbox.data);
         butler_e2e::assert_wall_clock_budget!(
             Duration::from_millis(tool_ms.try_into().unwrap()),
@@ -196,13 +190,95 @@ async fn recall_arriving_during_drain_keeps_its_own_deadline() -> Result<(), Har
             ) + super::FALLBACK_ASSEMBLY_ALLOWANCE,
             "recall admitted during drain retains its vector deadline and fallback headroom"
         );
-        eprintln!("DRAIN-ARRIVAL second_tool_ms={tool_ms} complete_text_results=4");
+        eprintln!(
+            "DRAIN-ARRIVAL grace_ms={grace} second_tool_ms={tool_ms} complete_vector_results=4 same_pid=true spawns=1 loads=1"
+        );
         answer.release();
         Ok::<_, HarnessError>(())
     };
     let (first, ()) = tokio::try_join!(batch::recall(&s, "general", ASK), arriving)?;
     assert_saved_instruction(&first, &code, 3);
     s.finish().await
+}
+
+#[tokio::test]
+async fn pending_projection_during_query_drain_keeps_the_just_loaded_worker()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (mut s, code, release) = prepare("MEM-DRAIN-PROJECTION", false).await?;
+    // Create genuinely unembedded conversation work. Reopening completed
+    // units would recover their persisted receipts without queueing inference.
+    let off =
+        s.gw.post("/setup/memory-model", serde_json::json!({"enabled":false}))
+            .await?;
+    assert_eq!(off.status, 200, "{}", off.text);
+    batch::recall(&s, "general", ASK).await?;
+    memory_stubs::text_complete(&s.sandbox.data, 4).await?;
+    let (pending, _) = memory_stubs::unit_states(&s.sandbox.data)?;
+    assert!(pending > 0);
+    assert!(butler_e2e::e2e::fixtures::embedding_assets(
+        &s.sandbox.data
+    )?);
+    let on =
+        s.gw.post("/setup/memory-model", serde_json::json!({"enabled":true}))
+            .await?;
+    assert_eq!(on.status, 200, "{}", on.text);
+    s.agent.terminate().await?;
+    std::fs::remove_file(&release)?;
+    std::fs::remove_file(release.with_extension("held"))?;
+    s.gw = s.agent.start_again().await?;
+    assert_eq!(memory_stubs::unit_states(&s.sandbox.data)?.0, pending);
+    assert_eq!(
+        usage::embedding_children(s.agent.pid().unwrap())?.unwrap(),
+        Vec::<u32>::new()
+    );
+    let mut trace = Trace::open(&s, 2).await?;
+    let answer = s.provider()?.hold_after_tool(ASK);
+    let release_after_queue = async {
+        // Observe actual WarmBackground admission while the cold recall owns
+        // the held query frame, rather than inferring queueing from unit state.
+        trace.until("queued class=WarmBackground").await?;
+        let grace = trace.drain().await?;
+        let pid = worker(&s)?;
+        assert!(release.with_extension("held").exists());
+        std::fs::write(&release, b"")?;
+        memory_stubs::vectors_complete(&s.sandbox.data, 4).await?;
+        assert_eq!(
+            worker(&s)?,
+            pid,
+            "projection discarded the just-loaded worker"
+        );
+        assert_eq!(memory_stubs::unit_states(&s.sandbox.data)?.0, 0);
+        assert_one_load(&s).await?;
+        eprintln!(
+            "DRAIN-PROJECTION grace_ms={grace} pending_before={pending} pending_after=0 same_pid=true spawns=1 loads=1"
+        );
+        answer.release();
+        Ok::<_, HarnessError>(pid)
+    };
+    let (first, pid) = tokio::try_join!(batch::recall(&s, "general", ASK), release_after_queue)?;
+    assert_saved_instruction(&first, &code, 4);
+    assert_eq!(
+        first["output"]["coverage"]["vectors"]["state"],
+        "unavailable"
+    );
+    memory_stubs::vectors_complete(&s.sandbox.data, 5).await?;
+    let complete = batch::recall(&s, "general", ASK).await?;
+    super::scale::assert_complete(&complete, &code, 5);
+    assert_eq!(worker(&s)?, pid);
+    assert_one_load(&s).await?;
+    s.finish().await
+}
+
+async fn assert_one_load(s: &Scenario) -> Result<(), HarnessError> {
+    let logs = s.agent.current_logs().await?;
+    assert_eq!(logs.matches("[embedding-worker] spawn_ms=").count(), 1);
+    assert_eq!(
+        logs.matches("[embedding-worker] initialized load_ms=")
+            .count(),
+        1
+    );
+    Ok(())
 }
 
 #[tokio::test]

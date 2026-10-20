@@ -77,13 +77,6 @@ impl PendingResponse {
 }
 
 impl QueueState {
-    pub(super) fn has_waiting(&self) -> bool {
-        self.interactive
-            .iter()
-            .chain(&self.background)
-            .any(|item| !item.cancellation.is_cancelled() && !expired(item.deadline))
-    }
-
     pub(super) fn release(&mut self, bytes: usize) {
         self.queued_requests = self.queued_requests.saturating_sub(1);
         self.queued_bytes = self.queued_bytes.saturating_sub(bytes);

@@ -53,7 +53,7 @@ pub(super) async fn run_item(
         biased;
         () = inner.shutdown.cancelled() => Err(error(CognitionCode::EmbedOwnerClosed)),
         () = release_requested(inner) => Err(error(CognitionCode::EmbedRequestCancelled)),
-        result = exchange_owned(inner, process, item) => result,
+        result = exchange_owned(process, item) => result,
     };
     match outcome {
         Ok(result) => result.map(Some),
@@ -68,7 +68,6 @@ pub(super) async fn run_item(
 // Drain only sent interactive queries. Every other request retains the normal
 // kill-at-deadline/cancellation policy, including checked projection batches.
 async fn exchange_owned(
-    inner: &Inner,
     process: &mut WorkerChild,
     item: &Pending,
 ) -> CognitionResult<CognitionResult<EmbeddingResult>> {
@@ -96,11 +95,10 @@ async fn exchange_owned(
         }
         result = &mut response => return result,
     }
-    drain_query(inner, item, response).await
+    drain_query(item, response).await
 }
 
 async fn drain_query(
-    inner: &Inner,
     item: &Pending,
     response: impl std::future::Future<Output = CognitionResult<CognitionResult<EmbeddingResult>>>,
 ) -> CognitionResult<CognitionResult<EmbeddingResult>> {
@@ -118,26 +116,17 @@ async fn drain_query(
             QUERY_DRAIN_GRACE.as_millis()
         );
     }
-    loop {
-        let notified = inner.notify.notified();
-        tokio::pin!(notified);
-        notified.as_mut().enable();
-        // Grace never holds up newly admitted work. Register before checking
-        // the queue so admission cannot be lost between this check and select.
-        if inner.state.lock().has_waiting() {
-            return Err(error(CognitionCode::EmbedRequestDeadline));
-        }
-        tokio::select! {
-            biased;
-            result = &mut response => return result,
-            () = tokio::time::sleep_until(deadline) => {
-                if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
-                    butler_core::diagnostic!("[embedding-worker] drain_end=deadline");
-                }
-                return Err(error(CognitionCode::EmbedRequestDeadline));
-            },
-            () = &mut notified => {},
-        }
+    // Queued work waits for this bounded exchange to preserve the loaded
+    // worker and frame synchronization. Its own deadline is pruned on dequeue.
+    tokio::select! {
+        biased;
+        result = &mut response => result,
+        () = tokio::time::sleep_until(deadline) => {
+            if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+                butler_core::diagnostic!("[embedding-worker] drain_end=deadline");
+            }
+            Err(error(CognitionCode::EmbedRequestDeadline))
+        },
     }
 }
 

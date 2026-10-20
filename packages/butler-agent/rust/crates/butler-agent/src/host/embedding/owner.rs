@@ -293,6 +293,12 @@ impl Inner {
         }
         state.queued_requests += 1;
         state.queued_bytes += pending.bytes;
+        if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+            butler_core::diagnostic!(
+                "[embedding-worker] queued class={class:?} texts={}",
+                pending.requested_texts
+            );
+        }
         match class {
             EmbeddingRequestClass::Interactive | EmbeddingRequestClass::WarmInteractive => {
                 state.interactive.push_back(pending);
