@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 
 use super::managed::{is_managed, manager_unreachable, request};
 use super::readiness::wait_for_stop;
-use super::{FORCE_STOP_TIMEOUT, STOP_TIMEOUT, active_service};
+use super::{FORCE_STOP_TIMEOUT, STOP_TIMEOUT, active_service_async};
 use crate::host::ResolvedInstallation;
 use crate::host::service::instance::{
     AdmissionLock, InstanceRecord, RestartIdentity, StopDelivery, StopIntent, StopRequest,
@@ -85,24 +85,27 @@ pub(super) async fn stop_service_admitted(
     request: StopRequest,
 ) -> Result<(StopReport, AdmissionLock), crate::host::HostError> {
     refuse_live_legacy_process(data_root)?;
-    let Some(record) = active_service(data_root)? else {
+    let Some(record) = active_service_async(data_root).await? else {
         return Ok((StopReport::AlreadyStopped, admission));
     };
     if expected.is_some_and(|identity| !identity.matches(&record)) {
         return Err("native_service_instance_changed".into());
     }
     let managed = is_managed(data_root, &record);
-    let previous = mark_stopping(data_root, &record.nonce, installation)?;
+    let stop_root = data_root.to_path_buf();
+    let stop_installation = installation.clone();
+    let stop_nonce = record.nonce.clone();
+    let previous = tokio::task::spawn_blocking(move || {
+        mark_stopping(&stop_root, &stop_nonce, &stop_installation)
+    })
+    .await
+    .map_err(crate::host::HostError::from_error)??;
     let delivery = match deliver_stop(data_root, &record, expected, request).await {
         Ok(delivery) => delivery,
         Err(error) => {
-            return Err(revert_undelivered_stop(
-                data_root,
-                installation,
-                &record,
-                previous,
-                error,
-            ));
+            return Err(
+                revert_undelivered_stop(data_root, installation, &record, previous, error).await,
+            );
         }
     };
     let forced = wait_or_force_stop(data_root, &record, expected).await;
@@ -144,8 +147,13 @@ async fn deliver_stop(
     expected: Option<&RestartIdentity>,
     request: StopRequest,
 ) -> Result<Option<StopDelivery>, crate::host::HostError> {
-    let current =
-        active_service(data_root)?.ok_or_else(|| "native_service_instance_changed".to_owned())?;
+    let Some(current) = active_service_async(data_root).await? else {
+        write_stop_intent(data_root, &StopIntent::new(request, record)).map_err(|source| {
+            crate::host::HostError::new("native_service_stop_intent_unavailable")
+                .with_source(source)
+        })?;
+        return Ok(None);
+    };
     if !same_instance(&current, record, expected) {
         return Err("native_service_instance_changed".into());
     }
@@ -209,14 +217,23 @@ async fn signal_intended_stop(
 /// The instance keeps running after an undelivered stop, so its record goes
 /// back to the state [`mark_stopping`] replaced (a record that changed since
 /// is left alone); `stop` is the error returned.
-fn revert_undelivered_stop(
+async fn revert_undelivered_stop(
     data_root: &Path,
     installation: &ResolvedInstallation,
     record: &InstanceRecord,
     previous: StoppingFrom,
     stop: crate::host::HostError,
 ) -> crate::host::HostError {
-    match revert_stopping(data_root, &record.nonce, previous, installation) {
+    let data_root = data_root.to_path_buf();
+    let installation = installation.clone();
+    let nonce = record.nonce.clone();
+    let reverted = tokio::task::spawn_blocking(move || {
+        revert_stopping(&data_root, &nonce, previous, &installation)
+    })
+    .await
+    .map_err(crate::host::HostError::from_error)
+    .and_then(std::convert::identity);
+    match reverted {
         Ok(()) => stop,
         Err(revert) => crate::host::HostError::new(stop.message().to_owned())
             .with_source(UndeliveredStopRevertFailed { revert, stop }),
@@ -234,25 +251,30 @@ async fn wait_or_force_stop(
     if wait_for_stop(data_root, record, STOP_TIMEOUT).await? {
         return Ok(false);
     }
-    let current =
-        active_service(data_root)?.ok_or_else(|| "native_service_instance_changed".to_owned())?;
+    let Some(current) = active_service_async(data_root).await? else {
+        return finish_stop(data_root, record, false).await;
+    };
     if !same_instance(&current, record, expected) {
         return Ok(false);
     }
     // Re-read the lock, nonce, PID, OS start identity, and executable directly
     // before force-killing the recorded service process.
-    if !instance_is_locked(data_root)? {
-        return Err(
-            "native_service_instance_ambiguous: refusing force kill (the DATA lock is free)".into(),
-        );
+    let locked = instance_is_locked(data_root)?;
+    if !(locked && process_matches(&current)?) {
+        if record_process_gone(&current)? {
+            return finish_stop(data_root, record, false).await;
+        }
+        return Err(if locked {
+            "native_service_instance_ambiguous: refusing force kill (the process does not match its record)"
+        } else {
+            "native_service_instance_ambiguous: refusing force kill (the DATA lock is free)"
+        }.into());
     }
-    if !process_matches(&current)? {
-        return Err("native_service_instance_ambiguous: refusing force kill (the process does not match its record)".into());
-    }
-    if is_managed(data_root, &current) {
+    let forced = if is_managed(data_root, &current) {
         // A signal sent straight to a supervised process looks like a crash
         // to its manager, which would relaunch it: the manager stops it.
         request(butler_platform::service_registration::stop).await?;
+        true
     } else if current.cli_supervisor_pid.is_none() && manager_unreachable(data_root).await {
         // The job is this DATA's but the manager does not answer, so the
         // service may be running under it: a kill could be answered by a
@@ -262,10 +284,22 @@ async fn wait_or_force_stop(
                 .into(),
         );
     } else {
-        force_stop(&current)?;
-    }
+        match force_stop(&current) {
+            Ok(()) => true,
+            Err(error) if error.message() == "native_service_process_exited" => false,
+            Err(error) => return Err(error),
+        }
+    };
+    finish_stop(data_root, record, forced).await
+}
+
+async fn finish_stop(
+    data_root: &Path,
+    record: &InstanceRecord,
+    forced: bool,
+) -> Result<bool, crate::host::HostError> {
     if !wait_for_stop(data_root, record, FORCE_STOP_TIMEOUT).await? {
         return Err("native_service_stop_timeout".into());
     }
-    Ok(true)
+    Ok(forced)
 }

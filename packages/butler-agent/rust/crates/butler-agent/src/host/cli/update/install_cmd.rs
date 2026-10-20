@@ -42,7 +42,7 @@ async fn install(
         .transpose()?;
     let context = Context::open(installation, options)?;
     let (archive, scratch) = resolve_archive(&context, source, sha256.as_deref()).await?;
-    let (home, protected) = (context.home.clone(), context.protected_executables());
+    let (home, protected) = (context.home.clone(), context.protected_executables().await);
     let sha = sha256.clone();
     let installed = tokio::task::spawn_blocking(move || {
         home.install_and_activate(&archive, sha.as_deref(), KEEP_VERSIONS, &protected)
@@ -57,7 +57,7 @@ async fn install(
         })?
         .map_err(|error| install_error(&error))?;
     let dir = activated.installed.dir.clone();
-    let before = context.running_record();
+    let before = context.running_record().await;
     let service = if options.no_restart {
         json!({"wasRunning": null, "restarted": false})
     } else {
@@ -74,7 +74,7 @@ async fn install(
             }
         }
     };
-    let launchers = context.refresh_launchers();
+    let launchers = context.refresh_launchers().await;
     let mut data = activated.to_json();
     data["agentHome"] = json!(context.home.root());
     data["launchers"] = launchers;

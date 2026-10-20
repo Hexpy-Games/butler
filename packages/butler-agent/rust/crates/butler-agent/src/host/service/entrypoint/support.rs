@@ -201,11 +201,17 @@ pub(super) async fn acquire_instance(
             supervised,
         )
     };
-    let instance = if butler_platform::secure_fs::OWNER_ONLY {
-        acquire()
-    } else {
-        tokio::task::spawn_blocking(acquire).await.map_err(io)?
-    };
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    tokio::task::spawn_blocking(move || {
+        // Cancellation may precede completion of the starting record write.
+        // Release an undelivered guard here, before this blocking job ends.
+        if let Err(Ok(instance)) = sender.send(acquire()) {
+            instance.release();
+        }
+    })
+    .await
+    .map_err(io)?;
+    let instance = receiver.await.map_err(io)?;
     instance.map_err(|message| {
         failure("native_service_instance_unavailable", message.to_string()).with_source(message)
     })

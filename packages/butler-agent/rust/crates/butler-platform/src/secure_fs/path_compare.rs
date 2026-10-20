@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 pub fn relative_path(target: &Path, root: &Path) -> Option<PathBuf> {
     #[cfg(windows)]
     {
-        if !is_within(target, root) {
+        if !path_is_within(target, root) {
             return None;
         }
         Some(
@@ -22,8 +22,9 @@ pub fn relative_path(target: &Path, root: &Path) -> Option<PathBuf> {
     }
 }
 
-// Containment checks need no allocation for an unused relative suffix.
-pub(super) fn is_within(target: &Path, root: &Path) -> bool {
+/// Component-wise containment after the caller resolves filesystem aliases.
+/// Windows comparisons ignore case and a needless verbatim prefix.
+pub fn path_is_within(target: &Path, root: &Path) -> bool {
     #[cfg(windows)]
     {
         comparison_key(target).starts_with(comparison_key(root))

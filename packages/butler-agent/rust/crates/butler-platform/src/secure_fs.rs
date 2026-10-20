@@ -22,6 +22,8 @@ pub use stage::{
 };
 mod device;
 pub use device::same_device;
+mod read_retry;
+pub use read_retry::{read_replaced_file, read_retry_allowed};
 mod contained_read;
 pub use contained_read::{ContainedReadCache, open_contained, open_directory_no_follow};
 #[cfg(unix)]
@@ -479,15 +481,8 @@ pub fn hard_link_unsupported(error: &io::Error) -> bool {
     error.kind() == io::ErrorKind::Unsupported || sys::hard_link_unsupported(error)
 }
 
-/// Component-wise containment after the caller resolves file-system aliases.
-/// Windows comparisons ignore case and normalize a needless verbatim prefix;
-/// Unix comparisons retain case. A sibling with a shared string prefix is out.
-pub fn path_is_within(target: &Path, root: &Path) -> bool {
-    path_compare::is_within(target, root)
-}
-
 mod path_compare;
-pub use path_compare::{ambiguous_path, relative_path, windows_ambiguous_spelling};
+pub use path_compare::{ambiguous_path, path_is_within, relative_path, windows_ambiguous_spelling};
 
 #[cfg(feature = "test-support")]
 pub use fixture_links::workspace_test_alias;
