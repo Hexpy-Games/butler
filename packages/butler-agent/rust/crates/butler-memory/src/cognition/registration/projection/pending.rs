@@ -47,13 +47,11 @@ fn notice(state: &State, pending: &PendingSemanticJob) -> CognitionResult<Projec
     } else if let Some((kind, record_id)) = pending.source_key.split_once(':')
         && matches!(kind, "task_report" | "explicit_record")
     {
-        let revision = state.graph.progress(&pending.job_id)?.revision;
         let owner = read_projection_record(
             &state.handle.source_root,
             &state.handle.source_root.join("cognition/memory"),
             kind,
             record_id,
-            &revision,
         )?;
         if owner.content_hash != pending.source_hash {
             return Err(changed());

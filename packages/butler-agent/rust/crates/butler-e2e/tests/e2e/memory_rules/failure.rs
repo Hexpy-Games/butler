@@ -20,7 +20,7 @@ async fn rules_stale_snapshot_refuses_mutation_and_io_failure_recovers() -> Resu
         &mut cassette,
         STALE,
         "update_explicit_memory",
-        &json!({"kind":"rule","text":"The user's bike lock code is 7400.","source":STALE,"replaces":"{{TARGET}}"}),
+        &json!({"kind":"instruction","text":"The user's bike lock code is 7400.","source":STALE,"replaces":"{{TARGET}}"}),
     );
     support::historical(&mut cassette);
     let setup = Setup::new("RULES-FAILURE")?

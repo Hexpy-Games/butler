@@ -1,13 +1,12 @@
 //! Durable v2 occurrence and attempt admission. The SQLite shard is only a
 //! short-lived cross-process admission lock; the JSON occurrence is authority.
 
+use crate::project_ledger::publication::timing::fs;
 use butler_platform::sqlite;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use butler_platform::secure_fs;
-use rusqlite::{TransactionBehavior, params};
+use rusqlite::TransactionBehavior;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -59,6 +58,7 @@ pub(super) fn read(
     scope: &ResolvedProjectWorkScope,
     identity: &ProjectWorkOperationIdentity,
 ) -> Result<Option<Occurrence>, ProjectWorkPublicationError> {
+    let _phase = crate::project_ledger::publication::timing::Phase::new("publication_read");
     let path = path(data_root, &occurrence_id(scope, identity)?);
     let bytes = match fs::read(path) {
         Ok(bytes) => bytes,
@@ -83,11 +83,11 @@ pub(super) fn reject_legacy(
             "projectRoot": project_root.to_string_lossy(),
             "schema": "butler.btcc-project-ledger-effect.v1",
         }))?;
-        if data_root
-            .join("runtime/btcc-project-ledger-effects/occurrences")
-            .join(format!("{id}.json"))
-            .exists()
-        {
+        if fs::exists(
+            data_root
+                .join("runtime/btcc-project-ledger-effects/occurrences")
+                .join(format!("{id}.json")),
+        ) {
             return Err(ProjectWorkPublicationError::Uncertain { source: None });
         }
     }
@@ -101,6 +101,7 @@ pub(super) fn admit(
     updates: &[super::contracts::ProjectLedgerRecordUpdate],
     collation: &butler_core::locale::LocaleCollation,
 ) -> Result<Occurrence, ProjectWorkPublicationError> {
+    let _phase = crate::project_ledger::publication::timing::Phase::new("publication_admit");
     let (base, targets) = record::capture(scope, updates, collation)?;
     let occurrence_id = occurrence_id(scope, identity)?;
     let candidate = Occurrence {
@@ -180,7 +181,10 @@ fn validate(
             || attempt.request_sha256 != identity.request_sha256
             || attempt.publication_id != publication_id(&stored.occurrence_id, attempt)?
             || attempt.expected_base.project_root != stored.ledger_root
-            || attempt.expected_base.schema != "butler.btcc-project-ledger-head.v1"
+            || !matches!(
+                attempt.expected_base.schema.as_str(),
+                "butler.btcc-project-ledger-head.v1" | "butler.btcc-project-ledger-head.v2"
+            )
             || attempt.expected_base.storage_authority.is_some()
             || !is_sha(&attempt.expected_base.source_sha256)
             || !is_sha(&attempt.expected_base.storage_sha256)
@@ -299,6 +303,7 @@ pub(super) fn atomic_json(
     path: &Path,
     value: &impl Serialize,
 ) -> Result<(), ProjectWorkPublicationError> {
+    let _phase = crate::project_ledger::publication::timing::Phase::new("publication_atomic_json");
     let parent = path.parent().ok_or_else(io)?;
     fs::create_dir_all(parent).map_err(|source| io().with_source(source))?;
     let temporary = path.with_extension(format!("{}.tmp", uuid::Uuid::new_v4()));
@@ -312,16 +317,16 @@ pub(super) fn atomic_json(
     result.map_err(|source| io().with_source(source))
 }
 
-/// Runs `action` while holding the SQLite admission lock for `id`: one of
-/// 64 shard databases under the canonical data root, each with a fence
-/// generation bumped on every acquisition and one row per held lock.
+/// Runs `action` under the same cross-process SQLite write reservation as
+/// legacy writers. SQL is only a mutex: the occurrence JSON is authority.
+/// Rolling back releases the reservation without a redundant durable commit.
 pub(super) fn with_lock<T>(
     root: &Path,
     id: &str,
     action: impl FnOnce() -> Result<T, ProjectWorkPublicationError>,
 ) -> Result<T, ProjectWorkPublicationError> {
-    let canonical_root = butler_platform::secure_fs::canonicalize(root)
-        .map_err(|source| io().with_source(source))?;
+    let _phase = super::timing::Phase::new("publication_admission_lock");
+    let canonical_root = fs::canonicalize(root).map_err(|source| io().with_source(source))?;
     let logical = canonical_root
         .join("runtime/btcc-project-ledger-effects-v2/admission-locks")
         .join(id);
@@ -329,36 +334,32 @@ pub(super) fn with_lock<T>(
     let tx = connection
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(|source| conflict().with_source(source))?;
-    tx.execute(
-        "UPDATE shard_fence SET generation=generation+1 WHERE singleton=1",
-        [],
-    )
-    .map_err(|source| io().with_source(source))?;
-    let token = uuid::Uuid::new_v4().to_string();
-    let key = logical.to_string_lossy();
-    tx.execute("INSERT OR REPLACE INTO active_lock(lock_key,ownership_token,owner_id,acquired_at,renewed_at) VALUES(?1,?2,?3,datetime('now'),datetime('now'))", params![key.as_ref(), token, "native-project-ledger"]).map_err(|source| io().with_source(source))?;
-    let result = match action() {
-        Ok(value) => value,
-        Err(error) => {
-            let _ = tx.rollback();
-            return Err(error);
-        }
+    let result = action();
+    let release = {
+        let _unlock = super::timing::Phase::new("publication_admission_unlock");
+        tx.rollback().map_err(|source| io().with_source(source))
     };
-    tx.execute(
-        "DELETE FROM active_lock WHERE lock_key=?1 AND ownership_token=?2",
-        params![key.as_ref(), token],
-    )
-    .map_err(|source| io().with_source(source))?;
-    tx.commit().map_err(|source| io().with_source(source))?;
-    Ok(result)
+    {
+        let _close = super::timing::Phase::new("publication_shard_close");
+        drop(connection);
+    }
+    match result {
+        Ok(value) => {
+            release?;
+            Ok(value)
+        }
+        Err(error) => Err(error),
+    }
 }
 
-/// The shard database `logical` hashes to, created with its schema and
-/// owner-only permissions; symlinked shards or directories are refused.
+/// The shard database `logical` hashes to, with owner-only permissions;
+/// symlinked shards or directories are refused. Existing schemas and journal
+/// modes remain untouched, so legacy writers retain the same lock domain.
 fn open_shard(
     canonical_root: &Path,
     logical: &Path,
 ) -> Result<sqlite::Connection, ProjectWorkPublicationError> {
+    let _phase = super::timing::Phase::new("publication_shard_open");
     let digest = Sha256::digest(logical.to_string_lossy().as_bytes());
     let prefix: [u8; 4] = digest
         .get(..4)
@@ -372,13 +373,13 @@ fn open_shard(
         }
     }
     fs::create_dir_all(&directory).map_err(|source| io().with_source(source))?;
-    if !butler_platform::secure_fs::canonicalize(&directory)
+    if !fs::canonicalize(&directory)
         .map_err(|source| io().with_source(source))?
         .starts_with(canonical_root)
     {
         return Err(ProjectWorkPublicationError::Uncertain { source: None });
     }
-    secure_fs::restrict_directory(&directory)
+    fs::restrict_directory(&directory)
         .transpose()
         .map_err(|source| io().with_source(source))?;
     let shard = directory.join(format!("mutation-lock-{shard:02}.sqlite3"));
@@ -386,25 +387,33 @@ fn open_shard(
         return Err(ProjectWorkPublicationError::Uncertain { source: None });
     }
     let connection = sqlite::open(&shard).map_err(|source| io().with_source(source))?;
-    secure_fs::restrict_file(&shard)
+    fs::restrict_file(&shard)
         .transpose()
         .map_err(|source| io().with_source(source))?;
     connection
         .busy_timeout(Duration::from_millis(250))
         .map_err(|source| io().with_source(source))?;
-    connection.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS shard_fence(singleton INTEGER PRIMARY KEY CHECK(singleton=1), generation INTEGER NOT NULL); INSERT OR IGNORE INTO shard_fence VALUES(1,0); CREATE TABLE IF NOT EXISTS active_lock(lock_key TEXT PRIMARY KEY, ownership_token TEXT NOT NULL, owner_id TEXT NOT NULL, acquired_at TEXT NOT NULL, renewed_at TEXT NOT NULL);").map_err(|source| io().with_source(source))?;
+    connection
+        .execute_batch("PRAGMA synchronous=FULL;")
+        .map_err(|source| io().with_source(source))?;
+    // A mutex-only connection must not checkpoint another writer's WAL on
+    // close. Committed WAL data retains its existing FULL durability.
+    connection
+        .set_db_config(
+            rusqlite::config::DbConfig::SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE,
+            true,
+        )
+        .map_err(|source| io().with_source(source))?;
     Ok(connection)
 }
 
 /// Whether `path` exists as a symlink.
 fn is_symlink(path: &Path) -> Result<bool, ProjectWorkPublicationError> {
-    if !path.exists() {
-        return Ok(false);
+    match fs::symlink_metadata(path) {
+        Ok(metadata) => Ok(metadata.file_type().is_symlink()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(source) => Err(io().with_source(source)),
     }
-    Ok(fs::symlink_metadata(path)
-        .map_err(|source| io().with_source(source))?
-        .file_type()
-        .is_symlink())
 }
 
 fn invalid() -> ProjectWorkPublicationError {

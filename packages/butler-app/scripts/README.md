@@ -33,8 +33,8 @@ gateway or Electron runtime.
   app-server port so the App setup path can be inspected without touching the
   user's real `~/.butler` state. This is a clean-launch inspection harness; it
   does not prove the first-run setup wizard is implemented.
-- App smoke and E2E: `app-client-managed-server-smoke.ts` and
-  `app-ui-hmr-smoke.ts` stay here when they are client-owned. Package, layout,
+- App smoke and E2E: `app-client-managed-server-smoke.ts` stays here
+  because it is client-owned. Package, layout,
   design-system, render, model-management, and multi-turn checks live under
   `tests/` because they start or inspect the agent-owned app gateway.
 - App release: `release/manifest.ts`, `release/release-gate.ts`, and

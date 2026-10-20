@@ -16,6 +16,7 @@ pill, ordinal and description colors in the four light cases. Dark cases and
 all geometry are unchanged (0px delta).
 It is a rendered browser reference, not a source-string assertion.
 
+The reference was captured on macOS; macOS CI runs this smoke.
 Run `bun run app:newchat:smoke` with isolated `HOME` / `BUTLER_DATA`.
 The native gateway uses isolated data and completed onboarding with a stub
 provider. The published preview.7 macOS Agent served all three UI builds

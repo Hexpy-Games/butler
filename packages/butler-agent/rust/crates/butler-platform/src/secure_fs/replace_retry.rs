@@ -6,14 +6,15 @@ pub(super) const SHARING_ERRORS: [i32; 2] = [32, 33];
 /// `ERROR_ACCESS_DENIED`.
 pub(super) const ACCESS_DENIED: i32 = 5;
 
-/// A DELETE-only reopen of the source or the target: success, or the raw OS
+/// An access probe of source DELETE and target DELETE (or parent FILE_ADD_FILE
+/// for first creation): success, or the raw OS
 /// error code of its failure (`None` when the error carries none).
 pub type DeleteProbe = Result<(), Option<i32>>;
 
-/// ACCESS_DENIED can be a sharing or mapped-view conflict even when DELETE
-/// opens succeed. Only confirmed permission failures stop the bounded retry.
-/// `probes` runs only for ACCESS_DENIED; `None` (a read-only or unreadable
-/// target) is final.
+/// ACCESS_DENIED can be a sharing or mapped-view conflict even when access
+/// probes succeed. Only confirmed permission failures stop the bounded retry.
+/// `probes` runs only for ACCESS_DENIED; `None` (a read-only target or failed
+/// metadata lookup) is final.
 pub fn replacement_retry_allowed(
     rename_code: Option<i32>,
     probes: impl FnOnce() -> Option<[DeleteProbe; 2]>,
@@ -27,7 +28,7 @@ pub fn replacement_retry_allowed(
     }
 }
 
-/// A successful DELETE open rules out a DACL denial. A sharing violation
+/// A successful access probe rules out a DACL denial. A sharing violation
 /// also permits retry; any other probe failure is final.
 fn probe_allows_retry(probe: DeleteProbe) -> bool {
     match probe {

@@ -1,4 +1,4 @@
-use std::fs;
+use crate::project_ledger::publication::timing::fs;
 use std::path::Path;
 
 use butler_turn::btcc::ResolvedProjectWorkScope;
@@ -23,6 +23,7 @@ pub(super) fn prepare(
     updates: &[ProjectLedgerRecordUpdate],
     collation: &butler_core::locale::LocaleCollation,
 ) -> Result<Journal, ProjectWorkPublicationError> {
+    let _phase = crate::project_ledger::publication::timing::Phase::new("publication_prepare");
     let root = &scope.ledger_root;
     let mut journal = Journal {
         schema: "project-ledger.publication-transaction.v1".into(),
@@ -65,13 +66,15 @@ fn build_candidate(
     collation: &butler_core::locale::LocaleCollation,
     journal: &mut Journal,
 ) -> Result<Journal, ProjectWorkPublicationError> {
+    let _phase =
+        crate::project_ledger::publication::timing::Phase::new("publication_build_candidate");
     let root = &scope.ledger_root;
-    let active = record::observe_head(root, &attempt.expected_base.record_paths)?;
+    let active = record::observe_expected(root, &attempt.expected_base)?;
     if !same_logical(&active, &attempt.expected_base) {
         return Err(ProjectWorkPublicationError::NotApplied);
     }
-    journal.status = JournalStatus::Preparing;
-    occurrence::atomic_json(&paths.journal, journal)?;
+    // ClaimPending covers the entire build: it and Preparing have identical
+    // recovery behavior, and neither can have changed canonical records.
     let before = paths.candidate.with_extension("before");
     candidate_skeleton(root, &paths.candidate, &before)?;
     copy_base_records(
@@ -87,42 +90,33 @@ fn build_candidate(
         updates,
         collation,
     )?;
-    let candidate_head =
-        record::observe_core_head(&paths.candidate, &attempt.expected_base.record_paths)?;
+    let candidate_head = record::observe_core_head(
+        &paths.candidate,
+        &attempt.expected_base,
+        &attempt.publication_id,
+    )?;
     journal.candidate_head = Some(candidate_head);
     journal.status = JournalStatus::Prepared;
     occurrence::atomic_json(&paths.journal, journal)?;
     Ok(journal.clone())
 }
 
-/// A fresh candidate with the project file, an empty event log and every
-/// Work directory; any earlier candidate and before-image are removed.
+/// A fresh sparse candidate. Only addressed records create Work directories;
+/// unrelated Works never enter candidate setup or the v2 head digest.
 fn candidate_skeleton(
     root: &Path,
     candidate: &Path,
     before: &Path,
 ) -> Result<(), ProjectWorkPublicationError> {
+    let _phase =
+        crate::project_ledger::publication::timing::Phase::new("publication_candidate_skeleton");
     remove_dir(candidate)?;
     remove_dir(before)?;
     fs::create_dir_all(candidate).map_err(|source| io().with_source(source))?;
     fs::copy(root.join("project.json"), candidate.join("project.json"))
         .map_err(|source| io().with_source(source))?;
     fs::write(candidate.join("ledger.jsonl"), "").map_err(|source| io().with_source(source))?;
-    let work_root = root.join("work");
-    if !work_root.exists() {
-        return Ok(());
-    }
-    for entry in fs::read_dir(work_root).map_err(|source| io().with_source(source))? {
-        let entry = entry.map_err(|source| io().with_source(source))?;
-        let is_dir = entry
-            .file_type()
-            .map_err(|source| io().with_source(source))?
-            .is_dir();
-        if is_dir {
-            fs::create_dir_all(candidate.join("work").join(entry.file_name()))
-                .map_err(|source| io().with_source(source))?;
-        }
-    }
+
     Ok(())
 }
 
@@ -132,6 +126,8 @@ fn copy_base_records(
     record_paths: &[String],
     destinations: &[&Path],
 ) -> Result<(), ProjectWorkPublicationError> {
+    let _phase =
+        crate::project_ledger::publication::timing::Phase::new("publication_copy_base_records");
     for relative in record_paths {
         let source = record::record_path(root, relative)?;
         let raw = match fs::read(source) {
@@ -152,7 +148,8 @@ fn copy_base_records(
 pub(super) fn promote(
     journal: &mut Journal,
     paths: &Paths,
-) -> Result<(), ProjectWorkPublicationError> {
+) -> Result<record::ProjectWorkHead, ProjectWorkPublicationError> {
+    let _phase = crate::project_ledger::publication::timing::Phase::new("publication_promote");
     let root = Path::new(&journal.canonical_root);
     claim::assert_owned(
         Path::new(&journal.claim_path),
@@ -165,8 +162,9 @@ pub(super) fn promote(
         .as_ref()
         .ok_or(ProjectWorkPublicationError::Uncertain { source: None })?;
     if journal.status == JournalStatus::Prepared {
-        let active = record::observe_head(root, &journal.base.record_paths)?;
-        let prepared = record::observe_core_head(&paths.candidate, &journal.base.record_paths)?;
+        let active = record::observe_expected(root, &journal.base)?;
+        let prepared =
+            record::observe_core_head(&paths.candidate, &journal.base, &journal.publication_id)?;
         if !same_logical(&active, &journal.base)
             || prepared.source_sha256 != candidate.source_sha256
         {
@@ -198,14 +196,16 @@ pub(super) fn promote(
             fs::copy(&source, &temporary).map_err(|source| io().with_source(source))?;
             fs::rename(temporary, target).map_err(|source| io().with_source(source))?;
         }
-        let active = record::observe_head(root, &journal.base.record_paths)?;
+        claim::advance_generation(Path::new(&journal.claim_path), &journal.publication_id)?;
+        let active = record::observe_expected(root, &journal.base)?;
         if active.source_sha256 != candidate.source_sha256 {
             return Err(ProjectWorkPublicationError::Uncertain { source: None });
         }
         journal.status = JournalStatus::Promoted;
         occurrence::atomic_json(&paths.journal, journal)?;
+        return Ok(active);
     }
-    Ok(())
+    Err(ProjectWorkPublicationError::Uncertain { source: None })
 }
 
 fn read_optional(path: &Path) -> Result<Option<Vec<u8>>, ProjectWorkPublicationError> {
