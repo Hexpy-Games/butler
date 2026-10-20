@@ -124,7 +124,10 @@ async fn owner_close_during_query_drain_reaps_without_waiting_for_grace() -> Res
     let pid = worker(&s)?;
     let started = Instant::now();
     s.agent.terminate().await?;
-    assert!(process_start(pid).unwrap().is_none(), "close left a draining child");
+    assert!(
+        process_start(pid).unwrap().is_none(),
+        "close left a draining child"
+    );
     assert!(started.elapsed() < Duration::from_millis(grace));
     eprintln!(
         "DRAIN-CLOSE grace_ms={grace} shutdown_ms={}",
