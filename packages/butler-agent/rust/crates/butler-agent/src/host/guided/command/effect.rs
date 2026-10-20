@@ -256,7 +256,11 @@ impl CommandEffectAdapter {
                     workspace_reference: None,
                     workspace_path: &self.workspace,
                     butler_data: &self.butler_data,
-                    execution: super::CommandExecution::Registered,
+                    execution: if self.project_write {
+                        super::CommandExecution::ProjectWrite
+                    } else {
+                        super::CommandExecution::Registered
+                    },
                     contained_reads: self.contained_reads,
                     full_access: self.full_access,
                     abort: signal.clone(),

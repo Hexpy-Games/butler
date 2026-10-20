@@ -2,13 +2,13 @@ use std::path::Path;
 
 // Compare the pattern to each component of the credential root. Once the root
 // is consumed, any remaining pattern can name a descendant. Never enumerate.
-pub(super) fn overlaps(pattern: &Path, root: &Path) -> bool {
-    compare(pattern, root, false)
+pub(super) fn overlaps(pattern: &Path, root: &Path, posix: bool) -> bool {
+    compare(pattern, root, false, posix)
 }
-pub(super) fn overlaps_ancestor(pattern: &Path, root: &Path) -> bool {
-    compare(pattern, root, true)
+pub(super) fn overlaps_ancestor(pattern: &Path, root: &Path, posix: bool) -> bool {
+    compare(pattern, root, true, posix)
 }
-fn compare(pattern: &Path, root: &Path, ancestors: bool) -> bool {
+fn compare(pattern: &Path, root: &Path, ancestors: bool, posix: bool) -> bool {
     let insensitive = super::comparison::insensitive(root);
     let pattern: Vec<_> = pattern
         .components()
@@ -18,20 +18,25 @@ fn compare(pattern: &Path, root: &Path, ancestors: bool) -> bool {
         .components()
         .map(|p| p.as_os_str().to_string_lossy().into_owned())
         .collect();
+    let mut prefix = std::path::PathBuf::new();
     for (index, component) in root.into_iter().enumerate() {
         let Some(part) = pattern.get(index) else {
-            return ancestors;
+            return ancestors && prefix.try_exists().unwrap_or(true);
         };
-        if part == "**" {
+        if part == "**" && (!posix || !component.starts_with('.')) {
             return true;
         }
-        if !matches(part, &component, insensitive) {
+        if !matches(part, &component, insensitive, posix) {
             return false;
         }
+        prefix.push(component);
     }
     true
 }
-fn matches(pattern: &str, text: &str, insensitive: bool) -> bool {
+fn matches(pattern: &str, text: &str, insensitive: bool, posix: bool) -> bool {
+    if posix && text.starts_with('.') && !pattern.starts_with('.') {
+        return false;
+    }
     let folded = insensitive.then(|| (pattern.to_lowercase(), text.to_lowercase()));
     let (pattern, text) = folded
         .as_ref()

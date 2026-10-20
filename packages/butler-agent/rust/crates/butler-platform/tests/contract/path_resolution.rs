@@ -6,9 +6,13 @@ use std::{collections::HashMap, path::Path};
 pub(super) fn verify() {
     foreign_credentials();
     recursive_and_name_patterns();
+    let fixture = super::super::scratch("path-resolution");
+    let data = fixture.join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    let data = std::fs::canonicalize(data).unwrap();
     let mut failures = Vec::new();
     let env = HashMap::from([
-        ("BUTLER_DATA".into(), "/profiles/data".into()),
+        ("BUTLER_DATA".into(), data.to_string_lossy().into_owned()),
         ("USERPROFILE".into(), "/profiles/home".into()),
     ]);
     for (syntax, command, expected) in [
@@ -63,9 +67,10 @@ pub(super) fn verify() {
             "/profiles/data/auth/token",
         ),
     ] {
+        let expected = expected.replace("/profiles/data", &data.to_string_lossy());
         let screen = screen_paths_with(command, Path::new("/work"), &env, syntax);
         if !screen.complete
-            || screen.candidates.last().unwrap().path.as_deref() != Some(Path::new(expected))
+            || screen.candidates.last().unwrap().path.as_deref() != Some(Path::new(&expected))
         {
             failures.push(format!("wrong cwd: {command}"));
         }
@@ -107,16 +112,18 @@ pub(super) fn verify() {
         ("cat ~/.ssh/*", "/profiles/home/.ssh", true),
     ] {
         let screen = screen_paths_with(command, Path::new("/work"), &env, PathSyntax::Posix);
+        let root = root.replace("/profiles/data", &data.to_string_lossy());
         assert_eq!(
             screen
                 .candidates
                 .last()
                 .unwrap()
-                .could_access(Path::new(root)),
+                .could_access(Path::new(&root)),
             expected,
             "{command}"
         );
     }
+    std::fs::remove_dir_all(fixture).unwrap();
     assert!(failures.is_empty(), "path screening failures: {failures:?}");
 }
 
@@ -165,7 +172,10 @@ fn foreign_credentials() {
 }
 
 fn recursive_and_name_patterns() {
-    let env = HashMap::from([("BUTLER_DATA".into(), "/profiles/data".into())]);
+    let fixture = super::super::scratch("recursive-patterns");
+    let data = std::fs::canonicalize(&fixture).unwrap();
+    std::fs::create_dir_all(data.join("app")).unwrap();
+    let env = HashMap::from([("BUTLER_DATA".into(), data.to_string_lossy().into_owned())]);
     for command in [
         "grep -r token $BUTLER_DATA",
         "grep -r token $BUTLER_DATA/ap*",
@@ -177,7 +187,7 @@ fn recursive_and_name_patterns() {
                 .candidates
                 .last()
                 .unwrap()
-                .could_reach(Path::new("/profiles/data/app/runtime/auth")),
+                .could_reach(&data.join("app/runtime/auth")),
             "{command}"
         );
     }
@@ -197,4 +207,5 @@ fn recursive_and_name_patterns() {
             "{command}"
         );
     }
+    std::fs::remove_dir_all(fixture).unwrap();
 }

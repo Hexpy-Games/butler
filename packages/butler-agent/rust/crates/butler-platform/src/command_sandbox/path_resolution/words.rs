@@ -18,17 +18,48 @@ impl Default for Word {
     }
 }
 
-// Keep operators outside quotes; directory effects are applied per segment.
-pub(super) fn segments(command: &str, syntax: PathSyntax) -> Vec<String> {
+pub(super) struct Segment {
+    pub text: String,
+    pub before: String,
+    pub after: String,
+}
+impl Segment {
+    pub(super) fn carries_directory(&self) -> bool {
+        !["|", "&", "||", "&&"].contains(&self.before.as_str())
+            && ["", ";", "&&", "\n"].contains(&self.after.as_str())
+    }
+}
+
+// Preserve shell operators: a pipeline/background location change cannot
+// establish the next command's working directory.
+pub(super) fn segments(command: &str, syntax: PathSyntax) -> Vec<Segment> {
     let mut result = Vec::new();
     let mut text = String::new();
+    let mut before = String::new();
     let mut quote = None;
     let mut escaped = false;
-    for ch in command.chars() {
+    let mut chars = command.chars().peekable();
+    while let Some(ch) = chars.next() {
         if quote.is_none() && !escaped && [';', '&', '|', '\n'].contains(&ch) {
-            if !text.trim().is_empty() {
-                result.push(std::mem::take(&mut text));
+            let mut after = ch.to_string();
+            if ['&', '|'].contains(&ch) && chars.peek() == Some(&ch) {
+                chars.next();
+                after.push(ch);
             }
+            if text.trim().is_empty()
+                && after == "\n"
+                && ["|", "&&", "||"].contains(&before.as_str())
+            {
+                continue;
+            }
+            if !text.trim().is_empty() {
+                result.push(Segment {
+                    text: std::mem::take(&mut text),
+                    before,
+                    after: after.clone(),
+                });
+            }
+            before = after;
             continue;
         }
         text.push(ch);
@@ -45,7 +76,11 @@ pub(super) fn segments(command: &str, syntax: PathSyntax) -> Vec<String> {
         }
     }
     if !text.trim().is_empty() {
-        result.push(text);
+        result.push(Segment {
+            text,
+            before,
+            after: String::new(),
+        });
     }
     result
 }
@@ -116,6 +151,7 @@ fn parse(
     while let Some(ch) = chars.next() {
         if split && quote.is_none() && ['(', ')', '{', '}', '#'].contains(&ch) {
             words.push(Word {
+                text: ch.to_string(),
                 known: false,
                 ..Default::default()
             });
@@ -193,18 +229,24 @@ fn append(
         let name: String = chars.by_ref().take_while(|ch| *ch != '%').collect();
         let value = expansion::value(env, &name, syntax);
         word.known &= value.is_some();
-        word.text.push_str(value.unwrap_or(""));
+        word.text.push_str(
+            &value
+                .map(str::to_owned)
+                .unwrap_or_else(|| format!("%{name}%")),
+        );
         return;
     }
     if ch == '~' && word.text.is_empty() && quote.is_none() {
         if chars.peek().is_some_and(|ch| !['/', '\\'].contains(ch)) {
             word.known = false;
+            word.text.push('~');
             return;
         }
         if let Some(home) = expansion::home(env, syntax) {
             word.text.push_str(home);
         } else {
             word.known = false;
+            word.text.push('~');
         }
         return;
     }

@@ -127,6 +127,7 @@ fn native_paths(paths: &PathScreen, workspace: &Path) -> Option<Value> {
         let resolved = PathCandidate {
             text: candidate.text.clone(),
             glob: candidate.glob,
+            posix_glob: candidate.posix_glob,
             path: candidate.path.as_deref().map(real_or_nearest),
         };
         if resolved.could_access(&root) {

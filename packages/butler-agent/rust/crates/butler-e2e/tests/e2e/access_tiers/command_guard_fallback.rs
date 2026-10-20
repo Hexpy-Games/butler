@@ -1,13 +1,9 @@
-//! The actual approval fallback runs on hosts without kernel read containment.
+//! Registered non-Full-Access commands require the lexical fallback on every host.
 use super::*;
 
 #[tokio::test]
 async fn command_guard_without_read_sandbox() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    butler_e2e::skip_unless!(
-        !butler_platform::command_sandbox::approval_free_reads(),
-        "Host without read sandbox"
-    );
     let (url, script, server) = stub::start().await?;
     let setup = Setup::new("COMMAND-FALLBACK")?
         .access(Access::AskAlways)
@@ -46,7 +42,7 @@ async fn command_guard_without_read_sandbox() -> Result<(), HarnessError> {
         ]
     };
     for command in commands {
-        let result = command_guard::approved(&s, &script, command).await?;
+        let result = command_guard::approved_effect(&s, &script, command, None, "mutation").await?;
         let refused = matches!(
             result["error"].as_str(),
             Some("protected_path" | "command_path_unknown")

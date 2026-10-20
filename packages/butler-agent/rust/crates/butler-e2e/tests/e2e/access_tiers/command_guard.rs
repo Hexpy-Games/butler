@@ -15,14 +15,24 @@ pub(super) async fn approved_with_timeout(
     command: &str,
     timeout_ms: Option<u64>,
 ) -> Result<Value, HarnessError> {
-    let prompt = format!("Inspect command: {command}");
+    approved_effect(s, script, command, timeout_ms, "read_only").await
+}
+
+pub(super) async fn approved_effect(
+    s: &Scenario,
+    script: &Arc<Script>,
+    command: &str,
+    timeout_ms: Option<u64>,
+    effect: &str,
+) -> Result<Value, HarnessError> {
+    let prompt = format!("Inspect command: {command:?}");
     script.rounds.lock().unwrap().insert(
         prompt.clone(),
         vec![call(
             "guard",
             "run_command",
             &json!({"command":command,
-            "summary":"Inspect files", "state_effect":"read_only", "timeout_ms":timeout_ms.unwrap_or(30_000),
+            "summary":"Inspect files", "state_effect":effect, "timeout_ms":timeout_ms.unwrap_or(30_000),
             "cwd":s.sandbox.workspace.to_string_lossy()}),
         )],
     );

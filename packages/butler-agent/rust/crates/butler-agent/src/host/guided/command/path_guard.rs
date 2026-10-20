@@ -28,9 +28,8 @@ impl GuidedCommand {
         let host = self.host_environment.clone();
         let path_form = super::directory_path_form(scope.contained_reads);
         let registered = scope.execution == super::CommandExecution::Registered;
-        let strict = registered
-            && !scope.full_access
-            && !butler_platform::command_sandbox::approval_free_reads();
+        let strict = registered && !scope.full_access;
+        let screened = registered || scope.execution == super::CommandExecution::ProjectWrite;
         // Full Access deliberately keeps best-effort lexical screening: the
         // owner granted unrestricted execution, including incomplete syntax.
         timing.mark("before_job");
@@ -44,12 +43,12 @@ impl GuidedCommand {
             // No match means no lexical rejection, never proof that a program is safe.
             let denied = if strict && !paths.complete {
                 Some(json!({"error":"command_path_unknown",
-                    "message":"Cannot resolve command paths. Use a simpler path.",
+                    "message":format!("Cannot resolve command path: {}. Use an explicit path.", paths.unknown.as_deref().unwrap_or_default()),
                     "next":[{"action":"Use a simpler command with explicit paths."}]}))
             } else {
-                registered.then(|| sensitive(&paths, &cwd, &data, &host, strict)).flatten()
+                screened.then(|| sensitive(&paths, &cwd, &data, &host, strict)).flatten()
             }
-                .or_else(|| registered.then(|| ledger_guard::guard((&command, &paths), &cwd, &root, &data, installation.as_deref(), home.as_deref())).flatten());
+                .or_else(|| screened.then(|| ledger_guard::guard((&command, &paths), &cwd, &root, &data, installation.as_deref(), home.as_deref())).flatten());
             timing.mark("guard_done");
             Ok::<_, butler_turn::workspace::CommandError>(denied.map(|denied| json!({
                 "ok":false,"command":command,"cwd":cwd.to_string_lossy(),"exit_code":1,
@@ -93,6 +92,7 @@ fn sensitive(
         let resolved = PathCandidate {
             text: candidate.text.clone(),
             glob: candidate.glob,
+            posix_glob: candidate.posix_glob,
             path: candidate.path.as_deref().map(ledger_guard::real_or_nearest),
         };
         if looks_sensitive(&candidate.text)

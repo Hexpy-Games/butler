@@ -40,6 +40,9 @@ pub(crate) struct GuidedCommand {
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CommandExecution {
     Sandboxed,
+    /// Project-write mutations execute with kernel read/write containment.
+    ProjectWrite,
+    /// Registered shell execution has no kernel read containment.
     Registered,
 }
 

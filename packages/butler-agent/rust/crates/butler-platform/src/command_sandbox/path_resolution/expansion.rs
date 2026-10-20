@@ -24,7 +24,7 @@ pub(super) fn dollar(
     syntax: PathSyntax,
 ) -> (String, bool) {
     if chars.peek() == Some(&'(') {
-        return ("$".into(), false);
+        return (substitution(chars), false);
     }
     let name = if chars.peek() == Some(&'{') {
         chars.next();
@@ -54,10 +54,30 @@ pub(super) fn dollar(
     if name == "HOME" || syntax == PathSyntax::PowerShell && name.eq_ignore_ascii_case("HOME") {
         return home(env, syntax)
             .map(|v| (v.into(), true))
-            .unwrap_or_default();
+            .unwrap_or_else(|| ("$HOME".into(), false));
     }
     match value(env, name, syntax) {
         Some(value) => (value.to_owned(), true),
-        None => (String::new(), false),
+        None => (format!("${{{name}}}"), false),
     }
+}
+
+// Keep an unresolved substitution as path text for the refusal diagnostic.
+// Do not execute it or inspect anything it might read.
+fn substitution(chars: &mut Peekable<Chars<'_>>) -> String {
+    let mut text = String::from("$");
+    let mut depth = 0usize;
+    for ch in chars.by_ref() {
+        text.push(ch);
+        if ch == '(' {
+            depth += 1;
+        }
+        if ch == ')' {
+            depth -= 1;
+            if depth == 0 {
+                break;
+            }
+        }
+    }
+    text
 }
