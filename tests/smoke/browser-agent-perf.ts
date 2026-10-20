@@ -70,7 +70,10 @@ try {
   const stills=[];
   for(const act of acts) stills.push(await expectBrowserStills(app.gateway,act));
   assert.equal(stills.length,acts.length,"every act checked for complete still delivery");
-  const budgets={actOverhead:20,stop:100},failures:string[]=[],operationP95:Record<string,number>={};
+  // Owner rule: fail only on a >=1.5x regression against main. Main's act p95 was 82.13 ms
+  // (load ~5) in the #694 A/B on the owner Mac, so act fails above 1.5 x 82.13 ms.
+  const MAIN_ACT_P95_MS=82.13,ACT_REGRESSION_FACTOR=1.5;
+  const budgets={actRegression:MAIN_ACT_P95_MS*ACT_REGRESSION_FACTOR,stop:100},failures:string[]=[],operationP95:Record<string,number>={};
   // Micro watch: half of the 20 ms per-tool-call overhead budget.
   const noopWatchMs=10;
   for(const [name,samples]of Object.entries(latencies)) {
@@ -79,10 +82,11 @@ try {
   }
   const quantiles=(values:number[])=>{const sorted=values.sort((a,b)=>a-b);return {p50:sorted[Math.ceil(sorted.length*.5)-1]!,p95:sorted[Math.ceil(sorted.length*.95)-1]!}};
   const actOverhead=quantiles(latencies.act!.map(row=>row.overheadMs!)),actTotal=quantiles(latencies.act!.map(row=>row.ms));
-  const actTotalWatchMs=50;
-  if(actOverhead.p95>budgets.actOverhead)failures.push(`act overhead p95 ${actOverhead.p95} exceeds ${budgets.actOverhead}ms`);
-  console.log(JSON.stringify({actOverhead,actTotal,actTotalWatchMs,actTotalOverWatch:actTotal.p95>actTotalWatchMs,loadAverage1m:loadavg()[0]}));
-  writeFileSync(join(evidence,'operation-perf.json'),JSON.stringify({actOverhead,actTotal,actTotalWatchMs,operationP95,latencies,stopProofs,stills,budgets,noopWatchMs,failures,reportOnly},null,2));
+  // Watches (printed, never failing): per-tool-call overhead (total minus measured settle) and total act p95.
+  const actOverheadWatchMs=20,actTotalWatchMs=50;
+  if(actTotal.p95>budgets.actRegression)failures.push(`act p95 ${actTotal.p95} exceeds ${budgets.actRegression}ms (${ACT_REGRESSION_FACTOR}x main ${MAIN_ACT_P95_MS}ms)`);
+  console.log(JSON.stringify({actOverhead,actOverheadWatchMs,actOverheadOverWatch:actOverhead.p95>actOverheadWatchMs,actTotal,actTotalWatchMs,actTotalOverWatch:actTotal.p95>actTotalWatchMs,loadAverage1m:loadavg()[0]}));
+  writeFileSync(join(evidence,'operation-perf.json'),JSON.stringify({actOverhead,actOverheadWatchMs,actTotal,actTotalWatchMs,operationP95,latencies,stopProofs,stills,budgets,noopWatchMs,failures,reportOnly},null,2));
   if(!reportOnly) {
     assert.deepEqual(failures,[],'browser operation budgets');
   }
