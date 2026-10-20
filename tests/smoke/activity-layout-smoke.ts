@@ -157,7 +157,11 @@ async function foldFrames(page: import("playwright").Page) {
   });
   const start = frames[0]!, end = frames.at(-1)!;
   assert(end < start, `completion raises the text inside its message: ${start} -> ${end}`);
-  assert(frames.every((value, index) => index === 0 || value < frames[index - 1]! + 3), `fold moves one way: ${frames.join(",")}`);
+  let lowest = start;
+  assert(frames.every(value => {
+    lowest = Math.min(lowest, value);
+    return value < lowest + 3;
+  }), `fold moves one way: ${frames.join(",")}`);
   assert(frames.some(value => value < start - 1 && value > end + 1), `fold animates through intermediate frames: ${frames.join(",")}`);
   return { start, end, frames: frames.length };
 }

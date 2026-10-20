@@ -156,10 +156,10 @@ async fn perf_02_round_overhead_at_large_context() -> Result<(), HarnessError> {
         bytes >= 1_400_000,
         "the context did not reach 1.4 MB: {bytes}"
     );
-    // Normal p95 34 ms (PR #1358); incident at ~30x, one second per round.
+    // Normal p95 19.3 ms (crate README, PERF-02); incident at ~20x, 400 ms per round.
     butler_e2e::assert_wall_clock_budget!(
         p95,
-        Duration::from_millis(1000),
+        Duration::from_millis(400),
         "PERF-02 p95 per-round overhead at owner scale",
     );
     s.finish().await

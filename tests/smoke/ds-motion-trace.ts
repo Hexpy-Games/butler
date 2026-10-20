@@ -537,9 +537,9 @@ const HERO_VIDEO_MS: Record<string, number> = {
   color: 13_000, typography: 24_400, spacing: 13_000, sizing: 9_800, radius: 11_700,
   iconography: 13_000, focus: 10_400, motion: 13_000, "z-index": 9_800, layout: 10_400,
 };
-// Normal hero cost 7.97–11.48 ms (PR #1372); incident at a full 60 Hz frame.
+// Owner-approved 10 ms per frame for issue #391: half the frame at the 50 fps floor.
 const HERO_MIN_FPS = 50;
-const HERO_FRAME_INCIDENT_MS = 1000 / 60;
+const HERO_FRAME_WATCH_MS = (1000 / HERO_MIN_FPS) / 2;
 /** The Typography specimen draws its outlines (stroke-dashoffset) and moves along the weight axis (font-weight) on one SVG; it may re-lay that text. */
 const HERO_SPECIMEN_PROPERTIES: Record<string, string[]> = { typography: ["strokeDashoffset", "fontWeight"] };
 
@@ -671,7 +671,7 @@ async function measureHeroes(page: Page, serverUrl: string) {
     assert(HERO_SPECIMEN_PROPERTIES[variant] !== undefined || playing.layouts <= still.layouts * 1.05 + 2, `${variant} hero laid out ${playing.layouts} time(s) while playing (${still.layouts} still)`);
     assert(fps >= HERO_MIN_FPS, `${variant} hero dropped the page to ${fps}fps`);
     if (frameCostMs > 5) console.warn(`${variant} hero frame-cost watch: ${frameCostMs}ms > 5ms`);
-    const budget = HERO_FRAME_INCIDENT_MS;
+    const budget = HERO_FRAME_WATCH_MS;
     assert(frameCostMs <= budget, `${variant} hero costs ${frameCostMs}ms of main thread per frame (max ${budget}ms)`);
     assert(offscreen.state === "paused" && offscreen.running === 0, `${variant} hero kept running offscreen: ${JSON.stringify(offscreen)}`);
     assert(hidden === "paused", `${variant} hero kept playing in a hidden tab (${hidden})`);

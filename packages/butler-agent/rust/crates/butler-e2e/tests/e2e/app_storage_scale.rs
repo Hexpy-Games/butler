@@ -218,7 +218,7 @@ async fn perf_01_owner_scale_delivery_and_restart() -> Result<(), HarnessError> 
         "PERF-01 empty turn {empty:?}; owner-scale start {first_ready:?}, turn {at_scale:?}, \
          session-view p95 {view_p95:?}, retention settled {settled:?} after the turn"
     );
-    // Micro watch: half of the 100 ms UI input-response budget.
+    // Normal session-view p95 1.943 ms (PR #1358); incident at 50 ms, ~26x normal.
     butler_e2e::assert_wall_clock_budget!(view_p95, Duration::from_millis(50), "session-view p95");
     // The projection of a delivered turn does not scale with the events table.
     butler_e2e::assert_wall_clock_budget!(
