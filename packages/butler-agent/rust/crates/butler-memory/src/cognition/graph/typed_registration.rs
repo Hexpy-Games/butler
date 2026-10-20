@@ -38,6 +38,7 @@ pub(super) fn register_typed(
     plan::persist_rebuild_cursor(&tx, &input)?;
     let now = (input.clock)();
     if let Some(job_id) = rows::existing_job(&tx, input.plan, input.completion_id)? {
+        super::source_validity::revive(&tx, &job_id, &now)?;
         tx.commit().map_err(db_error)?;
         return Ok(GraphRegistration { job_id });
     }

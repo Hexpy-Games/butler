@@ -11,6 +11,7 @@ pub(super) mod reader;
 mod report;
 mod shots;
 pub(super) mod signed_in;
+mod still_delivery;
 mod usage;
 use super::{Client, HttpError, HttpState};
 use axum::{
@@ -39,6 +40,8 @@ pub(super) struct Hub(
     tokio::sync::Mutex<()>,
     tokio::sync::Notify,
     Slots,
+    pub(super) tokio::sync::Notify,
+    tokio::sync::Mutex<()>,
 );
 /// Browser calls executing at once, sized to the machine; a call beyond them
 /// waits for a slot instead of being refused, on whichever browser serves it.
@@ -85,6 +88,10 @@ struct Inner {
     vault_fills: HashMap<String, pay::VaultFill>,
     /// The attached host is the hidden App host (no window, no user there).
     hidden: bool,
+    /// Durable evidence still owned by this host, including queued captures.
+    still_backlog: u64,
+    /// The previous host is settling and exiting before another host can attach.
+    retiring: bool,
     /// The App asked for the channel while the hidden host was busy.
     app_waiting: bool,
     /// Counts attaches; a stream's end clears only its own attach.
@@ -127,6 +134,7 @@ impl Inner {
     fn detach(&mut self) {
         self.host = None;
         self.hidden = false;
+        self.still_backlog = 0;
         self.app_waiting = false;
         self.generation += 1;
         self.pending.clear();
@@ -176,7 +184,7 @@ pub(super) async fn route(
     match (request.method(), path.as_str()) {
         (&Method::GET, "/internal/browser-host") => {
             let launch = hidden::launch_of(request.headers());
-            attach(state, client.keys.live_streams(), launch.as_deref())
+            attach(state, client.keys.live_streams(), launch.as_deref()).await
         }
         (&Method::POST, "/internal/browser-host/downloads") => {
             downloads::handle(state, read_json(request).await?).await
@@ -223,21 +231,13 @@ pub(super) async fn route(
         _ => Err(error(404, "not_found")),
     }
 }
-fn attach(
+async fn attach(
     state: Arc<HttpState>,
     rotated: tokio_util::sync::CancellationToken,
     launch: Option<&str>,
 ) -> Result<Response, HttpError> {
     let (sender, receiver) = mpsc::channel(channel_frames());
-    let generation = {
-        let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
-        hidden::admit(&state, &mut hub, launch)?;
-        hub.host = Some(sender);
-        hub.hidden = launch.is_some();
-        hub.app_waiting = false;
-        hub.generation += 1;
-        hub.generation
-    };
+    let generation = register_host(&state, sender, launch).await?;
     if launch.is_some() {
         hidden::watch(&state, generation);
     }
@@ -421,3 +421,42 @@ fn allowed_result_url(value: &Value, args: &Value) -> bool {
 mod assets;
 
 mod calls_validation;
+
+async fn register_host(
+    state: &HttpState,
+    sender: mpsc::Sender<Value>,
+    launch: Option<&str>,
+) -> Result<u64, HttpError> {
+    let _attach = state.browser.5.lock().await;
+    {
+        let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
+        hidden::admit(state, &mut hub, launch)?;
+    }
+    loop {
+        let changed = state.browser.2.notified();
+        tokio::pin!(changed);
+        changed.as_mut().enable();
+        if !state
+            .browser
+            .0
+            .lock()
+            .map_err(|_| HttpError::Internal)?
+            .retiring
+        {
+            break;
+        }
+        tokio::select! {
+            () = changed => (),
+            () = state.shutdown.cancelled() => return Err(error(503, "gateway_closing")),
+        }
+    }
+    let generation = {
+        let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
+        hub.host = Some(sender);
+        hub.hidden = launch.is_some();
+        hub.app_waiting = false;
+        hub.generation += 1;
+        hub.generation
+    };
+    Ok(generation)
+}

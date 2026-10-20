@@ -16,7 +16,7 @@ impl AppApplication {
         input: AppFileUpload,
     ) -> Result<MessageFileRef, GatewayApplicationError> {
         if let Some(tab) = input.browser_tab.clone() {
-            return self.upload_browser_still(input, tab).await;
+            return self.upload_browser_still(input, tab, None).await;
         }
         let owner = input
             .owner_session_id

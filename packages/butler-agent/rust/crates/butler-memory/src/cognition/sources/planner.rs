@@ -275,7 +275,10 @@ fn plan(input: PlanInput<'_>) -> Result<CognitionSourcePlan, CognitionSourceErro
         return Err(error(CognitionCode::MemorySourceTextMissing));
     }
     let windows = rows.iter().map(|row| vec![row.source_id.clone()]).collect();
-    let source_hash = revision.clone();
+    let source_hash = match revision_tail {
+        RevisionTail::SourceHash(hash) => hash,
+        RevisionTail::Generation(_) => revision.clone(),
+    };
     Ok(CognitionSourcePlan {
         source_key,
         episode_id,

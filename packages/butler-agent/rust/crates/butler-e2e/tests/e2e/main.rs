@@ -47,6 +47,8 @@ mod browser_round2;
 mod browser_selection;
 mod browser_signin;
 mod browser_speed;
+mod browser_still_busy;
+mod browser_still_delivery;
 mod browser_tool_args;
 mod browser_usage;
 mod cassette_lint;
@@ -175,6 +177,7 @@ mod token_cache;
 #[path = "support/token_metrics.rs"]
 mod token_metrics;
 mod tools;
+mod tools_direct_args;
 mod tools_effects;
 mod turn;
 mod turn_continuation;
