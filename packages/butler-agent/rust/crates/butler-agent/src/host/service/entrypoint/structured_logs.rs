@@ -101,15 +101,18 @@ pub(super) async fn run_until_stopped(
         structured_logs.close(),
     )
     .await;
-    let cleared = tokio::task::spawn_blocking(move || staging.cleanup())
+    if let Err(error) = tokio::task::spawn_blocking(move || staging.cleanup())
         .await
-        .map_err(io)?
-        .map_err(io);
+        .map_err(io)
+        .and_then(|result| result.map_err(io))
+    {
+        eprintln!("[agent] reader staging cleanup failed; startup will retry: {error}");
+    }
     // serve_initialized has joined App DB/artifact jobs, native dispatcher,
     // BTCC/conversation/binding stores, memory/cognition, developer capture and
     // transcript writer. Browser owners are joined by the HTTP listener;
     // metrics have no independent writer. A close error forbids reset apply.
-    let reset = if result.is_ok() && closed.is_ok() && cleared.is_ok() {
+    let reset = if result.is_ok() && closed.is_ok() {
         crate::host::service::shutdown_trace::measure(
             "data_reset_apply",
             crate::host::service::data_reset::finish(config.data_root.clone()),
@@ -121,7 +124,7 @@ pub(super) async fn run_until_stopped(
     tokio::task::spawn_blocking(move || drop(instance))
         .await
         .map_err(|error| failure("native_service_instance_release_failed", error.to_string()))?;
-    result.and_then(|session| closed.and(cleared).and(reset).map(|()| session))
+    result.and_then(|session| closed.and(reset).map(|()| session))
 }
 
 async fn reader_staging(

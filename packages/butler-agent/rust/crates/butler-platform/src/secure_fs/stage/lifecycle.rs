@@ -34,6 +34,8 @@ impl Drop for ReaderStaging {
 type Key = (PathBuf, String);
 struct State {
     data: PathBuf,
+    turn: String,
+    session: Option<String>,
     files: Mutex<HashMap<PathBuf, bool>>,
 }
 /// Releases unused copies when the bound turn ends, including cancellation.
@@ -46,10 +48,12 @@ fn registry() -> &'static Mutex<HashMap<Key, Weak<State>>> {
 }
 impl StageScope {
     /// Establish staging ownership before the turn can dispatch tools.
-    pub fn new(data: &Path, turn: &str) -> Self {
+    pub fn new(data: &Path, turn: &str, session: Option<String>) -> Self {
         let key = (data.to_path_buf(), turn.to_owned());
         let state = Arc::new(State {
             data: data.to_path_buf(),
+            turn: turn.to_owned(),
+            session,
             files: Mutex::default(),
         });
         if let Ok(mut registry) = registry().lock() {
@@ -81,16 +85,47 @@ pub(super) fn register(data: &Path, turn: &str, path: &Path) {
 }
 /// Transfer only selected closeout files to the attachment materializer. Their
 /// display identity remains the original project path, never this private copy.
-pub fn handoff_staged(path: &Path) {
-    if let Ok(registry) = registry().lock() {
-        for state in registry.values().filter_map(Weak::upgrade) {
-            if let Ok(mut files) = state.files.lock()
-                && let Some(handed) = files.get_mut(path)
-            {
-                *handed = true;
-            }
+pub fn handoff_staged(path: &Path, turn: &str) -> io::Result<PathBuf> {
+    // Match stage_file's lock order: filesystem changes, registry, then turn files.
+    let _changes = CHANGES
+        .lock()
+        .map_err(|_| io::Error::other("staging_unavailable"))?;
+    let registry = registry()
+        .lock()
+        .map_err(|_| io::Error::other("staging_unavailable"))?;
+    if let Some(state) = registry
+        .values()
+        .filter_map(Weak::upgrade)
+        .find(|state| state.turn == turn)
+    {
+        let durable = state.data.join(crate::data_paths::MESSAGE_HANDOFFS);
+        if path.starts_with(&durable) {
+            super::handoff::adopt(path, &state.turn, state.session.as_deref())?;
+            return Ok(path.to_path_buf());
         }
+        if !path.starts_with(state.data.join(crate::data_paths::READER_STAGING)) {
+            return Ok(path.to_path_buf());
+        }
+        let mut files = state
+            .files
+            .lock()
+            .map_err(|_| io::Error::other("staging_unavailable"))?;
+        let destination =
+            super::handoff::promote(&state.data, &state.turn, state.session.as_deref(), path)?;
+        if let Some(handed) = files.get_mut(path) {
+            *handed = true;
+        }
+        return Ok(destination);
     }
+    // Ordinary artifacts do not use reader staging and have their own owner.
+    if !path
+        .parent()
+        .and_then(Path::parent)
+        .is_some_and(|root| root.ends_with(crate::data_paths::READER_STAGING))
+    {
+        return Ok(path.to_path_buf());
+    }
+    Err(io::Error::other("staging_owner_missing"))
 }
 impl Drop for State {
     fn drop(&mut self) {

@@ -39,6 +39,7 @@ struct Inner {
     task: Mutex<Option<JoinHandle<Result<(), GatewayApplicationError>>>>,
     close: Mutex<CloseState>,
     closed: Notify,
+    _handoff_events: Mutex<Box<dyn crate::gateway::EventSubscription>>,
 }
 struct CloseState {
     started: bool,
@@ -112,6 +113,7 @@ impl ProjectionOwner {
                 .watch(path, RecursiveMode::NonRecursive)
                 .map_err(GatewayApplicationError::internal_from)?;
         }
+        let handoff_events = notifications::handoff_events(&context, &pending, &sender);
         let task = tokio::spawn(run(context, receiver, pending.clone()));
         let owner = Self {
             inner: Arc::new(Inner {
@@ -124,6 +126,7 @@ impl ProjectionOwner {
                     result: None,
                 }),
                 closed: Notify::new(),
+                _handoff_events: Mutex::new(handoff_events),
             }),
         };
         let _ = owner.inner.sender.try_send(Command::Wake);
@@ -235,19 +238,13 @@ impl ProjectionOwner {
     }
 }
 
-impl Drop for Inner {
-    fn drop(&mut self) {
-        self.watcher.get_mut().take();
-        let _ = self.sender.try_send(Command::Close);
-    }
-}
-
 async fn run(
     context: ProjectionContext,
     mut receiver: mpsc::Receiver<Command>,
     pending: Arc<Mutex<Pending>>,
 ) -> Result<(), GatewayApplicationError> {
     let mut work = Work::default();
+    pending.lock().handoffs = true;
     let files = open_turn_transcripts(&context).await?;
     for file in files {
         work.enqueue(file);
@@ -258,6 +255,9 @@ async fn run(
             tokio::time::sleep(SETTLE_DELAY).await;
         }
         let events = std::mem::take(&mut *pending.lock());
+        if events.handoffs {
+            super::handoffs::cleanup(&context).await;
+        }
         for file in events.paths {
             work.enqueue(file);
         }

@@ -381,7 +381,16 @@ fn bound_turn<'a>(
     Box::new(BoundTurn {
         inputs: Some(inputs),
         _root_pins: root_pins,
-        _stages: butler_platform::secure_fs::StageScope::new(data, &start.turn.turn_id),
+        _stages: butler_platform::secure_fs::StageScope::new(
+            data,
+            &start.turn.turn_id,
+            start
+                .turn
+                .context
+                .pointer("/executionPolicy/subsession/rootSessionId")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned),
+        ),
         progress: start.progress,
         base: start.base,
     })

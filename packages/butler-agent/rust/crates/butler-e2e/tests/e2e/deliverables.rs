@@ -6,6 +6,7 @@
     reason = "test assertions"
 )]
 pub(super) mod delegation;
+mod handoff;
 mod migration;
 mod paths;
 mod security;

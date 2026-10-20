@@ -266,10 +266,11 @@ fn artifacts(value: Option<&Value>, roots: &[PathBuf]) -> Vec<ArtifactFileCandid
             let local = text(object.get("stagedPath")).or_else(|| text(object.get("localPath")));
             let label = text(object.get("safePathLabel"));
             let mut paths = Vec::new();
+            let staged = object.contains_key("stagedPath");
             if let Some(path) = local {
                 paths.push(PathBuf::from(path));
             }
-            if let Some(label) = label.as_ref() {
+            if !staged && let Some(label) = label.as_ref() {
                 for root in roots {
                     paths.push(root.join(label));
                 }

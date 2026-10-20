@@ -35,6 +35,8 @@ pub const OUTPUTS: &str = "outputs";
 pub const DOWNLOADS: &str = "downloads";
 /// Store directories created by Rust storage writers.
 pub const MESSAGE_FILES: &str = "app-server/message-files";
+/// Durable deliverable copies awaiting App attachment commit.
+pub const MESSAGE_HANDOFFS: &str = "app-server/message-files/.handoffs";
 /// Captured message asset images.
 pub const ASSETS: &str = "app-server/assets";
 /// Generated artifact files.

@@ -55,9 +55,18 @@ pub(super) fn run(
     let mut staging = Staging(None);
     for candidate in &request.candidates {
         let Some(path) = paths.first_readable(candidate, &seen) else {
-            continue;
+            if paths.already_seen(candidate, &seen) {
+                continue;
+            }
+            if !candidate.deliverable {
+                continue;
+            }
+            return Err(public(
+                409,
+                "message_file_unavailable",
+                "Attachment unavailable.",
+            ));
         };
-        let _consumed = ConsumedStage::new(&path);
         seen.insert(path.clone());
         let fallback = path
             .file_name()
@@ -232,25 +241,5 @@ fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
         code: code.into(),
         message: message.into(),
         source: None,
-    }
-}
-
-struct ConsumedStage(Option<(PathBuf, PathBuf)>);
-impl ConsumedStage {
-    fn new(path: &Path) -> Self {
-        let suffix = Path::new(butler_platform::data_paths::READER_STAGING);
-        Self(path.ancestors().find_map(|data| {
-            path.strip_prefix(data.join(suffix))
-                .ok()
-                .filter(|relative| relative.components().count() == 2)
-                .map(|_| (data.to_path_buf(), path.to_path_buf()))
-        }))
-    }
-}
-impl Drop for ConsumedStage {
-    fn drop(&mut self) {
-        if let Some((data, path)) = &self.0 {
-            butler_platform::secure_fs::remove_staged(data, path);
-        }
     }
 }

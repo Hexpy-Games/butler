@@ -5,6 +5,7 @@ use std::collections::HashSet;
 pub(super) struct Pending {
     pub paths: HashSet<String>,
     pub terminal: bool,
+    pub handoffs: bool,
     pub overflow: bool,
 }
 
@@ -56,4 +57,24 @@ pub(super) fn observe_filesystem() -> bool {
 #[cfg(not(feature = "e2e-fixtures"))]
 pub(super) fn observe_filesystem() -> bool {
     true
+}
+
+pub(super) fn handoff_events(
+    context: &super::ProjectionContext,
+    pending: &std::sync::Arc<parking_lot::Mutex<Pending>>,
+    sender: &tokio::sync::mpsc::Sender<super::Command>,
+) -> Box<dyn crate::gateway::EventSubscription> {
+    let pending = pending.clone();
+    let sender = sender.clone();
+    context
+        .subscribers
+        .subscribe(std::sync::Arc::new(move |event| {
+            if matches!(
+                event.envelope().event_type.as_str(),
+                "turn.state_changed" | "session.permanently_deleted" | "project.deleted"
+            ) {
+                pending.lock().handoffs = true;
+                let _ = sender.try_send(super::Command::Events);
+            }
+        }))
 }

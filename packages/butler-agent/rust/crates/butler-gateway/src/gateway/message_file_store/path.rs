@@ -30,6 +30,19 @@ impl AllowedPaths {
         })
     }
 
+    pub(super) fn already_seen(
+        &self,
+        candidate: &ArtifactFileCandidate,
+        seen: &HashSet<PathBuf>,
+    ) -> bool {
+        candidate.candidate_paths.iter().any(|path| {
+            let absolute = absolute(path, &self.cwd);
+            seen.contains(&absolute)
+                || butler_platform::secure_fs::canonicalize(absolute)
+                    .is_ok_and(|path| seen.contains(&path))
+        })
+    }
+
     pub(super) fn first_readable(
         &self,
         candidate: &ArtifactFileCandidate,

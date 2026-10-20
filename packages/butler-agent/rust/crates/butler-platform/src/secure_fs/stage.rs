@@ -103,6 +103,7 @@ pub struct StagedFiles {
     data: PathBuf,
     paths: Vec<PathBuf>,
 }
+mod handoff;
 mod lifecycle;
 pub use lifecycle::{ReaderStaging, StageScope, handoff_staged};
 impl StagedFiles {
