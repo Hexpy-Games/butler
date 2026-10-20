@@ -7,6 +7,8 @@
 )]
 #[path = "delegate_followup/failure.rs"]
 mod failure;
+#[path = "delegate_followup/project.rs"]
+mod project;
 #[path = "delegate_followup/stub.rs"]
 pub(crate) mod stub;
 use butler_e2e::e2e::{
@@ -71,6 +73,9 @@ async fn followup(stopped: bool) -> Result<(), HarnessError> {
     assert_eq!(second["result"]["status"], "success");
     assert_followup(&s, &script, before, &relation, stopped, &turn);
     assert_reply(&s, &turn).await?;
+    super::steward_presentation::intent::assert_child_packets_stated_once(
+        &script.requests.lock().unwrap(),
+    );
     eprintln!(
         "stopped={stopped}: new delegation and result in {} ms",
         started.elapsed().as_millis()

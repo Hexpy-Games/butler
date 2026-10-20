@@ -90,7 +90,10 @@ fn within<'a>(stale: impl Iterator<Item = &'a Stale>, tokens: usize, bytes: usiz
 
 fn strip_stills(messages: &mut [ModelRoundMessage]) {
     for message in messages {
-        if message.role != ModelRoundRole::Tool || !message.content.contains("still_file") {
+        if message.role != ModelRoundRole::Tool
+            || (!message.content.contains("still_file")
+                && !message.content.contains("still_pending"))
+        {
             continue;
         }
         let Ok(mut value) = serde_json::from_str::<Value>(&message.content) else {

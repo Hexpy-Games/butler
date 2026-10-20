@@ -428,6 +428,7 @@ async fn sec_09_lan_bind_failure_reports_the_address() -> Result<(), HarnessErro
         .iter()
         .find(|error| error["address"] == address.to_string())
         .expect("bind error");
+    assert_eq!(error["code"], "address_in_use", "{view}");
     assert!(!error["error"].as_str().unwrap().is_empty(), "{view}");
     let bound = lan_listeners(&view);
     assert_eq!(app.set_remote(false).await?["bind_errors"], json!([]));

@@ -72,14 +72,15 @@ async fn perf_trampoline_start_latency_and_process_identity() -> Result<(), Harn
     added.sort_by(f64::total_cmp);
     let p50 = added[29];
     let p95 = added[56];
-    // WSL needs an execution-denial Landlock rule for each Windows drive.
-    let (host, budget) = if command_sandbox::wsl_test_host() {
-        ("WSL", Duration::from_micros(3500))
+    let host = if command_sandbox::wsl_test_host() {
+        "WSL"
     } else {
-        ("native Linux", Duration::from_millis(2))
+        "native Linux"
     };
+    // Micro watch: half of the 20 ms p95 per-tool-call overhead budget.
+    let budget = Duration::from_millis(10);
     eprintln!(
-        "LINUX-START-LATENCY host={host} added_p50_budget_ms={:.3} N=60 baseline_p50_ms={:.3} baseline_p95_ms={:.3} contained_p50_ms={:.3} contained_p95_ms={:.3} added_p50_ms={p50:.3} added_p95_ms={p95:.3}",
+        "LINUX-START-LATENCY host={host} added_p95_watch_ms={:.3} N=60 baseline_p50_ms={:.3} baseline_p95_ms={:.3} contained_p50_ms={:.3} contained_p95_ms={:.3} added_p50_ms={p50:.3} added_p95_ms={p95:.3}",
         budget.as_secs_f64() * 1000.0,
         percentile(&baseline, 50),
         percentile(&baseline, 95),
@@ -94,9 +95,9 @@ async fn perf_trampoline_start_latency_and_process_identity() -> Result<(), Harn
         percentile(&contained_complete, 95)
     );
     butler_e2e::assert_wall_clock_budget!(
-        Duration::from_secs_f64(p50.max(0.0) / 1000.0),
+        Duration::from_secs_f64(p95.max(0.0) / 1000.0),
         budget,
-        "Linux added launch latency p50",
+        "Linux added launch latency p95",
     );
     setup.sandbox.mark_success();
     Ok(())

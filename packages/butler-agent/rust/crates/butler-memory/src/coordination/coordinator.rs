@@ -53,6 +53,10 @@ pub struct CognitionWriteLease {
 }
 
 impl CognitionWriteCoordinator {
+    pub(crate) fn host(&self) -> Arc<dyn CognitionCoordinationHost> {
+        self.inner.host.clone()
+    }
+
     /// A coordinator for this process.
     pub fn new(host: Arc<dyn CognitionCoordinationHost>) -> CoordinationResult<Self> {
         let pid = host.process_id();
@@ -95,10 +99,10 @@ impl CognitionWriteCoordinator {
         mut request: CognitionWriteAcquire,
         wait_class: CognitionWaitClass,
     ) -> CoordinationResult<Option<CognitionWriteLease>> {
-        let budget = match wait_class {
-            CognitionWaitClass::Interactive => 5_000,
-            CognitionWaitClass::Background => 30_000,
-        };
+        let budget = self
+            .inner
+            .host
+            .write_wait_millis(wait_class, request.purpose.as_deref());
         let bounded_deadline = self.inner.host.now_epoch_millis().saturating_add(budget) as f64;
         request.deadline_at_epoch_ms = Some(request.deadline_at_epoch_ms.map_or(
             bounded_deadline,
@@ -128,6 +132,8 @@ impl CognitionWriteCoordinator {
             let remaining = request.deadline_at_epoch_ms.unwrap_or(f64::INFINITY)
                 - self.inner.host.now_epoch_millis() as f64;
             if remaining <= 0.0 {
+                #[cfg(feature = "e2e-fixtures")]
+                super::wait_observation::expired(&request).await?;
                 return Ok(None);
             }
             let wait = if remaining.is_nan() {

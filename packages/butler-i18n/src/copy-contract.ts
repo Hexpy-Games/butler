@@ -324,7 +324,7 @@ export interface BrowserCopy {
     copy: string; selectAll: string; paste: string;
   };
   history: { erase: string; title: string; search: string; clear: string; butlerOnly: string; empty: string; hour: string; today: string; week: string; all: string; suggestions: string; };
-  tabCount: string; tabMoved: string; agentControl: string; handBack: string; stills: string; still: string;
+  tabCount: string; tabMoved: string; agentControl: string; handBack: string; stills: string; still: string; stillPending: string; stillUnavailable: string; stillFailure: Record<string, string>;
   title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string;
   reload: string; stop: string; loading: string; crashed: string; empty: string; conversationEmpty: string; updateRequired: string; restartRequired: string; failed: string;
   openOutput: string; output: string; show: string; hide: string; active: string; openConversation: string; moveToConversation: string;
@@ -1698,6 +1698,12 @@ export interface AppCopy {
       remoteAccessDescription: string;
       addresses: string;
       noAddresses: string;
+      bindErrors: {
+        address_in_use: string;
+        permission_denied: string;
+        address_unavailable: string;
+        bind_failed: string;
+      };
       copyAddress: string;
       copied: string;
       code: string;

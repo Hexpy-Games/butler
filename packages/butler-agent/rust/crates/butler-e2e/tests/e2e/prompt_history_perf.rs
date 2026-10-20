@@ -111,9 +111,10 @@ async fn perf_owner_scale_history_assembly_and_idle_writes() -> Result<(), Harne
     let after: u64 = db.query_row("PRAGMA data_version", [], |row| row.get(0))?;
     assert_eq!(before, after, "idle canonical history writes");
     eprintln!("PROMPT_OWNER idle_writes=0");
+    // Micro watch: half of the 20 ms per-round overhead budget (PERF-02).
     butler_e2e::assert_wall_clock_budget!(
         Duration::from_micros(p95),
-        Duration::from_millis(20),
+        Duration::from_millis(10),
         "owner-scale history assembly"
     );
     s.finish().await?;

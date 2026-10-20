@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Warn when DS primitive, block or token changes lack an owner-approval marker.
+"""Block when DS primitive, block or token changes lack an owner-approval marker.
 
 DS primitives and blocks are frozen: changing their styles or structure needs the
 owner's approval. DisclosureRow broke three times because its geometry changed
 inside unrelated commits (2278cb00b, 92775d8cf) or was patched around in product
 code (12ada184c) while the block itself stayed wrong. This check makes the
-approval explicit and visible in history. It only warns: it annotates the PR and
-never fails the build.
+approval explicit and visible in history. Missing approval fails the check.
 
 Approve with either:
   - a commit trailer on any commit in the PR: `DS-Approved: <who, when, where>`
@@ -77,19 +76,19 @@ def main(argv):
             f"'DS-Approved: owner 2026-10-08, proposal <link or commit>' or the `{LABEL}` PR label. "
             'Never change a DS primitive to fit one screen.')
     for path in changed:
-        print(f'::warning file={path},title=DS change without approval::{note}')
-    print(f'{len(changed)} DS file(s) changed without approval (warning only).')
-    return 0
+        print(f'::error file={path},title=DS change without approval::{note}')
+    print(f'{len(changed)} DS file(s) changed without approval.')
+    return 1
 
 
-def warn_on_error(argv):
+def fail_on_error(argv):
     try:
         return main(argv)
     except Exception as error:
         reason = str(error).replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-        print(f'::warning title=ds-approval::{reason}')
-        return 0
+        print(f'::error title=ds-approval::{reason}')
+        return 1
 
 
 if __name__ == '__main__':
-    sys.exit(warn_on_error(sys.argv[1:]))
+    sys.exit(fail_on_error(sys.argv[1:]))

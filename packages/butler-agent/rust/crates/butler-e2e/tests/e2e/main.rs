@@ -47,8 +47,12 @@ mod browser_round2;
 mod browser_selection;
 mod browser_signin;
 mod browser_speed;
+mod browser_still_busy;
+mod browser_still_delivery;
+mod browser_tool_args;
 mod browser_usage;
 mod cassette_lint;
+mod catalog_provider_truth;
 mod cli_launcher;
 mod cli_remote;
 mod cli_reply_language;
@@ -109,6 +113,7 @@ mod memory_idle;
 mod memory_import;
 mod memory_model_cleanup;
 mod memory_wiring;
+mod metric_retention;
 mod migration;
 mod model_thinking;
 mod monitoring_scale;
@@ -173,6 +178,7 @@ mod token_cache;
 #[path = "support/token_metrics.rs"]
 mod token_metrics;
 mod tools;
+mod tools_direct_args;
 mod tools_effects;
 mod turn;
 mod turn_continuation;
@@ -256,5 +262,6 @@ mod outbound_http;
 
 mod trace_spans;
 
+mod content_port;
 mod turn_fenced_cancel;
 mod usage_delegated;

@@ -313,7 +313,7 @@ export const koKrCopy: AppCopy = {
   browser: {
     contextMenu: nativeContextMenuCopy("ko-KR"),
     history: { erase: "지우기", title: "방문 기록", search: "방문 기록 검색", clear: "방문 기록 지우기", butlerOnly: "버틀러가 방문", empty: "방문 기록 없음", hour: "지난 1시간", today: "오늘", week: "지난 7일", all: "전체", suggestions: "주소 추천" },
-    tabCount: "탭 {count}개", tabMoved: "{title}: {group}, {position}번째", agentControl: "버틀러가 사용 중", handBack: "버틀러에게 돌려주기", stills: "단계 이미지", still: "브라우저 단계",
+    tabCount: "탭 {count}개", tabMoved: "{title}: {group}, {position}번째", agentControl: "버틀러가 사용 중", handBack: "버틀러에게 돌려주기", stills: "단계 이미지", still: "브라우저 단계", stillFailure: {"dialog_pending": "대화상자 열림", "dispatch_interrupted": "입력 중단", "timeout": "입력 시간 초과", "stills_disabled": "단계 이미지 꺼짐", "document_changed": "페이지 변경", "capture_unavailable": "캡처 불가", "capture_failed": "캡처 실패", "pixels_not_captured": "캡처되지 않음", "file_deleted": "이미지 삭제됨", "control_changed": "제어권 변경", "browser_host_lost": "브라우저 연결 끊김", "gateway_restarted": "버틀러 재시작"}, stillPending: "이미지 저장 중", stillUnavailable: "이미지 없음",
     title: "브라우저", myTabs: "내 탭", newTab: "새 탭", closeTab: "탭 닫기", address: "주소", addressPlaceholder: "검색 또는 URL 입력", back: "뒤로", forward: "앞으로",
     reload: "새로고침", stop: "중지", loading: "로딩 중", crashed: "탭이 중단됨", empty: "새 탭을 열어보세요", conversationEmpty: "버틀러가 여는 페이지가 여기에 보입니다", updateRequired: "버틀러 업데이트 필요", restartRequired: "버틀러 재시작 필요",
     failed: "페이지를 열지 못함", openOutput: "브라우저에서 열기", output: "출력물", show: "브라우저 열기", hide: "브라우저 닫기", active: "버틀러가 브라우저 사용 중",
@@ -1978,6 +1978,12 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       remoteAccessDescription: "같은 네트워크의 기기에서 연결 코드를 입력해 접속합니다.",
       addresses: "접속 주소",
       noAddresses: "네트워크 주소 없음",
+      bindErrors: {
+        address_in_use: "포트 사용 중",
+        permission_denied: "포트 권한 없음",
+        address_unavailable: "주소 사용 불가",
+        bind_failed: "주소 열기 실패",
+      },
       copyAddress: "주소 복사",
       copied: "복사됨",
       code: "코드",

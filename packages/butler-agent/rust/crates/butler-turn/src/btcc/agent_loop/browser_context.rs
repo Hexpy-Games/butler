@@ -205,16 +205,17 @@ pub(super) fn is_superseded(content: &str) -> bool {
 }
 
 fn strip_desktop_stills(output: &mut Value) -> bool {
-    let mut changed = output
-        .as_object_mut()
-        .is_some_and(|record| record.remove("still_file").is_some());
+    let mut changed = output.as_object_mut().is_some_and(|record| {
+        record.remove("still_file").is_some() | record.remove("still_pending").is_some()
+    });
     if let Some(action) = output.get_mut("action") {
         changed |= strip_desktop_stills(action);
     }
     if let Some(steps) = output.get_mut("steps").and_then(Value::as_array_mut) {
         for step in steps {
             if let Some(record) = step.as_object_mut() {
-                changed |= record.remove("still_file").is_some();
+                changed |= record.remove("still_file").is_some()
+                    | record.remove("still_pending").is_some();
             }
         }
     }
@@ -234,7 +235,7 @@ fn browser_call(call: &ModelRoundToolCall) -> Option<ModelRoundToolCall> {
     if !browser {
         return None;
     }
-    let arguments: Value = serde_json::from_str(&call.raw_arguments).ok()?;
+    let arguments = Value::Object(call.arguments.clone());
     let (name, args) = if call.name == "tool_call" {
         (
             arguments.get("id")?.as_str()?.strip_prefix("native:")?,

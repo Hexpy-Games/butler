@@ -8,8 +8,7 @@
     "lower-action"
   ],
   "covered": {
-    "lower-action": "upper",
-    "background": "upper"
+    "lower-action": "upper"
   },
   "success": {
     "required": [

@@ -38,6 +38,7 @@ pub(crate) enum Mode {
 
 pub(crate) fn check(root: &Path, sources: &[PathBuf], mode: Mode) -> Result<bool, String> {
     let production = production_files(root, modules::load)?;
+    let mut violations = crate::reachability::check(root, sources, &production)?;
     let mut packages = BTreeMap::<PathBuf, Entries>::new();
     for source in sources {
         let relative = source.strip_prefix(root).unwrap_or(source);
@@ -57,7 +58,6 @@ pub(crate) fn check(root: &Path, sources: &[PathBuf], mode: Mode) -> Result<bool
         }
     }
 
-    let mut violations = 0;
     for (package, found) in &packages {
         let path = root.join(package).join(BASELINE_FILE);
         if mode == Mode::Bless {
@@ -88,7 +88,7 @@ pub(crate) fn production_files(
             if TEST_PACKAGES.iter().any(|test| root.join(test) == package) {
                 continue;
             }
-            for entry in crate_roots(&package)? {
+            for entry in crate::targets::roots(&package)? {
                 for module in load(&entry)? {
                     files.insert(canonical(&module.file)?);
                 }
@@ -96,27 +96,6 @@ pub(crate) fn production_files(
         }
     }
     Ok(files)
-}
-
-/// The crate roots of one package: `src/lib.rs`, `src/main.rs`, `build.rs`
-/// and every `src/bin` binary.
-fn crate_roots(package: &Path) -> Result<Vec<PathBuf>, String> {
-    let mut roots: Vec<PathBuf> = ["src/lib.rs", "src/main.rs", "build.rs"]
-        .iter()
-        .map(|file| package.join(file))
-        .collect();
-    let bin = package.join("src/bin");
-    if bin.is_dir() {
-        for path in sorted_entries(&bin)? {
-            roots.push(if path.is_dir() {
-                path.join("main.rs")
-            } else {
-                path
-            });
-        }
-    }
-    roots.retain(|root| root.is_file() && root.extension().is_some_and(|ext| ext == "rs"));
-    Ok(roots)
 }
 
 /// The subdirectories of `directory`, or none when it does not exist.
@@ -272,7 +251,6 @@ mod tests {
             .collect()
     }
 
-    #[test]
     fn packages_are_crates_and_tools() {
         for (path, package, file) in [
             (
@@ -296,6 +274,7 @@ mod tests {
 
     #[test]
     fn ratchet_fails_new_grown_shrunk_and_stale_entries() {
+        packages_are_crates_and_tools();
         let baseline = entries(&[("kept", 90), ("grown", 90), ("shrunk", 90), ("gone", 90)]);
         let found = entries(&[("kept", 90), ("grown", 91), ("shrunk", 85), ("new", 81)]);
         assert_eq!(compare("", &found, &baseline), 4);

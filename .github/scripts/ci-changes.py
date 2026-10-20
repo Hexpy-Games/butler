@@ -69,6 +69,7 @@ CI_LINT_ONLY = (
     '.github/scripts/ci_consumer_test_support.py',
     '.github/scripts/ci_rust_inputs.py', '.github/scripts/ci_input_tests.py',
     '.github/scripts/ci_tier_tests.py', '.github/scripts/ci_receipts.py',
+    '.github/scripts/ci_ds_approval_tests.py',
     '.github/scripts/ci_main_failure.py', '.github/scripts/ci_main_baseline.py',
     '.github/scripts/ci-main-gate.py', '.github/scripts/ci_windows_cascade_tests.py',
     '.github/scripts/ci-check-selected.py', '.github/scripts/ds-approval.py',
@@ -89,6 +90,7 @@ CI_CONSUMERS = (
         '.github/scripts/ci_policy.py', '.github/scripts/ci_parts.py',
         '.github/scripts/ci_consumer_test_support.py', '.github/scripts/ci_rust_inputs.py',
         '.github/scripts/ci_input_tests.py', '.github/scripts/ci_tier_tests.py',
+        '.github/scripts/ci_ds_approval_tests.py',
         '.github/scripts/ci_receipts.py', '.github/scripts/ci_main_failure.py',
         '.github/scripts/ci_main_baseline.py', '.github/scripts/ci-main-gate.py',
         '.github/scripts/ci_windows_cascade_tests.py',
@@ -111,6 +113,7 @@ CI_CONSUMERS = (
         '.github/workflows/linux-packages.yml', '.github/workflows/macos-app-package.yml',
         '.github/scripts/*windows*safety.py', '.github/scripts/prepare-windows-zstd.py')),
     (NATIVE_CI, ('.github/workflows/macos-*.yml',)),
+    (('signing',), ('.github/workflows/macos-selftest.yml',)),
     (('ui',), ('.github/workflows/bun-*.yml',)),
     (NATIVE_CI + ('site', 'ds', 'workflows'), ('.github/actions/bun-setup/*',)),
     (('site', 'ds', 'workflows'), ('.github/workflows/*site*.yml',)),
@@ -198,6 +201,12 @@ def command(*args):
 
 
 def changed(base, head='HEAD'):
+    # Diff from the merge base so commits that reached the base branch after
+    # this branch forked are not counted as this change's paths.
+    try:
+        base = command('git', 'merge-base', base, head)
+    except subprocess.CalledProcessError:
+        pass
     # --no-renames includes both removed and added paths; NUL handles any name.
     raw = subprocess.check_output(['git', 'diff', '--no-renames', '--name-only', '-z', base, head])
     return raw.decode().split('\0')[:-1]

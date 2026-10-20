@@ -369,3 +369,17 @@ mod coverage_support;
 
 #[path = "memory/model_choice.rs"]
 mod model_choice;
+
+#[path = "memory/lock_retry.rs"]
+mod lock_retry;
+
+#[path = "memory/standalone_upgrade.rs"]
+mod standalone_upgrade;
+
+#[path = "memory/orphaned.rs"]
+mod orphaned;
+#[path = "memory/typed_pending.rs"]
+mod typed_pending;
+
+#[path = "memory/typed_corrupt.rs"]
+mod typed_corrupt;

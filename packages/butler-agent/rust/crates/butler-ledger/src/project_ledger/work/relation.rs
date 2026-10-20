@@ -1,5 +1,5 @@
+use crate::project_ledger::publication::timing::fs;
 use std::collections::HashSet;
-use std::fs;
 
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -407,12 +407,21 @@ fn source_version(
     scope: &ResolvedProjectWorkScope,
     ids: Option<&[String]>,
 ) -> Result<String, ProjectLedgerReadError> {
-    let all_paths = work_paths(scope, None)?;
+    let _phase =
+        crate::project_ledger::publication::timing::Phase::new("publication_source_version");
+    // Claimed mutations advance the fence; selected raw records also detect
+    // direct edits without enumerating unrelated Work directories.
+    let generation =
+        super::super::publication::read_generation(&scope.ledger_root).map_err(|source| {
+            ProjectLedgerReadError::record_show("project_ledger_generation_io_error")
+                .with_source(source)
+        })?;
+    let version = committed::publication_version(&scope.ledger_root)?;
     let selected = work_paths(scope, ids)?;
     let records = selected.iter().map(|path| {
         Ok(serde_json::json!({"path": path, "raw": committed::read_selected(&scope.ledger_root, path)?}))
     }).collect::<Result<Vec<_>, ProjectLedgerReadError>>()?;
-    let source = serde_json::json!([all_paths, records]);
+    let source = serde_json::json!([generation, version, records]);
     let bytes = butler_core::json::stringify(&source).map_err(|source| {
         ProjectLedgerReadError::record_show("project_work_managed_record_invalid")
             .with_source(source)

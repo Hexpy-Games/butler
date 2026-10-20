@@ -164,36 +164,24 @@ fn read(path: &Path, relative: &str) -> String {
     String::from_utf8(fs::read(path).unwrap()).unwrap_or_else(|_| "<binary>\n".to_owned())
 }
 
-/// Which shard a lock lands in hashes the (random) data root, so the shards
-/// are pinned together: one schema, the total fence generation and the
-/// number of locks still held.
+/// Random roots distribute admissions among shards. Fresh admissions must
+/// persist no SQL shadow state; the write reservation alone is their mutex.
 fn lock_shards(shards: &[PathBuf]) -> String {
-    let mut schemas: Vec<String> = shards.iter().map(|path| schema(path).0).collect();
-    schemas.dedup();
-    assert_eq!(schemas.len(), 1, "lock shards disagree on their schema");
-    let (mut generations, mut held) = (0_i64, 0_i64);
     for path in shards {
-        let connection = rusqlite::Connection::open(path).unwrap();
-        generations += connection
-            .query_row(
-                "SELECT generation FROM shard_fence WHERE singleton=1",
-                [],
-                |row| row.get::<_, i64>(0),
-            )
-            .unwrap();
-        held += connection
-            .query_row("SELECT count(*) FROM active_lock", [], |row| {
-                row.get::<_, i64>(0)
-            })
-            .unwrap();
+        let (schema, _) = schema(path);
+        assert!(
+            schema.is_empty(),
+            "admission shard persisted SQL state: {schema:?}"
+        );
+        assert_eq!(
+            fs::metadata(path).unwrap().len(),
+            0,
+            "admission wrote the lock database"
+        );
     }
-    format!(
-        "{}fence generations: {generations}\nheld locks: {held}\n",
-        schemas.concat()
-    )
+    "SQLite write-reservation mutex\npersistent tables: 0\n".to_owned()
 }
 
-/// A SQLite file's schema (and table names), in a stable order.
 fn schema(path: &Path) -> (String, Vec<String>) {
     let connection = rusqlite::Connection::open(path).unwrap();
     let mut out = String::new();

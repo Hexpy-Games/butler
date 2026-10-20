@@ -21,6 +21,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { onboardingCompletedPatch } from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
+import { markDailyJobsDone } from "./daily-job-markers.ts";
 
 export type StubModelRequest = { stream: boolean; messages: unknown[]; body: Record<string, unknown> };
 
@@ -30,6 +31,9 @@ export type NativeAppServerOptions = {
   config?: Record<string, unknown>;
   /** Marks first-chat onboarding complete before launch. Default true. */
   onboardingComplete?: boolean;
+  /** Default "done-today" pre-marks today's 04:00 jobs done in the gateway's local day so the scheduled briefing (#1242) cannot call the model mid-smoke at a time-of-day-dependent moment.
+   * "due" leaves them to run on the first tick after 04:00. */
+  dailyJobs?: "done-today" | "due";
   stubReply?: (request: StubModelRequest) => string | Promise<string>;
   /** Offline provider deltas, paced by the scenario. */
   stubTextStream?: (request: StubModelRequest) => AsyncIterable<string>;
@@ -70,6 +74,7 @@ export type NativeAppServerHandle = {
 };
 
 const repositoryRoot = process.env.BUTLER_SMOKE_REPOSITORY_ROOT ?? fileURLToPath(new URL("../../", import.meta.url));
+export const AGENT_EXECUTABLE_NAME = process.platform === "win32" ? "butler-agent.exe" : "butler-agent";
 
 // ---------------------------------------------------------------------------
 // Process tracking: a spawned gateway must never outlive its owner.
@@ -347,15 +352,16 @@ function spawnLoggedGateway(command: string, args: string[],
 export async function createNativeAppServer(options: NativeAppServerOptions = {}): Promise<NativeAppServerHandle> {
   const scratch = mkdtempSync(join(tmpdir(), "butler-native-smoke-"));
   const butlerData = options.butlerData ?? join(scratch, "data");
+  const timeZone = options.env?.TZ ?? process.env.TZ;
   const home = join(scratch, "home");
   const installation = join(scratch, "install");
   const resources = join(installation, "resources");
   mkdirSync(butlerData, { recursive: true });
   mkdirSync(join(home, ".codex"), { recursive: true });
   mkdirSync(join(installation, "bin"), { recursive: true });
-  // APFS clone (cp -c semantics) keeps the ~500MB binary copy cheap; the
-  // service requires a canonical executable inside its installation root.
-  cpSync(nativeAgentExecutable(), join(installation, "bin/butler-agent"), { mode: 2 /* COPYFILE_FICLONE */ });
+  // APFS clone (cp -c semantics) keeps the ~500MB binary copy cheap; the service requires a
+  // canonical executable inside its installation root (Windows launches only an .exe name).
+  cpSync(nativeAgentExecutable(), join(installation, "bin", AGENT_EXECUTABLE_NAME), { mode: 2 /* COPYFILE_FICLONE */ });
   cpSync(join(repositoryRoot, "packages/butler-agent/resources"), resources, { recursive: true });
   const uiRoot = options.uiRoot ?? join(repositoryRoot, "packages/butler-app/client/ui/dist");
   if (!existsSync(join(uiRoot, "index.html"))) throw new Error(`UI build missing: ${uiRoot}`);
@@ -380,9 +386,9 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
 
   const port = await freeGatewayPort();
   const logPath = join(scratch, "gateway.log");
+  if (options.dailyJobs !== "due") markDailyJobsDone(butlerData, timeZone);
   const gateway = spawnLoggedGateway(
-    join(installation, "bin/butler-agent"),
-    ["--installation-root", installation, "--resource-root", resources],
+    join(installation, "bin", AGENT_EXECUTABLE_NAME), ["--installation-root", installation, "--resource-root", resources],
     {
       cwd: butlerData,
       cleanupPaths: [scratch],
@@ -400,6 +406,7 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
         BUTLER_E2E_TIER: "stub",
         BUTLER_E2E_EMBED_SOURCES: "http://127.0.0.1:9",
         ...(options.devOrigins?.length ? { BUTLER_APP_DEV_ORIGIN: options.devOrigins.join(",") } : {}),
+        ...(timeZone !== undefined ? { TZ: timeZone } : {}),
         ...options.env,
       },
     },

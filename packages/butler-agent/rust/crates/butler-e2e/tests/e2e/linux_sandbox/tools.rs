@@ -177,8 +177,10 @@ fn fixture(tool: &str, root: &Path, setup: &Setup) -> Result<String, HarnessErro
                 root.join("package.json"),
                 r#"{"name":"minimal","version":"1.0.0","dependencies":{"local":"file:./local"}}"#,
             )?;
+            // npm versions differ on whether file: dependencies are packed.
+            // This fixture exercises links; npm_tarball covers extraction.
             Ok(format!(
-                "npm install --offline --package-lock=false --cache '{}'",
+                "npm install --offline --install-links=false --package-lock=false --cache '{}'",
                 setup
                     .sandbox
                     .data

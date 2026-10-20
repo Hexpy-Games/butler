@@ -309,7 +309,7 @@ export const enUsCopy: AppCopy = {
   browser: {
     contextMenu: nativeContextMenuCopy("en-US"),
     history: { erase: "Clear", title: "History", search: "Search history", clear: "Clear browsing history", butlerOnly: "Visited by Butler", empty: "No visits", hour: "Last hour", today: "Today", week: "Last 7 days", all: "All time", suggestions: "Address suggestions" },
-    tabCount: "Tabs: {count}", tabMoved: "{title}: {group}, position {position}", agentControl: "Butler is browsing", handBack: "Give back to Butler", stills: "Step images", still: "Browser step",
+    tabCount: "Tabs: {count}", tabMoved: "{title}: {group}, position {position}", agentControl: "Butler is browsing", handBack: "Give back to Butler", stills: "Step images", still: "Browser step", stillFailure: {"dialog_pending": "Dialog open", "dispatch_interrupted": "Input interrupted", "timeout": "Input timed out", "stills_disabled": "Step images off", "document_changed": "Page changed", "capture_unavailable": "Capture unavailable", "capture_failed": "Capture failed", "pixels_not_captured": "Image not captured", "file_deleted": "Image removed", "control_changed": "Control changed", "browser_host_lost": "Browser disconnected", "gateway_restarted": "Butler restarted"}, stillPending: "Saving image", stillUnavailable: "Image unavailable",
     title: "Browser", myTabs: "My tabs", newTab: "New tab", closeTab: "Close tab", address: "Address", addressPlaceholder: "Search or enter URL",
     back: "Back", forward: "Forward", reload: "Reload", stop: "Stop", loading: "Loading", crashed: "Tab crashed", empty: "Open a new tab", conversationEmpty: "Pages Butler opens show here",
     updateRequired: "Update Butler", restartRequired: "Restart Butler", failed: "Could not open page", openOutput: "Open in Browser",
@@ -1974,6 +1974,12 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       remoteAccessDescription: "Devices on your network enter the connection code to connect.",
       addresses: "Addresses",
       noAddresses: "No network address",
+      bindErrors: {
+        address_in_use: "Port in use",
+        permission_denied: "Port blocked",
+        address_unavailable: "Address unavailable",
+        bind_failed: "Couldn't open address",
+      },
       copyAddress: "Copy address",
       copied: "Copied",
       code: "Code",

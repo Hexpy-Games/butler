@@ -54,11 +54,15 @@ pub(super) async fn route(
                 "Operation output is not available for this turn.",
             )
         })?;
+    let browser_stills = super::browser_stills::for_output(&state, &output.content).await?;
     json(
         StatusCode::OK,
         ApiEnvelope {
             protocol_version: APP_PROTOCOL_VERSION,
-            data: output,
+            data: OperationOutputResponse {
+                output,
+                browser_stills,
+            },
         },
     )
     .map(Some)
@@ -90,4 +94,12 @@ fn js_nonnegative_offset(raw: &str) -> Option<u64> {
         && parsed.fract() == 0.0
         && (0.0..=9_007_199_254_740_991.0).contains(&parsed))
     .then_some(butler_core::json::saturating_u64(parsed))
+}
+
+#[derive(serde::Serialize)]
+struct OperationOutputResponse {
+    #[serde(flatten)]
+    output: crate::gateway::OperationOutputView,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    browser_stills: Option<serde_json::Value>,
 }

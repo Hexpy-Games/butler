@@ -13,7 +13,7 @@ use butler_gateway::gateway::{
     ApplicationFuture, FullResetRequest, GatewayApplicationError, ResetNonce,
 };
 use journal::{Journal, Phase};
-pub(crate) use recovery::{finish, protected_roots, recover};
+pub(crate) use recovery::{finish, initialize_owned, protected_roots, recover};
 use serde_json::{Value, json};
 use std::{
     collections::VecDeque,

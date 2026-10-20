@@ -599,6 +599,8 @@ export interface SecurityView {
   bind_addresses: string[];
   /** Empty while remote access is off. */
   lan_urls: string[];
+  /** LAN bind failures; older gateways may omit the stable code. */
+  bind_errors?: { address: string; code?: string; error: string }[];
   /** Extra host names the gateway answers (tunnels, reverse proxies). */
   allowed_hosts: string[];
   content_hosts?: string[];

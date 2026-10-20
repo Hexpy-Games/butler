@@ -11,6 +11,7 @@ pub(super) mod reader;
 mod report;
 mod shots;
 pub(super) mod signed_in;
+mod still_delivery;
 mod usage;
 use super::{Client, HttpError, HttpState};
 use axum::{
@@ -39,6 +40,8 @@ pub(super) struct Hub(
     tokio::sync::Mutex<()>,
     tokio::sync::Notify,
     Slots,
+    pub(super) tokio::sync::Notify,
+    tokio::sync::Mutex<()>,
 );
 /// Browser calls executing at once, sized to the machine; a call beyond them
 /// waits for a slot instead of being refused, on whichever browser serves it.
@@ -75,7 +78,7 @@ fn channel_frames() -> usize {
 #[derive(Default)]
 struct Inner {
     host: Option<mpsc::Sender<Value>>,
-    pending: HashMap<String, oneshot::Sender<Value>>,
+    pending: HashMap<String, PendingReply>,
     tabs: butler_runtime::browser::TabRegistry,
     uses: HashMap<String, usage::Use>,
     turns: HashSet<(String, String)>,
@@ -85,16 +88,53 @@ struct Inner {
     vault_fills: HashMap<String, pay::VaultFill>,
     /// The attached host is the hidden App host (no window, no user there).
     hidden: bool,
+    /// Durable evidence still owned by this host, including queued captures.
+    still_backlog: u64,
+    /// The previous host is settling and exiting before another host can attach.
+    retiring: bool,
     /// The App asked for the channel while the hidden host was busy.
     app_waiting: bool,
     /// Counts attaches; a stream's end clears only its own attach.
     generation: u64,
+}
+/// Ownership is checked while accepting a host reply, before detach can erase
+/// the registry. Calls without a tab (including output checks) have no fence.
+struct PendingReply {
+    sender: oneshot::Sender<Value>,
+    owner: Option<(String, String, String)>,
+}
+impl From<oneshot::Sender<Value>> for PendingReply {
+    fn from(sender: oneshot::Sender<Value>) -> Self {
+        Self {
+            sender,
+            owner: None,
+        }
+    }
+}
+impl PendingReply {
+    fn agent(sender: oneshot::Sender<Value>, frame: &Value) -> Self {
+        let owner = frame["tab"].as_str().map(|tab| {
+            (
+                frame["session"].as_str().unwrap_or("").to_owned(),
+                tab.to_owned(),
+                frame["op"].as_str().unwrap_or("").to_owned(),
+            )
+        });
+        Self { sender, owner }
+    }
+    fn deliver(self, hub: &Inner, mut value: Value) {
+        if let Some((session, tab, op)) = self.owner {
+            agent_calls::recheck_owner(hub, &session, Some(&tab), &op, &mut value);
+        }
+        let _ = self.sender.send(value);
+    }
 }
 impl Inner {
     /// Forgets the attached host and everything it served.
     fn detach(&mut self) {
         self.host = None;
         self.hidden = false;
+        self.still_backlog = 0;
         self.app_waiting = false;
         self.generation += 1;
         self.pending.clear();
@@ -144,7 +184,7 @@ pub(super) async fn route(
     match (request.method(), path.as_str()) {
         (&Method::GET, "/internal/browser-host") => {
             let launch = hidden::launch_of(request.headers());
-            attach(state, client.keys.live_streams(), launch.as_deref())
+            attach(state, client.keys.live_streams(), launch.as_deref()).await
         }
         (&Method::POST, "/internal/browser-host/downloads") => {
             downloads::handle(state, read_json(request).await?).await
@@ -181,37 +221,23 @@ pub(super) async fn route(
                 .trim_start_matches("/internal/browser-host/renders/")
                 .trim_start_matches("/internal/browser-host/images/");
             let body = read_json(request).await?;
-            let sender = state
-                .browser
-                .0
-                .lock()
-                .map_err(|_| HttpError::Internal)?
-                .pending
-                .remove(id);
-            let Some(sender) = sender else {
+            let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
+            let Some(reply) = hub.pending.remove(id) else {
                 return Err(error(409, "browser_call_expired"));
             };
-            let _ = sender.send(body);
+            reply.deliver(&hub, body);
             super::json(StatusCode::OK, json!({"ok":true}))
         }
         _ => Err(error(404, "not_found")),
     }
 }
-fn attach(
+async fn attach(
     state: Arc<HttpState>,
     rotated: tokio_util::sync::CancellationToken,
     launch: Option<&str>,
 ) -> Result<Response, HttpError> {
     let (sender, receiver) = mpsc::channel(channel_frames());
-    let generation = {
-        let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
-        hidden::admit(&state, &mut hub, launch)?;
-        hub.host = Some(sender);
-        hub.hidden = launch.is_some();
-        hub.app_waiting = false;
-        hub.generation += 1;
-        hub.generation
-    };
+    let generation = register_host(&state, sender, launch).await?;
     if launch.is_some() {
         hidden::watch(&state, generation);
     }
@@ -315,7 +341,7 @@ async fn call(state: Arc<HttpState>, request: Request<Body>) -> Result<Response,
         };
         host.try_send(json!({"id":id,"lease":{"id":id,"kind":"output_check","content_origin":url::Url::parse(args["url"].as_str().unwrap_or("")).map_err(|_| error(400,"invalid_request"))?.origin().ascii_serialization()},"op":"output.check","args":args,"deadline_ms":7500}))
             .map_err(|_| error(429, "browser_busy"))?;
-        hub.pending.insert(id.clone(), sender);
+        hub.pending.insert(id.clone(), sender.into());
     }
     let _pending = PendingCall {
         state: state.clone(),
@@ -395,3 +421,42 @@ fn allowed_result_url(value: &Value, args: &Value) -> bool {
 mod assets;
 
 mod calls_validation;
+
+async fn register_host(
+    state: &HttpState,
+    sender: mpsc::Sender<Value>,
+    launch: Option<&str>,
+) -> Result<u64, HttpError> {
+    let _attach = state.browser.5.lock().await;
+    {
+        let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
+        hidden::admit(state, &mut hub, launch)?;
+    }
+    loop {
+        let changed = state.browser.2.notified();
+        tokio::pin!(changed);
+        changed.as_mut().enable();
+        if !state
+            .browser
+            .0
+            .lock()
+            .map_err(|_| HttpError::Internal)?
+            .retiring
+        {
+            break;
+        }
+        tokio::select! {
+            () = changed => (),
+            () = state.shutdown.cancelled() => return Err(error(503, "gateway_closing")),
+        }
+    }
+    let generation = {
+        let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
+        hub.host = Some(sender);
+        hub.hidden = launch.is_some();
+        hub.app_waiting = false;
+        hub.generation += 1;
+        hub.generation
+    };
+    Ok(generation)
+}

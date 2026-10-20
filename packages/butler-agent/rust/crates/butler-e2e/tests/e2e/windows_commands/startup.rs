@@ -80,12 +80,13 @@ async fn native_shell_startup_has_complete_unicode_output() -> Result<(), Harnes
             }
             let first = timings[0];
             timings.sort_by(f64::total_cmp);
-            eprintln!("SHELL-STARTUP shell={shell} n=20 first_ms={first:.3} p50_ms={:.3} p95_ms={:.3} max_ms={:.3} output_verified=20", timings[9], timings[18], timings[19]);
+            let p50 = f64::midpoint(timings[9], timings[10]);
+            eprintln!("SHELL-STARTUP shell={shell} n=20 first_ms={first:.3} p50_ms={:.3} p95_ms={:.3} max_ms={:.3} output_verified=20", p50, timings[18], timings[19]);
             if shell == "powershell" {
                 // Shipped invocation, inherited module path: a module scan per
                 // command (about 22 s on hosted runners) must fail this check.
                 butler_e2e::assert_wall_clock_budget!(
-                    std::time::Duration::from_secs_f64(timings[9] / 1000.),
+                    std::time::Duration::from_secs_f64(p50 / 1000.),
                     std::time::Duration::from_millis(POWERSHELL_STARTUP_P50_MS),
                     "PowerShell command startup p50",
                 );

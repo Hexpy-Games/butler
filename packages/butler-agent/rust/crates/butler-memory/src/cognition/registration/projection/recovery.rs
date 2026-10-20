@@ -13,13 +13,7 @@ impl CognitionRegistrationService {
         handle: MemoryGenerationHandle,
         target: MemoryGenerationTarget,
         cancellation: CancellationToken,
-    ) -> CognitionResult<()> {
-        let deps = self.projection.as_ref().ok_or_else(|| {
-            CognitionError::new(
-                CognitionCode::CognitionProjectionUnconfigured,
-                "cognition_projection_unconfigured",
-            )
-        })?;
+    ) -> CognitionResult<bool> {
         let permit = self
             .admission
             .clone()
@@ -37,7 +31,7 @@ impl CognitionRegistrationService {
         let coordinator = self.coordinator.clone();
         let clock = self.clock.clone();
         let shutdown = self.shutdown.clone();
-        let host = deps.host.clone();
+        let host = self.coordinator.host();
         let active_owners = self.active_windows.clone();
         let (sender, receiver) = oneshot::channel();
         // Detached on purpose: the operation token/guard moved into the task keeps the
@@ -71,7 +65,7 @@ impl CognitionRegistrationService {
                 Ok(lease) => tokio::task::spawn_blocking(move || {
                     let result = recovery.run(&lease, &lock);
                     let released = lease.release(result.is_ok()).map_err(CognitionError::from);
-                    result.and(released)
+                    result.and_then(|repaired| released.map(|()| repaired))
                 })
                 .await
                 .map_err(join_error)
@@ -105,7 +99,7 @@ impl Recovery {
         &self,
         lease: &crate::coordination::CognitionWriteLease,
         lock: &std::path::Path,
-    ) -> CognitionResult<()> {
+    ) -> CognitionResult<bool> {
         lease.assert_for_path(lock).map_err(CognitionError::from)?;
         assert_mutation_authority(
             &self.data_root,
@@ -114,6 +108,16 @@ impl Recovery {
             &self.handle,
         )?;
         let mut graph = GraphRepository::open(&self.handle.graph_path)?;
+        let canonical_path = self
+            .handle
+            .canonical_snapshot_path
+            .clone()
+            .unwrap_or_else(|| {
+                self.handle
+                    .source_root
+                    .join("runtime/conversation-store.sqlite")
+            });
+        let repaired = graph.repair_standalone_hashes(&canonical_path, &(self.clock)())?;
         let nonce = self.host.new_uuid();
         let now = (self.clock)();
         // Snapshot after the write lease. Claims register their owner while
@@ -130,6 +134,6 @@ impl Recovery {
             },
         );
         let closed = graph.close();
-        result.and(closed)
+        result.and(closed).map(|()| repaired)
     }
 }

@@ -23,3 +23,16 @@ pub fn same_metadata(left: &std::fs::Metadata, right: &std::fs::Metadata) -> boo
         _ => left.len() == right.len() && left.modified().ok() == right.modified().ok(),
     }
 }
+
+/// Whether an open file still identifies the entry at `path`, including after
+/// appends. Keeps the original file alive so its identity cannot be reused.
+pub fn same_open_file(file: &std::fs::File, path: &Path) -> io::Result<bool> {
+    #[cfg(unix)]
+    {
+        Ok(super::identity(&file.metadata()?).id == super::identity(&std::fs::metadata(path)?).id)
+    }
+    #[cfg(windows)]
+    {
+        Ok(same_file::Handle::from_file(file.try_clone()?)? == same_file::Handle::from_path(path)?)
+    }
+}

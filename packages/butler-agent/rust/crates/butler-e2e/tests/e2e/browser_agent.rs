@@ -298,3 +298,85 @@ async fn browser_popup_policy_is_runtime_owned() -> Result<(), HarnessError> {
     drop(stream);
     s.finish().await
 }
+
+#[tokio::test]
+async fn browser_host_detach_preserves_delivered_answer() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    detach_with_pending_call(true).await
+}
+
+#[tokio::test]
+async fn browser_host_detach_refuses_unanswered_call() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    detach_with_pending_call(false).await
+}
+
+#[allow(clippy::unwrap_used, reason = "test assertions")]
+async fn detach_with_pending_call(answer: bool) -> Result<(), HarnessError> {
+    let s = Setup::new("BROWSER-DETACH-PENDING")?.start().await?;
+    let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
+    let mut stream = reqwest::Client::new()
+        .get(format!("{}/internal/browser-host", s.gw.base))
+        .bearer_auth(&s.gw.token)
+        .header("x-butler-admin", &admin.admin)
+        .send()
+        .await?;
+    assert_eq!(stream.status(), 200);
+    let published = admin
+        .send(
+            Method::POST,
+            "/internal/browser-host/events",
+            Some(json!({
+                "tabs":[{"id":"page","owner":"conversation:general","profile":"signed_out",
+                    "epoch":1,"holder":"agent","url":"https://example.com/"}]
+            })),
+            &[],
+        )
+        .await?;
+    assert_eq!(published.status, 200, "{}", published.text);
+    let caller = admin.clone();
+    let pending = tokio::spawn(async move {
+        caller
+            .send(
+                Method::POST,
+                "/internal/browser/calls",
+                Some(json!({
+                    "op":"tab.observe","session":"general","tab":"page","args":{}
+                })),
+                &[],
+            )
+            .await
+    });
+    let mut buffer = String::new();
+    let started = super::browser_delegation::next_frame(&mut stream, &mut buffer).await?;
+    assert_eq!(started["op"], "use.started");
+    let frame = super::browser_delegation::next_frame(&mut stream, &mut buffer).await?;
+    assert_eq!(frame["op"], "tab.observe");
+    let delivered = json!({"status":"ok","tab":"page","text":"complete page contents"});
+    if answer {
+        let accepted = admin
+            .send(
+                Method::POST,
+                &format!(
+                    "/internal/browser-host/results/{}",
+                    frame["id"].as_str().unwrap()
+                ),
+                Some(delivered.clone()),
+                &[],
+            )
+            .await?;
+        assert_eq!(accepted.status, 200, "{}", accepted.text);
+    }
+    drop(stream);
+    let result = pending.await.unwrap()?;
+    assert_eq!(result.status, 200, "{}", result.text);
+    if answer {
+        assert_eq!(result.body, delivered);
+    } else {
+        assert_eq!(
+            result.body,
+            json!({"status":"not_dispatched","reason":"owner_changed"})
+        );
+    }
+    s.finish().await
+}

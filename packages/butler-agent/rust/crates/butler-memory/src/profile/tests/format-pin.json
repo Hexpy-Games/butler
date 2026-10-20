@@ -192,7 +192,7 @@
         "last_seen_at": "2023-11-14T21:00:00.000Z",
         "expires_or_decay": "decay",
         "status": "promoted",
-        "promoted_at": null
+        "promoted_at": "2023-11-14T22:13:20.000Z"
       },
       {
         "id": "pc_96f156e89318da3e",
@@ -330,7 +330,7 @@
         "last_seen_at": "2023-11-14T21:00:00.000Z",
         "expires_or_decay": "decay",
         "status": "promoted",
-        "promoted_at": null
+        "promoted_at": "2023-11-14T22:13:20.000Z"
       },
       {
         "id": "pc_96f156e89318da3e",
@@ -548,7 +548,7 @@
         "last_seen_at": "2023-11-14T21:00:00.000Z",
         "expires_or_decay": "decay",
         "status": "promoted",
-        "promoted_at": null
+        "promoted_at": "2023-11-14T22:13:20.000Z"
       },
       {
         "id": "pc_96f156e89318da3e",

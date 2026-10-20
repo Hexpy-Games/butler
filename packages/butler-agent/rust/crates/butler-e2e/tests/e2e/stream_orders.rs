@@ -76,6 +76,5 @@ async fn current_item_done_after_content_delivers_complete_answer() -> Result<()
     butler_e2e::gate!();
     // MEM-03 already records message completion after content. Removing its
     // optional reasoning boundaries above also covers the message-only stream.
-    // LIVE-09 is a separately recorded live baseline, not a stub prerequisite.
     replay("MEM-03", false).await
 }

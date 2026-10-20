@@ -45,10 +45,10 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
   };
   let page: Awaited<ReturnType<typeof electronPage>> | undefined;
   // An attached main inspector holds a quitting App at exit until it disconnects.
-  const detachMain = async () => { const client = inspectorClient; inspectorClient = undefined; (await client?.catch(()=>undefined))?.close(); };
+  const detachMain = async () => { const client = inspectorClient; inspectorClient = undefined; await (await client?.catch(()=>undefined))?.close(); };
   const stop = async () => {
     page?.close();
-    (await inspectorClient?.catch(()=>undefined))?.close();
+    await (await inspectorClient?.catch(()=>undefined))?.close();
     await stopElectronChild(child);
     writeFileSync(join(evidence, "agent.log"), gateway.diagnostics());
     await gateway.stop(); await visionStub?.stop(); writeFileSync(join(evidence, "electron.log"), logs.join("")); rmSync(dir, { recursive: true, force: true });

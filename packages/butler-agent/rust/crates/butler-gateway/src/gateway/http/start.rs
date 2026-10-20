@@ -14,6 +14,7 @@ pub(in crate::gateway) fn serve(
     config: GatewayConfig,
     shutdown: CancellationToken,
     local_addr: SocketAddr,
+    content_addr: SocketAddr,
 ) -> JoinHandle<std::io::Result<()>> {
     tokio::spawn(async move {
         let devices = prepare_devices(application.clone(), shutdown.clone(), local_addr).await?;
@@ -22,21 +23,12 @@ pub(in crate::gateway) fn serve(
             allowed_hosts: config.allowed_hosts.clone(),
             content_hosts: config.content_hosts.clone(),
         };
-        let content = butler_runtime::browser::ContentOrigin(local_addr.port().saturating_add(1));
+        let remote =
+            listeners::RemoteAccess::new(local_addr, content_addr, config.allowed_hosts.clone());
         let app_host = app_host(config.headless_browser.as_ref(), &shutdown);
-        let headless = config.headless_browser.map(|browser| {
-            butler_runtime::browser::Headless::new(
-                butler_runtime::browser::HeadlessConfig {
-                    root: browser.root,
-                    install: browser.install,
-                    content: Some(content),
-                    enabled: browser.enabled,
-                },
-                shutdown.clone(),
-            )
-        });
+        let headless = headless(config.headless_browser, &remote, &shutdown);
         let state = Arc::new(HttpState {
-            browser: super::browser_host::Hub::default(),
+            browser: Arc::new(super::browser_host::Hub::default()),
             headless,
             app_host,
             previews: butler_runtime::previews::Previews::default(),
@@ -52,7 +44,7 @@ pub(in crate::gateway) fn serve(
                 signed_url_ttl: config.signed_url_ttl,
                 shutdown: shutdown.clone(),
             }),
-            remote: listeners::RemoteAccess::new(local_addr, config.allowed_hosts),
+            remote,
             security_store: config.security_store,
             session_cursor_secret: uuid::Uuid::new_v4().to_string(),
             limiter: FixedWindowRateLimiter::new(
@@ -100,6 +92,26 @@ fn browser_ports(state: &Arc<HttpState>) {
             Arc::downgrade(state),
         )));
     }
+}
+
+/// Give headless egress the same content port as the bound listener.
+fn headless(
+    browser: Option<crate::gateway::HeadlessBrowserConfig>,
+    remote: &listeners::RemoteAccess,
+    shutdown: &CancellationToken,
+) -> Option<Arc<butler_runtime::browser::Headless>> {
+    let browser = browser?;
+    Some(butler_runtime::browser::Headless::new(
+        butler_runtime::browser::HeadlessConfig {
+            root: browser.root,
+            install: browser.install,
+            content: Some(butler_runtime::browser::ContentOrigin(
+                remote.content_addr().port(),
+            )),
+            enabled: browser.enabled,
+        },
+        shutdown.clone(),
+    ))
 }
 
 /// The hidden App host, where the browser without the App may use one.

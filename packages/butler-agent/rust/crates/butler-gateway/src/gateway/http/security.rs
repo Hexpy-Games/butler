@@ -46,7 +46,7 @@ use crate::gateway::protocol::{APP_PROTOCOL_VERSION, ApiEnvelope};
 use connect_page::ConnectPage;
 use fetch_metadata::SessionRefusal;
 use keys::{Keyed, SigningKey};
-use request_policy::RequestPolicy;
+pub(in crate::gateway) use request_policy::RequestPolicy;
 
 /// `POST /connection-codes`: mints a one-time browser link (bearer only).
 pub(super) const CONNECTION_CODES_PATH: &str = "/connection-codes";
@@ -212,6 +212,20 @@ impl GatewaySecurity {
             _ => ConnectPage::Failed,
         };
         page.response_with_status(status)
+    }
+
+    /// Check proposed trusted hosts against the stored content listener.
+    pub(super) fn validate_content_origin(
+        &self,
+        content_addr: SocketAddr,
+        allowed_hosts: &[String],
+    ) -> std::io::Result<()> {
+        RequestPolicy::validate_content_origin(
+            self.local_addr,
+            content_addr,
+            allowed_hosts,
+            self.dev_origins.as_deref(),
+        )
     }
 
     /// Answers `allowed_hosts` and the LAN authorities from now on.
