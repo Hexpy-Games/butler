@@ -87,7 +87,7 @@ impl Client {
                 Err(_) => json!({"status":"unknown","reason":"browser_host_lost"}),
             }
         };
-        let result = tokio::select! {
+        let mut result = tokio::select! {
             ()=signal.cancelled()=>{
                 let _ = self.client.post(format!("{}/internal/browser/calls",self.base))
                     .bearer_auth(&self.bearer).header("x-butler-admin",&self.admin)
@@ -97,6 +97,10 @@ impl Client {
             },
             result=request=>result
         };
+        // Internal phase timings stop at the model-facing transport boundary.
+        if let Some(record) = result.as_object_mut() {
+            record.remove("settleMs");
+        }
         let count = if op == "tab.act" {
             args["steps"].as_array().map_or(0, Vec::len)
         } else {

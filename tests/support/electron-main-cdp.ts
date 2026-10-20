@@ -8,9 +8,11 @@ export async function connectElectronMain(inspectorPort: number) {
   });
   let id = 0;
   const pending = new Map<number, {done:(value:any)=>void;fail:(error:Error)=>void}>();
-  const close = () => {
+  const disconnected = new Promise<void>(done => socket.addEventListener("close", () => done(), { once: true }));
+  const close = async () => {
     for (const entry of pending.values()) entry.fail(new Error("Main inspector disconnected"));
     pending.clear(); socket.close();
+    await disconnected;
   };
   socket.addEventListener("close", close, {once:true});
   socket.addEventListener("error", close, {once:true});
@@ -52,5 +54,5 @@ export async function connectElectronMain(inspectorPort: number) {
 /** One-shot callers still release the connection; long smokes reuse a client. */
 export async function electronMain<T>(inspectorPort:number,expression:string,queryInstances=false):Promise<T> {
   const client=await connectElectronMain(inspectorPort);
-  try{return await client.evaluate<T>(expression,queryInstances)}finally{client.close()}
+  try{return await client.evaluate<T>(expression,queryInstances)}finally{await client.close()}
 }

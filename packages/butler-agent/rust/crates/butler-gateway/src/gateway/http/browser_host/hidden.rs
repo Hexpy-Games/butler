@@ -28,7 +28,14 @@ pub(super) fn launch_of(headers: &HeaderMap) -> Option<String> {
 /// Whether the attached hidden host still serves a task: a call in flight or
 /// a turn that used it and has not ended.
 fn busy(hub: &Inner) -> bool {
-    !hub.pending.is_empty() || !hub.turns.is_empty()
+    hub.still_backlog > 0
+        || !hub.pending.is_empty()
+        || !hub.turns.is_empty()
+        || hub
+            .tabs
+            .ready_waits()
+            .iter()
+            .any(|tab| tab["inUse"] == true)
 }
 
 /// Admits an attach. The hidden host only as the launch the agent started,
@@ -39,6 +46,9 @@ pub(super) fn admit(
     hub: &mut Inner,
     launch: Option<&str>,
 ) -> Result<(), HttpError> {
+    if hub.retiring {
+        return Err(error(409, "browser_host_busy"));
+    }
     if let Some(launch) = launch {
         let ours = state.app_host.as_ref().is_some_and(|h| h.admit(launch));
         if !ours {
@@ -66,23 +76,35 @@ pub(super) fn admit(
 /// Ends the hidden host: its channel closes (it quits on its own) and its
 /// process tree is ended after a grace period.
 fn retire(state: &HttpState, hub: &mut Inner) {
-    if !hub.hidden {
-        return;
-    }
-    hub.detach();
-    state.browser.2.notify_waiters();
-    if let Some(app_host) = state.app_host.clone() {
-        tokio::spawn(async move { app_host.stop().await });
+    if hub.hidden {
+        detached(state, hub);
     }
 }
 
-/// The attached host's stream ended.
+/// The channel ended. Settle all indexed pending receipts and join the retired
+/// process before admitting another host that could replay its outbox.
 pub(super) fn detached(state: &HttpState, hub: &mut Inner) {
-    if hub.hidden {
-        retire(state, hub);
-    } else {
-        hub.detach();
-    }
+    let host = hub.hidden.then(|| state.app_host.clone()).flatten();
+    hub.detach();
+    hub.retiring = true;
+    state.browser.2.notify_waiters();
+    let application = state.application.clone();
+    let browser = state.browser.clone();
+    tokio::spawn(async move {
+        let _ = application
+            .browser_still(crate::gateway::AppBrowserStillCommand::SettlePending {
+                reason: "browser_host_lost".into(),
+            })
+            .await;
+        browser.4.notify_waiters();
+        if let Some(host) = host {
+            host.stop().await;
+        }
+        if let Ok(mut hub) = browser.0.lock() {
+            hub.retiring = false;
+        }
+        browser.2.notify_waiters();
+    });
 }
 
 /// Hands the channel to a waiting App once the hidden host's task ended.
@@ -135,7 +157,7 @@ pub(super) async fn ensure(state: &Arc<HttpState>, frame: Option<&Value>) {
             .pins
             .get(session)
             .is_some_and(|(pinned, backend)| pinned == turn && *backend == Backend::Headless);
-        if hub.host.is_some() || on_headless {
+        if hub.host.is_some() || hub.retiring || on_headless {
             return;
         }
         let (Some(token), Some(admin)) = (state.security.token(), state.security.admin()) else {
@@ -168,7 +190,7 @@ pub(super) fn watch(state: &Arc<HttpState>, generation: u64) {
             changed.as_mut().enable();
             let idle = match state.browser.0.lock() {
                 Ok(hub) if hub.generation == generation && hub.hidden => {
-                    hub.tabs.is_empty() && hub.pending.is_empty()
+                    hub.tabs.is_empty() && !busy(&hub)
                 }
                 _ => return,
             };
@@ -214,7 +236,7 @@ fn reap_generation(weak: &Weak<HttpState>, generation: u64, idle: bool) -> bool 
     if hub.generation != generation {
         return true;
     }
-    if idle && !(hub.tabs.is_empty() && hub.pending.is_empty()) {
+    if idle && (busy(&hub) || !hub.tabs.is_empty()) {
         return false;
     }
     retire(&state, &mut hub);

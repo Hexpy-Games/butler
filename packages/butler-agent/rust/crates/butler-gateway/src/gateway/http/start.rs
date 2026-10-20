@@ -28,7 +28,7 @@ pub(in crate::gateway) fn serve(
         let app_host = app_host(config.headless_browser.as_ref(), &shutdown);
         let headless = headless(config.headless_browser, &remote, &shutdown);
         let state = Arc::new(HttpState {
-            browser: super::browser_host::Hub::default(),
+            browser: Arc::new(super::browser_host::Hub::default()),
             headless,
             app_host,
             previews: butler_runtime::previews::Previews::default(),

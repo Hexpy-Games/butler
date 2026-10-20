@@ -13,7 +13,7 @@ function bounded(work, until) {
 export function saveBrowserForQuit(browser, until = performance.now() + SAVE_MS) {
   return bounded(() => {
     for (const tab of browser.tabs.values()) tab.flushHistory?.({ quitting: true });
-    return Promise.all([browser.history?.flush(), browser.flush()]);
+    return Promise.all([browser.drainStills(until), browser.history?.flush(), browser.flush()]);
   }, until);
 }
 

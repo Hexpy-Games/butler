@@ -3,7 +3,9 @@
 use crate::cognition::explicit_memory_rules_root as rule_root;
 use std::{fs, path::Path};
 
+mod projection;
 mod rules;
+pub(in crate::cognition) use projection::read_projection_record;
 mod write;
 pub use rules::{
     RememberedRule, RememberedRuleOwner, RememberedRuleReceipt, RememberedRuleTarget,
