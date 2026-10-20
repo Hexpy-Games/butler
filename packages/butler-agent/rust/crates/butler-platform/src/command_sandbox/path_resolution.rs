@@ -3,6 +3,7 @@
 mod comparison;
 mod expansion;
 mod glob;
+mod links;
 mod location;
 mod words;
 use std::{
@@ -101,10 +102,19 @@ pub fn screen_paths_with(
     };
     let mut directories = location::Directories::new(cwd);
     let mut filesystem_stable = true;
-    let mut links_possible = false;
-    for segment in words::segments(command, syntax) {
-        let mut tokens = words::expand(&segment.text, env, syntax);
-        let unknown_location = location::expand_attached(&mut tokens, syntax);
+    let segments: Vec<_> = words::segments(command, syntax)
+        .into_iter()
+        .map(|segment| {
+            let mut tokens = words::expand(&segment.text, env, syntax);
+            let unknown_location = location::expand_attached(&mut tokens, syntax);
+            words::normalize(&mut tokens, syntax);
+            (segment, tokens, unknown_location)
+        })
+        .collect();
+    // Pipelines and background jobs run concurrently: text order gives no
+    // filesystem ordering. Link-producing operations affect the whole script.
+    let links_possible = segments.iter().any(|(_, tokens, _)| links::creates(tokens));
+    for (segment, tokens, unknown_location) in segments {
         result.complete &= tokens.iter().all(|word| word.known);
         let name = command_name(&tokens);
         let opaque =
@@ -112,22 +122,14 @@ pub fn screen_paths_with(
         if opaque {
             result.complete = false;
         }
-        let candidates: Vec<_> = tokens
-            .iter()
-            .map(|word| PathCandidate {
-                path: (word.path
-                    && word.known
-                    && (filesystem_stable
-                        || !Path::new(&word.text)
-                            .components()
-                            .any(|part| part == Component::ParentDir)))
-                .then(|| resolve(&word.text, directories.current.as_deref(), !links_possible))
-                .flatten(),
-                text: word.text.clone(),
-                glob: word.glob,
-                posix_glob: syntax == PathSyntax::Posix,
-            })
-            .collect();
+        let mut candidates = candidates(
+            &tokens,
+            directories.current.as_deref(),
+            filesystem_stable,
+            links_possible,
+            syntax,
+        );
+        links::targets(&tokens, &mut candidates);
         let location = directories.change(
             &name,
             &tokens,
@@ -137,7 +139,6 @@ pub fn screen_paths_with(
             syntax,
         );
         filesystem_stable &= location;
-        links_possible |= !preserves_links(&name);
         result.complete &= directories.current.is_some();
         let index = usize::from(!opaque && segment.carries_directory() && tokens.len() > 1);
         let fallback = tokens
@@ -174,29 +175,29 @@ fn record_candidates(
     );
 }
 
-// This is intentionally small: arbitrary programs (including build scripts
-// and archive extractors) may create links. These operations cannot create a
-// symlink; mkdir -p can follow existing links, which resolution still checks.
-fn preserves_links(name: &str) -> bool {
-    [
-        "cd",
-        "chdir",
-        "pushd",
-        "popd",
-        "push-location",
-        "pop-location",
-        "set-location",
-        "sl",
-        "echo",
-        "printf",
-        "true",
-        "false",
-        "test",
-        "[",
-        "mkdir",
-        "touch",
-    ]
-    .contains(&name)
+fn candidates(
+    tokens: &[words::Word],
+    cwd: Option<&Path>,
+    filesystem_stable: bool,
+    links_possible: bool,
+    syntax: PathSyntax,
+) -> Vec<PathCandidate> {
+    tokens
+        .iter()
+        .map(|word| PathCandidate {
+            path: (word.path
+                && word.known
+                && (filesystem_stable
+                    || !Path::new(&word.text)
+                        .components()
+                        .any(|part| part == Component::ParentDir)))
+            .then(|| resolve(&word.text, cwd, !links_possible))
+            .flatten(),
+            text: word.text.clone(),
+            glob: word.glob,
+            posix_glob: syntax == PathSyntax::Posix,
+        })
+        .collect()
 }
 
 fn command_name(tokens: &[words::Word]) -> String {
@@ -204,9 +205,6 @@ fn command_name(tokens: &[words::Word]) -> String {
         .first()
         .map(|word| {
             word.text
-                .rsplit('/')
-                .next()
-                .unwrap_or_default()
                 .to_ascii_lowercase()
                 .trim_end_matches(".exe")
                 .to_owned()
@@ -215,6 +213,8 @@ fn command_name(tokens: &[words::Word]) -> String {
 }
 
 fn opaque(name: &str, tokens: &[words::Word]) -> bool {
+    // Executable paths still retain the existing interpreter/script opacity.
+    let name = name.rsplit(['/', '\\']).next().unwrap_or_default();
     tokens
         .iter()
         .any(|word| word.path && !word.text.starts_with('-') && word.text.contains('='))

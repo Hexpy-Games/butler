@@ -17,10 +17,18 @@ pub(super) fn expand_attached(tokens: &mut Vec<Word>, syntax: PathSyntax) -> boo
     let suffix = ["chdir", "cd"].into_iter().find_map(|name| {
         lower
             .strip_prefix(name)
-            .filter(|tail| tail.starts_with(['.', '/']))
+            .filter(|tail| tail.starts_with(['.', '/', '\\']))
     });
     let Some(suffix) = suffix else { return false };
-    if !["..", "/"].contains(&suffix) || !single {
+    // PowerShell defines exact functions cd.. and cd\; chdir is only an alias:
+    // https://github.com/PowerShell/PowerShell/blob/master/src/System.Management.Automation/engine/InitialSessionState.cs (BuiltInFunctions).
+    // cmd has a cd/chdir builtin with a path operand (and /D switch):
+    // https://learn.microsoft.com/windows-server/administration/windows-commands/cd
+    // Model only its parent/root shorthand here; all other attached parsing
+    // stays unknown. Preserve backslash provenance: cd/ is not PS's cd\.
+    let builtin = syntax == PathSyntax::Cmd || lower.starts_with("cd");
+    let recognized = suffix == ".." || suffix == "\\";
+    if !builtin || !recognized || !single {
         return true;
     }
     let operand = Word {

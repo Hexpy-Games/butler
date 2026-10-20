@@ -134,7 +134,9 @@ pub(super) fn token(
     env: &HashMap<String, String>,
     syntax: PathSyntax,
 ) -> Option<Word> {
-    parse(segment, env, syntax, false).pop()
+    let mut words = parse(segment, env, syntax, false);
+    normalize(&mut words, syntax);
+    words.pop()
 }
 
 fn parse(
@@ -200,12 +202,17 @@ fn parse(
     if started {
         words.push(word);
     }
+    words
+}
+
+// Normalize only after location shorthand recognition, which depends on the
+// original separator (PowerShell cd\ is a function; cd/ is not).
+pub(super) fn normalize(words: &mut [Word], syntax: PathSyntax) {
     if syntax != PathSyntax::Posix {
-        for word in &mut words {
+        for word in words {
             word.text = word.text.replace('\\', "/");
         }
     }
-    words
 }
 
 fn append(
