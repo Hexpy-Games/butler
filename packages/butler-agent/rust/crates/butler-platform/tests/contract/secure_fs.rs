@@ -7,9 +7,9 @@ use std::io::{self, Write};
 use butler_platform::secure_fs::{
     DIRECTORY_SYNC, ExchangeError, FILE_IDS, FileMode, NO_FOLLOW, OWNER_ONLY, PERMISSION_MODES,
     append_private, create_private_dir_all, exchange_directories, file_mode, identity,
-    is_owner_only, is_private, no_follow, open_read_no_follow, owner_only, protect_folder,
-    replace_private, restrict_directory, restrict_file, restrict_open_file, same_metadata,
-    set_file_mode, symlink, sync_directory,
+    is_owner_only, is_private, no_follow, open_read_no_follow, owner_only, protect_folder, rename,
+    replace_file, replace_private, restrict_directory, restrict_file, restrict_open_file,
+    same_metadata, set_file_mode, symlink, sync_directory,
 };
 
 use super::scratch;
@@ -90,6 +90,22 @@ fn replace_private_swaps_in_a_complete_owner_only_file() {
         .unwrap();
         assert_eq!(fs::read(&durable).unwrap(), bytes);
     }
+    // Both public publication primitives replace the complete destination.
+    let staged = long.join("staged.json");
+    fs::write(&staged, b"rename replacement").unwrap();
+    rename(&staged, &durable).unwrap();
+    assert!(!staged.exists());
+    assert_eq!(fs::read(&durable).unwrap(), b"rename replacement");
+    fs::write(&staged, b"replace_file replacement").unwrap();
+    let mut retries = 0;
+    replace_file(&staged, &durable, &mut || {
+        retries += 1;
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(retries, 0);
+    assert!(!staged.exists());
+    assert_eq!(fs::read(&durable).unwrap(), b"replace_file replacement");
     fs::remove_dir_all(directory).unwrap();
 }
 

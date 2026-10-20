@@ -26,9 +26,6 @@ pub(super) const ATOMIC_EXCHANGE: bool = false;
 
 /// `ERROR_SHARING_VIOLATION` and `ERROR_LOCK_VIOLATION`.
 const SHARING_ERRORS: [i32; 2] = [32, 33];
-/// How often, and how far apart, a refused rename is retried.
-const RENAME_ATTEMPTS: u32 = 10;
-const RENAME_BACKOFF: std::time::Duration = std::time::Duration::from_millis(20);
 const REPLACEMENT_ATTEMPTS: u32 = 20;
 const REPLACEMENT_BACKOFF: std::time::Duration = std::time::Duration::from_millis(50);
 
@@ -220,9 +217,12 @@ pub(super) fn rename(from: &Path, to: &Path) -> io::Result<()> {
         // The safe wrapper calls MoveFileExW with REPLACE_EXISTING | WRITE_THROUGH.
         let result = atomicwrites::replace_atomic(&from, &to);
         match result {
-            Err(error) if attempt < RENAME_ATTEMPTS && is_transient(&error) => {
+            Err(error)
+                if attempt < REPLACEMENT_ATTEMPTS
+                    && replacement_is_transient(&error, &from, &to) =>
+            {
                 attempt += 1;
-                std::thread::sleep(RENAME_BACKOFF);
+                std::thread::sleep(REPLACEMENT_BACKOFF);
             }
             result => return result,
         }
@@ -293,13 +293,6 @@ fn replacement_is_transient(error: &io::Error, from: &Path, to: &Path) -> bool {
         Some(5) => replacement_delete_allowed(from, to),
         _ => false,
     }
-}
-
-fn is_transient(error: &io::Error) -> bool {
-    error.kind() == io::ErrorKind::PermissionDenied
-        || error
-            .raw_os_error()
-            .is_some_and(|code| SHARING_ERRORS.contains(&code))
 }
 
 fn replacement_delete_allowed(from: &Path, to: &Path) -> bool {
