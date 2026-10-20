@@ -56,6 +56,27 @@ fn replace_retry_follows_rename_code_and_delete_probes() -> Result<(), HarnessEr
             "{rename:?}"
         );
     }
+    for (code, pending, retry) in [(Some(5), false, false), (Some(5), true, true)] {
+        assert_eq!(
+            butler_platform::secure_fs::read_retry_allowed(code, || pending),
+            retry
+        );
+    }
+    for (code, retry) in [
+        (Some(32), true),
+        (Some(33), true),
+        (Some(2), false),
+        (Some(3), false),
+        (Some(303), false),
+        (None, false),
+    ] {
+        assert_eq!(
+            butler_platform::secure_fs::read_retry_allowed(code, || {
+                panic!("only ACCESS_DENIED probes")
+            }),
+            retry
+        );
+    }
     Ok(())
 }
 

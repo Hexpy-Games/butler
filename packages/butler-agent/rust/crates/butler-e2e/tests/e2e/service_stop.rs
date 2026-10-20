@@ -59,3 +59,110 @@ async fn svc_09_service_stop_needs_the_token_and_the_announcement() -> Result<()
     assert!(status.success(), "a requested stop must exit 0: {status}");
     s.finish().await
 }
+
+#[tokio::test]
+async fn stop_reads_a_complete_record_during_replacement() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut setup = Setup::new("STOP-RECORD-REPLACE")?;
+    let probe = setup.sandbox.root.join("sharing-probe");
+    std::fs::write(&probe, b"probe")?;
+    let native = butler_platform::secure_fs::fixture_locks::deny_read(&probe)?.is_some();
+    if !native {
+        setup.sandbox.mark_success();
+    }
+    butler_e2e::skip_unless!(native, "Native read sharing required");
+    let mut failures = Vec::new();
+    for attempt in 0..20 {
+        let pending = attempt >= 10;
+        let s = Setup::new(&format!("STOP-RECORD-REPLACE-{attempt}"))?
+            .start()
+            .await?;
+        let path = s
+            .sandbox
+            .data
+            .join("state/butler-agent-native-service.json");
+        let bytes = std::fs::read(&path)?;
+        let record: serde_json::Value = serde_json::from_slice(&bytes)?;
+        assert_eq!(record["state"], "ready");
+        let staged = path.with_extension("replacement");
+        std::fs::write(&staged, &bytes)?;
+        let held = if pending {
+            butler_platform::secure_fs::fixture_locks::pending_delete(&path)?
+        } else {
+            butler_platform::secure_fs::fixture_locks::deny_read(&path)?
+        };
+        assert!(held.is_some());
+        assert_eq!(
+            std::fs::read(&path).unwrap_err().raw_os_error(),
+            Some(if pending { 5 } else { 32 })
+        );
+        // A short native sharing conflict during publication, with no partial
+        // writes. The CLI must reopen the whole replacement after it clears.
+        let writer = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(500));
+            drop(held);
+            butler_platform::secure_fs::rename(&staged, &path)?;
+            std::io::Result::Ok(())
+        });
+        let stop = s.agent.cli_async(&["stop", "--json"]).await?;
+        writer.join().expect("record writer panicked")?;
+        if stop.code == Some(0) {
+            let result: serde_json::Value = serde_json::from_str(&stop.stdout)?;
+            assert_eq!(result["data"]["stopped"], true, "{result}");
+            assert_eq!(result["data"]["pid"], record["pid"], "{result}");
+            let stopped = s.agent.cli_async(&["stop", "--json"]).await?;
+            assert_eq!(
+                stopped.code,
+                Some(0),
+                "{} {}",
+                stopped.stdout,
+                stopped.stderr
+            );
+            let stopped: serde_json::Value = serde_json::from_str(&stopped.stdout)?;
+            assert_eq!(stopped["data"]["alreadyStopped"], true, "{stopped}");
+        } else {
+            failures.push(format!("{attempt}: {} {}", stop.stdout, stop.stderr));
+        }
+        s.finish().await?;
+    }
+    eprintln!(
+        "stop record reads: {} of 20 failed: {failures:?}",
+        failures.len()
+    );
+    assert!(
+        failures.is_empty(),
+        "stop must survive record replacement: {failures:?}"
+    );
+    setup.sandbox.mark_success();
+    Ok(())
+}
+
+#[tokio::test]
+async fn record_read_preserves_real_permission_denial() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut setup = Setup::new("RECORD-READ-DENIED")?;
+    let path = setup.sandbox.root.join("private-record");
+    std::fs::write(&path, b"whole record")?;
+    let result = butler_platform::secure_fs::fixture_locks::with_read_denied(&path, || {
+        assert_eq!(std::fs::read(&path).unwrap_err().raw_os_error(), Some(5));
+        let start = Instant::now();
+        let error = butler_platform::secure_fs::read_replaced_file(&path).unwrap_err();
+        assert_eq!(error.raw_os_error(), Some(5));
+        eprintln!("real ACL denial returned in {:?}", start.elapsed());
+        butler_e2e::assert_wall_clock_budget!(
+            start.elapsed(),
+            Duration::from_millis(500),
+            "ACL denial was retried"
+        );
+    })?;
+    if result.is_none() {
+        setup.sandbox.mark_success();
+    }
+    butler_e2e::skip_unless!(result.is_some(), "Native file DACL required");
+    assert_eq!(
+        butler_platform::secure_fs::read_replaced_file(&path)?,
+        b"whole record"
+    );
+    setup.sandbox.mark_success();
+    Ok(())
+}

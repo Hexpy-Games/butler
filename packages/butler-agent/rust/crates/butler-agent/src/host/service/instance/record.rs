@@ -17,7 +17,7 @@ pub(super) fn read_record_at(
     if fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
         return Err("native_service_instance_ambiguous: invalid instance record".into());
     }
-    let bytes = match fs::read(path) {
+    let bytes = match secure_fs::read_replaced_file(path) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(_) => return Err("native_service_instance_record_unreadable".into()),
