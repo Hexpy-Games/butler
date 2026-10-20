@@ -50,6 +50,7 @@ mod browser_speed;
 mod browser_still_delivery;
 mod browser_usage;
 mod cassette_lint;
+mod catalog_provider_truth;
 mod cli_launcher;
 mod cli_remote;
 mod cli_reply_language;

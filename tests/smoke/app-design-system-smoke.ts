@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
+import { gotoNetworkQuiet } from "../support/network-quiet.ts";
 
 const root = process.cwd();
 const tempDir = mkdtempSync(join(tmpdir(), "butler-design-system-smoke-"));
@@ -14,9 +15,7 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 async function openViewerPage(page: Page, baseUrl: string, pageId: string): Promise<void> {
-  await page.goto(`${baseUrl}?visual=design-system&page=${encodeURIComponent(pageId)}`, {
-    waitUntil: "networkidle",
-  });
+  await gotoNetworkQuiet(page, `${baseUrl}?visual=design-system&page=${encodeURIComponent(pageId)}`);
   await page.locator(`[data-ds-page="${pageId}"]`).waitFor({ state: "attached" });
 }
 
