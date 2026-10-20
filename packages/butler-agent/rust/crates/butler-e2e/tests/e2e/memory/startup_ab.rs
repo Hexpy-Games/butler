@@ -1,5 +1,5 @@
 //! Optional interleaved main/head measurement on the very same owner fixture.
-use butler_e2e::e2e::{HarnessError, scenario::Scenario};
+use butler_e2e::e2e::{HarnessError, executable, scenario::Scenario};
 use butler_platform::process_control::usage;
 use std::{path::PathBuf, time::Instant};
 
@@ -12,11 +12,15 @@ pub(super) async fn start(
         s.gw = s.agent.start_again().await?;
         return Ok(started.elapsed().as_millis());
     };
-    let head = s.agent.launch.binary.clone();
+    let installed = s.agent.launch.binary.clone();
+    let head = s.sandbox.root.join("startup-head-agent");
+    executable::copy(&installed, &head)?;
     let mut elapsed = 0;
     for round in 1..=5 {
         for (name, binary) in [("main", PathBuf::from(&baseline)), ("head", head.clone())] {
-            s.agent.launch.binary = binary;
+            // The host validates its executable against the installation root.
+            // Swap only while stopped, publishing a closed executable handle.
+            executable::copy(&binary, &installed)?;
             let started = Instant::now();
             s.gw = s.agent.start_again().await?;
             elapsed = started.elapsed().as_millis();
