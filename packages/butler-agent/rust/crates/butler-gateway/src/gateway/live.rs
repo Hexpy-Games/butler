@@ -19,8 +19,10 @@ use super::{
     PublishedEvent, protocol::APP_PROTOCOL_VERSION, published_event::event_frame,
 };
 
-const MAX_REPLAY_EVENTS: usize = 200;
 const MAX_BUFFERED_EVENTS: usize = 128;
+// Startup also queues the current draft snapshot and a heartbeat. Larger gaps
+// reconcile on the open stream instead of overflowing before its first poll.
+const MAX_REPLAY_EVENTS: usize = MAX_BUFFERED_EVENTS - 2;
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(15);
 const HEARTBEAT: &str = "event: heartbeat\ndata: null\n\n";
 

@@ -12,6 +12,7 @@ use serde_json::{Value, json};
 const PROMPT: &str = "Show the two methods as structured records.";
 
 mod replay_boundary;
+mod replay_gap;
 
 #[tokio::test]
 async fn invalid_blocks_corrected_and_reopened() -> Result<(), HarnessError> {
