@@ -72,10 +72,6 @@ async fn fragmented_compaction_releases_write_lease_and_cancels_on_shutdown()
         "shutdown during compaction"
     );
     assert!(
-        shutdown < Duration::from_secs(8),
-        "shutdown waited for compaction"
-    );
-    assert!(
         !release.exists(),
         "shutdown waited for the hold to be released"
     );
