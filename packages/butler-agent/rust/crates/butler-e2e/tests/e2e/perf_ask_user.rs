@@ -39,7 +39,7 @@ async fn pending(name: &str) -> Result<(Scenario, String, Value), HarnessError> 
 }
 
 #[tokio::test]
-async fn perf_ask_user_pending_question_session_view_p95_under_150ms() -> Result<(), HarnessError> {
+async fn perf_ask_user_pending_question_session_view_p95() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, turn, question) = pending("ASK-USER-PERF").await?;
     scale::seed_history(&s, &question).await?;
@@ -60,6 +60,7 @@ async fn perf_ask_user_pending_question_session_view_p95_under_150ms() -> Result
     let p50 = samples[9];
     let p95 = samples[18];
     eprintln!("ask_user session-view p50 {p50:?}; p95 {p95:?}");
-    butler_e2e::assert_wall_clock_budget!(p95, Duration::from_millis(150), "session-view p95");
+    // Micro watch: half of the 100 ms UI input-response budget.
+    butler_e2e::assert_wall_clock_budget!(p95, Duration::from_millis(50), "session-view p95");
     s.finish().await
 }

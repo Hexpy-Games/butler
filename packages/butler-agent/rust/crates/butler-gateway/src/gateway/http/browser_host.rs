@@ -78,7 +78,7 @@ fn channel_frames() -> usize {
 #[derive(Default)]
 struct Inner {
     host: Option<mpsc::Sender<Value>>,
-    pending: HashMap<String, oneshot::Sender<Value>>,
+    pending: HashMap<String, PendingReply>,
     tabs: butler_runtime::browser::TabRegistry,
     uses: HashMap<String, usage::Use>,
     turns: HashSet<(String, String)>,
@@ -96,6 +96,38 @@ struct Inner {
     app_waiting: bool,
     /// Counts attaches; a stream's end clears only its own attach.
     generation: u64,
+}
+/// Ownership is checked while accepting a host reply, before detach can erase
+/// the registry. Calls without a tab (including output checks) have no fence.
+struct PendingReply {
+    sender: oneshot::Sender<Value>,
+    owner: Option<(String, String, String)>,
+}
+impl From<oneshot::Sender<Value>> for PendingReply {
+    fn from(sender: oneshot::Sender<Value>) -> Self {
+        Self {
+            sender,
+            owner: None,
+        }
+    }
+}
+impl PendingReply {
+    fn agent(sender: oneshot::Sender<Value>, frame: &Value) -> Self {
+        let owner = frame["tab"].as_str().map(|tab| {
+            (
+                frame["session"].as_str().unwrap_or("").to_owned(),
+                tab.to_owned(),
+                frame["op"].as_str().unwrap_or("").to_owned(),
+            )
+        });
+        Self { sender, owner }
+    }
+    fn deliver(self, hub: &Inner, mut value: Value) {
+        if let Some((session, tab, op)) = self.owner {
+            agent_calls::recheck_owner(hub, &session, Some(&tab), &op, &mut value);
+        }
+        let _ = self.sender.send(value);
+    }
 }
 impl Inner {
     /// Forgets the attached host and everything it served.
@@ -189,17 +221,11 @@ pub(super) async fn route(
                 .trim_start_matches("/internal/browser-host/renders/")
                 .trim_start_matches("/internal/browser-host/images/");
             let body = read_json(request).await?;
-            let sender = state
-                .browser
-                .0
-                .lock()
-                .map_err(|_| HttpError::Internal)?
-                .pending
-                .remove(id);
-            let Some(sender) = sender else {
+            let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
+            let Some(reply) = hub.pending.remove(id) else {
                 return Err(error(409, "browser_call_expired"));
             };
-            let _ = sender.send(body);
+            reply.deliver(&hub, body);
             super::json(StatusCode::OK, json!({"ok":true}))
         }
         _ => Err(error(404, "not_found")),
@@ -315,7 +341,7 @@ async fn call(state: Arc<HttpState>, request: Request<Body>) -> Result<Response,
         };
         host.try_send(json!({"id":id,"lease":{"id":id,"kind":"output_check","content_origin":url::Url::parse(args["url"].as_str().unwrap_or("")).map_err(|_| error(400,"invalid_request"))?.origin().ascii_serialization()},"op":"output.check","args":args,"deadline_ms":7500}))
             .map_err(|_| error(429, "browser_busy"))?;
-        hub.pending.insert(id.clone(), sender);
+        hub.pending.insert(id.clone(), sender.into());
     }
     let _pending = PendingCall {
         state: state.clone(),

@@ -80,11 +80,16 @@ try {
   const stills=[];
   for(const act of acts) stills.push(await expectBrowserStills(app.gateway,act));
   assert.equal(stills.length,acts.length,"every act checked for complete still delivery");
-  const budgets={noop:15,act:50,stop:100},failures:string[]=[],operationP95:Record<string,number>={};
+  const budgets={act:50,stop:100},failures:string[]=[],operationP95:Record<string,number>={};
+  // Micro watch: half of the 20 ms per-tool-call overhead budget.
+  const noopWatchMs=10;
   for(const [name,samples]of Object.entries(latencies)) {
     const sorted=samples.map(row=>row.ms).sort((a,b)=>a-b),p95=sorted[Math.ceil(sorted.length*.95)-1]!;operationP95[name]=p95;
-    if(p95>budgets[name as keyof typeof budgets])failures.push(`${name} p95 ${p95} exceeds ${budgets[name as keyof typeof budgets]}`);
+    if(name!=="noop" && p95>budgets[name as keyof typeof budgets])failures.push(`${name} p95 ${p95} exceeds ${budgets[name as keyof typeof budgets]}`);
   }
-  writeFileSync(join(evidence,'operation-perf.json'),JSON.stringify({operationP95,latencies,stopProofs,stills,budgets,failures,reportOnly},null,2));
-  if(!reportOnly) assert.deepEqual(failures,[],'browser operation budgets');
+  writeFileSync(join(evidence,'operation-perf.json'),JSON.stringify({operationP95,latencies,stopProofs,stills,budgets,noopWatchMs,failures,reportOnly},null,2));
+  if(!reportOnly) {
+    assert.deepEqual(failures,[],'browser operation budgets');
+    assert.ok(operationP95.noop!<=noopWatchMs,`noop p95 ${operationP95.noop} exceeds ${noopWatchMs}ms watch`);
+  }
 }finally{await app.stop()}
