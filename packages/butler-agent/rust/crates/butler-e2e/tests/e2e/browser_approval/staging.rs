@@ -29,6 +29,9 @@ async fn staging_recovers_after_normal_stop_and_kill() -> Result<(), HarnessErro
             ),
         ])?);
         let data = setup.sandbox.data.clone();
+        let preserved = data.join("preserved");
+        std::fs::create_dir(&preserved)?;
+        std::fs::write(preserved.join("keep.txt"), "complete-public")?;
         for n in 0..10 {
             std::fs::File::create(data.join(format!("part-{n}.txt")))?.set_len(BYTES / 10)?;
         }
@@ -66,7 +69,17 @@ async fn staging_recovers_after_normal_stop_and_kill() -> Result<(), HarnessErro
         for n in 0..1024 {
             std::fs::create_dir_all(data.join(READER_STAGING).join(format!("stale-{n}")))?;
         }
+        if butler_platform::secure_fs::NO_FOLLOW {
+            butler_platform::secure_fs::symlink(
+                &preserved,
+                &data.join(READER_STAGING).join("alias"),
+            )?;
+        }
         s.gw = s.agent.start_again().await?;
+        assert_eq!(
+            std::fs::read_to_string(preserved.join("keep.txt"))?,
+            "complete-public"
+        );
         assert_eq!(stage_bytes(&data)?, 0);
         let base = data.join(READER_STAGING);
         assert!(!base.exists() || std::fs::read_dir(&base)?.next().is_none());
@@ -85,6 +98,17 @@ async fn staging_recovers_after_normal_stop_and_kill() -> Result<(), HarnessErro
             "staging restart crash={crash}: 100 MiB delivery interrupted, 1024 stale folders cleared, 100 MiB upload complete"
         );
         drop(host);
+        if butler_platform::secure_fs::NO_FOLLOW {
+            // Test the staging root itself as a link while the Agent is stopped.
+            s.agent.terminate().await?;
+            butler_platform::secure_fs::symlink(&preserved, &base)?;
+            s.gw = s.agent.start_again().await?;
+            assert!(!base.exists());
+            assert_eq!(
+                std::fs::read_to_string(preserved.join("keep.txt"))?,
+                "complete-public"
+            );
+        }
         s.finish().await?;
     }
     Ok(())
