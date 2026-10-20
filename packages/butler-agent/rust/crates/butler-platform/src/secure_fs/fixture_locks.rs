@@ -42,7 +42,7 @@ pub fn mapped_view(path: &Path, control: &Path) -> io::Result<MappedView> {
                 "-NoProfile",
                 "-NonInteractive",
                 "-Command",
-                r#"
+                r"
 $ErrorActionPreference = 'Stop'
 $share = [IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete
 $file = [IO.File]::Open($env:BUTLER_MAPPING_FILE, 'Open', 'Read', $share)
@@ -52,7 +52,7 @@ $map = [IO.MemoryMappedFiles.MemoryMappedFile]::CreateFromFile(
 $view = $map.CreateViewAccessor(0, 0, [IO.MemoryMappedFiles.MemoryMappedFileAccess]::Read)
 [IO.File]::WriteAllText($env:BUTLER_MAPPING_READY, 'ready')
 [Threading.Thread]::Sleep(-1)
-"#,
+",
             ])
             .env("BUTLER_MAPPING_FILE", path)
             .env("BUTLER_MAPPING_READY", &ready)
