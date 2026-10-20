@@ -20,7 +20,10 @@ impl MemorySyncConsumer {
         let semantic = self.probe.recoverable_windows(graph).await?
             || self.probe.pending_job(graph, future).await?.is_some()
             || self.probe.cache_work(graph, future).await?;
-        let enabled = self.embedding.as_ref().is_some_and(|owner| owner.enabled());
+        let enabled = self
+            .embedding
+            .as_ref()
+            .is_some_and(|owner| owner.enabled() && owner.is_warm());
         let vector_admitted = enabled
             && (self.target.is_some()
                 || self.vector_batch.load(Ordering::Acquire)
