@@ -27,8 +27,6 @@ async fn cancelled_deliverables_do_not_exhaust_handoff_quota() -> Result<(), Har
         *script.prompt.lock().unwrap() = prompt.clone();
         *script.steps.lock().unwrap() = [
             deliver("report.md", "Report"),
-            call("tool_search", json!({"query":"browser_act browser_observe","limit":50})),
-            call("tool_describe", json!({"ids":["native:browser_observe","native:browser_act"]})),
             call("tool_call", json!({"id":"native:browser_observe","arguments":{"tab":"pub"}})),
             call("tool_call", json!({"id":"native:browser_act","arguments":{"tab":"pub","observation":"obs-1","steps":[{"action":"click","ref":"e9"}]}})), done()
         ].into();
