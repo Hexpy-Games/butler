@@ -98,6 +98,9 @@ export function removeWindowsOperationalState({
 }
 
 export function executeWindowsSquirrelLaunch(plan, {
+  shellRegistrationDisabled,
+  squirrelInstallPresent,
+  profileOwnsDataRoot,
   manageShortcut,
   setLoginItemSettings = () => {},
   registerProtocol = () => true,
@@ -105,6 +108,16 @@ export function executeWindowsSquirrelLaunch(plan, {
   cleanupOperationalState = () => [],
 } = {}) {
   if (!plan?.handled) return { handled: false, event: null };
+  if (shellRegistrationDisabled !== false || squirrelInstallPresent !== true) {
+    return {
+      handled: true,
+      event: plan.event,
+      shellRegistration: "skipped",
+      shortcutAction: null,
+      operationalStateRemoved: false,
+    };
+  }
+  let operationalStateRemoved = false;
   if (plan.removeOperationalState) {
     setLoginItemSettings({
       openAtLogin: false,
@@ -115,7 +128,11 @@ export function executeWindowsSquirrelLaunch(plan, {
     if (unregisterProtocol(plan.protocol, plan.stubLauncher, []) === false) {
       throw windowsSquirrelError("windows_squirrel_protocol_unregister_failed");
     }
-    cleanupOperationalState();
+    if (profileOwnsDataRoot === true) {
+      // A refused data root yields no cleanup paths: nothing was removed.
+      const removed = cleanupOperationalState();
+      operationalStateRemoved = Array.isArray(removed) && removed.length > 0;
+    }
   } else if (plan.registerProtocol) {
     if (registerProtocol(plan.protocol, plan.stubLauncher, []) === false) {
       throw windowsSquirrelError("windows_squirrel_protocol_register_failed");
@@ -135,11 +152,15 @@ export function executeWindowsSquirrelLaunch(plan, {
       throw windowsSquirrelError("windows_squirrel_shortcut_failed");
     }
   }
+  // "none": the event (obsolete) has no shell registration work to do.
+  const shellWork = plan.removeOperationalState || plan.registerProtocol ||
+    Boolean(plan.shortcutAction);
   return {
     handled: true,
     event: plan.event,
+    shellRegistration: shellWork ? "done" : "none",
     shortcutAction: plan.shortcutAction,
-    operationalStateRemoved: plan.removeOperationalState,
+    operationalStateRemoved,
   };
 }
 

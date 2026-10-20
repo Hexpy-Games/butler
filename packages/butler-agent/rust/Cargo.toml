@@ -99,6 +99,9 @@ rpassword = "7.4"
 # Key fingerprints (HMAC-SHA-256 with a data-folder secret) for duplicate checks.
 hmac = "0.12"
 
+[profile.release]
+strip = "symbols"
+
 # Debug info is limited to line tables because full DWARF made macOS target
 # directories exceed 50 GB: macOS defaults to split-debuginfo = "unpacked",
 # which keeps every object file's debug info in target/debug/deps, and
@@ -109,6 +112,7 @@ hmac = "0.12"
 # Branch previews retain optimizations without release link-time optimization.
 [profile.ci-fast]
 inherits = "release"
+strip = "none"
 lto = false
 codegen-units = 16
 

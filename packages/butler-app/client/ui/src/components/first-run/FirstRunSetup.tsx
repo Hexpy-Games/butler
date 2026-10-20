@@ -42,6 +42,8 @@ export function FirstRunSetup({ mode, onComplete, onCancel }: FirstRunSetupProps
   const intro = fresh && !completedAt ? (scene !== "still" ? "full" : "rerun") : mode === "rerun" ? "rerun" : "none";
   return (
     <SetupWizardShell
+      // Every setup link (provider key pages, help) opens in the user's own browser and sessions, never an in-app tab.
+      data-butler-link-target="external"
       data-first-run-screen={flow.step}
       data-test-class="first-run-setup"
       title={flow.copy.product}

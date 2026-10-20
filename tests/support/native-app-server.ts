@@ -74,6 +74,7 @@ export type NativeAppServerHandle = {
 };
 
 const repositoryRoot = process.env.BUTLER_SMOKE_REPOSITORY_ROOT ?? fileURLToPath(new URL("../../", import.meta.url));
+export const AGENT_EXECUTABLE_NAME = process.platform === "win32" ? "butler-agent.exe" : "butler-agent";
 
 // ---------------------------------------------------------------------------
 // Process tracking: a spawned gateway must never outlive its owner.
@@ -358,9 +359,9 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
   mkdirSync(butlerData, { recursive: true });
   mkdirSync(join(home, ".codex"), { recursive: true });
   mkdirSync(join(installation, "bin"), { recursive: true });
-  // APFS clone (cp -c semantics) keeps the ~500MB binary copy cheap; the
-  // service requires a canonical executable inside its installation root.
-  cpSync(nativeAgentExecutable(), join(installation, "bin/butler-agent"), { mode: 2 /* COPYFILE_FICLONE */ });
+  // APFS clone (cp -c semantics) keeps the ~500MB binary copy cheap; the service requires a
+  // canonical executable inside its installation root (Windows launches only an .exe name).
+  cpSync(nativeAgentExecutable(), join(installation, "bin", AGENT_EXECUTABLE_NAME), { mode: 2 /* COPYFILE_FICLONE */ });
   cpSync(join(repositoryRoot, "packages/butler-agent/resources"), resources, { recursive: true });
   const uiRoot = options.uiRoot ?? join(repositoryRoot, "packages/butler-app/client/ui/dist");
   if (!existsSync(join(uiRoot, "index.html"))) throw new Error(`UI build missing: ${uiRoot}`);
@@ -387,8 +388,7 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
   const logPath = join(scratch, "gateway.log");
   if (options.dailyJobs !== "due") markDailyJobsDone(butlerData, timeZone);
   const gateway = spawnLoggedGateway(
-    join(installation, "bin/butler-agent"),
-    ["--installation-root", installation, "--resource-root", resources],
+    join(installation, "bin", AGENT_EXECUTABLE_NAME), ["--installation-root", installation, "--resource-root", resources],
     {
       cwd: butlerData,
       cleanupPaths: [scratch],

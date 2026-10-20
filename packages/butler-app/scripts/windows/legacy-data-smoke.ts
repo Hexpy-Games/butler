@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSy
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
-import { freePort } from "../../../../tests/support/native-app-server.ts";
+import { freeGatewayPort, freePort } from "../../../../tests/support/native-app-server.ts";
 import { bridge, click, ownedProcesses, ownedSurvivors, ownedDiagnostics, powershell, readJson, waitFor, waitForOwnedExit, type OwnedProcesses } from "./installer-smoke-support.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
 
@@ -21,7 +21,8 @@ const home = join(root, "home");
 const data = join(home, ".butler");
 const owned: OwnedProcesses = new Map();
 const debugPort = await freePort();
-const agentPort = await freePort();
+// The Agent also binds its content origin on agentPort + 1.
+const agentPort = await freeGatewayPort();
 const env = { ...windowsPowerShellEnvironment(), HOME: home, USERPROFILE: home, BUTLER_DATA: data,
   LOCALAPPDATA: join(root, "local"), APPDATA: join(root, "roaming"), BUTLER_SECRET_STORE: "file",
   BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1", BUTLER_E2E_TIER: "stub", BUTLER_PROVIDER_QUOTA_POLLING: "0",

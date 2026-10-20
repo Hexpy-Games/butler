@@ -198,6 +198,12 @@ def command(*args):
 
 
 def changed(base, head='HEAD'):
+    # Diff from the merge base so commits that reached the base branch after
+    # this branch forked are not counted as this change's paths.
+    try:
+        base = command('git', 'merge-base', base, head)
+    except subprocess.CalledProcessError:
+        pass
     # --no-renames includes both removed and added paths; NUL handles any name.
     raw = subprocess.check_output(['git', 'diff', '--no-renames', '--name-only', '-z', base, head])
     return raw.decode().split('\0')[:-1]
