@@ -48,6 +48,10 @@ impl EffectAdapter for BrowserEffectAdapter {
                     signal,
                 )
                 .await;
+            self.client
+                .durable(&result)
+                .await
+                .map_err(|_| EffectFailure::adapter("Image file publication did not complete."))?;
             JsonDocument::from_value(&result)
                 .map(AdapterOutcome::Applied)
                 .map_err(|e| EffectFailure::adapter(e.to_string()))

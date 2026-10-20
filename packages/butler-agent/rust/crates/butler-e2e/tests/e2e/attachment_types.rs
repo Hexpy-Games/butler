@@ -65,7 +65,7 @@ pub(super) fn file_path(s: &Scenario, file: &Value) -> std::path::PathBuf {
         .data
         .join("app-server")
         .join("message-files")
-        .join(file["file_id"].as_str().unwrap())
+        .join(format!("{}.upload", file["file_id"].as_str().unwrap()))
 }
 fn small_zip() -> Vec<u8> {
     let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
@@ -222,7 +222,11 @@ async fn any_file_attaches_by_content() -> Result<(), HarnessError> {
     ] {
         assert!(text.contains(marker), "missing {marker}: {text}");
     }
-    assert!(!file_path(&s, &files[8]).with_extension("txt").exists());
+    assert!(
+        !file_path(&s, &files[8])
+            .with_extension("upload.txt")
+            .exists()
+    );
     let root = s.sandbox.data.join("app-server/message-files");
     let count = std::fs::read_dir(&root)?.count();
     for (name, bytes, status, code) in [

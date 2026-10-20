@@ -4,6 +4,7 @@ impl AppApplication {
     pub(super) fn clone_handle(&self) -> Self {
         Self {
             storage: self.storage.clone(),
+            uploads: self.uploads.clone(),
             dependencies: self.dependencies.clone(),
             subscribers: self.subscribers.clone(),
             projection: self.projection.clone(),

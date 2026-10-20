@@ -91,9 +91,9 @@ pub use application::{
     AppWorkStreamTurnOutcome, AppWorkerActivityQuery, AppWorkerActivitySourcePage,
     AppWorkspaceMode, ArtifactFileCandidate, ArtifactMaterializationRequest, ClaimedNativeSnapshot,
     EnqueueReceipt, MaterializedResponderFile, MemoryEventSink, OperationOutputChunk,
-    OperationOutputView, ProjectSnapshot, ResolvedNativeAssets, TranscriptExport,
-    VisualAdmissionRequest, project_task_graphs, task_graph_label, task_graph_model_label,
-    task_graph_response,
+    OperationOutputView, PendingMessageFile, ProjectSnapshot, ResolvedNativeAssets,
+    TranscriptExport, VisualAdmissionRequest, project_task_graphs, task_graph_label,
+    task_graph_model_label, task_graph_response,
 };
 pub use application::{
     AppCardInput, AppProfileInput, AppSignInCommand, AppSignInUpsert, AppVaultCommand,
@@ -312,6 +312,9 @@ pub trait GatewayApplication:
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn upload_message_file(&self, input: AppFileUpload) -> ApplicationFuture<MessageFileRef>;
+    fn stage_message_file(&self, input: AppFileUpload) -> ApplicationFuture<MessageFileRef> {
+        self.upload_message_file(input)
+    }
     fn message_file_metadata(&self, id: String) -> ApplicationFuture<MessageFileRef>;
     fn download_message_file(&self, id: String) -> ApplicationFuture<AppFileDownload>;
     fn runtime_readiness(&self) -> Result<RuntimeReadinessView, GatewayApplicationError>;

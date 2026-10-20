@@ -107,6 +107,24 @@ pub trait AppMessageFileStorage: Send + Sync + 'static {
         name: String,
     ) -> ApplicationFuture<MaterializedResponderFile>;
     fn write_upload(&self, input: AppFileWrite) -> ApplicationFuture<MaterializedResponderFile>;
+    /// The identity is available immediately; `ready` must finish before a row
+    /// or transcript reference can be committed.
+    fn stage_upload(&self, input: AppFileWrite) -> ApplicationFuture<PendingMessageFile> {
+        let written = self.write_upload(input);
+        Box::pin(async move {
+            Ok(PendingMessageFile {
+                file: written.await?,
+                ready: Box::pin(async { Ok(()) }),
+            })
+        })
+    }
+
+    fn cleanup_uploads(
+        &self,
+        _retained: std::collections::HashSet<String>,
+    ) -> ApplicationFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
     fn prepare_uploaded(&self, file: AppMessageFileSnapshot) -> ApplicationFuture<()>;
     fn read_original(&self, file: AppMessageFileSnapshot) -> ApplicationFuture<Bytes>;
 }
@@ -271,6 +289,11 @@ pub struct AppFileUpload {
     pub name: String,
     pub mime_type: Option<String>,
     pub bytes: Bytes,
+}
+
+pub struct PendingMessageFile {
+    pub file: MaterializedResponderFile,
+    pub ready: ApplicationFuture<()>,
 }
 
 #[derive(Clone, Debug)]

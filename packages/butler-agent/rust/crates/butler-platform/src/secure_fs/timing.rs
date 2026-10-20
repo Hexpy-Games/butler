@@ -6,16 +6,22 @@ pub(super) struct Timing(Option<Box<Active>>);
 struct Active {
     started: Instant,
     id: u64,
+    phase: &'static str,
 }
 
 impl Timing {
     pub(super) fn new() -> Self {
+        Self::named("private_replace")
+    }
+
+    pub(super) fn named(phase: &'static str) -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let enabled = std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
             == Some(std::ffi::OsStr::new("1"));
         let timing = Self(enabled.then(|| {
             Box::new(Active {
                 started: Instant::now(),
+                phase,
                 id: NEXT.fetch_add(1, Ordering::Relaxed),
             })
         }));
@@ -27,7 +33,8 @@ impl Timing {
         if let Some(active) = &self.0 {
             let output = Instant::now();
             eprintln!(
-                "command_file_timing phase=private_replace id={} event={event} utc_us={} elapsed_us={}",
+                "command_file_timing phase={} id={} event={event} utc_us={} elapsed_us={}",
+                active.phase,
                 active.id,
                 SystemTime::now()
                     .duration_since(UNIX_EPOCH)

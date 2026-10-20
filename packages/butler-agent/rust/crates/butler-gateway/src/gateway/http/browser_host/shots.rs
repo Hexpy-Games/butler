@@ -36,7 +36,7 @@ async fn store(state: &HttpState, session: &str, result: &mut Value) -> Result<(
     // Without a file the pixels simply stay inline, as before.
     let Ok(file) = state
         .application
-        .upload_message_file(crate::gateway::AppFileUpload {
+        .stage_message_file(crate::gateway::AppFileUpload {
             browser_tab: None,
             owner_session_id: Some(session.into()),
             name: "browser-observation.jpg".into(),

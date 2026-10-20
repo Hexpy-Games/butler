@@ -101,7 +101,11 @@ async fn browser_long_run_keeps_newest_pixels_and_bounded_requests() -> Result<(
         if let Some(parts) = newest["output"].as_array() {
             for image in parts.iter().filter(|part| part["type"] == "input_image") {
                 assert_eq!(
-                    image["image_url"], pixels,
+                    image["image_url"],
+                    format!(
+                        "data:image/jpeg;base64,{}",
+                        STANDARD.encode(frame_bytes(index - 2))
+                    ),
                     "complete pixels at request {index}"
                 );
             }
@@ -221,9 +225,6 @@ pub(super) async fn serve_host(
 ) -> Result<usize, HarnessError> {
     let mut buffer = String::new();
     let (mut observations, mut text_only) = (0, 0);
-    let pixels = STANDARD.encode(include_bytes!(
-        "../../fixtures/browser-route/observation.jpg"
-    ));
     loop {
         let frame = super::browser_delegation::next_frame(&mut stream, &mut buffer).await?;
         let op = frame["op"].as_str().unwrap().to_owned();
@@ -250,7 +251,7 @@ pub(super) async fn serve_host(
                 if frame["args"]["include_image"] == false {
                     text_only += 1;
                 } else {
-                    observed["image"] = json!({"mime_type":"image/jpeg","data":pixels});
+                    observed["image"] = json!({"mime_type":"image/jpeg","data":STANDARD.encode(frame_bytes(observations))});
                 }
                 observed
             }
@@ -261,7 +262,7 @@ pub(super) async fn serve_host(
                     "capture uses the newest observation"
                 );
                 json!({"status":"ok","tab":"t1","url":"https://example.com/","source_observation":frame["args"]["observation"],
-                    "image":{"mime_type":"image/jpeg","data":pixels}})
+                    "image":{"mime_type":"image/jpeg","data":STANDARD.encode(frame_bytes(observations + 1))}})
             }
             _ => panic!("unexpected browser op {op}"),
         };
@@ -359,7 +360,7 @@ async fn assert_uploaded_pixels(
         files.len(),
         "uploads retain distinct identities"
     );
-    for file in files {
+    for (index, file) in files.into_iter().enumerate() {
         let response =
             s.gw.http()
                 .get(format!("{}/message-files/{file}", s.gw.base))
@@ -369,8 +370,20 @@ async fn assert_uploaded_pixels(
         assert_eq!(response.status(), 200);
         assert_eq!(
             response.bytes().await?.as_ref(),
-            include_bytes!("../../fixtures/browser-route/observation.jpg")
+            frame_bytes(if index < OBSERVATIONS {
+                index + 1
+            } else {
+                index + 2
+            })
         );
     }
     Ok(())
+}
+
+fn frame_bytes(index: usize) -> Vec<u8> {
+    let mut bytes = include_bytes!("../../fixtures/browser-route/observation.jpg").to_vec();
+    // JPEG decoders ignore bytes after EOI. Retain valid, complete pixels while
+    // requiring a distinct durable payload for every observation and capture.
+    bytes.extend_from_slice(&u16::try_from(index).unwrap().to_be_bytes());
+    bytes
 }

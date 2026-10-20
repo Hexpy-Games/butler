@@ -105,3 +105,36 @@ impl Client {
         butler_runtime::browser::batch_receipts(count, result)
     }
 }
+
+impl Client {
+    pub(super) async fn durable(
+        &self,
+        result: &Value,
+    ) -> Result<(), butler_turn::btcc::ToolExecutionError> {
+        let Some(id) = result
+            .pointer("/image/file/file_id")
+            .and_then(Value::as_str)
+        else {
+            return Ok(());
+        };
+        if id.len() != 41
+            || !id.starts_with("file-")
+            || !id[5..]
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() || byte == b'-')
+        {
+            return Err(super::durability::failure());
+        }
+        let response = self
+            .client
+            .head(format!("{}/message-files/{id}", self.base))
+            .bearer_auth(&self.bearer)
+            .send()
+            .await
+            .map_err(|_| super::durability::failure())?;
+        if !response.status().is_success() {
+            return Err(super::durability::failure());
+        }
+        Ok(())
+    }
+}

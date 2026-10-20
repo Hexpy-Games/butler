@@ -6,6 +6,17 @@ use serde_json::json;
 use super::*;
 
 impl AppApplication {
+    pub(super) async fn recover_for_open(&self) -> Result<(), GatewayApplicationError> {
+        self.cleanup_uploads().await?;
+        self.recover_output_transfers().await?;
+        self.connect_update_progress().await;
+        if let Err(error) = self.recover_session_relocation_owned().await {
+            let _ = self.close().await;
+            return Err(error);
+        }
+        Ok(())
+    }
+
     /// Keep the linked Turn/message identity, but release only this admission's
     /// exact claim. A queued link is excluded from active-turn gating on restart.
     pub(super) async fn park_dispatch(

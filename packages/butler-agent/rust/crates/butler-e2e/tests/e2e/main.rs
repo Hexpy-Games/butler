@@ -185,6 +185,7 @@ mod update_channels;
 mod update_discovery;
 mod update_progress;
 mod updates;
+mod upload_durability;
 mod usage;
 mod usage_scale;
 mod usage_timeline;
@@ -260,6 +261,4 @@ mod trace_spans;
 
 mod content_port;
 mod turn_fenced_cancel;
-mod upload_cache;
-mod upload_content;
 mod usage_delegated;

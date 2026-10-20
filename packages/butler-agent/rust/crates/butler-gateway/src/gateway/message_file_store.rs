@@ -8,7 +8,7 @@ mod snapshot;
 #[cfg(test)]
 mod tests;
 mod upload;
-mod upload_cache;
+mod upload_lane;
 
 use parking_lot::Mutex;
 use std::{
@@ -33,7 +33,7 @@ pub struct AppMessageFiles {
     permits: Arc<Semaphore>,
     jobs: TaskTracker,
     closing: Arc<Mutex<bool>>,
-    uploads: Arc<Mutex<upload_cache::Cache>>,
+    uploads: upload_lane::Lane,
 }
 
 impl AppMessageFiles {
@@ -44,7 +44,7 @@ impl AppMessageFiles {
             permits: Arc::new(Semaphore::new(2)),
             jobs: TaskTracker::new(),
             closing: Arc::new(Mutex::new(false)),
-            uploads: Arc::default(),
+            uploads: upload_lane::Lane::default(),
         }
     }
 
@@ -53,6 +53,7 @@ impl AppMessageFiles {
             let mut closing = self.closing.lock();
             *closing = true;
             self.permits.close();
+            self.uploads.close();
             self.jobs.close();
         }
         self.jobs.wait().await;
@@ -130,12 +131,27 @@ impl AppMessageFileStorage for AppMessageFiles {
         bytes: Bytes,
         name: String,
     ) -> ApplicationFuture<MaterializedResponderFile> {
-        let uploads = self.uploads.clone();
-        self.run_file_job(move |root, _| upload::replace_still(root, file, &bytes, name, &uploads))
+        self.run_file_job(move |root, _| upload::replace_still(root, file, &bytes, name))
     }
     fn write_upload(&self, input: AppFileWrite) -> ApplicationFuture<MaterializedResponderFile> {
-        let uploads = self.uploads.clone();
-        self.run_file_job(move |root, clock| upload::write(root, clock, input, &uploads))
+        let staged = self.stage_upload(input);
+        Box::pin(async move {
+            let staged = staged.await?;
+            staged.ready.await?;
+            Ok(staged.file)
+        })
+    }
+
+    fn stage_upload(&self, input: AppFileWrite) -> ApplicationFuture<super::PendingMessageFile> {
+        let admission = self.run_file_job(move |_, clock| upload::admit(clock, input));
+        self.uploads.enqueue(self, admission)
+    }
+
+    fn cleanup_uploads(
+        &self,
+        retained: std::collections::HashSet<String>,
+    ) -> ApplicationFuture<()> {
+        self.run_file_job(move |root, _| upload_lane::remove_orphans(root, &retained))
     }
 
     fn prepare_uploaded(&self, file: AppMessageFileSnapshot) -> ApplicationFuture<()> {

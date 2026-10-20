@@ -39,6 +39,7 @@ mod mcp_servers;
 mod memory_management;
 mod message_files;
 mod message_projection;
+mod message_uploads;
 mod message_visibility;
 mod model_catalog;
 mod monitoring;
@@ -196,6 +197,7 @@ pub fn app_session_hint(chat_id: &str) -> String {
 
 pub struct AppApplication {
     storage: AppStorage,
+    uploads: Arc<message_uploads::Uploads>,
     dependencies: Arc<AppApplicationDependencies>,
     subscribers: EventSubscribers,
     projection: projection::ProjectionOwner,
@@ -290,6 +292,7 @@ impl AppApplication {
             };
         let application = Self {
             storage,
+            uploads: Arc::default(),
             dependencies,
             subscribers,
             projection,
@@ -323,16 +326,6 @@ impl AppApplication {
         application.initialize_thinking_preference().await?;
         application.recover_for_open().await?;
         Ok(application)
-    }
-
-    async fn recover_for_open(&self) -> Result<(), GatewayApplicationError> {
-        self.recover_output_transfers().await?;
-        self.connect_update_progress().await;
-        if let Err(error) = self.recover_session_relocation_owned().await {
-            let _ = self.close().await;
-            return Err(error);
-        }
-        Ok(())
     }
 
     /// The host initializes native admission before activating recovery, then
@@ -414,6 +407,7 @@ impl AppApplication {
             Some(retention) => measure_shutdown("app_retention_join", retention.close()).await,
             None => Ok(()),
         };
+        self.uploads.close().await;
         let storage = measure_shutdown("app_storage_join", self.storage.close())
             .await
             .map_err(app_error);

@@ -62,6 +62,21 @@ pub(super) async fn route(
         .filter(|value| !value.is_empty() && !value.contains('/'))
         .ok_or_else(not_found)?;
     let id = decode_file_id(encoded)?;
+    if request.method() == Method::HEAD {
+        let file = state.application.message_file_metadata(id).await?;
+        let mut response = Response::new(Body::empty());
+        response.headers_mut().insert(
+            header::CONTENT_LENGTH,
+            file.size_bytes
+                .to_string()
+                .parse()
+                .map_err(|_| HttpError::Internal)?,
+        );
+        response
+            .headers_mut()
+            .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+        return Ok(response);
+    }
     let download = state.application.download_message_file(id).await?;
     let size = download.bytes.len();
     let rendering = FileRendering::of(&download.file.mime_type);

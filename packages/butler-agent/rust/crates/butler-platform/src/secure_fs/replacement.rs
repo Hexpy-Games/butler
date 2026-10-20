@@ -84,22 +84,3 @@ fn replace<E>(
     }
     Ok(())
 }
-
-/// Publishes another private name for an already durable, private regular file.
-/// The caller retains the source; the new directory entry is durable before
-/// success. Hard links preserve the source's permissions and payload bytes.
-pub fn link_private(source: &Path, target: &Path) -> io::Result<()> {
-    if !fs::symlink_metadata(source)?.is_file() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "not a regular file",
-        ));
-    }
-    fs::hard_link(source, target)?;
-    let parent = target.parent().unwrap_or(Path::new("."));
-    if let Err(error) = sync_directory(parent).unwrap_or(Ok(())) {
-        let _ = fs::remove_file(target);
-        return Err(error);
-    }
-    Ok(())
-}

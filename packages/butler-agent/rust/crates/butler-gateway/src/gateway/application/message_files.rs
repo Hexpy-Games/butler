@@ -72,6 +72,7 @@ impl AppApplication {
         &self,
         id: String,
     ) -> Result<AppMessageFileSnapshot, GatewayApplicationError> {
+        self.uploads.wait(&id).await?;
         self.storage
             .execute(move |db| downloadable(db, &id))
             .await
@@ -85,7 +86,7 @@ impl AppApplication {
     }
 }
 
-fn ensure_chat(db: &Connection, id: &str) -> Result<(), AppStorageError> {
+pub(super) fn ensure_chat(db: &Connection, id: &str) -> Result<(), AppStorageError> {
     let exists = db
         .query_row("SELECT id FROM chats WHERE id=?1", [id], |_| Ok(()))
         .optional()
@@ -130,7 +131,9 @@ pub(super) fn insert_uploaded(
 
 fn downloadable(db: &Connection, id: &str) -> Result<AppMessageFileSnapshot, AppStorageError> {
     let row = super::admission::file(db, id)?.ok_or_else(not_found)?;
-    if row.storage_name != row.id || !valid_file_id(&row.storage_name) {
+    if (row.storage_name != row.id && row.storage_name != format!("{}.upload", row.id))
+        || !valid_file_id(&row.id)
+    {
         return Err(not_found());
     }
     Ok(row)

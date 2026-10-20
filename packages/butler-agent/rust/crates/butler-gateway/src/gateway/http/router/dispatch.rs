@@ -82,7 +82,7 @@ async fn commands(
         Handler::Shell if request.method() == Method::GET => shell::route(state, uri).await,
         Handler::Automations => automations::route(state, request, uri).await,
         Handler::Updates => updates::route(state, request).await,
-        Handler::MessageFiles if request.method() == Method::GET => {
+        Handler::MessageFiles if matches!(*request.method(), Method::GET | Method::HEAD) => {
             message_files::route(state, request).await
         }
         Handler::MessageUpload if request.method() == Method::POST => {
