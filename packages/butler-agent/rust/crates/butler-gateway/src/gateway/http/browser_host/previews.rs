@@ -60,7 +60,7 @@ async fn close_on_host(state: &Arc<HttpState>, session: &str, id: &str) {
         {
             return;
         }
-        hub.pending.insert(call.clone(), sender);
+        hub.pending.insert(call.clone(), sender.into());
     }
     let _pending = super::PendingCall {
         state: state.clone(),

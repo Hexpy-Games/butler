@@ -68,7 +68,7 @@ async fn on_host(
         if !sent {
             return Err("browser_unavailable");
         }
-        hub.pending.insert(id.clone(), sender);
+        hub.pending.insert(id.clone(), sender.into());
     }
     let _pending = PendingCall {
         state: state.clone(),
