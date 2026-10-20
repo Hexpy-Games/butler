@@ -6,6 +6,7 @@ mod authority;
 mod authority_permissions;
 mod body;
 mod browser_host;
+mod browser_stills;
 mod content;
 mod library;
 mod start;
@@ -90,7 +91,7 @@ pub(super) use body::read_body_with_limit;
 use body::{MAX_REQUEST_BODY_SIZE, declared_body_too_large, payload_too_large_response};
 
 struct HttpState {
-    browser: browser_host::Hub,
+    browser: Arc<browser_host::Hub>,
     headless: Option<Arc<butler_runtime::browser::Headless>>,
     /// The installed App's Electron as a windowless browser host.
     app_host: Option<Arc<butler_runtime::browser::AppHost>>,

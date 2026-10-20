@@ -39,6 +39,7 @@ interface BrowserBridge {
   onSelectionAction: (handler: (event: { op: string; elements: PickedElement[] }) => void) => () => void;
   onDownload?: (handler: (event: { type: string; session: string; reason?: string }) => void) => () => void;
   onHistory?: (handler: () => void) => () => void;
+  onStill?: (handler: (receipt: { id: string; session: string }) => void) => () => void;
   onAddress: (handler: () => void) => () => void;
 }
 declare global { interface Window { butlerBrowser?: BrowserBridge } }
