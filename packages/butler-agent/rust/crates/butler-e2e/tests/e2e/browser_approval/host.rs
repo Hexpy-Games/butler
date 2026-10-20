@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 pub(super) const PUBLIC: &str = "https://shop.example.test/";
 pub(super) const ACCOUNT: &str = "https://account.example.test/";
 
-pub(super) struct Host {
+pub(crate) struct Host {
     frames: Arc<Mutex<Vec<Value>>>,
     task: tokio::task::JoinHandle<()>,
 }
@@ -23,7 +23,7 @@ impl Drop for Host {
 
 impl Host {
     /// Attaches the host and publishes the public and signed-in tabs.
-    pub(super) async fn attach(s: &Scenario) -> Result<Self, HarnessError> {
+    pub(crate) async fn attach(s: &Scenario) -> Result<Self, HarnessError> {
         let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
         let mut stream = reqwest::Client::new()
             .get(format!("{}/internal/browser-host", s.gw.base))

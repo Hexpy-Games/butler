@@ -1,7 +1,7 @@
 //! Cancelled approval pauses release durable handoffs before the next turn.
+use super::super::browser_approval::host::Host;
 use super::handoff::{assert_empty, wait_for};
 use super::*;
-use butler_e2e::e2e::scenario::Access;
 use butler_platform::data_paths::MESSAGE_HANDOFFS;
 use std::time::{Duration, Instant};
 
@@ -10,20 +10,21 @@ async fn cancelled_deliverables_do_not_exhaust_handoff_quota() -> Result<(), Har
     butler_e2e::gate!();
     let (url, script, server) = stub::start().await?;
     let setup = Setup::new("DELIVERABLE-CANCELLED-HANDOFF")?
-        .access(Access::AskExceptReads)
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", &url);
     std::fs::write(setup.sandbox.data.join("report.md"), "Complete attachment")?;
     let s = setup.start().await?;
+    let host = Host::attach(&s).await?;
     let started = Instant::now();
     for index in 0..1100 {
         let prompt = format!("Deliver then request a change {index}");
         *script.prompt.lock().unwrap() = prompt.clone();
         *script.steps.lock().unwrap() = [
-            call("tool_search", json!({"query":"deliver_files run_command","limit":50})),
-            call("tool_describe", json!({"ids":["native:deliver_files","native:run_command"]})),
-            call("tool_call", json!({"id":"native:deliver_files","arguments":{"files":[{"path":"report.md","title":"Report"}]}})),
-            call("tool_call", json!({"id":"native:run_command","arguments":{"command":"printf changed > changed.txt","state_effect":"mutation","summary":"Write a file"}})), done()
+            deliver("report.md", "Report"),
+            call("tool_search", json!({"query":"browser_act browser_observe","limit":50})),
+            call("tool_describe", json!({"ids":["native:browser_observe","native:browser_act"]})),
+            call("tool_call", json!({"id":"native:browser_observe","arguments":{"tab":"pub"}})),
+            call("tool_call", json!({"id":"native:browser_act","arguments":{"tab":"pub","observation":"obs-1","steps":[{"action":"click","ref":"e9"}]}})), done()
         ].into();
         let accepted = s.gw.say("general", &prompt).await?;
         let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
@@ -34,13 +35,16 @@ async fn cancelled_deliverables_do_not_exhaust_handoff_quota() -> Result<(), Har
             Duration::from_secs(30),
         )
         .await?;
+        let cards = s.gw.approval_requests("general").await?;
+        assert_eq!(cards.len(), 1);
+        assert_eq!(cards[0]["approval"]["risk"], "high");
         let root = s.sandbox.data.join(MESSAGE_HANDOFFS);
         wait_for(|| std::fs::read_dir(&root).is_ok_and(|mut entries| entries.next().is_some()))
             .await;
         let stop =
             s.gw.post(&format!("/turns/{turn}/cancel"), json!({}))
                 .await?;
-        assert_eq!(stop.status, 200, "{stop:?}");
+        assert_eq!(stop.status, 202, "{stop:?}");
         let terminal =
             s.gw.wait_terminal("general", &turn, Duration::from_secs(30))
                 .await?;
@@ -49,7 +53,7 @@ async fn cancelled_deliverables_do_not_exhaust_handoff_quota() -> Result<(), Har
             .await;
         assert_empty(&root)?;
         script.requests.lock().unwrap().clear();
-        if (index + 1) % 100 == 0 {
+        if index == 0 || (index + 1) % 100 == 0 {
             eprintln!(
                 "cancelled handoffs: {} in {:?}",
                 index + 1,
@@ -58,11 +62,7 @@ async fn cancelled_deliverables_do_not_exhaust_handoff_quota() -> Result<(), Har
         }
     }
     *script.prompt.lock().unwrap() = "Deliver successfully".into();
-    *script.steps.lock().unwrap() = [
-        call("tool_search", json!({"query":"deliver_files","limit":1})),
-        call("tool_describe", json!({"ids":["native:deliver_files"]})),
-        call("tool_call", json!({"id":"native:deliver_files","arguments":{"files":[{"path":"report.md","title":"Report"}]}})), done()
-    ].into();
+    *script.steps.lock().unwrap() = [deliver("report.md", "Report"), done()].into();
     s.turn("general", "Deliver successfully").await?;
     let message = last(&s).await?;
     let attachments = message["attachments"].as_array().unwrap();
@@ -77,6 +77,7 @@ async fn cancelled_deliverables_do_not_exhaust_handoff_quota() -> Result<(), Har
         "1100 cancelled handoffs reclaimed, final attachment complete in {:?}",
         started.elapsed()
     );
+    drop(host);
     s.finish().await?;
     server.abort();
     Ok(())
