@@ -186,7 +186,15 @@ export function createBundledAgentSupervisor({
   let lastExited = null;
   let pollTimer = null;
 
+  function assertWritable() {
+    if (!readOnly) return;
+    const error = new Error("legacy_data_blocked");
+    error.code = "legacy_data_blocked";
+    throw error;
+  }
+
   async function ensureReady() {
+    assertWritable();
     for (;;) {
       const generation = restartGeneration;
       try {
@@ -391,7 +399,9 @@ export function createBundledAgentSupervisor({
     rememberChildInstance();
   }
 
-  async function start(gateway = resolveGateway()) {
+  async function start(gateway) {
+    assertWritable();
+    if (gateway === undefined) gateway = resolveGateway();
     if (child) {
       recordError("already_starting");
       throw new Error("Butler app server is already starting but is not healthy yet.");

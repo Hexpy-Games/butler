@@ -61,13 +61,19 @@ try {
     })()`);
     assert.deepEqual(layout, { labelAbove: true, overflow: false });
   }
-  phase = "blocked Agent health";
-  const blockedHealth = await page.expression<string | null>(
-    "window.butlerApp.health().then(() => null, error => error.message)",
-  );
-  assert.match(blockedHealth ?? "", /legacy_data_blocked/u);
-  assert.deepEqual(snapshot(data), original, "Blocked health request wrote into legacy data");
-  assert.ok(!existsSync(join(data, "app/runtime/foreground/instance.json")), "Agent started against legacy data");
+  for (const [action, request] of [
+    ["health", "window.butlerApp.health()"],
+    ["startAgent", "window.butlerApp.startAgent()"],
+    ["repair", 'window.butlerApp.startSetup({mode:"repair"})'],
+  ]) {
+    phase = `blocked Agent ${action}`;
+    const error = await page.expression<string | null>(
+      `${request}.then(() => null, error => error.message)`,
+    );
+    assert.match(error ?? "", /legacy_data_blocked/u, `Blocked ${action} must reject`);
+    assert.deepEqual(snapshot(data), original, `Blocked ${action} request wrote into legacy data`);
+    assert.ok(!existsSync(join(data, "app/runtime/foreground/instance.json")), "Agent started against legacy data");
+  }
   phase = "folder and restart";
   assert.deepEqual(await bridge(page, "recoverLegacyData", "open-folder"), { ok: true });
   renameSync(data, join(home, ".butler-0.0.20"));

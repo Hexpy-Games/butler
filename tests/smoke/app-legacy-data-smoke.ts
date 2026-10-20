@@ -60,14 +60,20 @@ try {
   await page.waitForFunction(() => Boolean(document.querySelector('[data-test-class~="legacy-data-recovery"]')));
   assert.equal(await page.evaluate(() => (window as any).butlerApp.startupIssue), "legacy-data");
   assert.deepEqual(snapshot(), original, "Recovery screen wrote into legacy data");
-  // health invokes ensure-server before requesting gateway auth or HTTP.
-  const error = await page.evaluate(() => (window as any).butlerApp.health().then(
-    () => null, (error: Error) => error.message,
-  ));
-  assert.match(error ?? "", /legacy_data_blocked/u);
-  assert.deepEqual(snapshot(), original, "Blocked health request wrote into legacy data");
-  assert.equal(existsSync(join(data, "app/runtime/foreground/instance.json")), false);
-  console.log(JSON.stringify({ ok: true, legacyDataPreserved: true, blockedHealth: true, filesystemChanges: 0 }));
+  for (const [action, request] of [
+    ["health", "window.butlerApp.health()"],
+    ["startAgent", "window.butlerApp.startAgent()"],
+    ["repair", 'window.butlerApp.startSetup({mode:"repair"})'],
+  ]) {
+    const error = await page.expression<string | null>(
+      `${request}.then(() => null, error => error.message)`,
+    );
+    assert.match(error ?? "", /legacy_data_blocked/u, `Blocked ${action} must reject`);
+    assert.deepEqual(snapshot(), original, `Blocked ${action} request wrote into legacy data`);
+    assert.equal(existsSync(join(data, "app/runtime/foreground/instance.json")), false);
+  }
+  console.log(JSON.stringify({ ok: true, legacyDataPreserved: true, blockedHealth: true,
+    blockedStartAgent: true, blockedRepair: true, filesystemChanges: 0 }));
 } finally {
   page?.close();
   await stopElectronChild(child);
