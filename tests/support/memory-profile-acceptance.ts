@@ -65,8 +65,10 @@ export async function checkMemoryRefreshDuringRead(server: NativeAppServerHandle
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.getByRole("button", { name: "Memory", exact: true }).click();
     await requested;
+    // Deliver on the open live stream; the App may be reconnecting after stream.reconcile_required.
+    await page.waitForFunction(() => (window as unknown as { memorySmokeStreams: EventSource[] }).memorySmokeStreams.some(stream => stream.readyState === EventSource.OPEN));
     await page.evaluate(() => {
-      for (const stream of (window as unknown as { memorySmokeStreams: EventSource[] }).memorySmokeStreams) {
+      for (const stream of (window as unknown as { memorySmokeStreams: EventSource[] }).memorySmokeStreams.filter(s => s.readyState === EventSource.OPEN)) {
         stream.onmessage?.(new MessageEvent("message", { data: JSON.stringify({ id: 11000, type: "memory.operation", payload: { kind: "instructions" } }) }));
       }
     });
