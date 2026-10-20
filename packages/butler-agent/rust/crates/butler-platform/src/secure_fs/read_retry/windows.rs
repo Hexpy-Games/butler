@@ -22,7 +22,10 @@ pub(super) fn read(path: &Path) -> io::Result<Vec<u8>> {
         match fs::read(path) {
             Err(error)
                 if attempt < ATTEMPTS
-                    && super::read_retry_allowed(error.raw_os_error(), || delete_pending(path)) =>
+                    && ((attempt > 1 && error.kind() == io::ErrorKind::NotFound)
+                        || super::read_retry_allowed(error.raw_os_error(), || {
+                            delete_pending(path)
+                        })) =>
             {
                 attempt += 1;
                 std::thread::sleep(BACKOFF);

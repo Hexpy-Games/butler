@@ -147,9 +147,13 @@ async fn deliver_stop(
     expected: Option<&RestartIdentity>,
     request: StopRequest,
 ) -> Result<Option<StopDelivery>, crate::host::HostError> {
-    let current = active_service_async(data_root)
-        .await?
-        .ok_or_else(|| "native_service_instance_changed".to_owned())?;
+    let Some(current) = active_service_async(data_root).await? else {
+        write_stop_intent(data_root, &StopIntent::new(request, record)).map_err(|source| {
+            crate::host::HostError::new("native_service_stop_intent_unavailable")
+                .with_source(source)
+        })?;
+        return Ok(None);
+    };
     if !same_instance(&current, record, expected) {
         return Err("native_service_instance_changed".into());
     }
@@ -247,26 +251,30 @@ async fn wait_or_force_stop(
     if wait_for_stop(data_root, record, STOP_TIMEOUT).await? {
         return Ok(false);
     }
-    let current = active_service_async(data_root)
-        .await?
-        .ok_or_else(|| "native_service_instance_changed".to_owned())?;
+    let Some(current) = active_service_async(data_root).await? else {
+        return finish_stop(data_root, record, false).await;
+    };
     if !same_instance(&current, record, expected) {
         return Ok(false);
     }
     // Re-read the lock, nonce, PID, OS start identity, and executable directly
     // before force-killing the recorded service process.
-    if !instance_is_locked(data_root)? {
-        return Err(
-            "native_service_instance_ambiguous: refusing force kill (the DATA lock is free)".into(),
-        );
+    let locked = instance_is_locked(data_root)?;
+    if !(locked && process_matches(&current)?) {
+        if record_process_gone(&current)? {
+            return finish_stop(data_root, record, false).await;
+        }
+        return Err(if locked {
+            "native_service_instance_ambiguous: refusing force kill (the process does not match its record)"
+        } else {
+            "native_service_instance_ambiguous: refusing force kill (the DATA lock is free)"
+        }.into());
     }
-    if !process_matches(&current)? {
-        return Err("native_service_instance_ambiguous: refusing force kill (the process does not match its record)".into());
-    }
-    if is_managed(data_root, &current) {
+    let forced = if is_managed(data_root, &current) {
         // A signal sent straight to a supervised process looks like a crash
         // to its manager, which would relaunch it: the manager stops it.
         request(butler_platform::service_registration::stop).await?;
+        true
     } else if current.cli_supervisor_pid.is_none() && manager_unreachable(data_root).await {
         // The job is this DATA's but the manager does not answer, so the
         // service may be running under it: a kill could be answered by a
@@ -276,10 +284,22 @@ async fn wait_or_force_stop(
                 .into(),
         );
     } else {
-        force_stop(&current)?;
-    }
+        match force_stop(&current) {
+            Ok(()) => true,
+            Err(error) if error.message() == "native_service_process_exited" => false,
+            Err(error) => return Err(error),
+        }
+    };
+    finish_stop(data_root, record, forced).await
+}
+
+async fn finish_stop(
+    data_root: &Path,
+    record: &InstanceRecord,
+    forced: bool,
+) -> Result<bool, crate::host::HostError> {
     if !wait_for_stop(data_root, record, FORCE_STOP_TIMEOUT).await? {
         return Err("native_service_stop_timeout".into());
     }
-    Ok(true)
+    Ok(forced)
 }

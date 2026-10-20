@@ -351,6 +351,11 @@ pub(super) fn active_service(
                 return Ok(Some(record));
             }
             if record_process_gone(&record)? {
+                // The lock observation preceded the identity query. Shutdown
+                // may have released it while that query was in flight.
+                if !instance_is_locked(data_root)? {
+                    return Ok(None);
+                }
                 // Left by an instance that did not remove it (a crash, a
                 // forced stop): the lock owner is a new instance that has
                 // taken the lock and not yet replaced the record.

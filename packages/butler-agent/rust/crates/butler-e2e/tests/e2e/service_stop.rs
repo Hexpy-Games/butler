@@ -101,6 +101,11 @@ async fn stop_reads_a_complete_record_during_replacement() -> Result<(), Harness
         let writer = std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(500));
             drop(held);
+            if pending {
+                // A delete-on-close replacement has a real missing-entry
+                // interval. Outlast a read retry so it must observe the gap.
+                std::thread::sleep(Duration::from_millis(100));
+            }
             butler_platform::secure_fs::rename(&staged, &path)?;
             std::io::Result::Ok(())
         });
@@ -142,6 +147,14 @@ async fn record_read_preserves_real_permission_denial() -> Result<(), HarnessErr
     butler_e2e::gate!();
     let mut setup = Setup::new("RECORD-READ-DENIED")?;
     let path = setup.sandbox.root.join("private-record");
+    let missing = Instant::now();
+    assert_eq!(
+        butler_platform::secure_fs::read_replaced_file(&path)
+            .unwrap_err()
+            .kind(),
+        std::io::ErrorKind::NotFound
+    );
+    eprintln!("initial missing record returned in {:?}", missing.elapsed());
     std::fs::write(&path, b"whole record")?;
     let result =
         butler_platform::secure_fs::fixture_locks::with_read_denied(&path, |delete_pending| {
@@ -164,5 +177,106 @@ async fn record_read_preserves_real_permission_denial() -> Result<(), HarnessErr
         b"whole record"
     );
     setup.sandbox.mark_success();
+    Ok(())
+}
+
+#[tokio::test]
+async fn stop_identity_unavailable_requires_observed_exit() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    for (operation, skip) in [
+        ("start", 0),
+        ("executable", 0),
+        ("start", 1),
+        ("executable", 1),
+    ] {
+        for exited in [false, true] {
+            let mut s = Setup::new(&format!("STOP-IDENTITY-{operation}-{skip}-{exited}"))?
+                .start()
+                .await?;
+            let barrier = s.sandbox.root.join("identity-barrier");
+            std::fs::create_dir(&barrier)?;
+            let pid = s.agent.pid().expect("running service PID");
+            std::fs::write(barrier.join("target"), format!("{pid}:{operation}:{skip}"))?;
+            let mut launch = s.agent.launch.clone();
+            launch.set_env("BUTLER_E2E_IDENTITY_BARRIER", barrier.to_string_lossy());
+            let mut command = tokio::process::Command::from(launch.command());
+            command
+                .args(["stop", "--json"])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .kill_on_drop(true);
+            let cli = command.spawn()?;
+            let deadline = Instant::now() + Duration::from_secs(30);
+            while !barrier.join("reached").exists() {
+                assert!(
+                    Instant::now() < deadline,
+                    "CLI did not probe the recorded PID"
+                );
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            if exited {
+                // Stop through the control endpoint without contending for
+                // the admission lock held by the paused CLI.
+                let record = instance_record(&s.sandbox.data).expect("record read before probe");
+                std::fs::write(intent_path(&s.sandbox.data), json!({
+                    "schema": "butler.agent-stop-intent.v1", "reason": "stop", "requested_by": "cli",
+                    "respawn_by": null, "instance_id": record["nonce"], "pid": record["pid"],
+                    "requested_at": "2026-10-20T00:00:00.000Z",
+                }).to_string())?;
+                let accepted = control_command(&record, "service_stop", None)?;
+                assert_eq!(accepted["result"]["ok"], true, "{accepted}");
+                while s.agent.is_running() {
+                    assert!(
+                        Instant::now() < deadline,
+                        "service did not exit during probe"
+                    );
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+                assert!(s.agent.reap().expect("exited service").success());
+            } else {
+                assert!(s.gw.healthy().await);
+            }
+            std::fs::write(barrier.join("release"), b"continue")?;
+            let output = cli.wait_with_output().await?;
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let payload = if output.status.success() {
+                stdout.as_ref()
+            } else {
+                stderr.lines().last().unwrap_or("")
+            };
+            let value: serde_json::Value = serde_json::from_str(payload)?;
+            eprintln!(
+                "identity race: operation={operation} skip={skip} exited={exited} status={} {stdout} {stderr}",
+                output.status
+            );
+            if exited {
+                assert!(output.status.success(), "{stdout} {stderr}");
+                if skip == 0 {
+                    assert_eq!(value["data"]["alreadyStopped"], true, "{value}");
+                }
+                assert_eq!(value["data"]["stopped"], true, "{value}");
+            } else {
+                assert!(!output.status.success(), "{value}");
+                assert_eq!(
+                    value["error"]["message"],
+                    if operation == "start" {
+                        "native_service_process_identity_unavailable"
+                    } else {
+                        "native_service_process_executable_unavailable"
+                    },
+                    "{stdout} {stderr}"
+                );
+                assert_eq!(s.agent.pid(), Some(pid));
+                assert!(s.agent.is_running(), "unverified PID was stopped");
+                assert!(
+                    s.gw.healthy().await,
+                    "refused stop changed the live service"
+                );
+            }
+            s.finish().await?;
+        }
+    }
     Ok(())
 }

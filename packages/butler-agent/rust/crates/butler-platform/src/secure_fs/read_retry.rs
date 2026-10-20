@@ -10,7 +10,9 @@ pub(super) mod windows;
 
 /// Reads a whole old or new file across atomic replacement. Windows retries
 /// sharing conflicts and confirmed delete-pending entries for at most 950 ms.
-/// Missing files, invalid paths and actual permission denials remain errors.
+/// A confirmed replacement can briefly remove the old entry before publishing
+/// the new one. Initially missing files, invalid paths and actual permission
+/// denials remain errors.
 /// This synchronous operation belongs on a blocking thread.
 pub fn read_replaced_file(path: &Path) -> io::Result<Vec<u8>> {
     #[cfg(windows)]
