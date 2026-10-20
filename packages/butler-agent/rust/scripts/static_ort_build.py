@@ -38,6 +38,8 @@ ISOLATION_DEFINES = (
     "FETCHCONTENT_TRY_FIND_PACKAGE_MODE=NEVER",
     "CMAKE_FIND_USE_PACKAGE_REGISTRY=OFF",
     "CMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF",
+    # Source archives have no Git checkout metadata or Git-based dependencies.
+    "CMAKE_DISABLE_FIND_PACKAGE_Git=ON",
     # Abseil defaults this unused test-source hint to a host directory.
     "ABSL_LOCAL_GOOGLETEST_DIR=",
 )

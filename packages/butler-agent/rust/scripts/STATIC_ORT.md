@@ -57,7 +57,8 @@ Removing the static ORT Actions-cache restore/save steps stops new SDK cache ent
 ## Host package isolation and load-path guard
 
 ORT uses `FETCHCONTENT_TRY_FIND_PACKAGE_MODE=NEVER` and disables both CMake
-package registries. The child environment removes inherited package, header,
+package registries. Optional Git discovery is disabled: these source archives
+have no Git checkout metadata. The child environment removes inherited package, header,
 library, compiler-flag and dynamic-loader search redirects, including package
 `*_ROOT`/`*_DIR` variables. pkg-config searches an empty stage directory.
 Unix PATH contains pinned Ninja/CMake, Python's directory and system tool

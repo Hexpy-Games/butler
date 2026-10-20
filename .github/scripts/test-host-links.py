@@ -110,6 +110,7 @@ class HostLinks(unittest.TestCase):
             self.assertTrue(Path(env['CC']).is_absolute())
             self.assertTrue(Path(env['PKG_CONFIG_LIBDIR']).is_dir())
             self.assertIn('FETCHCONTENT_TRY_FIND_PACKAGE_MODE=NEVER', build.ISOLATION_DEFINES)
+            self.assertIn('CMAKE_DISABLE_FIND_PACKAGE_Git=ON', build.ISOLATION_DEFINES)
             windows = build.build_environment(stage, Path('/pinned/cmake'), Path('/pinned/ninja'), 'windows-x64', host)
             self.assertTrue(windows['PATH'].endswith(host['PATH']))
 
