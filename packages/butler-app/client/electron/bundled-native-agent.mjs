@@ -4,6 +4,7 @@ import { processRoleFileNames } from "./scripts/process-role-names.mjs";
 import { preferNewerAgent, resolveCliInstalledAgent } from "./cli-installed-native-agent.mjs";
 
 const manifestName = "native-agent-manifest.json";
+const roleLinkWarnings = new Set();
 
 export function resolveBundledNativeAgentCommand({
   butlerData,
@@ -153,17 +154,29 @@ function readVersion(payloadRoot) {
   }
 }
 
-// ZIP extraction materializes hardlinks as copies. Recreate the three NTFS
-// aliases before spawning; Rust verifies file identity when executing a role.
+// Create missing aliases in this installation, repairing copies from older
+// archives. Rust verifies file identity when executing a role; missing aliases
+// fall back to the canonical executable on filesystems without hardlinks.
 function restoreWindowsRoleLinks(binary) {
-  const source = statSync(binary, { bigint: true });
   for (const name of processRoleFileNames("win32")) {
     const alias = join(dirname(binary), name);
-    if (existsSync(alias)) {
-      const metadata = statSync(alias, { bigint: true });
-      if (metadata.ino === source.ino && metadata.dev === source.dev) continue;
-      rmSync(alias);
+    let canonicalFallback = false;
+    try {
+      const source = statSync(binary, { bigint: true });
+      if (existsSync(alias)) {
+        const metadata = statSync(alias, { bigint: true });
+        if (metadata.ino === source.ino && metadata.dev === source.dev) continue;
+        rmSync(alias);
+      }
+      canonicalFallback = true;
+      linkSync(binary, alias);
+    } catch (error) {
+      if (!roleLinkWarnings.has(alias)) {
+        roleLinkWarnings.add(alias);
+        console.warn(canonicalFallback
+          ? `Could not create Agent process role link ${name}; using the canonical executable for this role.`
+          : `Could not prepare Agent process role link ${name}; this role is unavailable.`, error);
+      }
     }
-    linkSync(binary, alias);
   }
 }

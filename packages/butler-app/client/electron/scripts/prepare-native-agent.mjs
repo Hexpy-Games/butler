@@ -85,8 +85,10 @@ if (["linux", "win32"].includes(requestedPlatform)) {
   copyFileSync(helper, join(binaryRoot, helperName));
 }
 run(process.execPath, [join(scriptDir, "prepare-process-links.mjs"), join(binaryRoot, binaryName)], rustRoot);
-const roleLinks = spawnSync(join(binaryRoot, "butler-agent"), ["--prepare-process-links"], { stdio: "inherit" });
-if (roleLinks.status !== 0 && roleLinks.status !== 2) throw new Error("Could not prepare Agent process role links.");
+if (requestedPlatform !== "win32") {
+  const roleLinks = spawnSync(join(binaryRoot, "butler-agent"), ["--prepare-process-links"], { stdio: "inherit" });
+  if (roleLinks.status !== 0 && roleLinks.status !== 2) throw new Error("Could not prepare Agent process role links.");
+}
 cpSync(
   join(repositoryRoot, "packages", "butler-agent", "resources"),
   join(payloadRoot, "resources"),
