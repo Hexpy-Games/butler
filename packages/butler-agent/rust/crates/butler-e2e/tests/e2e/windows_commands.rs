@@ -12,6 +12,8 @@ mod capabilities;
 mod capability_stub;
 #[path = "windows_commands/file_paths.rs"]
 mod file_paths;
+#[path = "windows_commands/file_replace.rs"]
+mod file_replace;
 #[path = "windows_commands/file_sharing.rs"]
 mod file_sharing;
 #[path = "windows_commands/invalid_batch.rs"]
