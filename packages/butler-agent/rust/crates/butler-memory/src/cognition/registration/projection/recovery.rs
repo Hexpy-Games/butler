@@ -14,12 +14,6 @@ impl CognitionRegistrationService {
         target: MemoryGenerationTarget,
         cancellation: CancellationToken,
     ) -> CognitionResult<bool> {
-        let deps = self.projection.as_ref().ok_or_else(|| {
-            CognitionError::new(
-                CognitionCode::CognitionProjectionUnconfigured,
-                "cognition_projection_unconfigured",
-            )
-        })?;
         let permit = self
             .admission
             .clone()
@@ -37,7 +31,7 @@ impl CognitionRegistrationService {
         let coordinator = self.coordinator.clone();
         let clock = self.clock.clone();
         let shutdown = self.shutdown.clone();
-        let host = deps.host.clone();
+        let host = self.coordinator.host();
         let active_owners = self.active_windows.clone();
         let (sender, receiver) = oneshot::channel();
         // Detached on purpose: the operation token/guard moved into the task keeps the
@@ -123,10 +117,7 @@ impl Recovery {
                     .source_root
                     .join("runtime/conversation-store.sqlite")
             });
-        let canonical =
-            ConversationSourceReader::open(&canonical_path).map_err(CognitionError::from)?;
-        let repaired = graph.repair_standalone_hashes(&canonical, &(self.clock)())?;
-        canonical.close().map_err(CognitionError::from)?;
+        let repaired = graph.repair_standalone_hashes(&canonical_path, &(self.clock)())?;
         let nonce = self.host.new_uuid();
         let now = (self.clock)();
         // Snapshot after the write lease. Claims register their owner while

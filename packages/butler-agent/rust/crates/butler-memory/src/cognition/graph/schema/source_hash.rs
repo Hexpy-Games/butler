@@ -16,11 +16,27 @@ const COMPLETE: &str = "standalone_hash_repair_complete";
 const CURSOR: &str = "standalone_hash_repair_cursor";
 const PAGE: usize = 64;
 
+/// Fresh graphs have no legacy hashes. Finish during schema setup so their
+/// first idle poll needs neither a recovery write nor a canonical store.
+pub(super) fn complete_if_empty(db: &Connection, now: &str) -> CognitionResult<()> {
+    if read_state(db, COMPLETE)?.is_some() {
+        return Ok(());
+    }
+    db.execute(
+        "INSERT INTO memory_state(key,value) SELECT ?1,?2 WHERE NOT EXISTS(\
+         SELECT 1 FROM memory_chunks WHERE source_key>'conversation_message:' \
+         AND source_key<'conversation_message;')",
+        [COMPLETE, now],
+    )
+    .map_err(db_error)?;
+    Ok(())
+}
+
 impl GraphRepository {
     /// Runs one bounded schema-data repair quantum under the recovery lease.
     pub(in crate::cognition) fn repair_standalone_hashes(
         &mut self,
-        canonical: &ConversationSourceReader,
+        canonical_path: &std::path::Path,
         now: &str,
     ) -> CognitionResult<bool> {
         let db = self.connection_mut()?;
@@ -30,8 +46,12 @@ impl GraphRepository {
         let tx = db.transaction().map_err(db_error)?;
         let cursor = read_state(&tx, CURSOR)?.unwrap_or_else(|| "conversation_message:".into());
         let rows = read_page(&tx, &cursor)?;
-        for row in &rows {
-            repair_row(&tx, canonical, row, now)?;
+        if !rows.is_empty() {
+            let canonical = ConversationSourceReader::open(canonical_path)?;
+            for row in &rows {
+                repair_row(&tx, &canonical, row, now)?;
+            }
+            canonical.close()?;
         }
         if rows.len() < PAGE {
             tx.execute(
