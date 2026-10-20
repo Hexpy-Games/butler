@@ -105,10 +105,24 @@ async fn wait_state(s: &Scenario, turn: &str, expected: &str) -> Result<(), Harn
         if found {
             return Ok(());
         }
-        assert!(
-            Instant::now() < deadline,
-            "turn {turn} did not reach {expected}"
-        );
+        if Instant::now() >= deadline {
+            let db = rusqlite::Connection::open_with_flags(
+                s.sandbox.data.join("app-server/butler-client.sqlite"),
+                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+            )?;
+            let state: (String, Option<String>) = db.query_row(
+                "SELECT state,safe_error_code FROM turns WHERE id=?1",
+                [turn],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?;
+            panic!(
+                "turn {turn} did not reach {expected}; database={state:?}; active={} {}; latest={} {}",
+                view.data()["active_turn"]["id"],
+                view.data()["active_turn"]["state"],
+                view.data()["latest_turn"]["id"],
+                view.data()["latest_turn"]["state"]
+            );
+        }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }
