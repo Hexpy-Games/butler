@@ -178,3 +178,13 @@ pub(super) fn cancel_staged_write(path: &Path, nonce: &str) -> io::Result<()> {
     super::record_fault::cancel_rename();
     Ok(())
 }
+
+/// Retrying native reads must never sleep on a Tokio worker.
+pub(crate) async fn read_record_async(
+    data_root: &Path,
+) -> Result<Option<InstanceRecord>, crate::host::HostError> {
+    let data_root = data_root.to_path_buf();
+    tokio::task::spawn_blocking(move || super::read_record(&data_root))
+        .await
+        .map_err(crate::host::HostError::from_error)?
+}

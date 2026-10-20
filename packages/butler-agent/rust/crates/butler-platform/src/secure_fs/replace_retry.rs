@@ -4,7 +4,7 @@
 /// `ERROR_SHARING_VIOLATION` and `ERROR_LOCK_VIOLATION`.
 pub(super) const SHARING_ERRORS: [i32; 2] = [32, 33];
 /// `ERROR_ACCESS_DENIED`.
-const ACCESS_DENIED: i32 = 5;
+pub(super) const ACCESS_DENIED: i32 = 5;
 
 /// A DELETE-only reopen of the source or the target: success, or the raw OS
 /// error code of its failure (`None` when the error carries none).

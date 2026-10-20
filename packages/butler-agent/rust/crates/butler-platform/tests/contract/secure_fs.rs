@@ -88,10 +88,7 @@ fn replace_private_swaps_in_a_complete_owner_only_file() {
             std::convert::identity,
         )
         .unwrap();
-        assert_eq!(
-            butler_platform::secure_fs::read_replaced_file(&durable).unwrap(),
-            bytes
-        );
+        assert_eq!(fs::read(&durable).unwrap(), bytes);
     }
     fs::remove_dir_all(directory).unwrap();
 }

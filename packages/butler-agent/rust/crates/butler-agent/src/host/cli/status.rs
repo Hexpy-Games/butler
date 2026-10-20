@@ -105,7 +105,7 @@ pub(crate) async fn run_native_status_cli(
             )
             .await;
             let model = models.status_value(&metrics.model_telemetry());
-            let services = service_health(&data_root);
+            let services = service_health(&data_root).await;
             let previews =
                 update_previews(&models.configuration, installation.app_version().as_deref()).await;
             let version = crate::host::build_info::current().version;
@@ -236,8 +236,8 @@ fn expand_tilde(path: PathBuf) -> Result<PathBuf, crate::host::HostError> {
     })
 }
 
-fn service_health(data_root: &Path) -> Value {
-    let record = service_instance::read_record(data_root);
+async fn service_health(data_root: &Path) -> Value {
+    let record = service_instance::read_record_async(data_root).await;
     let locked = service_instance::instance_lock_is_held_read_only(data_root);
     let (status, evidence, pid, started_at, app) = match (record, locked) {
         (Err(_), _) | (_, Err(_)) => (

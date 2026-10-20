@@ -3,10 +3,10 @@
 use std::fs;
 use std::{io, path::Path};
 
-use super::replace_retry::SHARING_ERRORS;
+use super::replace_retry::{ACCESS_DENIED, SHARING_ERRORS};
 
 #[cfg(windows)]
-mod windows;
+pub(super) mod windows;
 
 /// Reads a whole old or new file across atomic replacement. Windows retries
 /// sharing conflicts and confirmed delete-pending entries for at most 950 ms.
@@ -24,7 +24,7 @@ pub fn read_replaced_file(path: &Path) -> io::Result<Vec<u8>> {
 pub fn read_retry_allowed(code: Option<i32>, delete_pending: impl FnOnce() -> bool) -> bool {
     match code {
         Some(code) if SHARING_ERRORS.contains(&code) => true,
-        Some(5) => delete_pending(),
+        Some(ACCESS_DENIED) => delete_pending(),
         _ => false,
     }
 }

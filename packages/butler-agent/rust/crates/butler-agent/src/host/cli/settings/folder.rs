@@ -41,7 +41,14 @@ async fn execute(
         .await
         .map_err(|_| unavailable())?;
     if endpoint.is_none() {
-        gateway::require_stopped(data, installation).map_err(|_| unavailable())?;
+        let stopped_data = data.to_path_buf();
+        let stopped_installation = installation.clone();
+        tokio::task::spawn_blocking(move || {
+            gateway::require_stopped(&stopped_data, &stopped_installation)
+        })
+        .await
+        .map_err(|_| unavailable())?
+        .map_err(|_| unavailable())?;
     }
     let data = data.to_path_buf();
     let installation = installation.clone();

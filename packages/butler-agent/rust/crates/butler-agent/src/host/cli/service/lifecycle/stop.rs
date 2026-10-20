@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 
 use super::managed::{is_managed, manager_unreachable, request};
 use super::readiness::wait_for_stop;
-use super::{FORCE_STOP_TIMEOUT, STOP_TIMEOUT, active_service};
+use super::{FORCE_STOP_TIMEOUT, STOP_TIMEOUT, active_service_async};
 use crate::host::ResolvedInstallation;
 use crate::host::service::instance::{
     AdmissionLock, InstanceRecord, RestartIdentity, StopDelivery, StopIntent, StopRequest,
@@ -85,24 +85,27 @@ pub(super) async fn stop_service_admitted(
     request: StopRequest,
 ) -> Result<(StopReport, AdmissionLock), crate::host::HostError> {
     refuse_live_legacy_process(data_root)?;
-    let Some(record) = active_service(data_root)? else {
+    let Some(record) = active_service_async(data_root).await? else {
         return Ok((StopReport::AlreadyStopped, admission));
     };
     if expected.is_some_and(|identity| !identity.matches(&record)) {
         return Err("native_service_instance_changed".into());
     }
     let managed = is_managed(data_root, &record);
-    let previous = mark_stopping(data_root, &record.nonce, installation)?;
+    let stop_root = data_root.to_path_buf();
+    let stop_installation = installation.clone();
+    let stop_nonce = record.nonce.clone();
+    let previous = tokio::task::spawn_blocking(move || {
+        mark_stopping(&stop_root, &stop_nonce, &stop_installation)
+    })
+    .await
+    .map_err(crate::host::HostError::from_error)??;
     let delivery = match deliver_stop(data_root, &record, expected, request).await {
         Ok(delivery) => delivery,
         Err(error) => {
-            return Err(revert_undelivered_stop(
-                data_root,
-                installation,
-                &record,
-                previous,
-                error,
-            ));
+            return Err(
+                revert_undelivered_stop(data_root, installation, &record, previous, error).await,
+            );
         }
     };
     let forced = wait_or_force_stop(data_root, &record, expected).await;
@@ -144,8 +147,9 @@ async fn deliver_stop(
     expected: Option<&RestartIdentity>,
     request: StopRequest,
 ) -> Result<Option<StopDelivery>, crate::host::HostError> {
-    let current =
-        active_service(data_root)?.ok_or_else(|| "native_service_instance_changed".to_owned())?;
+    let current = active_service_async(data_root)
+        .await?
+        .ok_or_else(|| "native_service_instance_changed".to_owned())?;
     if !same_instance(&current, record, expected) {
         return Err("native_service_instance_changed".into());
     }
@@ -209,14 +213,23 @@ async fn signal_intended_stop(
 /// The instance keeps running after an undelivered stop, so its record goes
 /// back to the state [`mark_stopping`] replaced (a record that changed since
 /// is left alone); `stop` is the error returned.
-fn revert_undelivered_stop(
+async fn revert_undelivered_stop(
     data_root: &Path,
     installation: &ResolvedInstallation,
     record: &InstanceRecord,
     previous: StoppingFrom,
     stop: crate::host::HostError,
 ) -> crate::host::HostError {
-    match revert_stopping(data_root, &record.nonce, previous, installation) {
+    let data_root = data_root.to_path_buf();
+    let installation = installation.clone();
+    let nonce = record.nonce.clone();
+    let reverted = tokio::task::spawn_blocking(move || {
+        revert_stopping(&data_root, &nonce, previous, &installation)
+    })
+    .await
+    .map_err(crate::host::HostError::from_error)
+    .and_then(std::convert::identity);
+    match reverted {
         Ok(()) => stop,
         Err(revert) => crate::host::HostError::new(stop.message().to_owned())
             .with_source(UndeliveredStopRevertFailed { revert, stop }),
@@ -234,8 +247,9 @@ async fn wait_or_force_stop(
     if wait_for_stop(data_root, record, STOP_TIMEOUT).await? {
         return Ok(false);
     }
-    let current =
-        active_service(data_root)?.ok_or_else(|| "native_service_instance_changed".to_owned())?;
+    let current = active_service_async(data_root)
+        .await?
+        .ok_or_else(|| "native_service_instance_changed".to_owned())?;
     if !same_instance(&current, record, expected) {
         return Ok(false);
     }

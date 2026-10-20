@@ -81,7 +81,7 @@ pub(super) async fn execute(
             let config = service_configuration(&installation, &data_root)?;
             if dry_run {
                 refuse_live_legacy_process(&data_root)?;
-                let active = active_service(&data_root)?;
+                let active = active_service_async(&data_root).await?;
                 return Ok(json!({
                     "service":"butler-agent-native",
                     "wouldRestart":true,
@@ -89,7 +89,7 @@ pub(super) async fn execute(
                 }));
             }
             let admission = acquire_admission(&data_root, &installation).await?;
-            if let Some(active) = active_service(&data_root)?
+            if let Some(active) = active_service_async(&data_root).await?
                 && managed::is_managed(&data_root, &active)
             {
                 return managed::restart_instance(&config, &active, admission, requested_by).await;
@@ -113,6 +113,17 @@ pub(super) async fn execute(
 /// Whether an instance owns the data folder `requested_data` names (or the
 /// default one). A folder that cannot be examined counts as not running:
 /// starting will report the real problem.
+pub(super) async fn already_running_async(
+    requested_data: Option<&str>,
+    installation: &ResolvedInstallation,
+) -> bool {
+    let requested_data = requested_data.map(str::to_owned);
+    let installation = installation.clone();
+    tokio::task::spawn_blocking(move || already_running(requested_data.as_deref(), &installation))
+        .await
+        .unwrap_or(false)
+}
+
 pub(super) fn already_running(
     requested_data: Option<&str>,
     installation: &ResolvedInstallation,
@@ -155,7 +166,7 @@ async fn start_service(
     let data_root = &config.data_root;
     refuse_live_legacy_process(data_root)?;
     if dry_run {
-        let active = active_service(data_root)?;
+        let active = active_service_async(data_root).await?;
         return Ok(json!({
             "service":"butler-agent-native",
             "wouldStart":active.is_none(),
@@ -175,7 +186,7 @@ async fn start_service_admitted(
 ) -> Result<Value, crate::host::HostError> {
     let data_root = &config.data_root;
     refuse_live_legacy_process(data_root)?;
-    let active = match active_service(data_root)? {
+    let active = match active_service_async(data_root).await? {
         Some(record) => Some(record),
         None => super::supervisor::existing(data_root).await?,
     };
@@ -262,7 +273,7 @@ async fn stop_service(
 ) -> Result<Value, crate::host::HostError> {
     if dry_run {
         refuse_live_legacy_process(data_root)?;
-        let active = active_service(data_root)?;
+        let active = active_service_async(data_root).await?;
         let Some(record) = active else {
             return Ok(
                 json!({"service":"butler-agent-native","stopped":true,"alreadyStopped":true}),
@@ -308,6 +319,15 @@ pub(super) async fn acquire_admission(
             Err(error) => return Err(error),
         }
     }
+}
+
+pub(super) async fn active_service_async(
+    data_root: &Path,
+) -> Result<Option<InstanceRecord>, crate::host::HostError> {
+    let data_root = data_root.to_path_buf();
+    tokio::task::spawn_blocking(move || active_service(&data_root))
+        .await
+        .map_err(crate::host::HostError::from_error)?
 }
 
 pub(super) fn active_service(

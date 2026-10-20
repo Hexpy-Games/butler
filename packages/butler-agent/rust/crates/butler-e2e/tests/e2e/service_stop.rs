@@ -143,18 +143,18 @@ async fn record_read_preserves_real_permission_denial() -> Result<(), HarnessErr
     let mut setup = Setup::new("RECORD-READ-DENIED")?;
     let path = setup.sandbox.root.join("private-record");
     std::fs::write(&path, b"whole record")?;
-    let result = butler_platform::secure_fs::fixture_locks::with_read_denied(&path, || {
-        assert_eq!(std::fs::read(&path).unwrap_err().raw_os_error(), Some(5));
-        let start = Instant::now();
-        let error = butler_platform::secure_fs::read_replaced_file(&path).unwrap_err();
-        assert_eq!(error.raw_os_error(), Some(5));
-        eprintln!("real ACL denial returned in {:?}", start.elapsed());
-        butler_e2e::assert_wall_clock_budget!(
-            start.elapsed(),
-            Duration::from_millis(500),
-            "ACL denial was retried"
-        );
-    })?;
+    let result =
+        butler_platform::secure_fs::fixture_locks::with_read_denied(&path, |delete_pending| {
+            assert!(
+                !delete_pending,
+                "real ACL denial was classified as delete-pending"
+            );
+            assert_eq!(std::fs::read(&path).unwrap_err().raw_os_error(), Some(5));
+            let start = Instant::now();
+            let error = butler_platform::secure_fs::read_replaced_file(&path).unwrap_err();
+            assert_eq!(error.raw_os_error(), Some(5));
+            eprintln!("real ACL denial returned in {:?}", start.elapsed());
+        })?;
     if result.is_none() {
         setup.sandbox.mark_success();
     }

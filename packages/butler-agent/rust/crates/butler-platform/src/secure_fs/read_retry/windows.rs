@@ -7,6 +7,9 @@ use std::{
     time::Duration,
 };
 
+use super::super::replace_retry::{ACCESS_DENIED, SHARING_ERRORS};
+
+const FILE_TRAVERSE: u32 = 0x20;
 const ATTEMPTS: u32 = 20;
 const BACKOFF: Duration = Duration::from_millis(50);
 // BACKUP_SEMANTICS supports directories; OVERLAPPED avoids implicitly
@@ -38,12 +41,12 @@ fn probe(path: &Path, access: u32) -> io::Result<File> {
         .open(path)
 }
 
-fn delete_pending(path: &Path) -> bool {
+pub(in crate::secure_fs) fn delete_pending(path: &Path) -> bool {
     // A file DACL denying even FullControl still permits a zero-access open;
     // a delete-pending entry refuses that open with ACCESS_DENIED as well.
     // Confirm parent traversal separately: a denied ancestor is not a replace.
     match probe(path, 0) {
-        Err(error) if error.raw_os_error() == Some(5) => {}
+        Err(error) if error.raw_os_error() == Some(ACCESS_DENIED) => {}
         // The old entry may already have disappeared or been replaced by the
         // time we probe. A normal read open verifies current read permission.
         _ => {
@@ -51,12 +54,11 @@ fn delete_pending(path: &Path) -> bool {
                 Ok(_) => true,
                 Err(error) => {
                     error.kind() == io::ErrorKind::NotFound
-                        || super::super::replace_retry::SHARING_ERRORS
-                            .contains(&error.raw_os_error().unwrap_or_default())
+                        || SHARING_ERRORS.contains(&error.raw_os_error().unwrap_or_default())
                 }
             };
         }
     }
     let parent = path.parent().filter(|path| !path.as_os_str().is_empty());
-    probe(parent.unwrap_or(Path::new(".")), 0x20).is_ok() // FILE_TRAVERSE
+    probe(parent.unwrap_or(Path::new(".")), FILE_TRAVERSE).is_ok()
 }
