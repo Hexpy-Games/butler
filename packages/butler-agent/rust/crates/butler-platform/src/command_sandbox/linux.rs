@@ -7,6 +7,9 @@ mod process;
 mod rediscovery;
 mod seccomp;
 pub(super) mod unresolved;
+mod timing;
+#[cfg(feature = "test-support")]
+pub use mountns::verify_mount_plan_contract;
 
 use std::collections::HashMap;
 use std::os::unix::process::CommandExt;
@@ -316,8 +319,7 @@ pub(super) fn project_write(
 }
 
 pub(super) fn trampoline() -> Result<(), Error> {
-    #[cfg(feature = "test-support")]
-    let started = std::time::Instant::now();
+    let mut timing = timing::Timing::new();
     let mut arguments = std::env::args().skip(1);
     match arguments.next().as_deref() {
         Some("--probe-seccomp") => return seccomp::apply(false),
@@ -338,10 +340,12 @@ pub(super) fn trampoline() -> Result<(), Error> {
         return Err("missing command separator".into());
     }
     let program = arguments.next().ok_or("missing program")?;
+    timing.mark("policy_parse");
     if let Some(root) = &policy.project {
         // The parent sends only denials the walk cannot rediscover; resolve
         // those fully, and discovered entries only where they are symlinks.
         let secrets = complement::entry_aliases(discover_project_secrets(root)?)?;
+        timing.mark("project_secrets");
         policy.denied = complement::aliases(&policy.denied)?;
         policy.write_denied = complement::aliases(&policy.write_denied)?;
         policy.credentials = complement::aliases(&policy.credentials)?;
@@ -352,26 +356,15 @@ pub(super) fn trampoline() -> Result<(), Error> {
         for root in &policy.allowed {
             policy.denied.extend(complement::project_secrets(root)?);
         }
+        timing.mark("project_secrets");
         policy.denied = complement::aliases(&policy.denied)?;
         policy.credentials = complement::aliases(&policy.credentials)?;
     }
+    timing.mark("credential_aliases");
     mountns::expand_views(&mut policy)?;
-    #[cfg(feature = "test-support")]
-    let tier = install_policy(&policy)?;
-    #[cfg(not(feature = "test-support"))]
-    install_policy(&policy)?;
-    #[cfg(feature = "test-support")]
-    if std::env::var_os("BUTLER_TEST_SANDBOX_TIMINGS").is_some() {
-        eprintln!(
-            "butler_sandbox_setup_us={} tier={}",
-            started.elapsed().as_micros(),
-            match tier {
-                mountns::Tier::MPlus => "M+",
-                mountns::Tier::M => "M",
-                mountns::Tier::L => "L",
-            }
-        );
-    }
+    timing.mark("expand_views");
+    let tier = install_policy(&policy, &mut timing)?;
+    timing.report(tier);
     // Dropped already by tool_environment; also remove it for direct invocations.
     let mut command = Command::new(program);
     if let Some(root) = &policy.project {
@@ -391,7 +384,7 @@ pub(super) fn prepare_project_write(
     generated::prepare(root, data)
 }
 
-fn install_policy(policy: &Policy) -> Result<mountns::Tier, Error> {
+fn install_policy(policy: &Policy, timing: &mut timing::Timing) -> Result<mountns::Tier, Error> {
     let cwd = std::env::current_dir()?;
     if policy.project.is_some() {
         links::validate(policy)?;
@@ -412,6 +405,7 @@ fn install_policy(policy: &Policy) -> Result<mountns::Tier, Error> {
         nix::unistd::chdir(&cwd)?;
     }
     let mut rules = ruleset(policy.tcp)?;
+    timing.mark("ruleset_and_mounts");
     let hidden: Vec<_> = if mounted {
         policy
             .secrets
@@ -429,15 +423,19 @@ fn install_policy(policy: &Policy) -> Result<mountns::Tier, Error> {
         &policy.credentials,
         &hidden,
         &policy.mounts,
+        timing,
     )?;
     if policy.project.is_some() {
         complement::project_write(&mut rules, policy, mounted, &policy.mounts)?;
     }
+    timing.mark("project_write");
     let status = rules.restrict_self()?;
+    timing.mark("restrict_self");
     if status.ruleset != RulesetStatus::FullyEnforced || !status.no_new_privs {
         return Err("Landlock was not fully enforced".into());
     }
     seccomp::apply(sealed)?;
+    timing.mark("seccomp");
     Ok(match (mounted, sealed) {
         (true, true) => mountns::Tier::MPlus,
         (true, false) => mountns::Tier::M,

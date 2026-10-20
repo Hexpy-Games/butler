@@ -62,6 +62,9 @@ pub use test_support::{
     windows_recovery_contract, windows_shell_file_contract, wsl_test_host,
 };
 
+#[cfg(all(feature = "test-support", target_os = "linux"))]
+pub use linux::verify_mount_plan_contract;
+
 mod host_capabilities;
 pub use host_capabilities::{Level, SandboxCapabilities, cached_capabilities, capabilities};
 #[cfg(target_os = "linux")]

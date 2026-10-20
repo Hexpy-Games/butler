@@ -92,6 +92,9 @@ pub(super) fn legacy_shell(
     // EncodedCommand preserves nested quotes and multi-line scripts without
     // cmd/CRT/PowerShell argument reparsing. Set both console and pipeline
     // encodings; native reg/cmd output follows the console code page.
+    // Keep the inner imports: NUL, quote, CR or LF in the program path makes
+    // code_page_shell retain the direct -EncodedCommand invocation. Wrapped
+    // transports repeat Import-Module, which does not reload an already loaded module.
     let modules = default_modules();
     let shell_started = phase_marker("script_started", environment);
     let language = include_str!("windows/language.ps1");
