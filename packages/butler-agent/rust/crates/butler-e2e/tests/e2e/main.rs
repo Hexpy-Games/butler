@@ -113,6 +113,7 @@ mod memory_idle;
 mod memory_import;
 mod memory_model_cleanup;
 mod memory_wiring;
+mod metric_retention;
 mod migration;
 mod model_thinking;
 mod monitoring_scale;

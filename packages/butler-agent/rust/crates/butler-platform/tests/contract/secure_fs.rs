@@ -7,9 +7,9 @@ use std::io::{self, Write};
 use butler_platform::secure_fs::{
     DIRECTORY_SYNC, ExchangeError, FILE_IDS, FileMode, NO_FOLLOW, OWNER_ONLY, PERMISSION_MODES,
     append_private, create_private_dir_all, exchange_directories, file_mode, identity,
-    is_owner_only, is_private, no_follow, open_read_no_follow, owner_only, protect_folder,
-    replace_private, restrict_directory, restrict_file, restrict_open_file, same_metadata,
-    set_file_mode, symlink, sync_directory,
+    is_owner_only, is_private, no_follow, open_read_no_follow, owner_only, protect_folder, rename,
+    replace_file, replace_private, restrict_directory, restrict_file, restrict_open_file,
+    same_metadata, set_file_mode, symlink, sync_directory,
 };
 
 use super::scratch;
@@ -17,6 +17,7 @@ use super::scratch;
 // test-category: security
 #[test]
 fn replace_private_swaps_in_a_complete_owner_only_file() {
+    first_publication_preserves_source_during_a_sharing_conflict();
     let directory = scratch("replace");
     let path = directory.join("config.json");
     let neighbor = directory.join("neighbor.tmp");
@@ -90,6 +91,22 @@ fn replace_private_swaps_in_a_complete_owner_only_file() {
         .unwrap();
         assert_eq!(fs::read(&durable).unwrap(), bytes);
     }
+    // Both public publication primitives replace the complete destination.
+    let staged = long.join("staged.json");
+    fs::write(&staged, b"rename replacement").unwrap();
+    rename(&staged, &durable).unwrap();
+    assert!(!staged.exists());
+    assert_eq!(fs::read(&durable).unwrap(), b"rename replacement");
+    fs::write(&staged, b"replace_file replacement").unwrap();
+    let mut retries = 0;
+    replace_file(&staged, &durable, &mut || {
+        retries += 1;
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(retries, 0);
+    assert!(!staged.exists());
+    assert_eq!(fs::read(&durable).unwrap(), b"replace_file replacement");
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -279,4 +296,35 @@ fn hard_link_aliases_are_detected_from_the_file() {
         &fs::metadata(&alias).unwrap()
     ));
     fs::remove_dir_all(folder).unwrap();
+}
+
+fn first_publication_preserves_source_during_a_sharing_conflict() {
+    let directory = scratch("first-publication");
+    let source = directory.join("source");
+    let target = directory.join("new-file");
+    fs::write(&source, b"complete").unwrap();
+    use butler_platform::secure_fs::fixture_locks::access_denied_rename_is_transient;
+    assert_eq!(
+        access_denied_rename_is_transient(&source, &target),
+        cfg!(windows).then_some(true)
+    );
+    let mut holder = Some(butler_platform::secure_fs::fixture_locks::deny_delete(&source).unwrap());
+    let mut retries = 0;
+    replace_file(&source, &target, &mut || {
+        assert_eq!(fs::read(&source).unwrap(), b"complete");
+        assert!(!target.exists());
+        retries += 1;
+        drop(holder.take());
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(retries, usize::from(cfg!(windows)));
+    drop(holder);
+    assert!(!source.exists());
+    assert_eq!(
+        access_denied_rename_is_transient(&source, &target),
+        cfg!(windows).then_some(false)
+    );
+    assert_eq!(fs::read(&target).unwrap(), b"complete");
+    fs::remove_dir_all(directory).unwrap();
 }
