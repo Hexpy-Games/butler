@@ -7,9 +7,8 @@ use super::Capabilities;
 
 pub mod answer_blocks;
 mod bridge;
-mod validation;
 pub use bridge::{BridgeCatalogTool, describe_native, search_native};
-pub use validation::validate_native_arguments;
+pub use butler_turn::btcc::validate_native_arguments;
 
 /// The bundled tool catalog does not match the registered capabilities.
 #[derive(Debug, thiserror::Error)]

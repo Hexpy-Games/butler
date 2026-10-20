@@ -314,7 +314,7 @@ fn cassette() -> Result<Cassette, HarnessError> {
         ),
         (
             "read_operation_results",
-            json!({"result_ref":"x","sha256":"x","revision":null,"work_id":null,"offset":0,"length":1}),
+            json!({"result_ref":"x","sha256":"0".repeat(64),"revision":null,"work_id":null,"offset":0,"length":1}),
         ),
         ("browser_open", json!({"url":"https://example.com"})),
         ("browser_observe", observe.clone()),

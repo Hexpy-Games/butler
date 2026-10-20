@@ -235,7 +235,7 @@ fn browser_call(call: &ModelRoundToolCall) -> Option<ModelRoundToolCall> {
     if !browser {
         return None;
     }
-    let arguments: Value = serde_json::from_str(&call.raw_arguments).ok()?;
+    let arguments = Value::Object(call.arguments.clone());
     let (name, args) = if call.name == "tool_call" {
         (
             arguments.get("id")?.as_str()?.strip_prefix("native:")?,
