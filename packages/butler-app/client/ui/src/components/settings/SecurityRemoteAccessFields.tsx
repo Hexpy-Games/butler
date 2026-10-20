@@ -15,6 +15,11 @@ export function SecurityRemoteAccessFields({
   onChange: (enabled: boolean) => void;
 }) {
   const copy = appCopy.settings.security;
+  const codes = [...new Set(view.bind_errors?.map(({ code }) => code))];
+  const firstCode = codes.find((code) => code && Object.hasOwn(copy.bindErrors, code)) ?? "bind_failed";
+  const bindError = codes.length > 0
+    ? copy.bindErrors[firstCode as keyof typeof copy.bindErrors]
+    : undefined;
   return (
     <>
       <SettingsSwitch
@@ -29,6 +34,7 @@ export function SecurityRemoteAccessFields({
         <SettingsField
           settingId="lan-urls"
           label={copy.addresses}
+          error={bindError}
           control={view.lan_urls.length > 0 ? (
             <Stack gap="xs">
               {view.lan_urls.map((url) => (
@@ -43,7 +49,7 @@ export function SecurityRemoteAccessFields({
                 </Stack>
               ))}
             </Stack>
-          ) : (
+          ) : bindError ? null : (
             <Typo.Caption tone="secondary">{copy.noAddresses}</Typo.Caption>
           )}
         />

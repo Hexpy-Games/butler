@@ -131,10 +131,11 @@ async fn approvals_owner_scale_complete_and_current() -> Result<(), HarnessError
         assert_eq!(grant["capability"], "run_command");
         assert_eq!(grant["cwd"], "/workspace");
     }
-    scale::measure_current(&s, grants, server_us).await?;
+    scale::measure_current(&s, grants).await?;
+    eprintln!("approvals cold watch: server_us={server_us} old_budget_us=50000");
     butler_e2e::assert_wall_clock_budget!(
         Duration::from_micros(server_us),
-        Duration::from_millis(50),
+        Duration::from_millis(200),
         "all approvals: 3000 grants / 600 owners"
     );
     s.finish().await

@@ -1975,6 +1975,12 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       remoteAccessDescription: "Devices on your network enter the connection code to connect.",
       addresses: "Addresses",
       noAddresses: "No network address",
+      bindErrors: {
+        address_in_use: "Port in use",
+        permission_denied: "Port blocked",
+        address_unavailable: "Address unavailable",
+        bind_failed: "Couldn't open address",
+      },
       copyAddress: "Copy address",
       copied: "Copied",
       code: "Code",
