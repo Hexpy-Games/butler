@@ -1,5 +1,10 @@
 use super::*;
+use crate::gateway::AppBrowserStillCommand;
 impl GatewayApplication for AppApplication {
+    fn browser_still(&self, command: AppBrowserStillCommand) -> ApplicationFuture<Value> {
+        let this = self.clone_handle();
+        Box::pin(async move { this.browser_still_owned(command).await })
+    }
     fn assets(&self, command: AppAssetCommand) -> ApplicationFuture<Value> {
         let this = self.clone_handle();
         Box::pin(async move { this.assets_owned(command).await })

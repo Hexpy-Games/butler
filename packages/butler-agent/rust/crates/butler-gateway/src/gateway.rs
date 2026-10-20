@@ -157,6 +157,9 @@ pub use session_controls_contract::GatewaySessionControls;
 mod data_reset;
 pub use data_reset::{AppDataResetPort, FullResetRequest, ResetNonce};
 
+mod browser_still_delivery;
+pub use browser_still_delivery::AppBrowserStillCommand;
+
 pub trait GatewayApplication:
     GatewayMutationCommands
     + GatewayProjectDashboard
@@ -168,6 +171,13 @@ pub trait GatewayApplication:
     + Sync
     + 'static
 {
+    fn browser_still(
+        &self,
+        command: AppBrowserStillCommand,
+    ) -> ApplicationFuture<serde_json::Value> {
+        let _ = command;
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn data_reset(&self) -> Option<Arc<dyn AppDataResetPort>> {
         None
     }

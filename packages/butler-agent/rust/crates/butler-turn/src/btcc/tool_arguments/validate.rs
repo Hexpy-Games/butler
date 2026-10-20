@@ -228,7 +228,7 @@ fn primitive_equal(left: &Value, right: &Value) -> bool {
         && left == right
 }
 
-fn required_fields(
+pub(super) fn required_fields(
     fields: &Map<String, Value>,
     schema: &Value,
     path: &str,

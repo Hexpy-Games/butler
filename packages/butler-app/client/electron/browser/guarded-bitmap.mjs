@@ -1,7 +1,7 @@
 /** A private capture cannot outlive its document or block on a native dialog. */
-export async function guardedCapture(tab, task) {
+export async function guardedCapture(tab, task, notifyUnavailable = true) {
   if (tab.dialog) return undefined;
-  if (!tab.view || tab.view.webContents.isDestroyed()) { tab.afterCapture?.(); return undefined; }
+  if (!tab.view || tab.view.webContents.isDestroyed()) { if (notifyUnavailable) tab.afterCapture?.(); return undefined; }
   const contents = tab.view.webContents;
   const dbg = contents.debugger;
   // EventEmitter cleanup remains valid after Electron destroys the native wrapper.
@@ -33,9 +33,18 @@ export async function guardedCapture(tab, task) {
   }
 }
 
-export async function settledBitmap(tab, contents, current, beforeCapture) {
+export async function settleStill(tab) {
+  return guardedCapture(tab, async (contents, current) => {
+    if (!contents.isLoading()) await contents.executeJavaScriptInIsolatedWorld(9001, [{
+      code: "new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done(true))))",
+    }]).catch(() => {});
+    return current();
+  }, false);
+}
+
+export async function settledBitmap(tab, contents, current, beforeCapture, settled = false) {
   // Input dispatch can finish before paint reaches the compositor.
-  if (!contents.isLoading()) await contents.executeJavaScriptInIsolatedWorld(9001, [{
+  if (!settled && !contents.isLoading()) await contents.executeJavaScriptInIsolatedWorld(9001, [{
     code: "new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done(true))))",
   }]).catch(() => {});
   if (!current()) return undefined;
