@@ -363,11 +363,7 @@ async fn register(
                 | ConversationRegistrationOutcome::Replayed(_)
                 | ConversationRegistrationOutcome::InternalControlSuperseded,
             ) => ingested += 1,
-            Err(error)
-                if matches!(
-                    error.code(),
-                    "memory_source_ineligible" | "memory_source_not_terminal"
-                ) => {}
+            Err(error) if crate::cognition::graph::source_validity::is_invalid(error.code()) => {}
             Err(error) => return Err(error),
         }
     }

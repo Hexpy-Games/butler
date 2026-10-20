@@ -1,6 +1,8 @@
 //! One tracked semantic projection quantum on the registered Conversation graph.
 
+mod claim;
 mod notice;
+mod pending;
 mod recovery;
 mod stages;
 use crate::cognition::graph::{ProviderCall, RepairBudget};
@@ -199,8 +201,10 @@ async fn execute(
     owners: &ActiveProjectionWindowOwners,
     deps: &ProjectionDependencies,
 ) -> CognitionResult<Option<GraphProgress>> {
-    let Some(claim) = claim_window(operation, owners, deps).await? else {
-        return Ok(None);
+    let claim = match claim::next(operation, owners, deps).await? {
+        claim::Next::Window(claim) => claim,
+        claim::Next::Settled(progress) => return Ok(Some(*progress)),
+        claim::Next::Empty => return Ok(None),
     };
     let key = (
         claim.job_id.clone(),
@@ -211,7 +215,6 @@ async fn execute(
         owners: owners.clone(),
         key,
     };
-    let claim = Arc::new(claim);
     let adapter_entered = Arc::new(AtomicBool::new(false));
     let result = execute_claimed(operation, &claim, deps, adapter_entered.clone()).await;
     match result {
@@ -220,43 +223,6 @@ async fn execute(
             .await
             .map(Some),
     }
-}
-
-/// Claims the job's next projection window for this process, registering
-/// the claim as active.
-async fn claim_window(
-    operation: &Operation,
-    owners: &ActiveProjectionWindowOwners,
-    deps: &ProjectionDependencies,
-) -> CognitionResult<Option<crate::cognition::graph::ClaimedProjectionWindow>> {
-    let host = deps.host.clone();
-    let active = owners.lock().clone();
-    let claim_owners = owners.clone();
-    let nonce = host.new_uuid();
-    let now = (operation.clock)();
-    operation
-        .write(move |state| {
-            notice::refresh_source_hash(state, &now)?;
-            let claim = state.graph.claim_projection_window(
-                crate::cognition::graph::ClaimProjectionWindowInput {
-                    job_id: Some(&state.input.job_id),
-                    now: &now,
-                    owner_pid: host.process_id(),
-                    owner_nonce: &nonce,
-                    active_owners: &active,
-                    process_status: &|pid| host.process_status(pid),
-                },
-            )?;
-            if let Some(claim) = &claim {
-                claim_owners.lock().insert((
-                    claim.job_id.clone(),
-                    claim.window_ref.clone(),
-                    claim.owner_nonce.clone(),
-                ));
-            }
-            Ok(claim)
-        })
-        .await
 }
 
 /// Records why the claimed window failed: a context expansion or an
@@ -286,7 +252,15 @@ async fn settle_failure(
     let clock = operation.clock.clone();
     settlement
         .write(move |state| {
-            assert_current(state, &clock())?;
+            let code = match assert_current(state, &clock()) {
+                Ok(()) => code,
+                Err(error)
+                    if crate::cognition::graph::source_validity::is_invalid(error.code()) =>
+                {
+                    error.code()
+                }
+                Err(error) => return Err(error),
+            };
             let owner = crate::cognition::graph::ProjectionWindowOwner {
                 job_id: &job,
                 window_ref: &window,

@@ -15,14 +15,13 @@ mod typed;
 pub(super) mod vector;
 use crate::cognition::generation::{resolve_active_generation, resolve_generation};
 use crate::cognition::registration::{ProjectSemanticWindowInput, ProjectionSourceNotice};
-use crate::cognition::sources::read_typed_record;
 use crate::cognition::{
     CognitionConversationSourceNotice, CognitionError, CognitionResult,
     ConversationRegistrationOutcome, MemoryGenerationTarget, RegisterConversationSourceInput,
 };
 use crate::coordination::CognitionWaitClass;
 use crate::lenient::{Arg, Obj};
-use butler_turn::conversation::{ConversationSourceReader, conversation_store_path};
+use butler_turn::conversation::conversation_store_path;
 
 mod input;
 pub(super) use input::Input;
@@ -381,9 +380,9 @@ pub(super) async fn project_next(
         return Ok((repaired, Some(handle)));
     };
     let job_id = pending.job_id.clone();
-    let owned = input.clone();
-    let generation = handle.clone();
-    let notice = super::blocking::run(move || pending_notice(&owned, &generation, pending)).await?;
+    // Resolve source authority under the claim lease, so invalid sources settle
+    // durably rather than escaping before the queue can advance.
+    let notice = ProjectionSourceNotice::Pending(pending);
     let projected = input
         .registration
         .project_semantic_window(ProjectSemanticWindowInput {
@@ -402,57 +401,6 @@ pub(super) async fn project_next(
         })
         .await?;
     Ok((projected.is_some(), Some(handle)))
-}
-
-/// The source notice of a pending semantic job, checked against the
-/// current canonical conversation or typed record.
-fn pending_notice(
-    input: &Input,
-    handle: &crate::cognition::MemoryGenerationHandle,
-    pending: crate::cognition::graph::PendingSemanticJob,
-) -> CognitionResult<ProjectionSourceNotice> {
-    let notice = if let Some(turn_id) = pending.source_key.strip_prefix("conversation_turn:") {
-        let canonical = ConversationSourceReader::open(&canonical_path(handle, &input.data_root))
-            .map_err(CognitionError::from)?;
-        let outcome = canonical
-            .read_turn_outcome(turn_id)
-            .map_err(CognitionError::from)?
-            .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?;
-        canonical.close().map_err(CognitionError::from)?;
-        ProjectionSourceNotice::Conversation(CognitionConversationSourceNotice::Turn {
-            session_id: pending
-                .session_id
-                .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?,
-            turn_id: turn_id.into(),
-            outcome_generation: outcome.generation,
-            extraction_version: pending.extraction_version,
-        })
-    } else if let Some(message_id) = pending.source_key.strip_prefix("conversation_message:") {
-        projection::standalone_notice(input, handle, &pending, message_id)?
-    } else if let Some((kind, record_id)) = pending.source_key.split_once(':')
-        && matches!(kind, "task_report" | "explicit_record")
-    {
-        let owner = read_typed_record(
-            &handle.source_root,
-            &handle.source_root.join("cognition/memory"),
-            kind,
-            record_id,
-        )?
-        .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?;
-        if owner.content_hash != pending.source_hash {
-            return Err(error(CognitionCode::MemorySourceChanged));
-        }
-        ProjectionSourceNotice::Typed {
-            source_kind: kind.into(),
-            record_id: record_id.into(),
-            revision: owner.revision,
-            content_hash: owner.content_hash,
-            operation_id: owner.operation_id,
-        }
-    } else {
-        return Err(error(CognitionCode::MemoryProjectionSourceInvalid));
-    };
-    Ok(notice)
 }
 
 pub(super) fn resolve_input_generation(

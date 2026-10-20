@@ -1,4 +1,4 @@
-//! Reconcile edited standalone sources through the bounded canonical change log.
+//! Reconcile changed sources through the bounded canonical change log.
 
 use super::{
     CatchupState, CognitionCode, CognitionConversationSourceNotice, CognitionError,
@@ -71,9 +71,16 @@ impl Pass {
         }
         let floor = open_floor(graph_path)?;
         let mut messages = HashSet::new();
+        let mut turns = HashSet::new();
         for change in &changes {
-            if change.kind == SourceChangeKind::Message && messages.insert(&change.entity_id) {
-                self.push_recovered(canonical, &floor, &change.entity_id)?;
+            match change.kind {
+                SourceChangeKind::Message if messages.insert(&change.entity_id) => {
+                    self.push_recovered(canonical, &floor, &change.entity_id)?;
+                }
+                SourceChangeKind::Turn if turns.insert(&change.entity_id) => {
+                    self.push_turn(canonical, &floor, &change.entity_id)?;
+                }
+                _ => {}
             }
         }
         if let Some(last) = changes.last() {
@@ -111,6 +118,40 @@ impl Pass {
                 break;
             }
         }
+        Ok(())
+    }
+
+    /// A restored outcome or terminal status can sit behind the append cursor.
+    /// Revalidate its old observation when its windows failed source validation.
+    fn push_turn(
+        &mut self,
+        canonical: &ConversationSourceReader,
+        floor: &rusqlite::Connection,
+        id: &str,
+    ) -> CognitionResult<()> {
+        if !crate::cognition::graph::source_validity::needs_revalidation(
+            floor,
+            &format!("conversation_turn:{id}"),
+        )? {
+            return Ok(());
+        }
+        if crate::coordination::admission_suppressed(floor, "turn", id).map_err(|source| {
+            error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
+        })? {
+            return Ok(());
+        }
+        let Some(outcome) = canonical.read_recall_outcome(id)? else {
+            return Ok(());
+        };
+        self.work.push((
+            CognitionConversationSourceNotice::Turn {
+                session_id: outcome.session_id,
+                turn_id: outcome.turn_id,
+                outcome_generation: outcome.generation,
+                extraction_version: "memory-extract-v3".into(),
+            },
+            format!("catchup:outcome:{}", outcome.id),
+        ));
         Ok(())
     }
 

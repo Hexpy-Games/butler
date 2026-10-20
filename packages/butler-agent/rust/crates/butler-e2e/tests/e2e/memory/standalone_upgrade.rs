@@ -137,7 +137,7 @@ async fn assert_standalone_cache(s: &Scenario, key: &str) -> Result<(), HarnessE
 }
 
 /// A registered, unprocessed window has no saved extraction output or plan.
-fn reset_pending(db: &butler_platform::sqlite::Connection, key: &str) {
+pub(super) fn reset_pending(db: &butler_platform::sqlite::Connection, key: &str) {
     db.execute("UPDATE memory_projection_windows SET state='pending',owner_nonce=NULL,owner_pid=NULL,next_attempt_at=NULL,attempt_count=0,output_json=NULL,normalized_plan_json=NULL,provider_evidence_json=NULL,input_json=NULL,input_sha256=NULL,extraction_stages_json='{}' WHERE job_id IN (SELECT j.job_id FROM memory_projection_jobs j JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id WHERE c.source_key=?1)", [key]).unwrap();
     db.execute("DELETE FROM memory_projection_attempts WHERE job_id IN (SELECT j.job_id FROM memory_projection_jobs j JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id WHERE c.source_key=?1)", [key]).unwrap();
     db.execute("UPDATE memory_projection_jobs SET semantic_graph_state='{\"state\":\"pending\"}',last_served_at=NULL WHERE episode_id IN (SELECT memory_chunk_id FROM memory_chunks WHERE source_key=?1)", [key]).unwrap();

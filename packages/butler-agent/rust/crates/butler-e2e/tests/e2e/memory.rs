@@ -375,3 +375,6 @@ mod lock_retry;
 
 #[path = "memory/standalone_upgrade.rs"]
 mod standalone_upgrade;
+
+#[path = "memory/orphaned.rs"]
+mod orphaned;

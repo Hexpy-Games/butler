@@ -57,7 +57,7 @@ pub enum JobOutcome {
 }
 
 #[derive(Clone, Debug)]
-pub(in crate::cognition) struct PendingSemanticJob {
+pub(crate) struct PendingSemanticJob {
     pub job_id: String,
     pub session_id: Option<String>,
     pub source_key: String,
@@ -183,7 +183,8 @@ pub(super) fn save_catchup_state(
 
 /// The observation ids among `ids` that a registered job already recorded.
 /// The jobs table is small next to the memory graph, so one pass over its
-/// observation lists answers the whole batch.
+/// observation lists answers the whole batch. A terminal source failure must
+/// be validated again when catch-up sees that observation after undo/restore.
 pub(super) fn registered_observations(
     connection: &Connection,
     ids: &[String],
@@ -191,17 +192,26 @@ pub(super) fn registered_observations(
     let mut found = HashSet::new();
     for batch in ids.chunks(256) {
         let marks = vec!["?"; batch.len()].join(",");
+        let codes = vec!["?"; super::source_validity::CODES.len()].join(",");
         let mut statement = connection
             .prepare(&format!(
                 "SELECT DISTINCT observed.value FROM memory_projection_jobs j, \
                  json_each(j.observed_completion_job_ids) observed \
-                 WHERE observed.value IN ({marks})"
+                 WHERE observed.value IN ({marks}) AND NOT EXISTS (\
+                 SELECT 1 FROM memory_projection_windows w WHERE w.job_id=j.job_id \
+                 AND w.state='failed' AND w.error_code IN ({codes}))"
             ))
             .map_err(db_error)?;
         let rows = statement
-            .query_map(rusqlite::params_from_iter(batch), |row| {
-                row.get::<_, String>(0)
-            })
+            .query_map(
+                rusqlite::params_from_iter(
+                    batch
+                        .iter()
+                        .map(String::as_str)
+                        .chain(super::source_validity::CODES),
+                ),
+                |row| row.get::<_, String>(0),
+            )
             .map_err(db_error)?;
         for row in rows {
             found.insert(row.map_err(db_error)?);
@@ -295,6 +305,7 @@ pub(super) fn replay(
         )
         .map_err(db_error)?;
     }
+    super::source_validity::revive(&tx, &job_id, now)?;
     tx.commit().map_err(db_error)?;
     Ok(Some(job_id))
 }

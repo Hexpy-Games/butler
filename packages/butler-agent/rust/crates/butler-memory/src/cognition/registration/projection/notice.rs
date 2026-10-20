@@ -8,6 +8,8 @@ use crate::cognition::{
 
 #[derive(Clone)]
 pub(crate) enum ProjectionSourceNotice {
+    /// A durable queue entry whose source is resolved under the claim lease.
+    Pending(crate::cognition::graph::PendingSemanticJob),
     Conversation(super::super::CognitionConversationSourceNotice),
     Typed {
         source_kind: String,
@@ -30,6 +32,10 @@ pub(super) fn assert_notice_current(
     now: &str,
 ) -> CognitionResult<()> {
     match &state.input.notice {
+        ProjectionSourceNotice::Pending(_) => Err(CognitionError::new(
+            CognitionCode::MemoryProjectionSourceInvalid,
+            "memory_projection_source_invalid",
+        )),
         ProjectionSourceNotice::Conversation(notice) => Ok(assert_conversation_source_current(
             &state.canonical,
             notice.borrowed(),
@@ -76,12 +82,17 @@ pub(super) fn refresh_source_hash(state: &State, now: &str) -> CognitionResult<(
     ) = &state.input.notice
     {
         let revision = state.graph.job_revision(&state.input.job_id)?;
-        state.graph.refresh_conversation_source_hash(
+        let result = state.graph.refresh_conversation_source_hash(
             &state.canonical,
             notice.borrowed(),
             &revision,
             now,
-        )?;
+        );
+        match result {
+            // Source validation below the refresh settles these under the lease.
+            Err(error) if crate::cognition::graph::source_validity::is_invalid(error.code()) => {}
+            result => result?,
+        }
     }
     Ok(())
 }
