@@ -476,5 +476,11 @@ impl Drop for GraphRepository {
 }
 
 pub(super) fn db_error(error: rusqlite::Error) -> CognitionError {
-    CognitionError::new(CognitionCode::MemoryGraphUnavailable, error.to_string()).with_source(error)
+    let code = match error.sqlite_error_code() {
+        Some(rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked) => {
+            CognitionCode::MemoryWriteBusy
+        }
+        _ => CognitionCode::MemoryGraphUnavailable,
+    };
+    CognitionError::new(code, error.to_string()).with_source(error)
 }
