@@ -1,4 +1,5 @@
 //! Schema-driven representation repair and validation shared by tool dispatch paths.
+mod direct;
 mod example;
 mod normalize;
 mod validate;
@@ -15,7 +16,7 @@ pub fn normalize_then_validate(
     normalize_and_validate(tool, schema, args, true)
 }
 
-/// Direct calls tolerate extra keys; missing required fields still get typo hints.
+/// Direct handlers own value rules; only top-level required fields get checked.
 pub fn normalize_direct_arguments(
     tool: &str,
     schema: &Value,
@@ -30,9 +31,17 @@ fn normalize_and_validate(
     args: &Value,
     strict: bool,
 ) -> Result<Map<String, Value>, (String, String)> {
-    let value = normalize::arguments(tool, schema, args, strict);
-    let result = if value.is_object() {
-        validate::validate(&value, schema, "$", tool, strict)
+    let value = if strict {
+        normalize::arguments(tool, schema, args, true)
+    } else {
+        direct::arguments(tool, schema, args)
+    };
+    let result = if let Some(fields) = value.as_object() {
+        if strict {
+            validate::validate(&value, schema, "$", tool, true)
+        } else {
+            validate::required_fields(fields, schema, "$", tool)
+        }
     } else {
         Err(("arguments must be one JSON object".into(), "$".into()))
     };

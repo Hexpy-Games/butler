@@ -150,6 +150,8 @@ async fn settle_jobs(data: &Path, membership: &str, sessions: &[&str]) {
             let graph_path = graph_path(data).unwrap();
             let ready = mirror_current(data)
                 && super::super::memory_idle::catchup_checkpoint_current(data, &graph_path)
+                && state(&graph(data), "canonical_catchup_change_seq").as_deref()
+                    == Some(canonical_position(data).1.to_string().as_str())
                 && graph(data)
                     .query_row(&incomplete, rusqlite::params_from_iter(sessions), |row| {
                         row.get::<_, i64>(0)

@@ -234,7 +234,7 @@ jobs:
             $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
             $filter = switch ($test) {
               'paired-idle' { 'gateway_pairing::support::idle::paired_devices_have_zero_idle_writes_and_request_driven_last_seen' }
-              'artifact-owner-scale' { 'project_artifacts::scale::many_matches_page_completely_at_owner_scale' }
+              'artifact-owner-scale' { 'project_artifacts::scale::perf_many_matches_page_completely_at_owner_scale' }
               'memory-rules-cursor' { 'memory_wiring_more::cursor::' }
               'project-instruction-reset' { 'memory_wiring_more::duration::project_reset_includes_temporary_instructions_and_keeps_other_scopes' }
               'memory-rules-crash' { 'memory_wiring_more::crash::' }

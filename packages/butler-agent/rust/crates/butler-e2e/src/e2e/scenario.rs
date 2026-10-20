@@ -154,7 +154,7 @@ impl Setup {
         self
     }
 
-    /// Records cassette traffic into `dir` (LIVE-09 drift check), whatever
+    /// Records cassette traffic into `dir`, whatever
     /// `BUTLER_E2E_RECORD` says.
     pub fn record_into(mut self, dir: std::path::PathBuf) -> Self {
         self.record_into = Some(dir);

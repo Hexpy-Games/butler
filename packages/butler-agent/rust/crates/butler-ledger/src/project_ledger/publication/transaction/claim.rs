@@ -1,4 +1,4 @@
-use std::fs;
+use crate::project_ledger::publication::timing::fs;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -32,8 +32,9 @@ pub(in crate::project_ledger::publication) fn acquire(
     base_sha256: &str,
     journal_path: &Path,
 ) -> Result<(), ProjectWorkPublicationError> {
+    let _phase = crate::project_ledger::publication::timing::Phase::new("publication_acquire");
     let claim_path = path(root);
-    if claim_path.exists() {
+    if fs::exists(&claim_path) {
         return assert_owned(&claim_path, root, publication_id, base_sha256);
     }
     let parent = claim_path.parent().ok_or_else(io)?;
@@ -71,6 +72,7 @@ pub(in crate::project_ledger::publication) fn assert_owned(
     publication_id: &str,
     base_sha256: &str,
 ) -> Result<(), ProjectWorkPublicationError> {
+    let _phase = crate::project_ledger::publication::timing::Phase::new("publication_assert_owned");
     let bytes = fs::read(path).map_err(|source| {
         ProjectWorkPublicationError::Uncertain { source: None }.with_source(source)
     })?;
@@ -94,6 +96,8 @@ pub(in crate::project_ledger::publication) fn release_if_owned(
     publication_id: &str,
     base_sha256: &str,
 ) -> Result<(), ProjectWorkPublicationError> {
+    let _phase =
+        crate::project_ledger::publication::timing::Phase::new("publication_release_if_owned");
     let bytes = match fs::read(path) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
@@ -109,9 +113,39 @@ pub(in crate::project_ledger::publication) fn release_if_owned(
     {
         return Ok(());
     }
+    advance_generation(path, publication_id)?;
     fs::remove_file(path).map_err(|source| io().with_source(source))
 }
 
 fn io() -> ProjectWorkPublicationError {
     ProjectWorkPublicationError::io("project_ledger_claim_io_error")
+}
+
+/// A constant-sized fence shared by all canonical mutation owners. It lives
+/// beside the claim, outside trees replaced by generic publications.
+pub(in crate::project_ledger) fn read_generation(
+    root: &Path,
+) -> Result<String, ProjectWorkPublicationError> {
+    read_generation_path(&path(root).with_extension("generation"))
+}
+
+fn read_generation_path(path: &Path) -> Result<String, ProjectWorkPublicationError> {
+    match fs::read(path) {
+        Ok(bytes) => serde_json::from_slice(&bytes).map_err(|source| io().with_source(source)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+        Err(source) => Err(io().with_source(source)),
+    }
+}
+
+/// Advance before exposing a mutation by releasing its claim. Idempotent on
+/// recovery; aborted claims may conservatively invalidate older captures.
+pub(in crate::project_ledger::publication) fn advance_generation(
+    claim_path: &Path,
+    generation: &str,
+) -> Result<(), ProjectWorkPublicationError> {
+    let path = claim_path.with_extension("generation");
+    if read_generation_path(&path)? != generation {
+        super::super::occurrence::atomic_json(&path, &generation)?;
+    }
+    Ok(())
 }

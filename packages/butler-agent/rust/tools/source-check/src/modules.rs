@@ -25,7 +25,10 @@ pub(crate) fn load_shipped(entry: &Path) -> Result<Vec<Module>, String> {
     load_skipping(entry, fixture_only)
 }
 
-fn load_skipping(entry: &Path, skip: fn(&[Attribute]) -> bool) -> Result<Vec<Module>, String> {
+pub(crate) fn load_skipping(
+    entry: &Path,
+    skip: fn(&[Attribute]) -> bool,
+) -> Result<Vec<Module>, String> {
     let mut modules = Vec::new();
     let file = read(entry)?;
     let mut ancestors = vec![canonical(entry)?];

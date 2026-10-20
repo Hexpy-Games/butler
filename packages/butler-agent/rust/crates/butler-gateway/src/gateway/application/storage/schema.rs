@@ -13,6 +13,7 @@ mod security;
 mod session_reads;
 mod signins;
 mod space;
+mod still_delivery;
 mod supporting;
 mod vault;
 mod wallpapers;
@@ -41,6 +42,7 @@ pub(super) fn migrate(
         "INTEGER NOT NULL DEFAULT 0",
     )?;
     library::create(connection)?;
+    still_delivery::recover(connection)?;
     super::history::schema::create(connection)?;
     security::create(connection)?;
     // Open-turn lookups filter on the state alone; databases that predate the

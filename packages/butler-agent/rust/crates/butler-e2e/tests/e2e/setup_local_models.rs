@@ -13,6 +13,8 @@
     reason = "test assertions"
 )]
 
+mod retry;
+
 use std::time::{Duration, Instant};
 
 use butler_e2e::e2e::HarnessError;
@@ -235,7 +237,68 @@ async fn setup_04_retried_stream_does_not_repeat_text() -> Result<(), HarnessErr
     let server = FakeServer::local_models(behavior).await?;
     let s = with_local_server("SETUP-04-RETRY", &server).await?;
     use_local_model(&s, &server.base_url).await?;
-    let (delivered, streamed) = streamed_turn(&s).await?;
+    let live = LiveEvents::subscribe(&s.gw, 0).await?;
+    let accepted =
+        s.gw.say("general", "Say something about local models.")
+            .await?;
+    let turn_id = accepted_turn_id(&accepted)?;
+    let turn = live
+        .wait_turn(
+            &s.gw,
+            "general",
+            &turn_id,
+            &["delivered"],
+            Duration::from_secs(60),
+        )
+        .await?;
+    assert_eq!(turn_state(&turn), "delivered", "{turn}");
+    let messages = s.gw.messages("general").await?;
+    let delivered = messages
+        .iter()
+        .find(|message| message["role"] == "assistant" && message["turn_id"] == turn_id.as_str())
+        .unwrap()["text"]
+        .as_str()
+        .unwrap();
+    let streamed = streamed_texts(&live, &turn_id);
+    let events: Vec<_> = live
+        .snapshot()
+        .into_iter()
+        .filter(|event| {
+            event["type"] == "agent.turn_event" && event_turn_id(event) == Some(turn_id.as_str())
+        })
+        .map(|event| event["payload"]["event"].clone())
+        .collect();
+    let first = events
+        .iter()
+        .position(|event| event["kind"] == "model.stream.text_delta")
+        .expect("cut stream must show text");
+    let stream_id = &events[first]["payload"]["streamId"];
+    let retry = events
+        .iter()
+        .position(|event| {
+            event["kind"] == "model.stream.text_delta" && event["payload"]["streamId"] != *stream_id
+        })
+        .expect("retry must stream text");
+    assert!(
+        events[first + 1..retry].iter().any(|event| {
+            event["kind"] == "model.stream.completed"
+                && event["payload"]["status"] == "discarded"
+                && event["payload"]["streamId"] == *stream_id
+        }),
+        "cut stream must be discarded before retry text: {events:?}"
+    );
+    let transcript = s.gw.get("/transcript-export?session_id=general").await?;
+    assert_eq!(transcript.status, 200, "{}", transcript.text);
+    assert_eq!(
+        transcript.data()["content"]
+            .as_str()
+            .unwrap()
+            .matches(&answer)
+            .count(),
+        1,
+        "{}",
+        transcript.text
+    );
     assert_eq!(delivered, answer);
     assert_prefixes(&streamed, &answer);
     let streams = server
@@ -244,6 +307,7 @@ async fn setup_04_retried_stream_does_not_repeat_text() -> Result<(), HarnessErr
         .filter(|request| request["stream"] == true && request["tools"].is_array())
         .count();
     assert!(streams >= 2, "the cut stream was not retried ({streams})");
+    retry::transport_retry(&s, &answer).await?;
     s.finish().await
 }
 

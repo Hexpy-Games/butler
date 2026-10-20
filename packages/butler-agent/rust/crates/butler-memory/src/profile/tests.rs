@@ -153,6 +153,7 @@ async fn generated_projection_requires_current_canonical_evidence_and_closes_rea
     assert!(reflected.summary.contains("working interpretation"));
 }
 
+// test-category: format-pin
 #[tokio::test]
 async fn candidate_duplicate_and_promoted_stable_merge_preserve_source_history() {
     let root = Root::new("candidate-merge");
@@ -235,12 +236,32 @@ async fn candidate_duplicate_and_promoted_stable_merge_preserve_source_history()
         service.reflective_summary("en").await.unwrap().entry_count,
         1
     );
-    candidates::upsert(
+    let db = storage::open(&root.0, storage::Access::Read).unwrap();
+    let promoted_at: String = db
+        .query_row(
+            "SELECT promoted_at FROM profile_candidates WHERE id=?1",
+            ["pc_6669536ca6f6f7df"],
+            |row| row.get(0),
+        )
+        .unwrap();
+    drop(db);
+    let merged = candidates::upsert(
         &root.0,
         &candidate("e2", "Retain merged instructions"),
         "2023-11-16T22:13:20.000Z",
     )
+    .unwrap()
     .unwrap();
+    assert_eq!(merged.promoted_at.as_deref(), Some(promoted_at.as_str()));
+    let db = storage::open(&root.0, storage::Access::Read).unwrap();
+    let stored: String = db
+        .query_row(
+            "SELECT promoted_at FROM profile_candidates WHERE id=?1",
+            [&merged.id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(stored, promoted_at);
     let stable = storage::stable_entries(&root.0).unwrap();
     assert_eq!(stable.len(), 1);
     assert_eq!(stable[0].understanding.evidence_refs, ["e1", "e2"]);

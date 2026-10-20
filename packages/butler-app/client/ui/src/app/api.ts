@@ -848,6 +848,10 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       parentSessionId: body.parent_session_id,
     });
   }
+  const stillDeliveryMatch = method === "GET" ? url.pathname.match(/^\/browser-stills\/([^/]+)$/u) : null;
+  if (stillDeliveryMatch) return callBridge<T>(bridge, "getBrowserStills", {
+    id: decodeURIComponent(stillDeliveryMatch[1]!), sessionId: url.searchParams.get("session_id"), wait: url.searchParams.get("wait") === "1",
+  });
   const operationOutputMatch = method === "GET"
     ? url.pathname.match(/^\/turns\/([^/]+)\/operations\/([^/]+)\/output$/u)
     : null;
