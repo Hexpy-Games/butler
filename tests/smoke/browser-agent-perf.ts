@@ -72,9 +72,9 @@ try {
   const stills=[];
   for(const act of acts) stills.push(await expectBrowserStills(app.gateway,act));
   assert.equal(stills.length,acts.length,"every act checked for complete still delivery");
-  // Normal act p95 53.5 ms (PR 1382); incident at roughly 20x.
-  const ACT_INCIDENT_MS=1000;
-  const budgets={actIncident:ACT_INCIDENT_MS,stop:100},failures:string[]=[],operationP95:Record<string,number>={};
+  // Normal act / overhead p95 53.5 / 21.2 ms (PR 1382); visible waits at ~10x normal.
+  const ACT_INCIDENT_MS=500,ACT_OVERHEAD_INCIDENT_MS=250;
+  const budgets={actIncident:ACT_INCIDENT_MS,actOverheadIncident:ACT_OVERHEAD_INCIDENT_MS,stop:100},failures:string[]=[],operationP95:Record<string,number>={};
   // Normal no-op p95 2.10–2.72 ms (issue 694 A/B); incident at roughly 20x.
   const NOOP_INCIDENT_MS=50;
   for(const [name,samples]of Object.entries(latencies)) {
@@ -83,11 +83,10 @@ try {
   }
   const quantiles=(values:number[])=>{const sorted=values.sort((a,b)=>a-b);return {p50:sorted[Math.ceil(sorted.length*.5)-1]!,p95:sorted[Math.ceil(sorted.length*.95)-1]!}};
   const actOverhead=quantiles(latencies.act!.map(row=>row.overheadMs!)),actTotal=quantiles(latencies.act!.map(row=>row.ms));
-  // Watches (printed, never failing): per-tool-call overhead (total minus measured settle) and total act p95.
-  const actOverheadWatchMs=20,actTotalWatchMs=50;
   if(actTotal.p95>budgets.actIncident)failures.push(`act p95 ${actTotal.p95} exceeds ${budgets.actIncident}ms incident threshold`);
-  console.log(JSON.stringify({actOverhead,actOverheadWatchMs,actOverheadOverWatch:actOverhead.p95>actOverheadWatchMs,actTotal,actTotalWatchMs,actTotalOverWatch:actTotal.p95>actTotalWatchMs,loadAverage1m:loadavg()[0]}));
-  writeFileSync(join(evidence,'operation-perf.json'),JSON.stringify({actOverhead,actOverheadWatchMs,actTotal,actTotalWatchMs,operationP95,latencies,stopProofs,stills,budgets,noopIncidentMs:NOOP_INCIDENT_MS,failures,reportOnly},null,2));
+  if(actOverhead.p95>budgets.actOverheadIncident)failures.push(`act overhead p95 ${actOverhead.p95} exceeds ${budgets.actOverheadIncident}ms incident threshold`);
+  console.log(JSON.stringify({actOverhead,actTotal,budgets,loadAverage1m:loadavg()[0]}));
+  writeFileSync(join(evidence,'operation-perf.json'),JSON.stringify({actOverhead,actTotal,operationP95,latencies,stopProofs,stills,budgets,noopIncidentMs:NOOP_INCIDENT_MS,failures,reportOnly},null,2));
   if(!reportOnly) {
     assert.deepEqual(failures,[],'browser operation budgets');
     assert.ok(operationP95.noop!<=NOOP_INCIDENT_MS,`noop p95 ${operationP95.noop} exceeds ${NOOP_INCIDENT_MS}ms incident threshold`);
