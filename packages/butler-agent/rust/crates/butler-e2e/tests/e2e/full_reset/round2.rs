@@ -2,6 +2,7 @@
 use super::*;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
+use std::path::PathBuf;
 
 async fn held(path: &Path) {
     let deadline = Instant::now() + Duration::from_secs(10);
@@ -177,7 +178,9 @@ async fn cleanup_failure_does_not_block_secrets_or_trash() -> Result<(), Harness
     }
     let journal: Value = serde_json::from_slice(&fs::read(&path)?).unwrap();
     assert_eq!(journal["secret_keys"], json!([]));
-    assert_eq!(journal["project_hot_caches"], json!([cache]));
+    let caches: Vec<PathBuf> =
+        serde_json::from_value(journal["project_hot_caches"].clone()).unwrap();
+    assert_eq!(caches, vec![cache.clone()]);
     assert_eq!(journal["pending_trash"], json!([]));
     assert_eq!(journal["kept_logs"], json!([]));
     assert!(!fs::read_dir(&root)?.any(|e| {
