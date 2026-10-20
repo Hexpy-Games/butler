@@ -3,7 +3,7 @@
 use crate::cognition::CognitionCode;
 use std::time::{Duration, Instant};
 
-use sha2::{Digest, Sha256};
+mod changes;
 
 use super::process::{Input, canonical_path, resolve_input_generation};
 use crate::cognition::graph::{CatchupState, GraphRepository};
@@ -52,7 +52,7 @@ fn claim_slot(input: &Input, schedule: Schedule) -> bool {
             .catchup_progress
             .lock()
             .as_ref()
-            .is_some_and(|(_, state)| !state.sweep_done)
+            .is_some_and(|(_, state)| !state.sweep_done || changes::pending(state))
     {
         return true;
     }
@@ -118,7 +118,7 @@ async fn run(input: &Input, schedule: Schedule) -> CognitionResult<CatchupReport
         scanned,
         ingested: registration.ingested,
         wrapped: pass.wrapped,
-        sweeping: !pass.state.sweep_done,
+        sweeping: !pass.state.sweep_done || changes::pending(&pass.state),
         outcome_cursor: pass.state.outcome,
         recovered_message_cursor: pass.state.message,
     })
@@ -133,7 +133,7 @@ struct Loaded {
 fn load(
     input: &Input,
     handle: &crate::cognition::MemoryGenerationHandle,
-    stored: CatchupState,
+    mut stored: CatchupState,
 ) -> CognitionResult<Option<Loaded>> {
     let canonical = match ConversationSourceReader::open(&canonical_path(handle, &input.data_root))
     {
@@ -151,16 +151,26 @@ fn load(
     let unclean = input
         .unclean_start
         .swap(false, std::sync::atomic::Ordering::AcqRel);
-    let unchanged = inventory_unchanged(
+    let (changed, reset) = changes::prepare(&canonical, &mut stored, identity.as_deref())?;
+    let scan_inventory = !inventory_unchanged(
         &stored,
         revision,
         identity.as_deref(),
-        unclean || !cursors_valid,
+        unclean || !cursors_valid || reset,
     );
-    let mut pass = Pass::begin(stored, revision, identity, unclean || !cursors_valid);
+    let unchanged = !changed && !scan_inventory;
+    let mut pass = Pass::begin(
+        stored,
+        revision,
+        identity,
+        unclean || !cursors_valid || reset,
+    );
     if !unchanged {
-        pass.read_outcomes(&canonical)?;
-        pass.read_recovered_sources(&canonical, &handle.graph_path)?;
+        pass.read_changes(&canonical, &handle.graph_path)?;
+        if scan_inventory {
+            pass.read_outcomes(&canonical)?;
+            pass.read_recovered_sources(&canonical, &handle.graph_path)?;
+        }
     }
     canonical.close().map_err(CognitionError::from)?;
     let work = std::mem::take(&mut pass.work);
@@ -283,10 +293,14 @@ impl Pass {
 
     /// Reads up to 255 recall outcomes after the outcome cursor.
     fn read_outcomes(&mut self, canonical: &ConversationSourceReader) -> CognitionResult<()> {
+        let limit = OUTCOME_PAGE.min(NOTICE_BUDGET - self.work.len());
+        if limit == 0 {
+            return Ok(());
+        }
         let outcomes = canonical
-            .read_recall_outcome_page(self.state.outcome.as_deref(), Some(OUTCOME_PAGE))
+            .read_recall_outcome_page(self.state.outcome.as_deref(), Some(limit))
             .map_err(CognitionError::from)?;
-        self.outcomes_at_end = outcomes.len() < OUTCOME_PAGE;
+        self.outcomes_at_end = outcomes.len() < limit;
         for outcome in outcomes {
             self.scanned += 1;
             self.state.outcome = Some(outcome.id.clone());
@@ -299,61 +313,6 @@ impl Pass {
                 },
                 format!("catchup:outcome:{}", outcome.id),
             ));
-        }
-        Ok(())
-    }
-
-    /// Fills the rest of the 256-notice budget with recovered standalone
-    /// messages after the message cursor.
-    fn read_recovered_sources(
-        &mut self,
-        canonical: &ConversationSourceReader,
-        graph_path: &std::path::Path,
-    ) -> CognitionResult<()> {
-        let floor = butler_platform::sqlite::open_with_flags(
-            graph_path,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        )
-        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
-        let remaining = NOTICE_BUDGET - self.work.len();
-        let mut scanned = 0;
-        while scanned < remaining {
-            // Limit simultaneous hydrated bodies; the source's total scan budget
-            // remains 256 and only compact notices survive to the awaits below.
-            let batch_size = (remaining - scanned).min(16);
-            let ids = canonical
-                .read_recovered_source_ids_page(self.state.message.as_deref(), Some(batch_size))
-                .map_err(CognitionError::from)?;
-            let count = ids.len();
-            self.scanned += count;
-            for id in ids {
-                self.state.message = Some(id.clone());
-                if crate::coordination::admission_suppressed(&floor, "message", &id).map_err(
-                    |source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source),
-                )? {
-                    continue;
-                }
-                let Some(message) = canonical.read_message(&id).map_err(CognitionError::from)?
-                else {
-                    continue;
-                };
-                let hash = recovered_source_hash(&message.parts)?;
-                self.state.message = Some(message.message.id.clone());
-                self.work.push((
-                    CognitionConversationSourceNotice::Standalone {
-                        session_id: message.message.session_id,
-                        message_id: message.message.id.clone(),
-                        source_hash: hash.clone(),
-                        extraction_version: "memory-extract-v3".into(),
-                    },
-                    format!("catchup:message:{}:{hash}", message.message.id),
-                ));
-            }
-            scanned += count;
-            if count < batch_size {
-                self.messages_at_end = true;
-                break;
-            }
         }
         Ok(())
     }
@@ -416,28 +375,6 @@ async fn register(
         ingested,
         interrupted: false,
     })
-}
-
-fn recovered_source_hash(
-    parts: &[butler_turn::conversation::ConversationPart],
-) -> CognitionResult<String> {
-    let mut encoded = String::from("[");
-    for (index, part) in parts.iter().enumerate() {
-        if index > 0 {
-            encoded.push(',');
-        }
-        encoded.push('[');
-        encoded.push_str(&serde_json::to_string(&part.id).map_err(json_error)?);
-        encoded.push(',');
-        butler_core::json::append_json(&part.content_json, &mut encoded).map_err(json_error)?;
-        encoded.push(']');
-    }
-    encoded.push(']');
-    Ok(format!("{:x}", Sha256::digest(encoded.as_bytes())))
-}
-
-fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
-    CognitionError::new(CognitionCode::MemoryCatchupJsonError, error.to_string()).with_source(error)
 }
 
 async fn save_state(

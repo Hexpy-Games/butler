@@ -12,7 +12,7 @@ use crate::cognition::CognitionCode;
 use crate::cognition::{
     CognitionError, CognitionResult, ConversationSourceNotice, assert_conversation_source_current,
 };
-use butler_turn::conversation::ConversationSourceReader;
+use butler_turn::conversation::{ConversationSourceReader, SourceChangeMark};
 
 /// Where one projection job stands across its stages.
 #[derive(Clone, Debug, PartialEq)]
@@ -70,6 +70,10 @@ pub(in crate::cognition) struct PendingSemanticJob {
 pub(in crate::cognition) struct CatchupState {
     pub outcome: Option<String>,
     pub message: Option<String>,
+    /// Last reconciled source change, including edits behind the append cursor.
+    pub change_mark: Option<SourceChangeMark>,
+    /// Head observed before reading this change page; only the feed continues to it.
+    pub change_head: Option<u64>,
     /// Canonical public revision at which the current sweep began.
     pub sweep_revision: Option<u64>,
     pub source_identity: Option<String>,
@@ -85,6 +89,9 @@ const SWEEP_REVISION: &str = "canonical_catchup_sweep_revision";
 const SOURCE_IDENTITY: &str = "canonical_catchup_source_identity";
 const SWEEP_DONE: &str = "canonical_catchup_sweep_done";
 const SWEPT_AT: &str = "canonical_catchup_swept_at_ms";
+const CHANGE_SEQ: &str = "canonical_catchup_change_seq";
+const CHANGE_KEY: &str = "canonical_catchup_change_key";
+const CHANGE_HEAD: &str = "canonical_catchup_change_head";
 
 pub(super) fn catchup_state(connection: &Connection) -> CognitionResult<CatchupState> {
     let read = |key| -> CognitionResult<Option<String>> {
@@ -98,9 +105,16 @@ pub(super) fn catchup_state(connection: &Connection) -> CognitionResult<CatchupS
             .map(|value| value.filter(|item| !item.is_empty()))
             .map_err(db_error)
     };
+    let change_seq = read(CHANGE_SEQ)?.and_then(|value| value.parse().ok());
+    let change_key = read(CHANGE_KEY)?.unwrap_or_default();
     Ok(CatchupState {
         outcome: read(OUTCOME_CURSOR)?,
         message: read(MESSAGE_CURSOR)?,
+        change_mark: change_seq.map(|seq| SourceChangeMark {
+            seq,
+            key: change_key,
+        }),
+        change_head: read(CHANGE_HEAD)?.and_then(|value| value.parse().ok()),
         sweep_revision: read(SWEEP_REVISION)?.and_then(|value| value.parse().ok()),
         source_identity: read(SOURCE_IDENTITY)?,
         sweep_done: read(SWEEP_DONE)?.as_deref() == Some("1"),
@@ -116,6 +130,29 @@ pub(super) fn save_catchup_state(
     for (key, value) in [
         (OUTCOME_CURSOR, state.outcome.clone().unwrap_or_default()),
         (MESSAGE_CURSOR, state.message.clone().unwrap_or_default()),
+        (
+            CHANGE_HEAD,
+            state
+                .change_head
+                .map(|head| head.to_string())
+                .unwrap_or_default(),
+        ),
+        (
+            CHANGE_SEQ,
+            state
+                .change_mark
+                .as_ref()
+                .map(|mark| mark.seq.to_string())
+                .unwrap_or_default(),
+        ),
+        (
+            CHANGE_KEY,
+            state
+                .change_mark
+                .as_ref()
+                .map(|mark| mark.key.clone())
+                .unwrap_or_default(),
+        ),
         (
             SWEEP_REVISION,
             state

@@ -179,11 +179,12 @@ async fn second_changes(
     let (t, f) = (true, false);
     let data = &s.sandbox.data;
     let part = "UPDATE conversation_parts SET content_json='{\"text\":\"seeded fact 2 in two, edited\"}' WHERE message_id=?1";
-    step(s, chats, "part_edited", [t, f, t, t, t, f], |db| {
+    step(s, chats, "part_edited", [t, f, t, t, t, t], |db| {
         execute(db, part, &format!("{S2}-turn-2-assistant"));
+        execute(db, part, &format!("{S5}-recovered-10"));
     })
     .await?;
-    step(s, chats, "status_changed", [f, f, f, f, t, f], |db| {
+    step(s, chats, "status_changed", [f, f, f, f, t, t], |db| {
         execute(
             db,
             "UPDATE conversation_turns SET status='running' WHERE id=?1",
@@ -314,5 +315,46 @@ async fn mem_coverage_mirror_matches_full_scan() -> Result<(), HarnessError> {
     let gate = apply(&data, gate, &[]).await;
     step(&s, &chats, "deletion_applied", [f, f, f, f, t, f], |_| {}).await?;
     release_gate(&gate);
+    s.finish().await
+}
+
+#[tokio::test]
+async fn mem_standalone_edit_survives_restart() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let variant = variants().pop().unwrap();
+    let mut s = start("MEM-STANDALONE-RECOVERY", &[variant]).await?;
+    let data = s.sandbox.data.clone();
+    session(&canonical(&data), S5, None);
+    recovered(&canonical(&data), S5, 10, "original recovered fact", MARCH);
+    drain(&data, &[]).await;
+    let identity = || {
+        graph(&data)
+            .query_row(
+                "SELECT current_revision,source_hash FROM memory_chunks WHERE source_key=?1",
+                [format!("conversation_message:{S5}-recovered-10")],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )
+            .unwrap()
+    };
+    let before = identity();
+    s.agent.terminate().await?;
+    execute(
+        &canonical(&data),
+        "UPDATE conversation_parts SET content_json='{\"text\":\"edited recovered fact\"}' WHERE message_id=?1",
+        &format!("{S5}-recovered-10"),
+    );
+    s.gw = s.agent.start_again().await?;
+    drain(&data, &[]).await;
+    let after = identity();
+    assert_ne!(before.0, after.0, "the edited revision was not registered");
+    assert_ne!(
+        before.1, after.1,
+        "the edited parts hash was not registered"
+    );
+    let (output, _) = recall(&s, &variants().pop().unwrap()).await?;
+    assert!(!super::coverage_support::pending(&output), "{output}");
+    eprintln!(
+        "MEM-STANDALONE-RECOVERY changed_revision=true changed_parts_hash=true pending=false"
+    );
     s.finish().await
 }
