@@ -111,7 +111,10 @@ async function observeOnce(tab, args) {
   // Per-tab sequence: unique for staleness checks and short enough to copy.
   const obs = `o${tab.observationSeq = (tab.observationSeq ?? 0) + 1}`, epoch = tab.epoch, frames = await frameWorlds(tab);
   const selected=frames.map((frame, index)=>({ frame, index })).filter(({ index })=>args.frame===undefined || args.frame===`f${index}`);
-  if(!selected.length) return { status:"refused", reason:"frame_unavailable" };
+  if (args.frame !== undefined && !selected.length) return { status: "refused", reason: "unknown_frame",
+    frames: frames.map((_, index) => `f${index}`),
+    recovery: `No frame has id ${args.frame}. Omit frame to observe every frame, or use an id listed in frames.` };
+  if (!selected.length) return { status: "refused", reason: "frame_unavailable" };
   const text = [], nodes = [], fields = [], regions = [], hidden = { invisible: 0, low_contrast: 0, tiny: 0 };
   const bindings = new Map(), paymentFrames = new Set(), classes = new Map();
   let scriptMs = 0, gridSampleMs = 0, below = 0, interactive = 0, payment = false, visual = false;

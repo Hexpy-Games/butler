@@ -29,7 +29,7 @@ pub enum ArgsMutation {
     },
     /// Cut the arguments JSON in half (unparseable).
     Truncate,
-    /// Replace every string value in the arguments object by a number.
+    /// Replace every string value in the arguments object by a boolean.
     WrongTypes,
     /// Rename the called tool to one that does not exist.
     UnknownTool,
@@ -222,7 +222,7 @@ fn mutate_arguments(text: &str, mutation: &ArgsMutation) -> String {
             Ok(Value::Object(mut object)) => {
                 for value in object.values_mut() {
                     if value.is_string() {
-                        *value = Value::from(12_345);
+                        *value = Value::Bool(true);
                     }
                 }
                 Value::Object(object).to_string()
