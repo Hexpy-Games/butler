@@ -276,7 +276,7 @@ def verify_macos_arm64(binary: Path) -> None:
     architectures = inspect("/usr/bin/lipo", "-archs", str(binary)).split()
     if architectures != ["arm64"]:
         raise SystemExit("native binary must contain only the macOS arm64 architecture")
-    check_path(binary, "darwin")
+    verify_host_links(binary, "darwin")
 
 
 def verify_linux(binary: Path, architecture: str) -> None:
@@ -287,7 +287,14 @@ def verify_linux(binary: Path, architecture: str) -> None:
     needed = re.findall(r"\(NEEDED\)\s+Shared library: \[([^\]]+)\]", inspect("readelf", "-d", str(binary)))
     if any(name not in LINUX_SYSTEM_LIBRARIES for name in needed):
         raise SystemExit("native binary has a non-system dynamic dependency")
-    check_path(binary, "linux")
+    verify_host_links(binary, "linux")
+
+
+def verify_host_links(binary: Path, platform: str) -> None:
+    try:
+        check_path(binary, platform)
+    except (OSError, subprocess.CalledProcessError, RuntimeError) as error:
+        raise SystemExit(f"Host-link guard failed for {binary}: {error}") from error
 
 
 def make_read_only(root: Path) -> None:

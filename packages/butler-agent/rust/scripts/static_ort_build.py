@@ -55,7 +55,8 @@ SEARCH_ENV = {
 def build_environment(stage, cmake, ninja, target, inherited):
     """Remove inherited search redirects; preserve the Windows developer shell."""
     env = {key: value for key, value in inherited.items()
-           if key.upper() not in SEARCH_ENV and not key.upper().endswith(("_ROOT", "_DIR"))
+           if key.upper() not in SEARCH_ENV
+           and (key.upper() == "DEVELOPER_DIR" or not key.upper().endswith(("_ROOT", "_DIR")))
            and not key.upper().startswith("DYLD_")}
     tools = [str(ninja.parent), str(cmake.parent)]
     if target == "windows-x64":
@@ -87,6 +88,11 @@ def run_build(stage, source, cmake, ninja, eigen, target, lock):
         f"Python_EXECUTABLE={sys.executable}", f"Python3_EXECUTABLE={sys.executable}",
         f"FETCHCONTENT_SOURCE_DIR_EIGEN={eigen}",
     ]
+    if target == "windows-x64":
+        patch = source / "cmake/external/git.Win32.2.41.03.patch/patch.exe"
+        if not patch.is_file():
+            fail(f"Pinned build tool missing: {patch}")
+        flags.append(f"Patch_EXECUTABLE={patch}")
     args = [
         sys.executable, str(source / "tools/ci_build/build.py"),
         "--build_dir", str(build_root), "--config", "Release", "--update", "--build",

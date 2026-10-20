@@ -4,9 +4,10 @@ import importlib.util
 import os
 import subprocess
 import textwrap
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import sys
 import tempfile
+import types
 import unittest
 from unittest.mock import patch
 
@@ -92,7 +93,12 @@ class HostLinks(unittest.TestCase):
     def test_cmake_cache_roots(self):
         with tempfile.TemporaryDirectory() as directory:
             stage = Path(directory)
-            clean = f'protobuf_DIR:PATH={stage}/build/protobuf\nCMAKE_C_COMPILER_EXECUTABLE:FILEPATH=/usr/bin/cc\nX_INCLUDE_DIRS:PATH=/usr/include;/usr/include/c++\n'
+            clean = (f'protobuf_DIR:PATH={stage}/build/protobuf\n'
+                     'CMAKE_C_COMPILER_EXECUTABLE:FILEPATH=/usr/bin/cc\n'
+                     'X_INCLUDE_DIRS:PATH=/usr/include;/usr/include/c++\n'
+                     'GIT_EXECUTABLE:FILEPATH=GIT_EXECUTABLE-NOTFOUND\n'
+                     f'Python_EXECUTABLE:FILEPATH={sys.executable}\n'
+                     f'CMAKE_MAKE_PROGRAM_EXECUTABLE:FILEPATH={stage}/tools/ninja\n')
             recipe.check_cmake_cache(clean, stage, 'linux-x64')
             for entry in ('Protobuf_DIR:PATH=/opt/homebrew/lib/cmake/protobuf',
                           'absl_DIR:PATH=/usr/local/lib/cmake/absl',
@@ -101,6 +107,55 @@ class HostLinks(unittest.TestCase):
                 with self.subTest(entry=entry), self.assertRaisesRegex(RuntimeError, 'outside allowed'):
                     recipe.check_cmake_cache(entry, stage, 'linux-x64')
 
+        with patch.object(recipe, 'command', side_effect=['/SDK', '/Xcode']):
+            roots = recipe.cache_allowed_roots(stage, 'macos-arm64')
+        clean = ('Patch_EXECUTABLE:FILEPATH=/usr/bin/patch\n'
+                 'CMAKE_AR_EXECUTABLE:FILEPATH=/Xcode/Toolchains/usr/bin/ar\n'
+                 'Iconv_INCLUDE_DIR:PATH=/SDK/usr/include\n'
+                 'Iconv_LIBRARY:FILEPATH=/SDK/usr/lib/libiconv.tbd\n')
+        recipe.check_cmake_cache(clean, stage, 'macos-arm64', roots)
+        recipe.check_cmake_cache('Patch_EXECUTABLE:FILEPATH=/bin/patch', stage, 'linux-x64')
+
+        class WindowsPath(PureWindowsPath):
+            def resolve(self):
+                return self
+
+        with patch.object(recipe, 'pathlib', types.SimpleNamespace(Path=WindowsPath)):
+            stage = WindowsPath('C:/stage')
+            with patch.dict(os.environ, VCToolsInstallDir='C:/MSVC', UniversalCRTSdkDir='C:/SDK',
+                            WindowsSdkDir='C:/SDK'):
+                roots = recipe.cache_allowed_roots(stage, 'windows-x64')
+            clean = ('Patch_EXECUTABLE:FILEPATH=C:/stage/source/cmake/external/git.Win32.2.41.03.patch/patch.exe\n'
+                     'CMAKE_MT_EXECUTABLE:FILEPATH=C:/SDK/bin/mt.exe\n'
+                     'CMAKE_LINKER_EXECUTABLE:FILEPATH=C:/MSVC/bin/link.exe\n'
+                     'CMAKE_RC_EXECUTABLE:FILEPATH=C:/SDK/bin/rc.exe\n'
+                     'MSVC_CRT_LIBRARY:FILEPATH=C:/MSVC/lib/libcmt.lib\n'
+                     'SDK_INCLUDE_DIR:PATH=C:/SDK/Include/ucrt\n'
+                     'GIT_EXECUTABLE:FILEPATH=GIT_EXECUTABLE-NOTFOUND\n'
+                     'Python_EXECUTABLE:FILEPATH=C:/Python/python.exe\n')
+            recipe.check_cmake_cache(clean, stage, 'windows-x64', roots, WindowsPath('C:/Python'))
+            with self.assertRaisesRegex(RuntimeError, 'outside allowed'):
+                recipe.check_cmake_cache('Patch_EXECUTABLE:FILEPATH=C:/Program Files/Git/usr/bin/patch.exe',
+                                         stage, 'windows-x64', roots, WindowsPath('C:/Python'))
+
+    # test-category: security
+    def test_windows_patch_is_pinned_before_build(self):
+        with tempfile.TemporaryDirectory() as directory:
+            stage = Path(directory)
+            source = stage / 'source'
+            executable = source / 'cmake/external/git.Win32.2.41.03.patch/patch.exe'
+            with patch.object(build.shutil, 'which', return_value='cl'):
+                with self.assertRaisesRegex(RuntimeError, 'Pinned build tool missing'):
+                    build.run_build(stage, source, stage / 'cmake', stage / 'ninja',
+                                    stage / 'eigen', 'windows-x64', {'build': {'parallel_jobs': 2}})
+                executable.parent.mkdir(parents=True)
+                executable.write_bytes(b'pinned patch')
+                with patch.object(build.subprocess, 'Popen', side_effect=RuntimeError('launch')) as launch:
+                    with self.assertRaisesRegex(RuntimeError, 'launch'):
+                        build.run_build(stage, source, stage / 'cmake', stage / 'ninja',
+                                        stage / 'eigen', 'windows-x64', {'build': {'parallel_jobs': 2}})
+                self.assertIn(f'Patch_EXECUTABLE={executable}', launch.call_args.args[0])
+
     # test-category: security
     def test_build_environment(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -108,10 +163,11 @@ class HostLinks(unittest.TestCase):
             host = dict(PATH='/opt/homebrew/bin:/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin',
                         CMAKE_PREFIX_PATH='/tmp/pkg', PKG_CONFIG_PATH='/tmp/pkg',
                         protobuf_ROOT='/tmp/pkg', absl_DIR='/tmp/pkg', DYLD_FALLBACK_LIBRARY_PATH='/tmp/pkg',
-                        CFLAGS='-I/tmp/pkg', CC='cc', CXX='c++')
+                        CFLAGS='-I/tmp/pkg', CC='cc', CXX='c++', DEVELOPER_DIR='/Applications/Xcode.app/Contents/Developer')
             env = build.build_environment(stage, Path('/pinned/cmake'), Path('/pinned/ninja'), 'linux-x64', host)
             for name in ('CMAKE_PREFIX_PATH', 'PKG_CONFIG_PATH', 'protobuf_ROOT', 'absl_DIR', 'DYLD_FALLBACK_LIBRARY_PATH', 'CFLAGS'):
                 self.assertNotIn(name, env)
+            self.assertEqual(env['DEVELOPER_DIR'], host['DEVELOPER_DIR'])
             self.assertNotIn('brew', env['PATH'])
             self.assertTrue(Path(env['CC']).is_absolute())
             self.assertTrue(Path(env['PKG_CONFIG_LIBDIR']).is_dir())
@@ -128,11 +184,12 @@ class HostLinks(unittest.TestCase):
                 recipe.release_env_preflight({name: '1'})
         with self.assertRaisesRegex(RuntimeError, 'ZSTD_SYS_USE_PKG_CONFIG'):
             recipe.release_env_preflight({'ZSTD_SYS_USE_PKG_CONFIG': ''})
-        for name in ('RUSTFLAGS', 'CARGO_ENCODED_RUSTFLAGS', 'CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS'):
-            for value in ('-L native=/tmp/pkg', '-L/tmp/pkg', '-Clink-search=/tmp/pkg', '-L\x1fnative=/tmp/pkg'):
+        for name in ('RUSTFLAGS', 'CARGO_ENCODED_RUSTFLAGS', 'CARGO_BUILD_RUSTFLAGS', 'CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS'):
+            for value in ('-L native=/tmp/pkg', '-L/tmp/pkg', '-Clink-search=/tmp/pkg', '-L\x1fnative=/tmp/pkg',
+                          '-C link-arg=-L/opt/x', '-Clink-args=-L/x', '-Clink-args=-Wl,-L/x'):
                 with self.subTest(name=name, value=value), self.assertRaisesRegex(RuntimeError, name):
                     recipe.release_env_preflight({name: value})
-        recipe.release_env_preflight({'RUSTFLAGS': '-C link-arg=-fuse-ld=mold -C target-feature=+crt-static'})
+            recipe.release_env_preflight({name: '-C link-arg=-fuse-ld=mold -C target-feature=+crt-static'})
 
     # test-category: security
     def test_preflight_runs_before_full_and_prebuilt_preparation(self):
@@ -168,6 +225,13 @@ class HostLinks(unittest.TestCase):
                 'build_stage': str(stage), 'cmake_cache_sha256': recipe.sha256(cache),
                 'build_roots': [str(root) for root in recipe.cache_allowed_roots(stage, 'linux-x64')],
                 'python_prefix': str(Path(python).parent.parent)}))
+            marker = stage / 'complete.json'
+            recorded = json.loads(marker.read_text())
+            for missing in ('build_stage', 'build_roots', 'python_prefix'):
+                marker.write_text(json.dumps({key: value for key, value in recorded.items() if key != missing}))
+                with self.assertRaisesRegex(RuntimeError, 'SDK marker lacks producer roots'):
+                    recipe.verified_outputs(release, 'linux-x64')
+            marker.write_text(json.dumps(recorded))
             restored = Path(directory) / 'consumer'
             stage.rename(restored)
             with patch.object(recipe.sys, 'executable', '/different/python/bin/python3'):

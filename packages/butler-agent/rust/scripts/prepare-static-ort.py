@@ -187,20 +187,21 @@ def release_env_preflight(env):
         if env.get(name) or (name == "ZSTD_SYS_USE_PKG_CONFIG" and name in env):
             fail(f"Release environment rejects {name}: redirects vendored native dependencies")
     for name, value in env.items():
-        if name in ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS") or (
+        if name in ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "CARGO_BUILD_RUSTFLAGS") or (
                 name.startswith("CARGO_TARGET_") and name.endswith("_RUSTFLAGS")):
-            if re.search(r"(?:^|[\s\x1f])-L|link-search", value):
+            if re.search(r"(?:^|[\s\x1f=,])-L|link-search", value):
                 fail(f"Release environment rejects {name}: native link-search override")
 
 
 def cache_allowed_roots(stage, target):
     roots = [stage.resolve()]
     if target == "macos-arm64":
+        roots.extend(pathlib.Path(path).resolve() for path in ("/usr/bin", "/bin"))
         roots.extend(pathlib.Path(command(args).strip()).resolve() for args in (
             ["xcrun", "--show-sdk-path"], ["xcode-select", "-p"]))
     elif target.startswith("linux-"):
         roots.extend(pathlib.Path(path).resolve() for pattern in (
-            "/usr/include", "/usr/lib*", "/lib*", "/usr/bin")
+            "/usr/include", "/usr/lib*", "/lib*", "/usr/bin", "/bin")
                      for path in glob.glob(pattern) if pathlib.Path(path).is_dir())
     else:
         roots.extend(pathlib.Path(os.environ[name]).resolve() for name in (
@@ -257,9 +258,11 @@ def verified_outputs(lib_path, target):
         recorded = json.loads(marker.read_text())
         if recorded.get("cmake_cache_sha256") != sha256(lib_path / "CMakeCache.txt"):
             fail("Static ORT CMake cache digest mismatch")
-        stage = pathlib.Path(recorded["build_stage"])
-        roots = [pathlib.Path(root) for root in recorded["build_roots"]]
-        python_prefix = pathlib.Path(recorded["python_prefix"])
+        if not all(recorded.get(key) for key in ("build_stage", "build_roots", "python_prefix")):
+            fail("SDK marker lacks producer roots")
+        stage = pathlib.Path(recorded.get("build_stage"))
+        roots = [pathlib.Path(root) for root in recorded.get("build_roots")]
+        python_prefix = pathlib.Path(recorded.get("python_prefix"))
     check_cmake_cache(settings, stage, target, roots, python_prefix)
     for setting in (
         *spec["cmake_cache"],
