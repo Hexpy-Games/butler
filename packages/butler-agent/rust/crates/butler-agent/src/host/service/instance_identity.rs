@@ -36,16 +36,39 @@ pub(crate) fn process_is_alive(pid: u32) -> Result<bool, crate::host::HostError>
 
 /// When process `pid` started (see `butler_platform::instance::process_start`).
 pub(crate) fn process_start_identity(pid: u32) -> Result<Option<String>, crate::host::HostError> {
-    platform::process_start(pid).map_err(|error| {
+    let result = platform::process_start(pid);
+    if let Err(error) = &result {
         eprintln!("[service-identity] pid={pid} error={error:?}");
-        identity_error(error, "native_service_process_identity_unavailable")
-    })
+    }
+    identity_result(pid, result, "native_service_process_identity_unavailable")
 }
 
 /// The executable process `pid` runs.
 pub(crate) fn process_executable(pid: u32) -> Result<Option<String>, crate::host::HostError> {
-    platform::process_executable(pid)
-        .map_err(|error| identity_error(error, "native_service_process_executable_unavailable"))
+    identity_result(
+        pid,
+        platform::process_executable(pid),
+        "native_service_process_executable_unavailable",
+    )
+}
+
+/// A failed identity query can race process exit. Only a subsequent Gone
+/// observation permits treating Unavailable as exited; unknown liveness and
+/// live processes retain the original identity error and never authorize a signal.
+pub(crate) fn identity_unavailable_after_exit(pid: u32, error: &IdentityError) -> bool {
+    matches!(error, IdentityError::Unavailable(_))
+        && process_is_alive(pid).is_ok_and(|alive| !alive)
+}
+
+fn identity_result<T>(
+    pid: u32,
+    result: Result<Option<T>, IdentityError>,
+    unavailable: &'static str,
+) -> Result<Option<T>, crate::host::HostError> {
+    match result {
+        Err(error) if identity_unavailable_after_exit(pid, &error) => Ok(None),
+        other => other.map_err(|error| identity_error(error, unavailable)),
+    }
 }
 
 /// The service's error for an identity that could not be read; `unavailable`

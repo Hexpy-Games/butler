@@ -27,15 +27,13 @@ pub(super) async fn text(data_root: &Path) -> Result<String, crate::host::HostEr
             }
         }
     }
+    let uptime_root = data_root.to_path_buf();
+    let uptime = tokio::task::spawn_blocking(move || uptime(&uptime_root))
+        .await
+        .unwrap_or_else(|_| "unknown".into());
     Ok(format!(
         "Uptime: {}\n{}\nTasks: {} total ({} running, {} done, {} failed)\nContext: native-local session state\nHot cache: {} files",
-        uptime(data_root),
-        control,
-        counts.total,
-        counts.running,
-        counts.done,
-        counts.failed,
-        hot_files,
+        uptime, control, counts.total, counts.running, counts.done, counts.failed, hot_files,
     ))
 }
 

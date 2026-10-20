@@ -77,8 +77,9 @@ impl Context {
     }
 
     /// Executables the service runs from, whose versions must not be pruned.
-    pub(super) fn protected_executables(&self) -> Vec<PathBuf> {
-        service::running_instance(&self.data_root)
+    pub(super) async fn protected_executables(&self) -> Vec<PathBuf> {
+        service::running_instance_async(&self.data_root)
+            .await
             .ok()
             .flatten()
             .map(|record| {
@@ -90,12 +91,15 @@ impl Context {
     }
 
     /// The service instance that runs now, if there is one.
-    pub(super) fn running_record(&self) -> Option<InstanceRecord> {
-        service::running_instance(&self.data_root).ok().flatten()
+    pub(super) async fn running_record(&self) -> Option<InstanceRecord> {
+        service::running_instance_async(&self.data_root)
+            .await
+            .ok()
+            .flatten()
     }
 
     /// Points both launchers at the CLI installation.
-    pub(super) fn refresh_launchers(&self) -> Value {
+    pub(super) async fn refresh_launchers(&self) -> Value {
         let canonical = self
             .home
             .sync_command_launcher(None)
@@ -116,6 +120,7 @@ impl Context {
         // bundled Agent), which its own start points the launcher at.
         let elsewhere = self
             .running_record()
+            .await
             .is_some_and(|record| !self.home.contains(Path::new(&record.executable)));
         let data = if elsewhere {
             "kept"
@@ -133,12 +138,12 @@ impl Context {
     /// that starts its own bundled Agent instead is reported as such
     /// (`onNewVersion: false`).
     pub(super) async fn restart_if_running(&self, dir: &str) -> Result<Value, CliError> {
-        match service::running_instance(&self.data_root) {
+        match service::running_instance_async(&self.data_root).await {
             Ok(Some(_)) => {
                 let restarted = self
                     .run_service_command(&self.runner_for(dir), "restart")
                     .await?;
-                let record = self.running_record();
+                let record = self.running_record().await;
                 let executable = record.as_ref().map(|record| record.executable.clone());
                 let on_new_version = executable.as_deref().is_some_and(|executable| {
                     let version = self.home.version_path(dir);
@@ -186,7 +191,7 @@ impl Context {
             }
             (None, None) => return false,
         };
-        let running = self.running_record().is_some();
+        let running = self.running_record().await.is_some();
         let verb = if running { "restart" } else { "start" };
         self.run_service_command(&runner, verb).await.is_ok()
     }

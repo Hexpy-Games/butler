@@ -142,9 +142,14 @@ pub(crate) async fn run_native_service_cli(
         action,
         Action::RegisterLogin | Action::UnregisterLogin | Action::LoginStatus
     ) {
-        return registration::run(action, &installation, data.as_deref(), &options);
+        let json = options.json;
+        return tokio::task::spawn_blocking(move || {
+            registration::run(action, &installation, data.as_deref(), &options)
+        })
+        .await
+        .unwrap_or_else(|error| report_error(action.name(), json, &error.to_string()));
     }
-    if options.if_absent && lifecycle::already_running(data.as_deref(), &installation) {
+    if options.if_absent && lifecycle::already_running_async(data.as_deref(), &installation).await {
         if !options.quiet {
             println!("Butler native service is already running");
         }
@@ -241,6 +246,12 @@ pub(super) fn running_instance(
     data_root: &Path,
 ) -> Result<Option<InstanceRecord>, crate::host::HostError> {
     lifecycle::active_service(data_root)
+}
+
+pub(super) async fn running_instance_async(
+    data_root: &Path,
+) -> Result<Option<InstanceRecord>, crate::host::HostError> {
+    lifecycle::active_service_async(data_root).await
 }
 
 /// Holds the DATA admission lock: while the guard lives, no controller
