@@ -45,35 +45,43 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
         state: state.clone(),
         id,
     };
-    let mut result = tokio::select! {
-        () = state.shutdown.cancelled() => json!({"status":"unknown","reason":"browser_host_lost"}),
+    let (mut result, answered) = tokio::select! {
+        () = state.shutdown.cancelled() => (json!({"status":"unknown","reason":"browser_host_lost"}), false),
         result = tokio::time::timeout(Duration::from_millis(deadline + 500),receiver) => match result {
-            Ok(Ok(value)) => value,
-            Ok(Err(_)) => json!({"status":"unknown","reason":"browser_host_lost"}),
-            Err(_) => json!({"status":"unknown","reason":"timeout"}),
+            Ok(Ok(value)) => (value, true),
+            Ok(Err(_)) => (json!({"status":"unknown","reason":"browser_host_lost"}), false),
+            Err(_) => (json!({"status":"unknown","reason":"timeout"}), false),
         }
     };
+    // Delivered replies were fenced under the hub lock when accepted. A later
+    // detach must not turn an executed call into a claim it never dispatched.
+    if !answered {
+        let hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
+        recheck_owner(&hub, &session, tab.as_deref(), &op, &mut result);
+    }
+    super::signed_in::recheck(&sent, &mut result);
+    finish_result(&state, &session, &op, &sent, &mut result).await?;
+    response(count, result)
+}
+
+pub(super) fn recheck_owner(
+    hub: &super::Inner,
+    session: &str,
+    tab: Option<&str>,
+    op: &str,
+    result: &mut Value,
+) {
     if let Some(tab) = tab
-        && state
-            .browser
-            .0
-            .lock()
-            .map_err(|_| HttpError::Internal)?
-            .tabs
-            .check(&session, &tab, "tab.cancel")
-            == Err("not_your_tab")
+        && hub.tabs.check(session, tab, "tab.cancel") == Err("not_your_tab")
     {
         // A moved page's observation must not cross the new conversation boundary.
         if op == "tab.act" {
             result["reason"] = json!("owner_changed");
             result["status"] = json!("interrupted");
         } else {
-            result = json!({"status":"not_dispatched","reason":"owner_changed"});
+            *result = json!({"status":"not_dispatched","reason":"owner_changed"});
         }
     }
-    super::signed_in::recheck(&sent, &mut result);
-    finish_result(&state, &session, &op, &sent, &mut result).await?;
-    response(count, result)
 }
 
 /// Signed-in fence and sign-in ops answered before (or instead of) native dispatch.
