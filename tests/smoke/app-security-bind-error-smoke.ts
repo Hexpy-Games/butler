@@ -26,15 +26,13 @@ async function capture(page: Page) {
   if (!shots) return;
   mkdirSync(shots, { recursive: true });
   for (const theme of ["light", "dark"] as const) {
+    await page.setViewportSize({ width: 1280, height: 900 });
     await page.emulateMedia({ colorScheme: theme });
     // The appearance is persisted through the same public settings endpoint.
     await page.evaluate(async (appearance_theme) => {
       await fetch("/settings", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ appearance_theme }) });
     }, theme);
-    await page.reload();
-    const copy = getAppCopy("ko-KR");
-    await page.getByRole("button", { name: copy.sidebar.settings, exact: true }).click();
-    await page.getByRole("button", { name: copy.settings.sections.security, exact: true }).click();
+    await page.goto(new URL("?settings=security", page.url()).href);
     await page.locator('[data-setting-id="lan-urls"]').waitFor();
     for (const width of [1280, 375]) {
       await page.setViewportSize({ width, height: 900 });
