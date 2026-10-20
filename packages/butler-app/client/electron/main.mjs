@@ -198,16 +198,17 @@ if (process.platform === "win32") {
   app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);
 }
 if (windowsSquirrelLaunch.handled) {
-  if (!installShellRegistrationAllowed()) process.exit(0);
   // Squirrel events act for this install: its shortcuts, its protocol handler
   // and its login item all target this install's stub, whatever the profile.
   // Only the data root's operational state belongs to the default profile.
-  const profileOwnsData = profileOwnsShellRegistration();
   let squirrelExitCode = 0;
   let squirrelErrorCode = null;
   let squirrelResult = null;
   try {
     squirrelResult = executeWindowsSquirrelLaunch(windowsSquirrelLaunch, {
+      shellRegistrationDisabled: process.env.BUTLER_APP_DISABLE_SHELL_REGISTRATION === "1",
+      squirrelInstallPresent: squirrelInstallPresent(),
+      profileOwnsDataRoot: profileOwnsShellRegistration(),
       manageShortcut: (shortcut) => manageWindowsSquirrelShortcut({
         ...shortcut,
         desktopPath: app.getPath("desktop"),
@@ -219,9 +220,8 @@ if (windowsSquirrelLaunch.handled) {
         app.setAsDefaultProtocolClient(scheme, executable, args),
       unregisterProtocol: (scheme, executable, args) =>
         app.removeAsDefaultProtocolClient(scheme, executable, args),
-      cleanupOperationalState: () => profileOwnsData
-        ? removeWindowsOperationalState({ butlerData: appWritableDataRoot })
-        : [],
+      cleanupOperationalState: () =>
+        removeWindowsOperationalState({ butlerData: appWritableDataRoot }),
     });
   } catch (error) {
     squirrelExitCode = 1;
@@ -2168,6 +2168,7 @@ function writeWindowsSquirrelEvidence({ event, exitCode, errorCode, result }) {
       event,
       exitCode,
       errorCode: typeof errorCode === "string" ? errorCode : null,
+      shellRegistration: result?.shellRegistration ?? null,
       shortcutAction: result?.shortcutAction ?? null,
       operationalStateRemoved: result?.operationalStateRemoved === true,
       normalInitializationReached: false,

@@ -1,3 +1,4 @@
+import "./bun-child-stdio";
 import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type CDPSession, type Page } from "playwright";
 import { strict as assert } from "node:assert";
 import { spawn, type ChildProcess } from "node:child_process";
