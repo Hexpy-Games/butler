@@ -61,7 +61,12 @@ try {
     })()`);
     assert.deepEqual(layout, { labelAbove: true, overflow: false });
   }
-  assert.deepEqual(snapshot(data), original, "Recovery screen wrote into legacy data");
+  phase = "blocked Agent health";
+  const blockedHealth = await page.expression<string | null>(
+    "window.butlerApp.health().then(() => null, error => error.message)",
+  );
+  assert.match(blockedHealth ?? "", /legacy_data_blocked/u);
+  assert.deepEqual(snapshot(data), original, "Blocked health request wrote into legacy data");
   assert.ok(!existsSync(join(data, "app/runtime/foreground/instance.json")), "Agent started against legacy data");
   phase = "folder and restart";
   assert.deepEqual(await bridge(page, "recoverLegacyData", "open-folder"), { ok: true });
@@ -134,7 +139,7 @@ function snapshot(folder: string): Record<string, string> {
   const visit = (relative: string) => {
     for (const entry of readdirSync(join(folder, relative), { withFileTypes: true })) {
       const path = join(relative, entry.name);
-      if (entry.isDirectory()) visit(path);
+      if (entry.isDirectory()) { files[path] = "directory"; visit(path); }
       else files[path] = createHash("sha256").update(readFileSync(join(folder, path))).digest("hex");
     }
   };

@@ -617,6 +617,11 @@ async function appServerProbeFetch(url, localAuth = null) {
 }
 
 async function ensureServer() {
+  if (legacyDataBlocked) {
+    const error = new Error("legacy_data_blocked");
+    error.code = "legacy_data_blocked";
+    throw error;
+  }
   if (isQuitting) {
     const error = new Error("Butler App is shutting down.");
     error.code = "app_shutting_down";
