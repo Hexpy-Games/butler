@@ -185,10 +185,10 @@ impl Operation {
         // path starts the owner without delaying text recall for model readiness.
         if generation.embedding.is_some() {
             let started = (self.clock)();
-            // Warm-file loads measured 1,642–1,916 ms. 2,250 ms gives the
-            // slowest sample 17% headroom without spending 4,250 ms on
-            // disk-cold loads (3,856–12,721 ms). The owner keeps loading.
-            let ready_deadline = deadline_at.min(started.saturating_add(2_250));
+            // Query embedding plus vector open/search measured 35–38 ms; reserve
+            // 50 ms for that work. On-demand loading may use the rest of the
+            // vector lane's remaining deadline.
+            let ready_deadline = deadline_at.saturating_sub(50);
             let remaining =
                 u64::try_from(ready_deadline.saturating_sub(started)).unwrap_or_default();
             let ready = tokio::time::timeout(
