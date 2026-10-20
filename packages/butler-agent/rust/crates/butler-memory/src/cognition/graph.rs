@@ -307,6 +307,16 @@ impl GraphRepository {
         })
     }
 
+    /// A fresh, consistent view for multi-query readers while writers advance.
+    pub(in crate::cognition) fn open_read_snapshot(path: &Path) -> CognitionResult<Self> {
+        let graph = Self::open_readonly(path)?;
+        graph
+            .connection()?
+            .execute_batch("BEGIN")
+            .map_err(db_error)?;
+        Ok(graph)
+    }
+
     pub(super) fn ensure_schema(&mut self, now: &str) -> CognitionResult<()> {
         schema::ensure(self.connection_mut()?, now)
     }

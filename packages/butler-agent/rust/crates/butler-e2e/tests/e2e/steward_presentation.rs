@@ -6,7 +6,7 @@
     reason = "test assertions"
 )]
 mod files;
-mod intent;
+pub(super) mod intent;
 #[path = "steward_presentation/stub.rs"]
 pub(crate) mod stub;
 mod visible;
@@ -77,6 +77,7 @@ async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), 
         "Delivery must preserve decomposed filename bytes: {complete}"
     );
     intent::assert_intent_carried(&script.requests.lock().unwrap());
+    intent::assert_packet_stated_once(&script.requests.lock().unwrap());
     files::assert_delegated_files(&s).await?;
     assert_sidebar_work(&s, false).await?;
     let activity = s.gw.get("/worker-activity?include_history=true").await?;

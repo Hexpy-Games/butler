@@ -3,7 +3,7 @@ import { launchInstalledApp, relaunchInstalledAppForDebugging } from "./installe
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { electronProfilePage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
@@ -12,6 +12,7 @@ import { freePort } from "../../../../tests/support/native-app-server.ts";
 import { alive, assertShortcuts, bridge, click, ownedProcesses, ownedSurvivors, powershell, preserveInstallerLogs, readJson, removeProfile, shortcutPaths, versionProcesses, waitFor, waitForOwnedExit, type OwnedProcesses } from "./installer-smoke-support.ts";
 import { smokeProviderReply } from "./smoke-provider.ts";
 import { proveReleasedDownloads, releasedDownloadsReply, type DownloadsProof } from "./released-downloads-smoke.ts";
+import { processRoleFileNames } from "../../client/electron/scripts/process-role-names.mjs";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
 
 if (process.platform !== "win32" || process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_ENVIRONMENT !== "github-hosted") {
@@ -38,7 +39,16 @@ const manifest = readJson(join(second, "app-update-manifest.json"))!;
 const artifact = manifest.artifacts.find((item: any) => item.platform === "windows-x64");
 assert.equal(artifact?.version, to, "Candidate manifest must describe the exact update version");
 const packageName = artifact.artifact_url.split("/").at(-1);
-const packageBytes = readFileSync(join(second, packageName));
+const packagePath = join(second, packageName);
+const packageBytes = readFileSync(packagePath);
+const packageEntries: string[] = JSON.parse(powershell(`Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $zip = [IO.Compression.ZipFile]::OpenRead($env:BUTLER_SMOKE_PACKAGE)
+  try { ConvertTo-Json -Compress -InputObject @($zip.Entries | ForEach-Object { $_.FullName }) }
+  finally { $zip.Dispose() }`, { ...process.env, BUTLER_SMOKE_PACKAGE: packagePath }));
+const binPrefix = "lib/net45/resources/bundled-agent/bin/";
+assert.deepEqual(packageEntries.filter(name => name.startsWith(binPrefix) && name !== binPrefix)
+  .map(name => name.slice(binPrefix.length)).sort(), ["butler-agent.exe", "butler-sandbox.exe"],
+"Candidate nupkg must contain only the canonical Agent and sandbox helper in bin");
 assert.equal(createHash("sha256").update(packageBytes).digest("hex"), artifact.sha256);
 const feed = readFileSync(join(second, "RELEASES"), "utf8").trim().split(/\s+/u);
 assert.equal(feed.length, 3, "Expected one complete RELEASES entry");
@@ -278,6 +288,18 @@ function agentPath(version: string): string {
   return join(versionFolder(version), "resources/bundled-agent/bin/butler-agent.exe");
 }
 
+function assertRoleLinks(version: string) {
+  const binary = agentPath(version);
+  const source = statSync(binary, { bigint: true });
+  for (const name of processRoleFileNames("win32")) {
+    const alias = join(dirname(binary), name);
+    assert.equal(lstatSync(alias).isSymbolicLink(), false, `${name} must not be a reparse point`);
+    const metadata = statSync(alias, { bigint: true });
+    assert.equal(metadata.ino, source.ino, `${name} must share the canonical file identity`);
+    assert.equal(metadata.dev, source.dev, `${name} must share the canonical device`);
+  }
+}
+
 async function appPage(): Promise<ElectronPage> {
   const found = await electronProfilePage(env.BUTLER_APP_ELECTRON_USER_DATA_DIR, devToolsEndpoint);
   devToolsEndpoint = found.endpoint;
@@ -299,6 +321,7 @@ async function proof(version: string) {
   ownedProcesses(data, owned);
   assert.equal((await bridge(page!, "getAppInfo")).version, version);
   assert.equal((await bridge(page!, "health")).ok, true);
+  assertRoleLinks(version);
   const agent = spawnSync(agentPath(version), ["--version"], { env, encoding: "utf8" });
   assert.equal(agent.status, 0); assert.ok(agent.stdout.includes(version));
   assert.equal(readFileSync(join(data, "sentinel.txt"), "utf8"), "retained");

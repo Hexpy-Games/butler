@@ -347,7 +347,9 @@ async fn trusted_hosts_cannot_be_patched_onto_content_port() -> Result<(), Harne
         .unwrap();
     let settings = s.gw.get("/settings").await?.data().clone();
     let saved = std::fs::read(s.agent.launch.data.join("gateways/app.json"))?;
-    for name in ["localhost", "name.example", "192.168.1.5"] {
+    // A LAN literal: remote access is configured with private-range hosts.
+    let lan_host = "192.168.1.5"; // privacy-hygiene: allow-private-ip (LAN allowed_hosts case)
+    for name in ["localhost", "name.example", lan_host] {
         let host = format!("{name}:{}", addr.port());
         let reply = app
             .send(
