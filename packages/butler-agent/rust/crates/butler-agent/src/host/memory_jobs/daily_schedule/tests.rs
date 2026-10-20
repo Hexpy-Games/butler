@@ -12,7 +12,7 @@ async fn failure_and_success_both_suppress_same_local_day() {
             239,
             0,
             &cancellation,
-            async { panic!("before due time") }
+            |_, _| async { panic!("before due time") }
         )
         .await
         .unwrap()
@@ -25,7 +25,7 @@ async fn failure_and_success_both_suppress_same_local_day() {
             240,
             0,
             &cancellation,
-            async { Err("failed".into()) }
+            |_, _| async { Err("failed".into()) }
         )
         .await
         .unwrap_err(),
@@ -39,7 +39,7 @@ async fn failure_and_success_both_suppress_same_local_day() {
             240,
             0,
             &cancellation,
-            async { Ok(()) }
+            |_, _| async { Ok(()) }
         )
         .await
         .unwrap()
@@ -52,7 +52,7 @@ async fn failure_and_success_both_suppress_same_local_day() {
             240,
             0,
             &cancellation,
-            async { panic!("same day already attempted") }
+            |_, _| async { panic!("same day already attempted") }
         )
         .await
         .unwrap()
@@ -65,7 +65,7 @@ async fn failure_and_success_both_suppress_same_local_day() {
             240,
             0,
             &cancellation,
-            async { Ok(()) }
+            |_, _| async { Ok(()) }
         )
         .await
         .unwrap()
@@ -78,7 +78,7 @@ async fn failure_and_success_both_suppress_same_local_day() {
             240,
             0,
             &cancellation,
-            async { panic!("same day already attempted") }
+            |_, _| async { panic!("same day already attempted") }
         )
         .await
         .unwrap()
@@ -93,7 +93,7 @@ async fn failure_and_success_both_suppress_same_local_day() {
             240,
             0,
             &closing,
-            async { panic!("closed scheduler admitted work") }
+            |_, _| async { panic!("closed scheduler admitted work") }
         )
         .await
         .unwrap()

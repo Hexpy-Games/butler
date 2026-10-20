@@ -319,7 +319,7 @@ class WindowsSafety(command_coverage.WindowsCommandCoverage):
 
     # test-category: security
     def test_owner_action_allowlist_and_installer_commands(self):
-        forbidden = ['uses: actions/setup-python@v5', 'uses: actions/setup-node@v4',
+        forbidden = ['uses: ./.github/actions/release-python', 'uses: actions/setup-python@v5', 'uses: actions/setup-node@v4',
                      'uses: vendor/arbitrary@v1', 'uses: actions/checkout-extra@v4',
                      'uses: ./.github/actions/../untrusted', 'choco install python',
                      'winget upgrade python', 'msiexec.exe /i python.msi',

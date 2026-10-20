@@ -53,3 +53,35 @@ gh workflow run native-deps.yml --repo Hexpy-Games/butler --ref main
 ```
 
 Removing the static ORT Actions-cache restore/save steps stops new SDK cache entries. Existing `static-ort-*` entries can be removed by the coordinator with `gh cache delete <cache-id> --repo Hexpy-Games/butler` after listing them with `gh cache list`; Cargo caches should be retained.
+
+## Host package isolation and load-path guard
+
+ORT uses `FETCHCONTENT_TRY_FIND_PACKAGE_MODE=NEVER` and disables both CMake
+package registries. Optional Git discovery is disabled: these source archives
+have no Git checkout metadata. The child environment removes inherited package, header,
+library, compiler-flag and dynamic-loader search redirects, including package
+`*_ROOT`/`*_DIR` variables. pkg-config searches an empty stage directory.
+Unix PATH contains pinned Ninja/CMake, Python's directory and system tool
+locations. Linux resolves CC/CXX before narrowing PATH. Windows retains the
+MSVC developer-shell PATH in the child process only.
+
+The CMake cache rejects dependency paths outside recipe and platform roots;
+protobuf, abseil and re2 package directories must be inside the build stage.
+The recorded producer stage, platform roots, Python prefix and cache digest
+allow the same check after SDK relocation. Release preparation also refuses Rust dependency environment
+switches and Rust link-search overrides. `--fingerprint` and `--protoc-only`
+remain inspection/tool-only modes. Release CI exposes its selected Python on PATH
+without setup-python package-search environment exports; inherited overrides
+still fail preflight. Cargo's pinned protoc is unchanged; ORT
+builds the protoc matching its own vendored protobuf.
+
+`check_host_links.py` checks Mach-O dylib loads and LC_RPATH, and ELF NEEDED
+paths and RPATH/RUNPATH, after native payload builds and standalone packaging.
+Mac App packaging checks every Mach-O in the signed bundle, including Electron
+helpers with parentheses in their names. Only system/relative Mach-O loads,
+loader/executable-relative LC_RPATH and `$ORIGIN`-relative ELF search paths
+pass. Existing ELF library and Windows DLL allowlists still apply.
+
+The isolation changes `static_ort_build.py`, so all four SDK fingerprints
+change. No compatibility mapping is added; publish the new SDKs before
+release consumers request them with `--require-prebuilt`.

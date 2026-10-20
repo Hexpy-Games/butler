@@ -47,10 +47,11 @@ SITE_CHECK_INPUTS = ('tests/smoke/ds-site-*', 'tests/smoke/font-assets-check.ts'
 SIGNING = ('deploy/macos*', 'packages/butler-app/scripts/release/*',
            'packages/butler-app/client/electron/*',
            'packages/butler-agent/rust/scripts/package-standalone-agent.py',
+           'packages/butler-agent/rust/scripts/check_host_links.py',
            'VERSION', 'package.json', 'bun.lock', 'bun.lockb')
 # Native Windows smoke inputs beyond Rust; other CI configuration stays out.
 WINDOWS = ('deploy/windows**', '.github/workflows/**windows**', '.github/actions/**windows**/**',
-           '.github/actions/rust-agent-setup/**', '.github/scripts/**windows**',
+           '.github/actions/release-python/**', '.github/actions/rust-agent-setup/**', '.github/scripts/**windows**',
            'windows**', '**/windows**', '**/windows**/**',
            'packages/butler-agent/rust/crates/butler-platform/**',
            'packages/butler-agent/rust/crates/butler-e2e/tests/e2e/windows_**')
@@ -109,6 +110,7 @@ CI_CONSUMERS = (
         '.github/scripts/agent-provenance.py', '.github/scripts/cargo-artifact-cache.py',
         '.github/scripts/cargo-target-release.py', '.github/scripts/runner_cache.py',
         '.github/scripts/check-gate.py', '.github/scripts/ci_policy.py',
+        '.github/actions/release-python/**',
         '.github/actions/rust-agent-setup/*', '.github/actions/build-agent-archive/*',
         '.github/workflows/linux-packages.yml', '.github/workflows/macos-app-package.yml',
         '.github/scripts/*windows*safety.py', '.github/scripts/prepare-windows-zstd.py')),

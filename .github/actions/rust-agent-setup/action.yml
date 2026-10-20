@@ -72,9 +72,7 @@ runs:
       run: echo 'PYTHONDONTWRITEBYTECODE=1' >> "$GITHUB_ENV"
 
     - name: Set up Python for the ORT recipe
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.12"
+      uses: ./.github/actions/release-python
 
     # The Lance build scripts need protoc. CI uses the pinned compiler tool
     # without compiling ONNX Runtime from source.

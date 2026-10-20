@@ -14,7 +14,9 @@ use butler_runtime::operations::CycleMetrics;
 use crate::host::memory_jobs::briefing::BriefingGeneration;
 use crate::host::memory_jobs::profile_consolidation::ProfileConsolidation;
 
+#[derive(Clone)]
 pub(in crate::host) struct CyclePhases {
+    pub(in crate::host) briefing_at: chrono::DateTime<chrono::Utc>,
     pub(in crate::host) metrics: Arc<CycleMetrics>,
     pub(in crate::host) briefing: Arc<BriefingGeneration>,
     pub(in crate::host) profile: Arc<ProfileConsolidation>,
@@ -76,7 +78,7 @@ impl PhaseExecutor for CyclePhases {
                     .map_err(cognition_phase_error),
                 Phase::NewChatBriefing => self
                     .briefing
-                    .generate(run_id, std::time::SystemTime::now().into(), cancellation)
+                    .generate(run_id, self.briefing_at, cancellation)
                     .await
                     .map_err(|error| {
                         PhaseError::new(error.code(), error.message()).with_source(error)
