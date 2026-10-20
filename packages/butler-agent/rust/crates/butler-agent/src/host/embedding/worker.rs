@@ -10,8 +10,6 @@ use butler_memory::cognition::{
 };
 
 pub(crate) mod assets;
-#[cfg(feature = "e2e-fixtures")]
-mod fixtures;
 
 const MAX_FRAME_BYTES: usize = 1024 * 1024;
 const MAX_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
@@ -160,8 +158,6 @@ async fn handle(
             let Some(loaded) = engine.as_mut() else {
                 return WorkerResponse::error(id, "embed_worker_unavailable");
             };
-            #[cfg(feature = "e2e-fixtures")]
-            fixtures::hold_request(request.op);
             match request.op {
                 WorkerOperation::Initialize => Ok(WorkerResult::Ready),
                 WorkerOperation::Tokenize => loaded

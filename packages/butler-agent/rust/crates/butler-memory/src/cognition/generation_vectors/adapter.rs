@@ -96,7 +96,6 @@ impl GenerationVectorAdapter {
         if texts.is_empty() {
             return Ok(RecallVectorMatches::default());
         }
-        let started = std::time::Instant::now();
         let response = self
             .embedding
             .embed(
@@ -111,12 +110,6 @@ impl GenerationVectorAdapter {
                 CancellationToken::new(),
             )
             .await?;
-        if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
-            butler_core::diagnostic!(
-                "[memory-vector] query_embed_ms={:.3}",
-                started.elapsed().as_secs_f64() * 1000.0
-            );
-        }
         // Warming a fresh generation lets the consumer bind its first vector identity.
         let expected = expected.ok_or_else(|| error(CognitionCode::VectorUnavailable))?;
         compatibility::query_identity(expected, &response.metadata)?;

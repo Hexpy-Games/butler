@@ -188,15 +188,7 @@ pub(crate) async fn search_generation_vectors(
     let Some(embedding) = generation.embedding.as_ref() else {
         return Err(error(CognitionCode::VectorUnavailable));
     };
-    let started = std::time::Instant::now();
     let table = VectorTable::open(data_root, generation).await?;
-    if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
-        butler_core::diagnostic!(
-            "[memory-vector] lance_open_ms={:.3}",
-            started.elapsed().as_secs_f64() * 1000.0
-        );
-    }
-    let started = std::time::Instant::now();
     for kind in [VectorKind::Node, VectorKind::Episode] {
         if kind == VectorKind::Episode
             && request.session_ids.is_empty()
@@ -217,12 +209,6 @@ pub(crate) async fn search_generation_vectors(
             VectorKind::Node => result.nodes = ranked,
             VectorKind::Episode => result.episodes = ranked,
         }
-    }
-    if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
-        butler_core::diagnostic!(
-            "[memory-vector] search_ms={:.3}",
-            started.elapsed().as_secs_f64() * 1000.0
-        );
     }
     Ok(result)
 }

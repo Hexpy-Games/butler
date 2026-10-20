@@ -7,7 +7,6 @@
 //! (`continuation`).
 
 mod binding;
-mod budget;
 mod continuation;
 mod cursor;
 pub(crate) mod details;

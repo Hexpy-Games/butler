@@ -146,9 +146,7 @@ impl Operation {
         }
         // Even after admission delay, optional vector work must leave 500 ms
         // for text candidates and 750 ms each for graph and source reads.
-        let vector_deadline = self
-            .deadline_at
-            .saturating_sub(super::super::budget::TEXT_RESERVE_MS);
+        let vector_deadline = self.deadline_at.saturating_sub(2_000);
         let mut initialization_ms = 0;
         let result = tokio::select! {
             () = self.shutdown.cancelled() => return Err(closed()),
@@ -187,10 +185,10 @@ impl Operation {
         // path starts the owner without delaying text recall for model readiness.
         if generation.embedding.is_some() {
             let started = (self.clock)();
-            // Query embedding plus vector open/search measured 35–38 ms; reserve
-            // 50 ms for that work. On-demand loading may use the rest of the
-            // vector lane's remaining deadline.
-            let ready_deadline = deadline_at.saturating_sub(50);
+            // Warm-file loads measured 1,642–1,916 ms. 2,250 ms gives the
+            // slowest sample 17% headroom without spending 4,250 ms on
+            // disk-cold loads (3,856–12,721 ms). The owner keeps loading.
+            let ready_deadline = deadline_at.min(started.saturating_add(2_250));
             let remaining =
                 u64::try_from(ready_deadline.saturating_sub(started)).unwrap_or_default();
             let ready = tokio::time::timeout(

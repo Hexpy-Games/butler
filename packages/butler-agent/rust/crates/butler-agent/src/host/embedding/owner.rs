@@ -43,9 +43,7 @@ mod tests;
 mod verification_tests;
 mod wire;
 
-use wire::{WorkerChild, initialize, kill_and_reap, receive_embedding, send_frame, spawn_worker};
-
-const WORKER_RESPONSE_TIMEOUT: Duration = Duration::from_secs(300);
+use wire::{WorkerChild, exchange, initialize, kill_and_reap, spawn_worker};
 
 use queue::{
     MAX_FRAME_BYTES, MAX_QUEUE_BYTES, MAX_QUEUE_REQUESTS, Pending, QueueState, deadline_instant,
@@ -186,7 +184,6 @@ impl EmbeddingOwner {
         let requested_texts = request.texts.len();
         let resplit = request.resplit;
         let max_embeddings = request.max_embeddings;
-        let interactive_query = execute::drainable_query(&request);
         let wire = WorkerRequest {
             id,
             op: WorkerOperation::Embed,
@@ -212,8 +209,11 @@ impl EmbeddingOwner {
             requested_texts,
             resplit,
             max_embeddings,
-            request_class: request.request_class,
-            interactive_query,
+            cold_start_allowed: matches!(
+                request.request_class,
+                EmbeddingRequestClass::Interactive | EmbeddingRequestClass::Background
+            ),
+            background: request.request_class == EmbeddingRequestClass::Background,
             cancellation: admitted_cancel.clone(),
             deadline,
             response: PendingResponse::Embedding(sender),
@@ -293,12 +293,6 @@ impl Inner {
         }
         state.queued_requests += 1;
         state.queued_bytes += pending.bytes;
-        if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
-            butler_core::diagnostic!(
-                "[embedding-worker] queued class={class:?} texts={}",
-                pending.requested_texts
-            );
-        }
         match class {
             EmbeddingRequestClass::Interactive | EmbeddingRequestClass::WarmInteractive => {
                 state.interactive.push_back(pending);

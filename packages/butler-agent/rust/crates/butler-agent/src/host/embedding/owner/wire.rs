@@ -79,8 +79,7 @@ pub(super) async fn initialize(process: &mut WorkerChild, id: u64) -> CognitionR
     let mut frame = serde_json::to_vec(&request)
         .map_err(|source| error(CognitionCode::EmbedWorkerProtocolInvalid).with_source(source))?;
     frame.push(b'\n');
-    send_frame(process, &frame).await?;
-    let response = read_response(process, id).await?;
+    let response = round_trip(process, &frame, id).await?;
     match response.result {
         WorkerResult::Ready => Ok(()),
         WorkerResult::Error { code } => Err(worker_error(&code)),
@@ -88,11 +87,11 @@ pub(super) async fn initialize(process: &mut WorkerChild, id: u64) -> CognitionR
     }
 }
 
-pub(super) async fn receive_embedding(
+pub(super) async fn exchange(
     process: &mut WorkerChild,
     item: &Pending,
 ) -> CognitionResult<CognitionResult<EmbeddingResult>> {
-    let response = read_response(process, item.id).await?;
+    let response = round_trip(process, &item.frame, item.id).await?;
     match response.result {
         WorkerResult::Embedding(result) => {
             validate_result(item, &result)?;
@@ -105,7 +104,11 @@ pub(super) async fn receive_embedding(
     }
 }
 
-pub(super) async fn send_frame(process: &mut WorkerChild, frame: &[u8]) -> CognitionResult<()> {
+async fn round_trip(
+    process: &mut WorkerChild,
+    frame: &[u8],
+    id: u64,
+) -> CognitionResult<WorkerResponse> {
     process
         .stdin
         .write_all(frame)
@@ -115,10 +118,7 @@ pub(super) async fn send_frame(process: &mut WorkerChild, frame: &[u8]) -> Cogni
         .stdin
         .flush()
         .await
-        .map_err(|source| error(CognitionCode::EmbedWorkerUnavailable).with_source(source))
-}
-
-async fn read_response(process: &mut WorkerChild, id: u64) -> CognitionResult<WorkerResponse> {
+        .map_err(|source| error(CognitionCode::EmbedWorkerUnavailable).with_source(source))?;
     let mut response = Vec::with_capacity(4096);
     let mut chunk = [0_u8; 8192];
     loop {
