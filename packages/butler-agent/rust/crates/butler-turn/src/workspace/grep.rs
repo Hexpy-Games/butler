@@ -140,6 +140,16 @@ fn read_bounded(
             return Err(GrepRead::skipped_unread(reason));
         }
     }
+    if !input.path_form.contained() {
+        match std::fs::symlink_metadata(input.root.join(&input.path)) {
+            Ok(metadata) if !metadata.is_file() => return Err(GrepRead::skipped_unread("symlink")),
+            Ok(metadata) if metadata.len() > cap => {
+                return Err(GrepRead::skipped_unread("max_bytes_per_file"));
+            }
+            Ok(_) => {}
+            Err(_) => return Err(GrepRead::skipped_after_read("io_error", 0)),
+        }
+    }
     let file = super::contained_reader::open_protected(
         &input.root,
         &input.path,
@@ -148,7 +158,7 @@ fn read_bounded(
         cache,
         &input.protected_roots,
     )
-    .map_err(|error| GrepRead::skipped_after_read(super::path_messages::io_reason(&error), 0))?;
+    .map_err(|error| refusal(input, &error))?;
     // Contained opens already verify the file type. The bounded read
     // below also rejects growth past the cap without a redundant metadata call.
     let mut bytes = Vec::new();
@@ -165,6 +175,30 @@ fn read_bounded(
         ));
     }
     Ok(bytes)
+}
+
+// Preserve the guard's original reason and the reader's existing generic I/O code.
+fn refusal(input: &GrepCandidate, error: &std::io::Error) -> GrepRead {
+    if input.path_form == super::PathForm::Contained
+        && let Ok(guard) =
+            super::path_guard::resolve_workspace_path_guard(super::path_guard::GuardInput {
+                butler_data: Some(&input.butler_data),
+                root: &input.root,
+                requested: &input.path,
+                path_form: input.path_form,
+                allow_directories: false,
+                protected_roots: &input.protected_roots,
+            })
+        && let Some(reason) = guard.reason
+    {
+        return GrepRead::skipped_unread(reason);
+    }
+    let reason = match error.to_string().as_str() {
+        "sensitive_path_blocked" => "sensitive_path_blocked",
+        "contained_read_refused" => "safety_refused",
+        _ => "io_error",
+    };
+    GrepRead::skipped_after_read(reason, 0)
 }
 
 /// Collects matching lines with their context until the match count or the

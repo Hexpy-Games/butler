@@ -62,6 +62,11 @@ enum ReadStage {
 fn io_failure(path: &str, error: &std::io::Error, stage: ReadStage) -> Value {
     let absent = error.kind() == std::io::ErrorKind::NotFound;
     let code = super::path_messages::io_reason(error);
+    let code = if code == "directory_not_allowed" {
+        "not_a_file"
+    } else {
+        code
+    };
     if matches!(
         code,
         "permission_denied"

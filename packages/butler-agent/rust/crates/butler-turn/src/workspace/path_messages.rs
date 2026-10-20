@@ -11,7 +11,8 @@ pub(super) fn io_reason(error: &std::io::Error) -> &'static str {
         "protected_path" => return "protected_path",
         "parent_traversal_not_allowed" => return "parent_traversal_not_allowed",
         "absolute_path_not_allowed" => return "absolute_path_not_allowed",
-        "directory_not_allowed" | "not_a_file" => return "not_a_file",
+        "directory_not_allowed" => return "directory_not_allowed",
+        "not_a_file" => return "not_a_file",
         "special_file_not_allowed" => return "special_file_not_allowed",
         "missing_path" => return "missing_path",
         _ => {}
