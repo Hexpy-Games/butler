@@ -14,6 +14,7 @@ pub(super) fn discard_cached_pages(_: &File) -> Option<io::Result<()>> {
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use super::replace_retry::{DeleteProbe, SHARING_ERRORS, replacement_retry_allowed};
 use super::{ExchangeError, FileIdentity, FileMode, FileTime, Writability};
 mod acl;
 
@@ -24,8 +25,6 @@ pub(super) const FILE_IDS: bool = false;
 pub(super) const DIRECTORY_SYNC: bool = false;
 pub(super) const ATOMIC_EXCHANGE: bool = false;
 
-/// `ERROR_SHARING_VIOLATION` and `ERROR_LOCK_VIOLATION`.
-const SHARING_ERRORS: [i32; 2] = [32, 33];
 /// How often, and how far apart, a refused rename is retried.
 const RENAME_ATTEMPTS: u32 = 10;
 const RENAME_BACKOFF: std::time::Duration = std::time::Duration::from_millis(20);
@@ -241,6 +240,16 @@ pub(super) fn replace_file(
         // Retain std's FileRenameInfoEx/POSIX fallback for delete-shared
         // readers, including a reader of an unlinked hard-link alias.
         let result = fs::rename(&from, &to);
+        if let Err(error) = &result
+            && std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
+                == Some(std::ffi::OsStr::new("1"))
+        {
+            eprintln!(
+                "command_file_error phase=replace_attempt attempt={attempt} kind={:?} os_code={:?}",
+                error.kind(),
+                error.raw_os_error()
+            );
+        }
         match result {
             Err(error)
                 if attempt < REPLACEMENT_ATTEMPTS
@@ -275,15 +284,8 @@ fn move_path(path: &Path) -> io::Result<PathBuf> {
     Ok(fs::canonicalize(parent)?.join(name))
 }
 
-/// MoveFileEx reports ACCESS_DENIED for a delete-sharing conflict on the
-/// destination. Confirm it with DELETE-only opens; ACL denials and read-only
-/// files must not be treated as transient permission failures.
 fn replacement_is_transient(error: &io::Error, from: &Path, to: &Path) -> bool {
-    match error.raw_os_error() {
-        Some(code) if SHARING_ERRORS.contains(&code) => true,
-        Some(5) => delete_sharing_conflict(from, to),
-        _ => false,
-    }
+    replacement_retry_allowed(error.raw_os_error(), || delete_probes(from, to))
 }
 
 fn is_transient(error: &io::Error) -> bool {
@@ -293,14 +295,14 @@ fn is_transient(error: &io::Error) -> bool {
             .is_some_and(|code| SHARING_ERRORS.contains(&code))
 }
 
-fn delete_sharing_conflict(from: &Path, to: &Path) -> bool {
+/// DELETE-only reopens of both files, or `None` for a read-only target.
+fn delete_probes(from: &Path, to: &Path) -> Option<[DeleteProbe; 2]> {
     if !current_metadata(to)
         .is_ok_and(|metadata| !metadata.is_file() || !metadata.permissions().readonly())
     {
-        return false;
+        return None;
     }
-    let mut conflict = false;
-    for path in [from, to] {
+    Some([("source", from), ("target", to)].map(|(role, path)| {
         // Request DELETE without deleting anything. Share all access, and
         // inspect reparse entries themselves. Every probe handle closes here,
         // before the next rename attempt or its backoff.
@@ -310,19 +312,16 @@ fn delete_sharing_conflict(from: &Path, to: &Path) -> bool {
             .share_mode(7)
             .custom_flags(0x0220_0000)
             .open(path);
-        match result {
-            Ok(_) => {}
-            Err(error)
-                if error
-                    .raw_os_error()
-                    .is_some_and(|code| SHARING_ERRORS.contains(&code)) =>
-            {
-                conflict = true;
-            }
-            Err(_) => return false,
+        let os_code = result.as_ref().err().and_then(io::Error::raw_os_error);
+        if std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
+            == Some(std::ffi::OsStr::new("1"))
+        {
+            eprintln!(
+                "command_file_error phase=rename os_code=Some(5) probe=delete role={role} probe_os_code={os_code:?}"
+            );
         }
-    }
-    conflict
+        result.map(drop).map_err(|_| os_code)
+    }))
 }
 
 /// Clears the read-only attribute of every file and directory under `root`.
