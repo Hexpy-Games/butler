@@ -150,9 +150,7 @@ fn run_claimed(step: &CacheStep, handle: &MemoryGenerationHandle) -> CognitionRe
     let job = graph.claim_cache_job(now)?;
     let Some(job) = job else {
         graph.close()?;
-        return Ok(CacheAdvance {
-            processed: indexed,
-        });
+        return Ok(CacheAdvance { processed: indexed });
     };
     let writer = JobWriter {
         step,
@@ -180,9 +178,7 @@ fn run_claimed(step: &CacheStep, handle: &MemoryGenerationHandle) -> CognitionRe
     let closed = graph.close();
     produced.and_then(|()| {
         closed?;
-        Ok(CacheAdvance {
-            processed: true,
-        })
+        Ok(CacheAdvance { processed: true })
     })
 }
 
