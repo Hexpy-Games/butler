@@ -28,12 +28,11 @@ class StillOutbox {
     return result;
   }
   async save(record) {
-    const target = this.path(record.id), temporary = target + ".tmp";
-    const file = await open(temporary, "w", 0o600);
-    try { await file.writeFile(JSON.stringify(record) + "\n"); await file.sync(); }
+    // Input waits for both syncs, so they run together. A reservation torn
+    // before its syncs ended never preceded input; load quarantines it.
+    const file = await open(this.path(record.id), "w", 0o600);
+    try { await file.writeFile(JSON.stringify(record) + "\n"); await Promise.all([file.sync(), syncDirectory(this.directory)]); }
     finally { await file.close(); }
-    await rename(temporary, target);
-    await syncDirectory(this.directory);
   }
   async load() {
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
@@ -90,10 +89,10 @@ class StillOutbox {
       this.onChanged();
     });
   }
-  async append(record, value) {
+  async append(record, values) {
     const file = await open(this.path(record.id), "a", 0o600);
-    // Only the new step is written and synced, never the earlier JPEGs.
-    try { await file.writeFile("\n" + JSON.stringify(value) + "\n"); await file.sync(); }
+    // Only the new steps are written and synced, never the earlier JPEGs.
+    try { await file.writeFile(values.map(value => "\n" + JSON.stringify(value) + "\n").join("")); await file.sync(); }
     finally { await file.close(); }
   }
   async deliver(id, value) {
@@ -102,7 +101,7 @@ class StillOutbox {
       const record = this.records.get(id), entry = record?.entries.find(row => row.step === value.step);
       if (!entry) throw Error("still_reservation_missing");
       if (value.still && Buffer.from(value.still.base64, "base64").length > MAX_JPEG) throw Error("still_too_large");
-      await this.append(record, value);
+      await this.append(record, [value]);
       entry.value = value;
       this.revision++;
     });
@@ -113,14 +112,16 @@ class StillOutbox {
     await this.exclusive(async () => {
       const record = this.records.get(id);
       if (!record) return;
-      for (const entry of record.entries) {
+      const settled = record.entries.flatMap(entry => {
         const step = result.steps?.[entry.step];
-        if (entry.value || step?.status === "completed" || step?.reason === "dialog_pending") continue;
-        const value = { step: entry.step, reason: step?.reason ?? result.reason ?? "pixels_not_captured" };
-        await this.append(record, value);
-        entry.value = value;
-        this.revision++;
-      }
+        if (entry.value || step?.status === "completed" || step?.reason === "dialog_pending") return [];
+        return [[entry, { step: entry.step, reason: step?.reason ?? result.reason ?? "pixels_not_captured" }]];
+      });
+      if (!settled.length) return;
+      // One sync covers every never-run step of this act.
+      await this.append(record, settled.map(([, value]) => value));
+      for (const [entry, value] of settled) entry.value = value;
+      this.revision++;
     });
     void this.flush();
   }

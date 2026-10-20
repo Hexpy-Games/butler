@@ -24,7 +24,7 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
   };
   const request = (path, init = {}) => fetch(path, { ...init, signal: controller.signal,
     headers: { "x-butler-admin": adminCredential(), ...init.headers } });
-  const stills = createStillOutbox({ directory: stillDirectory, replayDirectories, onChanged: () => { revision++; if (running) void flushState().catch(() => {}); }, send: value => uploadStill(fetch, adminCredential, value, onStillDelivered) });
+  const stills = createStillOutbox({ directory: stillDirectory, replayDirectories, onChanged: () => changed(), send: value => uploadStill(fetch, adminCredential, value, onStillDelivered) });
   const execute = createExecutor({ flushState, stills, executeBrowser, request });
   async function connect() {
     resetBrowser?.();
@@ -56,6 +56,11 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
     if (running && onClosed) { running = false; onClosed(); }
     else if (running) reconnect = setTimeout(connect, 1000);
   }
+  // Backlog changes publish with tab state; an act's own flush precedes its reply.
+  function changed() {
+    revision++;
+    if (!stateTimer && running) stateTimer = setTimeout(() => { stateTimer = null; void flushState().catch(() => {}); }, 50);
+  }
   const history = createVisitQueue(async visits => {
     const response = await request("/internal/browser-host/visits", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ visits }) });
     if (!response.ok) throw new Error("history_unavailable");
@@ -65,10 +70,7 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
     flushStills: () => stills.flush(),
     ...createSecrets(request, () => running && controller),
     start() { if (!running && enabled()) { running = true; void connect(); } },
-    changed() {
-      revision++;
-      if (!stateTimer && running) stateTimer = setTimeout(() => { stateTimer = null; void flushState().catch(() => {}); }, 50);
-    },
+    changed,
     stop() { stills.stop(); clearTimeout(stateTimer); running = false; clearTimeout(reconnect); controller?.abort(); resetBrowser?.(); closeOutputChecks(); closeReaderRenders(); },
   };
 }
