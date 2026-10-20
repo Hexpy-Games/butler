@@ -222,7 +222,7 @@ class NativeDeps(unittest.TestCase):
         self.assertNotEqual(self.fingerprint, sdk.key(script, self.lock, 'linux-x64'))
 
     # test-category: format-pin
-    def test_unchanged_build_inputs_keep_published_fingerprints(self):
+    def test_exact_compatibility_recipe_keeps_published_fingerprints(self):
         compatibility = json.loads((SCRIPTS / 'static-ort-key-compat.json').read_text())
         lock = json.loads(recipe.LOCK.read_text())
         script_dir = self.root / 'scripts'
@@ -237,6 +237,11 @@ class NativeDeps(unittest.TestCase):
         (self.root / 'rust-toolchain.toml').write_text(historical)
         self.assertEqual(hashlib.sha256(historical.encode()).hexdigest(),
                          compatibility['build_recipe']['rust-toolchain.toml'])
+        # Exercise an exact compatibility snapshot in the temporary recipe.
+        # Production keeps its original snapshot; isolation must invalidate it.
+        compatibility['build_recipe']['static_ort_build.py'] = hashlib.sha256(
+            (script_dir / 'static_ort_build.py').read_bytes()).hexdigest()
+        (script_dir / 'static-ort-key-compat.json').write_text(json.dumps(compatibility))
         for target in recipe.TARGETS:
             projected = recipe.target_lock(lock, target)
             previous = {'lock': projected, 'target': target,

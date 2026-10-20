@@ -20,6 +20,9 @@ import sys
 import tarfile
 import tempfile
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from check_host_links import check_path
+
 
 SCHEMA = "butler.native-agent-install.v1"
 PAYLOAD_SCHEMA = "butler.native-agent-payload.v1"
@@ -271,17 +274,9 @@ def inspect(*command: str) -> str:
 
 def verify_macos_arm64(binary: Path) -> None:
     architectures = inspect("/usr/bin/lipo", "-archs", str(binary)).split()
-    dependencies = inspect("/usr/bin/otool", "-L", str(binary)).splitlines()[1:]
     if architectures != ["arm64"]:
         raise SystemExit("native binary must contain only the macOS arm64 architecture")
-    unsupported = [
-        line.strip().split(" ", 1)[0]
-        for line in dependencies
-        if line.strip()
-        and not line.strip().split(" ", 1)[0].startswith(("/usr/lib/", "/System/Library/"))
-    ]
-    if unsupported:
-        raise SystemExit("native binary has a non-system dynamic dependency")
+    check_path(binary, "darwin")
 
 
 def verify_linux(binary: Path, architecture: str) -> None:
@@ -292,6 +287,7 @@ def verify_linux(binary: Path, architecture: str) -> None:
     needed = re.findall(r"\(NEEDED\)\s+Shared library: \[([^\]]+)\]", inspect("readelf", "-d", str(binary)))
     if any(name not in LINUX_SYSTEM_LIBRARIES for name in needed):
         raise SystemExit("native binary has a non-system dynamic dependency")
+    check_path(binary, "linux")
 
 
 def make_read_only(root: Path) -> None:

@@ -3,10 +3,12 @@
 
 import argparse
 import hashlib
+import glob
 import json
 import os
 import pathlib
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -178,6 +180,60 @@ def sole_directory(root):
     return children[0]
 
 
+def release_env_preflight(env):
+    """Vendored Rust dependencies must not be redirected to host packages."""
+    for name in ("LIBSQLITE3_SYS_USE_PKG_CONFIG", "ZSTD_SYS_USE_PKG_CONFIG",
+                 "RUSTONIG_SYSTEM_LIBONIG", "RUSTONIG_DYNAMIC_LIBONIG", "LIBRARY_PATH", "PKG_CONFIG_PATH"):
+        if env.get(name) or (name == "ZSTD_SYS_USE_PKG_CONFIG" and name in env):
+            fail(f"Release environment rejects {name}: redirects vendored native dependencies")
+    for name, value in env.items():
+        if name in ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS") or (
+                name.startswith("CARGO_TARGET_") and name.endswith("_RUSTFLAGS")):
+            if re.search(r"(?:^|[\s\x1f])-L|link-search", value):
+                fail(f"Release environment rejects {name}: native link-search override")
+
+
+def cache_allowed_roots(stage, target):
+    roots = [stage.resolve()]
+    if target == "macos-arm64":
+        roots.extend(pathlib.Path(command(args).strip()).resolve() for args in (
+            ["xcrun", "--show-sdk-path"], ["xcode-select", "-p"]))
+    elif target.startswith("linux-"):
+        roots.extend(pathlib.Path(path).resolve() for pattern in (
+            "/usr/include", "/usr/lib*", "/lib*", "/usr/bin")
+                     for path in glob.glob(pattern) if pathlib.Path(path).is_dir())
+    else:
+        roots.extend(pathlib.Path(os.environ[name]).resolve() for name in (
+            "VCToolsInstallDir", "UniversalCRTSdkDir", "WindowsSdkDir") if os.environ.get(name))
+    return roots
+
+
+def check_cmake_cache(text, stage, target, roots=None, python_prefix=None):
+    roots = cache_allowed_roots(stage, target) if roots is None else roots
+    python_prefix = python_prefix or pathlib.Path(sys.executable).resolve().parent.parent
+    package_keys = {"protobuf_DIR", "Protobuf_DIR", "absl_DIR", "re2_DIR"}
+    suffix = re.compile(r"(?:_DIR|_INCLUDE_DIRS?|_LIBRARY|_LIBRARIES|_LIBRARY_RELEASE|_EXECUTABLE)$")
+    for line in text.splitlines():
+        if line.startswith(("//", "#")) or "=" not in line or ":" not in line.split("=", 1)[0]:
+            continue
+        key, value = line.split("=", 1)
+        key = key.rsplit(":", 1)[0]
+        if not suffix.search(key):
+            continue
+        for item in value.split(";"):
+            if not item and key in package_keys:
+                fail(f"CMakeCache {key}={item}: outside allowed roots")
+            if not item or item.endswith("-NOTFOUND") or item == "NOTFOUND":
+                continue
+            path = pathlib.Path(item)
+            allowed = [stage.resolve()] if key in package_keys else roots
+            if "Python" in key and key.endswith("_EXECUTABLE"):
+                allowed = [*allowed, python_prefix]
+            if (path.is_absolute() or key in package_keys) and (
+                    not path.is_absolute() or not any(path.resolve().is_relative_to(root) for root in allowed)):
+                fail(f"CMakeCache {key}={item}: outside allowed roots")
+
+
 def verified_outputs(lib_path, target):
     spec = TARGETS[target]
     if lib_path.name != "Release" or not lib_path.is_dir():
@@ -194,6 +250,17 @@ def verified_outputs(lib_path, target):
     if dynamic:
         fail(f"Unexpected ONNX Runtime dynamic library in static build: {', '.join(dynamic)}")
     settings = (lib_path / "CMakeCache.txt").read_text()
+    stage = lib_path.parent.parent
+    marker = stage / "complete.json"
+    roots, python_prefix = None, None
+    if marker.is_file():
+        recorded = json.loads(marker.read_text())
+        if recorded.get("cmake_cache_sha256") != sha256(lib_path / "CMakeCache.txt"):
+            fail("Static ORT CMake cache digest mismatch")
+        stage = pathlib.Path(recorded["build_stage"])
+        roots = [pathlib.Path(root) for root in recorded["build_roots"]]
+        python_prefix = pathlib.Path(recorded["python_prefix"])
+    check_cmake_cache(settings, stage, target, roots, python_prefix)
     for setting in (
         *spec["cmake_cache"],
         "onnxruntime_BUILD_UNIT_TESTS:BOOL=OFF",
@@ -322,6 +389,10 @@ def prepare_cache(cache_root, fingerprint, lock, target, build_only, require_pre
                 outputs = verified_outputs(lib_path, target)
                 record = {
                     "fingerprint": fingerprint, "host": identity, "target": target,
+                    "build_stage": str(stage.resolve()),
+                    "build_roots": [str(root) for root in cache_allowed_roots(stage, target)],
+                    "python_prefix": str(pathlib.Path(sys.executable).resolve().parent.parent),
+                    "cmake_cache_sha256": sha256(lib_path / "CMakeCache.txt"),
                     "lock_sha256": hashlib.sha256(json.dumps(lock, sort_keys=True).encode()).hexdigest(),
                     "libraries": outputs,
                     "archives": {name: spec["sha256"] for name, spec in lock["sources"].items()},
@@ -359,6 +430,8 @@ def main():
     if args.fingerprint:
         print(prebuilt.key(SCRIPT, lock, target))
         return
+    if not args.protoc_only:
+        release_env_preflight(os.environ)
     host.rust_identity(lock["rust_target"])
     cache_root = root_for_target()
     cache_root.mkdir(parents=True, exist_ok=True)
