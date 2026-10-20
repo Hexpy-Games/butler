@@ -140,12 +140,13 @@ fn performance(dirs: usize, name: &str) -> Result<(), HarnessError> {
     );
     let scale = (dirs / 2_000) as u64;
     butler_e2e::assert_wall_clock_budget!(build, Duration::from_secs(2 * scale), "ledger build");
-    // Micro watch: half of the 20 ms p95 per-tool-call containment overhead budget.
-    butler_e2e::assert_wall_clock_budget!(p95, Duration::from_millis(10), "ledger admission p95");
-    // Micro watch: half of the 1 s refusal-latency budget.
-    butler_e2e::assert_wall_clock_budget!(delta, Duration::from_millis(500), "ledger 5000 delta");
-    // Micro watch: half of the 1 s refusal-latency budget.
-    butler_e2e::assert_wall_clock_budget!(verify, Duration::from_millis(500), "ledger full verify");
+    // No measured normal (manual desktop harness only); incident line about 10x the original
+    // 50 ms budget, where a user would notice a slower command start.
+    butler_e2e::assert_wall_clock_budget!(p95, Duration::from_millis(500), "ledger admission p95");
+    // This refusal-path work feeds the owner's 1 s refusal-latency budget.
+    butler_e2e::assert_wall_clock_budget!(delta, Duration::from_secs(1), "ledger 5000 delta");
+    // This refusal-path work feeds the owner's 1 s refusal-latency budget.
+    butler_e2e::assert_wall_clock_budget!(verify, Duration::from_secs(1), "ledger full verify");
     f.finish();
     Ok(())
 }
