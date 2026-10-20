@@ -15,6 +15,10 @@ async fn first_recall_after_start_uses_vector_lane() -> Result<(), HarnessError>
     memory_stubs::text_complete(&s.sandbox.data, 1).await?;
     batch::recall(&s, "general", ASK).await?;
     memory_stubs::vectors_complete(&s.sandbox.data, 2).await?;
+    // Explicit writes are instruction files; persist a third conversation
+    // source so the complete three-result oracle remains independent of them.
+    batch::recall(&s, "general", ASK).await?;
+    memory_stubs::vectors_complete(&s.sandbox.data, 3).await?;
     let (_, persisted) = memory_stubs::unit_states(&s.sandbox.data)?;
     assert!(persisted > 0);
     s.agent.terminate().await?;
@@ -28,7 +32,10 @@ async fn first_recall_after_start_uses_vector_lane() -> Result<(), HarnessError>
         min_ms: 0,
     });
     if let Some(workers) = usage::embedding_children(s.agent.pid().unwrap())? {
-        assert!(workers.is_empty(), "startup must not load the model");
+        assert!(
+            workers.len() <= 1,
+            "startup preparation shares the single owner"
+        );
     }
     let started = Instant::now();
     let first = batch::recall(&s, "general", ASK).await?;
@@ -51,7 +58,7 @@ async fn first_recall_after_start_uses_vector_lane() -> Result<(), HarnessError>
         first["output"]["coverage"]["vectors"]["state"], "ok",
         "{first}"
     );
-    // The explicit record and both completed conversation turns remain present.
+    // All three completed conversation sources remain present.
     assert_eq!(
         first["output"]["results"].as_array().unwrap().len(),
         3,
@@ -85,7 +92,7 @@ async fn first_recall_after_start_uses_vector_lane() -> Result<(), HarnessError>
     }
     // The first recall also creates a conversation turn. Settle that new work
     // before measuring an otherwise idle warm follow-up.
-    memory_stubs::vectors_complete(&s.sandbox.data, 3).await?;
+    memory_stubs::vectors_complete(&s.sandbox.data, 4).await?;
     assert_loaded_idle(&s).await?;
     s.provider()?.set_pacing(Default::default());
     let started = Instant::now();
@@ -173,6 +180,10 @@ async fn slow_model_load_leaves_complete_text_fallback_within_capped_wait()
     memory_stubs::text_complete(&s.sandbox.data, 1).await?;
     batch::recall(&s, "general", ASK).await?;
     memory_stubs::vectors_complete(&s.sandbox.data, 2).await?;
+    // Explicit writes are instruction files; persist a third conversation
+    // source so the complete three-result oracle remains independent of them.
+    batch::recall(&s, "general", ASK).await?;
+    memory_stubs::vectors_complete(&s.sandbox.data, 3).await?;
     s.agent.terminate().await?;
     // Existing owner-death fixture holds native initialization indefinitely.
     let barrier = s.sandbox.root.join("held-model-load");
@@ -226,3 +237,6 @@ async fn slow_model_load_leaves_complete_text_fallback_within_capped_wait()
     eprintln!("SLOW-RECALL load_continues=true");
     s.finish().await
 }
+
+#[path = "cold_scale.rs"]
+mod scale;

@@ -120,23 +120,17 @@ impl VectorOptimizeService {
             .collect();
         ordered.sort();
         let vectors_pruned = prune(&table, &ordered, cancellation, deadline_at_epoch_ms).await?;
-        // Maintenance is best effort: a failure leaves the table as it was.
-        // Old versions beyond the newest few are pruned, so a rollback reaches
-        // back a bounded number of writes, not to the table's creation.
-        let lancedb_compacted = if check_entry(cancellation, deadline_at_epoch_ms).is_err() {
-            false
-        } else {
-            match lance_maintenance::maintain(&table).await {
-                Ok(maintained) => maintained.compacted,
-                Err(_) => {
-                    lance_store::forget(&generation.root.join("butler.lance"), "butler_memory");
-                    false
-                }
-            }
-        };
         lease
             .release(true)
             .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
+        let lancedb_compacted = match maintain(&table, cancellation, deadline_at_epoch_ms).await {
+            Ok(compacted) => compacted,
+            Err(_) => {
+                lance_store::forget(&generation.root.join("butler.lance"), "butler_memory");
+                false
+            }
+        };
+        self.coordinator.invalidate_inventory();
         Ok(VectorOptimizeOutcome::Metrics {
             caches_compacted: 0,
             summaries_re_embedded: 0,
@@ -172,6 +166,22 @@ impl VectorOptimizeService {
             .assert_for_path(&lock_path)
             .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
         Ok(lease)
+    }
+}
+
+/// Physical maintenance never holds the consolidation lease. Dropping its
+/// future at shutdown leaves committed data intact; unfinished fragments are
+/// unreferenced and pruning never removes unverified files.
+async fn maintain(
+    table: &Table,
+    cancellation: &CancellationToken,
+    deadline: i64,
+) -> lancedb::Result<bool> {
+    tokio::select! {
+        biased;
+        () = cancellation.cancelled() => Ok(false),
+        () = butler_core::wall_clock::wait_until(deadline, butler_core::wall_clock::now_millis) => Ok(false),
+        result = lance_maintenance::maintain(table) => result.map(|result| result.compacted),
     }
 }
 

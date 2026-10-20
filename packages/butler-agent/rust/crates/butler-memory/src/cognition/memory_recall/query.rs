@@ -228,6 +228,10 @@ fn record_stage(
     name: &'static str,
     started: Instant,
 ) {
+    butler_core::diagnostic!(
+        "[memory-recall] stage={name} duration_ms={:.3}",
+        started.elapsed().as_secs_f64() * 1_000.0
+    );
     if let Some(sink) = metrics {
         sink.record(RecallMetric::Stage {
             name,

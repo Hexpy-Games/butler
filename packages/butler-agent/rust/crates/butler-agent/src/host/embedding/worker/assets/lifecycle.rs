@@ -7,7 +7,9 @@ use super::{
 };
 use crate::host::EmbeddingOwner;
 use butler_gateway::gateway::MemoryModelProgress;
-use butler_memory::cognition::MemorySyncConsumer;
+use butler_memory::cognition::{
+    CognitionPathEnvironment, GenerationVectorAdapter, MemorySyncConsumer,
+};
 use parking_lot::Mutex;
 use std::{
     path::PathBuf,
@@ -24,6 +26,7 @@ type Slot = Arc<Mutex<Option<(CancellationToken, JoinHandle<()>)>>>;
 pub(crate) struct Acquisition {
     root: PathBuf,
     state: watch::Sender<MemoryModelProgress>,
+    startup: watch::Sender<bool>,
     task: Slot,
     choice: Arc<Mutex<Choice>>,
     owner: Arc<EmbeddingOwner>,
@@ -39,6 +42,7 @@ pub(crate) struct Acquisition {
 pub(crate) struct ModelOwners {
     pub(crate) owner: Arc<EmbeddingOwner>,
     pub(crate) consumer: Arc<MemorySyncConsumer>,
+    pub(crate) paths: CognitionPathEnvironment,
 }
 
 impl Acquisition {
@@ -64,6 +68,7 @@ impl Acquisition {
         let this = Self {
             root,
             state: watch::channel(idle_view(choice)).0,
+            startup: watch::channel(false).0,
             task: Arc::default(),
             choice: Arc::new(Mutex::new(choice)),
             owner: owners.owner,
@@ -72,9 +77,14 @@ impl Acquisition {
             watcher: Mutex::new(None),
             switch: tokio::sync::Mutex::new(()),
         };
-        *this.watcher.lock() = Some(this.watch_ready(owners.consumer));
+        *this.watcher.lock() = Some(this.watch_ready(owners.consumer, owners.paths));
         this.retry();
         this
+    }
+
+    /// Publication only: the tracked watcher prepares after service readiness.
+    pub(crate) fn startup_ready(&self) {
+        self.startup.send_replace(true);
     }
 
     pub(crate) fn subscribe(&self) -> watch::Receiver<MemoryModelProgress> {
@@ -148,11 +158,21 @@ impl Acquisition {
     }
 
     /// Ready enables the owner; after an explicit switch to on it also backfills once.
-    fn watch_ready(&self, consumer: Arc<MemorySyncConsumer>) -> JoinHandle<()> {
+    fn watch_ready(
+        &self,
+        consumer: Arc<MemorySyncConsumer>,
+        paths: CognitionPathEnvironment,
+    ) -> JoinHandle<()> {
         let mut progress = self.state.subscribe();
+        let mut startup = self.startup.subscribe();
+        let root = self.root.clone();
         let (choice, owner) = (self.choice.clone(), self.owner.clone());
         let (wanted, backfill) = (self.backfill_wanted.clone(), self.backfill.clone());
         tokio::spawn(async move {
+            if startup.wait_for(|ready| *ready).await.is_err() {
+                return;
+            }
+            let mut prepared = false;
             while progress.changed().await.is_ok() {
                 if progress.borrow_and_update().state != "ready" {
                     continue;
@@ -164,6 +184,22 @@ impl Acquisition {
                         continue;
                     }
                     owner.enable();
+                }
+                // One preparation on the ready transition after startup. No
+                // timer, startup await, or shutdown drain waits for model load.
+                // The blocking probe uses a non-waiting graph reader; aborting
+                // this watcher cannot leave a five-second busy wait behind.
+                if !prepared {
+                    prepared = true;
+                    let (root, paths) = (root.clone(), paths.clone());
+                    if tokio::task::spawn_blocking(move || {
+                        GenerationVectorAdapter::has_recall_vectors(&root, &paths).unwrap_or(false)
+                    })
+                    .await
+                    .unwrap_or(false)
+                    {
+                        owner.prepare();
+                    }
                 }
                 butler_memory::cognition::signal_memory_work();
                 if wanted.swap(false, Ordering::AcqRel) {

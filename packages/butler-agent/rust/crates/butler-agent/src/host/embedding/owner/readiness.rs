@@ -50,6 +50,7 @@ impl EmbeddingOwner {
         if !self.enabled() {
             return Err(error(CognitionCode::EmbedWorkerCold));
         }
+        self.inner.admit_background();
         if self.inner.readiness.is_ready() {
             return Ok(());
         }
@@ -77,6 +78,14 @@ impl EmbeddingOwner {
 
     /// Best-effort turn prefetch; queue ownership keeps loading after this returns.
     pub(crate) fn start_loading(&self) {
+        if self.enabled() {
+            self.inner.admit_background();
+            self.prepare();
+        }
+    }
+
+    /// Speculative preparation never admits deferred projection on its own.
+    pub(crate) fn prepare(&self) {
         if !self.enabled() {
             return;
         }
@@ -109,5 +118,13 @@ impl EmbeddingOwner {
             },
             EmbeddingRequestClass::Interactive,
         )
+    }
+}
+
+impl Inner {
+    pub(super) fn admit_background(&self) {
+        if !self.background_admitted.swap(true, Ordering::AcqRel) && self.readiness.is_warm() {
+            butler_memory::cognition::signal_memory_work();
+        }
     }
 }

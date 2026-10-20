@@ -23,6 +23,7 @@ async fn active_cancellation_kills_and_reaps_child() {
         executable: PathBuf::new(),
         next_id: AtomicU64::new(1),
         readiness: WorkerReadiness::default(),
+        background_admitted: AtomicBool::new(true),
         enabled: AtomicBool::new(true),
         release: AtomicBool::new(false),
         release_signal: Notify::new(),

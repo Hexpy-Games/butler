@@ -60,6 +60,12 @@ pub trait CognitionEmbeddingPort: Send + Sync {
         true
     }
 
+    /// Whether opportunistic projection may use the warm worker. Speculative
+    /// preparation alone need not admit deferred background work.
+    fn background_ready(&self) -> bool {
+        self.is_warm()
+    }
+
     /// The user's memory-model choice: false means no model load, query or vector work.
     fn enabled(&self) -> bool {
         true

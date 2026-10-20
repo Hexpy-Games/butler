@@ -264,7 +264,7 @@ fn assert_view(
     Ok(())
 }
 
-fn assert_app(data: &std::path::Path) -> Result<(), HarnessError> {
+pub(crate) fn assert_app(data: &std::path::Path) -> Result<(), HarnessError> {
     let app = Connection::open(data.join("app-server/butler-client.sqlite"))?;
     let projections: i64 = app.query_row(
         "SELECT COUNT(*) FROM app_terminal_turn_projections WHERE turn_id LIKE 'perf-t%'",
@@ -293,7 +293,7 @@ fn assert_app(data: &std::path::Path) -> Result<(), HarnessError> {
     Ok(())
 }
 
-fn seed_extra_app(data: &std::path::Path) -> Result<(), HarnessError> {
+pub(crate) fn seed_extra_app(data: &std::path::Path) -> Result<(), HarnessError> {
     let db = Connection::open(data.join("app-server/butler-client.sqlite"))?;
     db.execute_batch(
         "BEGIN;

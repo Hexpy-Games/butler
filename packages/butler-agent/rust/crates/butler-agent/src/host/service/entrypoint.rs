@@ -238,8 +238,7 @@ async fn serve(
         return Err(error);
     }
     startup.phase("dispatch_recovery_and_instance_ready");
-    log_effective_model(&gateway, logs).await?;
-    let _ = ready.send(());
+    publish_ready(&runtime, &gateway, logs, ready).await?;
     let result = storage_health::while_serving(
         &config.data_root,
         poll_service(
@@ -393,14 +392,18 @@ async fn recover_inbound_queue(
     Ok(())
 }
 
-async fn log_effective_model(
+async fn publish_ready(
+    runtime: &AgentRuntime,
     gateway: &AppGatewayLifecycle,
     logs: ServiceLogMode,
+    ready: tokio::sync::oneshot::Sender<()>,
 ) -> Result<(), BtccError> {
     let model = gateway.effective_default_model().await?;
     let provider = butler_models::models::parse_model_ref(&model).provider_id;
     logs.write(&format!(
         "[native-butler] ready model={model} provider={provider}"
     ));
+    let _ = ready.send(());
+    runtime.memory_acquisition.startup_ready();
     Ok(())
 }
