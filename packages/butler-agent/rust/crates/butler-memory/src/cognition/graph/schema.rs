@@ -2,6 +2,7 @@
 
 mod base;
 mod migration;
+mod source_hash;
 
 use rusqlite::{Connection, OptionalExtension};
 
@@ -29,7 +30,8 @@ pub(super) fn ensure(connection: &mut Connection, now: &str) -> CognitionResult<
     base::create(connection)?;
     base::ensure_historical_columns(connection)?;
     migration::legacy_failures(connection, now)?;
-    migration::interrupted_failures(connection, now)
+    migration::interrupted_failures(connection, now)?;
+    source_hash::complete_if_empty(connection, now)
 }
 
 /// The recovery lease also upgrades already-indexed serving graphs.
