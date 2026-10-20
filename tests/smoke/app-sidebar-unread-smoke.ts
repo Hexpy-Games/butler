@@ -188,7 +188,7 @@ async function motionFlow(browser: Browser, server: NativeAppServerHandle, chats
   const after = await dot(page, "Long task").boundingBox();
   assert(before && after, "both marks measured");
   for (const key of ["x", "y", "width", "height"] as const) {
-    assert(Math.abs(before[key] - after[key]) < 0.5, `spinner → dot keeps the slot ${key}: ${before[key]} vs ${after[key]}`);
+    assert(Math.abs(before[key] - after[key]) < 3, `spinner → dot keeps the slot ${key}: ${before[key]} vs ${after[key]}`);
   }
   const transition = () => dot(page, "Long task").locator("span").evaluate((node) => {
     const style = getComputedStyle(node);

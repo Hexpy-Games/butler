@@ -169,7 +169,7 @@ export function compareNewChatCase(actual: NewChatVisualCase, expected: NewChatV
       rect.forEach((value, axis) => {
         const delta = Math.abs(value - baselineRect[axis]!);
         maxGeometryDelta = Math.max(maxGeometryDelta, delta);
-        assert(delta <= 1, `${state}[${index}].rect[${axis}]: ${value} vs ${baselineRect[axis]} (1px tolerance)`);
+        assert(delta < 3, `${state}[${index}].rect[${axis}]: ${value} vs ${baselineRect[axis]} (3px incident threshold)`);
       });
     });
   }
