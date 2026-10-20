@@ -7,6 +7,7 @@ mod npm_tarball;
 mod project_boundaries;
 mod project_write;
 mod reader_perf;
+mod reader_refusals;
 mod secret_changes;
 mod secret_inventory;
 mod secret_links;
