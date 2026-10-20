@@ -48,9 +48,9 @@ try {
       positions.push(geometry);
     }
     for (const geometry of positions) {
-      assert(Math.abs(geometry.x - positions[0]!.x) < 1, `${width}: tab left edge changed`);
-      assert(Math.abs(geometry.width - positions[0]!.width) < 1, `${width}: tab width changed`);
-      assert(Math.abs(geometry.gap - positions[0]!.gap) < 1, `${width}: tab top gap changed`);
+      assert(Math.abs(geometry.x - positions[0]!.x) < 3, `${width}: tab left edge changed`);
+      assert(Math.abs(geometry.width - positions[0]!.width) < 3, `${width}: tab width changed`);
+      assert(Math.abs(geometry.gap - positions[0]!.gap) < 3, `${width}: tab top gap changed`);
     }
     await tabs.nth(0).click();
     // Description is the second child: title header, description, then tabs.

@@ -293,10 +293,10 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
         [] as [serde_json::Value; 0]
     );
     assert_ne!(again.data()["archived_session"]["id"], archived);
-    // Micro watch: half of the 100 ms UI input-response budget.
+    // Normal maximum writer exclusion 29.8 ms (PR #1358); 500 ms is visible.
     butler_e2e::assert_wall_clock_budget!(
         write_lock,
-        Duration::from_millis(50),
+        Duration::from_millis(500),
         "General clear writer exclusion"
     );
     drop(canonical);

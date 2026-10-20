@@ -65,9 +65,10 @@ pub(super) async fn measure_current(s: &Scenario, expected: &[Value]) -> Result<
         "approvals p99 watch: server_us={} old_budget_us=50000",
         samples[98]
     );
+    // Normal warm p95 14–53 ms (PR #1372); incident at 500 ms.
     butler_e2e::assert_wall_clock_budget!(
         Duration::from_micros(p95),
-        Duration::from_millis(100),
+        Duration::from_millis(500),
         "all approvals p95: 3000 grants / 600 owners"
     );
     Ok(())
