@@ -16,6 +16,7 @@ mod exact_name;
 pub use exact_name::exact_entry_exists;
 mod fault;
 mod fresh;
+pub mod replace_retry;
 mod replacement;
 pub use fresh::PrivateFileBatch;
 mod timing;

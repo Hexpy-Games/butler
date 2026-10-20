@@ -20,7 +20,9 @@ const OBSERVATIONS: usize = 64;
 async fn browser_long_run_keeps_newest_pixels_and_bounded_requests() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let started = std::time::Instant::now();
-    let setup = Setup::new("BROWSER-LONG")?.stub_cassette(cassette()?);
+    let cassette = cassette()?;
+    let expected_rounds = cassette.exchanges.len();
+    let setup = Setup::new("BROWSER-LONG")?.stub_cassette(cassette);
     let s = setup.start().await?;
     let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
     let stream = reqwest::Client::new()
@@ -32,12 +34,11 @@ async fn browser_long_run_keeps_newest_pixels_and_bounded_requests() -> Result<(
     let host = tokio::spawn(serve_host(stream, admin));
     eprintln!("browser-long setup_ms={}", started.elapsed().as_millis());
     let turn_started = std::time::Instant::now();
+    // Retain the shared 60 s turn deadline for this durability benchmark.
     let (turn_id, turn) = s.turn("general", "Long browser task").await?;
+    let turn_elapsed = turn_started.elapsed();
     assert_eq!(turn["state"], "delivered");
-    eprintln!(
-        "browser-long turn_ms={}",
-        turn_started.elapsed().as_millis()
-    );
+    eprintln!("browser-long turn_ms={}", turn_elapsed.as_millis());
     let text_only = tokio::time::timeout(Duration::from_secs(30), host)
         .await
         .unwrap()
@@ -47,7 +48,20 @@ async fn browser_long_run_keeps_newest_pixels_and_bounded_requests() -> Result<(
         "exactly the look-never observation skipped the screenshot"
     );
     let requests = s.provider()?.requests();
+    assert_eq!(requests.len(), expected_rounds);
     assert_observations(&requests);
+    let per_round_ms = turn_elapsed.as_secs_f64() * 1000.0 / requests.len() as f64;
+    eprintln!(
+        "browser-long provider_rounds={} overhead_ms_per_round={per_round_ms:.3}",
+        requests.len()
+    );
+    if per_round_ms > 1000.0 {
+        eprintln!("browser-long watch: overhead {per_round_ms:.3}ms/round > 1000ms");
+    }
+    assert!(
+        per_round_ms < 2000.0,
+        "browser-long overhead {per_round_ms:.3}ms/round >= 2000ms"
+    );
     let last = requests.last().unwrap().to_string();
     assert!(
         !last.contains("image_budget_exhausted"),

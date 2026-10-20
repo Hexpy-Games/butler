@@ -6,7 +6,17 @@ impl Scenario {
     /// Sends once and observes that same input through queue admission and
     /// terminal delivery, within the original turn deadline.
     pub async fn turn(&self, chat: &str, text: &str) -> Result<(String, Value), HarnessError> {
-        let timeout = Duration::from_secs(turn_timeout());
+        self.turn_within(chat, text, Duration::from_secs(turn_timeout()))
+            .await
+    }
+
+    /// Sends and observes the same input within a caller-selected deadline.
+    pub async fn turn_within(
+        &self,
+        chat: &str,
+        text: &str,
+        timeout: Duration,
+    ) -> Result<(String, Value), HarnessError> {
         tokio::time::timeout(timeout, async {
             let accepted = self.gw.say(chat, text).await?;
             let turn_id = resolve(self, chat, &accepted).await?;
