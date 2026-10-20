@@ -28,6 +28,11 @@ impl GuidedCommand {
         let host = self.host_environment.clone();
         let path_form = super::directory_path_form(scope.contained_reads);
         let registered = scope.execution == super::CommandExecution::Registered;
+        let strict = registered
+            && !scope.full_access
+            && !butler_platform::command_sandbox::approval_free_reads();
+        // Full Access deliberately keeps best-effort lexical screening: the
+        // owner granted unrestricted execution, including incomplete syntax.
         timing.mark("before_job");
         let rejected = self.jobs.run(move || {
             let timing = super::timing::CommandTiming::new("guard_work");
@@ -37,7 +42,13 @@ impl GuidedCommand {
             let home = butler_platform::command_sandbox::resolve_path_token("~", &cwd, &environment);
             let paths = screen_paths(&command, &cwd, &environment);
             // No match means no lexical rejection, never proof that a program is safe.
-            let denied = sensitive(&paths, &cwd, &data, &host)
+            let denied = if strict && !paths.complete {
+                Some(json!({"error":"command_path_unknown",
+                    "message":"Cannot resolve command paths. Use a simpler path.",
+                    "next":[{"action":"Use a simpler command with explicit paths."}]}))
+            } else {
+                registered.then(|| sensitive(&paths, &cwd, &data, &host, strict)).flatten()
+            }
                 .or_else(|| registered.then(|| ledger_guard::guard((&command, &paths), &cwd, &root, &data, installation.as_deref(), home.as_deref())).flatten());
             timing.mark("guard_done");
             Ok::<_, butler_turn::workspace::CommandError>(denied.map(|denied| json!({
@@ -60,6 +71,7 @@ fn sensitive(
     cwd: &Path,
     data: &Path,
     environment: &std::collections::HashMap<String, String>,
+    ancestors: bool,
 ) -> Option<Value> {
     let denied = |target: &str| {
         json!({"error":"protected_path", "message":"Credential paths are protected.",
@@ -88,9 +100,11 @@ fn sensitive(
                 .path
                 .as_ref()
                 .is_some_and(|path| looks_sensitive(&path.to_string_lossy()))
-            || credentials
-                .iter()
-                .any(|root| resolved.could_access(root) || candidate.could_access(root))
+            || credentials.iter().any(|root| {
+                resolved.could_access(root)
+                    || candidate.could_access(root)
+                    || ancestors && (resolved.could_reach(root) || candidate.could_reach(root))
+            })
         {
             return Some(denied(&candidate.text));
         }

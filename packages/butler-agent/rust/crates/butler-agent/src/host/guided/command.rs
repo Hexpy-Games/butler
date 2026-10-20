@@ -49,6 +49,7 @@ pub(crate) struct CommandScope<'a> {
     pub workspace_path: &'a Path,
     pub butler_data: &'a Path,
     pub execution: CommandExecution,
+    pub full_access: bool,
     pub contained_reads: bool,
     pub abort: CancellationToken,
     pub allowed_tools_and_effects: Option<&'a [String]>,

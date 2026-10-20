@@ -1,7 +1,7 @@
 //! Approved commands retain credential denial and exact-action disclosure.
 use super::*;
 
-async fn approved(
+pub(super) async fn approved(
     s: &Scenario,
     script: &Arc<Script>,
     command: &str,
@@ -60,12 +60,19 @@ async fn approved_command_guard_normalizes_shell_paths() -> Result<(), HarnessEr
         for command in [
             format!("cd \"$BUTLER_DATA\" && cat {relative}"),
             format!("pushd \"$BUTLER_DATA\"; cat {relative}"),
+            format!("cd \"$BUTLER_DATA\" && (cd /tmp) && cat {relative}"),
+            format!("{{ cd \"$BUTLER_DATA\"; }} && cat {relative}"),
+            format!("if cd \"$BUTLER_DATA\"; then cat {relative}; fi"),
+            format!("command cd \"$BUTLER_DATA\"; cat {relative}"),
+            format!("builtin cd \"$BUTLER_DATA\"; cat {relative}"),
+            format!("cat \"$BUTLER_DATA/{relative}$NOPE\""),
+            format!("cat \"${{BUTLER_DATA:-x}}/{relative}\""),
             format!("cat \"$BUTLER_DATA\"/{relative}"),
             format!("cat \"$BUTLER_DATA\"\"/{relative}\""),
             format!("cat $BUTLER_DATA/{}*/{leaf}", &folder[..folder.len() - 1]),
         ] {
             let result = approved(&s, &script, &command).await?;
-            let denied = result["error"] == "protected_path";
+            let denied = credential_denied(&result);
             eprintln!("lexical_guard denied={denied}: {command}");
             if !denied {
                 missing.push(command);
@@ -74,7 +81,7 @@ async fn approved_command_guard_normalizes_shell_paths() -> Result<(), HarnessEr
     }
     for command in ["cat ~/.ssh/*", "cat \"$HOME\"/.ssh/*"] {
         let result = approved(&s, &script, command).await?;
-        let denied = result["error"] == "protected_path";
+        let denied = credential_denied(&result);
         eprintln!("lexical_guard denied={denied}: {command}");
         if !denied {
             missing.push(command.to_owned());
@@ -90,9 +97,8 @@ async fn approved_command_guard_normalizes_shell_paths() -> Result<(), HarnessEr
 async fn approved_command_guard_opaque_programs_hit_kernel_boundary() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(
-        butler_platform::command_sandbox::POSIX_SHELL
-            && butler_platform::command_sandbox::approval_free_reads(),
-        "Enforced POSIX sandbox"
+        butler_platform::command_sandbox::POSIX_SHELL,
+        "POSIX commands"
     );
     let (url, script, server) = stub::start().await?;
     let setup = Setup::new("COMMAND-OPAQUE")?
@@ -117,7 +123,11 @@ async fn approved_command_guard_opaque_programs_hit_kernel_boundary() -> Result<
             ),
         ] {
             let result = approved(&s, &script, &command).await?;
-            let denied = result["exit_code"] != 0 && result["stdout"] == "boundary-probe";
+            let denied = if butler_platform::command_sandbox::approval_free_reads() {
+                result["exit_code"] != 0 && result["stdout"] == "boundary-probe"
+            } else {
+                result["error"] == "command_path_unknown" && result["stdout"] == ""
+            };
             eprintln!("kernel_boundary denied={denied}: {command}");
             if !denied {
                 missing.push(command);
@@ -153,7 +163,15 @@ async fn approved_command_guard_allows_ordinary_paths() -> Result<(), HarnessErr
         setup.sandbox.home.join("project/file"),
         "complete-home-file",
     )?;
+    let repo = setup.sandbox.workspace.join("x");
+    let initialized = std::process::Command::new("git")
+        .args(["init", "-q"])
+        .arg(&repo)
+        .output()?;
+    assert!(initialized.status.success());
     let s = setup.start().await?;
+    let status = approved(&s, &script, "git -C x status").await?;
+    assert_eq!(status["exit_code"], 0, "{status}");
     for (command, expected) in [
         ("cd src && cat main.rs", "complete-source"),
         ("ls *.rs", "main.rs\n"),
@@ -166,4 +184,56 @@ async fn approved_command_guard_allows_ordinary_paths() -> Result<(), HarnessErr
     s.finish().await?;
     server.abort();
     Ok(())
+}
+
+#[tokio::test]
+async fn approved_command_guard_allows_name_patterns() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        butler_platform::command_sandbox::POSIX_SHELL
+            && butler_platform::command_sandbox::approval_free_reads(),
+        "POSIX read sandbox"
+    );
+    let (url, script, server) = stub::start().await?;
+    let setup = Setup::new("COMMAND-NAME-PATTERNS")?
+        .access(Access::AskAlways)
+        .stub_cassette(Cassette::load("TOOL-01")?)
+        .env("BUTLER_CODEX_BASE_URL", url);
+    std::fs::write(setup.sandbox.workspace.join("ordinary.txt"), "ordinary")?;
+    let s = setup.start().await?;
+    let mut failures = Vec::new();
+    for (command, exit) in [
+        ("find . -name '*.pem'", 0),
+        ("grep -r BEGIN --include='*.key' .", 1),
+    ] {
+        let result = approved(&s, &script, command).await?;
+        if result["error"] == "protected_path"
+            || result["exit_code"] != exit
+            || result["stdout"] != ""
+            || result["stderr"] != ""
+        {
+            failures.push(format!("{command}: {result}"));
+        }
+        assert!(
+            !result["stdout"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("credential-fixture")
+        );
+    }
+    s.finish().await?;
+    server.abort();
+    assert!(failures.is_empty(), "name patterns refused: {failures:?}");
+    Ok(())
+}
+
+fn credential_denied(result: &Value) -> bool {
+    // A sandbox may hide glob matches or deny the read; directory builtins
+    // may print first. Require a failed read and no credential content.
+    !result["stdout"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("credential-fixture")
+        && (result["error"] == "protected_path"
+            || result["exit_code"].as_i64().is_some_and(|code| code != 0))
 }

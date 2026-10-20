@@ -5,6 +5,8 @@ use std::{collections::HashMap, path::Path};
 
 pub(super) fn verify() {
     foreign_credentials();
+    recursive_and_name_patterns();
+    let mut failures = Vec::new();
     let env = HashMap::from([
         ("BUTLER_DATA".into(), "/profiles/data".into()),
         ("USERPROFILE".into(), "/profiles/home".into()),
@@ -41,6 +43,16 @@ pub(super) fn verify() {
             "/profiles/data/auth/token",
         ),
         (
+            PathSyntax::PowerShell,
+            "PuSh-LoCaTiOn $env:BUTLER_DATA; gc auth/token",
+            "/profiles/data/auth/token",
+        ),
+        (
+            PathSyntax::PowerShell,
+            "pushd $env:BUTLER_DATA; Push-Location /tmp; Pop-Location; gc auth/token",
+            "/profiles/data/auth/token",
+        ),
+        (
             PathSyntax::Cmd,
             "cd /d %BUTLER_DATA% && type auth/token",
             "/profiles/data/auth/token",
@@ -52,12 +64,11 @@ pub(super) fn verify() {
         ),
     ] {
         let screen = screen_paths_with(command, Path::new("/work"), &env, syntax);
-        assert!(screen.complete, "{command}");
-        assert_eq!(
-            screen.candidates.last().unwrap().path.as_deref(),
-            Some(Path::new(expected)),
-            "{command}"
-        );
+        if !screen.complete
+            || screen.candidates.last().unwrap().path.as_deref() != Some(Path::new(expected))
+        {
+            failures.push(format!("wrong cwd: {command}"));
+        }
     }
     for command in [
         "cd $unknown; cat relative",
@@ -65,9 +76,17 @@ pub(super) fn verify() {
         "cat $(pwd)/file",
         "eval opaque",
         "sh script.sh",
+        "cd /data && (cd /tmp) && cat auth/probe.txt",
+        "{ cd /data; } && cat auth/probe.txt",
+        "if cd /data; then cat auth/probe.txt; fi",
+        "command cd /data; cat auth/probe.txt",
+        "builtin cd /data; cat auth/probe.txt",
+        "cd /data; cd /; cd -; cat auth/probe.txt",
     ] {
         let screen = screen_paths_with(command, Path::new("/work"), &env, PathSyntax::Posix);
-        assert!(!screen.complete, "{command}");
+        if screen.complete {
+            failures.push(format!("incorrectly complete: {command}"));
+        }
     }
     let screen = screen_paths_with(
         "cd $unknown; cat relative",
@@ -98,6 +117,7 @@ pub(super) fn verify() {
             "{command}"
         );
     }
+    assert!(failures.is_empty(), "path screening failures: {failures:?}");
 }
 
 fn foreign_credentials() {
@@ -142,4 +162,39 @@ fn foreign_credentials() {
             .paths()
             .contains(&Path::new("/profiles/home").join(".ssh"))
     );
+}
+
+fn recursive_and_name_patterns() {
+    let env = HashMap::from([("BUTLER_DATA".into(), "/profiles/data".into())]);
+    for command in [
+        "grep -r token $BUTLER_DATA",
+        "grep -r token $BUTLER_DATA/ap*",
+    ] {
+        let screen = screen_paths_with(command, Path::new("/work"), &env, PathSyntax::Posix);
+        assert!(screen.complete, "{command}");
+        assert!(
+            screen
+                .candidates
+                .last()
+                .unwrap()
+                .could_reach(Path::new("/profiles/data/app/runtime/auth")),
+            "{command}"
+        );
+    }
+    for command in [
+        "find . -name '*.pem'",
+        "grep -r BEGIN --include='*.key' .",
+        "rg -g '*.pem' BEGIN .",
+        "rg -g*.pem BEGIN .",
+    ] {
+        let screen = screen_paths_with(command, Path::new("/work"), &env, PathSyntax::Posix);
+        assert!(screen.complete, "{command}");
+        assert!(
+            !screen
+                .candidates
+                .iter()
+                .any(|word| word.text.contains(".pem") || word.text.contains(".key")),
+            "{command}"
+        );
+    }
 }

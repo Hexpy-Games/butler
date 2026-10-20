@@ -5,6 +5,7 @@ pub(super) struct Word {
     pub text: String,
     pub known: bool,
     pub glob: bool,
+    pub path: bool,
 }
 impl Default for Word {
     fn default() -> Self {
@@ -12,6 +13,7 @@ impl Default for Word {
             text: String::new(),
             known: true,
             glob: false,
+            path: true,
         }
     }
 }
@@ -53,7 +55,43 @@ pub(super) fn expand(
     env: &HashMap<String, String>,
     syntax: PathSyntax,
 ) -> Vec<Word> {
-    parse(segment, env, syntax, true)
+    let mut words = parse(segment, env, syntax, true);
+    let mut pattern = false;
+    for word in words.iter_mut().skip(1) {
+        if pattern {
+            word.path = false;
+            pattern = false;
+            continue;
+        }
+        let option = word
+            .text
+            .split_once('=')
+            .map_or(word.text.as_str(), |(name, _)| name);
+        if word.text.starts_with("-g") && word.text.len() > 2 && !word.text.starts_with("--") {
+            word.path = false;
+            continue;
+        }
+        if [
+            "-name",
+            "-iname",
+            "-path",
+            "-ipath",
+            "-regex",
+            "-iregex",
+            "--include",
+            "--exclude",
+            "--exclude-dir",
+            "-g",
+            "--glob",
+            "--iglob",
+        ]
+        .contains(&option)
+        {
+            word.path = false;
+            pattern = !word.text.contains('=');
+        }
+    }
+    words
 }
 
 pub(super) fn token(
@@ -76,6 +114,12 @@ fn parse(
     let mut started = false;
     let mut chars = segment.chars().peekable();
     while let Some(ch) = chars.next() {
+        if split && quote.is_none() && ['(', ')', '{', '}', '#'].contains(&ch) {
+            words.push(Word {
+                known: false,
+                ..Default::default()
+            });
+        }
         if split
             && quote.is_none()
             && (ch.is_whitespace() || ['>', '<', ',', '(', ')'].contains(&ch))

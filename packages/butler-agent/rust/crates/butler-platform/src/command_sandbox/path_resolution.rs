@@ -1,5 +1,6 @@
 //! Partial shell interpretation for lexical guards. Incomplete means unknown,
 //! never safe: arbitrary programs require kernel credential-read protection.
+mod comparison;
 mod expansion;
 mod glob;
 mod words;
@@ -30,13 +31,24 @@ pub struct PathCandidate {
     pub glob: bool,
 }
 impl PathCandidate {
+    /// Whether recursive access can reach a credential root, including ancestors.
+    pub fn could_reach(&self, root: &Path) -> bool {
+        self.path.as_deref().is_some_and(|path| {
+            if self.glob {
+                glob::overlaps_ancestor(path, root)
+            } else {
+                comparison::within(path, root) || comparison::within(root, path)
+            }
+        })
+    }
+
     /// Whether this path/pattern can access the root or a descendant. No walk.
     pub fn could_access(&self, root: &Path) -> bool {
         self.path.as_deref().is_some_and(|path| {
             if self.glob {
                 glob::overlaps(path, root)
             } else {
-                crate::secure_fs::path_is_within(path, root)
+                comparison::within(path, root)
             }
         })
     }
@@ -89,17 +101,24 @@ pub fn screen_paths_with(
         result.complete &= tokens.iter().all(|word| word.known);
         let name = tokens
             .first()
-            .map(|word| word.text.to_ascii_lowercase())
+            .map(|word| {
+                word.text
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or_default()
+                    .to_ascii_lowercase()
+                    .trim_end_matches(".exe")
+                    .to_owned()
+            })
             .unwrap_or_default();
-        let opaque = opaque(&name, &tokens);
+        let opaque = opaque(&name, &tokens) || tokens.iter().any(|word| !word.known);
         if opaque {
             result.complete = false;
         }
         let candidates: Vec<_> = tokens
             .iter()
             .map(|word| PathCandidate {
-                path: word
-                    .known
+                path: (word.path && word.known)
                     .then(|| resolve(&word.text, directory.as_deref()))
                     .flatten(),
                 text: word.text.clone(),
@@ -114,18 +133,69 @@ pub fn screen_paths_with(
             &mut stack,
             expansion::home(env, syntax),
         );
-        if opaque {
+        if !result.complete {
             directory = None;
         }
         result.complete &= directory.is_some();
-        result.candidates.extend(candidates);
+        result.candidates.extend(
+            candidates
+                .into_iter()
+                .zip(&tokens)
+                .filter_map(|(path, word)| word.path.then_some(path)),
+        );
     }
     result
 }
 
 fn opaque(name: &str, tokens: &[words::Word]) -> bool {
-    tokens.iter().any(|word| word.text.contains('='))
+    tokens
+        .iter()
+        .any(|word| word.path && !word.text.starts_with('-') && word.text.contains('='))
         || [
+            "if",
+            "then",
+            "else",
+            "elif",
+            "fi",
+            "while",
+            "until",
+            "do",
+            "done",
+            "for",
+            "select",
+            "in",
+            "case",
+            "esac",
+            "function",
+            "foreach",
+            "switch",
+            "try",
+            "catch",
+            "finally",
+            "trap",
+            "alias",
+            "unalias",
+            "set",
+            "unset",
+            "export",
+            "declare",
+            "typeset",
+            "local",
+            "nohup",
+            "nice",
+            "timeout",
+            "doas",
+            "su",
+            "command",
+            "builtin",
+            "exec",
+            "env",
+            "sudo",
+            "time",
+            "coproc",
+            "!",
+            "{",
+            "}",
             "eval",
             "source",
             ".",
@@ -158,11 +228,29 @@ fn change_directory(
     stack: &mut Vec<Option<PathBuf>>,
     home: Option<&str>,
 ) {
-    if name == "popd" {
-        *directory = stack.pop().flatten();
+    if ["popd", "pop-location"].contains(&name) {
+        *directory = (tokens.len() == 1).then(|| stack.pop().flatten()).flatten();
         return;
     }
-    if !["cd", "chdir", "pushd", "set-location", "sl"].contains(&name) {
+    if ![
+        "cd",
+        "chdir",
+        "pushd",
+        "push-location",
+        "set-location",
+        "sl",
+    ]
+    .contains(&name)
+    {
+        return;
+    }
+    let arguments: Vec<_> = tokens
+        .iter()
+        .skip(1)
+        .filter(|word| !word.text.eq_ignore_ascii_case("/d"))
+        .collect();
+    if arguments.len() > 1 || arguments.iter().any(|word| word.text.starts_with('-')) {
+        *directory = None;
         return;
     }
     let target = tokens
@@ -173,7 +261,7 @@ fn change_directory(
         .and_then(|(index, _)| candidates.get(index))
         .filter(|candidate| !candidate.glob)
         .and_then(|candidate| candidate.path.clone());
-    if name == "pushd" {
+    if ["pushd", "push-location"].contains(&name) {
         stack.push(directory.clone());
     }
     *directory = target.or_else(|| {
