@@ -323,22 +323,22 @@ impl ProjectLedger {
         let root = self.data_root.clone();
         let fs_permits = Arc::clone(&self.owner.permits);
         let collation = Arc::clone(&self.collation);
+        let measurement = publication::timing::current();
         tokio::spawn(async move {
             let _permit = permit;
             let _active = active;
-            IN_PUBLICATION
-                .scope(
-                    (),
-                    publication::publish(
-                        root,
-                        fs_permits,
-                        collation,
-                        scope,
-                        identity,
-                        prepare_updates,
-                    ),
-                )
-                .await
+            let publication = IN_PUBLICATION.scope(
+                (),
+                publication::publish(
+                    root,
+                    fs_permits,
+                    collation,
+                    scope,
+                    identity,
+                    prepare_updates,
+                ),
+            );
+            publication::timing::inherit(measurement, publication).await
         })
         .await
         .map_err(|source| {
@@ -447,10 +447,11 @@ impl ProjectLedger {
         let active = ActiveRead(Arc::clone(&self.owner));
         let root = self.data_root.clone();
         let collation = Arc::clone(&self.collation);
+        let measurement = publication::timing::current();
         let task = tokio::task::spawn_blocking(move || {
             let _active = active;
             let _permit = permit;
-            work(&root, &collation)
+            publication::timing::on_worker(measurement, || work(&root, &collation))
         });
         task.await.map_err(|source| {
             ProjectLedgerReadError::owner("project_ledger_worker_failed").with_source(source)
