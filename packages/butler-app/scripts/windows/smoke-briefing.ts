@@ -44,7 +44,7 @@ export function smokeBriefing(body: any): SmokeBriefing | null {
     "persona", "runtime_projection", "profile_summaries", "project", "scope_rules", "output_shape"].sort());
   assert.equal(input.locale, "en");
   assert.ok(Number.isFinite(Date.parse(input.now)));
-  assert.match(input.consolidation_run_id, /^cr_scheduled_\d{14}_[0-9a-f]{32}$/u);
+  assert.match(input.consolidation_run_id, /^cr_scheduled_[0-9a-f]{32}$/u);
   assert.ok(["morning", "afternoon", "evening", "night"].includes(input.time_of_day));
   assert.equal(input.persona.id, "active");
   assert.ok(input.persona.excerpt.startsWith("---\nname: active\nbase: butler\nbase_locale: en\n---\n"));

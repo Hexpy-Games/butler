@@ -179,14 +179,28 @@ async fn assert_loaded_idle(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(
     };
     assert_eq!(workers.len(), 1);
     let pid = workers[0];
+    let graph = super::coverage_support::graph(&s.sandbox.data);
+    let version = || {
+        graph
+            .pragma_query_value::<u64, _>(None, "data_version", |row| row.get(0))
+            .unwrap()
+    };
+    let commits = version();
     let started = Instant::now();
     let before = usage::sample(pid)?.unwrap();
     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
     let after = usage::sample(pid)?.unwrap();
-    assert_eq!(
-        (before.cpu_user_time, before.cpu_system_time),
-        (after.cpu_user_time, after.cpu_system_time)
-    );
+    // CPU counters include runtime bookkeeping. Like the memory idle checks,
+    // prove no memory work through graph commits and I/O over the full window.
+    assert_eq!(version(), commits, "memory graph committed while idle");
+    let cpu_user = after
+        .cpu_user_time
+        .zip(before.cpu_user_time)
+        .map(|(a, b)| a - b);
+    let cpu_system = after
+        .cpu_system_time
+        .zip(before.cpu_system_time)
+        .map(|(a, b)| a - b);
     assert_eq!(
         (before.read_chars, before.read_bytes),
         (after.read_chars, after.read_bytes)
@@ -196,7 +210,7 @@ async fn assert_loaded_idle(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(
         (after.write_chars, after.write_bytes)
     );
     eprintln!(
-        "COLD-RECALL loaded_idle_ms={} cpu_delta=0 read_delta=0 write_delta=0",
+        "COLD-RECALL loaded_idle_ms={} cpu_user={cpu_user:?} cpu_system={cpu_system:?} graph_commits=0 read_delta=0 write_delta=0",
         started.elapsed().as_millis()
     );
     Ok(())

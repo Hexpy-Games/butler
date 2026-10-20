@@ -17,10 +17,12 @@ async fn correction_rollback_preserves_findings_without_startup_scan() -> Result
     )?;
     let before = snapshot(&path)?;
     let original = butler_platform::secure_fs::identity(&std::fs::metadata(&path)?).id;
-    let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_e2e-storage-rollback"))
-        .arg(&path)
-        .output()
-        .await?;
+    let output = tokio::process::Command::new(butler_e2e::e2e::binary::fixture_binary(
+        "e2e-storage-rollback",
+    )?)
+    .arg(&path)
+    .output()
+    .await?;
     assert!(
         output.status.success(),
         "{}",

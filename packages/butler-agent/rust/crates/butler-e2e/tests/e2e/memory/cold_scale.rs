@@ -85,7 +85,7 @@ async fn first_recall_after_restart_owner_scale_is_complete() -> Result<(), Harn
     super::assert_loaded_idle(&s).await?;
     // Reaping a child transfers its lifetime I/O counters to the parent on
     // Linux. Measure the parked process after that transfer, and separately
-    // retain the loaded worker's zero-CPU/zero-I/O assertion above.
+    // retain the loaded worker's zero-work/zero-I/O assertion above.
     park(&s).await?;
     idle(&s).await?;
     crate::data_perf::assert_app(&s.sandbox.data)?;
