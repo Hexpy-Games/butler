@@ -38,12 +38,16 @@ mod prewarm_tests;
 #[cfg(test)]
 mod readiness_tests;
 #[cfg(test)]
+mod sent_tests;
+#[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod verification_tests;
 mod wire;
 
-use wire::{WorkerChild, exchange, initialize, kill_and_reap, spawn_worker};
+use wire::{WorkerChild, initialize, kill_and_reap, receive_embedding, send_frame, spawn_worker};
+
+const WORKER_RESPONSE_TIMEOUT: Duration = Duration::from_secs(300);
 
 use queue::{
     MAX_FRAME_BYTES, MAX_QUEUE_BYTES, MAX_QUEUE_REQUESTS, Pending, QueueState, deadline_instant,

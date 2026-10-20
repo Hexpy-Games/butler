@@ -4,6 +4,13 @@ use butler_e2e::e2e::HarnessError;
 use butler_platform::process_control::usage;
 use std::time::{Duration, Instant};
 
+// Share the production deadline arithmetic without linking the memory engine.
+#[path = "../../../../butler-memory/src/cognition/memory_recall/budget.rs"]
+mod recall_budget;
+
+// Assembly after a deadline is observed is measured separately from vector work.
+const FALLBACK_ASSEMBLY_ALLOWANCE: Duration = Duration::from_millis(200);
+
 const ASK: &str = "What is my bike lock code? Call recall_memory with cue bike lock code.";
 
 #[tokio::test]
@@ -242,8 +249,12 @@ async fn slow_model_load_leaves_complete_text_fallback_within_capped_wait()
     eprintln!("SLOW-RECALL tool_ms={tool_ms} answer_ms={turn_ms} complete_results=4");
     butler_e2e::assert_wall_clock_budget!(
         Duration::from_millis(tool_ms.try_into().unwrap()),
-        Duration::from_secs(3),
-        "capped readiness leaves text fallback time",
+        Duration::from_millis(
+            (recall_budget::TOTAL_MS - recall_budget::TEXT_RESERVE_MS)
+                .try_into()
+                .unwrap(),
+        ) + FALLBACK_ASSEMBLY_ALLOWANCE,
+        "vector deadline plus text fallback assembly",
     );
     butler_e2e::assert_wall_clock_budget!(
         Duration::from_millis(turn_ms.try_into().unwrap()),
@@ -256,6 +267,9 @@ async fn slow_model_load_leaves_complete_text_fallback_within_capped_wait()
     eprintln!("SLOW-RECALL load_continues=true");
     s.finish().await
 }
+
+#[path = "cold_overrun.rs"]
+mod overrun;
 
 #[path = "cold_scale.rs"]
 mod scale;

@@ -102,7 +102,7 @@ fn seed_history(data: &Path) -> Result<(), HarnessError> {
     crate::btcc_scale::seed(data)
 }
 
-fn assert_complete(result: &Value, code: &str, conversations: usize) {
+pub(super) fn assert_complete(result: &Value, code: &str, conversations: usize) {
     let output = &result["output"];
     assert_eq!(output["coverage"]["vectors"]["state"], "ok", "{result}");
     assert_eq!(output["status"], "complete", "{result}");

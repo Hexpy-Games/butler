@@ -146,7 +146,9 @@ impl Operation {
         }
         // Even after admission delay, optional vector work must leave 500 ms
         // for text candidates and 750 ms each for graph and source reads.
-        let vector_deadline = self.deadline_at.saturating_sub(2_000);
+        let vector_deadline = self
+            .deadline_at
+            .saturating_sub(super::super::budget::TEXT_RESERVE_MS);
         let mut initialization_ms = 0;
         let result = tokio::select! {
             () = self.shutdown.cancelled() => return Err(closed()),

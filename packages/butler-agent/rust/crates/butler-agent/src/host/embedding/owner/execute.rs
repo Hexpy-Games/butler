@@ -36,9 +36,9 @@ pub(super) async fn run_item(
     let outcome = tokio::select! {
         biased;
         () = inner.shutdown.cancelled() => Err(error(CognitionCode::EmbedOwnerClosed)),
-        () = item.cancellation.cancelled() => Err(error(CognitionCode::EmbedRequestCancelled)),
-        () = deadline_wait(item.deadline) => Err(error(CognitionCode::EmbedRequestDeadline)),
-        result = exchange(process, item) => result,
+        () = release_requested(inner) => Err(error(CognitionCode::EmbedRequestCancelled)),
+        result = tokio::time::timeout(WORKER_RESPONSE_TIMEOUT, exchange_owned(process, item)) =>
+            result.unwrap_or_else(|_| Err(error(CognitionCode::EmbedWorkerUnavailable))),
     };
     match outcome {
         Ok(result) => result.map(Some),
@@ -47,6 +47,35 @@ pub(super) async fn run_item(
             kill_and_reap(child).await;
             Err(failure)
         }
+    }
+}
+
+// Caller deadlines bound waiting, not the lifetime of an already-sent request.
+// Drain its frame before admitting another request; otherwise stdout loses sync.
+async fn exchange_owned(
+    process: &mut WorkerChild,
+    item: &Pending,
+) -> CognitionResult<CognitionResult<EmbeddingResult>> {
+    tokio::select! {
+        biased;
+        () = item.cancellation.cancelled() => return Err(error(CognitionCode::EmbedRequestCancelled)),
+        () = deadline_wait(item.deadline) => return Err(error(CognitionCode::EmbedRequestDeadline)),
+        result = send_frame(process, &item.frame) => result?,
+    }
+    let response = receive_embedding(process, item);
+    tokio::pin!(response);
+    tokio::select! {
+        biased;
+        () = item.cancellation.cancelled() => {
+            // A live caller can explicitly cancel. A dropped receiver has only
+            // abandoned its result, so finish this sent request for the owner.
+            if !item.response.is_closed() {
+                return Err(error(CognitionCode::EmbedRequestCancelled));
+            }
+            response.await
+        }
+        () = deadline_wait(item.deadline) => response.await,
+        result = &mut response => result,
     }
 }
 
@@ -126,7 +155,7 @@ async fn initialize_owned(
         biased;
         () = inner.shutdown.cancelled() => Err(error(CognitionCode::EmbedOwnerClosed)),
         () = release_requested(inner) => Err(error(CognitionCode::EmbedRequestCancelled)),
-        result = tokio::time::timeout(Duration::from_secs(300), initialize(process, id)) =>
+        result = tokio::time::timeout(WORKER_RESPONSE_TIMEOUT, initialize(process, id)) =>
             result.unwrap_or_else(|_| Err(error(CognitionCode::EmbedWorkerUnavailable))),
     }
 }

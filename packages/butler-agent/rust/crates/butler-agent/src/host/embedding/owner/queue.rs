@@ -56,6 +56,10 @@ pub(super) enum PendingResponse {
 }
 
 impl PendingResponse {
+    pub(super) fn is_closed(&self) -> bool {
+        matches!(self, Self::Embedding(sender) if sender.is_closed())
+    }
+
     pub(super) fn send(self, result: CognitionResult<Option<EmbeddingResult>>) {
         match self {
             Self::Prewarm => {}
