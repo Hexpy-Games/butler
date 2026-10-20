@@ -20,36 +20,39 @@ pub(super) async fn finish(
     id: &str,
     session: &str,
     result: &mut Value,
+    awaiting_host: bool,
 ) -> Result<(), HttpError> {
-    // Unknown receipts can still be followed by a late capture. Keep those
-    // markers pending so shutdown/restart can settle them without losing proof.
-    let awaiting = result["steps"]
-        .as_array()
-        .map(|steps| {
-            steps
-                .iter()
-                .enumerate()
-                .filter_map(|(i, step)| {
-                    matches!(step["status"].as_str(), Some("completed" | "unknown")).then_some(i)
-                })
-                .collect()
+    let steps = result["steps"].as_array();
+    let awaiting = if awaiting_host {
+        (0..10).collect()
+    } else {
+        steps
+            .map(|steps| {
+                steps
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, step)| (step["status"] == "completed").then_some(i))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let failures = (0..10)
+        .map(|index| {
+            let reason = steps
+                .and_then(|steps| steps.get(index))
+                .and_then(|step| step["reason"].as_str())
+                .or_else(|| result["reason"].as_str())
+                .unwrap_or("pixels_not_captured");
+            (index, reason.to_owned())
         })
-        .unwrap_or_else(|| {
-            if matches!(
-                result["status"].as_str(),
-                Some("unknown" | "interrupted" | "dialog_pending")
-            ) {
-                (0..10).collect()
-            } else {
-                Vec::new()
-            }
-        });
+        .collect();
     state
         .application
         .browser_still(C::Finish {
             id: id.into(),
             session: session.into(),
             awaiting,
+            failures,
         })
         .await?;
     result["still_pending"] = json!({"id":id,"session":session});

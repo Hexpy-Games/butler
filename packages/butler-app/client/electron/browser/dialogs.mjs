@@ -1,4 +1,5 @@
-import { stepStill } from "./stills.mjs";
+import { settleStill } from "./guarded-bitmap.mjs";
+import { enqueueStill } from "./still-delivery.mjs";
 import { drainStills } from "./still-delivery.mjs";
 import { shortId } from "./ids.mjs";
 import { browserEvent } from "./events.mjs";
@@ -62,17 +63,23 @@ export function wireDialogs(browser, tab) {
 export function pendingDialog(tab) {
   return { status: "dialog_pending", tab: tab.id, url: tab.url, epoch: tab.epoch, dialog: publicDialog(tab) };
 }
-export async function answerDialog(browser, tab, args) {
+export async function answerDialog(browser, tab, args, deliverStill) {
   if (!tab.dialog || tab.dialog.id !== args.dialog || tab.dialog.epoch !== tab.epoch) return { status: "not_dispatched", reason: "stale_dialog" };
+  const evidence = tab.pendingStill;
+  const marker = evidence?.id ? { still_pending: { id: evidence.id, session: evidence.session } } : {};
   const close = tab.dialog.beforeUnloadClose;
   await resolveDialog(browser, tab, args);
   if (close && args.accept === true) { browser.close(tab.id); return { status: "ok", tab: tab.id }; }
+  const resumed = (tab.pendingBatch ?? []).findLastIndex(step => step.reason === "dialog_pending");
   const steps = (tab.pendingBatch ?? []).map(step => step.reason === "dialog_pending" ? { ...step, status: "completed", reason: undefined } : step);
   const completed = steps.findLast(step => step.status === "completed");
-  if (completed && tab.view && !tab.view.webContents.isDestroyed()) completed.still = await stepStill(tab);
-  if (tab.dialog) { tab.pendingBatch = steps; return { ...pendingDialog(tab), steps }; }
-  tab.pendingBatch = null;
-  return { status: "ok", tab: tab.id, epoch: tab.epoch, url: tab.url, steps };
+  if (completed && tab.view && !tab.view.webContents.isDestroyed()) {
+    const settled = tab.stills === false || await settleStill(tab);
+    if (!tab.dialog && resumed >= 0) enqueueStill(tab, resumed, tab.epoch, evidence?.deliver ?? deliverStill, true, settled ? undefined : "capture_unavailable");
+  }
+  if (tab.dialog) { tab.pendingBatch = steps; return { ...pendingDialog(tab), steps, ...marker }; }
+  tab.pendingBatch = null; tab.pendingStill = null;
+  return { status: "ok", tab: tab.id, epoch: tab.epoch, url: tab.url, steps, ...marker };
 }
 export async function requestClose(browser, tab) {
   if (tab) await drainStills(tab);

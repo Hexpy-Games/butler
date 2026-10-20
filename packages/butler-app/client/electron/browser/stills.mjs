@@ -34,13 +34,13 @@ export async function comparisonThumbnail(tab) {
 }
 
 /** Bounded desktop timeline still; never attached to model context. */
-export async function stepStill(tab) {
+export async function stepStill(tab, settled = false) {
   tab.comparisonStill = undefined;
   if (tab.dialog) return undefined;
   if (tab.stills === false) { tab.afterCapture?.(); return undefined; }
   return guardedCapture(tab, async (contents, current) => {
     let frame = null;
-    let image = await settledBitmap(tab, contents, current, async () => { frame = await frameReceipt(tab); });
+    let image = await settledBitmap(tab, contents, current, async () => { frame = await frameReceipt(tab); }, settled);
     if (!image) return undefined;
     const small = image.resize({ width: 320 });
     const thumb = thumbnail(small);

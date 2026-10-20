@@ -1,4 +1,5 @@
 import { pendingDialog } from "./dialogs.mjs";
+import { settleStill } from "./guarded-bitmap.mjs";
 import { enqueueStill } from "./still-delivery.mjs";
 import { resolveStep, selectStep, selectTextStep } from "./observe.mjs";
 import { dragTarget, dispatchDrag } from "./drag.mjs";
@@ -159,11 +160,13 @@ function batchResult(tab, steps, failed) {
 }
 export async function actBatch(tab, args, session) {
   tab.comparisonStill = undefined;
+  tab.pendingStill = null;
   const epoch = tab.epoch, steps = [];
   let failed = false;
   const deadline = Date.now() + Math.min(Number(args.deadline_ms) || 30000, 30000);
   for (const [index, step] of (args.steps ?? []).entries()) {
     await tab.stillCapture;
+    if (tab.dialog) failed = true;
     if (failed || Date.now() >= deadline || tab.cancelled || tab.owner !== `conversation:${session}` || tab.holder !== "agent" || tab.epoch !== epoch) {
       steps.push({ status: "not_dispatched", reason: tab.owner !== `conversation:${session}` ? "owner_changed" : failed ? "previous_step_failed" : "control_changed" }); failed = true; continue;
     }
@@ -181,10 +184,18 @@ export async function actBatch(tab, args, session) {
         if (effect) steps.at(-1).canvas_effect = effect;
       }
       if (tab.dialog) { steps[steps.length-1] = { status:"unknown", reason:"dialog_pending", hit:target.hit }; failed=true; }
-      else if (steps.at(-1).status === "completed") enqueueStill(tab, index, epoch, args.deliverStill);
+      else if (steps.at(-1).status === "completed" && tab.epoch === epoch && tab.holder === "agent") {
+        const settled = tab.stills === false || await settleStill(tab);
+        if (tab.dialog) { steps[steps.length - 1] = { status: "unknown", reason: "dialog_pending", hit: target.hit }; failed = true; }
+        else enqueueStill(tab, index, epoch, args.deliverStill, true, settled ? undefined : "capture_unavailable");
+      } else if (steps.at(-1).status === "completed") enqueueStill(tab, index, epoch, args.deliverStill, false, "control_changed");
     } catch { steps[index] = { status: "unknown", reason: "dispatch_interrupted" }; failed = true; }
   }
   recordBatch(tab, args, steps);
-  if (tab.dialog) { tab.pendingBatch=steps; return { ...pendingDialog(tab), steps }; }
+  if (tab.dialog) {
+    tab.pendingBatch = steps;
+    tab.pendingStill = { id: args.deliveryId, session, deliver: args.deliverStill };
+    return { ...pendingDialog(tab), steps };
+  }
   return batchResult(tab, steps, failed);
 }

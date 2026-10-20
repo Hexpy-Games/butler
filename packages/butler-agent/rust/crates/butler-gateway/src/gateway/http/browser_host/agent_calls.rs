@@ -43,7 +43,7 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     }
     if let Some(refused) = dispatch(&state, frame, count, deadline, &id, sender)? {
         if op == "tab.act" {
-            super::still_delivery::finish(&state, &id, &session, &mut json!({})).await?;
+            super::still_delivery::finish(&state, &id, &session, &mut json!({}), false).await?;
         }
         return Ok(refused);
     }
@@ -59,11 +59,12 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
             Err(_) => json!({"status":"unknown","reason":"timeout"}),
         }
     };
+    let awaiting_host = result["reason"] == "browser_host_lost" || state.shutdown.is_cancelled();
     fence_result(&state, &session, &op, tab, &mut result)?;
     super::signed_in::recheck(&sent, &mut result);
     finish_result(&state, &session, &op, &sent, &mut result).await?;
     if op == "tab.act" {
-        super::still_delivery::finish(&state, &id, &session, &mut result).await?;
+        super::still_delivery::finish(&state, &id, &session, &mut result, awaiting_host).await?;
     }
     response(count, result)
 }

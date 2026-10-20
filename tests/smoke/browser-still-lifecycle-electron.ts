@@ -156,9 +156,9 @@ try {
     assert.equal(result.existingRequested, 1, "an existing dialog never asks the blocked renderer to paint");
     assert.deepEqual(result.listeners, result.baseline, `${result.mode}: lifecycle and debugger listeners are removed`);
     if (result.mode === "act") {
-      assert.equal(result.status, "ok", "a later capture dialog never rewrites the acknowledged act");
-      assert.equal(result.pending, false);
-      assert.equal(result.reason, undefined);
+      assert.equal(result.status, "dialog_pending");
+      assert.equal(result.pending, true);
+      assert.equal(result.reason, "dialog_pending");
     } else if (result.mode === "answer") {
       assert.equal(result.status, "dialog_pending");
       assert.equal(result.pending, true, "the batch is retained for the pending dialog");

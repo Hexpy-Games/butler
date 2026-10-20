@@ -7,7 +7,9 @@ import { expectBrowserStills } from "../support/browser-still-delivery";
 import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
 import { browserStub, describeBrowser, bridgeBrowser, latestBrowser } from "../support/browser-agent-stub";
 async function waitForPerfLoad() {
+  const until = performance.now() + 60_000;
   while(loadavg()[0]>=8) {
+    assert.ok(performance.now() < until, `Load did not fall below 8: ${loadavg().join(", ")}`);
     console.log(JSON.stringify({waitingForLoad:true,loadAverage1m:loadavg()[0]}));
     await new Promise(done=>setTimeout(done,5000));
   }

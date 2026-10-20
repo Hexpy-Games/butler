@@ -16,6 +16,7 @@ pub enum AppBrowserStillCommand {
         id: String,
         session: String,
         awaiting: Vec<usize>,
+        failures: Vec<(usize, String)>,
     },
     Attach {
         id: String,

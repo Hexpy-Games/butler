@@ -165,7 +165,7 @@ async function executeFrame(browser, frame) {
   if (op === "tab.waiting") { tab.waitingTurn = frame.turn_id; tab.waiting = Boolean(tab.dialog) || args.value === true; browser.publish(); return { status: "ok" }; }
   if (tab.holder === "user") return { status: "not_dispatched", reason: "user_control" };
   if (op === "tab.close") return requestClose(browser,tab);
-  if (op === "tab.dialog") return answerDialog(browser,tab,args);
+  if (op === "tab.dialog") return answerDialog(browser,tab,args,frame.deliverStill);
   if (tab.dialog) return pendingDialog(tab);
   touch(browser, tab);
   browser.pointer.action(tab, frame.pointer);
@@ -194,7 +194,7 @@ async function executeFrame(browser, frame) {
     if (tab.busy) return { status: "not_dispatched", reason: "browser_busy" };
     tab.busy = true; tab.cancelled = false; tab.callId = frame.call_id; browser.publish();
     try {
-      tab.activeAct = actBatch(tab, { ...args, deliverStill: frame.deliverStill, deadline_ms: frame.deadline_ms }, session);
+      tab.activeAct = actBatch(tab, { ...args, deliveryId: frame.id, deliverStill: frame.deliverStill, deadline_ms: frame.deadline_ms }, session);
       return await tab.activeAct;
     } finally { tab.activeAct = null; tab.busy = false; browser.publish(); }
   }

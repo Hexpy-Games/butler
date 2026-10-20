@@ -84,7 +84,7 @@ pub(super) async fn for_output(
     if uuid::Uuid::parse_str(id).is_err() {
         return Ok(None);
     }
-    read(state, id, session, true).await.map(Some)
+    read(state, id, session, false).await.map(Some)
 }
 
 fn marker(value: &serde_json::Value, depth: usize) -> Option<(&str, &str)> {

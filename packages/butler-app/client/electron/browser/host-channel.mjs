@@ -1,10 +1,11 @@
+import { createStillOutbox } from "./still-outbox.mjs";
 import { createVisitQueue } from "./history.mjs";
 import { checkOutput, closeOutputChecks } from "./output-check.mjs";
 import { closeReaderRenders, renderReader } from "./reader-render.mjs";
 
 // Dedicated main-only SSE. Credentials and page diagnostics never reach a renderer.
 // `onClosed` (the hidden host): a lost channel ends the host instead of reconnecting.
-export function createBrowserHost({ fetch, adminCredential, executeBrowser, resetBrowser, snapshot, enabled = () => true, onClosed }) {
+export function createBrowserHost({ fetch, adminCredential, executeBrowser, resetBrowser, snapshot, enabled = () => true, onClosed, stillDirectory, onStillDelivered }) {
   let controller = null;
   let reconnect = null;
   let running = false;
@@ -23,24 +24,34 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
   };
   const request = (path, init = {}) => fetch(path, { ...init, signal: controller.signal,
     headers: { "x-butler-admin": adminCredential(), ...init.headers } });
+  const stills = createStillOutbox({ directory: stillDirectory, send: async value => {
+    // SSE reconnection must not cancel an independent evidence upload.
+    const response = await fetch("/internal/browser-host/stills", { method: "POST",
+      signal: AbortSignal.timeout(5000), headers: { "x-butler-admin": adminCredential(), "content-type": "application/json" },
+      body: JSON.stringify(value) });
+    if (!response.ok) throw Error("still_upload_failed");
+    onStillDelivered?.({ id: value.act_id, session: value.session });
+  } });
   async function execute(frame) {
     await flushState();
     let result;
+    const evidence = frame.op === "tab.act";
     try {
-      result = frame.op === "output.check" ? await checkOutput(frame.args, frame.lease)
+      if (evidence) {
+        try { await stills.reserve(frame); }
+        catch (error) { result = { status: "not_dispatched", reason: error.message === "still_storage_full" ? "still_storage_full" : "still_storage_unavailable" }; }
+      }
+      result ??= frame.op === "output.check" ? await checkOutput(frame.args, frame.lease)
         : frame.op === "reader.render" ? await renderReader(frame.args)
-          : await executeBrowser?.({ ...frame, deliverStill: async value => {
-            const response = await request("/internal/browser-host/stills", { method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ session: frame.session, tab: frame.tab, act_id: frame.id, ...value }) });
-            if (!response.ok) throw new Error("still_upload_failed");
-          } }) ?? { status: "unknown", reason: "unsupported_op" };
+          : await executeBrowser?.({ ...frame, deliverStill: value => stills.deliver(frame.id, value) })
+            ?? { status: "unknown", reason: "unsupported_op" };
     }
     catch (error) {
       // Keep the cause: an executor error is otherwise invisible to diagnosis.
       console.error(`[browser] ${frame.op} failed:`, error?.stack ?? String(error));
       result = { status: "unknown", reason: "executor_error" };
     }
+    if (evidence) await stills.finish(frame.id, result);
     await flushState();
     // Media and rendered pages carry bounded bytes on their own routes.
     const results = frame.op === "tab.image_collect" ? "images" : ["reader.render", "tab.read"].includes(frame.op) ? "renders" : "results";
@@ -56,6 +67,7 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
       if (!response.ok) throw new Error("host_unavailable");
       await flushState();
       await history.flush();
+      void stills.connect().catch(() => {});
       let pending = "";
       const decoder = new TextDecoder();
       for await (const chunk of response.body) {
@@ -106,6 +118,7 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
   }
   return {
     history,
+    flushStills: () => stills.flush(),
     credential,
     vault,
     start() { if (!running && enabled()) { running = true; void connect(); } },
@@ -113,6 +126,6 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
       revision++;
       if (!stateTimer && running) stateTimer = setTimeout(() => { stateTimer = null; void flushState().catch(() => {}); }, 50);
     },
-    stop() { clearTimeout(stateTimer); running = false; clearTimeout(reconnect); controller?.abort(); resetBrowser?.(); closeOutputChecks(); closeReaderRenders(); },
+    stop() { stills.stop(); clearTimeout(stateTimer); running = false; clearTimeout(reconnect); controller?.abort(); resetBrowser?.(); closeOutputChecks(); closeReaderRenders(); },
   };
 }

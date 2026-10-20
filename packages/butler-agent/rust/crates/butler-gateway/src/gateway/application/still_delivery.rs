@@ -26,7 +26,7 @@ impl AppApplication {
             } => {
                 let (key, owner, page) = (id.clone(), session.clone(), tab.clone());
                 let pending = self.storage.read(move |db| {
-                    db.query_row("SELECT COUNT(*) FROM browser_still_deliveries WHERE act_id=?1 AND session_id=?2 AND tab_id=?3 AND step=?4 AND state='pending'",
+                    db.query_row("SELECT COUNT(*) FROM browser_still_deliveries WHERE act_id=?1 AND session_id=?2 AND tab_id=?3 AND step=?4",
                         params![key, owner, page, step], |r| r.get::<_, usize>(0)).map_err(AppStorageError::sqlite)
                 }).await.map_err(app_error)?;
                 if pending != 1 {
@@ -35,6 +35,14 @@ impl AppApplication {
                         "still_settled",
                         "Still already settled.",
                     ));
+                }
+                let lookup = id.clone();
+                let previous = self.storage.read(move |db| {
+                    db.query_row("SELECT file_id FROM browser_still_deliveries WHERE act_id=?1 AND step=?2", params![lookup, step], |row| row.get::<_, Option<String>>(0))
+                        .map_err(AppStorageError::sqlite)
+                }).await.map_err(app_error)?;
+                if let Some(file) = previous {
+                    return Ok(json!({"still_file": self.message_file_metadata(file).await?}));
                 }
                 let input = AppFileUpload {
                     browser_tab: Some(tab.clone()),
@@ -74,10 +82,15 @@ fn mutate(db: &Connection, command: C) -> Result<Value, AppStorageError> {
             id,
             session,
             awaiting,
+            failures,
         } => {
             for step in 0..10 {
                 if !awaiting.contains(&step) {
-                    fail(db, &id, &session, step, "not_completed")?;
+                    let reason = failures
+                        .iter()
+                        .find(|(index, _)| *index == step)
+                        .map_or("pixels_not_captured", |(_, reason)| reason.as_str());
+                    fail(db, &id, &session, step, reason)?;
                 }
             }
         }
@@ -88,7 +101,7 @@ fn mutate(db: &Connection, command: C) -> Result<Value, AppStorageError> {
             reason,
         } => fail(db, &id, &session, step, &reason)?,
         C::Recover { reason } => {
-            db.execute("UPDATE browser_still_deliveries SET state='failed',reason=?1 WHERE state='pending'", [reason])
+            db.execute("UPDATE browser_still_deliveries SET state='pending',reason=?1 WHERE state='pending' OR (state='failed' AND reason IN ('gateway_restarted','browser_host_restarted'))", [reason])
                 .map_err(AppStorageError::sqlite)?;
         }
         C::Read { .. } | C::Attach { .. } => {
@@ -119,8 +132,14 @@ pub(super) fn attached(
     step: usize,
     file: &str,
 ) -> Result<(), AppStorageError> {
-    db.execute("UPDATE browser_still_deliveries SET state='attached',file_id=?3,reason=NULL WHERE act_id=?1 AND step=?2 AND state='pending'",
+    let changed = db.execute("UPDATE browser_still_deliveries SET state='attached',file_id=?3,reason=NULL WHERE act_id=?1 AND step=?2 AND state!='attached'",
         params![id, step, file]).map_err(AppStorageError::sqlite)?;
+    if changed != 1 {
+        return Err(AppStorageError::new(
+            super::storage::AppStorageCode::MessageFileNotFound,
+            "Still reservation missing",
+        ));
+    }
     Ok(())
 }
 

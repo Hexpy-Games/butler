@@ -401,13 +401,6 @@ async fn register_host(
         let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
         hidden::admit(state, &mut hub, launch)?;
     }
-    state
-        .application
-        .browser_still(crate::gateway::AppBrowserStillCommand::Recover {
-            reason: "browser_host_restarted".into(),
-        })
-        .await?;
-    state.browser.4.notify_waiters();
     let generation = {
         let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
         hub.host = Some(sender);

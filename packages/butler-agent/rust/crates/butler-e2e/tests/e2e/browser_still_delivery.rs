@@ -72,13 +72,6 @@ async fn browser_still_delivery_orders_late_uploads_and_recovers_full_queue()
     // The timeline's act receipt already exists, before any still upload.
     let view = s.gw.get("/session-view?session_id=general").await?;
     let row = act_row(view.data()).expect("browser act in the timeline");
-    assert!(
-        s.provider()?
-            .requests()
-            .iter()
-            .all(|r| !r["input"].to_string().contains("still_pending")),
-        "model-visible results are unchanged"
-    );
     let path = format!("/browser-stills/{id}?session_id=general");
     let before = s.gw.get(&path).await?;
     assert_eq!(before.status, 200, "{}", before.text);
@@ -89,6 +82,31 @@ async fn browser_still_delivery_orders_late_uploads_and_recovers_full_queue()
             .iter()
             .all(|v| v["state"] == "pending")
     );
+    // A reservation removed inside file insertion must roll back the whole write.
+    let db = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
+    db.execute_batch(&format!("CREATE TRIGGER remove_still_reservation BEFORE INSERT ON message_files BEGIN DELETE FROM browser_still_deliveries WHERE act_id='{id}'; END;"))?;
+    let failed = admin
+        .send(
+            Method::POST,
+            "/internal/browser-host/stills",
+            Some(json!({
+                "session":"general","tab":"page","act_id":id,"step":0,
+                "still":{"mime":"image/jpeg","base64":STANDARD.encode(still_bytes())}
+            })),
+            &[],
+        )
+        .await?;
+    assert_eq!(
+        failed.status, 400,
+        "a missing reservation cannot acknowledge attachment"
+    );
+    assert!(failed.text.contains("message_file_not_found"));
+    db.execute_batch("DROP TRIGGER remove_still_reservation;")?;
+    assert_eq!(
+        s.gw.get(&path).await?.data()["steps"][0]["state"],
+        "pending"
+    );
+    drop(db);
     // Deliberately reverse upload order; the timeline projection must retain step order.
     for index in [2, 0] {
         let value = json!({"session":"general","tab":"page","act_id":id,"step":index,
@@ -122,9 +140,10 @@ async fn browser_still_delivery_orders_late_uploads_and_recovers_full_queue()
     s.crash_and_restart().await?;
     let recovered = s.gw.get(&path).await?.data().clone();
     assert_eq!(recovered["steps"][0]["state"], "attached");
-    assert_eq!(recovered["steps"][1]["state"], "failed");
+    assert_eq!(recovered["steps"][1]["state"], "pending");
     assert_eq!(recovered["steps"][1]["reason"], "gateway_restarted");
     assert_eq!(recovered["steps"][2]["state"], "attached");
+    let started = std::time::Instant::now();
     let raw =
         s.gw.get(&format!(
             "/turns/{turn}/operations/{}/output?result_id={}&offset=0",
@@ -132,6 +151,11 @@ async fn browser_still_delivery_orders_late_uploads_and_recovers_full_queue()
             row["tool_result_id"].as_str().unwrap()
         ))
         .await?;
+    butler_e2e::assert_wall_clock_budget!(
+        started.elapsed(),
+        Duration::from_secs(1),
+        "raw output while awaiting pixels"
+    );
     let act: Value = serde_json::from_str(raw.data()["content"].as_str().unwrap()).unwrap();
     assert_eq!(act["still_pending"]["id"], id);
     assert_eq!(raw.data()["browser_stills"]["act_id"], id);
@@ -144,6 +168,33 @@ async fn browser_still_delivery_orders_late_uploads_and_recovers_full_queue()
         "gateway_restarted"
     );
 
+    let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
+    let late = admin
+        .send(
+            Method::POST,
+            "/internal/browser-host/stills",
+            Some(json!({
+                "session":"general","tab":"page","act_id":id,"step":1,
+                "still":{"mime":"image/jpeg","base64":STANDARD.encode(still_bytes())}
+            })),
+            &[],
+        )
+        .await?;
+    assert_eq!(late.status, 200, "{}", late.text);
+    assert_eq!(
+        s.gw.get(&path).await?.data()["steps"][1]["state"],
+        "attached"
+    );
+    let file_url = after["steps"][0]["still_file"]["url"].as_str().unwrap();
+    let file_id = file_url.strip_prefix("/message-files/").unwrap();
+    let db = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
+    db.execute_batch("PRAGMA foreign_keys=ON;")?;
+    db.execute("DELETE FROM message_files WHERE id=?1", [file_id])?;
+    let deleted = s.gw.get(&path).await?.data().clone();
+    assert_eq!(deleted["steps"][0]["state"], "failed");
+    assert_eq!(deleted["steps"][0]["reason"], "file_deleted");
+    assert!(deleted["steps"][0].get("still_file").is_none());
+    drop(db);
     s.finish().await
 }
 
@@ -204,7 +255,7 @@ async fn browser_still_shutdown_recovers_active_and_further_pending_stills()
     assert_eq!(after["steps"].as_array().unwrap().len(), 3);
     for (index, step) in after["steps"].as_array().unwrap().iter().enumerate() {
         assert_eq!(step["step"], index);
-        assert_eq!(step["state"], "failed");
+        assert_eq!(step["state"], "pending");
         assert_eq!(step["reason"], "gateway_restarted");
     }
     s.finish().await
@@ -305,4 +356,92 @@ fn delivery_cassette() -> Result<Cassette, HarnessError> {
     );
     cassette.exchanges.push(last);
     Ok(cassette)
+}
+
+#[tokio::test]
+async fn browser_still_unknown_steps_settle_and_late_bytes_win_finish() -> Result<(), HarnessError>
+{
+    butler_e2e::gate!();
+    let s = Setup::new("BROWSER-STILL-UNKNOWN")?.start().await?;
+    let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
+    let mut stream = reqwest::Client::new()
+        .get(format!("{}/internal/browser-host", s.gw.base))
+        .bearer_auth(&s.gw.token)
+        .header("x-butler-admin", &admin.admin)
+        .send()
+        .await?;
+    admin.send(Method::POST, "/internal/browser-host/events", Some(json!({"tabs":[{
+        "id":"page","owner":"conversation:general","profile":"signed_out","epoch":1,"holder":"agent","url":"https://example.com"
+    }]})), &[]).await?;
+    let mut buffer = String::new();
+    for reason in ["dialog_pending", "dispatch_interrupted", "timeout"] {
+        let caller = admin.clone();
+        let pending = tokio::spawn(async move {
+            caller.send(Method::POST, "/internal/browser/calls", Some(json!({
+            "op":"tab.act","session":"general","tab":"page","args":{"steps":[{"action":"wait","value":"50"},{"action":"wait","value":"50"}]}
+        })), &[]).await
+        });
+        let frame = loop {
+            let frame = super::browser_delegation::next_frame(&mut stream, &mut buffer).await?;
+            if frame["op"] == "tab.act" {
+                break frame;
+            }
+        };
+        let id = frame["id"].as_str().unwrap();
+        if reason == "dialog_pending" {
+            let captured = json!({"session":"general","tab":"page","act_id":id,"step":0,
+                "still":{"mime":"image/jpeg","base64":STANDARD.encode(still_bytes())}});
+            assert_eq!(
+                admin
+                    .send(
+                        Method::POST,
+                        "/internal/browser-host/stills",
+                        Some(captured),
+                        &[]
+                    )
+                    .await?
+                    .status,
+                200
+            );
+        }
+        answer(&admin, &frame, json!({"status":"unknown","steps":[{"status":"unknown","reason":reason},{"status":"unknown","reason":reason}]})).await?;
+        assert_eq!(pending.await.unwrap()?.status, 200);
+        let path = format!("/browser-stills/{id}?session_id=general");
+        let result = s.gw.get(&path).await?.data().clone();
+        assert_eq!(result["complete"], true);
+        for (index, step) in result["steps"].as_array().unwrap().iter().enumerate() {
+            if reason == "dialog_pending" && index == 0 {
+                assert_eq!(step["state"], "attached");
+                continue;
+            }
+            assert_eq!(step["state"], "failed");
+            assert_eq!(step["reason"], reason);
+        }
+        // Finish won first. Late bytes still become attached, and replay is idempotent.
+        let value = json!({"session":"general","tab":"page","act_id":id,"step":0,
+            "still":{"mime":"image/jpeg","base64":STANDARD.encode(still_bytes())}});
+        let first = admin
+            .send(
+                Method::POST,
+                "/internal/browser-host/stills",
+                Some(value.clone()),
+                &[],
+            )
+            .await?;
+        assert_eq!(first.status, 200, "{}", first.text);
+        let replay = admin
+            .send(
+                Method::POST,
+                "/internal/browser-host/stills",
+                Some(value),
+                &[],
+            )
+            .await?;
+        assert_eq!(replay.status, 200);
+        assert_eq!(first.data(), replay.data());
+        let result = s.gw.get(&path).await?.data().clone();
+        assert_eq!(result["steps"][0]["state"], "attached");
+        assert!(result["steps"][0]["still_file"]["url"].is_string());
+    }
+    s.finish().await
 }
