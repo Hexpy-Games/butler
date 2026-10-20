@@ -410,7 +410,13 @@ async fn register_host(
         let changed = state.browser.2.notified();
         tokio::pin!(changed);
         changed.as_mut().enable();
-        if !state.browser.0.lock().map_err(|_| HttpError::Internal)?.retiring {
+        if !state
+            .browser
+            .0
+            .lock()
+            .map_err(|_| HttpError::Internal)?
+            .retiring
+        {
             break;
         }
         tokio::select! {
