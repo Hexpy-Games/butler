@@ -14,18 +14,21 @@ pub(super) fn expand_attached(tokens: &mut Vec<Word>, syntax: PathSyntax) -> boo
         return false;
     };
     let lower = first.text.to_ascii_lowercase();
+    // Punctuation can end the command name (cmd), or name another function
+    // (PowerShell `cd~`): every such spelling may change location.
     let suffix = ["chdir", "cd"].into_iter().find_map(|name| {
-        lower
-            .strip_prefix(name)
-            .filter(|tail| tail.starts_with(['.', '/', '\\']))
+        lower.strip_prefix(name).filter(|tail| {
+            tail.starts_with(|ch: char| !ch.is_alphanumeric() && !['_', '-'].contains(&ch))
+        })
     });
     let Some(suffix) = suffix else { return false };
-    // PowerShell defines exact functions cd.. and cd\; chdir is only an alias:
-    // https://github.com/PowerShell/PowerShell/blob/master/src/System.Management.Automation/engine/InitialSessionState.cs (BuiltInFunctions).
-    // cmd has a cd/chdir builtin with a path operand (and /D switch):
-    // https://learn.microsoft.com/windows-server/administration/windows-commands/cd
-    // Model only its parent/root shorthand here; all other attached parsing
-    // stays unknown. Preserve backslash provenance: cd/ is not PS's cd\.
+    // Recognise only forms each shell defines; all others leave cwd unknown.
+    // PowerShell: built-in functions `cd..` and `cd\`; chdir is a plain alias.
+    // github.com/PowerShell/PowerShell: engine/InitialSessionState.cs
+    // cmd: cd and chdir are one builtin documented as `cd [..]`, with example
+    // `cd\` (learn.microsoft.com/windows-server/administration/windows-commands/cd).
+    // Its parser ends a command name before `\` or `/` (jeb/dbenham rules,
+    // dostips.com/forum/viewtopic.php?p=55577). Keep `\`: `cd/` is not `cd\`.
     let builtin = syntax == PathSyntax::Cmd || lower.starts_with("cd");
     let recognized = suffix == ".." || suffix == "\\";
     if !builtin || !recognized || !single {

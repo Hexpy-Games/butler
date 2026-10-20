@@ -2,41 +2,94 @@
 use super::{PathCandidate, resolve, words::Word};
 use std::path::Path;
 
+/// Whether this segment can create a filesystem link. The category is explicit:
+/// ordinary programs, including bare build tools, are not link creators.
 pub(super) fn creates(tokens: &[Word]) -> bool {
     let Some(program) = tokens.first() else {
         return false;
     };
-    // A path identifies arbitrary repository/user code, never a builtin by basename.
+    // A path identifies repository or user code, never a known program.
     if program.text.contains(['/', '\\']) {
         return true;
     }
     let name = program.text.to_ascii_lowercase();
     let name = name.trim_end_matches(".exe");
+    let arguments = &tokens[1..];
     match name {
-        // Interpreters remain opaque in the caller, including redirected input.
-        "ln" | "link" | "rsync" | "tar" | "bsdtar" | "unzip" | "7z" | "cpio" | "pax" | "mklink"
-        | "sh" | "bash" | "zsh" | "python" | "python3" | "node" | "perl" | "ruby" | "pwsh"
-        | "powershell" | "cmd" => true,
+        "ln" | "link" | "rsync" | "tar" | "bsdtar" | "unzip" | "7z" | "cpio" | "pax" | "mklink" => {
+            true
+        }
         "cp" => copy_links(tokens),
-        "git" => git_operation(tokens).is_some_and(|operation| {
-            [
-                "checkout",
-                "clone",
-                "apply",
-                "stash",
-                "reset",
-                "worktree",
-                "submodule",
-            ]
-            .contains(&operation)
-        }),
-        "fsutil" => tokens
-            .get(1)
+        "git" => git_operation(tokens).is_some_and(|operation| GIT_WORKTREE.contains(&operation)),
+        "fsutil" => arguments
+            .first()
             .is_some_and(|word| word.text.eq_ignore_ascii_case("hardlink")),
-        "new-item" | "ni" => tokens.windows(2).any(|pair| {
-            matches!(pair, [option, kind] if option.text.eq_ignore_ascii_case("-ItemType")
-                && ["symboliclink", "junction", "hardlink"]
-                    .contains(&kind.text.to_ascii_lowercase().as_str()))
+        // Parameter names may be abbreviated (-Type) or joined (-ItemType:Junction).
+        "new-item" | "ni" => arguments.iter().any(|word| {
+            let value = word.text.to_ascii_lowercase();
+            let value = value.rsplit(':').next().unwrap_or_default();
+            ["symboliclink", "junction", "hardlink"].contains(&value)
+        }),
+        // Programs that run a command given in their own arguments.
+        "xargs" => (1..tokens.len()).any(|index| creates(&tokens[index..])),
+        "find" => tokens.iter().enumerate().any(|(index, word)| {
+            ["-exec", "-execdir", "-ok", "-okdir"].contains(&word.text.as_str())
+                && creates(&tokens[index + 1..])
+        }),
+        _ => inline_code(name, arguments),
+    }
+}
+
+const GIT_WORKTREE: [&str; 13] = [
+    "checkout",
+    "switch",
+    "clone",
+    "apply",
+    "stash",
+    "reset",
+    "restore",
+    "worktree",
+    "submodule",
+    "pull",
+    "merge",
+    "rebase",
+    "cherry-pick",
+];
+
+/// Interpreters running code from the command line. Scripts and inline code
+/// stay opaque in the caller; inline code also counts as a link creator.
+fn inline_code(name: &str, arguments: &[Word]) -> bool {
+    let short = |flags: &[char]| {
+        arguments.iter().any(|word| {
+            word.text.starts_with('-')
+                && !word.text.starts_with("--")
+                && word.text[1..].contains(flags)
+        })
+    };
+    match name {
+        "sh" | "bash" | "zsh" | "dash" | "ksh" | "python" | "python3" => short(&['c']),
+        "perl" => short(&['e', 'E']),
+        "ruby" => short(&['e']),
+        "node" => {
+            short(&['e', 'p'])
+                || arguments
+                    .iter()
+                    .any(|word| ["--eval", "--print"].contains(&word.text.as_str()))
+        }
+        "pwsh" | "powershell" => arguments.iter().any(|word| {
+            let option = word.text.to_ascii_lowercase();
+            option.strip_prefix(['-', '/']).is_some_and(|option| {
+                !option.is_empty()
+                    && ("command".starts_with(option)
+                        || "encodedcommand".starts_with(option)
+                        || option == "ec")
+            })
+        }),
+        "cmd" => arguments.iter().any(|word| {
+            let option = word.text.to_ascii_lowercase();
+            ["/c", "/k", "/r"]
+                .iter()
+                .any(|flag| option.starts_with(flag))
         }),
         _ => false,
     }

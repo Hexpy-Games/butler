@@ -70,22 +70,29 @@ async fn strict_glued_cd_fix_reproductions() -> Result<(), HarnessError> {
     let cwd = std::fs::canonicalize(&setup.sandbox.workspace)?;
     let env = std::collections::HashMap::new();
     let mut failures = Vec::new();
-    for word in [
+    let invalid = [
         "cd/",
-        "chdir\\",
-        "chdir..",
-        "chdir/",
+        "cd~",
+        "cd:x",
+        "cd=x",
+        "cd+x",
         "cd../other",
+        "cd\\other",
+        "chdir/",
         "chdir.foo",
-    ] {
-        let screen = screen_paths_with(
-            &format!("{word}; Get-Content ordinary"),
-            &cwd,
-            &env,
+    ];
+    for (syntax, words) in [
+        (
             PathSyntax::PowerShell,
-        );
-        if screen.complete || screen.candidates.last().unwrap().path.is_some() {
-            failures.push(format!("{word}: {screen:?}"));
+            [&invalid[..], &["chdir\\", "chdir.."]].concat(),
+        ),
+        (PathSyntax::Cmd, invalid.to_vec()),
+    ] {
+        for word in words {
+            let screen = screen_paths_with(&format!("{word}; type ordinary"), &cwd, &env, syntax);
+            if screen.complete || screen.candidates.last().unwrap().path.is_some() {
+                failures.push(format!("{syntax:?} {word}: {screen:?}"));
+            }
         }
     }
     for (syntax, words) in [
@@ -138,6 +145,16 @@ async fn strict_link_program_categories() -> Result<(), HarnessError> {
             "git worktree list",
             "git submodule update",
             "git -C . checkout x",
+            "git switch x",
+            "git restore x",
+            "git pull",
+            "git merge x",
+            "git rebase x",
+            "git cherry-pick x",
+            "xargs -n1 ln -s",
+            "find . -execdir ln -s x y",
+            "New-Item -Type Junction x",
+            "ni -ItemType:HardLink x",
             "mklink x y",
             "New-Item -ItemType SymbolicLink x",
             "New-Item -ItemType Junction x",
@@ -167,6 +184,9 @@ async fn strict_link_program_categories() -> Result<(), HarnessError> {
             "go build",
             "pytest",
             "cp x y",
+            "find . -name x",
+            "xargs grep x",
+            "New-Item -ItemType Directory x",
             "git status",
             "git add -A",
             "git commit -m x",
@@ -218,18 +238,8 @@ async fn strict_default_tier_approved_build_flows() -> Result<(), HarnessError> 
         &tools.join("npm"),
         "case \"$*\" in 'run build') mkdir -p build; printf npm-output > build/out.js;; test) printf npm-tested;; *) exit 2;; esac",
     )?;
-    // Select a runnable installed rg; PATH may include a foreign-architecture
-    // binary before the native one on developer hosts.
-    let rg = std::env::split_paths(&std::env::var_os("PATH").unwrap())
-        .map(|directory| directory.join("rg"))
-        .find(|program| {
-            std::process::Command::new(program)
-                .arg("--version")
-                .output()
-                .is_ok_and(|output| output.status.success())
-        })
-        .ok_or_else(|| HarnessError("No runnable rg on PATH".into()))?;
-    std::fs::copy(rg, tools.join("rg"))?;
+    // rg is a stub too: the guard decision, not the search tool, is under test.
+    executable(&tools.join("rg"), "exec grep -rn -- \"$1\" .")?;
     let path = std::env::join_paths(
         std::iter::once(tools).chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
     )
@@ -255,33 +265,41 @@ async fn strict_default_tier_approved_build_flows() -> Result<(), HarnessError> 
     let s = setup.start().await?;
     assert_eq!(s.gw.settings().await?["access_mode"], "ask_except_reads");
     assert_eq!(s.gw.settings().await?["command_sandbox_enabled"], true);
+    // Control: this tier screens approved mutations strictly.
+    let control = "cat missing/credentials | ln -s src missing";
+    let result = command_guard::approved_effect(&s, &script, control, None, "mutation").await?;
+    assert_eq!(result["error"], "command_path_unknown", "{result}");
+    let cd_project = format!("cd '{}' && cargo test", s.sandbox.workspace.display());
     let mut failures = Vec::new();
+    // A login shell may put system folders before the stubs, so rg can be the
+    // host's own build: for it only the guard decision is asserted.
     for (command, expected) in [
         (
             "mkdir -p dist && cargo build && cp target/debug/app dist/app",
-            "",
+            Some(""),
         ),
-        ("npm run build && cp build/out.js out.js", ""),
-        ("cd . && cargo test", "cargo-tested"),
-        ("cd sub && npm test", "npm-tested"),
-        ("git status && git add -A && git commit -m x", ""),
-        ("git checkout -b x", ""),
-        ("find . -name '*.rs'", "./src/main.rs"),
-        ("grep -rn TODO src", "TODO foo"),
-        ("rg foo", "TODO foo"),
+        ("npm run build && cp build/out.js out.js", Some("")),
+        (cd_project.as_str(), Some("cargo-tested")),
+        ("cd sub && npm test", Some("npm-tested")),
+        ("git status && git add -A && git commit -m x", Some("")),
+        ("git checkout -b x", Some("")),
+        ("find . -name '*.rs'", Some("./src/main.rs")),
+        ("grep -rn TODO src", Some("TODO foo")),
+        ("rg foo", None),
     ] {
         let result = command_guard::approved_effect(&s, &script, command, None, "mutation").await?;
         eprintln!(
             "default_tier_approved {command}: error={} exit={}",
             result["error"], result["exit_code"]
         );
-        if !result["error"].is_null()
-            || result["exit_code"] != 0
-            || !result["stdout"]
-                .as_str()
-                .unwrap_or_default()
-                .contains(expected)
-        {
+        let ran = expected.is_none_or(|expected| {
+            result["exit_code"] == 0
+                && result["stdout"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .contains(expected)
+        });
+        if !result["error"].is_null() || !ran {
             failures.push(format!("{command}: {result}"));
         }
     }
