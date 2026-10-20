@@ -29,6 +29,17 @@ use support::{new_chat, read_json, until};
 
 fn correction_stub() -> Result<(Cassette, String, String, String), HarnessError> {
     let mut cassette = Cassette::load("MEM-01")?;
+    // Keep the recorded capture on the current instruction schema, with the
+    // default always lifetime used by the original durable rule.
+    let kind = ArgsMutation::Edits(vec![(
+        r#""kind":"rule""#.into(),
+        r#""kind":"instruction""#.into(),
+    )]);
+    for exchange in &mut cassette.exchanges {
+        for chunk in &mut exchange.response.chunks {
+            chunk.text = mutate_chunk(&chunk.text, &kind);
+        }
+    }
     let save = cassette.exchanges[0].request.key.user_request.clone();
     let correction = "Correction: my bike lock code is now 8642, replacing the previous code. Use your explicit memory tool to correct the remembered rule.".to_owned();
     let mut corrected = cassette.exchanges.clone();
@@ -51,7 +62,7 @@ fn correction_stub() -> Result<(Cassette, String, String, String), HarnessError>
     corrected[0].response = support::response(
         &json!({"type":"function_call","id":"fc_targeted_correction",
         "call_id":"call_targeted_correction","name":"update_explicit_memory","status":"completed",
-        "arguments":json!({"kind":"rule","text":"The user's bike lock code is 8642.",
+        "arguments":json!({"kind":"instruction","text":"The user's bike lock code is 8642.",
             "source":"User correction", "replaces":"{{RULE}}"}).to_string()}),
     );
     cassette.exchanges.extend(corrected);
