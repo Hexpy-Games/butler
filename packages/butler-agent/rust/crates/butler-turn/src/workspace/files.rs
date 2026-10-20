@@ -1,4 +1,4 @@
-use std::{io::Read, path::PathBuf};
+use std::path::PathBuf;
 
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -8,7 +8,6 @@ use super::path_guard::{GuardInput, resolve_workspace_path_guard, safe_cursor_pa
 /// A window read of one workspace file.
 #[derive(Debug)]
 pub struct ReadFileInput {
-    pub butler_data: PathBuf,
     pub root: PathBuf,
     pub path: String,
     pub path_form: super::PathForm,
@@ -55,6 +54,8 @@ fn failure(path: &str, error: &str, message: &str, hint: &str) -> Value {
 enum ReadStage {
     /// The first metadata check of the admitted path.
     Inspect,
+    /// The metadata re-check right before reading.
+    Recheck,
     /// Reading the file bytes.
     Read,
 }
@@ -62,20 +63,7 @@ enum ReadStage {
 fn io_failure(path: &str, error: &std::io::Error, stage: ReadStage) -> Value {
     let absent = error.kind() == std::io::ErrorKind::NotFound;
     let code = super::path_messages::io_reason(error);
-    let code = if code == "directory_not_allowed" {
-        "not_a_file"
-    } else {
-        code
-    };
-    if matches!(
-        code,
-        "permission_denied"
-            | "invalid_path"
-            | "safety_refused"
-            | "sensitive_path_blocked"
-            | "not_a_file"
-            | "path_escape"
-    ) {
+    if matches!(code, "permission_denied" | "invalid_path") {
         let (message, hint) = super::path_messages::explanation(code);
         let message = if code == "invalid_path" {
             error.to_string()
@@ -101,6 +89,16 @@ fn io_failure(path: &str, error: &std::io::Error, stage: ReadStage) -> Value {
                 retry
             },
         ),
+        ReadStage::Recheck => failure(
+            path,
+            code,
+            if absent {
+                not_found
+            } else {
+                "The requested file could not be inspected before reading."
+            },
+            retry,
+        ),
         ReadStage::Read => failure(
             path,
             code,
@@ -116,17 +114,13 @@ fn io_failure(path: &str, error: &std::io::Error, stage: ReadStage) -> Value {
 
 /// Reads one admitted workspace text file window: path guard, regular-file
 /// checks, UTF-8 decoding, then the line/cursor/byte-budget window.
-pub(super) fn read_one_blocking(
-    input: &ReadFileInput,
-    cache: Option<&butler_platform::secure_fs::ContainedReadCache>,
-) -> std::io::Result<WorkspaceFileRead> {
-    let file = match admitted_file(input, cache)? {
+pub(super) fn read_one_blocking(input: &ReadFileInput) -> std::io::Result<WorkspaceFileRead> {
+    let file = match admitted_file(input)? {
         Ok(file) => file,
         Err(failure) => return Ok(WorkspaceFileRead::failed(failure)),
     };
-    let mut data = Vec::new();
-    match file.take(u64::MAX).read_to_end(&mut data) {
-        Ok(_) => {}
+    let data = match std::fs::read(&file) {
+        Ok(value) => value,
         Err(error) => {
             return Ok(WorkspaceFileRead::failed(io_failure(
                 &input.path,
@@ -134,7 +128,7 @@ pub(super) fn read_one_blocking(
                 ReadStage::Read,
             )));
         }
-    }
+    };
     let read = BytesRead {
         sha256: format!("{:x}", Sha256::digest(&data)),
         bytes_read: data.len(),
@@ -146,25 +140,10 @@ pub(super) fn read_one_blocking(
     Ok(read_window(input, &text, read))
 }
 
-/// The admitted regular file descriptor. Contained reads walk the original
-/// request from the pinned root; bytes never come from a later path reopen.
-fn admitted_file(
-    input: &ReadFileInput,
-    cache: Option<&butler_platform::secure_fs::ContainedReadCache>,
-) -> std::io::Result<Result<std::fs::File, Value>> {
-    if input.path_form.contained() && butler_platform::secure_fs::FILE_IDS {
-        return Ok(super::contained_reader::open_protected(
-            &input.root,
-            &input.path,
-            input.path_form,
-            &input.butler_data,
-            cache,
-            &input.protected_roots,
-        )
-        .map_err(|error| contained_rejection(input, &error)));
-    }
+/// The admitted regular file behind the requested path, checked twice so a
+/// path swapped for a non-file between the checks is refused.
+fn admitted_file(input: &ReadFileInput) -> std::io::Result<Result<PathBuf, Value>> {
     let guard = resolve_workspace_path_guard(GuardInput {
-        butler_data: Some(&input.butler_data),
         root: &input.root,
         requested: &input.path,
         path_form: input.path_form,
@@ -181,52 +160,30 @@ fn admitted_file(
             &input.path,
         )));
     };
-    let opened = if input.path_form.contained() {
-        super::contained_reader::open(
-            &input.root,
-            &input.path,
-            input.path_form,
-            &input.butler_data,
-        )
-    } else {
-        std::fs::File::open(file)
-    };
-    match opened {
-        Ok(file) if file.metadata()?.is_file() => Ok(Ok(file)),
-        Ok(_) => Ok(Err(failure(
-            &input.path,
-            "not_a_file",
-            "Choose a regular file.",
-            "Restart discovery.",
-        ))),
-        Err(error) => Ok(Err(io_failure(&input.path, &error, ReadStage::Read))),
-    }
-}
-
-// Admission stays with the descriptor walk; only refused reads need the legacy
-// guard's public shape. Never interpolate an OS error or resolved secret path.
-fn contained_rejection(input: &ReadFileInput, error: &std::io::Error) -> Value {
-    let reason = super::path_messages::io_reason(error);
-    if let Ok(mut guard) = resolve_workspace_path_guard(GuardInput {
-        butler_data: Some(&input.butler_data),
-        root: &input.root,
-        requested: &input.path,
-        path_form: input.path_form,
-        allow_directories: false,
-        protected_roots: &input.protected_roots,
-    }) {
-        if matches!(reason, "sensitive_path_blocked" | "safety_refused") {
-            guard.reason = Some(reason);
-            guard.protected = false;
-        } else if guard.reason.is_none() && !matches!(reason, "io_error" | "invalid_path") {
-            guard.reason = Some(reason);
-            guard.protected = reason == "protected_path";
-        }
-        if guard.reason.is_some() {
-            return super::path_messages::read_rejection(&guard, &input.path);
+    let checks = [
+        (
+            ReadStage::Inspect,
+            "The requested path is not a regular file.",
+            "Choose a regular file path returned by list_files.",
+        ),
+        (
+            ReadStage::Recheck,
+            "The requested path is no longer a regular file.",
+            "Restart discovery and choose a regular file path returned by list_files.",
+        ),
+    ];
+    for (stage, message, hint) in checks {
+        let metadata = match std::fs::symlink_metadata(file) {
+            Ok(value) => value,
+            Err(error) => {
+                return Ok(Err(io_failure(&input.path, &error, stage)));
+            }
+        };
+        if !metadata.is_file() {
+            return Ok(Err(failure(&input.path, "not_a_file", message, hint)));
         }
     }
-    io_failure(&input.path, error, ReadStage::Read)
+    Ok(Ok(file.to_path_buf()))
 }
 
 /// Digest and size of the bytes read; failures after the read report them.

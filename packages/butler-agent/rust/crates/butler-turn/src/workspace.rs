@@ -2,7 +2,6 @@
 
 mod bindings;
 mod commands;
-mod contained_reader;
 mod discovery;
 mod effect_file;
 mod error;

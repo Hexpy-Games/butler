@@ -33,16 +33,6 @@ pub(super) fn kind(parent: impl AsFd, name: &OsStr) -> io::Result<FileType> {
 
 /// Names and directory flags of one directory, read before any is changed.
 pub(in crate::command_sandbox) fn entries(dir: &OwnedFd) -> io::Result<Vec<(OsString, bool)>> {
-    read_entries(dir, |name, kind| (name, kind == FileType::Directory))
-}
-
-pub(super) fn entries_with_links(dir: &OwnedFd) -> io::Result<Vec<(OsString, bool, bool)>> {
-    read_entries(dir, |name, kind| {
-        (name, kind == FileType::Directory, kind == FileType::Symlink)
-    })
-}
-
-fn read_entries<T>(dir: &OwnedFd, project: impl Fn(OsString, FileType) -> T) -> io::Result<Vec<T>> {
     let mut entries = Vec::new();
     for entry in Dir::read_from(dir)? {
         let entry = entry?;
@@ -50,11 +40,11 @@ fn read_entries<T>(dir: &OwnedFd, project: impl Fn(OsString, FileType) -> T) -> 
         if name == "." || name == ".." {
             continue;
         }
-        let kind = match entry.file_type() {
-            FileType::Unknown => kind(dir, name)?,
-            kind => kind,
+        let directory = match entry.file_type() {
+            FileType::Unknown => kind(dir, name)? == FileType::Directory,
+            kind => kind == FileType::Directory,
         };
-        entries.push(project(name.to_os_string(), kind));
+        entries.push((name.to_os_string(), directory));
     }
     Ok(entries)
 }

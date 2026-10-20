@@ -163,7 +163,7 @@ fn ledger_root_changes_wait_for_background_commit() -> Result<(), HarnessError> 
     fs::hard_link(scratch.join("public"), f.setup.sandbox.home.join("outside"))?;
     Ledger::pause_verify_commit(&f.root, true)?;
     Ledger::age(&f.root)?;
-    command_sandbox::sweep_new_secrets(&f.root, &Default::default(), &f.setup.sandbox.data)?;
+    command_sandbox::sweep_new_secrets(&f.root, &[], &f.setup.sandbox.data)?;
     let deadline = Instant::now() + Duration::from_secs(2);
     while !Ledger::verify_commit_paused(&f.root)? {
         assert!(Instant::now() < deadline);
@@ -203,7 +203,7 @@ fn ledger_quarantine_result_survives_rebuild_start_failure() -> Result<(), Harne
     let secret = f.root.join(".env");
     fs::write(&secret, b"private")?;
     assert_eq!(
-        command_sandbox::sweep_new_secrets(&f.root, &Default::default(), &f.setup.sandbox.data)?,
+        command_sandbox::sweep_new_secrets(&f.root, &[], &f.setup.sandbox.data)?,
         vec![secret.clone()]
     );
     assert!(!secret.exists());

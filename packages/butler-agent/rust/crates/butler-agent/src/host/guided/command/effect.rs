@@ -63,9 +63,6 @@ pub(super) async fn prepare(
     let target = target(&directory, effect);
     let adapter = CommandEffectAdapter {
         observation: owner.clone(),
-        inventory: scope
-            .workspace_reference
-            .and_then(butler_turn::workspace::WorkspaceReference::read_inventory),
         installation_root: scope.installation_root.map(Path::to_path_buf),
         allowed_tools_and_effects: scope.allowed_tools_and_effects.map(<[String]>::to_vec),
         commands: owner.commands.clone(),
@@ -91,7 +88,6 @@ pub(super) async fn prepare(
 
 struct CommandEffectAdapter {
     observation: GuidedCommand,
-    inventory: Option<Arc<butler_platform::secure_fs::SecretInventory>>,
     installation_root: Option<PathBuf>,
     allowed_tools_and_effects: Option<Vec<String>>,
     commands: Commands,
@@ -277,14 +273,9 @@ impl CommandEffectAdapter {
         signal: &CancellationToken,
     ) -> Result<AdapterOutcome, butler_turn::btcc::EffectFailure> {
         let data = self.butler_data.clone();
-        let inventory = self.inventory.clone();
         let before = self
             .jobs
-            .run(move || {
-                let inventory = inventory
-                    .unwrap_or_else(|| butler_platform::secure_fs::SecretInventory::cached(&data));
-                super::artifacts::snapshot(&data, &inventory)
-            })
+            .run(move || super::artifacts::snapshot(&data))
             .await
             .map_err(|error| {
                 butler_turn::btcc::EffectFailure::adapter(error.message()).with_source(error)
@@ -329,7 +320,6 @@ impl CommandEffectAdapter {
             },
             spooled,
             output::OutputOrigin {
-                inventory: self.inventory.clone(),
                 args,
                 workspace: &self.root_identity,
                 data_root: &self.butler_data,

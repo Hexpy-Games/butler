@@ -9,9 +9,7 @@
     clippy::panic,
     reason = "E2E assertions"
 )]
-pub(super) mod host;
-mod staging;
-mod upload;
+mod host;
 use butler_e2e::e2e::{
     HarnessError,
     gateway::turn_state,

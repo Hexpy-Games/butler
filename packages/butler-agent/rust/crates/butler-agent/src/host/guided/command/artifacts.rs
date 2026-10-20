@@ -45,9 +45,9 @@ struct File {
     modified: std::time::SystemTime,
 }
 
-pub(super) fn snapshot(data: &Path, inventory: &secure_fs::SecretInventory) -> Snapshot {
+pub(super) fn snapshot(data: &Path) -> Snapshot {
     Snapshot(
-        scan(data, inventory)
+        scan(data)
             .into_iter()
             .map(|file| (file.relative, file.fingerprint))
             .collect(),
@@ -61,7 +61,6 @@ pub(super) fn publish(
     cwd: &Path,
     before: Option<&Snapshot>,
     success: bool,
-    inventory: &secure_fs::SecretInventory,
 ) -> Publication {
     let requested = args
         .get("output_paths")
@@ -82,7 +81,7 @@ pub(super) fn publish(
         };
     }
     if requested > 0 {
-        return declared(args, data, workspace, cwd, requested, inventory);
+        return declared(args, data, workspace, cwd, requested);
     }
     let Some(before) = before else {
         return Publication {
@@ -93,7 +92,7 @@ pub(super) fn publish(
     };
     Publication {
         requested: 0,
-        artifacts: scan(data, inventory)
+        artifacts: scan(data)
             .into_iter()
             .filter(|file| file.size > 0 && before.0.get(&file.relative) != Some(&file.fingerprint))
             .take(MAX_ARTIFACTS)
@@ -109,7 +108,6 @@ fn declared(
     workspace: &Path,
     cwd: &Path,
     requested: usize,
-    inventory: &secure_fs::SecretInventory,
 ) -> Publication {
     let generated = data.join("artifacts/generated");
     if fs::create_dir_all(&generated).is_err() {
@@ -119,7 +117,7 @@ fn declared(
             error: None,
         };
     }
-    let root = inventory.canonical_root(&generated).unwrap_or(generated);
+    let root = canonical(&generated);
     let data_root = canonical(data);
     if !root.starts_with(&data_root) {
         return Publication {
@@ -128,9 +126,7 @@ fn declared(
             error: None,
         };
     }
-    let workspace_root = inventory
-        .canonical_root(workspace)
-        .unwrap_or_else(|_| workspace.to_path_buf());
+    let workspace_root = canonical(workspace);
     let mut artifacts = Vec::new();
     let mut seen = HashSet::new();
     for source in args
@@ -146,12 +142,14 @@ fn declared(
         let Some(candidate) = source_path(source, data, cwd, &root) else {
             continue;
         };
-        let Some((real, bytes)) =
-            verified_source(&candidate, &workspace_root, &root, data, inventory)
-        else {
+        let Some((real, bytes)) = verified_source(&candidate, &workspace_root, &root) else {
             continue;
         };
-        let published = publish_file(&root, &real, &bytes, inventory);
+        let published = if real.starts_with(&root) {
+            Some(real)
+        } else {
+            publish_file(&root, &real, &bytes)
+        };
         let Some(published) = published else { continue };
         let published = canonical(&published);
         if !published.starts_with(&root) {
@@ -225,38 +223,38 @@ fn source_path(source: &str, data: &Path, cwd: &Path, generated: &Path) -> Optio
     })
 }
 
-fn verified_source(
-    path: &Path,
-    workspace: &Path,
-    generated: &Path,
-    data: &Path,
-    inventory: &secure_fs::SecretInventory,
-) -> Option<(PathBuf, Vec<u8>)> {
-    use std::io::Read;
-    let scratch = data.join(butler_platform::data_paths::PROJECT_WRITE_TMP);
-    let root = [workspace, generated, &scratch]
-        .into_iter()
-        .find(|root| path.starts_with(root))?;
-    let relative = path.strip_prefix(root).ok()?;
-    let file = secure_fs::open_contained(root, relative, inventory).ok()?;
-    let before = file.metadata().ok()?;
-    if before.len() == 0 || before.len() > MAX_BYTES {
+fn verified_source(path: &Path, workspace: &Path, generated: &Path) -> Option<(PathBuf, Vec<u8>)> {
+    let link = fs::symlink_metadata(path).ok()?;
+    if !link.is_file() || link.file_type().is_symlink() || link.len() == 0 || link.len() > MAX_BYTES
+    {
         return None;
     }
-    let mut bytes = Vec::new();
-    file.take(MAX_BYTES + 1).read_to_end(&mut bytes).ok()?;
-    if bytes.len() as u64 > MAX_BYTES {
+    let real = butler_platform::secure_fs::canonicalize(path).ok()?;
+    if !real.starts_with(workspace) && !real.starts_with(generated) {
         return None;
     }
-    Some((path.to_path_buf(), bytes))
+    // Copies land in a folder later commands read; never publish project
+    // metadata or secrets that the command itself could not read.
+    if real.strip_prefix(workspace).is_ok_and(|relative| {
+        relative.components().any(|part| {
+            butler_platform::command_sandbox::secret_name(&part.as_os_str().to_string_lossy())
+        })
+    }) {
+        return None;
+    }
+    let before = fs::symlink_metadata(&real).ok()?;
+    if !before.is_file() || before.file_type().is_symlink() {
+        return None;
+    }
+    let bytes = fs::read(&real).ok()?;
+    let after = fs::symlink_metadata(&real).ok()?;
+    if bytes.len() as u64 != before.len() || !same_file(&before, &after) {
+        return None;
+    }
+    Some((real, bytes))
 }
 
-fn publish_file(
-    root: &Path,
-    source: &Path,
-    bytes: &[u8],
-    inventory: &secure_fs::SecretInventory,
-) -> Option<PathBuf> {
+fn publish_file(root: &Path, source: &Path, bytes: &[u8]) -> Option<PathBuf> {
     let hash = format!("{:x}", Sha256::digest(bytes));
     let directory = root.join("published").join(hash);
     fs::create_dir_all(&directory).ok()?;
@@ -273,8 +271,7 @@ fn publish_file(
         if !stat.is_file() || stat.file_type().is_symlink() || stat.len() != bytes.len() as u64 {
             return None;
         }
-        return (read_published(root, &destination, inventory)?.as_slice() == bytes)
-            .then_some(destination);
+        return (fs::read(&destination).ok()?.as_slice() == bytes).then_some(destination);
     }
     secure_fs::replace_private(
         &destination,
@@ -282,7 +279,7 @@ fn publish_file(
         std::convert::identity,
     )
     .ok()?;
-    (read_published(root, &destination, inventory)?.as_slice() == bytes).then_some(destination)
+    (fs::read(&destination).ok()?.as_slice() == bytes).then_some(destination)
 }
 
 fn safe_name(source: &str) -> String {
@@ -305,24 +302,16 @@ fn safe_name(source: &str) -> String {
     clean.chars().take(120).collect()
 }
 
-fn scan(data: &Path, inventory: &secure_fs::SecretInventory) -> Vec<File> {
+fn scan(data: &Path) -> Vec<File> {
     let root = data.join("artifacts/generated");
     if !root.exists() {
         return Vec::new();
     }
-    let root = inventory.canonical_root(&root).unwrap_or(root);
+    let root = canonical(&root);
     let mut result = Vec::new();
     let mut count = 0;
     let collator = LocaleCollation::new("en-US").ok();
-    visit(
-        &root,
-        &root,
-        0,
-        &mut count,
-        &mut result,
-        collator.as_ref(),
-        inventory,
-    );
+    visit(&root, &root, 0, &mut count, &mut result, collator.as_ref());
     result
 }
 
@@ -333,7 +322,6 @@ fn visit(
     count: &mut usize,
     out: &mut Vec<File>,
     collator: Option<&LocaleCollation>,
-    inventory: &butler_platform::secure_fs::SecretInventory,
 ) {
     if depth > MAX_DEPTH || *count >= MAX_FILES {
         return;
@@ -356,15 +344,7 @@ fn visit(
             continue;
         };
         if kind.is_dir() {
-            visit(
-                root,
-                &entry.path(),
-                depth + 1,
-                count,
-                out,
-                collator,
-                inventory,
-            );
+            visit(root, &entry.path(), depth + 1, count, out, collator);
             continue;
         }
         if !kind.is_file() {
@@ -377,13 +357,13 @@ fn visit(
         if !real.starts_with(root) {
             continue;
         }
+        let Ok(stat) = fs::symlink_metadata(&real) else {
+            continue;
+        };
+        if !stat.is_file() || stat.file_type().is_symlink() {
+            continue;
+        }
         let Ok(relative) = real.strip_prefix(root) else {
-            continue;
-        };
-        let Ok(file) = secure_fs::open_contained(root, relative, inventory) else {
-            continue;
-        };
-        let Ok(stat) = file.metadata() else {
             continue;
         };
         let modified = stat.modified().unwrap_or(std::time::UNIX_EPOCH);
@@ -451,6 +431,13 @@ fn file_id(stat: &fs::Metadata) -> String {
         .map(|id| format!("{}:{}", id.device, id.inode))
         .unwrap_or_default()
 }
+/// The same file with the same length and modification time.
+fn same_file(left: &fs::Metadata, right: &fs::Metadata) -> bool {
+    let (left_identity, right_identity) = (secure_fs::identity(left), secure_fs::identity(right));
+    left_identity.id == right_identity.id
+        && left.len() == right.len()
+        && left_identity.modified == right_identity.modified
+}
 
 fn declared_file(path: &Path, stat: &fs::Metadata, label: String) -> Artifact {
     Artifact {
@@ -460,16 +447,4 @@ fn declared_file(path: &Path, stat: &fs::Metadata, label: String) -> Artifact {
         size_bytes: stat.len(),
         modified_at: iso(stat.modified().unwrap_or(std::time::UNIX_EPOCH)),
     }
-}
-
-fn read_published(
-    root: &Path,
-    path: &Path,
-    inventory: &secure_fs::SecretInventory,
-) -> Option<Vec<u8>> {
-    use std::io::Read;
-    let file = secure_fs::open_contained(root, path.strip_prefix(root).ok()?, inventory).ok()?;
-    let mut bytes = Vec::new();
-    file.take(MAX_BYTES + 1).read_to_end(&mut bytes).ok()?;
-    (bytes.len() as u64 <= MAX_BYTES).then_some(bytes)
 }

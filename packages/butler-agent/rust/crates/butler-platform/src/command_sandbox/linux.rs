@@ -1,5 +1,5 @@
 //! Safe Landlock trampoline; never restrict the multithreaded agent itself.
-pub(super) mod complement;
+mod complement;
 mod generated;
 mod links;
 mod mountns;
@@ -7,7 +7,6 @@ mod process;
 mod rediscovery;
 mod seccomp;
 mod timing;
-pub(super) mod unresolved;
 #[cfg(feature = "test-support")]
 pub use mountns::verify_mount_plan_contract;
 

@@ -36,7 +36,7 @@ mod subsessions;
 mod task_graph_identity;
 pub use storage::{
     TaskGraphChildRecord, TaskGraphRecords, TaskGraphReviewRecord, TaskGraphScope,
-    TaskGraphWorkRecord, subsession_result_id,
+    TaskGraphWorkRecord,
 };
 pub use task_graph_identity::{decode as decode_task_graph_id, encode as encode_task_graph_id};
 mod turn;

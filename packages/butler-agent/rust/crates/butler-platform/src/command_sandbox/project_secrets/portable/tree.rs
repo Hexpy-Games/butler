@@ -10,77 +10,39 @@ pub(in crate::command_sandbox) const MAX_DEPTH: usize = 128;
 
 trait Walker {
     type Directory;
-    type Entry;
     fn root(path: &Path) -> io::Result<Self::Directory>;
     fn child(parent: &Self::Directory, name: &OsStr) -> io::Result<Self::Directory>;
-    fn entries(dir: &Self::Directory) -> io::Result<Vec<Self::Entry>>;
-    fn split(entry: Self::Entry) -> (OsString, bool, bool);
+    fn entries(dir: &Self::Directory) -> io::Result<Vec<(OsString, bool)>>;
 }
 struct Native;
 impl Walker for Native {
     type Directory = native::Directory;
-    type Entry = (OsString, bool);
     fn root(path: &Path) -> io::Result<Self::Directory> {
         native::open_root(path)
     }
     fn child(parent: &Self::Directory, name: &OsStr) -> io::Result<Self::Directory> {
         native::open_child(parent, name)
     }
-    fn entries(dir: &Self::Directory) -> io::Result<Vec<Self::Entry>> {
+    fn entries(dir: &Self::Directory) -> io::Result<Vec<(OsString, bool)>> {
         native::entries(dir)
-    }
-    fn split((name, directory): Self::Entry) -> (OsString, bool, bool) {
-        (name, directory, false)
-    }
-}
-#[cfg(unix)]
-struct Capture;
-#[cfg(unix)]
-impl Walker for Capture {
-    type Directory = native::Directory;
-    type Entry = (OsString, bool, bool);
-    fn root(path: &Path) -> io::Result<Self::Directory> {
-        Native::root(path)
-    }
-    fn child(parent: &Self::Directory, name: &OsStr) -> io::Result<Self::Directory> {
-        Native::child(parent, name)
-    }
-    fn entries(dir: &Self::Directory) -> io::Result<Vec<Self::Entry>> {
-        native::entries_with_links(dir)
-    }
-    fn split(entry: Self::Entry) -> (OsString, bool, bool) {
-        entry
     }
 }
 
 pub(in crate::command_sandbox) fn walk(root: &Path, bounded: bool) -> io::Result<Vec<PathBuf>> {
-    Ok(scan::<Native>(root, bounded)?.found)
-}
-#[cfg(unix)]
-pub(in crate::command_sandbox) fn entries(
-    root: &Path,
-    bounded: bool,
-) -> io::Result<(Vec<PathBuf>, Vec<PathBuf>)> {
-    let walk = scan::<Capture>(root, bounded)?;
-    Ok((walk.found, walk.links))
-}
-fn scan<W: Walker>(root: &Path, bounded: bool) -> io::Result<Walk> {
-    let dir = W::root(root)?;
+    let dir = Native::root(root)?;
     let mut walk = Walk {
         bounded,
         visited: 0,
         found: Vec::new(),
-        links: Vec::new(),
     };
-    walk.visit::<W>(&dir, Path::new(""), 0)?;
+    walk.visit::<Native>(&dir, Path::new(""), 0)?;
     walk.found.sort();
-    Ok(walk)
+    Ok(walk.found)
 }
 struct Walk {
     bounded: bool,
     visited: usize,
     found: Vec<PathBuf>,
-    links: Vec<PathBuf>,
 }
 impl Walk {
     fn visit<W: Walker>(
@@ -89,8 +51,7 @@ impl Walk {
         relative: &Path,
         depth: usize,
     ) -> io::Result<()> {
-        for entry in W::entries(dir)? {
-            let (name, directory, link) = W::split(entry);
+        for (name, directory) in W::entries(dir)? {
             self.visited += 1;
             if self.bounded && self.visited > MAX_ENTRIES {
                 return Err(io::Error::other(
@@ -98,9 +59,6 @@ impl Walk {
                 ));
             }
             let path = relative.join(&name);
-            if link {
-                self.links.push(path.clone());
-            }
             if crate::command_sandbox::secret_name(&name.to_string_lossy()) {
                 self.found.push(path);
                 continue;

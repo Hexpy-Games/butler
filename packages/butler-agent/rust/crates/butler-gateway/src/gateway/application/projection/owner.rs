@@ -9,7 +9,7 @@ use std::{
     time::Duration,
 };
 
-use notify::RecommendedWatcher;
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use rusqlite::OptionalExtension;
 use tokio::{
     sync::{Notify, mpsc, oneshot},
@@ -17,7 +17,6 @@ use tokio::{
 };
 
 mod files;
-mod filesystem;
 mod notifications;
 use notifications::Pending;
 
@@ -40,7 +39,6 @@ struct Inner {
     task: Mutex<Option<JoinHandle<Result<(), GatewayApplicationError>>>>,
     close: Mutex<CloseState>,
     closed: Notify,
-    _handoff_events: Mutex<Box<dyn crate::gateway::EventSubscription>>,
 }
 struct CloseState {
     started: bool,
@@ -61,10 +59,59 @@ impl ProjectionOwner {
     pub(in crate::gateway::application) fn start(
         context: ProjectionContext,
     ) -> Result<Self, GatewayApplicationError> {
+        // Watch and match canonical roots: FSEvents reports resolved paths, so
+        // a DATA root under a symlink (e.g. /var -> /private/var) would
+        // otherwise never match and every change would be dropped.
+        let watched_root = |relative: &str| {
+            let path = context.butler_data.join(relative);
+            std::fs::create_dir_all(&path)
+                .and_then(|()| butler_platform::secure_fs::canonicalize(&path))
+                .map_err(GatewayApplicationError::internal_from)
+        };
+        let transcript_root = watched_root("transcripts")?;
+        let processed_root = watched_root("runtime/inbound-events/processed")?;
+        let failed_root = watched_root("runtime/inbound-events/failed")?;
+        let roots = [
+            transcript_root.clone(),
+            processed_root.clone(),
+            failed_root.clone(),
+        ];
         let (sender, receiver) = mpsc::channel(NOTIFICATION_CAPACITY);
         let pending = Arc::new(Mutex::new(Pending::default()));
-        let watcher = filesystem::watch(&context, &pending, &sender)?;
-        let handoff_events = notifications::handoff_events(&context, &pending, &sender);
+        let observed = pending.clone();
+        let callback = sender.clone();
+        let observe_filesystem = notifications::observe_filesystem();
+        let mut watcher =
+            notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
+                if let Ok(event) = event
+                    && observe_filesystem
+                    && !matches!(event.kind, notify::EventKind::Access(_))
+                {
+                    for path in event.paths {
+                        if path.parent() == Some(transcript_root.as_path()) {
+                            if path.extension().is_some_and(|value| value == "jsonl")
+                                && let Some(file) = path.file_name().and_then(|v| v.to_str())
+                            {
+                                notifications::transcript(&observed, &callback, file.to_owned());
+                            }
+                        } else if path.extension().is_none_or(|value| value != "tmp")
+                            && (path == processed_root
+                                || path == failed_root
+                                || path.parent() == Some(processed_root.as_path())
+                                || path.parent() == Some(failed_root.as_path()))
+                        {
+                            observed.lock().terminal = true;
+                            let _ = callback.try_send(Command::Events);
+                        }
+                    }
+                }
+            })
+            .map_err(GatewayApplicationError::internal_from)?;
+        for path in &roots {
+            watcher
+                .watch(path, RecursiveMode::NonRecursive)
+                .map_err(GatewayApplicationError::internal_from)?;
+        }
         let task = tokio::spawn(run(context, receiver, pending.clone()));
         let owner = Self {
             inner: Arc::new(Inner {
@@ -77,7 +124,6 @@ impl ProjectionOwner {
                     result: None,
                 }),
                 closed: Notify::new(),
-                _handoff_events: Mutex::new(handoff_events),
             }),
         };
         let _ = owner.inner.sender.try_send(Command::Wake);
@@ -189,14 +235,19 @@ impl ProjectionOwner {
     }
 }
 
+impl Drop for Inner {
+    fn drop(&mut self) {
+        self.watcher.get_mut().take();
+        let _ = self.sender.try_send(Command::Close);
+    }
+}
+
 async fn run(
     context: ProjectionContext,
     mut receiver: mpsc::Receiver<Command>,
     pending: Arc<Mutex<Pending>>,
 ) -> Result<(), GatewayApplicationError> {
-    let mut handoffs = super::handoffs::Index::load(&context).await?;
     let mut work = Work::default();
-    pending.lock().handoffs = true;
     let files = open_turn_transcripts(&context).await?;
     for file in files {
         work.enqueue(file);
@@ -207,9 +258,6 @@ async fn run(
             tokio::time::sleep(SETTLE_DELAY).await;
         }
         let events = std::mem::take(&mut *pending.lock());
-        if events.handoffs {
-            handoffs.cleanup(&context, events.handoff_paths).await;
-        }
         for file in events.paths {
             work.enqueue(file);
         }

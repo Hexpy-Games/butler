@@ -175,7 +175,10 @@ fn apply(
             &input.turn_id,
             apply.now,
         )?;
-        let completion_payload = super::handoffs::record_delivery(&tx, input, apply.now)?;
+        let mut completion_payload = object_value(&json!({"safeLabel":"Completed"}))?;
+        if let Some(delivery) = input.delivery_metadata.as_ref() {
+            completion_payload.extend(delivery.clone());
+        }
         super::final_turn_events::append_if_missing(
             &tx,
             apply.subscribers,
@@ -411,10 +414,4 @@ fn visible_result(input: &FinalCandidate, files: &[MaterializedResponderFile]) -
         || !input.changed_files.is_empty()
         || input.plan.is_some()
         || input.answer_blocks.is_some()
-        || input.delivery_metadata.as_ref().is_some_and(|metadata| {
-            metadata
-                .get("limitation_codes")
-                .and_then(Value::as_array)
-                .is_some_and(|codes| !codes.is_empty())
-        })
 }

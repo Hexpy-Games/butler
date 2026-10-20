@@ -43,9 +43,6 @@ pub struct Output {
     pub turn_id: String,
     pub title: String,
     pub revisions: Vec<Revision>,
-    /// Refused project-relative paths from this publication, never silent loss.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub skipped_files: Vec<String>,
 }
 pub struct PublishRequest {
     pub workspace: PathBuf,
@@ -100,24 +97,13 @@ impl OutputStore {
         super::index::messages(&self.root.join("index.sqlite"), session, turns)
     }
     pub fn publish(&self, request: PublishRequest) -> std::io::Result<(Output, usize)> {
-        let data = self.root.parent().ok_or_else(|| error("data_root"))?;
-        self.publish_with_inventory(
-            request,
-            &butler_platform::secure_fs::SecretInventory::cached(data),
-        )
-    }
-    pub fn publish_with_inventory(
-        &self,
-        request: PublishRequest,
-        inventory: &butler_platform::secure_fs::SecretInventory,
-    ) -> std::io::Result<(Output, usize)> {
         let _lock = CHANGES
             .lock()
             .map_err(|_| error("output_store_unavailable"))?;
         if request.title.chars().count() > 200 {
             return Err(error("output_title_too_long"));
         }
-        let snapshot = super::snapshot::collect(&request, inventory)?;
+        let snapshot = super::snapshot::collect(&request)?;
         let id = self.publication_id(&request.session_id, &snapshot.source)?;
         let path = self.manifest(&id)?;
         let mut output = if path.exists() {
@@ -131,10 +117,8 @@ impl OutputStore {
                 turn_id: request.turn_id.clone(),
                 title: request.title.clone(),
                 revisions: Vec::new(),
-                skipped_files: Vec::new(),
             }
         };
-        output.skipped_files = snapshot.skipped;
         let mut hashes = BTreeMap::new();
         let mut written = 0;
         for (name, bytes) in snapshot.files {
