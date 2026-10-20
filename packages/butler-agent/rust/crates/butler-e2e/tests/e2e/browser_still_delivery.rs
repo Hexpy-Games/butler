@@ -45,7 +45,7 @@ async fn browser_still_delivery_orders_late_uploads_and_recovers_full_queue()
     let frame = serve_until_act(&mut stream, &mut buffer, &admin).await?;
     let id = frame["id"].as_str().unwrap();
     // The reply precedes every still: no capture/upload is needed to acknowledge dispatch.
-    let result = json!({"status":"ok","tab":"page","completed":3,"steps":[{"status":"completed"},{"status":"completed"},{"status":"completed"}]});
+    let result = json!({"settleMs":12.5,"status":"ok","tab":"page","completed":3,"steps":[{"status":"completed"},{"status":"completed"},{"status":"completed"}]});
     assert_eq!(
         admin
             .send(
@@ -69,6 +69,15 @@ async fn browser_still_delivery_orders_late_uploads_and_recovers_full_queue()
     }
     s.gw.wait_turn("general", &turn, &["delivered"], Duration::from_secs(30))
         .await?;
+    assert!(
+        !s.provider
+            .as_ref()
+            .unwrap()
+            .requests()
+            .iter()
+            .any(|request| request.to_string().contains("settleMs")),
+        "internal settle timing never enters the model request"
+    );
     // The timeline's act receipt already exists, before any still upload.
     let view = s.gw.get("/session-view?session_id=general").await?;
     let row = act_row(view.data()).expect("browser act in the timeline");
@@ -208,6 +217,17 @@ async fn browser_still_delivery_orders_late_uploads_and_recovers_full_queue()
     assert_eq!(deleted["steps"][0]["state"], "failed");
     assert_eq!(deleted["steps"][0]["reason"], "file_deleted");
     assert!(deleted["steps"][0].get("still_file").is_none());
+    let plan: String = db.query_row(
+        "EXPLAIN QUERY PLAN SELECT act_id FROM browser_still_deliveries WHERE state='attached' AND file_id IS NULL",
+        [], |row| row.get(3),
+    )?;
+    assert!(plan.contains("browser_still_missing_file_idx"), "{plan}");
+    db.execute("DELETE FROM chats WHERE id='general'", [])?;
+    let retained: usize =
+        db.query_row("SELECT COUNT(*) FROM browser_still_deliveries", [], |row| {
+            row.get(0)
+        })?;
+    assert_eq!(retained, 0, "still receipts share chat cascade retention");
     drop(db);
     s.finish().await
 }

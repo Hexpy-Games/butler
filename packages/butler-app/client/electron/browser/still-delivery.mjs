@@ -23,6 +23,15 @@ export function enqueueStill(tab, index, epoch, deliver, settled = false, reason
   tab.onStillChanged?.();
 }
 
+/** Every exit consumes the original step before its evidence owner can be replaced. */
+export function settlePendingStill(tab, reason) {
+  const evidence = tab.pendingStill;
+  const step = (tab.pendingBatch ?? []).findLastIndex(step => step.reason === "dialog_pending");
+  if (evidence && step >= 0) enqueueStill(tab, step, tab.epoch, evidence.deliver, true, reason);
+  tab.pendingStill = null;
+  tab.pendingBatch = null;
+}
+
 /** Close fences further input and joins the active act and its entire still queue. */
 export async function drainStills(tab, until = performance.now() + 1500) {
   let timer;
@@ -30,6 +39,7 @@ export async function drainStills(tab, until = performance.now() + 1500) {
   try {
     await Promise.race([(async () => {
       await Promise.resolve(tab.activeAct).catch(() => {});
+      settlePendingStill(tab, "document_changed");
       while (tab.stillJobs?.size) await Promise.all([...tab.stillJobs].map(job => job.promise));
     })(), deadline]);
   } finally { clearTimeout(timer); }

@@ -36,7 +36,7 @@ for (const ending of ["single", "multi", "dialog", "navigation"]) test(`model ac
     args.prepared_steps = (await implementation.prepareBatch(tab, args)).steps;
     const result = await implementation.actBatch(tab, args, "s");
     await tab.stillCapture;
-    return JSON.stringify(result, (key, value) => ["still", "still_file", "still_pending"].includes(key) ? undefined : value);
+    return JSON.stringify(result, (key, value) => ["still", "still_file", "still_pending", "settleMs"].includes(key) ? undefined : value);
   };
   expect(await run(branch)).toBe(golden[ending]);
 });

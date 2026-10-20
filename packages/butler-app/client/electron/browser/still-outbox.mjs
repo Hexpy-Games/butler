@@ -142,7 +142,7 @@ class StillOutbox {
     try {
       await this.send({ act_id: record.id, session: record.session, tab: record.tab, step: entry.step, ...entry.value });
     } catch (error) {
-      if (!Number.isInteger(error.status) || error.status >= 500) {
+      if (![400, 409].includes(error.status) || error.message !== "still_settled") {
         const attempt = entry.attempts ?? 0;
         entry.attempts = attempt + 1;
         entry.retryAt = this.retryMs.length ? Date.now() + this.retryMs[Math.min(attempt, this.retryMs.length - 1)] : Infinity;

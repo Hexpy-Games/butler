@@ -1,6 +1,6 @@
 import { pendingDialog } from "./dialogs.mjs";
 import { settleStill } from "./guarded-bitmap.mjs";
-import { enqueueStill } from "./still-delivery.mjs";
+import { enqueueStill, settlePendingStill } from "./still-delivery.mjs";
 import { resolveStep, selectStep, selectTextStep } from "./observe.mjs";
 import { dragTarget, dispatchDrag } from "./drag.mjs";
 import { resolvePoint } from "./point.mjs";
@@ -160,9 +160,9 @@ function batchResult(tab, steps, failed) {
 }
 export async function actBatch(tab, args, session) {
   tab.comparisonStill = undefined;
-  tab.pendingStill = null;
+  settlePendingStill(tab, "pixels_not_captured");
   const epoch = tab.epoch, steps = [];
-  let failed = false;
+  let failed = false, settleMs = 0;
   const deadline = Date.now() + Math.min(Number(args.deadline_ms) || 30000, 30000);
   for (const [index, step] of (args.steps ?? []).entries()) {
     await tab.stillCapture;
@@ -185,7 +185,9 @@ export async function actBatch(tab, args, session) {
       }
       if (tab.dialog) { steps[steps.length-1] = { status:"unknown", reason:"dialog_pending", hit:target.hit }; failed=true; }
       else if (steps.at(-1).status === "completed" && tab.epoch === epoch && tab.holder === "agent") {
+        const started = performance.now();
         const settled = tab.stills === false || await settleStill(tab);
+        settleMs += performance.now() - started;
         if (tab.dialog) { steps[steps.length - 1] = { status: "unknown", reason: "dialog_pending", hit: target.hit }; failed = true; }
         else enqueueStill(tab, index, epoch, args.deliverStill, true, settled ? undefined : "capture_unavailable");
       } else if (steps.at(-1).status === "completed") enqueueStill(tab, index, epoch, args.deliverStill, false, "control_changed");
@@ -195,7 +197,7 @@ export async function actBatch(tab, args, session) {
   if (tab.dialog) {
     tab.pendingBatch = steps;
     tab.pendingStill = { id: args.deliveryId, session, deliver: args.deliverStill };
-    return { ...pendingDialog(tab), steps };
+    return { ...pendingDialog(tab), steps, settleMs };
   }
-  return batchResult(tab, steps, failed);
+  return { ...batchResult(tab, steps, failed), settleMs };
 }

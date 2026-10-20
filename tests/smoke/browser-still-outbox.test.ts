@@ -89,3 +89,31 @@ test("a torn last append preserves every earlier durable JPEG", () => fixture(as
     expect(received[2].reason).toBe("pixels_not_captured");
   } finally { replay.stop(); }
 }));
+
+for (const [status, code] of [[403, "browser_host_forbidden"], [429, "browser_busy"], [400, "invalid_json"], [409, "conflict"], [503, "still_settled"], [409, "still_upload_failed"], [400, "still_unknown"]] as const)
+test(`HTTP ${status} ${code} retains pixels until reconnect`, () => fixture(async directory => {
+  let online = false;
+  const received: any[] = [];
+  const queue = createStillOutbox({ directory, retryMs: [4000], send: async (value: any) => {
+    if (!online) throw Object.assign(Error(code), { status }); received.push(value);
+  } });
+  try {
+    await queue.reserve(frame("act")); await queue.deliver("act", pixels()); await queue.flush();
+    expect(queue.pending).toBe(1);
+    const record = JSON.parse((await readFile(join(directory, (await readdir(directory))[0]!), "utf8")).split("\n").filter(Boolean).at(-1)!);
+    expect(record.still.base64).toBe("YWJj");
+    const entry = queue.records.get("act").entries[0];
+    expect(entry.retryAt - Date.now()).toBeGreaterThan(0);
+    expect(entry.retryAt - Date.now()).toBeLessThanOrEqual(4000);
+    online = true; await queue.connect();
+    expect(received[0].still.base64).toBe("YWJj"); expect(queue.pending).toBe(0);
+  } finally { queue.stop(); }
+}));
+
+for (const status of [400, 409]) test(`HTTP ${status} still outcome is final`, () => fixture(async directory => {
+  const queue = createStillOutbox({ directory, retryMs: [], send: async () => { throw Object.assign(Error("still_settled"), { status }); } });
+  try {
+    await queue.reserve(frame("act")); await queue.deliver("act", pixels()); await queue.flush();
+    expect(queue.pending).toBe(0); expect(await readdir(directory)).toEqual([]);
+  } finally { queue.stop(); }
+}));

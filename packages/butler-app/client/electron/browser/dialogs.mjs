@@ -1,5 +1,5 @@
 import { settleStill } from "./guarded-bitmap.mjs";
-import { enqueueStill, drainStills } from "./still-delivery.mjs";
+import { enqueueStill, drainStills, settlePendingStill } from "./still-delivery.mjs";
 import { shortId } from "./ids.mjs";
 import { browserEvent } from "./events.mjs";
 
@@ -23,7 +23,7 @@ export function beginDialog(browser, tab, value, callback) {
   browser.publish(); browser.sync(tab);
   tab.closeDialog?.();
 }
-export async function resolveDialog(browser, tab, answer, reason = "answered") {
+export async function resolveDialog(browser, tab, answer, reason = "answered", resuming = false) {
   const dialog = tab.dialog;
   if (!dialog || dialog.answering) return;
   dialog.answering = true; clearTimeout(dialog.timer);
@@ -35,6 +35,7 @@ export async function resolveDialog(browser, tab, answer, reason = "answered") {
   if (tab.dialog === dialog) tab.dialog = null;
   tab.waiting = Boolean(tab.dialog);
   browserEvent(browser, tab, answer.accept ? "dialog_accepted" : "dialog_cancelled", { dialog: dialog.id, dialog_type: dialog.type, reason });
+  if (!resuming) settlePendingStill(tab, reason === "timeout" ? "timeout" : "pixels_not_captured");
   browser.publish(); browser.sync(tab);
 }
 /** Only agent/agent-driven tabs subscribe to CDP dialog events. */
@@ -47,6 +48,7 @@ export function wireDialogs(browser, tab) {
     if (method === "Page.javascriptDialogOpening") beginDialog(browser, tab, { ...value, beforeUnloadClose: value.type === "beforeunload" && tab.closeRequested, sessionId: sessionId || undefined });
     if (method === "Page.javascriptDialogClosed" && tab.dialog && !tab.dialog.answering && !tab.dialog.callback && !tab.dialog.beforeUnloadClose) {
       browserEvent(browser, tab, "dialog_cancelled", { dialog: tab.dialog.id, dialog_type: tab.dialog.type, reason: "page_closed" });
+      settlePendingStill(tab, "pixels_not_captured");
       clearTimeout(tab.dialog.timer); tab.dialog = null; tab.waiting = false; browser.publish(); browser.sync(tab);
     }
     if (method === "Page.fileChooserOpened") {
@@ -67,18 +69,17 @@ export async function answerDialog(browser, tab, args, deliverStill) {
   const evidence = tab.pendingStill;
   const marker = evidence?.id ? { still_pending: { id: evidence.id, session: evidence.session } } : {};
   const close = tab.dialog.beforeUnloadClose;
-  await resolveDialog(browser, tab, args);
-  if (close && args.accept === true) { browser.close(tab.id); return { status: "ok", tab: tab.id }; }
+  await resolveDialog(browser, tab, args, "answered", true);
+  if (close && args.accept === true) { settlePendingStill(tab, "document_changed"); browser.close(tab.id); return { status: "ok", tab: tab.id }; }
   const resumed = (tab.pendingBatch ?? []).findLastIndex(step => step.reason === "dialog_pending");
-  const steps = (tab.pendingBatch ?? []).map(step => step.reason === "dialog_pending" ? { ...step, status: "completed", reason: undefined } : step);
-  const completed = steps.findLast(step => step.status === "completed");
-  if (completed && tab.view && !tab.view.webContents.isDestroyed()) {
-    const settled = tab.stills === false || await settleStill(tab);
-    if (!tab.dialog && resumed >= 0) enqueueStill(tab, resumed, tab.epoch, evidence?.deliver ?? deliverStill, true, settled ? undefined : "capture_unavailable");
+  const steps = tab.pendingBatch ?? [];
+  if (resumed >= 0) {
+    const settled = tab.view && !tab.view.webContents.isDestroyed() && (tab.stills === false || await settleStill(tab));
+    if (!tab.dialog) enqueueStill(tab, resumed, tab.epoch, evidence?.deliver ?? deliverStill, true, settled ? undefined : "capture_unavailable");
   }
   if (tab.dialog) { tab.pendingBatch = steps; return { ...pendingDialog(tab), steps, ...marker }; }
   tab.pendingBatch = null; tab.pendingStill = null;
-  return { status: "ok", tab: tab.id, epoch: tab.epoch, url: tab.url, steps, ...marker };
+  return { status: "ok", tab: tab.id, epoch: tab.epoch, url: tab.url, steps: steps.map(step => step.reason === "dialog_pending" ? { ...step, status: "completed", reason: undefined } : step), ...marker };
 }
 export async function requestClose(browser, tab) {
   if (tab) await drainStills(tab);

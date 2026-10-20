@@ -38,13 +38,7 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     let (sender, receiver) = oneshot::channel();
     let tab = frame["tab"].as_str().map(str::to_owned);
     let sent = json!({"args":{"policy":frame["args"]["policy"],"entry_id":frame["args"]["entry_id"],"fill_token":frame["args"]["fill_token"],"kind":frame["args"]["kind"],"item_id":frame["args"]["item_id"]},"tab":frame["tab"],"turn_id":frame["turn_id"]});
-    if op == "tab.act" {
-        super::still_delivery::reserve(&state, &id, &frame).await?;
-    }
-    if let Some(refused) = dispatch(&state, frame, count, deadline, &id, sender)? {
-        if op == "tab.act" {
-            super::still_delivery::finish(&state, &id, &session, &mut json!({})).await?;
-        }
+    if let Some(refused) = dispatch_reserved(&state, frame, count, deadline, &id, sender).await? {
         return Ok(refused);
     }
     let _pending = PendingCall {
@@ -129,6 +123,33 @@ async fn signed_in_call(
     }
     super::fill::prepare(state, frame, &tab).await
 }
+/// A reservation is settled even when dispatch returns a transport error.
+async fn dispatch_reserved(
+    state: &Arc<HttpState>,
+    frame: Value,
+    count: usize,
+    deadline: u64,
+    id: &str,
+    sender: oneshot::Sender<Value>,
+) -> Result<Option<Response>, HttpError> {
+    let act = frame["op"] == "tab.act";
+    let session = frame["session"].as_str().unwrap_or_default().to_owned();
+    if act {
+        super::still_delivery::reserve(state, id, &frame).await?;
+    }
+    let dispatched = dispatch(state, frame, count, deadline, id, sender);
+    if act && !matches!(dispatched, Ok(None)) {
+        super::still_delivery::finish(
+            state,
+            id,
+            &session,
+            &mut json!({"reason":"dispatch_interrupted"}),
+        )
+        .await?;
+    }
+    dispatched
+}
+
 fn dispatch(
     state: &Arc<HttpState>,
     mut frame: Value,
