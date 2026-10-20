@@ -389,7 +389,7 @@ rounds with distinct 22 KB prose files, then a final answer. It measures the gap
 from the end of each provider reply to arrival of the next complete request,
 excluding synthetic-provider matching and model time. Only samples whose next
 request transcript (`input`, excluding tools and instructions) is at least
-1.4 MB enter the owner-scale p95; it must be below 20 ms.
+1.4 MB enter the owner-scale p95; its incident threshold is 1 s (normal 34 ms, PR 1358).
 Every request must contain the exact results so far, with their call IDs and
 order; the final request carries all 60 files. Final delivery is checked too.
 The diagnostic prefix hashes, token counts and longest common prefixes are

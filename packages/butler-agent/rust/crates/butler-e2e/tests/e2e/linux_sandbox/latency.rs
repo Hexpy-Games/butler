@@ -86,11 +86,11 @@ async fn perf_trampoline_start_latency_and_process_identity() -> Result<(), Harn
     } else {
         "native Linux"
     };
-    // Micro watch: half of the 20 ms p95 per-tool-call overhead budget.
-    let budget = Duration::from_millis(10);
+    // Normal added p95 2.22 ms (PR #1358); incident at roughly 20x.
+    let incident = Duration::from_millis(50);
     eprintln!(
-        "LINUX-START-LATENCY host={host} added_p95_watch_ms={:.3} N=60 baseline_p50_ms={:.3} baseline_p95_ms={:.3} contained_p50_ms={:.3} contained_p95_ms={:.3} added_p50_ms={p50:.3} added_p95_ms={p95:.3}",
-        budget.as_secs_f64() * 1000.0,
+        "LINUX-START-LATENCY host={host} added_p95_incident_ms={:.3} N=60 baseline_p50_ms={:.3} baseline_p95_ms={:.3} contained_p50_ms={:.3} contained_p95_ms={:.3} added_p50_ms={p50:.3} added_p95_ms={p95:.3}",
+        incident.as_secs_f64() * 1000.0,
         percentile(&baseline, 50),
         percentile(&baseline, 95),
         percentile(&contained, 50),
@@ -105,7 +105,7 @@ async fn perf_trampoline_start_latency_and_process_identity() -> Result<(), Harn
     );
     butler_e2e::assert_wall_clock_budget!(
         Duration::from_secs_f64(p95.max(0.0) / 1000.0),
-        budget,
+        incident,
         "Linux added launch latency p95",
     );
     setup.sandbox.mark_success();

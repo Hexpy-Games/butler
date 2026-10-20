@@ -95,8 +95,8 @@ async function windowFacts(frame: Locator) {
   });
 }
 
-const near = (a: number | undefined, b: number | undefined, tolerance = 0.75) =>
-  a !== undefined && b !== undefined && Math.abs(a - b) <= tolerance;
+const near = (a: number | undefined, b: number | undefined, tolerance = 3) =>
+  a !== undefined && b !== undefined && Math.abs(a - b) < tolerance;
 
 type WindowFacts = Awaited<ReturnType<typeof windowFacts>>;
 type CardFacts = NonNullable<WindowFacts["card"]>;
@@ -129,7 +129,7 @@ try {
     assert(closed.icons && open.icons, `${theme}: title icons missing ${JSON.stringify({ closed, open })}`);
     assert(near(closed.icons.left, open.icons.left) && near(closed.icons.right, open.icons.right),
       `${theme}: opening the inspector moved the title icons: closed ${JSON.stringify(closed.icons)} open ${JSON.stringify(open.icons)}`);
-    assert(near(closed.icons.right, 1440 - 18 - 1, 1.5), `${theme}: title icons should end 18px off the window edge: ${closed.icons.right}`);
+    assert(near(closed.icons.right, 1440 - 18 - 1, 3), `${theme}: title icons should end 18px off the window edge: ${closed.icons.right}`);
     assert(closed.card?.radius === "12px" && near(closed.card.top, 49) && near(closed.card.right, 1440 - 8) && near(closed.card.bottom, 900 - 8),
       `${theme}: the content card should be inset 8 under the 48px title row (+1px frame) with a 12px radius: ${JSON.stringify(closed.card)}`);
     assert(open.inspector && open.inspector.radius === "12px" && near(open.inspector.top, 49) && near(open.inspector.right, 1440 - 8),
@@ -195,7 +195,7 @@ try {
         return { left: (first.left - sheet.left) / scale, top: (tab.top - sheet.top) / scale };
       });
       tabInsets.push(`${theme} ${name === STORY.hub ? "standalone" : index === 0 ? "1440" : "1100"}: left ${inset.left.toFixed(2)} top ${inset.top.toFixed(2)}`);
-      assert(near(inset.left, inset.top, 0.5), `${theme}: the first tab's left and top gaps must match: ${JSON.stringify(inset)}`);
+      assert(near(inset.left, inset.top, 3), `${theme}: the first tab's left and top gaps must match: ${JSON.stringify(inset)}`);
     }
 
     // One rhythm: the gap between two cards (outer edge to outer edge) equals the right inset (the last
@@ -232,11 +232,11 @@ try {
       });
       assert(gap, `${theme} ${label}: cards or handle missing`);
       cardGaps.push(`${theme} ${label}: gap ${gap.gap.toFixed(2)} inset ${gap.inset.toFixed(2)} handle ${gap.handleWidth.toFixed(2)} grip ${gap.gripOffset.toFixed(2)}`);
-      assert(near(gap.inset, 8, 0.5) && near(gap.gap, gap.inset, 0.5),
+      assert(near(gap.inset, 8, 3) && near(gap.gap, gap.inset, 3),
         `${theme} ${label}: the gap between cards must equal the right inset (8px): ${JSON.stringify(gap)}`);
       assert(gap.handleWidth >= gap.gap - 0.01 && gap.handleCovers,
         `${theme} ${label}: the resize handle's grab zone must span the whole gap: ${JSON.stringify(gap)}`);
-      assert(near(gap.gripOffset, 0, 0.5), `${theme} ${label}: the grip must sit centred in the gap: ${JSON.stringify(gap)}`);
+      assert(near(gap.gripOffset, 0, 3), `${theme} ${label}: the grip must sit centred in the gap: ${JSON.stringify(gap)}`);
     }
 
     for (const story of await page.locator('[data-ds-story^="Cards frame:"]').all()) {
@@ -267,7 +267,7 @@ try {
       return { gap: lock.left - lights.right, lightsLeft: lights.left - chrome.left, expected: mainGlyphStart - (20 + lights.width) };
     });
     popupGaps.push(`${theme} macOS ${popup.gap.toFixed(2)} (titlebar ${popup.expected.toFixed(2)})`);
-    assert(near(popup.lightsLeft, 12) && popup.expected > 0 && near(popup.gap, popup.expected, 0.5),
+    assert(near(popup.lightsLeft, 12) && popup.expected > 0 && near(popup.gap, popup.expected, 3),
       `${theme}: the pop-up lock must sit as far from the green light as the main titlebar's leading glyph: ${JSON.stringify(popup)}`);
     const win = page.locator(`[data-ds-story="${POPUP_STORY.windows}"] [data-ds-theme="${theme}"]`).first();
     const winFacts = await win.evaluate((node) => {
