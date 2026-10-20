@@ -176,6 +176,8 @@ async fn off_and_shutdown_prevent_replacement() {
         let owner = held_owner();
         let (mut child, _gate, mut reader) = peer();
         let item = take_prewarm(&owner);
+        let disable = owner.disable();
+        tokio::pin!(disable);
         {
             let work = run_item(&owner.inner, &mut child, &item);
             tokio::pin!(work);
@@ -184,16 +186,22 @@ async fn off_and_shutdown_prevent_replacement() {
                 () = received(&mut reader) => {},
             }
             if off {
-                let disable = owner.disable();
-                tokio::pin!(disable);
                 assert!(futures_util::poll!(disable.as_mut()).is_pending());
                 assert_eq!(work.await.err().unwrap().code(), "embed_worker_cold");
-                owner.inner.released.send_replace(true);
-                disable.await;
+                // Reproduce publication after disable cleared warmth, from an actor
+                // that had observed enabled before the switch to off.
+                owner.inner.readiness.publish(true);
             } else {
                 owner.inner.close();
                 assert_eq!(work.await.err().unwrap().code(), "embed_owner_closed");
             }
+        }
+        if off {
+            let release = run_loop(&owner.inner, &mut child, || {});
+            tokio::pin!(release);
+            assert!(futures_util::poll!(release.as_mut()).is_pending());
+            disable.await;
+            owner.enable();
         }
         assert!(
             child.is_none(),

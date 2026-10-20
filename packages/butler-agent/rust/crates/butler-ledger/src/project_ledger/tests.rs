@@ -96,6 +96,7 @@ async fn initialized_candidate_preference_and_path_escape() {
 // test-category: race
 #[tokio::test]
 async fn before_image_remains_authoritative_until_claim_release() {
+    super::publication::interrupted_publications_recover_without_exposing_partial_records();
     use butler_platform::process_control::Liveness;
 
     assert!(super::publication::process_may_be_alive(

@@ -1,4 +1,4 @@
-use std::fs;
+use crate::project_ledger::publication::timing::fs;
 use std::path::Path;
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
@@ -31,6 +31,29 @@ pub(in crate::project_ledger::publication) fn observe_head(
     root: &Path,
     paths: &[String],
 ) -> Result<ProjectWorkHead, ProjectWorkPublicationError> {
+    observe(root, paths, false, None)
+}
+
+/// Existing admitted transactions retain their original digest definition.
+pub(in crate::project_ledger::publication) fn observe_expected(
+    root: &Path,
+    expected: &ProjectWorkHead,
+) -> Result<ProjectWorkHead, ProjectWorkPublicationError> {
+    observe(
+        root,
+        &expected.record_paths,
+        expected.schema.ends_with(".v1"),
+        None,
+    )
+}
+
+fn observe(
+    root: &Path,
+    paths: &[String],
+    legacy: bool,
+    generation: Option<&str>,
+) -> Result<ProjectWorkHead, ProjectWorkPublicationError> {
+    let _phase = crate::project_ledger::publication::timing::Phase::new("publication_observe_head");
     let mut paths = paths.to_vec();
     paths.push("project.json".into());
     paths.sort();
@@ -56,6 +79,87 @@ pub(in crate::project_ledger::publication) fn observe_head(
         })?;
         hash.update(entry);
     }
+    if legacy {
+        hash.update(legacy_directories(root)?);
+    } else {
+        let generation = match generation {
+            Some(value) => value.to_owned(),
+            None => super::super::transaction::claim::read_generation(root)?,
+        };
+        hash.update(serde_json::to_vec(&generation).map_err(|source| {
+            ProjectWorkPublicationError::adapter("project_ledger_head_invalid").with_source(source)
+        })?);
+    }
+    let digest = format!("{:x}", hash.finalize());
+    Ok(ProjectWorkHead {
+        schema: if legacy {
+            "butler.btcc-project-ledger-head.v1"
+        } else {
+            "butler.btcc-project-ledger-head.v2"
+        }
+        .into(),
+        storage_authority: None,
+        project_root: root.to_string_lossy().into_owned(),
+        source_sha256: digest.clone(),
+        source_file_count: present,
+        storage_sha256: digest,
+        storage_entry_count: present,
+        record_paths: paths,
+    })
+}
+
+pub(in crate::project_ledger::publication) fn observe_core_head(
+    root: &Path,
+    expected: &ProjectWorkHead,
+    publication_id: &str,
+) -> Result<ProjectWorkHead, ProjectWorkPublicationError> {
+    let mut head = observe(
+        root,
+        &expected.record_paths,
+        expected.schema.ends_with(".v1"),
+        Some(publication_id),
+    )?;
+    head.schema = if expected.schema.ends_with(".v1") {
+        "project-ledger.source-head.v1"
+    } else {
+        "project-ledger.source-head.v2"
+    }
+    .into();
+    head.storage_authority = Some("project-ledger-record-set-v1".into());
+    Ok(head)
+}
+
+pub(in crate::project_ledger::publication) fn revalidate_target(
+    scope: &ResolvedProjectWorkScope,
+    target: &ProjectWorkTarget,
+) -> Result<(), ProjectWorkPublicationError> {
+    let _phase =
+        crate::project_ledger::publication::timing::Phase::new("publication_revalidate_target");
+    let relative = relative(scope, &target.path)?;
+    let raw = crate::project_ledger::committed::read_selected(&scope.ledger_root, relative)
+        .map_err(|source| {
+            ProjectWorkPublicationError::adapter("project_ledger_exact_read_failed")
+                .with_source(source)
+        })?;
+    match (&target.state, raw) {
+        (ProjectWorkTargetState::Absent, None) => Ok(()),
+        (ProjectWorkTargetState::Present, Some(raw))
+            if target.raw_record_sha256.as_deref() == Some(sha(raw.as_bytes()).as_str()) =>
+        {
+            Ok(())
+        }
+        _ => Err(ProjectWorkPublicationError::adapter(
+            "project_ledger_exact_record_hash_changed",
+        )),
+    }
+}
+
+pub(super) fn sha(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
+}
+
+/// v1 heads included every Work directory, even outside their addressed set.
+fn legacy_directories(root: &Path) -> Result<Vec<u8>, ProjectWorkPublicationError> {
     let mut work_directories = Vec::new();
     match fs::read_dir(root.join("work")) {
         Ok(entries) => {
@@ -84,53 +188,5 @@ pub(in crate::project_ledger::publication) fn observe_head(
     let directory_bytes = serde_json::to_vec(&work_directories).map_err(|source| {
         ProjectWorkPublicationError::adapter("project_ledger_head_invalid").with_source(source)
     })?;
-    hash.update(directory_bytes);
-    let digest = format!("{:x}", hash.finalize());
-    Ok(ProjectWorkHead {
-        schema: "butler.btcc-project-ledger-head.v1".into(),
-        storage_authority: None,
-        project_root: root.to_string_lossy().into_owned(),
-        source_sha256: digest.clone(),
-        source_file_count: present,
-        storage_sha256: digest,
-        storage_entry_count: present,
-        record_paths: paths,
-    })
-}
-
-pub(in crate::project_ledger::publication) fn observe_core_head(
-    root: &Path,
-    paths: &[String],
-) -> Result<ProjectWorkHead, ProjectWorkPublicationError> {
-    let mut head = observe_head(root, paths)?;
-    head.schema = "project-ledger.source-head.v1".into();
-    head.storage_authority = Some("project-ledger-record-set-v1".into());
-    Ok(head)
-}
-
-pub(in crate::project_ledger::publication) fn revalidate_target(
-    scope: &ResolvedProjectWorkScope,
-    target: &ProjectWorkTarget,
-) -> Result<(), ProjectWorkPublicationError> {
-    let relative = relative(scope, &target.path)?;
-    let raw = crate::project_ledger::committed::read_selected(&scope.ledger_root, relative)
-        .map_err(|source| {
-            ProjectWorkPublicationError::adapter("project_ledger_exact_read_failed")
-                .with_source(source)
-        })?;
-    match (&target.state, raw) {
-        (ProjectWorkTargetState::Absent, None) => Ok(()),
-        (ProjectWorkTargetState::Present, Some(raw))
-            if target.raw_record_sha256.as_deref() == Some(sha(raw.as_bytes()).as_str()) =>
-        {
-            Ok(())
-        }
-        _ => Err(ProjectWorkPublicationError::adapter(
-            "project_ledger_exact_record_hash_changed",
-        )),
-    }
-}
-
-pub(super) fn sha(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    Ok(directory_bytes)
 }

@@ -12,12 +12,13 @@
     "JWT/sk-key/bearer/email/home path/host name -> fixed placeholders",
     "response.instructions -> {{REDACTED_ECHO}}, response.tools -> []",
     "response headers reduced to content-type, retry-after",
-    "chunks re-cut at SSE event boundaries (event bytes unchanged)"
+    "chunks re-cut at SSE event boundaries (event bytes unchanged)",
+    "2026-10-20 owner-authorized schema repair: rule -> instruction; omitted duration remains always; no live recording"
   ],
   "files": [
     {
       "file": "000.json",
-      "sha256": "74dfe28186d3bbca07a665e7711056aeb5832c268522ab7bc26ed957402b2470"
+      "sha256": "68eacb11d984c52cf93e9e6a116477b699cff1d688a8aae3e44e79f5427cdea0"
     },
     {
       "file": "001.json",

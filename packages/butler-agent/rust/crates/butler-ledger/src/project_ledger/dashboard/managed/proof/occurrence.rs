@@ -241,7 +241,10 @@ fn validate_head(head: &Value, root: &Path) -> Result<(), ProjectLedgerReadError
         || value
             .keys()
             .any(|key| !keys.contains(&key.as_str()) && key != "recordPaths")
-        || head.get("schema").and_then(Value::as_str) != Some("butler.btcc-project-ledger-head.v1")
+        || !matches!(
+            head.get("schema").and_then(Value::as_str),
+            Some("butler.btcc-project-ledger-head.v1" | "butler.btcc-project-ledger-head.v2")
+        )
         || head
             .get("projectRoot")
             .and_then(Value::as_str)
