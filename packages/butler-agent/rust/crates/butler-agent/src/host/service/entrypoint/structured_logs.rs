@@ -64,7 +64,8 @@ pub(super) async fn run_until_stopped(
     let user_home = butler_platform::user_dirs::home_dir()
         .filter(|home| !home.as_os_str().is_empty())
         .ok_or_else(|| failure("native_home_unavailable", "User home is unavailable"))?;
-    crate::host::service::data_reset::recover(explicit_data, &user_home, &installation).await?;
+    let journal_seen =
+        crate::host::service::data_reset::recover(explicit_data, &user_home, &installation).await?;
     let mut config =
         support::capture_configuration(explicit_data, &user_home, &installation).await?;
     let listener = if config.app.enabled {
@@ -72,8 +73,6 @@ pub(super) async fn run_until_stopped(
     } else {
         None
     };
-    config = support::initialize_credentials(config).await?;
-    report_credential_errors(&config, logs);
     let executable = butler_platform::process_names::current_exe().map_err(io)?;
     let mut instance = support::acquire_instance(
         &config,
@@ -81,6 +80,9 @@ pub(super) async fn run_until_stopped(
         holds_foreground_lease(foreground_lease),
     )
     .await?;
+    crate::host::service::data_reset::initialize_owned(&config, &user_home, journal_seen).await?;
+    config = support::initialize_credentials(config).await?;
+    report_credential_errors(&config, logs);
     let port = listener
         .as_ref()
         .and_then(|listener| listener.local_addr().ok())

@@ -15,6 +15,7 @@ mod contained_read;
 mod exact_name;
 pub use exact_name::exact_entry_exists;
 mod fault;
+pub mod replace_retry;
 mod replacement;
 mod timing;
 pub use fault::{abort_point, checkpoint as fault_checkpoint, hold_point, write as fault_write};
