@@ -149,6 +149,12 @@ try {
     $page = @{ 'Sec-Fetch-Site' = 'same-origin'; Origin = $record.app_endpoint }
     $ui = Invoke-WebRequest $open.data.url -Headers $navigation -SessionVariable browser -UseBasicParsing
     if ($ui.StatusCode -ne 200 -or $ui.Content -notmatch '<div id="root">') { throw 'Renderer not served' }
+    $policy = [string]$ui.Headers['Content-Security-Policy']
+    if ($policy -notmatch "frame-src 'self' http://127\.0\.0\.1:(\d+)") { throw 'Missing content origin' }
+    $contentPort = [int]$Matches[1]
+    if ($contentPort -eq ([Uri]$record.app_endpoint).Port) { throw 'Content shares API origin' }
+    try { Invoke-WebRequest "http://127.0.0.1:$contentPort/health" -UseBasicParsing | Out-Null; throw 'Content served API' }
+    catch { if (!$_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 404) { throw } }
     $sessions = Invoke-RestMethod "$($record.app_endpoint)/sessions" -Headers $page -WebSession $browser
     if ($sessions.protocol_version -ne 'butler.app.v1') { throw 'Browser authentication failed' }
     $assets = [regex]::Matches($ui.Content,'(?:src|href)="((?:\./|/)?assets/[^\"]+)"')
