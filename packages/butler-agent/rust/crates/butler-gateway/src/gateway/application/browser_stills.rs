@@ -10,6 +10,7 @@ impl AppApplication {
         &self,
         input: AppFileUpload,
         tab: String,
+        delivery: Option<(String, usize)>,
     ) -> Result<MessageFileRef, GatewayApplicationError> {
         let owner = input
             .owner_session_id
@@ -22,7 +23,7 @@ impl AppApplication {
         let query_tab = tab.clone();
         let prior = self
             .storage
-            .execute(move |db| slot(db, &owner, &query_tab))
+            .read(move |db| slot(db, &owner, &query_tab))
             .await
             .map_err(app_error)?;
         let file = if let Some(prior) = prior {
@@ -51,7 +52,7 @@ impl AppApplication {
                         |r| r.get::<_, i64>(0),
                     )
                     .map_err(AppStorageError::sqlite)?;
-                if exists > 0 {
+                let row = if exists > 0 {
                     db.execute(
                         "UPDATE message_files SET safe_name=?2,size_bytes=?3,sha256=?4 WHERE id=?1",
                         params![file.id, file.safe_name, file.size_bytes, file.sha256],
@@ -68,7 +69,11 @@ impl AppApplication {
                     let row = super::message_files::insert_uploaded(db, Some(&owner), &file)?;
                     db.execute("INSERT INTO browser_stills(file_id,owner_session_id,tab_id,created_at) SELECT id,owner_session_id,?2,created_at FROM message_files WHERE id=?1", params![file.id, tab]).map_err(AppStorageError::sqlite)?;
                     Ok(row)
+                }?;
+                if let Some((id, step)) = delivery {
+                    super::still_delivery::attached(db, &id, step, &file.id)?;
                 }
+                Ok(row)
             })
             .await
             .map_err(app_error)?;

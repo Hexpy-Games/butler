@@ -1139,6 +1139,9 @@ const butlerApp = Object.freeze({
       body: JSON.stringify({ parent_session_id: parentSessionId }),
     },
   ),
+  getBrowserStills: ({ id, sessionId, wait }) => requestJson(
+    `/browser-stills/${encodeURIComponent(id)}?${new URLSearchParams({ session_id: sessionId, wait: wait ? "1" : "0" })}`,
+  ),
   getOperationOutput: ({ turnId, requestId, resultId, offset = 0 }) => {
     const params = new URLSearchParams({
       result_id: resultId,
@@ -1650,6 +1653,11 @@ contextBridge.exposeInMainWorld("butlerBrowser", {
     const listener = (_event, point) => handler(point);
     ipcRenderer.on("butler-browser:pointer", listener);
     return () => ipcRenderer.removeListener("butler-browser:pointer", listener);
+  },
+  onStill: (handler) => {
+    const listener = (_event, receipt) => handler(receipt);
+    ipcRenderer.on("butler-browser:still-delivered", listener);
+    return () => ipcRenderer.removeListener("butler-browser:still-delivered", listener);
   },
   onHistory: (handler) => {
     const listener = () => handler(); ipcRenderer.on("butler-browser:history", listener);

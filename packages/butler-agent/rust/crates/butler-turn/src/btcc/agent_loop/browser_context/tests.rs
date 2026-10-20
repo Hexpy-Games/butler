@@ -76,11 +76,9 @@ pub(in crate::btcc::agent_loop) fn assert_per_tab_cycles() {
     assert!(!is_superseded(&messages[3].content));
     assert!(!is_superseded(&messages[5].content));
     assert!(!is_superseded(&messages[8].content));
-    assert!(
-        messages
-            .iter()
-            .all(|m| m.image_attachments.is_empty() && !m.content.contains("still_file"))
-    );
+    assert!(messages.iter().all(|m| m.image_attachments.is_empty()
+        && !m.content.contains("still_file")
+        && !m.content.contains("still_pending")));
     let once = messages.clone();
     force_prune(&mut messages);
     assert_eq!(messages, once);
@@ -143,7 +141,11 @@ pub(in crate::btcc::agent_loop) fn assert_act_with_observation() {
         latest["output"]["action"]["steps"][1]["status"],
         "completed"
     );
-    assert!(messages.iter().all(|m| !m.content.contains("still_file")));
+    assert!(
+        messages
+            .iter()
+            .all(|m| !m.content.contains("still_file") && !m.content.contains("still_pending"))
+    );
     let once = messages.clone();
     force_prune(&mut messages);
     assert_eq!(messages, once);
@@ -185,7 +187,7 @@ fn observed_act(messages: &mut Vec<ModelRoundMessage>, source: &str, next: &str)
     let steps =
         json!([{"status":"completed","still_file":{"file_id":"desktop"}},{"status":"completed"}]);
     let mut result = tool(
-        &json!({"schema":"butler.browser-observation.v1","tab":"a","obs":next,"status":"ok","still_file":{"file_id":"desktop"},
+        &json!({"schema":"butler.browser-observation.v1","tab":"a","obs":next,"status":"ok","still_file":{"file_id":"desktop"},"still_pending":{"id":"desktop","session":"a"},
             "untrusted_content":{"text":"Confirm"},"action":{"schema":"butler.browser-action.v1","status":"ok","steps":steps}}),
     );
     result.tool_call_id = messages.pop().unwrap().tool_call_id;
@@ -383,7 +385,7 @@ fn assert_resumed_summary_floor() {
         state
             .messages
             .iter()
-            .all(|m| !m.content.contains("still_file"))
+            .all(|m| !m.content.contains("still_file") && !m.content.contains("still_pending"))
     );
     assert_eq!(state.browser_prune.stripped, state.messages.len());
     let legacy = State::resumed(

@@ -7,6 +7,7 @@ pub(super) fn handler(request: &Request<Body>) -> Option<Handler> {
         (family(path, "/logs"), Handler::Logs),
         (family(path, "/library"), Handler::Library),
         (family(path, "/browser-history"), Handler::History),
+        (family(path, "/browser-stills"), Handler::BrowserStills),
         (path.starts_with("/internal/browser"), Handler::Browser),
         (path.starts_with("/__o/"), Handler::NotFound),
         (path.starts_with("/previews/"), Handler::Preview),
