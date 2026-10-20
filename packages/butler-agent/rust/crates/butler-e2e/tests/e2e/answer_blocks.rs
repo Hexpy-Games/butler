@@ -256,7 +256,9 @@ async fn draft_is_ephemeral_and_reconnects_once() -> Result<(), HarnessError> {
         })
         .await?;
     assert!(first.get("id").is_none());
-    let before = draft_row_counts(&s)?;
+    let turn = first["payload"]["turn_id"].as_str().unwrap();
+    let before = draft_row_counts(&s, turn)?;
+    assert_eq!(before, (0, 0), "first draft must not write durable rows");
     let reconnect = LiveEvents::subscribe(&s.gw, 0).await?;
     let snapshot = reconnect
         .wait_for(std::time::Duration::from_secs(10), |event| {
@@ -282,8 +284,8 @@ async fn draft_is_ephemeral_and_reconnects_once() -> Result<(), HarnessError> {
         })
         .await?;
     assert!(second.get("id").is_none());
-    let after = draft_row_counts(&s)?;
-    assert_eq!(before, after, "draft units must not write rows");
+    let after = draft_row_counts(&s, turn)?;
+    assert_eq!(after, (0, 0), "draft units must not write durable rows");
     eprintln!("draft row counts before={before:?} after={after:?}; reconnect snapshots=1");
     assert_eq!(
         reconnect
@@ -293,7 +295,6 @@ async fn draft_is_ephemeral_and_reconnects_once() -> Result<(), HarnessError> {
             .count(),
         1
     );
-    let turn = first["payload"]["turn_id"].as_str().unwrap();
     s.gw.wait_turn(
         "general",
         turn,
@@ -301,6 +302,11 @@ async fn draft_is_ephemeral_and_reconnects_once() -> Result<(), HarnessError> {
         std::time::Duration::from_secs(20),
     )
     .await?;
+    assert_eq!(
+        draft_row_counts(&s, turn)?,
+        (0, 1),
+        "delivery must persist one assistant message and no draft events"
+    );
     let final_messages = s.gw.messages("general").await?;
     assert!(
         final_messages
@@ -318,15 +324,27 @@ async fn draft_is_ephemeral_and_reconnects_once() -> Result<(), HarnessError> {
     s.finish().await
 }
 
-fn draft_row_counts(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(i64, i64), HarnessError> {
+fn draft_row_counts(
+    s: &butler_e2e::e2e::scenario::Scenario,
+    turn: &str,
+) -> Result<(i64, i64), HarnessError> {
     let db = rusqlite::Connection::open_with_flags(
         s.sandbox.data.join("app-server/butler-client.sqlite"),
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
     )?;
+    // Durable progress can still catch up while ephemeral drafts are published.
+    // Count only draft events and this turn's assistant rows, not that progress.
     Ok((
-        db.query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))?,
-        db.query_row("SELECT COUNT(*) FROM app_owned_messages", [], |row| {
-            row.get(0)
-        })?,
+        db.query_row(
+            "SELECT COUNT(*) FROM events \
+             WHERE type IN ('answer_blocks.draft', 'answer_blocks.snapshot')",
+            [],
+            |row| row.get(0),
+        )?,
+        db.query_row(
+            "SELECT COUNT(*) FROM app_owned_messages WHERE turn_id=?1 AND role='assistant'",
+            [turn],
+            |row| row.get(0),
+        )?,
     ))
 }
