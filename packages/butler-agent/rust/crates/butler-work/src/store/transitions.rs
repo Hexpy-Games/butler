@@ -256,17 +256,15 @@ pub fn ready_works(db: &Connection, chain_id: &str) -> Result<Vec<String>> {
             continue;
         }
         let step = member["step_index"]
-            .as_u64()
+            .as_i64()
             .ok_or(Error::Invalid("step"))?;
         let satisfied = chain
             .members
             .iter()
-            .filter(|p| p["step_index"].as_u64() == step.checked_sub(1))
+            .filter(|p| p["step_index"].as_i64() == step.checked_sub(1))
             .all(|pred| {
                 (pred["run_state"] == "done" && !pred["result_reported_at"].is_null())
-                    || approvals
-                        .iter()
-                        .any(|a| approval_covers(a, pred, step as i64))
+                    || approvals.iter().any(|a| approval_covers(a, pred, step))
             });
         if satisfied {
             ready.push(text(member, "id")?.into());
@@ -276,7 +274,9 @@ pub fn ready_works(db: &Connection, chain_id: &str) -> Result<Vec<String>> {
 }
 
 fn allowed_transition(from: &str, to: RunState) -> Result<()> {
-    use RunState::*;
+    use RunState::{
+        Blocked, Cancelled, Done, Failed, Held, Idle, InReview, Paused, Running, Stopped, Waiting,
+    };
     let allowed: &[&str] = match to {
         Idle => &["idle"],
         Waiting => &[
