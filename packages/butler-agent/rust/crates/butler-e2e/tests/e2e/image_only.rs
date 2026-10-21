@@ -15,6 +15,8 @@ use butler_e2e::e2e::scenario::{Setup, accepted_turn_id};
 use butler_e2e::e2e::{HarnessError, media};
 use serde_json::json;
 
+pub(super) mod proof;
+
 #[tokio::test]
 async fn image_only_is_delivered_with_persisted_image_and_provider_image()
 -> Result<(), HarnessError> {
@@ -28,14 +30,11 @@ async fn image_only_is_delivered_with_persisted_image_and_provider_image()
         .start()
         .await?;
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
+    super::outbound_http::logging(&s, "full").await?;
+    let png = proof::upload_png();
     let upload =
-        s.gw.upload(
-            "number.png",
-            "image/png",
-            &media::digits_png("4821", 12),
-            Some("general"),
-        )
-        .await?;
+        s.gw.upload("number.png", "image/png", &png, Some("general"))
+            .await?;
     assert_eq!(upload.status, 201, "{}", upload.text);
     let file_id = upload.data()["file"]["file_id"].as_str().unwrap();
     let sent =
@@ -85,17 +84,11 @@ async fn image_only_is_delivered_with_persisted_image_and_provider_image()
     );
     let requests = s.provider()?.requests();
     assert_eq!(requests.len(), 1);
-    assert!(
-        requests[0]["input"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|m| m["role"] == "user"
-                && m["content"]
-                    .as_array()
-                    .is_some_and(|parts| parts.iter().any(|p| p["type"] == "input_image"))),
-        "provider lost image"
-    );
+    proof::assert_uploaded_image(&requests[0], &png);
+    let recorded = proof::provider_bodies(&s, &turn_id).await?;
+    assert_eq!(recorded.len(), 1);
+    proof::assert_uploaded_image(&recorded[0]["request"], &png);
+    proof::assert_response_ok(&recorded[0]);
     live.wait_for(Duration::from_secs(5), |e| {
         event_turn_id(e) == Some(&turn_id)
             && (e["payload"]["state"] == "delivered"

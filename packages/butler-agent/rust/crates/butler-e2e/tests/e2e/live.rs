@@ -1,7 +1,7 @@
 //! LIVE tier (SCENARIOS.md LIVE-01..10): real provider, coarse invariants.
 //!
 //! Every test is `#[ignore]` so the stub tier lists them as ignored. Run:
-//! `BUTLER_E2E_TIER=live cargo test -p butler-e2e --test live -- --ignored --test-threads=1`.
+//! `BUTLER_E2E_TIER=live cargo test -p butler-e2e --test e2e -- --ignored --test-threads=1`.
 //! Without credentials: tier `all` reports `SKIPPED (no credentials: ..)`,
 //! tier `live` fails.
 #![allow(
@@ -17,7 +17,7 @@ use std::time::Duration;
 use butler_e2e::e2e::config::{Credential, LiveProvider};
 use butler_e2e::e2e::gateway::{tool_rows, turn_state};
 use butler_e2e::e2e::scenario::{Scenario, Setup, accepted_turn_id};
-use butler_e2e::e2e::{HarnessError, live, media, nonce};
+use butler_e2e::e2e::{HarnessError, live, nonce};
 use serde_json::{Value, json};
 
 mod drift;
@@ -211,16 +211,24 @@ async fn live_05_cross_session_recall() -> Result<(), HarnessError> {
     done("LIVE-05")
 }
 
-/// LIVE-06 — Image understanding.
+/// LIVE-06 — Uploaded image reaches the provider unchanged.
 #[tokio::test]
 #[ignore = "LIVE tier"]
-async fn live_06_image_understanding() -> Result<(), HarnessError> {
+async fn live_06_image_reaches_provider() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let Some((s, _)) = start("LIVE-06").await? else {
         return Ok(());
     };
-    let digits = format!("{:04}", uuid::Uuid::new_v4().as_u128() % 10_000);
-    let png = media::digits_png(&digits, 12);
+    use super::image_only::proof;
+
+    super::outbound_http::logging(&s, "full").await?;
+    let prompt = "Please acknowledge receipt briefly.";
+    let baseline_chat = s.gw.post("/sessions", json!({"kind":"chat"})).await?;
+    let baseline_chat = baseline_chat.data()["session"]["id"].as_str().unwrap();
+    let (baseline_id, baseline_turn) = live_turn(&s, baseline_chat, prompt).await?;
+    assert_eq!(turn_state(&baseline_turn), "delivered", "{baseline_turn}");
+    let baseline = proof::provider_bodies(&s, &baseline_id).await?;
+    let png = proof::upload_png();
     let upload =
         s.gw.upload("number.png", "image/png", &png, Some("general"))
             .await?;
@@ -232,7 +240,7 @@ async fn live_06_image_understanding() -> Result<(), HarnessError> {
     live::spend_turn()?;
     let accepted = s
         .gw
-        .send_message(json!({"chat_id": "general", "text": "What number is shown in the image? Reply with digits only.",
+        .send_message(json!({"chat_id": "general", "text": prompt,
             "client_message_id": uuid::Uuid::new_v4().to_string(), "attachments": [{"file_id": file_id}]}))
         .await?;
     let turn_id = accepted_turn_id(&accepted)?;
@@ -240,8 +248,13 @@ async fn live_06_image_understanding() -> Result<(), HarnessError> {
         s.gw.wait_terminal("general", &turn_id, Duration::from_secs(300))
             .await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
-    let text = answer(&s, "general", &turn_id).await?;
-    assert!(text.contains(&digits), "expected {digits}, got {text}");
+    assert!(turn["error"].is_null(), "turn contains an error");
+    let recorded = proof::provider_bodies(&s, &turn_id).await?;
+    proof::assert_uploaded_image(&recorded[0]["request"], &png);
+    for body in baseline.iter().chain(&recorded) {
+        proof::assert_response_ok(body);
+    }
+    proof::assert_image_usage(&baseline[0], &recorded[0]);
     s.finish().await?;
     done("LIVE-06")
 }
