@@ -15,7 +15,10 @@ class WindowsCommandCoverage(unittest.TestCase):
         self.assertIn('"$test`::" @selection --list', script)
         self.assertIn('$selection --test-threads=$threads', script)
         basic = (ROOT / 'deploy/windows-basic-capabilities.ps1').read_text()
-        self.assertNotIn('--skip', basic)
+        self.assertIn('[switch]$WithoutE2eFixtures', basic)
+        self.assertIn("if ($WithoutE2eFixtures) { '--skip ::requires_e2e_fixtures::' } else { '' }", basic)
+        release = (ROOT / '.github/workflows/release.yml').read_text()
+        self.assertIn('windows-basic-capabilities.ps1 -Agent $agent -WithoutE2eFixtures', release)
 
     # test-category: format-pin
     def test_native_command_proofs_keep_machine_and_binary_coverage(self):
