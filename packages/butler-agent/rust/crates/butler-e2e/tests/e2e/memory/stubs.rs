@@ -215,12 +215,8 @@ pub(super) async fn assert_daily_briefing(
     assert_eq!(stored["source"]["model_ref"], "openai/gpt-6-luna");
     let run_id = stored["source"]["consolidation_run_id"].as_str().unwrap();
     let suffix = run_id.strip_prefix("cr_scheduled_").unwrap();
-    let (timestamp, identity) = suffix.split_once('_').unwrap();
-    assert_eq!(timestamp.len(), 14);
-    assert!(timestamp.bytes().all(|byte| byte.is_ascii_digit()));
-    assert_eq!(identity.len(), 32);
-    assert!(identity.bytes().all(|byte| byte.is_ascii_hexdigit()));
-    uuid::Uuid::parse_str(identity).unwrap();
+    let identity = uuid::Uuid::parse_str(suffix).unwrap();
+    assert_eq!(suffix, identity.simple().to_string());
     assert_eq!(s.provider()?.misses(), [] as [std::string::String; 0]);
     Ok(())
 }

@@ -45,7 +45,7 @@ jobs:
           path: ${{ runner.temp }}/rust-archive
       - name: Prepare the existing Agent and Electron UI
         run: |
-          chmod +x "$RUNNER_TEMP/rust-archive/butler-agent"
+          chmod +x "$RUNNER_TEMP/rust-archive/butler-agent" "$RUNNER_TEMP/rust-archive/window-capture"
           python3 .github/scripts/isolated.py bun install --frozen-lockfile
           # Keep Electron's first-install stdout out of the executable path below.
           python3 .github/scripts/isolated.py node packages/butler-app/client/electron/node_modules/electron/install.js
@@ -53,6 +53,7 @@ jobs:
       - name: Run canvas and route fixtures with stub model responses
         env:
           BUTLER_NATIVE_AGENT_EXECUTABLE: ${{ runner.temp }}/rust-archive/butler-agent
+          BUTLER_WINDOW_CAPTURE_EXECUTABLE: ${{ runner.temp }}/rust-archive/window-capture
           BUTLER_E2E_TIER: stub
         run: |
           BUTLER_SMOKE_ELECTRON_EXECUTABLE="$(node -p "require('./packages/butler-app/client/electron/node_modules/electron')")"

@@ -6,10 +6,10 @@
     reason = "test assertions"
 )]
 
-use super::coverage_seed::{recovered, session, turn};
-use super::coverage_support::{canonical, drain, graph, hold_gate, release_gate, start};
+use super::coverage_seed::{published, recovered, session, turn};
+use super::coverage_support::{canonical, drain, graph, hold_gate, release_gate};
 use super::standalone_upgrade::reset_pending;
-use butler_e2e::e2e::HarnessError;
+use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use std::time::{Duration, Instant};
 
 const GONE: &str = "orphan-source";
@@ -41,8 +41,15 @@ async fn mem_orphaned_turn_ineligible_restored() -> Result<(), HarnessError> {
 }
 
 async fn orphaned(standalone: bool, ineligible: bool) -> Result<(), HarnessError> {
-    let mut s = start("MEM-ORPHANED", &[]).await?;
+    let mut s = Setup::new("MEM-ORPHANED")?
+        .cassette("MEM-01")
+        .env("BUTLER_METRICS_ENABLED", "1")
+        .env("BUTLER_MEMORY_SYNC_TRACE", "1")
+        .start()
+        .await?;
     let data = s.sandbox.data.clone();
+    crate::memory_wiring::bootstrap(&data).await;
+    crate::memory_fixture::settle(&data).await?;
     for id in [GONE, KEPT] {
         session(&canonical(&data), id, None);
     }
@@ -58,6 +65,8 @@ async fn orphaned(standalone: bool, ineligible: bool) -> Result<(), HarnessError
     let kept_turn = turn(&canonical(&data), KEPT, 1, "unrelated turn fact", AT);
     recovered(&canonical(&data), KEPT, 10, "unrelated recovered fact", AT);
     drain(&data, &[]).await;
+    // Do not reset jobs while their original hot-cache or FTS work is in flight.
+    crate::memory_fixture::settle(&data).await?;
     // Recreate an upgraded graph's durable unprocessed queue under the lease.
     let gate = hold_gate(&data);
     let db = graph(&data);
@@ -70,7 +79,7 @@ async fn orphaned(standalone: bool, ineligible: bool) -> Result<(), HarnessError
     }
     db.execute("UPDATE memory_projection_jobs SET created_at='2000-01-01T00:00:00Z' WHERE episode_id IN (SELECT memory_chunk_id FROM memory_chunks WHERE source_key=?1)", [&source]).unwrap();
     // External canonical writers also delete sources (e.g. restored history).
-    // Eligibility changes no content or revision: restoration must replay this job.
+    // Park this revision without publishing new source content.
     let canonical = canonical(&data);
     if ineligible {
         let table = if standalone {
@@ -90,6 +99,7 @@ async fn orphaned(standalone: bool, ineligible: bool) -> Result<(), HarnessError
             .execute("DELETE FROM conversation_sessions WHERE id=?1", [GONE])
             .unwrap();
     }
+    let parked = idle_signals(&s).await;
     release_gate(&gate);
     drop(gate);
     let started = Instant::now();
@@ -116,12 +126,13 @@ async fn orphaned(standalone: bool, ineligible: bool) -> Result<(), HarnessError
         started.elapsed().as_millis()
     );
     drain(&data, &[GONE]).await;
-    assert_idle(&s).await;
+    assert_idle(&s, parked).await;
     s.agent.terminate().await?;
     s.gw = s.agent.start_again().await?;
     drain(&data, &[GONE]).await;
-    assert_idle(&s).await;
+    assert_idle(&s, 0).await;
     if ineligible {
+        let parked = idle_signals(&s).await;
         let table = if standalone {
             "conversation_messages"
         } else {
@@ -133,18 +144,54 @@ async fn orphaned(standalone: bool, ineligible: bool) -> Result<(), HarnessError
                 [GONE],
             )
             .unwrap();
+        published(&canonical);
         drain(&data, &[]).await;
         let completed: i64 = db.query_row("SELECT COUNT(*) FROM memory_projection_windows w JOIN memory_projection_jobs j ON j.job_id=w.job_id JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id WHERE c.source_key=?1 AND w.state='complete'", [&source], |r| r.get(0)).unwrap();
         assert_eq!(
             completed, windows,
             "catch-up must revive the same restored revision"
         );
-        assert_idle(&s).await;
+        assert_idle(&s, parked).await;
     }
     s.finish().await
 }
 
-async fn assert_idle(s: &butler_e2e::e2e::scenario::Scenario) {
+async fn idle_signals(s: &butler_e2e::e2e::scenario::Scenario) -> usize {
+    s.agent
+        .current_logs()
+        .await
+        .unwrap()
+        .matches("[memory-sync-trace] park delay=None")
+        .count()
+}
+
+async fn assert_idle(s: &butler_e2e::e2e::scenario::Scenario, parked: usize) {
+    // Semantic completion commits before finish() registers vector units, which
+    // updates last_served_at even when the vector states are unchanged. Wait for
+    // a fresh completed idle poll, after all writes for the seeded work, without
+    // holding the writer gate during the full five-second observation below.
+    let started = Instant::now();
+    tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            let logs = s.agent.current_logs().await.unwrap();
+            let fresh = logs.matches("[memory-sync-trace] park delay=None").count() > parked;
+            let last = logs
+                .lines()
+                .rfind(|line| line.contains("[memory-sync-trace]"));
+            if fresh
+                && last.is_some_and(|line| line.ends_with("[memory-sync-trace] park delay=None"))
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("memory consumer did not finish the requested writes and park idle");
+    eprintln!(
+        "MEM-ORPHANED writer_idle_barrier_ms={}",
+        started.elapsed().as_millis()
+    );
     let db = graph(&s.sandbox.data);
     let version = || {
         db.pragma_query_value::<u64, _>(None, "data_version", |r| r.get(0))
