@@ -358,6 +358,7 @@ const explicitElectronUserDataDir = process.env.BUTLER_APP_ELECTRON_USER_DATA_DI
 let openAIOAuthLoginSession = null;
 const bundledAgentSupervisor = createBundledAgentSupervisor({
   butlerData: butlerDataRoot,
+  readOnly: legacyDataBlocked,
   resolveGateway: managedGatewayCommand,
   spawnProcess: (command, args, options) => appLogging.spawn(spawnTracedAgent(command, args, options,
     (phase, edge) => quitFeedback?.phase(phase, edge), appWritableDataRoot)),
@@ -616,6 +617,11 @@ async function appServerProbeFetch(url, localAuth = null) {
 }
 
 async function ensureServer() {
+  if (legacyDataBlocked) {
+    const error = new Error("legacy_data_blocked");
+    error.code = "legacy_data_blocked";
+    throw error;
+  }
   if (isQuitting) {
     const error = new Error("Butler App is shutting down.");
     error.code = "app_shutting_down";
@@ -2188,7 +2194,7 @@ function safeString(value) {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
 
-const browserHost = createBrowserHost({
+const browserHost = legacyDataBlocked ? null : createBrowserHost({
   stillDirectory: join(butlerDataRoot, "app", "browser-still-outbox"),
   replayDirectories: [join(butlerDataRoot, "state", "browser", "app-host", "still-outbox")],
   onStillDelivered: receipt => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("butler-browser:still-delivered", receipt); },
@@ -2982,7 +2988,7 @@ if (appSingleInstanceLock) {
         await runMenuBarHelper();
         return;
       }
-      if (appLogOwner) {
+      if (appLogOwner && !legacyDataBlocked) {
         const unwatchLogs = watchAppLogging({ connect: signal => appServerFetch("/events/live", { signal }),
           refresh: () => appLogging.refresh() });
         app.once("will-quit", unwatchLogs);
@@ -3032,7 +3038,7 @@ app.on("before-quit", (event) => {
   void Promise.resolve(feedbackReady).then(async () => {
     // Save while the Agent can still accept visits; browserHost.stop() closes that channel.
     if (userBrowser) await saveBrowserForQuit(userBrowser);
-    browserHost.stop();
+    browserHost?.stop();
     return stopServerProcess({ reason: "app_quit" });
   }).catch((error) => {
     // Quit always exits. The supervisor already terminated an Agent that ignored the stop.

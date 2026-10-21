@@ -16,7 +16,18 @@ async fn first_recall_after_restart_history_is_complete() -> Result<(), HarnessE
     butler_e2e::gate!();
     let (setup, remember, code) = batch::setup("MEM-COLD-SCALE")?;
     let mut s = setup.env("BUTLER_MEMORY_SYNC_TRACE", "1").start().await?;
-    assert_eq!(s.turn("general", &remember).await?.1["state"], "delivered");
+    // Gateway readiness precedes fresh memory generation publication.
+    crate::memory_wiring::bootstrap(&s.sandbox.data).await;
+    let (remember_id, remembered) = s.turn("general", &remember).await?;
+    assert_eq!(remembered["state"], "delivered");
+    let writes =
+        butler_e2e::e2e::gateway::tool_rows(&s.gw.messages("general").await?, &remember_id);
+    let write = writes
+        .iter()
+        .find(|row| row["safe_tool_name"] == "update_explicit_memory")
+        .unwrap();
+    let saved: Value = serde_json::from_str(&s.gw.operation_output(&remember_id, write).await?)?;
+    assert_eq!(saved["ok"], true, "fixture memory must be saved: {saved}");
     memory_stubs::text_complete(&s.sandbox.data, 1).await?;
     batch::recall(&s, "general", ASK).await?;
     memory_stubs::vectors_complete(&s.sandbox.data, 2).await?;
@@ -85,7 +96,7 @@ async fn first_recall_after_restart_history_is_complete() -> Result<(), HarnessE
     super::assert_loaded_idle(&s).await?;
     // Reaping a child transfers its lifetime I/O counters to the parent on
     // Linux. Measure the parked process after that transfer, and separately
-    // retain the loaded worker's zero-CPU/zero-I/O assertion above.
+    // retain the loaded worker's zero-work/zero-I/O assertion above.
     park(&s).await?;
     idle(&s).await?;
     crate::data_perf::assert_app(&s.sandbox.data)?;

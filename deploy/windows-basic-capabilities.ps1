@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$Agent)
+param([Parameter(Mandatory=$true)][string]$Agent, [switch]$WithoutE2eFixtures)
 $ErrorActionPreference = 'Stop'
 $root = Join-Path $env:TEMP ('butler-basic-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force $root | Out-Null
@@ -26,8 +26,10 @@ try {
     $env:BUTLER_PLATFORM_SYSTEM_SECRETS = '0'
     $env:BUTLER_APP_DISABLE_SHELL_REGISTRATION = '1'
     $log = Join-Path $env:RUNNER_TEMP 'windows-basic-capabilities.log'
+    # Release binaries lack e2e-fixtures; skip fixture-only tests by requirement (#1409).
+    $selection = if ($WithoutE2eFixtures) { '--skip ::requires_e2e_fixtures::' } else { '' }
     $ErrorActionPreference = 'Continue'
-    cmd /d /c "cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e windows_commands:: -- --test-threads=1 --nocapture > `"$log`" 2>&1"
+    cmd /d /c "cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e windows_commands:: -- $selection --test-threads=1 --nocapture > `"$log`" 2>&1"
     $testCode = $LASTEXITCODE
     $ErrorActionPreference = 'Stop'
     if ($testCode -ne 0) {

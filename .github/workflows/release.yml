@@ -112,7 +112,7 @@ jobs:
           $env:CARGO_HOME = "$env:USERPROFILE/.cargo"
           $env:RUSTUP_HOME = "$env:USERPROFILE/.rustup"
           $agent = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/butler-agent.exe"
-          ../../../deploy/windows-basic-capabilities.ps1 -Agent $agent
+          ../../../deploy/windows-basic-capabilities.ps1 -Agent $agent -WithoutE2eFixtures
       - name: Upload Windows basic capability log
         if: always()
         uses: actions/upload-artifact@v4

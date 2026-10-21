@@ -8,6 +8,19 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class WindowsCommandCoverage(unittest.TestCase):
     # test-category: format-pin
+    def test_installed_selection_uses_target_feature_requirement(self):
+        script = (ROOT / 'deploy/windows-e2e-artifacts.ps1').read_text()
+        self.assertIn('[switch]$WithoutE2eFixtures', script)
+        self.assertIn("if ($WithoutE2eFixtures) { @('--skip', '::requires_e2e_fixtures::') } else { @() }", script)
+        self.assertIn('"$test`::" @selection --list', script)
+        self.assertIn('$selection --test-threads=$threads', script)
+        basic = (ROOT / 'deploy/windows-basic-capabilities.ps1').read_text()
+        self.assertIn('[switch]$WithoutE2eFixtures', basic)
+        self.assertIn("if ($WithoutE2eFixtures) { '--skip ::requires_e2e_fixtures::' } else { '' }", basic)
+        release = (ROOT / '.github/workflows/release.yml').read_text()
+        self.assertIn('windows-basic-capabilities.ps1 -Agent $agent -WithoutE2eFixtures', release)
+
+    # test-category: format-pin
     def test_native_command_proofs_keep_machine_and_binary_coverage(self):
         repository = ROOT
         workflow = (repository / '.github/workflows/windows-preview-smoke.yml').read_text()
@@ -22,7 +35,7 @@ class WindowsCommandCoverage(unittest.TestCase):
         self.assertIn('run: ../../../deploy/windows-installed-e2e.ps1 -Tests windows_commands', matrix)
         script = (repository / 'deploy/windows-installed-e2e.ps1').read_text()
         self.assertIn("Join-Path $env:BUTLER_E2E_INSTALLED_ROOT 'butler-agent.exe'", script)
-        self.assertIn('-Mode Run -Tests $Tests', script)
+        self.assertIn('-Mode Run -Tests $Tests -WithoutE2eFixtures', script)
         self.assertIn('if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }', script)
         installed = "@('windows_startup_xml','installed_preview','windows_commands','projection_settlement')"
         self.assertIn('$expected = ' + installed, release)
