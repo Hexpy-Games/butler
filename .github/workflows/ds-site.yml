@@ -25,7 +25,8 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Playwright has no Chromium build for ubuntu-26.04 (hosted image 20261012.163); pinned until it does.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
