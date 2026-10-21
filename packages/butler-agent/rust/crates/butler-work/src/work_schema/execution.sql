@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS wm_cross_db_intents (
   op_id TEXT PRIMARY KEY NOT NULL,
   kind TEXT NOT NULL,
   payload_json TEXT NOT NULL CHECK (json_valid(payload_json)),
+  revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
   state TEXT NOT NULL CHECK (state IN ('pending','applied')),
   created_at INTEGER NOT NULL
 );

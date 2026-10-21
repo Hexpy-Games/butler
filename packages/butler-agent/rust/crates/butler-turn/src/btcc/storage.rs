@@ -49,6 +49,7 @@ mod tool_journal;
 mod transitions;
 mod wake;
 mod work;
+mod work_model;
 
 pub(crate) use authority::{SqliteAuthorityReader, SqliteAuthorityRepository};
 pub use bootstrap::{

@@ -49,7 +49,9 @@ CREATE TABLE IF NOT EXISTS wm_attempts (
   status TEXT NOT NULL CHECK (status IN ('running','succeeded','failed','interrupted')),
   checkpoint_ref TEXT,
   started_at INTEGER NOT NULL,
-  finished_at INTEGER
+  finished_at INTEGER,
+  revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
+  recovered_at INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS wm_results (

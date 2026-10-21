@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS wm_hold_decisions (
   failed_work_id TEXT NOT NULL REFERENCES wm_works(id),
   held_step_index INTEGER NOT NULL CHECK (held_step_index >= 0),
   question_message_id TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
   decision TEXT CHECK (decision IN ('run_anyway','delete')),
   decided_at INTEGER,
   CHECK ((decision IS NULL) = (decided_at IS NULL))

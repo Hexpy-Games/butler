@@ -20,3 +20,5 @@ CREATE UNIQUE INDEX IF NOT EXISTS wm_attempts_lease ON wm_attempts(task_id) WHER
 CREATE INDEX IF NOT EXISTS wm_attempts_running ON wm_attempts(session_id) WHERE status='running';
 CREATE INDEX IF NOT EXISTS wm_outbox_unpublished ON wm_outbox(published,seq) WHERE published=0;
 CREATE INDEX IF NOT EXISTS wm_cross_db_intents_pending ON wm_cross_db_intents(state,op_id) WHERE state='pending';
+CREATE INDEX IF NOT EXISTS wm_hold_decisions_resolved ON wm_hold_decisions(chain_id,decision) WHERE decision='run_anyway';
+CREATE INDEX IF NOT EXISTS wm_attempts_interrupted ON wm_attempts(session_id) WHERE status='interrupted';
