@@ -1,0 +1,22 @@
+CREATE INDEX IF NOT EXISTS wm_works_scope ON wm_works(scope_kind,scope_ref,visibility,run_state);
+CREATE INDEX IF NOT EXISTS wm_works_plan ON wm_works(plan_id,plan_rank) WHERE visibility='canon';
+CREATE INDEX IF NOT EXISTS wm_works_backlog ON wm_works(scope_ref,plan_rank) WHERE visibility='canon' AND plan_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS wm_works_home ON wm_works(home_session_id) WHERE visibility='canon' AND home_session_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS wm_work_chains_queue ON wm_work_chains(session_id,state,created_at);
+CREATE INDEX IF NOT EXISTS wm_works_chain ON wm_works(chain_id,step_index,stack_position);
+CREATE INDEX IF NOT EXISTS wm_work_edges_successor ON wm_work_edges(succ_work_id);
+CREATE INDEX IF NOT EXISTS wm_work_edges_chain ON wm_work_edges(chain_id,pred_work_id,succ_work_id);
+CREATE INDEX IF NOT EXISTS wm_hold_decisions_pending ON wm_hold_decisions(chain_id) WHERE decision IS NULL;
+CREATE INDEX IF NOT EXISTS wm_plans_project ON wm_plans(project_id,status,due_on);
+CREATE INDEX IF NOT EXISTS wm_tasks_order ON wm_tasks(work_id,task_rank);
+CREATE INDEX IF NOT EXISTS wm_tasks_progress ON wm_tasks(work_id,status);
+CREATE INDEX IF NOT EXISTS wm_task_edges_successor ON wm_task_edges(work_id,succ,pred);
+CREATE INDEX IF NOT EXISTS wm_task_criteria_consumers ON wm_task_criteria(node_id,node_revision,criterion_id);
+CREATE INDEX IF NOT EXISTS wm_spec_nodes_work ON wm_spec_nodes(work_id);
+CREATE INDEX IF NOT EXISTS wm_spec_nodes_parent ON wm_spec_nodes(parent_node_id);
+CREATE INDEX IF NOT EXISTS wm_instructions_pending ON wm_instructions(target_session_id,status,received_seq)
+ WHERE status IN ('accepted','waiting_for_turn','waiting_for_task','pending_safe_point');
+CREATE UNIQUE INDEX IF NOT EXISTS wm_attempts_lease ON wm_attempts(task_id) WHERE status='running';
+CREATE INDEX IF NOT EXISTS wm_attempts_running ON wm_attempts(session_id) WHERE status='running';
+CREATE INDEX IF NOT EXISTS wm_outbox_unpublished ON wm_outbox(published,seq) WHERE published=0;
+CREATE INDEX IF NOT EXISTS wm_cross_db_intents_pending ON wm_cross_db_intents(state,op_id) WHERE state='pending';
