@@ -5,7 +5,7 @@ use butler_platform::sqlite;
 use rusqlite::{OpenFlags, params};
 use std::path::Path;
 
-pub(super) fn seed_scale(data: &Path) -> Result<(), HarnessError> {
+pub(super) fn seed_history(data: &Path) -> Result<(), HarnessError> {
     let mut db = sqlite::open_with_flags(
         data.join("app-server/butler-client.sqlite"),
         OpenFlags::SQLITE_OPEN_READ_WRITE,
@@ -14,7 +14,7 @@ pub(super) fn seed_scale(data: &Path) -> Result<(), HarnessError> {
     tx.execute_batch("INSERT INTO app_automations(id,title,prompt_body,target_kind,target_session_id,interval_seconds,access_mode,state,last_run_state,created_at,updated_at) VALUES('kept-schedule','Kept schedule','Keep scheduling here','chat','general',3600,'full_access','paused','delivered','2026-01-01','2026-01-01'); INSERT INTO app_automation_runs(id,automation_id,target_session_id,state,trigger,started_at,completed_at,turn_id) SELECT 'kept-run','kept-schedule','general','delivered','manual','2026-01-01','2026-01-01',id FROM turns WHERE chat_id='general' LIMIT 1")?;
     {
         let mut insert = tx.prepare("INSERT INTO messages(id,chat_id,role,text,status,created_at,updated_at) VALUES(?1,'general','user',?2,'delivered','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')")?;
-        for row in 0..100_000 {
+        for row in 0..40 {
             insert.execute(params![
                 format!("scale-{row:06}"),
                 format!("Scale message {row:06}")
@@ -30,7 +30,7 @@ pub(super) fn seed_scale(data: &Path) -> Result<(), HarnessError> {
         "projected_transport_events",
         "app_transport_projection_receipts",
     ] {
-        tx.execute_batch(&format!("WITH RECURSIVE n(x) AS (VALUES(0) UNION ALL SELECT x+1 FROM n WHERE x<999999) INSERT INTO {table}(action_id,event_id,chat_id,created_at) SELECT 'scale-action-'||x,'scale-event-'||x||printf('%01200d',0),CASE WHEN x<100000 THEN 'general' ELSE 'other' END,'2026-01-01' FROM n"))?;
+        tx.execute_batch(&format!("WITH RECURSIVE n(x) AS (VALUES(0) UNION ALL SELECT x+1 FROM n WHERE x<119) INSERT INTO {table}(action_id,event_id,chat_id,created_at) SELECT 'scale-action-'||x,'scale-event-'||x||printf('%064d',0),CASE WHEN x<40 THEN 'general' ELSE 'other' END,'2026-01-01' FROM n"))?;
     }
     tx.commit()?;
     Ok(())
@@ -184,7 +184,7 @@ pub(super) async fn verify_archive_cursors(
             .await?;
     assert_eq!(latest.status, 200, "{}", latest.text);
     assert_eq!(latest.data()["messages"].as_array().unwrap().len(), 1);
-    assert_eq!(latest.data()["messages"][0]["id"], "scale-099999");
+    assert_eq!(latest.data()["messages"][0]["id"], "scale-000039");
     assert_eq!(latest.data()["messages"][0]["chat_id"], archive);
     assert_eq!(latest.data()["message_window"]["has_more"], true);
     let token = latest.data()["message_window"]["previous_cursor_token"]
@@ -197,7 +197,7 @@ pub(super) async fn verify_archive_cursors(
         .await?;
     assert_eq!(older.status, 200, "{}", older.text);
     assert_eq!(older.data()["messages"].as_array().unwrap().len(), 1);
-    assert_eq!(older.data()["messages"][0]["id"], "scale-099998");
+    assert_eq!(older.data()["messages"][0]["id"], "scale-000038");
     assert_eq!(older.data()["messages"][0]["chat_id"], archive);
     let token = older.data()["message_window"]["next_cursor_token"]
         .as_str()

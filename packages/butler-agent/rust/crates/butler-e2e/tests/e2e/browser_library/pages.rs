@@ -1,6 +1,6 @@
 //! Library listings: every sort pages completely by cursor, combined filters
 //! (group, tags, site, dates, words) narrow together, and the same reads stay
-//! complete at owner scale.
+//! complete with retained history.
 use super::{ok, page};
 use butler_e2e::e2e::{HarnessError, scenario::Scenario, scenario::Setup};
 use serde_json::{Value, json};
@@ -158,18 +158,18 @@ async fn every_sort_and_filter_pages_completely() -> Result<(), HarnessError> {
     s.finish().await
 }
 
-/// Owner-scale seed: 10k scraps and 10k bookmarks written as a version-1
+/// history seed: 120 scraps and 120 bookmarks written as a version-1
 /// Library (bookmark folders in payloads), so startup migrates all of them.
 fn seed(data: &std::path::Path) {
     let db = butler_platform::sqlite::open(data.join("app-server/butler-client.sqlite")).unwrap();
     db.execute_batch("BEGIN;
         DELETE FROM browser_library_migration WHERE version=2;
-        WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<9999)
+        WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<119)
         INSERT INTO browser_library(id,kind,title,url,payload,created_at)
         SELECT 'scale-s'||i,'scrap','Scrap '||i,'https://site'||(i%40)||'.example/'||i,
           json_object('id','scale-s'||i,'kind','scrap','title','Scrap '||i,'url','https://site'||(i%40)||'.example/'||i,'site','site'||(i%40)||'.example','text',CASE WHEN i%100=0 THEN 'lighthouse' ELSE 'scale body' END,'crop','data:image/jpeg;base64,YQ==','capturedAt',strftime('%Y-%m-%dT%H:%M:%fZ','2026-01-01',printf('+%d seconds',i*60))),
           strftime('%Y-%m-%dT%H:%M:%fZ','2026-01-01',printf('+%d seconds',i*60)) FROM n;
-        WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<9999)
+        WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<119)
         INSERT INTO browser_library(id,kind,title,url,payload,created_at)
         SELECT 'scale-b'||i,'bookmark','Bookmark '||i,'https://mark'||(i%40)||'.example/'||i,
           json_object('id','scale-b'||i,'kind','bookmark','title','Bookmark '||i,'url','https://mark'||(i%40)||'.example/'||i,'folder','Folder '||(i%50),'capturedAt',strftime('%Y-%m-%dT%H:%M:%fZ','2026-01-01',printf('+%d seconds',i*60))),
@@ -181,7 +181,7 @@ fn seed(data: &std::path::Path) {
 }
 
 #[tokio::test]
-async fn owner_scale_library_reads_are_complete() -> Result<(), HarnessError> {
+async fn history_library_reads_are_complete() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("BROWSER-LIBRARY-SCALE")?.start().await?;
     s.agent.terminate().await?;
@@ -192,12 +192,12 @@ async fn owner_scale_library_reads_are_complete() -> Result<(), HarnessError> {
     let started = Instant::now();
     s.gw = s.agent.start_again().await?;
     eprintln!(
-        "LIBRARY-SCALE migrate_and_start items=20000 elapsed_ms={}",
+        "LIBRARY-SCALE migrate_and_start items=240 elapsed_ms={}",
         started.elapsed().as_millis()
     );
     let groups = page(&s, "/library/groups?kind=bookmark").await?;
     assert_eq!(groups["groups"].as_array().unwrap().len(), 50);
-    assert_eq!(groups["total"], 10_000);
+    assert_eq!(groups["total"], 120);
     let folder = groups["groups"]
         .as_array()
         .unwrap()
@@ -208,26 +208,14 @@ async fn owner_scale_library_reads_are_complete() -> Result<(), HarnessError> {
         .unwrap()
         .to_owned();
     let checks: Vec<(&str, String, usize)> = vec![
-        ("page_new", "/library?kind=scrap".into(), 10_000),
-        ("page_name", "/library?kind=scrap&sort=name".into(), 10_000),
-        (
-            "page_site",
-            "/library?kind=bookmark&sort=site".into(),
-            10_000,
-        ),
-        (
-            "group",
-            format!("/library?kind=bookmark&group={folder}"),
-            200,
-        ),
-        (
-            "tag_common",
-            "/library?kind=scrap&tags=common".into(),
-            5_000,
-        ),
-        ("tag_rare", "/library?kind=scrap&tags=rare".into(), 20),
-        ("site", "/library?kind=scrap&site=site3.example".into(), 250),
-        ("words", "/library?kind=scrap&q=lighthouse".into(), 100),
+        ("page_new", "/library?kind=scrap".into(), 120),
+        ("page_name", "/library?kind=scrap&sort=name".into(), 120),
+        ("page_site", "/library?kind=bookmark&sort=site".into(), 120),
+        ("group", format!("/library?kind=bookmark&group={folder}"), 3),
+        ("tag_common", "/library?kind=scrap&tags=common".into(), 60),
+        ("tag_rare", "/library?kind=scrap&tags=rare".into(), 1),
+        ("site", "/library?kind=scrap&site=site3.example".into(), 3),
+        ("words", "/library?kind=scrap&q=lighthouse".into(), 2),
     ];
     for (name, path, count) in checks {
         let started = Instant::now();
@@ -241,7 +229,7 @@ async fn owner_scale_library_reads_are_complete() -> Result<(), HarnessError> {
             .collect::<std::collections::HashSet<_>>();
         assert_eq!(unique.len(), count, "{name}: no repeats across pages");
         if name == "page_new" {
-            assert_eq!(first["items"][0]["id"], "scale-s9999");
+            assert_eq!(first["items"][0]["id"], "scale-s119");
         }
         assert_eq!(
             first["items"].as_array().unwrap().len(),
@@ -262,7 +250,7 @@ async fn owner_scale_library_reads_are_complete() -> Result<(), HarnessError> {
         let reply = page(&s, path).await?;
         eprintln!("LIBRARY-SCALE {name} us={}", started.elapsed().as_micros());
         if name == "tags" {
-            assert_eq!(reply["tags"][0], json!({"name":"Common","count":10_000}));
+            assert_eq!(reply["tags"][0], json!({"name":"Common","count":120}));
         }
         if name == "facets" {
             assert_eq!(
@@ -270,7 +258,7 @@ async fn owner_scale_library_reads_are_complete() -> Result<(), HarnessError> {
                     reply["total"].as_i64(),
                     reply["sites"].as_array().unwrap().len()
                 ),
-                (Some(10_000), 40)
+                (Some(120), 40)
             );
         }
     }

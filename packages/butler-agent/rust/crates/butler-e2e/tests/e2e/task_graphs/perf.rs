@@ -1,15 +1,11 @@
-//! PERF-TASK-GRAPH: full HTTP responses at owner scale, p99 <50ms.
+//! PERF-TASK-GRAPH: full HTTP responses with retained history, p99 <50ms.
 use super::super::data_perf::wal;
 use super::*;
 use std::time::{Duration, Instant};
 
 #[tokio::test]
-async fn perf_task_graph_endpoints_owner_scale() -> Result<(), HarnessError> {
+async fn perf_task_graph_endpoints_complete_and_current() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    butler_e2e::skip_unless!(
-        std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("perf"),
-        "requires perf tier and release agent"
-    );
     let s = Setup::new("PERF-TASK-GRAPH")?.start().await?;
     let created = s.gw.post("/sessions", json!({"kind":"chat"})).await?;
     let chat = created.data()["session"]["id"].as_str().unwrap().to_owned();
@@ -19,9 +15,9 @@ async fn perf_task_graph_endpoints_owner_scale() -> Result<(), HarnessError> {
         .to_owned();
     let ids = Box::pin(fixture::seed(&s.sandbox.data, &hint, 6)).await?;
     let graph_id = &ids[0];
-    let bytes = Box::pin(super::scale::seed(&s.sandbox.data)).await?;
+    let bytes = Box::pin(super::history::seed(&s.sandbox.data)).await?;
     tokio::time::sleep(Duration::from_secs(10)).await;
-    super::scale::assert_indexes(&s.sandbox.data)?;
+    super::history::assert_indexes(&s.sandbox.data)?;
     let pins = [
         "agent-runtime/btcc.sqlite",
         "app-server/butler-client.sqlite",
@@ -52,7 +48,7 @@ async fn perf_task_graph_endpoints_owner_scale() -> Result<(), HarnessError> {
         );
     }
     eprintln!("PERF-TASK-GRAPH endpoint+idle60s wal_bytes=0 commits=0");
-    super::scale::assert_indexes(&s.sandbox.data)?;
+    super::history::assert_indexes(&s.sandbox.data)?;
     drop(pins);
     s.finish().await
 }

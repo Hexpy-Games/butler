@@ -99,7 +99,7 @@ async function capture(page: Page, name: string) {
 
 async function reset(page: Page, language: "ko" | "en", theme: "light" | "dark") {
   stub.state.oauthStatus = "pending"; stub.state.holdCommit = false; stub.state.failCommit = false; stub.state.local = false;
-  stub.state.importEmpty = false; stub.state.readiness = "ready"; stub.state.label = "yeonwoo@example.com"; stub.state.memoryModel = "unset";
+  stub.state.importEmpty = false; stub.state.readiness = "ready"; stub.state.label = "person@example.test"; stub.state.memoryModel = "unset";
   await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language, appearance_theme: theme, onboarding: fresh }) });
   await page.reload();
   await page.locator("#first-run-language").selectOption(language);

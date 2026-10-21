@@ -2,7 +2,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test assertions")]
 use super::storage_correction_seed as seed;
 mod matrix;
-mod scale;
+mod startup;
 mod stub;
 use super::data_perf::wal;
 use butler_e2e::e2e::{
@@ -45,9 +45,8 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
     s.agent.kill9()?;
     let active = seed::admitted(&path, &id)?;
     assert_eq!(active.len(), 3);
-    let turn = id.clone();
     let snapshot = offline(&path, move |path| {
-        seed::seed(path, &seed::Profile::small(), &turn)?;
+        seed::seed(path, &seed::Profile::small())?;
         seed::snapshot(path)
     })
     .await?;

@@ -102,7 +102,7 @@ async fn session_effects_without_plan_pass_scan_and_restart() -> Result<(), Harn
     assert!(!path.with_extension("sqlite.corrupt").exists());
     assert!(!path.with_extension("sqlite.findings").exists());
     s.agent.terminate().await?;
-    // The owner's legacy code-only verdict must also clear.
+    // The legacy code-only verdict must also clear.
     std::fs::write(
         path.with_extension("sqlite.corrupt"),
         "agent_btcc_migration_reference_check_failed",

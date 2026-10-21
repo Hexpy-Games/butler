@@ -5,7 +5,7 @@ use std::time::Instant;
 
 fn seed(data: &std::path::Path) -> rusqlite::Result<()> {
     let db = sqlite::open(data.join("app-server/butler-client.sqlite")).unwrap();
-    super::super::app_storage_scale::seed::seed_scale(&db, 1, 1, 1);
+    super::super::app_retention::seed::seed_scale(&db, 1, 1, 1);
     db.execute_batch("BEGIN;
         DELETE FROM browser_library_migration WHERE version=4;
         INSERT INTO messages(id,chat_id,role,text,status,created_at,updated_at) VALUES('legacy-message','general','assistant','Result','delivered','2026-01-01','2026-01-01');

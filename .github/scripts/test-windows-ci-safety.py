@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Owner Windows job safety, including imported SDK link creation."""
+"""Self-hosted Windows job safety, including imported SDK link creation."""
 import contextlib
 import hashlib
 import importlib.util
@@ -50,7 +50,7 @@ class WindowsSafety(command_coverage.WindowsCommandCoverage):
         self.assertNotIn('if:', matrix)  # Every selected stub keeps its native proof.
         self.assertIn('run: ../../../deploy/windows-command-matrix.ps1', matrix)
         source = (repository / 'deploy/windows-command-matrix.ps1').read_text()
-        self.assertIn("$env:BUTLER_E2E_PERF = '1'", source)  # Owner-PC matrix enforces the budgets.
+        self.assertIn("$env:BUTLER_E2E_PERF = '1'", source)  # Self-hosted Windows runner matrix enforces the budgets.
         hosted = (repository / 'deploy/windows-e2e-artifacts.ps1').read_text()
         self.assertNotIn("BUTLER_E2E_PERF = '1'", hosted)  # Hosted run records timings only.
         self.assertIn("$env:BUTLER_E2E_PERF = '0'", hosted)
@@ -115,7 +115,7 @@ class WindowsSafety(command_coverage.WindowsCommandCoverage):
                 self.assertIn('Last 300 lines:', result.stdout)
 
     # test-category: security
-    def test_owner_jobs_reject_github_cli_requirement(self):
+    def test_self_hosted_jobs_reject_github_cli_requirement(self):
         for source in ['gh api repos/owner/repo', "cache.output('gh', 'api', endpoint)",
                        "subprocess.run(['gh', 'api', endpoint])"]:
             self.assertTrue(any('GitHub CLI' in hazard for _, hazard in windows_safety.hazards(source)))
@@ -123,7 +123,7 @@ class WindowsSafety(command_coverage.WindowsCommandCoverage):
         self.assertEqual(workflow.count('uses: ./.github/actions/publish-windows-target\n        continue-on-error: true'), 1)
         preview = (ROOT.parent / 'actions/windows-preview-build/action.yml').read_text()
         self.assertIn('uses: ./.github/actions/publish-windows-target\n      continue-on-error: true', preview)
-        setup = (ROOT.parent / 'actions/windows-owner-setup/action.yml').read_text()
+        setup = (ROOT.parent / 'actions/windows-runner-setup/action.yml').read_text()
         for entry in ['GIT_CONFIG_COUNT=1', 'GIT_CONFIG_KEY_0=safe.directory', 'GIT_CONFIG_VALUE_0=$workspace']:
             self.assertIn(entry, setup)
         self.assertIn("$env:GITHUB_WORKSPACE.Replace('\\', '/')", setup)
@@ -133,7 +133,7 @@ class WindowsSafety(command_coverage.WindowsCommandCoverage):
     # test-category: security
     def test_recursive_provider_operations_are_rejected(self):
         for command in ['Copy-Item $failures $destination -Recurse',
-                        'Remove-Item -Recurse -Force $env:OWNER_JOB_ROOT',
+                        'Remove-Item -Recurse -Force $env:RUNNER_JOB_ROOT',
                         'Remove-Item $profile -Force -Recurse',
                         'Copy-Item $failures `\n -Recurse']:
             self.assertTrue(windows_safety.hazards(command), command)
@@ -181,11 +181,11 @@ class WindowsSafety(command_coverage.WindowsCommandCoverage):
             self.assertEqual(windows_safety.audit(root)[1], [])
 
     # test-category: security
-    def test_owner_jobs_and_reachable_actions_have_no_shared_machine_hazards(self):
+    def test_self_hosted_jobs_and_reachable_actions_have_no_shared_machine_hazards(self):
         jobs, findings = windows_safety.audit(ROOT.parents[1])
         self.assertGreaterEqual(len(jobs), 6, jobs)
         self.assertEqual(findings, [], '\n'.join(findings))
-        print(f'Windows concurrency audit: {len(jobs)} owner jobs, no hazards')
+        print(f'Windows concurrency audit: {len(jobs)} self-hosted jobs, no hazards')
 
     # test-category: security
     def test_windows_consumers_cannot_select_sdk_without_toolset_key(self):
@@ -226,32 +226,32 @@ class WindowsSafety(command_coverage.WindowsCommandCoverage):
         self.assertLess(initialization, setup.index('cargo-artifact-cache.py'))
 
     # test-category: security
-    def test_owner_native_publisher_uses_powershell_not_runner_bash_alias(self):
+    def test_self_hosted_native_publisher_uses_powershell_not_runner_bash_alias(self):
         source = (ROOT.parents[1] / '.github/workflows/native-deps.yml').read_text()
-        owner_job = source.split('  windows-owner:', 1)[1]
-        self.assertNotIn('setup-python', owner_job)
-        self.assertNotIn('rustup-init', owner_job)
-        self.assertNotIn('toolchain install', owner_job)
-        self.assertIn("sys.version_info[:2] != (3, 12)", owner_job)
-        self.assertIn("RUSTUP_AUTO_INSTALL: '0'", owner_job)
-        self.assertIn('no installation attempted', owner_job)
-        self.assertIn('Verify existing owner toolchain', owner_job)
-        self.assertLess(owner_job.index('uses: ./.github/actions/windows-owner-discovery'),
-                        owner_job.index('name: Verify existing owner toolchain'))
-        owner = source.split('name: Build and publish owner-toolset SDK', 1)[1]
+        runner_job = source.split('  windows-self-hosted:', 1)[1]
+        self.assertNotIn('setup-python', runner_job)
+        self.assertNotIn('rustup-init', runner_job)
+        self.assertNotIn('toolchain install', runner_job)
+        self.assertIn("sys.version_info[:2] != (3, 12)", runner_job)
+        self.assertIn("RUSTUP_AUTO_INSTALL: '0'", runner_job)
+        self.assertIn('no installation attempted', runner_job)
+        self.assertIn('Verify existing runner toolchain', runner_job)
+        self.assertLess(runner_job.index('uses: ./.github/actions/windows-runner-discovery'),
+                        runner_job.index('name: Verify existing runner toolchain'))
+        owner = source.split('name: Build and publish runner-toolset SDK', 1)[1]
         self.assertIn('native-deps $env:NATIVE_TARGET', owner)
         self.assertIn('if ($LASTEXITCODE -ne 0)', owner)
         hosted = source.split('name: Build once and publish verified SDK', 1)[1].split(
-            'name: Build and publish owner-toolset SDK', 1)[0]
+            'name: Build and publish runner-toolset SDK', 1)[0]
         self.assertIn('shell: bash', hosted)
 
     # test-category: security
-    def test_owner_portable_oras_is_reachable_without_persistent_host_changes(self):
+    def test_self_hosted_portable_oras_is_reachable_without_persistent_host_changes(self):
         repository = ROOT.parents[1]
         publisher = (repository / '.github/workflows/native-deps.yml').read_text().split(
-            '  windows-owner:', 1)[1]
-        consumer = (repository / '.github/actions/windows-owner-setup/action.yml').read_text()
-        for source, operation in [(publisher, 'name: Build and publish owner-toolset SDK'),
+            '  windows-self-hosted:', 1)[1]
+        consumer = (repository / '.github/actions/windows-runner-setup/action.yml').read_text()
+        for source, operation in [(publisher, 'name: Build and publish runner-toolset SDK'),
                                   (consumer, 'name: Verify or prepare pinned static ORT')]:
             self.assertNotIn("'oras'", source)
             self.assertLess(source.index('uses: ./.github/actions/setup-oras'), source.index(operation))
@@ -259,7 +259,7 @@ class WindowsSafety(command_coverage.WindowsCommandCoverage):
             root = Path(temporary)
             workflow = root / '.github/workflows/portable.yml'
             workflow.parent.mkdir(parents=True)
-            workflow.write_text('jobs:\n  build:\n    runs-on: [self-hosted, butler-win]\n'
+            workflow.write_text('jobs:\n  build:\n    runs-on: [self-hosted, windows-fixture]\n'
                                 '    steps:\n      - uses: ./.github/actions/setup-oras\n')
             action = root / '.github/actions/setup-oras/action.yml'
             action.parent.mkdir(parents=True)
@@ -295,7 +295,7 @@ class WindowsSafety(command_coverage.WindowsCommandCoverage):
             (root / '.github/workflows').mkdir(parents=True)
             (root / '.github/actions/setup').mkdir(parents=True)
             workflow = root / '.github/workflows/fixture.yml'
-            workflow.write_text('jobs:\n  build:\n    runs-on: [self-hosted, butler-win]\n'
+            workflow.write_text('jobs:\n  build:\n    runs-on: [self-hosted, windows-fixture]\n'
                                 '    steps:\n      - uses: ./.github/actions/setup\n')
             action = root / '.github/actions/setup/action.yml'
             action.write_text('runs:\n  using: composite\n  steps:\n    - run: ../../../deploy/probe.ps1\n')
@@ -313,12 +313,12 @@ class WindowsSafety(command_coverage.WindowsCommandCoverage):
             probe.write_text('$root = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())\n'
                              '$env:BUTLER_APP_SERVER_PORT = $port\nStop-Process -Id $child.Id')
             self.assertEqual(windows_safety.audit(root)[1], [])
-            workflow.write_text(workflow.read_text().replace('[self-hosted, butler-win]', 'windows-latest'))
+            workflow.write_text(workflow.read_text().replace('[self-hosted, windows-fixture]', 'windows-latest'))
             probe.write_text('Stop-Process -Name node')
             self.assertEqual(windows_safety.audit(root)[0], [])
 
     # test-category: security
-    def test_owner_action_allowlist_and_installer_commands(self):
+    def test_self_hosted_action_allowlist_and_installer_commands(self):
         forbidden = ['uses: ./.github/actions/release-python', 'uses: actions/setup-python@v5', 'uses: actions/setup-node@v4',
                      'uses: vendor/arbitrary@v1', 'uses: actions/checkout-extra@v4',
                      'uses: ./.github/actions/../untrusted', 'choco install python',
@@ -346,7 +346,7 @@ class WindowsSafety(command_coverage.WindowsCommandCoverage):
             self.assertTrue(windows_safety.hazards(unsafe), unsafe)
 
     # test-category: security
-    def test_hosted_guard_requires_literal_owner_binding(self):
+    def test_hosted_guard_requires_literal_runner_binding(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             workflow = root / '.github/workflows/test.yml'
@@ -355,14 +355,14 @@ class WindowsSafety(command_coverage.WindowsCommandCoverage):
             action.parent.mkdir(parents=True)
             action.write_text("runs:\n  using: composite\n  steps:\n"
                               "    - uses: actions/setup-node@v4\n"
-                              "      if: inputs.owner-runner != 'true'\n")
-            job = ('jobs:\n  build:\n    runs-on: [self-hosted, butler-win]\n'
+                              "      if: inputs.self-hosted-runner != 'true'\n")
+            job = ('jobs:\n  build:\n    runs-on: [self-hosted, windows-fixture]\n'
                    '    steps:\n      - uses: ./.github/actions/build\n')
             workflow.write_text(job)
             self.assertTrue(windows_safety.audit(root)[1])
-            workflow.write_text(job + "        with:\n          owner-runner: 'true'\n")
+            workflow.write_text(job + "        with:\n          self-hosted-runner: 'true'\n")
             self.assertEqual(windows_safety.audit(root)[1], [])
-            action.write_text(action.read_text().replace("inputs.owner-runner != 'true'", 'unknown.condition'))
+            action.write_text(action.read_text().replace("inputs.self-hosted-runner != 'true'", 'unknown.condition'))
             self.assertTrue(windows_safety.audit(root)[1])
 
     # test-category: security
@@ -419,7 +419,7 @@ class WindowsSafety(command_coverage.WindowsCommandCoverage):
             action = root / '.github/actions/setup/action.yml'
             action.parent.mkdir(parents=True)
             workflow = root / '.github/workflows/fixture.yml'
-            job = ('jobs:\n  build:\n    runs-on: [self-hosted, butler-win]\n'
+            job = ('jobs:\n  build:\n    runs-on: [self-hosted, windows-fixture]\n'
                    '    steps:\n      - uses: ./.github/actions/setup\n')
             for unsafe in ['shell: bash', 'shell: pwsh', 'shell: powershell', 'uses: oras-project/setup-oras@v1']:
                 action.write_text('runs:\n  using: composite\n  steps:\n    - ' + unsafe + '\n')
@@ -466,7 +466,7 @@ class WindowsSafety(command_coverage.WindowsCommandCoverage):
             root = Path(temporary)
             workflow = root / '.github/workflows/fixture.yml'
             workflow.parent.mkdir(parents=True)
-            workflow.write_text('jobs:\n  build:\n    runs-on: [self-hosted, butler-win]\n'
+            workflow.write_text('jobs:\n  build:\n    runs-on: [self-hosted, windows-fixture]\n'
                                 '    steps:\n      - run: python deploy/entry.py\n')
             scripts = root / 'deploy'
             scripts.mkdir()

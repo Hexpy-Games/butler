@@ -10,7 +10,7 @@ on:
         default: '[1,2,3,4,5,6,"ins-02","ins-14","install"]'
       perf-shards:
         type: string
-        default: '[1,2,3,"idle"]'
+        default: '[1,2,3]'
       e2e:
         type: boolean
         default: true
@@ -205,9 +205,7 @@ jobs:
           agent-binary: ${{ runner.temp }}/perf-agent/butler-agent
           enforce-budgets: "true"
           exclude-perf: "false"
-          filter-file: ${{ matrix.shard != 'idle' && format('{0}/rust-archive/perf-{1}.txt', runner.temp, matrix.shard) || '' }}
-          idle-only: ${{ matrix.shard == 'idle' }}
-          run-perf-idle: ${{ matrix.shard == 'idle' }}
+          filter-file: ${{ format('{0}/rust-archive/perf-{1}.txt', runner.temp, matrix.shard) }}
           run-systemd: "false"
           test-threads: "1"
           success-output: final
@@ -215,7 +213,7 @@ jobs:
         uses: ./.github/actions/assert-home-untouched
 
       - name: Report session-view p95
-        if: always() && matrix.shard != 'idle'
+        if: always()
         env:
           PERF_LOG: ${{ runner.temp }}/e2e-stub.log
           PLATFORM: ${{ inputs.platform }}

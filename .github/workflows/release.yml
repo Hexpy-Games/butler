@@ -90,13 +90,13 @@ jobs:
       CARGO_TARGET_DIR: ${{ github.workspace }}/target/windows-release
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/windows-owner-setup
+      - uses: ./.github/actions/windows-runner-setup
         if: inputs.runner != 'hosted'
         with:
           workflow: windows-agent-v1
       - uses: ./.github/actions/build-windows-agent
         with:
-          owner-runner: ${{ inputs.runner != 'hosted' }}
+          self-hosted-runner: ${{ inputs.runner != 'hosted' }}
           profile: release
           cache-key: package-windows-x64
           artifact-base-url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
@@ -121,10 +121,10 @@ jobs:
           path: ${{ runner.temp }}/windows-basic-capabilities.log
           if-no-files-found: warn
           retention-days: 14
-      - name: Check owner registration and remove job profile
+      - name: Check runner registration and remove job profile
         if: always() && inputs.runner != 'hosted'
         shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
-        run: ./deploy/windows-owner-cleanup.ps1
+        run: ./deploy/windows-self-hosted-cleanup.ps1
 
   agent-windows:
     name: Verify unsigned Windows x64 Agent preview
@@ -172,22 +172,22 @@ jobs:
         with:
           name: agent-windows-x64
           path: dist/release/agent
-      - uses: ./.github/actions/windows-owner-setup
+      - uses: ./.github/actions/windows-runner-setup
         if: inputs.runner != 'hosted'
         with:
           workflow: win-installer-release
       - uses: ./.github/actions/package-windows-app
         with:
-          owner-runner: ${{ inputs.runner != 'hosted' }}
+          self-hosted-runner: ${{ inputs.runner != 'hosted' }}
       - uses: actions/upload-artifact@v4
         with:
           name: app-windows-x64
           path: dist/release/app-windows/*
           if-no-files-found: error
-      - name: Verify owner registration and clean job profile
+      - name: Verify runner registration and clean job profile
         if: always() && inputs.runner != 'hosted'
         shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
-        run: ./deploy/windows-owner-cleanup.ps1
+        run: ./deploy/windows-self-hosted-cleanup.ps1
 
   # Runs after the macOS job, whose single-platform manifests it replaces with
   # the merged ones (the update manifest lists one artifact per platform).

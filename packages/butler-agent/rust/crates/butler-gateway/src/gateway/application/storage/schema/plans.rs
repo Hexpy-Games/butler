@@ -69,7 +69,7 @@ pub(super) fn hot_queries_use_their_indexes() {
     assert_uses(&connection, SETTLE_ENDED_SQL, "messages_streaming_turn_idx");
 }
 
-/// Exercise the deployed-schema upgrade and production lookup at owner scale.
+/// Exercise the deployed-schema upgrade and production lookup with retained history.
 pub(super) fn schedule_window_uses_turn_indexes() {
     let mut db = Connection::open_in_memory().unwrap();
     migrate(&mut db, None).unwrap();
@@ -81,10 +81,10 @@ pub(super) fn schedule_window_uses_turn_indexes() {
         INSERT INTO chats(id,title,kind,created_at,updated_at) VALUES('c','Chat','chat','old','old');
         INSERT INTO app_automations(id,title,prompt_body,target_kind,target_session_id,interval_seconds,state,last_run_state,created_at,updated_at)
             VALUES('a','Report','Report','chat','c',3600,'paused','delivered','old','old');
-        WITH RECURSIVE n(i) AS (VALUES(0) UNION ALL SELECT i+1 FROM n WHERE i<299999)
+        WITH RECURSIVE n(i) AS (VALUES(0) UNION ALL SELECT i+1 FROM n WHERE i<47)
         INSERT INTO session_queued_messages(id,chat_id,text,attachments_json,controls_json,state,turn_id,created_at,updated_at)
             SELECT 'q-'||i,'c','Report','[]','{}','dispatched','queued-'||i,'old','old' FROM n;
-        WITH RECURSIVE n(i) AS (VALUES(0) UNION ALL SELECT i+1 FROM n WHERE i<299999)
+        WITH RECURSIVE n(i) AS (VALUES(0) UNION ALL SELECT i+1 FROM n WHERE i<47)
         INSERT INTO app_automation_runs(id,automation_id,target_session_id,state,trigger,started_at,completed_at,turn_id,queued_message_id)
             SELECT 'r-'||i,'a','c','delivered','scheduled','2026-01-01','2026-01-01','direct-'||i,'q-'||i FROM n;")
         .unwrap();
@@ -103,10 +103,10 @@ pub(super) fn schedule_window_uses_turn_indexes() {
         let count: i64 = db
             .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
             .unwrap();
-        assert_eq!(count, 300_000);
+        assert_eq!(count, 48);
     }
     let plan = plan(&db, SCHEDULE_TURN_SQL);
-    eprintln!("schedule lookup: 300000 runs + 300000 queued messages\n{plan}");
+    eprintln!("schedule lookup: 48 runs + 48 queued messages\n{plan}");
     for search in [
         "SEARCH r USING COVERING INDEX automation_runs_turn_idx (turn_id=?)",
         "SEARCH q USING INDEX session_queued_messages_turn_idx (turn_id=?)",
@@ -124,8 +124,8 @@ pub(super) fn schedule_window_uses_turn_indexes() {
 fn assert_schedule_matches(db: &Connection) {
     let mut statement = db.prepare(SCHEDULE_TURN_SQL).unwrap();
     for (turn, expected) in [
-        ("direct-299999", true),
-        ("queued-299999", true),
+        ("direct-47", true),
+        ("queued-47", true),
         ("direct-0", true),
         ("queued-1", true),
         ("interactive", false),

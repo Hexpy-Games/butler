@@ -152,7 +152,7 @@ fn assert_decision(
     action: &str,
     turn: &str,
 ) -> Result<(), HarnessError> {
-    let db = Connection::open(crate::btcc_scale::path(&s.sandbox.data))?;
+    let db = Connection::open(crate::terminal_history::path(&s.sandbox.data))?;
     let (decision, message): (String, String) = db.query_row(
         "SELECT a.decision,t.original_message FROM btcc_authority_requests a JOIN btcc_turns t ON t.turn_id=a.source_turn_id WHERE a.request_ref=?1 AND t.turn_id=?2",
         [reference, turn], |row| Ok((row.get(0)?, row.get(1)?)),

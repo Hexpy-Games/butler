@@ -1,5 +1,5 @@
 //! Deadline expiry must discard a sent embed without discarding its loaded worker.
-use super::{ASK, assert_saved_instruction, batch, memory_stubs, recall_tool_ms, scale};
+use super::{ASK, assert_saved_instruction, batch, memory_stubs, recall_tool_ms, restart};
 use butler_e2e::e2e::HarnessError;
 use butler_platform::process_control::usage;
 
@@ -68,7 +68,7 @@ async fn expired_embed_after_load_keeps_one_warm_worker() -> Result<(), HarnessE
     memory_stubs::vectors_complete(&s.sandbox.data, 4).await?;
     assert_eq!(usage::embedding_children(pid)?, held);
     let warm = batch::recall(&s, "general", ASK).await?;
-    scale::assert_complete(&warm, &code, 4);
+    restart::assert_complete(&warm, &code, 4);
     assert_eq!(usage::embedding_children(pid)?, held);
     assert_eq!(
         counts(&s.agent.current_logs().await?),

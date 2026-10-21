@@ -68,7 +68,7 @@ const FIRST_UNSETTLED_SQL: &str = concat!(
 );
 
 /// Bound predicate evaluation even when almost every turn is already settled.
-/// SQL LIMIT on matching rows alone can scan the entire owner-scale table.
+/// SQL LIMIT on matching rows alone can scan the entire history table.
 fn page_end(db: &Connection, after: i64) -> Result<Option<i64>, AppStorageError> {
     db.query_row_cached(
         "SELECT rowid FROM turns WHERE rowid>?1 ORDER BY rowid LIMIT 1 OFFSET ?2",

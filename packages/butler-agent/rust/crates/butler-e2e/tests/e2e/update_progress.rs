@@ -6,8 +6,8 @@ use sha2::{Digest, Sha256};
 use std::time::{Duration, Instant};
 #[path = "update_progress/checks.rs"]
 mod checks;
-#[path = "update_progress/scale.rs"]
-pub(crate) mod scale;
+#[path = "update_progress/history.rs"]
+pub(crate) mod history;
 
 const BYTES: usize = 131_072;
 const WAIT: Duration = Duration::from_secs(10);
@@ -40,7 +40,7 @@ async fn update_progress_bytes_unknown_length_failure_cancel_and_retry() -> Resu
         .env("BUTLER_APP_UPDATE_MANIFEST", manifest.to_string_lossy())
         .start()
         .await?;
-    let seed_cursor = scale::seed(&s.sandbox.data).await?;
+    let seed_cursor = history::seed(&s.sandbox.data).await?;
     for (name, hash, terminal) in [
         ("known", digest.as_str(), "ready"),
         ("unknown", digest.as_str(), "ready"),

@@ -1,10 +1,10 @@
 name: Package unsigned Windows App
 description: Consume the Windows Agent archive and emit Squirrel and portable artifacts
 inputs:
-  owner-runner:
+  self-hosted-runner:
     required: false
     default: "false"
-    description: Use installed build tools without changing the owner host
+    description: Use installed build tools without changing the runner host
   version:
     required: false
     default: ""
@@ -13,9 +13,9 @@ runs:
   using: composite
   steps:
     - uses: oven-sh/setup-bun@v2
-      if: inputs.owner-runner != 'true'
+      if: inputs.self-hosted-runner != 'true'
     - uses: actions/setup-node@v4
-      if: inputs.owner-runner != 'true'
+      if: inputs.self-hosted-runner != 'true'
       with:
         node-version: 24
     - name: Package the exact App and bundled Agent version
@@ -23,7 +23,7 @@ runs:
       run: |
         $ErrorActionPreference = 'Stop'
         if ('${{ inputs.version }}') { $env:GITHUB_REF_NAME = 'v${{ inputs.version }}' }
-        $profileRoot = if ($env:OWNER_JOB_ROOT) { $env:OWNER_JOB_ROOT } else { $env:RUNNER_TEMP }
+        $profileRoot = if ($env:RUNNER_JOB_ROOT) { $env:RUNNER_JOB_ROOT } else { $env:RUNNER_TEMP }
         $profile = Join-Path $profileRoot ([guid]::NewGuid())
         New-Item -ItemType Directory $profile | Out-Null
         $env:HOME = Join-Path $profile 'home'

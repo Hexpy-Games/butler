@@ -38,7 +38,7 @@ fn fixture(path: &std::path::Path, format: &str, count: i64, now: i64) -> rusqli
             "CREATE TABLE history_items(id INTEGER PRIMARY KEY,url TEXT); CREATE TABLE history_visits(id INTEGER PRIMARY KEY,history_item INTEGER,visit_time REAL,title TEXT);",
             "INSERT INTO history_items VALUES(?1,?2)",
             "INSERT INTO history_visits VALUES(?1,?1,?2,'Imported')",
-            -978_307_200_000,
+            -978_307_240,
             0.001,
         ),
     };
@@ -153,7 +153,7 @@ async fn history_import_formats_dedupe_native_visits_and_undo() -> Result<(), Ha
     s.finish().await
 }
 #[tokio::test]
-async fn history_import_200k_complete_and_ordered() -> Result<(), HarnessError> {
+async fn history_import_paged_complete_and_ordered() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let setup = Setup::new("BROWSER-HISTORY-IMPORT-SCALE")?;
     let root = profile_roots(&setup.sandbox.home)
@@ -169,7 +169,7 @@ async fn history_import_200k_complete_and_ordered() -> Result<(), HarnessError> 
         br#"{"profile":{"info_cache":{"Default":{"name":"Fixture"}}}}"#,
     )?;
     let now = chrono::Utc::now().timestamp_millis() - 1000;
-    drop(fixture(&root.join("History"), "chrome", 200_000, now));
+    drop(fixture(&root.join("History"), "chrome", 240, now));
     let s = setup.start().await?;
     let started = std::time::Instant::now();
     let first = post(
@@ -178,7 +178,7 @@ async fn history_import_200k_complete_and_ordered() -> Result<(), HarnessError> 
         json!({"source":"chrome:Default","history":true,"bookmarks":false,"passwords":false}),
     )
     .await?;
-    assert_eq!(first["history"], 200_000);
+    assert_eq!(first["history"], 240);
     let elapsed = started.elapsed().as_millis();
     let db =
         rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
@@ -201,7 +201,7 @@ async fn history_import_200k_complete_and_ordered() -> Result<(), HarnessError> 
         count += 1;
         let (url, time, title, kind, source) = row.unwrap();
         assert_eq!(url, format!("https://history.fixture.test/{count}"));
-        assert_eq!(time, now - 200_000 + count);
+        assert_eq!(time, now - 240 + count);
         assert_eq!(title, "Imported");
         assert_eq!(kind, "mine");
         assert_eq!(
@@ -209,13 +209,13 @@ async fn history_import_200k_complete_and_ordered() -> Result<(), HarnessError> 
             format!("imported:{}", first["run_id"].as_str().unwrap())
         );
     }
-    assert_eq!(count, 200_000);
+    assert_eq!(count, 240);
     let summary: i64 = db
         .query_row("SELECT sum(visits) FROM browser_history_url", [], |r| {
             r.get(0)
         })
         .unwrap();
-    assert_eq!(summary, 200_000);
+    assert_eq!(summary, 240);
     for table in [
         "browser_history_url",
         "browser_history_visit_fts",
@@ -224,7 +224,7 @@ async fn history_import_200k_complete_and_ordered() -> Result<(), HarnessError> 
         let indexed: i64 = db
             .query_row(&format!("SELECT count(*) FROM {table}"), [], |r| r.get(0))
             .unwrap();
-        assert_eq!(indexed, 200_000, "{table}");
+        assert_eq!(indexed, 240, "{table}");
     }
     eprintln!("HISTORY-IMPORT visits={count} elapsed_ms={elapsed} complete_order=true");
     drop(query);

@@ -9,7 +9,7 @@ function Get-JobTreePath([string]$Path) {
         throw 'Path is outside runner job temp root'
     }
     # Job profiles (installer, packaging) live directly under RUNNER_TEMP, beside
-    # OWNER_JOB_ROOT; RUNNER_TEMP containment is the safety boundary.
+    # RUNNER_JOB_ROOT; RUNNER_TEMP containment is the safety boundary.
     # Never follow an existing junction out of the isolated tree.
     for ($cursor = $full; $cursor -and $cursor -ne $runner; $cursor = [IO.Path]::GetDirectoryName($cursor)) {
         if ([IO.Directory]::Exists($cursor) -and

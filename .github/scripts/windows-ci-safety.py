@@ -1,4 +1,4 @@
-"""Static safety boundary for jobs sharing the owner Windows host.
+"""Static safety boundary for jobs sharing the self-hosted Windows host.
 
 Walk local composite actions and literal script entry points. This deliberately
 rejects absolute drive paths even for reads: installed tools use environment
@@ -21,10 +21,10 @@ ALLOWED_ACTIONS = re.compile(
     r'\./\.github/actions/[\w/-]+)\Z')
 
 RULES = {
-    'release Python setup forbidden on owner runner': r'\buses:\s*[\x22\x27]?\./\.github/actions/release-python(?:[/@\s\x22\x27]|$)',
-    'GitHub CLI required on owner runner': r"(?:\bgh(?:\.exe)?\s+(?:api|auth|run|release)\b|['\"]gh['\"]\s*,)",
+    'release Python setup forbidden on self-hosted Windows runner': r'\buses:\s*[\x22\x27]?\./\.github/actions/release-python(?:[/@\s\x22\x27]|$)',
+    'GitHub CLI required on self-hosted Windows runner': r"(?:\bgh(?:\.exe)?\s+(?:api|auth|run|release)\b|['\"]gh['\"]\s*,)",
     'MAX_PATH-unsafe recursive job tree operation': r'\b(?:Copy-Item|Remove-Item)\b[^\n]*-(?:Recurse|r|rec)\b',
-    'owner Windows Bash shell': r'^\s*(?:-\s*)?shell:\s*[\x22\x27]?bash\b',
+    'self-hosted Windows Bash shell': r'^\s*(?:-\s*)?shell:\s*[\x22\x27]?bash\b',
     'unavailable PowerShell 7 shell': r'^\s*(?:-\s*)?shell:\s*[\x22\x27]?pwsh\b',
     'PowerShell CI script blocked by execution policy': r'^\s*(?:-\s*)?shell:\s*[\x22\x27]?powershell[\x22\x27]?\s*$',
     'unsafe Windows ORAS setup action': r'\buses:\s*[\x22\x27]?oras-project/setup-oras@',
@@ -39,10 +39,10 @@ RULES = {
                                 r'\bGet-Process\b[^\n]*\|[^\n]*\bStop-Process\b|'
                                 r'\bStop-Process\b[^\n]*\bGet-Process\b[^\n]*-Name\b|'
                                 r'\b(?:pkill|killall)\b'),
-    'owner profile write path': (r'(?:\$env:USERPROFILE|%USERPROFILE%)[\\/]'
+    'runner profile write path': (r'(?:\$env:USERPROFILE|%USERPROFILE%)[\\/]'
                                  r'(?!\.cargo\b|\.rustup\b)|'
                                  r'(?:\$env:LOCALAPPDATA|%LOCALAPPDATA%)[\\/]butler-app'),
-    'owner installer or host configuration write': (
+    'runner installer or host configuration write': (
         r'\b(?:choco|winget|msiexec|setx)(?:\.exe)?\b|'
         r'\bSet-ItemProperty\b[^\n]*(?:HKLM|HKCU|HKEY_LOCAL_MACHINE|HKEY_CURRENT_USER)\b|'
         r'\b(?:rustup(?:\.exe)?\s+(?:toolchain\s+install|default|update)|rustup-init)\b|'
@@ -133,13 +133,13 @@ def hazards(source):
             continue
         action = re.search(r"\buses:\s*[\"']?([^\s\"']+)", line)
         if action and not ALLOWED_ACTIONS.fullmatch(action[1]):
-            findings.append((number, 'action not allowed on owner runner: ' + action[1]))
+            findings.append((number, 'action not allowed on self-hosted Windows runner: ' + action[1]))
         for kind, pattern in RULES.items():
             if kind == 'non-job-scoped PATH modification' and re.search(
                     r'\|\s*Out-File -FilePath \$env:GITHUB_PATH -Encoding utf8 -Append\s*$', line, re.I):
                 continue  # GitHub runner command file, never persistent host PATH.
-            if kind == 'owner profile write path' and 'Get-ChildItem' in line and '\\Downloads' in line:
-                continue  # Existing owner-profile observation is read-only.
+            if kind == 'runner profile write path' and 'Get-ChildItem' in line and '\\Downloads' in line:
+                continue  # Existing runner-profile observation is read-only.
             if re.search(pattern, line, re.I):
                 findings.append((number, kind))
         if re.search(r'\bStop-Process\b', line, re.I) and not re.search(r'-Id\b', line, re.I):
@@ -147,22 +147,22 @@ def hazards(source):
     return findings + symlink_hazards(source)
 
 
-def owner_steps(source, owner_input):
+def runner_steps(source, runner_input):
     """Exclude only a literal hosted-only input guard proven by the caller.
 
     Blank excluded lines to retain diagnostic line numbers. Unknown expressions
-    remain reachable and must pass the owner safety checks.
+    remain reachable and must pass the runner safety checks.
     """
     blocks = re.split(r'(?=^\s*- (?:uses:|name:|run:))', source, flags=re.M)
-    guard = r"^\s*if:\s*(?:\$\{\{\s*)?inputs\.owner-runner != 'true'(?:\s*\}\})?\s*$"
+    guard = r"^\s*if:\s*(?:\$\{\{\s*)?inputs\.self-hosted-runner != 'true'(?:\s*\}\})?\s*$"
     unix_guard = r"^\s*if:\s*(?:\$\{\{\s*)?runner\.os != 'Windows'(?:\s*\}\})?\s*$"
     return ''.join('\n' * block.count('\n') if (re.search(unix_guard, block, re.M)
-                   or owner_input and re.search(guard, block, re.M)) else block for block in blocks)
+                   or runner_input and re.search(guard, block, re.M)) else block for block in blocks)
 
 
-def local_sources(root, path, source, seen, owner_input=False):
+def local_sources(root, path, source, seen, runner_input=False):
     """Follow local actions and scripts without traversing dependencies or data."""
-    source = owner_steps(source, owner_input)
+    source = runner_steps(source, runner_input)
     yield path, source
     references = re.findall(r'uses:\s*\./([^\s]+)', source)
     references += re.findall(r'\$\{\{ github.action_path \}\}/([\w/-]+\.ps1)', source)
@@ -190,16 +190,16 @@ def local_sources(root, path, source, seen, owner_input=False):
         seen.add(candidate)
         step = re.search(r'uses:\s*\./' + re.escape(name) + r'[^\n]*\n'
                          r'(?:(?!\s*- (?:uses:|name:|run:)).*\n)*', source)
-        bound_owner = step and re.search(r"owner-runner:\s*['\"]?true['\"]?\s*$", step[0], re.M)
-        if step and not bound_owner:
-            # This exact selector reaches butler-win only when runner != hosted.
+        bound_runner = step and re.search(r"self-hosted-runner:\s*['\"]?true['\"]?\s*$", step[0], re.M)
+        if step and not bound_runner:
+            # This exact selector reaches self-hosted Windows only when runner != hosted.
             selector = "inputs.runner == 'hosted' && 'windows-latest'"
             runner = re.search(r'^\s*runs-on:\s*(.+)$', source, re.M)
             labels = re.search(r"fromJSON\('([^']+)'\)", runner[1]) if runner else None
-            owner = labels and {'self-hosted', 'butler-win'} <= set(json.loads(labels[1]))
-            bound_owner = runner and selector in runner[1] and owner and re.search(
-                r"owner-runner:\s*\$\{\{ inputs\.runner != 'hosted' \}\}", step[0])
-        yield from local_sources(root, candidate, candidate.read_text(), seen, bool(bound_owner))
+            registered = labels and {'self-hosted', 'butler-win'} <= set(json.loads(labels[1]))
+            bound_runner = runner and selector in runner[1] and registered and re.search(
+                r"self-hosted-runner:\s*\$\{\{ inputs\.runner != 'hosted' \}\}", step[0])
+        yield from local_sources(root, candidate, candidate.read_text(), seen, bool(bound_runner))
 
 
 def audit(root):
@@ -210,18 +210,18 @@ def audit(root):
         source = workflow.read_text()
         for block in re.split(r'(?=^  [\w-]+:\s*\n)', source, flags=re.M):
             runner = re.search(r'^    runs-on:[ \t]*([^\n]*(?:\n      - [^\n]+)*)', block, re.M)
-            owner_runner = runner and re.search(r'butler-win|self-hosted', runner[1], re.I)
-            owner_matrix = runner and 'matrix.runner' in runner[1] and re.search(
+            self_hosted_runner = runner and re.search(r'butler-win|self-hosted', runner[1], re.I)
+            self_hosted_matrix = runner and 'matrix.runner' in runner[1] and re.search(
                 r'runner:\s*\[[^\n]*butler-win', block, re.I)
-            if not (owner_runner or owner_matrix):
+            if not (self_hosted_runner or self_hosted_matrix):
                 continue
             job = block.split(':', 1)[0].strip()
             jobs.append(f'{workflow.name}/{job}')
             offset = source.index(block)
-            # Workflow defaults also apply to owner jobs with no step shell.
+            # Workflow defaults also apply to self-hosted jobs with no step shell.
             prefix = source.split('\njobs:', 1)[0]
             for line, hazard in hazards(prefix):
-                if hazard in ('owner Windows Bash shell', 'unavailable PowerShell 7 shell', 'PowerShell CI script blocked by execution policy'):
+                if hazard in ('self-hosted Windows Bash shell', 'unavailable PowerShell 7 shell', 'PowerShell CI script blocked by execution policy'):
                     findings.append(f'{workflow.relative_to(root)}:{line}: {hazard}')
             imported = set()
             for path, text in local_sources(root, workflow, block, {workflow.resolve()}):

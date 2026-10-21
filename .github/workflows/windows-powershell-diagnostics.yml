@@ -18,16 +18,16 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/windows-owner-setup
+      - uses: ./.github/actions/windows-runner-setup
         with:
           workflow: ${{ inputs.native-cache || 'captain-p7' }}
       - name: Probe cold module discovery without application writes
         working-directory: .
         run: ./deploy/windows-powershell-diagnosis.ps1
-      - name: Check owner registration and remove job profile
+      - name: Check runner registration and remove job profile
         if: always()
         working-directory: .
-        run: ./deploy/windows-owner-cleanup.ps1
+        run: ./deploy/windows-self-hosted-cleanup.ps1
 
   diagnose-hosted:
     name: Isolated hosted PowerShell startup probe

@@ -1,4 +1,4 @@
-name: Build owner Windows debug agent
+name: Build self-hosted Windows debug agent
 description: Build the E2E fixture agent and retain successful Cargo fingerprints
 runs:
   using: composite

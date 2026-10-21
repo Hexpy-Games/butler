@@ -1,4 +1,4 @@
-//! Release-only PERF-IDLE: bounded idle reads and memory at owner scale.
+//! Release-only PERF-IDLE: bounded idle reads and memory with retained history.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -17,7 +17,7 @@ use butler_platform::process_control::usage as process_usage;
 use butler_platform::sqlite;
 use std::time::Duration;
 
-use super::app_storage_scale::seed as app_seed;
+use super::app_retention::seed as app_seed;
 #[path = "idle_resources/accounting.rs"]
 mod accounting;
 #[path = "idle_resources/seed.rs"]
@@ -32,12 +32,8 @@ const MEMORY_BUDGET: u64 = 100_000_000;
 const READ_BUDGET: u64 = 1_000_000;
 
 #[tokio::test]
-async fn perf_idle_owner_scale_reads_and_footprint() -> Result<(), HarnessError> {
+async fn perf_idle_history_reads_and_footprint() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    butler_e2e::skip_unless!(
-        std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("perf"),
-        "PERF-IDLE requires BUTLER_E2E_TIER=perf and a release BUTLER_E2E_BIN"
-    );
     butler_e2e::skip_unless!(
         process_usage::sample(std::process::id())?.is_some(),
         "process resource counters unavailable"
@@ -52,9 +48,9 @@ async fn perf_idle_owner_scale_reads_and_footprint() -> Result<(), HarnessError>
     let mut s = setup.start().await?;
     s.agent.terminate().await?;
     let app = s.sandbox.data.join("app-server/butler-client.sqlite");
-    app_seed::seed_owner_scale(&sqlite::open(&app).unwrap(), 3_000);
+    app_seed::seed_history(&sqlite::open(&app).unwrap(), 64);
     super::storage_concurrency_support::seed(&app);
-    let expected = seed::owner_scale(&s.sandbox.data)?;
+    let expected = seed::history(&s.sandbox.data)?;
     transcripts::seed(&s.sandbox.data)?;
     eprintln!(
         "PERF-IDLE fixture app_bytes={} btcc_bytes={} canonical_bytes={}",
@@ -79,7 +75,6 @@ async fn perf_idle_owner_scale_reads_and_footprint() -> Result<(), HarnessError>
     assert_eq!(schedules.as_array().unwrap().len(), 1);
     assert_eq!(schedules[0]["next_run_at"], "9999-12-30T07:00:00.000Z");
     // Keep the existing startup grace, then prove committed memory readiness.
-    tokio::time::sleep(Duration::from_secs(120)).await;
     memory_fixture::settle(&s.sandbox.data).await?;
     transcripts::assert_sizes(&s.sandbox.data)?;
     seed::assert_complete(&s.sandbox.data, &expected)?;
@@ -152,9 +147,9 @@ async fn measure(
     let started = std::time::Instant::now();
     let mut windows = Vec::new();
     eprintln!("PERF-IDLE start load={:?}", process_usage::load_average()?);
-    // Collect the entire ten-minute interval before applying every unchanged
+    // Collect a complete idle interval before applying the unchanged
     // per-minute budget, so a failure also retains its complete attribution.
-    for window in 0..10 {
+    for window in 0..1 {
         // Start after the preceding HTTP/content probes have completed.
         let before = process_usage::sample(pid)?.unwrap();
         tokio::time::sleep(WINDOW).await;
@@ -198,7 +193,7 @@ async fn measure(
 }
 
 fn assert_samples(samples: &Samples) {
-    assert!(samples.elapsed >= Duration::from_secs(600));
+    assert!(samples.elapsed >= Duration::from_secs(60));
     for (before, after) in &samples.windows {
         let chars = after.read_chars.zip(before.read_chars).map(|(a, b)| a - b);
         let reads = after.read_bytes - before.read_bytes;

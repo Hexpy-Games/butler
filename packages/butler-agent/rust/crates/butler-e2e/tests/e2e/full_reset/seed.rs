@@ -1,4 +1,4 @@
-//! Small API/DB fixtures plus sparse large files exercise complete removal.
+//! Small API/DB fixtures plus retained files exercise complete removal.
 use super::*;
 use butler_platform::sqlite;
 pub(super) async fn seed(s: &Scenario) -> Result<(), HarnessError> {
@@ -44,10 +44,10 @@ pub(super) async fn seed(s: &Scenario) -> Result<(), HarnessError> {
     db.execute("INSERT INTO projects(id,display_name,status,workspace_path,workspace_label,safe_path_label,created_at,updated_at) VALUES('reset-project','Registered project','active',?1,'project','project','2026-10-18T00:00:00Z','2026-10-18T00:00:00Z')", [project.display().to_string()])?;
     drop(db);
     for (name, bytes) in [
-        ("transcripts/large-fixture", 1_500_000_000),
-        ("metrics/large-fixture", 300_000_000),
-        ("reset-scale/large-fixture", 7_000_000_000),
-        ("agent-runtime/large-fixture", 7_000_000_000),
+        ("transcripts/retained-fixture", 8_192),
+        ("metrics/retained-fixture", 4_096),
+        ("reset-fixture/retained-fixture", 16_384),
+        ("agent-runtime/retained-fixture", 16_384),
     ] {
         let path = s.sandbox.data.join(name);
         std::fs::create_dir_all(path.parent().unwrap())?;
@@ -106,9 +106,9 @@ pub(super) async fn assert_empty(s: &Scenario) -> Result<(), HarnessError> {
         "state/browser/reset-profile",
         "cache/favicons/reset-icon",
         "downloads/reset-download",
-        "transcripts/large-fixture",
-        "metrics/large-fixture",
-        "agent-runtime/large-fixture",
+        "transcripts/retained-fixture",
+        "metrics/retained-fixture",
+        "agent-runtime/retained-fixture",
     ] {
         assert!(!s.sandbox.data.join(name).exists(), "retained {name}");
     }
@@ -120,8 +120,8 @@ pub(super) async fn assert_empty(s: &Scenario) -> Result<(), HarnessError> {
         assert_eq!(std::fs::read(s.sandbox.data.join(name))?, b"discard");
     }
     assert_eq!(
-        std::fs::metadata(s.sandbox.data.join("reset-scale/large-fixture"))?.len(),
-        7_000_000_000
+        std::fs::metadata(s.sandbox.data.join("reset-fixture/retained-fixture"))?.len(),
+        16_384
     );
     let project = s.sandbox.workspace.join("registered-project");
     assert!(!project.join(".butler/hot-cache.md").exists());

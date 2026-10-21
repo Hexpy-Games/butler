@@ -41,7 +41,7 @@ pub(in super::super) async fn start(
         rounds,
     });
     let app = Router::new()
-        // The owner-scale synthetic input is about 2.4 MB; retain the complete body.
+        // The history synthetic input is about 2.4 MB; retain the complete body.
         .route("/codex/responses", post(reply))
         .layer(DefaultBodyLimit::max(8 * 1024 * 1024))
         .with_state(script.clone());

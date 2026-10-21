@@ -9,8 +9,8 @@
 mod consecutive;
 #[path = "ask_user/free_text.rs"]
 mod free_text;
-#[path = "ask_user/scale.rs"]
-pub(super) mod scale;
+#[path = "ask_user/history.rs"]
+pub(super) mod history;
 #[path = "ask_user/stub.rs"]
 pub(super) mod stub;
 use butler_e2e::e2e::{
@@ -87,7 +87,7 @@ async fn completed(s: &Scenario, turn: &str) -> Result<(), HarnessError> {
 async fn ask_user_answer_continues_same_turn() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, turn, q) = pending("ASK-USER").await?;
-    scale::seed_history(&s, &q).await?;
+    history::seed_history(&s, &q).await?;
     for _ in 0..20 {
         let view = s.gw.get("/session-view?session_id=general").await?;
         assert_eq!(view.status, 200, "{}", view.text);

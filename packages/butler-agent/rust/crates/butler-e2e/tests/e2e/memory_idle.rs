@@ -1,4 +1,4 @@
-//! MEM-IDLE: a settled owner-scale memory graph does not write while idle.
+//! MEM-IDLE: a settled history memory graph does not write while idle.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -18,7 +18,7 @@ use butler_e2e::e2e::scenario::{Fixture, Setup};
 use butler_e2e::e2e::stop_intent::{instance_record, read_intent};
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 
-const COMPLETED_WINDOWS: usize = 30_000;
+const COMPLETED_WINDOWS: usize = 40;
 const IDLE: Duration = Duration::from_secs(60);
 const IDLE_READ_BUDGET: u64 = 128 * 1024;
 

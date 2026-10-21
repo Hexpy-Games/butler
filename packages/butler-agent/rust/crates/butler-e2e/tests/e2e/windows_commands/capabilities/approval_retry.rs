@@ -96,7 +96,7 @@ fn plant_decisions(
     requests: &[(String, String, String)],
 ) -> Result<(), HarnessError> {
     // Seed the durable post-decision/pre-publication crash state while stopped.
-    let mut db = Connection::open(crate::btcc_scale::path(&s.sandbox.data))?;
+    let mut db = Connection::open(crate::terminal_history::path(&s.sandbox.data))?;
     db.pragma_update(None, "synchronous", "FULL")?;
     butler_platform::sqlite::with_fullfsync(&mut db, |db| -> rusqlite::Result<()> {
         let tx = db.transaction()?;

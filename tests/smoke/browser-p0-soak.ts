@@ -8,7 +8,7 @@ import { budget, sample, type P0App, type Row, type Sample } from "./browser-p0-
 import { memoryCheckpoint } from "./browser-p0-memory";
 import { openBrowserArea, visitUserSite } from "./browser-p0-user";
 import { waitFor } from "./browser-p0-app";
-import { seedP0OwnerScale, waitP0OwnerScaleSpace } from "./browser-p0-owner-scale";
+import { seedP0History } from "./browser-p0-history";
 
 function agentRSS(pid: number): number {
   if (process.platform === "win32") return Number(execFileSync("powershell.exe", ["-NoProfile", "-Command", `(Get-Process -Id ${pid}).WorkingSet64`], { encoding: "utf8" }).trim());
@@ -23,8 +23,7 @@ export async function leakSoak(app: P0App, origin: string, rows: Row[], minutes:
   assert(evidence, "BUTLER_P0_EVIDENCE required"); mkdirSync(evidence, { recursive: true });
   const pid = JSON.parse(readFileSync(join(app.data, "app/runtime/foreground/instance.json"), "utf8")).agent_host_pid;
   assert(Number.isSafeInteger(pid) && pid > 0);
-  await waitP0OwnerScaleSpace(app.data);
-  const ownerScale = seedP0OwnerScale(app.data);
+  const historyFixture = seedP0History(app.data);
   await app.page.reload(); await openBrowserArea(app);
   await visitUserSite(app, `${origin}/nodes`, evidence);
   for (const path of ["nodes", "cpu", "network"]) {
@@ -81,7 +80,7 @@ export async function leakSoak(app: P0App, origin: string, rows: Row[], minutes:
     rows.push({ test: "soak", metric: `${label} unresolved writer changed files`, value: delta.writers.unresolved ?? 0, budget: 0, status: delta.writers.unresolved ? "UNAVAILABLE" : "PASS" });
     rows.push({ test: "soak", metric: `${label} Chromium profile deltas`, value: JSON.stringify(delta), budget: "report internal flushes", status: "DESCRIPTIVE" });
   }
-  return { ownerScale, productWarm, productAfter, measurement, outliers, nativeCheckpoints: [nativeStart, nativeEnd], ...loop, minutes, initialIdle, afterSoak, postIdle, idleCPU, baselineCPU, initialIdleSnapshots: { before: idleBefore, after: idleAfter }, shortVariant: minutes === 10 };
+  return { historyFixture, productWarm, productAfter, measurement, outliers, nativeCheckpoints: [nativeStart, nativeEnd], ...loop, minutes, initialIdle, afterSoak, postIdle, idleCPU, baselineCPU, initialIdleSnapshots: { before: idleBefore, after: idleAfter }, shortVariant: minutes === 10 };
 }
 
 export async function runSoakLoop(app: P0App, origin: string, minutes: number, evidence: string, native = false) {

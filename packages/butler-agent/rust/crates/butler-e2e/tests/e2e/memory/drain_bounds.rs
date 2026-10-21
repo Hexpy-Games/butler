@@ -177,7 +177,7 @@ async fn recall_arriving_during_drain_reuses_the_loaded_worker() -> Result<(), H
             Ok::<_, HarnessError>(())
         };
         let (second, ()) = tokio::try_join!(batch::recall(&s, &chat, ASK), release_after_arrival)?;
-        super::scale::assert_complete(&second, &code, 3);
+        super::restart::assert_complete(&second, &code, 3);
         assert_eq!(worker(&s)?, pid);
         assert_one_load(&s).await?;
         let tool_ms = recall_tool_ms(&s.sandbox.data);
@@ -264,7 +264,7 @@ async fn pending_projection_during_query_drain_keeps_the_just_loaded_worker()
     );
     memory_stubs::vectors_complete(&s.sandbox.data, 5).await?;
     let complete = batch::recall(&s, "general", ASK).await?;
-    super::scale::assert_complete(&complete, &code, 5);
+    super::restart::assert_complete(&complete, &code, 5);
     assert_eq!(worker(&s)?, pid);
     assert_one_load(&s).await?;
     s.finish().await
@@ -314,7 +314,7 @@ async fn background_overrun_still_kills_at_its_projection_deadline() -> Result<(
     assert_saved_instruction(&demand, &code, 4);
     memory_stubs::vectors_complete(&s.sandbox.data, 5).await?;
     let complete = batch::recall(&s, "general", ASK).await?;
-    super::scale::assert_complete(&complete, &code, 5);
+    super::restart::assert_complete(&complete, &code, 5);
     eprintln!(
         "DRAIN-BACKGROUND deadline_ms=30000 reaped_ms={} complete_results=6",
         elapsed.as_millis()

@@ -8,10 +8,10 @@
 mod events;
 mod fidelity;
 mod fixture;
+mod history;
 mod perf;
 mod progress;
 mod reads;
-mod scale;
 use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use serde_json::json;
 

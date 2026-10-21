@@ -55,7 +55,7 @@ def pack(root, output):
     records = inventory(root)
     output.mkdir(parents=True, exist_ok=True)
     bundle = output / 'installers.bundle'
-    temporary = os.environ.get('OWNER_JOB_ROOT', os.environ.get('RUNNER_TEMP', os.environ.get('TMPDIR')))
+    temporary = os.environ.get('RUNNER_JOB_ROOT', os.environ.get('RUNNER_TEMP', os.environ.get('TMPDIR')))
     with tempfile.TemporaryDirectory(prefix='installer-pack-', dir=temporary) as work:
         repo = Path(work) / 'git'
         command(['git', 'init', '--bare', str(repo)])

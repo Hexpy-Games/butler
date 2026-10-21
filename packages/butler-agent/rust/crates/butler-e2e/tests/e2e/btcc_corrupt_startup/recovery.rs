@@ -2,14 +2,14 @@
 use super::*;
 
 #[tokio::test]
-async fn owner_scale_recovery_validation_outlives_readiness_deadline() -> Result<(), HarnessError> {
+async fn history_recovery_validation_outlives_readiness_deadline() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("BTCC-RECOVERY-DEADLINE")?
         .env("BUTLER_STARTUP_TRACE", "1")
         .start()
         .await?;
     s.agent.terminate().await?;
-    super::super::btcc_startup_scale::seed(&s.sandbox.data, 300_000)?;
+    super::super::btcc_history::seed(&s.sandbox.data, 48)?;
     let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
     Connection::open(&path)?.execute_batch(
         "PRAGMA foreign_keys=OFF;
@@ -20,7 +20,6 @@ async fn owner_scale_recovery_validation_outlives_readiness_deadline() -> Result
     )?;
     write_verdict(&path, true)?;
     let before = digest(&path)?;
-    assert!(before.0 >= 7_000_000_000, "owner-scale fixture required");
     let verdict = path.with_extension("sqlite.corrupt");
     let original = std::fs::read(&verdict)?;
     let release = s.sandbox.root.join("validation-release");

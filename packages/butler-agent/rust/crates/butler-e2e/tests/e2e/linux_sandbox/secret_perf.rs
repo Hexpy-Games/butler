@@ -1,4 +1,4 @@
-//! Owner-scale walks preserve all file and link content within the same budget.
+//! Project walks preserve all file and link content within the same budget.
 use super::*;
 use std::time::Instant;
 

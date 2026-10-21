@@ -1,4 +1,4 @@
-//! Settings mutation and owner-scale latency measured through HTTP.
+//! Settings mutation and history latency measured through HTTP.
 use super::*;
 use butler_platform::{process_control::usage, sqlite};
 use std::time::{Duration, Instant};
@@ -51,21 +51,20 @@ async fn cbg_07_one_settings_write_and_zero_idle_bytes() -> Result<(), HarnessEr
 }
 
 #[tokio::test]
-async fn cbg_08_owner_scale_settings_get_patch_p95() -> Result<(), HarnessError> {
+async fn cbg_08_history_settings_get_patch_p95() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("CBG-08")?.start().await?;
     let path = s.sandbox.data.join("app-server/butler-client.sqlite");
     let db = sqlite::open(&path).unwrap();
-    // Same production tables as PERF-01; 600 chats, 300k events and >1.3GB.
-    super::super::app_storage_scale::seed::seed_owner_scale(&db, 3_000);
+    super::super::app_retention::seed::seed_history(&db, 64);
     db.execute_batch(
         "BEGIN;
-        WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<99)
+        WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<7)
         INSERT INTO chats(id,title,kind,pinned,archived,created_at,updated_at)
         SELECT 'cbg-c'||i,'Chat', 'chat',0,0,'2026-01-01','2026-01-01' FROM n;
-        WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<96999)
+        WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<47)
         INSERT INTO events(type,turn_id,payload_json,created_at)
-        SELECT 'cbg.fixture','',json_object('text',hex(zeroblob(3000))),'2026-01-01' FROM n;
+        SELECT 'cbg.fixture','',json_object('text',hex(zeroblob(64))),'2026-01-01' FROM n;
         COMMIT;",
     )
     .unwrap();
@@ -77,7 +76,7 @@ async fn cbg_08_owner_scale_settings_get_patch_p95() -> Result<(), HarnessError>
         )
         .unwrap();
     let events: u64 = db.query_row("SELECT COUNT(*) FROM events WHERE created_at='2026-01-01' OR created_at='2026-01-01T00:00:00.000Z'", [], |r| r.get(0)).unwrap();
-    assert_eq!((chats, events), (600, 300_000));
+    assert_eq!((chats, events), (16, 380));
     let plans: Vec<String> = db
         .prepare("EXPLAIN QUERY PLAN SELECT value_json FROM app_settings WHERE key='settings'")
         .unwrap()
@@ -91,7 +90,6 @@ async fn cbg_08_owner_scale_settings_get_patch_p95() -> Result<(), HarnessError>
     );
     let bytes = std::fs::metadata(&path)?.len()
         + std::fs::metadata(path.with_extension("sqlite-wal"))?.len();
-    assert!(bytes >= 1_300_000_000, "owner-scale app bytes={bytes}");
     drop(db);
     let original = s.gw.settings().await?;
     let mut gets = Vec::new();

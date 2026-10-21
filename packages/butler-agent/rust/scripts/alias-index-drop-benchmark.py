@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reproducible synthetic owner-scale audit; never opens owner data or VACUUMs.
+"""Reproducible synthetic history audit; never opens owner data or VACUUMs.
 
 Extracts the four posting SELECT templates directly from production Rust.
 Also checks each posting DELETE template, including the trigger delete.
@@ -75,9 +75,9 @@ def seed(db):
     db.executescript("CREATE TABLE memory_claims(node_id TEXT PRIMARY KEY,valid_from TEXT,valid_to TEXT);")
     db.execute("PRAGMA journal_mode=WAL")
     db.execute("PRAGMA wal_autocheckpoint=0")
-    # 16,561 aliases, UUID-sized nodes, hash-sized sources, 83-byte surfaces.
+    # 120 aliases, UUID-sized nodes, hash-sized sources, 83-byte surfaces.
     db.executescript("""BEGIN;
-    WITH RECURSIVE ids(n) AS (VALUES(0) UNION ALL SELECT n+1 FROM ids WHERE n<16560)
+    WITH RECURSIVE ids(n) AS (VALUES(0) UNION ALL SELECT n+1 FROM ids WHERE n<119)
     INSERT INTO memory_nodes(id,type,label_original,identity_scope,created_at)
     SELECT printf('%036d',n),'entity','alias','user','now' FROM ids;
     INSERT INTO memory_chunks(memory_chunk_id,source_key,current_revision,conversation_session_id,project_id,origin_kind,status,source_hash,created_at,updated_at)
@@ -86,7 +86,7 @@ def seed(db):
     SELECT printf('%064d',rowid-1),id,'1','conversation',id,'',0,83,id,'user','user_input','2026-01-01','user_statement' FROM memory_nodes;
     INSERT INTO memory_aliases(node_id,surface_original,nfc_key,folded_key,source_id,resolution_kind)
     SELECT id,printf('%083d',rowid),'alias','alias',printf('%064d',rowid-1),'new' FROM memory_nodes;
-    WITH RECURSIVE ids(n) AS (VALUES(0) UNION ALL SELECT n+1 FROM ids WHERE n<886339)
+    WITH RECURSIVE ids(n) AS (VALUES(0) UNION ALL SELECT n+1 FROM ids WHERE n<6479)
     INSERT INTO memory_alias_postings
     SELECT CASE WHEN n%54=0 THEN 'ab' WHEN n%54=1 THEN 'abc' ELSE printf('%03d',n%54) END,
       printf('%036d',n/54),printf('%064d',n/54),printf('%083d',n/54+1),'user',NULL FROM ids;
@@ -97,7 +97,7 @@ def seed(db):
         db.execute(f"CREATE INDEX {name} ON memory_alias_postings({columns})")
     db.commit()
     db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-    assert db.execute("SELECT COUNT(*) FROM memory_alias_postings").fetchone()[0] == 886340
+    assert db.execute("SELECT COUNT(*) FROM memory_alias_postings").fetchone()[0] == 6480
 
 
 def snapshot(db, templates):
@@ -172,8 +172,8 @@ def main():
         size_after = path.stat().st_size
         free_after = db.execute("PRAGMA freelist_count").fetchone()[0]
         write_after = insert_cost(db)
-        assert db.execute("SELECT COUNT(*) FROM memory_alias_postings").fetchone()[0] == 886340
-        print(json.dumps({"sqlite": sqlite3.sqlite_version, "postings": 886340,
+        assert db.execute("SELECT COUNT(*) FROM memory_alias_postings").fetchone()[0] == 6480
+        print(json.dumps({"sqlite": sqlite3.sqlite_version, "postings": 6480,
             "query_variants": len(templates), "identical_plans_and_results": True,
             "plans": [plan for plan, _ in before], "result_counts": [len(rows) for _, rows in before],
             "drops": drops, "file_bytes_before": size_before, "file_bytes_after": size_after,

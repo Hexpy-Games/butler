@@ -17,8 +17,8 @@ mod anthropic_requests;
 mod anthropic_thinking_history;
 mod app_admission_history;
 mod app_db_schema;
+mod app_retention;
 mod app_state;
-mod app_storage_scale;
 mod ask_user;
 mod attachment_reach;
 mod attachment_types;
@@ -117,7 +117,7 @@ mod memory_wiring;
 mod metric_retention;
 mod migration;
 mod model_thinking;
-mod monitoring_scale;
+mod monitoring_history;
 mod onboarding;
 mod onboarding_form;
 mod outbox_identity;
@@ -191,7 +191,7 @@ mod update_discovery;
 mod update_progress;
 mod updates;
 mod usage;
-mod usage_scale;
+mod usage_history;
 mod usage_timeline;
 mod user_work;
 mod wall_clock_budget;
@@ -210,10 +210,8 @@ mod schedule_cassette;
 
 mod btcc_corrupt_startup;
 mod btcc_cutover;
-#[path = "support/btcc_scale.rs"]
-mod btcc_scale;
+mod btcc_history;
 mod btcc_startup_integrity;
-mod btcc_startup_scale;
 mod cli_project_folder;
 mod data_perf;
 mod delegate_followup;
@@ -226,8 +224,6 @@ mod memory_profile_reset;
 mod memory_reset;
 mod memory_wiring_more;
 mod native_worker_ownership;
-#[path = "support/owner_scale.rs"]
-mod owner_scale;
 mod project_artifacts;
 mod project_instructions;
 mod project_workspace;
@@ -235,9 +231,11 @@ mod schedule_handoff;
 mod session_folder;
 mod storage_concurrency;
 mod supervisor_ownership;
-#[path = "support/transcript_scale.rs"]
+#[path = "support/terminal_history.rs"]
+mod terminal_history;
+#[path = "support/transcript_history.rs"]
 #[allow(clippy::unwrap_used, reason = "test fixture assertions")]
-mod transcript_scale;
+mod transcript_history;
 
 #[path = "support/memory_reset_support.rs"]
 mod memory_reset_support;

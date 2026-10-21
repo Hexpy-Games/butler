@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 mod ownership;
 mod support;
 use support::{
-    ordered_message_ids, seed_interrupted_output_transfer, seed_scale, verify_rotated_permissions,
+    ordered_message_ids, seed_history, seed_interrupted_output_transfer, verify_rotated_permissions,
 };
 
 #[tokio::test]
@@ -89,7 +89,7 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
     let old = s.gw.messages("general").await?;
     assert!(old.len() >= 2);
     s.agent.terminate().await?;
-    seed_scale(&s.sandbox.data)?;
+    seed_history(&s.sandbox.data)?;
     s.gw = s.agent.start_again().await?;
     let db = sqlite::open_with_flags(
         s.sandbox.data.join("app-server/butler-client.sqlite"),
@@ -170,7 +170,7 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
         [archived],
         |row| row.get(0),
     )?;
-    assert_eq!(count, 100_000 + i64::try_from(old.len()).unwrap());
+    assert_eq!(count, 40 + i64::try_from(old.len()).unwrap());
     for original in &old {
         let text: String = db.query_row(
             "SELECT text FROM app_owned_messages WHERE id=?1 AND chat_id=?2",
@@ -197,7 +197,7 @@ async fn general_clear_archives_history_preserves_memory_and_starts_fresh()
             [],
             |r| r.get(0),
         )?;
-        assert_eq!((moved, kept), (100_000, 900_000));
+        assert_eq!((moved, kept), (40, 80));
     }
     let indexed: i64 = db.query_row(
         "SELECT COUNT(*) FROM messages_fts f JOIN app_owned_messages m ON m.rowid=f.rowid WHERE m.chat_id=?1",

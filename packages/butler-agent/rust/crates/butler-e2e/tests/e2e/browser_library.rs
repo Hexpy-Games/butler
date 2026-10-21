@@ -104,7 +104,7 @@ async fn library_pages_are_complete_in_latest_first_order() -> Result<(), Harnes
     butler_e2e::gate!();
     let mut s = Setup::new("BROWSER-LIBRARY-PAGES")?.start().await?;
     s.agent.terminate().await?;
-    super::update_progress::scale::seed(&s.sandbox.data).await?;
+    super::update_progress::history::seed(&s.sandbox.data).await?;
     s.gw = s.agent.start_again().await?;
     for n in 0..75 {
         assert_eq!(
@@ -130,7 +130,7 @@ async fn library_pages_are_complete_in_latest_first_order() -> Result<(), Harnes
         assert_eq!(item["id"], format!("row-{:03}", 74 - n));
     }
     eprintln!(
-        "LIBRARY-OWNER-SCALE complete_items=75 pages=2 elapsed_us={}",
+        "LIBRARY-history complete_items=75 pages=2 elapsed_us={}",
         started.elapsed().as_micros()
     );
     s.finish().await

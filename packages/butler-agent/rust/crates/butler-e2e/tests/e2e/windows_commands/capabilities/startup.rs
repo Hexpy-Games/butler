@@ -4,18 +4,14 @@ use rusqlite::Connection;
 use std::path::Path;
 
 #[tokio::test]
-async fn owner_scale_cold_startup_with_and_without_indexes() -> Result<(), HarnessError> {
+async fn history_cold_startup_with_and_without_indexes() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    butler_e2e::skip_unless!(
-        std::env::var("BUTLER_E2E_OWNER_SCALE").as_deref() == Ok("1"),
-        "requires owner-scale disk history"
-    );
     let (mut s, chat, script, server) = setup(Access::FullAccess).await?;
     s.agent
         .launch
         .env
         .push(("BUTLER_STARTUP_TRACE".into(), "1".into()));
-    let history = scale::prepare(&mut s, &chat).await?;
+    let history = history::prepare(&mut s, &chat).await?;
     let case = Case {
         tool: "read_file",
         args: json!({"requests":[{"path":"home/Downloads/보고서.txt"}]}),
@@ -25,12 +21,12 @@ async fn owner_scale_cold_startup_with_and_without_indexes() -> Result<(), Harne
         .await?;
     // The shared App seed includes pending retention. Settle it before testing
     // cold starts; the exact retained-event assertion remains unchanged.
-    crate::app_storage_scale::wait_retention_settled(&s).await;
+    crate::app_retention::wait_retention_settled(&s).await;
     let mut ordinary = Duration::ZERO;
     for missing_indexes in [false, true] {
         s.agent.terminate().await?;
         if missing_indexes {
-            Connection::open(crate::btcc_scale::path(&s.sandbox.data))?.execute_batch(
+            Connection::open(crate::terminal_history::path(&s.sandbox.data))?.execute_batch(
                 "DROP INDEX idx_btcc_turns_authority_waiting; DROP INDEX idx_btcc_subsession_outbox_pending;"
             )?;
         }
@@ -57,8 +53,8 @@ async fn owner_scale_cold_startup_with_and_without_indexes() -> Result<(), Harne
         {
             eprintln!("APPROVAL-STARTUP missing_indexes={missing_indexes} {line}");
         }
-        crate::btcc_scale::assert_indexed(&s.sandbox.data)?;
-        crate::btcc_scale::assert_complete(&s.sandbox.data)?;
+        crate::terminal_history::assert_indexed(&s.sandbox.data)?;
+        crate::terminal_history::assert_complete(&s.sandbox.data)?;
         let messages = s.gw.messages(&chat).await?;
         assert!(
             messages
@@ -71,11 +67,11 @@ async fn owner_scale_cold_startup_with_and_without_indexes() -> Result<(), Harne
                 .any(|message| message["role"] == "assistant" && message["status"] == "delivered")
         );
     }
-    scale::assert_complete(&s, history).await?;
+    history::assert_complete(&s, history).await?;
     butler_e2e::assert_wall_clock_budget!(
         ordinary,
         Duration::from_secs(5),
-        "owner-scale cold startup with current indexes"
+        "history cold startup with current indexes"
     );
     s.finish().await?;
     server.abort();

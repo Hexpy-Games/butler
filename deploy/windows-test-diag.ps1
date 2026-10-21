@@ -12,7 +12,7 @@ function Find-Diagnostics([string]$Root) {
 }
 if (!$Path) {
     # Prefer the newest active launcher profile, before environment or saved runs.
-    $profiles = Get-ChildItem -LiteralPath $env:TEMP -Filter 'butler-win-protected-path-*' `
+    $profiles = Get-ChildItem -LiteralPath $env:TEMP -Filter 'butler-protected-path-*' `
         -Directory -ErrorAction SilentlyContinue | Sort-Object CreationTimeUtc -Descending
     foreach ($profile in $profiles) {
         $candidate = Join-Path $profile.FullName 'data'
