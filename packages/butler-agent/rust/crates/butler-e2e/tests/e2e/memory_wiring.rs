@@ -26,7 +26,7 @@ async fn until(mut ready: impl FnMut() -> bool) {
     .expect("production owner did not publish its completion marker");
 }
 
-async fn bootstrap(data: &Path) {
+pub(super) async fn bootstrap(data: &Path) {
     until(|| {
         data.join("cognition/memory/active-generation.json")
             .exists()

@@ -6,7 +6,7 @@
     reason = "test assertions"
 )]
 
-use super::coverage_seed::{recovered, session, turn};
+use super::coverage_seed::{published, recovered, session, turn};
 use super::coverage_support::{canonical, drain, graph, hold_gate, release_gate, start};
 use super::standalone_upgrade::reset_pending;
 use butler_e2e::e2e::HarnessError;
@@ -43,6 +43,8 @@ async fn mem_orphaned_turn_ineligible_restored() -> Result<(), HarnessError> {
 async fn orphaned(standalone: bool, ineligible: bool) -> Result<(), HarnessError> {
     let mut s = start("MEM-ORPHANED", &[]).await?;
     let data = s.sandbox.data.clone();
+    crate::memory_wiring::bootstrap(&data).await;
+    crate::memory_fixture::settle(&data).await?;
     for id in [GONE, KEPT] {
         session(&canonical(&data), id, None);
     }
@@ -58,6 +60,8 @@ async fn orphaned(standalone: bool, ineligible: bool) -> Result<(), HarnessError
     let kept_turn = turn(&canonical(&data), KEPT, 1, "unrelated turn fact", AT);
     recovered(&canonical(&data), KEPT, 10, "unrelated recovered fact", AT);
     drain(&data, &[]).await;
+    // Do not reset jobs while their original hot-cache or FTS work is in flight.
+    crate::memory_fixture::settle(&data).await?;
     // Recreate an upgraded graph's durable unprocessed queue under the lease.
     let gate = hold_gate(&data);
     let db = graph(&data);
@@ -70,7 +74,7 @@ async fn orphaned(standalone: bool, ineligible: bool) -> Result<(), HarnessError
     }
     db.execute("UPDATE memory_projection_jobs SET created_at='2000-01-01T00:00:00Z' WHERE episode_id IN (SELECT memory_chunk_id FROM memory_chunks WHERE source_key=?1)", [&source]).unwrap();
     // External canonical writers also delete sources (e.g. restored history).
-    // Eligibility changes no content or revision: restoration must replay this job.
+    // Park this revision without publishing new source content.
     let canonical = canonical(&data);
     if ineligible {
         let table = if standalone {
@@ -133,6 +137,7 @@ async fn orphaned(standalone: bool, ineligible: bool) -> Result<(), HarnessError
                 [GONE],
             )
             .unwrap();
+        published(&canonical);
         drain(&data, &[]).await;
         let completed: i64 = db.query_row("SELECT COUNT(*) FROM memory_projection_windows w JOIN memory_projection_jobs j ON j.job_id=w.job_id JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id WHERE c.source_key=?1 AND w.state='complete'", [&source], |r| r.get(0)).unwrap();
         assert_eq!(
