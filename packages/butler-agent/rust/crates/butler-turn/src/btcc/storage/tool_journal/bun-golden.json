@@ -7,7 +7,7 @@
       "arguments": {
         "2": "two",
         "10": "ten",
-        "label": "é",
+        "label": "é",
         "nested": {
           "a": true,
           "z": 1
@@ -37,7 +37,7 @@
       "arguments": {
         "2": "two",
         "10": "ten",
-        "label": "é",
+        "label": "é",
         "nested": {
           "a": true,
           "z": 1
@@ -68,7 +68,7 @@
       "arguments": {
         "2": "two",
         "10": "ten",
-        "label": "é",
+        "label": "é",
         "nested": {
           "a": true,
           "z": 1
@@ -101,7 +101,7 @@
       "arguments": {
         "2": "two",
         "10": "ten",
-        "label": "é",
+        "label": "é",
         "nested": {
           "a": true,
           "z": 1

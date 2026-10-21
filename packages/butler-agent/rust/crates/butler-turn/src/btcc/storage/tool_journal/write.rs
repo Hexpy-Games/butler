@@ -3,7 +3,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::{ToolJournalFinish, ToolJournalStart};
 use crate::btcc::StorageCode;
 use crate::btcc::identity::digest;
-use crate::btcc::storage::common::{canonical_json, error, json, stringify};
+use crate::btcc::storage::common::{canonical_json, document_json, error, json, stringify};
 use crate::btcc::storage::{StorageError, StorageResult};
 
 pub(super) fn start(
@@ -11,7 +11,7 @@ pub(super) fn start(
     input: &ToolJournalStart,
     clock: &dyn Fn() -> String,
 ) -> StorageResult<()> {
-    let arguments_json = canonical_json(&input.arguments)?;
+    let arguments_json = document_json(&input.arguments)?;
     let started_at = clock();
     db.execute(
         "INSERT OR IGNORE INTO btcc_guided_tool_calls
@@ -43,8 +43,12 @@ pub(super) fn start(
         .optional()
         .map_err(StorageError::sqlite)?;
     if let Some((turn_id, tool_name, stored)) = current {
+        // Compare NFC identities: earlier builds stored arguments NFC-normalized.
         let stored = canonical_json(&json(&stored, StorageCode::ToolJournalJsonInvalid)?)?;
-        if turn_id == input.turn_id && tool_name == input.tool_name && stored == arguments_json {
+        if turn_id == input.turn_id
+            && tool_name == input.tool_name
+            && stored == canonical_json(&input.arguments)?
+        {
             return Ok(());
         }
     }

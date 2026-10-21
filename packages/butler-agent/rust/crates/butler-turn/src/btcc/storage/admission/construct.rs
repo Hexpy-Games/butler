@@ -9,7 +9,7 @@ use crate::btcc::continuation_budget::{
 };
 use crate::btcc::identity::digest;
 use crate::btcc::storage::common::{
-    canonical_json, canonical_record, column_exists, error, stringify,
+    column_exists, document_json, document_record, error, stringify,
 };
 use crate::btcc::storage::runtime_owner::RuntimeOwner;
 use crate::btcc::storage::{StorageError, StorageResult};
@@ -108,7 +108,7 @@ fn insert_initial_turn(
     })?;
     let context = command.context;
     let model = command.model_selection;
-    let context_json = canonical_json(context)?;
+    let context_json = document_json(context)?;
     let snapshot_ref = persist_admission_snapshot(connection, context)?;
     let turn_id = text(command.turn_id, "turnId")?;
     let checkpoint_id = digest(&format!("btcc-checkpoint.v1\0{turn_id}\0{}\0admitted", 0));
@@ -128,17 +128,17 @@ fn insert_initial_turn(
                 command.message_id()?,
                 command.content()?,
                 snapshot_ref,
-                canonical_record(&model.selection)?,
+                document_record(&model.selection)?,
                 model
                     .model_route
                     .as_ref()
-                    .map(canonical_record)
+                    .map(document_record)
                     .transpose()?,
                 budget,
                 context_json,
                 command
                     .progress_destination
-                    .map(canonical_record)
+                    .map(document_record)
                     .transpose()?,
                 if stopped { "cancelled" } else { "admitted" },
                 if stopped {
@@ -195,7 +195,7 @@ fn activate_admitted_checkpoint(
 /// and returns its reference.
 // Passthrough: context document assembled by the context assembler, persisted verbatim; typed reads use ButlerContext.
 fn persist_admission_snapshot(connection: &Connection, context: &Value) -> StorageResult<String> {
-    let snapshot_json = canonical_json(&json!({"context": context}))?;
+    let snapshot_json = document_json(&json!({"context": context}))?;
     let snapshot_sha = digest(&snapshot_json);
     let snapshot_ref = digest(&format!("btcc-admission-snapshot.v1\0{snapshot_sha}"));
     insert_immutable_record(

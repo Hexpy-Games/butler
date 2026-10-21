@@ -39,6 +39,17 @@ pub(super) fn sqlite_stable_json(value: &Value) -> Result<String, BtccError> {
     .map_err(identity_error)
 }
 
+/// [`sqlite_stable_json`] keeping every string exactly, for stored documents
+/// that are parsed back (see [`butler_core::json::canonical_json_exact`]).
+// Passthrough: generic JSON canonicalization over arbitrary documents.
+pub(super) fn sqlite_document_json(value: &Value) -> Result<String, BtccError> {
+    butler_core::json::canonical_json_exact(
+        value,
+        butler_core::json::CanonicalKeyOrder::JsPropertyEnumeration,
+    )
+    .map_err(identity_error)
+}
+
 // Passthrough: generic JSON canonicalization/hashing over arbitrary documents.
 pub(super) fn json_stringify_without(value: &Value, field: &str) -> Result<String, BtccError> {
     butler_core::json::stringify_without(value, field).map_err(identity_error)

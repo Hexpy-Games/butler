@@ -60,6 +60,7 @@ async fn canonical_turn_journal_matches_bun_identity_delivery_and_reopen() {
     let journal = ToolJournalRepository::new(storage.clone(), clock);
     let expected: Value = serde_json::from_str(include_str!("bun-golden.json")).unwrap();
     journal.start(start("call")).await.unwrap();
+    // An NFC retry has the call's identity; the row keeps its exact arguments.
     let mut retry = start("call");
     retry.raw_arguments = "different raw allowed".into();
     retry.arguments["label"] = "é".into();
