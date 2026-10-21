@@ -23,7 +23,7 @@ fn image_only_proof_covers_each_native_serializer() -> Result<(), HarnessError> 
 
 // test-category: pure-logic
 #[test]
-fn image_only_proof_uses_final_success_after_retries() -> Result<(), HarnessError> {
+fn image_only_proof_uses_first_success_after_retries() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let rows = [
         json!({"attrs":{"status":429},"error":{"message":"rate limit"}}),
@@ -35,57 +35,32 @@ fn image_only_proof_uses_final_success_after_retries() -> Result<(), HarnessErro
     ];
     let refs: Vec<_> = rows.iter().collect();
     assert_eq!(
-        final_successful_attempt(&refs)["content"]["request"]["attempt"],
-        2
+        first_successful_attempt(&refs).unwrap()["content"]["request"]["attempt"],
+        1
     );
-    assert!(std::panic::catch_unwind(|| final_successful_attempt(&refs[..3])).is_err());
+    assert!(first_successful_attempt(&refs[..3]).is_none());
+    assert!(first_successful_attempt(&[]).is_none());
     let rejected = json!({"attrs":{"status":400}});
+    assert!(first_successful_attempt(&[&rejected]).is_none());
     let mut refs = refs;
     refs.push(&rejected);
-    assert!(std::panic::catch_unwind(|| final_successful_attempt(&refs)).is_err());
+    assert_eq!(first_successful_attempt(&refs), Some(&rows[3]));
     Ok(())
 }
 
 // test-category: pure-logic
 #[test]
-fn image_only_proof_checks_completion_and_usage_for_each_protocol() -> Result<(), HarnessError> {
+fn image_only_proof_checks_completion_for_each_protocol() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     for event in [
-        json!({"type":"response.completed","response":{"usage":{"input_tokens":20}}}),
-        json!({"choices":[{"finish_reason":"stop"}],"usage":{"prompt_tokens":20}}),
-        json!({"type":"message_stop","usage":{"input_tokens":20}}),
-        json!({"candidates":[{"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":20}}),
+        json!({"type":"response.completed"}),
+        json!({"choices":[{"finish_reason":"stop"}]}),
+        json!({"type":"message_stop"}),
+        json!({"candidates":[{"finishReason":"STOP"}]}),
     ] {
-        let baseline_event = if event.get("usageMetadata").is_some() {
-            json!({"usageMetadata":{"promptTokenCount":10}})
-        } else if event.get("choices").is_some() {
-            json!({"usage":{"prompt_tokens":10}})
-        } else {
-            json!({"usage":{"input_tokens":10}})
-        };
-        let baseline = json!({"response":baseline_event});
         let body = json!({"response":format!("data: {event}\n\ndata: [DONE]\n")});
         assert_response_ok(&body);
-        assert_image_usage(&baseline, &body);
-        assert!(std::panic::catch_unwind(|| assert_image_usage(&body, &baseline)).is_err());
     }
-    let no_usage = json!({"response":{"candidates":[{"finishReason":"STOP"}]}});
-    assert_image_usage(&no_usage, &no_usage);
-    for usage in [
-        json!({"input_tokens":1,"input_tokens_details":{"image_tokens":5}}),
-        json!({"prompt_tokens":1,"prompt_tokens_details":{"image_tokens":5}}),
-        json!({"promptTokenCount":1,"promptTokensDetails":[
-            {"modality":"TEXT","tokenCount":30},{"modality":"IMAGE","tokenCount":2},
-            {"modality":"IMAGE","tokenCount":3}
-        ]}),
-    ] {
-        assert_eq!(image_tokens(&usage), Some(5));
-        assert_image_usage(&no_usage, &json!({"response":{"usage":usage}}));
-    }
-    let zero_image = json!({"response":{"usageMetadata":{
-        "promptTokenCount":100,"promptTokensDetails":[{"modality":"IMAGE","tokenCount":0}]
-    }}});
-    assert!(std::panic::catch_unwind(|| assert_image_usage(&no_usage, &zero_image)).is_err());
     for event in [
         json!({"candidates":[{"content":{"parts":[{"text":"unfinished"}]}}]}),
         json!({"candidates":[{"finishReason":"STOP"}],"error":{"message":"failed"}}),

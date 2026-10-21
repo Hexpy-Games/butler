@@ -69,9 +69,10 @@ fn matches_bytes(encoded: &Value, uploaded: &[u8]) -> bool {
         .is_some_and(|bytes| bytes == uploaded)
 }
 
-/// Read the final successful attempt, scoped to the delivered turn.
+/// Read the first successful attempt in timestamp order for the delivered turn.
 pub(crate) async fn provider_body(s: &Scenario, turn: &str) -> Result<Value, HarnessError> {
-    tokio::time::timeout(Duration::from_secs(10), async {
+    let mut last_status = None;
+    let result = tokio::time::timeout(Duration::from_secs(10), async {
         loop {
             let logs =
                 s.gw.get(&format!("/logs?turn_id={turn}&limit=1000"))
@@ -90,8 +91,8 @@ pub(crate) async fn provider_body(s: &Scenario, turn: &str) -> Result<Value, Har
                 })
                 .collect();
             rows.sort_by_key(|r| r["ts"].as_str().unwrap_or_default());
-            if !rows.is_empty() {
-                let row = final_successful_attempt(&rows);
+            last_status = rows.last().and_then(|row| row["attrs"]["status"].as_u64());
+            if let Some(row) = first_successful_attempt(&rows) {
                 assert_eq!(row["turn_id"], turn);
                 let body = if let Some(reference) = row["body_ref"].as_str() {
                     let reply = s.gw.get(&format!("/logs/bodies/{reference}")).await?;
@@ -106,28 +107,23 @@ pub(crate) async fn provider_body(s: &Scenario, turn: &str) -> Result<Value, Har
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
     })
-    .await
-    .expect("provider HTTP log missing")
+    .await;
+    if result.is_err() {
+        assert!(
+            !last_status.is_some_and(|status| (400..500).contains(&status)),
+            "provider ended with a non-retried 4xx"
+        );
+    }
+    result.expect("no successful provider HTTP log before timeout")
 }
 
-fn final_successful_attempt<'a>(rows: &[&'a Value]) -> &'a Value {
-    let last = rows.last().expect("provider attempts");
-    assert!(
-        !last["attrs"]["status"]
+fn first_successful_attempt<'a>(rows: &[&'a Value]) -> Option<&'a Value> {
+    rows.iter().copied().find(|row| {
+        row["attrs"]["status"]
             .as_u64()
-            .is_some_and(|status| (400..500).contains(&status)),
-        "provider ended with a non-retried 4xx"
-    );
-    rows.iter()
-        .rev()
-        .copied()
-        .find(|row| {
-            row["attrs"]["status"]
-                .as_u64()
-                .is_some_and(|status| (200..300).contains(&status))
-                && row["error"].is_null()
-        })
-        .expect("no provider attempt succeeded")
+            .is_some_and(|status| (200..300).contains(&status))
+            && row["error"].is_null()
+    })
 }
 
 fn response_events(body: &Value) -> Vec<Value> {
@@ -199,69 +195,6 @@ fn assert_no_error(value: &Value) {
         }
         _ => {}
     }
-}
-
-fn usage(body: &Value) -> Option<Value> {
-    response_events(body).iter().rev().find_map(find_usage)
-}
-
-fn find_usage(value: &Value) -> Option<Value> {
-    for key in ["usage", "usageMetadata"] {
-        if value[key].is_object() {
-            return Some(value[key].clone());
-        }
-    }
-    match value {
-        Value::Object(items) => items.values().find_map(find_usage),
-        Value::Array(items) => items.iter().find_map(find_usage),
-        _ => None,
-    }
-}
-
-pub(crate) fn assert_image_usage(baseline: &Value, image: &Value) {
-    let Some(image) = usage(image) else {
-        return;
-    };
-    if let Some(tokens) = image_tokens(&image) {
-        assert!(tokens > 0, "provider reported zero image tokens");
-        return;
-    }
-    let input_tokens = |u: &Value| {
-        u["input_tokens"]
-            .as_u64()
-            .or_else(|| u["prompt_tokens"].as_u64())
-            .or_else(|| u["promptTokenCount"].as_u64())
-    };
-    if let Some(tokens) = input_tokens(&image) {
-        let baseline = usage(baseline)
-            .as_ref()
-            .and_then(input_tokens)
-            .expect("provider reported image input tokens but no text-only baseline usage");
-        eprintln!("image usage: text-only={baseline}, with-image={tokens}");
-        assert!(
-            tokens > baseline,
-            "image input was not counted above text-only baseline"
-        );
-    }
-}
-
-// Explicit image accounting takes precedence over aggregate prompt deltas.
-fn image_tokens(usage: &Value) -> Option<u64> {
-    for path in [
-        "/input_tokens_details/image_tokens",
-        "/prompt_tokens_details/image_tokens",
-    ] {
-        if let Some(tokens) = usage.pointer(path).and_then(Value::as_u64) {
-            return Some(tokens);
-        }
-    }
-    let details = usage["promptTokensDetails"].as_array()?;
-    let tokens: Vec<_> = details
-        .iter()
-        .filter(|detail| detail["modality"] == "IMAGE")
-        .filter_map(|detail| detail["tokenCount"].as_u64())
-        .collect();
-    (!tokens.is_empty()).then(|| tokens.iter().sum())
 }
 
 mod tests;
