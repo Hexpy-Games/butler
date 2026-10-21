@@ -25,9 +25,10 @@ export function readAppLocalAuth(input: { butlerData: string }): {
 
 export function fullResetPending(input: { butlerData: string }): boolean;
 
-/** `token` is null only while a full reset is pending and the Agent has not written one yet. */
+/** `token` is null when a refused or resetting data folder has no existing token. */
 export function prepareAppLocalAuth(input: {
   butlerData: string;
+  readOnly?: boolean;
   now?: () => Date;
   generateToken?: () => string;
 }): {
@@ -50,6 +51,7 @@ export function buildBundledAgentSupervisorEnv(input: {
 
 export function createBundledAgentSupervisor(input: {
   butlerData: string;
+  readOnly?: boolean;
   resolveGateway: () => {
     command: string;
     args: string[];

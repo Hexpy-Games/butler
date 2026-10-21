@@ -1,4 +1,4 @@
-param([ValidateSet('Export','Run')][string]$Mode, [string[]]$Tests)
+param([ValidateSet('Export','Run')][string]$Mode, [string[]]$Tests, [switch]$WithoutE2eFixtures)
 $ErrorActionPreference = 'Stop'
 $artifacts = Join-Path $env:PREVIEW_ROOT 'artifacts'
 if ($Mode -eq 'Export') {
@@ -17,12 +17,14 @@ if ($Mode -eq 'Export') {
     }
 } else {
     if ($env:BUTLER_E2E_TIER -ne 'stub') { throw 'Compiled Windows verification requires BUTLER_E2E_TIER=stub' }
+    # Requirement modules describe the target binary, independently of the harness build profile.
+    $selection = if ($WithoutE2eFixtures) { @('--skip', '::requires_e2e_fixtures::') } else { @() }
     foreach ($test in $Tests) {
         $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
         $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
         New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
         $ErrorActionPreference = 'Continue'
-        $listed = & "$artifacts/e2e.exe" "$test`::" --list
+        $listed = & "$artifacts/e2e.exe" "$test`::" @selection --list
         $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0 -or !($listed -match ': test$')) { throw "Empty E2E selection: $test" }
         $savedPerf = $env:BUTLER_E2E_PERF
@@ -31,7 +33,7 @@ if ($Mode -eq 'Export') {
         $threads = if ($test -eq 'windows_commands') { 1 } else { 8 }
         $log = "$env:PREVIEW_ROOT/logs/$test.log"
         $ErrorActionPreference = 'Continue'
-        cmd /d /c "`"$artifacts/e2e.exe`" `"$test`::`" --test-threads=$threads --nocapture > `"$log`" 2>&1"
+        cmd /d /c "`"$artifacts/e2e.exe`" `"$test`::`" $selection --test-threads=$threads --nocapture > `"$log`" 2>&1"
         $testCode = $LASTEXITCODE
         $ErrorActionPreference = 'Stop'
         if ($null -eq $savedPerf) { Remove-Item Env:BUTLER_E2E_PERF -ErrorAction SilentlyContinue } else { $env:BUTLER_E2E_PERF = $savedPerf }

@@ -35,20 +35,17 @@ async fn reply(
     State(script): State<Arc<Script>>,
     Json(body): Json<Value>,
 ) -> axum::response::Response {
-    let mut requests = script.requests.lock().unwrap();
-    let step = requests.len();
-    requests.push(body.clone());
-    drop(requests);
-    let item = if step == 0 {
-        *script.started.lock().unwrap() = Some(Instant::now());
-        call(
-            "observe",
-            "run_command",
-            &json!({"command":script.command,
-            "summary":"다운로드 목록 확인","state_effect":"read_only","output_mode":"full",
-            "max_output_tokens":6000,"timeout_ms":30000}),
-        )
-    } else {
+    if body.to_string().contains("_new_chat_briefing") {
+        let wire = super::stub::response(&message("{}")).body();
+        return ([("content-type", "text/event-stream")], wire).into_response();
+    }
+    script.requests.lock().unwrap().push(body.clone());
+    let has_result = body["input"].as_array().is_some_and(|input| {
+        input
+            .iter()
+            .any(|item| item["type"] == "function_call_output" && item["call_id"] == "call_observe")
+    });
+    let item = if has_result {
         *script.elapsed.lock().unwrap() = Some(script.started.lock().unwrap().unwrap().elapsed());
         let result = outputs(&body)
             .into_iter()
@@ -58,11 +55,24 @@ async fn reply(
         } else {
             "보호 경로 접근을 거부했습니다."
         };
-        json!({"type":"message","id":"msg_answer","role":"assistant","status":"completed",
-            "content":[{"type":"output_text","text":text,"annotations":[]}]})
+        message(text)
+    } else {
+        *script.started.lock().unwrap() = Some(Instant::now());
+        call(
+            "observe",
+            "run_command",
+            &json!({"command":script.command,
+            "summary":"다운로드 목록 확인","state_effect":"read_only","output_mode":"full",
+            "max_output_tokens":6000,"timeout_ms":30000}),
+        )
     };
     let wire = super::stub::response(&item).body();
     ([("content-type", "text/event-stream")], wire).into_response()
+}
+
+fn message(text: &str) -> Value {
+    json!({"type":"message","id":"msg_answer","role":"assistant","status":"completed",
+        "content":[{"type":"output_text","text":text,"annotations":[]}]})
 }
 
 fn call(id: &str, name: &str, args: &Value) -> Value {

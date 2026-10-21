@@ -325,6 +325,7 @@ async function proof(version: string) {
   const agent = spawnSync(agentPath(version), ["--version"], { env, encoding: "utf8" });
   assert.equal(agent.status, 0); assert.ok(agent.stdout.includes(version));
   assert.equal(readFileSync(join(data, "sentinel.txt"), "utf8"), "retained");
+  await waitFor(() => readJson(join(data, "app/runtime/foreground/startup-progress.json"))?.stage === "window_ready", "window ready before tray proof");
   assert.equal(readJson(join(data, "app/runtime/foreground/startup-progress.json"))?.tray_ready, true);
 }
 

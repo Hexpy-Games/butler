@@ -112,7 +112,12 @@ jobs:
           $env:CARGO_HOME = "$env:USERPROFILE/.cargo"
           $env:RUSTUP_HOME = "$env:USERPROFILE/.rustup"
           $agent = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/butler-agent.exe"
-          ../../../deploy/windows-basic-capabilities.ps1 -Agent $agent
+          # Release binaries lack e2e-fixtures: skip fixture-only tests by requirement, as the installed job does (#1409).
+          $script = Get-Content -Raw -LiteralPath ../../../deploy/windows-basic-capabilities.ps1
+          $selection = 'windows_commands:: -- --test-threads=1'
+          if (-not $script.Contains($selection)) { throw 'Basic capability test selection changed' }
+          Set-Content -LiteralPath ../../../deploy/windows-basic-capabilities.release.ps1 -Encoding UTF8 -Value $script.Replace($selection, 'windows_commands:: -- --skip ::requires_e2e_fixtures:: --test-threads=1')
+          ../../../deploy/windows-basic-capabilities.release.ps1 -Agent $agent
       - name: Upload Windows basic capability log
         if: always()
         uses: actions/upload-artifact@v4

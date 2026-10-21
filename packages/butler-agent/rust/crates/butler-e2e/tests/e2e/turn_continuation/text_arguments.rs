@@ -8,19 +8,23 @@ use super::*;
 async fn tool_arguments_written_as_text_receive_feedback() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, script, server) = setup(stub::Mode::JsonProse, Access::FullAccess).await?;
-    let (_, turn) = s.turn("general", stub::REQUEST).await?;
+    let (id, turn) = s.turn("general", stub::REQUEST).await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
     let messages = s.gw.messages("general").await?;
     let answer = messages.iter().find(|m| m["role"] == "assistant").unwrap()["text"]
         .as_str()
         .unwrap();
     assert_eq!(answer, "The total is 42.");
+    assert!(
+        tool_rows(&messages, &id).is_empty(),
+        "text must not execute tools"
+    );
     let requests = script.requests.lock().unwrap().clone();
     assert_eq!(requests.len(), 2);
     assert!(
         requests[1]
             .to_string()
-            .contains("You wrote these tool names as text: read_file."),
+            .contains("These tool calls were written as text and were not run: read_file."),
         "{}",
         requests[1]
     );
