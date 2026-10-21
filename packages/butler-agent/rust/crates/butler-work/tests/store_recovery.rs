@@ -172,7 +172,10 @@ fn terminal_step_failure_leaves_no_question_and_active_chain() {
     let mut db = db();
     queue(&mut db, &["a"]);
     runtime(&mut db, "a", RunState::Failed, false);
-    assert!(undecided_holds(&db, "ch").unwrap().is_empty());
+    assert_eq!(
+        undecided_holds(&db, "ch").unwrap(),
+        Vec::<serde_json::Value>::new()
+    );
     assert_eq!(
         db.query_row::<String, _, _>("SELECT state FROM wm_work_chains WHERE id='ch'", [], |r| r
             .get(0))

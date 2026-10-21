@@ -197,7 +197,10 @@ fn last_failure_needs_no_question_and_crash_needs_no_caller_id() {
     let mut db = db();
     queue(&mut db, &["a"]);
     runtime(&mut db, "a", RunState::Failed, false);
-    assert!(undecided_holds(&db, "ch").unwrap().is_empty());
+    assert_eq!(
+        undecided_holds(&db, "ch").unwrap(),
+        Vec::<serde_json::Value>::new()
+    );
     assert_eq!(
         db.query_row::<String, _, _>("SELECT state FROM wm_work_chains WHERE id='ch'", [], |r| r
             .get(0))
@@ -251,7 +254,10 @@ fn derived_holds_preserve_started_and_terminal_followers() {
         let before = read_work(&db, "b").unwrap();
         runtime(&mut db, "a", RunState::Failed, false);
         assert_eq!(read_work(&db, "b").unwrap(), before);
-        assert!(undecided_holds(&db, "ch").unwrap().is_empty());
+        assert_eq!(
+            undecided_holds(&db, "ch").unwrap(),
+            Vec::<serde_json::Value>::new()
+        );
     }
 }
 
