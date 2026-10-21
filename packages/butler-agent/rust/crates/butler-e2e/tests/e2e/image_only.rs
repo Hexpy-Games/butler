@@ -85,10 +85,9 @@ async fn image_only_is_delivered_with_persisted_image_and_provider_image()
     let requests = s.provider()?.requests();
     assert_eq!(requests.len(), 1);
     proof::assert_uploaded_image(&requests[0], &png);
-    let recorded = proof::provider_bodies(&s, &turn_id).await?;
-    assert_eq!(recorded.len(), 1);
-    proof::assert_uploaded_image(&recorded[0]["request"], &png);
-    proof::assert_response_ok(&recorded[0]);
+    let recorded = proof::provider_body(&s, &turn_id).await?;
+    proof::assert_uploaded_image(&recorded["request"], &png);
+    proof::assert_response_ok(&recorded);
     live.wait_for(Duration::from_secs(5), |e| {
         event_turn_id(e) == Some(&turn_id)
             && (e["payload"]["state"] == "delivered"

@@ -34,14 +34,18 @@ pub(crate) fn assert_uploaded_image(request: &Value, uploaded: &[u8]) {
 }
 
 fn contains_image(value: &Value, uploaded: &[u8]) -> bool {
+    // Shapes emitted by butler-models provider/visual.rs::image_part.
+    if value["inline_data"]["mime_type"]
+        .as_str()
+        .is_some_and(|mime| mime.starts_with("image/"))
+    {
+        return matches_bytes(&value["inline_data"]["data"], uploaded);
+    }
     let encoded = match value["type"].as_str() {
         Some("input_image") => value["image_url"].as_str(),
         Some("image_url") => value["image_url"]["url"].as_str(),
         Some("image") if value["source"]["type"] == "base64" => {
-            return value["source"]["data"]
-                .as_str()
-                .and_then(|s| STANDARD.decode(s).ok())
-                .is_some_and(|bytes| bytes == uploaded);
+            return matches_bytes(&value["source"]["data"], uploaded);
         }
         _ => None,
     };
@@ -58,8 +62,15 @@ fn contains_image(value: &Value, uploaded: &[u8]) -> bool {
     }
 }
 
-/// Read Butler's full HTTP bodies, scoped to the turn (not the stub's capture).
-pub(crate) async fn provider_bodies(s: &Scenario, turn: &str) -> Result<Vec<Value>, HarnessError> {
+fn matches_bytes(encoded: &Value, uploaded: &[u8]) -> bool {
+    encoded
+        .as_str()
+        .and_then(|s| STANDARD.decode(s).ok())
+        .is_some_and(|bytes| bytes == uploaded)
+}
+
+/// Read the final successful attempt, scoped to the delivered turn.
+pub(crate) async fn provider_body(s: &Scenario, turn: &str) -> Result<Value, HarnessError> {
     tokio::time::timeout(Duration::from_secs(10), async {
         loop {
             let logs =
@@ -80,32 +91,43 @@ pub(crate) async fn provider_bodies(s: &Scenario, turn: &str) -> Result<Vec<Valu
                 .collect();
             rows.sort_by_key(|r| r["ts"].as_str().unwrap_or_default());
             if !rows.is_empty() {
-                let mut bodies = Vec::new();
-                for row in rows {
-                    assert_eq!(row["turn_id"], turn);
-                    let status = row["attrs"]["status"].as_u64().expect("HTTP status");
-                    assert!(
-                        (200..300).contains(&status),
-                        "provider HTTP status {status}"
-                    );
-                    assert!(row["error"].is_null(), "provider HTTP error");
-                    let body = if let Some(reference) = row["body_ref"].as_str() {
-                        let reply = s.gw.get(&format!("/logs/bodies/{reference}")).await?;
-                        assert_eq!(reply.status, 200);
-                        reply.body
-                    } else {
-                        row["content"].clone()
-                    };
-                    assert!(body["request"].is_object(), "missing full request body");
-                    bodies.push(body);
-                }
-                return Ok::<_, HarnessError>(bodies);
+                let row = final_successful_attempt(&rows);
+                assert_eq!(row["turn_id"], turn);
+                let body = if let Some(reference) = row["body_ref"].as_str() {
+                    let reply = s.gw.get(&format!("/logs/bodies/{reference}")).await?;
+                    assert_eq!(reply.status, 200);
+                    reply.body
+                } else {
+                    row["content"].clone()
+                };
+                assert!(body["request"].is_object(), "missing full request body");
+                return Ok::<_, HarnessError>(body);
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
     })
     .await
     .expect("provider HTTP log missing")
+}
+
+fn final_successful_attempt<'a>(rows: &[&'a Value]) -> &'a Value {
+    let last = rows.last().expect("provider attempts");
+    assert!(
+        !last["attrs"]["status"]
+            .as_u64()
+            .is_some_and(|status| (400..500).contains(&status)),
+        "provider ended with a non-retried 4xx"
+    );
+    rows.iter()
+        .rev()
+        .copied()
+        .find(|row| {
+            row["attrs"]["status"]
+                .as_u64()
+                .is_some_and(|status| (200..300).contains(&status))
+                && row["error"].is_null()
+        })
+        .expect("no provider attempt succeeded")
 }
 
 fn response_events(body: &Value) -> Vec<Value> {
@@ -148,6 +170,11 @@ pub(crate) fn assert_response_ok(body: &Value) {
                         .iter()
                         .any(|choice| choice["finish_reason"].is_string())
                 })
+                || event["candidates"].as_array().is_some_and(|candidates| {
+                    candidates
+                        .iter()
+                        .any(|candidate| candidate["finishReason"].is_string())
+                })
         }),
         "provider response has no protocol completion"
     );
@@ -179,8 +206,10 @@ fn usage(body: &Value) -> Option<Value> {
 }
 
 fn find_usage(value: &Value) -> Option<Value> {
-    if value["usage"].is_object() {
-        return Some(value["usage"].clone());
+    for key in ["usage", "usageMetadata"] {
+        if value[key].is_object() {
+            return Some(value[key].clone());
+        }
     }
     match value {
         Value::Object(items) => items.values().find_map(find_usage),
@@ -193,10 +222,7 @@ pub(crate) fn assert_image_usage(baseline: &Value, image: &Value) {
     let Some(image) = usage(image) else {
         return;
     };
-    if let Some(tokens) = image
-        .pointer("/input_tokens_details/image_tokens")
-        .and_then(Value::as_u64)
-    {
+    if let Some(tokens) = image_tokens(&image) {
         assert!(tokens > 0, "provider reported zero image tokens");
         return;
     }
@@ -204,6 +230,7 @@ pub(crate) fn assert_image_usage(baseline: &Value, image: &Value) {
         u["input_tokens"]
             .as_u64()
             .or_else(|| u["prompt_tokens"].as_u64())
+            .or_else(|| u["promptTokenCount"].as_u64())
     };
     if let Some(tokens) = input_tokens(&image) {
         let baseline = usage(baseline)
@@ -217,3 +244,24 @@ pub(crate) fn assert_image_usage(baseline: &Value, image: &Value) {
         );
     }
 }
+
+// Explicit image accounting takes precedence over aggregate prompt deltas.
+fn image_tokens(usage: &Value) -> Option<u64> {
+    for path in [
+        "/input_tokens_details/image_tokens",
+        "/prompt_tokens_details/image_tokens",
+    ] {
+        if let Some(tokens) = usage.pointer(path).and_then(Value::as_u64) {
+            return Some(tokens);
+        }
+    }
+    let details = usage["promptTokensDetails"].as_array()?;
+    let tokens: Vec<_> = details
+        .iter()
+        .filter(|detail| detail["modality"] == "IMAGE")
+        .filter_map(|detail| detail["tokenCount"].as_u64())
+        .collect();
+    (!tokens.is_empty()).then(|| tokens.iter().sum())
+}
+
+mod tests;

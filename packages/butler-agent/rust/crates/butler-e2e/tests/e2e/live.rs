@@ -227,10 +227,12 @@ async fn live_06_image_reaches_provider() -> Result<(), HarnessError> {
     let baseline_chat = baseline_chat.data()["session"]["id"].as_str().unwrap();
     let (baseline_id, baseline_turn) = live_turn(&s, baseline_chat, prompt).await?;
     assert_eq!(turn_state(&baseline_turn), "delivered", "{baseline_turn}");
-    let baseline = proof::provider_bodies(&s, &baseline_id).await?;
+    let baseline = proof::provider_body(&s, &baseline_id).await?;
+    let image_chat = s.gw.post("/sessions", json!({"kind":"chat"})).await?;
+    let image_chat = image_chat.data()["session"]["id"].as_str().unwrap();
     let png = proof::upload_png();
     let upload =
-        s.gw.upload("number.png", "image/png", &png, Some("general"))
+        s.gw.upload("number.png", "image/png", &png, Some(image_chat))
             .await?;
     assert_eq!(upload.status, 201, "{}", upload.text);
     let file_id = upload.data()["file"]["file_id"]
@@ -240,21 +242,20 @@ async fn live_06_image_reaches_provider() -> Result<(), HarnessError> {
     live::spend_turn()?;
     let accepted = s
         .gw
-        .send_message(json!({"chat_id": "general", "text": prompt,
+        .send_message(json!({"chat_id": image_chat, "text": prompt,
             "client_message_id": uuid::Uuid::new_v4().to_string(), "attachments": [{"file_id": file_id}]}))
         .await?;
     let turn_id = accepted_turn_id(&accepted)?;
     let turn =
-        s.gw.wait_terminal("general", &turn_id, Duration::from_secs(300))
+        s.gw.wait_terminal(image_chat, &turn_id, Duration::from_secs(300))
             .await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
     assert!(turn["error"].is_null(), "turn contains an error");
-    let recorded = proof::provider_bodies(&s, &turn_id).await?;
-    proof::assert_uploaded_image(&recorded[0]["request"], &png);
-    for body in baseline.iter().chain(&recorded) {
-        proof::assert_response_ok(body);
-    }
-    proof::assert_image_usage(&baseline[0], &recorded[0]);
+    let recorded = proof::provider_body(&s, &turn_id).await?;
+    proof::assert_uploaded_image(&recorded["request"], &png);
+    proof::assert_response_ok(&baseline);
+    proof::assert_response_ok(&recorded);
+    proof::assert_image_usage(&baseline, &recorded);
     s.finish().await?;
     done("LIVE-06")
 }
