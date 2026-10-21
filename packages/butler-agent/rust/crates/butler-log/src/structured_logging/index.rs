@@ -93,9 +93,18 @@ fn save_mode(path: &Path, blocks: &[Block], durable: bool) -> io::Result<()> {
     if durable {
         super::files::sync(&file)?;
     }
-    butler_platform::secure_fs::rename(&tmp, &path.with_extension("idx"))?;
+    drop(file);
     if durable {
+        butler_platform::secure_fs::rename(&tmp, &path.with_extension("idx"))?;
         super::files::sync_parent(path)?;
+    } else {
+        // Live indexes need atomic visibility, not Windows write-through. A
+        // durable rename would put filesystem synchronization back on CLI exit.
+        butler_platform::secure_fs::replace_file(
+            &tmp,
+            &path.with_extension("idx"),
+            &mut || Ok(()),
+        )?;
     }
     Ok(())
 }

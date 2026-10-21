@@ -397,6 +397,48 @@ fn logs_dropped_notice_is_visible_without_flush() -> Result<(), Box<dyn std::err
 }
 
 #[tokio::test]
+async fn logs_producer_close_publishes_latest_index_to_open_service()
+-> Result<(), Box<dyn std::error::Error>> {
+    butler_e2e::gate!();
+    let root = root();
+    let service = Logger::open(&root, Config::detailed())?;
+    let producer = Logger::producer(&root, Config::detailed())?;
+    producer.record_written(record(0, "INFO")).await?;
+    assert_eq!(service.query(&Query::default())?.rows.len(), 1);
+    let index = fs::read_dir(root.join("logs/agent/main"))?
+        .map(|entry| entry.map(|entry| entry.path()))
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .find(|path| path.extension().is_some_and(|ext| ext == "idx"))
+        .unwrap();
+    let old_index = fs::read(&index)?;
+    let mut reader = fs::File::open(&index)?;
+    producer.record(record(1, "INFO"))?;
+    let start = Instant::now();
+    producer
+        .shutdown_bounded(Duration::from_millis(250))
+        .await?;
+    let elapsed = start.elapsed();
+    // Query the running service before startup repair can rebuild any index.
+    let rows = service.query(&Query::default())?.rows;
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].msg, "row 1");
+    assert_eq!(rows[1].msg, "row 0");
+    assert_ne!(fs::read(index)?, old_index);
+    let mut retained = Vec::new();
+    reader.read_to_end(&mut retained)?;
+    assert_eq!(retained, old_index, "open readers retain their snapshot");
+    drop(reader);
+    eprintln!(
+        "LOG-PRODUCER live_index_close_ms={:.3} rows=2",
+        elapsed.as_secs_f64() * 1000.0
+    );
+    service.shutdown()?;
+    fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn logs_producer_bounded_close_preserves_complete_records()
 -> Result<(), Box<dyn std::error::Error>> {
     butler_e2e::gate!();
