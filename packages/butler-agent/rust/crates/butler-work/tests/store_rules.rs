@@ -139,13 +139,29 @@ fn hold_run_anyway_only_releases_next_step_and_delete_cancels_later() {
             )
             .unwrap();
             assert_eq!(ready_works(&tx, "ch").unwrap(), vec!["y"]);
-            assert_eq!(read_work(&tx, "z").unwrap()["run_state"], "held");
+            assert_eq!(read_work(&tx, "z").unwrap()["run_state"], "waiting");
+            assert!(!ready_works(&tx, "ch").unwrap().contains(&"z".into()));
         } else {
             assert_eq!(read_work(&tx, "y").unwrap()["run_state"], "cancelled");
             assert_eq!(read_work(&tx, "z").unwrap()["run_state"], "cancelled");
         }
         tx.commit().unwrap();
     }
+
+    let mut db = approved_failure();
+    runtime(&mut db, "b", RunState::Done, false);
+    assert_eq!(ready_works(&db, "ch").unwrap(), Vec::<String>::new());
+    runtime(&mut db, "b", RunState::Done, true);
+    assert_eq!(ready_works(&db, "ch").unwrap(), vec!["c"]);
+    assert_eq!(
+        undecided_holds(&db, "ch").unwrap(),
+        Vec::<serde_json::Value>::new()
+    );
+    runtime(&mut db, "c", RunState::Running, false);
+    assert_eq!(chain_state(&db), "active");
+    runtime(&mut db, "c", RunState::Done, true);
+    assert_eq!(read_work(&db, "a").unwrap()["run_state"], "failed");
+    assert_eq!(chain_state(&db), "done");
 }
 
 // test-category: pure-logic

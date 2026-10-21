@@ -47,15 +47,25 @@ fn held_cannot_escape_via_runtime() {
 }
 // test-category: pure-logic
 #[test]
-fn repeated_failure_preserves_running_follower() {
-    let mut db = db();
-    queue(&mut db, &["a", "b", "c"]);
-    runtime(&mut db, "a", RunState::Failed, false);
-    decide(&mut db, Decision::RunAnyway);
-    runtime(&mut db, "b", RunState::Running, false);
+fn repeated_failure_questions_the_first_actually_held_step() {
+    let mut db = approved_failure();
     runtime(&mut db, "a", RunState::Running, false);
     runtime(&mut db, "a", RunState::Failed, false);
     assert_eq!(read_work(&db, "b").unwrap()["run_state"], "running");
+    assert_eq!(read_work(&db, "c").unwrap()["held_by_work_id"], "a");
+    let questions = undecided_holds(&db, "ch").unwrap();
+    assert_eq!(questions.len(), 1);
+    assert_eq!(questions[0]["held_step_index"], 2);
+    approve(&mut db);
+    assert_eq!(
+        undecided_holds(&db, "ch").unwrap(),
+        Vec::<serde_json::Value>::new()
+    );
+    assert_eq!(ready_works(&db, "ch").unwrap(), Vec::<String>::new());
+    runtime(&mut db, "b", RunState::Done, true);
+    assert_eq!(ready_works(&db, "ch").unwrap(), vec!["c"]);
+    runtime(&mut db, "c", RunState::Done, true);
+    assert_eq!(chain_state(&db), "done");
 }
 // test-category: pure-logic
 #[test]
@@ -295,6 +305,18 @@ fn approval_retires_on_state_or_step_change_and_covers_only_recorded_failures() 
         assert_eq!(read_work(&db, "c").unwrap()["run_state"], "held");
         assert_eq!(undecided_holds(&db, "ch").unwrap().len(), 1);
     }
+
+    let db = approved_failure();
+    db.execute(
+        "UPDATE wm_hold_decisions SET coverage_json='{}' WHERE chain_id='ch'",
+        [],
+    )
+    .unwrap();
+    // Put the admitted follower back at the barrier without deriving holds:
+    // readiness must propagate the codec error, rather than silently denying it.
+    db.execute("UPDATE wm_works SET run_state='waiting' WHERE id='b'", [])
+        .unwrap();
+    assert!(matches!(ready_works(&db, "ch"), Err(Error::Json(_))));
 }
 
 // test-category: pure-logic

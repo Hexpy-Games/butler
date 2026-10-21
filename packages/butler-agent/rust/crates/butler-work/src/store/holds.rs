@@ -22,11 +22,13 @@ fn coverage(work: &Value) -> Value {
     json!({"id":work["id"],"step":work["step_index"],
         "state":work["run_state"],"generation":work["run_generation"]})
 }
-pub(super) fn approval_covers(approval: &Value, work: &Value, step: i64) -> bool {
-    let covered: Vec<Value> =
-        serde_json::from_str(approval["coverage_json"].as_str().unwrap_or("[]"))
-            .unwrap_or_default();
-    work["step_index"].as_i64() == step.checked_sub(1) && covered.contains(&coverage(work))
+pub(super) fn approval_covers(approvals: &[Value], work: &Value) -> Result<bool> {
+    let mut covers = false;
+    for approval in approvals {
+        let covered: Vec<Value> = serde_json::from_str(text(approval, "coverage_json")?)?;
+        covers |= covered.contains(&coverage(work));
+    }
+    Ok(covers)
 }
 fn retire_approvals(
     tx: &Transaction<'_>,
@@ -66,19 +68,21 @@ pub(super) fn rederive_holds(
 ) -> Result<Vec<Value>> {
     let members = rows(tx, sql::MEMBERS, [chain_id])?;
     let approvals = retire_approvals(tx, ctx, chain_id, &members)?;
+    let mut failures = Vec::new();
+    for member in members.iter().filter(|m| failed(m)) {
+        if !approval_covers(&approvals, member)? {
+            failures.push(member);
+        }
+    }
     let mut needed = BTreeMap::new();
     for member in members.iter().filter(|m| unstarted(m)) {
         let step = member["step_index"]
             .as_i64()
             .ok_or(Error::Invalid("step"))?;
-        let cause = members
+        let cause = failures
             .iter()
-            .rev()
-            .filter(|pred| {
-                failed(pred)
-                    && pred["step_index"].as_i64().is_some_and(|i| i < step)
-                    && !approvals.iter().any(|a| approval_covers(a, pred, step))
-            })
+            .copied()
+            .filter(|pred| pred["step_index"].as_i64().is_some_and(|i| i < step))
             .max_by_key(|pred| pred["step_index"].as_i64());
         if let Some(cause) = cause {
             let failure_step = cause["step_index"].as_i64().ok_or(Error::Invalid("step"))?;
@@ -97,14 +101,10 @@ pub(super) fn rederive_holds(
                 None,
                 false,
             )?;
-            // A decided boundary already has its durable card. Remote followers
-            // stay held; its approval grants admission only to the immediate step.
-            if !approvals
-                .iter()
-                .any(|a| approval_covers(a, cause, failure_step + 1))
-            {
-                needed.insert(failure_step + 1, cause);
-            }
+            // One question per failure boundary, at the first step that
+            // actually has held Works (earlier followers may already be running).
+            let entry = needed.entry(failure_step).or_insert((step, cause));
+            entry.0 = entry.0.min(step);
         } else {
             set_state(
                 tx,
@@ -118,7 +118,7 @@ pub(super) fn rederive_holds(
             )?;
         }
     }
-    reconcile_questions(tx, ctx, chain_id, &members, needed)?;
+    reconcile_questions(tx, ctx, chain_id, &members, needed.into_values().collect())?;
     update_chain_state(tx, chain_id)?;
     undecided_holds(tx, chain_id)
 }

@@ -109,3 +109,33 @@ pub(crate) fn member_revisions(db: &Connection, id: &str) -> Vec<(String, i64)> 
         })
         .collect()
 }
+
+pub(crate) fn approve(db: &mut rusqlite::Connection) {
+    let q = undecided_holds(db, "ch").unwrap().remove(0);
+    let tx = db.transaction().unwrap();
+    decide_hold(
+        &tx,
+        &context(),
+        q["id"].as_str().unwrap(),
+        q["revision"].as_i64().unwrap(),
+        graph(&tx, "ch"),
+        Decision::RunAnyway,
+    )
+    .unwrap();
+    tx.commit().unwrap();
+}
+pub(crate) fn approved_failure() -> rusqlite::Connection {
+    let mut db = db();
+    queue(&mut db, &["a", "b", "c"]);
+    runtime(&mut db, "a", RunState::Failed, false);
+    approve(&mut db);
+    assert_eq!(ready_works(&db, "ch").unwrap(), vec!["b"]);
+    runtime(&mut db, "b", RunState::Running, false);
+    db
+}
+pub(crate) fn chain_state(db: &rusqlite::Connection) -> String {
+    db.query_row("SELECT state FROM wm_work_chains WHERE id='ch'", [], |r| {
+        r.get(0)
+    })
+    .unwrap()
+}

@@ -38,8 +38,19 @@ fn stack_failures_share_one_question_and_bypass_only_that_barrier() {
     )
     .unwrap();
     assert_eq!(ready_works(&tx, "ch").unwrap(), vec!["b"]);
-    assert_eq!(read_work(&tx, "c").unwrap()["run_state"], "held");
+    assert_eq!(read_work(&tx, "c").unwrap()["run_state"], "waiting");
     tx.commit().unwrap();
+
+    let mut db = approved_failure();
+    assert_eq!(read_work(&db, "c").unwrap()["run_state"], "waiting");
+    runtime(&mut db, "b", RunState::Failed, false);
+    let questions = undecided_holds(&db, "ch").unwrap();
+    assert_eq!(questions.len(), 1);
+    assert_eq!(questions[0]["failed_work_id"], "b");
+    assert_eq!(questions[0]["held_step_index"], 2);
+    assert_eq!(read_work(&db, "c").unwrap()["held_by_work_id"], "b");
+    approve(&mut db);
+    assert_eq!(ready_works(&db, "ch").unwrap(), vec!["c"]);
 }
 // test-category: pure-logic
 #[test]

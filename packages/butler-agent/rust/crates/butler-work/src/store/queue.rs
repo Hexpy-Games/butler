@@ -132,12 +132,16 @@ pub(super) fn persist(
 }
 pub(super) fn update_chain_state(tx: &Transaction<'_>, id: &str) -> Result<()> {
     let members = rows(tx, sql::MEMBERS, [id])?;
+    let approvals = rows(tx, sql::DECIDED_HOLDS, [id])?;
+    let mut complete = true;
+    for member in &members {
+        let approved = approval_covers(&approvals, member)?;
+        complete &=
+            (member["run_state"] == "done" && !member["result_reported_at"].is_null()) || approved;
+    }
     let state = if !undecided_holds(tx, id)?.is_empty() {
         "held"
-    } else if members
-        .iter()
-        .all(|r| r["run_state"] == "done" && !r["result_reported_at"].is_null())
-    {
+    } else if complete {
         "done"
     } else {
         "active"

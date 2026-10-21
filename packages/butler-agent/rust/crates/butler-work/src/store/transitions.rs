@@ -258,14 +258,16 @@ pub fn ready_works(db: &Connection, chain_id: &str) -> Result<Vec<String>> {
         let step = member["step_index"]
             .as_i64()
             .ok_or(Error::Invalid("step"))?;
-        let satisfied = chain
+        let mut satisfied = true;
+        for pred in chain
             .members
             .iter()
             .filter(|p| p["step_index"].as_i64() == step.checked_sub(1))
-            .all(|pred| {
-                (pred["run_state"] == "done" && !pred["result_reported_at"].is_null())
-                    || approvals.iter().any(|a| approval_covers(a, pred, step))
-            });
+        {
+            let approved = approval_covers(&approvals, pred)?;
+            satisfied &=
+                (pred["run_state"] == "done" && !pred["result_reported_at"].is_null()) || approved;
+        }
         if satisfied {
             ready.push(text(member, "id")?.into());
         }
