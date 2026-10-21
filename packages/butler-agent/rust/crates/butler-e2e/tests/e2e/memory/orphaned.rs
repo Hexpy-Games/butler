@@ -7,9 +7,9 @@
 )]
 
 use super::coverage_seed::{published, recovered, session, turn};
-use super::coverage_support::{canonical, drain, graph, hold_gate, release_gate, start};
+use super::coverage_support::{canonical, drain, graph, hold_gate, release_gate};
 use super::standalone_upgrade::reset_pending;
-use butler_e2e::e2e::HarnessError;
+use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use std::time::{Duration, Instant};
 
 const GONE: &str = "orphan-source";
@@ -41,7 +41,12 @@ async fn mem_orphaned_turn_ineligible_restored() -> Result<(), HarnessError> {
 }
 
 async fn orphaned(standalone: bool, ineligible: bool) -> Result<(), HarnessError> {
-    let mut s = start("MEM-ORPHANED", &[]).await?;
+    let mut s = Setup::new("MEM-ORPHANED")?
+        .cassette("MEM-01")
+        .env("BUTLER_METRICS_ENABLED", "1")
+        .env("BUTLER_MEMORY_SYNC_TRACE", "1")
+        .start()
+        .await?;
     let data = s.sandbox.data.clone();
     crate::memory_wiring::bootstrap(&data).await;
     crate::memory_fixture::settle(&data).await?;
@@ -94,6 +99,7 @@ async fn orphaned(standalone: bool, ineligible: bool) -> Result<(), HarnessError
             .execute("DELETE FROM conversation_sessions WHERE id=?1", [GONE])
             .unwrap();
     }
+    let parked = idle_signals(&s).await;
     release_gate(&gate);
     drop(gate);
     let started = Instant::now();
@@ -120,12 +126,13 @@ async fn orphaned(standalone: bool, ineligible: bool) -> Result<(), HarnessError
         started.elapsed().as_millis()
     );
     drain(&data, &[GONE]).await;
-    assert_idle(&s).await;
+    assert_idle(&s, parked).await;
     s.agent.terminate().await?;
     s.gw = s.agent.start_again().await?;
     drain(&data, &[GONE]).await;
-    assert_idle(&s).await;
+    assert_idle(&s, 0).await;
     if ineligible {
+        let parked = idle_signals(&s).await;
         let table = if standalone {
             "conversation_messages"
         } else {
@@ -144,12 +151,47 @@ async fn orphaned(standalone: bool, ineligible: bool) -> Result<(), HarnessError
             completed, windows,
             "catch-up must revive the same restored revision"
         );
-        assert_idle(&s).await;
+        assert_idle(&s, parked).await;
     }
     s.finish().await
 }
 
-async fn assert_idle(s: &butler_e2e::e2e::scenario::Scenario) {
+async fn idle_signals(s: &butler_e2e::e2e::scenario::Scenario) -> usize {
+    s.agent
+        .current_logs()
+        .await
+        .unwrap()
+        .matches("[memory-sync-trace] park delay=None")
+        .count()
+}
+
+async fn assert_idle(s: &butler_e2e::e2e::scenario::Scenario, parked: usize) {
+    // Semantic completion commits before finish() registers vector units, which
+    // updates last_served_at even when the vector states are unchanged. Wait for
+    // a fresh completed idle poll, after all writes for the seeded work, without
+    // holding the writer gate during the full five-second observation below.
+    let started = Instant::now();
+    tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            let logs = s.agent.current_logs().await.unwrap();
+            let fresh = logs.matches("[memory-sync-trace] park delay=None").count() > parked;
+            let last = logs
+                .lines()
+                .rfind(|line| line.contains("[memory-sync-trace]"));
+            if fresh
+                && last.is_some_and(|line| line.ends_with("[memory-sync-trace] park delay=None"))
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("memory consumer did not finish the requested writes and park idle");
+    eprintln!(
+        "MEM-ORPHANED writer_idle_barrier_ms={}",
+        started.elapsed().as_millis()
+    );
     let db = graph(&s.sandbox.data);
     let version = || {
         db.pragma_query_value::<u64, _>(None, "data_version", |r| r.get(0))
