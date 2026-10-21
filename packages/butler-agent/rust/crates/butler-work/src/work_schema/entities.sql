@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS wm_works (
   title TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   kind TEXT,
+  run_generation INTEGER NOT NULL DEFAULT 0 CHECK (run_generation >= 0),
   run_state TEXT NOT NULL DEFAULT 'idle' CHECK (run_state IN ('idle','waiting','held','running','in_review','blocked','failed','paused','stopped','done','cancelled')),
   canon_status TEXT CHECK (canon_status IN ('planned','in_progress','in_review','blocked','done','cancelled')),
   canon_status_source TEXT CHECK (canon_status_source IN ('runtime','person')),
@@ -77,7 +78,10 @@ CREATE TABLE IF NOT EXISTS wm_hold_decisions (
   failed_work_id TEXT NOT NULL REFERENCES wm_works(id),
   held_step_index INTEGER NOT NULL CHECK (held_step_index >= 0),
   question_message_id TEXT NOT NULL,
+  coverage_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(coverage_json)),
+  revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
   decision TEXT CHECK (decision IN ('run_anyway','delete')),
   decided_at INTEGER,
+  resolved_at INTEGER,
   CHECK ((decision IS NULL) = (decided_at IS NULL))
 );

@@ -22,7 +22,7 @@ indexed_reads! {
     ChainMembers => ("SELECT id,step_index,stack_position,run_state,result_reported_at
  FROM wm_works WHERE chain_id=?1 ORDER BY step_index,stack_position", "wm_works_chain"),
     Readiness => ("SELECT pred_work_id FROM wm_work_edges WHERE succ_work_id=?1", "wm_work_edges_successor"),
-    HoldDecisions => ("SELECT * FROM wm_hold_decisions WHERE chain_id=?1 AND decision IS NULL", "wm_hold_decisions_pending"),
+    HoldDecisions => ("SELECT * FROM wm_hold_decisions WHERE chain_id=?1 AND decision IS NULL AND resolved_at IS NULL", "wm_hold_decisions_pending"),
     ConversationWork => ("SELECT * FROM wm_works WHERE home_session_id=?1
  AND visibility='canon' AND home_session_id IS NOT NULL", "wm_works_home"),
     PlanOverview => ("SELECT * FROM wm_works WHERE plan_id=?1 AND visibility='canon' ORDER BY plan_rank", "wm_works_plan"),
