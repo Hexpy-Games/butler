@@ -15,7 +15,7 @@ fn seed(data: &std::path::Path) {
         COMMIT;").unwrap();
 }
 #[tokio::test]
-async fn history_history_indexed_reads_and_live_visit_are_complete() -> Result<(), HarnessError> {
+async fn history_indexed_reads_and_live_visit_are_complete() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("BROWSER-HISTORY-SCALE")?.start().await?;
     s.agent.terminate().await?;

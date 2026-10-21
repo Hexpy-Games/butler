@@ -14,7 +14,7 @@ async fn terminal_history_survives_restarts() -> Result<(), HarnessError> {
     let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
     std::fs::remove_file(path.with_extension("sqlite.verified"))?;
     let mut stamp = Vec::new();
-    for clean in [false, true, true] {
+    for (run, clean) in [false, true, true].into_iter().enumerate() {
         s.gw = s.agent.start_again().await?;
         assert!(s.gw.healthy().await);
         complete(&s.sandbox.data, 48)?;
@@ -27,6 +27,17 @@ async fn terminal_history_survives_restarts() -> Result<(), HarnessError> {
         } else {
             concurrent_scan(&s.sandbox.data, &s.gw, 48).await?;
             stamp = std::fs::read(path.with_extension("sqlite.verified"))?;
+        }
+        if run == 2 {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            let pid = s.agent.pid().unwrap();
+            let before = butler_platform::process_control::usage::sample(pid)?.unwrap();
+            tokio::time::sleep(Duration::from_secs(60)).await;
+            let after = butler_platform::process_control::usage::sample(pid)?.unwrap();
+            let writes = after.write_bytes - before.write_bytes;
+            assert!(writes <= 1_000_000, "idle disk writes: {writes}");
+            eprintln!("BTCC clean restart idle_write_bytes_60s={writes}");
+            complete(&s.sandbox.data, 48)?;
         }
         if clean {
             s.agent.terminate().await?;

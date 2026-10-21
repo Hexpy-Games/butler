@@ -10,7 +10,7 @@ use butler_platform::sqlite;
 use std::time::{Duration, Instant};
 
 #[tokio::test]
-async fn user_work_ignores_failed_queues_and_history_history() -> Result<(), HarnessError> {
+async fn user_work_ignores_failed_queues_and_history() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("UPDATE-USER-WORK")?.start().await?;
     s.agent.terminate().await?;

@@ -1,7 +1,7 @@
 use super::*;
 use rusqlite::{Connection, params};
 
-// 360 registrations in the project, plus unrelated history message history.
+// 360 registrations in the project, plus unrelated message history.
 fn seed(data: &std::path::Path, project: &str, chat: &str) -> Vec<String> {
     let started = std::time::Instant::now();
     seed_usage("seed_begin");

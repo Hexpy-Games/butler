@@ -1,8 +1,10 @@
-//! 640 scopes and history requests over thirty days, including low-ranked selection.
+//! 240 scopes straddle the 24-hour, seven-day and thirty-day range boundaries.
 use super::super::usage_timeline::assert_timeline;
 use super::*;
 use std::collections::BTreeMap;
-const ROW_COUNT: usize = 720;
+// Each group includes every scope, preserving selected-session overflow coverage.
+const AGE_SLOTS: [i64; 7] = [0, 94, 98, 670, 674, 2878, 2882];
+const ROW_COUNT: usize = SCOPE_COUNT * AGE_SLOTS.len();
 const SCOPE_COUNT: usize = 240;
 const SLOT_MS: i64 = 900_000;
 
@@ -17,7 +19,7 @@ fn scope(index: usize) -> String {
     }
 }
 fn timestamp(base: i64, index: usize) -> i64 {
-    base - i64::try_from(index / SCOPE_COUNT * 960).expect("slot fits i64") * SLOT_MS
+    base - AGE_SLOTS[index / SCOPE_COUNT] * SLOT_MS
 }
 fn total(index: usize) -> f64 {
     if scope_index(index) == SCOPE_COUNT - 1 {
@@ -69,7 +71,7 @@ fn scheduled(index: usize) -> bool {
     scope_index(index).is_multiple_of(100) || (scope_index(index) == 1 && index.is_multiple_of(3))
 }
 
-/// Thousands of actual run bindings, half routed through the durable queue.
+/// Three run bindings per time group, alternating through the durable queue.
 fn seed_runs(data: &Path, base: i64) -> Result<(), HarnessError> {
     let mut db = butler_platform::sqlite::open(data.join("app-server/butler-client.sqlite"))?;
     db.execute_batch("INSERT INTO app_automations(id,title,prompt_body,target_kind,target_session_id,interval_seconds,state,last_run_state,created_at,updated_at)
@@ -96,7 +98,7 @@ fn seed_runs(data: &Path, base: i64) -> Result<(), HarnessError> {
         count += 1;
     }
     tx.commit()?;
-    assert!(count > 0 && queued_count > 0);
+    assert_eq!((count, queued_count), (21, 11));
     eprintln!("usage schedule fixture: {count} runs, {queued_count} queued");
     Ok(())
 }
@@ -204,10 +206,11 @@ async fn perf_usage_timeline_history_ranges() -> Result<(), HarnessError> {
     let memory = super::memory::PeakMemory::start(s.agent.pid().unwrap());
     let (ingest, view) = timed(&s.gw, "/usage-monitor?since_hours=720").await?;
     verify(&view, base, false);
+    assert_eq!(view["model"]["requestCount"], 1440);
     butler_e2e::assert_wall_clock_budget!(ingest, COLD, "history ingest");
     eprintln!("usage timeline history ingest + initial request: {ingest:?}");
     let mut measurements = Vec::new();
-    for hours in [24, 168, 720] {
+    for (hours, groups) in [(24, 2), (168, 4), (720, 6)] {
         for selected in [false, true] {
             let suffix = if selected { "&session_id=general" } else { "" };
             let (latency, view) = timed(
@@ -216,10 +219,20 @@ async fn perf_usage_timeline_history_ranges() -> Result<(), HarnessError> {
             )
             .await?;
             verify(&view, base, selected);
+            let expected = if selected {
+                groups
+            } else {
+                groups * SCOPE_COUNT
+            };
+            assert_eq!(view["model"]["requestCount"], expected);
             eprintln!("usage timeline {hours}h scoped={selected}: {latency:?}");
             measurements.push(latency);
         }
     }
+    let (_, all) = timed(&s.gw, "/usage-monitor").await?;
+    assert_timeline(&all);
+    assert_eq!(all["model"]["requestCount"], 1680);
+    assert_eq!(all["model"]["totalTokens"], 2_008_440.0);
     // Same-harness main baseline: 401 MB physical footprint; allow at most +10%.
     memory.finish_peak(401_000_000 * 110 / 100);
     for latency in measurements {

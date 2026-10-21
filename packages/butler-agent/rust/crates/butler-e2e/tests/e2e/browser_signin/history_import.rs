@@ -38,7 +38,7 @@ fn fixture(path: &std::path::Path, format: &str, count: i64, now: i64) -> rusqli
             "CREATE TABLE history_items(id INTEGER PRIMARY KEY,url TEXT); CREATE TABLE history_visits(id INTEGER PRIMARY KEY,history_item INTEGER,visit_time REAL,title TEXT);",
             "INSERT INTO history_items VALUES(?1,?2)",
             "INSERT INTO history_visits VALUES(?1,?1,?2,'Imported')",
-            -978_307_240,
+            -978_307_200_000,
             0.001,
         ),
     };

@@ -35,6 +35,10 @@ const READ_BUDGET: u64 = 1_000_000;
 async fn perf_idle_history_reads_and_footprint() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(
+        std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("perf"),
+        "PERF-IDLE requires BUTLER_E2E_TIER=perf and a release BUTLER_E2E_BIN"
+    );
+    butler_e2e::skip_unless!(
         process_usage::sample(std::process::id())?.is_some(),
         "process resource counters unavailable"
     );
@@ -75,6 +79,7 @@ async fn perf_idle_history_reads_and_footprint() -> Result<(), HarnessError> {
     assert_eq!(schedules.as_array().unwrap().len(), 1);
     assert_eq!(schedules[0]["next_run_at"], "9999-12-30T07:00:00.000Z");
     // Keep the existing startup grace, then prove committed memory readiness.
+    tokio::time::sleep(Duration::from_secs(120)).await;
     memory_fixture::settle(&s.sandbox.data).await?;
     transcripts::assert_sizes(&s.sandbox.data)?;
     seed::assert_complete(&s.sandbox.data, &expected)?;
@@ -147,9 +152,9 @@ async fn measure(
     let started = std::time::Instant::now();
     let mut windows = Vec::new();
     eprintln!("PERF-IDLE start load={:?}", process_usage::load_average()?);
-    // Collect a complete idle interval before applying the unchanged
+    // Collect the entire ten-minute interval before applying every unchanged
     // per-minute budget, so a failure also retains its complete attribution.
-    for window in 0..1 {
+    for window in 0..10 {
         // Start after the preceding HTTP/content probes have completed.
         let before = process_usage::sample(pid)?.unwrap();
         tokio::time::sleep(WINDOW).await;
@@ -193,7 +198,7 @@ async fn measure(
 }
 
 fn assert_samples(samples: &Samples) {
-    assert!(samples.elapsed >= Duration::from_secs(60));
+    assert!(samples.elapsed >= Duration::from_secs(600));
     for (before, after) in &samples.windows {
         let chars = after.read_chars.zip(before.read_chars).map(|(a, b)| a - b);
         let reads = after.read_bytes - before.read_bytes;

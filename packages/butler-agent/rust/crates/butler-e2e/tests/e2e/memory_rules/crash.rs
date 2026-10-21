@@ -43,7 +43,7 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
             let mut s = forget::start(setup).await?;
             assert_eq!(s.gw.messages("general").await?.iter().filter(|message|
                 message["role"] == "user" && message["text"] == forget::GLOBAL
-            ).count(), 1, "starting chwith retained history was not copied completely");
+            ).count(), 1, "starting chat history was not copied completely");
             let output = baseline_output;
             trace("original_committed");
             let original = support::active_rules(&s.sandbox.data).pop().unwrap();
