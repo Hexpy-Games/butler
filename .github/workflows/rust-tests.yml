@@ -58,6 +58,7 @@ jobs:
         run: |
           BUTLER_SMOKE_ELECTRON_EXECUTABLE="$(node -p "require('./packages/butler-app/client/electron/node_modules/electron')")"
           export BUTLER_SMOKE_ELECTRON_EXECUTABLE
+          python3 .github/scripts/isolated.py bun tests/smoke/app-legacy-data-smoke.ts
           export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/canvas"
           python3 .github/scripts/isolated.py bun tests/smoke/browser-canvas-electron.ts
           export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/route"

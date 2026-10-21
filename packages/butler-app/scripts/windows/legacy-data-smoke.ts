@@ -61,8 +61,19 @@ try {
     })()`);
     assert.deepEqual(layout, { labelAbove: true, overflow: false });
   }
-  assert.deepEqual(snapshot(data), original, "Recovery screen wrote into legacy data");
-  assert.ok(!existsSync(join(data, "app/runtime/foreground/instance.json")), "Agent started against legacy data");
+  for (const [action, request] of [
+    ["health", "window.butlerApp.health()"],
+    ["startAgent", "window.butlerApp.startAgent()"],
+    ["repair", 'window.butlerApp.startSetup({mode:"repair"})'],
+  ]) {
+    phase = `blocked Agent ${action}`;
+    const error = await page.expression<string | null>(
+      `${request}.then(() => null, error => error.message)`,
+    );
+    assert.match(error ?? "", /legacy_data_blocked/u, `Blocked ${action} must reject`);
+    assert.deepEqual(snapshot(data), original, `Blocked ${action} request wrote into legacy data`);
+    assert.ok(!existsSync(join(data, "app/runtime/foreground/instance.json")), "Agent started against legacy data");
+  }
   phase = "folder and restart";
   assert.deepEqual(await bridge(page, "recoverLegacyData", "open-folder"), { ok: true });
   renameSync(data, join(home, ".butler-0.0.20"));
@@ -134,7 +145,7 @@ function snapshot(folder: string): Record<string, string> {
   const visit = (relative: string) => {
     for (const entry of readdirSync(join(folder, relative), { withFileTypes: true })) {
       const path = join(relative, entry.name);
-      if (entry.isDirectory()) visit(path);
+      if (entry.isDirectory()) { files[path] = "directory"; visit(path); }
       else files[path] = createHash("sha256").update(readFileSync(join(folder, path))).digest("hex");
     }
   };
