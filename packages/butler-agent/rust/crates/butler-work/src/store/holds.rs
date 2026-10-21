@@ -4,57 +4,194 @@ use crate::{
     work_types::*,
 };
 use rusqlite::params;
+use std::collections::BTreeMap;
+
 pub fn undecided_holds(db: &Connection, chain_id: &str) -> Result<Vec<Value>> {
     rows(db, sql::PENDING_HOLDS, [chain_id])
 }
-pub(super) fn hold_followers(
+fn failed(work: &Value) -> bool {
+    matches!(work["run_state"].as_str(), Some("failed" | "stopped"))
+}
+fn unstarted(work: &Value) -> bool {
+    matches!(
+        work["run_state"].as_str(),
+        Some("idle" | "waiting" | "held")
+    )
+}
+fn coverage(work: &Value) -> Value {
+    json!({"id":work["id"],"step":work["step_index"],
+        "state":work["run_state"],"generation":work["run_generation"]})
+}
+pub(super) fn approval_covers(approval: &Value, work: &Value, step: i64) -> bool {
+    let covered: Vec<Value> =
+        serde_json::from_str(approval["coverage_json"].as_str().unwrap_or("[]"))
+            .unwrap_or_default();
+    work["step_index"].as_i64() == step.checked_sub(1) && covered.contains(&coverage(work))
+}
+fn retire_approvals(
     tx: &Transaction<'_>,
     ctx: &Context,
-    id: &str,
-    question: &str,
-) -> Result<()> {
-    let row = read_work(tx, id)?;
-    let chain_id = text(&row, "chain_id")?;
-    let step = row["step_index"].as_i64().ok_or(Error::Invalid("step"))?;
-    let members = rows(tx, sql::MEMBERS, [chain_id])?;
-    let reason = if row["run_state"] == "stopped" {
-        "predecessor_stopped"
-    } else {
-        "predecessor_failed"
-    };
-    let pending = undecided_holds(tx, chain_id)?;
-    let held_by = pending
-        .iter()
-        .find(|p| p["held_step_index"] == step + 1)
-        .and_then(|p| p["failed_work_id"].as_str())
-        .unwrap_or(id);
-    for member in members
-        .iter()
-        .filter(|m| m["step_index"].as_i64().is_some_and(|i| i > step))
-    {
-        if matches!(member["run_state"].as_str(), Some("done" | "cancelled")) {
-            continue;
+    chain: &str,
+    members: &[Value],
+) -> Result<Vec<Value>> {
+    let mut live = Vec::new();
+    for approval in rows(tx, sql::DECIDED_HOLDS, [chain])? {
+        let covered: Vec<Value> = serde_json::from_str(text(&approval, "coverage_json")?)?;
+        if !covered.is_empty()
+            && covered
+                .iter()
+                .all(|c| members.iter().any(|m| coverage(m) == *c))
+        {
+            live.push(approval);
+        } else {
+            resolve(tx, ctx, &approval)?;
         }
-        set_state(
-            tx,
-            ctx,
-            text(member, "id")?,
-            RunState::Held,
-            Some((reason, held_by)),
-            None,
-            None,
-            false,
-        )?;
     }
-    if !pending.iter().any(|p| p["held_step_index"] == step + 1) {
-        let decision_id = IdGenerator::global_next(IdKind::Decision, ctx.now)?;
+    Ok(live)
+}
+fn resolve(tx: &Transaction<'_>, ctx: &Context, question: &Value) -> Result<()> {
+    let id = text(question, "id")?;
+    let revision = question["revision"]
+        .as_i64()
+        .ok_or(Error::Invalid("revision"))?;
+    tx.execute(sql::RESOLVE_HOLD, params![id, ctx.now, revision])?;
+    event(tx, ctx, "hold_decision", id, revision + 1, "resolve")
+}
+/// Derive only unstarted members. Approval coverage is a snapshot of failure
+/// identity, step and state generation; ordinary label edits cannot revoke it.
+pub(super) fn rederive_holds(
+    tx: &Transaction<'_>,
+    ctx: &Context,
+    chain_id: &str,
+) -> Result<Vec<Value>> {
+    let members = rows(tx, sql::MEMBERS, [chain_id])?;
+    let approvals = retire_approvals(tx, ctx, chain_id, &members)?;
+    let mut needed = BTreeMap::new();
+    for member in members.iter().filter(|m| unstarted(m)) {
+        let step = member["step_index"]
+            .as_i64()
+            .ok_or(Error::Invalid("step"))?;
+        let cause = members
+            .iter()
+            .rev()
+            .filter(|pred| {
+                failed(pred)
+                    && pred["step_index"].as_i64().is_some_and(|i| i < step)
+                    && !approvals.iter().any(|a| approval_covers(a, pred, step))
+            })
+            .max_by_key(|pred| pred["step_index"].as_i64());
+        if let Some(cause) = cause {
+            let failure_step = cause["step_index"].as_i64().ok_or(Error::Invalid("step"))?;
+            let reason = if cause["run_state"] == "stopped" {
+                "predecessor_stopped"
+            } else {
+                "predecessor_failed"
+            };
+            set_state(
+                tx,
+                ctx,
+                text(member, "id")?,
+                RunState::Held,
+                Some((reason, text(cause, "id")?)),
+                None,
+                None,
+                false,
+            )?;
+            // A decided boundary already has its durable card. Remote followers
+            // stay held; its approval grants admission only to the immediate step.
+            if !approvals
+                .iter()
+                .any(|a| approval_covers(a, cause, failure_step + 1))
+            {
+                needed.insert(failure_step + 1, cause);
+            }
+        } else {
+            set_state(
+                tx,
+                ctx,
+                text(member, "id")?,
+                RunState::Waiting,
+                None,
+                None,
+                None,
+                false,
+            )?;
+        }
+    }
+    reconcile_questions(tx, ctx, chain_id, &members, needed)?;
+    update_chain_state(tx, chain_id)?;
+    undecided_holds(tx, chain_id)
+}
+fn reconcile_questions(
+    tx: &Transaction<'_>,
+    ctx: &Context,
+    chain_id: &str,
+    members: &[Value],
+    mut needed: BTreeMap<i64, &Value>,
+) -> Result<()> {
+    let pending = undecided_holds(tx, chain_id)?;
+    for question in &pending {
+        let step = question["held_step_index"]
+            .as_i64()
+            .ok_or(Error::Invalid("step"))?;
+        if let Some(cause) = needed.remove(&step) {
+            let covered = step_coverage(members, cause);
+            if question["failed_work_id"] != cause["id"] || question["coverage_json"] != covered {
+                let revision = question["revision"]
+                    .as_i64()
+                    .ok_or(Error::Invalid("revision"))?;
+                tx.execute(
+                    sql::REPOINT_HOLD,
+                    params![text(question, "id")?, text(cause, "id")?, revision, covered],
+                )?;
+                event(
+                    tx,
+                    ctx,
+                    "hold_decision",
+                    text(question, "id")?,
+                    revision + 1,
+                    "repoint",
+                )?;
+            }
+        } else {
+            resolve(tx, ctx, question)?;
+        }
+    }
+    for (step, cause) in needed {
+        let id = IdGenerator::global_next(IdKind::Decision, ctx.now)?;
         tx.execute(
             sql::INSERT_HOLD,
-            params![decision_id, chain_id, id, step + 1, question],
+            params![
+                id,
+                chain_id,
+                text(cause, "id")?,
+                step,
+                id,
+                step_coverage(members, cause)
+            ],
         )?;
-        event(tx, ctx, "hold_decision", &decision_id, 0, "create")?;
+        event(tx, ctx, "hold_decision", &id, 0, "create")?;
     }
-    update_chain_state(tx, chain_id)
+    Ok(())
+}
+/// Mutation receipts include the durable question ids needed to post cards.
+pub(super) fn work_result(
+    db: &Connection,
+    id: &str,
+    previous_chain: Option<&str>,
+) -> Result<Value> {
+    let mut work = read_work(db, id)?;
+    let mut questions = match work["chain_id"].as_str() {
+        Some(chain) => undecided_holds(db, chain)?,
+        None => Vec::new(),
+    };
+    if let Some(chain) = previous_chain
+        && work["chain_id"] != chain
+    {
+        questions.extend(undecided_holds(db, chain)?);
+    }
+    work["hold_questions"] = json!(questions);
+    Ok(work)
 }
 pub fn decide_hold(
     tx: &Transaction<'_>,
@@ -80,41 +217,32 @@ pub fn decide_hold(
         sql::DECIDE,
         params![id, decision.as_str(), ctx.now, expected_revision],
     )?;
-    let failed = text(&row, "failed_work_id")?;
-    let failure = read_work(tx, failed)?;
-    let next_step = failure["step_index"].as_i64().map(|i| i + 1);
-    let mut next = chain.chain.clone();
-    for member in &chain.members {
-        if member["run_state"] != "held" || member["held_by_work_id"] != failed {
-            continue;
-        }
-        let work_id = text(member, "id")?;
-        match decision {
-            Decision::RunAnyway if member["step_index"].as_i64() == next_step => {
-                set_state(tx, ctx, work_id, RunState::Waiting, None, None, None, false)?;
-            }
-            Decision::Delete => {
-                set_state(
-                    tx,
-                    ctx,
-                    work_id,
-                    RunState::Cancelled,
-                    None,
-                    None,
-                    None,
-                    false,
-                )?;
-                cancel_tasks(tx, ctx, work_id, "held steps deleted")?;
-                next = next.delete(&WorkId(work_id.into()), &running(&[&chain]))?;
-            }
-            Decision::RunAnyway => {}
-        }
-    }
     if decision == Decision::Delete {
+        let mut next = chain.chain.clone();
+        for member in &chain.members {
+            if member["run_state"] != "held"
+                || member["step_index"].as_i64() < row["held_step_index"].as_i64()
+            {
+                continue;
+            }
+            let work_id = text(member, "id")?;
+            set_state(
+                tx,
+                ctx,
+                work_id,
+                RunState::Cancelled,
+                None,
+                None,
+                None,
+                false,
+            )?;
+            cancel_tasks(tx, ctx, work_id, "held steps deleted")?;
+            next = next.delete(&WorkId(work_id.into()), &running(&[&chain]))?;
+        }
         persist(tx, ctx, &[(&chain, &next)])?;
     } else {
+        rederive_holds(tx, ctx, chain_id)?;
         bump(tx, ctx, chain_id, expected_graph_revision)?;
-        update_chain_state(tx, chain_id)?;
     }
     event(
         tx,
@@ -124,85 +252,16 @@ pub fn decide_hold(
         expected_revision + 1,
         "decide",
     )?;
-    one(tx, sql::HOLD, [id])
-}
-/// A released step finishing opens its immediate follower; remote later steps
-/// remain held until their own complete, reported predecessor barrier clears.
-pub(super) fn release_satisfied_holds(
-    tx: &Transaction<'_>,
-    ctx: &Context,
-    chain_id: &str,
-) -> Result<()> {
-    reconcile_holds(tx, ctx, chain_id)?;
-    let chain = load_chain(tx, chain_id)?;
-    for member in &chain.members {
-        if member["run_state"] != "held" {
-            continue;
-        }
-        let step = member["step_index"]
-            .as_u64()
-            .ok_or(Error::Invalid("step"))?;
-        let predecessors: Vec<_> = chain
-            .members
-            .iter()
-            .filter(|p| p["step_index"].as_u64() == step.checked_sub(1))
-            .collect();
-        if predecessors
-            .iter()
-            .all(|p| p["run_state"] == "done" && !p["result_reported_at"].is_null())
-        {
-            set_state(
-                tx,
-                ctx,
-                text(member, "id")?,
-                RunState::Waiting,
-                None,
-                None,
-                None,
-                false,
-            )?;
-        }
-    }
-    Ok(())
+    let mut result = one(tx, sql::HOLD, [id])?;
+    result["hold_questions"] = json!(undecided_holds(tx, chain_id)?);
+    Ok(result)
 }
 
-/// Membership edits remove prerequisites, so a hold cannot keep depending on
-/// a Work in another chain or a later step. Retired questions remain durable
-/// history with a distinct resolution token rather than a fabricated answer.
-pub(super) fn reconcile_holds(tx: &Transaction<'_>, ctx: &Context, chain_id: &str) -> Result<()> {
-    let members = rows(tx, sql::MEMBERS, [chain_id])?;
-    for member in &members {
-        if member["run_state"] != "held" {
-            continue;
-        }
-        let cause = read_work(tx, text(member, "held_by_work_id")?)?;
-        if cause["chain_id"] != chain_id
-            || cause["step_index"].as_i64() >= member["step_index"].as_i64()
-        {
-            set_state(
-                tx,
-                ctx,
-                text(member, "id")?,
-                RunState::Waiting,
-                None,
-                None,
-                None,
-                false,
-            )?;
-        }
-    }
-    for question in undecided_holds(tx, chain_id)? {
-        let cause = read_work(tx, text(&question, "failed_work_id")?)?;
-        if cause["chain_id"] != chain_id
-            || matches!(cause["run_state"].as_str(), Some("done" | "cancelled"))
-        {
-            let id = text(&question, "id")?;
-            let revision = question["revision"]
-                .as_i64()
-                .ok_or(Error::Invalid("revision"))?;
-            tx.execute(sql::RESOLVE_HOLD, params![id, ctx.now, revision])?;
-            event(tx, ctx, "hold_decision", id, revision + 1, "resolve")?;
-        }
-    }
-    Ok(())
+fn step_coverage(members: &[Value], cause: &Value) -> String {
+    let covered: Vec<_> = members
+        .iter()
+        .filter(|m| failed(m) && m["step_index"] == cause["step_index"])
+        .map(coverage)
+        .collect();
+    json!(covered).to_string()
 }

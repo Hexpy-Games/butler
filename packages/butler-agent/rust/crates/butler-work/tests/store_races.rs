@@ -145,7 +145,6 @@ fn queue_edit_and_completion_serialize_in_both_orders_without_stale_edges() {
                     RunState::Done,
                     true,
                     None,
-                    None,
                 )
                 .unwrap();
             } else {
@@ -200,7 +199,6 @@ fn queue_edit_and_completion_serialize_in_both_orders_without_stale_edges() {
                     work_revision,
                     RunState::Done,
                     true,
-                    None,
                     None,
                 )
                 .unwrap();

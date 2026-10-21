@@ -123,9 +123,18 @@ fn hold_run_anyway_only_releases_next_step_and_delete_cancels_later() {
                 &context(),
                 "sibling",
                 revision(&tx, "sibling"),
+                RunState::Running,
+                false,
+                None,
+            )
+            .unwrap();
+            transition(
+                &tx,
+                &context(),
+                "sibling",
+                revision(&tx, "sibling"),
                 RunState::Done,
                 true,
-                None,
                 None,
             )
             .unwrap();
@@ -207,7 +216,11 @@ fn runtime_label_mapping_only_on_real_transitions() {
         let mut db = db();
         work(&mut db, "a");
         runtime(&mut db, "a", *state, false);
-        let expected = runtime_label(*state).unwrap_or(CanonStatus::Planned);
+        let expected = runtime_label(*state).unwrap_or(if *state == RunState::Paused {
+            CanonStatus::InProgress
+        } else {
+            CanonStatus::Planned
+        });
         assert_eq!(
             read_work(&db, "a").unwrap()["canon_status"],
             expected.as_str()

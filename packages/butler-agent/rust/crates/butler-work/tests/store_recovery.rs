@@ -1,7 +1,6 @@
 #![allow(clippy::unwrap_used, reason = "test assertions")]
 mod store_support;
 use butler_work::{store::*, work_types::*};
-use std::collections::BTreeMap;
 use store_support::*;
 fn attempt(db: &rusqlite::Connection) {
     db.execute_batch("INSERT INTO wm_tasks(id,work_id,spec_ref,title,kind,status,task_rank,created_at,updated_at,created_by) VALUES('task','a','{}','task','execute','running','V',0,0,'{}');
@@ -16,14 +15,7 @@ fn crash_holds_full_queue_and_clean_restart_keeps_steps_and_requeues_tasks() {
         runtime(&mut db, "a", RunState::Running, false);
         attempt(&db);
         let tx = db.transaction().unwrap();
-        recover_session(
-            &tx,
-            &context(),
-            "chat",
-            previous,
-            &BTreeMap::from([("a".into(), "question".into())]),
-        )
-        .unwrap();
+        recover_session(&tx, &context(), "chat", previous).unwrap();
         assert_eq!(read_work(&tx, "a").unwrap()["step_index"], 0);
         assert_eq!(load_chain(&tx, "ch").unwrap().chain.steps.len(), 3);
         if previous == PreviousShutdown::Crash {
@@ -78,7 +70,6 @@ fn no_op_runtime_transition_preserves_person_label_and_done_requires_reporting()
         RunState::Running,
         false,
         None,
-        None,
     )
     .unwrap();
     assert_eq!(revision(&tx, "a"), current);
@@ -86,17 +77,7 @@ fn no_op_runtime_transition_preserves_person_label_and_done_requires_reporting()
         read_work(&tx, "a").unwrap()["canon_status_source"],
         "person"
     );
-    transition(
-        &tx,
-        &context(),
-        "a",
-        current,
-        RunState::Done,
-        false,
-        None,
-        None,
-    )
-    .unwrap();
+    transition(&tx, &context(), "a", current, RunState::Done, false, None).unwrap();
     assert_eq!(ready_works(&tx, "ch").unwrap(), Vec::<String>::new());
     let graph_before = graph(&tx, "ch");
     transition(
@@ -106,7 +87,6 @@ fn no_op_runtime_transition_preserves_person_label_and_done_requires_reporting()
         revision(&tx, "a"),
         RunState::Done,
         true,
-        None,
         None,
     )
     .unwrap();
@@ -176,23 +156,9 @@ fn recovered_attempt_is_not_recovered_again_after_a_later_crash() {
     runtime(&mut db, "a", RunState::Running, false);
     attempt(&db);
     let tx = db.transaction().unwrap();
-    recover_session(
-        &tx,
-        &context(),
-        "chat",
-        PreviousShutdown::Clean,
-        &BTreeMap::new(),
-    )
-    .unwrap();
+    recover_session(&tx, &context(), "chat", PreviousShutdown::Clean).unwrap();
     let after = read_work(&tx, "a").unwrap();
-    recover_session(
-        &tx,
-        &context(),
-        "chat",
-        PreviousShutdown::Crash,
-        &BTreeMap::from([("a".into(), "question".into())]),
-    )
-    .unwrap();
+    recover_session(&tx, &context(), "chat", PreviousShutdown::Crash).unwrap();
     assert_eq!(read_work(&tx, "a").unwrap(), after);
     assert_eq!(
         undecided_holds(&tx, "ch").unwrap(),
@@ -202,16 +168,16 @@ fn recovered_attempt_is_not_recovered_again_after_a_later_crash() {
 }
 // test-category: pure-logic
 #[test]
-fn terminal_step_failure_still_records_a_durable_question_and_held_chain() {
+fn terminal_step_failure_leaves_no_question_and_active_chain() {
     let mut db = db();
     queue(&mut db, &["a"]);
     runtime(&mut db, "a", RunState::Failed, false);
-    assert_eq!(undecided_holds(&db, "ch").unwrap().len(), 1);
+    assert!(undecided_holds(&db, "ch").unwrap().is_empty());
     assert_eq!(
         db.query_row::<String, _, _>("SELECT state FROM wm_work_chains WHERE id='ch'", [], |r| r
             .get(0))
             .unwrap(),
-        "held"
+        "active"
     );
 }
 // test-category: pure-logic
@@ -232,6 +198,6 @@ fn person_done_on_a_failed_work_satisfies_its_follower_barrier() {
     )
     .unwrap();
     assert_eq!(ready_works(&tx, "ch").unwrap(), vec!["b"]);
-    assert_eq!(read_work(&tx, "c").unwrap()["run_state"], "held");
+    assert_eq!(read_work(&tx, "c").unwrap()["run_state"], "waiting");
     tx.commit().unwrap();
 }

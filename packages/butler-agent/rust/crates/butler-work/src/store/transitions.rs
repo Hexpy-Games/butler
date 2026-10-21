@@ -98,10 +98,10 @@ pub fn transition(
     state: RunState,
     result_reported: bool,
     failure_reason: Option<&str>,
-    question_message_id: Option<&str>,
 ) -> Result<Value> {
     let row = read_work(tx, id)?;
     cas(&row, "revision", expected_revision)?;
+    allowed_transition(text(&row, "run_state")?, state)?;
     if result_reported && state != RunState::Done {
         return Err(Error::Invalid("only done Works can report completion"));
     }
@@ -133,22 +133,11 @@ pub fn transition(
         if state == RunState::Cancelled {
             leave_cancelled(tx, ctx, id, &old)?;
         } else {
-            if text(&row, "run_state")? != state.as_str()
-                && matches!(state, RunState::Failed | RunState::Stopped)
-            {
-                hold_followers(
-                    tx,
-                    ctx,
-                    id,
-                    question_message_id.ok_or(Error::Invalid("hold question required"))?,
-                )?;
-            }
-            release_satisfied_holds(tx, ctx, chain_id)?;
+            rederive_holds(tx, ctx, chain_id)?;
             bump(tx, ctx, chain_id, old.graph_revision)?;
-            update_chain_state(tx, chain_id)?;
         }
     }
-    read_work(tx, id)
+    work_result(tx, id, row["chain_id"].as_str())
 }
 pub(super) fn leave_cancelled(
     tx: &Transaction<'_>,
@@ -218,13 +207,12 @@ pub fn set_label(
         let chain = load_chain(tx, chain_id)?;
         if state == RunState::Cancelled {
             leave_cancelled(tx, ctx, id, &chain)?;
-        } else if state == RunState::Done {
-            release_satisfied_holds(tx, ctx, chain_id)?;
+        } else {
+            rederive_holds(tx, ctx, chain_id)?;
             bump(tx, ctx, chain_id, chain.graph_revision)?;
-            update_chain_state(tx, chain_id)?;
         }
     }
-    read_work(tx, id)
+    work_result(tx, id, row["chain_id"].as_str())
 }
 pub(super) fn cancel_tasks(
     tx: &Transaction<'_>,
@@ -276,14 +264,56 @@ pub fn ready_works(db: &Connection, chain_id: &str) -> Result<Vec<String>> {
             .filter(|p| p["step_index"].as_u64() == step.checked_sub(1))
             .all(|pred| {
                 (pred["run_state"] == "done" && !pred["result_reported_at"].is_null())
-                    || approvals.iter().any(|a| {
-                        a["held_step_index"].as_u64() == Some(step)
-                            && matches!(pred["run_state"].as_str(), Some("failed" | "stopped"))
-                    })
+                    || approvals
+                        .iter()
+                        .any(|a| approval_covers(a, pred, step as i64))
             });
         if satisfied {
             ready.push(text(member, "id")?.into());
         }
     }
     Ok(ready)
+}
+
+fn allowed_transition(from: &str, to: RunState) -> Result<()> {
+    use RunState::*;
+    let allowed: &[&str] = match to {
+        Idle => &["idle"],
+        Waiting => &[
+            "idle",
+            "waiting",
+            "running",
+            "in_review",
+            "paused",
+            "blocked",
+            "stopped",
+            "failed",
+        ],
+        Running => &[
+            "idle", "waiting", "running", "failed", "stopped", "paused", "blocked",
+        ],
+        InReview => &["running", "in_review"],
+        Blocked => &["running", "in_review", "blocked"],
+        Paused => &["running", "in_review", "blocked", "paused"],
+        Failed => &["running", "in_review", "failed"],
+        Stopped => &["running", "in_review", "paused", "blocked", "stopped"],
+        Done => &["running", "in_review", "done"],
+        Cancelled => &[
+            "idle",
+            "waiting",
+            "running",
+            "in_review",
+            "paused",
+            "blocked",
+            "failed",
+            "stopped",
+            "cancelled",
+        ],
+        Held => &[],
+    };
+    if allowed.contains(&from) {
+        Ok(())
+    } else {
+        Err(Error::Invalid("runtime transition is not allowed"))
+    }
 }

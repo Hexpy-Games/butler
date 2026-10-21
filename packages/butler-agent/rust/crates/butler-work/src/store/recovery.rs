@@ -1,7 +1,7 @@
 use super::*;
 use crate::work_types::RunState;
 use rusqlite::params;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PreviousShutdown {
     Clean,
@@ -34,8 +34,7 @@ pub fn recover_session(
     ctx: &Context,
     session: &str,
     previous: PreviousShutdown,
-    questions: &BTreeMap<String, String>,
-) -> Result<Vec<String>> {
+) -> Result<Vec<Value>> {
     let attempts = rows(tx, sql::RECOVER_ATTEMPTS, [session])?;
     let mut works = BTreeSet::new();
     for attempt in &attempts {
@@ -87,7 +86,7 @@ pub fn recover_session(
             .as_i64()
             .ok_or(Error::Invalid("revision"))?;
         if previous == PreviousShutdown::Clean {
-            transition(tx, ctx, id, revision, RunState::Waiting, false, None, None)?;
+            transition(tx, ctx, id, revision, RunState::Waiting, false, None)?;
         } else {
             transition(
                 tx,
@@ -97,11 +96,10 @@ pub fn recover_session(
                 RunState::Failed,
                 false,
                 Some("interrupted_by_crash"),
-                questions.get(id).map(String::as_str),
             )?;
         }
     }
-    Ok(works.into_iter().collect())
+    works.iter().map(|id| work_result(tx, id, None)).collect()
 }
 /// Use this wrapper when a domain mutation needs an App DB projection. Replay
 /// returns the original receipt before invoking the mutation closure.

@@ -122,20 +122,17 @@ pub(super) fn persist(
         }
     }
     for (old, next) in changes {
-        reconcile_holds(tx, ctx, &old.id)?;
+        rederive_holds(tx, ctx, &old.id)?;
         for (pred, succ) in next.edges()? {
             tx.execute(sql::INSERT_EDGE, params![pred.0, succ.0, old.id])?;
         }
         bump(tx, ctx, &old.id, old.graph_revision)?;
-        update_chain_state(tx, &old.id)?;
     }
     Ok(())
 }
 pub(super) fn update_chain_state(tx: &Transaction<'_>, id: &str) -> Result<()> {
     let members = rows(tx, sql::MEMBERS, [id])?;
-    let state = if members.iter().any(|r| r["run_state"] == "held")
-        || !undecided_holds(tx, id)?.is_empty()
-    {
+    let state = if !undecided_holds(tx, id)?.is_empty() {
         "held"
     } else if members
         .iter()
@@ -164,8 +161,8 @@ pub fn create_root(
 ) -> Result<Value> {
     let row = read_work(tx, id)?;
     cas(&row, "revision", expected_revision)?;
-    if !row["chain_id"].is_null() {
-        return Err(Error::Invalid("Work already queued"));
+    if row["run_state"] != "idle" || !row["chain_id"].is_null() {
+        return Err(Error::Invalid("Work must be idle and unqueued"));
     }
     check_chat(&row, session)?;
     tx.execute(sql::INSERT_CHAIN, params![chain_id, session, ctx.now])?;
@@ -178,10 +175,7 @@ pub fn create_root(
     };
     persist(tx, ctx, &[(&old, &next)])?;
     tx.execute(sql::PROVENANCE, params![id, origin.as_str(), message])?;
-    if row["run_state"] == "idle" {
-        set_state(tx, ctx, id, RunState::Waiting, None, None, None, false)?;
-    }
-    read_work(tx, id)
+    work_result(tx, id, None)
 }
 pub(super) fn check_chat(row: &Value, session: &str) -> Result<()> {
     if row["scope_kind"] == "session" && row["scope_ref"] != session {
@@ -206,8 +200,8 @@ pub fn place_after(
 ) -> Result<Value> {
     let row = read_work(tx, id)?;
     cas(&row, "revision", expected_revision)?;
-    if !row["chain_id"].is_null() {
-        return Err(Error::Invalid("Work already queued"));
+    if row["run_state"] != "idle" || !row["chain_id"].is_null() {
+        return Err(Error::Invalid("Work must be idle and unqueued"));
     }
     let anchor = read_work(tx, anchor)?;
     let chain = load_chain(tx, text(&anchor, "chain_id")?)?;
@@ -223,10 +217,7 @@ pub fn place_after(
         &running(&[&chain]),
     )?;
     persist(tx, ctx, &[(&chain, &next)])?;
-    if row["run_state"] == "idle" {
-        set_state(tx, ctx, id, RunState::Waiting, None, None, None, false)?;
-    }
-    read_work(tx, id)
+    work_result(tx, id, None)
 }
 #[derive(Debug, Clone)]
 pub enum QueueEdit {
@@ -268,13 +259,17 @@ pub fn edit_queue(
     expected_graphs: &[(String, i64)],
     expected_works: &[(String, i64)],
     ops: &[QueueEdit],
-) -> Result<()> {
+) -> Result<Vec<Value>> {
     tx.execute_batch("SAVEPOINT wm_queue_batch")?;
     let result = edit_batch(tx, ctx, expected_graphs, expected_works, ops);
     match result {
         Ok(()) => {
             tx.execute_batch("RELEASE wm_queue_batch")?;
-            Ok(())
+            let mut questions = Vec::new();
+            for (chain, _) in expected_graphs {
+                questions.extend(undecided_holds(tx, chain)?);
+            }
+            Ok(questions)
         }
         Err(error) => {
             tx.execute_batch("ROLLBACK TO wm_queue_batch; RELEASE wm_queue_batch")?;
@@ -318,6 +313,13 @@ fn edit_batch(
     let changes: Vec<_> = chains.iter().map(|(id, old)| (old, &next[id])).collect();
     persist(tx, ctx, &changes)?;
     for (id, root) in removed {
+        let row = read_work(tx, &id)?;
+        if matches!(row["run_state"].as_str(), Some("done" | "cancelled")) {
+            if root.is_some() {
+                return Err(Error::Invalid("terminal Work cannot detach"));
+            }
+            continue;
+        }
         set_state(tx, ctx, &id, RunState::Idle, None, None, None, false)?;
         if let Some((new_chain, session)) = root {
             create_root(
@@ -470,5 +472,6 @@ pub fn start_new(
         session,
         QueueOrigin::Detach,
         None,
-    )
+    )?;
+    work_result(tx, id, row["chain_id"].as_str())
 }

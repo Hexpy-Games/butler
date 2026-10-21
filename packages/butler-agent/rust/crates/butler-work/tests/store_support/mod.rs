@@ -69,6 +69,20 @@ pub(crate) fn queue(db: &mut Connection, ids: &[&str]) {
     }
 }
 pub(crate) fn runtime(db: &mut Connection, id: &str, state: RunState, reported: bool) {
+    if matches!(
+        state,
+        RunState::Failed
+            | RunState::Stopped
+            | RunState::Paused
+            | RunState::Blocked
+            | RunState::InReview
+            | RunState::Done
+    ) && matches!(
+        read_work(db, id).unwrap()["run_state"].as_str(),
+        Some("idle" | "waiting")
+    ) {
+        runtime(db, id, RunState::Running, false);
+    }
     let tx = db.transaction().unwrap();
     transition(
         &tx,
@@ -78,7 +92,6 @@ pub(crate) fn runtime(db: &mut Connection, id: &str, state: RunState, reported: 
         state,
         reported,
         Some("task_failed"),
-        Some("question"),
     )
     .unwrap();
     tx.commit().unwrap();

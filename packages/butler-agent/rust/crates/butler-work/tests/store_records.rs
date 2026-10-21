@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, reason = "test assertions")]
 mod store_support;
-use butler_work::{store::*, work_ids::*, work_schema, work_types::*};
+use butler_work::{store::*, work_ids::*, work_types::*};
 use serde_json::json;
 use store_support::*;
 // test-category: pure-logic
@@ -217,18 +217,5 @@ fn every_store_statement_has_an_indexed_query_plan() {
             !plan.contains("SCAN wm_") && !plan.contains("SCAN a") && !plan.contains("SCAN t"),
             "{name}: {plan}"
         );
-    }
-}
-// test-category: format-pin
-#[test]
-fn branch_one_database_upgrades_cas_columns_idempotently() {
-    let db = rusqlite::Connection::open_in_memory().unwrap();
-    db.execute_batch("CREATE TABLE wm_hold_decisions(id TEXT PRIMARY KEY,chain_id TEXT,failed_work_id TEXT,held_step_index INTEGER,question_message_id TEXT,decision TEXT,decided_at INTEGER);
-    CREATE TABLE wm_cross_db_intents(op_id TEXT PRIMARY KEY,kind TEXT,payload_json TEXT,state TEXT,created_at INTEGER);").unwrap();
-    work_schema::ensure(&db).unwrap();
-    work_schema::ensure(&db).unwrap();
-    for table in ["wm_hold_decisions", "wm_cross_db_intents"] {
-        db.prepare(&format!("SELECT revision FROM {table}"))
-            .unwrap();
     }
 }

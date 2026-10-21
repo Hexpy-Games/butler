@@ -42,7 +42,6 @@ async fn exercise(storage: &BtccStorage, id: String) -> std::result::Result<(), 
                 RunState::Failed,
                 false,
                 Some("task_failed"),
-                Some("hold-question"),
             )
         })
         .await?;
@@ -62,7 +61,7 @@ async fn exercise(storage: &BtccStorage, id: String) -> std::result::Result<(), 
                 now: 201,
                 actor: json!({"person":"companion"}),
             };
-            transition(tx, &ctx, &id, 0, RunState::Done, true, None, None)
+            transition(tx, &ctx, &id, 0, RunState::Done, true, None)
         })
         .await
         .expect_err("stale revision");

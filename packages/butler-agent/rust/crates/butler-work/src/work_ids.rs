@@ -75,7 +75,9 @@ impl IdGenerator {
     pub fn global_next(kind: IdKind, millis: i64) -> Result<String> {
         static GENERATOR: Mutex<IdGenerator> = Mutex::new(IdGenerator { last: None });
         let mut entropy = [0u8; 10];
-        entropy.copy_from_slice(&uuid::Uuid::new_v4().as_bytes()[6..]);
+        let random = uuid::Uuid::new_v4();
+        entropy[..6].copy_from_slice(&random.as_bytes()[..6]);
+        entropy[6..].copy_from_slice(&random.as_bytes()[9..13]);
         GENERATOR
             .lock()
             .map_err(|_| IdError("ID generator poisoned"))?
