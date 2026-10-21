@@ -14,7 +14,9 @@ pub(super) fn create(connection: &Connection) -> Result<(), AppStorageError> {
             PRIMARY KEY (project_id,group_key,work_id)
          );
          CREATE INDEX IF NOT EXISTS app_canon_sidebar_order_position
-         ON app_canon_sidebar_order(project_id,group_key,position);",
+         ON app_canon_sidebar_order(project_id,group_key,position);
+         CREATE UNIQUE INDEX IF NOT EXISTS app_canon_sidebar_order_op
+         ON app_canon_sidebar_order(op_id) WHERE op_id IS NOT NULL;",
         )
         .map_err(AppStorageError::sqlite)
 }

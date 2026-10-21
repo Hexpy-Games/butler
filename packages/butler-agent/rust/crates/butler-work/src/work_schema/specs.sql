@@ -27,7 +27,6 @@ CREATE TABLE IF NOT EXISTS wm_spec_revisions (
   revision INTEGER NOT NULL,
   body_hash TEXT NOT NULL REFERENCES wm_spec_bodies(hash),
   parser_version TEXT NOT NULL,
-  ext_ref TEXT,
   state TEXT NOT NULL CHECK (state IN ('published','active','inactive')),
   authoring_instruction_id TEXT REFERENCES wm_instructions(id),
   PRIMARY KEY (node_id,revision)

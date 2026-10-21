@@ -7,6 +7,7 @@ use butler_work::{
     work_types::WorkId,
 };
 use rusqlite::{Connection, params_from_iter, types::Value};
+use sha2::Digest;
 use std::collections::BTreeMap;
 
 type Snapshot = BTreeMap<String, Vec<Vec<Value>>>;
@@ -56,7 +57,7 @@ fn validate_chains(db: &Connection) -> Result<(), HarnessError> {
     assert_eq!(ids.len(), 3);
     for id in ids {
         let mut chain = Chain { steps: Vec::new() };
-        let mut stmt = db.prepare(work_queries::CHAIN_MEMBERS)?;
+        let mut stmt = db.prepare(work_queries::Query::ChainMembers.sql())?;
         let rows = stmt.query_map([&id], |r| {
             Ok((
                 r.get::<_, String>(0)?,
@@ -85,6 +86,52 @@ fn validate_chains(db: &Connection) -> Result<(), HarnessError> {
     Ok(())
 }
 
+fn validate_local_fixture(db: &Connection) -> Result<(), HarnessError> {
+    assert_eq!(
+        db.query_row::<i64, _, _>(
+            "SELECT count(*) FROM wm_works
+        WHERE visibility='private' AND home_session_id IS NOT NULL",
+            [],
+            |r| r.get(0)
+        )?,
+        0
+    );
+    assert_eq!(
+        db.query_row::<i64, _, _>(
+            "SELECT count(*) FROM wm_works
+        WHERE run_state='idle' AND canon_status='planned' AND canon_status_source!='person'",
+            [],
+            |r| r.get(0)
+        )?,
+        0
+    );
+    let (hash, compressed, bytes) = db.query_row(
+        "SELECT hash,body,bytes FROM wm_spec_bodies
+        JOIN wm_spec_revisions ON hash=body_hash WHERE node_id='sp_canon'",
+        [],
+        |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, Vec<u8>>(1)?,
+                r.get::<_, usize>(2)?,
+            ))
+        },
+    )?;
+    let body = zstd::stream::decode_all(compressed.as_slice())?;
+    assert_eq!(body.len(), bytes);
+    assert_eq!(
+        String::from_utf8_lossy(&body),
+        "계획·과제·명세를 사용자가 직접 편집하고 협업자와 공유한다. 작업·시도·검토는 실행 원장에 숨긴다."
+    );
+    assert_eq!(hash, format!("{:x}", sha2::Sha256::digest(&body)));
+    assert_eq!(
+        db.query_row::<String, _, _>("SELECT title FROM wm_tasks WHERE id='tk_board'", [], |r| r
+            .get(0))?,
+        "보드 순서 검토"
+    );
+    Ok(())
+}
+
 #[tokio::test]
 async fn fresh_and_populated_schema_survive_restart() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -95,7 +142,8 @@ async fn fresh_and_populated_schema_survive_restart() -> Result<(), HarnessError
     let fresh = snapshot(&db)?;
     assert_eq!(fresh.len(), 25);
     assert!(fresh.values().all(Vec::is_empty));
-    for (_, index) in work_queries::INDEXED_READS {
+    for query in work_queries::Query::all() {
+        let index = query.index();
         assert_eq!(
             db.query_row::<i64, _, _>(
                 "SELECT count(*) FROM sqlite_schema WHERE type='index' AND name=?1",
@@ -107,9 +155,23 @@ async fn fresh_and_populated_schema_survive_restart() -> Result<(), HarnessError
     }
     let app = Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
     assert_eq!(app.query_row::<i64,_,_>("SELECT count(*) FROM sqlite_schema WHERE name IN ('app_canon_sidebar_order','app_canon_sidebar_order_position')",[],|r|r.get(0))?,2);
+    app.execute_batch(
+        "INSERT INTO app_canon_sidebar_order VALUES
+        ('butler','plan','first','A','op'),('butler','plan','second','B',NULL),
+        ('butler','plan','third','C',NULL);",
+    )?;
+    assert!(
+        app.execute(
+            "INSERT INTO app_canon_sidebar_order VALUES
+        ('other','backlog','fourth','D','op')",
+            []
+        )
+        .is_err()
+    );
     drop(app);
     db.execute_batch("PRAGMA foreign_keys=ON")?;
     db.execute_batch(include_str!("../../fixtures/work-model-p14/seed.sql"))?;
+    validate_local_fixture(&db)?;
     let before = snapshot(&db)?;
     validate_chains(&db)?;
     drop(db);
@@ -118,8 +180,10 @@ async fn fresh_and_populated_schema_survive_restart() -> Result<(), HarnessError
     let db = Connection::open(path)?;
     assert_eq!(before, snapshot(&db)?);
     validate_chains(&db)?;
-    indexed(&db, work_queries::CHAT_QUEUE, "wm_work_chains_queue")?;
-    indexed(&db, work_queries::READINESS, "wm_work_edges_successor")?;
+    for query in work_queries::Query::all() {
+        let (sql, index) = (query.sql(), query.index());
+        indexed(&db, sql, index)?;
+    }
     drop(db);
     s.finish().await
 }

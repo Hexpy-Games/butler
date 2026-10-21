@@ -1,6 +1,8 @@
 use butler_work::work_types::*;
 
 pub(super) fn roundtrips_match_sql() {
+    assert!("remote".parse::<CanonStatusSource>().is_err());
+    assert!("github".parse::<Origin>().is_err());
     macro_rules! pin {
         ($ty:ident, $table:literal, $column:literal) => {{
             let values = $ty::ALL

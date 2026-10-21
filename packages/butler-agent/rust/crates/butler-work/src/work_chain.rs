@@ -22,6 +22,13 @@ pub enum ChainError {
     #[error("task edges must be unique, known, nonself and acyclic")]
     TaskDag,
 }
+/// Destination in another chain. New-step indices refer to the target chain.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Placement {
+    NewStep(usize),
+    Stack(WorkId),
+}
+
 impl Chain {
     /// An empty chain represents the result of removing its last Work.
     pub fn validate(&self) -> Result<(), ChainError> {
@@ -68,6 +75,11 @@ impl Chain {
         }
         Ok(())
     }
+    fn pin(&self, id: &WorkId) -> Option<(usize, BTreeSet<WorkId>)> {
+        let (index, _) = self.locate(id).ok()?;
+        let predecessors = index.checked_sub(1).map(|i| &self.steps[i].works);
+        Some((index, predecessors.into_iter().flatten().cloned().collect()))
+    }
     fn finish(&self, mut next: Self, running: &BTreeSet<WorkId>) -> Result<Self, ChainError> {
         self.validate()?;
         for (i, step) in next.steps.iter_mut().enumerate() {
@@ -75,7 +87,7 @@ impl Chain {
         }
         next.validate()?;
         for id in running {
-            if self.locate(id).ok() != next.locate(id).ok() {
+            if self.pin(id) != next.pin(id) {
                 return Err(ChainError::Pinned);
             }
         }
@@ -138,7 +150,7 @@ impl Chain {
         next.remove(id)?;
         self.finish(next, running)
     }
-    /// Insert a new Work after the target's entire step, including all siblings.
+    /// Join the next step's stack, or append a last step if the target is last.
     pub fn place_after(
         &self,
         id: WorkId,
@@ -150,14 +162,56 @@ impl Chain {
         }
         let (i, _) = self.locate(target)?;
         let mut next = self.clone();
-        next.steps.insert(
-            i + 1,
-            Step {
+        if let Some(step) = next.steps.get_mut(i + 1) {
+            step.works.push(id);
+        } else {
+            next.steps.push(Step {
                 index: i + 1,
                 works: vec![id],
-            },
-        );
+            });
+        }
         self.finish(next, running)
+    }
+    /// Move between distinct chains; the caller checks that both belong to one chat.
+    /// Both results must be persisted atomically under their graph-revision CAS.
+    pub fn move_between(
+        &self,
+        target: &Self,
+        id: &WorkId,
+        placement: Placement,
+        running: &BTreeSet<WorkId>,
+    ) -> Result<(Self, Self), ChainError> {
+        self.validate()?;
+        target.validate()?;
+        if self
+            .steps
+            .iter()
+            .flat_map(|s| &s.works)
+            .any(|w| target.locate(w).is_ok())
+        {
+            return Err(ChainError::Membership);
+        }
+        let source = self.delete(id, running)?;
+        let mut next = target.clone();
+        match placement {
+            Placement::NewStep(index) => {
+                if index > next.steps.len() {
+                    return Err(ChainError::Unknown);
+                }
+                next.steps.insert(
+                    index,
+                    Step {
+                        index,
+                        works: vec![id.clone()],
+                    },
+                );
+            }
+            Placement::Stack(work) => {
+                let (index, _) = next.locate(&work)?;
+                next.steps[index].works.push(id.clone());
+            }
+        }
+        Ok((source, target.finish(next, running)?))
     }
 }
 

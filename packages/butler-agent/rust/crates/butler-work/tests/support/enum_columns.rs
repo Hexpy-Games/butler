@@ -13,11 +13,7 @@ pub(super) const COLUMNS: &[(&str, &str, &str)] = &[
         "canon_status",
         "'planned','in_progress','in_review','blocked','done','cancelled'",
     ),
-    (
-        "wm_works",
-        "canon_status_source",
-        "'runtime','person','remote'",
-    ),
+    ("wm_works", "canon_status_source", "'runtime','person'"),
     (
         "wm_works",
         "hold_reason",
@@ -32,7 +28,7 @@ pub(super) const COLUMNS: &[(&str, &str, &str)] = &[
     (
         "wm_works",
         "origin",
-        "'chat','dialog','board','github','mcp','migration'",
+        "'chat','dialog','board','mcp','migration'",
     ),
     ("wm_hold_decisions", "decision", "'run_anyway','delete'"),
     ("wm_tasks", "kind", "'execute','integrate','review'"),

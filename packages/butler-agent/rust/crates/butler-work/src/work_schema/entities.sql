@@ -6,7 +6,6 @@ CREATE TABLE IF NOT EXISTS wm_plans (
   due_on TEXT,
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed')),
   visibility TEXT NOT NULL CHECK (visibility IN ('private','canon')),
-  ext_ref TEXT,
   revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
@@ -33,9 +32,9 @@ CREATE TABLE IF NOT EXISTS wm_works (
   kind TEXT,
   run_state TEXT NOT NULL DEFAULT 'idle' CHECK (run_state IN ('idle','waiting','held','running','in_review','blocked','failed','paused','stopped','done','cancelled')),
   canon_status TEXT CHECK (canon_status IN ('planned','in_progress','in_review','blocked','done','cancelled')),
-  canon_status_source TEXT CHECK (canon_status_source IN ('runtime','person','remote')),
+  canon_status_source TEXT CHECK (canon_status_source IN ('runtime','person')),
   assignee TEXT,
-  plan_rank TEXT CHECK (plan_rank IS NULL OR length(plan_rank)>0),
+  plan_rank TEXT CHECK (plan_rank IS NULL OR (length(plan_rank)>0 AND plan_rank NOT GLOB '*[^0-9A-Za-z]*' AND plan_rank NOT GLOB '*0')),
   chain_id TEXT REFERENCES wm_work_chains(id),
   step_index INTEGER CHECK (step_index >= 0),
   stack_position INTEGER CHECK (stack_position >= 0),
@@ -48,18 +47,18 @@ CREATE TABLE IF NOT EXISTS wm_works (
   draft INTEGER NOT NULL DEFAULT 0 CHECK (draft IN (0,1)),
   tier INTEGER NOT NULL DEFAULT 1 CHECK (tier IN (1,2)),
   visibility TEXT NOT NULL CHECK (visibility IN ('private','canon')),
-  origin TEXT NOT NULL CHECK (origin IN ('chat','dialog','board','github','mcp','migration')),
+  origin TEXT NOT NULL CHECK (origin IN ('chat','dialog','board','mcp','migration')),
   import_note TEXT,
   revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   created_by TEXT NOT NULL CHECK (json_valid(created_by)),
-  UNIQUE (chain_id, step_index, stack_position),
   UNIQUE (id, chain_id),
   CHECK ((chain_id IS NULL AND step_index IS NULL AND stack_position IS NULL) OR (chain_id IS NOT NULL AND step_index IS NOT NULL AND stack_position IS NOT NULL)),
   CHECK (visibility='canon' OR (canon_status IS NULL AND canon_status_source IS NULL)),
-  CHECK (run_state!='held' OR (hold_reason IS NOT NULL AND held_by_work_id IS NOT NULL)),
-  CHECK (run_state!='failed' OR failure_reason IS NOT NULL)
+  CHECK ((run_state='held') = (hold_reason IS NOT NULL)),
+  CHECK ((run_state='held') = (held_by_work_id IS NOT NULL)),
+  CHECK ((run_state='failed') = (failure_reason IS NOT NULL))
 );
 
 CREATE TABLE IF NOT EXISTS wm_work_edges (

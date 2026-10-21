@@ -1,14 +1,20 @@
 //! Base-62 fractional ranks for plan/task order, compared as plain bytes.
 const DIGITS: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-/// Allocate between valid ranks produced by this function, with `a < b` when
+/// Return None for invalid bounds. Allocate between valid ranks, with `a < b` when
 /// both are present. Valid ranks are nonempty base-62 strings not ending in 0.
 /// Missing bounds represent infinities. A digit provides at least five binary
 /// subdivisions: repeated insertion into one shrinking gap adds at most one
 /// character per five insertions (plus the common prefix). No fixed precision
 /// or machine-sized counter limits the number of insertions.
 #[must_use]
-pub fn between(a: Option<&str>, b: Option<&str>) -> String {
+pub fn between(a: Option<&str>, b: Option<&str>) -> Option<String> {
+    if a.into_iter().chain(b).any(|rank| {
+        rank.is_empty() || rank.ends_with('0') || !rank.bytes().all(|c| DIGITS.contains(&c))
+    }) || matches!((a, b), (Some(a), Some(b)) if a >= b)
+    {
+        return None;
+    }
     let lower = a.unwrap_or_default().as_bytes();
     let upper = b.unwrap_or_default().as_bytes();
     let mut result = String::new();
@@ -29,7 +35,7 @@ pub fn between(a: Option<&str>, b: Option<&str>) -> String {
         };
         if hi > lo + 1 {
             result.push(char::from(DIGITS[lo + (hi - lo) / 2]));
-            return result;
+            return Some(result);
         }
         result.push(char::from(DIGITS[lo]));
         if lo < hi {

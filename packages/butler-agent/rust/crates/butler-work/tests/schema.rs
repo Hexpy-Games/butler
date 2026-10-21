@@ -27,7 +27,8 @@ fn uses(db: &Connection, sql: &str, index: &str) -> bool {
 fn every_request_query_uses_its_index() {
     let db = Connection::open_in_memory().unwrap();
     work_schema::ensure(&db).unwrap();
-    for (sql, index) in work_queries::INDEXED_READS {
+    for query in work_queries::Query::all() {
+        let (sql, index) = (query.sql(), query.index());
         assert!(uses(&db, sql, index), "{sql}\n{}", plan(&db, sql));
     }
     assert!(!uses(
@@ -125,6 +126,8 @@ fn rejects_unknown_enum(table: &str, column: &str) {
             "'canon'".into()
         } else if let Some(default) = default {
             default
+        } else if name == "task_rank" {
+            "'V'".into()
         } else if name == "decided_at" {
             "1".into()
         } else if !required && name != "singleton" {
@@ -150,6 +153,11 @@ fn rejects_unknown_enum(table: &str, column: &str) {
     }
     if let Some(i) = names.iter().position(|n| n == "visibility") {
         values[i] = "'canon'".into();
+    }
+    for name in ["hold_reason", "held_by_work_id"] {
+        if let Some(i) = names.iter().position(|n| n == name) {
+            values[i] = "NULL".into();
+        }
     }
     let insert = |values: &[String]| {
         format!(

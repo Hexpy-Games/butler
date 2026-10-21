@@ -66,7 +66,7 @@ BEGIN SELECT RAISE(ABORT, 'immutable work-model history'); END;
 CREATE TRIGGER IF NOT EXISTS wm_spec_criteria_no_delete BEFORE DELETE ON wm_spec_criteria
 BEGIN SELECT RAISE(ABORT, 'immutable work-model history'); END;
 CREATE TRIGGER IF NOT EXISTS wm_spec_revisions_no_content_update
-BEFORE UPDATE OF node_id,revision,body_hash,parser_version,ext_ref,authoring_instruction_id ON wm_spec_revisions
+BEFORE UPDATE OF node_id,revision,body_hash,parser_version,authoring_instruction_id ON wm_spec_revisions
 BEGIN SELECT RAISE(ABORT, 'immutable spec revision content'); END;
 CREATE TRIGGER IF NOT EXISTS wm_spec_revisions_no_delete BEFORE DELETE ON wm_spec_revisions
 BEGIN SELECT RAISE(ABORT, 'immutable spec revision'); END;

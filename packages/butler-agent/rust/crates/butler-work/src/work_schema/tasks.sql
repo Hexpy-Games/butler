@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS wm_tasks (
   description TEXT NOT NULL DEFAULT '',
   kind TEXT NOT NULL CHECK (kind IN ('execute','integrate','review')),
   status TEXT NOT NULL CHECK (status IN ('draft','pending','running','awaiting_review','completed','blocked','paused','stopped','cancelled')),
-  task_rank TEXT NOT NULL CHECK (length(task_rank)>0),
+  task_rank TEXT NOT NULL CHECK (length(task_rank)>0 AND task_rank NOT GLOB '*[^0-9A-Za-z]*' AND task_rank NOT GLOB '*0'),
   assignee_session_id TEXT,
   blocked_reason TEXT,
   supersedes_task_id TEXT REFERENCES wm_tasks(id),
