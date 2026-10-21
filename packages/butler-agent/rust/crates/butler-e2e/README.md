@@ -41,6 +41,12 @@ The harness builds `butler-agent` itself with `butler-agent/e2e-fixtures` unless
 for browser import scenarios also need this feature to inject isolated profile
 and key sources. Never enable it in shipped agents.
 
+Put scenarios that require compiled-in hooks in a `requires_e2e_fixtures` module,
+including their hook-arming helpers. The installed Windows runner passes
+`--skip ::requires_e2e_fixtures::` to both test listing and execution. Stub/debug
+runs omit that filter. This requirement belongs to the target executable, not
+the harness's `debug_assertions`; new scenarios in these modules inherit it.
+
 Every fault, barrier, fixed clock and storage/idle probe that a scenario arms with a
 `BUTLER_E2E_*` variable exists only in that fixture build (`e2e-fixtures` in each
 product crate). Shipped binaries contain none of them, and `butler-source-check`
