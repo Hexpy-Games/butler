@@ -44,4 +44,3 @@ CREATE TABLE IF NOT EXISTS wm_runtime_marker (
   started_at INTEGER NOT NULL,
   clean_shutdown_at INTEGER
 );
-

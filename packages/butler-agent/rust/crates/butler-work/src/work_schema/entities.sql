@@ -82,4 +82,3 @@ CREATE TABLE IF NOT EXISTS wm_hold_decisions (
   decided_at INTEGER,
   CHECK ((decision IS NULL) = (decided_at IS NULL))
 );
-

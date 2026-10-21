@@ -42,4 +42,3 @@ CREATE TABLE IF NOT EXISTS wm_spec_criteria (
   PRIMARY KEY (node_id,revision,criterion_id),
   FOREIGN KEY (node_id,revision) REFERENCES wm_spec_revisions(node_id,revision)
 );
-

@@ -78,4 +78,3 @@ CREATE TABLE IF NOT EXISTS wm_reviews (
   at INTEGER NOT NULL,
   FOREIGN KEY (result_id,result_revision) REFERENCES wm_results(id,revision)
 );
-

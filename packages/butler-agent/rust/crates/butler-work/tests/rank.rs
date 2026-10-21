@@ -11,7 +11,7 @@ fn fractional_ranks_sort_and_grow_at_a_bounded_rate() {
     for _ in 0..1000 {
         let next = between(Some(&middle), Some(&upper));
         assert!(middle < next && next < upper);
-        assert!(!next.is_empty());
+        assert_ne!(next, "");
         upper = next;
     }
     // Base-62 midpoint allocation consumes at most one digit per five halvings.

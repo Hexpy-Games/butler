@@ -97,12 +97,9 @@ fn chain_invariants_and_all_edits() {
     );
     // Reindexing a pinned sibling/step is also movement.
     assert!(c.delete(&id("a"), &BTreeSet::from([id("d")])).is_err());
-    assert!(
-        chain(&[&["a"]])
-            .delete(&id("a"), &empty)
-            .unwrap()
-            .steps
-            .is_empty()
+    assert_eq!(
+        chain(&[&["a"]]).delete(&id("a"), &empty).unwrap(),
+        chain(&[])
     );
 }
 
