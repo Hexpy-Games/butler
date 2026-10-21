@@ -1,10 +1,10 @@
 //! Repeated lexical refusals retain their complete result without running a shell.
 use super::*;
 
+#[path = "refusal_history.rs"]
+mod history;
 #[path = "refusal_samples.rs"]
 mod samples;
-#[path = "refusal_scale.rs"]
-mod scale;
 #[path = "startup.rs"]
 mod startup;
 
@@ -26,7 +26,7 @@ async fn full_access_lexical_refusals_keep_complete_results_without_shell_work()
 
 async fn sample(access: Access) -> Result<(), HarnessError> {
     let (mut s, chat, script, server) = setup(access).await?;
-    let history = scale::prepare(&mut s, &chat).await?;
+    let history = history::prepare(&mut s, &chat).await?;
     let initial_logs = s.agent.current_logs().await?.lines().count();
     let control = transport_control::Control::start(&s.gw)?;
     // POSIX read observations use the OS sandbox; mutation admission exercises
@@ -113,7 +113,7 @@ async fn sample(access: Access) -> Result<(), HarnessError> {
         }
         eprintln!("REFUSAL-STORAGE-TRACE-END");
     }
-    scale::assert_complete(&s, history).await?;
+    history::assert_complete(&s, history).await?;
     // Every sample must still meet the one-second bound; report all N=20 first.
     butler_e2e::assert_wall_clock_budget!(
         slowest,

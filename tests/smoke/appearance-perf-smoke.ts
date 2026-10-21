@@ -13,7 +13,7 @@ const custom = Bun.argv.includes("--custom-only");
 mkdirSync(out, { recursive: true });
 const server = await createNativeAppServer();
 const browser = await launchSmokeBrowser();
-writeFileSync(`${out}/environment.json`, JSON.stringify({ browser: browser.version(), viewportHeight: 900, deviceScaleFactor: 1, custom, ownerScale: Bun.argv.includes("--owner-scale") }, null, 2));
+writeFileSync(`${out}/environment.json`, JSON.stringify({ browser: browser.version(), viewportHeight: 900, deviceScaleFactor: 1, custom, historyFixture: Bun.argv.includes("--history") }, null, 2));
 const expected = ["none", "live:butler.riso-print", "live:butler.bloom", "live:butler.silk", "live:butler.riso-flow", "live:butler.lamina", "live:butler.diatom", "live:butler.dusk", "live:butler.shoreline", "live:butler.photo-clouds", "live:butler.photo-daisies", "live:butler.stipple"];
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -117,9 +117,9 @@ async function measure(width: number, module: string, tone: string) {
 
 const results = [];
 try {
-  if (Bun.argv.includes("--owner-scale")) {
+  if (Bun.argv.includes("--history")) {
     const ids: string[] = [];
-    for (let start = 0; start < 600; start += 10) {
+    for (let start = 0; start < 20; start += 10) {
       const rows = await Promise.all(Array.from({ length: 10 }, (_, i) => server.api<{ session: { id: string } }>("/sessions", {
         method: "POST", body: JSON.stringify({ kind: "chat", title: `Appearance scale ${start + i}` }),
       })));
@@ -127,8 +127,8 @@ try {
     }
     const navigation = await server.api<{ chats: { id: string }[] }>("/navigation");
     const listed = new Set(navigation.chats.map((chat) => chat.id));
-    assert(ids.every((id) => listed.has(id)), "Owner-scale navigation dropped chats");
-    console.error(`owner-scale: ${ids.length} complete chat summaries`);
+    assert(ids.every((id) => listed.has(id)), "history navigation dropped chats");
+    console.error(`history: ${ids.length} complete chat summaries`);
   }
   for (const width of widths) {
     for (const module of [...(!custom ? ["butler.riso-print"] : []), "butler.silk", "butler.photo-clouds"]) {

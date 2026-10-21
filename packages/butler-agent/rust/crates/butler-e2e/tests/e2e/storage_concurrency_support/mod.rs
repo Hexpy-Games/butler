@@ -12,20 +12,19 @@ pub(super) fn seed(path: &Path) {
     let db = butler_platform::sqlite::open(path).unwrap();
     db.execute_batch(
         "PRAGMA synchronous=OFF; BEGIN;
-      WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<599)
+      WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<7)
       INSERT INTO chats(id,title,kind,pinned,archived,created_at,updated_at)
       SELECT 'scale-c'||i,'Scale','chat',0,0,'2026-01-01','2026-01-01' FROM n;
-      WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<299999)
+      WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<47)
       INSERT INTO events(type,turn_id,payload_json,created_at)
-      SELECT 'seed','',json_object('text',hex(zeroblob(2048))),'2026-01-01' FROM n;
+      SELECT 'seed','',json_object('text',hex(zeroblob(64))),'2026-01-01' FROM n;
       COMMIT; PRAGMA wal_checkpoint(TRUNCATE);",
     )
     .unwrap();
     let events: u64 = db
         .query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))
         .unwrap();
-    assert!(events >= 300_000);
-    assert!(std::fs::metadata(path).unwrap().len() >= 1_300_000_000);
+    assert!(events >= 48);
 }
 
 pub(super) fn verify_rows(

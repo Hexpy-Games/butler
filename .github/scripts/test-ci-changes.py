@@ -72,7 +72,7 @@ class Paths(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(changes.categories(path), set(changes.GROUPS))
         for path in ['.github/releases/v1.2.3.md',
-                     '.github/actions/windows-owner-setup/README.md']:
+                     '.github/actions/windows-runner-setup/README.md']:
             self.assertEqual(changes.categories(path), set())
 
     # test-category: pure-logic

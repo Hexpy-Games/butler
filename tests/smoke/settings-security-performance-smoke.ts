@@ -1,4 +1,4 @@
-// Loaded settings interactions against a real isolated gateway at owner scale.
+// Loaded settings interactions against a real isolated gateway at history.
 import { strict as assert } from "node:assert";
 import { join, resolve } from "node:path";
 import { readFileSync, statSync } from "node:fs";
@@ -47,7 +47,7 @@ setAppCopyLanguage("ko");
 const server = await createNativeAppServer({ uiRoot: resolve("packages/butler-app/client/ui/dist") });
 const browser = await launchSmokeBrowser();
 try {
-  await seedApprovalFixture(server); // 603 conversations, 13 grants -> 12 complete rows.
+  await seedApprovalFixture(server); // Small retained history, 13 grants -> 12 complete rows.
   const { secret } = JSON.parse(readFileSync(join(server.butlerData, "app/runtime/auth/local-admin.json"), "utf8"));
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await server.signIn(page);
@@ -79,7 +79,7 @@ try {
   await page.waitForTimeout(1_000);
   assert.deepEqual(snapshot(), idleBefore, "loaded settings idle storage remains unchanged");
   assert.equal(server.stubModelCalls.length, 0);
-  console.log(JSON.stringify({ conversations: 603, modelCalls: 0, idleObservationMs: 1000, changedStorageFiles: 0, results }));
+  console.log(JSON.stringify({ conversations: (await server.api<{ chats: unknown[] }>("/navigation")).chats.length, modelCalls: 0, idleObservationMs: 1000, changedStorageFiles: 0, results }));
   for (const result of results) {
     assert(result.ready, `${result.interaction} content ready`);
     assert(result.elapsedMs <= 150, `${result.interaction}: ${result.elapsedMs}ms`);

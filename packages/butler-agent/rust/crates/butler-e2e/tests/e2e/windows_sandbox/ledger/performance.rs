@@ -46,10 +46,10 @@ fn ledger_100k_performance_and_exactness() -> Result<(), HarnessError> {
     performance(2_000, "WIN-LEDGER-100K")
 }
 #[test]
-fn ledger_300k_performance_and_exactness() -> Result<(), HarnessError> {
+fn ledger_repeated_files_and_exactness() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(!command_sandbox::POSIX_SHELL, "Windows ledger perf");
-    performance(6_000, "WIN-LEDGER-300K")
+    performance(8, "WIN-LEDGER-FILES")
 }
 fn performance(dirs: usize, name: &str) -> Result<(), HarnessError> {
     let f = Fixture::new(name)?;

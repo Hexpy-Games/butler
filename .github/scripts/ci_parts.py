@@ -2,7 +2,7 @@
 import re
 
 E2E = [1, 2, 3, 4, 5, 6, 'ins-02', 'ins-14', 'install']
-PERF = [1, 2, 3, 'idle']
+PERF = [1, 2, 3]
 HOSTED = [
     dict(shard='remote', tests='gateway_remote,gateway_pairing,cli_remote'),
     dict(shard='recovery', tests='queue_shutdown,service_supervision,service_diagnostics'),

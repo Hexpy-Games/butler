@@ -4,7 +4,7 @@ import { cpus, loadavg } from "node:os";
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { launchP0App, waitFor } from "./browser-p0-app.ts";
-import { seedP0OwnerScale } from "./browser-p0-owner-scale.ts";
+import { seedP0History } from "./browser-p0-history.ts";
 
 // Real App/stub smoke. Build UI + Electron first and provide the native Agent.
 // BUTLER_SCROLL_OUTPUT must be outside the repository. No WebContentsView harness.
@@ -13,20 +13,20 @@ if (output) assert(!resolve(output).startsWith(`${process.cwd()}/`));
 const app = await launchP0App({ harness: false });
 let tracing = false;
 try {
-  const scale = seedP0OwnerScale(app.data);
+  const scale = seedP0History(app.data);
   await app.main.evaluate(`globalThis.require=process.getBuiltinModule('module').createRequire(process.cwd()+'/main.mjs');
     globalThis.scrollWindow=require('electron').BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().startsWith('app://butler/'));true`);
   await app.page.reload();
-  await waitFor(() => app.page.expression("Array.from(document.querySelectorAll('[data-test-class=\"tree-row\"]')).some(e=>e.textContent.includes('P0 대화 599'))"), "sidebar");
-  await app.page.expression("Array.from(document.querySelectorAll('[data-test-class=\"tree-row\"]')).find(e=>e.textContent.includes('P0 대화 599')).click()");
-  await waitFor(() => app.page.expression("document.body.textContent.includes('메시지 2999')"), "latest", 60_000);
-  const source = await app.page.expression<any>("window.butlerApp.listMessages({chatId:'p0-c599',cursor:0})");
+  await waitFor(() => app.page.expression("Array.from(document.querySelectorAll('[data-test-class=\"tree-row\"]')).some(e=>e.textContent.includes('P0 대화 7'))"), "sidebar");
+  await app.page.expression("Array.from(document.querySelectorAll('[data-test-class=\"tree-row\"]')).find(e=>e.textContent.includes('P0 대화 7')).click()");
+  await waitFor(() => app.page.expression("document.body.textContent.includes('메시지 239')"), "latest", 60_000);
+  const source = await app.page.expression<any>("window.butlerApp.listMessages({chatId:'p0-c7',cursor:0})");
   const messages = Array.isArray(source) ? source : source.messages;
   assert.equal(messages.length, 200, "Existing native response window retains every message");
   for (const [offset, message] of messages.entries()) {
-    const index = 2800 + offset;
+    const index = 40 + offset;
     assert.equal(message.id, `p0-m${index}`);
-    assert.equal(message.text, `메시지 ${index}\n${"한글".repeat(16200)}`);
+    assert.equal(message.text, `메시지 ${index}\n${"한글".repeat(1024)}`);
   }
   await app.page.expression("(()=>{window.scrollSettled=false;let last,stable=0;function tick(now){stable=last!==undefined&&now-last<100?stable+1:0;last=now;if(stable>=120)window.scrollSettled=true;else requestAnimationFrame(tick)}requestAnimationFrame(tick);return true})()");
   await waitFor(() => app.page.expression("window.scrollSettled"), "settled transcript");

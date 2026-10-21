@@ -133,7 +133,7 @@ Run Clippy on the crates you changed; the example selects the Agent's static bui
 
 Test changed behavior E2E first: `BUTLER_E2E_TIER=stub cargo test --locked -p butler-e2e`. Use stub or replay only. Non-E2E tests require a `// test-category: race`, `security`, `pure-logic` or `format-pin` marker directly above the test function; source-check ratchets the counts in `source-check-tests.txt`, which may only decrease. Live cassette recording, when explicitly required, uses only `openai/gpt-6-luna`. The [harness README](packages/butler-agent/rust/crates/butler-e2e/README.md) covers tiers and recording.
 
-Keep source files at most 500 lines and production functions at most 80 lines. OS-specific code belongs only in `butler-platform`; unsafe code is forbidden. Performance checks must verify complete, current results at owner scale (600+ chats, about 300k events and multi-GB stores). Follow the detailed request-path and idle-work rules in [AGENTS.md](AGENTS.md).
+Keep source files at most 500 lines and production functions at most 80 lines. OS-specific code belongs only in `butler-platform`; unsafe code is forbidden. Performance checks must verify complete, current results. Follow the detailed request-path and idle-work rules in [AGENTS.md](AGENTS.md).
 
 ## Design system
 
@@ -198,9 +198,9 @@ The app release gate fails when the bundled agent version changes and the app ve
 
 Windows preview releases include the unsigned Agent and Squirrel App installer.
 
-### Live E2E OAuth setup (Windows owner runner)
+### Live E2E OAuth setup (self-hosted Windows runner)
 
-On the owner's `butler-win` runner, sign in once in PowerShell:
+On a self-hosted Windows runner, sign in once in PowerShell:
 
 ```powershell
 $env:CODEX_HOME = "$HOME\.butler-e2e-auth"; npx -y @openai/codex login

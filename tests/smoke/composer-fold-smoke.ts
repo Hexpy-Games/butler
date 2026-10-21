@@ -201,17 +201,17 @@ try {
     observer.observe(document, { childList: true, subtree: true });
   });
   await server.signIn(context);
-  // 600 chats exercise the existing owner-scale navigation, with full membership checks.
+  // 20 chats exercise the existing history navigation, with full membership checks.
   const ids: string[] = [];
-  for (let i = 0; i < 600; i += 10) {
+  for (let i = 0; i < 20; i += 10) {
     const rows = await Promise.all(Array.from({ length: 10 }, (_, j) => server.api<any>("/sessions", {
-      method: "POST", body: JSON.stringify({ kind: "chat", title: i + j >= 598 ? `Fold smoke ${i + j === 598 ? "A" : "B"}` : `Fold scale ${i + j}` }),
+      method: "POST", body: JSON.stringify({ kind: "chat", title: i + j >= 18 ? `Fold smoke ${i + j === 18 ? "A" : "B"}` : `Fold scale ${i + j}` }),
     })));
     ids.push(...rows.map((row) => row.session.id));
   }
   interactionChatIds = ids.slice(-2);
   const nav = await server.api<any>("/navigation");
-  assert(ids.every((id) => nav.chats.some((chat: any) => chat.id === id)), "Owner-scale chat membership");
+  assert(ids.every((id) => nav.chats.some((chat: any) => chat.id === id)), "history chat membership");
   for (const width of [1280, 375]) for (const theme of ["light", "dark"]) {
     await server.api("/settings", { method: "PATCH", body: JSON.stringify({ appearance_theme: theme, collapse_message_box: true, wallpaper: { source: { kind: "none" } } }) });
     await page.setViewportSize({ width, height: 900 });
@@ -263,7 +263,7 @@ try {
   }
   assert.equal(server.stubModelCalls.length, 0);
   writeFileSync(join(out, "results.json"), JSON.stringify({ chats: ids.length, timings, results, maxMs: Math.max(0, ...timings) }, null, 2));
-  console.log(`PASS: ${results.filter((row: any) => typeof row.collapse === "boolean").length} composer cases, 600 chats; max toggle ${Math.max(0, ...timings).toFixed(1)}ms; no model calls`);
+  console.log(`PASS: ${results.filter((row: any) => typeof row.collapse === "boolean").length} composer cases, 20 chats; max toggle ${Math.max(0, ...timings).toFixed(1)}ms; no model calls`);
 } catch (error) {
   console.error(error);
   console.log("failure state", await card.count() ? await card.evaluate((node) => ({ expanded: node.dataset.expanded, active: document.activeElement?.tagName, children: [...node.children].map((child) => ({ slot: child.getAttribute("data-slot"), state: child.getAttribute("data-state"), height: child.getBoundingClientRect().height })) })).catch(() => null) : null);

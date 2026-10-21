@@ -42,6 +42,6 @@ try {
     python -c "import shutil,sys; shutil.rmtree(chr(92)*2+'?'+chr(92)+sys.argv[1])" $root
     $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) { throw 'Could not remove isolated test profiles' }
-    if ($before -cne $after) { throw 'Owner protocol registration changed' }
+    if ($before -cne $after) { throw 'Runner protocol registration changed' }
     Write-Output 'Protocol registration unchanged'
 }

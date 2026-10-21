@@ -230,7 +230,7 @@ async fn queue_followup(s: &Scenario, prompt: &str) -> Result<String, HarnessErr
 }
 
 #[test]
-fn owner_scale_posting_queries_keep_plans_and_results() -> Result<(), HarnessError> {
+fn history_posting_queries_keep_plans_and_results() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut setup = Setup::new("ALIAS-DROP-AUDIT")?;
     let directory = setup.sandbox.data.join("audit");

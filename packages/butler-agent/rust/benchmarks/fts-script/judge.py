@@ -64,7 +64,7 @@ def call(folder, i, question, rows, summaries, count):
                                               ensure_ascii=False, separators=(',', ':'))
     (folder / (i+'.prompt.txt')).write_text(prompt)
     home, data = tempfile.mkdtemp(), tempfile.mkdtemp()
-    env = dict(os.environ, HOME=home, BUTLER_DATA=data, CODEX_HOME='/home/yeonw/.codex')
+    env = dict(os.environ, HOME=home, BUTLER_DATA=data, CODEX_HOME=os.environ.get('CODEX_HOME', str(Path.home() / '.codex')))
     command = ['codex', 'exec', '-m', 'gpt-6-luna', '--ephemeral', '--ignore-user-config',
                '--skip-git-repo-check', '-C', str(folder), '-s', 'read-only', '--json',
                '-c', 'model_reasoning_effort="low"', '-c', 'model_provider="openai"',

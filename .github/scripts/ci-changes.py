@@ -123,7 +123,7 @@ CI_CONSUMERS = (
                                '.github/actions/*windows*/**', '.github/scripts/*windows*')),
     (('workflows',), ('.github/actions/build-windows-agent/*',
                       '.github/actions/package-windows-app/*',
-                      '.github/actions/windows-owner-*/*',
+                      '.github/actions/windows-runner-*/*',
                       '.github/actions/windows-preview-gate/*',
                       '.github/workflows/windows-powershell-diagnostics.yml',
                       '.github/workflows/windows-released-smoke.yml')),

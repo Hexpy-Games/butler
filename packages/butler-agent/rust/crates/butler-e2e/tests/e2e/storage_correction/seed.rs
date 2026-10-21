@@ -8,7 +8,6 @@ pub(super) struct Profile {
     pub turns: usize,
     pub rows: usize,
     pub live_bytes: usize,
-    pub perf: bool,
 }
 impl Profile {
     pub(super) fn small() -> Self {
@@ -16,20 +15,11 @@ impl Profile {
             turns: 120,
             rows: 480,
             live_bytes: 40_000_000,
-            perf: false,
-        }
-    }
-    pub(super) fn owner() -> Self {
-        Self {
-            turns: 2440,
-            rows: 15886,
-            live_bytes: 450_000_000,
-            perf: true,
         }
     }
 }
 
-pub(super) fn seed(path: &Path, p: &Profile, active: &str) -> Result<(), HarnessError> {
+pub(super) fn seed(path: &Path, p: &Profile) -> Result<(), HarnessError> {
     let mut db = Connection::open(path)?;
     db.execute_batch(
         "PRAGMA secure_delete=OFF; PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;",
@@ -43,38 +33,17 @@ pub(super) fn seed(path: &Path, p: &Profile, active: &str) -> Result<(), Harness
         tx.execute("INSERT INTO btcc_turns(turn_id,session_id,inbox_id,trigger_key,original_message_id,original_message,admission_snapshot_ref,model_selection_json,context_json,semantic_state,revision,execution_fence) VALUES(?1,?3,?1,?1,?1,'Synthetic history','fixture','{}','{}',?2,1,1)",params![id,if i%20==0 {"cancelled"} else {"delivered"},format!("corr-chat-{i}")])?;
         tx.execute("INSERT INTO btcc_messages(message_id,session_id,turn_id,role,content,idempotency_key,created_at) VALUES(?1,?2,?1,'assistant','Synthetic history',?1,'2026-01-01T00:00:00Z')",params![id,format!("corr-chat-{i}")])?;
     }
-    let admitted = if p.perf { 162 } else { 0 };
     let mut insert=tx.prepare("INSERT INTO btcc_model_round_acceptances(acceptance_id,turn_id,round_id,route_digest,candidate_index,checkpoint_id,checkpoint_revision,model_ref,transport_attempt,normalized_response_json,provider_identity_json,created_at) VALUES(?1,?2,?1,'fixture',0,'fixture',1,'openai/gpt-6-luna',1,?3,'{}','2026-01-01T00:00:00Z')")?;
     let mut ordered = Vec::with_capacity(p.rows);
     for i in 0..p.rows {
-        let turn = if i < admitted {
-            active.to_owned()
-        } else if p.perf && i < admitted + 473 {
-            "corr-0001".to_owned()
-        } else {
-            {
-                let slot = (i - admitted) % if p.perf { p.turns - 1 } else { p.turns };
-                format!(
-                    "corr-{:04}",
-                    if p.perf && slot >= 1 { slot + 1 } else { slot }
-                )
-            }
-        };
+        let turn = format!("corr-{:04}", i % p.turns);
         ordered.push((turn, i));
     }
     // Legacy rounds append together within a turn; preserve that physical
     // layout rather than artificially interleaving every historical session.
     ordered.sort();
     for (turn, i) in ordered {
-        let bytes = if !p.perf {
-            600_000
-        } else if i < admitted {
-            387_000
-        } else if i < admitted + 473 {
-            1_020_000 + (i - admitted) * 1_520_000 / 472
-        } else {
-            340_764 + (i % 7) * 1_000
-        };
+        let bytes = 600_000;
         let payload = format!(
             r#"{{"continuation":{{"statelessInput":[{{"type":"message","content":"distinct-{i}:{}"}}]}}}}"#,
             "x".repeat(bytes)
@@ -185,18 +154,4 @@ pub(super) fn live_bytes(path: &Path) -> Result<u64, HarnessError> {
     let count: u64 = db.pragma_query_value(None, "page_count", |r| r.get(0))?;
     let free: u64 = db.pragma_query_value(None, "freelist_count", |r| r.get(0))?;
     Ok((count - free) * size)
-}
-
-/// Stream actual unrelated disk writes before timing; no privileged cache drop.
-pub(super) fn evict_cache(path: &Path) -> Result<(), HarnessError> {
-    use std::io::Write;
-    let mut file = std::fs::File::create(path)?;
-    let buffer = vec![0x5a; 1_000_000];
-    for _ in 0..20_000 {
-        file.write_all(&buffer)?;
-    }
-    file.sync_all()?;
-    drop(file);
-    std::fs::remove_file(path)?;
-    Ok(())
 }

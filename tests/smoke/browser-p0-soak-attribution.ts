@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { launchP0App, waitFor } from "./browser-p0-app";
 import { browserP0Fixtures } from "./browser-p0-fixtures";
 import { hostWindow, HostLoadExceeded } from "./browser-p0-host-load";
-import { seedP0OwnerScale, waitP0OwnerScaleSpace } from "./browser-p0-owner-scale";
+import { seedP0History } from "./browser-p0-history";
 import { runSoakLoop } from "./browser-p0-soak";
 import { sample } from "./browser-p0-measure";
 import { openBrowserArea, visitUserSite } from "./browser-p0-user";
@@ -21,8 +21,7 @@ const fixtures = browserP0Fixtures(), origin = `http://127.0.0.1:${fixtures.port
 let app: Awaited<ReturnType<typeof launchP0App>> | undefined;
 try {
   app = await launchP0App();
-  await waitP0OwnerScaleSpace(app.data);
-  const ownerScale = seedP0OwnerScale(app.data);
+  const historyFixture = seedP0History(app.data);
   await app.page.reload(); await openBrowserArea(app);
   await visitUserSite(app, `${origin}/nodes`, evidence);
   for (const path of ["nodes", "cpu", "network"]) {
@@ -49,7 +48,7 @@ try {
     assert.deepEqual(after.resources, before.resources);
     return { loop, mainLoop: after.loop, outliers, resources: after.resources, productBefore };
   });
-  const result = { variant, ownerScale, ...measured, diagnosticOnly: true };
+  const result = { variant, historyFixture, ...measured, diagnosticOnly: true };
   writeFileSync(join(evidence, "result.json"), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result));
 } catch (error) {

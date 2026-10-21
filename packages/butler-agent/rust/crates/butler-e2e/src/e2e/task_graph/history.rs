@@ -1,4 +1,4 @@
-//! Owner-scale synthetic history, recorded through the same admission/services.
+//! Small synthetic history, recorded through the same admission/services.
 use super::*;
 
 impl GraphBuilder {

@@ -1,4 +1,4 @@
-//! Release-only PERF-IDLE: bounded idle reads and memory at owner scale.
+//! Release-only PERF-IDLE: bounded idle reads and memory with retained history.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -17,7 +17,7 @@ use butler_platform::process_control::usage as process_usage;
 use butler_platform::sqlite;
 use std::time::Duration;
 
-use super::app_storage_scale::seed as app_seed;
+use super::app_retention::seed as app_seed;
 #[path = "idle_resources/accounting.rs"]
 mod accounting;
 #[path = "idle_resources/seed.rs"]
@@ -32,7 +32,7 @@ const MEMORY_BUDGET: u64 = 100_000_000;
 const READ_BUDGET: u64 = 1_000_000;
 
 #[tokio::test]
-async fn perf_idle_owner_scale_reads_and_footprint() -> Result<(), HarnessError> {
+async fn perf_idle_history_reads_and_footprint() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(
         std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("perf"),
@@ -52,9 +52,9 @@ async fn perf_idle_owner_scale_reads_and_footprint() -> Result<(), HarnessError>
     let mut s = setup.start().await?;
     s.agent.terminate().await?;
     let app = s.sandbox.data.join("app-server/butler-client.sqlite");
-    app_seed::seed_owner_scale(&sqlite::open(&app).unwrap(), 3_000);
+    app_seed::seed_history(&sqlite::open(&app).unwrap(), 64);
     super::storage_concurrency_support::seed(&app);
-    let expected = seed::owner_scale(&s.sandbox.data)?;
+    let expected = seed::history(&s.sandbox.data)?;
     transcripts::seed(&s.sandbox.data)?;
     eprintln!(
         "PERF-IDLE fixture app_bytes={} btcc_bytes={} canonical_bytes={}",

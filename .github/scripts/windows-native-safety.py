@@ -1,4 +1,4 @@
-"""Guard straight-line PS 5.1 native calls in owner steps and scripts.
+"""Guard straight-line PS 5.1 native calls in self-hosted runner steps and scripts.
 
 GitHub starts PowerShell steps under Stop. Redirection alone does not prevent
 NativeCommandError in 5.1; require Continue at the call, then an exit-code check.

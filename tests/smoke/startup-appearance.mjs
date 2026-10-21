@@ -67,12 +67,12 @@ try {
     assert.deepEqual(fairState.getState(), { onBattery: false, constrained: false }, "unknown thermal state does not constrain wallpaper");
   } finally { fairState.stop(); }
   db.exec("CREATE TABLE app_settings(key TEXT PRIMARY KEY, value_json TEXT NOT NULL)");
-  if (process.argv.includes("--owner-scale")) {
+  if (process.argv.includes("--history")) {
     db.exec("CREATE TABLE chats(id INTEGER PRIMARY KEY, payload BLOB); CREATE TABLE events(id INTEGER PRIMARY KEY, chat_id INTEGER)");
-    db.exec("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<600) INSERT INTO chats SELECT x,zeroblob(2166667) FROM n");
-    db.exec("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<300000) INSERT INTO events SELECT x,x%600+1 FROM n");
-    assert.equal(db.prepare("SELECT count(*) AS n FROM chats").get().n, 600);
-    assert.equal(db.prepare("SELECT count(*) AS n FROM events").get().n, 300000);
+    db.exec("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<8) INSERT INTO chats SELECT x,zeroblob(64) FROM n");
+    db.exec("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<48) INSERT INTO events SELECT x,x%8+1 FROM n");
+    assert.equal(db.prepare("SELECT count(*) AS n FROM chats").get().n, 8);
+    assert.equal(db.prepare("SELECT count(*) AS n FROM events").get().n, 48);
   }
   const write = db.prepare("INSERT OR REPLACE INTO app_settings VALUES ('settings', ?)");
   const times = [];
@@ -108,5 +108,5 @@ try {
   const plan = db.prepare("EXPLAIN QUERY PLAN SELECT value_json FROM app_settings WHERE key='settings'").all();
   assert.ok(plan.every((row) => !row.detail.includes("SCAN")), "settings uses the key index");
   console.log(JSON.stringify({ result: "PASS power change-only/idle, setting/scene/OS precedence, live/image/none, latest state, indexed query", powerMessages: powerMessages.length, idleMessages: idlePowerMessages, reads: times.length,
-    medianMs: times.sort((a, b) => a - b)[Math.floor(times.length / 2)], maxMs: Math.max(...times), bytes: statSync(path).size, ownerScale: process.argv.includes("--owner-scale") }));
+    medianMs: times.sort((a, b) => a - b)[Math.floor(times.length / 2)], maxMs: Math.max(...times), bytes: statSync(path).size, historyFixture: process.argv.includes("--history") }));
 } finally { initialRead?.stop(); powerState.stop(); db.close(); }

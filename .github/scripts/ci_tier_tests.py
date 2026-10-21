@@ -175,7 +175,7 @@ class ApprovedTiers(unittest.TestCase):
 
 
     # test-category: format-pin
-    def test_owner_windows_jobs_reserve_the_release_lane(self):
+    def test_self_hosted_windows_jobs_reserve_the_release_lane(self):
         from ci_consumer_test_support import jobs
         dynamic = "${{ (startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/')) && 'butler-win-release' || 'butler-win-shared' }}"
         expected = {
@@ -186,7 +186,7 @@ class ApprovedTiers(unittest.TestCase):
             ('windows-preview-smoke.yml', 'build'): 'butler-win-release',
             ('windows-preview-smoke.yml', 'stub'): dynamic,
             ('windows-powershell-diagnostics.yml', 'diagnose-native'): dynamic,
-            ('native-deps.yml', 'windows-owner'): dynamic,
+            ('native-deps.yml', 'windows-self-hosted'): dynamic,
         }
         found = set()
         for workflow in (ROOT.parent / 'workflows').glob('*.yml'):
@@ -200,9 +200,9 @@ class ApprovedTiers(unittest.TestCase):
                 if workflow.name == 'release.yml':
                     self.assertIn("inputs.runner == 'hosted' && 'windows-latest'", runner[1])
         self.assertEqual(found, set(expected))
-        plan = (ROOT.parent / 'actions/windows-owner-setup/README.md').read_text()
-        self.assertIn('`yw-pc`: `butler-win-release` only.', plan)
-        self.assertIn('`yw-pc-2`: both `butler-win-shared` and `butler-win-release`.', plan)
+        plan = (ROOT.parent / 'actions/windows-runner-setup/README.md').read_text()
+        self.assertIn('dedicated release and shared lanes', plan)
+        self.assertIn('PR/main jobs use the shared lane', plan)
         config = (ROOT.parent / 'actionlint.yaml').read_text()
         for lane in ('butler-win-release', 'butler-win-shared'):
             self.assertIn(lane, config)
@@ -236,8 +236,8 @@ class ApprovedTiers(unittest.TestCase):
             '.github/actions/rust-agent-setup/action.yml': True,
             '.github/actions/rust-agent-setup/nested/config.json': True,
             '.github/actions/rust-agent-setup-other/action.yml': False,
-            '.github/actions/windows-owner-setup/action.yml': True,
-            '.github/actions/windows-owner-setup/nested/file.ps1': True,
+            '.github/actions/windows-runner-setup/action.yml': True,
+            '.github/actions/windows-runner-setup/nested/file.ps1': True,
             '.github/workflows/rust-windows-check.yml': True,
             '.github/scripts/test-windows-ci-safety.py': True,
             '.github/scripts/nested/windows-check.py': True,

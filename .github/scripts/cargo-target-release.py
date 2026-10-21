@@ -41,7 +41,7 @@ class UnsuccessfulProducer(ValueError):
 
 
 def api(endpoint, method='GET'):
-    """Use the workflow token without requiring GitHub CLI on owner hosts."""
+    """Use the workflow token without requiring GitHub CLI on runner hosts."""
     url = 'https://api.github.com/' + endpoint
     field = 'jobs' if '/jobs?' in endpoint else 'artifacts' if '/artifacts?' in endpoint else None
     entries = []

@@ -7,12 +7,12 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: ./.github/actions/windows-owner-setup
+    - uses: ./.github/actions/windows-runner-setup
       with:
         workflow: ${{ inputs.native-cache }}
     - uses: ./.github/actions/build-windows-agent
       with:
-        owner-runner: 'true'
+        self-hosted-runner: 'true'
         profile: ci-fast
         cache-key: windows-preview
         artifact-base-url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
@@ -26,8 +26,8 @@ runs:
       if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
     - uses: ./.github/actions/prepare-windows-release-target
       if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
-    - name: Check owner registration and remove job profile
+    - name: Check runner registration and remove job profile
       if: always()
       working-directory: .
       shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
-      run: ./deploy/windows-owner-cleanup.ps1
+      run: ./deploy/windows-self-hosted-cleanup.ps1

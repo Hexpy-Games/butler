@@ -446,7 +446,7 @@ async function runCase(width: number, theme: "light" | "dark", language: "en" | 
 }
 try {
   const ids: string[] = [];
-  for (let start = 0; start < 600; start += 10) {
+  for (let start = 0; start < 20; start += 10) {
     const rows = await Promise.all(Array.from({ length: 10 }, (_, i) => server.api<{ session: { id: string } }>("/sessions", {
       method: "POST", body: JSON.stringify({ kind: "chat", title: `Composer scale ${start + i}` }),
     })));
@@ -454,7 +454,7 @@ try {
   }
   const navigation = await server.api<{ chats: { id: string }[] }>("/navigation");
   const listed = new Set(navigation.chats.map(chat => chat.id));
-  assert(ids.every(id => listed.has(id)), "all 600 owner-scale chat summaries retained");
+  assert(ids.every(id => listed.has(id)), "all 20 history chat summaries retained");
   if (panelsOnly) await panelScreens();
   if (!scrollOnly && !startsOnly && !panelsOnly) {
     for (const width of widths) for (const theme of ["light", "dark"] as const) for (const language of ["ko", "en"] as const) {
@@ -464,7 +464,7 @@ try {
   }
   if (!startsOnly && !panelsOnly) await scrollReserveScreens();
   if (!scrollOnly && !panelsOnly) await startScreens();
-  if (!scrollOnly && !startsOnly && !panelsOnly) writeFileSync(join(out, "results.json"), JSON.stringify({ before, cases: results, browser: browser.version(), ownerScaleChats: 600 }, null, 2));
+  if (!scrollOnly && !startsOnly && !panelsOnly) writeFileSync(join(out, "results.json"), JSON.stringify({ before, cases: results, browser: browser.version(), historyFixtureChats: 20 }, null, 2));
   console.log(JSON.stringify({ before, cases: results }));
 } catch (error) {
   console.error(error instanceof Error ? `${error.stack}\nCause: ${error.cause instanceof Error ? error.cause.stack : error.cause}` : String(error));

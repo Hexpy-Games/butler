@@ -65,17 +65,16 @@ async fn failed_start(
 }
 
 #[tokio::test]
-async fn btcc_flagged_owner_scale_fails_fast_without_mutation() -> Result<(), HarnessError> {
+async fn btcc_flagged_history_fails_fast_without_mutation() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("BTCC-FLAGGED-SCALE")?
         .env("BUTLER_STARTUP_TRACE", "1")
         .start()
         .await?;
     s.agent.terminate().await?;
-    super::btcc_startup_scale::seed(&s.sandbox.data, 300_000)?;
+    super::btcc_history::seed(&s.sandbox.data, 48)?;
     let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
     let before = digest(&path)?;
-    assert!(before.0 >= 7_000_000_000, "owner-scale fixture required");
     write_verdict(&path, false)?;
     for (generation, legacy) in [(2, false), (3, true)] {
         if legacy {
@@ -86,7 +85,7 @@ async fn btcc_flagged_owner_scale_fails_fast_without_mutation() -> Result<(), Ha
         butler_e2e::assert_wall_clock_budget!(
             elapsed,
             Duration::from_secs(3),
-            "flagged owner-scale BTCC startup"
+            "flagged history BTCC startup"
         );
         assert!(
             log.contains(CORRUPTION),

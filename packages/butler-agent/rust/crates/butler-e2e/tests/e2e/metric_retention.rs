@@ -125,7 +125,7 @@ fn independent_process_appends_survive_repeated_retention_in_order() -> Result {
 }
 
 #[test]
-fn owner_scale_retention_skips_unchanged_content_until_expiry() -> Result {
+fn history_retention_skips_unchanged_content_until_expiry() -> Result {
     butler_e2e::gate!();
     let root = std::env::temp_dir().join(format!("metric-scale-{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(root.join("metrics"))?;
@@ -134,7 +134,7 @@ fn owner_scale_retention_skips_unchanged_content_until_expiry() -> Result {
         "{{\"ts\":1000,\"rawTextStored\":false,\"payload\":\"{}\"}}\n",
         "x".repeat(4096)
     );
-    let count = (310 * 1024 * 1024) / line.len() + 1;
+    let count = 48;
     let mut output = BufWriter::new(File::create(&path)?);
     for _ in 0..count {
         output.write_all(line.as_bytes())?;

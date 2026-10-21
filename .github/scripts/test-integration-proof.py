@@ -157,13 +157,13 @@ class IntegrationProof(unittest.TestCase):
         parts = proof.changes.ci_parts
         inputs = {job: 'hash' for job in parts.inventory('rust-quality.yml')}
         complete = {f'{job}/{part}': 'hash' for job, names in parts.inventory('rust-quality.yml').items() for part in names}
-        failed = 'linux-perf/perf-idle'
+        failed = 'linux-perf/perf-2'
         receipt = dict(run=1, job_inputs=inputs, part_hashes=dict(complete),
                        part_results={key: 'success' for key in complete})
         receipt['part_hashes'].pop(failed)
         receipt['part_results'][failed] = 'failure'
         selected, reuse, artifacts = parts.select('rust-quality.yml', inputs, [receipt])
-        self.assertEqual(selected['linux-perf']['perf'], ['idle'])
+        self.assertEqual(selected['linux-perf']['perf'], [2])
         self.assertFalse(selected['linux-tests']['workspace'])
         self.assertEqual(selected['linux-tests']['e2e'], [])
         self.assertEqual(len(reuse), len(complete) - 1)

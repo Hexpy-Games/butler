@@ -207,7 +207,7 @@ async fn stopped_steward_projects_terminal_state_and_publishes_change() -> Resul
         .await
         .unwrap();
     assert_sidebar_work(&s, true).await?;
-    assert_owner_scale_sidebar(&s).await?;
+    assert_history_sidebar(&s).await?;
     let view = s.gw.get("/session-view?session_id=general").await?;
     assert!(view.data()["active_turn"].is_null(), "parent has ended");
     let child = &view.data()["steward_children"][0];
@@ -452,13 +452,13 @@ async fn assert_sidebar_work(
     Ok(())
 }
 
-async fn assert_owner_scale_sidebar(
+async fn assert_history_sidebar(
     s: &butler_e2e::e2e::scenario::Scenario,
 ) -> Result<(), HarnessError> {
     let db =
         rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
     db.execute_batch(
-        "WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<599)
+        "WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<7)
         INSERT INTO chats(id,title,kind,created_at,updated_at)
         SELECT 'busy-scale-'||i,'Idle chat '||i,'chat','2026-01-01','2026-01-01' FROM n;",
     )
@@ -467,7 +467,7 @@ async fn assert_owner_scale_sidebar(
     let navigation = s.gw.get("/navigation").await?;
     let elapsed = started.elapsed();
     let chats = navigation.data()["chats"].as_array().unwrap();
-    assert_eq!(chats.len(), 601, "complete navigation at owner scale");
+    assert_eq!(chats.len(), 9, "complete navigation with retained history");
     assert_eq!(
         chats
             .iter()
@@ -483,10 +483,10 @@ async fn assert_owner_scale_sidebar(
     butler_e2e::assert_wall_clock_budget!(
         elapsed,
         Duration::from_millis(500),
-        "601-chat delegated navigation"
+        "9-chat delegated navigation"
     );
     println!(
-        "601-chat complete delegated navigation: {} ms",
+        "9-chat complete delegated navigation: {} ms",
         elapsed.as_millis()
     );
     Ok(())

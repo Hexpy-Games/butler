@@ -1,8 +1,8 @@
-name: Publish owner Windows target
+name: Publish self-hosted Windows target
 description: Publish the existing preview or debug tree with its exact build flags
 inputs:
   profile:
-    description: Existing owner build profile, ci-fast, release or debug
+    description: Existing runner build profile, ci-fast, release or debug
     default: ci-fast
 runs:
   using: composite
@@ -19,7 +19,7 @@ runs:
         TARGET_SNAPSHOT_FEATURES: ${{ inputs.profile == 'debug' && 'workspace-no-defaults,butler-agent/static-ort' || 'butler-agent/static-ort' }}
         CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
         RUSTFLAGS: -C target-feature=+crt-static
-        TARGET_SNAPSHOT_RUNNER_KIND: owner
+        TARGET_SNAPSHOT_RUNNER_KIND: self-hosted
       with:
         platform: windows-x64
         mode: static-ort

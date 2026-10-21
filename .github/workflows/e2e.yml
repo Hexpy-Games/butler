@@ -49,7 +49,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: ./.github/actions/windows-owner-setup
+      - uses: ./.github/actions/windows-runner-setup
         with:
           workflow: e2e-live
 
@@ -67,7 +67,7 @@ jobs:
             Write-Output 'Persistent live OAuth profile exists'
             "BUTLER_E2E_CODEX_AUTH_JSON=$profile" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           } elseif ($env:CODEX_AUTH_SECRET) {
-            $path = Join-Path $env:OWNER_JOB_ROOT 'codex-auth.json'
+            $path = Join-Path $env:RUNNER_JOB_ROOT 'codex-auth.json'
             [IO.File]::WriteAllText($path, $env:CODEX_AUTH_SECRET, (New-Object Text.UTF8Encoding($false)))
             "BUTLER_E2E_CODEX_AUTH_JSON=$path" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           } elseif ($env:API_KEY_SECRET) {
@@ -140,7 +140,7 @@ jobs:
           BUTLER_E2E_RECORD: "0"
           BUTLER_E2E_TIER: live
           BUTLER_E2E_SKIP_BUILD: "1"
-          BUTLER_E2E_REPORT: ${{ env.OWNER_JOB_ROOT }}/e2e-live-report.txt
+          BUTLER_E2E_REPORT: ${{ env.RUNNER_JOB_ROOT }}/e2e-live-report.txt
           RUSTFLAGS: -C target-feature=+crt-static
         run: |
           # Diagnose access to the sibling gate without locking or modifying
@@ -171,14 +171,14 @@ jobs:
         if: always() && steps.credential.outputs.available == 'true'
         run: |
           "### E2E live tier ($env:BUTLER_E2E_PROVIDER, $env:BUTLER_E2E_MODEL)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-          $report = Join-Path $env:OWNER_JOB_ROOT 'e2e-live-report.txt'
+          $report = Join-Path $env:RUNNER_JOB_ROOT 'e2e-live-report.txt'
           if (Test-Path $report) {
             Get-Content $report | ForEach-Object { "    $_" } | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
           } else {
             'no report' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
           }
 
-      - name: Check owner registration and remove job profile
-        if: always() && env.OWNER_JOB_ROOT != ''
+      - name: Check runner registration and remove job profile
+        if: always() && env.RUNNER_JOB_ROOT != ''
         working-directory: ${{ github.workspace }}
-        run: ./deploy/windows-owner-cleanup.ps1
+        run: ./deploy/windows-self-hosted-cleanup.ps1

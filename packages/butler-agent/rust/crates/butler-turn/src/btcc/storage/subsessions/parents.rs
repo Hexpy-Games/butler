@@ -6,7 +6,7 @@ use rusqlite::params_from_iter;
 type ParentLink = (String, String, Option<String>);
 
 impl SqliteSubsessionRepository {
-    /// Indexed append watermark, cheap even at owner scale.
+    /// Indexed append watermark, cheap with retained history.
     pub async fn relation_watermark(&self) -> Result<i64, StorageError> {
         self.storage
             .read(|db| {

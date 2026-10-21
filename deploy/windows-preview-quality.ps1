@@ -12,7 +12,7 @@ python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" python -c "import sys
 $ErrorActionPreference = 'Stop'
 if ($LASTEXITCODE -ne 7) { throw 'Failed native stderr lost the exit code' }
 $global:LASTEXITCODE = 0
-$root = $env:OWNER_JOB_ROOT
+$root = $env:RUNNER_JOB_ROOT
 $env:PREVIEW_ROOT = $root
 New-Item -ItemType Directory -Force "$root/logs" | Out-Null
 # Keep toolchain/cache locations while every check gets a fresh HOME.

@@ -5,8 +5,8 @@
     clippy::panic,
     reason = "test assertions"
 )]
-#[path = "project_artifacts/scale.rs"]
-mod scale;
+#[path = "project_artifacts/paging.rs"]
+mod paging;
 #[path = "project_artifacts/stub.rs"]
 mod stub;
 use butler_e2e::e2e::{

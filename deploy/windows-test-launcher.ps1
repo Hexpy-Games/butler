@@ -1,6 +1,6 @@
 param([switch]$NoBrowser, [switch]$Smoke, [switch]$StubChat, [string]$PackageRoot = $PSScriptRoot)
 $ErrorActionPreference = 'Stop'
-$root = Join-Path $env:TEMP ('butler-win-protected-path-' + [guid]::NewGuid().ToString('N'))
+$root = Join-Path $env:TEMP ('butler-protected-path-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force $root | Out-Null
 $keys = @('HOME','BUTLER_DATA','LOCALAPPDATA','APPDATA','TEMP','TMP','TMPDIR','CODEX_HOME',
     'BUTLER_SECRET_STORE','BUTLER_PLATFORM_SYSTEM_SECRETS','BUTLER_SERVICE_MANAGER',
@@ -119,6 +119,6 @@ try {
     foreach ($key in $keys) { [Environment]::SetEnvironmentVariable($key,$saved[$key]) }
     python -c "import shutil,sys,os,stat;shutil.rmtree(chr(92)*2+'?'+chr(92)+sys.argv[1],onexc=lambda f,p,e:(os.chmod(p,stat.S_IWRITE),f(p)))" $root
     if ($LASTEXITCODE -ne 0) { throw 'Test profile cleanup failed' }
-    if ($before -cne $after) { throw 'Owner protocol registration changed' }
+    if ($before -cne $after) { throw 'Runner protocol registration changed' }
     Write-Output 'Test agent stopped; isolated profile removed; protocol registration unchanged'
 }

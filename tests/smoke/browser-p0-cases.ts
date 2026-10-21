@@ -4,7 +4,7 @@ import { strict as assert } from "node:assert";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { budget, frames, percentile, sample, startFrames, typing, prepareTyping, attributeTrace, type P0App, type Row } from "./browser-p0-measure.ts";
-import { seedP0OwnerScale, waitP0OwnerScaleSpace } from "./browser-p0-owner-scale.ts";
+import { seedP0History } from "./browser-p0-history.ts";
 import { waitFor, P0_STUB_CONTENT } from "./browser-p0-app.ts";
 
 export async function rendererCrash(app: P0App, origin: string, rows: Row[]) {
@@ -157,13 +157,12 @@ async function measuredMainLoad(app: P0App, origin: string, rows: Row[], tracing
 }
 
 export async function uiBaseline(app: P0App, rows: Row[], origin: string) {
-  await waitP0OwnerScaleSpace(app.data);
-  const scale = seedP0OwnerScale(app.data);
+  const scale = seedP0History(app.data);
   await app.page.reload();
   await app.page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="workspace"]')));
-  await waitFor(() => app.page.expression("Array.from(document.querySelectorAll('[data-test-class=\"tree-row\"]')).some(e=>e.textContent.includes('P0 대화 599'))"), "longest transcript sidebar row");
-  await app.page.expression("Array.from(document.querySelectorAll('[data-test-class=\"tree-row\"]')).find(e=>e.textContent.includes('P0 대화 599')).click()");
-  await waitFor(() => app.page.expression("document.body.textContent.includes('메시지 2999')"), "latest transcript message");
+  await waitFor(() => app.page.expression("Array.from(document.querySelectorAll('[data-test-class=\"tree-row\"]')).some(e=>e.textContent.includes('P0 대화 7'))"), "longest transcript sidebar row");
+  await app.page.expression("Array.from(document.querySelectorAll('[data-test-class=\"tree-row\"]')).find(e=>e.textContent.includes('P0 대화 7')).click()");
+  await waitFor(() => app.page.expression("document.body.textContent.includes('메시지 239')"), "latest transcript message");
   const tracePath = join(process.env.BUTLER_P0_EVIDENCE || app.dir, "baseline-trace.json");
   const { session } = await app.page.expression<{ session: { id: string } }>("window.butlerApp.createSession({kind:'chat',title:'P0 streaming'})");
   await waitFor(() => app.page.expression("Array.from(document.querySelectorAll('[data-test-class=\"tree-row\"]')).some(e=>e.textContent.includes('P0 streaming'))"), "streaming sidebar row");
@@ -178,16 +177,16 @@ export async function uiBaseline(app: P0App, rows: Row[], origin: string) {
   const input = load.input;
   await app.main.evaluate(`browserP0.traceStop(${JSON.stringify(tracePath)})`);
   const loadAttribution = attributeTrace(JSON.parse(readFileSync(tracePath, "utf8")), (await sample(app)).uiPID, (await sample(app)).mainPID);
-  rows.push({ test: "owner scale", metric: "ThreadPool JPEG encode p95 ms", value: loadAttribution.jpegEncoding?.p95Ms ?? null, budget: "descriptive", status: loadAttribution.jpegEncoding ? "DESCRIPTIVE" : "UNAVAILABLE" });
+  rows.push({ test: "history", metric: "ThreadPool JPEG encode p95 ms", value: loadAttribution.jpegEncoding?.p95Ms ?? null, budget: "descriptive", status: loadAttribution.jpegEncoding ? "DESCRIPTIVE" : "UNAVAILABLE" });
   assert((await turns()).turns.some(t => !["delivered", "failed", "cancelled"].includes(t.state)), "Entire typing sample overlaps streaming");
-  budget(rows, "owner scale", "Korean input to paint upper bound p95 ms", input.inputToRafP95, 100, "Trace required", "Optimize dominant JS/layout/GPU work");
-  await waitFor(() => app.page.expression("Array.from(document.querySelectorAll('[data-test-class=\"tree-row\"]')).some(e=>e.textContent.includes('P0 대화 599'))"), "longest transcript sidebar row");
-  await app.page.expression("Array.from(document.querySelectorAll('[data-test-class=\"tree-row\"]')).find(e=>e.textContent.includes('P0 대화 599')).click()");
-  await waitFor(() => app.page.expression("document.body.textContent.includes('메시지 2999')"), "longest transcript ready before scroll");
+  budget(rows, "history", "Korean input to paint upper bound p95 ms", input.inputToRafP95, 100, "Trace required", "Optimize dominant JS/layout/GPU work");
+  await waitFor(() => app.page.expression("Array.from(document.querySelectorAll('[data-test-class=\"tree-row\"]')).some(e=>e.textContent.includes('P0 대화 7'))"), "longest transcript sidebar row");
+  await app.page.expression("Array.from(document.querySelectorAll('[data-test-class=\"tree-row\"]')).find(e=>e.textContent.includes('P0 대화 7')).click()");
+  await waitFor(() => app.page.expression("document.body.textContent.includes('메시지 239')"), "longest transcript ready before scroll");
   await app.page.expression("new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))");
   const scrollTracePath = join(process.env.BUTLER_P0_EVIDENCE || app.dir, "scroll-trace.json");
-  const scrollResult = await hostWindow("owner-scale scroll", async () => {
-    const scrollHostLoad = await quietHost("owner-scale scroll", app);
+  const scrollResult = await hostWindow("history scroll", async () => {
+    const scrollHostLoad = await quietHost("history scroll", app);
     await app.main.evaluate("browserP0.traceStart()");
     await startFrames(app);
     const scroll = await app.page.expression<{ distance: number; latest: boolean }>("new Promise(resolve=>{const e=document.querySelector('[data-test-class~=\"conversation-scroll\"]');if(!e)throw Error('Transcript scroller missing');const start=e.scrollTop;let n=0;function tick(){e.scrollTop=Math.max(0,e.scrollTop-400);if(++n<120)requestAnimationFrame(tick);else resolve({distance:Math.abs(e.scrollTop-start),latest:e.isConnected&&document.body.textContent.includes('메시지')})}requestAnimationFrame(tick)})");
@@ -204,6 +203,6 @@ export async function uiBaseline(app: P0App, rows: Row[], origin: string) {
   const reply = db.query("SELECT text FROM messages WHERE chat_id=? AND role='assistant' ORDER BY rowid DESC LIMIT 1").get(session.id) as { text: string };
   assert.equal(reply.text, P0_STUB_CONTENT, "Complete stub response retained");
   db.close();
-  rows.push({ test: "owner scale", metric: "scroll frame p95/max ms", value: `${percentile(frameTimes, .95)}/${Math.max(...frameTimes)}`, budget: "descriptive (no scroll budget in §12)", status: "DESCRIPTIVE" });
+  rows.push({ test: "history", metric: "scroll frame p95/max ms", value: `${percentile(frameTimes, .95)}/${Math.max(...frameTimes)}`, budget: "descriptive (no scroll budget in §12)", status: "DESCRIPTIVE" });
   return { scale, load, inputSamples: input.values.length, frames: frameTimes.length, attribution, loadAttribution, scrollHostLoad, metrics };
 }

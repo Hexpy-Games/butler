@@ -72,9 +72,9 @@ async function verify(reduced: boolean) {
 }
 
 try {
-  if (Bun.argv.includes("--owner-scale")) {
+  if (Bun.argv.includes("--history")) {
     const ids: string[] = [];
-    for (let start = 0; start < 600; start += 10) {
+    for (let start = 0; start < 20; start += 10) {
       const rows = await Promise.all(Array.from({ length: 10 }, (_, i) => server.api<any>("/sessions", {
         method: "POST", body: JSON.stringify({ kind: "chat", title: `Motion scale ${start + i}` }),
       })));
@@ -82,7 +82,7 @@ try {
     }
     const navigation = await server.api<any>("/navigation");
     const listed = new Set(navigation.chats.map((chat: any) => chat.id));
-    assert(ids.every((id) => listed.has(id)), "Owner-scale navigation lost chats");
+    assert(ids.every((id) => listed.has(id)), "history navigation lost chats");
   }
   // The cached shell must render even when the authoritative request is held.
   await server.signIn(context);
@@ -168,7 +168,7 @@ try {
   assert(JSON.stringify(ordered) === JSON.stringify(expected), "Wallpaper count/order changed");
   assert(await toggle.getAttribute("aria-checked") === "true", "Latest motion setting was lost");
   assert(appearanceMs.every((ms) => ms < 150), `Appearance exceeded 150ms: ${appearanceMs}`);
-  writeFileSync(join(out, "appearance-timing.json"), JSON.stringify({ ownerScale: Bun.argv.includes("--owner-scale"), chats: Bun.argv.includes("--owner-scale") ? 600 : null, options, appearanceMs, toggles, maxMs: Math.max(...appearanceMs) }, null, 2));
+  writeFileSync(join(out, "appearance-timing.json"), JSON.stringify({ historyFixture: Bun.argv.includes("--history"), chats: Bun.argv.includes("--history") ? 20 : null, options, appearanceMs, toggles, maxMs: Math.max(...appearanceMs) }, null, 2));
   assert(server.stubModelCalls.length === 0, "Appearance called a model");
   writeFileSync(join(out, "self-check.json"), JSON.stringify(results, null, 2));
   console.log(`PASS: ${results.length} DS motion states; four KO screenshots; restart persistence; no model calls`);

@@ -275,8 +275,8 @@ mod overrun;
 #[path = "drain_bounds.rs"]
 mod drain_bounds;
 
-#[path = "cold_scale.rs"]
-mod scale;
+#[path = "restart_recall.rs"]
+mod restart;
 
 #[path = "compaction.rs"]
 mod compaction;

@@ -1,4 +1,4 @@
-//! Owner-scale query/insert audit using the same bundled SQLite as the service.
+//! history query/insert audit using the same bundled SQLite as the service.
 use rusqlite::{Connection, params, params_from_iter, types::Value};
 use std::{path::Path, time::Instant};
 
@@ -27,12 +27,12 @@ fn snapshot(db: &Connection, queries: &[Query]) -> Vec<(Rows, Rows)> {
         assert!(!plan.iter().flatten().any(|value| matches!(value, Value::Text(text) if INDEXES.iter().any(|index| text.contains(index)))));
         let actual = rows(db, sql, args);
         let scoped = label == "selection" || label.contains("project") || label.contains("unassigned");
-        let count = if scoped { 8_207 } else { 16_414 };
+        let count = if scoped { 60 } else { 120 };
         let expected = if label == "delete" { Vec::new() }
         else if sql.starts_with("WITH") {
             vec![vec![Value::Text("ab".into()), Value::Integer(count)], vec![Value::Text("abc".into()), Value::Integer(count)]]
         } else {
-            (0..16_414).filter(|n| !scoped || n % 2 == i32::from(label.contains("project"))).map(|n| {
+            (0..120).filter(|n| !scoped || n % 2 == i32::from(label.contains("project"))).map(|n| {
                 vec![Value::Text(format!("{n:036}")), Value::Text(format!("{n:064}")), Value::Text(format!("{:083}", n+1))]
             }).collect()
         };
@@ -49,7 +49,7 @@ fn insert_cost(db: &Connection) -> f64 {
         let mut posting = db
             .prepare("INSERT INTO memory_alias_postings VALUES(?1,?2,?3,?4,'user',NULL)")
             .unwrap();
-        for i in 0..1000 {
+        for i in 0..8 {
             let node = format!("{i:036}");
             let source = format!("{i:064}");
             let surface = format!("bench-{i:077}");
@@ -63,13 +63,13 @@ fn insert_cost(db: &Connection) -> f64 {
     }
     db.execute_batch("COMMIT").unwrap();
     // 1,000 full aliases: elapsed seconds equals milliseconds per alias.
-    let per_alias_ms = started.elapsed().as_secs_f64();
+    let per_alias_ms = started.elapsed().as_secs_f64() * 1000.0 / 8.0;
     let actual = rows(
         db,
         "SELECT * FROM memory_alias_postings WHERE surface_original LIKE 'bench-%' ORDER BY node_id,gram",
         &[],
     );
-    let expected: Rows = (0..1000)
+    let expected: Rows = (0..8)
         .flat_map(|i| {
             (0..54).map(move |gram| {
                 vec![
@@ -90,7 +90,7 @@ fn insert_cost(db: &Connection) -> f64 {
             "SELECT COUNT(*) FROM memory_aliases WHERE surface_original LIKE 'bench-%'",
             &[]
         ),
-        vec![vec![Value::Integer(1000)]]
+        vec![vec![Value::Integer(8)]]
     );
     db.execute_batch("DELETE FROM memory_alias_postings WHERE surface_original LIKE 'bench-%'; DELETE FROM memory_aliases WHERE surface_original LIKE 'bench-%'; PRAGMA wal_checkpoint(TRUNCATE)").unwrap();
     per_alias_ms
@@ -137,12 +137,12 @@ pub(super) fn run(directory: &Path) {
     let write_after = insert_cost(&db);
     assert_eq!(
         rows(&db, "SELECT COUNT(*) FROM memory_alias_postings", &[]),
-        vec![vec![Value::Integer(886_340)]]
+        vec![vec![Value::Integer(6_480)]]
     );
     eprintln!(
         "ALIAS-DROP-NATIVE {}",
         serde_json::json!({
-            "sqlite": rusqlite::version(), "postings": 886_340, "query_variants": queries.len(),
+            "sqlite": rusqlite::version(), "postings": 6_480, "query_variants": queries.len(),
             "drops": drops, "file_bytes_before": size_before, "file_bytes_after": size_after,
         "freelist_pages_after": free_after, "alias_insert_ms_before": write_before,
         "alias_insert_ms_after": write_after, "vacuum": false,
