@@ -6,7 +6,7 @@ CREATE INDEX IF NOT EXISTS wm_work_chains_queue ON wm_work_chains(session_id,sta
 CREATE INDEX IF NOT EXISTS wm_works_chain ON wm_works(chain_id,step_index,stack_position);
 CREATE INDEX IF NOT EXISTS wm_work_edges_successor ON wm_work_edges(succ_work_id);
 CREATE INDEX IF NOT EXISTS wm_work_edges_chain ON wm_work_edges(chain_id,pred_work_id,succ_work_id);
-CREATE UNIQUE INDEX IF NOT EXISTS wm_hold_decisions_pending ON wm_hold_decisions(chain_id,held_step_index) WHERE decision IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS wm_hold_decisions_pending ON wm_hold_decisions(chain_id,held_step_index) WHERE decision IS NULL AND resolved_at IS NULL;
 CREATE INDEX IF NOT EXISTS wm_plans_project ON wm_plans(project_id,status,due_on);
 CREATE INDEX IF NOT EXISTS wm_tasks_order ON wm_tasks(work_id,task_rank);
 CREATE INDEX IF NOT EXISTS wm_tasks_progress ON wm_tasks(work_id,status);

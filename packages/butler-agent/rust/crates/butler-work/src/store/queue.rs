@@ -122,6 +122,7 @@ pub(super) fn persist(
         }
     }
     for (old, next) in changes {
+        reconcile_holds(tx, ctx, &old.id)?;
         for (pred, succ) in next.edges()? {
             tx.execute(sql::INSERT_EDGE, params![pred.0, succ.0, old.id])?;
         }

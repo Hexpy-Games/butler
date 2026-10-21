@@ -11,7 +11,7 @@ pub mod sql;
 mod transitions;
 pub use entities::*;
 pub use holds::*;
-use holds::{hold_followers, release_satisfied_holds};
+use holds::{hold_followers, reconcile_holds, release_satisfied_holds};
 pub use queue::*;
 use queue::{bump, persist, running, update_chain_state};
 pub use recovery::*;

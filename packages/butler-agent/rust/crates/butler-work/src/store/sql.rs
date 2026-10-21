@@ -33,8 +33,9 @@ CANCEL_TASK = "UPDATE wm_tasks SET status='cancelled',blocked_reason=?2,revision
 TASK = "SELECT * FROM wm_tasks WHERE id=?1";
 TASKS = "SELECT * FROM wm_tasks WHERE work_id=?1 AND status IN ('draft','pending','running','awaiting_review','blocked','paused','stopped')";
 INSERT_HOLD = "INSERT INTO wm_hold_decisions(id,chain_id,failed_work_id,held_step_index,question_message_id) VALUES(?1,?2,?3,?4,?5)";
+RESOLVE_HOLD = "UPDATE wm_hold_decisions SET resolved_at=?2,revision=revision+1 WHERE id=?1 AND revision=?3 AND decision IS NULL AND resolved_at IS NULL";
 HOLD = "SELECT * FROM wm_hold_decisions WHERE id=?1";
-PENDING_HOLDS = "SELECT * FROM wm_hold_decisions WHERE chain_id=?1 AND decision IS NULL ORDER BY held_step_index";
+PENDING_HOLDS = "SELECT * FROM wm_hold_decisions WHERE chain_id=?1 AND decision IS NULL AND resolved_at IS NULL ORDER BY held_step_index";
 MOVE_SCOPE = "UPDATE wm_works SET scope_ref=?2,revision=revision+1,updated_at=?3 WHERE id=?1 AND revision=?4";
 DECIDED_HOLDS = "SELECT * FROM wm_hold_decisions WHERE chain_id=?1 AND decision='run_anyway'";
 DECIDE = "UPDATE wm_hold_decisions SET decision=?2,decided_at=?3,revision=revision+1 WHERE id=?1 AND revision=?4 AND decision IS NULL";

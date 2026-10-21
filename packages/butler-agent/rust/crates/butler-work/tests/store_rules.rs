@@ -193,7 +193,10 @@ fn delete_middle_start_new_and_draft_barriers() {
         None,
     )
     .unwrap();
-    assert!(ready_works(&tx, "draft-chain").unwrap().is_empty());
+    assert_eq!(
+        ready_works(&tx, "draft-chain").unwrap(),
+        Vec::<String>::new()
+    );
     tx.commit().unwrap();
 }
 

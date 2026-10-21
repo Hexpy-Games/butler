@@ -44,7 +44,10 @@ fn crash_holds_full_queue_and_clean_restart_keeps_steps_and_requeues_tasks() {
                 .unwrap(),
                 "pending"
             );
-            assert!(undecided_holds(&tx, "ch").unwrap().is_empty());
+            assert_eq!(
+                undecided_holds(&tx, "ch").unwrap(),
+                Vec::<serde_json::Value>::new()
+            );
         }
         tx.commit().unwrap();
     }
@@ -94,7 +97,7 @@ fn no_op_runtime_transition_preserves_person_label_and_done_requires_reporting()
         None,
     )
     .unwrap();
-    assert!(ready_works(&tx, "ch").unwrap().is_empty());
+    assert_eq!(ready_works(&tx, "ch").unwrap(), Vec::<String>::new());
     let graph_before = graph(&tx, "ch");
     transition(
         &tx,
@@ -191,7 +194,10 @@ fn recovered_attempt_is_not_recovered_again_after_a_later_crash() {
     )
     .unwrap();
     assert_eq!(read_work(&tx, "a").unwrap(), after);
-    assert!(undecided_holds(&tx, "ch").unwrap().is_empty());
+    assert_eq!(
+        undecided_holds(&tx, "ch").unwrap(),
+        Vec::<serde_json::Value>::new()
+    );
     tx.commit().unwrap();
 }
 // test-category: pure-logic

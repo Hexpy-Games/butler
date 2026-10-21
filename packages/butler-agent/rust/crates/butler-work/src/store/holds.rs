@@ -66,7 +66,7 @@ pub fn decide_hold(
 ) -> Result<Value> {
     let row = one(tx, sql::HOLD, [id])?;
     cas(&row, "revision", expected_revision)?;
-    if !row["decision"].is_null() {
+    if !row["decision"].is_null() || !row["resolved_at"].is_null() {
         return Err(Error::Conflict { current: row });
     }
     let chain_id = text(&row, "chain_id")?;
@@ -133,6 +133,7 @@ pub(super) fn release_satisfied_holds(
     ctx: &Context,
     chain_id: &str,
 ) -> Result<()> {
+    reconcile_holds(tx, ctx, chain_id)?;
     let chain = load_chain(tx, chain_id)?;
     for member in &chain.members {
         if member["run_state"] != "held" {
@@ -160,6 +161,47 @@ pub(super) fn release_satisfied_holds(
                 None,
                 false,
             )?;
+        }
+    }
+    Ok(())
+}
+
+/// Membership edits remove prerequisites, so a hold cannot keep depending on
+/// a Work in another chain or a later step. Retired questions remain durable
+/// history with a distinct resolution token rather than a fabricated answer.
+pub(super) fn reconcile_holds(tx: &Transaction<'_>, ctx: &Context, chain_id: &str) -> Result<()> {
+    let members = rows(tx, sql::MEMBERS, [chain_id])?;
+    for member in &members {
+        if member["run_state"] != "held" {
+            continue;
+        }
+        let cause = read_work(tx, text(member, "held_by_work_id")?)?;
+        if cause["chain_id"] != chain_id
+            || cause["step_index"].as_i64() >= member["step_index"].as_i64()
+        {
+            set_state(
+                tx,
+                ctx,
+                text(member, "id")?,
+                RunState::Waiting,
+                None,
+                None,
+                None,
+                false,
+            )?;
+        }
+    }
+    for question in undecided_holds(tx, chain_id)? {
+        let cause = read_work(tx, text(&question, "failed_work_id")?)?;
+        if cause["chain_id"] != chain_id
+            || matches!(cause["run_state"].as_str(), Some("done" | "cancelled"))
+        {
+            let id = text(&question, "id")?;
+            let revision = question["revision"]
+                .as_i64()
+                .ok_or(Error::Invalid("revision"))?;
+            tx.execute(sql::RESOLVE_HOLD, params![id, ctx.now, revision])?;
+            event(tx, ctx, "hold_decision", id, revision + 1, "resolve")?;
         }
     }
     Ok(())

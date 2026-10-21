@@ -80,5 +80,6 @@ CREATE TABLE IF NOT EXISTS wm_hold_decisions (
   revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
   decision TEXT CHECK (decision IN ('run_anyway','delete')),
   decided_at INTEGER,
+  resolved_at INTEGER,
   CHECK ((decision IS NULL) = (decided_at IS NULL))
 );

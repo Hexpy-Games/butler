@@ -173,3 +173,70 @@ fn imported_scope_counts_initialize_from_indexed_rows_and_update_by_delta() {
     assert_eq!(db.query_row::<i64,_,_>("SELECT count FROM wm_counts WHERE scope_kind='session' AND scope_ref='chat' AND key='works'",[],|r|r.get(0)).unwrap(),2);
     assert_eq!(db.query_row::<i64,_,_>("SELECT count FROM wm_counts WHERE scope_kind='session' AND scope_ref='chat' AND key='run_state:idle'",[],|r|r.get(0)).unwrap(),1);
 }
+// test-category: pure-logic
+#[test]
+fn cancelling_a_failed_root_releases_followers_and_retires_its_question() {
+    let mut db = db();
+    queue(&mut db, &["a", "b", "c"]);
+    runtime(&mut db, "a", RunState::Failed, false);
+    let tx = db.transaction().unwrap();
+    set_label(
+        &tx,
+        &context(),
+        "a",
+        revision(&tx, "a"),
+        CanonStatus::Cancelled,
+        &UserAct::new("tester"),
+        Some(graph(&tx, "ch")),
+    )
+    .unwrap();
+    assert_eq!(read_work(&tx, "b").unwrap()["run_state"], "waiting");
+    assert_eq!(ready_works(&tx, "ch").unwrap(), vec!["b"]);
+    assert_eq!(
+        undecided_holds(&tx, "ch").unwrap(),
+        Vec::<serde_json::Value>::new()
+    );
+    tx.commit().unwrap();
+}
+// test-category: pure-logic
+#[test]
+fn moving_a_held_work_to_another_chain_removes_its_old_barrier() {
+    let mut db = db();
+    queue(&mut db, &["a", "b", "c"]);
+    work(&mut db, "d");
+    runtime(&mut db, "a", RunState::Failed, false);
+    let tx = db.transaction().unwrap();
+    create_root(
+        &tx,
+        &context(),
+        "d",
+        0,
+        "other",
+        "chat",
+        QueueOrigin::Detach,
+        None,
+    )
+    .unwrap();
+    let mut works = member_revisions(&tx, "ch");
+    works.extend(member_revisions(&tx, "other"));
+    edit_queue(
+        &tx,
+        &context(),
+        &[
+            ("ch".into(), graph(&tx, "ch")),
+            ("other".into(), graph(&tx, "other")),
+        ],
+        &works,
+        &[QueueEdit::MoveBetween {
+            chain_id: "ch".into(),
+            target_chain_id: "other".into(),
+            work_id: "b".into(),
+            placement: Placement::Stack(WorkId("d".into())),
+        }],
+    )
+    .unwrap();
+    assert_eq!(read_work(&tx, "b").unwrap()["run_state"], "waiting");
+    assert_eq!(ready_works(&tx, "other").unwrap(), vec!["d", "b"]);
+    assert_eq!(undecided_holds(&tx, "ch").unwrap().len(), 1);
+    tx.commit().unwrap();
+}
