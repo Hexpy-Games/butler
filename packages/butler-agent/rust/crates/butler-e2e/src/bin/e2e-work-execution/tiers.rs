@@ -150,7 +150,7 @@ fn escalate(tx: &Transaction<'_>, ctx: &Context, work: &str, task: &str) -> Resu
         floors: Default::default(),
         child_session: false,
     };
-    let result = apply(tx, ctx, &scope, &input).expect("Tier 2 escalation batch");
+    let result = apply(tx, ctx, &scope, &input)?;
     assert_eq!(result["work"]["tier"], 2);
     tiers::ensure_detail(tx, work)?;
     tiers::ensure_coverage(tx, work)?;

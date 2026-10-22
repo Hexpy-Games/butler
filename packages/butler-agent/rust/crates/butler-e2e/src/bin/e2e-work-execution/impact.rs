@@ -78,7 +78,7 @@ pub(super) fn exercise(tx: &Transaction<'_>, ctx: &Context) -> Result<()> {
     let graph = read_work(tx, "work")?["task_graph_revision"]
         .as_i64()
         .unwrap();
-    let input = input(previous, graph, &completed, &active)?;
+    let input = input(&previous, graph, &completed, &active)?;
     let mut missing = input.clone();
     if let butler_work::store::tool_ops::Operation::Activate { impact_map, .. } =
         &mut missing.operations[1]
@@ -94,7 +94,7 @@ pub(super) fn exercise(tx: &Transaction<'_>, ctx: &Context) -> Result<()> {
         active,
         "a rejected activation does not interrupt execution"
     );
-    let result = apply(tx, ctx, &scope, &input).expect("approved Spec impact batch");
+    let result = apply(tx, ctx, &scope, &input)?;
     assert!(result["ok"].as_bool().unwrap());
     assert_eq!(
         read_task(tx, "task")?,
@@ -122,7 +122,7 @@ pub(super) fn exercise(tx: &Transaction<'_>, ctx: &Context) -> Result<()> {
     Ok(())
 }
 fn input(
-    previous: serde_json::Value,
+    previous: &serde_json::Value,
     graph: i64,
     completed: &serde_json::Value,
     active: &serde_json::Value,
