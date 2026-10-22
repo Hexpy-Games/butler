@@ -77,37 +77,6 @@ fn hand_done_barrier_running_rejection_and_cancel_relink() {
         1
     );
     tx.commit().unwrap();
-    {
-        let mut db = store_support::db();
-        queue(&mut db, &["a", "b", "c"]);
-        let old = read_work(&db, "a").unwrap();
-        let old_graph = graph(&db, "ch");
-        let tx = db.transaction().unwrap();
-        edit_queue(
-            &tx,
-            &context(),
-            &[("ch".into(), old_graph)],
-            &member_revisions(&tx, "ch"),
-            &[QueueEdit::Delete {
-                chain_id: "ch".into(),
-                work_id: "c".into(),
-            }],
-        )
-        .unwrap();
-        tx.commit().unwrap();
-        assert_eq!(read_work(&db, "a").unwrap()["revision"], old["revision"]);
-        let tx = db.transaction().unwrap();
-        assert!(matches!(
-            write_api(
-                &tx,
-                &context(),
-                butler_work::store::api::Resource::EditEpic,
-                "a",
-                json!({"expected_revision":old["revision"],"expected_graph_revision":old_graph,"status":"done"})
-            ),
-            Err(Error::Conflict { .. })
-        ));
-    }
 }
 
 // test-category: pure-logic
@@ -274,4 +243,38 @@ fn runtime_label_mapping_only_on_real_transitions() {
             expected.as_str()
         );
     }
+}
+
+// test-category: pure-logic
+#[test]
+fn epic_status_edit_rejects_stale_graph_with_unchanged_work_revision() {
+    let mut db = store_support::db();
+    queue(&mut db, &["a", "b", "c"]);
+    let old = read_work(&db, "a").unwrap();
+    let old_graph = graph(&db, "ch");
+    let tx = db.transaction().unwrap();
+    edit_queue(
+        &tx,
+        &context(),
+        &[("ch".into(), old_graph)],
+        &member_revisions(&tx, "ch"),
+        &[QueueEdit::Delete {
+            chain_id: "ch".into(),
+            work_id: "c".into(),
+        }],
+    )
+    .unwrap();
+    tx.commit().unwrap();
+    assert_eq!(read_work(&db, "a").unwrap()["revision"], old["revision"]);
+    let tx = db.transaction().unwrap();
+    assert!(matches!(
+        write_api(
+            &tx,
+            &context(),
+            butler_work::store::api::Resource::EditEpic,
+            "a",
+            json!({"expected_revision":old["revision"],"expected_graph_revision":old_graph,"status":"done"})
+        ),
+        Err(Error::Conflict { .. })
+    ));
 }
