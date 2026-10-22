@@ -111,8 +111,12 @@ async fn bootstrap_steps_effects_and_hidden_review() -> Result<(), HarnessError>
     for (table, expected, count) in counts {
         assert_eq!(count, expected, "{table}");
     }
-    s.turn("general", "Write the single follow-up marker.").await?;
-    assert_eq!(tokio::fs::read_to_string(s.sandbox.data.join("direct-marker.txt")).await?,"direct edit");
+    s.turn("general", "Write the single follow-up marker.")
+        .await?;
+    assert_eq!(
+        tokio::fs::read_to_string(s.sandbox.data.join("direct-marker.txt")).await?,
+        "direct edit"
+    );
     server.abort();
     s.finish().await
 }
@@ -182,8 +186,11 @@ async fn request_during_importing_keeps_its_message_and_finishes_after_switch()
         .await?,
         0
     );
-    s.turn(other, "What is two plus two while the update runs?")
+    s.gw.wait_terminal("general", &turn, Duration::from_secs(60))
         .await?;
+    s.turn("general", "What is two plus two while the update runs?")
+        .await?;
+    let messages_before_replay = s.gw.messages("general").await?.len();
     database(&s, |db| {
         db.execute(
             "UPDATE wm_migration SET state='complete',writer_epoch=?1 WHERE singleton=1",
@@ -202,6 +209,26 @@ async fn request_during_importing_keeps_its_message_and_finishes_after_switch()
         "delivered",
         "{ended}"
     );
+    let deadline = Instant::now() + Duration::from_secs(60);
+    loop {
+        let completed = database(&s, |db| {
+            db.query_row(
+                "SELECT count(*) FROM wm_tasks WHERE status='completed'",
+                [],
+                |r| r.get::<_, i64>(0),
+            )
+        })
+        .await?;
+        if completed == 2 && s.gw.messages("general").await?.len() > messages_before_replay {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "kept request did not resume: {}",
+            s.agent.logs()
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
     assert_eq!(
         database(&s, |db| db.query_row(
             "SELECT count(*) FROM wm_tasks WHERE status='completed'",

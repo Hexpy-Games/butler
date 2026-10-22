@@ -3,6 +3,7 @@ use crate::btcc::subsessions::assignment::Child;
 
 mod admission;
 mod control;
+mod cutover;
 mod delegation;
 mod followup;
 mod helpers;
@@ -54,6 +55,13 @@ pub struct SubsessionEnqueue {
 pub trait SubsessionChildQueue: Send + Sync {
     /// Enqueues a child envelope.
     fn enqueue(&self, input: SubsessionEnqueue) -> Result<(), BtccError>;
+    /// Replay a durable managed request with its original authority and context.
+    fn replay_kept_request(&self, _event_id: &str, _receipt_id: &str) -> Result<(), BtccError> {
+        Err(BtccError::relayed(
+            "managed_replay_unavailable",
+            "Managed request replay is unavailable",
+        ))
+    }
     /// The interrupted event of a child turn, if its dispatch was interrupted.
     fn interrupted_event(
         &self,

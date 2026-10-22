@@ -10,7 +10,7 @@ use tokio_util::sync::CancellationToken;
 
 // test-category: pure-logic
 #[tokio::test]
-async fn admission_waits_through_postponed_and_failed_backup()
+async fn admission_returns_pending_through_postponed_and_failed_backup()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     butler_e2e::gate!();
     for failed in [false, true] {
@@ -57,6 +57,11 @@ async fn admission_waits_through_postponed_and_failed_backup()
             }
             Ok::<(),butler_turn::btcc::StorageError>(())
         }).await??;
+        let admitted = tokio::time::timeout(std::time::Duration::from_secs(5), task).await???;
+        assert!(
+            matches!(admitted, CutoverAdmission::Pending(_)),
+            "{admitted:?}"
+        );
         storage
             .work_model_write(|tx| {
                 cutover::resume(tx, CutoverState::Importing)?;
@@ -68,11 +73,6 @@ async fn admission_waits_through_postponed_and_failed_backup()
                 Ok(())
             })
             .await?;
-        let admitted = tokio::time::timeout(std::time::Duration::from_secs(5), task).await???;
-        assert!(
-            matches!(admitted, CutoverAdmission::Ready(_)),
-            "{admitted:?}"
-        );
         let row = storage.work_model_read(|db| {
             Ok(db.query_row("SELECT anchor_id,received_seq,status FROM wm_instructions WHERE idempotency_key='original-message'",[],|r|Ok((r.get::<_,String>(0)?,r.get::<_,i64>(1)?,r.get::<_,String>(2)?)))?)
         }).await?;

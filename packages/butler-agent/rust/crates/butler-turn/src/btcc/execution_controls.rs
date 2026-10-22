@@ -131,6 +131,28 @@ impl ExecutionControls {
         Ok(Self(Value::Object(fields)))
     }
 
+    /// Carries the exact admitted authority into a replayed managed request.
+    pub fn for_kept_request(&self, turn_id: &str) -> Result<Self, BtccError> {
+        let verified = self.verify()?;
+        Self::create(
+            turn_id,
+            &verified.session_id,
+            ControlResolution {
+                model: verified.model_ref,
+                reasoning_effort: verified.reasoning_effort,
+                access_mode: verified.access_mode,
+                plan_mode: verified.plan_mode,
+                source: verified.source,
+                session_control_revision: verified.session_control_revision,
+                catalog_generation: verified.catalog_generation,
+                model_fallback: verified.model_fallback,
+                subsession_result: verified.subsession_result,
+                schedule_run: verified.schedule_run,
+            },
+            &verified.resolved_at,
+        )
+    }
+
     /// Verifies the schema and content of the stored controls.
     pub fn verify(&self) -> Result<VerifiedExecutionControls, BtccError> {
         let fields = self.0.as_object().ok_or_else(invalid)?;

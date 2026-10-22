@@ -104,58 +104,49 @@ pub enum CutoverAdmission {
     Pending(String),
 }
 impl BtccStorage {
-    /// Admission boundary for Task runtime: persist receipt, prioritize this
-    /// session's import, then wait on changes. No timer or legacy fallback.
+    /// Persist the managed request and release the turn while cutover owns it.
+    /// The change-driven receipt consumer resumes it after the epoch switch.
     pub async fn admit_work_model(
         &self,
         input: butler_work::cutover::ManagedAdmission,
         stop: &tokio_util::sync::CancellationToken,
     ) -> StorageResult<CutoverAdmission> {
-        use butler_work::cutover::{self, CutoverState};
-        let mut changes = self.subscribe_changes();
-        let session = input.session_id.clone();
-        let id = self
-            .work_model_write(move |tx| butler_work::cutover::accept(tx, &input))
-            .await?;
-        let mut cursor = String::new();
-        let mut imported = false;
-        loop {
-            if stop.is_cancelled() {
-                return Ok(CutoverAdmission::Pending(id));
+        if let Some(receipt) = input.message_id.strip_prefix("cutover-message:") {
+            let receipt = receipt.to_owned();
+            let session = input.session_id.clone();
+            let original = self.work_model_read(move |db| {
+                use rusqlite::OptionalExtension;
+                Ok(db.query_row("SELECT id FROM wm_instructions WHERE id=?1 AND target_session_id=?2 AND status IN ('waiting_for_turn','delivered','applied')",rusqlite::params![receipt,session],|r|r.get::<_,String>(0)).optional()?)
+            }).await?;
+            if let Some(id) = original {
+                return Ok(CutoverAdmission::Ready(id));
             }
-            changes.borrow_and_update();
-            let state = self.work_model_cutover_status().await?.state;
-            match state {
-                CutoverState::Done => return Ok(CutoverAdmission::Ready(id)),
-                CutoverState::Importing if !imported => {
-                    let session = session.clone();
-                    let after = cursor.clone();
-                    if let Some(next) = self
-                        .work_model_write(move |tx| {
-                            let ctx = butler_work::store::Context {
-                                now: chrono::Utc::now().timestamp_millis(),
-                                actor: serde_json::json!({"origin":"migration"}),
-                            };
-                            cutover::session_batch(tx, &ctx, &session, &after)
-                        })
-                        .await?
-                    {
-                        cursor = next;
-                        continue;
-                    }
-                    imported = true;
-                    continue;
+        }
+        let (id, ready) = self
+            .work_model_write(move |tx| {
+                let id = butler_work::cutover::accept(tx, &input)?;
+                let ready = butler_work::cutover::status(tx)?.state
+                    == butler_work::cutover::CutoverState::Done;
+                if !ready {
+                    let ctx = butler_work::store::Context {
+                        now: chrono::Utc::now().timestamp_millis(),
+                        actor: serde_json::json!({"runtime":"cutover"}),
+                    };
+                    butler_work::store::record_intent(
+                        tx,
+                        &ctx,
+                        &format!("cutover_wait:{id}"),
+                        "cutover_wait",
+                        &serde_json::json!({"instruction_id":id,"turn_id":input.turn_id}),
+                    )?;
                 }
-                CutoverState::Pending
-                | CutoverState::BackingUp
-                | CutoverState::Importing
-                | CutoverState::PostponedNoSpace
-                | CutoverState::FailedBackup => {}
-            }
-            tokio::select! {
-                () = stop.cancelled() => return Ok(CutoverAdmission::Pending(id)),
-                changed = changes.changed() => if changed.is_err() { return Ok(CutoverAdmission::Pending(id)); },
-            }
+                Ok((id, ready))
+            })
+            .await?;
+        if !stop.is_cancelled() && ready {
+            Ok(CutoverAdmission::Ready(id))
+        } else {
+            Ok(CutoverAdmission::Pending(id))
         }
     }
 }

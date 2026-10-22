@@ -25,6 +25,16 @@ impl CutoverOwner {
         service
             .recover_native_assignments(self.recovery.interrupted.as_ref().clone())
             .await?;
+        let replay = service.clone();
+        let stop = self.stop.child_token();
+        self.tasks.spawn(async move {
+            if let Err(error) = replay.replay_kept_requests(stop).await {
+                butler_core::diagnostic!(
+                    "[work-cutover] receipt replay failed code={}",
+                    error.code()
+                );
+            }
+        });
         let _ = self.subsessions.set(service);
         Ok(())
     }
