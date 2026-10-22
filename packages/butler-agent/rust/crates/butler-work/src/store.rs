@@ -3,6 +3,7 @@
 pub mod api;
 pub use api::{mark_outbox_published, read as read_api, write as write_api};
 mod counts;
+mod migration;
 use counts::ensure_work_counts;
 mod entities;
 mod holds;
@@ -136,6 +137,11 @@ pub(super) fn event(
     revision: i64,
     op: &str,
 ) -> Result<()> {
+    if let Some(effects) = tx.effects.borrow_mut().as_mut() {
+        effects.events += 1;
+        effects.changed = true;
+        return Ok(());
+    }
     let payload =
         json!({"entity_kind":kind,"entity_id":id,"revision":revision,"op":op}).to_string();
     tx.execute(
@@ -153,12 +159,19 @@ pub(super) fn event(
     api::outbox(tx, ctx, kind, id, revision, op)?;
     Ok(())
 }
-pub(super) fn count(
+pub(crate) fn count(
     tx: &Transaction<'_>,
     scope: (&str, &str),
     key: &str,
     delta: i64,
 ) -> Result<()> {
+    if let Some(effects) = tx.effects.borrow_mut().as_mut() {
+        *effects
+            .counts
+            .entry((scope.0.into(), scope.1.into(), key.into()))
+            .or_default() += delta;
+        return Ok(());
+    }
     tx.execute(sql::COUNT, rusqlite::params![scope.0, scope.1, key, delta])?;
     Ok(())
 }

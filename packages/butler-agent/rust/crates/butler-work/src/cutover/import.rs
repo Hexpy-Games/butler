@@ -22,7 +22,7 @@ pub(super) fn stable_id(kind: &str, source: &str, key: &str) -> String {
     format!("{kind}_{:x}", hash.finalize())
 }
 
-/// A source and all its metadata are imported alone. Its hash/map and the
+/// A source and all its metadata are imported atomically within a batch. Its hash/map and the
 /// caller's keyset cursor commit with its rows, so replay is a no-op.
 pub(super) fn work(
     tx: &Transaction<'_>,
@@ -164,14 +164,11 @@ fn upsert_work(
         .unwrap_or("idle");
     if state != previous {
         for (state, delta) in [(previous, -1), (state, 1)] {
-            tx.execute(
-                store::sql::COUNT,
-                params![
-                    scope_kind.as_str(),
-                    scope_ref,
-                    format!("run_state:{state}"),
-                    delta
-                ],
+            store::count(
+                tx,
+                (scope_kind.as_str(), scope_ref),
+                &format!("run_state:{state}"),
+                delta,
             )?;
         }
     }

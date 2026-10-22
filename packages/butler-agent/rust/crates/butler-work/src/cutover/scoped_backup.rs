@@ -20,9 +20,9 @@ pub fn has_space(available: u64, needed: u64) -> bool {
     available >= needed
 }
 
-pub(super) fn estimate(db: &Connection, inventory: &Inventory) -> rusqlite::Result<u64> {
-    // Startup-only indexed counts and payload totals, not database size. Include
-    // all history: a single latest plan can contain arbitrarily many tasks.
+pub(super) fn side_estimate(db: &Connection, inventory: &Inventory) -> rusqlite::Result<u64> {
+    // Indexed pre-images only; page rounding and the inventory are bounded
+    // by the exact write scope, independent of untouched legacy history.
     let mut needed = serde_json::to_vec(inventory)
         .map_err(|_| rusqlite::Error::InvalidQuery)?
         .len() as u64
@@ -33,39 +33,7 @@ pub(super) fn estimate(db: &Connection, inventory: &Inventory) -> rusqlite::Resu
             needed = needed.saturating_add(row.map_or(4096, |r| r.len() as u64 + 4096));
         }
     }
-    for (table, index) in [
-        ("btcc_guided_works", "sqlite_autoindex_btcc_guided_works_1"),
-        (
-            "btcc_guided_work_plan_revisions",
-            "sqlite_autoindex_btcc_guided_work_plan_revisions_2",
-        ),
-        ("btcc_subsession_directions", "wm_pending_directions"),
-    ] {
-        let count: u64 = db.query_row(
-            &format!(
-                "SELECT count(*) FROM {table} INDEXED BY {index}{}",
-                if table == "btcc_subsession_directions" {
-                    " WHERE status='pending'"
-                } else {
-                    ""
-                }
-            ),
-            [],
-            |r| r.get(0),
-        )?;
-        needed = needed.saturating_add(count.saturating_mul(65536));
-    }
-    let payload: u64 = db.query_row(
-        "SELECT (SELECT coalesce(sum(length(CAST(actions_json AS BLOB))),0) FROM btcc_guided_work_plan_revisions) + (SELECT coalesce(sum(length(CAST(objective AS BLOB))),0) FROM btcc_guided_works) + (SELECT coalesce(sum(length(CAST(instruction AS BLOB))),0) FROM btcc_subsession_directions INDEXED BY wm_pending_directions WHERE status='pending')",
-        [],
-        |r| r.get(0),
-    )?;
-    // 128x source bytes covers task/part rows, edges, indexes, audit and WAL;
-    // fixed reserve covers schema/page rounding and small metadata transactions.
-    Ok(needed
-        .saturating_add(payload.saturating_mul(128))
-        .saturating_mul(2)
-        .saturating_add(16 * 1024 * 1024))
+    Ok(needed.saturating_add(16 * 4096))
 }
 
 fn preimage(

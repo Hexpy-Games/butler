@@ -134,10 +134,19 @@ async fn prepare_backup(
     storage: &BtccStorage,
     stop: CancellationToken,
 ) -> Result<CutoverState, BtccError> {
-    let result = tokio::task::spawn_blocking(move || {
-        cutover::prepare_with_cancel(&root, &inventory, &|| stop.is_cancelled())
-    })
-    .await;
+    let frozen = inventory.clone();
+    let result = match storage
+        .work_model_write(move |tx| cutover::freeze_inventory(tx, &frozen))
+        .await
+    {
+        Ok(_) => {
+            tokio::task::spawn_blocking(move || {
+                cutover::prepare_with_cancel(&root, &inventory, &|| stop.is_cancelled())
+            })
+            .await
+        }
+        Err(error) => Ok(Err(std::io::Error::other(BtccError::from(error)))),
+    };
     let (code, error) = match result {
         Ok(Ok(state)) => return Ok(state),
         Ok(Err(error)) => (

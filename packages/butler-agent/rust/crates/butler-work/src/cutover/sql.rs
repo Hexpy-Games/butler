@@ -52,8 +52,7 @@ pub(super) const UPSERT_PART: &str = "INSERT INTO wm_task_parts(id,task_id,kind,
 pub(super) const INSERT_PART_EDGE: &str =
     "INSERT INTO wm_task_part_edges(task_id,pred,succ) VALUES(?1,?2,?3)";
 
-pub(super) const TASK_EVENT: &str =
-    "INSERT INTO wm_outbox(topic,payload_json,created_at) VALUES('work_model.changed',?1,?2)";
+pub(super) const MIGRATION_EVENT: &str = "INSERT INTO wm_outbox(topic,payload_json,created_at) VALUES('stream.reconcile_required',?1,?2)";
 
 pub(super) const BIND_IMPORTED_SPEC: &str = "UPDATE wm_works SET spec_node_id=?2,revision=?3,task_graph_revision=task_graph_revision+1 WHERE id=?1";
 
@@ -148,7 +147,7 @@ pub const ALL: &[(&str, &str)] = &[
     ("RETIRE_PARTS", RETIRE_PARTS),
     ("UPSERT_PART", UPSERT_PART),
     ("INSERT_PART_EDGE", INSERT_PART_EDGE),
-    ("TASK_EVENT", TASK_EVENT),
+    ("MIGRATION_EVENT", MIGRATION_EVENT),
     ("BIND_IMPORTED_SPEC", BIND_IMPORTED_SPEC),
     ("MAP_WORK", MAP_WORK),
     ("IMPORT_WORK_FIELDS", IMPORT_WORK_FIELDS),

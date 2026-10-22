@@ -91,6 +91,13 @@ async fn wmu_12_automatic_upgrade_is_private_idle_and_idempotent() -> Result<(),
     let initial_bytes = backup_assertions::bytes(&setup.sandbox.data);
     let mut s = setup.start().await?;
     let status = completed(&s).await?;
+    let events = butler_e2e::e2e::events::LiveEvents::subscribe(&s.gw, 0).await?;
+    events
+        .wait_for(Duration::from_secs(10), |event| {
+            event["type"] == "stream.reconcile_required" && event["payload"]["scope"] == "migration"
+        })
+        .await?;
+    drop(events);
     assert!(
         status["needs_source"]
             .as_array()
@@ -142,6 +149,11 @@ async fn wmu_12_automatic_upgrade_is_private_idle_and_idempotent() -> Result<(),
         "SELECT json_array(id,revision,task_graph_revision) FROM wm_works ORDER BY id",
     )?;
     let outbox: i64 = db.query_row("SELECT count(*) FROM wm_outbox", [], |r| r.get(0))?;
+    assert_eq!(outbox, 1);
+    assert_eq!(
+        db.query_row::<i64, _, _>("SELECT count(*) FROM wm_audit", [], |r| r.get(0))?,
+        1
+    );
     let task_ids = rows(&db, "SELECT id FROM wm_tasks ORDER BY id")?;
     let migration: String = db.query_row(
         "SELECT source_counts_json FROM wm_migration WHERE singleton=1",

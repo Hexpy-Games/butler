@@ -151,6 +151,7 @@ pub(super) fn verify(
             })?,
         );
     }
+    measure(root, &live)?;
     eprintln!(
         "WMU-12 scoped bytes: side={}, DB+WAL before={}, after={}, growth={}; inventory keys={:?}; rows={counts:?}",
         manifest.files[0].size,
@@ -162,6 +163,23 @@ pub(super) fn verify(
             .iter()
             .map(|(k, v)| (k, v.len()))
             .collect::<BTreeMap<_, _>>()
+    );
+    Ok(())
+}
+
+fn measure(root: &Path, db: &Connection) -> Result<(), HarnessError> {
+    let wal = std::fs::read(root.join("agent-runtime/btcc.sqlite-wal"))?;
+    let page = u32::from_be_bytes(wal[8..12].try_into().unwrap()) as usize;
+    let frames = wal[32..].chunks_exact(page + 24).collect::<Vec<_>>();
+    let pages = frames
+        .iter()
+        .map(|f| u32::from_be_bytes(f[..4].try_into().unwrap()))
+        .collect::<std::collections::BTreeSet<_>>();
+    let records: u64 = db.query_row("SELECT coalesce(sum(payload),0) FROM dbstat WHERE name IN (SELECT name FROM sqlite_schema WHERE tbl_name GLOB 'wm_*')", [], |r| r.get(0))?;
+    eprintln!(
+        "WMU-12 BTCC WAL frames={}, distinct pages={}, wm record bytes={records}",
+        frames.len(),
+        pages.len()
     );
     Ok(())
 }

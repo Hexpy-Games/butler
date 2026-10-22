@@ -6,7 +6,7 @@ use super::{
 };
 use crate::store::{Context, Result, Transaction};
 use rusqlite::params;
-use serde_json::{Value, json};
+use serde_json::Value;
 
 pub(super) fn tasks(
     tx: &Transaction<'_>,
@@ -27,10 +27,6 @@ pub(super) fn tasks(
     } else {
         parts(tx, ctx, source, work, spec, &layout.edges)?;
     }
-    tx.execute(
-        sql::TASK_EVENT,
-        params![json!({"work_id":work,"scope":"tasks"}).to_string(), ctx.now],
-    )?;
     Ok(())
 }
 fn migrate_chain(

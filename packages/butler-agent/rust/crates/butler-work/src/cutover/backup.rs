@@ -32,12 +32,16 @@
 //!   store.rs:131 and store/counts.rs:5: wm_works, wm_tasks,
 //!   wm_task_chains, wm_task_edges, wm_task_parts, wm_task_part_edges,
 //!   wm_spec_nodes, wm_spec_bodies, wm_spec_revisions, wm_spec_criteria,
-//!   wm_counts, wm_audit, wm_outbox, wm_legacy_map, wm_instructions. Their only
+//!   wm_counts (batch deltas), wm_audit (batch summary; store/migration.rs),
+//!   wm_outbox (completion reconcile), wm_legacy_map, wm_instructions. Their only
 //!   triggers are immutable-history rejection guards (work_schema/support.sql:48)
 //!   and have no target writes; sqlite_sequence advances for audit/outbox.
 //! - butler-turn/src/btcc/storage/work_model_cutover.rs:45: low-space status
-//!   lives only in process memory; postponement writes no cutover data.
-//! - inventory.rs:47: wm_cutover_inventory replaces one durable inventory row.
+//!   lives only in process memory; postponement retains inventory/estimate
+//!   metadata only, without source/target import writes.
+//! - estimate.rs:freeze_inventory on the BTCC lane: wm_cutover_inventory
+//!   replaces one durable inventory row; wm_migration.source_counts_json caches
+//!   the estimate by inventory hash, including on low-space postponement.
 //! - butler-turn/src/btcc/storage/migration.rs:76; work_schema.rs:25: additive wm_* schema and
 //!   wm_legacy_session_work/wm_pending_directions indexes before this backup.
 //! - butler-agent/src/host/runtime/work_cutover.rs:275: App DB read-only.
@@ -79,28 +83,20 @@ pub struct Manifest {
 
 pub fn check_epoch(root: &Path) -> io::Result<()> {
     if root.join(BTCC).exists() {
-        let db = open(root, true)?;
+        let db = open(root)?;
         state::check_epoch(&db).map_err(error)?;
     }
     Ok(())
 }
-fn open(root: &Path, readonly: bool) -> io::Result<sqlite::Connection> {
+fn open(root: &Path) -> io::Result<sqlite::Connection> {
     reject_links(root, Path::new(BTCC))?;
-    sqlite::open_with_flags(
-        root.join(BTCC),
-        if readonly {
-            OpenFlags::SQLITE_OPEN_READ_ONLY
-        } else {
-            OpenFlags::SQLITE_OPEN_READ_WRITE
-        },
-    )
-    .map_err(error)
+    sqlite::open_with_flags(root.join(BTCC), OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(error)
 }
 
 /// Reuse persisted inputs only when their exact completed pre-image is valid.
 /// With no completed set, callers recompute Ledger observations before prepare.
 pub fn frozen_inventory(root: &Path) -> io::Result<Option<Inventory>> {
-    let db = open(root, true)?;
+    let db = open(root)?;
     let Some(inventory) = Inventory::load(&db).map_err(error)? else {
         return Ok(None);
     };
@@ -121,20 +117,22 @@ pub fn prepare(root: &Path, inventory: &Inventory) -> io::Result<CutoverState> {
     prepare_with_cancel(root, inventory, &|| false)
 }
 
-/// Precheck precedes inventory/state/filesystem writes. Schema installation is
-/// native startup's responsibility; this estimates only cutover writes.
+/// The caller freezes inventory and its estimate on the writer lane first.
+/// The space precheck precedes source/target writes and filesystem export.
 pub fn prepare_with_cancel(
     root: &Path,
     inventory: &Inventory,
     cancelled: &dyn Fn() -> bool,
 ) -> io::Result<CutoverState> {
     check_cancelled(cancelled)?;
-    let db = open(root, true)?;
+    let db = open(root)?;
     state::check_epoch(&db).map_err(error)?;
     if state::status(&db).map_err(error)?.state == CutoverState::Done {
         return Ok(CutoverState::Done);
     }
-    let needed = scoped_backup::estimate(&db, inventory).map_err(error)?;
+    let needed = super::estimate::cached_estimate(&db, inventory)
+        .map_err(error)?
+        .ok_or_else(|| error("cutover inventory must be frozen on the writer lane"))?;
     if !scoped_backup::has_space(fs_space::available_bytes(root)?, needed) {
         return Ok(CutoverState::PostponedNoSpace);
     }
@@ -156,12 +154,6 @@ pub fn prepare_with_cancel(
         }
     }
     drop(db);
-    let writer = open(root, false)?;
-    writer
-        .pragma_update(None, "synchronous", "FULL")
-        .map_err(error)?;
-    inventory.save(&writer).map_err(error)?;
-    drop(writer);
     let folder = private_folder(root, "backups/work-model-cutover")?;
     remove_partial_sets(&folder)?;
     let destination = folder.join(chrono::Utc::now().format("%Y%m%dT%H%M%S%.9fZ").to_string());
@@ -172,7 +164,7 @@ pub fn prepare_with_cancel(
     options.create_new(true).write(true);
     secure_fs::owner_only(&mut options);
     drop(options.open(&side)?);
-    let db = open(root, true)?;
+    let db = open(root)?;
     let mut manifest = scoped_backup::export(&db, &side, inventory, cancelled).map_err(error)?;
     secure_fs::sync_path(&side)?;
     manifest.files.push(BackupFile {

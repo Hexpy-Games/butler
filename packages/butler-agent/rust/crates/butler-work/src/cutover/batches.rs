@@ -74,24 +74,18 @@ pub fn resume(tx: &Transaction<'_>, state: CutoverState) -> Result<bool> {
     Ok(true)
 }
 
-/// One source per transaction (<=500 rows and <=1 MiB decoded metadata except
-/// an individually streamed large record). The caller yields the writer lane
-/// after every batch; no request path scans historical tables.
+/// Bounded source batches release the lane between commits. Source, maps,
+/// counters, summary and keyset cursor always commit together.
 pub fn batch(tx: &Transaction<'_>, ctx: &Context) -> Result<bool> {
+    tx.migration(ctx, || batch_inner(tx, ctx))
+}
+fn batch_inner(tx: &Transaction<'_>, ctx: &Context) -> Result<bool> {
     let raw: String = tx.query_row(sql::CURSOR, [], |r| r.get(0))?;
     let mut cursor: Cursor = serde_json::from_str(&raw)?;
     match cursor.phase.as_str() {
         "" | "works" => {
             cursor.phase = "works".into();
-            let id = tx
-                .query_row(sql::WORK_BATCH, params![cursor.work, 1], |r| {
-                    r.get::<_, String>(0)
-                })
-                .optional()?;
-            if let Some(id) = id {
-                import_work(tx, ctx, &id)?;
-                cursor.work = id;
-            } else {
+            if !super::work_batch::works(tx, ctx, &mut cursor.work)? {
                 cursor.phase = "delegations".into();
             }
         }
@@ -107,7 +101,7 @@ pub fn batch(tx: &Transaction<'_>, ctx: &Context) -> Result<bool> {
         }
         "feed" => {
             if !feed(tx, ctx, &mut cursor)? {
-                switch(tx)?;
+                switch(tx, ctx)?;
                 return Ok(false);
             }
         }
@@ -120,7 +114,7 @@ fn save(tx: &Transaction<'_>, cursor: &Cursor) -> Result<()> {
     tx.execute(sql::SAVE_CURSOR, [serde_json::to_string(cursor)?])?;
     Ok(())
 }
-fn import_work(tx: &Transaction<'_>, ctx: &Context, id: &str) -> Result<()> {
+pub(super) fn import_work(tx: &Transaction<'_>, ctx: &Context, id: &str) -> Result<()> {
     // Malformed source remains untouched and visible as needs_source. SQL/IO
     // failures abort the batch instead of silently losing it.
     let source = match source::load(tx, id) {
@@ -224,6 +218,7 @@ fn direction(tx: &Transaction<'_>, cursor: &mut Cursor) -> Result<bool> {
     )?;
     tx.execute(sql::MAP_DIRECTION, params![id, hash])?;
     tx.execute(sql::COUNT_DIRECTION, [])?;
+    tx.migration_changed()?;
     cursor.direction = id;
     Ok(true)
 }
@@ -256,10 +251,22 @@ fn feed(tx: &Transaction<'_>, ctx: &Context, cursor: &mut Cursor) -> Result<bool
     }
     Ok(true)
 }
-fn switch(tx: &Transaction<'_>) -> Result<()> {
+fn switch(tx: &Transaction<'_>, ctx: &Context) -> Result<()> {
     let watermark: i64 = tx.query_row(sql::WATERMARK, [], |r| r.get(0))?;
     tx.execute(sql::SWITCH, params![WRITER_EPOCH, watermark])?;
     retire_turn_triggers(tx)?;
+    let changed: bool = tx.query_row("SELECT coalesce(json_extract(source_counts_json,'$.changed'),0) FROM wm_migration WHERE singleton=1", [], |r| r.get(0))?;
+    if changed {
+        tx.execute(
+            sql::MIGRATION_EVENT,
+            params![
+                json!({"scope":"migration","writer_epoch":WRITER_EPOCH,"watermark":watermark})
+                    .to_string(),
+                ctx.now
+            ],
+        )?;
+        tx.execute("UPDATE wm_migration SET source_counts_json=json_remove(source_counts_json,'$.changed') WHERE singleton=1", [])?;
+    }
     Ok(())
 }
 pub fn needs_source(tx: &Transaction<'_>, source: &str, id: &str, code: &str) -> Result<()> {
@@ -280,15 +287,17 @@ pub fn session_batch(
     session: &str,
     after: &str,
 ) -> Result<Option<String>> {
-    let id = tx
-        .query_row(sql::SESSION_BATCH, params![session, after], |r| {
-            r.get::<_, String>(0)
-        })
-        .optional()?;
-    if let Some(id) = &id {
-        import_work(tx, ctx, id)?;
-    }
-    Ok(id)
+    tx.migration(ctx, || {
+        let id = tx
+            .query_row(sql::SESSION_BATCH, params![session, after], |r| {
+                r.get::<_, String>(0)
+            })
+            .optional()?;
+        if let Some(id) = &id {
+            import_work(tx, ctx, id)?;
+        }
+        Ok(id)
+    })
 }
 
 /// New child turns are not legacy Work mutations. Older builds recreate these

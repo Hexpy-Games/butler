@@ -35,8 +35,8 @@ pub(super) fn fence(db: &Connection) {
     db.flush_prepared_statement_cache();
 }
 impl BtccStorage {
-    /// Low-space postponement is process-local: no cutover DB/file write is
-    /// permitted until the next start's free-space precheck succeeds.
+    /// Low-space status is process-local. Only frozen inventory/estimate
+    /// metadata persists before a successful free-space precheck.
     pub fn postpone_work_model_cutover(&self) {
         if !self
             .inner

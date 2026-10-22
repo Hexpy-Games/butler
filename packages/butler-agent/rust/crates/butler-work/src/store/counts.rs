@@ -3,6 +3,9 @@ use rusqlite::params;
 /// Branch-1/imported rows may predate counters. Initialize one indexed scope
 /// once, then keep counters by delta in the domain transaction.
 pub(super) fn ensure_work_counts(tx: &Transaction<'_>, scope: (&str, &str)) -> Result<()> {
+    if tx.counts_pending(scope) {
+        return Ok(());
+    }
     match one(tx, sql::COUNT_ROW, params![scope.0, scope.1, "works"]) {
         Ok(_) => return Ok(()),
         Err(Error::NotFound) => {}

@@ -4,6 +4,7 @@ mod admission;
 mod backup;
 mod backup_files;
 mod batches;
+mod estimate;
 mod import;
 mod inventory;
 mod scoped_backup;
@@ -13,6 +14,7 @@ mod sql;
 mod state;
 mod target;
 mod version;
+mod work_batch;
 
 pub use admission::{ManagedAdmission, accept};
 pub use backup::{
@@ -20,6 +22,7 @@ pub use backup::{
     prepare_with_cancel, valid,
 };
 pub use batches::{batch, begin, needs_source, resume, retire_turn_triggers, session_batch};
+pub use estimate::{EstimateCounts, cached_estimate, freeze_inventory};
 pub use inventory::Inventory;
 pub use scoped_backup::has_space;
 pub use shape::{Action, Layout, layout};

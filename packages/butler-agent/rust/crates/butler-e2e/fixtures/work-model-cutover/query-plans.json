@@ -164,7 +164,7 @@
   "TASK_ASSIGNMENT": [
     "SEARCH wm_tasks USING INDEX sqlite_autoindex_wm_tasks_1 (id=?)"
   ],
-  "TASK_EVENT": [],
+  "MIGRATION_EVENT": [],
   "TASK_EXISTS": [
     "SCAN CONSTANT ROW",
     "SCALAR SUBQUERY 1",

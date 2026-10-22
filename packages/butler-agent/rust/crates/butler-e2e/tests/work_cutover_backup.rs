@@ -56,6 +56,21 @@ fn inventory() -> Inventory {
         .push(json!({"work_id":"legacy-open","objective":"original"}));
     inventory
 }
+fn freeze(root: &Path, inventory: &Inventory) -> Result<u64, butler_e2e::e2e::HarnessError> {
+    let mut db = Connection::open(root.join("agent-runtime/btcc.sqlite"))?;
+    let tx = butler_work::store::Transaction::new(db.transaction()?).unwrap();
+    let needed = cutover::freeze_inventory(&tx, inventory)
+        .map_err(|e| butler_e2e::e2e::harness_error(e.to_string()))?;
+    tx.commit()?;
+    Ok(needed)
+}
+fn prepare(
+    root: &Path,
+    inventory: &Inventory,
+) -> Result<CutoverState, butler_e2e::e2e::HarnessError> {
+    freeze(root, inventory)?;
+    Ok(cutover::prepare(root, inventory)?)
+}
 fn sets(root: &Path) -> Vec<PathBuf> {
     std::fs::read_dir(root.join("backups/work-model-cutover"))
         .unwrap()
@@ -87,26 +102,17 @@ fn inventory_hash_binds_retries_and_partial_cleanup() -> Result<(), butler_e2e::
     std::fs::create_dir_all(&partial)?;
     std::fs::write(partial.join("pre-cutover.sqlite"), b"partial")?;
     assert!(cutover::frozen_inventory(&root)?.is_none());
-    assert_eq!(
-        cutover::prepare(&root, &inventory)?,
-        CutoverState::Importing
-    );
+    assert_eq!(prepare(&root, &inventory)?, CutoverState::Importing);
     assert!(!partial.exists());
     let before = sets(&root);
     assert_eq!(before.len(), 1);
     assert!(cutover::valid(&before[0])?);
     assert_eq!(cutover::frozen_inventory(&root)?.unwrap().hash()?, hash);
-    assert_eq!(
-        cutover::prepare(&root, &inventory)?,
-        CutoverState::Importing
-    );
+    assert_eq!(prepare(&root, &inventory)?, CutoverState::Importing);
     assert_eq!(sets(&root), before);
     inventory.observations[0]["objective"] = json!("changed Ledger Work");
     assert_ne!(inventory.hash()?, hash);
-    assert_eq!(
-        cutover::prepare(&root, &inventory)?,
-        CutoverState::Importing
-    );
+    assert_eq!(prepare(&root, &inventory)?, CutoverState::Importing);
     let after = sets(&root);
     assert_eq!(after.len(), 1);
     assert_ne!(after, before);
@@ -120,7 +126,7 @@ fn inventory_hash_binds_retries_and_partial_cleanup() -> Result<(), butler_e2e::
         "UPDATE btcc_guided_works SET objective=CAST(X'80' AS TEXT) WHERE work_id='legacy-open'",
     )?;
     inventory.observations[0]["objective"] = json!("another revision");
-    assert!(cutover::prepare(&root, &inventory).is_err());
+    assert!(prepare(&root, &inventory).is_err());
     assert_eq!(sets(&root), after);
     assert!(cutover::valid(&after[0])?);
     drop(db);
@@ -145,6 +151,7 @@ fn scoped_snapshot_captures_absence_and_restores_coalesced_feed()
         commit.send(()).unwrap();
     });
     let wrote = AtomicBool::new(false);
+    freeze(&root, &inventory)?;
     let result = cutover::prepare_with_cancel(&root, &inventory, &|| {
         let exporting = root.join("backups/work-model-cutover").is_dir()
             && sets(&root)
@@ -211,6 +218,97 @@ fn scoped_snapshot_captures_absence_and_restores_coalesced_feed()
     assert!(manifest.read_only_tables.contains(&"btcc_turns".into()));
     drop(side);
     drop(db);
+    std::fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+// test-category: pure-logic
+#[test]
+fn count_estimate_uses_measured_coefficients_and_saturates()
+-> Result<(), butler_e2e::e2e::HarnessError> {
+    butler_e2e::gate!();
+    let counts = cutover::EstimateCounts {
+        works: 2,
+        tasks: 3,
+        parts: 4,
+        chains: 1,
+        task_edges: 2,
+        part_edges: 3,
+        bodies: 2,
+        compressed_bytes: 100,
+    };
+    // Formula rounds packing upward and reserves one WAL batch.
+    let records = 12330_u64;
+    let packed = (records * 10).div_ceil(7);
+    assert_eq!(
+        counts.needed(4096),
+        packed * 2 + 4096 + 128 * 4096 + 256 * 1024
+    );
+    assert_eq!(
+        cutover::EstimateCounts {
+            works: u64::MAX,
+            ..Default::default()
+        }
+        .needed(u64::MAX),
+        u64::MAX
+    );
+    Ok(())
+}
+
+// test-category: pure-logic
+#[test]
+fn postponed_attempt_reuses_estimate_without_reading_legacy_tables()
+-> Result<(), butler_e2e::e2e::HarnessError> {
+    butler_e2e::gate!();
+    use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
+    let root = fixture();
+    let inventory = inventory();
+    freeze(&root, &inventory)?;
+    let needed = i64::MAX as u64;
+    let mut db = Connection::open(root.join("agent-runtime/btcc.sqlite"))?;
+    db.execute("UPDATE wm_migration SET source_counts_json=json_set(source_counts_json,'$.backup_estimate.bytes',?1)", [needed])?;
+    assert_eq!(
+        cutover::prepare(&root, &inventory)?,
+        CutoverState::PostponedNoSpace
+    );
+    assert!(!root.join("backups").exists());
+    db.authorizer(Some(|ctx: AuthContext<'_>| match ctx.action {
+        AuthAction::Read { table_name, .. } if table_name.starts_with("btcc_") => {
+            Authorization::Deny
+        }
+        _ => Authorization::Allow,
+    }));
+    let tx = butler_work::store::Transaction::new(db.transaction()?).unwrap();
+    assert_eq!(cutover::freeze_inventory(&tx, &inventory).unwrap(), needed);
+    assert_eq!(
+        cutover::cached_estimate(&tx, &inventory).unwrap(),
+        Some(needed)
+    );
+    let mut changed = inventory.clone();
+    changed.needs_source.push(json!({"id":"new inventory"}));
+    assert!(cutover::freeze_inventory(&tx, &changed).is_err());
+    tx.rollback()?;
+    drop(db);
+    std::fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+// test-category: race
+#[test]
+fn export_uses_only_a_reader_while_the_writer_is_busy() -> Result<(), butler_e2e::e2e::HarnessError>
+{
+    butler_e2e::gate!();
+    let root = fixture();
+    let inventory = inventory();
+    freeze(&root, &inventory)?;
+    let writer = Connection::open(root.join("agent-runtime/btcc.sqlite"))?;
+    writer.execute_batch("BEGIN IMMEDIATE")?;
+    assert_eq!(
+        cutover::prepare(&root, &inventory)?,
+        CutoverState::Importing
+    );
+    writer.execute_batch("ROLLBACK")?;
+    drop(writer);
     std::fs::remove_dir_all(root)?;
     Ok(())
 }
