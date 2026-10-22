@@ -77,8 +77,10 @@ export function connectDebugger(browser, tab) {
     if(method==="Target.detachedFromTarget") {tab.frameAttachPromises.delete(value.sessionId);for(const [id,session] of tab.frameSessions)if(session===value.sessionId)tab.frameSessions.delete(id);}
   });
   // A view Butler created has no renderer until its first load, and renderer-scoped
-  // commands need one. A pop-up's view is already opening its own page.
-  const renderer = contents.getURL() || contents.isLoading() || tab.opener ? Promise.resolve() : contents.loadURL("about:blank");
+  // commands need one. A pop-up's view is already opening its own page. Loads wait
+  // for the web identity, so decide only once it is ready: a page queued behind it
+  // has started by then and must not be raced by a blank load.
+  const renderer = tab.identityReady.then(() => contents.getURL() || contents.isLoading() || tab.opener ? undefined : contents.loadURL("about:blank"));
   tab.debuggerReady = renderer.then(() => contents.debugger.sendCommand("Target.setAutoAttach", AUTO_ATTACH))
     .then(() => contents.debugger.sendCommand("Runtime.enable"));
   void tab.debuggerReady.then(() => contents.debugger.sendCommand("Emulation.setFocusEmulationEnabled",{enabled:true})).catch(()=>{});
