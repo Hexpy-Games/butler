@@ -22,6 +22,8 @@ let cells = 0;
 let backendTitle = "Login form refactor";
 const heights = new Map<string, number>();
 const heightDeltas: number[] = [];
+let maxGapDelta = 0;
+let maxShareDelta = 0;
 const popoverHeights: Record<string, number> = {};
 const chartHeights = new Map<string, number>();
 const alignmentDeltas: number[] = [];
@@ -70,12 +72,14 @@ async function assertBars(chart: Locator, label: string) {
   assert(columns.length > 0, `${label}: painted columns`);
   for (const column of columns) {
     const sum = column.segments.reduce((total, value) => total + value, 0);
+    maxGapDelta = Math.max(maxGapDelta, Math.abs(sum - column.height));
     assert(Math.abs(sum - column.height) <= 1, `${label}: segments fill their column without gaps (${sum} of ${column.height})`);
     assert(column.parts.every(part => part >= 1.9), `${label}: split parts are at least 2px (${column.parts})`);
     for (const hatch of column.hatches) {
       const [key, series] = hatch.key.split("/");
       assert.equal(key, splitHour.key, `${label}: only the first delegated hour draws subtask parts; thin ones merge`);
       const expected = column.height * splitHour.subtask[series!]! / splitHour.total;
+      maxShareDelta = Math.max(maxShareDelta, Math.abs(hatch.height - expected));
       assert(Math.abs(hatch.height - expected) <= 1, `${label}: ${series} subtask part ${hatch.height}px, expected ${expected}px`);
     }
   }
@@ -345,7 +349,7 @@ try {
     }
   }
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ ok: true, cells, reads, allReads, before, heightDeltas, alignmentDeltas, popoverHeights }));
+  console.log(JSON.stringify({ ok: true, cells, reads, allReads, before, heightDeltas, alignmentDeltas, popoverHeights, maxGapDelta, maxShareDelta }));
 } finally {
   // The last loading cell deliberately holds a route. Settle it before teardown.
   releaseLoading.forEach(resolve => resolve());
