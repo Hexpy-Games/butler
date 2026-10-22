@@ -48,7 +48,7 @@ export const guidance: ShowcaseGuidance = {
   content: ["Labels are nouns; values are formatted (38.1K, Ready, -)."],
   accessibility: [
     "Label and value read together; the swatch is decorative.",
-    "A linked row (onHighlightChange) is one tab stop with the shared focus ring; focus and hover give the same emphasis.",
+    "A linked row (onHighlightChange) is one tab stop, a group named by its label and value, with the shared focus ring; keyboard focus and mouse hover give the same emphasis.",
   ],
   tokens: ["--context-chart-1", "--context-chart-2", "--context-chart-5", "--hatch-alpha", "--text-secondary", "--space-xs", "--focus-ring-room"],
 };
