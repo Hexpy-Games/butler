@@ -1,4 +1,5 @@
-// Honest Butler Client Hints for the web profile, matching its CDP metadata. Electron has no
+// Chromium Client Hints for a web profile, the values its pages read from
+// navigator.userAgentData. The User-Agent header is the session's own. Electron has no
 // Accept-CH store, so navigations carry no hints and documents get only the
 // low-entropy set. Chrome sends no UA hints from workers; Electron attributes
 // worker requests to their frame, but leaves them without Sec-CH-UA, so only
@@ -6,7 +7,7 @@
 const profiles = new WeakSet();
 const HIGH_HINTS = {
   "sec-ch-ua-full-version-list": data => brands(data.fullVersionList),
-  "sec-ch-ua-full-version": data => JSON.stringify(data.fullVersion),
+  "sec-ch-ua-full-version": data => JSON.stringify(data.uaFullVersion),
   "sec-ch-ua-platform-version": data => JSON.stringify(data.platformVersion),
   "sec-ch-ua-arch": data => JSON.stringify(data.architecture),
   "sec-ch-ua-bitness": data => JSON.stringify(data.bitness),
@@ -44,10 +45,9 @@ export function installIdentityHeaders(profile, identity) {
     callback({ responseHeaders: details.responseHeaders });
   });
   profile.webRequest.onBeforeSendHeaders((details, callback) => {
-    void identity.then(({ userAgent, userAgentMetadata: data }) => {
+    void identity.then(data => {
       const headers = { ...details.requestHeaders };
       const names = Object.keys(headers);
-      for (const name of names) if (name.toLowerCase() === "user-agent") headers[name] = userAgent;
       const navigation = details.resourceType === "mainFrame" || details.resourceType === "subFrame";
       const hinted = names.some(name => name.toLowerCase() === "sec-ch-ua");
       if (trusted(details.url) && (navigation || hinted)) {
