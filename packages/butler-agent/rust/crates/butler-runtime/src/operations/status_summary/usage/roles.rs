@@ -28,8 +28,8 @@ impl UsageLogIndex {
                 .collect::<BTreeMap<_, _>>()
         )
     }
-    pub(in super::super) fn delegated_slots(&self, window: Window<'_>) -> BTreeMap<i64, f64> {
-        let mut slots = BTreeMap::<i64, f64>::new();
+    pub(in super::super) fn delegated_slots(&self, window: Window<'_>) -> BTreeMap<i64, Tokens> {
+        let mut slots = BTreeMap::<i64, Tokens>::new();
         if let Some(scope) = window.scope {
             for (member, role) in self.owners.members(scope) {
                 if role.as_ref() == "main" {
@@ -37,8 +37,7 @@ impl UsageLogIndex {
                 }
                 for (&start, slot) in self.scope_slots(&member, window) {
                     let tokens = self.slot_tokens(start, &slot.rows, &slot.usage.tokens, window);
-                    let total = tokens.prompt + tokens.output;
-                    *slots.entry(start).or_default() += total;
+                    slots.entry(start).or_default().merge(&tokens);
                 }
             }
         }
