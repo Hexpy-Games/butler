@@ -27,11 +27,6 @@ pub(super) async fn execute(
             parent_turn_id: owner.binding.turn_id.clone(),
             anchor_message_id: invocation.turn.original_message_id.clone(),
             request: request.to_owned(),
-            task_id: call
-                .arguments
-                .get("task_id")
-                .and_then(Value::as_str)
-                .map(str::to_owned),
             part_id: call
                 .arguments
                 .get("part_id")

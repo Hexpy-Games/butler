@@ -4412,18 +4412,14 @@
       "definition": {
         "type": "function",
         "name": "delegate_to_steward",
-        "description": "Pass the request unchanged as a part of the current started Task at Tier 2. Runtime derives identity, Composer access, tool grants, workspace, EOL, context, budget and provenance. Child excludes Butler persona, receives immutable project context and bounded parent conversation, and returns a canonical terminal result. Optional safe_title; otherwise the request's first line. Children receive only granted tools. Schedule CRUD: direct Tier 0, including research prompts. For a new request after a prior delegation has closed, read the owning Task and add or select its next part in this same turn and set previous_relation_id to attach the original request and canonical results. Do not ask the user to restart.",
+        "description": "Hand one part of your started Task to a Steward session. The Steward plans and runs that part and returns one result. That result comes back to your Task through `task.submit` and review. Tier 2 only.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "task_id": {
-              "type": "string",
-              "description": "Ready Task to assign; omit to delegate a part of the current started Task."
-            },
             "part_id": {
               "type": "string",
-              "description": "Runnable part of the owning Task to assign."
+              "description": "the part to delegate; it must belong to your started Task and not be running.\nOmitted: a new execute part is created under your current started Task."
             },
             "request": {
               "type": "string",
@@ -4463,18 +4459,14 @@
       "definition": {
         "type": "function",
         "name": "delegate_to_worker",
-        "description": "Assign one bounded part of the current started Task at Tier 2 to a Worker. Include a compact implementation brief with the relevant code, current state, constraints, and intended result. Steward remains responsible for integration, review, validation, and reporting.",
+        "description": "Hand one part of your started Task to a Worker session for direct execution. The result comes back to your Task through `task.submit` and review. Tier 2 only.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "task_id": {
-              "type": "string",
-              "description": "Ready Task to assign; omit to delegate a part of the current started Task."
-            },
             "part_id": {
               "type": "string",
-              "description": "Runnable part of the owning Task to assign."
+              "description": "the part to delegate; it must belong to your started Task and not be running.\nOmitted: a new execute part is created under your current started Task."
             },
             "action_key": {
               "type": "string",

@@ -53,11 +53,6 @@ fn request(
             .and_then(Value::as_str)
             .unwrap_or_default()
             .into(),
-        task_id: call
-            .arguments
-            .get("task_id")
-            .and_then(Value::as_str)
-            .map(str::to_owned),
         part_id: call
             .arguments
             .get("part_id")

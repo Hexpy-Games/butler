@@ -91,7 +91,7 @@ pub struct StewardDelegationRequest {
     pub parent_turn_id: String,
     pub anchor_message_id: String,
     pub request: String,
-    pub task_id: Option<String>,
+
     pub part_id: Option<String>,
     pub previous_relation_id: Option<String>,
     pub safe_title: Option<String>,
@@ -110,7 +110,7 @@ pub struct WorkerDelegationRequest {
     pub anchor_message_id: String,
     pub source_tool_call_id: String,
     pub action_key: String,
-    pub task_id: Option<String>,
+
     pub part_id: Option<String>,
     pub objective: String,
     pub acceptance_criteria: Vec<String>,
@@ -218,7 +218,7 @@ impl SubsessionService {
             parent_turn_id: request.parent_turn_id,
             anchor_message_id: request.anchor_message_id,
             request: request.request,
-            task_id: request.task_id,
+
             part_id: request.part_id,
             role: ChildRole::Steward,
             safe_title: request.safe_title,

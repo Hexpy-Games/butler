@@ -123,19 +123,22 @@ fn recover(
         .ok_or(store::Error::Invalid("work id"))?
         .to_owned();
     let attempt_id = format!("attempt-{id}");
-    store::assign_task(
-        tx,
-        &context(),
-        &task_id,
-        at(&task, "/revision")
-            .as_i64()
-            .ok_or(store::Error::Invalid("revision"))?,
-        &store::ExecutionScope {
-            session_id: &row.child_session_id,
-            turn_id: &row.child_turn_id,
-        },
-        &attempt_id,
-    )?;
+    let ctx = context();
+    if !matches!(at(&task, "/status").as_str(), Some("running" | "in_review")) {
+        store::start_task(tx, &ctx, &task_id,
+            at(&task, "/revision").as_i64().ok_or(store::Error::Invalid("revision"))?,
+            &store::ExecutionScope { session_id: &row.parent_session_id, turn_id: &row.parent_turn_id },
+            &format!("parent-{attempt_id}"))?;
+    }
+    let part_id = format!("part-{id}");
+    store::add_part(tx, &ctx, &store::NewPart {
+        id: &part_id, task_id: &task_id, kind: butler_work::work_types::TaskKind::Execute,
+        title: &row.safe_title, after_part_ids: &[],
+    })?;
+    store::assign_part(tx, &ctx, &part_id, 0, &row.parent_session_id,
+        &store::ExecutionScope { session_id: &row.child_session_id, turn_id: &row.child_turn_id },
+        &attempt_id)?;
+    store::tiers::bind_started_task(tx, &row.parent_session_id, &task_id)?;
     store::tiers::admit(
         tx,
         &context(),
@@ -159,7 +162,7 @@ fn recover(
         delegation: row,
         work_id,
         task_id,
-        part_id: None,
+        part_id: Some(part_id),
         attempt_id,
     })))
 }

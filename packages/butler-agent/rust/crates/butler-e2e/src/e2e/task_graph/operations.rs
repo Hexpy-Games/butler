@@ -97,7 +97,7 @@ impl GraphBuilder {
                 parent_turn_id: parent.scope.turn_id.clone(),
                 anchor_message_id: "anchor".into(),
                 request: objective.into(),
-                task_id: None,
+
                 part_id: None,
                 previous_relation_id: None,
                 safe_title: Some(objective.into()),
@@ -138,7 +138,7 @@ impl GraphBuilder {
                 parent_turn_id: work.scope.turn_id.clone(),
                 anchor_message_id: "anchor".into(),
                 source_tool_call_id: format!("worker-{}", self.sequence),
-                task_id: None,
+
                 part_id: None,
                 action_key: key.into(),
                 objective: format!("Complete {key}"),

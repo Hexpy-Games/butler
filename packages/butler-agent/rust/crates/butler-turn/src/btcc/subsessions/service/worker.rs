@@ -18,7 +18,7 @@ impl SubsessionService {
             parent_turn_id: request.parent_turn_id,
             anchor_message_id: request.anchor_message_id,
             request: request.objective,
-            task_id: request.task_id,
+
             part_id: request.part_id,
             role: ChildRole::Worker,
             safe_title: request.safe_title,

@@ -11,7 +11,7 @@ pub(super) struct AssignmentRequest {
     pub parent_turn_id: String,
     pub anchor_message_id: String,
     pub request: String,
-    pub task_id: Option<String>,
+
     pub part_id: Option<String>,
     pub role: ChildRole,
     pub safe_title: Option<String>,
@@ -58,12 +58,11 @@ impl SubsessionService {
         let target = input
             .part_id
             .as_ref()
-            .or(input.task_id.as_ref())
             .or(task.as_ref())
             .ok_or_else(|| {
                 BtccError::relayed(
-                    "delegation_task_required",
-                    "Start a Task before delegating its parts.",
+                    "no_started_task",
+                    "Delegation needs a started Task to hold the part. Call work_apply with task.start on the Task this work belongs to, then delegate again.",
                 )
             })?;
         let naming = if input.role == ChildRole::Worker {
@@ -121,25 +120,10 @@ fn assign(
         session_id: &ids.child_session_id,
         turn_id: &ids.child_turn_id,
     };
-    if let Some(part) = &part {
-        let revision = at(&store::read_part(tx, part)?, "/revision")
-            .as_i64()
-            .ok_or(store::Error::Invalid("revision"))?;
-        store::assign_part(
-            tx,
-            &ctx,
-            part,
-            revision,
-            &input.parent_session_id,
-            &child,
-            &attempt,
-        )?;
-    } else {
-        let revision = at(&task_row, "/revision")
-            .as_i64()
-            .ok_or(store::Error::Invalid("revision"))?;
-        store::assign_task(tx, &ctx, &task, revision, &child, &attempt)?;
-    }
+    let part_id = part.as_deref().ok_or(store::Error::Invalid("no_started_task"))?;
+    let revision = at(&store::read_part(tx, part_id)?, "/revision")
+        .as_i64().ok_or(store::Error::Invalid("revision"))?;
+    store::assign_part(tx, &ctx, part_id, revision, &input.parent_session_id, &child, &attempt)?;
     store::tiers::admit(tx, &ctx, &ids.child_session_id, work, 2, "delegated")?;
     store::tiers::bind_started_task(tx, &ids.child_session_id, &task)?;
     persist(tx, input, parent, ids, now, work, &task, part, &attempt)
@@ -182,18 +166,19 @@ fn resolve_target(
     current: Option<&str>,
     ids: &delegation::DelegationIds,
 ) -> store::Result<(String, Option<String>)> {
+    let task = current.ok_or(store::Error::Invalid("no_started_task"))?;
+    store::execution::ensure_task_effect(tx, task, &input.parent_session_id)
+        .map_err(|error| match error {
+            store::Error::Invalid(_) | store::Error::NotFound => store::Error::Invalid("no_started_task"),
+            other => other,
+        })?;
     if let Some(part) = &input.part_id {
         let row = store::read_part(tx, part)?;
-        let task = string(&row, "task_id")?.to_owned();
-        if input.task_id.as_ref().is_some_and(|id| *id != task) {
+        if string(&row, "task_id")? != task {
             return Err(store::Error::Invalid("part belongs to another Task"));
         }
-        return Ok((task, Some(part.clone())));
+        return Ok((task.into(), Some(part.clone())));
     }
-    if let Some(task) = &input.task_id {
-        return Ok((task.clone(), None));
-    }
-    let task = current.ok_or(store::Error::Invalid("delegation_task_required"))?;
     let part = format!("part-{}", ids.delegation_id);
     store::add_part(
         tx,
