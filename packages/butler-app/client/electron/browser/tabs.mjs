@@ -1,7 +1,7 @@
 import { disposeMarkingHost, startMarkingHost } from "./marking-host.mjs";
 import { BrowserLiveFrames } from "./live.mjs";
 import { linkMenuItems } from "./links.mjs";
-import { configureWebIdentity } from "./identity.mjs";
+import { configureWebSession } from "./identity.mjs";
 import { wireHistory } from "./history.mjs";
 import { isHistoryShortcut } from "../butler-platform/browser-shortcuts.mjs";
 import { BrowserDownloads } from "./downloads.mjs";
@@ -166,7 +166,7 @@ class UserBrowser {
     tab.view ??= new WebContentsView({ webPreferences: this.pagePreferences(tab) });
     tab.wired = true;
     tab.session = tab.view.webContents.session;
-    tab.identityReady = configureWebIdentity(tab.view.webContents, !supplied);
+    tab.identityReady = configureWebSession(tab.session);
     attachNativeWorlds(tab);
     this.live.watch(tab);
     tab.afterCapture = image => this.live.changed(tab, image);
