@@ -1,6 +1,7 @@
 //! Read-only legacy sources reconcile once onto native assignments and delivery.
 use super::*;
 use crate::btcc::{Child, ChildAssignment};
+use butler_core::json::at;
 use butler_work::{cutover, store};
 
 fn context() -> store::Context {
@@ -113,11 +114,11 @@ fn recover(
         unresolved(tx, id, "undecodable_packet")?;
         return Ok(None);
     }
-    let task_id = task["id"]
+    let task_id = at(&task, "/id")
         .as_str()
         .ok_or(store::Error::Invalid("task id"))?
         .to_owned();
-    let work_id = task["work_id"]
+    let work_id = at(&task, "/work_id")
         .as_str()
         .ok_or(store::Error::Invalid("work id"))?
         .to_owned();
@@ -126,7 +127,7 @@ fn recover(
         tx,
         &context(),
         &task_id,
-        task["revision"]
+        at(&task, "/revision")
             .as_i64()
             .ok_or(store::Error::Invalid("revision"))?,
         &store::ExecutionScope {
@@ -171,17 +172,16 @@ fn unresolved(tx: &store::Transaction<'_>, id: &str, code: &str) -> store::Resul
 }
 
 fn resolve_task(tx: &store::Transaction<'_>, mapped: &str) -> store::Result<Option<Value>> {
-    Ok(match store::read_task(tx, &mapped) {
+    Ok(match store::read_task(tx, mapped) {
         Ok(task) => Some(task),
         Err(store::Error::NotFound) => {
             let mut stmt=tx.prepare("SELECT id FROM wm_tasks WHERE work_id=?1 AND status IN ('pending','waiting') ORDER BY chain_id,step_index,stack_position LIMIT 2")?;
             let ids = stmt
                 .query_map([mapped], |r| r.get::<_, String>(0))?
                 .collect::<rusqlite::Result<Vec<_>>>()?;
-            if ids.len() == 1 {
-                Some(store::read_task(tx, &ids[0])?)
-            } else {
-                None
+            match ids.as_slice() {
+                [id] => Some(store::read_task(tx, id)?),
+                _ => None,
             }
         }
         Err(error) => return Err(error),

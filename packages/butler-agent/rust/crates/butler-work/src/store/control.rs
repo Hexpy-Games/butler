@@ -31,7 +31,7 @@ pub fn admit(tx: &Transaction<'_>, ctx: &Context, input: &Instruction<'_>) -> Re
             if stored != content {
                 return Err(Error::Invalid("idempotency_conflict"));
             }
-            return receipt(tx, row);
+            return receipt(tx, &row);
         }
         Err(Error::NotFound) => {}
         Err(error) => return Err(error),
@@ -71,11 +71,11 @@ fn persist_instruction(
         ],
     )?;
     event(tx, ctx, "instruction", &id, 0, "admit")?;
-    receipt(tx, one(tx, sql::CONTROL_KEY, [input.idempotency_key])?)
+    receipt(tx, &one(tx, sql::CONTROL_KEY, [input.idempotency_key])?)
 }
 
-fn receipt(db: &Connection, row: Value) -> Result<Value> {
-    let content: Value = serde_json::from_str(&tool_read::body(db, text(&row, "body_ref")?)?)?;
+fn receipt(db: &Connection, row: &Value) -> Result<Value> {
+    let content: Value = serde_json::from_str(&tool_read::body(db, text(row, "body_ref")?)?)?;
     Ok(
         json!({"ok":true,"instruction_id":row["id"],"control_epoch":content["control_epoch"],
         "status":"accepted"}),

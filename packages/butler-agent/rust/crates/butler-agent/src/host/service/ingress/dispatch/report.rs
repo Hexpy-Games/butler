@@ -9,7 +9,7 @@ pub(super) async fn deliver(
     delivery: &dyn IngressDelivery,
     subsessions: &butler_turn::btcc::SubsessionService,
 ) -> Result<Executed, super::super::IngressError> {
-    let actions = action::actions(item, &envelope, &binding, &outcome)?;
+    let actions = action::actions(item, envelope, binding, outcome)?;
     let eligible = match &outcome.result {
         TurnOutcomeKind::Delivered(value) if value.runtime_failure.is_none() => {
             Some(value.turn_id.clone())

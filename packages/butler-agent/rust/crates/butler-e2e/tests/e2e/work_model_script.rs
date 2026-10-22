@@ -109,8 +109,10 @@ pub(super) fn bootstrap(goal: &str, checks: &[&str]) -> Value {
 }
 
 pub(super) fn apply(body: &Value, operations: Value) -> Value {
-    json!({"reason":"Apply the requested outcome and its evidence","spec_ref":spec(body),
-        "expected_task_graph_revision":graph(body),"operations":operations})
+    let mut input = json!({"reason":"Apply the requested outcome and its evidence","spec_ref":spec(body),
+        "expected_task_graph_revision":graph(body)});
+    butler_core::json::object_mut(&mut input).insert("operations".into(), operations);
+    input
 }
 
 pub(super) fn submit(body: &Value, summary: &str) -> Value {

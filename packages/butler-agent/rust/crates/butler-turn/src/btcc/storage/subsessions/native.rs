@@ -1,6 +1,7 @@
 //! Indexed native assignment reads. Transport metadata lives with the dispatch intent.
 use super::*;
 use crate::btcc::subsessions::assignment::{Child, ChildAssignment};
+use butler_core::json::at;
 use butler_work::store;
 use rusqlite::Params;
 
@@ -37,13 +38,14 @@ pub(super) fn read(
     .map_err(StorageError::sqlite)?
     .map(|(payload, attempt_id, task_id, part_id, work_id)| {
         let payload: Value = serde_json::from_str(&payload).map_err(invalid)?;
-        let delegation = serde_json::from_value(payload["delegation"].clone()).map_err(invalid)?;
+        let delegation =
+            serde_json::from_value(at(&payload, "/delegation").clone()).map_err(invalid)?;
         Ok(Child::Assigned(ChildAssignment {
             delegation,
-            attempt_id,
+            work_id,
             task_id,
             part_id,
-            work_id,
+            attempt_id,
         }))
     })
     .transpose()
@@ -89,11 +91,11 @@ pub(super) fn result(
         FROM wm_attempts a LEFT JOIN wm_task_parts p ON p.id=a.part_id WHERE a.task_id=?1 AND a.session_id=?2 ORDER BY a.started_at DESC,a.id DESC LIMIT 1",
         params![child.task_id, child.child_session_id], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,Option<String>>(3)?,r.get::<_,Option<i64>>(4)?,r.get::<_,Option<String>>(5)?)))
         .optional().map_err(StorageError::sqlite)?;
-    let Some((attempt, turn, state, reason, at, part)) = row else {
+    let Some((attempt, turn, state, reason, created_at, part)) = row else {
         return Ok(None);
     };
     if state == "running"
-        || !db
+        || db
             .query_row(
                 "SELECT 1 FROM btcc_subsession_outbox WHERE result_id=?1",
                 [format!("result-{attempt}")],
@@ -101,7 +103,7 @@ pub(super) fn result(
             )
             .optional()
             .map_err(StorageError::sqlite)?
-            .is_some()
+            .is_none()
     {
         return Ok(None);
     }
@@ -124,8 +126,8 @@ pub(super) fn result(
         "failed"
     };
     let mut projected = serde_json::json!({"result_id":format!("result-{attempt}"),"child_turn_id":turn,
-        "status":status,"work_status":store::read_task(db, &child.task_id).map_err(super::super::work_model::work_error)?["status"],"summary":content["result_refs"],"acceptance_evidence":content["evidence_refs"],"created_at":at});
-    if let Some(reference) = content["result_refs"]
+        "status":status,"work_status":at(&store::read_task(db, &child.task_id).map_err(super::super::work_model::work_error)?, "/status"),"summary":at(&content, "/result_refs"),"acceptance_evidence":at(&content, "/evidence_refs"),"created_at":created_at});
+    if let Some(reference) = at(&content, "/result_refs")
         .as_array()
         .and_then(|refs| refs.first())
         .and_then(Value::as_str)
@@ -139,7 +141,7 @@ pub(super) fn result(
             .optional()
             .map_err(StorageError::sqlite)?
             .unwrap_or(false);
-        projected["summary"] = if stored {
+        let summary = if stored {
             serde_json::json!(
                 store::tool_read::body(db, reference)
                     .map_err(super::super::work_model::work_error)?
@@ -147,10 +149,12 @@ pub(super) fn result(
         } else {
             serde_json::json!(reference)
         };
+        butler_core::json::object_mut(&mut projected).insert("summary".into(), summary);
     } else {
-        projected["summary"] = serde_json::json!(reason.unwrap_or_else(|| {
+        let summary = serde_json::json!(reason.unwrap_or_else(|| {
             "Delegated work could not continue: child_turn_interrupted.".into()
         }));
+        butler_core::json::object_mut(&mut projected).insert("summary".into(), summary);
     }
     project_saved_delivery(db, &turn, status, &mut projected)?;
     Ok(Some(projected))
@@ -173,16 +177,17 @@ fn project_saved_delivery(
         .flatten();
     if let Some(payload) = payload {
         let payload: Value = serde_json::from_str(&payload).map_err(invalid)?;
-        if let Some(content) = payload["content"]
+        if let Some(content) = at(&payload, "/content")
             .as_str()
             .filter(|content| !content.is_empty())
         {
-            projected["summary"] = serde_json::json!(content);
+            butler_core::json::object_mut(projected)
+                .insert("summary".into(), serde_json::json!(content));
         }
         if status == "success"
             && let Some(artifacts) = payload.get("artifacts")
         {
-            projected["artifacts"] = artifacts.clone();
+            butler_core::json::object_mut(projected).insert("artifacts".into(), artifacts.clone());
         }
     }
     Ok(())

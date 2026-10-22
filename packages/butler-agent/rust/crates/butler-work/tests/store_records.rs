@@ -200,10 +200,9 @@ fn intent_replay_skips_domain_change_and_preserves_original_payload() {
     )
     .unwrap();
     control::mark_applied(&tx, &context(), pending[0]["id"].as_str().unwrap()).unwrap();
-    assert!(
-        control::next_pending(&tx, "child", false)
-            .unwrap()
-            .is_empty()
+    assert_eq!(
+        control::next_pending(&tx, "child", false).unwrap(),
+        [] as [serde_json::Value; 0]
     );
     let hold = control::hold(&tx, &context(), "child", "stop", "chat").unwrap();
     assert_eq!(hold["control_epoch"], 2);

@@ -196,8 +196,7 @@ fn message_step(_script: &Script, step: usize, body: &Value) -> Value {
     let apply = |args: Value| json!({"type":"function_call","name":"work_apply","arguments":args});
     match step {
         0 => read(json!({"view":"tasks"})),
-        1 => read(json!({"view":"task","task_id":native::task_id(body)})),
-        3 => read(json!({"view":"task","task_id":native::task_id(body)})),
+        1 | 3 => read(json!({"view":"task","task_id":native::task_id(body)})),
         2 => {
             let view = native::view(body);
             let part = native::part(body);

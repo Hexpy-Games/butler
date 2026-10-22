@@ -1,5 +1,6 @@
 //! Parent-owned native controls, with durable receipts and control-epoch CAS.
 use super::*;
+use butler_core::json::at;
 use butler_work::store;
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -74,7 +75,7 @@ impl SubsessionService {
         let for_enqueue = child.clone();
         let control_name = match &request.instruction {
             Instruction::Control { control, .. } => Some(control.clone()),
-            _ => None,
+            Instruction::Text { .. } => None,
         };
         let target = request.target_session_id.clone();
         let input = serde_json::to_value(&request)
@@ -87,7 +88,7 @@ impl SubsessionService {
             let prior:Option<String>=tx.query_row("SELECT payload_json FROM wm_cross_db_intents WHERE op_id=?1",[&key],|r|r.get(0)).optional()?;
             if let Some(prior)=prior {
                 let prior:Value=serde_json::from_str(&prior)?;
-                return if prior["input"]==input { Ok(prior["receipt"].clone()) } else { Ok(json!({"ok":false,"error":{"code":"idempotency_conflict"}})) };
+                return if at(&prior, "/input")==&input { Ok(at(&prior, "/receipt").clone()) } else { Ok(json!({"ok":false,"error":{"code":"idempotency_conflict"}})) };
             }
             let current=store::control_epoch(tx,&request.target_session_id)?;
             if current!=request.expected_control_epoch {
@@ -108,13 +109,13 @@ impl SubsessionService {
                     }
                     _=>return Err(store::Error::Invalid("unknown control")),
                 },
-                _=>return Err(store::Error::Invalid("instruction text required")),
+                Instruction::Text { .. }=>return Err(store::Error::Invalid("instruction text required")),
             };
             store::record_intent(tx,&ctx,&key,"session_control",&json!({"input":input,"receipt":receipt}))?;
             store::mark_intent_applied(tx,&ctx,&key,0)?;
             Ok(receipt)
         }).await.map_err(BtccError::from)?;
-        if receipt["ok"] == true {
+        if at(&receipt, "/ok") == true {
             if control_name.as_deref() == Some("stop") {
                 self.enqueue_cancel(&for_enqueue, &receipt.to_string())
                     .await?;

@@ -1,6 +1,7 @@
 //! Child work, completion and dispatch recovery of subsessions.
 
 use super::*;
+use butler_core::json::at;
 
 impl SubsessionService {
     /// Verifies an initial assignment, or claims a continuation's new attempt.
@@ -27,20 +28,20 @@ impl SubsessionService {
             let existing: bool = tx.query_row("SELECT 1 FROM wm_attempts WHERE task_id=?1 AND session_id=?2 AND turn_id=?3",rusqlite::params![assigned.task_id,session,turn],|_|Ok(())).optional()?.is_some();
             if existing { return Ok(()) }
             let instruction = store::pending_instructions(tx,&session,false)?.into_iter()
-                .find(|row| crate::btcc::storage::direction_turn_id(row["id"].as_str().unwrap_or_default())==turn)
+                .find(|row| crate::btcc::storage::direction_turn_id(at(row, "/id").as_str().unwrap_or_default())==turn)
                 .ok_or(store::Error::Invalid("child turn has no assignment"))?;
             let ctx=admission::context();
             let task=store::read_task(tx,&assigned.task_id)?;
             if let Some(part)=&assigned.part_id {
-                if !matches!(task["status"].as_str(),Some("running"|"in_review")) {
-                    store::start_task(tx,&ctx,&assigned.task_id,task["revision"].as_i64().ok_or(store::Error::Invalid("revision"))?,
+                if !matches!(at(&task, "/status").as_str(),Some("running"|"in_review")) {
+                    store::start_task(tx,&ctx,&assigned.task_id,at(&task, "/revision").as_i64().ok_or(store::Error::Invalid("revision"))?,
                         &store::ExecutionScope{session_id:&assigned.parent_session_id,turn_id:&assigned.parent_turn_id},&format!("parent-attempt:{turn}"))?;
                 }
                 tx.execute(store::execution_sql::PART_STATE,rusqlite::params![part,"pending",Option::<&str>::None])?;
-                let revision=store::read_part(tx,part)?["revision"].as_i64().ok_or(store::Error::Invalid("revision"))?;
+                let revision=at(&store::read_part(tx,part)?, "/revision").as_i64().ok_or(store::Error::Invalid("revision"))?;
                 store::assign_part(tx,&ctx,part,revision,&assigned.parent_session_id,&store::ExecutionScope{session_id:&session,turn_id:&turn},&format!("attempt:{turn}"))?;
             } else {
-                store::start_task(tx,&ctx,&assigned.task_id,task["revision"].as_i64().ok_or(store::Error::Invalid("revision"))?,
+                store::start_task(tx,&ctx,&assigned.task_id,at(&task, "/revision").as_i64().ok_or(store::Error::Invalid("revision"))?,
                     &store::ExecutionScope{session_id:&session,turn_id:&turn},&format!("attempt:{turn}"))?;
             }
             tx.execute("UPDATE btcc_session_relations SET activity_terminal=0 WHERE relation_id=?1",[&assigned.relation_id])?;
@@ -151,7 +152,7 @@ impl SubsessionService {
             .storage()
             .work_model_write(move |tx| {
                 let task = butler_work::store::read_task(tx, &child.task_id)?;
-                if task["status"] == "completed" {
+                if at(&task, "/status") == "completed" {
                     butler_work::store::report_task(tx, &admission::context(), &child.task_id)?;
                 }
                 Ok(())

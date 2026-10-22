@@ -354,16 +354,15 @@ impl SubsessionService {
             .ok_or_else(|| error(BtccCode::SubsessionParentBindingMissing))?;
         let access = stored.packet.access_mode.as_str();
         let mut metadata = child_metadata(role_name, &stored.packet, access, &parent);
-        if let Child::Assigned(assignment) = stored {
-            if let Some(subsession) = metadata
+        if let Child::Assigned(assignment) = stored
+            && let Some(subsession) = metadata
                 .get_mut("subsession")
                 .and_then(Value::as_object_mut)
-            {
-                subsession.insert("work_id".into(), json!(assignment.work_id));
-                subsession.insert("task_id".into(), json!(assignment.task_id));
-                subsession.insert("part_id".into(), json!(assignment.part_id));
-                subsession.insert("attempt_id".into(), json!(assignment.attempt_id));
-            }
+        {
+            subsession.insert("work_id".into(), json!(assignment.work_id));
+            subsession.insert("task_id".into(), json!(assignment.task_id));
+            subsession.insert("part_id".into(), json!(assignment.part_id));
+            subsession.insert("attempt_id".into(), json!(assignment.attempt_id));
         }
         self.create_child_binding(stored, &parent, role, metadata)
             .await

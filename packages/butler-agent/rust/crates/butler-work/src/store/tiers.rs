@@ -209,7 +209,7 @@ pub fn delegation_floor(db: &Connection, work: &str) -> Result<()> {
     check_floor(
         db,
         Some(work),
-        tier as u8,
+        u8::try_from(tier).map_err(|_| Error::Invalid("tier"))?,
         0,
         Floors {
             delegation_or_child_assignment: true,

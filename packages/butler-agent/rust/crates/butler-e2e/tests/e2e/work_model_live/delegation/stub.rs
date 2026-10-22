@@ -98,8 +98,8 @@ async fn reply(
         .into_response()
 }
 
-fn call(step: usize, name: &str, args: Value) -> Value {
-    super::super::super::access_tiers::stub::call(&format!("native-{step}"), name, &args)
+fn call(step: usize, name: &str, args: &Value) -> Value {
+    super::super::super::access_tiers::stub::call(&format!("native-{step}"), name, args)
 }
 fn message(text: &str) -> Value {
     json!({"type":"message","id":"native-answer","role":"assistant","status":"completed","content":[{"type":"output_text","text":text,"annotations":[]}]})
@@ -108,7 +108,7 @@ fn read_task(step: usize, body: &Value) -> Value {
     call(
         step,
         "work_read",
-        json!({"view":"task","task_id":native::task_id(body)}),
+        &json!({"view":"task","task_id":native::task_id(body)}),
     )
 }
 
@@ -117,35 +117,35 @@ fn parent(step: usize, body: &Value) -> Value {
         0 => call(
             step,
             "work_apply",
-            native::bootstrap(FEATURE, &["Marker built", "Output checked"]),
+            &native::bootstrap(FEATURE, &["Marker built", "Output checked"]),
         ),
         1 => read_task(step, body),
         2 => call(
             step,
             "delegate_to_steward",
-            json!({"request":"Build the requested marker and retain evidence."}),
+            &json!({"request":"Build the requested marker and retain evidence."}),
         ),
         _ => message("The feature work is assigned."),
     }
 }
 fn child(step: usize, body: &Value) -> Value {
     match step {
-        0 => call(step, "work_read", json!({"view":"tasks"})),
+        0 => call(step, "work_read", &json!({"view":"tasks"})),
         1 => read_task(step, body),
         2 => call(
             step,
             "write_file",
-            json!({"path":"feature-marker.txt","content":"original marker"}),
+            &json!({"path":"feature-marker.txt","content":"original marker"}),
         ),
         3 => call(
             step,
             "write_file",
-            json!({"path":"feature-marker.txt","content":"corrected marker"}),
+            &json!({"path":"feature-marker.txt","content":"corrected marker"}),
         ),
         4 => call(
             step,
             "work_apply",
-            native::submit(body, "feature-marker.txt"),
+            &native::submit(body, "feature-marker.txt"),
         ),
         _ => message("The corrected marker was built and checked."),
     }
@@ -158,9 +158,9 @@ fn control(step: usize, request: &str, script: &Script) -> Value {
     call(
         step,
         "session_control",
-        json!({"target_session_id":script.target.lock().unwrap().clone(),"mode":"steer",
+        &json!({"target_session_id":script.target.lock().unwrap().clone(),"mode":"steer",
         "instruction":if stop {json!({"control":"stop"})}else{json!({"text":"Use the corrected marker before submitting."})},
-        "expected_control_epoch":if stop {1}else{0},"idempotency_key":if stop {"stop-feature"}else{"steer-feature"}}),
+        "expected_control_epoch":u8::from(stop),"idempotency_key":if stop {"stop-feature"}else{"steer-feature"}}),
     )
 }
 fn result(step: usize, body: &Value, request: &str) -> Value {
@@ -168,38 +168,38 @@ fn result(step: usize, body: &Value, request: &str) -> Value {
         return message("The delegated work was stopped; its Task remains resumable.");
     }
     match step {
-        0 => call(step, "work_read", json!({"view":"tasks"})),
+        0 => call(step, "work_read", &json!({"view":"tasks"})),
         1 => read_task(step, body),
         2 => native::complete(body)
-            .map(|args| call(step, "work_apply", args))
+            .map(|args| call(step, "work_apply", &args))
             .unwrap_or_else(|| message("The result needs input.")),
         _ => message(RESULT),
     }
 }
 fn second(step: usize, body: &Value) -> Value {
     match step {
-        0 => call(step, "work_read", json!({"view":"tasks"})),
+        0 => call(step, "work_read", &json!({"view":"tasks"})),
         1 => read_task(step, body),
         2 => {
             let mut args = native::extend(body, SECOND);
             let placement = args["operations"][0].as_object_mut().unwrap();
             placement.remove("step");
             placement.insert("after_task_id".into(), native::task_id(body));
-            call(step, "work_apply", args)
+            call(step, "work_apply", &args)
         }
         _ => message("The next verification Task is running."),
     }
 }
 fn edit(step: usize, body: &Value) -> Value {
     match step {
-        0 => call(step, "work_read", json!({"view":"spec"})),
-        1 => call(step, "work_read", json!({"view":"tasks"})),
+        0 => call(step, "work_read", &json!({"view":"spec"})),
+        1 => call(step, "work_read", &json!({"view":"tasks"})),
         2 => read_task(step, body),
-        3 => call(step, "work_apply", criterion_delta(body)),
+        3 => call(step, "work_apply", &criterion_delta(body)),
         4 => call(
             step,
             "write_file",
-            json!({"path":"stale-effect.txt","content":"must be fenced"}),
+            &json!({"path":"stale-effect.txt","content":"must be fenced"}),
         ),
         _ => message(
             "The approved criterion is active; corrective Tasks retain the completed history.",
@@ -238,7 +238,7 @@ fn criterion_delta(body: &Value) -> Value {
         .into_iter()
         .fold(Vec::<Value>::new(), |mut refs, item| {
             if !refs.contains(&item) {
-                refs.push(item)
+                refs.push(item);
             }
             refs
         });

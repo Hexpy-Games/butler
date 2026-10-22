@@ -1,5 +1,6 @@
 //! Durable subsession state on the existing BTCC SQLite owner.
 
+use butler_core::json::at;
 mod activity;
 mod assets;
 mod completion;
@@ -274,7 +275,7 @@ impl SqliteSubsessionRepository {
                         butler_work::store::read_task(db, &assigned.task_id)?
                     };
                     Ok(!matches!(
-                        row["status"].as_str(),
+                        at(&row, "/status").as_str(),
                         Some("completed" | "cancelled")
                     ))
                 })
@@ -290,21 +291,25 @@ impl SqliteSubsessionRepository {
     ) -> Result<Option<Child>, StorageError> {
         self.storage
             .execute(move |db| {
-                if let Some(child) = native::read(db, "d.root_work_id=?1", &work)? {
-                    let crate::btcc::subsessions::assignment::Child::Assigned(assigned) = &child
-                    else {
-                        unreachable!()
-                    };
+                if let Some(Child::Assigned(assigned)) =
+                    native::read(db, "d.root_work_id=?1", &work)?
+                {
                     let task = butler_work::store::read_task(db, &assigned.task_id)
                         .map_err(super::work_model::work_error)?;
                     let open = if let Some(part) = &assigned.part_id {
                         let part = butler_work::store::read_part(db, part)
                             .map_err(super::work_model::work_error)?;
-                        !matches!(part["status"].as_str(), Some("completed" | "cancelled"))
+                        !matches!(
+                            at(&part, "/status").as_str(),
+                            Some("completed" | "cancelled")
+                        )
                     } else {
-                        !matches!(task["status"].as_str(), Some("completed" | "cancelled"))
+                        !matches!(
+                            at(&task, "/status").as_str(),
+                            Some("completed" | "cancelled")
+                        )
                     };
-                    return Ok(open.then_some(child));
+                    return Ok(open.then_some(Child::Assigned(assigned)));
                 }
                 let status: Option<String> = db
                     .query_row(

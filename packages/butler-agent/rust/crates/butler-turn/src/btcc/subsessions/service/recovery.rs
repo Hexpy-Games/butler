@@ -1,6 +1,7 @@
 //! Startup replay is driven by durable intents, attempts and read-only imports.
 use super::*;
 use crate::btcc::Child;
+use butler_core::json::at;
 
 impl SubsessionService {
     pub async fn recover_assignments(&self, interrupted: Vec<Value>) -> Result<(), BtccError> {
@@ -28,7 +29,7 @@ impl SubsessionService {
     ) -> Result<(), BtccError> {
         self.replay_pending_assignments().await?;
         for attempt in interrupted {
-            let Some(session) = attempt["session_id"].as_str() else {
+            let Some(session) = at(&attempt, "/session_id").as_str() else {
                 continue;
             };
             if self
@@ -38,7 +39,7 @@ impl SubsessionService {
                 .map_err(BtccError::from)?
                 .is_some()
             {
-                let turn = attempt["turn_id"]
+                let turn = at(&attempt, "/turn_id")
                     .as_str()
                     .ok_or_else(|| error(BtccCode::SubsessionDispatchIntentInvalid))?;
                 self.complete_failed_child(session, turn, "child_turn_interrupted")
@@ -63,12 +64,12 @@ impl SubsessionService {
                 return Ok(());
             }
             for intent in intents {
-                after = intent["op_id"].as_str().unwrap_or_default().into();
-                if intent["kind"] != "child_dispatch" {
+                after = at(&intent, "/op_id").as_str().unwrap_or_default().into();
+                if at(&intent, "/kind") != "child_dispatch" {
                     continue;
                 }
                 let payload: Value =
-                    serde_json::from_str(intent["payload_json"].as_str().unwrap_or_default())
+                    serde_json::from_str(at(&intent, "/payload_json").as_str().unwrap_or_default())
                         .map_err(|e| {
                             error(BtccCode::SubsessionDispatchIntentInvalid).with_source(e)
                         })?;

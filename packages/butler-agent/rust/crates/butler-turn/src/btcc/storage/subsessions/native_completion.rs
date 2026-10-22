@@ -1,6 +1,7 @@
 //! Result and delivery commit together on the Work writer lane.
 use super::*;
 use crate::btcc::subsessions::assignment::Child;
+use butler_core::json::at;
 use butler_work::store;
 
 pub(super) fn settle(
@@ -133,11 +134,11 @@ pub(super) fn resolve_outcome(
         return Ok(());
     }
     let task = store::read_task(tx, &child.task_id)?;
-    if matches!(task["status"].as_str(), Some("blocked" | "failed")) {
-        completion.status = task["status"].as_str().unwrap_or("failed").into();
-        completion.failure_reason = task["blocked_reason"]
+    if matches!(at(&task, "/status").as_str(), Some("blocked" | "failed")) {
+        completion.status = at(&task, "/status").as_str().unwrap_or("failed").into();
+        completion.failure_reason = at(&task, "/blocked_reason")
             .as_str()
-            .or(task["failure_reason"].as_str())
+            .or(at(&task, "/failure_reason").as_str())
             .map(str::to_owned);
     }
     Ok(())

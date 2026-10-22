@@ -2,6 +2,7 @@
 use super::*;
 use crate::btcc::subsessions::assignment::{Child, ChildAssignment};
 use crate::btcc::{PacketExecutionMode, StoredSubsessionDelegation, SubsessionPacket};
+use butler_core::json::at;
 use butler_work::{store, work_types::TaskKind};
 use rusqlite::{OptionalExtension, params};
 
@@ -107,10 +108,12 @@ fn assign(
         return Ok(child);
     }
     let ctx = context();
-    let (task, part) = resolve_target(tx, &ctx, &input, task, &ids)?;
+    let (task, part) = resolve_target(tx, &ctx, input, task, ids)?;
     let task_row = store::read_task(tx, &task)?;
     let work = string(&task_row, "work_id")?;
-    if store::bound_work(tx, &input.parent_session_id, None)?.is_none_or(|row| row["id"] != work) {
+    if store::bound_work(tx, &input.parent_session_id, None)?
+        .is_none_or(|row| at(&row, "/id") != work)
+    {
         return Err(store::Error::Invalid("assignment outside parent Work"));
     }
     store::tiers::delegation_floor(tx, work)?;
@@ -119,7 +122,7 @@ fn assign(
         turn_id: &ids.child_turn_id,
     };
     if let Some(part) = &part {
-        let revision = store::read_part(tx, part)?["revision"]
+        let revision = at(&store::read_part(tx, part)?, "/revision")
             .as_i64()
             .ok_or(store::Error::Invalid("revision"))?;
         store::assign_part(
@@ -132,14 +135,14 @@ fn assign(
             &attempt,
         )?;
     } else {
-        let revision = task_row["revision"]
+        let revision = at(&task_row, "/revision")
             .as_i64()
             .ok_or(store::Error::Invalid("revision"))?;
         store::assign_task(tx, &ctx, &task, revision, &child, &attempt)?;
     }
     store::tiers::admit(tx, &ctx, &ids.child_session_id, work, 2, "delegated")?;
     store::tiers::bind_started_task(tx, &ids.child_session_id, &task)?;
-    persist(tx, &input, &parent, &ids, &now, work, &task, part, &attempt)
+    persist(tx, input, parent, ids, now, work, &task, part, &attempt)
 }
 
 fn existing_assignment(tx: &store::Transaction<'_>, attempt: &str) -> store::Result<Option<Child>> {
@@ -155,7 +158,7 @@ fn existing_assignment(tx: &store::Transaction<'_>, attempt: &str) -> store::Res
     };
     let payload: Value = serde_json::from_str(&payload)?;
     let delegation: StoredSubsessionDelegation =
-        serde_json::from_value(payload["delegation"].clone())?;
+        serde_json::from_value(at(&payload, "/delegation").clone())?;
     let (task_id, part_id): (String, Option<String>) = tx.query_row(
         "SELECT task_id,part_id FROM wm_attempts WHERE id=?1",
         [attempt],

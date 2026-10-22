@@ -1,6 +1,7 @@
 //! Narrow read of the BTCC execution authority used by App relocation admission.
 
 use super::{SqliteSubsessionRepository, StorageError};
+use butler_core::json::at;
 
 impl SqliteSubsessionRepository {
     /// Narrow execution presence for quit/restart. Old waiting display cards
@@ -90,7 +91,7 @@ fn activity_child(
 ) -> Result<serde_json::Value, StorageError> {
     use rusqlite::OptionalExtension;
     let result=match super::native::result(db,&r.relation_id)? {
-        Some(result)=>result["status"].as_str().map(str::to_owned),
+        Some(result)=>at(&result, "/status").as_str().map(str::to_owned),
         None=>db.query_row("SELECT status FROM btcc_steward_results WHERE relation_id=?1 ORDER BY created_at DESC LIMIT 1",[&r.relation_id],|row|row.get::<_,String>(0)).optional().map_err(StorageError::sqlite)?,
     };
     let latest: Option<String> = db

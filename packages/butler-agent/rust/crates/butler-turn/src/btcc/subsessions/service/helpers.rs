@@ -365,8 +365,10 @@ pub(super) fn child_envelope(input: ChildEnvelopeInput<'_>) -> ChildEnvelope {
 pub(super) fn delegation_output(stored: &crate::btcc::Child) -> Value {
     let mut output = json!({"ok":true,"status":"queued","relation_id":stored.relation_id,"child_session_id":stored.child_session_id,"task_id":stored.task_id,"control_epoch":0});
     if let crate::btcc::Child::Assigned(assignment) = stored {
-        output["part_id"] = json!(assignment.part_id);
-        output["attempt_id"] = json!(assignment.attempt_id);
+        butler_core::json::object_mut(&mut output)
+            .insert("part_id".into(), json!(assignment.part_id));
+        butler_core::json::object_mut(&mut output)
+            .insert("attempt_id".into(), json!(assignment.attempt_id));
     }
     output
 }

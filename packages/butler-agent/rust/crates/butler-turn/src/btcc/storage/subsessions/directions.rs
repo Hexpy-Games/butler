@@ -1,5 +1,6 @@
 //! Native direction receipts; imported legacy rows are never mutated.
 use super::*;
+use butler_core::json::at;
 use butler_work::store;
 
 pub(crate) fn direction_turn_id(id: &str) -> String {
@@ -11,9 +12,9 @@ pub(crate) fn direction_turn_id(id: &str) -> String {
 
 fn direction(row: &Value, relation: &str) -> StoredSubsessionDirection {
     StoredSubsessionDirection {
-        instruction_id: row["id"].as_str().unwrap_or_default().into(),
+        instruction_id: at(row, "/id").as_str().unwrap_or_default().into(),
         relation_id: relation.into(),
-        revision: row["received_seq"].as_i64().unwrap_or_default(),
+        revision: at(row, "/received_seq").as_i64().unwrap_or_default(),
         instruction: row
             .pointer("/content/body/text")
             .and_then(Value::as_str)
@@ -52,7 +53,7 @@ impl SqliteSubsessionRepository {
                 mode: "queue", body: serde_json::json!({"text":instruction}), idempotency_key: &key,
                 expected_control_epoch: epoch, anchor_task: &child.task_id })?;
             let rows = store::pending_instructions(tx, &child.child_session_id, false)?;
-            rows.iter().find(|r| r["id"]==receipt["instruction_id"]).map(|r| direction(r,&relation)).ok_or(store::Error::NotFound)
+            rows.iter().find(|r| at(r, "/id")==at(&receipt, "/instruction_id")).map(|r| direction(r,&relation)).ok_or(store::Error::NotFound)
         }).await
     }
     pub(crate) async fn pending_direction(
@@ -102,18 +103,18 @@ impl SqliteSubsessionRepository {
                 };
                 let pending = store::pending_instructions(tx, &child, false)?;
                 let row = pending.iter().find(|r| {
-                    r["mode"] == "steer"
-                        || direction_turn_id(r["id"].as_str().unwrap_or_default()) == turn
+                    at(r, "/mode") == "steer"
+                        || direction_turn_id(at(r, "/id").as_str().unwrap_or_default()) == turn
                 });
                 if let Some(row) = row {
-                    let id = row["id"]
+                    let id = at(row, "/id")
                         .as_str()
                         .ok_or(store::Error::Invalid("instruction id"))?;
                     store::deliver_instruction(
                         tx,
                         &context(),
                         id,
-                        row["status"]
+                        at(row, "/status")
                             .as_str()
                             .ok_or(store::Error::Invalid("status"))?,
                     )?;
