@@ -84,6 +84,7 @@ pub(super) fn recompute_work(tx: &Transaction<'_>, ctx: &Context, id: &str) -> R
     } else if any("failed") {
         RunState::Failed
     } else if any("blocked") || any("held") || any("stopped") {
+        // A stopped Task maps the Work to blocked (§3.3).
         RunState::Blocked
     } else {
         RunState::Idle

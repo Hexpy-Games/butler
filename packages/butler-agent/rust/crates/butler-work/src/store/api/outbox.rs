@@ -7,6 +7,7 @@ pub(in crate::store) fn append(
     kind: &str,
     id: &str,
     revision: i64,
+    op: &str,
 ) -> Result<()> {
     let project = match kind {
         "plan" => {
@@ -39,17 +40,44 @@ pub(in crate::store) fn append(
             params!["canon.changed", payload.to_string(), ctx.now],
         )?;
     }
-    if kind == "task_graph" {
-        let row = read_work(tx, id)?;
-        let session = row["home_session_id"].as_str().or_else(|| {
-            (row["scope_kind"] == "session")
-                .then(|| row["scope_ref"].as_str())
-                .flatten()
-        });
-        let payload = json!({"scope":"tasks","work_id":id,"session_id":session,"task_graph_revision":revision});
+    if matches!(kind, "task" | "task_graph") || (kind == "work" && op == "state") {
+        let work_id = if kind == "task" {
+            text(&read_task(tx, id)?, "work_id")?.to_owned()
+        } else {
+            id.to_owned()
+        };
+        tasks_changed(tx, ctx, &work_id)?;
+    }
+    Ok(())
+}
+
+fn tasks_changed(tx: &Transaction<'_>, ctx: &Context, id: &str) -> Result<()> {
+    let row = read_work(tx, id)?;
+    let session = row["home_session_id"].as_str().or_else(|| {
+        (row["scope_kind"] == "session")
+            .then(|| row["scope_ref"].as_str())
+            .flatten()
+    });
+    let payload = json!({"scope":"tasks","work_id":id,"session_id":session,
+        "task_graph_revision":row["task_graph_revision"]})
+    .to_string();
+    let seq: Option<i64> = tx
+        .query_row(
+            "SELECT seq FROM wm_outbox WHERE seq>?1 AND topic='work_model.changed'
+         AND json_extract(payload_json,'$.work_id')=?2 LIMIT 1",
+            params![tx.outbox_start, id],
+            |r| r.get(0),
+        )
+        .optional()?;
+    if let Some(seq) = seq {
+        tx.execute(
+            "UPDATE wm_outbox SET payload_json=?1 WHERE seq=?2",
+            params![payload, seq],
+        )?;
+    } else {
         tx.execute(
             super::super::sql::OUTBOX,
-            params!["work_model.changed", payload.to_string(), ctx.now],
+            params!["work_model.changed", payload, ctx.now],
         )?;
     }
     Ok(())

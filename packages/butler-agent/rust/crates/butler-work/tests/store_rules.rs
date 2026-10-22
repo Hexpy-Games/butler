@@ -18,7 +18,7 @@ fn work_state_is_derived_and_person_labels_survive_no_op_transitions() {
         runtime(&mut db, "a", state, false);
         assert_eq!(read_work(&db, "work").unwrap()["run_state"], expected);
     }
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     let row = read_work(&tx, "work").unwrap();
     set_label(
         &tx,
@@ -45,7 +45,7 @@ fn terminal_labels_cancel_open_tasks_and_parts_with_graph_cas() {
         let mut db = db();
         queue(&mut db, &["a", "b"]);
         db.execute("INSERT INTO wm_task_parts(id,task_id,kind,title,status,part_rank) VALUES('part','b','review','review','pending','A')",[]).unwrap();
-        let tx = db.transaction().unwrap();
+        let tx = Transaction::new(db.transaction().unwrap()).unwrap();
         let old = read_work(&tx, "work").unwrap();
         assert!(matches!(
             set_label(
@@ -103,7 +103,7 @@ fn done_is_rejected_during_execution_and_structure_cas_does_not_need_entity_chan
     )
     .unwrap();
     assert_eq!(read_work(&db, "work").unwrap()["revision"], old["revision"]);
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     assert!(matches!(
         write_api(
             &tx,
@@ -116,7 +116,7 @@ fn done_is_rejected_during_execution_and_structure_cas_does_not_need_entity_chan
     ));
     tx.rollback().unwrap();
     runtime(&mut db, "a", TaskStatus::Running, false);
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     let old = read_work(&tx, "work").unwrap();
     assert!(matches!(
         set_label(

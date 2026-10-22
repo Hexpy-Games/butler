@@ -22,7 +22,7 @@ fn clean_restart_resumes_same_step_and_crash_fails_tasks_and_holds_full_queue_on
         runtime(&mut db, id, TaskStatus::Running, false);
         db.execute("INSERT INTO wm_task_parts(id,task_id,kind,title,status,part_rank) VALUES('part',?1,'execute','part','running','A')",[id]).unwrap();
         db.execute("INSERT INTO wm_attempts(id,task_id,part_id,task_revision,spec_ref,session_id,lease_epoch,status,started_at) VALUES('at',?1,'part',1,'{}','chat',1,'interrupted',0)",[id]).unwrap();
-        let tx = db.transaction().unwrap();
+        let tx = Transaction::new(db.transaction().unwrap()).unwrap();
         recover_session(&tx, &context(), "chat", previous).unwrap();
         let a = read_task(&tx, id).unwrap();
         assert_eq!(a["step_index"], step);

@@ -28,7 +28,7 @@ fn holds_share_a_question_keep_siblings_and_release_only_one_barrier() {
         TaskStatus::Pending,
         TaskStatus::Waiting,
     ] {
-        let tx = db.transaction().unwrap();
+        let tx = Transaction::new(db.transaction().unwrap()).unwrap();
         assert!(transition(&tx, &context(), "b", revision(&tx, "b"), state, false, None).is_err());
     }
     decide(&mut db, Decision::RunAnyway);

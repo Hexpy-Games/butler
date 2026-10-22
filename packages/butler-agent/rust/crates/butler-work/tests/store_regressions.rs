@@ -82,7 +82,7 @@ fn runtime_review_preserves_a_concurrent_structure_token_but_holds_advance_it() 
     let expected = graph(&db);
     runtime(&mut db, "a", TaskStatus::InReview, false);
     assert_eq!(graph(&db), expected);
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     edit_queue(
         &tx,
         &context(),
@@ -108,7 +108,7 @@ fn terminal_works_reject_task_admission() {
     for label in [CanonStatus::Done, CanonStatus::Cancelled] {
         let mut db = db();
         queue(&mut db, &["a"]);
-        let tx = db.transaction().unwrap();
+        let tx = Transaction::new(db.transaction().unwrap()).unwrap();
         set_label(
             &tx,
             &context(),
@@ -188,7 +188,7 @@ fn holds_skip_started_and_completed_followers_and_question_targets_first_held_st
 fn mutation_receipts_include_durable_questions_and_waiting_cannot_complete() {
     let mut db = db();
     queue(&mut db, &["a", "b"]);
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     assert!(matches!(
         transition(
             &tx,
@@ -203,7 +203,7 @@ fn mutation_receipts_include_durable_questions_and_waiting_cannot_complete() {
     ));
     tx.rollback().unwrap();
     runtime(&mut db, "a", TaskStatus::Running, false);
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     let receipt = transition(
         &tx,
         &context(),
@@ -365,7 +365,7 @@ fn failed_batch_rolls_back_edges_events_and_counts_even_if_outer_transaction_com
     let before = snapshot(&db);
     // Reject the final graph event after membership, holds, edges and counts have changed.
     db.execute_batch("CREATE TEMP TRIGGER reject_graph BEFORE INSERT ON wm_audit WHEN NEW.entity_kind='task_graph' BEGIN SELECT RAISE(ABORT,'reject graph'); END;").unwrap();
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     assert!(
         edit_queue(
             &tx,
@@ -417,7 +417,7 @@ fn deciding_an_already_decided_question_returns_only_the_structure_revision() {
     runtime(&mut db, "a", TaskStatus::Failed, false);
     let question = undecided_holds(&db, "ch").unwrap().remove(0);
     decide(&mut db, Decision::RunAnyway);
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     for revision in [0, 1] {
         let result = decide_hold(
             &tx,

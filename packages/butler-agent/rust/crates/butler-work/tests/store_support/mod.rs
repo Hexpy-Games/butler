@@ -15,7 +15,7 @@ pub(crate) fn context() -> Context {
     }
 }
 pub(crate) fn work(db: &mut Connection, id: &str) {
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     create_work(
         &tx,
         &context(),
@@ -42,7 +42,7 @@ pub(crate) fn graph(db: &Connection) -> i64 {
         .unwrap()
 }
 pub(crate) fn add(db: &mut Connection, id: &str, chain: &str, after: Option<&str>, draft: bool) {
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     create_task(
         &tx,
         &context(),
@@ -83,7 +83,7 @@ pub(crate) fn runtime(db: &mut Connection, id: &str, state: TaskStatus, reported
     ) {
         runtime(db, id, TaskStatus::Running, false);
     }
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     transition(
         &tx,
         &context(),
@@ -97,13 +97,13 @@ pub(crate) fn runtime(db: &mut Connection, id: &str, state: TaskStatus, reported
     tx.commit().unwrap();
 }
 pub(crate) fn edit(db: &mut Connection, ops: &[QueueEdit]) -> Result<Vec<Value>> {
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     let result = edit_queue(&tx, &context(), "work", graph(&tx), ops)?;
     tx.commit().unwrap();
     Ok(result)
 }
 pub(crate) fn decide(db: &mut Connection, decision: Decision) {
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     let q = undecided_holds(&tx, "ch").unwrap().remove(0);
     decide_hold(
         &tx,

@@ -62,7 +62,7 @@ async fn wma_03_done_rules_and_task_graph_cas() -> Result<(), HarnessError> {
 #[tokio::test]
 async fn wma_04_task_delete_split_cas_atomic_batch_and_event() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let Seed { s, chat, .. } = seeded("WMA-04", "").await?;
+    let Seed { mut s, chat, .. } = seeded("WMA-04", "").await?;
     let q = queue(&s, "wk_canon").await?;
     assert_eq!(
         step_ids(&q),
@@ -116,7 +116,15 @@ async fn wma_04_task_delete_split_cas_atomic_batch_and_event() -> Result<(), Har
     assert_eq!(changed["payload"]["session_id"], chat);
     assert!(changed["payload"].get("plan_id").is_none());
     assert!(changed["payload"]["task_graph_revision"].is_i64());
+    let barrier = stream
+        .wait_for(Duration::from_secs(10), |e| {
+            e["type"] == "work_model.changed"
+                && e["payload"]["work_id"] == "wk_canon"
+                && e["payload"]["task_graph_revision"] == deleted["task_graph_revision"]
+        })
+        .await?;
     drop(stream);
+    super::events::review_task_and_observe(&mut s, &chat, &deleted, &barrier).await?;
     s.finish().await
 }
 #[tokio::test]

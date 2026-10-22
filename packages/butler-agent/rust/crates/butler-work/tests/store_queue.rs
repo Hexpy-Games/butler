@@ -82,7 +82,7 @@ fn drafts_barriers_and_cancelled_relink() {
     queue(&mut db, &["a", "b", "c"]);
     add(&mut db, "draft", "draft", None, true);
     assert_eq!(ready_tasks(&db, "draft").unwrap(), Vec::<String>::new());
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     assert!(
         transition(
             &tx,

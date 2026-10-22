@@ -10,6 +10,7 @@ mod queue;
 mod recovery;
 mod specs;
 pub mod sql;
+mod transaction;
 mod transitions;
 pub use entities::*;
 pub use holds::*;
@@ -17,9 +18,10 @@ use holds::{approval_covers, rederive_holds, task_result};
 pub use queue::*;
 use queue::{bump, persist, running, update_chain_state};
 pub use recovery::*;
-use rusqlite::{Connection, OptionalExtension, Params, Row, Transaction};
+use rusqlite::{Connection, OptionalExtension, Params, Row};
 use serde_json::{Value, json};
 pub use specs::*;
+pub use transaction::Transaction;
 pub use transitions::*;
 use transitions::{recompute_work, set_state};
 
@@ -148,7 +150,7 @@ pub(super) fn event(
             payload
         ],
     )?;
-    api::outbox(tx, ctx, kind, id, revision)?;
+    api::outbox(tx, ctx, kind, id, revision, op)?;
     Ok(())
 }
 pub(super) fn count(

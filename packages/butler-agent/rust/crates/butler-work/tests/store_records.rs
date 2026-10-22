@@ -7,7 +7,7 @@ use store_support::*;
 #[test]
 fn plan_work_spec_cas_and_immutable_publication() {
     let mut db = db();
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     let mut fields = PlanFields {
         title: "plan".into(),
         description: "description".into(),
@@ -100,7 +100,7 @@ fn home_rank_and_private_creation_have_typed_rules() {
     let mut db = db();
     work(&mut db, "a");
     work(&mut db, "b");
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     assign_home(&tx, &context(), "a", 0, Some("home")).unwrap();
     assert!(matches!(
         assign_home(&tx, &context(), "b", 0, Some("home")),
@@ -127,7 +127,7 @@ fn home_rank_and_private_creation_have_typed_rules() {
 #[test]
 fn intent_replay_skips_domain_change_and_preserves_original_payload() {
     let mut db = db();
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     let first = with_intent(
         &tx,
         &context(),
@@ -156,7 +156,7 @@ fn intent_replay_skips_domain_change_and_preserves_original_payload() {
 #[test]
 fn boot_marker_distinguishes_first_clean_and_crash_and_fences_old_boot() {
     let mut db = db();
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     assert_eq!(
         begin_boot(&tx, &context(), "first").unwrap(),
         PreviousShutdown::FirstBoot
@@ -234,7 +234,7 @@ fn every_store_statement_has_an_indexed_query_plan() {
 #[test]
 fn epic_creation_records_fields_without_a_synthetic_edit() {
     let mut db = store_support::db();
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     let epic = write_api(
         &tx,
         &context(),

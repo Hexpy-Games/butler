@@ -37,10 +37,7 @@ fn connection(path: &std::path::Path) -> Connection {
 }
 fn race(
     db: &Database,
-    operation: impl Fn(&rusqlite::Transaction<'_>, usize) -> Result<serde_json::Value>
-    + Send
-    + Sync
-    + 'static,
+    operation: impl Fn(&Transaction<'_>, usize) -> Result<serde_json::Value> + Send + Sync + 'static,
 ) -> Vec<Result<serde_json::Value>> {
     let barrier = Arc::new(Barrier::new(2));
     let operation = Arc::new(operation);
@@ -52,9 +49,11 @@ fn race(
             thread::spawn(move || {
                 let mut db = connection(&path);
                 barrier.wait();
-                let tx = db
-                    .transaction_with_behavior(TransactionBehavior::Immediate)
-                    .unwrap();
+                let tx = Transaction::new(
+                    db.transaction_with_behavior(TransactionBehavior::Immediate)
+                        .unwrap(),
+                )
+                .unwrap();
                 let result = operation(&tx, i);
                 if result.is_ok() {
                     tx.commit().unwrap();
@@ -133,9 +132,11 @@ fn queue_edit_and_completion_serialize_in_both_orders_without_stale_edges() {
 
         let first = thread::spawn(move || {
             let mut db = connection(&path);
-            let tx = db
-                .transaction_with_behavior(TransactionBehavior::Immediate)
-                .unwrap();
+            let tx = Transaction::new(
+                db.transaction_with_behavior(TransactionBehavior::Immediate)
+                    .unwrap(),
+            )
+            .unwrap();
             if completion_first {
                 transition(
                     &tx,
@@ -168,9 +169,11 @@ fn queue_edit_and_completion_serialize_in_both_orders_without_stale_edges() {
         let second = thread::spawn(move || {
             let mut db = connection(&path);
             committed_rx.recv().unwrap();
-            let tx = db
-                .transaction_with_behavior(TransactionBehavior::Immediate)
-                .unwrap();
+            let tx = Transaction::new(
+                db.transaction_with_behavior(TransactionBehavior::Immediate)
+                    .unwrap(),
+            )
+            .unwrap();
             if completion_first {
                 edit_queue(
                     &tx,
