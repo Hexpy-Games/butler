@@ -18,12 +18,17 @@ pub fn admit(tx: &Transaction<'_>, ctx: &Context, input: &Instruction<'_>) -> Re
             "instruction mode and idempotency key required",
         ));
     }
-    let content = json!({"target":input.target,"sender":input.sender,"mode":input.mode,
-        "body":input.body,"anchor_task":input.anchor_task,
-        "control_epoch":input.expected_control_epoch + 1});
+    let mut content = json!({"target":input.target,"sender":input.sender,"mode":input.mode,
+        "body":input.body,"anchor_task":input.anchor_task});
     match one(tx, sql::CONTROL_KEY, [input.idempotency_key]) {
         Ok(row) => {
-            if tool_read::body(tx, text(&row, "body_ref")?)? != content.to_string() {
+            let mut stored: Value =
+                serde_json::from_str(&tool_read::body(tx, text(&row, "body_ref")?)?)?;
+            stored
+                .as_object_mut()
+                .ok_or(Error::Invalid("instruction content"))?
+                .remove("control_epoch");
+            if stored != content {
                 return Err(Error::Invalid("idempotency_conflict"));
             }
             return receipt(tx, row);
@@ -32,6 +37,7 @@ pub fn admit(tx: &Transaction<'_>, ctx: &Context, input: &Instruction<'_>) -> Re
         Err(error) => return Err(error),
     }
     advance_epoch(tx, input.target, input.expected_control_epoch)?;
+    content["control_epoch"] = json!(input.expected_control_epoch + 1);
     persist_instruction(tx, ctx, input, &content)
 }
 

@@ -164,6 +164,16 @@ fn intent_replay_skips_domain_change_and_preserves_original_payload() {
     let receipt = control::admit(&tx, &context(), &input).unwrap();
     assert_eq!(receipt["control_epoch"], 1);
     assert_eq!(control::admit(&tx, &context(), &input).unwrap(), receipt);
+    let refreshed = control::Instruction {
+        expected_control_epoch: 1,
+        sender: input.sender.clone(),
+        body: input.body.clone(),
+        ..input
+    };
+    assert_eq!(
+        control::admit(&tx, &context(), &refreshed).unwrap(),
+        receipt
+    );
     let changed = control::Instruction {
         body: json!({"text":"different"}),
         ..input
