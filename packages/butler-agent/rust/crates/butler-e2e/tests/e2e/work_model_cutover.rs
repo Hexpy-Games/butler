@@ -186,7 +186,13 @@ async fn wmu_12_automatic_upgrade_is_private_idle_and_idempotent() -> Result<(),
         .len(),
         7
     );
-    assert!(rows(&db, "SELECT name FROM sqlite_schema WHERE type='trigger' AND name IN ('task_graph_turn_insert','task_graph_turn_update')")?.is_empty());
+    assert_eq!(
+        rows(
+            &db,
+            "SELECT name FROM sqlite_schema WHERE type='trigger' AND name IN ('task_graph_turn_insert','task_graph_turn_update')"
+        )?,
+        Vec::<String>::new()
+    );
     assert_eq!(std::fs::read_dir(backups)?.count(), 1);
     s.finish().await
 }
@@ -226,7 +232,7 @@ async fn backup_failure_is_visible_and_retried_on_restart() -> Result<(), Harnes
     assert_eq!(failed["failure_code"], "copy");
     let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
     let db = Connection::open(&path)?;
-    assert!(rows(&db, "SELECT id FROM wm_works")?.is_empty());
+    assert_eq!(rows(&db, "SELECT id FROM wm_works")?, Vec::<String>::new());
     assert_eq!(rows(&db, "SELECT work_id FROM btcc_guided_works")?.len(), 3);
     drop(db);
     s.agent.terminate().await?;
