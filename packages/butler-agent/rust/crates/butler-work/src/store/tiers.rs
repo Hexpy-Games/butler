@@ -56,7 +56,10 @@ pub fn check_floor(
         Some(id) => db.query_row(sql::FLOOR_COUNT, [id], |r| r.get(0))?,
         None => 0,
     };
-    if tier < 2 && (facts.requires_full() || count.saturating_add(added as i64) > 5) {
+    if tier < 2
+        && (facts.requires_full()
+            || count.saturating_add(i64::try_from(added).unwrap_or(i64::MAX)) > 5)
+    {
         return Err(Error::Invalid(
             "Tier 2 required: escalate, publish Spec detail, and retry in this round; preserve the existing Work and Task identities",
         ));

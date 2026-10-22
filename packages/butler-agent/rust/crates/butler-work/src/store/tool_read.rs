@@ -84,33 +84,30 @@ pub fn read(
         ),
         None => tier,
     };
-    if matches!(input.view, View::Operations) {
-        return Ok(
-            json!({"ok":true,"operations":operations(tier, planning, work.is_some()),"work":work,"remaining":0}),
-        );
-    }
-    let Some(work) = work else {
-        return Ok(json!({"ok":true,"work":null,"remaining":0}));
-    };
-    let id = text(&work, "id")?;
-    let view = match input.view {
-        View::Summary => summary(db, &work)?,
-        View::Tasks => api::queue(db, id)?,
-        View::Task => task(
+    let graph = work
+        .as_ref()
+        .map(|work| work["task_graph_revision"].clone());
+    let view = match (&work, input.view) {
+        (_, View::Operations) => {
+            return Ok(json!({"ok":true,
+            "operations":operations(tier,planning,work.is_some()),"work":work,"remaining":0}));
+        }
+        (None, _) => return Ok(json!({"ok":true,"work":null,"remaining":0})),
+        (Some(work), View::Summary) => summary(db, work)?,
+        (Some(work), View::Tasks) => api::queue(db, text(work, "id")?)?,
+        (Some(work), View::Task) => task(
             db,
-            id,
+            text(work, "id")?,
             input
                 .task_id
                 .as_deref()
                 .ok_or(Error::Invalid("task_id required for view=task"))?,
         )?,
-        View::Spec | View::Coverage => spec(db, &work, input)?,
-        View::Operations => unreachable!(),
+        (Some(work), View::Spec | View::Coverage) => spec(db, work, input)?,
     };
-    Ok(
-        json!({"ok":true,"view":view,"task_graph_revision":work["task_graph_revision"],"remaining":0}),
-    )
+    Ok(json!({"ok":true,"view":view,"task_graph_revision":graph,"remaining":0}))
 }
+
 fn summary(db: &Connection, work: &Value) -> Result<Value> {
     let counts = db
         .prepare(crate::work_queries::Query::TaskProgress.sql())?
@@ -178,13 +175,7 @@ fn body(db: &Connection, hash: &str) -> Result<String> {
 
 pub fn operations(tier: u8, planning: bool, bound: bool) -> Value {
     let mut available = Vec::new();
-    if !bound {
-        available.push("work.create_light");
-        available.push("task.start");
-        if tier == 2 {
-            available.extend(["spec.propose", "spec.activate"]);
-        }
-    } else {
+    if bound {
         available.extend([
             "task.add",
             "task.edit",
@@ -210,6 +201,12 @@ pub fn operations(tier: u8, planning: bool, bound: bool) -> Value {
                 "task.block",
                 "task.fail",
             ]);
+        }
+    } else {
+        available.push("work.create_light");
+        available.push("task.start");
+        if tier == 2 {
+            available.extend(["spec.propose", "spec.activate"]);
         }
     }
     json!({"available":available,"unavailable_reason":if planning {"Execution is hidden during planning."} else if tier < 2 {"Delegation and full Spec authoring require Tier 2."} else {"Only in-scope variants are permitted."}})
