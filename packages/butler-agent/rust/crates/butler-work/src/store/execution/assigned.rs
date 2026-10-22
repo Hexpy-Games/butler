@@ -36,6 +36,7 @@ pub fn assign_part(
     tx.execute(sql::PART_STATE, params![part, "running", child.session_id])?;
     refresh_parts_phase(tx, ctx, task)?;
     insert_attempt(tx, ctx, task, Some(part), child, attempt)?;
+    tx.execute(sql::REGISTER_REPORT, params![attempt, task, parent_session])?;
     event(tx, ctx, "part", part, expected + 1, "assign")?;
     Ok(json!({"part":parts::read_part(tx,part)?,"attempt_id":attempt}))
 }

@@ -1,5 +1,7 @@
 //! Task and part leases. The writer lane owns the enclosing transaction.
 mod assigned;
+mod delivery;
+pub use delivery::*;
 mod review;
 pub use assigned::*;
 pub mod sql;

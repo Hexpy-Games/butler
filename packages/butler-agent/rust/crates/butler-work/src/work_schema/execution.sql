@@ -45,3 +45,13 @@ CREATE TABLE IF NOT EXISTS wm_runtime_marker (
   started_at INTEGER NOT NULL,
   clean_shutdown_at INTEGER
 );
+
+CREATE TABLE IF NOT EXISTS wm_delegation_reports (
+  attempt_id TEXT PRIMARY KEY NOT NULL REFERENCES wm_attempts(id),
+  task_id TEXT NOT NULL REFERENCES wm_tasks(id),
+  parent_session_id TEXT NOT NULL,
+  delivered_at INTEGER,
+  delivery_ended_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS wm_delegation_reports_pending ON wm_delegation_reports(task_id)
+  WHERE delivered_at IS NULL OR delivery_ended_at IS NULL;

@@ -15,6 +15,10 @@ PART_STATE = "UPDATE wm_task_parts SET status=?2,assignee_session_id=coalesce(?3
 REMOVE_PART_EDGES = "DELETE FROM wm_task_part_edges WHERE task_id=?1 AND (pred=?2 OR succ=?2)";
 REMOVE_PART_PREDS = "DELETE FROM wm_task_part_edges WHERE task_id=?1 AND succ=?2";
 INSERT_PART_EDGE = "INSERT INTO wm_task_part_edges(task_id,pred,succ) VALUES(?1,?2,?3)";
+REGISTER_REPORT = "INSERT INTO wm_delegation_reports(attempt_id,task_id,parent_session_id) VALUES(?1,?2,?3)";
+PENDING_REPORT = "SELECT attempt_id FROM wm_delegation_reports WHERE task_id=?1 AND (delivered_at IS NULL OR delivery_ended_at IS NULL) LIMIT 1";
+DELIVER_REPORT = "UPDATE wm_delegation_reports SET delivered_at=coalesce(delivered_at,?2) WHERE attempt_id=?1 RETURNING task_id";
+END_REPORT = "UPDATE wm_delegation_reports SET delivery_ended_at=coalesce(delivery_ended_at,?3) WHERE attempt_id=?1 AND parent_session_id=?2 RETURNING task_id";
 DELEGATED_PART = "SELECT id FROM wm_task_parts WHERE task_id=?1 AND assignee_session_id IS NOT NULL AND assignee_session_id<>?2 LIMIT 1";
 TASK_OWNER = "UPDATE wm_tasks SET assignee_session_id=?2 WHERE id=?1";
 TASK_REASON = "UPDATE wm_tasks SET blocked_reason=?2 WHERE id=?1";

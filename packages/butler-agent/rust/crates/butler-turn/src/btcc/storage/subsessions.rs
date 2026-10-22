@@ -394,7 +394,15 @@ impl SqliteSubsessionRepository {
 
     /// Marks a child result delivered.
     pub async fn mark_delivered(&self, result: String, now: String) -> Result<(), StorageError> {
-        self.storage.execute(move|db| { db.execute("UPDATE btcc_subsession_outbox SET status='delivered',delivered_at=?2 WHERE result_id=?1 AND status='pending'",params![result,now]).map_err(StorageError::sqlite)?; Ok(()) }).await
+        self.storage.work_model_write(move |tx| {
+            tx.execute("UPDATE btcc_subsession_outbox SET status='delivered',delivered_at=?2 WHERE result_id=?1 AND status='pending'",params![result,now])?;
+            if let Some(attempt) = result.strip_prefix("result-") {
+                butler_work::store::deliver_delegated_result(tx, &butler_work::store::Context {
+                    now: chrono::Utc::now().timestamp_millis(), actor: serde_json::json!({"runtime":"delivery"}),
+                }, attempt)?;
+            }
+            Ok(())
+        }).await
     }
 }
 

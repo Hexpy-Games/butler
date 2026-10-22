@@ -32,18 +32,22 @@ pub(super) async fn deliver(
         delivered += 1;
         final_delivered |= final_action;
     }
-    if final_delivered
-        && eligible.is_some()
-        && let Some(context) = envelope.execution_controls.as_ref()
-        && let Some(result) = context
-            .verify()
+    if final_delivered && eligible.is_some() {
+        let result = envelope
+            .execution_controls
+            .as_ref()
+            .map(|controls| controls.verify())
+            .transpose()
             .map_err(|error| {
                 super::super::IngressError::new("subsession_report_context_invalid", error.code())
             })?
-            .subsession_result
-    {
+            .and_then(|controls| controls.subsession_result);
+        let identity = result
+            .as_ref()
+            .map(|result| result.result_id.as_str())
+            .unwrap_or(&envelope.message.id);
         subsessions
-            .report_delivered(&result.relation_id)
+            .report_parent_turn(&binding.session_id, identity)
             .await
             .map_err(|error| {
                 super::super::IngressError::new("subsession_report_commit_failed", error.code())

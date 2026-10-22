@@ -22,7 +22,7 @@ pub use control::{
 pub use execution::sql as execution_sql;
 pub use execution::{
     ExecutionScope, Submission, assign_part, assign_task, block_task, fail_part, fail_task,
-    report_task, start_task, submit_task,
+    report_task, start_task, submit_task, deliver_delegated_result, end_delegated_delivery,
 };
 pub use parts::{NewPart, add_part, read_part};
 mod holds;

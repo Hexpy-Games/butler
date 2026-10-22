@@ -120,12 +120,7 @@ pub fn complete_task(
         params![id, "succeeded", ctx.now, Option::<&str>::None],
     )?;
     tx.execute(sql::TASK_COMPLETION, params![id, revision(&task)?])?;
-    let reported = reported
-        && match one(tx, sql::DELEGATED_PART, params![id, session]) {
-            Err(Error::NotFound) => true,
-            Ok(_) => false,
-            Err(error) => return Err(error),
-        };
+    let reported = reported && !has_pending_reports(tx, id)?;
     transition(
         tx,
         ctx,

@@ -16,6 +16,8 @@ pub(super) const QUEUED: &str = "Acknowledge this after the delegated result.";
 pub(super) const SECOND: &str = "Start the next verification Task after the completed feature.";
 pub(super) const EDIT: &str =
     "Apply the approved criterion correction and preserve the completed work.";
+pub(super) const LATER: &str = "Review and complete the previously delivered result.";
+pub(super) const DEFERRED: &str = "The child result has arrived for later review.";
 pub(super) const RESULT: &str = "The delegated marker feature is verified.";
 pub(super) const QUEUED_REPLY: &str = "The later request is acknowledged.";
 
@@ -27,6 +29,7 @@ pub(super) struct Script {
     pub report_held: Notify,
     pub release_report: Notify,
     pub hold_report: AtomicBool,
+    pub defer_review: AtomicBool,
 }
 impl Default for Script {
     fn default() -> Self {
@@ -38,6 +41,7 @@ impl Default for Script {
             report_held: Notify::new(),
             release_report: Notify::new(),
             hold_report: AtomicBool::new(true),
+            defer_review: AtomicBool::new(false),
         }
     }
 }
@@ -84,8 +88,12 @@ async fn reply(
         second(step, &body)
     } else if request == EDIT {
         edit(step, &body)
+    } else if request == LATER {
+        result(step, &body, request)
     } else if request == QUEUED {
         message(QUEUED_REPLY)
+    } else if request.contains("Delegated result") && script.defer_review.load(Ordering::SeqCst) {
+        message(DEFERRED)
     } else if request.contains("Delegated result") {
         result(step, &body, request)
     } else {

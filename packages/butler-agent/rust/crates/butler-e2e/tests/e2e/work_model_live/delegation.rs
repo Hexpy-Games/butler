@@ -272,3 +272,25 @@ async fn wait_message(s: &Scenario, text: &str) -> Result<(), HarnessError> {
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
 }
+
+#[tokio::test]
+async fn delivered_child_result_can_be_reviewed_in_a_later_turn() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, assigned) = start("WMU-LATER-REVIEW", false).await?;
+    script.defer_review.store(true, Ordering::SeqCst);
+    script.release_child.notify_one();
+    wait_message(&s, stub::DEFERRED).await?;
+    s.turn("general", stub::LATER).await?;
+    let row = task(&s, &assigned["task"]).await?;
+    assert_eq!(row["status"], "completed", "{row}");
+    assert!(
+        !row["reported"].is_null(),
+        "delivered result must release its following step: {row}"
+    );
+    s.turn("general", stub::QUEUED).await?;
+    wait_message(&s, stub::QUEUED_REPLY).await?;
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+

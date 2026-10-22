@@ -138,24 +138,26 @@ impl SubsessionService {
         }
         self.deliver_worker_results().await
     }
-    /// W-C: the parent's delivered answer releases the completed Task's barrier.
-    pub async fn report_delivered(&self, relation_id: &str) -> Result<(), BtccError> {
-        let Some(crate::btcc::Child::Assigned(child)) = self
-            .repository
-            .relation_by_id(relation_id.into())
-            .await
-            .map_err(BtccError::from)?
-        else {
+    /// W-C applies to every result-carrying turn, including the Steward queue.
+    pub async fn report_parent_turn(&self, session: &str, message: &str) -> Result<(), BtccError> {
+        let result = message
+            .strip_prefix("subsession-result-message:")
+            .or_else(|| message.strip_prefix("worker-result-message:"))
+            .or_else(|| message.starts_with("result-").then_some(message));
+        let Some(attempt) = result.and_then(|result| result.strip_prefix("result-")) else {
             return Ok(());
         };
+        let attempt = attempt.to_owned();
+        let session = session.to_owned();
         self.repository
             .storage()
             .work_model_write(move |tx| {
-                let task = butler_work::store::read_task(tx, &child.task_id)?;
-                if at(&task, "/status") == "completed" {
-                    butler_work::store::report_task(tx, &admission::context(), &child.task_id)?;
-                }
-                Ok(())
+                butler_work::store::end_delegated_delivery(
+                    tx,
+                    &admission::context(),
+                    &attempt,
+                    &session,
+                )
             })
             .await
             .map_err(BtccError::from)
