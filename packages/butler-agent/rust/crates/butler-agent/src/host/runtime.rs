@@ -57,6 +57,7 @@ pub(crate) use contracts::{AgentRuntime, RuntimePaths};
 use owners::RuntimeOwners;
 use std::path::PathBuf;
 use std::sync::Arc;
+#[cfg(test)]
 pub(super) use subsession_queue::SubsessionQueue;
 impl AgentRuntime {
     pub(crate) async fn open(
@@ -268,7 +269,7 @@ impl AgentRuntime {
         let (subsessions, usage_lineage, inbound_queue) = monitoring::session_usage_services(
             &stores,
             &paths.data_root,
-            worker_profiles,
+            (worker_profiles, app_endpoint.clone()),
             work_service.clone(),
             &work_cutover,
         )

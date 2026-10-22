@@ -1,4 +1,6 @@
 //! Shared native queue adapter for BTCC child dispatch and recovery facts.
+mod replay;
+pub(super) use replay::AppSubsessionQueue;
 
 use std::sync::Arc;
 
@@ -20,38 +22,6 @@ impl SubsessionChildQueue for SubsessionQueue {
             .enqueue_idempotent_with_metadata(document, input.metadata)
             .map(|_| ())
             .map_err(queue_error)
-    }
-
-    fn replay_kept_request(&self, event_id: &str, receipt_id: &str) -> Result<(), BtccError> {
-        let lookup = JsonDocument::from_value(&json!({"eventId":event_id}))
-            .map_err(|e| invalid().with_source(e))?;
-        let original = self
-            .0
-            .find_idempotent(&lookup)
-            .map_err(queue_error)?
-            .ok_or_else(invalid)?;
-        let mut envelope: Value = original
-            .envelope
-            .read()
-            .map_err(|e| invalid().with_source(e))?;
-        let turn = format!("cutover-turn:{receipt_id}");
-        let event = format!("cutover-replay:{receipt_id}");
-        let message = format!("cutover-message:{receipt_id}");
-        envelope["eventId"] = json!(event);
-        envelope["message"]["id"] = json!(message);
-        envelope["routingHints"] =
-            json!({"sessionId":envelope["routingHints"]["sessionId"],"turnId":turn});
-        if let Some(controls) = envelope.get("executionControls").filter(|v| !v.is_null()) {
-            let controls: butler_turn::btcc::ExecutionControls =
-                serde_json::from_value(controls.clone()).map_err(|e| invalid().with_source(e))?;
-            envelope["executionControls"] = json!(controls.for_kept_request(&turn)?);
-            envelope["appTurnContext"]["conversation"]["turnId"] = json!(turn);
-            envelope["appTurnContext"]["conversation"]["userMessageId"] = json!(message);
-        }
-        self.enqueue(SubsessionEnqueue {
-            envelope,
-            metadata: serde_json::Map::new(),
-        })
     }
 
     fn interrupted_event(

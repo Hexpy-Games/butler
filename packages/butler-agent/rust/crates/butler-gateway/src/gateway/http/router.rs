@@ -24,6 +24,7 @@ pub(super) enum Handler {
     Health,
     InternalSessionBranches,
     InternalSubsessionResult,
+    InternalCutoverReplay,
     Messages,
     NewChatBriefing,
     ProjectSessions,
@@ -148,6 +149,10 @@ const ROUTES: &[(&str, Handler)] = &[
     (
         "/internal/subsession-result",
         Handler::InternalSubsessionResult,
+    ),
+    (
+        "/internal/work-cutover-replay",
+        Handler::InternalCutoverReplay,
     ),
     ("/internal/wallpaper", Handler::Wallpapers),
     ("/internal/wallpaper-modules", Handler::Wallpapers),

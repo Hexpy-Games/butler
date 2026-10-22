@@ -18,7 +18,10 @@ impl SubsessionService {
                 .state
                 == CutoverState::Done
             {
-                self.replay_ready_requests().await?;
+                tokio::select! {
+                    () = stop.cancelled() => return Ok(()),
+                    result = self.replay_ready_requests() => result?,
+                }
             }
             tokio::select! {
                 ()=stop.cancelled()=>return Ok(()),
@@ -46,11 +49,9 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?;
         for (op, revision, instruction, event) in pending {
-            let queue = self.queue.clone();
-            let receipt = instruction.clone();
-            tokio::task::spawn_blocking(move || queue.replay_kept_request(&event, &receipt))
-                .await
-                .map_err(|e| error(BtccCode::SubsessionPersistFailed).with_source(e))??;
+            self.queue
+                .replay_kept_request(event, instruction.clone())
+                .await?;
             storage
                 .work_model_write(move |tx| {
                     store::deliver_instruction(

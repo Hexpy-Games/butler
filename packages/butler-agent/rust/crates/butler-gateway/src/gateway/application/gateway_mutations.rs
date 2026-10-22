@@ -2,6 +2,15 @@ use super::*;
 use crate::gateway::GatewayMutationCommands;
 
 impl GatewayMutationCommands for AppApplication {
+    fn replay_kept_request(
+        &self,
+        chat: String,
+        source: String,
+        receipt: String,
+    ) -> ApplicationFuture<()> {
+        let this = self.clone_handle();
+        Box::pin(async move { this.replay_kept_request_owned(chat, source, receipt).await })
+    }
     fn automation_run_attention(
         &self,
         id: String,

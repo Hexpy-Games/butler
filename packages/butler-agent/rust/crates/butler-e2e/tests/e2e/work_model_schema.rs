@@ -145,7 +145,8 @@ async fn fresh_and_populated_schema_survive_restart() -> Result<(), HarnessError
     let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
     let db = Connection::open(&path)?;
     let fresh = snapshot(&db)?;
-    assert_eq!(fresh.len(), 27);
+    assert_eq!(fresh.len(), 28);
+    assert!(fresh["wm_delegation_reports"].is_empty());
     assert_eq!(fresh["wm_cutover_inventory"].len(), 1);
     let inventory = butler_work::cutover::Inventory::load(&db)?.unwrap();
     assert_eq!(inventory.observations, Vec::<serde_json::Value>::new());

@@ -40,6 +40,7 @@ mod router;
 pub(crate) use router::templates as route_templates;
 mod security;
 pub(super) use security::RequestPolicy;
+mod cutover_replay;
 mod security_settings;
 mod session_branches;
 mod session_controls;
@@ -308,6 +309,9 @@ async fn route(
         (Method::GET, router::Handler::Skills) => skills::get(state).await,
         (Method::POST, router::Handler::SkillsImport) => skills::import(state, request).await,
         (Method::POST, router::Handler::Messages) => post_message(state, request).await,
+        (Method::POST, router::Handler::InternalCutoverReplay) => {
+            cutover_replay::post(state, request).await
+        }
         (Method::POST, router::Handler::InternalSubsessionResult) => {
             subsession_result::post(state, request).await
         }

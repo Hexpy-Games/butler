@@ -35,7 +35,10 @@ pub(super) fn open(
 pub(super) async fn session_usage_services(
     stores: &super::stores::RuntimeStores,
     data_root: &Path,
-    profiles: Arc<dyn butler_turn::btcc::WorkerProfileReader>,
+    (profiles, endpoint): (
+        Arc<dyn butler_turn::btcc::WorkerProfileReader>,
+        Arc<crate::host::ActiveAppEndpoint>,
+    ),
     work: Arc<butler_turn::btcc::DurableWorkService>,
     cutover: &super::work_cutover::CutoverOwner,
 ) -> Result<
@@ -54,7 +57,10 @@ pub(super) async fn session_usage_services(
     let subsessions = Arc::new(butler_turn::btcc::SubsessionService::new(
         repository,
         stores.bindings.clone(),
-        Arc::new(super::SubsessionQueue(queue.clone())),
+        Arc::new(super::subsession_queue::AppSubsessionQueue::new(
+            queue.clone(),
+            endpoint,
+        )?),
         profiles,
         work,
         Arc::new(|| {

@@ -56,11 +56,13 @@ pub trait SubsessionChildQueue: Send + Sync {
     /// Enqueues a child envelope.
     fn enqueue(&self, input: SubsessionEnqueue) -> Result<(), BtccError>;
     /// Replay a durable managed request with its original authority and context.
-    fn replay_kept_request(&self, _event_id: &str, _receipt_id: &str) -> Result<(), BtccError> {
-        Err(BtccError::relayed(
-            "managed_replay_unavailable",
-            "Managed request replay is unavailable",
-        ))
+    fn replay_kept_request(&self, _event_id: String, _receipt_id: String) -> PortFuture<'_, ()> {
+        Box::pin(async {
+            Err(BtccError::relayed(
+                "managed_replay_unavailable",
+                "Managed request replay is unavailable",
+            ))
+        })
     }
     /// The interrupted event of a child turn, if its dispatch was interrupted.
     fn interrupted_event(

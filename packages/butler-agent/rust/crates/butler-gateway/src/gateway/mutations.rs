@@ -3,6 +3,14 @@
 use super::*;
 
 pub trait GatewayMutationCommands: Send + Sync + 'static {
+    fn replay_kept_request(
+        &self,
+        _chat: String,
+        _source: String,
+        _receipt: String,
+    ) -> ApplicationFuture<()> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     /// An unattended schedule run skipped a step that needs permission (D8).
     fn automation_run_attention(
         &self,

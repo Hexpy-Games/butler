@@ -59,6 +59,7 @@ mod projects;
 mod question_followup;
 mod queue;
 mod queue_dispatcher;
+mod queue_replay;
 mod queue_view;
 mod quota_events;
 mod read_model;
