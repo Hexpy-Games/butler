@@ -81,8 +81,8 @@ pub trait PromptPort: Send + Sync {
         _invocation: GuidedInvocation<'a>,
         _instructions: &'a mut Option<String>,
         _cache_prefix: &'a mut Option<serde_json::Value>,
-    ) -> PortFuture<'a, ()> {
-        Box::pin(async { Ok(()) })
+    ) -> PortFuture<'a, bool> {
+        Box::pin(async { Ok(false) })
     }
 
     /// Renders the prompt, instructions, tools and request options.

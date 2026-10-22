@@ -81,7 +81,7 @@ impl GuidedPolicyPort for GuidedPolicy {
         &'a self,
         invocation: GuidedInvocation<'a>,
         prepared: &'a mut PreparedPolicy,
-    ) -> PortFuture<'a, ()> {
+    ) -> PortFuture<'a, bool> {
         self.dependencies.prompt.refresh_instructions(
             invocation,
             &mut prepared.instructions,

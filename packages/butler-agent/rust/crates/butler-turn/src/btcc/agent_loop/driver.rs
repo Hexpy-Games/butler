@@ -159,11 +159,14 @@ async fn run_iteration(
     let resumed_batch = state.resumed_batch.take();
     if !state.is_replaying(resumed_batch.as_ref()) {
         observe_steering(input, state).await?;
-        input
+        if input
             .policy
             .refresh_instructions(GuidedInvocation::from(input), prepared)
             .await
-            .map_err(propagated)?;
+            .map_err(propagated)?
+        {
+            state.provider_continuation = None;
+        }
     }
     timing.mark("steering_done");
     let mut surface = match &resumed_batch {

@@ -346,13 +346,18 @@ impl PromptPort for GuidedPrompt {
         invocation: GuidedInvocation<'a>,
         instructions: &'a mut Option<String>,
         cache_prefix: &'a mut Option<Value>,
-    ) -> PortFuture<'a, ()> {
+    ) -> PortFuture<'a, bool> {
         Box::pin(async move {
             if let Some(instructions) = instructions {
-                work_tier::configure(&self.state, invocation.turn, instructions, cache_prefix)
-                    .await?;
+                return work_tier::configure(
+                    &self.state,
+                    invocation.turn,
+                    instructions,
+                    cache_prefix,
+                )
+                .await;
             }
-            Ok(())
+            Ok(false)
         })
     }
 

@@ -7,11 +7,11 @@ pub(super) async fn configure(
     turn: &TurnRecord,
     instructions: &mut String,
     cache_prefix: &mut Option<Value>,
-) -> Result<(), BtccError> {
+) -> Result<bool, BtccError> {
     if state.phase.execution_policy.role != PolicyRole::Butler
         || !instructions.contains(store::TIER_ONE)
     {
-        return Ok(());
+        return Ok(false);
     }
     let session = turn.session_id.clone();
     let tier2 = state
@@ -30,6 +30,7 @@ pub(super) async fn configure(
             prefix["instructionPrefix"] =
                 Value::String(text.replace(store::TIER_ONE, store::TIER_TWO));
         }
+        return Ok(true);
     }
-    Ok(())
+    Ok(false)
 }

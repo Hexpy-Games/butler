@@ -208,8 +208,8 @@ pub(crate) trait GuidedPolicyPort: Send + Sync {
         &'a self,
         _invocation: GuidedInvocation<'a>,
         _prepared: &'a mut PreparedPolicy,
-    ) -> PortFuture<'a, ()> {
-        Box::pin(async { Ok(()) })
+    ) -> PortFuture<'a, bool> {
+        Box::pin(async { Ok(false) })
     }
 
     fn before_model_round<'a>(
