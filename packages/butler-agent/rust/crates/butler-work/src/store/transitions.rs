@@ -1,34 +1,105 @@
 use super::*;
 use crate::work_types::*;
 use rusqlite::params;
-/// Runtime changes project onto canon labels only when the runtime state changes.
+
 pub fn runtime_label(state: RunState) -> Option<CanonStatus> {
     match state {
         RunState::Running => Some(CanonStatus::InProgress),
         RunState::InReview => Some(CanonStatus::InReview),
-        RunState::Blocked | RunState::Failed | RunState::Stopped | RunState::Held => {
-            Some(CanonStatus::Blocked)
-        }
+        RunState::Blocked | RunState::Failed | RunState::Stopped => Some(CanonStatus::Blocked),
         RunState::Done => Some(CanonStatus::Done),
         RunState::Cancelled => Some(CanonStatus::Cancelled),
-        RunState::Idle | RunState::Waiting | RunState::Paused => None,
+        RunState::Idle | RunState::Paused => None,
     }
 }
-#[allow(clippy::too_many_arguments, reason = "internal complete state update")]
+#[allow(clippy::too_many_arguments, reason = "complete Task state update")]
 pub(super) fn set_state(
     tx: &Transaction<'_>,
     ctx: &Context,
     id: &str,
-    state: RunState,
+    state: TaskStatus,
     hold: Option<(&str, &str)>,
     failure: Option<&str>,
-    label: Option<(CanonStatus, &str)>,
+    _label: Option<(CanonStatus, &str)>,
     reported: bool,
 ) -> Result<bool> {
+    let row = read_task(tx, id)?;
+    let result = if state == TaskStatus::Completed {
+        row["result_reported_at"]
+            .as_i64()
+            .or(reported.then_some(ctx.now))
+    } else {
+        None
+    };
+    let failure = if state == TaskStatus::Failed {
+        Some(failure.ok_or(Error::Invalid("failure reason required"))?)
+    } else {
+        None
+    };
+    let (reason, held_by) = hold.map_or((None, None), |(r, t)| (Some(r), Some(t)));
+    if row["status"] == state.as_str()
+        && row["result_reported_at"] == json!(result)
+        && row["failure_reason"] == json!(failure)
+        && row["hold_reason"] == json!(reason)
+        && row["held_by_task_id"] == json!(held_by)
+    {
+        return Ok(false);
+    }
+    let revision = row["revision"].as_i64().ok_or(Error::Invalid("revision"))?;
+    tx.execute(
+        sql::STATE,
+        params![
+            id,
+            state.as_str(),
+            reason,
+            held_by,
+            failure,
+            result,
+            ctx.now,
+            revision
+        ],
+    )?;
+    if state == TaskStatus::Cancelled {
+        tx.execute(sql::CANCEL_PARTS, [id])?;
+    }
+    event(tx, ctx, "task", id, revision + 1, "state")?;
+    // Entity progress alone does not invalidate a structure editor's token.
+    Ok(row["hold_reason"] != json!(reason) || row["held_by_task_id"] != json!(held_by))
+}
+/// Work runtime state is an aggregate; explicit terminal/control states win.
+pub(super) fn recompute_work(tx: &Transaction<'_>, ctx: &Context, id: &str) -> Result<()> {
     let row = read_work(tx, id)?;
-    let old = text(&row, "run_state")?;
-    ensure_work_counts(tx, (text(&row, "scope_kind")?, text(&row, "scope_ref")?))?;
-    let label = label.or_else(|| {
+    if matches!(
+        row["run_state"].as_str(),
+        Some("done" | "cancelled" | "paused" | "stopped")
+    ) {
+        return Ok(());
+    }
+    let states = rows(tx, crate::work_queries::Query::TaskProgress.sql(), [id])?;
+    let any = |status: &str| states.iter().any(|r| r["status"] == status);
+    let state = if any("running") {
+        RunState::Running
+    } else if any("in_review") {
+        RunState::InReview
+    } else if any("failed") {
+        RunState::Failed
+    } else if any("blocked") || any("held") || any("stopped") {
+        // A stopped Task maps the Work to blocked (§3.3).
+        RunState::Blocked
+    } else {
+        RunState::Idle
+    };
+    set_work_state(tx, ctx, &row, state, None)
+}
+fn set_work_state(
+    tx: &Transaction<'_>,
+    ctx: &Context,
+    row: &Value,
+    state: RunState,
+    label: Option<CanonStatus>,
+) -> Result<()> {
+    let old = text(row, "run_state")?;
+    let label = label.map(|s| (s, "person")).or_else(|| {
         (old != state.as_str() && row["visibility"] == "canon")
             .then(|| runtime_label(state).map(|s| (s, "runtime")))
             .flatten()
@@ -39,52 +110,32 @@ pub(super) fn set_state(
     let source = label
         .map(|(_, s)| s)
         .or(row["canon_status_source"].as_str());
-    let result = if state == RunState::Done {
-        row["result_reported_at"]
-            .as_i64()
-            .or(reported.then_some(ctx.now))
-    } else {
-        None
-    };
-    let failure = if state == RunState::Failed {
-        Some(failure.ok_or(Error::Invalid("failure reason required"))?)
-    } else {
-        None
-    };
-    let (reason, held_by) = hold.map_or((None, None), |(r, w)| (Some(r), Some(w)));
     if old == state.as_str()
-        && row["result_reported_at"] == json!(result)
         && row["canon_status"] == json!(status)
         && row["canon_status_source"] == json!(source)
-        && row["failure_reason"] == json!(failure)
-        && row["hold_reason"] == json!(reason)
-        && row["held_by_work_id"] == json!(held_by)
     {
-        return Ok(false);
+        return Ok(());
     }
-    let revision = row["revision"].as_i64().ok_or(Error::Invalid("revision"))?;
+    let id = text(row, "id")?;
+    let scope = (text(row, "scope_kind")?, text(row, "scope_ref")?);
+    ensure_work_counts(tx, scope)?;
+    let failure = (state == RunState::Failed).then_some("task_failed");
     tx.execute(
-        sql::STATE,
-        params![
-            id,
-            state.as_str(),
-            status,
-            source,
-            reason,
-            held_by,
-            failure,
-            result,
-            ctx.now,
-            revision
-        ],
+        sql::WORK_STATE,
+        params![id, state.as_str(), status, source, failure, ctx.now],
     )?;
     if old != state.as_str() {
-        let scope = (text(&row, "scope_kind")?, text(&row, "scope_ref")?);
         count(tx, scope, &format!("run_state:{old}"), -1)?;
         count(tx, scope, &format!("run_state:{}", state.as_str()), 1)?;
     }
-    event(tx, ctx, "work", id, revision + 1, "state")?;
-    Ok(true)
+    event(
+        tx,
+        ctx,
+        "work",
+        id,
+        row["revision"].as_i64().ok_or(Error::Invalid("revision"))? + 1,
+        "state",
+    )
 }
 #[allow(
     clippy::too_many_arguments,
@@ -95,30 +146,29 @@ pub fn transition(
     ctx: &Context,
     id: &str,
     expected_revision: i64,
-    state: RunState,
+    state: TaskStatus,
     result_reported: bool,
     failure_reason: Option<&str>,
 ) -> Result<Value> {
-    let row = read_work(tx, id)?;
+    let row = read_task(tx, id)?;
     cas(&row, "revision", expected_revision)?;
-    allowed_transition(text(&row, "run_state")?, state)?;
-    if result_reported && state != RunState::Done {
-        return Err(Error::Invalid("only done Works can report completion"));
+    allowed_transition(text(&row, "status")?, state)?;
+    if result_reported && state != TaskStatus::Completed {
+        return Err(Error::Invalid("only completed Tasks can report"));
     }
-    if state == RunState::Running && row["draft"] == 1 {
-        return Err(Error::Invalid("draft Work cannot start"));
+    let work = read_work(tx, text(&row, "work_id")?)?;
+    if matches!(work["run_state"].as_str(), Some("done" | "cancelled")) {
+        return Err(Error::Invalid("terminal Work"));
     }
-    if state == RunState::Running
-        && matches!(row["run_state"].as_str(), Some("idle" | "waiting"))
-        && let Some(chain_id) = row["chain_id"].as_str()
-        && !ready_works(tx, chain_id)?.iter().any(|work| work == id)
+    if state == TaskStatus::Running
+        && matches!(row["status"].as_str(), Some("pending" | "waiting"))
+        && !ready_tasks(tx, text(&row, "chain_id")?)?
+            .iter()
+            .any(|t| t == id)
     {
         return Err(Error::Invalid("predecessor barrier is not satisfied"));
     }
-    if state == RunState::Held {
-        return Err(Error::Invalid("held is derived from predecessor state"));
-    }
-    let changed = set_state(
+    let mut structure_changed = set_state(
         tx,
         ctx,
         id,
@@ -128,26 +178,30 @@ pub fn transition(
         None,
         result_reported,
     )?;
-    if changed && let Some(chain_id) = row["chain_id"].as_str() {
-        let old = load_chain(tx, chain_id)?;
-        if state == RunState::Cancelled {
-            leave_cancelled(tx, ctx, id, &old)?;
-        } else {
-            rederive_holds(tx, ctx, chain_id)?;
-            bump(tx, ctx, chain_id, old.graph_revision)?;
-        }
+    if row["chain_id"].is_null() {
+        return task_result(tx, id, None);
     }
-    work_result(tx, id, row["chain_id"].as_str())
+    let chain = load_chain(tx, text(&row, "chain_id")?)?;
+    structure_changed |= if state == TaskStatus::Cancelled {
+        leave_cancelled(tx, ctx, id, &chain)?
+    } else {
+        rederive_holds(tx, ctx, &chain.id)?
+    };
+    recompute_work(tx, ctx, &chain.work_id)?;
+    if structure_changed {
+        bump(tx, ctx, &chain.id, chain.graph_revision)?;
+    }
+    task_result(tx, id, row["chain_id"].as_str())
 }
 pub(super) fn leave_cancelled(
     tx: &Transaction<'_>,
     ctx: &Context,
     id: &str,
     old: &StoredChain,
-) -> Result<()> {
+) -> Result<bool> {
     let mut pins = running(&[old]);
-    pins.remove(&WorkId(id.into()));
-    let next = old.chain.delete(&WorkId(id.into()), &pins)?;
+    pins.remove(&TaskId(id.into()));
+    let next = old.chain.delete(&TaskId(id.into()), &pins)?;
     persist(tx, ctx, &[(old, &next)])
 }
 pub fn set_label(
@@ -157,7 +211,7 @@ pub fn set_label(
     expected_revision: i64,
     label: CanonStatus,
     person: &UserAct,
-    expected_graph_revision: Option<i64>,
+    expected_task_graph_revision: Option<i64>,
 ) -> Result<Value> {
     let row = read_work(tx, id)?;
     cas(&row, "revision", expected_revision)?;
@@ -169,16 +223,21 @@ pub fn set_label(
     {
         return Err(Error::Running);
     }
-    if matches!(label, CanonStatus::Done | CanonStatus::Cancelled)
-        && let Some(chain) = row["chain_id"].as_str()
-    {
+    let terminal = matches!(label, CanonStatus::Done | CanonStatus::Cancelled);
+    if terminal {
         cas(
-            &one(tx, sql::CHAIN, [chain])?,
-            "graph_revision",
-            expected_graph_revision.ok_or(Error::Invalid("graph revision required"))?,
+            &row,
+            "task_graph_revision",
+            expected_task_graph_revision.ok_or(Error::Invalid("task graph revision required"))?,
+        )?;
+        cancel_tasks(
+            tx,
+            ctx,
+            id,
+            &format!("marked {} by {}", label.as_str(), person.person()),
         )?;
     }
-    let current: RunState = text(&row, "run_state")?
+    let current = text(&row, "run_state")?
         .parse()
         .map_err(|_| Error::Invalid("run state"))?;
     let state = match label {
@@ -186,33 +245,18 @@ pub fn set_label(
         CanonStatus::Cancelled => RunState::Cancelled,
         _ => current,
     };
-    let hold = row["hold_reason"]
-        .as_str()
-        .zip(row["held_by_work_id"].as_str())
-        .filter(|_| state == RunState::Held);
-    let changed = set_state(
-        tx,
-        ctx,
-        id,
-        state,
-        hold,
-        row["failure_reason"].as_str(),
-        Some((label, "person")),
-        label == CanonStatus::Done,
-    )?;
-    if changed && label == CanonStatus::Done {
-        cancel_tasks(tx, ctx, id, &format!("marked done by {}", person.person()))?;
+    set_work_state(tx, ctx, &read_work(tx, id)?, state, Some(label))?;
+    if terminal {
+        super::queue::bump_work(
+            tx,
+            ctx,
+            id,
+            row["task_graph_revision"]
+                .as_i64()
+                .ok_or(Error::Invalid("revision"))?,
+        )?;
     }
-    if changed && let Some(chain_id) = row["chain_id"].as_str() {
-        let chain = load_chain(tx, chain_id)?;
-        if state == RunState::Cancelled {
-            leave_cancelled(tx, ctx, id, &chain)?;
-        } else {
-            rederive_holds(tx, ctx, chain_id)?;
-            bump(tx, ctx, chain_id, chain.graph_revision)?;
-        }
-    }
-    work_result(tx, id, row["chain_id"].as_str())
+    read_work(tx, id)
 }
 pub(super) fn cancel_tasks(
     tx: &Transaction<'_>,
@@ -221,21 +265,18 @@ pub(super) fn cancel_tasks(
     reason: &str,
 ) -> Result<()> {
     let tasks = rows(tx, sql::TASKS, [id])?;
-    for task in tasks {
+    for task in &tasks {
+        let task_id = text(task, "id")?;
         tx.execute(
             sql::CANCEL_TASK,
-            params![
-                text(&task, "id")?,
-                reason,
-                ctx.now,
-                task["revision"].as_i64()
-            ],
+            params![task_id, reason, ctx.now, task["revision"].as_i64()],
         )?;
+        tx.execute(sql::CANCEL_PARTS, [task_id])?;
         event(
             tx,
             ctx,
             "task",
-            text(&task, "id")?,
+            task_id,
             task["revision"]
                 .as_i64()
                 .ok_or(Error::Invalid("revision"))?
@@ -243,16 +284,26 @@ pub(super) fn cancel_tasks(
             "cancel",
         )?;
     }
+    let chains = rows(tx, api::sql::CHAINS, [id])?;
+    for chain in chains {
+        let old = load_chain(tx, text(&chain, "id")?)?;
+        let mut next = old.chain.clone();
+        for task in &tasks {
+            if task["chain_id"] == old.id {
+                next = next.delete(&TaskId(text(task, "id")?.into()), &Default::default())?;
+            }
+        }
+        persist(tx, ctx, &[(&old, &next)])?;
+    }
     Ok(())
 }
-/// Readiness is a projection only. It never starts a Work or bypasses drafts.
-pub fn ready_works(db: &Connection, chain_id: &str) -> Result<Vec<String>> {
+/// Projection only: drafts cannot pass admission and every predecessor must report.
+pub fn ready_tasks(db: &Connection, chain_id: &str) -> Result<Vec<String>> {
     let chain = load_chain(db, chain_id)?;
     let approvals = rows(db, sql::DECIDED_HOLDS, [chain_id])?;
     let mut ready = Vec::new();
     for member in &chain.members {
-        if member["draft"] != 0 || !matches!(member["run_state"].as_str(), Some("idle" | "waiting"))
-        {
+        if !matches!(member["status"].as_str(), Some("pending" | "waiting")) {
             continue;
         }
         let step = member["step_index"]
@@ -264,9 +315,8 @@ pub fn ready_works(db: &Connection, chain_id: &str) -> Result<Vec<String>> {
             .iter()
             .filter(|p| p["step_index"].as_i64() == step.checked_sub(1))
         {
-            let approved = approval_covers(&approvals, pred)?;
-            satisfied &=
-                (pred["run_state"] == "done" && !pred["result_reported_at"].is_null()) || approved;
+            satisfied &= (pred["status"] == "completed" && !pred["result_reported_at"].is_null())
+                || approval_covers(&approvals, pred)?;
         }
         if satisfied {
             ready.push(text(member, "id")?.into());
@@ -274,16 +324,16 @@ pub fn ready_works(db: &Connection, chain_id: &str) -> Result<Vec<String>> {
     }
     Ok(ready)
 }
-
-fn allowed_transition(from: &str, to: RunState) -> Result<()> {
-    use RunState::{
-        Blocked, Cancelled, Done, Failed, Held, Idle, InReview, Paused, Running, Stopped, Waiting,
+fn allowed_transition(from: &str, to: TaskStatus) -> Result<()> {
+    use TaskStatus::{
+        Blocked, Cancelled, Completed, Draft, Failed, Held, InReview, Paused, Pending, Running,
+        Stopped, Waiting,
     };
     let allowed: &[&str] = match to {
-        Idle => &["idle"],
-        Waiting => &[
-            "idle",
-            "waiting",
+        Draft | Held => &[],
+        Pending => &[
+            "draft",
+            "pending",
             "running",
             "in_review",
             "paused",
@@ -291,27 +341,29 @@ fn allowed_transition(from: &str, to: RunState) -> Result<()> {
             "stopped",
             "failed",
         ],
+        Waiting => &["draft", "waiting", "pending"],
         Running => &[
-            "idle", "waiting", "running", "failed", "stopped", "paused", "blocked",
+            "pending", "waiting", "running", "failed", "stopped", "paused", "blocked",
         ],
         InReview => &["running", "in_review"],
         Blocked => &["running", "in_review", "blocked"],
         Paused => &["running", "in_review", "blocked", "paused"],
         Failed => &["running", "in_review", "failed"],
         Stopped => &["running", "in_review", "paused", "blocked", "stopped"],
-        Done => &["running", "in_review", "done"],
+        Completed => &["running", "in_review", "completed"],
         Cancelled => &[
-            "idle",
+            "draft",
             "waiting",
+            "pending",
             "running",
             "in_review",
+            "held",
             "paused",
             "blocked",
             "failed",
             "stopped",
             "cancelled",
         ],
-        Held => &[],
     };
     if allowed.contains(&from) {
         Ok(())

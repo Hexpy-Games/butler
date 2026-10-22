@@ -37,10 +37,7 @@ fn connection(path: &std::path::Path) -> Connection {
 }
 fn race(
     db: &Database,
-    operation: impl Fn(&rusqlite::Transaction<'_>, usize) -> Result<serde_json::Value>
-    + Send
-    + Sync
-    + 'static,
+    operation: impl Fn(&Transaction<'_>, usize) -> Result<serde_json::Value> + Send + Sync + 'static,
 ) -> Vec<Result<serde_json::Value>> {
     let barrier = Arc::new(Barrier::new(2));
     let operation = Arc::new(operation);
@@ -52,9 +49,11 @@ fn race(
             thread::spawn(move || {
                 let mut db = connection(&path);
                 barrier.wait();
-                let tx = db
-                    .transaction_with_behavior(TransactionBehavior::Immediate)
-                    .unwrap();
+                let tx = Transaction::new(
+                    db.transaction_with_behavior(TransactionBehavior::Immediate)
+                        .unwrap(),
+                )
+                .unwrap();
                 let result = operation(&tx, i);
                 if result.is_ok() {
                     tx.commit().unwrap();
@@ -94,9 +93,9 @@ fn hold_final_admission_has_one_winner() {
     let file = Database::new();
     let mut db = file.open();
     queue(&mut db, &["a", "b", "c"]);
-    runtime(&mut db, "a", RunState::Failed, false);
+    runtime(&mut db, "a", TaskStatus::Failed, false);
     let row = undecided_holds(&db, "ch").unwrap().remove(0);
-    let expected = graph(&db, "ch");
+    let expected = graph(&db);
     drop(db);
     let id = row["id"].as_str().unwrap().to_owned();
     let results = race(&file, move |tx, i| {
@@ -114,7 +113,7 @@ fn hold_final_admission_has_one_winner() {
         )
     });
     assert_eq!(results.iter().filter(|r| r.is_ok()).count(), 1);
-    assert!(results.into_iter().any(|r|matches!(r,Err(Error::Conflict {current}) if current["revision"]==1 && !current["decision"].is_null())));
+    assert!(results.into_iter().any(|r|matches!(r,Err(Error::Conflict {current}) if current==serde_json::json!({"revision":graph(&file.open())}))));
 }
 // test-category: race
 #[test]
@@ -123,26 +122,28 @@ fn queue_edit_and_completion_serialize_in_both_orders_without_stale_edges() {
         let file = Database::new();
         let mut db = file.open();
         queue(&mut db, &["a", "b", "c"]);
-        runtime(&mut db, "a", RunState::Running, false);
-        let graph_revision = graph(&db, "ch");
-        let expected = member_revisions(&db, "ch");
+        runtime(&mut db, "a", TaskStatus::Running, false);
+        let graph_revision = graph(&db);
+
         let work_revision = revision(&db, "a");
         drop(db);
         let (committed_tx, committed_rx) = mpsc::channel();
         let path = file.0.clone();
-        let first_expected = expected.clone();
+
         let first = thread::spawn(move || {
             let mut db = connection(&path);
-            let tx = db
-                .transaction_with_behavior(TransactionBehavior::Immediate)
-                .unwrap();
+            let tx = Transaction::new(
+                db.transaction_with_behavior(TransactionBehavior::Immediate)
+                    .unwrap(),
+            )
+            .unwrap();
             if completion_first {
                 transition(
                     &tx,
                     &context(),
                     "a",
                     work_revision,
-                    RunState::Done,
+                    TaskStatus::Completed,
                     true,
                     None,
                 )
@@ -151,11 +152,11 @@ fn queue_edit_and_completion_serialize_in_both_orders_without_stale_edges() {
                 edit_queue(
                     &tx,
                     &context(),
-                    &[("ch".into(), graph_revision)],
-                    &first_expected,
+                    "work",
+                    graph_revision,
                     &[QueueEdit::MoveToNewStep {
                         chain_id: "ch".into(),
-                        work_id: "b".into(),
+                        task_id: "b".into(),
                         index: 2,
                     }],
                 )
@@ -168,28 +169,28 @@ fn queue_edit_and_completion_serialize_in_both_orders_without_stale_edges() {
         let second = thread::spawn(move || {
             let mut db = connection(&path);
             committed_rx.recv().unwrap();
-            let tx = db
-                .transaction_with_behavior(TransactionBehavior::Immediate)
-                .unwrap();
+            let tx = Transaction::new(
+                db.transaction_with_behavior(TransactionBehavior::Immediate)
+                    .unwrap(),
+            )
+            .unwrap();
             if completion_first {
-                assert!(matches!(
-                    edit_queue(
-                        &tx,
-                        &context(),
-                        &[("ch".into(), graph_revision)],
-                        &expected,
-                        &[QueueEdit::JoinStack {
-                            chain_id: "ch".into(),
-                            work_id: "b".into(),
-                            target: "c".into()
-                        }]
-                    ),
-                    Err(Error::Conflict { .. })
-                ));
-                tx.rollback().unwrap();
+                edit_queue(
+                    &tx,
+                    &context(),
+                    "work",
+                    graph_revision,
+                    &[QueueEdit::JoinStack {
+                        chain_id: "ch".into(),
+                        task_id: "b".into(),
+                        target: "c".into(),
+                    }],
+                )
+                .unwrap();
+                tx.commit().unwrap();
             } else {
                 assert_eq!(
-                    load_chain(&tx, "ch").unwrap().chain.steps[1].works[0].as_str(),
+                    load_chain(&tx, "ch").unwrap().chain.steps[1].tasks[0].as_str(),
                     "c"
                 );
                 transition(
@@ -197,7 +198,7 @@ fn queue_edit_and_completion_serialize_in_both_orders_without_stale_edges() {
                     &context(),
                     "a",
                     work_revision,
-                    RunState::Done,
+                    TaskStatus::Completed,
                     true,
                     None,
                 )
@@ -212,8 +213,14 @@ fn queue_edit_and_completion_serialize_in_both_orders_without_stale_edges() {
         chain.chain.validate().unwrap();
         let mut edges = chain.chain.edges().unwrap();
         edges.sort();
-        let stored=db.prepare("SELECT pred_work_id,succ_work_id FROM wm_work_edges WHERE chain_id=?1 ORDER BY pred_work_id,succ_work_id").unwrap().query_map(["ch"],|r|Ok((WorkId(r.get(0)?),WorkId(r.get(1)?)))).unwrap().collect::<rusqlite::Result<Vec<_>>>().unwrap();
+        let stored = db
+            .prepare("SELECT pred,succ FROM wm_task_edges WHERE chain_id=?1 ORDER BY pred,succ")
+            .unwrap()
+            .query_map(["ch"], |r| Ok((TaskId(r.get(0)?), TaskId(r.get(1)?))))
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
         assert_eq!(edges, stored);
-        assert_eq!(read_work(&db, "a").unwrap()["step_index"], 0);
+        assert_eq!(read_task(&db, "a").unwrap()["step_index"], 0);
     }
 }

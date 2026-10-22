@@ -19,7 +19,16 @@ async fn main() -> std::result::Result<(), Failure> {
     )?;
     config.path = path;
     let storage = BtccStorage::open(config).await?;
-    let result = exercise(&storage, id).await;
+    let result = if let Some(status) = std::env::args().nth(3) {
+        change_status(
+            &storage,
+            id,
+            status.parse().map_err(|_| "invalid task status")?,
+        )
+        .await
+    } else {
+        exercise(&storage, id).await
+    };
     storage.close().await?;
     result
 }
@@ -32,14 +41,14 @@ async fn exercise(storage: &BtccStorage, id: String) -> std::result::Result<(), 
                 now: 200,
                 actor: json!({"person":"companion"}),
             };
-            let row = read_work(tx, &work_id)?;
+            let row = read_task(tx, &work_id)?;
             let revision = row["revision"].as_i64().ok_or(Error::Invalid("revision"))?;
             transition(
                 tx,
                 &ctx,
                 &work_id,
                 revision,
-                RunState::Failed,
+                TaskStatus::Failed,
                 false,
                 Some("task_failed"),
             )
@@ -61,7 +70,7 @@ async fn exercise(storage: &BtccStorage, id: String) -> std::result::Result<(), 
                 now: 201,
                 actor: json!({"person":"companion"}),
             };
-            transition(tx, &ctx, &id, 0, RunState::Done, true, None)
+            transition(tx, &ctx, &id, 0, TaskStatus::Completed, true, None)
         })
         .await
         .expect_err("stale revision");
@@ -78,5 +87,25 @@ async fn exercise(storage: &BtccStorage, id: String) -> std::result::Result<(), 
     } else {
         return Err("typed conflict lost".into());
     }
+    Ok(())
+}
+
+async fn change_status(
+    storage: &BtccStorage,
+    id: String,
+    status: TaskStatus,
+) -> std::result::Result<(), Failure> {
+    storage
+        .work_model_write(move |tx| {
+            let ctx = Context {
+                now: 202,
+                actor: json!({"person":"companion"}),
+            };
+            let row = read_task(tx, &id)?;
+            let revision = row["revision"].as_i64().ok_or(Error::Invalid("revision"))?;
+            transition(tx, &ctx, &id, revision, status, false, Some("task_failed"))?;
+            Ok(())
+        })
+        .await?;
     Ok(())
 }

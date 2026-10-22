@@ -1,7 +1,7 @@
 //! Host-owned BTCC adapter; every SQL operation stays on its owning lane.
 use butler_gateway::gateway::{
     AppWorkModelConflict, AppWorkModelEvent, AppWorkModelPort, AppWorkModelRequest,
-    AppWorkModelResource, ApplicationFuture, GatewayApplicationError,
+    AppWorkModelResource, AppWorkModelScope, ApplicationFuture, GatewayApplicationError,
 };
 use butler_turn::btcc::{BtccStorage, StorageError};
 use butler_work::{store, work_queries::Query};
@@ -56,6 +56,25 @@ impl AppWorkModelPort for AppWorkModel {
             storage
                 .work_model_read(move |db| {
                     store::api::project_scope(db, store_resource(resource), &id)
+                })
+                .await
+                .map_err(error)
+        })
+    }
+    fn work_scope(&self, id: String) -> ApplicationFuture<AppWorkModelScope> {
+        let storage = self.storage.clone();
+        Box::pin(async move {
+            storage
+                .work_model_read(move |db| {
+                    let (kind, id) = store::api::work_scope(db, &id)?;
+                    Ok(match kind {
+                        butler_work::work_types::ScopeKind::Project => {
+                            AppWorkModelScope::Project(id)
+                        }
+                        butler_work::work_types::ScopeKind::Session => {
+                            AppWorkModelScope::Session(id)
+                        }
+                    })
                 })
                 .await
                 .map_err(error)
@@ -125,7 +144,7 @@ fn error(error: StorageError) -> GatewayApplicationError {
             .and_then(|e| match e {
                 store::Error::Conflict { current } => current["revision"]
                     .as_i64()
-                    .or(current["graph_revision"].as_i64()),
+                    .or(current["task_graph_revision"].as_i64()),
                 _ => None,
             })
             .map(|revision| {

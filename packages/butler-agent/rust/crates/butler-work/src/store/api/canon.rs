@@ -111,7 +111,7 @@ pub(super) fn edit_plan(
 #[serde(deny_unknown_fields)]
 struct EpicInput {
     expected_revision: Option<i64>,
-    expected_graph_revision: Option<i64>,
+    expected_task_graph_revision: Option<i64>,
     title: Option<String>,
     description: Option<String>,
     status: Option<CanonStatus>,
@@ -129,7 +129,7 @@ pub(super) fn create_epic(
 ) -> Result<Value> {
     let input: EpicInput = input(value)?;
     if input.expected_revision.is_some()
-        || input.expected_graph_revision.is_some()
+        || input.expected_task_graph_revision.is_some()
         || input.status.is_some()
     {
         return Err(Error::Invalid("invalid creation fields"));
@@ -197,7 +197,7 @@ pub(super) fn edit_epic(
             revision(&row)?,
             status,
             &person(ctx)?,
-            input.expected_graph_revision,
+            input.expected_task_graph_revision,
         )?;
     }
     epic(tx, id)

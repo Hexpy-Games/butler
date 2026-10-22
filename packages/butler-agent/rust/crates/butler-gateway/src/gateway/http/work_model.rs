@@ -15,8 +15,8 @@ pub(super) async fn route(
 ) -> Result<Response, HttpError> {
     let parts: Vec<_> = uri.path().trim_start_matches('/').split('/').collect();
     let (resource, id) = match (request.method(), parts.as_slice()) {
-        (&Method::GET, ["sessions", id, "work-queue"])
-        | (&Method::POST, ["sessions", id, "work-queue", "edits"]) => (Queue, *id),
+        (&Method::GET, ["works", id, "tasks"])
+        | (&Method::POST, ["works", id, "tasks", "edits"]) => (Queue, *id),
         (&Method::GET, ["projects", id, "canon"]) => (Canon, *id),
         (&Method::GET, ["canon", "plans", id]) => (Plan, *id),
         (&Method::GET, ["canon", "epics", id]) => (Epic, *id),

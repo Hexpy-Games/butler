@@ -30,6 +30,18 @@ use Resource::{
     BacklogOrder, Canon, CreateEpic, CreatePlan, EditEpic, EditPlan, Epic, Plan, PlanOrder, Queue,
 };
 
+/// Work identity only; no Tasks, cards or spec bodies are read for App scope checks.
+pub fn work_scope(db: &Connection, id: &str) -> Result<(ScopeKind, String)> {
+    let (kind, scope): (String, String) = db
+        .query_row(sql::WORK_SCOPE, [id], |row| Ok((row.get(0)?, row.get(1)?)))
+        .optional()?
+        .ok_or(Error::NotFound)?;
+    Ok((
+        kind.parse().map_err(|_| Error::Invalid("scope kind"))?,
+        scope,
+    ))
+}
+
 /// Identity-only PK lookups, shared by reads and edits before App project checks.
 pub fn project_scope(db: &Connection, resource: Resource, id: &str) -> Result<String> {
     let sql = match resource {

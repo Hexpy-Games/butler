@@ -1,7 +1,8 @@
 //! Inert work-model port. SQL runs only on the BTCC writer/read lanes.
 use super::{BtccStorage, StorageError, StorageResult};
 use butler_work::store;
-use rusqlite::{Connection, Transaction, TransactionBehavior};
+use rusqlite::{Connection, TransactionBehavior};
+use store::Transaction;
 
 impl BtccStorage {
     /// One domain operation (or batch), one IMMEDIATE transaction. Dropping the
@@ -16,6 +17,7 @@ impl BtccStorage {
             let tx = db
                 .transaction_with_behavior(TransactionBehavior::Immediate)
                 .map_err(StorageError::sqlite)?;
+            let tx = Transaction::new(tx).map_err(work_error)?;
             let value = operation(&tx).map_err(work_error)?;
             tx.commit().map_err(StorageError::sqlite)?;
             Ok(value)

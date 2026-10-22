@@ -53,7 +53,7 @@ macro_rules! vocabulary {
     };
 }
 vocabulary!(RunState {
-    Idle => "idle", Waiting => "waiting", Held => "held", Running => "running",
+    Idle => "idle", Running => "running",
     InReview => "in_review", Blocked => "blocked", Failed => "failed", Paused => "paused",
     Stopped => "stopped", Done => "done", Cancelled => "cancelled"
 });
@@ -61,15 +61,15 @@ vocabulary!(CanonStatus { Planned => "planned", InProgress => "in_progress",
     InReview => "in_review", Blocked => "blocked", Done => "done", Cancelled => "cancelled" });
 vocabulary!(CanonStatusSource { Runtime => "runtime", Person => "person" });
 vocabulary!(HoldReason { PredecessorFailed => "predecessor_failed", PredecessorStopped => "predecessor_stopped" });
-vocabulary!(QueueOrigin { UserMessage => "user_message", Schedule => "schedule", Detach => "detach" });
+vocabulary!(QueueOrigin { UserMessage => "user_message", Schedule => "schedule", Detach => "detach", Planner => "planner", Migration => "migration" });
 vocabulary!(Origin { Chat => "chat", Dialog => "dialog", Board => "board", Mcp => "mcp", Migration => "migration" });
 vocabulary!(Visibility { Private => "private", Canon => "canon" });
 vocabulary!(ScopeKind { Session => "session", Project => "project" });
 vocabulary!(ChainState { Active => "active", Held => "held", Done => "done" });
 vocabulary!(Decision { RunAnyway => "run_anyway", Delete => "delete" });
 vocabulary!(PlanStatus { Open => "open", Closed => "closed" });
-vocabulary!(TaskStatus { Draft => "draft", Pending => "pending", Running => "running",
-    AwaitingReview => "awaiting_review", Completed => "completed", Blocked => "blocked",
+vocabulary!(TaskStatus { Draft => "draft", Waiting => "waiting", Pending => "pending", Running => "running",
+    InReview => "in_review", Held => "held", Failed => "failed", Completed => "completed", Blocked => "blocked",
     Paused => "paused", Stopped => "stopped", Cancelled => "cancelled" });
 vocabulary!(TaskKind { Execute => "execute", Integrate => "integrate", Review => "review" });
 vocabulary!(AttemptStatus { Running => "running", Succeeded => "succeeded", Failed => "failed", Interrupted => "interrupted" });

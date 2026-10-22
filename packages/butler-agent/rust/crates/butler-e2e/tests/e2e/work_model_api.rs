@@ -66,7 +66,6 @@ struct Seed {
     s: Scenario,
     project: String,
     chat: String,
-    held_chat: String,
 }
 async fn seeded(id: &str, extra: &str) -> Result<Seed, HarnessError> {
     let mut s = Setup::new(id)?.start().await?;
@@ -94,25 +93,21 @@ async fn seeded(id: &str, extra: &str) -> Result<Seed, HarnessError> {
         s,
         project,
         chat: chats[0].clone(),
-        held_chat: chats[1].clone(),
     })
 }
 async fn queue(s: &Scenario, chat: &str) -> Result<Value, HarnessError> {
-    Ok(data(
-        s.gw.get(&format!("/sessions/{chat}/work-queue")).await?,
-        200,
-    ))
+    Ok(data(s.gw.get(&format!("/works/{chat}/tasks")).await?, 200))
 }
 async fn edit_queue(
     s: &Scenario,
     chat: &str,
-    chain: &str,
+    _chain: &str,
     revision: &Value,
     ops: Value,
 ) -> Result<Reply, HarnessError> {
     s.gw.post(
-        &format!("/sessions/{chat}/work-queue/edits"),
-        json!({"ops":ops,"expected_graph_revisions":{chain:revision}}),
+        &format!("/works/{chat}/tasks/edits"),
+        json!({"ops":ops,"expected_task_graph_revision":revision}),
     )
     .await
 }
@@ -121,13 +116,16 @@ fn step_ids(queue: &Value) -> Vec<Vec<String>> {
         .as_array()
         .unwrap()
         .iter()
-        .map(|s| ids(&s["works"]))
+        .map(|s| ids(&s["tasks"]))
         .collect()
 }
 async fn event(stream: &LiveEvents, topic: &str, id: &str) -> Result<Value, HarnessError> {
     stream
         .wait_for(Duration::from_secs(10), |e| {
-            e["type"] == topic && (e["payload"]["id"] == id || e["payload"]["session_id"] == id)
+            e["type"] == topic
+                && (e["payload"]["id"] == id
+                    || e["payload"]["work_id"] == id
+                    || e["payload"]["session_id"] == id)
         })
         .await
 }

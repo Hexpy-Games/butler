@@ -1,6 +1,7 @@
 #![allow(dead_code, clippy::unwrap_used, reason = "test helpers")]
 use butler_work::{store::*, work_schema, work_types::*};
-use rusqlite::{Connection, TransactionBehavior};
+use rusqlite::Connection;
+use serde_json::{Value, json};
 pub(crate) fn db() -> Connection {
     let db = Connection::open_in_memory().unwrap();
     db.execute_batch("PRAGMA foreign_keys=ON").unwrap();
@@ -10,11 +11,11 @@ pub(crate) fn db() -> Connection {
 pub(crate) fn context() -> Context {
     Context {
         now: 100,
-        actor: serde_json::json!({"person":"tester"}),
+        actor: json!({"person":"tester"}),
     }
 }
 pub(crate) fn work(db: &mut Connection, id: &str) {
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     create_work(
         &tx,
         &context(),
@@ -33,57 +34,56 @@ pub(crate) fn work(db: &mut Connection, id: &str) {
     tx.commit().unwrap();
 }
 pub(crate) fn revision(db: &Connection, id: &str) -> i64 {
-    read_work(db, id).unwrap()["revision"].as_i64().unwrap()
+    read_task(db, id).unwrap()["revision"].as_i64().unwrap()
 }
-pub(crate) fn graph(db: &Connection, id: &str) -> i64 {
-    db.query_row(
-        "SELECT graph_revision FROM wm_work_chains WHERE id=?1",
-        [id],
-        |r| r.get(0),
-    )
-    .unwrap()
+pub(crate) fn graph(db: &Connection) -> i64 {
+    read_work(db, "work").unwrap()["task_graph_revision"]
+        .as_i64()
+        .unwrap()
 }
-pub(crate) fn queue(db: &mut Connection, ids: &[&str]) {
-    for id in ids {
-        work(db, id);
-    }
-    let tx = db
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .unwrap();
-    create_root(
+pub(crate) fn add(db: &mut Connection, id: &str, chain: &str, after: Option<&str>, draft: bool) {
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
+    create_task(
         &tx,
         &context(),
-        ids[0],
-        0,
-        "ch",
-        "chat",
-        QueueOrigin::UserMessage,
-        Some("message"),
+        &NewTask {
+            id: id.into(),
+            work_id: "work".into(),
+            title: id.into(),
+            spec_ref: json!({}),
+            draft,
+            origin: QueueOrigin::Planner,
+            origin_message_id: None,
+        },
+        graph(&tx),
+        chain,
+        after,
     )
     .unwrap();
     tx.commit().unwrap();
-    for pair in ids.windows(2) {
-        let tx = db.transaction().unwrap();
-        place_after(&tx, &context(), pair[1], 0, pair[0], graph(&tx, "ch")).unwrap();
-        tx.commit().unwrap();
+}
+pub(crate) fn queue(db: &mut Connection, ids: &[&str]) {
+    work(db, "work");
+    for (i, id) in ids.iter().enumerate() {
+        add(db, id, "ch", i.checked_sub(1).map(|j| ids[j]), false);
     }
 }
-pub(crate) fn runtime(db: &mut Connection, id: &str, state: RunState, reported: bool) {
+pub(crate) fn runtime(db: &mut Connection, id: &str, state: TaskStatus, reported: bool) {
     if matches!(
         state,
-        RunState::Failed
-            | RunState::Stopped
-            | RunState::Paused
-            | RunState::Blocked
-            | RunState::InReview
-            | RunState::Done
+        TaskStatus::Failed
+            | TaskStatus::Stopped
+            | TaskStatus::Paused
+            | TaskStatus::Blocked
+            | TaskStatus::InReview
+            | TaskStatus::Completed
     ) && matches!(
-        read_work(db, id).unwrap()["run_state"].as_str(),
-        Some("idle" | "waiting")
+        read_task(db, id).unwrap()["status"].as_str(),
+        Some("pending" | "waiting")
     ) {
-        runtime(db, id, RunState::Running, false);
+        runtime(db, id, TaskStatus::Running, false);
     }
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     transition(
         &tx,
         &context(),
@@ -96,46 +96,32 @@ pub(crate) fn runtime(db: &mut Connection, id: &str, state: RunState, reported: 
     .unwrap();
     tx.commit().unwrap();
 }
-pub(crate) fn member_revisions(db: &Connection, id: &str) -> Vec<(String, i64)> {
-    load_chain(db, id)
-        .unwrap()
-        .members
-        .iter()
-        .map(|r| {
-            (
-                r["id"].as_str().unwrap().into(),
-                r["revision"].as_i64().unwrap(),
-            )
-        })
-        .collect()
+pub(crate) fn edit(db: &mut Connection, ops: &[QueueEdit]) -> Result<Vec<Value>> {
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
+    let result = edit_queue(&tx, &context(), "work", graph(&tx), ops)?;
+    tx.commit().unwrap();
+    Ok(result)
 }
-
-pub(crate) fn approve(db: &mut rusqlite::Connection) {
-    let q = undecided_holds(db, "ch").unwrap().remove(0);
-    let tx = db.transaction().unwrap();
+pub(crate) fn decide(db: &mut Connection, decision: Decision) {
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
+    let q = undecided_holds(&tx, "ch").unwrap().remove(0);
     decide_hold(
         &tx,
         &context(),
         q["id"].as_str().unwrap(),
         q["revision"].as_i64().unwrap(),
-        graph(&tx, "ch"),
-        Decision::RunAnyway,
+        graph(&tx),
+        decision,
     )
     .unwrap();
     tx.commit().unwrap();
 }
-pub(crate) fn approved_failure() -> rusqlite::Connection {
+pub(crate) fn approved_failure() -> Connection {
     let mut db = db();
     queue(&mut db, &["a", "b", "c"]);
-    runtime(&mut db, "a", RunState::Failed, false);
-    approve(&mut db);
-    assert_eq!(ready_works(&db, "ch").unwrap(), vec!["b"]);
-    runtime(&mut db, "b", RunState::Running, false);
+    runtime(&mut db, "a", TaskStatus::Failed, false);
+    decide(&mut db, Decision::RunAnyway);
+    assert_eq!(ready_tasks(&db, "ch").unwrap(), vec!["b"]);
+    runtime(&mut db, "b", TaskStatus::Running, false);
     db
-}
-pub(crate) fn chain_state(db: &rusqlite::Connection) -> String {
-    db.query_row("SELECT state FROM wm_work_chains WHERE id='ch'", [], |r| {
-        r.get(0)
-    })
-    .unwrap()
 }

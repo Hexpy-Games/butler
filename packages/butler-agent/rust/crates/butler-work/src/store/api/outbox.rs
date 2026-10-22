@@ -7,6 +7,7 @@ pub(in crate::store) fn append(
     kind: &str,
     id: &str,
     revision: i64,
+    op: &str,
 ) -> Result<()> {
     let project = match kind {
         "plan" => {
@@ -39,12 +40,38 @@ pub(in crate::store) fn append(
             params!["canon.changed", payload.to_string(), ctx.now],
         )?;
     }
-    if kind == "chain" {
-        let row = one(tx, super::super::sql::CHAIN, [id])?;
-        let payload = json!({"session_id":row["session_id"],"revision":revision});
+    if matches!(kind, "task" | "task_graph") || (kind == "work" && op == "state") {
+        let work_id = if kind == "task" {
+            text(&read_task(tx, id)?, "work_id")?.to_owned()
+        } else {
+            id.to_owned()
+        };
+        tasks_changed(tx, ctx, &work_id)?;
+    }
+    Ok(())
+}
+
+fn tasks_changed(tx: &Transaction<'_>, ctx: &Context, id: &str) -> Result<()> {
+    let row = read_work(tx, id)?;
+    let session = row["home_session_id"].as_str().or_else(|| {
+        (row["scope_kind"] == "session")
+            .then(|| row["scope_ref"].as_str())
+            .flatten()
+    });
+    let payload = json!({"scope":"tasks","work_id":id,"session_id":session,
+        "task_graph_revision":row["task_graph_revision"]})
+    .to_string();
+    let seq: Option<i64> = tx
+        .query_row(sql::TASKS_CHANGED, params![tx.outbox_start, id], |r| {
+            r.get(0)
+        })
+        .optional()?;
+    if let Some(seq) = seq {
+        tx.execute(sql::UPDATE_TASKS_CHANGED, params![payload, seq])?;
+    } else {
         tx.execute(
             super::super::sql::OUTBOX,
-            params!["work_queue.changed", payload.to_string(), ctx.now],
+            params!["work_model.changed", payload, ctx.now],
         )?;
     }
     Ok(())

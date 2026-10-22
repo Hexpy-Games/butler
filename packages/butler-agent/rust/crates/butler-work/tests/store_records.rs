@@ -7,7 +7,7 @@ use store_support::*;
 #[test]
 fn plan_work_spec_cas_and_immutable_publication() {
     let mut db = db();
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     let mut fields = PlanFields {
         title: "plan".into(),
         description: "description".into(),
@@ -100,7 +100,7 @@ fn home_rank_and_private_creation_have_typed_rules() {
     let mut db = db();
     work(&mut db, "a");
     work(&mut db, "b");
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     assign_home(&tx, &context(), "a", 0, Some("home")).unwrap();
     assert!(matches!(
         assign_home(&tx, &context(), "b", 0, Some("home")),
@@ -127,7 +127,7 @@ fn home_rank_and_private_creation_have_typed_rules() {
 #[test]
 fn intent_replay_skips_domain_change_and_preserves_original_payload() {
     let mut db = db();
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     let first = with_intent(
         &tx,
         &context(),
@@ -156,7 +156,7 @@ fn intent_replay_skips_domain_change_and_preserves_original_payload() {
 #[test]
 fn boot_marker_distinguishes_first_clean_and_crash_and_fences_old_boot() {
     let mut db = db();
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     assert_eq!(
         begin_boot(&tx, &context(), "first").unwrap(),
         PreviousShutdown::FirstBoot
@@ -196,6 +196,16 @@ fn identifiers_pin_crockford_format_and_monotonic_clock_regression() {
         assert_eq!(id.len(), 29);
         previous = id;
     }
+    let alphabet = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+    let mut nibbles = std::collections::BTreeSet::new();
+    for i in 0..512 {
+        let id = IdGenerator::global_next(IdKind::Work, 1_000_000 + i).unwrap();
+        let bits = id[3..].bytes().fold(0u128, |v, c| {
+            (v << 5) | alphabet.iter().position(|x| *x == c).unwrap() as u128
+        });
+        nibbles.insert((bits >> 76) & 15);
+    }
+    assert_eq!(nibbles.len(), 16);
 }
 // test-category: format-pin
 #[test]
@@ -213,14 +223,6 @@ fn every_store_statement_has_an_indexed_query_plan() {
             .collect::<rusqlite::Result<Vec<_>>>()
             .unwrap()
             .join("\n");
-        if *name == "CHAIN_REVISION" {
-            assert!(
-                plan.contains(
-                    "SEARCH wm_work_chains USING INDEX sqlite_autoindex_wm_work_chains_1 (id=?)"
-                ),
-                "{plan}"
-            );
-        }
         assert!(
             !plan.contains("SCAN wm_") && !plan.contains("SCAN a") && !plan.contains("SCAN t"),
             "{name}: {plan}"
@@ -232,7 +234,7 @@ fn every_store_statement_has_an_indexed_query_plan() {
 #[test]
 fn epic_creation_records_fields_without_a_synthetic_edit() {
     let mut db = store_support::db();
-    let tx = db.transaction().unwrap();
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     let epic = write_api(
         &tx,
         &context(),

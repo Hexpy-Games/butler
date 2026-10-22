@@ -1,12 +1,12 @@
 pub(super) const COLUMNS: &[(&str, &str, &str)] = &[
     ("wm_plans", "status", "'open','closed'"),
     ("wm_plans", "visibility", "'private','canon'"),
-    ("wm_work_chains", "state", "'active','held','done'"),
+    ("wm_task_chains", "state", "'active','held','done'"),
     ("wm_works", "scope_kind", "'session','project'"),
     (
         "wm_works",
         "run_state",
-        "'idle','waiting','held','running','in_review','blocked','failed','paused','stopped','done','cancelled'",
+        "'idle','running','in_review','blocked','failed','paused','stopped','done','cancelled'",
     ),
     (
         "wm_works",
@@ -15,14 +15,14 @@ pub(super) const COLUMNS: &[(&str, &str, &str)] = &[
     ),
     ("wm_works", "canon_status_source", "'runtime','person'"),
     (
-        "wm_works",
+        "wm_tasks",
         "hold_reason",
         "'predecessor_failed','predecessor_stopped'",
     ),
     (
-        "wm_works",
-        "queue_origin",
-        "'user_message','schedule','detach'",
+        "wm_tasks",
+        "origin",
+        "'user_message','schedule','detach','planner','migration'",
     ),
     ("wm_works", "visibility", "'private','canon'"),
     (
@@ -30,17 +30,26 @@ pub(super) const COLUMNS: &[(&str, &str, &str)] = &[
         "origin",
         "'chat','dialog','board','mcp','migration'",
     ),
-    ("wm_hold_decisions", "decision", "'run_anyway','delete'"),
-    ("wm_tasks", "kind", "'execute','integrate','review'"),
+    (
+        "wm_task_hold_decisions",
+        "decision",
+        "'run_anyway','delete'",
+    ),
+    ("wm_task_parts", "kind", "'execute','integrate','review'"),
     (
         "wm_tasks",
         "status",
-        "'draft','pending','running','awaiting_review','completed','blocked','paused','stopped','cancelled'",
+        "'draft','waiting','pending','running','in_review','held','failed','completed','blocked','paused','stopped','cancelled'",
     ),
     (
         "wm_attempts",
         "status",
         "'running','succeeded','failed','interrupted'",
+    ),
+    (
+        "wm_task_parts",
+        "status",
+        "'pending','running','awaiting_review','completed','failed','cancelled'",
     ),
     ("wm_reviews", "verdict", "'accepted','rejected'"),
     ("wm_spec_nodes", "scope_kind", "'session','project'"),

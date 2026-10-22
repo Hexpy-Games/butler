@@ -34,7 +34,7 @@ fn every_request_query_uses_its_index() {
     assert!(!uses(
         &db,
         "SELECT * FROM wm_works WHERE title=?1",
-        "wm_works_chain"
+        "wm_tasks_chain"
     ));
 }
 
@@ -65,19 +65,21 @@ fn schema_constraints_and_idempotency() {
         db.query_row::<i64, _, _>("SELECT count(*) FROM wm_works", [], |r| r.get(0))
             .unwrap()
     );
-    db.execute_batch(
-        "INSERT INTO wm_work_chains(id,session_id,created_at) VALUES('x','chat',0),('y','other',0);
-        UPDATE wm_works SET chain_id='x',step_index=0,stack_position=0 WHERE id='a';
-        UPDATE wm_works SET chain_id='y',step_index=0,stack_position=0 WHERE id='c';
-        UPDATE wm_works SET chain_id='x',step_index=1,stack_position=0 WHERE id='d';",
+    db.execute_batch("INSERT INTO wm_task_chains(id,work_id,created_at) VALUES('x','a',0),('y','c',0);
+        INSERT INTO wm_tasks(id,work_id,spec_ref,title,status,origin,chain_id,step_index,stack_position,created_at,updated_at,created_by)
+        VALUES('ta','a','{}','A','pending','planner','x',0,0,0,0,'{}'),('tc','c','{}','C','pending','planner','y',0,0,0,0,'{}'),('td','a','{}','D','waiting','planner','x',1,0,0,0,'{}');").unwrap();
+    assert!(
+        db.execute(
+            "INSERT INTO wm_task_edges(work_id,pred,succ,chain_id) VALUES('a','ta','tc','x')",
+            []
+        )
+        .is_err()
+    );
+    db.execute(
+        "INSERT INTO wm_task_edges(work_id,pred,succ,chain_id) VALUES('a','ta','td','x')",
+        [],
     )
     .unwrap();
-    assert!(
-        db.execute("INSERT INTO wm_work_edges VALUES('a','c','x')", [])
-            .is_err()
-    );
-    db.execute("INSERT INTO wm_work_edges VALUES('a','d','x')", [])
-        .unwrap();
     for (table, column, values) in enum_columns::COLUMNS {
         rejects_unknown_enum(table, column);
         let sql = db
@@ -126,7 +128,15 @@ fn rejects_unknown_enum(table: &str, column: &str) {
             "'canon'".into()
         } else if let Some(default) = default {
             default
-        } else if name == "task_rank" {
+        } else if matches!(name.as_str(), "chain_id" | "step_index" | "stack_position")
+            && table == "wm_tasks"
+        {
+            if kind == "INTEGER" {
+                "0".into()
+            } else {
+                "'chain'".into()
+            }
+        } else if name == "part_rank" {
             "'V'".into()
         } else if name == "decided_at" {
             "1".into()
@@ -154,7 +164,7 @@ fn rejects_unknown_enum(table: &str, column: &str) {
     if let Some(i) = names.iter().position(|n| n == "visibility") {
         values[i] = "'canon'".into();
     }
-    for name in ["hold_reason", "held_by_work_id"] {
+    for name in ["hold_reason", "held_by_task_id"] {
         if let Some(i) = names.iter().position(|n| n == name) {
             values[i] = "NULL".into();
         }
@@ -177,4 +187,143 @@ fn rejects_unknown_enum(table: &str, column: &str) {
         rusqlite::ffi::SQLITE_CONSTRAINT_CHECK,
         "{table}.{column}: {error}"
     );
+}
+
+// test-category: format-pin
+#[test]
+fn p1_upgrade_preserves_works_and_unrelated_tables_and_is_idempotent() {
+    let db = Connection::open_in_memory().unwrap();
+    db.execute_batch("PRAGMA foreign_keys=ON").unwrap();
+    db.execute_batch(include_str!(
+        "../../butler-e2e/fixtures/work-model-p14/p1-shape.sql"
+    ))
+    .unwrap();
+    db.execute_batch(include_str!(
+        "../../butler-e2e/fixtures/work-model-p14/p1-values.sql"
+    ))
+    .unwrap();
+    let before: Vec<serde_json::Value> = db
+        .prepare("SELECT id FROM wm_works ORDER BY id")
+        .unwrap()
+        .query_map([], |r| r.get::<_, String>(0))
+        .unwrap()
+        .map(|id| butler_work::store::read_work(&db, &id.unwrap()).unwrap())
+        .collect();
+    db.execute_batch("BEGIN IMMEDIATE").unwrap();
+    work_schema::ensure(&db).unwrap();
+    assert!(
+        !db.pragma_query_value::<bool, _>(None, "defer_foreign_keys", |r| r.get(0))
+            .unwrap()
+    );
+    db.execute_batch("COMMIT").unwrap();
+    work_schema::ensure(&db).unwrap();
+    for old in before {
+        let current = butler_work::store::read_work(&db, old["id"].as_str().unwrap()).unwrap();
+        for (column, value) in current.as_object().unwrap() {
+            let expected = match column.as_str() {
+                "task_graph_revision" => serde_json::json!(0),
+                "failure_reason" => serde_json::Value::Null,
+                "run_state"
+                    if !matches!(
+                        old[column].as_str(),
+                        Some("done" | "cancelled" | "paused" | "stopped")
+                    ) =>
+                {
+                    serde_json::json!("idle")
+                }
+                _ => old[column].clone(),
+            };
+            assert_eq!(*value, expected, "{}.{column}", old["id"]);
+        }
+    }
+    for table in ["wm_tasks", "wm_results", "wm_attempts"] {
+        assert_eq!(
+            db.query_row::<i64, _, _>(&format!("SELECT count(*) FROM {table}"), [], |r| r.get(0))
+                .unwrap(),
+            0
+        );
+    }
+    let session: (i64,String,String,i64,Option<String>,i64) = db.query_row("SELECT tier,phase,control_state,control_epoch,current_task_id,last_applied_seq FROM wm_session_exec", [],
+        |r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?))).unwrap();
+    assert_eq!(
+        session,
+        (2, "execution".into(), "running".into(), 17, None, 31)
+    );
+    assert_eq!(
+        db.query_row::<i64, _, _>(
+            "SELECT count(*) FROM wm_counts WHERE key='works' OR key LIKE 'run_state:%'",
+            [],
+            |r| r.get(0)
+        )
+        .unwrap(),
+        0
+    );
+    assert_eq!(
+        db.query_row::<i64, _, _>(
+            "SELECT count FROM wm_counts WHERE key='backlog_revision'",
+            [],
+            |r| r.get(0)
+        )
+        .unwrap(),
+        13
+    );
+    assert!(
+        db.prepare("PRAGMA foreign_key_check")
+            .unwrap()
+            .query([])
+            .unwrap()
+            .next()
+            .unwrap()
+            .is_none()
+    );
+    let fresh = Connection::open_in_memory().unwrap();
+    work_schema::ensure(&fresh).unwrap();
+    assert_eq!(schema(&db), schema(&fresh));
+}
+fn schema(db: &Connection) -> Vec<(String, Option<String>)> {
+    db.prepare("SELECT name,sql FROM sqlite_schema WHERE name GLOB 'wm_*' ORDER BY name")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap()
+}
+
+// test-category: format-pin
+#[test]
+fn upgrade_rejects_foreign_key_violations_and_restores_deferral_on_error() {
+    let db = Connection::open_in_memory().unwrap();
+    db.execute_batch(include_str!(
+        "../../butler-e2e/fixtures/work-model-p14/p1-shape.sql"
+    ))
+    .unwrap();
+    db.execute_batch("PRAGMA foreign_keys=OFF; UPDATE wm_spec_nodes SET work_id='missing'; PRAGMA foreign_keys=ON; BEGIN IMMEDIATE").unwrap();
+    assert!(work_schema::ensure(&db).is_err());
+    assert!(
+        !db.pragma_query_value::<bool, _>(None, "defer_foreign_keys", |r| r.get(0))
+            .unwrap()
+    );
+    // Schema/data changes rolled back at the migration savepoint, even inside an outer transaction.
+    assert!(db.prepare("SELECT chain_id FROM wm_works").is_ok());
+    db.execute_batch("ROLLBACK").unwrap();
+}
+
+// test-category: format-pin
+#[test]
+fn local_work_vocabulary_rejects_remote_status_sources_and_github_origins() {
+    let db = Connection::open_in_memory().unwrap();
+    work_schema::ensure(&db).unwrap();
+    db.execute_batch("INSERT INTO wm_works(id,scope_kind,scope_ref,title,visibility,origin,created_by,created_at,updated_at) VALUES('local','project','project','title','canon','board','{}',1,1)").unwrap();
+    for (column, value) in [("canon_status_source", "remote"), ("origin", "github")] {
+        let error = db
+            .execute(
+                &format!("UPDATE wm_works SET {column}=?1 WHERE id='local'"),
+                [value],
+            )
+            .unwrap_err();
+        assert_eq!(
+            error.sqlite_error().unwrap().extended_code,
+            rusqlite::ffi::SQLITE_CONSTRAINT_CHECK
+        );
+    }
 }
