@@ -127,6 +127,7 @@ fn home_rank_and_private_creation_have_typed_rules() {
 #[test]
 fn intent_replay_skips_domain_change_and_preserves_original_payload() {
     let mut db = db();
+    work(&mut db, "work");
     let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     let first = with_intent(
         &tx,
@@ -150,7 +151,54 @@ fn intent_replay_skips_domain_change_and_preserves_original_payload() {
         Err(Error::Conflict { .. })
     ));
     assert_eq!(pending_intents(&tx, "", 10).unwrap().len(), 1);
-    tx.commit().unwrap();
+    tiers::admit(&tx, &context(), "child", "work", 1, "assigned").unwrap();
+    let input = control::Instruction {
+        target: "child",
+        sender: json!({"parent":"chat"}),
+        mode: "steer",
+        body: json!({"text":"revise"}),
+        idempotency_key: "direction",
+        expected_control_epoch: 0,
+        anchor_task: "task",
+    };
+    let receipt = control::admit(&tx, &context(), &input).unwrap();
+    assert_eq!(receipt["control_epoch"], 1);
+    assert_eq!(control::admit(&tx, &context(), &input).unwrap(), receipt);
+    let changed = control::Instruction {
+        body: json!({"text":"different"}),
+        ..input
+    };
+    assert!(matches!(
+        control::admit(&tx, &context(), &changed),
+        Err(Error::Invalid("idempotency_conflict"))
+    ));
+    let stale = control::Instruction {
+        idempotency_key: "other",
+        ..changed
+    };
+    assert!(matches!(
+        control::admit(&tx, &context(), &stale),
+        Err(Error::Conflict { .. })
+    ));
+    let pending = control::next_pending(&tx, "child", true).unwrap();
+    assert_eq!(pending.len(), 1);
+    control::mark_delivered(
+        &tx,
+        &context(),
+        pending[0]["id"].as_str().unwrap(),
+        "pending_safe_point",
+    )
+    .unwrap();
+    control::mark_applied(&tx, &context(), pending[0]["id"].as_str().unwrap()).unwrap();
+    assert!(
+        control::next_pending(&tx, "child", false)
+            .unwrap()
+            .is_empty()
+    );
+    let hold = control::hold(&tx, &context(), "child", "stop", "chat").unwrap();
+    assert_eq!(hold["control_epoch"], 2);
+    assert!(control::release(&tx, &context(), hold["hold_id"].as_str().unwrap(), 1).is_err());
+    control::release(&tx, &context(), hold["hold_id"].as_str().unwrap(), 2).unwrap();
 }
 // test-category: pure-logic
 #[test]

@@ -11,6 +11,7 @@ pub use task_fields::*;
 mod task_placement;
 pub use task_placement::*;
 pub mod apply;
+pub mod control;
 pub mod execution;
 mod holds;
 pub mod parts;

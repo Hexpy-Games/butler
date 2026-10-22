@@ -66,4 +66,16 @@ CRITERION = "INSERT INTO wm_spec_criteria(node_id,revision,criterion_id,part_id,
 NODE_BUMP = "UPDATE wm_spec_nodes SET revision=revision+1,updated_at=?2 WHERE node_id=?1 AND revision=?3";
 ACTIVATE = "UPDATE wm_spec_nodes SET active_revision=?2,lifecycle='active',revision=revision+1,updated_at=?3 WHERE node_id=?1 AND revision=?4 AND active_revision IS ?5";
 SPEC_STATE = "UPDATE wm_spec_revisions SET state=?3 WHERE node_id=?1 AND revision=?2";
+CONTROL_KEY = "SELECT * FROM wm_instructions WHERE idempotency_key=?1";
+CONTROL_NEXT = "SELECT * FROM wm_instructions WHERE target_session_id=?1 AND status IN ('accepted','waiting_for_turn','waiting_for_task','pending_safe_point') AND (?2=0 OR mode='steer') ORDER BY received_seq,id";
+CONTROL_SEQUENCE = "SELECT coalesce(max(seq),0)+1 AS seq FROM wm_audit";
+CONTROL_INSERT = "INSERT INTO wm_instructions(id,idempotency_key,target_session_id,sender,mode,body_ref,anchor_kind,anchor_id,boundary_seq,status,received_seq) VALUES(?1,?2,?3,?4,?5,?6,'task',?7,?8,?9,?8)";
+CONTROL_EPOCH = "UPDATE wm_session_exec SET control_epoch=control_epoch+1 WHERE session_id=?1 AND control_epoch=?2";
+CONTROL_STATUS = "UPDATE wm_instructions SET status=?2 WHERE id=?1 AND status=?3";
+CONTROL_STATE = "UPDATE wm_session_exec SET control_state=?2 WHERE session_id=?1";
+HOLD_INSERT = "INSERT INTO wm_holds(id,target,owner,kind) VALUES(?1,?2,?3,?4)";
+CONTROL_HOLD = "SELECT * FROM wm_holds WHERE id=?1";
+HOLDS = "SELECT * FROM wm_holds WHERE target=?1 AND released_at IS NULL ORDER BY id";
+HOLD_RELEASE = "UPDATE wm_holds SET released_at=?2 WHERE id=?1 AND released_at IS NULL";
+
 }

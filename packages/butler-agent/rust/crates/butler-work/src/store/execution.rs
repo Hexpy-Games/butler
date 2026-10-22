@@ -1,5 +1,7 @@
 //! Task and part leases. The writer lane owns the enclosing transaction.
+mod assigned;
 mod review;
+pub use assigned::*;
 pub mod sql;
 use super::*;
 use crate::work_types::TaskStatus;
@@ -131,7 +133,11 @@ pub(super) fn task_lease(db: &Connection, id: &str, session: &str) -> Result<Val
 /// Called immediately before admitting an effect, on the same writer lane as
 /// its receipt. A later active Spec revision fences an earlier Task binding.
 pub fn ensure_task_effect(db: &Connection, id: &str, session: &str) -> Result<Value> {
-    let lease = task_lease(db, id, session)?;
+    let lease = match task_lease(db, id, session) {
+        Ok(lease) => lease,
+        Err(Error::Invalid(_)) => one(db, sql::SESSION_PART_LEASE, params![id, session])?,
+        Err(error) => return Err(error),
+    };
     super::task_fields::validate_task_criteria(db, id)?;
     Ok(lease)
 }
@@ -154,11 +160,11 @@ pub fn submit_task(
         result_refs,
         evidence_refs,
     } = *submission;
-    let task_attempt = ensure_task_effect(tx, task, scope.session_id)?;
+    super::task_fields::validate_task_criteria(tx, task)?;
     let attempt = if let Some(id) = part {
         submit_part(tx, ctx, task, id, scope.session_id)?
     } else {
-        task_attempt
+        task_lease(tx, task, scope.session_id)?
     };
     refresh_parts_phase(tx, ctx, task)?;
     // A new result always invalidates prior reviews, including repeated submits
@@ -230,6 +236,14 @@ pub fn fail_task(
     reason: &str,
 ) -> Result<Value> {
     task_lease(tx, id, session)?;
+    finish_failed_task(tx, ctx, id, reason)
+}
+fn finish_failed_task(
+    tx: &Transaction<'_>,
+    ctx: &Context,
+    id: &str,
+    reason: &str,
+) -> Result<Value> {
     tx.execute(
         sql::FINISH_TASK_ATTEMPTS,
         params![id, "failed", ctx.now, Option::<&str>::None],
@@ -264,7 +278,6 @@ pub fn fail_part(
 ) -> Result<Value> {
     let part = parts::read_part(tx, id)?;
     let task = text(&part, "task_id")?;
-    task_lease(tx, task, session)?;
     let lease = one(tx, sql::PART_LEASE, [id])?;
     if lease["session_id"] != session {
         return Err(Error::Invalid("part lease belongs to another session"));
@@ -281,7 +294,7 @@ pub fn fail_part(
             .iter()
             .any(|p| p["status"] == "running")
     {
-        return fail_task(tx, ctx, task, session, reason);
+        return finish_failed_task(tx, ctx, task, reason);
     }
     refresh_parts_phase(tx, ctx, task)?;
     read_task(tx, task)
@@ -295,7 +308,6 @@ pub fn block_task(
     reason: &str,
     checkpoint: Option<&str>,
 ) -> Result<Value> {
-    task_lease(tx, task, session)?;
     if let Some(id) = part {
         let row = parts::read_part(tx, id)?;
         if row["task_id"] != task {
@@ -305,6 +317,8 @@ pub fn block_task(
         if lease["session_id"] != session {
             return Err(Error::Invalid("part lease belongs to another session"));
         }
+    } else {
+        task_lease(tx, task, session)?;
     }
     // Blocking the Task settles every active part, retaining their checkpoints.
     tx.execute(

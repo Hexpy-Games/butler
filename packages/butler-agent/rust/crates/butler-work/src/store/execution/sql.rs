@@ -27,6 +27,7 @@ TASK_SPEC = "UPDATE wm_tasks SET spec_ref=?2,revision=revision+1,updated_at=?3 W
 WORK_SPEC = "UPDATE wm_works SET spec_node_id=?2,tier=?3 WHERE id=?1";
 INSTRUCTION = "SELECT id FROM wm_instructions WHERE id=?1 AND target_session_id=?2";
 ATTEMPTS = "SELECT * FROM wm_attempts WHERE task_id=?1 ORDER BY started_at,id";
+SESSION_PART_LEASE = "SELECT * FROM wm_attempts WHERE session_id=?2 AND task_id=?1 AND status='running' AND part_id IS NOT NULL LIMIT 1";
 LEASE = "SELECT * FROM wm_attempts WHERE task_id=?1 AND status='running' AND part_id IS NULL";
 PART_LEASE = "SELECT * FROM wm_attempts WHERE part_id=?1 AND status='running' AND part_id IS NOT NULL";
 INSERT_ATTEMPT = "INSERT INTO wm_attempts(id,task_id,part_id,task_revision,spec_ref,session_id,turn_id,lease_epoch,status,started_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?4,'running',?8)";

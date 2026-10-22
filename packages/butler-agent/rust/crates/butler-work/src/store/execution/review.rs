@@ -36,7 +36,7 @@ pub fn review_task(
         accept,
         judgments,
     } = *input;
-    ensure_task_effect(tx, id, session)?;
+    task_lease(tx, id, session)?;
     let task = read_task(tx, id)?;
     if task["status"] != "in_review"
         || parts::task_parts(tx, id)?
@@ -96,7 +96,7 @@ pub fn complete_task(
     review_id: &str,
     reported: bool,
 ) -> Result<Value> {
-    ensure_task_effect(tx, id, session)?;
+    task_lease(tx, id, session)?;
     let task = read_task(tx, id)?;
     let review = one(tx, sql::REVIEW, [review_id])?;
     let result = one(tx, sql::LATEST_RESULT, [id])?;

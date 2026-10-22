@@ -167,7 +167,7 @@ fn spec(db: &Connection, work: &Value, input: &Read) -> Result<Value> {
         json!({"node":node,"published":published,"body":body(db,text(&published,"body_hash")?)?,"criteria":criteria}),
     )
 }
-fn body(db: &Connection, hash: &str) -> Result<String> {
+pub fn body(db: &Connection, hash: &str) -> Result<String> {
     let encoded: Vec<u8> = db.query_row(sql::BODY, [hash], |r| r.get(0))?;
     let decoded = zstd::stream::decode_all(encoded.as_slice()).map_err(Error::BodyCodec)?;
     String::from_utf8(decoded).map_err(|_| Error::Invalid("Spec body is not UTF-8"))

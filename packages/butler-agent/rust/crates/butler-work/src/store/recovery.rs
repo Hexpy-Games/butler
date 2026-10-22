@@ -101,7 +101,7 @@ pub fn recover_session(
             )?;
         }
     }
-    tasks.iter().map(|id| task_result(tx, id, None)).collect()
+    Ok(attempts)
 }
 /// Use this wrapper when a domain mutation needs an App DB projection. Replay
 /// returns the original receipt before invoking the mutation closure.

@@ -12,6 +12,7 @@ pub mod sql {
     pub const WORK_TIER: &str =
         "UPDATE wm_works SET tier=?2,revision=revision+(tier<>?2),updated_at=?3 WHERE id=?1";
     pub const ACTIVE_LEASE: &str = "SELECT a.id FROM wm_attempts a JOIN wm_tasks t ON t.id=a.task_id WHERE a.task_id=?1 AND a.session_id=?2 AND a.status='running' AND a.part_id IS NULL AND t.status IN ('running','in_review')";
+    pub const ACTIVE_PART_LEASE: &str = "SELECT a.id FROM wm_attempts a JOIN wm_tasks t ON t.id=a.task_id WHERE a.session_id=?2 AND a.task_id=?1 AND a.status='running' AND a.part_id IS NOT NULL AND t.status IN ('running','in_review') LIMIT 1";
     pub const BIND_TASK: &str = "UPDATE wm_session_exec SET current_task_id=?2 WHERE session_id=?1";
     pub const UNCOVERED: &str = "SELECT c.criterion_id FROM wm_spec_nodes n JOIN wm_spec_criteria c ON c.node_id=n.node_id AND c.revision=n.active_revision WHERE n.work_id=?1 AND NOT EXISTS(SELECT 1 FROM wm_task_criteria b JOIN wm_tasks t ON t.id=b.task_id WHERE b.node_id=c.node_id AND b.node_revision=c.revision AND b.criterion_id=c.criterion_id AND t.work_id=?1 AND t.status!='cancelled') LIMIT 1";
     pub const DETAIL: &str = "SELECT node_id FROM wm_spec_nodes WHERE work_id=?1 AND parent_node_id IS NOT NULL AND active_revision IS NOT NULL LIMIT 1";
@@ -23,6 +24,7 @@ pub mod sql {
         ("UNCOVERED", UNCOVERED),
         ("WORK_TIER", WORK_TIER),
         ("ACTIVE_LEASE", ACTIVE_LEASE),
+        ("ACTIVE_PART_LEASE", ACTIVE_PART_LEASE),
         ("BIND_TASK", BIND_TASK),
     ];
 }
@@ -125,7 +127,10 @@ pub fn effects_allowed(db: &Connection, session: &str) -> Result<bool> {
     let Some(task) = row["current_task_id"].as_str() else {
         return Ok(false);
     };
-    match one(db, sql::ACTIVE_LEASE, params![task, session]) {
+    match one(db, sql::ACTIVE_LEASE, params![task, session]).or_else(|error| match error {
+        Error::NotFound => one(db, sql::ACTIVE_PART_LEASE, params![task, session]),
+        other => Err(other),
+    }) {
         Ok(_) => match execution::ensure_task_effect(db, task, session) {
             Ok(_) => Ok(true),
             Err(Error::Invalid(_) | Error::NotFound | Error::Running) => Ok(false),
@@ -193,4 +198,22 @@ pub fn ensure_detail(db: &Connection, work: &str) -> Result<()> {
         )),
         Err(error) => Err(error),
     }
+}
+
+/// Delegation uses the same Tier 2 floor as ordinary execution admission.
+pub fn delegation_floor(db: &Connection, work: &str) -> Result<()> {
+    let row = read_work(db, work)?;
+    let tier = row["tier"].as_u64().ok_or(Error::Invalid("tier"))?;
+    check_floor(
+        db,
+        Some(work),
+        tier as u8,
+        0,
+        Floors {
+            delegation_or_child_assignment: true,
+            ..Floors::default()
+        },
+    )?;
+    ensure_detail(db, work)?;
+    ensure_coverage(db, work)
 }

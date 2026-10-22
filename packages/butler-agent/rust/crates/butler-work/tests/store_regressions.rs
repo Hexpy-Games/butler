@@ -29,6 +29,12 @@ fn terminal_tasks_cannot_be_deleted_or_detached_and_keep_their_report() {
     let mut db = db();
     queue(&mut db, &["a", "b"]);
     runtime(&mut db, "a", TaskStatus::Completed, true);
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
+    let before_report = read_task(&tx, "a").unwrap();
+    execution::report_task(&tx, &context(), "a").unwrap();
+    execution::report_task(&tx, &context(), "a").unwrap();
+    assert_eq!(read_task(&tx, "a").unwrap(), before_report);
+    tx.commit().unwrap();
     let before = read_task(&db, "a").unwrap();
     let rev = graph(&db);
     for op in [

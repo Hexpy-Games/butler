@@ -31,3 +31,5 @@ CREATE INDEX IF NOT EXISTS wm_task_parts_session ON wm_task_parts(assignee_sessi
 CREATE INDEX IF NOT EXISTS wm_tasks_session ON wm_tasks(assignee_session_id,work_id) WHERE assignee_session_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS wm_reviews_task ON wm_reviews(task_id,at,id);
 CREATE INDEX IF NOT EXISTS wm_audit_entity ON wm_audit(entity_kind,entity_id,seq);
+
+CREATE INDEX IF NOT EXISTS wm_holds_active ON wm_holds(target,kind,id) WHERE released_at IS NULL;
