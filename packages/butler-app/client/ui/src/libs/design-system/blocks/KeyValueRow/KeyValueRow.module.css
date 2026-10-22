@@ -1,4 +1,6 @@
 .row {
+  /* Focus scrolling keeps the whole ring of a linked row inside the scroller. */
+  scroll-margin: calc(var(--focus-ring-room) + var(--focus-ring-width));
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto;
@@ -90,4 +92,26 @@
   width: 100%;
   height: 100%;
   background: var(--swatch-color);
+}
+
+/* The UsageBars subtask hatch on the swatch color (same formula and token). */
+.color-swatch[data-pattern="hatched"] {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--swatch-color) 0 2px,
+    color-mix(in srgb, var(--swatch-color) var(--hatch-alpha), transparent) 2px
+      4px
+  );
+}
+
+/* A row linked to a chart is focusable; its ring keeps --focus-ring-room of
+   clear space around the row, like the chart's own ring. */
+.row[data-linked="true"] {
+  border-radius: var(--radius-control);
+  outline: none;
+}
+
+.row[data-linked="true"]:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-room);
 }
