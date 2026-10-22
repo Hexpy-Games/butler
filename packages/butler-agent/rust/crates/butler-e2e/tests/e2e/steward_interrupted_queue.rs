@@ -274,8 +274,7 @@ fn assert_requests(script: &stub::Script) {
     assert!(
         requests
             .iter()
-            .any(|r| request_text(r).starts_with(stub::DIRECTION)
-                && stub::child_lane(r)),
+            .any(|r| request_text(r).starts_with(stub::DIRECTION) && stub::child_lane(r)),
         "direction never ran as a child continuation"
     );
 }

@@ -154,9 +154,7 @@ pub(super) fn phase(
     policy: &GuidedExecutionPolicy,
     catalog: &GuidedCatalogSnapshot,
 ) -> GuidedPhase {
-    if policy.tracking_mode != "none"
-        && policy.role == PolicyRole::Butler
-    {
+    if policy.tracking_mode != "none" && policy.role == PolicyRole::Butler {
         return GuidedPhase::Execution;
     }
     let workspace = policy
