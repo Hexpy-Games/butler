@@ -108,6 +108,16 @@ fn replaying_a_committed_batch_preserves_ids_and_cursor()
     let tx = store::Transaction::new(db.transaction().unwrap()).unwrap();
     cutover::begin(&tx, cutover::CutoverState::Pending).unwrap();
     cutover::resume(&tx, cutover::CutoverState::Importing).unwrap();
+    let initial_cursor: String = tx.query_row(cutover::CURSOR, [], |r| r.get(0)).unwrap();
+    let seq: i64 = tx
+        .query_row("SELECT max(seq) FROM agent_task_graph_changes", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&initial_cursor).unwrap()["feed_seq"],
+        seq
+    );
     assert!(cutover::batch(&tx, &ctx()).unwrap());
     tx.commit().unwrap();
     let before: String = db
@@ -122,8 +132,8 @@ fn replaying_a_committed_batch_preserves_ids_and_cursor()
         .unwrap();
     let tx = store::Transaction::new(db.transaction().unwrap()).unwrap();
     tx.execute(
-        "UPDATE wm_migration SET cursor_json='{}' WHERE singleton=1",
-        [],
+        "UPDATE wm_migration SET cursor_json=?1 WHERE singleton=1",
+        [initial_cursor],
     )
     .unwrap();
     assert!(cutover::batch(&tx, &ctx()).unwrap());
@@ -358,6 +368,91 @@ fn direction_receipts_keep_each_recipient_of_the_same_parent_message()
         )
         .unwrap(),
         2
+    );
+    Ok(())
+}
+
+// test-category: pure-logic
+#[test]
+fn switched_turns_do_not_signal_downgrade() -> Result<(), butler_e2e::e2e::HarnessError> {
+    butler_e2e::gate!();
+    let mut db = legacy_db();
+    migrate(&mut db);
+    let seq: i64 = db
+        .query_row("SELECT max(seq) FROM agent_task_graph_changes", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    db.execute(
+        "INSERT INTO btcc_turns VALUES('new-turn','legacy-child')",
+        [],
+    )
+    .unwrap();
+    db.execute(
+        "UPDATE btcc_turns SET session_id='legacy-child' WHERE turn_id='new-turn'",
+        [],
+    )
+    .unwrap();
+    assert_eq!(
+        db.query_row::<i64, _, _>("SELECT max(seq) FROM agent_task_graph_changes", [], |r| r
+            .get(0))
+            .unwrap(),
+        seq
+    );
+    Ok(())
+}
+
+// test-category: pure-logic
+#[test]
+fn fence_pass_keeps_done_and_imports_new_directions() -> Result<(), butler_e2e::e2e::HarnessError> {
+    butler_e2e::gate!();
+    let mut db = legacy_db();
+    migrate(&mut db);
+    db.execute(
+        "UPDATE btcc_guided_works SET objective='Revised request' WHERE work_id='legacy-open'",
+        [],
+    )
+    .unwrap();
+    db.execute_batch("INSERT INTO btcc_subsession_directions(instruction_id,relation_id,revision,source_parent_turn_id,source_message_id,instruction,status,created_at) SELECT 'later-direction',relation_id,2,source_parent_turn_id,'later-message','Another instruction','pending',created_at FROM btcc_subsession_directions LIMIT 1").unwrap();
+    let tx = store::Transaction::new(db.transaction().unwrap()).unwrap();
+    assert!(cutover::resume(&tx, cutover::CutoverState::Done).unwrap());
+    assert_eq!(
+        cutover::status(&tx).unwrap().state,
+        cutover::CutoverState::Done
+    );
+    tx.commit().unwrap();
+    loop {
+        let tx = store::Transaction::new(db.transaction().unwrap()).unwrap();
+        let more = cutover::batch(&tx, &ctx()).unwrap();
+        assert_eq!(
+            cutover::status(&tx).unwrap().state,
+            cutover::CutoverState::Done
+        );
+        tx.commit().unwrap();
+        if !more {
+            break;
+        }
+    }
+    assert_eq!(
+        db.query_row::<i64, _, _>(
+            "SELECT count(*) FROM wm_instructions WHERE id='later-direction'",
+            [],
+            |r| r.get(0)
+        )
+        .unwrap(),
+        1
+    );
+    // Directions have no legacy feed trigger, so they must also be found alone.
+    db.execute_batch("INSERT INTO btcc_subsession_directions(instruction_id,relation_id,revision,source_parent_turn_id,source_message_id,instruction,status,created_at) SELECT 'directions-only',relation_id,3,source_parent_turn_id,'directions-only-message','Only direction changed','pending',created_at FROM btcc_subsession_directions LIMIT 1").unwrap();
+    migrate(&mut db);
+    assert_eq!(
+        db.query_row::<i64, _, _>(
+            "SELECT count(*) FROM wm_instructions WHERE id='directions-only'",
+            [],
+            |r| r.get(0)
+        )
+        .unwrap(),
+        1
     );
     Ok(())
 }

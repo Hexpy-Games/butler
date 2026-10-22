@@ -1,4 +1,4 @@
-//! Stepped online backups. No source checkpoint, VACUUM, or raw DB copying.
+//! Snapshot online backups. No source checkpoint, VACUUM, or raw DB copying.
 use super::state::{self, CutoverState};
 use butler_platform::{fs_space, secure_fs, sqlite};
 use rusqlite::{
@@ -76,6 +76,7 @@ pub fn prepare_with_cancel(root: &Path, cancelled: &dyn Fn() -> bool) -> io::Res
         return Ok(CutoverState::Importing);
     }
     check_cancelled(cancelled)?;
+    remove_partial_sets(&folder)?;
     let size = database_bytes(root)?;
     let needed = size.saturating_add(size.div_ceil(10));
     if fs_space::available_bytes(root)? < needed {
@@ -170,13 +171,18 @@ fn copy(source: &Path, path: &Path, cancelled: &dyn Fn() -> bool) -> io::Result<
     drop(options.open(path)?);
     let source =
         sqlite::open_with_flags(source, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(error)?;
+    source.execute_batch("BEGIN").map_err(error)?;
     let mut target = sqlite::open(path).map_err(error)?;
+    // Deliberate deviation from the spec's page batches: a single read
+    // transaction copies all pages. WAL writers continue; their WAL grows for
+    // the copy duration. Repeated small steps restart from page 1 on commits,
+    // causing unbounded target rewrites under steady chat.
     let backup = Backup::new(&source, &mut target).map_err(error)?;
     loop {
         check_cancelled(cancelled)?;
-        match backup.step(128).map_err(error)? {
+        match backup.step(-1).map_err(error)? {
             StepResult::Done => break,
-            StepResult::More => std::thread::yield_now(),
+            StepResult::More => return Err(error("incomplete all-pages SQLite backup")),
             StepResult::Busy | StepResult::Locked => std::thread::sleep(Duration::from_millis(10)),
             _ => return Err(error("unexpected SQLite backup state")),
         }
@@ -269,4 +275,20 @@ fn check_cancelled(cancelled: &dyn Fn() -> bool) -> io::Result<()> {
     } else {
         Ok(())
     }
+}
+
+// Only our timestamp-named directories are eligible, never symlinks or other
+// user content. Reclaim crashed copies before measuring space for their retry.
+fn remove_partial_sets(folder: &Path) -> io::Result<()> {
+    for entry in fs::read_dir(folder)? {
+        let entry = entry?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if chrono::NaiveDateTime::parse_from_str(&name, "%Y%m%dT%H%M%S%.fZ").is_ok()
+            && entry.file_type()?.is_dir()
+            && !entry.path().join("manifest.json").try_exists()?
+        {
+            fs::remove_dir_all(entry.path())?;
+        }
+    }
+    secure_fs::sync_path(folder)
 }

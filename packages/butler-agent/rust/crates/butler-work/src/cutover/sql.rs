@@ -16,7 +16,8 @@ pub(super) const WORK: &str = "SELECT * FROM btcc_guided_works WHERE work_id=?1"
 pub(super) const PLAN: &str =
     "SELECT * FROM btcc_guided_work_plan_revisions WHERE work_id=?1 ORDER BY revision DESC LIMIT 1";
 pub(super) const CHECKPOINT: &str = "SELECT * FROM btcc_guided_work_checkpoint_revisions WHERE work_id=?1 ORDER BY revision DESC LIMIT 1";
-pub(super) const DIRECTIONS: &str = "SELECT d.instruction_id,d.source_message_id,d.instruction,d.revision,r.child_session_id,g.child_turn_id,g.delegation_id,r.parent_session_id FROM btcc_subsession_directions d INDEXED BY wm_pending_directions JOIN btcc_session_relations r ON r.relation_id=d.relation_id LEFT JOIN btcc_subsession_delegations g ON g.relation_id=d.relation_id WHERE d.status='pending' AND d.instruction_id>?1 ORDER BY d.instruction_id LIMIT 1";
+pub(super) const DIRECTIONS: &str = "SELECT d.instruction_id,d.source_message_id,d.instruction,d.revision,r.child_session_id,g.child_turn_id,g.delegation_id,r.parent_session_id FROM btcc_subsession_directions d INDEXED BY wm_pending_directions JOIN btcc_session_relations r ON r.relation_id=d.relation_id LEFT JOIN btcc_subsession_delegations g ON g.relation_id=d.relation_id WHERE d.status='pending' AND d.instruction_id>?1 AND NOT EXISTS(SELECT 1 FROM wm_legacy_map m WHERE m.source='direction' AND m.source_id=d.instruction_id) ORDER BY d.instruction_id LIMIT 1";
+pub(super) const NEW_DIRECTIONS: &str = "SELECT EXISTS(SELECT 1 FROM btcc_subsession_directions d INDEXED BY wm_pending_directions WHERE d.status='pending' AND NOT EXISTS(SELECT 1 FROM wm_legacy_map m WHERE m.source='direction' AND m.source_id=d.instruction_id))";
 pub(super) const DELEGATION: &str = "SELECT d.*,r.child_session_id,r.parent_session_id FROM btcc_subsession_delegations d JOIN btcc_session_relations r ON r.relation_id=d.relation_id WHERE d.root_work_id=?1";
 pub(super) const HISTORY: [&str; 6] = [
     "SELECT * FROM btcc_guided_work_plan_revisions WHERE work_id=?1 ORDER BY revision",
@@ -113,6 +114,9 @@ pub(super) const CHAIN_STATE: &str = "UPDATE wm_task_chains SET state=?2 WHERE i
 pub(super) const TASK_REVISION: &str = "SELECT revision FROM wm_tasks WHERE id=?1";
 pub(super) const MAP_ENTITY: &str = "INSERT INTO wm_legacy_map VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(source,source_id) DO UPDATE SET new_id=excluded.new_id,source_hash=excluded.source_hash,imported_revision=excluded.imported_revision,batch=excluded.batch";
 
+pub(super) const FAIL_BACKUP: &str =
+    "UPDATE wm_migration SET state=?1 WHERE singleton=1 AND writer_epoch=0";
+
 pub const BACKING_UP: &str =
     "UPDATE wm_migration SET state='backing_up' WHERE singleton=1 AND writer_epoch=0";
 
@@ -132,6 +136,7 @@ pub const ALL: &[(&str, &str)] = &[
     ("PLAN", PLAN),
     ("CHECKPOINT", CHECKPOINT),
     ("DIRECTIONS", DIRECTIONS),
+    ("NEW_DIRECTIONS", NEW_DIRECTIONS),
     ("DELEGATION", DELEGATION),
     ("SESSION_BATCH", SESSION_BATCH),
     ("CLEAR_EDGES", CLEAR_EDGES),
@@ -175,6 +180,7 @@ pub const ALL: &[(&str, &str)] = &[
     ("TASK_REVISION", TASK_REVISION),
     ("MAP_ENTITY", MAP_ENTITY),
     ("BACKING_UP", BACKING_UP),
+    ("FAIL_BACKUP", FAIL_BACKUP),
     ("DELEGATION_BATCH", DELEGATION_BATCH),
     ("COUNT_DELEGATION", COUNT_DELEGATION),
     ("HISTORY_0", HISTORY[0]),

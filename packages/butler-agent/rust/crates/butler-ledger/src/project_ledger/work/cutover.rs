@@ -43,19 +43,26 @@ impl ProjectWork {
                     .push(json!({"source":"ledger_work","id":id,"code":"unresolvable_session"}));
                 continue;
             }
-            let version = repository.source_version(Some(vec![id.clone()])).await?;
-            let work = super::publication::observed_work(snapshot)?;
-            if work.work.session_id.is_empty() {
-                return Err(invalid("project_work_session_missing"));
+            let result = async {
+                let version = repository.source_version(Some(vec![id.clone()])).await?;
+                let work = super::publication::observed_work(snapshot)?;
+                if work.work.session_id.is_empty() {
+                    return Err(invalid("project_work_session_missing"));
+                }
+                observe(ProjectWorkObserveWorks {
+                    session_head_work_id: work.work.work_id.clone(),
+                    works: vec![work],
+                    ledger_project_id: scope.ledger_project_id.clone(),
+                    canonical_head_sha256: version,
+                    legacy_import_claim_work_id: None,
+                })
+                .await?;
+                Ok::<_, BtccError>(())
             }
-            observe(ProjectWorkObserveWorks {
-                session_head_work_id: work.work.work_id.clone(),
-                works: vec![work],
-                ledger_project_id: scope.ledger_project_id.clone(),
-                canonical_head_sha256: version,
-                legacy_import_claim_work_id: None,
-            })
-            .await?;
+            .await;
+            if let Err(error) = result {
+                unresolved.push(json!({"source":"ledger_work","id":id,"code":error.code()}));
+            }
         }
         Ok(unresolved)
     }

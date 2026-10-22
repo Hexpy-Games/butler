@@ -12,12 +12,22 @@ pub enum CutoverState {
     Importing,
     Done,
     PostponedNoSpace,
+    FailedBackup,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BackupFailureCode {
+    Copy,
+    Worker,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CutoverStatus {
     pub state: CutoverState,
     pub needs_source: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure_code: Option<BackupFailureCode>,
 }
 
 /// Must precede all schema writes, including forward migrations.
@@ -35,11 +45,18 @@ pub fn status(db: &Connection) -> Result<CutoverStatus> {
         return Ok(CutoverStatus {
             state: CutoverState::Pending,
             needs_source: serde_json::json!([]),
+            failure_code: None,
         });
+    };
+    let failure_code = match state.as_str() {
+        "failed_backup_copy" => Some(BackupFailureCode::Copy),
+        "failed_backup_worker" => Some(BackupFailureCode::Worker),
+        _ => None,
     };
     let state = match state.as_str() {
         "complete" => CutoverState::Done,
         "importing" | "needs_source" => CutoverState::Importing,
+        "failed_backup_copy" | "failed_backup_worker" => CutoverState::FailedBackup,
         "backing_up" => CutoverState::BackingUp,
         "postponed_no_space" => CutoverState::PostponedNoSpace,
         _ => CutoverState::Pending,
@@ -47,6 +64,7 @@ pub fn status(db: &Connection) -> Result<CutoverStatus> {
     Ok(CutoverStatus {
         state,
         needs_source: serde_json::from_str(&needs_source)?,
+        failure_code,
     })
 }
 
@@ -70,4 +88,14 @@ pub fn reimport(
     } else {
         Reimport::Separate
     }
+}
+
+/// The next start retries backup; the connection-local legacy writer fence stays.
+pub fn fail_backup(tx: &crate::store::Transaction<'_>, code: BackupFailureCode) -> Result<()> {
+    let state = match code {
+        BackupFailureCode::Copy => "failed_backup_copy",
+        BackupFailureCode::Worker => "failed_backup_worker",
+    };
+    tx.execute(super::sql::FAIL_BACKUP, [state])?;
+    Ok(())
 }

@@ -240,6 +240,30 @@ impl Gateway {
         Ok(list(reply.data(), "messages"))
     }
 
+    /// Wait for externally observable route state without a busy request loop.
+    pub async fn wait_for(
+        &self,
+        path: &str,
+        timeout: Duration,
+        accepts: impl Fn(&Value) -> bool,
+    ) -> Result<Value, HarnessError> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            let reply = self.get(path).await?;
+            expect_status(&reply, 200, path)?;
+            if accepts(reply.data()) {
+                return Ok(reply.data().clone());
+            }
+            if Instant::now() >= deadline {
+                return Err(harness_error(format!(
+                    "{path} did not reach expected state: {}",
+                    reply.text
+                )));
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
+
     /// Polls `/turns` until the turn reaches a state in `states`.
     pub async fn wait_turn(
         &self,

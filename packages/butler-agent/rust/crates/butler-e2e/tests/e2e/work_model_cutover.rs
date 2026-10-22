@@ -30,6 +30,17 @@ fn fixture(root: &Path, workspace: &Path) -> Result<(), HarnessError> {
     for name in tables {
         db.execute_batch(&format!("DROP TABLE {name}"))?;
     }
+    db.execute_batch(
+        "DROP INDEX IF EXISTS wm_legacy_session_work; DROP INDEX IF EXISTS wm_pending_directions",
+    )?;
+    assert_eq!(
+        db.query_row::<i64, _, _>(
+            "SELECT count(*) FROM sqlite_schema WHERE name GLOB 'wm_*'",
+            [],
+            |r| r.get(0)
+        )?,
+        0
+    );
     db.execute_batch(include_str!("../../fixtures/work-model-cutover/btcc.sql"))?;
     drop(db);
     std::fs::create_dir_all(root.join("app-server"))?;
@@ -59,20 +70,10 @@ fn fixture(root: &Path, workspace: &Path) -> Result<(), HarnessError> {
     Ok(())
 }
 pub(super) async fn completed(s: &Scenario) -> Result<Value, HarnessError> {
-    tokio::time::timeout(Duration::from_secs(30), async {
-        loop {
-            let reply = s.gw.get("/work-model/cutover").await?;
-            assert_eq!(reply.status, 200, "{}", reply.text);
-            if reply.data()["state"] == "done" {
-                return Ok::<_, HarnessError>(reply.data().clone());
-            }
-            // Wait for externally observable state; no synthetic fault or timing
-            // assertion is involved in this startup user flow.
-            tokio::task::yield_now().await;
-        }
+    s.gw.wait_for("/work-model/cutover", Duration::from_secs(30), |state| {
+        state["state"] == "done"
     })
     .await
-    .map_err(|_| butler_e2e::e2e::harness_error("cutover did not finish"))?
 }
 fn rows(db: &Connection, sql: &str) -> Result<Vec<String>, HarnessError> {
     Ok(db
@@ -133,6 +134,11 @@ async fn wmu_12_automatic_upgrade_is_private_idle_and_idempotent() -> Result<(),
         "SELECT cast(t.step_index AS TEXT) FROM wm_tasks t JOIN wm_works w ON w.id=t.work_id WHERE w.title='Prepare a garden' ORDER BY t.step_index,t.stack_position",
     )?;
     assert_eq!(chain_steps, vec!["0", "1", "1", "2"]);
+    let versions = rows(
+        &db,
+        "SELECT json_array(id,revision,task_graph_revision) FROM wm_works ORDER BY id",
+    )?;
+    let outbox: i64 = db.query_row("SELECT count(*) FROM wm_outbox", [], |r| r.get(0))?;
     let task_ids = rows(&db, "SELECT id FROM wm_tasks ORDER BY id")?;
     let migration: String = db.query_row(
         "SELECT source_counts_json FROM wm_migration WHERE singleton=1",
@@ -152,6 +158,17 @@ async fn wmu_12_automatic_upgrade_is_private_idle_and_idempotent() -> Result<(),
     assert_eq!(completed(&s).await?, status);
     let db = Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
     assert_eq!(rows(&db, "SELECT id FROM wm_works ORDER BY id")?, ids);
+    assert_eq!(
+        rows(
+            &db,
+            "SELECT json_array(id,revision,task_graph_revision) FROM wm_works ORDER BY id"
+        )?,
+        versions
+    );
+    assert_eq!(
+        db.query_row::<i64, _, _>("SELECT count(*) FROM wm_outbox", [], |r| r.get(0))?,
+        outbox
+    );
     assert_eq!(rows(&db, "SELECT id FROM wm_tasks ORDER BY id")?, task_ids);
     assert_eq!(
         db.query_row::<String, _, _>(
@@ -161,6 +178,15 @@ async fn wmu_12_automatic_upgrade_is_private_idle_and_idempotent() -> Result<(),
         )?,
         migration
     );
+    assert_eq!(
+        rows(
+            &db,
+            "SELECT name FROM sqlite_schema WHERE type='trigger' AND name GLOB 'task_graph_*'"
+        )?
+        .len(),
+        7
+    );
+    assert!(rows(&db, "SELECT name FROM sqlite_schema WHERE type='trigger' AND name IN ('task_graph_turn_insert','task_graph_turn_update')")?.is_empty());
     assert_eq!(std::fs::read_dir(backups)?.count(), 1);
     s.finish().await
 }
@@ -181,5 +207,35 @@ async fn newer_writer_epoch_refuses_startup() -> Result<(), HarnessError> {
     let result = s.agent.start_again().await;
     assert!(result.is_err());
     assert!(s.agent.logs().contains("newer Butler"));
+    s.finish().await
+}
+
+#[tokio::test]
+async fn backup_failure_is_visible_and_retried_on_restart() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = Setup::new("WMU-BACKUP-FAILURE")?;
+    fixture(&setup.sandbox.data, &setup.sandbox.workspace)?;
+    // A file occupying the backup directory is a real filesystem failure.
+    std::fs::write(setup.sandbox.data.join("backups"), b"unavailable")?;
+    let mut s = setup.start().await?;
+    let failed =
+        s.gw.wait_for("/work-model/cutover", Duration::from_secs(30), |v| {
+            v["state"] == "failed_backup"
+        })
+        .await?;
+    assert_eq!(failed["failure_code"], "copy");
+    let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
+    let db = Connection::open(&path)?;
+    assert!(rows(&db, "SELECT id FROM wm_works")?.is_empty());
+    assert_eq!(rows(&db, "SELECT work_id FROM btcc_guided_works")?.len(), 3);
+    drop(db);
+    s.agent.terminate().await?;
+    std::fs::remove_file(s.sandbox.data.join("backups"))?;
+    s.gw = s.agent.start_again().await?;
+    completed(&s).await?;
+    assert_eq!(
+        rows(&Connection::open(path)?, "SELECT id FROM wm_works")?.len(),
+        4
+    );
     s.finish().await
 }

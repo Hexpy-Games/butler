@@ -33,6 +33,16 @@ pub fn begin(tx: &Transaction<'_>, state: CutoverState) -> Result<bool> {
         "pending"
     };
     tx.execute(sql::BEGIN, [state])?;
+    // Capture the feed before Ledger observation. The initial indexed walk
+    // already imports history; only later changes need the fence pass.
+    let feed_seq = tx.query_row(sql::WATERMARK, [], |r| r.get(0))?;
+    save(
+        tx,
+        &Cursor {
+            feed_seq,
+            ..Cursor::default()
+        },
+    )?;
     Ok(true)
 }
 pub fn resume(tx: &Transaction<'_>, state: CutoverState) -> Result<bool> {
@@ -45,18 +55,22 @@ pub fn resume(tx: &Transaction<'_>, state: CutoverState) -> Result<bool> {
         Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))
     })?;
     let max: i64 = tx.query_row(sql::WATERMARK, [], |r| r.get(0))?;
-    if epoch == WRITER_EPOCH && max <= watermark {
+    let directions: bool = tx.query_row(sql::NEW_DIRECTIONS, [], |r| r.get(0))?;
+    if epoch == WRITER_EPOCH && max <= watermark && !directions {
         return Ok(false);
     }
     if epoch == WRITER_EPOCH {
         let cursor = Cursor {
-            phase: "feed".into(),
+            phase: "directions".into(),
             feed_seq: watermark,
             ..Cursor::default()
         };
         save(tx, &cursor)?;
     }
-    tx.execute(sql::IMPORTING, [])?;
+    // Fence reconciliation never changes global readiness or admissions.
+    if epoch == 0 {
+        tx.execute(sql::IMPORTING, [])?;
+    }
     Ok(true)
 }
 
@@ -245,6 +259,7 @@ fn feed(tx: &Transaction<'_>, ctx: &Context, cursor: &mut Cursor) -> Result<bool
 fn switch(tx: &Transaction<'_>) -> Result<()> {
     let watermark: i64 = tx.query_row(sql::WATERMARK, [], |r| r.get(0))?;
     tx.execute(sql::SWITCH, params![WRITER_EPOCH, watermark])?;
+    retire_turn_triggers(tx)?;
     Ok(())
 }
 pub fn needs_source(tx: &Transaction<'_>, source: &str, id: &str, code: &str) -> Result<()> {
@@ -274,4 +289,14 @@ pub fn session_batch(
         import_work(tx, ctx, id)?;
     }
     Ok(id)
+}
+
+/// New child turns are not legacy Work mutations. Older builds recreate these
+/// with IF NOT EXISTS; the seven legacy-table invalidation triggers stay live.
+pub fn retire_turn_triggers(db: &rusqlite::Connection) -> Result<()> {
+    let epoch: Option<i64> = db.query_row(sql::EPOCH, [], |r| r.get(0)).optional()?;
+    if epoch.is_some_and(|epoch| epoch == WRITER_EPOCH) {
+        db.execute_batch("DROP TRIGGER IF EXISTS task_graph_turn_insert; DROP TRIGGER IF EXISTS task_graph_turn_update")?;
+    }
+    Ok(())
 }

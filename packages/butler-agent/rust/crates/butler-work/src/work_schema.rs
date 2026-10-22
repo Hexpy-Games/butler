@@ -39,7 +39,7 @@ fn upgrade_migration_state(db: &Connection) -> rusqlite::Result<()> {
             |r| r.get(0),
         )
         .optional()?;
-    if ddl.is_some_and(|ddl| !ddl.contains("backing_up")) {
+    if ddl.is_some_and(|ddl| !ddl.contains("failed_backup_copy")) {
         db.execute_batch("ALTER TABLE wm_migration RENAME TO wm_migration_previous")?;
         db.execute_batch(include_str!("work_schema/support.sql"))?;
         db.execute_batch("INSERT INTO wm_migration SELECT * FROM wm_migration_previous; DROP TABLE wm_migration_previous")?;

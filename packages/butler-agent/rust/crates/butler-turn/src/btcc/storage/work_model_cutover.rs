@@ -102,7 +102,9 @@ impl BtccStorage {
             let state = self.work_model_read(cutover::status).await?.state;
             match state {
                 CutoverState::Done => return Ok(CutoverAdmission::Ready(id)),
-                CutoverState::PostponedNoSpace => return Ok(CutoverAdmission::Pending(id)),
+                CutoverState::PostponedNoSpace | CutoverState::FailedBackup => {
+                    return Ok(CutoverAdmission::Pending(id));
+                }
                 CutoverState::Importing if !imported => {
                     let session = session.clone();
                     let after = cursor.clone();

@@ -49,11 +49,16 @@
   ],
   "DIRECTIONS": [
     "SEARCH d USING INDEX wm_pending_directions (instruction_id>?)",
+    "CORRELATED SCALAR SUBQUERY 1",
+    "SEARCH m USING COVERING INDEX sqlite_autoindex_wm_legacy_map_1 (source=? AND source_id=?)",
     "SEARCH r USING INDEX sqlite_autoindex_btcc_session_relations_1 (relation_id=?)",
     "SEARCH g USING INDEX sqlite_autoindex_btcc_subsession_delegations_2 (relation_id=?) LEFT-JOIN"
   ],
   "ENSURE_CHAIN": [],
   "EPOCH": [
+    "SEARCH wm_migration USING INTEGER PRIMARY KEY (rowid=?)"
+  ],
+  "FAIL_BACKUP": [
     "SEARCH wm_migration USING INTEGER PRIMARY KEY (rowid=?)"
   ],
   "FEED": [
@@ -103,6 +108,13 @@
   ],
   "NEEDS_SOURCE": [
     "SEARCH wm_migration USING INTEGER PRIMARY KEY (rowid=?)"
+  ],
+  "NEW_DIRECTIONS": [
+    "SCAN CONSTANT ROW",
+    "SCALAR SUBQUERY 2",
+    "SCAN d USING COVERING INDEX wm_pending_directions",
+    "CORRELATED SCALAR SUBQUERY 1",
+    "SEARCH m USING COVERING INDEX sqlite_autoindex_wm_legacy_map_1 (source=? AND source_id=?)"
   ],
   "PLAN": [
     "SEARCH btcc_guided_work_plan_revisions USING INDEX sqlite_autoindex_btcc_guided_work_plan_revisions_2 (work_id=?)"

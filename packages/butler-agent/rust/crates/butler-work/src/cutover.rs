@@ -15,9 +15,10 @@ pub use admission::{ManagedAdmission, accept};
 pub use backup::{
     BackupFile, Manifest, check_epoch as check_epoch_path, prepare, prepare_with_cancel, valid,
 };
-pub use batches::{batch, begin, needs_source, resume, session_batch};
+pub use batches::{batch, begin, needs_source, resume, retire_turn_triggers, session_batch};
 pub use shape::{Action, Layout, layout};
 pub use sql::{ALL, APP_PROJECT_BATCH, APP_SESSIONS, BACKING_UP, CURSOR, EPOCH};
 pub use state::{
-    CutoverState, CutoverStatus, Reimport, WRITER_EPOCH, check_epoch, reimport, status,
+    BackupFailureCode, CutoverState, CutoverStatus, Reimport, WRITER_EPOCH, check_epoch,
+    fail_backup, reimport, status,
 };

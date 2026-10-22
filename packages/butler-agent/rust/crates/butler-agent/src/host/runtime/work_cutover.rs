@@ -76,21 +76,7 @@ async fn run(
         .await
         .map_err(BtccError::from)?;
     let backup = if epoch == 0 {
-        storage
-            .work_model_write(|tx| {
-                tx.execute(butler_work::cutover::BACKING_UP, [])?;
-                Ok(())
-            })
-            .await
-            .map_err(BtccError::from)?;
-        let directory = root.clone();
-        let backup_stop = stop.clone();
-        tokio::task::spawn_blocking(move || {
-            butler_work::cutover::prepare_with_cancel(&directory, &|| backup_stop.is_cancelled())
-        })
-        .await
-        .map_err(|e| BtccError::relayed("work_cutover_backup_worker", e.to_string()))?
-        .map_err(|e| BtccError::relayed("work_cutover_backup", e.to_string()))?
+        prepare_backup(root.clone(), &storage, stop.clone()).await?
     } else {
         CutoverState::Done
     };
@@ -115,6 +101,42 @@ async fn run(
     }
     Ok(())
 }
+async fn prepare_backup(
+    root: PathBuf,
+    storage: &BtccStorage,
+    stop: CancellationToken,
+) -> Result<CutoverState, BtccError> {
+    storage
+        .work_model_write(|tx| {
+            tx.execute(cutover::BACKING_UP, [])?;
+            Ok(())
+        })
+        .await
+        .map_err(BtccError::from)?;
+    // Pre-import image, after this build's native schema migrations. It is
+    // deliberately not a byte-for-byte pre-upgrade copy of the data folder.
+    let result = tokio::task::spawn_blocking(move || {
+        cutover::prepare_with_cancel(&root, &|| stop.is_cancelled())
+    })
+    .await;
+    let (code, error) = match result {
+        Ok(Ok(state)) => return Ok(state),
+        Ok(Err(error)) => (
+            cutover::BackupFailureCode::Copy,
+            BtccError::relayed("work_cutover_backup", error.to_string()),
+        ),
+        Err(error) => (
+            cutover::BackupFailureCode::Worker,
+            BtccError::relayed("work_cutover_backup_worker", error.to_string()),
+        ),
+    };
+    storage
+        .work_model_write(move |tx| cutover::fail_backup(tx, code))
+        .await
+        .map_err(BtccError::from)?;
+    Err(error)
+}
+
 fn context() -> store::Context {
     store::Context {
         now: chrono::Utc::now().timestamp_millis(),

@@ -74,6 +74,8 @@ pub(super) fn apply_transaction(connection: &mut Connection) -> rusqlite::Result
     // so no later migration can accidentally rely on deferred constraints.
     butler_work::work_schema::ensure(&transaction)?;
     transaction.execute_batch("CREATE INDEX IF NOT EXISTS wm_legacy_session_work ON btcc_guided_works(session_id,work_id); CREATE INDEX IF NOT EXISTS wm_pending_directions ON btcc_subsession_directions(instruction_id) WHERE status='pending'")?;
+    butler_work::cutover::retire_turn_triggers(&transaction)
+        .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
     transaction.commit()
 }
 
