@@ -47,9 +47,8 @@ fn clear(
         .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
         .map_err(sql_error)?;
     let phase = std::time::Instant::now();
-    // A retryable failure is not pending work; clearing makes it final history.
     let busy_now: bool = tx.query_row(
-        "SELECT EXISTS(SELECT 1 FROM turns WHERE chat_id='general' AND (state NOT IN ('delivered','cancelled','failed','runtime_fault'))) OR EXISTS(SELECT 1 FROM session_queued_messages WHERE chat_id='general' AND state IN ('queued','dispatching')) OR EXISTS(SELECT 1 FROM app_session_context_gate WHERE session_id='general')",
+        "SELECT EXISTS(SELECT 1 FROM turns WHERE chat_id='general' AND (state NOT IN ('delivered','cancelled','failed','runtime_fault') OR retryable=1)) OR EXISTS(SELECT 1 FROM session_queued_messages WHERE chat_id='general' AND state IN ('queued','dispatching')) OR EXISTS(SELECT 1 FROM app_session_context_gate WHERE session_id='general')",
         [], |row| row.get(0)).map_err(sql_error)?;
     profile_read("SELECT busy", phase);
     if busy_now {
@@ -133,14 +132,6 @@ fn transfer_history(db: &Connection, archived: &str) -> Result<(), GatewayApplic
         )
         .map_err(sql_error)?;
     }
-    // Retry is bound to the session the turn ran in, so archived failures are final.
-    timed_execute(
-        db,
-        "UPDATE turns SET retryable=0 WHERE chat_id=?1 AND retryable=1",
-        [archived],
-    )
-    .map_err(sql_error)?;
-    timed_execute(db, "UPDATE messages SET retryable=0 WHERE chat_id='general' AND retryable=1 AND rowid BETWEEN (SELECT first_rowid FROM app_general_history WHERE archive_id=?1) AND (SELECT last_rowid FROM app_general_history WHERE archive_id=?1)", [archived]).map_err(sql_error)?;
     timed_execute(db, "UPDATE message_files SET owner_session_id=?1 WHERE owner_session_id='general' AND EXISTS(SELECT 1 FROM messages m JOIN app_general_history h ON h.archive_id=?1 WHERE m.id=message_files.message_id AND m.rowid BETWEEN h.first_rowid AND h.last_rowid)", [archived]).map_err(sql_error)?;
     timed_execute(
         db,

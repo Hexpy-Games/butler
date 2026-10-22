@@ -92,9 +92,10 @@ CREATE TABLE IF NOT EXISTS app_session_relocations (
  phase TEXT NOT NULL CHECK(phase IN ('preparing','prepared','bound','committed','aborted')),
  from_json TEXT NOT NULL, to_json TEXT NOT NULL, prepared_json TEXT, error_code TEXT
 );
--- Turn ownership is read from turns; no turn lifecycle releases 'turn' rows,
--- so drop rows earlier startups wrote instead of keeping sessions busy forever.
-DELETE FROM app_session_context_gate WHERE owner_kind='turn';
+INSERT OR IGNORE INTO app_session_context_gate(session_id,owner_kind,owner_id)
+ SELECT chat_id,'turn',id FROM turns t
+ WHERE (state NOT IN ('delivered','cancelled','failed','runtime_fault') OR retryable=1)
+ AND rowid=(SELECT MAX(rowid) FROM turns WHERE chat_id=t.chat_id);
 CREATE UNIQUE INDEX IF NOT EXISTS app_session_relocation_active
  ON app_session_relocations(session_id) WHERE phase IN ('preparing','prepared','bound');
 CREATE TRIGGER IF NOT EXISTS session_context_queue_guard BEFORE INSERT ON session_queued_messages
