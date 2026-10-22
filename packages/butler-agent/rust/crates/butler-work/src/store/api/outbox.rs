@@ -62,18 +62,12 @@ fn tasks_changed(tx: &Transaction<'_>, ctx: &Context, id: &str) -> Result<()> {
         "task_graph_revision":row["task_graph_revision"]})
     .to_string();
     let seq: Option<i64> = tx
-        .query_row(
-            "SELECT seq FROM wm_outbox WHERE seq>?1 AND topic='work_model.changed'
-         AND json_extract(payload_json,'$.work_id')=?2 LIMIT 1",
-            params![tx.outbox_start, id],
-            |r| r.get(0),
-        )
+        .query_row(sql::TASKS_CHANGED, params![tx.outbox_start, id], |r| {
+            r.get(0)
+        })
         .optional()?;
     if let Some(seq) = seq {
-        tx.execute(
-            "UPDATE wm_outbox SET payload_json=?1 WHERE seq=?2",
-            params![payload, seq],
-        )?;
+        tx.execute(sql::UPDATE_TASKS_CHANGED, params![payload, seq])?;
     } else {
         tx.execute(
             super::super::sql::OUTBOX,

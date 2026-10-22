@@ -18,6 +18,7 @@ EDIT_WORK = "UPDATE wm_works SET title=?2,description=?3,kind=?4,assignee=?5,dra
 HOME = "UPDATE wm_works SET home_session_id=?2,revision=revision+1,updated_at=?3 WHERE id=?1 AND revision=?4";
 RANK = "UPDATE wm_works SET plan_id=?2,plan_rank=?3,revision=revision+1,updated_at=?4 WHERE id=?1 AND revision=?5";
 AUDIT = "INSERT INTO wm_audit(entity_kind,entity_id,revision,actor_json,op,at,payload_json) VALUES(?1,?2,?3,?4,?5,?6,?7)";
+OUTBOX_START = "SELECT coalesce(max(seq),0) FROM wm_outbox";
 OUTBOX = "INSERT INTO wm_outbox(topic,payload_json,created_at) VALUES(?1,?2,?3)";
 COUNT_ROW = "SELECT count FROM wm_counts WHERE scope_kind=?1 AND scope_ref=?2 AND key=?3";
 SCOPE_COUNTS = "SELECT run_state,count(*) AS count FROM wm_works WHERE scope_kind=?1 AND scope_ref=?2 GROUP BY run_state";

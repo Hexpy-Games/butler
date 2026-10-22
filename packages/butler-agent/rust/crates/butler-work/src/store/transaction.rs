@@ -9,10 +9,7 @@ pub struct Transaction<'conn> {
 }
 impl<'conn> Transaction<'conn> {
     pub fn new(inner: rusqlite::Transaction<'conn>) -> Result<Self> {
-        let outbox_start =
-            inner.query_row("SELECT coalesce(max(seq),0) FROM wm_outbox", [], |row| {
-                row.get(0)
-            })?;
+        let outbox_start = inner.query_row(sql::OUTBOX_START, [], |row| row.get(0))?;
         Ok(Self {
             inner,
             outbox_start,
