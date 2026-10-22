@@ -246,7 +246,7 @@ async fn wma_06_task_edits_preserve_canon_membership_and_support_heads() -> Resu
 #[tokio::test]
 async fn wma_08_task_routes_require_an_active_work_scope() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let Seed { s, .. } = seeded("WMA-08", "
+    let Seed { s, project, .. } = seeded("WMA-08", "
         UPDATE wm_works SET scope_ref='missing-project' WHERE id='wk_passkey';
         INSERT INTO wm_works(id,scope_kind,scope_ref,title,visibility,origin,created_at,updated_at,created_by)
           SELECT 'session-work','session',home_session_id,'session work','private','chat',1,1,'{}'
@@ -274,6 +274,22 @@ async fn wma_08_task_routes_require_an_active_work_scope() -> Result<(), Harness
             .await?;
         assert_eq!(write.status, 404, "{}", write.text);
         assert_eq!(write.error_code(), Some(code));
+    }
+    data(
+        s.gw.post(&format!("/projects/{project}/archive"), json!({}))
+            .await?,
+        200,
+    );
+    for reply in [
+        s.gw.get("/works/wk_canon/tasks").await?,
+        s.gw.post(
+            "/works/wk_canon/tasks/edits",
+            json!({"ops":[],"expected_task_graph_revision":1}),
+        )
+        .await?,
+    ] {
+        assert_eq!(reply.status, 404, "{}", reply.text);
+        assert_eq!(reply.error_code(), Some("project_not_found"));
     }
     s.finish().await
 }

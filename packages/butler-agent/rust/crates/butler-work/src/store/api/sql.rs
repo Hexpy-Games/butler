@@ -6,6 +6,7 @@ macro_rules! statements {
     }
 }
 statements! {
+WORK_SCOPE = "SELECT scope_kind,scope_ref FROM wm_works WHERE id=?1";
 PLAN_SCOPE = "SELECT project_id FROM wm_plans WHERE id=?1 AND visibility='canon'";
 EPIC_SCOPE = "SELECT scope_ref FROM wm_works WHERE id=?1 AND visibility='canon'";
 CHAINS = "SELECT * FROM wm_task_chains WHERE work_id=?1 ORDER BY created_at,id";

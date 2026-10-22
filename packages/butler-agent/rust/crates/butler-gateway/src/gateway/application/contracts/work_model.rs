@@ -46,6 +46,12 @@ pub struct AppWorkModelConflict {
     pub revision: i64,
 }
 
+#[derive(Clone, Debug)]
+pub enum AppWorkModelScope {
+    Project(String),
+    Session(String),
+}
+
 pub trait AppWorkModelPort: Send + Sync + 'static {
     fn execute(&self, _request: AppWorkModelRequest) -> ApplicationFuture<Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
@@ -56,6 +62,10 @@ pub trait AppWorkModelPort: Send + Sync + 'static {
         _resource: AppWorkModelResource,
         _id: String,
     ) -> ApplicationFuture<String> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    /// Work identity only, resolved by primary key on the BTCC read lane.
+    fn work_scope(&self, _id: String) -> ApplicationFuture<AppWorkModelScope> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn changes(&self) -> Option<tokio::sync::watch::Receiver<()>> {
