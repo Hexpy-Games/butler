@@ -25,8 +25,9 @@ pub(super) fn exercise(tx: &Transaction<'_>) -> Result<()> {
         turn_id: "batch-turn".into(),
         instruction_id: instruction,
         work_id: None,
-        tier: 1,
+        tier: 0,
         planning: false,
+        floors: Default::default(),
         child_session: false,
     };
     let input: Apply = serde_json::from_value(
@@ -96,6 +97,7 @@ pub(super) fn exercise(tx: &Transaction<'_>) -> Result<()> {
                 .is_err()
         );
     }
+    super::tiers::exercise(tx, &ctx, work, a)?;
     fail_task(tx, &ctx, a, "batch-chat", "task_failed")?;
     assert_eq!(read_task(tx, b)?["status"], "held");
     assert_eq!(read_task(tx, c)?["status"], "held");

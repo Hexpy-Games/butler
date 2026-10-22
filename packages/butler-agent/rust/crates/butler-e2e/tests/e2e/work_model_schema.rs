@@ -362,7 +362,9 @@ async fn p1_schema_upgrades_before_start_and_second_start_is_identical() -> Resu
             Value::Text("running".into()),
             Value::Integer(17),
             Value::Null,
-            Value::Integer(31)
+            Value::Integer(31),
+            Value::Text(String::new()),
+            Value::Text(String::new())
         ]]
     );
     assert_eq!(

@@ -11,8 +11,8 @@ impl Batch<'_, '_> {
         criteria: &[String],
         tasks: &[Vec<TaskDraft>],
     ) -> Result<()> {
-        if self.scope.tier != 1 || self.work.is_some() {
-            return Err(Error::Invalid("bootstrap is only available once at Tier 1"));
+        if self.work.is_some() {
+            return Err(Error::Invalid("bootstrap is only available once"));
         }
         if !(2..=3).contains(&criteria.len()) || tasks.is_empty() || tasks.iter().any(Vec::is_empty)
         {
@@ -262,11 +262,6 @@ impl Batch<'_, '_> {
                 expected_tree_version,
                 impact_map,
             } => {
-                if impact_map.is_some() {
-                    return Err(Error::Invalid(
-                        "Spec impact reconciliation is required before activation",
-                    ));
-                }
                 let work = read_work(self.tx, self.work()?)?;
                 let tree_key = format!("spec_tree:{}", self.work()?);
                 let scope = (text(&work, "scope_kind")?, text(&work, "scope_ref")?);
@@ -284,49 +279,10 @@ impl Batch<'_, '_> {
                         current: json!({"tree_version":version}),
                     });
                 }
-                for spec in published_refs {
-                    let node = self.validate_spec(spec)?;
-                    if self.scope.tier == 1 && work["spec_node_id"] != spec.node_id {
-                        return Err(Error::Invalid("Tier 1 can author only the brief node"));
-                    }
-                    self.fence_consumers(spec)?;
-                    activate_spec(
-                        self.tx,
-                        self.ctx,
-                        &spec.node_id,
-                        revision(&node)?,
-                        node["active_revision"].as_i64(),
-                        spec.revision,
-                    )?;
-                    self.revisions
-                        .insert(spec.node_id.clone(), revision(&node)? + 1);
-                }
+                self.activate_publications(published_refs, impact_map.as_ref())?;
                 count(self.tx, scope, &tree_key, 1)
             }
             _ => Err(Error::Invalid("not a Spec operation")),
         }
-    }
-    fn fence_consumers(&self, spec: &SpecRef) -> Result<()> {
-        let node = self.validate_spec(spec)?;
-        if let Some(old) = node["active_revision"].as_i64() {
-            for criterion in rows(
-                self.tx,
-                super::super::api::sql::SPEC_CRITERIA,
-                params![spec.node_id, old],
-            )? {
-                let consumers = rows(
-                    self.tx,
-                    crate::work_queries::Query::CriterionConsumers.sql(),
-                    params![spec.node_id, old, text(&criterion, "criterion_id")?],
-                )?;
-                for task in consumers {
-                    let row = read_task(self.tx, text(&task, "task_id")?)?;
-                    if matches!(row["status"].as_str(), Some("running" | "in_review")) {
-                        return Err(Error::Running);
-                    }
-                }
-            }
-        }
-        Ok(())
     }
 }

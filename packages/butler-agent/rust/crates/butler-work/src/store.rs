@@ -18,6 +18,7 @@ mod queue;
 mod recovery;
 mod specs;
 pub mod sql;
+pub mod tiers;
 pub mod tool_ops;
 mod transaction;
 mod transitions;

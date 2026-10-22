@@ -1,10 +1,12 @@
 //! One model batch, one writer transaction. The host binds scope and tier.
 mod bootstrap;
+mod impact;
 mod structure;
 use super::{execution::*, tool_ops::*, *};
 use crate::work_ids::{IdGenerator, IdKind};
 use std::collections::BTreeMap;
 
+#[derive(Clone)]
 pub struct ApplyScope {
     pub session_id: String,
     pub turn_id: String,
@@ -12,6 +14,8 @@ pub struct ApplyScope {
     pub work_id: Option<String>,
     pub tier: u8,
     pub planning: bool,
+    /// Deterministic facts captured by the authenticated admission boundary.
+    pub floors: tiers::Floors,
     /// Child-session completion is reported only by the parent's delivery.
     pub child_session: bool,
 }
@@ -31,8 +35,9 @@ pub fn apply(
     scope: &ApplyScope,
     input: &Apply,
 ) -> Result<Value> {
+    let scope = tiers::selected_scope(tx, scope, input)?;
     tx.execute_batch("SAVEPOINT wm_apply")?;
-    let result = apply_batch(tx, ctx, scope, input);
+    let result = apply_batch(tx, ctx, &scope, input);
     match result {
         Ok(value) => {
             tx.execute_batch("RELEASE wm_apply")?;
@@ -56,6 +61,17 @@ fn apply_batch(
     if input.reason.trim().is_empty() || input.operations.is_empty() {
         return Err(Error::Invalid("reason and operations required"));
     }
+    if scope.tier == 1
+        && scope.work_id.is_none()
+        && !input
+            .operations
+            .iter()
+            .any(|op| matches!(op, Operation::Start { .. }))
+    {
+        return Err(Error::Invalid(
+            "Tier 1 bootstrap must start its first Task in the same batch",
+        ));
+    }
     let mut batch = Batch {
         tx,
         ctx,
@@ -77,7 +93,21 @@ fn apply_batch(
         .work
         .as_deref()
         .ok_or(Error::Invalid("no bound Work"))?;
+    tiers::admit(
+        tx,
+        ctx,
+        &scope.session_id,
+        work_id,
+        scope.tier,
+        &input.reason,
+    )?;
+    for op in &input.operations {
+        if let Operation::Start { task_id } = op {
+            tiers::bind_started_task(tx, &scope.session_id, &batch.resolve(task_id)?)?;
+        }
+    }
     let work = read_work(tx, work_id)?;
+    batch.revisions.insert(work_id.into(), revision(&work)?);
     Ok(
         json!({"ok":true,"operation_ids":batch.operation_ids,"keys":batch.keys,
         "entity_revisions":batch.revisions,"task_graph_revision":work["task_graph_revision"],
@@ -163,7 +193,29 @@ impl Batch<'_, '_> {
         }
         Ok(())
     }
+    fn resolve_spec(&self, spec: &SpecRef) -> Result<SpecRef> {
+        let node_id = self.resolve(&spec.node_id)?;
+        let body_hash = if spec.body_hash.starts_with('@') {
+            if self.resolve(&spec.body_hash)? != node_id {
+                return Err(Error::Invalid("Spec publication key mismatch"));
+            }
+            let row = one(
+                self.tx,
+                super::sql::SPEC_REVISION,
+                rusqlite::params![node_id, spec.revision],
+            )?;
+            text(&row, "body_hash")?.to_owned()
+        } else {
+            spec.body_hash.clone()
+        };
+        Ok(SpecRef {
+            node_id,
+            revision: spec.revision,
+            body_hash,
+        })
+    }
     fn validate_spec(&self, spec: &SpecRef) -> Result<Value> {
+        let spec = self.resolve_spec(spec)?;
         let node = one(self.tx, super::sql::NODE, [&spec.node_id])?;
         if self.work.is_some() && node["work_id"] != self.work()? {
             return Err(Error::Invalid("Spec outside bound Work"));
@@ -197,13 +249,34 @@ impl Batch<'_, '_> {
         {
             return Err(Error::Invalid("operation is hidden at Tier 1"));
         }
+        let added = match op {
+            Operation::CreateLight { tasks, .. } => tasks.iter().map(Vec::len).sum(),
+            Operation::Add { .. } => 1,
+            _ => 0,
+        };
+        tiers::check_floor(
+            self.tx,
+            self.work.as_deref(),
+            self.scope.tier,
+            added,
+            self.scope.floors,
+        )?;
+        if self.scope.tier == 2 && matches!(op, Operation::Start { .. }) {
+            tiers::ensure_detail(self.tx, self.work()?)?;
+            tiers::ensure_coverage(self.tx, self.work()?)?;
+        }
         match op {
             Operation::CreateLight {
+                tier: _,
                 key,
                 goal,
                 done_criteria,
                 tasks,
             } => self.bootstrap(key.as_deref(), goal, done_criteria, tasks),
+            Operation::Escalate { .. } => {
+                tiers::ensure_detail(self.tx, self.work()?)?;
+                tiers::ensure_coverage(self.tx, self.work()?)
+            }
             Operation::Add { .. }
             | Operation::Edit { .. }
             | Operation::Move { .. }

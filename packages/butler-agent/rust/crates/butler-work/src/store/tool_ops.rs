@@ -54,11 +54,14 @@ pub struct SpecDraft {
 pub enum Operation {
     #[serde(rename = "work.create_light")]
     CreateLight {
+        tier: Option<u8>,
         key: Option<String>,
         goal: String,
         done_criteria: Vec<String>,
         tasks: Vec<Vec<TaskDraft>>,
     },
+    #[serde(rename = "work.escalate")]
+    Escalate { tier: u8, reason: String },
     #[serde(rename = "task.add")]
     Add {
         key: Option<String>,
@@ -151,8 +154,27 @@ pub enum Operation {
     Activate {
         published_refs: Vec<SpecRef>,
         expected_tree_version: i64,
-        impact_map: Option<serde_json::Value>,
+        impact_map: Option<ImpactMap>,
     },
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ImpactMap {
+    pub tasks: Vec<TaskImpact>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskImpact {
+    pub task_id: String,
+    pub expected_revision: i64,
+    pub acceptance_refs: Vec<CriterionRef>,
+    pub corrective: Option<CorrectiveDraft>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CorrectiveDraft {
+    pub title: String,
+    pub description: String,
 }
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum Verdict {
@@ -165,7 +187,11 @@ impl Operation {
     pub fn structure(&self) -> bool {
         matches!(
             self,
-            Self::Add { .. }
+            Self::Activate {
+                impact_map: Some(_),
+                ..
+            } | Self::Escalate { .. }
+                | Self::Add { .. }
                 | Self::Edit { .. }
                 | Self::Move { .. }
                 | Self::JoinStack { .. }

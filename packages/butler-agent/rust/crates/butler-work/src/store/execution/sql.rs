@@ -23,6 +23,7 @@ DELETE_CRITERIA = "DELETE FROM wm_task_criteria WHERE task_id=?1";
 INSERT_CRITERION = "INSERT INTO wm_task_criteria(task_id,node_id,node_revision,criterion_id) VALUES(?1,?2,?3,?4)";
 CRITERION = "SELECT c.*,n.work_id,n.active_revision FROM wm_spec_criteria c JOIN wm_spec_nodes n ON n.node_id=c.node_id WHERE c.node_id=?1 AND c.revision=?2 AND c.criterion_id=?3";
 EDIT_TASK = "UPDATE wm_tasks SET title=?2,description=?3,status=?4,revision=revision+1,updated_at=?5 WHERE id=?1 AND revision=?6";
+TASK_SPEC = "UPDATE wm_tasks SET spec_ref=?2,revision=revision+1,updated_at=?3 WHERE id=?1 AND revision=?4";
 WORK_SPEC = "UPDATE wm_works SET spec_node_id=?2,tier=?3 WHERE id=?1";
 INSTRUCTION = "SELECT id FROM wm_instructions WHERE id=?1 AND target_session_id=?2";
 ATTEMPTS = "SELECT * FROM wm_attempts WHERE task_id=?1 ORDER BY started_at,id";

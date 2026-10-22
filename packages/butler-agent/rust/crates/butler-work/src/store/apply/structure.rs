@@ -25,12 +25,18 @@ impl Batch<'_, '_> {
                 }
                 let task = self.task(task_id)?;
                 let id = text(&task, "id")?;
+                let mut patch = patch.clone();
+                patch.acceptance_refs = patch
+                    .acceptance_refs
+                    .as_deref()
+                    .map(|refs| self.criteria(refs))
+                    .transpose()?;
                 let updated = edit_task_fields(
                     self.tx,
                     self.ctx,
                     id,
                     self.edited(task_id, &task)?,
-                    patch,
+                    &patch,
                     confirm_draft.unwrap_or(false),
                 )?;
                 self.revisions.insert(id.into(), revision(&updated)?);
@@ -110,6 +116,16 @@ impl Batch<'_, '_> {
             _ => Err(Error::Invalid("not a part op")),
         }
     }
+    pub(super) fn criteria(&self, refs: &[CriterionRef]) -> Result<Vec<CriterionRef>> {
+        refs.iter()
+            .map(|criterion| {
+                Ok(CriterionRef {
+                    node_id: self.resolve(&criterion.node_id)?,
+                    ..criterion.clone()
+                })
+            })
+            .collect()
+    }
     fn resolve_many(&self, ids: &[String]) -> Result<Vec<String>> {
         ids.iter().map(|id| self.resolve(id)).collect()
     }
@@ -131,7 +147,10 @@ impl Batch<'_, '_> {
             join_step_of_task_id.as_deref(),
             step.as_deref(),
         );
-        let criteria = acceptance_refs.as_deref();
+        let criteria = acceptance_refs
+            .as_deref()
+            .map(|refs| self.criteria(refs))
+            .transpose()?;
         placement(after, join, step)?;
         let work = self.work()?.to_owned();
         let spec = self
@@ -182,7 +201,7 @@ impl Batch<'_, '_> {
             &TaskPatch {
                 title: None,
                 description: Some(description.into()),
-                acceptance_refs: criteria.map(<[_]>::to_vec),
+                acceptance_refs: criteria,
             },
             false,
         )?;

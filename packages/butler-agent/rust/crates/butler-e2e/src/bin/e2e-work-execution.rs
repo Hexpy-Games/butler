@@ -11,6 +11,10 @@ type Failure = Box<dyn std::error::Error + Send + Sync>;
 mod batch;
 #[path = "e2e-work-execution/failure.rs"]
 mod failure;
+#[path = "e2e-work-execution/impact.rs"]
+mod impact;
+#[path = "e2e-work-execution/tiers.rs"]
+mod tiers;
 
 #[tokio::main]
 async fn main() -> std::result::Result<(), Failure> {
@@ -142,6 +146,9 @@ fn flow(tx: &Transaction<'_>) -> Result<()> {
         |r| r.get(0),
     )?;
     assert_eq!(count, 1, "integrate/review stay hidden parts");
+    tx.execute_batch("SAVEPOINT impact_flow")?;
+    impact::exercise(tx, &ctx)?;
+    tx.execute_batch("ROLLBACK TO impact_flow; RELEASE impact_flow")?;
     failure::exercise(tx, &ctx)?;
     batch::exercise(tx)?;
     Ok(())

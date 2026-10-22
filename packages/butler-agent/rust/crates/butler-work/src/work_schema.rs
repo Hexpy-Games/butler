@@ -20,7 +20,22 @@ fn target(connection: &Connection) -> rusqlite::Result<()> {
     upgrade::p1(connection)?;
     upgrade_migration_state(connection)?;
     upgrade_execution(connection)?;
-    create(connection)
+    create(connection)?;
+    upgrade_tiers(connection)
+}
+fn upgrade_tiers(db: &Connection) -> rusqlite::Result<()> {
+    let columns = db
+        .prepare("PRAGMA table_info(wm_session_exec)")?
+        .query_map([], |r| r.get::<_, String>(1))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    for name in ["tier_reason", "tier_policy_revision"] {
+        if !columns.is_empty() && !columns.iter().any(|column| column == name) {
+            db.execute_batch(&format!(
+                "ALTER TABLE wm_session_exec ADD COLUMN {name} TEXT NOT NULL DEFAULT ''"
+            ))?;
+        }
+    }
+    Ok(())
 }
 fn upgrade_execution(db: &Connection) -> rusqlite::Result<()> {
     let columns = db
