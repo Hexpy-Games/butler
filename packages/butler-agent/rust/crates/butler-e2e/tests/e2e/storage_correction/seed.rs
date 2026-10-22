@@ -64,9 +64,18 @@ pub(super) fn seed(path: &Path, p: &Profile) -> Result<(), HarnessError> {
 pub(super) fn snapshot(path: &Path) -> Result<BTreeMap<String, (u64, String)>, HarnessError> {
     let db = Connection::open(path)?;
     let tables=db.prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT IN ('agent_storage_corrections','agent_acceptance_reclaims') ORDER BY name")?.query_map([],|r|r.get::<_,String>(0))?.collect::<rusqlite::Result<Vec<_>>>()?;
+    assert_process_lifecycle(&db)?;
     let mut out = BTreeMap::new();
     for table in tables {
-        let sql = if table == "btcc_model_round_acceptances" {
+        // Boot/clean events vary across restart independently of correction.
+        // Their exact relationship to the process marker is asserted above.
+        let sql = if table == "wm_runtime_marker" {
+            "SELECT singleton FROM wm_runtime_marker".to_owned()
+        } else if table == "wm_audit" {
+            "SELECT * FROM wm_audit WHERE entity_kind<>'runtime_marker' ORDER BY seq".to_owned()
+        } else if table == "sqlite_sequence" {
+            "SELECT * FROM sqlite_sequence WHERE name<>'wm_audit' ORDER BY name".to_owned()
+        } else if table == "btcc_model_round_acceptances" {
             "SELECT acceptance_id,turn_id,round_id,route_digest,candidate_index,checkpoint_id,checkpoint_revision,model_ref,transport_attempt,provider_identity_json,created_at FROM btcc_model_round_acceptances ORDER BY rowid".to_owned()
         } else {
             format!(
@@ -96,6 +105,7 @@ pub(super) fn snapshot(path: &Path) -> Result<BTreeMap<String, (u64, String)>, H
         }
         out.insert(table, (count, format!("{:x}", hash.finalize())));
     }
+    snapshot_lifecycle(&db, &mut out)?;
     Ok(out)
 }
 
@@ -154,4 +164,69 @@ pub(super) fn live_bytes(path: &Path) -> Result<u64, HarnessError> {
     let count: u64 = db.pragma_query_value(None, "page_count", |r| r.get(0))?;
     let free: u64 = db.pragma_query_value(None, "freelist_count", |r| r.get(0))?;
     Ok((count - free) * size)
+}
+
+/// Only the process lifecycle may vary while correction preserves domain rows.
+fn assert_process_lifecycle(db: &Connection) -> Result<(), HarnessError> {
+    use rusqlite::OptionalExtension;
+    let marker = db
+        .query_row(
+            "SELECT boot_id,started_at,clean_shutdown_at FROM wm_runtime_marker WHERE singleton=1",
+            [],
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, Option<i64>>(2)?,
+                ))
+            },
+        )
+        .optional()?;
+    if let Some((boot, started, clean)) = marker {
+        assert!(uuid::Uuid::parse_str(&boot).is_ok());
+        let events = db.prepare("SELECT op,at FROM wm_audit WHERE entity_kind='runtime_marker' AND entity_id=?1 ORDER BY seq")?
+            .query_map([boot], |r| Ok((r.get::<_,String>(0)?,r.get::<_,i64>(1)?)))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let mut expected = vec![("begin_boot".into(), started)];
+        if let Some(clean) = clean {
+            assert!(clean >= started);
+            expected.push(("clean_shutdown".into(), clean));
+        }
+        assert_eq!(events, expected);
+        let sequence: i64 = db.query_row(
+            "SELECT seq FROM sqlite_sequence WHERE name='wm_audit'",
+            [],
+            |r| r.get(0),
+        )?;
+        let maximum: i64 = db.query_row("SELECT coalesce(max(seq),0) FROM wm_audit", [], |r| {
+            r.get(0)
+        })?;
+        assert_eq!(sequence, maximum);
+    }
+    Ok(())
+}
+
+/// Restart may append lifecycle records, but every earlier record stays exact.
+fn snapshot_lifecycle(
+    db: &Connection,
+    out: &mut BTreeMap<String, (u64, String)>,
+) -> Result<(), HarnessError> {
+    let mut query =
+        db.prepare("SELECT * FROM wm_audit WHERE entity_kind='runtime_marker' ORDER BY seq")?;
+    let columns = query.column_count();
+    let mut rows = query.query([])?;
+    while let Some(row) = rows.next()? {
+        let seq: i64 = row.get(0)?;
+        let contents = (0..columns)
+            .map(|i| row.get_ref(i).map(|v| format!("{v:?}")))
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        out.insert(
+            format!("wm_audit:{seq}"),
+            (
+                1,
+                format!("{:x}", Sha256::digest(serde_json::to_vec(&contents)?)),
+            ),
+        );
+    }
+    Ok(())
 }

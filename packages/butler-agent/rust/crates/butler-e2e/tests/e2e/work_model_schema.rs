@@ -1,4 +1,4 @@
-//! WMS: migration creates inert schemas and preserves a populated work model.
+//! WMS: migration and process recovery preserve the populated work model.
 #![allow(clippy::unwrap_used, clippy::panic, reason = "test assertions")]
 use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use butler_work::{
@@ -9,6 +9,8 @@ use butler_work::{
 use rusqlite::{Connection, params_from_iter, types::Value};
 use sha2::Digest;
 use std::collections::BTreeMap;
+
+mod lifecycle;
 
 type Snapshot = BTreeMap<String, Vec<Vec<Value>>>;
 fn snapshot(db: &Connection) -> rusqlite::Result<Snapshot> {
@@ -154,9 +156,13 @@ async fn fresh_and_populated_schema_survive_restart() -> Result<(), HarnessError
     assert!(
         fresh
             .iter()
-            .filter(|(name, _)| !matches!(name.as_str(), "wm_migration" | "wm_cutover_inventory"))
+            .filter(|(name, _)| !matches!(
+                name.as_str(),
+                "wm_migration" | "wm_cutover_inventory" | "wm_runtime_marker" | "wm_audit"
+            ))
             .all(|(_, rows)| rows.is_empty())
     );
+    lifecycle::assert_closed_boot(&fresh, 1)?;
     for query in work_queries::Query::all() {
         let index = query.index();
         assert_eq!(
@@ -221,6 +227,7 @@ async fn fresh_and_populated_schema_survive_restart() -> Result<(), HarnessError
     s.agent.terminate().await?;
     assert_publication(&s.sandbox.data, &mut before)?;
     let db = Connection::open(&path)?;
+    lifecycle::advance(&mut before, &snapshot(&db)?)?;
     assert_eq!(before, snapshot(&db)?);
     validate_chains(&db)?;
     for query in work_queries::Query::all() {
@@ -233,13 +240,14 @@ async fn fresh_and_populated_schema_survive_restart() -> Result<(), HarnessError
     s.agent.terminate().await?;
     assert_publication(&s.sandbox.data, &mut before)?;
     let db = Connection::open(path)?;
+    lifecycle::advance(&mut before, &snapshot(&db)?)?;
     assert_eq!(before, snapshot(&db)?);
     drop(db);
     s.finish().await
 }
 
-/// Publication is the sole startup mutation in P1. Assert both sides of the
-/// bridge and then keep the original exact snapshot check for every wm row.
+/// Assert both sides of publication; the lifecycle helper separately verifies
+/// boot records before the exact snapshot comparison of all managed data.
 fn assert_publication(data: &std::path::Path, expected: &mut Snapshot) -> Result<(), HarnessError> {
     let app = Connection::open(data.join("app-server/butler-client.sqlite"))?;
     let rows = expected.get_mut("wm_outbox").unwrap();
@@ -315,7 +323,7 @@ async fn p1_schema_upgrades_before_start_and_second_start_is_identical() -> Resu
     super::work_model_cutover::completed(&s).await?;
     s.agent.terminate().await?;
     let db = Connection::open(&path)?;
-    let migrated = snapshot(&db)?;
+    let mut migrated = snapshot(&db)?;
     for table in ["wm_work_chains", "wm_work_edges", "wm_hold_decisions"] {
         assert!(!migrated.contains_key(table));
     }
@@ -389,13 +397,14 @@ async fn p1_schema_upgrades_before_start_and_second_start_is_identical() -> Resu
         "wm_spec_revisions",
         "wm_spec_criteria",
         "wm_instructions",
-        "wm_runtime_marker",
-        "wm_audit",
         "wm_outbox",
         "wm_legacy_map",
     ] {
         assert_eq!(original[table], migrated[table], "{table}");
     }
+    lifecycle::assert_closed_boot(&migrated, 1)?;
+    assert_eq!(original["wm_runtime_marker"], Vec::<Vec<Value>>::new());
+    assert_eq!(original["wm_audit"], Vec::<Vec<Value>>::new());
     assert_eq!(original["wm_migration"], Vec::<Vec<Value>>::new());
     assert_eq!(migrated["wm_migration"].len(), 1);
     assert_eq!(
@@ -413,6 +422,7 @@ async fn p1_schema_upgrades_before_start_and_second_start_is_identical() -> Resu
     s.restart().await?;
     s.agent.terminate().await?;
     let db = Connection::open(path)?;
+    lifecycle::advance(&mut migrated, &snapshot(&db)?)?;
     assert_eq!(snapshot(&db)?, migrated);
     drop(db);
     s.finish().await

@@ -151,8 +151,27 @@ async fn wmu_12_automatic_upgrade_is_private_idle_and_idempotent() -> Result<(),
     let outbox: i64 = db.query_row("SELECT count(*) FROM wm_outbox", [], |r| r.get(0))?;
     assert_eq!(outbox, 1);
     assert_eq!(
-        db.query_row::<i64, _, _>("SELECT count(*) FROM wm_audit", [], |r| r.get(0))?,
+        db.query_row::<i64, _, _>(
+            "SELECT count(*) FROM wm_audit WHERE entity_kind='migration'",
+            [],
+            |r| r.get(0)
+        )?,
         1
+    );
+    assert_eq!(
+        rows(
+            &db,
+            "SELECT op FROM wm_audit WHERE entity_kind='runtime_marker' ORDER BY seq"
+        )?,
+        ["begin_boot"]
+    );
+    assert_eq!(
+        db.query_row::<i64, _, _>(
+            "SELECT count(*) FROM wm_audit WHERE entity_kind NOT IN ('migration','runtime_marker')",
+            [],
+            |r| r.get(0)
+        )?,
+        0
     );
     let task_ids = rows(&db, "SELECT id FROM wm_tasks ORDER BY id")?;
     let migration: String = db.query_row(
@@ -173,6 +192,13 @@ async fn wmu_12_automatic_upgrade_is_private_idle_and_idempotent() -> Result<(),
     s.gw = s.agent.restart().await?;
     assert_eq!(completed(&s).await?, status);
     let db = Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    assert_eq!(
+        rows(
+            &db,
+            "SELECT op FROM wm_audit WHERE entity_kind='runtime_marker' ORDER BY seq"
+        )?,
+        ["begin_boot", "clean_shutdown", "begin_boot"]
+    );
     assert_eq!(rows(&db, "SELECT id FROM wm_works ORDER BY id")?, ids);
     assert_eq!(
         rows(

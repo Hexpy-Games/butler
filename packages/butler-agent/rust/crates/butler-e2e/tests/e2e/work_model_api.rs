@@ -89,6 +89,29 @@ async fn seeded(id: &str, extra: &str) -> Result<Seed, HarnessError> {
     db.execute_batch(extra)?;
     drop(db);
     s.restart().await?;
+    // Startup correctly recovered the offline lease. Establish the active
+    // fixture after recovery so running-edit assertions still exercise a run.
+    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    assert_eq!(
+        db.query_row::<String, _, _>(
+            "SELECT status FROM wm_tasks WHERE id='tk_schema'",
+            [],
+            |r| r.get(0)
+        )?,
+        "pending"
+    );
+    assert_eq!(db.query_row::<i64,_,_>("SELECT count(*) FROM wm_attempts WHERE id='at_schema' AND status='interrupted' AND recovered_at IS NOT NULL", [], |r| r.get(0))?, 1);
+    db.execute_batch("BEGIN IMMEDIATE;
+        UPDATE wm_attempts SET status='running',finished_at=NULL,recovered_at=NULL WHERE id='at_schema';
+        UPDATE wm_tasks SET status='running',assignee_session_id=(SELECT session_id FROM wm_attempts WHERE id='at_schema') WHERE id='tk_schema';
+        UPDATE wm_works SET run_state='running' WHERE id='wk_canon';
+        UPDATE wm_counts SET count=0 WHERE key LIKE 'run_state:%';
+        INSERT INTO wm_counts(scope_kind,scope_ref,key,count)
+          SELECT scope_kind,scope_ref,'run_state:'||run_state,count(*) FROM wm_works
+          GROUP BY scope_kind,scope_ref,run_state
+          ON CONFLICT(scope_kind,scope_ref,key) DO UPDATE SET count=excluded.count;
+        COMMIT;")?;
+    drop(db);
     Ok(Seed {
         s,
         project,

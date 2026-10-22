@@ -41,17 +41,10 @@ async fn exercise(storage: &BtccStorage, id: String) -> std::result::Result<(), 
                 now: 200,
                 actor: json!({"person":"companion"}),
             };
-            let row = read_task(tx, &work_id)?;
-            let revision = row["revision"].as_i64().ok_or(Error::Invalid("revision"))?;
-            transition(
-                tx,
-                &ctx,
-                &work_id,
-                revision,
-                TaskStatus::Failed,
-                false,
-                Some("task_failed"),
-            )
+            let lease_session: String = tx.query_row(
+                "SELECT session_id FROM wm_attempts WHERE task_id=?1 AND status='running' AND part_id IS NULL",
+                [&work_id], |r| r.get(0))?;
+            execution::fail_task(tx, &ctx, &work_id, &lease_session, "task_failed")
         })
         .await?;
     assert!(changes.has_changed()?);
