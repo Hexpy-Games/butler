@@ -1,15 +1,35 @@
 import { useRef, type CSSProperties, type ReactNode } from "react";
 import { Skeleton } from "../../components/Skeleton";
 import { dsClass, dsStyle } from "../../lib/internal";
-import { placeAxisLabels, skeletonHeights, type UsageBarsColumn } from "./usageBarsLayout";
+import { placeAxisLabels, skeletonHeights, type UsageBarsColumn, type UsageBarsColumnSegment } from "./usageBarsLayout";
 import type { UsageBarsAxisLabel, UsageBarsBucket, UsageBarsSize } from "./usageBarsTypes";
 import { useAxisLabelFit } from "./useAxisLabelFit";
-import { USAGE_BARS_COLUMN_ATTRIBUTE } from "./useUsageBarsMotion";
+import { USAGE_BARS_COLUMN_ATTRIBUTE, USAGE_BARS_HATCH_ATTRIBUTE } from "./useUsageBarsMotion";
 import styles from "./UsageBars.module.css";
 
 type Vars = CSSProperties & Record<`--${string}`, string | number>;
 
-/** One stacked column; the segments share its height in proportion to their values. */
+/**
+ * One segment. Painted leaves carry data-pattern: a solid segment, a whole
+ * hatched one (all subtask, or merged into its larger hatched part), or a
+ * split pair with the hatched subtask part on top and no gap between.
+ */
+function UsageBarsSegmentView({ segment, hatchKey }: { segment: UsageBarsColumnSegment; hatchKey: string }) {
+  const share = { "--usage-bars-share": segment.share } as Vars;
+  const hatch = { [USAGE_BARS_HATCH_ATTRIBUTE]: hatchKey };
+  if (segment.subtask <= 0) return <span className={styles.segment} data-color={segment.color} data-pattern="solid" style={share} />;
+  if (segment.subtask >= 1) {
+    return <span className={styles.segment} data-color={segment.color} data-pattern="hatched" {...hatch} style={share} />;
+  }
+  return (
+    <span className={styles.segment} data-color={segment.color} data-split="true" style={share}>
+      <span className={styles.part} data-pattern="solid" style={{ "--usage-bars-part": 1 - segment.subtask } as Vars} />
+      <span className={styles.part} data-pattern="hatched" {...hatch} style={{ "--usage-bars-part": segment.subtask } as Vars} />
+    </span>
+  );
+}
+
+/** One stacked column; the segments share its height in proportion to their values, with no gaps. */
 export function UsageBarsColumnView({ column, selected }: { column: UsageBarsColumn; selected: boolean }) {
   return (
     <div className={styles.slot}>
@@ -18,7 +38,7 @@ export function UsageBarsColumnView({ column, selected }: { column: UsageBarsCol
         style={{ "--usage-bars-fraction": column.fraction } as Vars}>
         <div className={styles.stack}>
           {column.segments.map((segment) => (
-            <span key={segment.id} className={styles.segment} data-color={segment.color} style={{ "--usage-bars-share": segment.share } as Vars} />
+            <UsageBarsSegmentView key={segment.id} segment={segment} hatchKey={`${column.key}/${segment.id}`} />
           ))}
         </div>
       </div>

@@ -1,5 +1,5 @@
 import type { DsBaseProps } from "../../lib/dsProps";
-import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
+import type { CSSProperties, FocusEvent, HTMLAttributes, PointerEvent, ReactNode } from "react";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
@@ -13,9 +13,45 @@ export interface KeyValueRowProps extends DsBaseProps<HTMLAttributes<HTMLDivElem
   meta?: ReactNode;
   swatch?: ReactNode;
   swatchColor?: string;
+  /** hatched: the swatchColor subtask hatch of UsageBars (light stripes at --hatch-alpha). Default solid. */
+  swatchPattern?: "solid" | "hatched";
+  /**
+   * Links the row to a chart: the row becomes focusable and reports pointer
+   * hover and keyboard focus (true) and their end (false), so the chart can
+   * emphasize the series this row names.
+   */
+  onHighlightChange?: (highlighted: boolean) => void;
   valueTextSize?: "body" | "caption";
   detailAlign?: "center" | "start";
   detailLayout?: "row" | "stack";
+}
+
+type HighlightHandlers = Pick<HTMLAttributes<HTMLDivElement>, "onPointerEnter" | "onPointerLeave" | "onFocus" | "onBlur">;
+
+/** Hover and focus handlers that report the row's highlight, chained after the caller's own. */
+function highlightLink(
+  onHighlightChange: ((highlighted: boolean) => void) | undefined,
+  { onPointerEnter, onPointerLeave, onFocus, onBlur, tabIndex }: HighlightHandlers & { tabIndex?: number },
+): (HighlightHandlers & { tabIndex: number; "data-linked": "true" }) | undefined {
+  if (!onHighlightChange) return undefined;
+  return {
+    tabIndex: tabIndex ?? 0,
+    "data-linked": "true",
+    // Mouse hover only, as in UsageBars; a tap focuses the row instead.
+    onPointerEnter: (event: PointerEvent<HTMLDivElement>) => {
+      onPointerEnter?.(event);
+      if (event.pointerType === "mouse") onHighlightChange(true);
+    },
+    onPointerLeave: (event: PointerEvent<HTMLDivElement>) => {
+      onPointerLeave?.(event);
+      if (event.pointerType === "mouse" && document.activeElement !== event.currentTarget) onHighlightChange(false);
+    },
+    onFocus: (event: FocusEvent<HTMLDivElement>) => { onFocus?.(event); onHighlightChange(true); },
+    onBlur: (event: FocusEvent<HTMLDivElement>) => {
+      onBlur?.(event);
+      if (!event.currentTarget.matches(":hover")) onHighlightChange(false);
+    },
+  };
 }
 
 export function KeyValueRow({
@@ -25,12 +61,15 @@ export function KeyValueRow({
   meta,
   swatch,
   swatchColor,
+  swatchPattern = "solid",
+  onHighlightChange,
   valueTextSize = "body",
   detailAlign = "center",
   detailLayout = "row",
   className,
   ...props
 }: KeyValueRowProps) {
+  const link = highlightLink(onHighlightChange, props);
   const hasSwatch = Boolean(swatch || swatchColor);
   const ValueText = valueTextSize === "caption" ? Typo.Caption : Typo.Body;
   const isDetailStacked = detailLayout === "stack";
@@ -44,7 +83,7 @@ export function KeyValueRow({
           : undefined
       }
     >
-      {swatch ?? <span className={styles["color-swatch"]} />}
+      {swatch ?? <span className={styles["color-swatch"]} data-pattern={swatchPattern} />}
     </span>
   ) : null;
 
@@ -53,6 +92,7 @@ export function KeyValueRow({
       className={cn(styles.row, hasSwatch && styles.hasSwatch, className)}
       data-test-class="key-value-row"
       {...props}
+      {...link}
     >
       <Stack
         align="row"
