@@ -1344,7 +1344,7 @@ export interface UsageSectionBucketView {
 
 export interface UsageMonitorView {
   /** Session views append the slot's delegated tokens (prompt + output of every role other than "main"), then that work's requests, cached and output. */
-  timeline: { slotMinutes: 15; slots: ([number, number, number, number, number] | [number, number, number, number, number, number] | [number, number, number, number, number, number, number, number, number])[] };
+  timeline: { slotMinutes: 15; slots: ([number, number, number, number, number] | [number, number, number, number, number, number, number, number, number])[] };
   topSessions: { sessionId: string; title: string | null; kind: "chat" | "schedule" | "butler"; totalTokens: number; requests: number; lastUsedMs: number | null }[];
   previousPeriod: { totalTokens: number } | null;
   filters: {

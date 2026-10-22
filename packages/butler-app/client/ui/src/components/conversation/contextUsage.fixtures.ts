@@ -52,6 +52,7 @@ export function delegatedUsageView(fields: Parameters<typeof usageView>[0] = {})
   const worker = role(6, 31_400, 22_000, 2_600);
   const total = role(11, 89_400, 60_000, 6_920);
   view.model = { ...view.model, ...total, cacheHitRatio: 0.67, byRole: { main, steward, worker } };
-  view.timeline.slots = [[Date.parse("2026-09-28T05:00:00Z"), 11, 89_400, 60_000, 6_920, 44_700]];
+  // The slot appends the delegated total, then that work's requests, cached and output.
+  view.timeline.slots = [[Date.parse("2026-09-28T05:00:00Z"), 11, 89_400, 60_000, 6_920, 44_700, 8, 28_100, 3_500]];
   return view;
 }
