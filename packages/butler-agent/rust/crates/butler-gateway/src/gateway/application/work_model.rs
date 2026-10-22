@@ -1,7 +1,9 @@
 //! App identity/scope resolution, over the host-owned local work-model port.
 mod events;
 use super::*;
-use AppWorkModelResource::*;
+use AppWorkModelResource::{
+    BacklogOrder, Canon, CreateEpic, CreatePlan, EditEpic, EditPlan, Epic, Plan, PlanOrder, Queue,
+};
 pub(super) use events::start;
 use rusqlite::OptionalExtension;
 

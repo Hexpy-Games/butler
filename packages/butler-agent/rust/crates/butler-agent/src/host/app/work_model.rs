@@ -144,7 +144,10 @@ fn error(error: StorageError) -> GatewayApplicationError {
 }
 
 fn store_resource(resource: AppWorkModelResource) -> store::api::Resource {
-    use AppWorkModelResource::*;
+    use AppWorkModelResource::{
+        BacklogOrder, Canon, CreateEpic, CreatePlan, EditEpic, EditPlan, Epic, Plan, PlanOrder,
+        Queue,
+    };
     match resource {
         Queue => store::api::Resource::Queue,
         Canon => store::api::Resource::Canon,

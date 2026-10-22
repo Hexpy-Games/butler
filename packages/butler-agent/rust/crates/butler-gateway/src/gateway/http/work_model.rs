@@ -1,6 +1,12 @@
 //! Local-only queue and canon routes; normal gateway auth protects this handler.
 use super::*;
-use crate::gateway::{AppWorkModelRequest, AppWorkModelResource::*};
+use crate::gateway::{
+    AppWorkModelRequest,
+    AppWorkModelResource::{
+        BacklogOrder, Canon, CreateEpic, CreatePlan, EditEpic, EditPlan, Epic, Plan, PlanOrder,
+        Queue,
+    },
+};
 
 pub(super) async fn route(
     state: Arc<HttpState>,

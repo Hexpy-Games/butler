@@ -26,7 +26,9 @@ pub enum Resource {
     PlanOrder,
     BacklogOrder,
 }
-use Resource::*;
+use Resource::{
+    BacklogOrder, Canon, CreateEpic, CreatePlan, EditEpic, EditPlan, Epic, Plan, PlanOrder, Queue,
+};
 
 /// Identity-only PK lookups, shared by reads and edits before App project checks.
 pub fn project_scope(db: &Connection, resource: Resource, id: &str) -> Result<String> {
