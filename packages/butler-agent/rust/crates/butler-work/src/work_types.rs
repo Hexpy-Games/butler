@@ -59,10 +59,10 @@ vocabulary!(RunState {
 });
 vocabulary!(CanonStatus { Planned => "planned", InProgress => "in_progress",
     InReview => "in_review", Blocked => "blocked", Done => "done", Cancelled => "cancelled" });
-vocabulary!(CanonStatusSource { Runtime => "runtime", Person => "person", Remote => "remote" });
+vocabulary!(CanonStatusSource { Runtime => "runtime", Person => "person" });
 vocabulary!(HoldReason { PredecessorFailed => "predecessor_failed", PredecessorStopped => "predecessor_stopped" });
 vocabulary!(QueueOrigin { UserMessage => "user_message", Schedule => "schedule", Detach => "detach", Planner => "planner", Migration => "migration" });
-vocabulary!(Origin { Chat => "chat", Dialog => "dialog", Board => "board", Mcp => "mcp", Migration => "migration", Github => "github" });
+vocabulary!(Origin { Chat => "chat", Dialog => "dialog", Board => "board", Mcp => "mcp", Migration => "migration" });
 vocabulary!(Visibility { Private => "private", Canon => "canon" });
 vocabulary!(ScopeKind { Session => "session", Project => "project" });
 vocabulary!(ChainState { Active => "active", Held => "held", Done => "done" });

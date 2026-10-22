@@ -13,11 +13,7 @@ pub(super) const COLUMNS: &[(&str, &str, &str)] = &[
         "canon_status",
         "'planned','in_progress','in_review','blocked','done','cancelled'",
     ),
-    (
-        "wm_works",
-        "canon_status_source",
-        "'runtime','person'",
-    ),
+    ("wm_works", "canon_status_source", "'runtime','person'"),
     (
         "wm_tasks",
         "hold_reason",

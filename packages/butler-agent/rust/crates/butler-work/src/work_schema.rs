@@ -17,6 +17,9 @@ pub fn ensure(connection: &Connection) -> rusqlite::Result<()> {
 }
 fn target(connection: &Connection) -> rusqlite::Result<()> {
     upgrade::p1(connection)?;
+    create(connection)
+}
+fn create(connection: &Connection) -> rusqlite::Result<()> {
     connection.execute_batch(include_str!("work_schema/entities.sql"))?;
     connection.execute_batch(include_str!("work_schema/tasks.sql"))?;
     connection.execute_batch(include_str!("work_schema/specs.sql"))?;
