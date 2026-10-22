@@ -1,6 +1,7 @@
 //! Existing App schema migration in its source-defined order.
 
 mod assets;
+mod canon_sidebar;
 mod core;
 mod library;
 mod message_ownership;
@@ -42,6 +43,7 @@ pub(super) fn migrate(
         "INTEGER NOT NULL DEFAULT 0",
     )?;
     library::create(connection)?;
+    canon_sidebar::create(connection)?;
     still_delivery::recover(connection)?;
     super::history::schema::create(connection)?;
     security::create(connection)?;

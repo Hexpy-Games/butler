@@ -922,6 +922,7 @@ dependencies = [
  "butler-platform",
  "butler-runtime",
  "butler-turn",
+ "butler-work",
  "bytes",
  "chrono",
  "flate2",
@@ -1302,6 +1303,7 @@ dependencies = [
  "butler-core",
  "butler-platform",
  "butler-test-support",
+ "butler-work",
  "chrono",
  "futures-util",
  "indexmap 2.14.2",
@@ -1318,6 +1320,16 @@ dependencies = [
  "tracing",
  "unicode-normalization",
  "uuid",
+]
+
+[[package]]
+name = "butler-work"
+version = "0.0.0"
+dependencies = [
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
 ]
 
 [[package]]

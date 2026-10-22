@@ -70,6 +70,7 @@ pub(super) fn apply_transaction(connection: &mut Connection) -> rusqlite::Result
     )?;
     startup_indexes::cutover(&transaction)?;
     transaction.execute_batch(super::schema::task_graphs::SCHEMA)?;
+    butler_work::work_schema::ensure(&transaction)?;
     transaction.commit()
 }
 
