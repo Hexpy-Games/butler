@@ -7,6 +7,7 @@
 )]
 mod files;
 pub(super) mod intent;
+mod script_work;
 #[path = "steward_presentation/stub.rs"]
 pub(crate) mod stub;
 mod visible;

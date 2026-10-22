@@ -34,14 +34,16 @@ pub(super) async fn deliver(
     }
     if final_delivered
         && eligible.is_some()
-        && let Some(relation) = envelope
-            .app_turn_context
-            .as_ref()
-            .and_then(|context| context.pointer("/subsessionResult/relation_id"))
-            .and_then(serde_json::Value::as_str)
+        && let Some(context) = envelope.execution_controls.as_ref()
+        && let Some(result) = context
+            .verify()
+            .map_err(|error| {
+                super::super::IngressError::new("subsession_report_context_invalid", error.code())
+            })?
+            .subsession_result
     {
         subsessions
-            .report_delivered(relation)
+            .report_delivered(&result.relation_id)
             .await
             .map_err(|error| {
                 super::super::IngressError::new("subsession_report_commit_failed", error.code())

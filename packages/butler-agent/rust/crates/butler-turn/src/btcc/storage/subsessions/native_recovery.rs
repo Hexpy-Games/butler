@@ -77,7 +77,7 @@ impl SqliteSubsessionRepository {
         session: String,
     ) -> Result<Option<Value>, StorageError> {
         self.storage.read(move |db| db.query_row("SELECT r.relation_id,r.parent_session_id,r.parent_turn_id,r.safe_title,r.created_at,coalesce(r.activity_role,CASE WHEN r.child_session_id LIKE 'worker-%' THEN 'worker' ELSE 'steward' END) FROM btcc_session_relations r JOIN btcc_subsession_delegations d ON d.relation_id=r.relation_id JOIN wm_legacy_map m ON m.source='delegation_recovery' AND m.source_id=d.delegation_id WHERE r.child_session_id=?1 AND m.batch='unresolved'",[&session],|r| {
-            Ok(serde_json::json!({"session_id":session,"role":r.get::<_,String>(5)?,"status":"failed","terminal":true,"active_turn":null,
+            Ok(serde_json::json!({"session_id":session,"role":r.get::<_,String>(5)?,"status":"failed","terminal":true,"active_turn":null,"updated_at":r.get::<_,String>(4)?,
                 "relation":{"relation_id":r.get::<_,String>(0)?,"parent_session_id":r.get::<_,String>(1)?,"parent_turn_id":r.get::<_,String>(2)?,"safe_title":r.get::<_,String>(3)?,"created_at":r.get::<_,String>(4)?},
                 "result":{"status":"failed","summary":"The delegation source could not be restored."},"steward_children":[],"workers":[]}))
         }).optional().map_err(StorageError::sqlite)).await

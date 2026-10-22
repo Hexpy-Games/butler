@@ -1,4 +1,5 @@
 //! Deterministic provider for the real parent/child/follow-up path.
+use super::super::work_model_script as native;
 use axum::{Json, Router, extract::State, routing::post};
 use butler_e2e::e2e::{HarnessError, matching, sanitize::Placeholders};
 use serde_json::{Value, json};
@@ -88,6 +89,21 @@ async fn reply(
     {
         return ([("content-type", "text/event-stream")], wire(message("{}"))).into_response();
     }
+    if child && key.user_request.starts_with(DIRECTION) && native::view(&body).is_null() {
+        let has_tasks = native::outputs(&body)
+            .iter()
+            .any(|output| output.pointer("/view/chains").is_some());
+        let item = if has_tasks {
+            call(
+                "read-continued-task",
+                "work_read",
+                &json!({"view":"task","task_id":native::task_id(&body)}),
+            )
+        } else {
+            call("read-continued-work", "work_read", &json!({"view":"tasks"}))
+        };
+        return ([("content-type", "text/event-stream")], wire(item)).into_response();
+    }
     let step = {
         let mut steps = script.steps.lock().unwrap();
         let step = if child { &mut steps.1 } else { &mut steps.0 };
@@ -130,7 +146,7 @@ async fn reply(
     } else if key.user_request.contains("Delegated result") {
         message("Approach B verified.")
     } else {
-        parent_item(step, script.answer_blocks.load(Ordering::SeqCst))
+        super::script_work::parent_item(step, &body, script.answer_blocks.load(Ordering::SeqCst))
     };
     ([("content-type", "text/event-stream")], wire(item)).into_response()
 }
@@ -152,34 +168,18 @@ fn raw_text(item: &Value) -> String {
 }
 
 pub(crate) fn child_lane(body: &Value) -> bool {
-    body["input"].as_array().into_iter().flatten().any(|item| {
-        item["role"] == "user"
-            && (user_text(item).starts_with("role: steward")
-                || raw_text(item).lines().any(|line| {
-                    line.starts_with("Original request (highest priority): role: steward")
-                }))
-    })
-}
-
-/// With `presented`, the parent Plan decides to show the result as cards and
-/// a table, which the delegated task then carries.
-fn parent_item(step: usize, presented: bool) -> Value {
-    let mut parent_plan = plan(false, "steward");
-    if presented {
-        parent_plan["presentation"] = json!(["cards", "table"]);
-    }
-    let mut revised_plan = parent_plan.clone();
-    revised_plan["checks"] = json!(["Approach verified", REVISED_CHECK]);
-    parent_plan["intent"] = json!({"goal":"Choose the better approach for the owner's next step","deliver":"A one-line recommendation","next":"Apply the chosen approach","assume":"Both files are current"});
-    match step {
-        0 => call("start", "start_work", &json!({"objective":OWNER})),
-        1 => call("plan", "replace_work_plan", &parent_plan),
-        2 => call("plan-revise", "record_work_review", &revise()),
-        3 => call("plan-revision", "replace_work_plan", &revised_plan),
-        4 => call("review", "record_work_review", &review()),
-        5 => call("delegate", "delegate_to_steward", &json!({"request":OWNER})),
-        _ => message("Direction delivered."),
-    }
+    body["tools"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|tool| tool["name"] == "delegate_to_worker")
+        || body["input"].as_array().into_iter().flatten().any(|item| {
+            item["role"] == "user"
+                && (user_text(item).starts_with("role: steward")
+                    || raw_text(item).lines().any(|line| {
+                        line.starts_with("Original request (highest priority): role: steward")
+                    }))
+        })
 }
 
 fn child_item(step: usize, body: &Value, script: &Script) -> Value {
@@ -233,8 +233,12 @@ fn child_item(step: usize, body: &Value, script: &Script) -> Value {
             step
         };
         return match step {
-            0 => call("browser-plan", "replace_work_plan", &plan(false, "direct")),
-            1 => call("browser-review", "record_work_review", &review()),
+            0 => call("browser-assignment", "work_read", &json!({"view":"tasks"})),
+            1 => call(
+                "browser-task",
+                "work_read",
+                &json!({"view":"task","task_id":native::task_id(body)}),
+            ),
             2 => call(
                 "describe-browser",
                 "tool_describe",
@@ -260,37 +264,42 @@ fn child_item(step: usize, body: &Value, script: &Script) -> Value {
                 "tool_call",
                 &json!({"id":"native:browser_screenshot","arguments":{"tab":"parent-tab","observation":"parent-observation"}}),
             ),
-            7 => {
-                let mut wrong = work_id(body);
-                wrong.pop();
-                call(
-                    "wrong-browser-work",
-                    "record_work_disposition",
-                    &json!({"work_id":wrong,"disposition":"completed","summary":"Browser verified"}),
-                )
-            }
+            7 => call(
+                "wrong-browser-task",
+                "work_read",
+                &json!({"view":"task","task_id":"unknown-task"}),
+            ),
             8 => call(
-                "wrong-browser-continuation",
-                "continue_work",
-                &json!({"work_id":format!("{}-wrong",work_id(body))}),
+                "browser-current-task",
+                "work_read",
+                &json!({"view":"task","task_id":native::task_id(body)}),
             ),
             9 => call(
                 "close-browser-work",
-                "record_work_disposition",
-                &json!({"work_id":work_id(body),"disposition":"completed","summary":"Browser verified",
-                    "action_updates":[{"action_key":"read","status":"done"},{"action_key":"compare","status":"done"}],
-                    "remaining_actions":[],"followups":[]}),
+                "work_apply",
+                &native::submit(body, "Browser verified"),
             ),
             _ => message("Browser verified."),
         };
     }
     if script.deliverables.load(Ordering::SeqCst) && step >= 6 {
-        return super::super::deliverables::delegation::child(step, &work_id(body));
+        if step == 11 {
+            return call(
+                "submit-deliverables",
+                "work_apply",
+                &native::submit(body, "Done"),
+            );
+        }
+        return super::super::deliverables::delegation::child(step, "");
     }
     let path = |name: &str| format!("{}/{}", script.workspace.lock().unwrap(), name);
     match step {
-        0 => call("child-plan", "replace_work_plan", &plan(false, "direct")),
-        1 => call("child-review", "record_work_review", &review()),
+        0 => call("child-assignment", "work_read", &json!({"view":"tasks"})),
+        1 => call(
+            "child-task",
+            "work_read",
+            &json!({"view":"task","task_id":native::task_id(body)}),
+        ),
         2 => call(
             "read-a",
             "read_file",
@@ -298,8 +307,8 @@ fn child_item(step: usize, body: &Value, script: &Script) -> Value {
         ),
         3 => call(
             "checkpoint",
-            "record_work_checkpoint",
-            &json!({"public_summary":"Comparing approaches","action_updates":[{"action_key":"read","status":"done"},{"action_key":"compare","status":"active"}]}),
+            "work_read",
+            &json!({"view":"task","task_id":native::task_id(body)}),
         ),
         4 => call(
             "read-current",
@@ -313,15 +322,13 @@ fn child_item(step: usize, body: &Value, script: &Script) -> Value {
         ),
         6 if script.blocked_disposition.load(Ordering::SeqCst) => call(
             "close-blocked",
-            "record_work_disposition",
-            &json!({"work_id":work_id(body),"disposition":"blocked","summary":"Research delivered; follow-up remains",
-                "action_updates":[],"remaining_actions":["compare"],"next_condition":"Owner follow-up","followups":[]}),
+            "work_apply",
+            &native::block(body, "Owner follow-up"),
         ),
         6 if script.open_disposition.load(Ordering::SeqCst) => call(
             "close-open",
-            "record_work_disposition",
-            &json!({"work_id":work_id(body),"disposition":"open","summary":"Comparison remains unfinished",
-                "action_updates":[],"remaining_actions":["compare"],"next_condition":"Continue comparing approaches","followups":[]}),
+            "work_apply",
+            &native::block(body, "Continue comparing approaches"),
         ),
         6 => call(
             "write-report",
@@ -333,57 +340,15 @@ fn child_item(step: usize, body: &Value, script: &Script) -> Value {
         }
         7 | 12 => call(
             "close",
-            "record_work_disposition",
-            &json!({"work_id":work_id(body),"disposition":"completed","summary":"Approach B verified","action_updates":[{"action_key":"compare","status":"done"}],"remaining_actions":[],"followups":[]}),
+            "work_apply",
+            &native::submit(body, "Approach B verified"),
         ),
         _ => message("Approach B verified: 키센스.txt"),
     }
 }
 
-fn work_id(body: &Value) -> String {
-    body["input"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .rev()
-        .filter_map(|item| item["output"].as_str())
-        .filter_map(|output| serde_json::from_str::<Value>(output).ok())
-        .find_map(|output| {
-            output
-                .pointer("/output/work/work_id")
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-        })
-        .or_else(|| {
-            body["input"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .filter(|item| item["role"] == "user")
-                .find_map(|item| {
-                    raw_text(item).lines().find_map(|line| {
-                        line.strip_prefix(
-                            "Explicit relation Work id (model-only; never report to user): ",
-                        )
-                        .map(str::to_owned)
-                    })
-                })
-        })
-        .unwrap()
-}
-
-fn plan(start_new: bool, mode: &str) -> Value {
-    json!({"start_new":start_new,"objective":OWNER,"execution_mode":mode,"governing_refs":[],"actions":[{"action_key":"read","description":"Read source","dependency_keys":[]},{"action_key":"compare","description":"Compare approaches","dependency_keys":["read"]}],"checks":["Approach verified"]})
-}
 pub(crate) const REVISED_CHECK: &str = "Comparison names its deciding criterion";
 
-fn revise() -> Value {
-    json!({"subject":"plan","verdict":"revise","summary":"Name the deciding criterion","corrections":["Add a check that the comparison names its deciding criterion"],"correction_scope":"planning","action_updates":[]})
-}
-
-fn review() -> Value {
-    json!({"subject":"plan","verdict":"accept","summary":"Ready","corrections":[],"action_updates":[]})
-}
 fn call(id: &str, name: &str, args: &Value) -> Value {
     json!({"type":"function_call","id":id,"call_id":id,"name":name,"arguments":args.to_string(),"status":"completed"})
 }

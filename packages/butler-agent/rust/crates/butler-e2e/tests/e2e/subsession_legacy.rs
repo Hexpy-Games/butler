@@ -92,6 +92,14 @@ async fn sub_legacy_01_pre_typed_delegations_are_read() -> Result<(), HarnessErr
         activity.text
     );
 
+    let unreadable =
+        s.gw.get("/session-view?session_id=steward-legacy-e")
+            .await?;
+    assert_eq!(unreadable.status, 200, "{unreadable:?}");
+    assert_eq!(unreadable.data()["status"], "failed", "{unreadable:?}");
+    assert_eq!(unreadable.data()["terminal"], true);
+    assert!(unreadable.data()["active_turn"].is_null());
+    assert!(view.data()["active_turn"].is_null());
     activity::assert_pages(&s, &chat, activity.data()).await?;
     presentation::assert_waiting_children(&mut s, &chat).await?;
     s.agent.terminate().await?;
@@ -131,14 +139,25 @@ fn assert_unreadable_pending_row_closed(s: &Scenario) {
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
     )
     .unwrap();
-    let closed: (String, Option<String>) = db
-        .query_row(
-            "SELECT x.status, d.dispatch_state FROM btcc_steward_results x JOIN btcc_subsession_delegations d ON d.relation_id = x.relation_id WHERE x.relation_id = 'relation-e'",
+    let (needs,pending):(String,String)=db.query_row("SELECT m.needs_source_json,d.dispatch_state FROM wm_migration m JOIN btcc_subsession_delegations d ON d.delegation_id='delegation-e' WHERE m.singleton=1",[],|r|Ok((r.get(0)?,r.get(1)?))).expect("unreadable source remains recorded");
+    let needs: Value = serde_json::from_str(&needs).unwrap();
+    assert!(
+        needs
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["source"] == "delegation" && entry["id"] == "delegation-e")
+    );
+    assert_eq!(pending, "pending");
+    assert_eq!(
+        db.query_row(
+            "SELECT count(*) FROM btcc_steward_results WHERE relation_id='relation-e'",
             [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            |r| r.get::<_, i64>(0)
         )
-        .expect("the unreadable pending delegation is closed");
-    assert_eq!(closed, ("failed".to_owned(), None));
+        .unwrap(),
+        0
+    );
 }
 
 /// Five delegations of the parent session `hint` in the shapes the runtime

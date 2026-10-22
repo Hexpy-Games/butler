@@ -95,7 +95,7 @@ async fn interrupted_queue(crash: bool) -> Result<(), HarnessError> {
         .to_owned();
     let child_turn: String = db(&s)
         .query_row(
-            "SELECT child_turn_id FROM btcc_subsession_delegations WHERE relation_id=?1",
+            "SELECT a.turn_id FROM btcc_session_relations r JOIN wm_session_exec s ON s.session_id=r.child_session_id JOIN wm_attempts a ON a.task_id=s.current_task_id AND a.session_id=r.child_session_id WHERE r.relation_id=?1 ORDER BY a.started_at LIMIT 1",
             [&relation],
             |row| row.get(0),
         )
@@ -105,7 +105,7 @@ async fn interrupted_queue(crash: bool) -> Result<(), HarnessError> {
     assert_eq!(
         count(
             &db(&s),
-            "SELECT count(*) FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending'",
+            "SELECT count(*) FROM wm_instructions i JOIN btcc_session_relations r ON r.child_session_id=i.target_session_id WHERE r.relation_id=?1 AND i.status IN ('waiting_for_task','pending_safe_point')",
             &relation
         ),
         1
@@ -158,17 +158,17 @@ async fn assert_drained(
         let db = db(s);
         let failed = count(
             &db,
-            "SELECT count(*) FROM btcc_steward_results WHERE relation_id=?1 AND status='failed'",
+            "SELECT count(*) FROM btcc_session_relations r JOIN wm_session_exec s ON s.session_id=r.child_session_id JOIN wm_attempts a ON a.task_id=s.current_task_id AND a.session_id=r.child_session_id WHERE r.relation_id=?1 AND a.status='interrupted'",
             relation,
         );
         let success = count(
             &db,
-            "SELECT count(*) FROM btcc_steward_results WHERE relation_id=?1 AND status='success'",
+            "SELECT count(*) FROM btcc_session_relations r JOIN wm_session_exec s ON s.session_id=r.child_session_id JOIN wm_attempts a ON a.task_id=s.current_task_id AND a.session_id=r.child_session_id WHERE r.relation_id=?1 AND a.status='succeeded'",
             relation,
         );
         let direction: String = db
             .query_row(
-                "SELECT status FROM btcc_subsession_directions WHERE relation_id=?1",
+                "SELECT i.status FROM wm_instructions i JOIN btcc_session_relations r ON r.child_session_id=i.target_session_id WHERE r.relation_id=?1 AND i.anchor_kind='task'",
                 [relation],
                 |row| row.get(0),
             )
@@ -196,17 +196,25 @@ async fn assert_drained(
             assert_eq!(
                 count(
                     &db,
-                    "SELECT count(*) FROM btcc_steward_results WHERE relation_id=?1",
+                    "SELECT count(*) FROM btcc_session_relations r JOIN wm_session_exec s ON s.session_id=r.child_session_id JOIN wm_attempts a ON a.task_id=s.current_task_id AND a.session_id=r.child_session_id WHERE r.relation_id=?1",
                     relation
                 ),
                 2
             );
-            let original: String = db.query_row("SELECT child_turn_id FROM btcc_steward_results WHERE relation_id=?1 AND status='failed'", [relation], |row| row.get(0)).unwrap();
+            let original: String = db.query_row("SELECT a.turn_id FROM btcc_session_relations r JOIN wm_session_exec s ON s.session_id=r.child_session_id JOIN wm_attempts a ON a.task_id=s.current_task_id AND a.session_id=r.child_session_id WHERE r.relation_id=?1 AND a.status='interrupted'", [relation], |row| row.get(0)).unwrap();
             assert_eq!(original, child_turn);
             assert_eq!(
                 count(
                     &db,
                     "SELECT count(*) FROM btcc_subsession_outbox WHERE relation_id=?1 AND input_json LIKE '%status: failed%'",
+                    relation
+                ),
+                1
+            );
+            assert_eq!(
+                count(
+                    &db,
+                    "SELECT count(*) FROM wm_results x JOIN wm_attempts a ON a.id=x.attempt_id JOIN btcc_session_relations r ON r.child_session_id=a.session_id WHERE r.relation_id=?1",
                     relation
                 ),
                 1
@@ -266,7 +274,8 @@ fn assert_requests(script: &stub::Script) {
     assert!(
         requests
             .iter()
-            .any(|r| stub::child_lane(r) && request_text(r).starts_with(stub::DIRECTION)),
+            .any(|r| request_text(r).starts_with(stub::DIRECTION)
+                && r.to_string().contains("work_read")),
         "direction never ran as a child continuation"
     );
 }
@@ -283,7 +292,7 @@ async fn restart_close_keeps_a_saved_success_result() -> Result<(), HarnessError
     let child_session = child["session_id"].as_str().unwrap();
     let child_turn: String = db(&s)
         .query_row(
-            "SELECT child_turn_id FROM btcc_subsession_delegations WHERE relation_id=?1",
+            "SELECT a.turn_id FROM btcc_session_relations r JOIN wm_session_exec s ON s.session_id=r.child_session_id JOIN wm_attempts a ON a.task_id=s.current_task_id AND a.session_id=r.child_session_id WHERE r.relation_id=?1 ORDER BY a.started_at LIMIT 1",
             [relation],
             |row| row.get(0),
         )
@@ -324,19 +333,19 @@ async fn restart_close_keeps_a_saved_success_result() -> Result<(), HarnessError
     assert_eq!(
         count(
             &db,
-            "SELECT count(*) FROM btcc_steward_results WHERE relation_id=?1",
+            "SELECT count(*) FROM btcc_session_relations r JOIN wm_session_exec s ON s.session_id=r.child_session_id JOIN wm_attempts a ON a.task_id=s.current_task_id AND a.session_id=r.child_session_id WHERE r.relation_id=?1",
             relation
         ),
         1
     );
     let (status, failure_key): (String, Option<String>) = db
         .query_row(
-            "SELECT status,failure_key FROM btcc_steward_results WHERE relation_id=?1",
+            "SELECT a.status,a.checkpoint_ref FROM btcc_session_relations r JOIN wm_session_exec s ON s.session_id=r.child_session_id JOIN wm_attempts a ON a.task_id=s.current_task_id AND a.session_id=r.child_session_id WHERE r.relation_id=?1",
             [relation],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .unwrap();
-    assert_eq!(status, "success");
+    assert_eq!(status, "succeeded");
     assert_eq!(failure_key, None, "restart close re-keyed a saved success");
     assert_eq!(
         count(

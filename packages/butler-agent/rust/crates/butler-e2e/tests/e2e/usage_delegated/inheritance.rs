@@ -118,7 +118,7 @@ async fn child_usage_roots_survive_recovery_and_grandchildren() -> Result<(), Ha
             db.execute("INSERT INTO btcc_session_relations(relation_id,parent_session_id,parent_turn_id,child_session_id,anchor_message_id,ordinal,safe_title,created_at) VALUES (?1,?2,'turn',?1,'anchor',1,'Task','now')", rusqlite::params![child, source])?;
             db.execute("INSERT INTO btcc_subsession_delegations(delegation_id,relation_id,task_id,child_turn_id,root_work_id,packet_json,dispatch_intent_json,dispatch_state,created_at) VALUES (?1,?1,?1,?2,?3,?4,?5,'pending','now')", rusqlite::params![child, format!("turn-{child}"), format!("work-{child}"), serde_json::to_string(&packet)?, serde_json::to_string(&DispatchIntent::fixture())?])?;
             drop(db);
-            service.recover_dispatches().await.unwrap();
+            service.recover_assignments(Vec::new()).await.unwrap();
             let binding = bindings.get_by_session_id(&child).await.unwrap().unwrap();
             assert_eq!(
                 binding.metadata.unwrap()["subsession"]["root_session_id"].as_str(),

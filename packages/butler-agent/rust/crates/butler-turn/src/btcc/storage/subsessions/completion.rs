@@ -27,7 +27,7 @@ impl SqliteSubsessionRepository {
     }
     pub(crate) async fn commit_result(
         &self,
-        completion: ChildCompletion,
+        mut completion: ChildCompletion,
         now: String,
     ) -> Result<(), StorageError> {
         let child = self
@@ -38,6 +38,7 @@ impl SqliteSubsessionRepository {
             })?;
         self.storage.work_model_write(move |tx| {
             let result_id = super::native_completion::settle(tx,&child,&completion)?;
+            super::native_completion::resolve_outcome(tx, &child, &mut completion)?;
             if tx.query_row("SELECT 1 FROM btcc_subsession_outbox WHERE result_id=?1", [&result_id], |_|Ok(())).optional()?.is_some() { return Ok(()) }
             let text = result_text(tx, &child, &completion)?;
             let input = parent_input(&child, &result_id, text, &now);
@@ -92,7 +93,7 @@ fn result_text(
         completion.status, completion.summary
     );
     if let Some(reason) = &completion.failure_reason {
-        let count: i64 = tx.query_row("SELECT count(*) FROM wm_task_parts p JOIN wm_attempts a ON a.task_id=p.task_id AND a.part_id=p.id WHERE p.task_id=?1 AND p.title=?2 AND a.status='failed' AND a.checkpoint_ref=?3",params![child.task_id,child.safe_title,reason],|r|r.get(0))?;
+        let count: i64 = tx.query_row("SELECT count(*) FROM btcc_session_relations r JOIN wm_session_exec s ON s.session_id=r.child_session_id JOIN wm_attempts origin ON origin.task_id=s.current_task_id AND origin.session_id=r.child_session_id JOIN wm_cross_db_intents i ON i.op_id='child_dispatch:'||origin.id JOIN wm_attempts a ON a.task_id=s.current_task_id AND a.session_id=r.child_session_id WHERE r.parent_session_id=?1 AND json_extract(i.payload_json,'$.delegation.packet.objective')=?2 AND a.status IN ('failed','interrupted') AND a.checkpoint_ref=?3",params![child.parent_session_id,child.packet.objective,reason],|r|r.get(0))?;
         text.push_str(&format!("\nreason: {reason}"));
         if count > 1 {
             text.push_str(&format!(

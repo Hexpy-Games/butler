@@ -63,6 +63,9 @@ async fn child_repetition_and_parent_redelegation_have_separate_feedback()
             butler_e2e::e2e::matching::key("/codex/responses", r, &Default::default())
                 .user_request
                 .contains("Delegated result")
+                && butler_e2e::e2e::matching::key("/codex/responses", r, &Default::default())
+                    .round
+                    .is_empty()
         })
         .collect();
     assert_eq!(parent_results.len(), 2);
@@ -79,12 +82,12 @@ async fn child_repetition_and_parent_redelegation_have_separate_feedback()
     assert!(
         parent_results[1]
             .to_string()
-            .contains("Resolve this blocker or revise the Plan")
+            .contains("Resolve this blocker or revise the Task")
     );
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap();
     let count: i64 = db
         .query_row(
-            "SELECT count(*) FROM btcc_steward_results WHERE failure_key IS NOT NULL",
+            "SELECT count(*) FROM btcc_session_relations r JOIN wm_session_exec s ON s.session_id=r.child_session_id JOIN wm_attempts a ON a.task_id=s.current_task_id AND a.session_id=r.child_session_id WHERE a.checkpoint_ref='Owner supplies source credentials'",
             [],
             |row| row.get(0),
         )
@@ -159,15 +162,10 @@ async fn duplicate_assignment_returns_the_running_relation() -> Result<(), Harne
             let first: Value = serde_json::from_str(&rows[0])?;
             let second: Value = serde_json::from_str(&rows[1])?;
             assert_eq!(first["ok"], true);
-            assert_eq!(second["ok"], false);
-            assert_eq!(second["error"]["code"], "already_delegated");
+            assert_eq!(second["ok"], true);
+            assert_eq!(first["attempt_id"], second["attempt_id"]);
+            assert_eq!(first["part_id"], second["part_id"]);
             assert_eq!(first["relation_id"], second["relation_id"]);
-            assert!(
-                second["error"]["message"]
-                    .as_str()
-                    .unwrap()
-                    .contains("steer_steward")
-            );
             assert_eq!(children(&s).await?.len(), 1);
             break;
         }

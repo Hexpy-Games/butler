@@ -129,6 +129,14 @@ impl Batch<'_, '_> {
     fn resolve_many(&self, ids: &[String]) -> Result<Vec<String>> {
         ids.iter().map(|id| self.resolve(id)).collect()
     }
+    fn task_spec(&self) -> Result<SpecRef> {
+        let spec = self
+            .input
+            .spec_ref
+            .as_ref()
+            .ok_or(Error::Invalid("spec_ref required"))?;
+        self.resolve_spec(spec)
+    }
     fn add(&mut self, op: &Operation) -> Result<()> {
         let Operation::Add {
             key,
@@ -153,12 +161,7 @@ impl Batch<'_, '_> {
             .transpose()?;
         placement(after, join, step)?;
         let work = self.work()?.to_owned();
-        let spec = self
-            .input
-            .spec_ref
-            .as_ref()
-            .ok_or(Error::Invalid("spec_ref required"))?;
-        let spec = self.resolve_spec(spec)?;
+        let spec = self.task_spec()?;
         let id = self.id(IdKind::Task)?;
         let after = after.map(|id| self.task(id)).transpose()?;
         let chain = after

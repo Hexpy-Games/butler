@@ -76,6 +76,9 @@ fn finish(
                 },
             )?;
         }
+        "failed" if completion.failure_code.as_deref() == Some("child_turn_interrupted") => {
+            store::recover_session(tx, ctx, &completion.session, store::PreviousShutdown::Crash)?;
+        }
         "failed" => {
             if let Some(part) = part {
                 store::fail_part(tx, ctx, part, &completion.session, reason)?;
@@ -112,6 +115,30 @@ fn finish(
             }
         }
         _ => return Err(store::Error::Invalid("child completion status")),
+    }
+    Ok(())
+}
+
+/// A model can block its assignment before the transport delivers the final answer.
+/// Resolve that durable outcome in the same transaction as its parent receipt.
+pub(super) fn resolve_outcome(
+    tx: &store::Transaction<'_>,
+    child: &Child,
+    completion: &mut ChildCompletion,
+) -> store::Result<()> {
+    let Child::Assigned(child) = child else {
+        return Ok(());
+    };
+    if completion.status != "success" {
+        return Ok(());
+    }
+    let task = store::read_task(tx, &child.task_id)?;
+    if matches!(task["status"].as_str(), Some("blocked" | "failed")) {
+        completion.status = task["status"].as_str().unwrap_or("failed").into();
+        completion.failure_reason = task["blocked_reason"]
+            .as_str()
+            .or(task["failure_reason"].as_str())
+            .map(str::to_owned);
     }
     Ok(())
 }

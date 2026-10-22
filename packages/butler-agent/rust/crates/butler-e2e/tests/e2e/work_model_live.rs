@@ -1,5 +1,6 @@
 //! WMU-01/02/18 through the real model-tool, effect and HTTP surfaces.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
+mod delegation;
 mod recovery;
 mod stub;
 use butler_e2e::e2e::{
@@ -275,7 +276,7 @@ async fn session_control_surface_is_limited_to_tier_two_parents() -> Result<(), 
     let results = stub::outputs(requests.last().unwrap());
     assert_eq!(
         results.last().unwrap()["error"]["code"],
-        "session_control_unavailable"
+        "parent_control_forbidden"
     );
     server.abort();
     s.finish().await

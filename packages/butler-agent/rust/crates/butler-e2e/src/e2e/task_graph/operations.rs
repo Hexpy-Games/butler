@@ -92,21 +92,20 @@ impl GraphBuilder {
         self.tick();
         let output = self
             .children
-            .delegate_steward(
-                StewardDelegationRequest {
-                    parent_session_id: parent.scope.session_id.clone(),
-                    parent_turn_id: parent.scope.turn_id.clone(),
-                    anchor_message_id: "anchor".into(),
-                    request: objective.into(),
-                    previous_relation_id: None,
-                    safe_title: Some(objective.into()),
-                    model_ref: "openai/gpt-6-luna".into(),
-                    reasoning_effort: "low".into(),
-                    access_mode: "read_only".into(),
-                    schedule_run: None,
-                },
-                &parent.view,
-            )
+            .delegate_steward(StewardDelegationRequest {
+                parent_session_id: parent.scope.session_id.clone(),
+                parent_turn_id: parent.scope.turn_id.clone(),
+                anchor_message_id: "anchor".into(),
+                request: objective.into(),
+                task_id: None,
+                part_id: None,
+                previous_relation_id: None,
+                safe_title: Some(objective.into()),
+                model_ref: "openai/gpt-6-luna".into(),
+                reasoning_effort: "low".into(),
+                access_mode: "read_only".into(),
+                schedule_run: None,
+            })
             .await?;
         let session = output["child_session_id"]
             .as_str()
@@ -134,23 +133,22 @@ impl GraphBuilder {
         self.tick();
         let output = self
             .children
-            .delegate_worker(
-                WorkerDelegationRequest {
-                    parent_session_id: work.scope.session_id.clone(),
-                    parent_turn_id: work.scope.turn_id.clone(),
-                    anchor_message_id: "anchor".into(),
-                    source_tool_call_id: format!("worker-{}", self.sequence),
-                    action_key: key.into(),
-                    objective: format!("Complete {key}"),
-                    acceptance_criteria: vec!["All checks pass".into()],
-                    implementation_brief: brief.into(),
-                    safe_title: Some(format!("Task {key}")),
-                    profile_id: None,
-                    access_mode: "read_only".into(),
-                    schedule_run: None,
-                },
-                &work.view,
-            )
+            .delegate_worker(WorkerDelegationRequest {
+                parent_session_id: work.scope.session_id.clone(),
+                parent_turn_id: work.scope.turn_id.clone(),
+                anchor_message_id: "anchor".into(),
+                source_tool_call_id: format!("worker-{}", self.sequence),
+                task_id: None,
+                part_id: None,
+                action_key: key.into(),
+                objective: format!("Complete {key}"),
+                acceptance_criteria: vec!["All checks pass".into()],
+                implementation_brief: brief.into(),
+                safe_title: Some(format!("Task {key}")),
+                profile_id: None,
+                access_mode: "read_only".into(),
+                schedule_run: None,
+            })
             .await?;
         let session = output["child_session_id"]
             .as_str()

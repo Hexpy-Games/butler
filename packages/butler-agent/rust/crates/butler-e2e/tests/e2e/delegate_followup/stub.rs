@@ -1,4 +1,5 @@
 //! Replays synthetic responses with only per-run relation/Work placeholders.
+use super::super::work_model_script as native;
 use axum::{Json, Router, extract::State, routing::post};
 use butler_e2e::e2e::{HarnessError, matching, sanitize::Placeholders};
 use serde_json::{Value, json};
@@ -119,12 +120,15 @@ async fn reply(
                     };
                     json!({"type":"function_call","name":"read_file","arguments":arguments})
                 }
-                6 => json!({"type":"function_call","name":"record_work_disposition","arguments":{
-                    "work_id":"{{WORK}}","disposition":"blocked","summary":"Source requires owner credentials",
-                    "action_updates":[],"remaining_actions":["research"],"next_condition":"Owner supplies source credentials","followups":[]}}),
+                6 => {
+                    json!({"type":"function_call","name":"work_apply","arguments":native::block(&body,"Owner supplies source credentials")})
+                }
                 7.. => json!({"type":"message","text":"Source requires owner credentials"}),
                 _ => template,
             };
+        } else if kind == "followup" && step == 0 {
+            template =
+                json!({"type":"function_call","name":"work_read","arguments":{"view":"tasks"}});
         } else if kind == "followup" && template["name"] == "delegate_to_steward" {
             template["arguments"]["request"] = OWNER.into();
         }
@@ -138,27 +142,34 @@ async fn reply(
         };
     }
     if script.blocked.load(Ordering::SeqCst) && child && step == 2 {
-        template["arguments"]["disposition"] = "blocked".into();
-        template["arguments"]["action_updates"] = json!([]);
-        template["arguments"]["remaining_actions"] = json!(["research"]);
-        template["arguments"]["next_condition"] = "Source unavailable".into();
+        template = json!({"type":"function_call","name":"work_apply","arguments":native::block(&body,"Source unavailable")});
     }
     if child && step > 0 {
-        *script.work.lock().unwrap() = work_id(&body);
+        *script.work.lock().unwrap() = native::view(&body)["task"]["work_id"]
+            .as_str()
+            .unwrap_or_default()
+            .into();
     }
     if is_message {
-        template = message_step(&script, step);
+        template = message_step(&script, step, &body);
     }
+    if kind == "synthesis" && step == 2 {
+        template = match native::complete(&body) {
+            Some(arguments) => {
+                json!({"type":"function_call","name":"work_apply","arguments":arguments})
+            }
+            None => json!({"type":"message","text":"원문 확인 결과를 정리했습니다."}),
+        };
+    }
+    template = native::fill(template, &body);
     let id = if template["name"] == "delegate_to_steward" {
         "delegate".into()
     } else {
         format!("{kind}-{step}")
     };
-    let work = work_id(&body);
     let encoded = template
         .to_string()
-        .replace("{{RELATION}}", &script.relation.lock().unwrap())
-        .replace("{{WORK}}", &work);
+        .replace("{{RELATION}}", &script.relation.lock().unwrap());
     let template: Value = serde_json::from_str(&encoded).unwrap();
     let item = if template["type"] == "function_call" {
         json!({"type":"function_call","id":id,"call_id":id,"name":template["name"],"arguments":template["arguments"].to_string(),"status":"completed"})
@@ -180,38 +191,33 @@ async fn reply(
     };
     ([("content-type", "text/event-stream")], wire(item)).into_response()
 }
-fn message_step(script: &Script, step: usize) -> Value {
+fn message_step(_script: &Script, step: usize, body: &Value) -> Value {
+    let read = |args: Value| json!({"type":"function_call","name":"work_read","arguments":args});
+    let apply = |args: Value| json!({"type":"function_call","name":"work_apply","arguments":args});
     match step {
-        0 if script.blocked.load(Ordering::SeqCst) => {
-            json!({"type":"function_call","name":"continue_work","arguments":{"work_id":script.work.lock().unwrap().clone()}})
+        0 => read(json!({"view":"tasks"})),
+        1 => read(json!({"view":"task","task_id":native::task_id(body)})),
+        3 => read(json!({"view":"task","task_id":native::task_id(body)})),
+        2 => {
+            let view = native::view(body);
+            let part = native::part(body);
+            let mut input = native::apply(
+                body,
+                json!([{"op":"part.edit","part_id":part,"patch":{"title":"Verify the additional source"},"after_part_ids":if step==2 {vec![part.clone()]}else{vec![]}}]),
+            );
+            let revision = view["parts"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|p| p["id"] == part)
+                .unwrap()["revision"]
+                .clone();
+            input["expected_revisions"] = json!({part.as_str().unwrap():revision});
+            apply(input)
         }
-        0 => json!({"type":"function_call","name":"start_work","arguments":{"objective":MESSAGE}}),
-        1 | 2 => json!({"type":"function_call","name":"replace_work_plan","arguments":{
-            "start_new":false,"objective":MESSAGE,"governing_refs":[],"execution_mode":"direct",
-            "actions":[{"action_key":"research","description":"Verify the additional source","dependency_keys":if step==1 {vec!["missing"]}else{vec![]}}],"checks":["Verified"]}}),
-        3 => {
-            json!({"type":"function_call","name":"record_work_review","arguments":{"subject":"plan","verdict":"accept","summary":"Ready","corrections":[],"action_updates":[]}})
-        }
-        4 => {
-            json!({"type":"function_call","name":"record_work_disposition","arguments":{"work_id":"{{WORK}}","disposition":"completed","summary":"Additional source verified","action_updates":[{"action_key":"research","status":"done"}],"remaining_actions":[],"followups":[]}})
-        }
+        4 => apply(native::submit(body, "Additional source verified")),
         _ => json!({"type":"message","text":"Additional source verified"}),
     }
-}
-fn work_id(body: &Value) -> String {
-    body["input"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .rev()
-        .filter_map(|item| item["output"].as_str())
-        .filter_map(|s| serde_json::from_str::<Value>(s).ok())
-        .find_map(|v| {
-            v.pointer("/output/work/work_id")
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-        })
-        .unwrap_or_default()
 }
 fn message(text: &str) -> Value {
     json!({"type":"message","id":"answer","role":"assistant","status":"completed","content":[{"type":"output_text","text":text,"annotations":[]}]})

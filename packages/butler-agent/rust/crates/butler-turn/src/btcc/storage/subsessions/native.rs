@@ -92,7 +92,17 @@ pub(super) fn result(
     let Some((attempt, turn, state, reason, at, part)) = row else {
         return Ok(None);
     };
-    if state == "running" {
+    if state == "running"
+        || !db
+            .query_row(
+                "SELECT 1 FROM btcc_subsession_outbox WHERE result_id=?1",
+                [format!("result-{attempt}")],
+                |_| Ok(()),
+            )
+            .optional()
+            .map_err(StorageError::sqlite)?
+            .is_some()
+    {
         return Ok(None);
     }
     let content: Option<String> = db.query_row("SELECT body_ref FROM wm_results WHERE task_id=?1 AND attempt_id=?2 ORDER BY revision DESC LIMIT 1", params![child.task_id,attempt], |r| r.get(0))
@@ -114,7 +124,7 @@ pub(super) fn result(
         "failed"
     };
     let mut projected = serde_json::json!({"result_id":format!("result-{attempt}"),"child_turn_id":turn,
-        "status":status,"summary":content["result_refs"],"acceptance_evidence":content["evidence_refs"],"created_at":at});
+        "status":status,"work_status":store::read_task(db, &child.task_id).map_err(super::super::work_model::work_error)?["status"],"summary":content["result_refs"],"acceptance_evidence":content["evidence_refs"],"created_at":at});
     if let Some(reference) = content["result_refs"]
         .as_array()
         .and_then(|refs| refs.first())

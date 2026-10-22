@@ -258,13 +258,7 @@ async fn drain_chat(
     app: &AppApplication,
     chat_id: &str,
 ) -> Result<(), GatewayApplicationError> {
-    let parent = app.runtime_hint(chat_id).await?;
-    if app
-        .dependencies
-        .subsessions
-        .has_active_child(parent)
-        .await?
-    {
+    if active_child(app, chat_id).await? {
         return Ok(());
     }
     let chat = chat_id.to_owned();
@@ -286,39 +280,7 @@ async fn drain_chat(
         if active {
             return Ok(());
         }
-        let now = app.dependencies.identity_clock.now_iso();
-        let lease = app
-            .dependencies
-            .identity_clock
-            .iso_after_millis(queue::SESSION_QUEUE_LEASE_MILLIS as u64);
-        let claim_id = app.dependencies.identity_clock.new_uuid();
-        let owner = app.queue_owner.clone();
-        let subscribers = app.subscribers.clone();
-        let chat = chat_id.to_owned();
-        let queued = row.id.clone();
-        let claim = app
-            .storage
-            .execute(move |db| {
-                queue::claim(
-                    db,
-                    &queue::QueueClaim {
-                        queued_message_id: queued,
-                        chat_id: chat,
-                        claim_id,
-                        claim_owner: owner,
-                        lease_expires_at: lease,
-                    },
-                    if row.result {
-                        queue::ClaimOrder::Immediate
-                    } else {
-                        queue::ClaimOrder::Fifo
-                    },
-                    &now,
-                    &subscribers,
-                )
-            })
-            .await
-            .map_err(app_error)?;
+        let claim = claim_row(app, chat_id, &row).await?;
         let Some(claim) = claim else { continue };
         let Ok(resolution) = settings::resolution_from_persisted(&row.control_resolution_json)
         else {
@@ -344,6 +306,53 @@ async fn drain_chat(
         }
     }
     Ok(())
+}
+
+async fn claim_row(
+    app: &AppApplication,
+    chat_id: &str,
+    row: &QueuedRow,
+) -> Result<Option<queue::QueueClaim>, GatewayApplicationError> {
+    let now = app.dependencies.identity_clock.now_iso();
+    let lease = app
+        .dependencies
+        .identity_clock
+        .iso_after_millis(queue::SESSION_QUEUE_LEASE_MILLIS as u64);
+    let claim_id = app.dependencies.identity_clock.new_uuid();
+    let owner = app.queue_owner.clone();
+    let subscribers = app.subscribers.clone();
+    let chat = chat_id.to_owned();
+    let queued = row.id.clone();
+    let result = row.result;
+    app.storage
+        .execute(move |db| {
+            queue::claim(
+                db,
+                &queue::QueueClaim {
+                    queued_message_id: queued,
+                    chat_id: chat,
+                    claim_id,
+                    claim_owner: owner,
+                    lease_expires_at: lease,
+                },
+                if result {
+                    queue::ClaimOrder::Immediate
+                } else {
+                    queue::ClaimOrder::Fifo
+                },
+                &now,
+                &subscribers,
+            )
+        })
+        .await
+        .map_err(app_error)
+}
+
+async fn active_child(app: &AppApplication, chat: &str) -> Result<bool, GatewayApplicationError> {
+    app.dependencies
+        .subsessions
+        .has_active_child(app.runtime_hint(chat).await?)
+        .await
 }
 
 struct QueuedRow {

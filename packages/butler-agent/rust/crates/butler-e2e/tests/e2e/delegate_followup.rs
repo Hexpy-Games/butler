@@ -209,7 +209,7 @@ fn assert_followup(
     assert!(
         followups[0]
             .to_string()
-            .contains("closed: new requests need a fresh reviewed Work")
+            .contains("closed: new requests need work_read view=task")
     );
     assert!(followups[0].to_string().contains("previous_relation_id"));
     let feedback = followups[1]["input"]
@@ -243,29 +243,44 @@ fn assert_followup(
         assert!(child.contains("Original evidence: paper A verified."));
     }
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap();
-    let count: i64 = db.query_row("SELECT count(*) FROM btcc_subsession_delegations d JOIN btcc_session_relations r USING(relation_id) WHERE r.parent_turn_id=?1", [turn["id"].as_str().unwrap()], |row| row.get(0)).unwrap();
+    let count: i64 = db
+        .query_row(
+            "SELECT count(*) FROM btcc_session_relations WHERE parent_turn_id=?1",
+            [turn["id"].as_str().unwrap()],
+            |row| row.get(0),
+        )
+        .unwrap();
     assert_eq!(
         count, 1,
         "fresh delegation must start in the follow-up Turn"
     );
-    let packet: String = db.query_row("SELECT packet_json FROM btcc_subsession_delegations d JOIN btcc_session_relations r USING(relation_id) WHERE r.parent_turn_id=?1", [turn["id"].as_str().unwrap()], |row| row.get(0)).unwrap();
+    let packet: String = db.query_row("SELECT json_extract(i.payload_json,'$.delegation.packet') FROM btcc_session_relations r JOIN wm_session_exec s ON s.session_id=r.child_session_id JOIN wm_attempts a ON a.task_id=s.current_task_id AND a.session_id=r.child_session_id JOIN wm_cross_db_intents i ON i.op_id='child_dispatch:'||a.id WHERE r.parent_turn_id=?1", [turn["id"].as_str().unwrap()], |row| row.get(0)).unwrap();
     let packet: Value = serde_json::from_str(&packet).unwrap();
     assert!(packet["prior_context"].as_str().unwrap().contains(relation));
     assert_eq!(
         packet["objective"],
         "다시 조사해줄래? 추가 원문도 확인해 주세요."
     );
-    let roots: Vec<(String, String)> = {
-        let mut q = db.prepare("SELECT d.root_work_id,w.status FROM btcc_subsession_delegations d JOIN btcc_guided_works w ON w.work_id=d.root_work_id ORDER BY d.created_at").unwrap();
+    let parts: Vec<(String, String)> = {
+        let mut q=db.prepare("SELECT p.assignee_session_id,p.status FROM btcc_session_relations r JOIN wm_task_parts p ON p.assignee_session_id=r.child_session_id ORDER BY r.ordinal").unwrap();
         q.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap()
     };
-    assert_eq!(roots.len(), 2);
-    assert_ne!(roots[0].0, roots[1].0);
-    assert_eq!(roots[0].1, if stopped { "abandoned" } else { "completed" });
-    assert_eq!(roots[1].1, "completed");
+    assert_eq!(parts.len(), 2);
+    assert_ne!(parts[0].0, parts[1].0);
+    assert_eq!(parts[0].1, if stopped { "cancelled" } else { "completed" });
+    assert_eq!(parts[1].1, "completed");
+    assert_eq!(
+        db.query_row(
+            "SELECT count(*) FROM btcc_subsession_delegations",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        0
+    );
 }
 async fn assert_reply(s: &Scenario, turn: &Value) -> Result<(), HarnessError> {
     let messages = s.gw.messages("general").await?;

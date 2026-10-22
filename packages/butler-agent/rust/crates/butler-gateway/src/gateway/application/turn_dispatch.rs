@@ -228,7 +228,7 @@ impl AppApplication {
         error: GatewayApplicationError,
     ) -> Result<GatewayApplicationError, GatewayApplicationError> {
         if self.queue_wake.is_stopping()
-            || matches!(&error, GatewayApplicationError::Public { code, .. } if code == "service_stopping")
+            || matches!(&error, GatewayApplicationError::Public { code, .. } if code == "service_stopping" || code == "app_transport_executor_unavailable")
         {
             self.park_dispatch(claim).await?;
             return Ok(public(

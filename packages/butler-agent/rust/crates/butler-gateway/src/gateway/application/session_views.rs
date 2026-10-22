@@ -217,6 +217,7 @@ impl AppApplication {
         view.insert("kind".into(), json!("chat"));
         view.insert("status".into(), json!(child_status(&projection)));
         for key in [
+            "terminal",
             "active_turn",
             "latest_turn",
             "messages",
