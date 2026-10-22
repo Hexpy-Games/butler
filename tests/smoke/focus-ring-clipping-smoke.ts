@@ -10,8 +10,9 @@
 // every ancestor that clips its painting (overflow, clip-path, mask including
 // the scroll-edge fades) and the viewport. Each screen's overflowing scrollers
 // are also scrolled so an edge fade is on, then the control at that edge takes
-// focus and is probed frame by frame (#1017). Light and dark, wallpaper and
-// plain, desktop and phone width.
+// focus and is probed frame by frame (#1017). Settings › Usage and the context
+// popover run with a delegating chat, so its linked split rows are walked too.
+// Light and dark, wallpaper and plain, desktop and phone width.
 //
 // BUTLER_FOCUS_RING_SHOTS=<dir> saves a capture of each clipped stop.
 import assert from "node:assert/strict";
@@ -20,7 +21,8 @@ import { extname, join, normalize, sep } from "node:path";
 import type { Page } from "playwright";
 import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 import type { AnswerBlocks } from "../../packages/butler-app/client/shared/app-contracts";
-import type { MessageRecord } from "../../packages/butler-app/client/ui/src/app/types";
+import type { MessageRecord, UsageMonitorView } from "../../packages/butler-app/client/ui/src/app/types";
+import { delegatedUsageView } from "../../packages/butler-app/client/ui/src/components/conversation/contextUsage.fixtures";
 import { launchSmokeBrowser } from "../support/smoke-browser";
 import { auditTabOrder, formatClips, probeFocusRing, probeFocusRingFrames, type FocusRingClip } from "../support/focus-ring-clipping";
 
@@ -76,10 +78,27 @@ function record(cell: Cell, screen: string, result: { stops: number; clipped: Fo
   }
 }
 
-async function open(page: Page, cell: Cell) {
+/** A chat whose work was delegated; only a chat's view splits by role and carries the subtask slot values. */
+function usageMonitor(url: URL): UsageMonitorView {
+  const view = delegatedUsageView();
+  const now = Date.parse(view.generated_at);
+  const hours = Number(url.searchParams.get("since_hours")) || 0;
+  const session = url.searchParams.get("session_id");
+  view.filters = { sessionId: session, sinceTs: hours ? now - hours * 3_600_000 : null, untilTs: hours ? now : null };
+  view.topSessions = [{ sessionId: "s1", title: "Login form refactor", kind: "chat", totalTokens: view.model.totalTokens,
+    requests: view.model.requestCount, lastUsedMs: now }];
+  if (!session) {
+    delete view.model.byRole;
+    view.timeline.slots = view.timeline.slots.map(([start, requests, prompt, cached, output]) => [start, requests, prompt, cached, output]);
+  }
+  return view;
+}
+
+/** `auth` picks the harness model's billing; a tracked one (api_key) shows usage in the context popover. */
+async function open(page: Page, cell: Cell, auth?: string) {
   fixture = { messages: [answer], background: cell.background };
   await page.setViewportSize({ width: cell.width, height: cell.height });
-  await page.goto(`${base}?visual=components&theme=${cell.theme}&locale=ko`);
+  await page.goto(`${base}?visual=components&theme=${cell.theme}&locale=ko${auth ? `&auth=${auth}` : ""}`);
   await page.locator('[data-slot="item-card"]').first().waitFor();
   await page.locator('[data-slot="tab-rail"]').first().waitFor();
   await page.evaluate(() => document.fonts.ready);
@@ -234,6 +253,23 @@ async function auditCell(page: Page, cell: Cell) {
   await page.getByRole("button", { name: copy.sidebar.settings }).first().click();
   await page.locator('[data-test-class~="settings-view"]').waitFor();
   await auditScope(page, cell, "settings", '[data-test-class~="settings-view"]', 160);
+  await auditUsage(page, cell);
+}
+
+/** Settings › Usage with a delegating chat selected (linked split rows, the chart), then the context popover. */
+async function auditUsage(page: Page, cell: Cell) {
+  const section = '[data-settings-section-id="usage-overview"]';
+  await page.getByRole("button", { name: copy.settings.sections.usage, exact: true }).first().click();
+  await page.locator(section).getByRole("tabpanel").getByRole("button", { name: /Login form refactor/u }).click();
+  await page.locator(`${section} [data-test-class="usage-parts"] [data-linked="true"]`).first().waitFor();
+  await auditScope(page, cell, "settings-usage", section, 80);
+  await open(page, cell, "api_key");
+  await page.locator('[data-slot="composer-compact-preview"]').click();
+  await page.locator('[data-test-class="context-donut-button"]').click();
+  const popover = '[data-test-class="context-popover"]';
+  await page.locator(`${popover} [data-test-class="usage-parts"] [data-linked="true"]`).first().waitFor();
+  await auditScope(page, cell, "context-popover", popover, 20);
+  await page.keyboard.press("Escape");
 }
 
 try {
@@ -263,6 +299,7 @@ try {
       revision: 0, catalog_generation: "harness-model-catalog-v1", controls: { model: "openai/gpt-6-luna", reasoning_effort: "none", access_mode: "full_access", plan_mode: false } } } });
     if (url.pathname === "/session-queue") return route.fulfill({ json: { ok: true, data: { queued_messages: [] } } });
     if (["/session-view", "/summary", "/navigation", "/events/live", "/health"].includes(url.pathname)) return route.fulfill({ json: { ok: true, data: {} } });
+    if (url.pathname === "/usage-monitor") return route.fulfill({ json: { ok: true, data: usageMonitor(url) } });
     return route.fulfill({ status: 404, json: { ok: false, error: { code: "not_found" } } });
   });
   for (const [width, height] of [[1280, 860], [390, 844]]) {
