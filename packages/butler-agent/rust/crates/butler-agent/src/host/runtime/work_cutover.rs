@@ -6,7 +6,7 @@ use butler_work::{
     cutover::{self, CutoverState},
     store,
 };
-use rusqlite::{Connection, OpenFlags, OptionalExtension};
+use rusqlite::{OpenFlags, OptionalExtension};
 use std::{collections::BTreeSet, path::PathBuf, sync::Arc};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
@@ -53,7 +53,7 @@ pub(super) async fn start(
     let stopping = owner.stop.clone();
     let ready = owner.ready.clone();
     owner.tasks.spawn(async move {
-        tokio::select! { _ = ready.notified() => {}, _ = stopping.cancelled() => return }
+        tokio::select! { () = ready.notified() => {}, () = stopping.cancelled() => return }
         if let Err(error) = run(root, storage, project, stopping.clone()).await {
             // Codes only: source paths and document contents never reach logs.
             if !stopping.is_cancelled() {
@@ -175,7 +175,7 @@ fn valid_component(value: &str) -> bool {
 type ProjectBatch = Option<(String, String, BTreeSet<String>)>;
 fn project_batch(path: PathBuf, after: &str) -> Result<ProjectBatch, BtccError> {
     let read = || -> rusqlite::Result<ProjectBatch> {
-        let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+        let db = butler_platform::sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
         // Startup-only App inventory, keyset by primary key. Never used by a
         // request or an idle poll; one project's sessions are read once.
         let row = db

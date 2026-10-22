@@ -150,6 +150,7 @@ fn status(source: &Source, key: &str, step: usize) -> &'static str {
         _ => "waiting",
     }
 }
+#[derive(Clone, Copy)]
 struct Task<'a> {
     id: &'a str,
     source_key: Option<&'a str>,
@@ -166,8 +167,12 @@ fn task(tx: &Transaction<'_>, ctx: &Context, source: &Source, task: Task<'_>) ->
     let actor = ctx.actor.to_string();
     let member = task.status != "cancelled";
     let chain = member.then_some(task.chain);
-    let step = member.then_some(task.step as i64);
-    let position = member.then_some(task.position as i64);
+    let step = member.then_some(i64::try_from(task.step).map_err(|_| {
+        crate::store::Error::Invalid("legacy step index exceeds SQLite integer range")
+    })?);
+    let position = member.then_some(i64::try_from(task.position).map_err(|_| {
+        crate::store::Error::Invalid("legacy stack position exceeds SQLite integer range")
+    })?);
     let historical = task.status == "completed";
     let reported = historical.then_some(ctx.now);
     let values = params![

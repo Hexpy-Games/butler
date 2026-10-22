@@ -23,7 +23,7 @@ pub(super) fn row_json(row: &Row<'_>) -> rusqlite::Result<Value> {
             rusqlite::types::ValueRef::Integer(n) => json!(n),
             rusqlite::types::ValueRef::Real(n) => json!(n),
             rusqlite::types::ValueRef::Text(s) => json!(String::from_utf8_lossy(s)),
-            _ => return Err(rusqlite::Error::InvalidQuery),
+            rusqlite::types::ValueRef::Blob(_) => return Err(rusqlite::Error::InvalidQuery),
         };
         object.insert((*name).into(), value);
     }

@@ -1,8 +1,8 @@
 //! Stepped online backups. No source checkpoint, VACUUM, or raw DB copying.
 use super::state::{self, CutoverState};
-use butler_platform::{fs_space, secure_fs};
+use butler_platform::{fs_space, secure_fs, sqlite};
 use rusqlite::{
-    Connection, OpenFlags,
+    OpenFlags,
     backup::{Backup, StepResult},
 };
 use serde::{Deserialize, Serialize};
@@ -37,7 +37,7 @@ pub fn check_epoch(root: &Path) -> io::Result<()> {
         return Ok(());
     }
     reject_links(root, Path::new(DATABASES[0]))?;
-    let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(error)?;
+    let db = sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(error)?;
     state::check_epoch(&db).map_err(error)
 }
 
@@ -53,8 +53,7 @@ pub fn prepare_with_cancel(root: &Path, cancelled: &dyn Fn() -> bool) -> io::Res
     let btcc = root.join(DATABASES[0]);
     if btcc.exists() {
         reject_links(root, Path::new(DATABASES[0]))?;
-        let db =
-            Connection::open_with_flags(&btcc, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(error)?;
+        let db = sqlite::open_with_flags(&btcc, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(error)?;
         state::check_epoch(&db).map_err(error)?;
         let exists = db
             .query_row(super::sql::HAS_MIGRATION, [], |r| r.get::<_, bool>(0))
@@ -63,9 +62,9 @@ pub fn prepare_with_cancel(root: &Path, cancelled: &dyn Fn() -> bool) -> io::Res
             return Ok(CutoverState::Done);
         }
     }
-    // New installations have no legacy BTCC to protect.
+    // Called only after both native databases have opened.
     if !btcc.exists() {
-        return Ok(CutoverState::Pending);
+        return Err(error("BTCC database is unavailable for backup"));
     }
     let folder = private_folder(root, "backups/work-model-cutover")?;
     if let Some(path) = completed(&folder)?
@@ -90,7 +89,7 @@ pub fn prepare_with_cancel(root: &Path, cancelled: &dyn Fn() -> bool) -> io::Res
     for relative in DATABASES {
         let source = root.join(relative);
         if !source.exists() {
-            continue;
+            return Err(error("A native database is unavailable for backup"));
         }
         reject_links(root, Path::new(relative))?;
         let name = Path::new(relative)
@@ -117,8 +116,8 @@ fn database_bytes(root: &Path) -> io::Result<u64> {
         let path = root.join(name);
         let size = if path.exists() {
             reject_links(root, Path::new(name))?;
-            let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-                .map_err(error)?;
+            let db =
+                sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(error)?;
             let pages: u64 = db
                 .pragma_query_value(None, "page_count", |r| r.get(0))
                 .map_err(error)?;
@@ -150,7 +149,18 @@ fn private_folder(root: &Path, relative: &str) -> io::Result<PathBuf> {
     Ok(path)
 }
 fn reject_links(root: &Path, relative: &Path) -> io::Result<()> {
-    drop(secure_fs::open_read_beneath(root, relative)?);
+    // Never open/close a live database outside SQLite: on POSIX, closing any
+    // descriptor for its inode releases this process's SQLite advisory locks.
+    let mut path = root.to_path_buf();
+    for component in relative.components() {
+        if !matches!(component, std::path::Component::Normal(_)) {
+            return Err(error("database path must stay below the data directory"));
+        }
+        path.push(component);
+        if fs::symlink_metadata(&path)?.file_type().is_symlink() {
+            return Err(error("database path must not contain symlinks"));
+        }
+    }
     Ok(())
 }
 fn copy(source: &Path, path: &Path, cancelled: &dyn Fn() -> bool) -> io::Result<()> {
@@ -159,8 +169,8 @@ fn copy(source: &Path, path: &Path, cancelled: &dyn Fn() -> bool) -> io::Result<
     secure_fs::owner_only(&mut options);
     drop(options.open(path)?);
     let source =
-        Connection::open_with_flags(source, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(error)?;
-    let mut target = Connection::open(path).map_err(error)?;
+        sqlite::open_with_flags(source, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(error)?;
+    let mut target = sqlite::open(path).map_err(error)?;
     let backup = Backup::new(&source, &mut target).map_err(error)?;
     loop {
         check_cancelled(cancelled)?;
@@ -203,11 +213,14 @@ fn valid_with_cancel(path: &Path, cancelled: &dyn Fn() -> bool) -> io::Result<bo
     let manifest: Manifest =
         serde_json::from_reader(secure_fs::open_read_no_follow(&path.join("manifest.json"))?)
             .map_err(error)?;
-    if manifest.files.is_empty() {
+    if manifest.files.len() != DATABASES.len() {
         return Ok(false);
     }
+    let mut names = std::collections::BTreeSet::new();
     for file in manifest.files {
-        if !matches!(file.name.as_str(), "btcc.sqlite" | "butler-client.sqlite") {
+        if !matches!(file.name.as_str(), "btcc.sqlite" | "butler-client.sqlite")
+            || !names.insert(file.name.clone())
+        {
             return Ok(false);
         }
         let target = path.join(file.name);
@@ -220,7 +233,7 @@ fn valid_with_cancel(path: &Path, cancelled: &dyn Fn() -> bool) -> io::Result<bo
 fn hash(path: &Path, cancelled: &dyn Fn() -> bool) -> io::Result<String> {
     let mut file = secure_fs::open_read_no_follow(path)?;
     let mut digest = Sha256::new();
-    let mut buffer = [0_u8; 65536];
+    let mut buffer = vec![0_u8; 65536].into_boxed_slice();
     loop {
         check_cancelled(cancelled)?;
         let n = file.read(&mut buffer)?;

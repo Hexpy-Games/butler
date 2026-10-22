@@ -389,7 +389,7 @@ async fn p1_schema_upgrades_before_start_and_second_start_is_identical() -> Resu
     ] {
         assert_eq!(original[table], migrated[table], "{table}");
     }
-    assert!(original["wm_migration"].is_empty());
+    assert_eq!(original["wm_migration"], Vec::<Vec<Value>>::new());
     assert_eq!(migrated["wm_migration"].len(), 1);
     assert_eq!(
         migrated["wm_migration"][0][1],

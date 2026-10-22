@@ -10,11 +10,13 @@ use rusqlite::{
 
 pub(super) fn fence(db: &Connection) {
     db.authorizer(Some(|context: AuthContext<'_>| {
-        let table = match context.action {
-            AuthAction::Insert { table_name }
-            | AuthAction::Update { table_name, .. }
-            | AuthAction::Delete { table_name } => table_name,
-            _ => return Authorization::Allow,
+        let (AuthAction::Insert { table_name: table }
+        | AuthAction::Update {
+            table_name: table, ..
+        }
+        | AuthAction::Delete { table_name: table }) = context.action
+        else {
+            return Authorization::Allow;
         };
         if table.starts_with("btcc_guided_work")
             || matches!(
@@ -123,7 +125,7 @@ impl BtccStorage {
                 CutoverState::Pending | CutoverState::BackingUp | CutoverState::Importing => {}
             }
             tokio::select! {
-                _ = stop.cancelled() => return Ok(CutoverAdmission::Pending(id)),
+                () = stop.cancelled() => return Ok(CutoverAdmission::Pending(id)),
                 changed = changes.changed() => if changed.is_err() { return Ok(CutoverAdmission::Pending(id)); },
             }
         }
