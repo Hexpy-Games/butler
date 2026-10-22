@@ -22,14 +22,14 @@ pub struct ProjectWorkLocateInput {
 }
 
 /// One observed project Work with its turn bindings.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ProjectWorkObserveWork {
     pub work: WorkView,
     pub bindings: Vec<ProjectWorkBinding>,
 }
 
 /// The project Works to persist for a canonical ledger head.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ProjectWorkObserveWorks {
     pub works: Vec<ProjectWorkObserveWork>,
     pub session_head_work_id: String,

@@ -143,13 +143,18 @@ async fn fresh_and_populated_schema_survive_restart() -> Result<(), HarnessError
     let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
     let db = Connection::open(&path)?;
     let fresh = snapshot(&db)?;
-    assert_eq!(fresh.len(), 26);
+    assert_eq!(fresh.len(), 27);
+    assert_eq!(fresh["wm_cutover_inventory"].len(), 1);
+    let inventory = butler_work::cutover::Inventory::load(&db)?.unwrap();
+    assert_eq!(inventory.observations, Vec::<serde_json::Value>::new());
+    assert_eq!(inventory.needs_source, Vec::<serde_json::Value>::new());
+    assert!(inventory.keys.is_empty());
     assert_eq!(fresh["wm_migration"].len(), 1);
     assert_eq!(fresh["wm_migration"][0][1], Value::Text("complete".into()));
     assert!(
         fresh
             .iter()
-            .filter(|(name, _)| name.as_str() != "wm_migration")
+            .filter(|(name, _)| !matches!(name.as_str(), "wm_migration" | "wm_cutover_inventory"))
             .all(|(_, rows)| rows.is_empty())
     );
     for query in work_queries::Query::all() {

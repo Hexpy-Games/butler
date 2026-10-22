@@ -70,3 +70,9 @@ BEFORE UPDATE OF node_id,revision,body_hash,parser_version,authoring_instruction
 BEGIN SELECT RAISE(ABORT, 'immutable spec revision content'); END;
 CREATE TRIGGER IF NOT EXISTS wm_spec_revisions_no_delete BEFORE DELETE ON wm_spec_revisions
 BEGIN SELECT RAISE(ABORT, 'immutable spec revision'); END;
+
+CREATE TABLE IF NOT EXISTS wm_cutover_inventory (
+  singleton INTEGER PRIMARY KEY CHECK (singleton=1),
+  inventory_hash TEXT NOT NULL,
+  inventory_json TEXT NOT NULL CHECK (json_valid(inventory_json))
+);

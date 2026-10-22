@@ -6,8 +6,9 @@ use serde_json::{Value, json};
 use std::collections::BTreeSet;
 
 impl ProjectWork {
-    /// Reads verified Ledger snapshots, passing each one through the startup
-    /// observation port; returns source-linked diagnostics without fabrication.
+    /// Reads verified Ledger snapshots into the caller's observation sink.
+    /// Cutover freezes these inputs before backup; this reader never writes
+    /// projections. Returns source-linked diagnostics without fabrication.
     pub async fn observe_for_cutover<F, Fut>(
         &self,
         scope: ResolvedProjectWorkScope,

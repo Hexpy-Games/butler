@@ -168,50 +168,6 @@ fn replaying_a_committed_batch_preserves_ids_and_cursor()
     Ok(())
 }
 
-// test-category: pure-logic
-#[test]
-fn interrupted_backup_is_redone_and_completed_set_is_reused()
--> Result<(), butler_e2e::e2e::HarnessError> {
-    butler_e2e::gate!();
-    use butler_work::cutover::CutoverState;
-    let root = std::env::temp_dir().join(format!("work-backup-{}", uuid::Uuid::new_v4()));
-    for (folder, name) in [
-        ("agent-runtime", "btcc.sqlite"),
-        ("app-server", "butler-client.sqlite"),
-    ] {
-        std::fs::create_dir_all(root.join(folder)).unwrap();
-        let db = Connection::open(root.join(folder).join(name)).unwrap();
-        db.execute_batch("CREATE TABLE original(id INTEGER PRIMARY KEY,value TEXT); INSERT INTO original VALUES(1,'kept')").unwrap();
-    }
-    let backups = root.join("backups/work-model-cutover");
-    let incomplete = backups.join("20000101T000000.000000000Z");
-    std::fs::create_dir_all(&incomplete).unwrap();
-    std::fs::write(incomplete.join("btcc.sqlite"), b"incomplete").unwrap();
-    assert_eq!(cutover::prepare(&root).unwrap(), CutoverState::Importing);
-    assert!(!incomplete.exists());
-    let sets = || {
-        std::fs::read_dir(&backups)
-            .unwrap()
-            .map(|e| e.unwrap().path())
-            .collect::<Vec<_>>()
-    };
-    let before = sets();
-    assert_eq!(before.len(), 1);
-    assert!(cutover::valid(&before[0]).unwrap());
-    assert_eq!(cutover::prepare(&root).unwrap(), CutoverState::Importing);
-    assert_eq!(before, sets());
-    for name in ["btcc.sqlite", "butler-client.sqlite"] {
-        let db = Connection::open(before[0].join(name)).unwrap();
-        assert_eq!(
-            db.query_row::<String, _, _>("SELECT value FROM original WHERE id=1", [], |r| r.get(0))
-                .unwrap(),
-            "kept"
-        );
-    }
-    std::fs::remove_dir_all(root).unwrap();
-    Ok(())
-}
-
 // test-category: format-pin
 #[test]
 fn every_cutover_statement_has_a_pinned_query_plan() -> Result<(), butler_e2e::e2e::HarnessError> {

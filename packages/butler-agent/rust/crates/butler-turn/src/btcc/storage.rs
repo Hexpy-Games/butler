@@ -132,6 +132,7 @@ pub struct BtccStorage {
 }
 
 struct StorageInner {
+    cutover_postponed: std::sync::atomic::AtomicBool,
     payload: payload::PayloadMemo,
     changes: tokio::sync::watch::Sender<()>,
     lane: AsyncMutex<LaneState>,
@@ -200,6 +201,7 @@ impl BtccStorage {
         let _ = owner;
         Ok(Self {
             inner: Arc::new(StorageInner {
+                cutover_postponed: Default::default(),
                 payload: Default::default(),
                 changes,
                 readers,

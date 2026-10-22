@@ -1,5 +1,6 @@
 //! WMU-12: a static pre-p14 folder starts and upgrades without an action.
 #![allow(clippy::unwrap_used, clippy::panic, reason = "test assertions")]
+mod backup_assertions;
 mod ledger_fixture;
 use butler_e2e::e2e::{
     HarnessError,
@@ -86,6 +87,8 @@ async fn wmu_12_automatic_upgrade_is_private_idle_and_idempotent() -> Result<(),
     butler_e2e::gate!();
     let setup = Setup::new("WMU-12")?;
     fixture(&setup.sandbox.data, &setup.sandbox.workspace)?;
+    let before = backup_assertions::snapshot(&setup.sandbox.data)?;
+    let initial_bytes = backup_assertions::bytes(&setup.sandbox.data);
     let mut s = setup.start().await?;
     let status = completed(&s).await?;
     assert!(
@@ -153,7 +156,8 @@ async fn wmu_12_automatic_upgrade_is_private_idle_and_idempotent() -> Result<(),
     assert_eq!(sets.len(), 1);
     assert!(butler_work::cutover::valid(&sets[0])?);
     let manifest: Value = serde_json::from_slice(&std::fs::read(sets[0].join("manifest.json"))?)?;
-    assert_eq!(manifest["files"].as_array().unwrap().len(), 2);
+    assert_eq!(manifest["files"].as_array().unwrap().len(), 1);
+    backup_assertions::verify(&s.sandbox.data, before, initial_bytes)?;
     s.gw = s.agent.restart().await?;
     assert_eq!(completed(&s).await?, status);
     let db = Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;

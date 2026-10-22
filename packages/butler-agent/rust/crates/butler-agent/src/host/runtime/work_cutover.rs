@@ -38,10 +38,6 @@ pub(super) async fn start(
     stop: &CancellationToken,
 ) -> Result<CutoverOwner, BtccError> {
     storage
-        .work_model_write(move |tx| cutover::begin(tx, CutoverState::Pending))
-        .await
-        .map_err(BtccError::from)?;
-    storage
         .fence_legacy_work_writers()
         .await
         .map_err(BtccError::from)?;
@@ -71,15 +67,27 @@ async fn run(
 ) -> Result<(), BtccError> {
     let epoch = storage
         .work_model_read(|db| {
-            Ok(db.query_row(butler_work::cutover::EPOCH, [], |r| r.get::<_, i64>(0))?)
+            Ok(db
+                .query_row(butler_work::cutover::EPOCH, [], |r| r.get::<_, i64>(0))
+                .optional()?
+                .unwrap_or(0))
         })
         .await
         .map_err(BtccError::from)?;
-    let backup = if epoch == 0 {
-        prepare_backup(root.clone(), &storage, stop.clone()).await?
+    let inventory = if epoch == 0 {
+        Some(inventory(&root, &project, &stop).await?)
+    } else {
+        None
+    };
+    let backup = if let Some(inventory) = &inventory {
+        prepare_backup(root.clone(), inventory.clone(), &storage, stop.clone()).await?
     } else {
         CutoverState::Done
     };
+    if backup == CutoverState::PostponedNoSpace {
+        storage.postpone_work_model_cutover();
+        return Ok(());
+    }
     let active = storage
         .work_model_write(move |tx| cutover::resume(tx, backup))
         .await
@@ -87,8 +95,8 @@ async fn run(
     if !active {
         return Ok(());
     }
-    if epoch == 0 {
-        observe(&root, &storage, &project, &stop).await?;
+    if let Some(inventory) = inventory {
+        observe(&storage, inventory, &stop).await?;
     }
     while !stop.is_cancelled() {
         let more = storage
@@ -101,22 +109,33 @@ async fn run(
     }
     Ok(())
 }
+async fn observe(
+    storage: &BtccStorage,
+    inventory: cutover::Inventory,
+    stop: &CancellationToken,
+) -> Result<(), BtccError> {
+    let mut needs = inventory.needs_source;
+    for observation in inventory.observations {
+        if stop.is_cancelled() {
+            return Ok(());
+        }
+        let input: butler_turn::btcc::ProjectWorkObserveWorks = serde_json::from_value(observation)
+            .map_err(|e| BtccError::relayed("work_cutover_inventory", e.to_string()))?;
+        let id = input.session_head_work_id.clone();
+        if let Err(error) = storage.observe_work_model_cutover(input).await {
+            needs.push(serde_json::json!({"source":"ledger_work","id":id,"code":BtccError::from(error).code()}));
+        }
+    }
+    unresolved(storage, needs).await
+}
 async fn prepare_backup(
     root: PathBuf,
+    inventory: cutover::Inventory,
     storage: &BtccStorage,
     stop: CancellationToken,
 ) -> Result<CutoverState, BtccError> {
-    storage
-        .work_model_write(|tx| {
-            tx.execute(cutover::BACKING_UP, [])?;
-            Ok(())
-        })
-        .await
-        .map_err(BtccError::from)?;
-    // Pre-import image, after this build's native schema migrations. It is
-    // deliberately not a byte-for-byte pre-upgrade copy of the data folder.
     let result = tokio::task::spawn_blocking(move || {
-        cutover::prepare_with_cancel(&root, &|| stop.is_cancelled())
+        cutover::prepare_with_cancel(&root, &inventory, &|| stop.is_cancelled())
     })
     .await;
     let (code, error) = match result {
@@ -131,7 +150,10 @@ async fn prepare_backup(
         ),
     };
     storage
-        .work_model_write(move |tx| cutover::fail_backup(tx, code))
+        .work_model_write(move |tx| {
+            cutover::begin(tx, CutoverState::Pending)?;
+            cutover::fail_backup(tx, code)
+        })
         .await
         .map_err(BtccError::from)?;
     Err(error)
@@ -143,12 +165,20 @@ fn context() -> store::Context {
         actor: serde_json::json!({"origin":"migration"}),
     }
 }
-async fn observe(
+async fn inventory(
     root: &std::path::Path,
-    storage: &BtccStorage,
     project: &ProjectWork,
     stop: &CancellationToken,
-) -> Result<(), BtccError> {
+) -> Result<cutover::Inventory, BtccError> {
+    let data = root.to_owned();
+    let frozen = tokio::task::spawn_blocking(move || cutover::frozen_inventory(&data))
+        .await
+        .map_err(|e| BtccError::relayed("work_cutover_inventory_worker", e.to_string()))?
+        .map_err(|e| BtccError::relayed("work_cutover_inventory", e.to_string()))?;
+    if let Some(frozen) = frozen {
+        return Ok(frozen);
+    }
+    let records = std::sync::Mutex::new(cutover::Inventory::default());
     let mut after = String::new();
     while !stop.is_cancelled() {
         let db = root.join("app-server/butler-client.sqlite");
@@ -161,7 +191,7 @@ async fn observe(
         };
         after = id.clone();
         if !valid_component(&ledger_id) {
-            unresolved(storage, vec![serde_json::json!({"source":"ledger_project","id":id,"code":"invalid_project_id"})]).await?;
+            records.lock().map_err(|e| BtccError::relayed("work_cutover_inventory", e.to_string()))?.needs_source.push(serde_json::json!({"source":"ledger_project","id":id,"code":"invalid_project_id"}));
             continue;
         }
         let scope = ResolvedProjectWorkScope {
@@ -171,13 +201,8 @@ async fn observe(
         };
         let result = project
             .observe_for_cutover(scope, sessions, |input| {
-                let storage = storage.clone();
-                async move {
-                    storage
-                        .observe_work_model_cutover(input)
-                        .await
-                        .map_err(BtccError::from)
-                }
+                let result = freeze(&records, input);
+                async move { result }
             })
             .await;
         let needs = match result {
@@ -186,8 +211,60 @@ async fn observe(
                 vec![serde_json::json!({"source":"ledger_project","id":id,"code":error.code()})]
             }
         };
-        unresolved(storage, needs).await?;
+        records
+            .lock()
+            .map_err(|e| BtccError::relayed("work_cutover_inventory", e.to_string()))?
+            .needs_source
+            .extend(needs);
     }
+    if stop.is_cancelled() {
+        return Err(BtccError::relayed(
+            "work_cutover_cancelled",
+            "Work cutover stopped",
+        ));
+    }
+    records
+        .into_inner()
+        .map_err(|e| BtccError::relayed("work_cutover_inventory", e.to_string()))
+}
+fn freeze(
+    records: &std::sync::Mutex<cutover::Inventory>,
+    input: butler_turn::btcc::ProjectWorkObserveWorks,
+) -> Result<(), BtccError> {
+    let mut inventory = records
+        .lock()
+        .map_err(|e| BtccError::relayed("work_cutover_inventory", e.to_string()))?;
+    for item in &input.works {
+        for (table, key) in [
+            ("btcc_guided_works", &item.work.work_id),
+            ("btcc_guided_work_session_heads", &item.work.session_id),
+            ("agent_task_graph_changes", &item.work.session_id),
+        ] {
+            inventory
+                .keys
+                .entry(table.into())
+                .or_default()
+                .insert(key.clone());
+        }
+        for binding in &item.bindings {
+            inventory
+                .keys
+                .entry("btcc_guided_turn_work_bindings".into())
+                .or_default()
+                .insert(binding.binding_revision_id.clone());
+        }
+        for result in &item.work.result_refs {
+            inventory
+                .keys
+                .entry("btcc_guided_work_results".into())
+                .or_default()
+                .insert(result.result_ref.clone());
+        }
+    }
+    inventory.observations.push(
+        serde_json::to_value(input)
+            .map_err(|e| BtccError::relayed("work_cutover_inventory", e.to_string()))?,
+    );
     Ok(())
 }
 fn valid_component(value: &str) -> bool {

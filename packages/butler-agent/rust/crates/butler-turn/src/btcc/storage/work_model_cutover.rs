@@ -35,6 +35,30 @@ pub(super) fn fence(db: &Connection) {
     db.flush_prepared_statement_cache();
 }
 impl BtccStorage {
+    /// Low-space postponement is process-local: no cutover DB/file write is
+    /// permitted until the next start's free-space precheck succeeds.
+    pub fn postpone_work_model_cutover(&self) {
+        if !self
+            .inner
+            .cutover_postponed
+            .swap(true, std::sync::atomic::Ordering::Relaxed)
+        {
+            self.inner.changes.send_replace(());
+        }
+    }
+    pub async fn work_model_cutover_status(
+        &self,
+    ) -> StorageResult<butler_work::cutover::CutoverStatus> {
+        let mut status = self.work_model_read(butler_work::cutover::status).await?;
+        if self
+            .inner
+            .cutover_postponed
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            status.state = butler_work::cutover::CutoverState::PostponedNoSpace;
+        }
+        Ok(status)
+    }
     pub async fn fence_legacy_work_writers(&self) -> StorageResult<()> {
         self.execute(|db| {
             fence(db);
@@ -99,7 +123,7 @@ impl BtccStorage {
                 return Ok(CutoverAdmission::Pending(id));
             }
             changes.borrow_and_update();
-            let state = self.work_model_read(cutover::status).await?.state;
+            let state = self.work_model_cutover_status().await?.state;
             match state {
                 CutoverState::Done => return Ok(CutoverAdmission::Ready(id)),
                 CutoverState::PostponedNoSpace | CutoverState::FailedBackup => {

@@ -34,10 +34,9 @@ impl AppWorkModelPort for AppWorkModel {
             } = request;
             if resource == AppWorkModelResource::Cutover {
                 return storage
-                    .work_model_read(|db| {
-                        Ok(serde_json::to_value(butler_work::cutover::status(db)?)?)
-                    })
+                    .work_model_cutover_status()
                     .await
+                    .map(|status| json!(status))
                     .map_err(error);
             }
             if let Some(input) = input {
