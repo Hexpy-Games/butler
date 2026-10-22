@@ -20,8 +20,7 @@ try {
   const reports = await app.main<any>(`${contents}.executeJavaScript('globalThis.reports')`);
   assertBrowserIdentity(reports, await app.main<string>("process.versions.chrome"), fixture.requests);
   assert.equal(await app.page.expression("navigator.userAgent"), internal);
-  // The process has one identity: the App's own renderer reports what its web tabs do.
-  assert.equal(internal, reports.page.js.ua);
+  assert.match(internal, /Electron\//u);
   writeFileSync(join(evidence, "real-app-identity.json"), JSON.stringify({ internal, reports, requests: fixture.requests }, null, 2));
   await app.call("close", { id });
   if (process.env.BUTLER_UA_GOOGLE_CHECK === "1") {

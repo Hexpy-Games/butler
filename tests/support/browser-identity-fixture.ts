@@ -39,25 +39,21 @@ export function identityFixture(frameMode: "cross-site" | "sandboxed" = "cross-s
 const brandList = (list: Array<{ brand: string; version: string }>) => list.map(b => `${JSON.stringify(b.brand)};v=${JSON.stringify(b.version)}`).join(", ");
 const uaHints = (headers: Record<string, string>) => Object.keys(headers).filter(name => name.startsWith("sec-ch-ua")).sort();
 
-/** One identity in every context, with consistent Client Hints: pages and frames
- * send them; workers send none (as Chrome itself does). Butler's web tabs are
- * plain Chromium: reduced UA, GREASE and Chromium brands only. */
-export function assertBrowserIdentity(reports: Record<string, Report>, chrome: string, requests: Array<{ path: string; headers: Record<string, string> }>, product: "Chromium" | "Google Chrome" = "Chromium") {
+/** Butler's honest identity in every context, with consistent Client Hints: pages and
+ * frames send them; workers send none (as Chrome itself does). */
+export function assertBrowserIdentity(reports: Record<string, Report>, chrome: string, requests: Array<{ path: string; headers: Record<string, string> }>, product: "Butler" | "Google Chrome" = "Butler") {
   const page = reports.page.js;
   const major = chrome.split(".")[0];
-  assert.doesNotMatch(page.ua, /Electron\/|HeadlessChrome|Butler\//u);
-  if (product === "Chromium") {
-    const platform = /^Mozilla\/5\.0 \((Macintosh; Intel Mac OS X 10_15_7|Windows NT 10\.0; Win64; x64|X11; Linux x86_64)\) /u;
-    assert.match(page.ua, platform);
-    assert.ok(page.ua.endsWith(` AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36`), page.ua);
-    for (const list of [page.data.brands, page.data.fullVersionList]) {
-      assert.equal(list.length, 2, JSON.stringify(list));
-      assert.ok(list.some((b: any) => /^Not.A.Brand$/u.test(b.brand)), JSON.stringify(list));
-    }
-  } else assert.ok(page.ua.includes(` Chrome/${chrome} `), page.ua); // The Rust reader runs stock Chrome for Testing.
+  assert.doesNotMatch(page.ua, /Electron\/|HeadlessChrome/u);
+  assert.ok(page.ua.includes(` Chrome/${chrome} `), page.ua);
+  if (product === "Butler") {
+    assert.match(page.ua, / Safari\/537\.36 Butler\/(\S+)$/u);
+    for (const list of [page.data.brands, page.data.fullVersionList]) assert.ok(!list.some((b: any) => b.brand === "Google Chrome"));
+  } else assert.doesNotMatch(page.ua, /Butler\//u); // The Rust reader runs stock Chrome for Testing.
+  const appVersion = page.ua.split("Butler/")[1];
   for (const brand of [product, "Chromium"]) {
-    assert.ok(page.data.brands.some((b: any) => b.brand === brand && b.version === major), brand);
-    assert.ok(page.data.fullVersionList.some((b: any) => b.brand === brand && b.version === chrome), brand);
+    assert.ok(page.data.brands.some((b: any) => b.brand === brand && b.version === (brand === "Butler" ? appVersion.split(".")[0] : major)), brand);
+    assert.ok(page.data.fullVersionList.some((b: any) => b.brand === brand && b.version === (brand === "Butler" ? appVersion : chrome)), brand);
   }
   assert.equal(page.data.mobile, false);
   for (const context of ["page", "worker", "iframe"]) {

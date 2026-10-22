@@ -15,10 +15,7 @@ const fixture = identityFixture(), dir = mkdtempSync(join(tmpdir(), "browser-ide
 const results = join(dir, "result.json"), root = resolve("packages/butler-app/client/electron/browser");
 const moduleUrl = (name: string) => pathToFileURL(join(root, `${name}.mjs`)).href;
 writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "butler-identity-smoke", version: "0.1.0", main: "main.mjs", type: "module" }));
-const platformUrl = pathToFileURL(resolve("packages/butler-app/client/electron/butler-platform/browser-identity.mjs")).href;
 writeFileSync(join(dir, "main.mjs"), `import {app,BrowserWindow,protocol,session} from 'electron';import {writeFileSync} from 'node:fs';
-// As bootstrap.mjs sets it for the App and the browser host.
-import {plainChromiumUserAgent} from ${JSON.stringify(platformUrl)};app.userAgentFallback=plainChromiumUserAgent(process.versions.chrome);
 protocol.registerSchemesAsPrivileged([{scheme:'app',privileges:{standard:true,secure:true,supportFetchAPI:true}}]);app.setPath('userData',${JSON.stringify(join(dir, "profile"))});app.on('window-all-closed',()=>{});
 console.log("entry");void app.whenReady().then(async()=>{try{console.log("ready");
  session.defaultSession.protocol.handle('app',()=>new Response('<title>Butler internal shell</title>'));const {createUserBrowser}=await import(${JSON.stringify(moduleUrl("tabs"))});
@@ -63,9 +60,7 @@ try {
   });
   const out = JSON.parse(readFileSync(results, "utf8"));
   writeFileSync(join(evidence, "electron-identity.json"), JSON.stringify({ ...out, requests: fixture.requests }, null, 2));
-  assert.ok(!out.error, out.error); assert.equal(out.internal, out.internalAfter);
-  // The process has one identity: Butler's own shell reports what its web tabs do.
-  assert.equal(out.internal, out.app.page.js.ua);
+  assert.ok(!out.error, out.error); assert.equal(out.internal, out.internalAfter); assert.match(out.internal, /Electron\//u);
   for (const backend of ["app", "hidden", "popup"]) assertBrowserIdentity(out[backend], out.versions.chrome, fixture.requests);
   assert.equal(out.reader.status, "ok");
   const reader = Buffer.from(out.reader.html_base64, "base64").toString("utf8"); assert.ok(reader.includes('"worker"'));

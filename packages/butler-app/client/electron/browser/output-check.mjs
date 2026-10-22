@@ -1,4 +1,4 @@
-import { configureWebSession } from "./identity.mjs";
+import { configureWebIdentity } from "./identity.mjs";
 import { BrowserWindow, session } from "electron";
 import { checkScript } from "./page/check.mjs";
 
@@ -62,7 +62,6 @@ async function emulate(contents, mobile) {
   contents.enableDeviceEmulation({ screenPosition: mobile ? "mobile" : "desktop", screenSize: size,
     viewPosition: { x: 0, y: 0 }, deviceScaleFactor: 1, viewSize: size, scale: 1 });
   // Electron has no native touch-emulation API. Only this gap uses the debugger.
-  if (!contents.debugger.isAttached()) contents.debugger.attach("1.3");
   await contents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", { enabled: mobile });
 }
 async function measure(contents, mobile) {
@@ -108,7 +107,7 @@ export async function checkOutput(args, policy) {
   try {
     // Native window creation and navigation must not monopolize one main tick.
     await new Promise(resolve => setTimeout(resolve, 0));
-    await configureWebSession(partition);
+    await configureWebIdentity(contents);
     const started = performance.now();
     await contents.loadURL(args.url);
     const load_ms = Math.round(performance.now() - started);
