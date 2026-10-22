@@ -6,6 +6,8 @@ export interface UsageBarsColumnSegment {
   value: number;
   /** Part of the column total (0..1); sizes the segment whatever the unit. */
   share: number;
+  /** Hatched (subtask) part of the segment (0..1) after the tiny-part merge: 0 all solid, 1 all hatched. */
+  subtask: number;
 }
 
 export interface UsageBarsColumn {
@@ -37,20 +39,44 @@ export function niceCeiling(value: number): number {
   return step * magnitude;
 }
 
+/**
+ * Drawing heights (px) of the plot per size, mirroring UsageBars.module.css:
+ * popover 56px, panel --chart-height-panel (13rem). The panel's y ticks keep
+ * --space-sm of headroom above the tallest column.
+ */
+export const USAGE_BARS_DRAW_HEIGHT: Readonly<Record<UsageBarsSize, number>> = { popover: 56, panel: 208 };
+export const USAGE_BARS_TICK_HEADROOM = 8;
+/** Columns and parts are never drawn thinner than this (px). */
+const MIN_PART_PX = 2;
+
+const positive = (value: number | undefined) => (value !== undefined && Number.isFinite(value) && value > 0 ? value : 0);
+
 function columnSegments(bucket: UsageBarsBucket, series: readonly UsageBarsSeries[]): UsageBarsColumnSegment[] {
   return series.flatMap((entry) => {
-    const value = bucket.segments
-      .filter((segment) => segment.id === entry.id)
-      .reduce((sum, segment) => sum + (Number.isFinite(segment.value) && segment.value > 0 ? segment.value : 0), 0);
-    return value > 0 ? [{ id: entry.id, color: entry.color, value, share: 0 }] : [];
+    const matching = bucket.segments.filter((segment) => segment.id === entry.id);
+    const value = matching.reduce((sum, segment) => sum + positive(segment.value), 0);
+    const subtask = Math.min(value, matching.reduce((sum, segment) => sum + positive(segment.subtask), 0));
+    return value > 0 ? [{ id: entry.id, color: entry.color, value, share: 0, subtask: subtask / value }] : [];
   });
+}
+
+/**
+ * Tiny-part merge: when either part of a split segment would be under 2px,
+ * the segment is drawn whole in the style of its larger part (solid on a tie).
+ */
+export function mergeTinyPart(subtask: number, segmentPx: number): number {
+  if (subtask <= 0 || subtask >= 1) return subtask;
+  const hatched = segmentPx * subtask;
+  const solid = segmentPx - hatched;
+  if (hatched >= MIN_PART_PX && solid >= MIN_PART_PX) return subtask;
+  return hatched > solid ? 1 : 0;
 }
 
 /** Columns, slot count and scale for the ready state. */
 export function usageBarsGeometry(
   buckets: readonly UsageBarsBucket[],
   series: readonly UsageBarsSeries[],
-  { minSlots, ticks }: { minSlots: number; ticks: boolean },
+  { minSlots, ticks, size }: { minSlots: number; ticks: boolean; size: UsageBarsSize },
 ): UsageBarsGeometry {
   const stacked = buckets.map((bucket) => {
     const parts = columnSegments(bucket, series);
@@ -60,8 +86,14 @@ export function usageBarsGeometry(
   const max = stacked.reduce((most, column) => Math.max(most, column.total), 0);
   // Any unit works: fractional totals scale to the plot like whole ones.
   const top = ticks ? niceCeiling(max) : max > 0 ? max : 1;
+  const drawHeight = USAGE_BARS_DRAW_HEIGHT[size] - (ticks ? USAGE_BARS_TICK_HEADROOM : 0);
   return {
-    columns: stacked.map((column) => ({ ...column, fraction: column.total / top })),
+    columns: stacked.map((column) => {
+      const fraction = column.total / top;
+      const columnPx = Math.max(MIN_PART_PX, fraction * drawHeight);
+      const segments = column.segments.map((segment) => ({ ...segment, subtask: mergeTinyPart(segment.subtask, columnPx * segment.share) }));
+      return { ...column, segments, fraction };
+    }),
     slots: Math.max(buckets.length, Math.floor(minSlots), 1),
     top,
     ticks: ticks && max > 0 ? [top / 2, top] : [],
