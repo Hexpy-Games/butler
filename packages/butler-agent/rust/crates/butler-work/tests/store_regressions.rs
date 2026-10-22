@@ -161,7 +161,7 @@ fn run_anyway_covers_only_failures_recorded_at_approval() {
     assert_ne!(next[0]["id"], first["id"]);
     assert_eq!(next[0]["failed_task_id"], "s");
     assert_eq!(read_task(&db, "b").unwrap()["status"], "held");
-    assert!(ready_tasks(&db, "ch").unwrap().is_empty());
+    assert_eq!(ready_tasks(&db, "ch").unwrap(), Vec::<String>::new());
 }
 
 // test-category: pure-logic
@@ -260,7 +260,10 @@ fn cancelling_the_only_failure_releases_followers_and_resolves_question() {
     let before = graph(&db);
     runtime(&mut db, "a", TaskStatus::Cancelled, false);
     assert_eq!(graph(&db), before + 1);
-    assert!(undecided_holds(&db, "ch").unwrap().is_empty());
+    assert_eq!(
+        undecided_holds(&db, "ch").unwrap(),
+        Vec::<serde_json::Value>::new()
+    );
     assert_eq!(ready_tasks(&db, "ch").unwrap(), vec!["b"]);
     assert_eq!(read_task(&db, "c").unwrap()["status"], "waiting");
     assert_eq!(chain_state(&db), "active");
@@ -392,7 +395,10 @@ fn chain_state_is_held_only_with_a_question_and_done_only_when_all_report() {
     let before = graph(&db);
     runtime(&mut db, "b", TaskStatus::Failed, false);
     assert_eq!(graph(&db), before);
-    assert!(undecided_holds(&db, "ch").unwrap().is_empty());
+    assert_eq!(
+        undecided_holds(&db, "ch").unwrap(),
+        Vec::<serde_json::Value>::new()
+    );
     assert_eq!(chain_state(&db), "active");
     runtime(&mut db, "a", TaskStatus::Running, false);
     runtime(&mut db, "a", TaskStatus::Completed, true);
