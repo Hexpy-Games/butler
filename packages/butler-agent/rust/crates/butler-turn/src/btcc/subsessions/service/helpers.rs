@@ -1,12 +1,10 @@
 //! Deterministic subsession packets and host envelopes.
 
 use super::*;
-mod identity;
 use crate::btcc::{
     BtccCode, ChildEnvelope, ChildRole, EnvelopeMessage, EnvelopePeer, EnvelopeRaw,
     EnvelopeRouting, EnvelopeSender, NativeStewardContext, SubsessionPacket,
 };
-pub(super) use identity::{StewardIdentity, WorkerIdentity, parent_work_ref};
 
 /// The acceptance criteria as the rendered JSON array.
 fn criteria(packet: &SubsessionPacket) -> String {
@@ -273,94 +271,6 @@ fn inherit_folder(
     metadata
 }
 
-pub(super) fn child_work_scope(
-    stored: &crate::btcc::StoredSubsessionDelegation,
-    binding: &crate::workspace::StoredSessionBinding,
-    turn_id: &str,
-) -> Result<WorkTurnScope, BtccError> {
-    if binding.session_id != stored.child_session_id {
-        return Err(error(BtccCode::SubsessionChildBindingMismatch));
-    }
-    let role = stored.packet.child_role;
-    let expected_role = match role {
-        ChildRole::Steward => crate::workspace::SessionRole::Steward,
-        ChildRole::Worker => crate::workspace::SessionRole::Worker,
-    };
-    if binding.role != expected_role {
-        return Err(error(BtccCode::SubsessionChildBindingMismatch));
-    }
-    let project_ref = if role == ChildRole::Steward {
-        let policy = binding
-            .metadata
-            .as_ref()
-            .and_then(|metadata| metadata.get("runtimePolicy"));
-        let tracking_mode = policy
-            .and_then(Value::as_object)
-            .and_then(|policy| {
-                policy
-                    .get("trackingMode")
-                    .filter(|value| !value.is_null())
-                    .or_else(|| policy.get("tracking_mode"))
-            })
-            .and_then(Value::as_str)
-            .filter(|value| matches!(*value, "ledger" | "local" | "none"))
-            .unwrap_or(
-                if binding
-                    .project_id
-                    .as_deref()
-                    .is_some_and(|id| !id.trim().is_empty())
-                {
-                    "ledger"
-                } else {
-                    "local"
-                },
-            );
-        match tracking_mode {
-            "ledger" => {
-                if binding
-                    .ledger_project_id
-                    .as_deref()
-                    .is_none_or(|id| id.trim().is_empty())
-                {
-                    return Err(error(BtccCode::StewardProjectBindingMissing));
-                }
-                Some(
-                    binding
-                        .app_project_id
-                        .as_deref()
-                        .or(binding.project_id.as_deref())
-                        .filter(|id| !id.trim().is_empty())
-                        .ok_or_else(|| error(BtccCode::StewardProjectBindingMissing))?
-                        .to_owned(),
-                )
-            }
-            _ => None,
-        }
-    } else {
-        // Worker delegation deliberately keeps a session-owned Work even when
-        // its inherited binding carries Project identity.
-        None
-    };
-    Ok(WorkTurnScope {
-        turn_id: turn_id.to_owned(),
-        session_id: binding.session_id.clone(),
-        project_ref,
-    })
-}
-
-pub(super) fn work_matches_scope(work: &crate::btcc::WorkView, scope: &WorkTurnScope) -> bool {
-    if work.session_id != scope.session_id {
-        return false;
-    }
-    match (&work.scope, scope.project_ref.as_deref()) {
-        (crate::btcc::WorkScope::Session { session_id }, None) => session_id == &scope.session_id,
-        (crate::btcc::WorkScope::Project { project_ref }, Some(expected)) => {
-            project_ref == expected
-        }
-        _ => false,
-    }
-}
-
 // Passthrough: free-form session-binding metadata shared with the App runtime policy.
 fn string_values(value: Option<&Value>) -> Value {
     let mut values = Vec::new();
@@ -452,22 +362,13 @@ pub(super) fn child_envelope(input: ChildEnvelopeInput<'_>) -> ChildEnvelope {
         },
     }
 }
-pub(super) fn existing_delegation_output(
-    stored: &crate::btcc::StoredSubsessionDelegation,
-) -> Value {
-    let next = match stored.packet.child_role {
-        ChildRole::Steward => {
-            "Wait for this child's outcome through the delegation flow, or use steer_steward with this relation_id to change its instruction."
-        }
-        ChildRole::Worker => {
-            "Use wait_for_worker, or steer_worker with this relation_id to change its instruction."
-        }
-    };
-    json!({"ok":false,"wait_for_child":true,"relation_id":stored.relation_id,"child_session_id":stored.child_session_id,"task_id":stored.task_id,
-        "error":{"code":"already_delegated","message":format!("This assignment already has a child. {next} Revise the Work/Plan for a new attempt instead of repeating the same delegation.")}})
-}
-pub(super) fn delegation_output(stored: &crate::btcc::StoredSubsessionDelegation) -> Value {
-    json!({"ok":true,"status":"queued","relation_id":stored.relation_id,"child_session_id":stored.child_session_id})
+pub(super) fn delegation_output(stored: &crate::btcc::Child) -> Value {
+    let mut output = json!({"ok":true,"status":"queued","relation_id":stored.relation_id,"child_session_id":stored.child_session_id,"task_id":stored.task_id,"control_epoch":0});
+    if let crate::btcc::Child::Assigned(assignment) = stored {
+        output["part_id"] = json!(assignment.part_id);
+        output["attempt_id"] = json!(assignment.attempt_id);
+    }
+    output
 }
 pub(super) fn error(code: BtccCode) -> BtccError {
     BtccError::detected(code, code.as_str())

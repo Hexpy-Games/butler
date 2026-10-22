@@ -1,6 +1,7 @@
 //! Relation ownership and eligibility for parent control.
 use super::{SubsessionService, error};
-use crate::btcc::{BtccCode, BtccError, StoredSubsessionDelegation};
+use crate::btcc::subsessions::assignment::Child;
+use crate::btcc::{BtccCode, BtccError};
 use crate::workspace::SessionRole;
 impl SubsessionService {
     /// Select one eligible relation, or one closed relation for structured
@@ -9,7 +10,7 @@ impl SubsessionService {
     pub(super) async fn select_relation(
         &self,
         query: RelationQuery<'_>,
-    ) -> Result<StoredSubsessionDelegation, BtccError> {
+    ) -> Result<Child, BtccError> {
         let candidates = self.candidate_relations(&query).await?;
         let owned = self.owned_relations(&query, candidates).await?;
         let mut eligible = Vec::new();
@@ -20,7 +21,7 @@ impl SubsessionService {
             } else if query.purpose == RelationPurpose::Direct
                 && self
                     .repository
-                    .open_relation_by_work(candidate.root_work_id.clone())
+                    .open_relation(candidate.clone())
                     .await
                     .map_err(BtccError::from)?
                     .is_none()
@@ -44,7 +45,7 @@ impl SubsessionService {
     async fn candidate_relations(
         &self,
         query: &RelationQuery<'_>,
-    ) -> Result<Vec<StoredSubsessionDelegation>, BtccError> {
+    ) -> Result<Vec<Child>, BtccError> {
         let mut candidates = match (query.purpose, query.work_id, query.relation_id) {
             (_, _, Some(id)) => self
                 .repository
@@ -91,8 +92,8 @@ impl SubsessionService {
     async fn owned_relations(
         &self,
         query: &RelationQuery<'_>,
-        candidates: Vec<StoredSubsessionDelegation>,
-    ) -> Result<Vec<StoredSubsessionDelegation>, BtccError> {
+        candidates: Vec<Child>,
+    ) -> Result<Vec<Child>, BtccError> {
         let source = self
             .bindings
             .get_by_session_id(query.parent)
@@ -138,7 +139,7 @@ impl SubsessionService {
     pub(super) async fn relation_is_eligible(
         &self,
         query: &RelationQuery<'_>,
-        candidate: &StoredSubsessionDelegation,
+        candidate: &Child,
     ) -> Result<bool, BtccError> {
         let terminal = self
             .repository
@@ -156,7 +157,7 @@ impl SubsessionService {
         }
         Ok(self
             .repository
-            .open_relation_by_work(candidate.root_work_id.clone())
+            .open_relation(candidate.clone())
             .await
             .map_err(BtccError::from)?
             .is_some())

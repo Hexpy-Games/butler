@@ -1,10 +1,11 @@
 //! Reads delegation rows, including rows written before packets and dispatch
 //! intents were typed records.
 
-use rusqlite::{OptionalExtension, Params, params};
+use crate::btcc::subsessions::assignment::Child;
+use rusqlite::{OptionalExtension, Params};
 use serde_json::Value;
 
-use super::{SELECT, StoredSubsessionDelegation, StoredSubsessionDirection, SubsessionPacket};
+use super::{SELECT, StoredSubsessionDelegation, SubsessionPacket};
 use crate::btcc::{StorageCode, StorageError};
 
 /// A delegation row as stored: the packet and dispatch intent still JSON text.
@@ -111,12 +112,15 @@ pub(super) fn read(
     db: &rusqlite::Connection,
     predicate: &str,
     value: &str,
-) -> Result<Option<StoredSubsessionDelegation>, StorageError> {
+) -> Result<Option<Child>, StorageError> {
+    if let Some(native) = super::native::read(db, predicate, value)? {
+        return Ok(Some(native));
+    }
     db.query_row(&format!("{SELECT} WHERE {predicate}"), [value], raw_row)
         .optional()
         .map_err(StorageError::sqlite)?
         .map(|raw| {
-            decode(&raw).map_err(|error| {
+            decode(&raw).map(Child::Legacy).map_err(|error| {
                 StorageError::new(
                     StorageCode::SubsessionPacketInvalid,
                     "Subsession delegation is undecodable",
@@ -147,50 +151,31 @@ fn query_raw(
 pub(super) fn list(
     db: &rusqlite::Connection,
     filter: &str,
-    params: impl Params,
-) -> Result<Vec<StoredSubsessionDelegation>, StorageError> {
-    Ok(query_raw(db, filter, params)?
-        .into_iter()
-        .filter_map(|raw| decode_or_report(&raw))
-        .collect())
+    params: impl Params + Clone,
+) -> Result<Vec<Child>, StorageError> {
+    let mut all = super::native::list(db, filter, params.clone())?;
+    all.extend(
+        query_raw(db, filter, params)?
+            .into_iter()
+            .filter_map(|raw| decode_or_report(&raw))
+            .map(Child::Legacy),
+    );
+    all.sort_by_key(|row| row.ordinal);
+    Ok(all)
 }
 
-/// The delegations waiting to be dispatched. A pending row that cannot be
-/// decoded could never be dispatched, so it is closed as a failed result:
-/// the parent stops waiting for it and it is not retried.
+/// Legacy pending packets remain read-only; startup reconciles them onto wm rows.
 pub(super) fn pending(
     db: &mut rusqlite::Connection,
 ) -> Result<Vec<StoredSubsessionDelegation>, StorageError> {
-    let mut pending = Vec::new();
-    for raw in query_raw(
+    Ok(query_raw(
         db,
         "WHERE d.dispatch_state='pending' ORDER BY r.created_at",
         [],
-    )? {
-        match decode_or_report(&raw) {
-            Some(stored) => pending.push(stored),
-            None => close_undecodable(db, &raw)?,
-        }
-    }
-    Ok(pending)
-}
-
-fn close_undecodable(
-    db: &mut rusqlite::Connection,
-    raw: &RawDelegation,
-) -> Result<(), StorageError> {
-    let tx = db.transaction().map_err(StorageError::sqlite)?;
-    tx.execute(
-        "INSERT OR IGNORE INTO btcc_steward_results (result_id,relation_id,task_id,child_session_id,child_turn_id,status,code,summary,acceptance_evidence_json,changed_artifacts_json,created_at) VALUES (?1,?2,?3,?4,?5,'failed','delegation_context_incomplete','The delegation record is unreadable.','[]','[]',strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
-        params![format!("result-unreadable-{}", raw.relation_id), raw.relation_id, raw.task_id, raw.child_session_id, raw.child_turn_id],
-    )
-    .map_err(StorageError::sqlite)?;
-    tx.execute(
-        "UPDATE btcc_subsession_delegations SET dispatch_state=NULL WHERE delegation_id=?1",
-        [&raw.delegation_id],
-    )
-    .map_err(StorageError::sqlite)?;
-    tx.commit().map_err(StorageError::sqlite)
+    )?
+    .iter()
+    .filter_map(decode_or_report)
+    .collect())
 }
 
 /// The decoded row, or `None` after a diagnostic.
@@ -205,30 +190,4 @@ fn decode_or_report(raw: &RawDelegation) -> Option<StoredSubsessionDelegation> {
             );
         })
         .ok()
-}
-
-pub(super) fn direction_row(
-    row: &rusqlite::Row<'_>,
-) -> rusqlite::Result<StoredSubsessionDirection> {
-    Ok(StoredSubsessionDirection {
-        instruction_id: row.get(0)?,
-        relation_id: row.get(1)?,
-        revision: row.get(2)?,
-        instruction: row.get(3)?,
-        created_at: row.get(4)?,
-    })
-}
-
-pub(super) fn required_packet_string<'a>(
-    value: &'a str,
-    key: &str,
-) -> Result<&'a str, StorageError> {
-    Some(value)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            StorageError::new(
-                StorageCode::SubsessionPacketInvalid,
-                format!("Subsession packet is missing {key}"),
-            )
-        })
 }

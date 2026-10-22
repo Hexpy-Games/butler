@@ -3,70 +3,55 @@
 use super::*;
 
 impl SubsessionService {
-    /// Makes sure a child turn is bound to its relation's root Work.
-    pub async fn ensure_child_work(&self, session: &str, turn: &str) -> Result<(), BtccError> {
-        self.bind_child_work(session, turn).await?;
-        self.notify_execution_changed(session).await
-    }
-
-    async fn bind_child_work(&self, session: &str, turn: &str) -> Result<(), BtccError> {
-        let stored = self
+    /// Verifies an initial assignment, or claims a continuation's new attempt.
+    pub async fn ensure_child_assignment(
+        &self,
+        session: &str,
+        turn: &str,
+    ) -> Result<(), BtccError> {
+        let child = self
             .repository
             .by_child(session.into())
             .await
             .map_err(BtccError::from)?
             .ok_or_else(|| error(BtccCode::SubsessionRelationMissing))?;
-        let binding = self
-            .bindings
-            .get_by_session_id(session)
-            .await
-            .map_err(BtccError::from)?
-            .ok_or_else(|| error(BtccCode::SubsessionChildBindingMissing))?;
-        let scope = child_work_scope(&stored, &binding, turn)?;
-        let existing = self.work.bound_work_for_turn(turn.into()).await?;
-        if let Some(existing) = existing {
-            if existing.work_id != stored.root_work_id
-                || existing.session_id != session
-                || !work_matches_scope(&existing, &scope)
-            {
-                return Err(error(BtccCode::SubsessionRootWorkIdentityMismatch));
-            }
-            return Ok(());
-        }
-        if turn != stored.child_turn_id {
-            let bound = self
-                .work
-                .bind_open_work(scope.clone(), Some(stored.root_work_id.clone()))
-                .await?
-                .ok_or_else(|| error(BtccCode::SubsessionRootWorkIdentityMismatch))?;
-            if bound.work_id != stored.root_work_id
-                || bound.session_id != session
-                || !work_matches_scope(&bound, &scope)
-            {
-                return Err(error(BtccCode::SubsessionRootWorkIdentityMismatch));
-            }
-            return Ok(());
-        }
-        let mutation = format!(
-            "subsession-root-work:{}:{}:{}",
-            stored.delegation_id, stored.task_id, stored.child_session_id
-        );
-        let work = self
-            .work
-            .start_work(StartWorkInput {
-                scope,
-                mutation_call_id: mutation,
-                objective: stored.packet.objective.clone(),
-                backfill_tool_call_ids: None,
-            })
-            .await?;
-        if work.work_id != stored.root_work_id
-            || work.session_id != session
-            || !work_matches_scope(&work, &child_work_scope(&stored, &binding, turn)?)
-        {
+        let crate::btcc::subsessions::assignment::Child::Assigned(assigned) = child else {
             return Err(error(BtccCode::SubsessionRootWorkIdentityMismatch));
-        }
-        Ok(())
+        };
+        let session = session.to_owned();
+        let turn = turn.to_owned();
+        let notifying_session = session.clone();
+        self.repository.storage().work_model_write(move |tx| {
+            use butler_work::store::{self, execution};
+            use rusqlite::OptionalExtension;
+            let existing: bool = tx.query_row("SELECT 1 FROM wm_attempts WHERE task_id=?1 AND session_id=?2 AND turn_id=?3",rusqlite::params![assigned.task_id,session,turn],|_|Ok(())).optional()?.is_some();
+            if existing { return Ok(()) }
+            let instruction = store::control::next_pending(tx,&session,false)?.into_iter()
+                .find(|row| crate::btcc::storage::direction_turn_id(row["id"].as_str().unwrap_or_default())==turn)
+                .ok_or(store::Error::Invalid("child turn has no assignment"))?;
+            let ctx=admission::context();
+            let task=store::read_task(tx,&assigned.task_id)?;
+            if let Some(part)=&assigned.part_id {
+                if !matches!(task["status"].as_str(),Some("running"|"in_review")) {
+                    execution::start_task(tx,&ctx,&assigned.task_id,task["revision"].as_i64().ok_or(store::Error::Invalid("revision"))?,
+                        &execution::ExecutionScope{session_id:&assigned.parent_session_id,turn_id:&assigned.parent_turn_id},&format!("parent-attempt:{turn}"))?;
+                }
+                tx.execute(execution::sql::PART_STATE,rusqlite::params![part,"pending",Option::<&str>::None])?;
+                let revision=store::parts::read_part(tx,part)?["revision"].as_i64().ok_or(store::Error::Invalid("revision"))?;
+                execution::assign_part(tx,&ctx,part,revision,&assigned.parent_session_id,&execution::ExecutionScope{session_id:&session,turn_id:&turn},&format!("attempt:{turn}"))?;
+            } else {
+                execution::start_task(tx,&ctx,&assigned.task_id,task["revision"].as_i64().ok_or(store::Error::Invalid("revision"))?,
+                    &execution::ExecutionScope{session_id:&session,turn_id:&turn},&format!("attempt:{turn}"))?;
+            }
+            tx.execute("UPDATE btcc_session_relations SET activity_terminal=0 WHERE relation_id=?1",[&assigned.relation_id])?;
+            let _=instruction;
+            Ok(())
+        }).await.map_err(BtccError::from)?;
+        self.notify_execution_changed(&notifying_session).await
+    }
+    /// Compatibility for callers transitioning to the native assignment port.
+    pub async fn ensure_child_work(&self, session: &str, turn: &str) -> Result<(), BtccError> {
+        self.ensure_child_assignment(session, turn).await
     }
     /// Commits a child's result with its evidence and delivers worker results.
     pub async fn complete_child(
@@ -113,56 +98,14 @@ impl SubsessionService {
         summary: String,
         failure_code: Option<String>,
     ) -> Result<(), BtccError> {
-        // Cancellation can precede the child's first execution. Validate an
-        // existing binding, but never create execution authority for a stop.
-        if status != "cancelled" || self.work.bound_work_for_turn(turn.into()).await?.is_some() {
-            self.bind_result_work(session, turn, failure_code.as_deref())
-                .await?;
-        }
-        if status == "cancelled" {
-            self.work
-                .abandon_bound_work_for_turn(turn.to_owned())
-                .await?;
-        }
-        let disposition = self
-            .work
-            .bound_work_for_turn(turn.to_owned())
-            .await?
-            .and_then(|work| work.latest_disposition);
-        let blocked = disposition
-            .as_ref()
-            .filter(|value| value.disposition == crate::btcc::DispositionStatus::Blocked);
-        let failure_reason = failure_code.clone().or_else(|| {
-            blocked
-                .map(|value| {
-                    value
-                        .next_condition
-                        .clone()
-                        .unwrap_or_else(|| value.summary.clone())
-                })
-                .or_else(|| (status == "failed").then(|| summary.clone()))
-        });
-        let status = if status == "success" && blocked.is_some() {
-            "blocked"
-        } else {
-            status
-        };
-        let handoff = disposition
-            .as_ref()
-            .filter(|value| value.disposition == crate::btcc::DispositionStatus::Blocked)
-            .and_then(|value| value.next_condition.as_deref())
-            .and_then(crate::btcc::CapabilityHandoff::from_condition);
-        let mut evidence_refs = disposition
-            .map(|disposition| disposition.evidence_snapshot)
-            .unwrap_or_default();
-        evidence_refs.extend(
-            self.repository
-                .child_result_evidence(session.to_owned())
-                .await
-                .map_err(BtccError::from)?,
-        );
-        evidence_refs.sort();
-        evidence_refs.dedup();
+        let evidence_refs = self
+            .repository
+            .child_result_evidence(session.to_owned())
+            .await
+            .map_err(BtccError::from)?;
+        let failure_reason = failure_code
+            .clone()
+            .or_else(|| (status == "failed").then(|| summary.clone()));
         self.repository
             .commit_result(
                 crate::btcc::storage::ChildCompletion {
@@ -173,33 +116,13 @@ impl SubsessionService {
                     failure_reason,
                     failure_code,
                     evidence_refs,
-                    handoff,
+                    handoff: None,
                 },
                 (self.now)(),
             )
             .await
             .map_err(BtccError::from)?;
         self.deliver_child_result(session, status).await
-    }
-
-    async fn bind_result_work(
-        &self,
-        session: &str,
-        turn: &str,
-        failure_code: Option<&str>,
-    ) -> Result<(), BtccError> {
-        if let Err(error) = self.bind_child_work(session, turn).await {
-            // A runtime failure answers the parent even when the child's Work
-            // cannot be bound; the failure needs no Work disposition.
-            if failure_code.is_none() {
-                return Err(error);
-            }
-            butler_core::diagnostic!(
-                "[native-btcc] failed child Work unbound code={}",
-                error.code()
-            );
-        }
-        Ok(())
     }
 
     async fn deliver_child_result(&self, session: &str, status: &str) -> Result<(), BtccError> {
@@ -218,14 +141,44 @@ impl SubsessionService {
     }
     /// Re-dispatches pending children, directions and worker results after a restart.
     pub async fn recover_dispatches(&self) -> Result<(), BtccError> {
-        for stored in self
-            .repository
-            .pending_dispatches()
-            .await
-            .map_err(BtccError::from)?
-        {
-            self.ensure_child_binding(&stored).await?;
-            self.replay(&stored).await?;
+        let mut after = String::new();
+        loop {
+            let cursor = after.clone();
+            let intents = self
+                .repository
+                .storage()
+                .work_model_read(move |db| butler_work::store::pending_intents(db, &cursor, 100))
+                .await
+                .map_err(BtccError::from)?;
+            if intents.is_empty() {
+                break;
+            }
+            for intent in intents {
+                after = intent["op_id"].as_str().unwrap_or_default().into();
+                if intent["kind"] != "child_dispatch" {
+                    continue;
+                }
+                let payload: Value =
+                    serde_json::from_str(intent["payload_json"].as_str().unwrap_or_default())
+                        .map_err(|e| {
+                            error(BtccCode::SubsessionDispatchIntentInvalid).with_source(e)
+                        })?;
+                let Some(session) = payload
+                    .pointer("/delegation/child_session_id")
+                    .and_then(Value::as_str)
+                else {
+                    return Err(error(BtccCode::SubsessionDispatchIntentInvalid));
+                };
+                if let Some(stored) = self
+                    .repository
+                    .by_child(session.into())
+                    .await
+                    .map_err(BtccError::from)?
+                {
+                    self.ensure_child_binding(&stored).await?;
+                    self.replay(&stored).await?;
+                }
+            }
         }
         self.recover_directions().await?;
         self.deliver_worker_results().await

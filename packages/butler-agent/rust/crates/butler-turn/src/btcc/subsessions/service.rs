@@ -1,5 +1,7 @@
 //! Durable subsession orchestration and role-specific result routing.
+use crate::btcc::subsessions::assignment::Child;
 
+mod admission;
 mod control;
 mod delegation;
 mod followup;
@@ -7,13 +9,14 @@ mod helpers;
 mod projection;
 mod result_delivery;
 mod selection;
+mod session_control;
+pub use session_control::SessionControlRequest;
 #[cfg(test)]
 pub(crate) mod tests;
 mod worker;
 
 pub use control::{SubsessionCancelRequest, SubsessionDirectionRequest, SubsessionResumeRequest};
 
-use delegation::accepted_plan;
 use helpers::*;
 
 use serde_json::{Map, Value, json};
@@ -21,14 +24,12 @@ use std::sync::Arc;
 
 use crate::btcc::BtccCode;
 use crate::btcc::{
-    ActionStatus, BtccError, ChildRole, DispatchIntent, DispatchMetadata, DurableWorkService,
-    ExecutionMode, ParentResultRoute, PortFuture, SqliteSubsessionRepository, StartWorkInput,
-    SubsessionCreate, WorkTurnScope, WorkView,
+    BtccError, ChildRole, DispatchIntent, DispatchMetadata, DurableWorkService, ParentResultRoute,
+    PortFuture, SqliteSubsessionRepository, WorkView,
 };
 use crate::workspace::{OwnOptional, SessionBindingStore, SessionRole, UpsertSessionBinding};
 
 mod lifecycle;
-mod packets;
 
 /// A child dispatch that was interrupted and can be recovered.
 #[derive(Clone, Debug)]
@@ -89,6 +90,8 @@ pub struct StewardDelegationRequest {
     pub parent_turn_id: String,
     pub anchor_message_id: String,
     pub request: String,
+    pub task_id: Option<String>,
+    pub part_id: Option<String>,
     pub previous_relation_id: Option<String>,
     pub safe_title: Option<String>,
     pub model_ref: String,
@@ -106,6 +109,8 @@ pub struct WorkerDelegationRequest {
     pub anchor_message_id: String,
     pub source_tool_call_id: String,
     pub action_key: String,
+    pub task_id: Option<String>,
+    pub part_id: Option<String>,
     pub objective: String,
     pub acceptance_criteria: Vec<String>,
     pub implementation_brief: String,
@@ -159,7 +164,7 @@ impl SubsessionService {
             .by_child(session)
             .await
             .map_err(BtccError::from)?
-            .map(|relation| relation.parent_session_id))
+            .map(|relation| relation.parent_session_id.clone()))
     }
 
     /// Change notifications after durable child execution state transitions.
@@ -179,7 +184,8 @@ impl SubsessionService {
                 relation
                     .packet
                     .parent_chat_id
-                    .unwrap_or(relation.parent_session_id),
+                    .clone()
+                    .unwrap_or_else(|| relation.parent_session_id.clone()),
                 session.into(),
             ));
         }
@@ -191,7 +197,7 @@ impl SubsessionService {
     pub async fn delegate_steward(
         &self,
         request: StewardDelegationRequest,
-        reviewed: &WorkView,
+        _reviewed: &WorkView,
     ) -> Result<Value, BtccError> {
         let parent = self
             .parent_binding(
@@ -200,68 +206,42 @@ impl SubsessionService {
                 BtccCode::ParentButlerSessionRequired,
             )
             .await?;
-        let (plan, review) = accepted_plan(
-            reviewed,
-            ExecutionMode::Steward,
-            BtccCode::StewardDelegationPlanModeRequired,
-        )?;
+        let prior_context = self.followup_context(&request).await?;
         let parent_chat_id = parent
             .transport_bindings
             .iter()
             .find(|binding| binding.transport == "app" && !binding.peer_id.trim().is_empty())
             .map(|binding| binding.peer_id.clone())
             .ok_or_else(|| error(BtccCode::ParentAppBindingRequired))?;
-        let identity = packets::steward_identity(&request, reviewed, (plan, review));
-        let delegation_id = delegation::delegation_id(&delegation::STEWARD, &identity)?;
-        if let Some(existing) = self.replay_existing(&delegation_id).await? {
-            if self
-                .repository
-                .result_for_relation(existing.relation_id.clone())
-                .await
-                .map_err(BtccError::from)?
-                .is_some()
-            {
-                return self.closed_feedback(&existing).await;
-            }
-            return Ok(helpers::existing_delegation_output(&existing));
-        }
-        let ids = delegation::DelegationIds::derive(&delegation::STEWARD, delegation_id);
-        let now = (self.now)();
-        let mut packet = packets::steward(&ids, &request, parent_chat_id, reviewed, (plan, review));
-        packet.prior_context = self.followup_context(&request).await?;
-        let envelope = child_envelope(ChildEnvelopeInput {
-            role: "steward",
-            delegation: &ids.delegation_id,
-            child: &ids.child_session_id,
-            parent_id: &request.parent_session_id,
-            turn: &ids.child_turn_id,
-            parent: &parent,
-            model: &request.model_ref,
-            reasoning: &request.reasoning_effort,
-            text: render_steward_input(&packet),
-            now: &now,
-            schedule_run: packet.schedule_run.clone(),
-        });
-        let title = helpers::delegation_title(request.safe_title.as_deref(), &request.request);
-        let intent = DispatchIntent {
-            envelope,
-            metadata: DispatchMetadata {
-                source: "btcc-subsession-delegation".into(),
-            },
+        let input = admission::AssignmentRequest {
+            parent_session_id: request.parent_session_id,
+            parent_turn_id: request.parent_turn_id,
+            anchor_message_id: request.anchor_message_id,
+            request: request.request,
+            task_id: request.task_id,
+            part_id: request.part_id,
+            role: ChildRole::Steward,
+            safe_title: request.safe_title,
+            model_ref: request.model_ref,
+            reasoning_effort: request.reasoning_effort,
+            access_mode: request.access_mode,
+            parent_chat_id: Some(parent_chat_id),
+            prior_context,
+            implementation_brief: None,
+            worker_prompt: None,
+            worker_profile: None,
+            schedule_run: request.schedule_run,
         };
-        let stored = self
-            .create_and_dispatch(ids.create(
-                delegation::Parent {
-                    session_id: request.parent_session_id,
-                    turn_id: request.parent_turn_id,
-                    anchor_message_id: request.anchor_message_id,
-                },
-                title,
-                packet,
-                intent,
-                now,
-            ))
-            .await?;
+        let stored = self.admit_assignment(input, parent).await?;
+        if self
+            .repository
+            .result_for_relation(stored.relation_id.clone())
+            .await
+            .map_err(BtccError::from)?
+            .is_some()
+        {
+            return self.closed_feedback(&stored).await;
+        }
         Ok(delegation_output(&stored))
     }
 
@@ -288,7 +268,7 @@ impl SubsessionService {
     async fn replay_existing(
         &self,
         delegation_id: &str,
-    ) -> Result<Option<crate::btcc::StoredSubsessionDelegation>, BtccError> {
+    ) -> Result<Option<crate::btcc::subsessions::assignment::Child>, BtccError> {
         let Some(existing) = self
             .repository
             .by_delegation(delegation_id.to_owned())
@@ -302,30 +282,9 @@ impl SubsessionService {
         Ok(Some(existing))
     }
 
-    /// Persists a new delegation, binds its child session and dispatches it.
-    async fn create_and_dispatch(
-        &self,
-        create: SubsessionCreate,
-    ) -> Result<crate::btcc::StoredSubsessionDelegation, BtccError> {
-        let delegation_id = create.delegation_id.clone();
-        self.repository
-            .create(create)
-            .await
-            .map_err(BtccError::from)?;
-        let stored = self
-            .repository
-            .by_delegation(delegation_id)
-            .await
-            .map_err(BtccError::from)?
-            .ok_or_else(|| error(BtccCode::SubsessionPersistFailed))?;
-        self.ensure_child_binding(&stored).await?;
-        self.replay(&stored).await?;
-        Ok(stored)
-    }
-
     async fn create_child_binding(
         &self,
-        stored: &crate::btcc::StoredSubsessionDelegation,
+        stored: &crate::btcc::subsessions::assignment::Child,
         parent: &crate::workspace::StoredSessionBinding,
         role: SessionRole,
         // Passthrough: free-form session-binding metadata shared with the App runtime policy.
@@ -369,7 +328,7 @@ impl SubsessionService {
     }
     async fn ensure_child_binding(
         &self,
-        stored: &crate::btcc::StoredSubsessionDelegation,
+        stored: &crate::btcc::subsessions::assignment::Child,
     ) -> Result<(), BtccError> {
         let role_name = stored.packet.child_role;
         let role = match role_name {
@@ -394,14 +353,45 @@ impl SubsessionService {
             .map_err(BtccError::from)?
             .ok_or_else(|| error(BtccCode::SubsessionParentBindingMissing))?;
         let access = stored.packet.access_mode.as_str();
-        let metadata = child_metadata(role_name, &stored.packet, access, &parent);
+        let mut metadata = child_metadata(role_name, &stored.packet, access, &parent);
+        if let Child::Assigned(assignment) = stored {
+            if let Some(subsession) = metadata
+                .get_mut("subsession")
+                .and_then(Value::as_object_mut)
+            {
+                subsession.insert("work_id".into(), json!(assignment.work_id));
+                subsession.insert("task_id".into(), json!(assignment.task_id));
+                subsession.insert("part_id".into(), json!(assignment.part_id));
+                subsession.insert("attempt_id".into(), json!(assignment.attempt_id));
+            }
+        }
         self.create_child_binding(stored, &parent, role, metadata)
             .await
     }
     async fn replay(
         &self,
-        stored: &crate::btcc::StoredSubsessionDelegation,
+        stored: &crate::btcc::subsessions::assignment::Child,
     ) -> Result<(), BtccError> {
+        let Child::Assigned(assignment) = stored else {
+            return Ok(());
+        };
+        let op_id = format!("child_dispatch:{}", assignment.attempt_id);
+        let lookup = op_id.clone();
+        let applied = self
+            .repository
+            .storage()
+            .work_model_read(move |db| {
+                Ok(db.query_row(
+                    "SELECT state='applied' FROM wm_cross_db_intents WHERE op_id=?1",
+                    [lookup],
+                    |r| r.get::<_, bool>(0),
+                )?)
+            })
+            .await
+            .map_err(BtccError::from)?;
+        if applied {
+            return Ok(());
+        }
         let intent = stored
             .dispatch_intent
             .as_ref()
@@ -414,7 +404,11 @@ impl SubsessionService {
             metadata: Map::new(),
         })?;
         self.repository
-            .mark_enqueued(stored.relation_id.clone())
+            .storage()
+            .work_model_write(move |tx| {
+                butler_work::store::mark_intent_applied(tx, &admission::context(), &op_id, 0)?;
+                Ok(())
+            })
             .await
             .map_err(BtccError::from)
     }

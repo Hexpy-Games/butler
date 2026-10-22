@@ -1,10 +1,11 @@
 //! Read-only App projection from the BTCC subsession authority.
+use crate::btcc::subsessions::assignment::Child;
 
 use serde_json::{Value, json};
 
 use super::SubsessionService;
+use crate::btcc::BtccError;
 use crate::btcc::{BtccCode, StorageCode};
-use crate::btcc::{BtccError, StoredSubsessionDelegation};
 
 impl SubsessionService {
     /// The user-facing session that owns decisions for this delegation chain.
@@ -21,7 +22,7 @@ impl SubsessionService {
             else {
                 return Ok(owner);
             };
-            owner = relation.parent_session_id;
+            owner = relation.parent_session_id.clone();
         }
         Err(BtccError::relayed(
             "subsession_relation_cycle",
@@ -164,10 +165,7 @@ impl SubsessionService {
         Ok(projection)
     }
 
-    async fn project_child(
-        &self,
-        relation: &StoredSubsessionDelegation,
-    ) -> Result<Value, BtccError> {
+    async fn project_child(&self, relation: &Child) -> Result<Value, BtccError> {
         let latest = self
             .repository
             .latest_turn(relation.child_session_id.clone())
@@ -221,7 +219,7 @@ impl SubsessionService {
         {
             if self
                 .repository
-                .result_for_relation(child.relation_id)
+                .result_for_relation(child.relation_id.clone())
                 .await
                 .map_err(BtccError::from)?
                 .is_none()
@@ -232,13 +230,10 @@ impl SubsessionService {
         Ok(false)
     }
 
-    async fn child_recoverable(
-        &self,
-        relation: &StoredSubsessionDelegation,
-    ) -> Result<bool, BtccError> {
+    async fn child_recoverable(&self, relation: &Child) -> Result<bool, BtccError> {
         if self
             .repository
-            .open_relation_by_work(relation.root_work_id.clone())
+            .open_relation(relation.clone())
             .await
             .map_err(BtccError::from)?
             .is_none()

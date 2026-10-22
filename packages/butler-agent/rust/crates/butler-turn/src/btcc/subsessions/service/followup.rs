@@ -1,27 +1,22 @@
 //! Closed delegation feedback and trusted context for a fresh assignment.
 use super::{StewardDelegationRequest, SubsessionService, error};
-use crate::btcc::{BtccCode, BtccError, StoredSubsessionDelegation};
+use crate::btcc::subsessions::assignment::Child;
+use crate::btcc::{BtccCode, BtccError};
 use serde_json::{Value, json};
 
 impl SubsessionService {
-    pub(super) async fn closed_feedback(
-        &self,
-        relation: &StoredSubsessionDelegation,
-    ) -> Result<Value, BtccError> {
+    pub(super) async fn closed_feedback(&self, relation: &Child) -> Result<Value, BtccError> {
         let prior = self.prior_context(relation).await?;
         Ok(json!({"ok":false,"error":{
             "code":"delegated_session_closed","recoverable":true,
-            "message":"The prior delegated Work is closed. For a new user request, continue in this same turn: start a new Work, record and review its Steward Plan, then delegate_to_steward with previous_relation_id. Do not ask the user to restart or end with a connection notice. An acceptance/closeout request for already closed Work needs no replacement. No child was steered."
+            "message":"The prior delegated Work is closed. For a new user request, continue in this same turn: read the owning Task, add or select its next part, then delegate_to_steward with previous_relation_id and part_id or task_id. Do not ask the user to restart or end with a connection notice. An acceptance/closeout request for already closed Work needs no replacement. No child was steered."
         },"next_action":{"tool":"delegate_to_steward",
             "previous_relation_id":relation.relation_id,
-            "requires":["start_work","replace_work_plan","record_work_review"]},
+            "task_id":relation.task_id},
             "prior_context":prior}))
     }
 
-    async fn prior_context(
-        &self,
-        relation: &StoredSubsessionDelegation,
-    ) -> Result<Value, BtccError> {
+    async fn prior_context(&self, relation: &Child) -> Result<Value, BtccError> {
         let result = self
             .repository
             .result_for_relation(relation.relation_id.clone())
@@ -85,15 +80,15 @@ impl SubsessionService {
             .map_err(BtccError::from)?;
         let open = self
             .repository
-            .open_relation_by_work(relation.root_work_id.clone())
+            .open_relation(relation.clone())
             .await
             .map_err(BtccError::from)?
             .is_some();
         let state = match (result.is_some(), open) {
-            (false, _) => "active: steer_steward for related follow-ups",
-            (true, true) => "reported, Work open/blocked: steer_steward to its retained owner",
+            (false, _) => "active: session_control for related follow-ups",
+            (true, true) => "reported, Task open/blocked: session_control to its retained owner",
             (true, false) => {
-                "closed: new requests need a fresh reviewed Work and delegate_to_steward(previous_relation_id) in this turn"
+                "closed: new requests need work_read view=task and delegate_to_steward(previous_relation_id, part_id|task_id) in this turn"
             }
         };
         Ok(format!(

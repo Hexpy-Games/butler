@@ -1,11 +1,12 @@
 //! Durable direction revisions and cancellation over the shared native queue.
+use crate::btcc::subsessions::assignment::Child;
 
 use serde_json::{Value, json};
 
 use super::selection::{RelationPurpose, RelationQuery};
 use super::{SubsessionService, direction_text, error};
 use crate::btcc::BtccCode;
-use crate::btcc::{BtccError, StoredSubsessionDelegation, StoredSubsessionDirection};
+use crate::btcc::{BtccError, StoredSubsessionDirection};
 use crate::workspace::SessionRole;
 
 /// A parent's new direction for one of its subsessions.
@@ -44,7 +45,7 @@ impl SubsessionService {
     /// Whether the child's latest turn still runs: admitted and without a saved
     /// result. An interrupted turn closed with a failed result stays `admitted`
     /// in the turn store but no longer holds back a direction.
-    async fn child_turn_running(&self, child_session: &str) -> Result<bool, BtccError> {
+    pub(super) async fn child_turn_running(&self, child_session: &str) -> Result<bool, BtccError> {
         let Some((turn, state)) = self
             .repository
             .latest_turn(child_session.to_owned())
@@ -112,7 +113,7 @@ impl SubsessionService {
         // interrupted turn is still recorded as admitted.
         if self
             .repository
-            .open_relation_by_work(relation.root_work_id.clone())
+            .open_relation(relation.clone())
             .await
             .map_err(BtccError::from)?
             .is_none()
@@ -223,7 +224,7 @@ impl SubsessionService {
             )
             .await
             .map_err(BtccError::from)?;
-        if direction.instruction_id != instruction_id || direction.instruction != instruction {
+        if direction.instruction != instruction {
             return Err(error(BtccCode::StewardDirectionIdentityConflict));
         }
         if !self.child_turn_running(&relation.child_session_id).await? {
@@ -255,6 +256,30 @@ impl SubsessionService {
         {
             return Err(error(BtccCode::ActiveStewardRelationNotFound));
         }
+        let target = relation.child_session_id.clone();
+        let parent = request.parent_session_id;
+        let receipt = self
+            .repository
+            .storage()
+            .work_model_write(move |tx| {
+                butler_work::store::control::hold(
+                    tx,
+                    &super::admission::context(),
+                    &target,
+                    "stop",
+                    &parent,
+                )
+            })
+            .await
+            .map_err(BtccError::from)?;
+        self.enqueue_cancel(&relation, &receipt.to_string()).await
+    }
+
+    pub(super) async fn enqueue_cancel(
+        &self,
+        relation: &Child,
+        identity: &str,
+    ) -> Result<Value, BtccError> {
         let turn_id = self
             .repository
             .latest_turn(relation.child_session_id.clone())
@@ -262,30 +287,19 @@ impl SubsessionService {
             .map_err(BtccError::from)?
             .map(|(id, _)| id)
             .unwrap_or_else(|| relation.child_turn_id.clone());
-        let identity = json!({"relation_id":relation.relation_id,"source_message_id":request.source_message_id});
         let request_id = format!(
             "cancel-steward-{}",
-            &crate::btcc::digest_identity(&identity.to_string())[..40]
+            &crate::btcc::digest_identity(identity)[..40]
         );
         let now = (self.now)();
-        self.queue.enqueue(super::SubsessionEnqueue {
-            envelope: json!({
+        self.queue.enqueue(super::SubsessionEnqueue { envelope:json!({
             "eventId":format!("subsession-cancel:{request_id}"),"transport":"app","accountId":"local",
             "peer":{"kind":"dm","id":relation.child_session_id,"parentId":relation.parent_session_id},
             "sender":{"id":"subsession-parent-cancel","displayName":"Parent"},
             "message":{"id":format!("subsession-cancel-message:{request_id}"),"text":"","timestamp":now},
             "routingHints":{"sessionId":relation.child_session_id,"turnId":turn_id},
             "control":{"kind":"cancel_turn","requestId":request_id,"turnId":turn_id,"requestedAt":now}
-            }),
-            metadata: serde_json::Map::from_iter([
-                ("source".into(), json!("btcc-steward-control")),
-                ("relation_id".into(), json!(relation.relation_id)),
-                (
-                    "source_parent_turn_id".into(),
-                    json!(request.parent_turn_id),
-                ),
-            ]),
-        })?;
+        }), metadata:serde_json::Map::new() })?;
         Ok(
             json!({"relation_id":relation.relation_id,"child_turn_id":turn_id,"status":"cancelling","request_id":request_id}),
         )
@@ -344,7 +358,7 @@ impl SubsessionService {
 
     async fn enqueue_direction(
         &self,
-        relation: &StoredSubsessionDelegation,
+        relation: &Child,
         requested: &StoredSubsessionDirection,
     ) -> Result<(), BtccError> {
         let direction = self

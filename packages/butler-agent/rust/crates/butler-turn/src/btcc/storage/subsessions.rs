@@ -6,6 +6,8 @@ mod completion;
 mod decode;
 mod directions;
 mod files;
+mod native;
+mod native_completion;
 mod parents;
 mod records;
 
@@ -13,10 +15,11 @@ pub use completion::turn_result_id as subsession_result_id;
 pub(crate) use directions::direction_turn_id;
 pub use records::*;
 
+use crate::btcc::subsessions::assignment::Child;
 use rusqlite::{OptionalExtension, params};
 use serde_json::Value;
 
-use self::decode::{direction_row, list, read, required_packet_string};
+use self::decode::{list, read};
 use super::{BtccStorage, StorageError};
 use crate::btcc::StorageCode;
 
@@ -39,7 +42,7 @@ pub struct SubsessionCreate {
 }
 
 /// A persisted subsession delegation.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct StoredSubsessionDelegation {
     pub relation_id: String,
     pub delegation_id: String,
@@ -60,8 +63,8 @@ pub struct StoredSubsessionDelegation {
 
 /// Both relation lookups for one App projection share the same WAL snapshot.
 pub(crate) struct SessionRelations {
-    pub children: Vec<StoredSubsessionDelegation>,
-    pub own: super::StorageResult<Option<StoredSubsessionDelegation>>,
+    pub children: Vec<Child>,
+    pub own: super::StorageResult<Option<Child>>,
 }
 
 /// A direction sent to a subsession.
@@ -117,61 +120,27 @@ pub(crate) struct ChildCompletion {
 }
 
 impl SqliteSubsessionRepository {
+    pub fn storage(&self) -> BtccStorage {
+        self.storage.clone()
+    }
     /// A repository over the store.
     pub fn new(storage: BtccStorage) -> Self {
         Self { storage }
     }
 
-    pub(crate) async fn create(&self, input: SubsessionCreate) -> Result<bool, StorageError> {
-        let encode = |error: serde_json::Error| {
-            StorageError::new(StorageCode::SubsessionPacketInvalid, error.to_string())
-                .with_source(error)
-        };
-        let packet_json = serde_json::to_string(&input.packet).map_err(encode)?;
-        let intent_json = serde_json::to_string(&input.dispatch_intent).map_err(encode)?;
-        self.storage.execute(move |db| {
-            let tx = db.transaction().map_err(StorageError::sqlite)?;
-            let ordinal: i64 = tx.query_row(
-                "SELECT COALESCE(MAX(ordinal),0)+1 FROM btcc_session_relations WHERE parent_session_id=?1",
-                [&input.parent_session_id], |row| row.get(0),
-            ).map_err(StorageError::sqlite)?;
-            let inserted = tx.execute(
-                "INSERT OR IGNORE INTO btcc_session_relations (relation_id,parent_session_id,parent_turn_id,child_session_id,anchor_message_id,ordinal,safe_title,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
-                params![input.relation_id,input.parent_session_id,input.parent_turn_id,input.child_session_id,input.anchor_message_id,ordinal,input.safe_title,input.created_at],
-            ).map_err(StorageError::sqlite)? == 1;
-            if inserted {
-                tx.execute(
-                    "INSERT INTO btcc_subsession_delegations (delegation_id,relation_id,task_id,child_turn_id,root_work_id,packet_json,dispatch_intent_json,dispatch_state,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'pending',?8)",
-                    params![input.delegation_id,input.relation_id,input.task_id,input.child_turn_id,input.root_work_id,packet_json,intent_json,input.created_at],
-                ).map_err(StorageError::sqlite)?;
-            }
-            tx.commit().map_err(StorageError::sqlite)?;
-            Ok(inserted)
-        }).await
-    }
-
-    pub(crate) async fn by_delegation(
-        &self,
-        id: String,
-    ) -> Result<Option<StoredSubsessionDelegation>, StorageError> {
+    pub(crate) async fn by_delegation(&self, id: String) -> Result<Option<Child>, StorageError> {
         self.storage
             .read(move |db| read(db, "d.delegation_id=?1", &id))
             .await
     }
 
-    pub(crate) async fn by_child(
-        &self,
-        id: String,
-    ) -> Result<Option<StoredSubsessionDelegation>, StorageError> {
+    pub(crate) async fn by_child(&self, id: String) -> Result<Option<Child>, StorageError> {
         self.storage
             .read(move |db| read(db, "r.child_session_id=?1", &id))
             .await
     }
 
-    pub(crate) async fn relation_by_id(
-        &self,
-        id: String,
-    ) -> Result<Option<StoredSubsessionDelegation>, StorageError> {
+    pub(crate) async fn relation_by_id(&self, id: String) -> Result<Option<Child>, StorageError> {
         self.storage
             .read(move |db| read(db, "r.relation_id=?1", &id))
             .await
@@ -196,10 +165,7 @@ impl SqliteSubsessionRepository {
     }
 
     /// The parent's delegations.
-    pub async fn relations_for_parent(
-        &self,
-        parent: String,
-    ) -> Result<Vec<StoredSubsessionDelegation>, StorageError> {
+    pub async fn relations_for_parent(&self, parent: String) -> Result<Vec<Child>, StorageError> {
         self.storage
             .read(move |db| {
                 list(
@@ -214,7 +180,7 @@ impl SqliteSubsessionRepository {
     pub(crate) async fn latest_relation_for_parent(
         &self,
         parent: String,
-    ) -> Result<Option<StoredSubsessionDelegation>, StorageError> {
+    ) -> Result<Option<Child>, StorageError> {
         self.storage
             .execute(move |db| {
                 Ok(list(
@@ -225,61 +191,6 @@ impl SqliteSubsessionRepository {
                 .pop())
             })
             .await
-    }
-
-    pub(crate) async fn create_direction(
-        &self,
-        relation: String,
-        source_turn: String,
-        source_message: String,
-        instruction: String,
-        instruction_id: String,
-        now: String,
-    ) -> Result<StoredSubsessionDirection, StorageError> {
-        self.storage.execute(move |db| {
-            let tx=db.transaction().map_err(StorageError::sqlite)?;
-            let revision:i64=tx.query_row("SELECT COALESCE(MAX(revision),0)+1 FROM btcc_subsession_directions WHERE relation_id=?1",[&relation],|r|r.get(0)).map_err(StorageError::sqlite)?;
-            tx.execute("INSERT OR IGNORE INTO btcc_subsession_directions (instruction_id,relation_id,revision,source_parent_turn_id,source_message_id,instruction,status,created_at) VALUES (?1,?2,?3,?4,?5,?6,'pending',?7)",params![instruction_id,relation,revision,source_turn,source_message,instruction,now]).map_err(StorageError::sqlite)?;
-            let stored=tx.query_row("SELECT instruction_id,relation_id,revision,instruction,created_at FROM btcc_subsession_directions WHERE relation_id=?1 AND source_message_id=?2",params![relation,source_message],direction_row).map_err(StorageError::sqlite)?;
-            tx.commit().map_err(StorageError::sqlite)?;
-            Ok(stored)
-        }).await
-    }
-
-    pub(crate) async fn pending_direction(
-        &self,
-        relation: String,
-    ) -> Result<Option<StoredSubsessionDirection>, StorageError> {
-        self.storage.execute(move |db| db.query_row("SELECT instruction_id,relation_id,revision,instruction,created_at FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending' ORDER BY revision LIMIT 1",[relation],direction_row).optional().map_err(StorageError::sqlite)).await
-    }
-
-    pub(crate) async fn pending_directions(
-        &self,
-    ) -> Result<Vec<StoredSubsessionDirection>, StorageError> {
-        self.storage.execute(move |db| {
-            let mut statement=db.prepare("SELECT instruction_id,relation_id,revision,instruction,created_at FROM btcc_subsession_directions WHERE status='pending' ORDER BY relation_id,revision").map_err(StorageError::sqlite)?;
-            let rows=statement.query_map([],direction_row).map_err(StorageError::sqlite)?;
-            rows.collect::<Result<Vec<_>,_>>().map_err(StorageError::sqlite)
-        }).await
-    }
-
-    pub(crate) async fn consume_direction(
-        &self,
-        child: String,
-        child_turn: String,
-        now: String,
-    ) -> Result<Option<StoredSubsessionDirection>, StorageError> {
-        self.storage.execute(move |db| {
-            let tx=db.transaction().map_err(StorageError::sqlite)?;
-            let relation:Option<String>=tx.query_row("SELECT relation_id FROM btcc_session_relations WHERE child_session_id=?1",[child],|r|r.get(0)).optional().map_err(StorageError::sqlite)?;
-            let Some(relation)=relation else { return Ok(None) };
-            let direction=tx.query_row("SELECT instruction_id,relation_id,revision,instruction,created_at FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending' ORDER BY revision LIMIT 1",[&relation],direction_row).optional().map_err(StorageError::sqlite)?;
-            if let Some(value)=&direction {
-                tx.execute("UPDATE btcc_subsession_directions SET status='applied',applied_at=?2,applied_child_turn_id=?3 WHERE instruction_id=?1 AND status='pending'",params![value.instruction_id,now,child_turn]).map_err(StorageError::sqlite)?;
-            }
-            tx.commit().map_err(StorageError::sqlite)?;
-            Ok(direction)
-        }).await
     }
 
     pub(crate) async fn latest_turn(
@@ -324,7 +235,9 @@ impl SqliteSubsessionRepository {
         &self,
         relation: String,
     ) -> Result<Option<Value>, StorageError> {
-        self.storage.execute(move |db| db.query_row(
+        self.storage.execute(move |db| {
+            if let Some(result) = native::result(db, &relation)? { return Ok(Some(result)); }
+            db.query_row(
             "SELECT r.result_id,r.child_turn_id,r.status,r.summary,r.acceptance_evidence_json,r.created_at,t.final_payload_json \
              FROM btcc_steward_results r LEFT JOIN btcc_turns t ON t.turn_id=r.child_turn_id \
              WHERE r.relation_id=?1 ORDER BY r.created_at DESC LIMIT 1", [relation], |r| {
@@ -336,24 +249,62 @@ impl SqliteSubsessionRepository {
                     super::subsession_result::project_delivery(&mut result, &payload);
                 }
                 Ok(result)
-            }).optional().map_err(StorageError::sqlite)).await
+            }).optional().map_err(StorageError::sqlite) }).await
     }
 
     pub(crate) async fn relation_by_work(
         &self,
         work: String,
-    ) -> Result<Option<StoredSubsessionDelegation>, StorageError> {
+    ) -> Result<Option<Child>, StorageError> {
         self.storage
             .execute(move |db| read(db, "d.root_work_id=?1", &work))
             .await
     }
 
+    pub(crate) async fn open_relation(&self, child: Child) -> Result<Option<Child>, StorageError> {
+        if let Child::Assigned(assigned) = &child {
+            let assigned = assigned.clone();
+            let open = self
+                .storage
+                .work_model_read(move |db| {
+                    let row = if let Some(part) = &assigned.part_id {
+                        butler_work::store::parts::read_part(db, part)?
+                    } else {
+                        butler_work::store::read_task(db, &assigned.task_id)?
+                    };
+                    Ok(!matches!(
+                        row["status"].as_str(),
+                        Some("completed" | "cancelled")
+                    ))
+                })
+                .await?;
+            return Ok(open.then_some(child));
+        }
+        self.open_relation_by_work(child.root_work_id.clone()).await
+    }
+
     pub(crate) async fn open_relation_by_work(
         &self,
         work: String,
-    ) -> Result<Option<StoredSubsessionDelegation>, StorageError> {
+    ) -> Result<Option<Child>, StorageError> {
         self.storage
             .execute(move |db| {
+                if let Some(child) = native::read(db, "d.root_work_id=?1", &work)? {
+                    let crate::btcc::subsessions::assignment::Child::Assigned(assigned) = &child
+                    else {
+                        unreachable!()
+                    };
+                    let task = butler_work::store::read_task(db, &assigned.task_id)
+                        .map_err(super::work_model::work_error)?;
+                    let open = if let Some(part) = &assigned.part_id {
+                        let part = butler_work::store::parts::read_part(db, part)
+                            .map_err(super::work_model::work_error)?;
+                        !matches!(part["status"].as_str(), Some("completed" | "cancelled"))
+                    } else {
+                        !matches!(task["status"].as_str(), Some("completed" | "cancelled"))
+                    };
+                    return Ok(open.then_some(child));
+                }
                 let status: Option<String> = db
                     .query_row(
                         "SELECT status FROM btcc_guided_works WHERE work_id=?1",
@@ -370,14 +321,7 @@ impl SqliteSubsessionRepository {
             .await
     }
 
-    pub(crate) async fn mark_enqueued(&self, relation: String) -> Result<(), StorageError> {
-        self.storage.execute(move |db| {
-            db.execute("UPDATE btcc_subsession_delegations SET dispatch_state='enqueued' WHERE relation_id=?1",[relation]).map_err(StorageError::sqlite)?;
-            Ok(())
-        }).await
-    }
-
-    pub(crate) async fn pending_dispatches(
+    pub async fn pending_dispatches(
         &self,
     ) -> Result<Vec<StoredSubsessionDelegation>, StorageError> {
         self.storage.execute(decode::pending).await
@@ -389,7 +333,7 @@ impl SqliteSubsessionRepository {
             .execute(move |db| {
                 let count: i64 = db
                     .query_row(
-                        "SELECT COUNT(*) FROM btcc_session_relations r LEFT JOIN btcc_steward_results x ON x.relation_id=r.relation_id WHERE r.parent_session_id=?1 AND x.result_id IS NULL",
+                        "SELECT COUNT(*) FROM btcc_session_relations r JOIN wm_attempts a ON a.session_id=r.child_session_id AND a.status='running' WHERE r.parent_session_id=?1",
                         [parent],
                         |row| row.get(0),
                     )

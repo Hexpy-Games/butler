@@ -86,7 +86,7 @@ impl SqliteSubsessionRepository {
 
 fn activity_child(
     db: &rusqlite::Connection,
-    r: &super::StoredSubsessionDelegation,
+    r: &crate::btcc::subsessions::assignment::Child,
 ) -> Result<serde_json::Value, StorageError> {
     use rusqlite::OptionalExtension;
     let result: Option<String>=db.query_row("SELECT status FROM btcc_steward_results WHERE relation_id=?1 ORDER BY created_at DESC LIMIT 1",[&r.relation_id],|row|row.get(0)).optional().map_err(StorageError::sqlite)?;
@@ -129,7 +129,7 @@ impl SqliteSubsessionRepository {
             let mut parents=Vec::new();
             for id in ids {
                 match super::decode::read(db,"r.relation_id=?1",&id) {
-                    Ok(Some(row))=>parents.push(row.parent_session_id),
+                    Ok(Some(row))=>parents.push(row.parent_session_id.clone()),
                     Ok(None)=>{},
                     Err(error) if error.code()==crate::btcc::StorageCode::SubsessionPacketInvalid.as_str()=>{},
                     Err(error)=>return Err(error),
@@ -147,7 +147,7 @@ impl SqliteSubsessionRepository {
     pub async fn running_descendants(
         &self,
         parents: Vec<String>,
-    ) -> Result<Vec<(String, super::StoredSubsessionDelegation)>, StorageError> {
+    ) -> Result<Vec<(String, crate::btcc::subsessions::assignment::Child)>, StorageError> {
         let parents = serde_json::to_string(&parents).map_err(|error| {
             StorageError::new(
                 crate::btcc::StorageCode::SubsessionPacketInvalid,

@@ -27,6 +27,4 @@ extern crate butler_core;
 
 pub mod btcc;
 pub mod conversation;
-#[cfg(test)]
-mod test_clock;
 pub mod workspace;

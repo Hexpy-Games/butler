@@ -177,10 +177,12 @@ pub use storage::{
 };
 #[cfg(any(test, feature = "test-support"))]
 pub use storage::{ContextDocumentInput, TestStorageFixture, test_prepared_turn};
+pub use subsessions::assignment::{Child, ChildAssignment};
 pub use subsessions::{
-    InterruptedSubsessionEvent, StewardDelegationRequest, SubsessionCancelRequest,
-    SubsessionChildQueue, SubsessionDirectionRequest, SubsessionEnqueue, SubsessionResumeRequest,
-    SubsessionService, WorkerDelegationRequest, WorkerProfile, WorkerProfileReader,
+    InterruptedSubsessionEvent, SessionControlRequest, StewardDelegationRequest,
+    SubsessionCancelRequest, SubsessionChildQueue, SubsessionDirectionRequest, SubsessionEnqueue,
+    SubsessionResumeRequest, SubsessionService, WorkerDelegationRequest, WorkerProfile,
+    WorkerProfileReader,
 };
 pub use work::WorkStatus as DurableWorkStatus;
 pub use work::policy::{

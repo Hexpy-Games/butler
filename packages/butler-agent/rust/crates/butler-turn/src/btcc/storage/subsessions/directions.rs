@@ -1,72 +1,144 @@
-//! A direction settles with the child turn that was started to continue it.
-
+//! Native direction receipts; imported legacy rows are never mutated.
 use super::*;
+use butler_work::store::{self, control};
 
-/// The child turn that continues a subsession with one direction.
-pub(crate) fn direction_turn_id(instruction_id: &str) -> String {
+pub(crate) fn direction_turn_id(id: &str) -> String {
     format!(
         "subsession-direction-turn-{}",
-        &crate::btcc::digest_identity(instruction_id)[..32]
+        &crate::btcc::digest_identity(id)[..32]
     )
 }
 
-const SETTLE: &str = "UPDATE btcc_subsession_directions SET status='applied',applied_at=?2,applied_child_turn_id=?3 WHERE instruction_id=?1 AND status='pending'";
-
-/// A continuation's saved result settles the direction it was started for,
-/// even when the turn ended before a model round took it: the parent has the
-/// turn's result, the direction never runs again, and the next one can.
-pub(super) fn settle_continued_direction(
-    tx: &rusqlite::Transaction<'_>,
-    relation: &str,
-    turn: &str,
-    now: &str,
-) -> Result<(), StorageError> {
-    let mut statement = tx
-        .prepare(
-            "SELECT instruction_id FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending'",
-        )
-        .map_err(StorageError::sqlite)?;
-    let pending: Vec<String> = statement
-        .query_map([relation], |row| row.get(0))
-        .map_err(StorageError::sqlite)?
-        .collect::<Result<_, _>>()
-        .map_err(StorageError::sqlite)?;
-    if let Some(id) = pending.iter().find(|id| direction_turn_id(id) == turn) {
-        tx.execute(SETTLE, params![id, now, turn])
-            .map_err(StorageError::sqlite)?;
+fn direction(row: &Value, relation: &str) -> StoredSubsessionDirection {
+    StoredSubsessionDirection {
+        instruction_id: row["id"].as_str().unwrap_or_default().into(),
+        relation_id: relation.into(),
+        revision: row["received_seq"].as_i64().unwrap_or_default(),
+        instruction: row
+            .pointer("/content/body/text")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .into(),
+        created_at: chrono::Utc::now().to_rfc3339(),
     }
-    Ok(())
 }
-
+fn context() -> store::Context {
+    store::Context {
+        now: chrono::Utc::now().timestamp_millis(),
+        actor: serde_json::json!({"runtime":"direction"}),
+    }
+}
 impl SqliteSubsessionRepository {
-    /// Settles a pending direction whose continuation turn already has a saved
-    /// result (left by a closeout saved before directions settled with their
-    /// continuation). Returns whether it was settled.
+    pub(crate) async fn create_direction(
+        &self,
+        relation: String,
+        _source_turn: String,
+        source_message: String,
+        instruction: String,
+        _instruction_id: String,
+        _now: String,
+    ) -> Result<StoredSubsessionDirection, StorageError> {
+        let child = self
+            .relation_by_id(relation.clone())
+            .await?
+            .ok_or_else(|| {
+                StorageError::new(StorageCode::SubsessionRelationMissing, "Relation missing")
+            })?;
+        self.storage.work_model_write(move |tx| {
+            let epoch = control::epoch(tx, &child.child_session_id)?;
+            let key = format!("parent-direction:{relation}:{source_message}");
+            let receipt = control::admit(tx, &context(), &control::Instruction {
+                target: &child.child_session_id, sender: serde_json::json!({"parent":{"session_id":child.parent_session_id,"relation_id":relation,"relation_epoch":0}}),
+                mode: "queue", body: serde_json::json!({"text":instruction}), idempotency_key: &key,
+                expected_control_epoch: epoch, anchor_task: &child.task_id })?;
+            let rows = control::next_pending(tx, &child.child_session_id, false)?;
+            rows.iter().find(|r| r["id"]==receipt["instruction_id"]).map(|r| direction(r,&relation)).ok_or(store::Error::NotFound)
+        }).await
+    }
+    pub(crate) async fn pending_direction(
+        &self,
+        relation: String,
+    ) -> Result<Option<StoredSubsessionDirection>, StorageError> {
+        let child = self.relation_by_id(relation.clone()).await?;
+        let Some(child) = child else { return Ok(None) };
+        self.storage
+            .work_model_read(move |db| {
+                Ok(control::next_pending(db, &child.child_session_id, false)?
+                    .first()
+                    .map(|r| direction(r, &relation)))
+            })
+            .await
+    }
+    pub(crate) async fn pending_directions(
+        &self,
+    ) -> Result<Vec<StoredSubsessionDirection>, StorageError> {
+        self.storage.work_model_read(move |db| {
+            let mut stmt = db.prepare("SELECT DISTINCT r.relation_id,r.child_session_id FROM btcc_session_relations r JOIN wm_instructions i ON i.target_session_id=r.child_session_id WHERE i.status IN ('waiting_for_task','pending_safe_point')")?;
+            let ids = stmt.query_map([],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))?.collect::<rusqlite::Result<Vec<_>>>()?;
+            let mut pending=Vec::new();
+            for (relation,child) in ids { pending.extend(control::next_pending(db,&child,false)?.iter().map(|r|direction(r,&relation))); }
+            Ok(pending)
+        }).await
+    }
+    pub(crate) async fn consume_direction(
+        &self,
+        child: String,
+        turn: String,
+        _now: String,
+    ) -> Result<Option<StoredSubsessionDirection>, StorageError> {
+        self.storage
+            .work_model_write(move |tx| {
+                let relation: Option<String> = tx
+                    .query_row(
+                        "SELECT relation_id FROM btcc_session_relations WHERE child_session_id=?1",
+                        [&child],
+                        |r| r.get(0),
+                    )
+                    .optional()?;
+                let Some(relation) = relation else {
+                    return Ok(None);
+                };
+                let pending = control::next_pending(tx, &child, false)?;
+                let row = pending.iter().find(|r| {
+                    r["mode"] == "steer"
+                        || direction_turn_id(r["id"].as_str().unwrap_or_default()) == turn
+                });
+                if let Some(row) = row {
+                    let id = row["id"]
+                        .as_str()
+                        .ok_or(store::Error::Invalid("instruction id"))?;
+                    control::mark_delivered(
+                        tx,
+                        &context(),
+                        id,
+                        row["status"]
+                            .as_str()
+                            .ok_or(store::Error::Invalid("status"))?,
+                    )?;
+                    control::mark_applied(tx, &context(), id)?;
+                    return Ok(Some(direction(row, &relation)));
+                }
+                Ok(None)
+            })
+            .await
+    }
     pub(crate) async fn settle_ended_direction(
         &self,
         child: String,
-        instruction_id: String,
-        now: String,
+        id: String,
+        _now: String,
     ) -> Result<bool, StorageError> {
+        let turn = direction_turn_id(&id);
+        if !self.has_turn_result(child, turn).await? {
+            return Ok(false);
+        }
         self.storage
-            .execute(move |db| {
-                let turn = direction_turn_id(&instruction_id);
-                let ended = db
-                    .query_row(
-                        "SELECT 1 FROM btcc_steward_results WHERE result_id=?1",
-                        [super::completion::turn_result_id(&child, &turn)],
-                        |_| Ok(()),
-                    )
-                    .optional()
-                    .map_err(StorageError::sqlite)?
-                    .is_some();
-                if !ended {
-                    return Ok(false);
+            .work_model_write(move |tx| {
+                for status in ["waiting_for_task", "pending_safe_point"] {
+                    control::mark_delivered(tx, &context(), &id, status)?;
                 }
-                let settled = db
-                    .execute(SETTLE, params![instruction_id, now, turn])
-                    .map_err(StorageError::sqlite)?;
-                Ok(settled == 1)
+                control::mark_applied(tx, &context(), &id)?;
+                Ok(true)
             })
             .await
     }

@@ -100,7 +100,7 @@ impl DurableWorkService {
         super::validation::required_text(&turn_id, "turnId")?;
         self.repository.bound_work_for_turn(turn_id).await
     }
-
+    #[cfg(test)]
     pub(crate) async fn abandon_bound_work_for_turn(
         &self,
         turn_id: String,
