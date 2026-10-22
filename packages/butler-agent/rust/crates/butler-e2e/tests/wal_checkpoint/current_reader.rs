@@ -37,6 +37,7 @@ fn current_reader_after_full_pass_waits_for_new_frame_threshold()
     butler_e2e::gate!();
     let _serial = SERIAL.lock().unwrap();
     PASSES.store(0, SeqCst);
+    FINISHES.store(0, SeqCst);
     let store = Store::new();
     READER.with(|reader| *reader.borrow_mut() = Some(sqlite::open(&store.path).unwrap()));
     let (finished, passes) = mpsc::sync_channel(1);
@@ -46,6 +47,7 @@ fn current_reader_after_full_pass_waits_for_new_frame_threshold()
         .unwrap()
         .unwrap();
     let release = resume;
+    owner.lane_busy();
     store.insert_many(1100);
     passes.recv_timeout(Duration::from_secs(5)).unwrap();
     let (initial, done) = frames(&store.path);
@@ -60,12 +62,15 @@ fn current_reader_after_full_pass_waits_for_new_frame_threshold()
         // another full pass while preventing the writer from resetting WAL.
         store.insert();
     }
+    owner.lane_idle();
     release.send(()).unwrap();
     owner.close().unwrap();
     let (tail, _) = frames(&store.path);
     let new_frames = usize::try_from(tail - initial).unwrap();
     assert!(tail > initial && new_frames < 1000);
-    let background = PASSES.load(SeqCst);
+    let finishes = FINISHES.load(SeqCst);
+    assert_eq!(finishes, 1);
+    let background = PASSES.load(SeqCst) - finishes;
     assert!(
         background <= 1 + new_frames / 1000,
         "passes={background} new_frames={new_frames}"
