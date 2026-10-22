@@ -19,11 +19,28 @@ impl SqliteSubsessionRepository {
         session: String,
         turn: String,
     ) -> Result<bool, StorageError> {
-        self.storage.work_model_read(move |db| {
-            let id: Option<String> = db.query_row("SELECT a.id FROM wm_session_exec s JOIN wm_attempts a ON a.task_id=s.current_task_id WHERE s.session_id=?1 AND a.session_id=?1 AND a.turn_id=?2 ORDER BY a.started_at DESC LIMIT 1", params![session,turn], |r|r.get(0)).optional()?;
-            let result = id.map(|id|format!("result-{id}")).unwrap_or_else(||turn_result_id(&session,&turn));
-            Ok(db.query_row("SELECT 1 FROM btcc_subsession_outbox WHERE result_id=?1",[result], |_|Ok(())).optional()?.is_some())
-        }).await
+        self.storage
+            .work_model_read(move |db| {
+                let id: Option<String> = db
+                    .query_row(
+                        crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_COMPLETION_1,
+                        params![session, turn],
+                        |r| r.get(0),
+                    )
+                    .optional()?;
+                let result = id
+                    .map(|id| format!("result-{id}"))
+                    .unwrap_or_else(|| turn_result_id(&session, &turn));
+                Ok(db
+                    .query_row(
+                        crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_COMPLETION_2,
+                        [result],
+                        |_| Ok(()),
+                    )
+                    .optional()?
+                    .is_some())
+            })
+            .await
     }
     pub(crate) async fn commit_result(
         &self,
@@ -36,17 +53,43 @@ impl SqliteSubsessionRepository {
             .ok_or_else(|| {
                 StorageError::new(StorageCode::SubsessionRelationMissing, "Relation missing")
             })?;
-        self.storage.work_model_write(move |tx| {
-            let result_id = super::native_completion::settle(tx,&child,&completion)?;
-            super::native_completion::resolve_outcome(tx, &child, &mut completion)?;
-            if tx.query_row("SELECT 1 FROM btcc_subsession_outbox WHERE result_id=?1", [&result_id], |_|Ok(())).optional()?.is_some() { return Ok(()) }
-            let text = result_text(tx, &child, &completion)?;
-            let input = parent_input(&child, &result_id, text, &now);
-            tx.execute("INSERT OR IGNORE INTO btcc_subsession_outbox(outbox_id,relation_id,result_id,parent_session_id,parent_turn_id,message_id,input_json,status,created_at) VALUES(?1,?2,?3,?4,?5,?6,?7,'pending',?8)",
-                params![format!("outbox-{result_id}"),child.relation_id,result_id,child.parent_session_id,child.parent_turn_id,format!("subsession-result-message:{result_id}"),serde_json::to_string(&input)?,now])?;
-            tx.execute("UPDATE btcc_session_relations SET activity_terminal=1 WHERE relation_id=?1",[&child.relation_id])?;
-            Ok(())
-        }).await
+        self.storage
+            .work_model_write(move |tx| {
+                let result_id = super::native_completion::settle(tx, &child, &completion)?;
+                super::native_completion::resolve_outcome(tx, &child, &mut completion)?;
+                if tx
+                    .query_row(
+                        crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_COMPLETION_3,
+                        [&result_id],
+                        |_| Ok(()),
+                    )
+                    .optional()?
+                    .is_some()
+                {
+                    return Ok(());
+                }
+                let text = result_text(tx, &child, &completion)?;
+                let input = parent_input(&child, &result_id, text, &now);
+                tx.execute(
+                    crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_COMPLETION_4,
+                    params![
+                        format!("outbox-{result_id}"),
+                        child.relation_id,
+                        result_id,
+                        child.parent_session_id,
+                        child.parent_turn_id,
+                        format!("subsession-result-message:{result_id}"),
+                        serde_json::to_string(&input)?,
+                        now
+                    ],
+                )?;
+                tx.execute(
+                    crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_COMPLETION_5,
+                    [&child.relation_id],
+                )?;
+                Ok(())
+            })
+            .await
     }
 }
 
@@ -93,7 +136,11 @@ fn result_text(
         completion.status, completion.summary
     );
     if let Some(reason) = &completion.failure_reason {
-        let count: i64 = tx.query_row("SELECT count(*) FROM btcc_session_relations r JOIN wm_session_exec s ON s.session_id=r.child_session_id JOIN wm_attempts origin ON origin.task_id=s.current_task_id AND origin.session_id=r.child_session_id JOIN wm_cross_db_intents i ON i.op_id='child_dispatch:'||origin.id JOIN wm_attempts a ON a.task_id=s.current_task_id AND a.session_id=r.child_session_id WHERE r.parent_session_id=?1 AND json_extract(i.payload_json,'$.delegation.packet.objective')=?2 AND a.status IN ('failed','interrupted') AND a.checkpoint_ref=?3",params![child.parent_session_id,child.packet.objective,reason],|r|r.get(0))?;
+        let count: i64 = tx.query_row(
+            crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_COMPLETION_6,
+            params![child.parent_session_id, child.packet.objective, reason],
+            |r| r.get(0),
+        )?;
         text.push_str(&format!("\nreason: {reason}"));
         if count > 1 {
             text.push_str(&format!(
@@ -142,7 +189,7 @@ fn delivery_artifacts(
 ) -> butler_work::store::Result<String> {
     let raw: Option<String> = tx
         .query_row(
-            "SELECT final_payload_json FROM btcc_turns WHERE turn_id=?1",
+            crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_COMPLETION_7,
             [turn],
             |row| row.get(0),
         )

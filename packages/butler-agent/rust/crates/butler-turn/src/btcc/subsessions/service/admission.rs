@@ -46,7 +46,7 @@ impl SubsessionService {
             .work_model_read(move |db| {
                 Ok(db
                     .query_row(
-                        "SELECT current_task_id FROM wm_session_exec WHERE session_id=?1",
+                        crate::btcc::storage::native_sql::SUBSESSIONS_SERVICE_ADMISSION_INDEXED_1,
                         [session],
                         |r| r.get::<_, Option<String>>(0),
                     )
@@ -120,10 +120,21 @@ fn assign(
         session_id: &ids.child_session_id,
         turn_id: &ids.child_turn_id,
     };
-    let part_id = part.as_deref().ok_or(store::Error::Invalid("no_started_task"))?;
+    let part_id = part
+        .as_deref()
+        .ok_or(store::Error::Invalid("no_started_task"))?;
     let revision = at(&store::read_part(tx, part_id)?, "/revision")
-        .as_i64().ok_or(store::Error::Invalid("revision"))?;
-    store::assign_part(tx, &ctx, part_id, revision, &input.parent_session_id, &child, &attempt)?;
+        .as_i64()
+        .ok_or(store::Error::Invalid("revision"))?;
+    store::assign_part(
+        tx,
+        &ctx,
+        part_id,
+        revision,
+        &input.parent_session_id,
+        &child,
+        &attempt,
+    )?;
     store::tiers::admit(tx, &ctx, &ids.child_session_id, work, 2, "delegated")?;
     store::tiers::bind_started_task(tx, &ids.child_session_id, &task)?;
     persist(tx, input, parent, ids, now, work, &task, part, &attempt)
@@ -132,7 +143,7 @@ fn assign(
 fn existing_assignment(tx: &store::Transaction<'_>, attempt: &str) -> store::Result<Option<Child>> {
     let payload: Option<String> = tx
         .query_row(
-            "SELECT payload_json FROM wm_cross_db_intents WHERE op_id=?1",
+            crate::btcc::storage::native_sql::SUBSESSIONS_SERVICE_ADMISSION_INDEXED_2,
             [format!("child_dispatch:{attempt}")],
             |r| r.get(0),
         )
@@ -144,7 +155,7 @@ fn existing_assignment(tx: &store::Transaction<'_>, attempt: &str) -> store::Res
     let delegation: StoredSubsessionDelegation =
         serde_json::from_value(at(&payload, "/delegation").clone())?;
     let (task_id, part_id): (String, Option<String>) = tx.query_row(
-        "SELECT task_id,part_id FROM wm_attempts WHERE id=?1",
+        crate::btcc::storage::native_sql::SUBSESSIONS_SERVICE_ADMISSION_INDEXED_3,
         [attempt],
         |r| Ok((r.get(0)?, r.get(1)?)),
     )?;
@@ -167,11 +178,14 @@ fn resolve_target(
     ids: &delegation::DelegationIds,
 ) -> store::Result<(String, Option<String>)> {
     let task = current.ok_or(store::Error::Invalid("no_started_task"))?;
-    store::execution::ensure_task_effect(tx, task, &input.parent_session_id)
-        .map_err(|error| match error {
-            store::Error::Invalid(_) | store::Error::NotFound => store::Error::Invalid("no_started_task"),
+    store::execution::ensure_task_effect(tx, task, &input.parent_session_id).map_err(|error| {
+        match error {
+            store::Error::Invalid(_) | store::Error::NotFound => {
+                store::Error::Invalid("no_started_task")
+            }
             other => other,
-        })?;
+        }
+    })?;
     if let Some(part) = &input.part_id {
         let row = store::read_part(tx, part)?;
         if string(&row, "task_id")? != task {
@@ -228,14 +242,7 @@ fn persist(
         now,
         schedule_run: input.schedule_run.clone(),
     });
-    let ordinal: i64 = tx.query_row(
-        "SELECT coalesce(max(ordinal),0)+1 FROM btcc_session_relations WHERE parent_session_id=?1",
-        [&input.parent_session_id],
-        |r| r.get(0),
-    )?;
-    let title = delegation_title(input.safe_title.as_deref(), &input.request);
-    tx.execute("INSERT OR IGNORE INTO btcc_session_relations(relation_id,parent_session_id,parent_turn_id,child_session_id,anchor_message_id,ordinal,safe_title,created_at,activity_role,activity_worker_id) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?4)",
-        params![ids.relation_id,input.parent_session_id,input.parent_turn_id,ids.child_session_id,input.anchor_message_id,ordinal,title,now,input.role.as_str()])?;
+    let (ordinal, title) = insert_relation(tx, input, ids, now)?;
     let delegation = StoredSubsessionDelegation {
         relation_id: ids.relation_id.clone(),
         delegation_id: ids.delegation_id.clone(),
@@ -289,8 +296,15 @@ fn packet(
             ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    let criteria = criteria.into_iter().map(|(node,revision,id)| tx.query_row(
-        "SELECT text FROM wm_spec_criteria WHERE node_id=?1 AND revision=?2 AND criterion_id=?3", params![node,revision,id], |r| r.get::<_,String>(0)))
+    let criteria = criteria
+        .into_iter()
+        .map(|(node, revision, id)| {
+            tx.query_row(
+                crate::btcc::storage::native_sql::SUBSESSIONS_SERVICE_ADMISSION_INDEXED_6,
+                params![node, revision, id],
+                |r| r.get::<_, String>(0),
+            )
+        })
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(SubsessionPacket {
         child_role: input.role,
@@ -324,4 +338,33 @@ pub(super) fn string<'a>(row: &'a Value, field: &str) -> store::Result<&'a str> 
     row[field]
         .as_str()
         .ok_or(store::Error::Invalid("missing assignment field"))
+}
+
+fn insert_relation(
+    tx: &store::Transaction<'_>,
+    input: &AssignmentRequest,
+    ids: &delegation::DelegationIds,
+    now: &str,
+) -> store::Result<(i64, String)> {
+    let ordinal: i64 = tx.query_row(
+        crate::btcc::storage::native_sql::SUBSESSIONS_SERVICE_ADMISSION_INDEXED_4,
+        [&input.parent_session_id],
+        |r| r.get(0),
+    )?;
+    let title = delegation_title(input.safe_title.as_deref(), &input.request);
+    tx.execute(
+        crate::btcc::storage::native_sql::SUBSESSIONS_SERVICE_ADMISSION_INDEXED_5,
+        params![
+            ids.relation_id,
+            input.parent_session_id,
+            input.parent_turn_id,
+            ids.child_session_id,
+            input.anchor_message_id,
+            ordinal,
+            title,
+            now,
+            input.role.as_str()
+        ],
+    )?;
+    Ok((ordinal, title))
 }

@@ -11,9 +11,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-async fn start(
+async fn start_mode(
     id: &str,
     hold_report: bool,
+    use_worker: bool,
 ) -> Result<
     (
         Scenario,
@@ -25,6 +26,7 @@ async fn start(
 > {
     let (url, script, server) = stub::start().await?;
     script.hold_report.store(hold_report, Ordering::SeqCst);
+    script.use_worker.store(use_worker, Ordering::SeqCst);
     let s = Setup::new(id)?
         .access(Access::FullAccess)
         .stub_cassette(Cassette::load("TOOL-01")?)
@@ -39,6 +41,21 @@ async fn start(
         "session":r.get::<_,String>(0)?,"task":r.get::<_,String>(1)?,"attempt":r.get::<_,String>(2)?,"turn":r.get::<_,String>(3)?,"work":r.get::<_,String>(4)?,"part":r.get::<_,String>(5)?})))).await?;
     *script.target.lock().unwrap() = assigned["session"].as_str().unwrap().into();
     Ok((s, script, server, assigned))
+}
+
+async fn start(
+    id: &str,
+    hold_report: bool,
+) -> Result<
+    (
+        Scenario,
+        Arc<stub::Script>,
+        tokio::task::JoinHandle<()>,
+        Value,
+    ),
+    HarnessError,
+> {
+    start_mode(id, hold_report, false).await
 }
 
 async fn control_receipt(s: &Scenario, turn: &Value) -> Result<Value, HarnessError> {
@@ -101,6 +118,14 @@ async fn wmu_03_09_child_lease_steer_and_reporting_precede_queued_followup()
         "corrected marker"
     );
     let requests = script.requests.lock().unwrap().clone();
+    for body in requests.iter().filter(|body| {
+        native_request(body) == stub::FEATURE
+            && !super::super::work_model_script::outputs(body).is_empty()
+    }) {
+        let instructions = body["instructions"].as_str().unwrap();
+        assert!(instructions.contains(butler_work::store::TIER_TWO));
+        assert!(!instructions.contains(butler_work::store::TIER_ONE));
+    }
     assert!(!requests.iter().any(|body| {
         butler_e2e::e2e::matching::key("/codex/responses", body, &Default::default()).user_request
             == stub::QUEUED
@@ -294,3 +319,111 @@ async fn delivered_child_result_can_be_reviewed_in_a_later_turn() -> Result<(), 
     Ok(())
 }
 
+#[tokio::test]
+async fn paused_child_allows_parent_queue_and_resume_releases_hold() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, assigned) = start("WMU-PAUSE-RESUME", false).await?;
+    let (_, turn) = s.turn("general", stub::PAUSE).await?;
+    let receipt = control_receipt(&s, &turn).await?;
+    assert_eq!(receipt["ok"], true, "{receipt}");
+    *script.hold.lock().unwrap() = receipt["hold_id"].as_str().unwrap().into();
+    let queued =
+        s.gw.post(
+            "/session-queue",
+            json!({"chat_id":"general","text":stub::QUEUED,"client_message_id":"paused-followup"}),
+        )
+        .await?;
+    assert_eq!(queued.status, 202);
+    wait_message(&s, stub::QUEUED_REPLY).await?;
+    let (_, turn) = s.turn("general", stub::RESUME).await?;
+    assert_eq!(control_receipt(&s, &turn).await?["ok"], true);
+    script.release_child.notify_one();
+    wait_completed(&s, &assigned["task"]).await?;
+    let active = super::database(&s, |db| {
+        db.query_row(
+            "SELECT count(*) FROM wm_holds WHERE released_at IS NULL",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+    })
+    .await?;
+    assert_eq!(active, 0);
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+#[tokio::test]
+async fn legacy_cancel_then_steer_releases_stop_and_continues_child() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, assigned) = start("WMU-LEGACY-RESUME", false).await?;
+    s.turn("general", stub::LEGACY_STOP).await?;
+    let receipt=super::database(&s,|db|db.query_row("SELECT result_json FROM btcc_guided_tool_calls WHERE tool_name='cancel_steward' ORDER BY rowid DESC LIMIT 1",[],|r|r.get::<_,String>(0))).await?;
+    let receipt: Value = serde_json::from_str(&receipt)?;
+    assert!(receipt["hold_id"].is_string(), "{receipt}");
+    *script.relation.lock().unwrap() = receipt["relation_id"].as_str().unwrap().to_owned();
+    script.release_child.notify_one();
+    wait_message(
+        &s,
+        "The delegated work was stopped; its Task remains resumable.",
+    )
+    .await?;
+    s.turn("general", stub::LEGACY_RESUME).await?;
+    wait_completed(&s, &assigned["task"]).await?;
+    assert_eq!(
+        tokio::fs::read_to_string(s.sandbox.data.join("feature-marker.txt")).await?,
+        "corrected marker"
+    );
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+#[tokio::test]
+async fn invalid_session_control_is_a_model_fixable_result() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, assigned) = start("WMU-CONTROL-ERROR", false).await?;
+    for request in [stub::INVALID, stub::STALE, stub::MISSING] {
+        if request == stub::MISSING {
+            super::database(&s,|db|db.execute("DELETE FROM wm_session_exec WHERE session_id IN (SELECT parent_session_id FROM btcc_session_relations)",[])).await?;
+        }
+        let (_, turn) = s.turn("general", request).await?;
+        let receipt = control_receipt(&s, &turn).await?;
+        assert_eq!(receipt["ok"], false, "{receipt}");
+        assert_eq!(
+            receipt["error"]["code"],
+            if request == stub::STALE {
+                "conflict"
+            } else {
+                "work_apply_rejected"
+            },
+            "{receipt}"
+        );
+    }
+    script.release_child.notify_one();
+    wait_completed(&s, &assigned["task"]).await?;
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
+fn native_request(body: &Value) -> String {
+    butler_e2e::e2e::matching::key("/codex/responses", body, &Default::default()).user_request
+}
+
+#[tokio::test]
+async fn worker_queue_result_reports_when_the_steward_turn_ends() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, assigned) = start_mode("WMU-WORKER-REPORT", false, true).await?;
+    script.release_child.notify_one();
+    wait_completed(&s, &assigned["task"]).await?;
+    let reports=super::database(&s,|db|db.query_row("SELECT count(*),sum(delivered_at IS NOT NULL AND delivery_ended_at IS NOT NULL) FROM wm_delegation_reports",[],|r|Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?)))).await?;
+    assert_eq!(reports, (2, 2));
+    assert_eq!(
+        tokio::fs::read_to_string(s.sandbox.data.join("feature-marker.txt")).await?,
+        "corrected marker"
+    );
+    s.turn("general", stub::QUEUED).await?;
+    wait_message(&s, stub::QUEUED_REPLY).await?;
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}

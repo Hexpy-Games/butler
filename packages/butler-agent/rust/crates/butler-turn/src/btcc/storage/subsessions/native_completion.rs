@@ -14,12 +14,15 @@ pub(super) fn settle(
         return Ok(legacy
             .unwrap_or_else(|| completion::turn_result_id(&completion.session, &completion.turn)));
     };
-    let attempt: (String,String,Option<String>) = tx.query_row("SELECT id,status,part_id FROM wm_attempts WHERE task_id=?1 AND session_id=?2 AND turn_id=?3 ORDER BY started_at DESC,id DESC LIMIT 1",
-        params![assigned.task_id,completion.session,completion.turn], |r|Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
+    let attempt: (String, String, Option<String>) = tx.query_row(
+        crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_NATIVE_COMPLETION_INDEXED_1,
+        params![assigned.task_id, completion.session, completion.turn],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    )?;
     let result_id = format!("result-{}", attempt.0);
     if tx
         .query_row(
-            "SELECT 1 FROM btcc_subsession_outbox WHERE result_id=?1",
+            crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_NATIVE_COMPLETION_INDEXED_2,
             [&result_id],
             |_| Ok(()),
         )
@@ -87,7 +90,7 @@ fn finish(
                 store::fail_task(tx, ctx, &child.task_id, &completion.session, reason)?;
             }
             tx.execute(
-                "UPDATE wm_attempts SET checkpoint_ref=?2 WHERE id=?1",
+                crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_NATIVE_COMPLETION_INDEXED_3,
                 params![attempt, reason],
             )?;
         }

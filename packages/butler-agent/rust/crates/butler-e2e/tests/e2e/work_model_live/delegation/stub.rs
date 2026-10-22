@@ -1,4 +1,5 @@
 //! Scripted feature work, parent controls, delivery and criterion correction.
+mod worker;
 use super::super::super::work_model_script as native;
 use axum::{Json, Router, extract::State, response::IntoResponse, routing::post};
 use butler_e2e::e2e::{HarnessError, matching, sanitize::Placeholders};
@@ -11,6 +12,13 @@ use tokio::sync::Notify;
 
 pub(super) const FEATURE: &str = "Build and verify the delegated marker feature.";
 pub(super) const STEER: &str = "Correct the delegated marker before submitting.";
+pub(super) const PAUSE: &str = "Pause the delegated work.";
+pub(super) const RESUME: &str = "Resume the delegated work.";
+pub(super) const LEGACY_STOP: &str = "Cancel the delegated work through the legacy control.";
+pub(super) const LEGACY_RESUME: &str = "Continue the stopped delegated work.";
+pub(super) const STALE: &str = "Send a control against an old epoch.";
+pub(super) const MISSING: &str = "Send a control after execution state was removed.";
+pub(super) const INVALID: &str = "Send a control with invalid mode.";
 pub(super) const STOP: &str = "Stop the delegated feature work.";
 pub(super) const QUEUED: &str = "Acknowledge this after the delegated result.";
 pub(super) const SECOND: &str = "Start the next verification Task after the completed feature.";
@@ -24,24 +32,30 @@ pub(super) const QUEUED_REPLY: &str = "The later request is acknowledged.";
 pub(super) struct Script {
     pub requests: Mutex<Vec<Value>>,
     pub target: Mutex<String>,
+    pub hold: Mutex<String>,
+    pub relation: Mutex<String>,
     pub child_held: Notify,
     pub release_child: Notify,
     pub report_held: Notify,
     pub release_report: Notify,
     pub hold_report: AtomicBool,
     pub defer_review: AtomicBool,
+    pub use_worker: AtomicBool,
 }
 impl Default for Script {
     fn default() -> Self {
         Self {
             requests: Mutex::default(),
             target: Mutex::default(),
+            hold: Mutex::default(),
+            relation: Mutex::default(),
             child_held: Notify::new(),
             release_child: Notify::new(),
             report_held: Notify::new(),
             release_report: Notify::new(),
             hold_report: AtomicBool::new(true),
             defer_review: AtomicBool::new(false),
+            use_worker: AtomicBool::new(false),
         }
     }
 }
@@ -78,12 +92,34 @@ async fn reply(
         script.report_held.notify_one();
         script.release_report.notified().await;
     }
-    let item = if request.starts_with("role: steward") {
+    let item = if request.starts_with("role: worker") {
+        worker::execute(step, &body)
+    } else if script.use_worker.load(Ordering::SeqCst) && request.starts_with("role: steward") {
+        worker::steward(step, &body)
+    } else if script.use_worker.load(Ordering::SeqCst)
+        && request.contains("Delegated result")
+        && body["instructions"]
+            .as_str()
+            .is_some_and(|text| text.starts_with("You run one delegated Work"))
+    {
+        worker::result(step, &body)
+    } else if request.starts_with("role: steward")
+        || request.contains("Resume the assigned Task from its retained checkpoint.")
+        || request.contains("Continue from the retained checkpoint.")
+    {
         child(step, &body)
     } else if request == FEATURE {
         parent(step, &body)
-    } else if request == STEER || request == STOP {
+    } else if [STEER, STOP, PAUSE, RESUME, INVALID, STALE, MISSING].contains(&request) {
         control(step, request, &script)
+    } else if request == LEGACY_STOP && step == 0 {
+        call(step, "cancel_steward", &json!({}))
+    } else if request == LEGACY_RESUME && step == 0 {
+        call(
+            step,
+            "steer_steward",
+            &json!({"relation_id":script.relation.lock().unwrap().clone(),"instruction":"Continue from the retained checkpoint."}),
+        )
     } else if request == SECOND {
         second(step, &body)
     } else if request == EDIT {
@@ -166,9 +202,9 @@ fn control(step: usize, request: &str, script: &Script) -> Value {
     call(
         step,
         "session_control",
-        &json!({"target_session_id":script.target.lock().unwrap().clone(),"mode":"steer",
-        "instruction":if stop {json!({"control":"stop"})}else{json!({"text":"Use the corrected marker before submitting."})},
-        "expected_control_epoch":u8::from(stop),"idempotency_key":if stop {"stop-feature"}else{"steer-feature"}}),
+        &json!({"target_session_id":script.target.lock().unwrap().clone(),"mode":if request==INVALID {"invalid"}else{"steer"},
+        "instruction":match request {STOP=>json!({"control":"stop"}),PAUSE=>json!({"control":"pause"}),RESUME=>json!({"control":"resume","hold_id":script.hold.lock().unwrap().clone()}),_=>json!({"text":"Use the corrected marker before submitting."})},
+        "expected_control_epoch":if request==STALE {99}else{i32::from(stop||request==RESUME)},"idempotency_key":request}),
     )
 }
 fn result(step: usize, body: &Value, request: &str) -> Value {
@@ -230,32 +266,32 @@ fn criterion_delta(body: &Value) -> Value {
         .unwrap();
     let next = node["revision"].as_i64().unwrap() + 1;
     let root = node["node_id"].as_str().unwrap();
-    let criteria: Vec<_> = native::view(body)["criteria"]
+    let tasks: Vec<_> = layout
         .as_array()
         .unwrap()
         .iter()
-        .map(|criterion| {
-            if criterion["node_id"] == root {
-                json!({"node_id":root,"node_revision":next,"criterion_id":"c0"})
-            } else {
-                criterion.clone()
-            }
+        .flat_map(|chain| chain["steps"].as_array().unwrap())
+        .flat_map(|step| step["tasks"].as_array().unwrap())
+        .collect();
+    let impacts: serde_json::Map<String, Value> = tasks
+        .iter()
+        .map(|task| {
+            (
+                task["id"].as_str().unwrap().to_owned(),
+                json!({"action":"reverify","reason":"Verify the corrected criterion"}),
+            )
         })
         .collect();
-    let criteria: Vec<_> = criteria
-        .into_iter()
-        .fold(Vec::<Value>::new(), |mut refs, item| {
-            if !refs.contains(&item) {
-                refs.push(item);
-            }
-            refs
-        });
-    let impacts:Vec<_>=layout.as_array().unwrap().iter().flat_map(|chain|chain["steps"].as_array().unwrap())
-        .flat_map(|step|step["tasks"].as_array().unwrap()).map(|task|json!({"task_id":task["id"],"expected_revision":task["revision"],
-            "acceptance_refs":criteria,"corrective":{"title":"Verify the corrected criterion","description":"Recheck this Task's outcome against the approved correction"}})).collect();
+    let mut expected = serde_json::Map::from_iter([(root.to_owned(), node["revision"].clone())]);
+    expected.extend(tasks.iter().map(|task| {
+        (
+            task["id"].as_str().unwrap().to_owned(),
+            task["revision"].clone(),
+        )
+    }));
     json!({"reason":"Apply the approved criterion correction and fence stale execution","spec_ref":{"node_id":root,"revision":publication["revision"],"body_hash":publication["body_hash"]},
-    "expected_task_graph_revision":native::graph(body),"expected_revisions":{root:node["revision"]},"operations":[
+    "expected_task_graph_revision":native::graph(body),"expected_revisions":expected,"operations":[
         {"op":"spec.propose","key":"changed","node_id":root,"base_revision":node["active_revision"],"node":{"title":FEATURE,"goal":FEATURE,"criteria":["Corrected marker verified"],"constraints":[]}},
-        {"op":"spec.activate","expected_tree_version":1,"published_refs":[{"node_id":"@changed","revision":next,"body_hash":"@changed"}],"impact_map":{"tasks":impacts}}
+        {"op":"spec.activate","expected_tree_version":1,"published_refs":[{"node_id":"@changed","revision":next,"body_hash":"@changed"}],"impact_map":impacts}
     ]})
 }

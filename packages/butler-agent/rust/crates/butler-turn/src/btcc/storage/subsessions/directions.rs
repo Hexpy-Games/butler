@@ -75,13 +75,24 @@ impl SqliteSubsessionRepository {
     pub(crate) async fn pending_directions(
         &self,
     ) -> Result<Vec<StoredSubsessionDirection>, StorageError> {
-        self.storage.work_model_read(move |db| {
-            let mut stmt = db.prepare("SELECT DISTINCT r.relation_id,r.child_session_id FROM btcc_session_relations r JOIN wm_instructions i ON i.target_session_id=r.child_session_id WHERE i.status IN ('waiting_for_task','pending_safe_point')")?;
-            let ids = stmt.query_map([],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))?.collect::<rusqlite::Result<Vec<_>>>()?;
-            let mut pending=Vec::new();
-            for (relation,child) in ids { pending.extend(store::pending_instructions(db,&child,false)?.iter().map(|r|direction(r,&relation))); }
-            Ok(pending)
-        }).await
+        self.storage
+            .work_model_read(move |db| {
+                let mut stmt =
+                    db.prepare(crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_DIRECTIONS_1)?;
+                let ids = stmt
+                    .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                let mut pending = Vec::new();
+                for (relation, child) in ids {
+                    pending.extend(
+                        store::pending_instructions(db, &child, false)?
+                            .iter()
+                            .map(|r| direction(r, &relation)),
+                    );
+                }
+                Ok(pending)
+            })
+            .await
     }
     pub(crate) async fn consume_direction(
         &self,
@@ -93,7 +104,7 @@ impl SqliteSubsessionRepository {
             .work_model_write(move |tx| {
                 let relation: Option<String> = tx
                     .query_row(
-                        "SELECT relation_id FROM btcc_session_relations WHERE child_session_id=?1",
+                        crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_DIRECTIONS_2,
                         [&child],
                         |r| r.get(0),
                     )

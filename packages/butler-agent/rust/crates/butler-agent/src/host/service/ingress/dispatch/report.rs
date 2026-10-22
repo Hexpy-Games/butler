@@ -32,7 +32,14 @@ pub(super) async fn deliver(
         delivered += 1;
         final_delivered |= final_action;
     }
-    if final_delivered && eligible.is_some() {
+    let ended = matches!(
+        outcome.result,
+        TurnOutcomeKind::Delivered(_)
+            | TurnOutcomeKind::AlreadyDelivered(_)
+            | TurnOutcomeKind::Cancelled { .. }
+            | TurnOutcomeKind::AlreadyCancelled { .. }
+    );
+    if ended {
         let result = envelope
             .execution_controls
             .as_ref()

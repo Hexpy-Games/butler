@@ -36,6 +36,7 @@ SESSION_PART_LEASE = "SELECT * FROM wm_attempts WHERE session_id=?2 AND task_id=
 LEASE = "SELECT * FROM wm_attempts WHERE task_id=?1 AND status='running' AND part_id IS NULL";
 PART_LEASE = "SELECT * FROM wm_attempts WHERE part_id=?1 AND status='running' AND part_id IS NOT NULL";
 INSERT_ATTEMPT = "INSERT INTO wm_attempts(id,task_id,part_id,task_revision,spec_ref,session_id,turn_id,lease_epoch,status,started_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?4,'running',?8)";
+CONTINUE_ATTEMPT = "UPDATE wm_attempts SET turn_id=?3,revision=revision+1 WHERE id=?1 AND session_id=?2 AND status='running'";
 FINISH_ATTEMPT = "UPDATE wm_attempts SET status=?2,finished_at=?3,checkpoint_ref=?4,revision=revision+1 WHERE id=?1 AND status='running'";
 FINISH_TASK_ATTEMPTS = "UPDATE wm_attempts SET status=?2,finished_at=?3,checkpoint_ref=?4,revision=revision+1 WHERE task_id=?1 AND status='running'";
 RESULTS = "SELECT * FROM wm_results WHERE task_id=?1 ORDER BY revision DESC";

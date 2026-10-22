@@ -289,7 +289,10 @@ async fn execute(
     if internal_subsession
         && matches!(
             outcome.result,
-            TurnOutcomeKind::Delivered(_) | TurnOutcomeKind::AlreadyDelivered(_)
+            TurnOutcomeKind::Delivered(_)
+                | TurnOutcomeKind::AlreadyDelivered(_)
+                | TurnOutcomeKind::Cancelled { .. }
+                | TurnOutcomeKind::AlreadyCancelled { .. }
         )
     {
         subsessions

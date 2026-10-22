@@ -5,12 +5,6 @@ use butler_core::json::at;
 use butler_work::store;
 use rusqlite::Params;
 
-const SELECT: &str = "SELECT i.payload_json,a.id,a.task_id,a.part_id,t.work_id \
- FROM btcc_session_relations r JOIN wm_session_exec s ON s.session_id=r.child_session_id \
- JOIN wm_tasks t ON t.id=s.current_task_id \
- JOIN wm_attempts a ON a.task_id=t.id AND a.session_id=r.child_session_id \
- JOIN wm_cross_db_intents i ON i.op_id='child_dispatch:'||a.id";
-
 pub(super) fn read(
     db: &rusqlite::Connection,
     predicate: &str,
@@ -22,7 +16,7 @@ pub(super) fn read(
         other => other,
     };
     db.query_row(
-        &format!("{SELECT} WHERE {predicate} ORDER BY a.started_at,a.id LIMIT 1"),
+        &crate::btcc::storage::native_sql::assignment_read(predicate),
         [value],
         |r| {
             Ok((
@@ -87,17 +81,30 @@ pub(super) fn result(
     let Some(Child::Assigned(child)) = read(db, "r.relation_id=?1", relation)? else {
         return Ok(None);
     };
-    let row = db.query_row("SELECT a.id,a.turn_id,a.status,a.checkpoint_ref,a.finished_at,p.status \
-        FROM wm_attempts a LEFT JOIN wm_task_parts p ON p.id=a.part_id WHERE a.task_id=?1 AND a.session_id=?2 ORDER BY a.started_at DESC,a.id DESC LIMIT 1",
-        params![child.task_id, child.child_session_id], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,Option<String>>(3)?,r.get::<_,Option<i64>>(4)?,r.get::<_,Option<String>>(5)?)))
-        .optional().map_err(StorageError::sqlite)?;
+    let row = db
+        .query_row(
+            crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_NATIVE_INDEXED_1,
+            params![child.task_id, child.child_session_id],
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, Option<String>>(3)?,
+                    r.get::<_, Option<i64>>(4)?,
+                    r.get::<_, Option<String>>(5)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(StorageError::sqlite)?;
     let Some((attempt, turn, state, reason, created_at, part)) = row else {
         return Ok(None);
     };
     if state == "running"
         || db
             .query_row(
-                "SELECT 1 FROM btcc_subsession_outbox WHERE result_id=?1",
+                crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_NATIVE_INDEXED_2,
                 [format!("result-{attempt}")],
                 |_| Ok(()),
             )
@@ -107,8 +114,14 @@ pub(super) fn result(
     {
         return Ok(None);
     }
-    let content: Option<String> = db.query_row("SELECT body_ref FROM wm_results WHERE task_id=?1 AND attempt_id=?2 ORDER BY revision DESC LIMIT 1", params![child.task_id,attempt], |r| r.get(0))
-        .optional().map_err(StorageError::sqlite)?;
+    let content: Option<String> = db
+        .query_row(
+            crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_NATIVE_INDEXED_3,
+            params![child.task_id, attempt],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(StorageError::sqlite)?;
     let content: Value = content
         .map(|hash| store::tool_read::body(db, &hash).map_err(super::super::work_model::work_error))
         .transpose()?
@@ -127,35 +140,7 @@ pub(super) fn result(
     };
     let mut projected = serde_json::json!({"result_id":format!("result-{attempt}"),"child_turn_id":turn,
         "status":status,"work_status":at(&store::read_task(db, &child.task_id).map_err(super::super::work_model::work_error)?, "/status"),"summary":at(&content, "/result_refs"),"acceptance_evidence":at(&content, "/evidence_refs"),"created_at":created_at});
-    if let Some(reference) = at(&content, "/result_refs")
-        .as_array()
-        .and_then(|refs| refs.first())
-        .and_then(Value::as_str)
-    {
-        let stored: bool = db
-            .query_row(
-                "SELECT 1 FROM wm_spec_bodies WHERE hash=?1",
-                [reference],
-                |_| Ok(true),
-            )
-            .optional()
-            .map_err(StorageError::sqlite)?
-            .unwrap_or(false);
-        let summary = if stored {
-            serde_json::json!(
-                store::tool_read::body(db, reference)
-                    .map_err(super::super::work_model::work_error)?
-            )
-        } else {
-            serde_json::json!(reference)
-        };
-        butler_core::json::object_mut(&mut projected).insert("summary".into(), summary);
-    } else {
-        let summary = serde_json::json!(reason.unwrap_or_else(|| {
-            "Delegated work could not continue: child_turn_interrupted.".into()
-        }));
-        butler_core::json::object_mut(&mut projected).insert("summary".into(), summary);
-    }
+    project_summary(db, &content, reason, &mut projected)?;
     project_saved_delivery(db, &turn, status, &mut projected)?;
     Ok(Some(projected))
 }
@@ -168,7 +153,7 @@ fn project_saved_delivery(
 ) -> Result<(), StorageError> {
     let payload: Option<String> = db
         .query_row(
-            "SELECT final_payload_json FROM btcc_turns WHERE turn_id=?1",
+            crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_NATIVE_INDEXED_5,
             [&turn],
             |r| r.get(0),
         )
@@ -189,6 +174,44 @@ fn project_saved_delivery(
         {
             butler_core::json::object_mut(projected).insert("artifacts".into(), artifacts.clone());
         }
+    }
+    Ok(())
+}
+
+fn project_summary(
+    db: &rusqlite::Connection,
+    content: &Value,
+    reason: Option<String>,
+    projected: &mut Value,
+) -> Result<(), StorageError> {
+    if let Some(reference) = at(&content, "/result_refs")
+        .as_array()
+        .and_then(|refs| refs.first())
+        .and_then(Value::as_str)
+    {
+        let stored: bool = db
+            .query_row(
+                crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_NATIVE_INDEXED_4,
+                [reference],
+                |_| Ok(true),
+            )
+            .optional()
+            .map_err(StorageError::sqlite)?
+            .unwrap_or(false);
+        let summary = if stored {
+            serde_json::json!(
+                store::tool_read::body(db, reference)
+                    .map_err(super::super::work_model::work_error)?
+            )
+        } else {
+            serde_json::json!(reference)
+        };
+        butler_core::json::object_mut(projected).insert("summary".into(), summary);
+    } else {
+        let summary = serde_json::json!(reason.unwrap_or_else(|| {
+            "Delegated work could not continue: child_turn_interrupted.".into()
+        }));
+        butler_core::json::object_mut(projected).insert("summary".into(), summary);
     }
     Ok(())
 }

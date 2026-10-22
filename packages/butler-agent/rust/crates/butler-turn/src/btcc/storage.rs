@@ -22,6 +22,11 @@ mod legacy_cutover;
 mod lifecycle;
 mod migration;
 mod model;
+pub(crate) mod native_sql;
+#[cfg(feature = "test-support")]
+pub fn native_query_statements() -> Vec<(&'static str, String)> {
+    native_sql::statements()
+}
 mod operation_input;
 mod operation_results;
 mod payload;

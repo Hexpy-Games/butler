@@ -23,8 +23,9 @@ pub use control::{
 };
 pub use execution::sql as execution_sql;
 pub use execution::{
-    ExecutionScope, Submission, assign_part, assign_task, block_task, deliver_delegated_result,
-    end_delegated_delivery, fail_part, fail_task, report_task, start_task, submit_task,
+    ExecutionScope, Submission, assign_part, assign_task, block_task, continue_part_turn,
+    deliver_delegated_result, end_delegated_delivery, fail_part, fail_task, report_task,
+    start_task, submit_task,
 };
 pub use model_text::*;
 pub use parts::{NewPart, add_part, read_part};

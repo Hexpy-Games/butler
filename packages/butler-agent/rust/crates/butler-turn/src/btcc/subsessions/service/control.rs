@@ -1,4 +1,5 @@
 //! Durable direction revisions and cancellation over the shared native queue.
+mod resume;
 use crate::btcc::subsessions::assignment::Child;
 
 use serde_json::{Value, json};
@@ -103,84 +104,6 @@ impl SubsessionService {
         self.enqueue_direction(&relation, &direction).await
     }
 
-    /// Resumes a subsession.
-    pub async fn resume(&self, request: SubsessionResumeRequest) -> Result<Value, BtccError> {
-        let relation = self
-            .repository
-            .relation_by_id(request.relation_id.clone())
-            .await
-            .map_err(BtccError::from)?
-            .filter(|relation| {
-                relation.parent_session_id == request.parent_session_id
-                    && relation.packet.child_role == crate::btcc::ChildRole::Steward
-            })
-            .ok_or_else(|| error(BtccCode::StewardRelationNotFound))?;
-        self.bindings
-            .get_by_session_id(&request.parent_session_id)
-            .await
-            .map_err(BtccError::from)?
-            .filter(|binding| binding.role == SessionRole::Butler)
-            .ok_or_else(|| error(BtccCode::StewardRelationNotFound))?;
-        // A child whose result reached the parent is terminal, even when its
-        // interrupted turn is still recorded as admitted.
-        if self
-            .repository
-            .open_relation(relation.clone())
-            .await
-            .map_err(BtccError::from)?
-            .is_none()
-            || self
-                .repository
-                .result_for_relation(relation.relation_id.clone())
-                .await
-                .map_err(BtccError::from)?
-                .is_some()
-        {
-            return Err(error(BtccCode::StewardRelationNotActive));
-        }
-        let turn = self
-            .repository
-            .latest_resume_turn(relation.child_session_id.clone())
-            .await
-            .map_err(BtccError::from)?
-            .filter(|turn| turn.semantic_state == "admitted")
-            .ok_or_else(|| error(BtccCode::StewardRelationNotActive))?;
-        let interrupted = self
-            .queue
-            .interrupted_event(
-                &turn.original_event_id,
-                &relation.child_session_id,
-                &turn.turn_id,
-            )?
-            .filter(|event| {
-                event.event_id == turn.original_event_id
-                    && event.message_id == turn.original_message_id
-                    && event.message == turn.original_message
-            })
-            .ok_or_else(|| error(BtccCode::StewardRelationNotRecoverable))?;
-        let request_id = format!(
-            "app-steward-resume:{}:{}",
-            relation.relation_id, interrupted.recovery_id
-        );
-        let now = (self.now)();
-        self.queue.enqueue(super::SubsessionEnqueue {
-            envelope: json!({
-            "eventId":format!("app:resume:{request_id}"),"transport":"app","accountId":"local",
-            "peer":{"kind":"dm","id":relation.child_session_id,"parentId":relation.parent_session_id},
-            "sender":{"id":"app-user","displayName":"Butler App"},
-            "message":{"id":interrupted.message_id,"text":interrupted.message,"timestamp":now},
-            "routingHints":{"sessionId":relation.child_session_id,"turnId":turn.turn_id,"canonicalEventId":interrupted.event_id},
-            "control":{"kind":"resume_turn","requestId":request_id,"turnId":turn.turn_id,"requestedAt":now},
-            "raw":{"source":"app-steward-observer"}
-            }),
-            metadata: serde_json::Map::new(),
-        })?;
-        Ok(
-            json!({"relation_id":relation.relation_id,"child_turn_id":turn.turn_id,
-            "status":"resuming","request_id":request_id}),
-        )
-    }
-
     /// Sends new direction to a subsession.
     pub async fn steer(&self, request: SubsessionDirectionRequest) -> Result<Value, BtccError> {
         let instruction = butler_core::public_text::trim_js_whitespace(&request.instruction);
@@ -239,6 +162,8 @@ impl SubsessionService {
         if direction.instruction != instruction {
             return Err(error(BtccCode::StewardDirectionIdentityConflict));
         }
+        self.release_stop_holds(&relation.child_session_id, &request.parent_session_id)
+            .await?;
         if !self.child_turn_running(&relation.child_session_id).await? {
             self.enqueue_direction(&relation, &direction).await?;
         }
@@ -284,7 +209,38 @@ impl SubsessionService {
             })
             .await
             .map_err(BtccError::from)?;
-        self.enqueue_cancel(&relation, &receipt.to_string()).await
+        let mut result = self.enqueue_cancel(&relation, &receipt.to_string()).await?;
+        butler_core::json::object_mut(&mut result)
+            .insert("hold_id".into(), receipt["hold_id"].clone());
+        Ok(result)
+    }
+
+    async fn release_stop_holds(&self, target: &str, parent: &str) -> Result<bool, BtccError> {
+        let target = target.to_owned();
+        let parent = parent.to_owned();
+        self.repository
+            .storage()
+            .work_model_write(move |tx| {
+                use butler_work::store;
+                let holds = store::active_session_holds(tx, &target)?;
+                let mut released = false;
+                for hold in holds {
+                    if hold["kind"] == "stop" && hold["owner"] == parent {
+                        store::release_session_hold(
+                            tx,
+                            &super::admission::context(),
+                            hold["id"]
+                                .as_str()
+                                .ok_or(store::Error::Invalid("hold id"))?,
+                            store::control_epoch(tx, &target)?,
+                        )?;
+                        released = true;
+                    }
+                }
+                Ok(released)
+            })
+            .await
+            .map_err(BtccError::from)
     }
 
     pub(super) async fn enqueue_cancel(
@@ -373,6 +329,32 @@ impl SubsessionService {
         relation: &Child,
         requested: &StoredSubsessionDirection,
     ) -> Result<(), BtccError> {
+        let target = relation.child_session_id.clone();
+        let assigned_part = match relation {
+            Child::Assigned(assigned) => assigned.part_id.clone(),
+            Child::Legacy(_) => None,
+        };
+        let task_id = relation.task_id.clone();
+        let held = self
+            .repository
+            .storage()
+            .work_model_read(move |db| {
+                use butler_work::store;
+                if !store::active_session_holds(db, &target)?.is_empty() {
+                    return Ok(true);
+                }
+                if let Some(part) = assigned_part {
+                    let part = store::read_part(db, &part)?;
+                    let task = store::read_task(db, &task_id)?;
+                    return Ok(part["status"] == "completed" || task["status"] == "in_review");
+                }
+                Ok(false)
+            })
+            .await
+            .map_err(BtccError::from)?;
+        if held {
+            return Ok(());
+        }
         let direction = self
             .repository
             .pending_direction(relation.relation_id.clone())

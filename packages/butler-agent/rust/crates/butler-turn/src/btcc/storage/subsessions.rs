@@ -199,7 +199,17 @@ impl SqliteSubsessionRepository {
         &self,
         session: String,
     ) -> Result<Option<(String, String)>, StorageError> {
-        self.storage.execute(move |db| db.query_row("SELECT turn_id,semantic_state FROM btcc_turns WHERE session_id=?1 ORDER BY rowid DESC LIMIT 1",[session],|r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(StorageError::sqlite)).await
+        self.storage
+            .execute(move |db| {
+                db.query_row(
+                    crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_1,
+                    [session],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .optional()
+                .map_err(StorageError::sqlite)
+            })
+            .await
     }
 
     pub(crate) async fn latest_resume_turn(
@@ -209,14 +219,20 @@ impl SqliteSubsessionRepository {
         self.storage
             .execute(move |db| {
                 db.query_row(
-            "SELECT turn_id,semantic_state,trigger_key,original_message_id,original_message \
-             FROM btcc_turns WHERE session_id=?1 ORDER BY rowid DESC LIMIT 1",
-            [session],
-            |row| Ok(StoredSubsessionResumeTurn {
-                turn_id: row.get(0)?, semantic_state: row.get(1)?, original_event_id: row.get(2)?,
-                original_message_id: row.get(3)?, original_message: row.get(4)?,
-            }),
-        ).optional().map_err(StorageError::sqlite)
+                    crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_INDEXED_1,
+                    [session],
+                    |row| {
+                        Ok(StoredSubsessionResumeTurn {
+                            turn_id: row.get(0)?,
+                            semantic_state: row.get(1)?,
+                            original_event_id: row.get(2)?,
+                            original_message_id: row.get(3)?,
+                            original_message: row.get(4)?,
+                        })
+                    },
+                )
+                .optional()
+                .map_err(StorageError::sqlite)
             })
             .await
     }
@@ -227,10 +243,20 @@ impl SqliteSubsessionRepository {
         turn: String,
         message: String,
     ) -> Result<bool, StorageError> {
-        self.storage.execute(move |db| {
-            let present=db.query_row("SELECT 1 FROM btcc_turns WHERE turn_id=?1 AND session_id=?2 AND original_message_id=?3",params![turn,session,message],|_|Ok(())).optional().map_err(StorageError::sqlite)?.is_some();
-            Ok(present)
-        }).await
+        self.storage
+            .execute(move |db| {
+                let present = db
+                    .query_row(
+                        crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_INDEXED_2,
+                        params![turn, session, message],
+                        |_| Ok(()),
+                    )
+                    .optional()
+                    .map_err(StorageError::sqlite)?
+                    .is_some();
+                Ok(present)
+            })
+            .await
     }
 
     pub(crate) async fn result_for_relation(
@@ -313,7 +339,7 @@ impl SqliteSubsessionRepository {
                 }
                 let status: Option<String> = db
                     .query_row(
-                        "SELECT status FROM btcc_guided_works WHERE work_id=?1",
+                        crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_INDEXED_3,
                         [&work],
                         |r| r.get(0),
                     )
@@ -339,7 +365,7 @@ impl SqliteSubsessionRepository {
             .execute(move |db| {
                 let count: i64 = db
                     .query_row(
-                        "SELECT COUNT(*) FROM btcc_session_relations r JOIN wm_attempts a ON a.session_id=r.child_session_id AND a.status='running' WHERE r.parent_session_id=?1",
+                        crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_INDEXED_4,
                         [parent],
                         |row| row.get(0),
                     )
@@ -374,35 +400,72 @@ impl SqliteSubsessionRepository {
 
     /// Child results waiting to be delivered to parents.
     pub async fn pending_parent_inputs(&self) -> Result<Vec<PendingParentInput>, StorageError> {
-        self.storage.execute(move |db| {
-            let mut statement=db.prepare("SELECT result_id,parent_session_id,input_json FROM btcc_subsession_outbox WHERE status='pending' ORDER BY created_at").map_err(StorageError::sqlite)?;
-            let rows=statement.query_map([],|row| Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?,row.get::<_,String>(2)?))).map_err(StorageError::sqlite)?;
-            rows.map(|value| {
-                let (result_id,parent_session_id,encoded)=value.map_err(StorageError::sqlite)?;
-                let invalid=|e: serde_json::Error| StorageError::new(StorageCode::SubsessionOutboxInvalid,e.to_string()).with_source(e);
-                let tag:RouteTag=serde_json::from_str(&encoded).map_err(invalid)?;
-                let route=match tag.route {
-                    Some(OutboxRoute::StewardQueue)=>ParentResultRoute::StewardQueue,
-                    Some(OutboxRoute::ButlerApp)=>ParentResultRoute::ButlerApp,
-                    Some(OutboxRoute::Unknown) | None=>return Err(StorageError::new(StorageCode::SubsessionOutboxRouteInvalid,"Subsession outbox route is invalid")),
-                };
-                let input=serde_json::from_str(&encoded).map_err(invalid)?;
-                Ok(PendingParentInput{result_id,parent_session_id,route,input})
-            }).collect()
-        }).await
+        self.storage
+            .execute(move |db| {
+                let mut statement = db
+                    .prepare(crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_INDEXED_5)
+                    .map_err(StorageError::sqlite)?;
+                let rows = statement
+                    .query_map([], |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, String>(2)?,
+                        ))
+                    })
+                    .map_err(StorageError::sqlite)?;
+                rows.map(|value| {
+                    let (result_id, parent_session_id, encoded) =
+                        value.map_err(StorageError::sqlite)?;
+                    let invalid = |e: serde_json::Error| {
+                        StorageError::new(StorageCode::SubsessionOutboxInvalid, e.to_string())
+                            .with_source(e)
+                    };
+                    let tag: RouteTag = serde_json::from_str(&encoded).map_err(invalid)?;
+                    let route = match tag.route {
+                        Some(OutboxRoute::StewardQueue) => ParentResultRoute::StewardQueue,
+                        Some(OutboxRoute::ButlerApp) => ParentResultRoute::ButlerApp,
+                        Some(OutboxRoute::Unknown) | None => {
+                            return Err(StorageError::new(
+                                StorageCode::SubsessionOutboxRouteInvalid,
+                                "Subsession outbox route is invalid",
+                            ));
+                        }
+                    };
+                    let input = serde_json::from_str(&encoded).map_err(invalid)?;
+                    Ok(PendingParentInput {
+                        result_id,
+                        parent_session_id,
+                        route,
+                        input,
+                    })
+                })
+                .collect()
+            })
+            .await
     }
 
     /// Marks a child result delivered.
     pub async fn mark_delivered(&self, result: String, now: String) -> Result<(), StorageError> {
-        self.storage.work_model_write(move |tx| {
-            tx.execute("UPDATE btcc_subsession_outbox SET status='delivered',delivered_at=?2 WHERE result_id=?1 AND status='pending'",params![result,now])?;
-            if let Some(attempt) = result.strip_prefix("result-") {
-                butler_work::store::deliver_delegated_result(tx, &butler_work::store::Context {
-                    now: chrono::Utc::now().timestamp_millis(), actor: serde_json::json!({"runtime":"delivery"}),
-                }, attempt)?;
-            }
-            Ok(())
-        }).await
+        self.storage
+            .work_model_write(move |tx| {
+                tx.execute(
+                    crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_INDEXED_6,
+                    params![result, now],
+                )?;
+                if let Some(attempt) = result.strip_prefix("result-") {
+                    butler_work::store::deliver_delegated_result(
+                        tx,
+                        &butler_work::store::Context {
+                            now: chrono::Utc::now().timestamp_millis(),
+                            actor: serde_json::json!({"runtime":"delivery"}),
+                        },
+                        attempt,
+                    )?;
+                }
+                Ok(())
+            })
+            .await
     }
 }
 

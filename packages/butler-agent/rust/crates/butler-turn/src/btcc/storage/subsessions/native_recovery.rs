@@ -14,7 +14,7 @@ fn context() -> store::Context {
 impl SqliteSubsessionRepository {
     pub(crate) async fn recover_legacy_assignments(&self) -> Result<Vec<Child>, StorageError> {
         let records=self.storage.read(|db| {
-            let mut stmt=db.prepare("SELECT d.delegation_id,r.child_session_id FROM btcc_subsession_delegations d JOIN btcc_session_relations r ON r.relation_id=d.relation_id WHERE d.dispatch_state='pending' ORDER BY d.created_at,d.delegation_id").map_err(StorageError::sqlite)?;
+            let mut stmt=db.prepare("SELECT d.delegation_id,r.child_session_id FROM btcc_subsession_delegations d JOIN btcc_session_relations r ON r.relation_id=d.relation_id WHERE d.dispatch_state='pending' AND NOT EXISTS(SELECT 1 FROM wm_legacy_map m WHERE m.source='delegation_recovery' AND m.source_id=d.delegation_id) AND NOT EXISTS(SELECT 1 FROM wm_cross_db_intents i WHERE i.op_id='child_dispatch:attempt-'||d.delegation_id) ORDER BY d.created_at,d.delegation_id").map_err(StorageError::sqlite)?;
             let ids=stmt.query_map([],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?))).map_err(StorageError::sqlite)?.collect::<rusqlite::Result<Vec<_>>>().map_err(StorageError::sqlite)?;
             ids.into_iter().map(|(id,child)| {
                 let row=match decode::read(db,"r.child_session_id=?1",&child) {
@@ -43,12 +43,18 @@ impl SqliteSubsessionRepository {
 
     pub(crate) async fn recover_legacy_results(&self) -> Result<(), StorageError> {
         let rows=self.storage.read(|db| {
-            let mut stmt=db.prepare("SELECT x.child_session_id,x.child_turn_id,x.status,x.summary,x.acceptance_evidence_json,x.created_at FROM btcc_steward_results x WHERE NOT EXISTS(SELECT 1 FROM btcc_subsession_outbox o WHERE o.result_id=x.result_id) ORDER BY x.created_at,x.result_id").map_err(StorageError::sqlite)?;
-            stmt.query_map([],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,String>(4)?,r.get::<_,String>(5)?)))
+            let mut stmt=db.prepare("SELECT x.result_id,x.child_session_id,x.child_turn_id,x.status,x.summary,x.acceptance_evidence_json,x.created_at FROM btcc_steward_results x WHERE NOT EXISTS(SELECT 1 FROM wm_legacy_map m WHERE m.source='result_recovery' AND m.source_id=x.result_id) ORDER BY x.created_at,x.result_id").map_err(StorageError::sqlite)?;
+            stmt.query_map([],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,String>(4)?,r.get::<_,String>(5)?,r.get::<_,String>(6)?)))
                 .map_err(StorageError::sqlite)?.collect::<rusqlite::Result<Vec<_>>>().map_err(StorageError::sqlite)
         }).await?;
-        for (session, turn, status, summary, evidence, now) in rows {
+        for (result_id, session, turn, status, summary, evidence, now) in rows {
             if self.by_child(session.clone()).await?.is_none() {
+                self.storage
+                    .work_model_write(move |tx| {
+                        cutover::needs_source(tx, "steward_result", &result_id, "unmapped_result")?;
+                        mark_result(tx, &result_id)
+                    })
+                    .await?;
                 continue;
             }
             let evidence_refs = serde_json::from_str(&evidence).map_err(|e| {
@@ -69,6 +75,9 @@ impl SqliteSubsessionRepository {
                 now,
             )
             .await?;
+            self.storage
+                .work_model_write(move |tx| mark_result(tx, &result_id))
+                .await?;
         }
         Ok(())
     }
@@ -123,22 +132,7 @@ fn recover(
         .ok_or(store::Error::Invalid("work id"))?
         .to_owned();
     let attempt_id = format!("attempt-{id}");
-    let ctx = context();
-    if !matches!(at(&task, "/status").as_str(), Some("running" | "in_review")) {
-        store::start_task(tx, &ctx, &task_id,
-            at(&task, "/revision").as_i64().ok_or(store::Error::Invalid("revision"))?,
-            &store::ExecutionScope { session_id: &row.parent_session_id, turn_id: &row.parent_turn_id },
-            &format!("parent-{attempt_id}"))?;
-    }
-    let part_id = format!("part-{id}");
-    store::add_part(tx, &ctx, &store::NewPart {
-        id: &part_id, task_id: &task_id, kind: butler_work::work_types::TaskKind::Execute,
-        title: &row.safe_title, after_part_ids: &[],
-    })?;
-    store::assign_part(tx, &ctx, &part_id, 0, &row.parent_session_id,
-        &store::ExecutionScope { session_id: &row.child_session_id, turn_id: &row.child_turn_id },
-        &attempt_id)?;
-    store::tiers::bind_started_task(tx, &row.parent_session_id, &task_id)?;
+    let part_id = claim_legacy_part(tx, id, &row, &task, &task_id, &attempt_id)?;
     store::tiers::admit(
         tx,
         &context(),
@@ -158,6 +152,7 @@ fn recover(
         "child_dispatch",
         &serde_json::json!({"delegation":row}),
     )?;
+    tx.execute("INSERT INTO wm_legacy_map(source,source_id,new_id,source_hash,imported_revision,batch) VALUES('delegation_recovery',?1,?2,'',0,'assigned') ON CONFLICT(source,source_id) DO NOTHING",params![id,part_id])?;
     Ok(Some(Child::Assigned(ChildAssignment {
         delegation: row,
         work_id,
@@ -189,4 +184,61 @@ fn resolve_task(tx: &store::Transaction<'_>, mapped: &str) -> store::Result<Opti
         }
         Err(error) => return Err(error),
     })
+}
+
+fn mark_result(tx: &store::Transaction<'_>, id: &str) -> store::Result<()> {
+    tx.execute("INSERT INTO wm_legacy_map(source,source_id,new_id,source_hash,imported_revision,batch) VALUES('result_recovery',?1,'','',0,'processed') ON CONFLICT(source,source_id) DO NOTHING",[id])?;
+    Ok(())
+}
+
+fn claim_legacy_part(
+    tx: &store::Transaction<'_>,
+    id: &str,
+    row: &crate::btcc::StoredSubsessionDelegation,
+    task: &Value,
+    task_id: &str,
+    attempt_id: &str,
+) -> store::Result<String> {
+    let ctx = context();
+    if !matches!(at(&task, "/status").as_str(), Some("running" | "in_review")) {
+        store::start_task(
+            tx,
+            &ctx,
+            &task_id,
+            at(&task, "/revision")
+                .as_i64()
+                .ok_or(store::Error::Invalid("revision"))?,
+            &store::ExecutionScope {
+                session_id: &row.parent_session_id,
+                turn_id: &row.parent_turn_id,
+            },
+            &format!("parent-{attempt_id}"),
+        )?;
+    }
+    let part_id = format!("part-{id}");
+    store::add_part(
+        tx,
+        &ctx,
+        &store::NewPart {
+            id: &part_id,
+            task_id: &task_id,
+            kind: butler_work::work_types::TaskKind::Execute,
+            title: &row.safe_title,
+            after_part_ids: &[],
+        },
+    )?;
+    store::assign_part(
+        tx,
+        &ctx,
+        &part_id,
+        0,
+        &row.parent_session_id,
+        &store::ExecutionScope {
+            session_id: &row.child_session_id,
+            turn_id: &row.child_turn_id,
+        },
+        &attempt_id,
+    )?;
+    store::tiers::bind_started_task(tx, &row.parent_session_id, &task_id)?;
+    Ok(part_id)
 }

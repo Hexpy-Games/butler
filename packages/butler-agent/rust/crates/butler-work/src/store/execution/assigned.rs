@@ -56,3 +56,41 @@ pub fn report_task(tx: &Transaction<'_>, ctx: &Context, task: &str) -> Result<Va
         None,
     )
 }
+
+/// A returning result continues the session's live part without taking a new lease.
+pub fn continue_part_turn(
+    tx: &Transaction<'_>,
+    ctx: &Context,
+    part: &str,
+    session: &str,
+    turn: &str,
+) -> Result<bool> {
+    let row = parts::read_part(tx, part)?;
+    if row["status"] != "running" {
+        return Ok(false);
+    }
+    let lease = one(tx, sql::PART_LEASE, [part])?;
+    if lease["session_id"] != session {
+        return Err(Error::Invalid("part lease belongs to another session"));
+    }
+    let task = read_task(tx, text(&row, "task_id")?)?;
+    if task["status"] == "in_review" {
+        return Err(Error::Invalid(
+            "The Task is in review. Finish its review before continuing execution.",
+        ));
+    }
+    super::super::task_fields::validate_task_criteria(tx, text(&row, "task_id")?)?;
+    tx.execute(
+        sql::CONTINUE_ATTEMPT,
+        params![text(&lease, "id")?, session, turn],
+    )?;
+    event(
+        tx,
+        ctx,
+        "attempt",
+        text(&lease, "id")?,
+        revision(&lease)? + 1,
+        "continue",
+    )?;
+    Ok(true)
+}

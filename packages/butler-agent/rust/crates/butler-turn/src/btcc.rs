@@ -288,3 +288,6 @@ mod test_pause;
 #[cfg(feature = "e2e-fixtures")]
 #[doc(hidden)]
 pub use test_pause::reach as pause_for_test;
+
+#[cfg(feature = "test-support")]
+pub use storage::native_query_statements;

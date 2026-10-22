@@ -60,16 +60,12 @@ impl SubsessionService {
         &self,
         request: SessionControlRequest,
     ) -> Result<Value, BtccError> {
-        let child = self
-            .repository
-            .by_child(request.target_session_id.clone())
-            .await
-            .map_err(BtccError::from)?;
+        let child = self.control_child(&request).await?;
         let Some(child) =
             child.filter(|child| child.parent_session_id == request.parent_session_id)
         else {
             return Ok(
-                json!({"ok":false,"error":{"code":"parent_control_forbidden","message":"You cannot control sessions you did not start."}}),
+                json!({"ok":false,"error":{"code":"parent_control_forbidden","message":store::parent_control_forbidden(&request.target_session_id)}}),
             );
         };
         let for_enqueue = child.clone();
@@ -81,18 +77,22 @@ impl SubsessionService {
         let input = serde_json::to_value(&request)
             .map_err(|e| error(BtccCode::SubsessionIdentityInvalid).with_source(e))?;
         let receipt=self.repository.storage().work_model_write(move |tx| {
+            tx.execute_batch("SAVEPOINT session_control")?;
+            let result = (|| {
             let ctx=admission::context();
-            let parent_tier: i64=tx.query_row("SELECT tier FROM wm_session_exec WHERE session_id=?1",[&request.parent_session_id],|r|r.get(0))?;
+            let parent_tier: Option<i64>=tx.query_row(crate::btcc::storage::native_sql::SUBSESSIONS_SERVICE_SESSION_CONTROL_1,[&request.parent_session_id],|r|r.get(0)).optional()?;
+            let parent_tier=parent_tier.ok_or(store::Error::NotFound)?;
+            if !matches!(request.mode.as_str(), "queue" | "steer") { return Err(store::Error::Invalid("mode must be queue or steer")) }
             if parent_tier!=2 { return Err(store::Error::Invalid("session_control requires Tier 2")) }
             let key=format!("session_control:{}:{}",request.parent_session_id,request.idempotency_key);
-            let prior:Option<String>=tx.query_row("SELECT payload_json FROM wm_cross_db_intents WHERE op_id=?1",[&key],|r|r.get(0)).optional()?;
+            let prior:Option<String>=tx.query_row(crate::btcc::storage::native_sql::SUBSESSIONS_SERVICE_SESSION_CONTROL_2,[&key],|r|r.get(0)).optional()?;
             if let Some(prior)=prior {
                 let prior:Value=serde_json::from_str(&prior)?;
-                return if at(&prior, "/input")==&input { Ok(at(&prior, "/receipt").clone()) } else { Ok(json!({"ok":false,"error":{"code":"idempotency_conflict"}})) };
+                return if at(&prior, "/input")==&input { Ok(at(&prior, "/receipt").clone()) } else { Ok(store::refusal("conflict",store::conflict("idempotency key reused with different input"))) };
             }
             let current=store::control_epoch(tx,&request.target_session_id)?;
             if current!=request.expected_control_epoch {
-                return Ok(json!({"ok":false,"error":{"code":"conflict","current":{"control_epoch":current}}}));
+                return Ok(json!({"ok":false,"error":{"code":"conflict","message":store::conflict("control epoch changed"),"current":{"control_epoch":current}}}));
             }
             let receipt=match &request.instruction {
                 Instruction::Text { text,.. } if !text.trim().is_empty() => store::admit_instruction(tx,&ctx,&store::SessionInstruction {
@@ -103,7 +103,7 @@ impl SubsessionService {
                     "pause"|"stop" => store::hold_session(tx,&ctx,&request.target_session_id,kind,&request.parent_session_id)?,
                     "resume" => {
                         let id=hold_id.as_deref().ok_or(store::Error::Invalid("hold_id required for resume"))?;
-                        let owned:bool=tx.query_row("SELECT 1 FROM wm_holds WHERE id=?1 AND target=?2 AND owner=?3",params![id,request.target_session_id,request.parent_session_id],|_|Ok(true)).optional()?.unwrap_or(false);
+                        let owned:bool=tx.query_row(crate::btcc::storage::native_sql::SUBSESSIONS_SERVICE_SESSION_CONTROL_3,params![id,request.target_session_id,request.parent_session_id],|_|Ok(true)).optional()?.unwrap_or(false);
                         if !owned { return Err(store::Error::Invalid("hold belongs to another owner")) }
                         store::release_session_hold(tx,&ctx,id,current)?
                     }
@@ -114,8 +114,17 @@ impl SubsessionService {
             store::record_intent(tx,&ctx,&key,"session_control",&json!({"input":input,"receipt":receipt}))?;
             store::mark_intent_applied(tx,&ctx,&key,0)?;
             Ok(receipt)
+            })();
+            match result {
+                Ok(receipt) => {tx.execute_batch("RELEASE session_control")?; Ok(receipt)},
+                Err(error) => {
+                    tx.execute_batch("ROLLBACK TO session_control; RELEASE session_control")?;
+                    store::from_error(&error).ok_or(error)
+                }
+            }
         }).await.map_err(BtccError::from)?;
         if at(&receipt, "/ok") == true {
+            self.notify_execution_changed(&target).await?;
             if control_name.as_deref() == Some("stop") {
                 self.enqueue_cancel(&for_enqueue, &receipt.to_string())
                     .await?;
@@ -126,5 +135,14 @@ impl SubsessionService {
             }
         }
         Ok(receipt)
+    }
+    async fn control_child(
+        &self,
+        request: &SessionControlRequest,
+    ) -> Result<Option<crate::btcc::Child>, BtccError> {
+        self.repository
+            .by_child(request.target_session_id.clone())
+            .await
+            .map_err(BtccError::from)
     }
 }

@@ -31,10 +31,30 @@ pub fn start_task(
         return Err(Error::Running);
     }
     super::task_fields::validate_task_criteria(tx, id)?;
+    let lease = match one(tx, sql::LEASE, [id]) {
+        Ok(lease) => Some(lease),
+        Err(Error::NotFound) => None,
+        Err(error) => return Err(error),
+    };
+    if lease
+        .as_ref()
+        .is_some_and(|lease| lease["session_id"] != scope.session_id)
+    {
+        return Err(Error::Invalid("Task lease belongs to another session"));
+    }
     transition(tx, ctx, id, expected, TaskStatus::Running, false, None)?;
     tx.execute(sql::TASK_OWNER, params![id, scope.session_id])?;
-    insert_attempt(tx, ctx, id, None, scope, attempt_id)?;
-    Ok(json!({"task":read_task(tx,id)?,"attempt_id":attempt_id}))
+    let attempt = if let Some(lease) = lease {
+        tx.execute(
+            sql::CONTINUE_ATTEMPT,
+            params![text(&lease, "id")?, scope.session_id, scope.turn_id],
+        )?;
+        text(&lease, "id")?.to_owned()
+    } else {
+        insert_attempt(tx, ctx, id, None, scope, attempt_id)?;
+        attempt_id.to_owned()
+    };
+    Ok(json!({"task":read_task(tx,id)?,"attempt_id":attempt}))
 }
 fn insert_attempt(
     tx: &Transaction<'_>,
@@ -311,17 +331,9 @@ pub fn block_task(
     checkpoint: Option<&str>,
 ) -> Result<Value> {
     if let Some(id) = part {
-        let row = parts::read_part(tx, id)?;
-        if row["task_id"] != task {
-            return Err(Error::Invalid("part belongs to another Task"));
-        }
-        let lease = one(tx, sql::PART_LEASE, [id])?;
-        if lease["session_id"] != session {
-            return Err(Error::Invalid("part lease belongs to another session"));
-        }
-    } else {
-        task_lease(tx, task, session)?;
+        return block_part(tx, ctx, task, id, session, reason, checkpoint);
     }
+    task_lease(tx, task, session)?;
     // Blocking the Task settles every active part, retaining their checkpoints.
     tx.execute(
         sql::FINISH_TASK_ATTEMPTS,
@@ -344,6 +356,52 @@ pub fn block_task(
         }
     }
     tx.execute(sql::TASK_REASON, params![task, reason])?;
+    let row = read_task(tx, task)?;
+    transition(
+        tx,
+        ctx,
+        task,
+        revision(&row)?,
+        TaskStatus::Blocked,
+        false,
+        None,
+    )
+}
+
+fn block_part(
+    tx: &Transaction<'_>,
+    ctx: &Context,
+    task: &str,
+    id: &str,
+    session: &str,
+    reason: &str,
+    checkpoint: Option<&str>,
+) -> Result<Value> {
+    let row = parts::read_part(tx, id)?;
+    if row["task_id"] != task {
+        return Err(Error::Invalid("part belongs to another Task"));
+    }
+    let lease = one(tx, sql::PART_LEASE, [id])?;
+    if lease["session_id"] != session {
+        return Err(Error::Invalid("part lease belongs to another session"));
+    }
+    tx.execute(
+        sql::FINISH_ATTEMPT,
+        params![text(&lease, "id")?, "interrupted", ctx.now, checkpoint],
+    )?;
+    tx.execute(
+        sql::PART_STATE,
+        params![id, "pending", Option::<&str>::None],
+    )?;
+    event(tx, ctx, "part", id, revision(&row)? + 1, "block")?;
+    tx.execute(sql::TASK_REASON, params![task, reason])?;
+    if parts::task_parts(tx, task)?
+        .iter()
+        .any(|p| p["status"] == "running")
+    {
+        refresh_parts_phase(tx, ctx, task)?;
+        return read_task(tx, task);
+    }
     let row = read_task(tx, task)?;
     transition(
         tx,
