@@ -98,6 +98,9 @@ fn delegated_prompts_preserve_role_and_scope() -> Result<(), Box<dyn std::error:
         "../fixtures/work-model-p14/child-prompts.json"
     ))?;
     let catalog = GuidedCatalogSnapshot::parse(&butler_core::tool_catalog::load()?.to_string())?;
+    let main: Value = serde_json::from_str(include_str!(
+        "../fixtures/work-model-p14/child-tools-main.json"
+    ))?;
     for role in ["steward", "worker"] {
         let mut turn = turn("execution");
         turn.context["executionPolicy"]["role"] = json!(role);
@@ -109,6 +112,33 @@ fn delegated_prompts_preserve_role_and_scope() -> Result<(), Box<dyn std::error:
             operation_replay_flag: "off",
             default_workspace: "/tmp",
         })?;
+        assert_eq!(selected.phase.as_str(), "execution", "{role}");
+        let removed = [
+            "start_work",
+            "continue_work",
+            "replace_work_plan",
+            "record_work_checkpoint",
+            "record_work_review",
+            "record_work_disposition",
+            "update_todo_list",
+        ];
+        let mut expected_names: Vec<String> = main[role]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .filter(|name| !removed.contains(name))
+            .map(str::to_owned)
+            .collect();
+        expected_names.extend(["work_read", "work_apply"].map(str::to_owned));
+        expected_names.sort();
+        let mut actual: Vec<_> = selected
+            .provider_tools
+            .iter()
+            .map(|v| v["name"].as_str().unwrap().to_owned())
+            .collect();
+        actual.sort();
+        assert_eq!(actual, expected_names, "{role} tool names against main");
         assert_eq!(
             selected.stable_instruction_prefix,
             expected[role].as_str().unwrap(),
