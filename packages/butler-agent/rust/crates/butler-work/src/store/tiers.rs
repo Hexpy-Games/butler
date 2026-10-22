@@ -121,7 +121,9 @@ pub fn effects_allowed(db: &Connection, session: &str) -> Result<bool> {
     if row["tier"] == 0 {
         return Ok(true);
     }
-    if row["control_state"] != "running" {
+    if row["control_state"] != "running"
+        || !super::control::next_pending(db, session, true)?.is_empty()
+    {
         return Ok(false);
     }
     let Some(task) = row["current_task_id"].as_str() else {

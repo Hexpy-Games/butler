@@ -33,7 +33,8 @@ pub(super) async fn execute(
             }
         };
         storage.work_model_read(move |db| {
-            match store::tool_read::read(db, &session, &input, 1, false) {
+            let tier=store::bound_work(db,&session,None)?.and_then(|row|row["tier"].as_u64()).and_then(|tier|u8::try_from(tier).ok()).unwrap_or(1);
+            match store::tool_read::read(db, &session, &input, tier, false) {
                 Ok(value) => Ok(value),
                 Err(store::Error::Invalid(message)) => Ok(json!({"ok":false,"error":{"code":"invalid_work_read","message":message}})),
                 Err(store::Error::NotFound) => Ok(json!({"ok":false,"error":{"code":"work_model_not_found","message":"Use an id from work_read view=tasks."}})),
@@ -43,10 +44,23 @@ pub(super) async fn execute(
     } else if call.name == ToolName::WorkApply {
         return apply(owner, invocation, call_id, raw).await;
     } else {
-        return encoded(
-            &json!({"ok":false,"error":{"code":"session_control_unavailable",
-            "message":"session_control is not available yet in this phase."}}),
-        );
+        let mut request: butler_turn::btcc::SessionControlRequest = match serde_json::from_value(
+            raw,
+        ) {
+            Ok(request) => request,
+            Err(error) => {
+                return encoded(
+                    &json!({"ok":false,"error":{"code":"invalid_session_control","message":error.to_string()}}),
+                );
+            }
+        };
+        request.parent_session_id = session;
+        let response = owner
+            .subsessions
+            .session_control(request)
+            .await
+            .map_err(ToolExecutionError::Integrity)?;
+        return encoded(&response);
     };
     match value {
         Ok(value) => encoded(&value),
@@ -94,7 +108,11 @@ async fn apply(
             .as_ref()
             .and_then(|w| w["id"].as_str())
             .map(str::to_owned),
-        tier: 1,
+        tier: work
+            .as_ref()
+            .and_then(|row| row["tier"].as_u64())
+            .and_then(|tier| u8::try_from(tier).ok())
+            .unwrap_or(1),
         planning: false,
         floors: store::tiers::Floors::default(),
         child_session: owner.binding.owner_session_id != owner.binding.source_session_id,

@@ -4412,11 +4412,19 @@
       "definition": {
         "type": "function",
         "name": "delegate_to_steward",
-        "description": "Pass the request unchanged after Plan Review. Runtime derives identity, Composer access, tool grants, workspace, EOL, context, budget and provenance. Child excludes Butler persona, receives immutable project context and bounded parent conversation, and returns a canonical terminal result. Optional safe_title; otherwise the request's first line. Children receive only granted tools. Schedule CRUD: direct Tier 0, including research prompts. For a new request after a prior delegation has closed, start a fresh reviewed Work in this same turn and set previous_relation_id to attach the original request and canonical results. Do not ask the user to restart.",
+        "description": "Pass the request unchanged as a part of the current started Task at Tier 2. Runtime derives identity, Composer access, tool grants, workspace, EOL, context, budget and provenance. Child excludes Butler persona, receives immutable project context and bounded parent conversation, and returns a canonical terminal result. Optional safe_title; otherwise the request's first line. Children receive only granted tools. Schedule CRUD: direct Tier 0, including research prompts. For a new request after a prior delegation has closed, read the owning Task and add or select its next part in this same turn and set previous_relation_id to attach the original request and canonical results. Do not ask the user to restart.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "task_id": {
+              "type": "string",
+              "description": "Ready Task to assign; omit to delegate a part of the current started Task."
+            },
+            "part_id": {
+              "type": "string",
+              "description": "Runnable part of the owning Task to assign."
+            },
             "request": {
               "type": "string",
               "minLength": 1,
@@ -4455,11 +4463,19 @@
       "definition": {
         "type": "function",
         "name": "delegate_to_worker",
-        "description": "Assign one bounded action from the current accepted Steward Plan to a Worker. Include a compact implementation brief with the relevant code, current state, constraints, and intended result. Steward remains responsible for integration, review, validation, and reporting.",
+        "description": "Assign one bounded part of the current started Task at Tier 2 to a Worker. Include a compact implementation brief with the relevant code, current state, constraints, and intended result. Steward remains responsible for integration, review, validation, and reporting.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "task_id": {
+              "type": "string",
+              "description": "Ready Task to assign; omit to delegate a part of the current started Task."
+            },
+            "part_id": {
+              "type": "string",
+              "description": "Runnable part of the owning Task to assign."
+            },
             "action_key": {
               "type": "string",
               "minLength": 1,
@@ -7968,11 +7984,19 @@
     "delegate_to_worker": {
       "type": "function",
       "name": "delegate_to_worker",
-      "description": "Assign one bounded action from the current accepted Steward Plan to a Worker. Include a compact implementation brief with the relevant code, current state, constraints, and intended result. Steward remains responsible for integration, review, validation, and reporting.",
+      "description": "Assign one bounded part of the current started Task at Tier 2 to a Worker. Include a compact implementation brief with the relevant code, current state, constraints, and intended result. Steward remains responsible for integration, review, validation, and reporting.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "task_id": {
+            "type": "string",
+            "description": "Ready Task to assign; omit to delegate a part of the current started Task."
+          },
+          "part_id": {
+            "type": "string",
+            "description": "Runnable part of the owning Task to assign."
+          },
           "action_key": {
             "type": "string",
             "minLength": 1,
@@ -9275,11 +9299,19 @@
     "delegate_to_steward": {
       "type": "function",
       "name": "delegate_to_steward",
-      "description": "After Plan Review, pass the request unchanged. Runtime derives identity, Composer access, grants, workspace, EOL, bounded parent context, budget and provenance; immutable project context, no Butler persona, canonical terminal result. safe_title optional; else from request. Children use only granted tools. Schedule CRUD is direct Tier 0, even for future research. Closed delegation follow-up: create/review fresh Work this Turn; previous_relation_id attaches prior request/results. Never ask for restart.",
+      "description": "At Tier 2, pass the request unchanged as a part of the current started Task. Runtime derives identity, Composer access, grants, workspace, EOL, bounded parent context, budget and provenance; immutable project context, no Butler persona, canonical terminal result. safe_title optional; else from request. Children use only granted tools. Schedule CRUD is direct Tier 0, even for future research. Closed delegation follow-up: read the owning Task and add/select its next part this Turn; previous_relation_id attaches prior request/results. Never ask for restart.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "task_id": {
+            "type": "string",
+            "description": "Ready Task to assign; omit to delegate a part of the current started Task."
+          },
+          "part_id": {
+            "type": "string",
+            "description": "Runnable part of the owning Task to assign."
+          },
           "request": {
             "type": "string",
             "minLength": 1,

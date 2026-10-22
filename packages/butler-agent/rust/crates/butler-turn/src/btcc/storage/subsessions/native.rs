@@ -113,9 +113,67 @@ pub(super) fn result(
     } else {
         "failed"
     };
-    Ok(Some(
-        serde_json::json!({"result_id":format!("result-{attempt}"),"child_turn_id":turn,
-        "status":status,"summary":content["result_refs"].as_array().and_then(|refs|refs.first()).cloned().unwrap_or_else(||serde_json::json!(reason.unwrap_or_default())),
-        "acceptance_evidence":content["evidence_refs"],"created_at":at}),
-    ))
+    let mut projected = serde_json::json!({"result_id":format!("result-{attempt}"),"child_turn_id":turn,
+        "status":status,"summary":content["result_refs"],"acceptance_evidence":content["evidence_refs"],"created_at":at});
+    if let Some(reference) = content["result_refs"]
+        .as_array()
+        .and_then(|refs| refs.first())
+        .and_then(Value::as_str)
+    {
+        let stored: bool = db
+            .query_row(
+                "SELECT 1 FROM wm_spec_bodies WHERE hash=?1",
+                [reference],
+                |_| Ok(true),
+            )
+            .optional()
+            .map_err(StorageError::sqlite)?
+            .unwrap_or(false);
+        projected["summary"] = if stored {
+            serde_json::json!(
+                store::tool_read::body(db, reference)
+                    .map_err(super::super::work_model::work_error)?
+            )
+        } else {
+            serde_json::json!(reference)
+        };
+    } else {
+        projected["summary"] = serde_json::json!(reason.unwrap_or_else(|| {
+            "Delegated work could not continue: child_turn_interrupted.".into()
+        }));
+    }
+    project_saved_delivery(db, &turn, status, &mut projected)?;
+    Ok(Some(projected))
+}
+
+fn project_saved_delivery(
+    db: &rusqlite::Connection,
+    turn: &str,
+    status: &str,
+    projected: &mut Value,
+) -> Result<(), StorageError> {
+    let payload: Option<String> = db
+        .query_row(
+            "SELECT final_payload_json FROM btcc_turns WHERE turn_id=?1",
+            [&turn],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(StorageError::sqlite)?
+        .flatten();
+    if let Some(payload) = payload {
+        let payload: Value = serde_json::from_str(&payload).map_err(invalid)?;
+        if let Some(content) = payload["content"]
+            .as_str()
+            .filter(|content| !content.is_empty())
+        {
+            projected["summary"] = serde_json::json!(content);
+        }
+        if status == "success"
+            && let Some(artifacts) = payload.get("artifacts")
+        {
+            projected["artifacts"] = artifacts.clone();
+        }
+    }
+    Ok(())
 }

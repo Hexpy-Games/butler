@@ -15,6 +15,7 @@ PART_STATE = "UPDATE wm_task_parts SET status=?2,assignee_session_id=coalesce(?3
 REMOVE_PART_EDGES = "DELETE FROM wm_task_part_edges WHERE task_id=?1 AND (pred=?2 OR succ=?2)";
 REMOVE_PART_PREDS = "DELETE FROM wm_task_part_edges WHERE task_id=?1 AND succ=?2";
 INSERT_PART_EDGE = "INSERT INTO wm_task_part_edges(task_id,pred,succ) VALUES(?1,?2,?3)";
+DELEGATED_PART = "SELECT id FROM wm_task_parts WHERE task_id=?1 AND assignee_session_id IS NOT NULL AND assignee_session_id<>?2 LIMIT 1";
 TASK_OWNER = "UPDATE wm_tasks SET assignee_session_id=?2 WHERE id=?1";
 TASK_REASON = "UPDATE wm_tasks SET blocked_reason=?2 WHERE id=?1";
 TASK_COMPLETION = "UPDATE wm_tasks SET completion_revision=?2 WHERE id=?1";

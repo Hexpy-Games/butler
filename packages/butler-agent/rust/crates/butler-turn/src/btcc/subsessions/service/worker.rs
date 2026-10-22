@@ -4,7 +4,6 @@ impl SubsessionService {
     pub async fn delegate_worker(
         &self,
         request: WorkerDelegationRequest,
-        _reviewed: &WorkView,
     ) -> Result<Value, BtccError> {
         let parent = self
             .parent_binding(

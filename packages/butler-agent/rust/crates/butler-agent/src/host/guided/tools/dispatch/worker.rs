@@ -13,40 +13,11 @@ pub(super) async fn execute(
     call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
     let acceptance = acceptance(call)?;
-    let reviewed = owner
-        .work
-        .bound_work()
-        .await
-        .map_err(ToolExecutionError::Integrity)?
-        .ok_or_else(|| {
-            ToolExecutionError::Integrity(BtccError::relayed(
-                "delegation_reviewed_plan_required",
-                "Reviewed parent Work is required",
-            ))
-        })?;
     let result = owner
         .subsessions
-        .delegate_worker(
-            request(owner, &invocation, call, call_id, acceptance)?,
-            &reviewed,
-        )
+        .delegate_worker(request(owner, &invocation, call, call_id, acceptance)?)
         .await
         .map_err(ToolExecutionError::Integrity)?;
-    if let Some(task_id) = result.get("task_id").and_then(Value::as_str) {
-        owner
-            .work_streams
-            .link_worker(
-                crate::host::guided::work_streams::WorkStreamScope {
-                    session_id: owner.binding.source_session_id.clone(),
-                    origin_chat_id: None,
-                    project_id: owner.binding.memory.project_id.clone(),
-                    turn_id: owner.binding.turn_id.clone(),
-                },
-                task_id.to_owned(),
-            )
-            .await
-            .map_err(ToolExecutionError::Integrity)?;
-    }
     encoded(&result)
 }
 
@@ -76,7 +47,22 @@ fn request(
         parent_turn_id: owner.binding.turn_id.clone(),
         anchor_message_id: invocation.turn.original_message_id.clone(),
         source_tool_call_id: call_id.into(),
-        action_key: required("action_key")?,
+        action_key: call
+            .arguments
+            .get("action_key")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .into(),
+        task_id: call
+            .arguments
+            .get("task_id")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        part_id: call
+            .arguments
+            .get("part_id")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
         objective: required("objective")?,
         acceptance_criteria: acceptance,
         implementation_brief: required("implementation_brief")?,

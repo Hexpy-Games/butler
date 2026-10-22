@@ -41,6 +41,9 @@ impl TurnSteeringPort for GuidedSteering {
         invocation: GuidedInvocation<'a>,
     ) -> PortFuture<'a, Vec<SteeringObservation>> {
         Box::pin(async move {
+            self.subsessions
+                .observe_holds(&self.child_session_id, invocation.cancellation)
+                .await?;
             let direction = self
                 .subsessions
                 .consume_direction(&self.child_session_id, &self.child_turn_id)

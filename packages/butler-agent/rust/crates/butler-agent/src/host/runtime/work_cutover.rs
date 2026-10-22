@@ -14,9 +14,20 @@ pub(super) struct CutoverOwner {
     stop: CancellationToken,
     tasks: TaskTracker,
     ready: Arc<tokio::sync::Notify>,
+    subsessions: Arc<std::sync::OnceLock<Arc<butler_turn::btcc::SubsessionService>>>,
     recovery: super::work_recovery::RecoveryOwner,
 }
 impl CutoverOwner {
+    pub(super) async fn bind_subsessions(
+        &self,
+        service: Arc<butler_turn::btcc::SubsessionService>,
+    ) -> Result<(), BtccError> {
+        service
+            .recover_native_assignments(self.recovery.interrupted.as_ref().clone())
+            .await?;
+        let _ = self.subsessions.set(service);
+        Ok(())
+    }
     pub(super) fn ready(&self) -> Arc<tokio::sync::Notify> {
         self.ready.clone()
     }
@@ -49,12 +60,31 @@ pub(super) async fn start(
         tasks: TaskTracker::new(),
         ready: Arc::new(tokio::sync::Notify::new()),
         recovery,
+        subsessions: Arc::new(std::sync::OnceLock::new()),
     };
+    let subsessions = owner.subsessions.clone();
     let stopping = owner.stop.clone();
     let ready = owner.ready.clone();
     owner.tasks.spawn(async move {
         tokio::select! { () = ready.notified() => {}, () = stopping.cancelled() => return }
-        if let Err(error) = run(root, storage, project, stopping.clone()).await {
+        let result = async {
+            run(root, storage.clone(), project, stopping.clone()).await?;
+            let done = storage
+                .work_model_cutover_status()
+                .await
+                .map_err(BtccError::from)?
+                .state
+                == CutoverState::Done;
+            if done
+                && !stopping.is_cancelled()
+                && let Some(service) = subsessions.get()
+            {
+                service.recover_assignments(Vec::new()).await?;
+            }
+            Ok::<(), BtccError>(())
+        }
+        .await;
+        if let Err(error) = result {
             // Codes only: source paths and document contents never reach logs.
             if !stopping.is_cancelled() {
                 butler_core::diagnostic!("[work-cutover] failed code={}", error.code());

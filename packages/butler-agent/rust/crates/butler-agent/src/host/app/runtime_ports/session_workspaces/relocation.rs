@@ -218,7 +218,7 @@ async fn has_open_child(
         pending.extend(
             relations
                 .into_iter()
-                .map(|relation| relation.child_session_id),
+                .map(|relation| relation.child_session_id.clone()),
         );
     }
     Ok(false)

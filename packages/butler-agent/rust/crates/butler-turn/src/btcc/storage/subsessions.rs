@@ -8,6 +8,7 @@ mod directions;
 mod files;
 mod native;
 mod native_completion;
+mod native_recovery;
 mod parents;
 mod records;
 
@@ -268,7 +269,7 @@ impl SqliteSubsessionRepository {
                 .storage
                 .work_model_read(move |db| {
                     let row = if let Some(part) = &assigned.part_id {
-                        butler_work::store::parts::read_part(db, part)?
+                        butler_work::store::read_part(db, part)?
                     } else {
                         butler_work::store::read_task(db, &assigned.task_id)?
                     };
@@ -297,7 +298,7 @@ impl SqliteSubsessionRepository {
                     let task = butler_work::store::read_task(db, &assigned.task_id)
                         .map_err(super::work_model::work_error)?;
                     let open = if let Some(part) = &assigned.part_id {
-                        let part = butler_work::store::parts::read_part(db, part)
+                        let part = butler_work::store::read_part(db, part)
                             .map_err(super::work_model::work_error)?;
                         !matches!(part["status"].as_str(), Some("completed" | "cancelled"))
                     } else {

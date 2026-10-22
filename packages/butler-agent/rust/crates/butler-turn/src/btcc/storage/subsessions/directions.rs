@@ -1,6 +1,6 @@
 //! Native direction receipts; imported legacy rows are never mutated.
 use super::*;
-use butler_work::store::{self, control};
+use butler_work::store;
 
 pub(crate) fn direction_turn_id(id: &str) -> String {
     format!(
@@ -45,13 +45,13 @@ impl SqliteSubsessionRepository {
                 StorageError::new(StorageCode::SubsessionRelationMissing, "Relation missing")
             })?;
         self.storage.work_model_write(move |tx| {
-            let epoch = control::epoch(tx, &child.child_session_id)?;
+            let epoch = store::control_epoch(tx, &child.child_session_id)?;
             let key = format!("parent-direction:{relation}:{source_message}");
-            let receipt = control::admit(tx, &context(), &control::Instruction {
+            let receipt = store::admit_instruction(tx, &context(), &store::SessionInstruction {
                 target: &child.child_session_id, sender: serde_json::json!({"parent":{"session_id":child.parent_session_id,"relation_id":relation,"relation_epoch":0}}),
                 mode: "queue", body: serde_json::json!({"text":instruction}), idempotency_key: &key,
                 expected_control_epoch: epoch, anchor_task: &child.task_id })?;
-            let rows = control::next_pending(tx, &child.child_session_id, false)?;
+            let rows = store::pending_instructions(tx, &child.child_session_id, false)?;
             rows.iter().find(|r| r["id"]==receipt["instruction_id"]).map(|r| direction(r,&relation)).ok_or(store::Error::NotFound)
         }).await
     }
@@ -63,9 +63,11 @@ impl SqliteSubsessionRepository {
         let Some(child) = child else { return Ok(None) };
         self.storage
             .work_model_read(move |db| {
-                Ok(control::next_pending(db, &child.child_session_id, false)?
-                    .first()
-                    .map(|r| direction(r, &relation)))
+                Ok(
+                    store::pending_instructions(db, &child.child_session_id, false)?
+                        .first()
+                        .map(|r| direction(r, &relation)),
+                )
             })
             .await
     }
@@ -76,7 +78,7 @@ impl SqliteSubsessionRepository {
             let mut stmt = db.prepare("SELECT DISTINCT r.relation_id,r.child_session_id FROM btcc_session_relations r JOIN wm_instructions i ON i.target_session_id=r.child_session_id WHERE i.status IN ('waiting_for_task','pending_safe_point')")?;
             let ids = stmt.query_map([],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))?.collect::<rusqlite::Result<Vec<_>>>()?;
             let mut pending=Vec::new();
-            for (relation,child) in ids { pending.extend(control::next_pending(db,&child,false)?.iter().map(|r|direction(r,&relation))); }
+            for (relation,child) in ids { pending.extend(store::pending_instructions(db,&child,false)?.iter().map(|r|direction(r,&relation))); }
             Ok(pending)
         }).await
     }
@@ -98,7 +100,7 @@ impl SqliteSubsessionRepository {
                 let Some(relation) = relation else {
                     return Ok(None);
                 };
-                let pending = control::next_pending(tx, &child, false)?;
+                let pending = store::pending_instructions(tx, &child, false)?;
                 let row = pending.iter().find(|r| {
                     r["mode"] == "steer"
                         || direction_turn_id(r["id"].as_str().unwrap_or_default()) == turn
@@ -107,7 +109,7 @@ impl SqliteSubsessionRepository {
                     let id = row["id"]
                         .as_str()
                         .ok_or(store::Error::Invalid("instruction id"))?;
-                    control::mark_delivered(
+                    store::deliver_instruction(
                         tx,
                         &context(),
                         id,
@@ -115,7 +117,7 @@ impl SqliteSubsessionRepository {
                             .as_str()
                             .ok_or(store::Error::Invalid("status"))?,
                     )?;
-                    control::mark_applied(tx, &context(), id)?;
+                    store::apply_instruction(tx, &context(), id)?;
                     return Ok(Some(direction(row, &relation)));
                 }
                 Ok(None)
@@ -135,9 +137,9 @@ impl SqliteSubsessionRepository {
         self.storage
             .work_model_write(move |tx| {
                 for status in ["waiting_for_task", "pending_safe_point"] {
-                    control::mark_delivered(tx, &context(), &id, status)?;
+                    store::deliver_instruction(tx, &context(), &id, status)?;
                 }
-                control::mark_applied(tx, &context(), &id)?;
+                store::apply_instruction(tx, &context(), &id)?;
                 Ok(true)
             })
             .await

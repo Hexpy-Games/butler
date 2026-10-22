@@ -97,7 +97,7 @@ impl GuidedPreparation {
             butler_turn::btcc::PolicyRole::Worker | butler_turn::btcc::PolicyRole::Steward
         ) {
             self.subsessions
-                .ensure_child_work(&turn.session_id, &turn.turn_id)
+                .ensure_child_assignment(&turn.session_id, &turn.turn_id)
                 .await?;
         } else if policy.role != butler_turn::btcc::PolicyRole::Butler {
             return Err(contract("guided_subsession_role_unsupported"));

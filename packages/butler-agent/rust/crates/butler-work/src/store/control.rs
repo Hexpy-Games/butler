@@ -32,6 +32,15 @@ pub fn admit(tx: &Transaction<'_>, ctx: &Context, input: &Instruction<'_>) -> Re
         Err(error) => return Err(error),
     }
     advance_epoch(tx, input.target, input.expected_control_epoch)?;
+    persist_instruction(tx, ctx, input, &content)
+}
+
+fn persist_instruction(
+    tx: &Transaction<'_>,
+    ctx: &Context,
+    input: &Instruction<'_>,
+    content: &Value,
+) -> Result<Value> {
     let id =
         crate::work_ids::IdGenerator::global_next(crate::work_ids::IdKind::Operation, ctx.now)?;
     let body = put_body(tx, &content.to_string())?;
@@ -156,5 +165,38 @@ pub fn release(
     };
     tx.execute(sql::CONTROL_STATE, params![session, state])?;
     event(tx, ctx, "session", session, epoch, "resume")?;
-    Ok(json!({"ok":true,"hold_id":id,"control_epoch":epoch,"status":"accepted"}))
+    let mut receipt = json!({"ok":true,"hold_id":id,"control_epoch":epoch,"status":"accepted"});
+    if holds.is_empty()
+        && row["kind"] == "stop"
+        && let Some(task) = one(tx, tiers::sql::SESSION, [session])?["current_task_id"].as_str()
+    {
+        receipt["instruction_id"] =
+            resume_instruction(tx, ctx, session, task, id, text(&row, "owner")?, epoch)?;
+    }
+    Ok(receipt)
+}
+
+fn resume_instruction(
+    tx: &Transaction<'_>,
+    ctx: &Context,
+    session: &str,
+    task: &str,
+    hold: &str,
+    owner: &str,
+    epoch: i64,
+) -> Result<Value> {
+    if let Some(pending) = next_pending(tx, session, false)?.first() {
+        return Ok(pending["id"].clone());
+    }
+    let input = Instruction {
+        target: session,
+        sender: json!({"parent":{"session_id":owner}}),
+        mode: "queue",
+        body: json!({"text":"Resume the assigned Task from its retained checkpoint."}),
+        idempotency_key: &format!("resume:{hold}:{epoch}"),
+        expected_control_epoch: epoch - 1,
+        anchor_task: task,
+    };
+    let content = json!({"target":session,"sender":input.sender,"mode":"queue","body":input.body,"anchor_task":task,"control_epoch":epoch});
+    Ok(persist_instruction(tx, ctx, &input, &content)?["instruction_id"].clone())
 }

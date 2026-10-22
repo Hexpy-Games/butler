@@ -7,6 +7,7 @@ mod delegation;
 mod followup;
 mod helpers;
 mod projection;
+mod recovery;
 mod result_delivery;
 mod selection;
 mod session_control;
@@ -25,7 +26,7 @@ use std::sync::Arc;
 use crate::btcc::BtccCode;
 use crate::btcc::{
     BtccError, ChildRole, DispatchIntent, DispatchMetadata, DurableWorkService, ParentResultRoute,
-    PortFuture, SqliteSubsessionRepository, WorkView,
+    PortFuture, SqliteSubsessionRepository,
 };
 use crate::workspace::{OwnOptional, SessionBindingStore, SessionRole, UpsertSessionBinding};
 
@@ -197,7 +198,6 @@ impl SubsessionService {
     pub async fn delegate_steward(
         &self,
         request: StewardDelegationRequest,
-        _reviewed: &WorkView,
     ) -> Result<Value, BtccError> {
         let parent = self
             .parent_binding(

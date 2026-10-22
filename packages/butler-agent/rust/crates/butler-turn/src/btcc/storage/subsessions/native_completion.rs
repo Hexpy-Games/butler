@@ -1,7 +1,7 @@
 //! Result and delivery commit together on the Work writer lane.
 use super::*;
 use crate::btcc::subsessions::assignment::Child;
-use butler_work::store::{self, execution};
+use butler_work::store;
 
 pub(super) fn settle(
     tx: &store::Transaction<'_>,
@@ -9,10 +9,9 @@ pub(super) fn settle(
     completion: &ChildCompletion,
 ) -> store::Result<String> {
     let Child::Assigned(assigned) = child else {
-        return Ok(completion::turn_result_id(
-            &completion.session,
-            &completion.turn,
-        ));
+        let legacy:Option<String>=tx.query_row("SELECT result_id FROM btcc_steward_results WHERE relation_id=?1 AND child_turn_id=?2 ORDER BY created_at DESC LIMIT 1",params![child.relation_id,completion.turn],|r|r.get(0)).optional()?;
+        return Ok(legacy
+            .unwrap_or_else(|| completion::turn_result_id(&completion.session, &completion.turn)));
     };
     let attempt: (String,String,Option<String>) = tx.query_row("SELECT id,status,part_id FROM wm_attempts WHERE task_id=?1 AND session_id=?2 AND turn_id=?3 ORDER BY started_at DESC,id DESC LIMIT 1",
         params![assigned.task_id,completion.session,completion.turn], |r|Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
@@ -53,7 +52,7 @@ fn finish(
     attempt: &str,
     part: Option<&str>,
 ) -> store::Result<()> {
-    let scope = execution::ExecutionScope {
+    let scope = store::ExecutionScope {
         session_id: &completion.session,
         turn_id: &completion.turn,
     };
@@ -64,12 +63,12 @@ fn finish(
     match completion.status.as_str() {
         "success" => {
             let summary = store::put_body(tx, &completion.summary)?;
-            execution::submit_task(
+            store::submit_task(
                 tx,
                 ctx,
                 &child.task_id,
                 &scope,
-                &execution::Submission {
+                &store::Submission {
                     part_id: part,
                     result_id: &format!("submission-{attempt}"),
                     result_refs: &[summary],
@@ -79,9 +78,9 @@ fn finish(
         }
         "failed" => {
             if let Some(part) = part {
-                execution::fail_part(tx, ctx, part, &completion.session, reason)?;
+                store::fail_part(tx, ctx, part, &completion.session, reason)?;
             } else {
-                execution::fail_task(tx, ctx, &child.task_id, &completion.session, reason)?;
+                store::fail_task(tx, ctx, &child.task_id, &completion.session, reason)?;
             }
             tx.execute(
                 "UPDATE wm_attempts SET checkpoint_ref=?2 WHERE id=?1",
@@ -94,7 +93,7 @@ fn finish(
             } else {
                 reason
             };
-            execution::block_task(
+            store::block_task(
                 tx,
                 ctx,
                 &child.task_id,
@@ -107,7 +106,7 @@ fn finish(
                 && let Some(part) = part
             {
                 tx.execute(
-                    execution::sql::PART_STATE,
+                    store::execution_sql::PART_STATE,
                     params![part, "cancelled", Option::<&str>::None],
                 )?;
             }

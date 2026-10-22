@@ -279,77 +279,9 @@ async fn execute(
     delivery: &dyn IngressDelivery,
     subsessions: &butler_turn::btcc::SubsessionService,
 ) -> Result<Executed, super::IngressError> {
-    let (btcc, shutdown) = turn;
     let envelope = Envelope::from_record(&item.record)?;
-    let kind = envelope
-        .control
-        .as_ref()
-        .and_then(|control| control.get("kind"))
-        .and_then(serde_json::Value::as_str);
-    let (binding, outcome) = match kind {
-        None => {
-            let request =
-                bind::bind_and_request(&envelope, bindings, data_root, default_workspace).await?;
-            let session_id = request.session_id.clone();
-            let outcome = super::shutdown::run(btcc, request, shutdown)
-                .await
-                .map_err(|error| turn_error(&error))?;
-            let binding = bindings
-                .get_by_session_id(&session_id)
-                .await
-                .map_err(|source| {
-                    super::IngressError::new(
-                        "session_binding_unavailable",
-                        "Session binding unavailable",
-                    )
-                    .with_source(source)
-                })?
-                .ok_or_else(|| {
-                    super::IngressError::new(
-                        "session_binding_missing",
-                        "Session binding unavailable",
-                    )
-                })?;
-            (binding, outcome)
-        }
-        Some("cancel_turn") => {
-            let binding = bind::existing_control_binding(&envelope, bindings).await?;
-            let turn_id = bind::routed_turn_id(&envelope);
-            if envelope
-                .control
-                .as_ref()
-                .and_then(|value| value.get("turnId"))
-                .and_then(serde_json::Value::as_str)
-                != Some(turn_id)
-            {
-                return Err(super::IngressError::new(
-                    "inbound_control_invalid",
-                    "Cancellation identity mismatch",
-                ));
-            }
-            let outcome = btcc
-                .stop_turn(StopRequest {
-                    turn_id: turn_id.into(),
-                })
-                .await
-                .map_err(|error| turn_error(&error))?;
-            (binding, outcome)
-        }
-        Some("resume_turn") => {
-            let binding = bind::existing_control_binding(&envelope, bindings).await?;
-            let request = bind::control_request(&envelope, &binding)?;
-            let outcome = super::shutdown::run(btcc, request, shutdown)
-                .await
-                .map_err(|error| turn_error(&error))?;
-            (binding, outcome)
-        }
-        Some(_) => {
-            return Err(super::IngressError::new(
-                "inbound_control_unsupported",
-                "Unknown inbound control",
-            ));
-        }
-    };
+    let (binding, outcome) =
+        run::execute(&envelope, turn, bindings, data_root, default_workspace).await?;
     let internal_subsession = matches!(
         binding.role,
         butler_turn::workspace::SessionRole::Worker | butler_turn::workspace::SessionRole::Steward
@@ -369,33 +301,7 @@ async fn execute(
             eligible_turn_id: None,
         });
     }
-    let actions = action::actions(item, &envelope, &binding, &outcome)?;
-    let eligible = match &outcome.result {
-        TurnOutcomeKind::Delivered(value) if value.runtime_failure.is_none() => {
-            Some(value.turn_id.clone())
-        }
-        _ => None,
-    };
-    let mut delivered = 0;
-    let mut final_delivered = false;
-    for action in actions {
-        let final_action = action
-            .pointer("/metadata/kind")
-            .and_then(serde_json::Value::as_str)
-            == Some("final_result");
-        if !trace::deliver(delivery, &binding.session_id, action).await? {
-            return Err(super::IngressError::new(
-                "inbound_delivery_interrupted",
-                "App result delivery unavailable",
-            ));
-        }
-        delivered += 1;
-        final_delivered |= final_action;
-    }
-    Ok(Executed {
-        delivered,
-        eligible_turn_id: final_delivered.then_some(eligible).flatten(),
-    })
+    report::deliver(item, &envelope, &binding, &outcome, delivery, subsessions).await
 }
 
 async fn complete_subsession_child(
@@ -465,6 +371,8 @@ async fn complete_subsession_child(
 
 mod interrupted;
 mod rejected;
+mod report;
+mod run;
 #[cfg(test)]
 mod tests;
 

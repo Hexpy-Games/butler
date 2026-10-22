@@ -40,7 +40,6 @@ enum Job {
     Active(AppWorkStreamQuery, Reply),
     Reconcile(AppWorkStreamTurnOutcome, Reply),
     Prompt(String, Option<String>, Reply),
-    Link(WorkStreamScope, String, &'static str, Reply),
 }
 
 type Reply = oneshot::Sender<Result<Value, BtccError>>;
@@ -79,9 +78,6 @@ impl WorkStreams {
                         }
                         Job::Prompt(session, project, reply) => {
                             (store.prompt_context(&session, project.as_deref()), reply)
-                        }
-                        Job::Link(scope, target_id, field, reply) => {
-                            (store.link(&scope, &target_id, field), reply)
                         }
                     };
                     let _ = reply.send(result);
@@ -156,26 +152,6 @@ impl WorkStreams {
                 .map_err(|_| failure("work_stream_owner_join_failed", "worker panicked"))?;
         }
         Ok(())
-    }
-
-    pub(crate) async fn link_orchestration(
-        &self,
-        scope: WorkStreamScope,
-        relation_id: String,
-    ) -> Result<(), BtccError> {
-        self.submit(|reply| Job::Link(scope, relation_id, "linked_orchestration_ids", reply))
-            .await
-            .map(|_| ())
-    }
-
-    pub(crate) async fn link_worker(
-        &self,
-        scope: WorkStreamScope,
-        task_id: String,
-    ) -> Result<(), BtccError> {
-        self.submit(|reply| Job::Link(scope, task_id, "linked_worker_task_ids", reply))
-            .await
-            .map(|_| ())
     }
 
     pub(crate) async fn prompt_context(

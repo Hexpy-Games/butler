@@ -324,6 +324,14 @@ impl Batch<'_, '_> {
         Ok(())
     }
     fn execute(&mut self, op: &Operation) -> Result<()> {
+        if matches!(op, Operation::Complete { .. } | Operation::Submit { .. })
+            && let Some(instruction) =
+                control::next_pending(self.tx, &self.scope.session_id, true)?.first()
+        {
+            return Err(Error::Conflict {
+                current: json!({"instruction_id":instruction["id"]}),
+            });
+        }
         let (task_id, part_id) = self.execution_target(op)?;
         if matches!(
             op,

@@ -12,6 +12,8 @@ pub(super) fn response(
 ) -> Result<Value> {
     let target = target(op).unwrap_or("unknown");
     let (code, message) = match error {
+        Error::Conflict { current } if current.get("instruction_id").is_some() => (
+            "instruction_pending",format!("Apply pending instruction {} before submitting or completing.",current["instruction_id"])),
         Error::Conflict { current } if current.get("task_graph_revision").is_some() => {
             let n = &current["task_graph_revision"];
             ("stale_task_graph_revision", format!("The Task layout changed after your read (now revision {n}). Call work_read view=tasks, re-plan against the current steps, and resend with expected_task_graph_revision={n}."))

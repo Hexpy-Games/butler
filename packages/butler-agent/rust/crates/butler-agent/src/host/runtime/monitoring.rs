@@ -32,28 +32,35 @@ pub(super) fn open(
 }
 
 /// Compose the two owners from the same durable relation repository.
-pub(super) fn session_usage_services(
-    repository: butler_turn::btcc::SqliteSubsessionRepository,
-    bindings: butler_turn::workspace::SessionBindingStore,
-    queue: Arc<butler_gateway::gateway::InboundQueue>,
+pub(super) async fn session_usage_services(
+    stores: &super::stores::RuntimeStores,
+    data_root: &Path,
     profiles: Arc<dyn butler_turn::btcc::WorkerProfileReader>,
     work: Arc<butler_turn::btcc::DurableWorkService>,
-) -> (
-    Arc<butler_turn::btcc::SubsessionService>,
-    Arc<butler_runtime::operations::UsageLineage>,
-) {
+    cutover: &super::work_cutover::CutoverOwner,
+) -> Result<
+    (
+        Arc<butler_turn::btcc::SubsessionService>,
+        Arc<butler_runtime::operations::UsageLineage>,
+        Arc<butler_gateway::gateway::InboundQueue>,
+    ),
+    butler_turn::btcc::BtccError,
+> {
+    let queue = Arc::new(butler_gateway::gateway::InboundQueue::new(data_root));
+    let repository = butler_turn::btcc::SqliteSubsessionRepository::new(stores.btcc.clone());
     let lineage = Arc::new(butler_runtime::operations::UsageLineage::new(
         repository.clone(),
     ));
     let subsessions = Arc::new(butler_turn::btcc::SubsessionService::new(
         repository,
-        bindings,
-        Arc::new(super::SubsessionQueue(queue)),
+        stores.bindings.clone(),
+        Arc::new(super::SubsessionQueue(queue.clone())),
         profiles,
         work,
         Arc::new(|| {
             butler_models::models::ModelConfigurationClock::now_iso(&super::SystemIdentity)
         }),
     ));
-    (subsessions, lineage)
+    cutover.bind_subsessions(subsessions.clone()).await?;
+    Ok((subsessions, lineage, queue))
 }

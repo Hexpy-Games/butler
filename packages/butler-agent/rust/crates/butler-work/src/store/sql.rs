@@ -54,7 +54,7 @@ APPLY_INTENT = "UPDATE wm_cross_db_intents SET state='applied',revision=revision
 MARKER = "SELECT * FROM wm_runtime_marker WHERE singleton=1";
 BOOT = "INSERT INTO wm_runtime_marker(singleton,boot_id,started_at) VALUES(1,?1,?2) ON CONFLICT(singleton) DO UPDATE SET boot_id=?1,started_at=?2,clean_shutdown_at=NULL";
 CLEAN = "UPDATE wm_runtime_marker SET clean_shutdown_at=?1 WHERE singleton=1 AND boot_id=?2";
-RECOVER_ATTEMPTS = "SELECT a.*,t.work_id FROM wm_attempts a JOIN wm_tasks t ON t.id=a.task_id WHERE a.session_id=?1 AND a.status='running' AND a.recovered_at IS NULL UNION ALL SELECT a.*,t.work_id FROM wm_attempts a JOIN wm_tasks t ON t.id=a.task_id WHERE a.session_id=?1 AND a.status='interrupted' AND a.recovered_at IS NULL ORDER BY started_at,id";
+RECOVER_ATTEMPTS = "SELECT a.*,t.work_id FROM wm_attempts a JOIN wm_tasks t ON t.id=a.task_id WHERE a.session_id=?1 AND a.status='running' AND a.recovered_at IS NULL AND NOT EXISTS(SELECT 1 FROM wm_cross_db_intents i WHERE i.op_id='child_dispatch:'||a.id AND i.state='pending') UNION ALL SELECT a.*,t.work_id FROM wm_attempts a JOIN wm_tasks t ON t.id=a.task_id WHERE a.session_id=?1 AND a.status='interrupted' AND a.recovered_at IS NULL AND NOT EXISTS(SELECT 1 FROM wm_cross_db_intents i WHERE i.op_id='child_dispatch:'||a.id AND i.state='pending') ORDER BY started_at,id";
 INTERRUPT = "UPDATE wm_attempts SET status='interrupted',finished_at=?2,recovered_at=?2,revision=revision+1 WHERE id=?1 AND revision=?3 AND recovered_at IS NULL";
 NODE = "SELECT * FROM wm_spec_nodes WHERE node_id=?1";
 INSERT_NODE = "INSERT INTO wm_spec_nodes(node_id,scope_kind,scope_ref,work_id,parent_node_id,concern_id,visibility,lifecycle,source,created_at,updated_at,created_by) VALUES(?1,?2,?3,?4,?5,?6,?7,'draft','local',?8,?8,?9)";
@@ -67,7 +67,7 @@ NODE_BUMP = "UPDATE wm_spec_nodes SET revision=revision+1,updated_at=?2 WHERE no
 ACTIVATE = "UPDATE wm_spec_nodes SET active_revision=?2,lifecycle='active',revision=revision+1,updated_at=?3 WHERE node_id=?1 AND revision=?4 AND active_revision IS ?5";
 SPEC_STATE = "UPDATE wm_spec_revisions SET state=?3 WHERE node_id=?1 AND revision=?2";
 CONTROL_KEY = "SELECT * FROM wm_instructions WHERE idempotency_key=?1";
-CONTROL_NEXT = "SELECT * FROM wm_instructions WHERE target_session_id=?1 AND status IN ('accepted','waiting_for_turn','waiting_for_task','pending_safe_point') AND (?2=0 OR mode='steer') ORDER BY received_seq,id";
+CONTROL_NEXT = "SELECT * FROM wm_instructions WHERE target_session_id=?1 AND status IN ('accepted','waiting_for_turn','waiting_for_task','pending_safe_point') AND (anchor_kind='task' OR json_extract(sender,'$.origin')='migration') AND (?2=0 OR mode='steer') ORDER BY received_seq,id";
 CONTROL_SEQUENCE = "SELECT coalesce(max(seq),0)+1 AS seq FROM wm_audit";
 CONTROL_INSERT = "INSERT INTO wm_instructions(id,idempotency_key,target_session_id,sender,mode,body_ref,anchor_kind,anchor_id,boundary_seq,status,received_seq) VALUES(?1,?2,?3,?4,?5,?6,'task',?7,?8,?9,?8)";
 CONTROL_EPOCH = "UPDATE wm_session_exec SET control_epoch=control_epoch+1 WHERE session_id=?1 AND control_epoch=?2";

@@ -236,47 +236,6 @@ impl Store {
         Ok(Value::Array(result))
     }
 
-    pub(super) fn link(
-        &mut self,
-        scope: &WorkStreamScope,
-        target_id: &str,
-        field: &'static str,
-    ) -> Result<Value, BtccError> {
-        self.recover_pending()?;
-        if !matches!(field, "linked_orchestration_ids" | "linked_worker_task_ids") {
-            return Err(error("work_stream_link_invalid"));
-        }
-        safe_id(target_id, 120)?;
-        let Some(id) = self.active_for_session(&scope.session_id, &scope.turn_id)? else {
-            return Ok(json!({"linked":false}));
-        };
-        let record = self.mutate(&id, "legacy_link", |current| {
-            let mut record = current.ok_or_else(|| failure("work_stream_not_found", &id))?;
-            let map = record
-                .as_object_mut()
-                .ok_or_else(|| error("work_stream_record_invalid"))?;
-            let mut linked = map
-                .get(field)
-                .and_then(Value::as_array)
-                .cloned()
-                .unwrap_or_default();
-            if !linked.iter().any(|value| value.as_str() == Some(target_id)) {
-                linked.push(json!(target_id));
-                linked.sort_by_key(|value| value.as_str().unwrap_or_default().to_owned());
-            }
-            let generation = map
-                .get("record_generation")
-                .and_then(Value::as_u64)
-                .unwrap_or(1)
-                + 1;
-            map.insert(field.into(), Value::Array(linked));
-            map.insert("updated_at".into(), json!(now_iso()));
-            map.insert("record_generation".into(), json!(generation));
-            Ok(record)
-        })?;
-        Ok(json!({"linked":true,"work_stream":record}))
-    }
-
     pub(super) fn records(&self) -> Result<Vec<Value>, BtccError> {
         let directory = self.root.join(butler_platform::data_paths::WORK_STREAMS);
         let mut records = Vec::new();

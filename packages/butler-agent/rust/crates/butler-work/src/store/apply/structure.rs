@@ -158,6 +158,7 @@ impl Batch<'_, '_> {
             .spec_ref
             .as_ref()
             .ok_or(Error::Invalid("spec_ref required"))?;
+        let spec = self.resolve_spec(spec)?;
         let id = self.id(IdKind::Task)?;
         let after = after.map(|id| self.task(id)).transpose()?;
         let chain = after

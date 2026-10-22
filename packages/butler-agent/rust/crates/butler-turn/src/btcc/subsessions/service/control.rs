@@ -69,6 +69,18 @@ impl SubsessionService {
         &self,
         child_session: &str,
     ) -> Result<(), BtccError> {
+        let target = child_session.to_owned();
+        let held = self
+            .repository
+            .storage()
+            .work_model_read(move |db| {
+                Ok(!butler_work::store::active_session_holds(db, &target)?.is_empty())
+            })
+            .await
+            .map_err(BtccError::from)?;
+        if held {
+            return Ok(());
+        }
         let Some(relation) = self
             .repository
             .by_child(child_session.to_owned())
@@ -262,7 +274,7 @@ impl SubsessionService {
             .repository
             .storage()
             .work_model_write(move |tx| {
-                butler_work::store::control::hold(
+                butler_work::store::hold_session(
                     tx,
                     &super::admission::context(),
                     &target,

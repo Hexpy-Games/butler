@@ -115,6 +115,14 @@ impl SubsessionService {
 
     /// The App projection of a session's subsessions.
     pub async fn app_projection(&self, session_id: &str) -> Result<Value, BtccError> {
+        if let Some(unresolved) = self
+            .repository
+            .unresolved_projection(session_id.into())
+            .await
+            .map_err(BtccError::from)?
+        {
+            return Ok(unresolved);
+        }
         let relations = self
             .repository
             .projection_relations(session_id.into())

@@ -21,7 +21,7 @@ pub struct NewPart<'a> {
     pub after_part_ids: &'a [String],
 }
 pub fn add_part(tx: &Transaction<'_>, ctx: &Context, input: &NewPart<'_>) -> Result<Value> {
-    editable_task(tx, input.task_id)?;
+    let task = editable_task(tx, input.task_id)?;
     let all = task_parts(tx, input.task_id)?;
     let last = all.last().and_then(|p| p["part_rank"].as_str());
     // Part order is append-only. Imported ranks need not use the fractional
@@ -43,6 +43,15 @@ pub fn add_part(tx: &Transaction<'_>, ctx: &Context, input: &NewPart<'_>) -> Res
     write_predecessors(tx, input.task_id, input.id, input.after_part_ids)?;
     touch_task(tx, ctx, input.task_id)?;
     event(tx, ctx, "part", input.id, 0, "add")?;
+    let work = read_work(tx, text(&task, "work_id")?)?;
+    super::queue::bump_work(
+        tx,
+        ctx,
+        text(&work, "id")?,
+        work["task_graph_revision"]
+            .as_i64()
+            .ok_or(Error::Invalid("revision"))?,
+    )?;
     read_part(tx, input.id)
 }
 pub fn edit_part(

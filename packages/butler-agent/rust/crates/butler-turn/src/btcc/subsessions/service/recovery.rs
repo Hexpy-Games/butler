@@ -1,0 +1,94 @@
+//! Startup replay is driven by durable intents, attempts and read-only imports.
+use super::*;
+use crate::btcc::Child;
+
+impl SubsessionService {
+    pub async fn recover_assignments(&self, interrupted: Vec<Value>) -> Result<(), BtccError> {
+        self.recover_native_assignments(interrupted).await?;
+        for child in self
+            .repository
+            .recover_legacy_assignments()
+            .await
+            .map_err(BtccError::from)?
+        {
+            self.ensure_child_binding(&child).await?;
+            self.replay(&child).await?;
+        }
+        self.repository
+            .recover_legacy_results()
+            .await
+            .map_err(BtccError::from)?;
+        self.recover_directions().await?;
+        self.deliver_worker_results().await
+    }
+
+    pub async fn recover_native_assignments(
+        &self,
+        interrupted: Vec<Value>,
+    ) -> Result<(), BtccError> {
+        self.replay_pending_assignments().await?;
+        for attempt in interrupted {
+            let Some(session) = attempt["session_id"].as_str() else {
+                continue;
+            };
+            if self
+                .repository
+                .by_child(session.into())
+                .await
+                .map_err(BtccError::from)?
+                .is_some()
+            {
+                let turn = attempt["turn_id"]
+                    .as_str()
+                    .ok_or_else(|| error(BtccCode::SubsessionDispatchIntentInvalid))?;
+                self.complete_failed_child(session, turn, "child_turn_interrupted")
+                    .await?;
+            }
+        }
+        self.recover_directions().await?;
+        self.deliver_worker_results().await
+    }
+
+    pub(super) async fn replay_pending_assignments(&self) -> Result<(), BtccError> {
+        let mut after = String::new();
+        loop {
+            let cursor = after.clone();
+            let intents = self
+                .repository
+                .storage()
+                .work_model_read(move |db| butler_work::store::pending_intents(db, &cursor, 100))
+                .await
+                .map_err(BtccError::from)?;
+            if intents.is_empty() {
+                return Ok(());
+            }
+            for intent in intents {
+                after = intent["op_id"].as_str().unwrap_or_default().into();
+                if intent["kind"] != "child_dispatch" {
+                    continue;
+                }
+                let payload: Value =
+                    serde_json::from_str(intent["payload_json"].as_str().unwrap_or_default())
+                        .map_err(|e| {
+                            error(BtccCode::SubsessionDispatchIntentInvalid).with_source(e)
+                        })?;
+                let Some(session) = payload
+                    .pointer("/delegation/child_session_id")
+                    .and_then(Value::as_str)
+                else {
+                    return Err(error(BtccCode::SubsessionDispatchIntentInvalid));
+                };
+                if let Some(Child::Assigned(stored)) = self
+                    .repository
+                    .by_child(session.into())
+                    .await
+                    .map_err(BtccError::from)?
+                {
+                    let child = Child::Assigned(stored);
+                    self.ensure_child_binding(&child).await?;
+                    self.replay(&child).await?;
+                }
+            }
+        }
+    }
+}

@@ -89,7 +89,10 @@ fn activity_child(
     r: &crate::btcc::subsessions::assignment::Child,
 ) -> Result<serde_json::Value, StorageError> {
     use rusqlite::OptionalExtension;
-    let result: Option<String>=db.query_row("SELECT status FROM btcc_steward_results WHERE relation_id=?1 ORDER BY created_at DESC LIMIT 1",[&r.relation_id],|row|row.get(0)).optional().map_err(StorageError::sqlite)?;
+    let result=match super::native::result(db,&r.relation_id)? {
+        Some(result)=>result["status"].as_str().map(str::to_owned),
+        None=>db.query_row("SELECT status FROM btcc_steward_results WHERE relation_id=?1 ORDER BY created_at DESC LIMIT 1",[&r.relation_id],|row|row.get::<_,String>(0)).optional().map_err(StorageError::sqlite)?,
+    };
     let latest: Option<String> = db
         .query_row(
             "SELECT semantic_state FROM btcc_turns WHERE session_id=?1 ORDER BY rowid DESC LIMIT 1",

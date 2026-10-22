@@ -15,12 +15,17 @@ impl SqliteSubsessionRepository {
             .execute(move |db| {
                 let mut statement = db
                     .prepare_cached(
-                        "SELECT t.final_payload_json FROM btcc_session_relations r \
+                        "SELECT t.final_payload_json,x.created_at AS at,x.result_id AS identity FROM btcc_session_relations r \
                  JOIN btcc_steward_results x ON x.relation_id=r.relation_id \
                  JOIN btcc_turns t ON t.turn_id=x.child_turn_id \
                  WHERE r.parent_session_id=?1 AND x.status<>'cancelled' \
                  AND (x.result_id=?2 OR (?3 AND r.activity_role='worker')) \
-                 ORDER BY x.created_at,x.result_id",
+                 UNION ALL SELECT t.final_payload_json,strftime('%Y-%m-%dT%H:%M:%fZ',a.finished_at/1000.0,'unixepoch'), 'result-'||a.id \
+                 FROM btcc_session_relations r JOIN wm_session_exec s ON s.session_id=r.child_session_id \
+                 JOIN wm_attempts a ON a.task_id=s.current_task_id AND a.session_id=r.child_session_id \
+                 JOIN btcc_turns t ON t.turn_id=a.turn_id \
+                 WHERE r.parent_session_id=?1 AND a.status='succeeded' \
+                 AND ('result-'||a.id=?2 OR (?3 AND r.activity_role='worker')) ORDER BY at,identity",
                     )
                     .map_err(StorageError::sqlite)?;
                 let rows = statement

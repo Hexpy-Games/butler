@@ -47,8 +47,8 @@ use butler_turn::btcc::{
     BtccError, BtccRepositories, ContextCompactionRepository, DefaultTurnPreparation,
     GuidedContinuationBudgetFactory, HostDependencies, ModelRouteRetryConfig,
     OperationResultRepository, PortFuture, PrincipalAuthority, ProductionAgentLoop,
-    SqliteSubsessionRepository, StorageEffectJournal, StorageProgressPublication,
-    ToolJournalRepository, TurnFacadeDependencies, TurnModelExecutionFactory,
+    StorageEffectJournal, StorageProgressPublication, ToolJournalRepository,
+    TurnFacadeDependencies, TurnModelExecutionFactory,
 };
 use butler_turn::workspace::{
     Commands, SessionWorkspaceRecovery, SessionWorktrees, WorkspaceFiles, WorkspaceMutations,
@@ -265,14 +265,14 @@ impl AgentRuntime {
         .await?;
         let (session_worktrees, workspace_recovery) =
             owners::workspace_services(&stores, &commands, &files, &host_environment, &paths);
-        let inbound_queue = Arc::new(butler_gateway::gateway::InboundQueue::new(&paths.data_root));
-        let (subsessions, usage_lineage) = monitoring::session_usage_services(
-            SqliteSubsessionRepository::new(stores.btcc.clone()),
-            stores.bindings.clone(),
-            inbound_queue.clone(),
+        let (subsessions, usage_lineage, inbound_queue) = monitoring::session_usage_services(
+            &stores,
+            &paths.data_root,
             worker_profiles,
             work_service.clone(),
-        );
+            &work_cutover,
+        )
+        .await?;
         let restart_tool_journal =
             Arc::new(ToolJournalRepository::new(stores.btcc.clone(), now.clone()));
         let restart_effect_journal = Arc::new(StorageEffectJournal::new(stores.btcc.clone(), now));

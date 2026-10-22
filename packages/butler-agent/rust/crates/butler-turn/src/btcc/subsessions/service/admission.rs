@@ -102,6 +102,10 @@ fn assign(
     now: &str,
     task: Option<&str>,
 ) -> store::Result<Child> {
+    let attempt = format!("attempt-{}", ids.delegation_id);
+    if let Some(child) = existing_assignment(tx, &attempt)? {
+        return Ok(child);
+    }
     let ctx = context();
     let (task, part) = resolve_target(tx, &ctx, &input, task, &ids)?;
     let task_row = store::read_task(tx, &task)?;
@@ -110,16 +114,15 @@ fn assign(
         return Err(store::Error::Invalid("assignment outside parent Work"));
     }
     store::tiers::delegation_floor(tx, work)?;
-    let attempt = format!("attempt-{}", ids.delegation_id);
-    let child = store::execution::ExecutionScope {
+    let child = store::ExecutionScope {
         session_id: &ids.child_session_id,
         turn_id: &ids.child_turn_id,
     };
     if let Some(part) = &part {
-        let revision = store::parts::read_part(tx, part)?["revision"]
+        let revision = store::read_part(tx, part)?["revision"]
             .as_i64()
             .ok_or(store::Error::Invalid("revision"))?;
-        store::execution::assign_part(
+        store::assign_part(
             tx,
             &ctx,
             part,
@@ -132,11 +135,41 @@ fn assign(
         let revision = task_row["revision"]
             .as_i64()
             .ok_or(store::Error::Invalid("revision"))?;
-        store::execution::assign_task(tx, &ctx, &task, revision, &child, &attempt)?;
+        store::assign_task(tx, &ctx, &task, revision, &child, &attempt)?;
     }
     store::tiers::admit(tx, &ctx, &ids.child_session_id, work, 2, "delegated")?;
     store::tiers::bind_started_task(tx, &ids.child_session_id, &task)?;
     persist(tx, &input, &parent, &ids, &now, work, &task, part, &attempt)
+}
+
+fn existing_assignment(tx: &store::Transaction<'_>, attempt: &str) -> store::Result<Option<Child>> {
+    let payload: Option<String> = tx
+        .query_row(
+            "SELECT payload_json FROM wm_cross_db_intents WHERE op_id=?1",
+            [format!("child_dispatch:{attempt}")],
+            |r| r.get(0),
+        )
+        .optional()?;
+    let Some(payload) = payload else {
+        return Ok(None);
+    };
+    let payload: Value = serde_json::from_str(&payload)?;
+    let delegation: StoredSubsessionDelegation =
+        serde_json::from_value(payload["delegation"].clone())?;
+    let (task_id, part_id): (String, Option<String>) = tx.query_row(
+        "SELECT task_id,part_id FROM wm_attempts WHERE id=?1",
+        [attempt],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )?;
+    let work = store::read_task(tx, &task_id)?;
+    let work_id = string(&work, "work_id")?.into();
+    Ok(Some(Child::Assigned(ChildAssignment {
+        delegation,
+        task_id,
+        part_id,
+        work_id,
+        attempt_id: attempt.into(),
+    })))
 }
 
 fn resolve_target(
@@ -147,7 +180,7 @@ fn resolve_target(
     ids: &delegation::DelegationIds,
 ) -> store::Result<(String, Option<String>)> {
     if let Some(part) = &input.part_id {
-        let row = store::parts::read_part(tx, part)?;
+        let row = store::read_part(tx, part)?;
         let task = string(&row, "task_id")?.to_owned();
         if input.task_id.as_ref().is_some_and(|id| *id != task) {
             return Err(store::Error::Invalid("part belongs to another Task"));
@@ -159,10 +192,10 @@ fn resolve_target(
     }
     let task = current.ok_or(store::Error::Invalid("delegation_task_required"))?;
     let part = format!("part-{}", ids.delegation_id);
-    store::parts::add_part(
+    store::add_part(
         tx,
         ctx,
-        &store::parts::NewPart {
+        &store::NewPart {
             id: &part,
             task_id: task,
             kind: TaskKind::Execute,
@@ -259,7 +292,7 @@ fn packet(
     task: &str,
 ) -> store::Result<SubsessionPacket> {
     let criteria = tx
-        .prepare(store::execution::sql::CRITERIA)?
+        .prepare(store::execution_sql::CRITERIA)?
         .query_map([task], |r| {
             Ok((
                 r.get::<_, String>(0)?,

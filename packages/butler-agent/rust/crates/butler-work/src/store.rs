@@ -13,6 +13,18 @@ pub use task_placement::*;
 pub mod apply;
 pub mod control;
 pub mod execution;
+pub use control::{
+    Instruction as SessionInstruction, active_holds as active_session_holds,
+    admit as admit_instruction, epoch as control_epoch, hold as hold_session,
+    mark_applied as apply_instruction, mark_delivered as deliver_instruction,
+    next_pending as pending_instructions, release as release_session_hold,
+};
+pub use execution::sql as execution_sql;
+pub use execution::{
+    ExecutionScope, Submission, assign_part, assign_task, block_task, fail_part, fail_task,
+    report_task, start_task, submit_task,
+};
+pub use parts::{NewPart, add_part, read_part};
 mod holds;
 pub mod parts;
 mod queue;
