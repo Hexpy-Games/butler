@@ -44,10 +44,10 @@ fn work_error(error: store::Error) -> StorageError {
         store::Error::ConversationOccupied => "conversation_occupied",
         store::Error::CrossChat => "cross_chat",
         store::Error::Invalid(_) | store::Error::Chain(_) => "work_model_invalid",
-        store::Error::Json(_) | store::Error::BodyCodec(_) | store::Error::Id(_) => {
-            "work_model_internal"
-        }
-        store::Error::Sqlite(_) => unreachable!("handled above"),
+        store::Error::Json(_)
+        | store::Error::BodyCodec(_)
+        | store::Error::Id(_)
+        | store::Error::Sqlite(_) => "work_model_internal",
     };
     // Preserve the typed error, including Conflict.current, for the API layer.
     StorageError::Port {

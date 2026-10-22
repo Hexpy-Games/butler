@@ -37,7 +37,7 @@ pub(super) fn execute(
                         .await?
                 }
                 Canon | CreatePlan | CreateEpic | BacklogOrder => request.id.clone(),
-                Queue => unreachable!("handled above"),
+                Queue => return Err(GatewayApplicationError::internal()),
             };
             let exists = app
                 .storage
