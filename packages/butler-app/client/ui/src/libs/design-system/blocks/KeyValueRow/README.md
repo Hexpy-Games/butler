@@ -20,8 +20,10 @@ Pass display-ready label, value, description, meta, or swatch nodes.
   hatch on `swatchColor`:
   `repeating-linear-gradient(135deg, c 0 2px, color-mix(in srgb, c var(--hatch-alpha), transparent) 2px 4px)`.
 - `onHighlightChange(highlighted)`: links the row to a chart as its legend.
-  The row becomes one tab stop and reports mouse hover and keyboard focus
-  (`true`) and their end (`false`); the caller maps it to the chart, e.g.
+  The row becomes one tab stop, a group named by its label and value, and
+  reports mouse hover and keyboard (`:focus-visible`) focus (`true`) and their
+  end (`false`); a click alone leaves no highlight once the pointer leaves.
+  The caller maps it to the chart, e.g.
   `UsageBars emphasis`. It draws the shared focus ring with
   `--focus-ring-room` of clear space.
 
