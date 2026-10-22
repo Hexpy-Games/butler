@@ -1,4 +1,4 @@
-import { configureWebIdentity } from "./identity.mjs";
+import { configureWebSession } from "./identity.mjs";
 import { BrowserWindow, session } from "electron";
 import { guardUrl } from "./guard.mjs";
 import { settle } from "./observe.mjs";
@@ -55,7 +55,7 @@ export async function renderReader(args) {
   const timeout = setTimeout(() => { if (!host.isDestroyed()) host.destroy(); }, wait);
   try {
     await new Promise(resolve => setTimeout(resolve, 0));
-    await configureWebIdentity(contents);
+    await configureWebSession(profile);
     // Register before navigation: loadURL waits for all load-blocking resources,
     // while DOM readiness proves the complete document was parsed.
     await waitForDocument(contents, args.url);
