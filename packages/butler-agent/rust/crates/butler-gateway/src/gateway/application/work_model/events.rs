@@ -83,6 +83,10 @@ async fn drain(
         port.published(seqs).await?;
         // App append + receipt commit together. Keep receipts until BTCC has
         // durably acknowledged: replay after a crash cannot append twice.
+        // A crash before App commit leaves no event or receipt. A crash after
+        // that commit but before published() replays through the receipt.
+        // After published() commits, pruning is safe: BTCC no longer returns
+        // those rows. A failed prune is retried before advancing the drain.
         cursor.after = last;
         cursor.prune = Some(last);
     }
