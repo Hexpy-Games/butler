@@ -43,6 +43,7 @@ impl Drop for Pressure {
     }
 }
 
+// test-category: race
 #[test]
 fn sustained_writes_bound_active_wal_under_cpu_and_io_pressure()
 -> Result<(), butler_e2e::e2e::HarnessError> {
@@ -51,14 +52,25 @@ fn sustained_writes_bound_active_wal_under_cpu_and_io_pressure()
     LAST.store(0, SeqCst);
     MAX.store(0, SeqCst);
     RESTARTS.store(0, SeqCst);
+    INLINE.store(0, SeqCst);
+    FINISHES.store(0, SeqCst);
     let store = Store::new();
     let pressure = Pressure::start(&store.path.with_extension("pressure"));
     let owner = store.worker();
+    owner.lane_busy();
     let mut peak = 0;
+    let mut transaction_frames = 0;
     let mut timings = Vec::with_capacity(20_000);
     for _ in 0..20_000 {
         let started = Instant::now();
+        let previous = LAST.load(SeqCst);
         store.insert();
+        let current = LAST.load(SeqCst);
+        transaction_frames = transaction_frames.max(if current > previous {
+            current - previous
+        } else {
+            current
+        });
         timings.push(started.elapsed().as_micros());
         peak = peak.max(store.bytes());
     }
@@ -67,8 +79,10 @@ fn sustained_writes_bound_active_wal_under_cpu_and_io_pressure()
     store.counts(20_000);
     timings.sort_unstable();
     eprintln!(
-        "sustained WAL: commits=20000 peak_bytes={peak} restarts={} \
+        "sustained WAL: commits=20000 peak_bytes={peak} peak_frames={} inline={} restarts={} \
         commit_us p50={} p99={} max={}",
+        MAX.load(SeqCst),
+        INLINE.load(SeqCst),
         RESTARTS.load(SeqCst),
         timings[9999].midpoint(timings[10000]),
         timings[19799],
@@ -76,5 +90,15 @@ fn sustained_writes_bound_active_wal_under_cpu_and_io_pressure()
     );
     assert!(peak <= JOURNAL_LIMIT, "active sustained WAL grew to {peak}");
     assert!(RESTARTS.load(SeqCst) > 0);
+    assert_eq!(
+        FINISHES.load(SeqCst),
+        0,
+        "continuous writes never report idle"
+    );
+    assert!(
+        MAX.load(SeqCst) <= 4 * 1000 + transaction_frames,
+        "ceiling exceeded one transaction: {} + {transaction_frames}",
+        MAX.load(SeqCst)
+    );
     Ok(())
 }

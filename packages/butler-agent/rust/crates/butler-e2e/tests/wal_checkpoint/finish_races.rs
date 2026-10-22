@@ -1,90 +1,89 @@
-//! Deterministic writer/maintenance interleavings at pass start and backfill.
+//! A stalled background finish cannot delay sub-ceiling writer commits.
 use super::*;
-use std::sync::atomic::AtomicBool;
+use std::time::Instant;
 
-static PAUSE_START: AtomicBool = AtomicBool::new(false);
-
-fn pause_pass(event: sqlite::CheckpointEvent) {
-    current_reader::pin_current_snapshot(event);
-    let should_pause = if PAUSE_START.load(SeqCst) {
-        matches!(event, sqlite::CheckpointEvent::Started)
-    } else {
-        matches!(
-            event,
-            sqlite::CheckpointEvent::Checkpointed { inline: false, .. }
-        )
-    };
-    if should_pause {
-        let pause = PAUSE.lock().unwrap().take();
-        if let Some((arrived, resume)) = pause {
-            arrived.send(()).unwrap();
-            let _ = resume.recv();
-        }
-    }
-}
-
-fn pause_next(start: bool) -> (mpsc::Receiver<()>, mpsc::SyncSender<()>) {
-    PAUSE_START.store(start, SeqCst);
-    let (arrived, paused) = mpsc::sync_channel(1);
-    let (resume, release) = mpsc::sync_channel(1);
-    *PAUSE.lock().unwrap() = Some((arrived, release));
-    (paused, resume)
-}
-
-fn run_race(pause_at_start: bool) {
+fn run_race(pin_finish: bool) {
     let _serial = SERIAL.lock().unwrap();
     FINISHES.store(0, SeqCst);
     PASSES.store(0, SeqCst);
     let store = Store::new();
     READER.with(|reader| *reader.borrow_mut() = Some(sqlite::open(&store.path).unwrap()));
-    let (first, resume) = pause_next(false);
-    let owner = sqlite::CheckpointOwner::start(&store.db, "test", Some(pause_pass))
+    let (arrived, backfilled) = mpsc::sync_channel(1);
+    let (resume, paused) = mpsc::sync_channel(1);
+    *PAUSE.lock().unwrap() = Some((arrived, paused));
+    let owner = sqlite::CheckpointOwner::start(&store.db, "test", Some(pause_after_backfill))
         .unwrap()
         .unwrap();
     let release = resume;
+    owner.lane_busy();
     store.insert_many(1100);
-    first.recv_timeout(Duration::from_secs(5)).unwrap();
-    // Queue another threshold before the first pass publishes finish_pending.
-    store.insert_many(1100);
-    let (second, resume) = pause_next(pause_at_start);
+    backfilled.recv_timeout(Duration::from_secs(5)).unwrap();
+    let (log, done) = frames(&store.path);
+    assert_eq!(log, done);
+    store.insert();
+    assert!(frames(&store.path).0 > log);
+    READER.with(|reader| {
+        assert!(reader.borrow_mut().take().unwrap().is_autocommit());
+    });
+    let (stalled, waiting) = mpsc::sync_channel(1);
+    let (unstall, resume_finish) = mpsc::sync_channel(1);
+    owner.stall_next_finish(move || {
+        stalled.send(()).unwrap();
+        let _ = resume_finish.recv();
+    });
+    // Declare after owner, so panic drops the release channel before joining.
+    let release_finish = unstall;
+    if pin_finish {
+        // The finish can copy the tail, but this read mark prevents reset.
+        let reader = sqlite::open(&store.path).unwrap();
+        reader
+            .execute_batch("BEGIN; SELECT * FROM t LIMIT 1")
+            .unwrap();
+        READER.with(|slot| *slot.borrow_mut() = Some(reader));
+    }
+    owner.lane_idle();
     release.send(()).unwrap();
-    let release = resume;
-    second.recv_timeout(Duration::from_secs(5)).unwrap();
+    waiting.recv_timeout(Duration::from_secs(5)).unwrap();
     assert_eq!(FINISHES.load(SeqCst), 0);
+    owner.lane_busy();
     let (committed, returned) = mpsc::sync_channel(1);
-    // Always release the paused worker, including on regression or panic.
     let watchdog = std::thread::spawn(move || {
-        let returned = returned.recv_timeout(Duration::from_secs(2)).is_ok();
-        let _ = release.send(());
+        let returned = returned.recv_timeout(Duration::from_secs(5)).is_ok();
+        let _ = release_finish.send(());
         returned
     });
-    store.insert();
-    let expected = usize::from(pause_at_start);
-    let finishes = FINISHES.load(SeqCst);
-    let (finished, completion) = mpsc::sync_channel(1);
-    *FINISHED.lock().unwrap() = Some(finished);
+    let mut maximum = Duration::ZERO;
+    for _ in 0..5 {
+        let started = Instant::now();
+        store.insert();
+        maximum = maximum.max(started.elapsed());
+        assert_eq!(FINISHES.load(SeqCst), 0, "finish released before commit");
+    }
+    let raced = frames(&store.path);
+    if pin_finish {
+        assert!(raced.0 > raced.1, "commits must race the finish's snapshot");
+        READER.with(|reader| reader.borrow_mut().take());
+    }
     let _ = committed.send(());
-    assert!(
-        watchdog.join().unwrap(),
-        "commit waited for paused maintenance"
-    );
-    assert_eq!(finishes, expected);
-    completion.recv_timeout(Duration::from_secs(5)).unwrap();
-    assert_eq!(PASSES.load(SeqCst), 2);
-    // Mid-pass skip must re-arm once; a finish after the start snapshot must not.
-    store.insert();
-    assert_eq!(FINISHES.load(SeqCst), 1);
-    store.insert();
-    assert_eq!(FINISHES.load(SeqCst), 1, "second finish for the same pass");
+    assert!(watchdog.join().unwrap(), "commit waited for stalled finish");
+    // Another idle report cannot re-arm a consumed finish, even for a raced tail.
+    owner.lane_idle();
     owner.close().unwrap();
-    store.counts(2203);
-    READER.with(|reader| reader.borrow_mut().take());
+    assert_eq!(FINISHES.load(SeqCst), 1);
+    assert_eq!(PASSES.load(SeqCst), 2, "one pass plus one finish, no chain");
+    if pin_finish {
+        assert_eq!(frames(&store.path), raced, "raced finish was re-armed");
+    }
+    store.counts(1106);
+    eprintln!(
+        "stalled finish: commits=5 max_commit_us={} pinned={pin_finish}",
+        maximum.as_micros()
+    );
 }
 
 // test-category: race
 #[test]
-fn finish_skips_busy_worker_without_waiting_for_commit() -> Result<(), butler_e2e::e2e::HarnessError>
-{
+fn stalled_finish_does_not_block_writer_commit() -> Result<(), butler_e2e::e2e::HarnessError> {
     butler_e2e::gate!();
     run_race(false);
     Ok(())
@@ -92,8 +91,7 @@ fn finish_skips_busy_worker_without_waiting_for_commit() -> Result<(), butler_e2
 
 // test-category: race
 #[test]
-fn pass_completed_after_writer_finish_does_not_rearm() -> Result<(), butler_e2e::e2e::HarnessError>
-{
+fn raced_idle_finish_is_not_rearmed() -> Result<(), butler_e2e::e2e::HarnessError> {
     butler_e2e::gate!();
     run_race(true);
     Ok(())

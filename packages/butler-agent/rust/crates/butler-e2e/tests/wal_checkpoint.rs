@@ -46,6 +46,7 @@ static MAX_PASS_US: AtomicU64 = AtomicU64::new(0);
 type Pause = (mpsc::SyncSender<()>, mpsc::Receiver<()>);
 static PAUSE: Mutex<Option<Pause>> = Mutex::new(None);
 static FINISHED: Mutex<Option<mpsc::SyncSender<()>>> = Mutex::new(None);
+static INLINE: AtomicUsize = AtomicUsize::new(0);
 static FINISHES: AtomicUsize = AtomicUsize::new(0);
 thread_local! {
     static READER: RefCell<Option<sqlite::Connection>> = const { RefCell::new(None) };
@@ -62,7 +63,7 @@ fn pause_before_finish_pending(event: sqlite::CheckpointEvent) {
 fn pause_backfill(event: sqlite::CheckpointEvent, before_pending: bool) {
     if matches!(event, sqlite::CheckpointEvent::WalCommitted(_)) {
         // Pin the first committed snapshot through the next write, preventing
-        // reset. Release it inside that commit's hook so the writer can
+        // reset. Release it inside that commit's hook so idle maintenance can
         // finish the small tail once finish_pending has been published.
         READER.with(|reader| {
             let reader = reader.borrow();
@@ -103,6 +104,9 @@ fn observe(event: sqlite::CheckpointEvent) {
     match event {
         sqlite::CheckpointEvent::Checkpointed { finish: true, .. } => {
             FINISHES.fetch_add(1, SeqCst);
+        }
+        sqlite::CheckpointEvent::Checkpointed { inline: true, .. } => {
+            INLINE.fetch_add(1, SeqCst);
         }
         sqlite::CheckpointEvent::Checkpointed { .. } | sqlite::CheckpointEvent::Started => {}
         sqlite::CheckpointEvent::WalCommitted(pages) => {
@@ -275,11 +279,13 @@ fn bursts_restart_bound_wal_and_leave_zero_idle_checkpoint_writes()
     let mut largest = 0;
     let mut committed = 0;
     for _ in 0..100 {
+        owner.lane_busy();
         for _ in 0..200 {
             store.insert();
             committed += 1;
             largest = largest.max(store.bytes());
         }
+        owner.lane_idle();
         sleep(Duration::from_millis(300));
         largest = largest.max(store.bytes());
     }
@@ -306,10 +312,12 @@ fn bursts_restart_bound_wal_and_leave_zero_idle_checkpoint_writes()
 
     // Finish with a threshold crossing, then drain queued checkpoints. A quiet
     // tail below one checkpoint threshold is bounded; no exact reset is needed.
+    owner.lane_busy();
     while LAST.load(SeqCst) < 1000 {
         store.insert();
         committed += 1;
     }
+    owner.lane_idle();
     owner.close().unwrap();
     let (log, done) = frames(&store.path);
     assert!(
@@ -321,6 +329,7 @@ fn bursts_restart_bound_wal_and_leave_zero_idle_checkpoint_writes()
         MAX_PASS_US.load(SeqCst)
     );
     let idle_owner = store.worker();
+    idle_owner.lane_idle();
     let passes = PASSES.load(SeqCst);
     let bytes = store.bytes();
     let before = sample_usage(std::process::id()).unwrap().unwrap();
@@ -357,10 +366,12 @@ fn pinned_reader_stops_partial_passes_until_another_commit()
     let reader = sqlite::open(&store.path).unwrap();
     reader.execute_batch("BEGIN; SELECT * FROM t;").unwrap();
     let owner = store.worker();
+    owner.lane_busy();
     for _ in 0..2000 {
         store.insert();
     }
     // Draining must terminate even while the reader keeps a partial backfill.
+    owner.lane_idle();
     owner.close().unwrap();
     let (log, done) = frames(&store.path);
     assert!(done < log);
@@ -377,7 +388,9 @@ fn pinned_reader_stops_partial_passes_until_another_commit()
     );
     reader.execute_batch("ROLLBACK").unwrap();
     let owner = store.worker();
+    owner.lane_busy();
     store.insert();
+    owner.lane_idle();
     owner.close().unwrap();
     // PASSIVE can backfill everything without truncating the retained tail.
     // Only the next writer resets it and applies journal_size_limit.
@@ -389,8 +402,7 @@ fn pinned_reader_stops_partial_passes_until_another_commit()
 
 // test-category: race
 #[test]
-fn final_small_commit_after_backfill_cannot_strand_a_wal_tail()
--> Result<(), butler_e2e::e2e::HarnessError> {
+fn idle_finish_resets_wal_on_next_begin() -> Result<(), butler_e2e::e2e::HarnessError> {
     butler_e2e::gate!();
     let _serial = SERIAL.lock().unwrap();
     FINISHES.store(0, SeqCst);
@@ -404,27 +416,34 @@ fn final_small_commit_after_backfill_cannot_strand_a_wal_tail()
         .unwrap();
     // Drop the sender before the owner on panic, so joining cannot deadlock.
     let release = resume;
+    owner.lane_busy();
     store.insert_many(2000);
     backfilled.recv().unwrap();
     let (log, done) = frames(&store.path);
     assert!(log >= 1000);
     assert_eq!(done, log);
-    // The pinned snapshot prevents a reset when this write begins. Its hook
-    // releases the snapshot, then consumes finish_pending to backfill this small tail once.
+    // The pinned snapshot prevents reset; its hook releases the reader, leaving a tail.
     store.insert();
     let (tail, _) = frames(&store.path);
     assert!(tail > log && tail - log < 1000);
     READER.with(|reader| {
         assert!(reader.borrow_mut().take().unwrap().is_autocommit());
     });
+    assert_eq!(FINISHES.load(SeqCst), 0, "busy lane must not finish");
+    let (finished, completion) = mpsc::sync_channel(1);
+    *FINISHED.lock().unwrap() = Some(finished);
+    owner.lane_idle();
     release.send(()).unwrap();
+    completion.recv_timeout(Duration::from_secs(5)).unwrap();
     assert_eq!(FINISHES.load(SeqCst), 1);
-    owner.close().unwrap();
     let (_, backfilled) = frames(&store.path);
     assert_eq!(backfilled, tail);
+    owner.lane_busy();
     store.reset_after_quiet();
+    owner.lane_idle();
+    owner.close().unwrap();
     store.counts(2002);
-    eprintln!("final small commit: before={log} after={tail} backfilled={backfilled}");
+    eprintln!("idle finish: before={log} after={tail} backfilled={backfilled}");
     Ok(())
 }
 
