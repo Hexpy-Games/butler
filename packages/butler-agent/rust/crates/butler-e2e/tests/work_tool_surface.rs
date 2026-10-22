@@ -89,3 +89,23 @@ fn main_phase_baseline() -> Result<(), butler_e2e::e2e::HarnessError> {
     );
     Ok(())
 }
+
+// test-category: format-pin
+#[test]
+fn delegated_prompts_preserve_role_and_scope() -> Result<(), Box<dyn std::error::Error>> {
+    butler_e2e::gate!();
+    let expected: Value = serde_json::from_str(include_str!("../fixtures/work-model-p14/child-prompts.json"))?;
+    let catalog = GuidedCatalogSnapshot::parse(&butler_core::tool_catalog::load()?.to_string())?;
+    for role in ["steward", "worker"] {
+        let mut turn = turn("execution");
+        turn.context["executionPolicy"]["role"] = json!(role);
+        turn.context["executionPolicy"]["subsession"] = json!({"rootSessionId":"parent", "executionMode":"mutation", "mutationScope":["assigned files"]});
+        let selected = select_phase(GuidedPhaseInput {
+            turn: &turn, catalog: &catalog, phase_surface_flag: "on",
+            operation_replay_flag: "off", default_workspace: "/tmp",
+        })?;
+        assert_eq!(selected.stable_instruction_prefix, expected[role].as_str().unwrap(), "{role}");
+    }
+    Ok(())
+}
+

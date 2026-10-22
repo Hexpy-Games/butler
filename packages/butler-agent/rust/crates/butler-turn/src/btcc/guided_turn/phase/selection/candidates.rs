@@ -155,7 +155,7 @@ pub(super) fn phase(
     catalog: &GuidedCatalogSnapshot,
 ) -> GuidedPhase {
     if policy.tracking_mode != "none"
-        && (policy.role == PolicyRole::Butler || policy.subsession.is_some())
+        && policy.role == PolicyRole::Butler
     {
         return GuidedPhase::Execution;
     }

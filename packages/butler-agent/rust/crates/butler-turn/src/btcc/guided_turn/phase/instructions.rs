@@ -17,9 +17,7 @@ pub(super) fn prefix(
     let prefixes = PREFIXES.get_or_init(|| {
         serde_json::from_str(include_str!("instruction-prefixes.json")).unwrap_or_default()
     });
-    let key = if phase == GuidedPhase::Execution {
-        "phase_minimal|butler|execution".to_owned()
-    } else if policy.subsession.is_some() && policy.role == PolicyRole::Steward {
+    let key = if policy.subsession.is_some() && policy.role == PolicyRole::Steward {
         let submode = policy
             .subsession
             .as_ref()
@@ -46,7 +44,7 @@ pub(super) fn prefix(
             GuidedPreparationError::Policy(format!("guided instruction prefix unavailable: {key}"))
         })?
         .clone();
-    if phase == GuidedPhase::Execution && policy.tracking_mode == "none" {
+    if key == "phase_minimal|butler|execution" && policy.tracking_mode == "none" {
         value = TIER_ZERO.to_owned();
     }
     if key.contains("delegated|steward") && key.ends_with("mutation") {
