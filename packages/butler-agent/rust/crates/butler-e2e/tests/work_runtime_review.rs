@@ -83,17 +83,17 @@ fn context() -> Context {
         actor: json!({"origin":"chat"}),
     }
 }
-async fn open() -> std::result::Result<BtccStorage, Failure> {
+async fn open() -> std::result::Result<(TestStorageFixture, BtccStorage), Failure> {
     let fixture = TestStorageFixture::activated();
     let storage = BtccStorage::open(fixture.config("runtime-review")).await?;
     storage.work_model_write(seed).await?;
-    Ok(storage)
+    Ok((fixture, storage))
 }
 // test-category: pure-logic
 #[tokio::test]
 async fn held_children_do_not_block_the_parent_queue() -> std::result::Result<(), Failure> {
     butler_e2e::gate!();
-    let storage = open().await?;
+    let (_fixture, storage) = open().await?;
     let children = SqliteSubsessionRepository::new(storage.clone());
     assert!(children.has_active_child("parent".into()).await?);
     storage
@@ -114,7 +114,7 @@ async fn held_children_do_not_block_the_parent_queue() -> std::result::Result<()
 #[tokio::test]
 async fn blocking_one_part_keeps_its_sibling_attempt_live() -> std::result::Result<(), Failure> {
     butler_e2e::gate!();
-    let storage = open().await?;
+    let (_fixture, storage) = open().await?;
     storage
         .work_model_write(|tx| {
             let task = read_part(tx, "first")?["task_id"]
@@ -160,7 +160,7 @@ async fn reporting_requires_every_child_and_allows_later_review() -> std::result
 {
     butler_e2e::gate!();
     for deliver_before_review in [false, true] {
-        let storage = open().await?;
+        let (_fixture, storage) = open().await?;
         storage
             .work_model_write(move |tx| {
                 let task = read_part(tx, "first")?["task_id"]
@@ -231,7 +231,7 @@ fn accept_and_complete(
 #[tokio::test]
 async fn native_runtime_statements_use_indexes() -> std::result::Result<(), Failure> {
     butler_e2e::gate!();
-    let storage = open().await?;
+    let (_fixture, storage) = open().await?;
     storage
         .work_model_read(|db| {
             for (name, sql) in butler_turn::btcc::native_query_statements() {
@@ -266,7 +266,7 @@ async fn native_runtime_statements_use_indexes() -> std::result::Result<(), Fail
 async fn escalation_requires_only_the_authored_reason_and_keeps_ids()
 -> std::result::Result<(), Failure> {
     butler_e2e::gate!();
-    let storage = open().await?;
+    let (_fixture, storage) = open().await?;
     storage.work_model_write(|tx| {
         let id=read_part(tx,"first")?["task_id"].as_str().unwrap().to_owned();
         let task=read_task(tx,&id)?;
@@ -290,7 +290,7 @@ async fn escalation_requires_only_the_authored_reason_and_keeps_ids()
 async fn redo_waits_for_its_new_delivery_after_earlier_results_were_reported()
 -> std::result::Result<(), Failure> {
     butler_e2e::gate!();
-    let storage = open().await?;
+    let (_fixture, storage) = open().await?;
     storage.work_model_write(|tx| {
         let task = read_part(tx,"first")?["task_id"].as_str().unwrap().to_owned();
         for child in ["first","second"] {
@@ -324,7 +324,7 @@ async fn redo_waits_for_its_new_delivery_after_earlier_results_were_reported()
 #[tokio::test]
 async fn blocking_all_parts_keeps_the_owner_lease_resumable() -> std::result::Result<(), Failure> {
     butler_e2e::gate!();
-    let storage = open().await?;
+    let (_fixture, storage) = open().await?;
     storage.work_model_write(|tx| {
         let task=read_part(tx,"first")?["task_id"].as_str().unwrap().to_owned();
         for part in ["first","second"] {
@@ -337,6 +337,55 @@ async fn blocking_all_parts_keeps_the_owner_lease_resumable() -> std::result::Re
         assert_eq!(read_task(tx,&task)?["status"],"running");
         Ok(())
     }).await?;
+    storage.close().await?;
+    Ok(())
+}
+
+// test-category: pure-logic
+#[tokio::test]
+async fn terminal_work_leases_do_not_gate_later_direct_turns() -> std::result::Result<(), Failure> {
+    butler_e2e::gate!();
+    let (_fixture, storage) = open().await?;
+    storage
+        .work_model_write(|tx| {
+            assert!(tiers::effects_allowed_in_turn(
+                tx,
+                "parent",
+                "later-turn",
+                false
+            )?);
+            let task = read_part(tx, "first")?["task_id"]
+                .as_str()
+                .unwrap()
+                .to_owned();
+            submit_task(
+                tx,
+                &context(),
+                &task,
+                &ExecutionScope {
+                    session_id: "first",
+                    turn_id: "first",
+                },
+                &Submission {
+                    part_id: Some("first"),
+                    result_id: "done",
+                    result_refs: &["output".into()],
+                    evidence_refs: &["check".into()],
+                },
+            )?;
+            for state in ["done", "cancelled"] {
+                tx.execute("UPDATE wm_works SET run_state=?1", [state])?;
+                assert!(tiers::effects_allowed_in_turn(
+                    tx,
+                    "parent",
+                    "parent-turn",
+                    false
+                )?);
+                assert!(!tiers::effects_allowed_in_turn(tx, "first", "first", true)?);
+            }
+            Ok(())
+        })
+        .await?;
     storage.close().await?;
     Ok(())
 }
