@@ -2,6 +2,7 @@
 mod resume;
 use crate::btcc::subsessions::assignment::Child;
 
+use butler_core::json::at;
 use serde_json::{Value, json};
 
 use super::selection::{RelationPurpose, RelationQuery};
@@ -211,7 +212,7 @@ impl SubsessionService {
             .map_err(BtccError::from)?;
         let mut result = self.enqueue_cancel(&relation, &receipt.to_string()).await?;
         butler_core::json::object_mut(&mut result)
-            .insert("hold_id".into(), receipt["hold_id"].clone());
+            .insert("hold_id".into(), at(&receipt, "/hold_id").clone());
         Ok(result)
     }
 
@@ -225,11 +226,13 @@ impl SubsessionService {
                 let holds = store::active_session_holds(tx, &target)?;
                 let mut released = false;
                 for hold in holds {
-                    if hold["kind"] == "stop" && hold["owner"] == parent {
+                    if at(&hold, "/kind") == "stop"
+                        && at(&hold, "/owner").as_str() == Some(parent.as_str())
+                    {
                         store::release_session_hold(
                             tx,
                             &super::admission::context(),
-                            hold["id"]
+                            at(&hold, "/id")
                                 .as_str()
                                 .ok_or(store::Error::Invalid("hold id"))?,
                             store::control_epoch(tx, &target)?,
@@ -335,23 +338,24 @@ impl SubsessionService {
             Child::Legacy(_) => None,
         };
         let task_id = relation.task_id.clone();
-        let held = self
-            .repository
-            .storage()
-            .work_model_read(move |db| {
-                use butler_work::store;
-                if !store::active_session_holds(db, &target)?.is_empty() {
-                    return Ok(true);
-                }
-                if let Some(part) = assigned_part {
-                    let part = store::read_part(db, &part)?;
-                    let task = store::read_task(db, &task_id)?;
-                    return Ok(part["status"] == "completed" || task["status"] == "in_review");
-                }
-                Ok(false)
-            })
-            .await
-            .map_err(BtccError::from)?;
+        let held =
+            self.repository
+                .storage()
+                .work_model_read(move |db| {
+                    use butler_work::store;
+                    if !store::active_session_holds(db, &target)?.is_empty() {
+                        return Ok(true);
+                    }
+                    if let Some(part) = assigned_part {
+                        let part = store::read_part(db, &part)?;
+                        let task = store::read_task(db, &task_id)?;
+                        return Ok(at(&part, "/status") == "completed"
+                            || at(&task, "/status") == "in_review");
+                    }
+                    Ok(false)
+                })
+                .await
+                .map_err(BtccError::from)?;
         if held {
             return Ok(());
         }

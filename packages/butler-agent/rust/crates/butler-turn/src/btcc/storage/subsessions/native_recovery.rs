@@ -200,12 +200,12 @@ fn claim_legacy_part(
     attempt_id: &str,
 ) -> store::Result<String> {
     let ctx = context();
-    if !matches!(at(&task, "/status").as_str(), Some("running" | "in_review")) {
+    if !matches!(at(task, "/status").as_str(), Some("running" | "in_review")) {
         store::start_task(
             tx,
             &ctx,
-            &task_id,
-            at(&task, "/revision")
+            task_id,
+            at(task, "/revision")
                 .as_i64()
                 .ok_or(store::Error::Invalid("revision"))?,
             &store::ExecutionScope {
@@ -221,7 +221,7 @@ fn claim_legacy_part(
         &ctx,
         &store::NewPart {
             id: &part_id,
-            task_id: &task_id,
+            task_id,
             kind: butler_work::work_types::TaskKind::Execute,
             title: &row.safe_title,
             after_part_ids: &[],
@@ -237,8 +237,8 @@ fn claim_legacy_part(
             session_id: &row.child_session_id,
             turn_id: &row.child_turn_id,
         },
-        &attempt_id,
+        attempt_id,
     )?;
-    store::tiers::bind_started_task(tx, &row.parent_session_id, &task_id)?;
+    store::tiers::bind_started_task(tx, &row.parent_session_id, task_id)?;
     Ok(part_id)
 }

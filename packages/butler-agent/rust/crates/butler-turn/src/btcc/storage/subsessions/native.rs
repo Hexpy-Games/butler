@@ -184,7 +184,7 @@ fn project_summary(
     reason: Option<String>,
     projected: &mut Value,
 ) -> Result<(), StorageError> {
-    if let Some(reference) = at(&content, "/result_refs")
+    if let Some(reference) = at(content, "/result_refs")
         .as_array()
         .and_then(|refs| refs.first())
         .and_then(Value::as_str)

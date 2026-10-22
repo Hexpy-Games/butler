@@ -43,7 +43,7 @@ pub(super) async fn deliver(
         let result = envelope
             .execution_controls
             .as_ref()
-            .map(|controls| controls.verify())
+            .map(butler_turn::btcc::ExecutionControls::verify)
             .transpose()
             .map_err(|error| {
                 super::super::IngressError::new("subsession_report_context_invalid", error.code())

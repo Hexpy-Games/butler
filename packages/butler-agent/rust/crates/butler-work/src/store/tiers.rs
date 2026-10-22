@@ -163,7 +163,7 @@ pub fn effects_allowed_in_turn(
             .is_some();
         let live_work = super::bound_work(db, session, None)?
             .is_some_and(|work| !matches!(work["run_state"].as_str(), Some("done" | "cancelled")));
-        if !lease && !(admission && live_work) {
+        if !(lease || admission && live_work) {
             return Ok(true);
         }
     }
