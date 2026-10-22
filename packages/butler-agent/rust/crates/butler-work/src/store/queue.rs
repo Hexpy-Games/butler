@@ -94,7 +94,8 @@ pub(super) fn persist(
     tx: &Transaction<'_>,
     ctx: &Context,
     changes: &[(&StoredChain, &Chain)],
-) -> Result<()> {
+) -> Result<bool> {
+    let mut changed = changes.iter().any(|(old, next)| old.chain != **next);
     for (old, next) in changes {
         next.validate()?;
         tx.execute(sql::DELETE_EDGES, [&old.id])?;
@@ -115,6 +116,9 @@ pub(super) fn persist(
         let (chain, step, stack) = match destinations.get(id) {
             Some((c, s, p)) => (Some(*c), Some(*s), Some(*p)),
             None => {
+                if row["status"] == "completed" {
+                    return Err(Error::Invalid("completed Task cannot be deleted"));
+                }
                 set_state(tx, ctx, id, TaskStatus::Cancelled, None, None, None, false)?;
                 (None, None, None)
             }
@@ -152,12 +156,12 @@ pub(super) fn persist(
         }
     }
     for (old, next) in changes {
-        rederive_holds(tx, ctx, &old.id)?;
+        changed |= rederive_holds(tx, ctx, &old.id)?;
         for (pred, succ) in next.edges()? {
             tx.execute(sql::INSERT_EDGE, params![pred.0, succ.0, old.id])?;
         }
     }
-    Ok(())
+    Ok(changed)
 }
 pub(super) fn update_chain_state(tx: &Transaction<'_>, id: &str) -> Result<()> {
     let members = rows(tx, sql::MEMBERS, [id])?;
@@ -358,9 +362,11 @@ fn edit_batch(
         apply_edit(tx, ctx, op, &mut next, &pins)?;
     }
     let changes: Vec<_> = chains.iter().map(|(id, old)| (old, &next[id])).collect();
-    persist(tx, ctx, &changes)?;
+    let changed = persist(tx, ctx, &changes)?;
     recompute_work(tx, ctx, work)?;
-    bump_work(tx, ctx, work, expected)?;
+    if changed {
+        bump_work(tx, ctx, work, expected)?;
+    }
     let mut questions = Vec::new();
     for id in chains.keys() {
         questions.extend(undecided_holds(tx, id)?);

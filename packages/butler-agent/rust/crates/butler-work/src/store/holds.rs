@@ -35,7 +35,8 @@ fn retire_approvals(
     ctx: &Context,
     chain: &str,
     members: &[Value],
-) -> Result<Vec<Value>> {
+) -> Result<(Vec<Value>, bool)> {
+    let mut changed = false;
     let mut live = Vec::new();
     for approval in rows(tx, sql::DECIDED_HOLDS, [chain])? {
         let covered: Vec<Value> = serde_json::from_str(text(&approval, "coverage_json")?)?;
@@ -47,9 +48,10 @@ fn retire_approvals(
             live.push(approval);
         } else {
             resolve(tx, ctx, &approval)?;
+            changed = true;
         }
     }
-    Ok(live)
+    Ok((live, changed))
 }
 fn resolve(tx: &Transaction<'_>, ctx: &Context, question: &Value) -> Result<()> {
     let id = text(question, "id")?;
@@ -61,13 +63,9 @@ fn resolve(tx: &Transaction<'_>, ctx: &Context, question: &Value) -> Result<()> 
 }
 /// Derive only unstarted members. Approval coverage is a snapshot of failure
 /// identity, step and state generation; ordinary label edits cannot revoke it.
-pub(super) fn rederive_holds(
-    tx: &Transaction<'_>,
-    ctx: &Context,
-    chain_id: &str,
-) -> Result<Vec<Value>> {
+pub(super) fn rederive_holds(tx: &Transaction<'_>, ctx: &Context, chain_id: &str) -> Result<bool> {
     let members = rows(tx, sql::MEMBERS, [chain_id])?;
-    let approvals = retire_approvals(tx, ctx, chain_id, &members)?;
+    let (approvals, mut changed) = retire_approvals(tx, ctx, chain_id, &members)?;
     let mut failures = Vec::new();
     for member in members.iter().filter(|m| failed(m)) {
         if !approval_covers(&approvals, member)? {
@@ -91,7 +89,7 @@ pub(super) fn rederive_holds(
             } else {
                 "predecessor_failed"
             };
-            set_state(
+            changed |= set_state(
                 tx,
                 ctx,
                 text(member, "id")?,
@@ -106,7 +104,7 @@ pub(super) fn rederive_holds(
             let entry = needed.entry(failure_step).or_insert((step, cause));
             entry.0 = entry.0.min(step);
         } else {
-            set_state(
+            changed |= set_state(
                 tx,
                 ctx,
                 text(member, "id")?,
@@ -122,9 +120,9 @@ pub(super) fn rederive_holds(
             )?;
         }
     }
-    reconcile_questions(tx, ctx, chain_id, &members, needed.into_values().collect())?;
+    changed |= reconcile_questions(tx, ctx, chain_id, &members, needed.into_values().collect())?;
     update_chain_state(tx, chain_id)?;
-    undecided_holds(tx, chain_id)
+    Ok(changed)
 }
 fn reconcile_questions(
     tx: &Transaction<'_>,
@@ -132,7 +130,8 @@ fn reconcile_questions(
     chain_id: &str,
     members: &[Value],
     mut needed: BTreeMap<i64, &Value>,
-) -> Result<()> {
+) -> Result<bool> {
+    let mut changed = false;
     let pending = undecided_holds(tx, chain_id)?;
     for question in &pending {
         let step = question["held_step_index"]
@@ -148,6 +147,7 @@ fn reconcile_questions(
                     sql::REPOINT_HOLD,
                     params![text(question, "id")?, text(cause, "id")?, revision, covered],
                 )?;
+                changed = true;
                 event(
                     tx,
                     ctx,
@@ -159,9 +159,11 @@ fn reconcile_questions(
             }
         } else {
             resolve(tx, ctx, question)?;
+            changed = true;
         }
     }
     for (step, cause) in needed {
+        changed = true;
         let id = IdGenerator::global_next(IdKind::Decision, ctx.now)?;
         tx.execute(
             sql::INSERT_HOLD,
@@ -176,7 +178,7 @@ fn reconcile_questions(
         )?;
         event(tx, ctx, "hold_decision", &id, 0, "create")?;
     }
-    Ok(())
+    Ok(changed)
 }
 /// Mutation receipts include the durable question ids needed to post cards.
 pub(super) fn task_result(
@@ -206,12 +208,16 @@ pub fn decide_hold(
     decision: Decision,
 ) -> Result<Value> {
     let row = one(tx, sql::HOLD, [id])?;
-    cas(&row, "revision", expected_revision)?;
-    if !row["decision"].is_null() || !row["resolved_at"].is_null() {
-        return Err(Error::Conflict { current: row });
-    }
     let chain_id = text(&row, "chain_id")?;
     let chain = load_chain(tx, chain_id)?;
+    if row["revision"].as_i64() != Some(expected_revision)
+        || !row["decision"].is_null()
+        || !row["resolved_at"].is_null()
+    {
+        return Err(Error::Conflict {
+            current: json!({"revision":chain.graph_revision}),
+        });
+    }
     cas(
         &read_work(tx, &chain.work_id)?,
         "task_graph_revision",

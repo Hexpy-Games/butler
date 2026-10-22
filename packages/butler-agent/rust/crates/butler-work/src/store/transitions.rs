@@ -63,7 +63,8 @@ pub(super) fn set_state(
         tx.execute(sql::CANCEL_PARTS, [id])?;
     }
     event(tx, ctx, "task", id, revision + 1, "state")?;
-    Ok(true)
+    // Entity progress alone does not invalidate a structure editor's token.
+    Ok(row["hold_reason"] != json!(reason) || row["held_by_task_id"] != json!(held_by))
 }
 /// Work runtime state is an aggregate; explicit terminal/control states win.
 pub(super) fn recompute_work(tx: &Transaction<'_>, ctx: &Context, id: &str) -> Result<()> {
@@ -82,7 +83,7 @@ pub(super) fn recompute_work(tx: &Transaction<'_>, ctx: &Context, id: &str) -> R
         RunState::InReview
     } else if any("failed") {
         RunState::Failed
-    } else if any("blocked") || any("held") {
+    } else if any("blocked") || any("held") || any("stopped") {
         RunState::Blocked
     } else {
         RunState::Idle
@@ -166,7 +167,7 @@ pub fn transition(
     {
         return Err(Error::Invalid("predecessor barrier is not satisfied"));
     }
-    let changed = set_state(
+    let mut structure_changed = set_state(
         tx,
         ctx,
         id,
@@ -176,14 +177,17 @@ pub fn transition(
         None,
         result_reported,
     )?;
-    if changed {
-        let chain = load_chain(tx, text(&row, "chain_id")?)?;
-        if state == TaskStatus::Cancelled {
-            leave_cancelled(tx, ctx, id, &chain)?;
-        } else {
-            rederive_holds(tx, ctx, &chain.id)?;
-        }
-        recompute_work(tx, ctx, &chain.work_id)?;
+    if row["chain_id"].is_null() {
+        return task_result(tx, id, None);
+    }
+    let chain = load_chain(tx, text(&row, "chain_id")?)?;
+    structure_changed |= if state == TaskStatus::Cancelled {
+        leave_cancelled(tx, ctx, id, &chain)?
+    } else {
+        rederive_holds(tx, ctx, &chain.id)?
+    };
+    recompute_work(tx, ctx, &chain.work_id)?;
+    if structure_changed {
         bump(tx, ctx, &chain.id, chain.graph_revision)?;
     }
     task_result(tx, id, row["chain_id"].as_str())
@@ -193,7 +197,7 @@ pub(super) fn leave_cancelled(
     ctx: &Context,
     id: &str,
     old: &StoredChain,
-) -> Result<()> {
+) -> Result<bool> {
     let mut pins = running(&[old]);
     pins.remove(&TaskId(id.into()));
     let next = old.chain.delete(&TaskId(id.into()), &pins)?;
