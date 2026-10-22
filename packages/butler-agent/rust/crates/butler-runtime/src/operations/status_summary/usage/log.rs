@@ -316,7 +316,13 @@ impl UsageLogIndex {
                     json!(tokens.output),
                 ];
                 if window.scope.is_some() {
-                    slot.push(json!(delegated.get(&start).copied().unwrap_or(0.0)));
+                    let d = delegated.get(&start).cloned().unwrap_or_default();
+                    slot.extend([
+                        json!(d.prompt + d.output),
+                        json!(d.request_count),
+                        json!(d.cached),
+                        json!(d.output),
+                    ]);
                 }
                 json!(slot)
             })
