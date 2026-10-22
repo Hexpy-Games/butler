@@ -107,8 +107,44 @@ async fn canonical_completion_publishes_one_observation_and_one_queue_job_then_d
     turn.admit_final("original assistant answer", "final-1")
         .await
         .unwrap();
-    turn.finalize("complete", "2026-09-19T00:00:01.000Z")
-        .await
+    // Occupy the observer lane on a durable write. Finalizing the answer must
+    // not wait for it: the publication follows once the lane is free.
+    let metrics = root.join("metrics");
+    std::fs::create_dir_all(&metrics).unwrap();
+    let lane_lock = std::fs::File::options()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(metrics.join(".operational-events.jsonl.append.lock"))
+        .unwrap();
+    lane_lock.try_lock().unwrap();
+    let busy = tokio::spawn({
+        let observer = observer.clone();
+        async move {
+            observer
+                .admission_metric(AdmissionMetric {
+                    session_id: "runtime-second-user".into(),
+                    session_role: "primary".into(),
+                    source: AdmissionSource::Gateway,
+                    event_kind: "inbound.accepted".into(),
+                    admitted: true,
+                    class_name: "user",
+                    reason: "public_ingress",
+                })
+                .await
+        }
+    });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let finalized = tokio::time::timeout(
+        Duration::from_secs(5),
+        turn.finalize("complete", "2026-09-19T00:00:01.000Z"),
+    )
+    .await;
+    lane_lock.unlock().unwrap();
+    busy.await.unwrap().unwrap();
+    finalized
+        .expect("the final answer must not wait on memory publication")
         .unwrap();
     let canonical = store
         .read_turn_outcome("ct_first_user")
