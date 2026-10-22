@@ -47,13 +47,12 @@ pub type ConversationObserverFuture<'a> =
 pub trait ConversationAdmissionObserver: Send + Sync {
     /// Records how an event was classified.
     fn admission_metric(&self, metric: AdmissionMetric) -> ConversationObserverFuture<'_>;
-    /// Records a completed turn for downstream observers.
+    /// Hands a completed turn to downstream observers. Completes once the
+    /// observation is accepted; its publication never delays the answer.
     fn completion_observation(
         &self,
         observation: CompletionObservation,
     ) -> ConversationObserverFuture<'_>;
-    /// Records whether a turn completed.
-    fn completion_metric(&self, metric: CompletionMetric) -> ConversationObserverFuture<'_>;
 }
 
 /// How one event was classified for admission.
@@ -79,13 +78,6 @@ pub struct CompletionObservation {
     pub outbound_message_id: String,
     pub outcome_generation: f64,
     pub completed_at: String,
-}
-
-/// Whether a turn completed and whether it was project-scoped.
-#[derive(Clone, Debug)]
-pub struct CompletionMetric {
-    pub project_scoped: bool,
-    pub succeeded: bool,
 }
 
 /// The durable session a turn is admitted into.
@@ -281,7 +273,9 @@ impl ConversationAdmissionTurn {
         if status == "complete"
             && let (Some(inbound), Some(outbound)) = (request, assistant)
         {
-            let result = self
+            // Diagnostic only: memory catch-up reconciles canonical outcomes
+            // whose notice was not accepted.
+            let _ignored_observation = self
                 .input
                 .observer
                 .completion_observation(CompletionObservation {
@@ -293,14 +287,6 @@ impl ConversationAdmissionTurn {
                     outbound_message_id: outbound,
                     outcome_generation: generation,
                     completed_at: completed_at.into(),
-                })
-                .await;
-            let _ignored_metric = self
-                .input
-                .observer
-                .completion_metric(CompletionMetric {
-                    project_scoped: self.input.binding.project_id.is_some(),
-                    succeeded: result.is_ok(),
                 })
                 .await;
         }
