@@ -13,8 +13,8 @@ use crate::btcc::{
     TurnRoute, TurnStore,
 };
 use crate::conversation::{
-    AdmissionMetric, CompletionMetric, CompletionObservation, ConversationIdentityClock,
-    ConversationLocaleCollation, ConversationObserverFuture, ConversationStoreConfig,
+    AdmissionMetric, CompletionObservation, ConversationIdentityClock, ConversationLocaleCollation,
+    ConversationObserverFuture, ConversationStoreConfig,
 };
 use crate::workspace::{
     OwnOptional, SessionBindingStoreConfig, SessionLifecycleState, SessionRole,
@@ -58,9 +58,6 @@ impl ConversationAdmissionObserver for Identity {
         Box::pin(async { Ok(()) })
     }
     fn completion_observation(&self, _: CompletionObservation) -> ConversationObserverFuture<'_> {
-        Box::pin(async { Ok(()) })
-    }
-    fn completion_metric(&self, _: CompletionMetric) -> ConversationObserverFuture<'_> {
         Box::pin(async { Ok(()) })
     }
 }
