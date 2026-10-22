@@ -1,5 +1,5 @@
 //! Worker delegation input and parent Work-stream linkage.
-use super::{GuidedTools, access_mode, encoded};
+use super::{GuidedTools, access_mode};
 use butler_core::json::JsonDocument;
 use butler_turn::btcc::{
     BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError, WorkerDelegationRequest,
@@ -16,9 +16,8 @@ pub(super) async fn execute(
     let result = owner
         .subsessions
         .delegate_worker(request(owner, &invocation, call, call_id, acceptance)?)
-        .await
-        .map_err(ToolExecutionError::Integrity)?;
-    encoded(&result)
+        .await;
+    super::model_result(result)
 }
 
 fn request(

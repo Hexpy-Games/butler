@@ -299,10 +299,7 @@ impl Batch<'_, '_> {
                 done_criteria,
                 tasks,
             } => self.bootstrap(key.as_deref(), goal, done_criteria, tasks),
-            Operation::Escalate { .. } => {
-                tiers::ensure_detail(self.tx, self.work()?)?;
-                tiers::ensure_coverage(self.tx, self.work()?)
-            }
+            Operation::Escalate { .. } => Ok(()),
             Operation::Add { .. }
             | Operation::Edit { .. }
             | Operation::Move { .. }
@@ -324,6 +321,13 @@ impl Batch<'_, '_> {
         Ok(())
     }
     fn execute(&mut self, op: &Operation) -> Result<()> {
+        if matches!(op, Operation::Complete { .. } | Operation::Submit { .. })
+            && let Some(hold) = control::active_holds(self.tx, &self.scope.session_id)?.first()
+        {
+            return Err(Error::Conflict {
+                current: json!({"instruction_id":hold["id"]}),
+            });
+        }
         if matches!(op, Operation::Complete { .. } | Operation::Submit { .. })
             && let Some(instruction) =
                 control::next_pending(self.tx, &self.scope.session_id, true)?.first()

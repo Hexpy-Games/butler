@@ -60,6 +60,11 @@ async fn reply(
         .count();
     let item = match key.user_request.as_str() {
         super::JOB => next(&out),
+        "Write the single follow-up marker." if step == 0 => call(
+            0,
+            "write_file",
+            &json!({"path":"direct-marker.txt","content":"direct edit"}),
+        ),
         super::DESIGN if step == 0 => call(
             0,
             "work_apply",

@@ -47,6 +47,7 @@ pub(super) fn prefix(
     if key == "phase_minimal|butler|execution" && policy.tracking_mode == "none" {
         value = TIER_ZERO.to_owned();
     }
+    value = value.replace("__WORK_TIER_RULES__", butler_work::store::TIER_ONE);
     if key.contains("delegated|steward") && key.ends_with("mutation") {
         let scope = policy
             .subsession

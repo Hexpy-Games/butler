@@ -75,6 +75,16 @@ pub struct GuidedPolicyDependencies {
 
 /// Renders the guided prompt of a turn.
 pub trait PromptPort: Send + Sync {
+    /// Refreshes durable instruction policy without rebuilding the turn context.
+    fn refresh_instructions<'a>(
+        &'a self,
+        _invocation: GuidedInvocation<'a>,
+        _instructions: &'a mut Option<String>,
+        _cache_prefix: &'a mut Option<serde_json::Value>,
+    ) -> PortFuture<'a, ()> {
+        Box::pin(async { Ok(()) })
+    }
+
     /// Renders the prompt, instructions, tools and request options.
     fn render<'a>(
         &'a self,

@@ -77,6 +77,18 @@ impl GuidedPolicyPort for GuidedPolicy {
         })
     }
 
+    fn refresh_instructions<'a>(
+        &'a self,
+        invocation: GuidedInvocation<'a>,
+        prepared: &'a mut PreparedPolicy,
+    ) -> PortFuture<'a, ()> {
+        self.dependencies.prompt.refresh_instructions(
+            invocation,
+            &mut prepared.instructions,
+            &mut prepared.request.stable_provider_cache_prefix,
+        )
+    }
+
     fn before_model_round<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,

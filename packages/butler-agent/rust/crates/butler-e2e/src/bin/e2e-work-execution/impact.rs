@@ -83,7 +83,7 @@ pub(super) fn exercise(tx: &Transaction<'_>, ctx: &Context) -> Result<()> {
     if let butler_work::store::tool_ops::Operation::Activate { impact_map, .. } =
         &mut missing.operations[1]
     {
-        impact_map.as_mut().unwrap().tasks.pop();
+        impact_map.as_mut().unwrap().0.pop_last();
     }
     assert!(
         apply(tx, ctx, &scope, &missing).is_err(),
@@ -127,21 +127,18 @@ fn input(
     completed: &serde_json::Value,
     active: &serde_json::Value,
 ) -> Result<Apply> {
-    let criterion = json!({"node_id":"spec","node_revision":3,"criterion_id":"c0"});
     Ok(serde_json::from_value(json!({
         "reason":"Apply the approved criterion revision", "spec_ref":previous,
-        "expected_task_graph_revision":graph,"expected_revisions":{"spec":2},
+        "expected_task_graph_revision":graph,"expected_revisions":{"spec":2,"task":completed["revision"],"impact-active":active["revision"]},
         "operations":[
             {"op":"spec.propose","key":"edited","node_id":"spec","base_revision":1,
                 "node":{"title":"Result","goal":"Deliver the checked result","criteria":["Verify against the revised criterion"],"constraints":[]}},
             {"op":"spec.activate","expected_tree_version":0,
                 "published_refs":[{"node_id":"@edited","revision":3,"body_hash":"@edited"}],
-                "impact_map":{"tasks":[
-                    {"task_id":"task","expected_revision":completed["revision"],"acceptance_refs":[criterion.clone()],
-                        "corrective":{"title":"Recheck the delivered result","description":"Apply the revised acceptance check"}},
-                    {"task_id":"impact-active","expected_revision":active["revision"],"acceptance_refs":[criterion],
-                        "corrective":{"title":"Verify the revised result","description":"Check the changed acceptance condition"}}
-                ]}}
+                "impact_map":{
+                    "task":{"action":"reverify","reason":"Apply the revised acceptance check"},
+                    "impact-active":{"action":"reverify","reason":"Check the changed acceptance condition"}
+                }}
         ]
     }))?)
 }

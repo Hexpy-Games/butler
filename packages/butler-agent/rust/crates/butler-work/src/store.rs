@@ -13,6 +13,8 @@ pub use task_placement::*;
 pub mod apply;
 pub mod control;
 pub mod execution;
+pub mod model_text;
+pub mod work_rules;
 pub use control::{
     Instruction as SessionInstruction, active_holds as active_session_holds,
     admit as admit_instruction, epoch as control_epoch, hold as hold_session,
@@ -21,10 +23,12 @@ pub use control::{
 };
 pub use execution::sql as execution_sql;
 pub use execution::{
-    ExecutionScope, Submission, assign_part, assign_task, block_task, fail_part, fail_task,
-    report_task, start_task, submit_task, deliver_delegated_result, end_delegated_delivery,
+    ExecutionScope, Submission, assign_part, assign_task, block_task, deliver_delegated_result,
+    end_delegated_delivery, fail_part, fail_task, report_task, start_task, submit_task,
 };
+pub use model_text::*;
 pub use parts::{NewPart, add_part, read_part};
+pub use work_rules::*;
 mod holds;
 pub mod parts;
 mod queue;

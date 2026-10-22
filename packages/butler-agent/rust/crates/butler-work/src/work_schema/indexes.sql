@@ -33,3 +33,6 @@ CREATE INDEX IF NOT EXISTS wm_reviews_task ON wm_reviews(task_id,at,id);
 CREATE INDEX IF NOT EXISTS wm_audit_entity ON wm_audit(entity_kind,entity_id,seq);
 
 CREATE INDEX IF NOT EXISTS wm_holds_active ON wm_holds(target,kind,id) WHERE released_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS wm_intents_pending_kind ON wm_cross_db_intents(kind,op_id) WHERE state='pending';
+CREATE INDEX IF NOT EXISTS wm_instructions_turn ON wm_instructions(target_session_id,anchor_kind,anchor_id);

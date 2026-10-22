@@ -50,7 +50,7 @@ pub(super) async fn execute(
             Ok(request) => request,
             Err(error) => {
                 return encoded(
-                    &json!({"ok":false,"error":{"code":"invalid_session_control","message":error.to_string()}}),
+                    &json!({"ok":false,"error":{"code":"work_apply_rejected","message":store::rejected(&error.to_string())}}),
                 );
             }
         };
@@ -75,6 +75,16 @@ async fn apply(
     raw: Value,
 ) -> Result<JsonDocument, ToolExecutionError> {
     let storage = owner.journal.work_model_storage();
+    let inbox = invocation.turn.inbox_id.clone();
+    let session = owner.binding.source_session_id.clone();
+    let (received_seq, sender) = storage.work_model_read(move |db| {
+        use rusqlite::OptionalExtension;
+        let seq = db.query_row("SELECT rowid FROM btcc_inbound_inbox WHERE inbox_id=?1",[inbox],|r|r.get(0))?;
+        let parent:Option<(String,String)> = db.query_row("SELECT parent_session_id,relation_id FROM btcc_session_relations WHERE child_session_id=?1",[session],|r|Ok((r.get(0)?,r.get(1)?))).optional()?;
+        let sender = parent.map(|(session,relation)|json!({"parent":{"session_id":session,"relation_id":relation,"relation_epoch":0}}))
+            .unwrap_or_else(||json!({"user":{"principal_id":"app-user"}}));
+        Ok((seq,sender))
+    }).await.map_err(integrity)?;
     let receipt = storage
         .admit_work_model(
             ManagedAdmission {
@@ -82,8 +92,8 @@ async fn apply(
                 session_id: owner.binding.source_session_id.clone(),
                 turn_id: owner.binding.turn_id.clone(),
                 body: invocation.turn.original_message.clone(),
-                received_seq: 0,
-                sender: json!({"user":{"principal_id":"app-user"}}),
+                received_seq,
+                sender,
             },
             invocation.cancellation,
         )
@@ -92,7 +102,7 @@ async fn apply(
     let CutoverAdmission::Ready(instruction_id) = receipt else {
         return encoded(
             &json!({"ok":false,"pending":true,"error":{"code":"work_cutover_pending",
-            "message":"The request is kept pending until the Work model switch completes."}}),
+            "message":store::CUTOVER_PENDING}}),
         );
     };
     let session = owner.binding.source_session_id.clone();
@@ -137,12 +147,28 @@ async fn apply(
 
 pub(super) async fn effects_allowed(owner: &GuidedTools) -> Result<bool, ToolExecutionError> {
     let session = owner.binding.source_session_id.clone();
+    let turn = owner.binding.turn_id.clone();
+    let child = owner.binding.owner_session_id != owner.binding.source_session_id;
     owner
         .journal
         .work_model_storage()
-        .work_model_read(move |db| store::tiers::effects_allowed(db, &session))
+        .work_model_read(move |db| {
+            store::tiers::effects_allowed_in_turn(db, &session, &turn, child)
+        })
         .await
         .map_err(integrity)
+}
+pub(super) async fn effect_refusal(
+    owner: &GuidedTools,
+) -> Result<JsonDocument, ToolExecutionError> {
+    let session = owner.binding.source_session_id.clone();
+    let value = owner
+        .journal
+        .work_model_storage()
+        .work_model_read(move |db| store::tiers::effect_refusal(db, &session))
+        .await
+        .map_err(integrity)?;
+    encoded(&value)
 }
 fn integrity(error: butler_turn::btcc::StorageError) -> ToolExecutionError {
     ToolExecutionError::Integrity(BtccError::from(error))

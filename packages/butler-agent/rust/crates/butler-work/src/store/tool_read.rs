@@ -184,10 +184,12 @@ pub fn operations(tier: u8, planning: bool, bound: bool) -> Value {
             "part.add",
             "part.edit",
             "part.remove",
-            "work.escalate",
             "spec.propose",
             "spec.activate",
         ]);
+        if tier == 1 {
+            available.push("work.escalate");
+        }
         if tier == 2 {
             available.extend(["task.join_stack", "task.split_stack"]);
         }

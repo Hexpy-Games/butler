@@ -61,7 +61,7 @@ pub enum Operation {
         tasks: Vec<Vec<TaskDraft>>,
     },
     #[serde(rename = "work.escalate")]
-    Escalate { tier: u8, reason: String },
+    Escalate { reason: String },
     #[serde(rename = "task.add")]
     Add {
         key: Option<String>,
@@ -158,9 +158,27 @@ pub enum Operation {
     },
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ImpactMap(pub BTreeMap<String, ImpactDecision>);
+impl ImpactMap {
+    pub fn task_ids(&self) -> Vec<&str> {
+        self.0.keys().map(String::as_str).collect()
+    }
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ImpactMap {
-    pub tasks: Vec<TaskImpact>,
+pub struct ImpactDecision {
+    pub action: ImpactAction,
+    pub reason: String,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ImpactAction {
+    Retain,
+    Edit,
+    Cancel,
+    Add,
+    Reverify,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -169,6 +187,8 @@ pub struct TaskImpact {
     pub expected_revision: i64,
     pub acceptance_refs: Vec<CriterionRef>,
     pub corrective: Option<CorrectiveDraft>,
+    pub action: ImpactAction,
+    pub reason: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

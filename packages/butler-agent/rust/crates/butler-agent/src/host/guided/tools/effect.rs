@@ -80,11 +80,7 @@ async fn execute_effect(
         Some(ToolName::RunCommand | ToolName::WriteFile | ToolName::EditFile)
     ) && !super::work_model::effects_allowed(owner).await?
     {
-        return ordinary(
-            "task_not_started",
-            "Call work_apply with task.start first, before this Task's file writes or commands.",
-            None,
-        );
+        return super::work_model::effect_refusal(owner).await;
     }
     let scope = CommandScope {
         workspace_reference: owner.binding.workspace_reference.as_ref(),

@@ -13,6 +13,9 @@ pub mod sql {
         "UPDATE wm_works SET tier=?2,revision=revision+(tier<>?2),updated_at=?3 WHERE id=?1";
     pub const ACTIVE_LEASE: &str = "SELECT a.id FROM wm_attempts a JOIN wm_tasks t ON t.id=a.task_id WHERE a.task_id=?1 AND a.session_id=?2 AND a.status='running' AND a.part_id IS NULL AND t.status IN ('running','in_review')";
     pub const ACTIVE_PART_LEASE: &str = "SELECT a.id FROM wm_attempts a JOIN wm_tasks t ON t.id=a.task_id WHERE a.session_id=?2 AND a.task_id=?1 AND a.status='running' AND a.part_id IS NOT NULL AND t.status IN ('running','in_review') LIMIT 1";
+    pub const TURN_ADMISSION: &str = "SELECT 1 FROM wm_instructions WHERE target_session_id=?1 AND anchor_kind='turn' AND anchor_id=?2 LIMIT 1";
+    pub const SESSION_LEASE: &str =
+        "SELECT 1 FROM wm_attempts WHERE session_id=?1 AND status='running' LIMIT 1";
     pub const BIND_TASK: &str = "UPDATE wm_session_exec SET current_task_id=?2 WHERE session_id=?1";
     pub const UNCOVERED: &str = "SELECT c.criterion_id FROM wm_spec_nodes n JOIN wm_spec_criteria c ON c.node_id=n.node_id AND c.revision=n.active_revision WHERE n.work_id=?1 AND NOT EXISTS(SELECT 1 FROM wm_task_criteria b JOIN wm_tasks t ON t.id=b.task_id WHERE b.node_id=c.node_id AND b.node_revision=c.revision AND b.criterion_id=c.criterion_id AND t.work_id=?1 AND t.status!='cancelled') LIMIT 1";
     pub const DETAIL: &str = "SELECT node_id FROM wm_spec_nodes WHERE work_id=?1 AND parent_node_id IS NOT NULL AND active_revision IS NOT NULL LIMIT 1";
@@ -26,6 +29,8 @@ pub mod sql {
         ("ACTIVE_LEASE", ACTIVE_LEASE),
         ("ACTIVE_PART_LEASE", ACTIVE_PART_LEASE),
         ("BIND_TASK", BIND_TASK),
+        ("TURN_ADMISSION", TURN_ADMISSION),
+        ("SESSION_LEASE", SESSION_LEASE),
     ];
 }
 
@@ -62,9 +67,7 @@ pub fn check_floor(
         && (facts.requires_full()
             || count.saturating_add(i64::try_from(added).unwrap_or(i64::MAX)) > 5)
     {
-        return Err(Error::Invalid(
-            "Tier 2 required: escalate, publish Spec detail, and retry in this round; preserve the existing Work and Task identities",
-        ));
+        return Err(Error::Invalid("tier1_floor_exceeded"));
     }
     Ok(())
 }
@@ -143,6 +146,55 @@ pub fn effects_allowed(db: &Connection, session: &str) -> Result<bool> {
     }
 }
 
+/// A historical Work never promotes a later direct turn into managed execution.
+pub fn effects_allowed_in_turn(
+    db: &Connection,
+    session: &str,
+    turn: &str,
+    child: bool,
+) -> Result<bool> {
+    if !child {
+        let lease = db
+            .query_row(sql::SESSION_LEASE, [session], |_| Ok(()))
+            .optional()?
+            .is_some();
+        let admission = db
+            .query_row(sql::TURN_ADMISSION, params![session, turn], |_| Ok(()))
+            .optional()?
+            .is_some();
+        let live_work = super::bound_work(db, session, None)?
+            .is_some_and(|work| !matches!(work["run_state"].as_str(), Some("done" | "cancelled")));
+        if !lease && !(admission && live_work) {
+            return Ok(true);
+        }
+    }
+    effects_allowed(db, session)
+}
+
+pub fn effect_refusal(db: &Connection, session: &str) -> Result<Value> {
+    if !super::active_session_holds(db, session)?.is_empty()
+        || !super::pending_instructions(db, session, true)?.is_empty()
+    {
+        return Ok(super::model_text::refusal(
+            "instruction_pending",
+            super::model_text::INSTRUCTION_PENDING,
+        ));
+    }
+    let row = match one(db, sql::SESSION, [session]) {
+        Ok(row) => Some(row),
+        Err(Error::NotFound) => None,
+        Err(error) => return Err(error),
+    };
+    let task = row
+        .as_ref()
+        .and_then(|row| row["current_task_id"].as_str())
+        .unwrap_or("none");
+    Ok(super::model_text::refusal(
+        "task_not_started",
+        super::model_text::task_not_started(task),
+    ))
+}
+
 /// Tier 2 execution cannot begin while an active criterion has no Task owner.
 pub fn ensure_coverage(db: &Connection, work: &str) -> Result<()> {
     match one(db, sql::UNCOVERED, [work]) {
@@ -172,11 +224,11 @@ pub fn selected_scope(
     for op in &input.operations {
         let proposed = match op {
             tool_ops::Operation::CreateLight { tier, .. } => tier.unwrap_or(1),
-            tool_ops::Operation::Escalate { tier, reason } => {
-                if *tier != 2 || reason.trim().is_empty() {
+            tool_ops::Operation::Escalate { reason } => {
+                if scope.work_id.is_none() || selected.tier != 1 || reason.trim().is_empty() {
                     return Err(Error::Invalid("escalation requires tier 2 and a reason"));
                 }
-                *tier
+                2
             }
             tool_ops::Operation::Propose { .. } if scope.work_id.is_none() => 2,
             _ => continue,

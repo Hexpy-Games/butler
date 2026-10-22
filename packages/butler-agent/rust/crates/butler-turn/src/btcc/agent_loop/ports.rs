@@ -204,6 +204,14 @@ pub(crate) trait GuidedPolicyPort: Send + Sync {
 
     fn prepare<'a>(&'a self, invocation: GuidedInvocation<'a>) -> PortFuture<'a, PreparedPolicy>;
 
+    fn refresh_instructions<'a>(
+        &'a self,
+        _invocation: GuidedInvocation<'a>,
+        _prepared: &'a mut PreparedPolicy,
+    ) -> PortFuture<'a, ()> {
+        Box::pin(async { Ok(()) })
+    }
+
     fn before_model_round<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,

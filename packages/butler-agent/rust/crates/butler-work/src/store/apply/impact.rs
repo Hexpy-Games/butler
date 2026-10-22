@@ -1,5 +1,6 @@
 //! Reconcile exact Spec bindings without rewriting completed Task history.
 use super::*;
+mod decisions;
 use crate::store::execution::sql;
 use crate::work_types::QueueOrigin;
 use rusqlite::params;
@@ -34,8 +35,8 @@ impl Batch<'_, '_> {
             prepared.push((spec, node));
         }
         if let Some(map) = map {
-            for impact in &map.tasks {
-                if !impacts.contains_key(&self.resolve(&impact.task_id)?) {
+            for task_id in map.task_ids() {
+                if !impacts.contains_key(&self.resolve(task_id)?) {
                     return Err(Error::Invalid(
                         "Task impact is outside the activated revisions",
                     ));
@@ -98,16 +99,17 @@ impl Batch<'_, '_> {
                 *consumers.entry(id).or_default() |= changed;
             }
         }
-        self.match_impacts(map, &consumers)
+        let normalized = self.normalize_impacts(spec, map)?;
+        self.match_impacts(&normalized, &consumers)
     }
     fn match_impacts(
         &self,
-        map: Option<&ImpactMap>,
+        impacts: &[TaskImpact],
         consumers: &BTreeMap<String, bool>,
     ) -> Result<Vec<TaskImpact>> {
         let mut result = Vec::new();
         let mut seen = BTreeSet::new();
-        for impact in map.map(|m| m.tasks.as_slice()).unwrap_or_default() {
+        for impact in impacts {
             let id = self.resolve(&impact.task_id)?;
             if !seen.insert(id.clone()) {
                 return Err(Error::Invalid("duplicate Task impact"));
@@ -120,7 +122,10 @@ impl Batch<'_, '_> {
             if row["status"] == "cancelled" {
                 continue;
             }
-            if consumers[&id] && impact.corrective.is_none() {
+            if consumers[&id]
+                && impact.corrective.is_none()
+                && impact.action != ImpactAction::Cancel
+            {
                 return Err(Error::Invalid("changed criteria require a corrective Task"));
             }
             result.push(TaskImpact {
@@ -144,6 +149,10 @@ impl Batch<'_, '_> {
     ) -> Result<()> {
         for impact in impacts {
             let row = self.task(&impact.task_id)?;
+            if impact.action == ImpactAction::Cancel {
+                self.cancel_impact(&row, &impact.reason)?;
+                continue;
+            }
             let criteria = self.criteria(&impact.acceptance_refs)?;
             if row["status"] != "completed" {
                 self.rebind_task(spec, &row, &criteria)?;

@@ -111,6 +111,8 @@ async fn bootstrap_steps_effects_and_hidden_review() -> Result<(), HarnessError>
     for (table, expected, count) in counts {
         assert_eq!(count, expected, "{table}");
     }
+    s.turn("general", "Write the single follow-up marker.").await?;
+    assert_eq!(tokio::fs::read_to_string(s.sandbox.data.join("direct-marker.txt")).await?,"direct edit");
     server.abort();
     s.finish().await
 }

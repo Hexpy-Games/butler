@@ -51,7 +51,7 @@ pub fn apply_tool(
                 Err(error) => rejection::response(tx, scope, &error, failed.as_ref()),
             },
             Err(error) => Ok(
-                json!({"ok":false,"error":{"code":"invalid_work_apply","message":error.to_string()}}),
+                json!({"ok":false,"error":{"code":"work_apply_rejected","message":super::super::model_text::rejected(&error.to_string())}}),
             ),
         }
     }?;

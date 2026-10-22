@@ -103,7 +103,7 @@ fn reject_growth(tx: &Transaction<'_>, ctx: &Context, work: &str, task: &str) ->
         child_session: false,
     };
     assert!(
-        matches!(apply(tx, ctx, &scope, &input), Err(Error::Invalid(message)) if message.starts_with("Tier 2 required:"))
+        matches!(apply(tx, ctx, &scope, &input), Err(Error::Invalid(message)) if message == "tier1_floor_exceeded")
     );
     let after = read_work(tx, work)?;
     assert_eq!(
@@ -133,7 +133,7 @@ fn escalate(tx: &Transaction<'_>, ctx: &Context, work: &str, task: &str) -> Resu
             {"op":"spec.propose","key":"detail","node":{"title":"Method","goal":"Verify the outcome","criteria":["Method checked"],"constraints":[]}},
             {"op":"spec.activate","expected_tree_version":0,"published_refs":[{"node_id":"@detail","revision":1,"body_hash":"@detail"}]},
             {"op":"task.add","title":"Check method","description":"Verify the method","step":"new","acceptance_refs":[{"node_id":"@detail","node_revision":1,"criterion_id":"c0"}]},
-            {"op":"work.escalate","tier":2,"reason":"delegation required"}
+            {"op":"work.escalate","reason":"delegation required"}
         ]
     }))?;
     let scope = ApplyScope {

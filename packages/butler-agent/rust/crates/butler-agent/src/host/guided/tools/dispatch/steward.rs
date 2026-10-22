@@ -47,9 +47,8 @@ pub(super) async fn execute(
             access_mode: access_mode(owner),
             schedule_run: owner.unattended_run(),
         })
-        .await
-        .map_err(ToolExecutionError::Integrity)?;
-    encoded(&result)
+        .await;
+    super::model_result(result)
 }
 
 pub(super) async fn steer(

@@ -109,7 +109,7 @@ pub(super) async fn run(mut input: Invocation<'_>) -> Result<AgentLoopResult, Ag
     };
     timing.mark("context_begun");
     loop {
-        let step = match run_iteration(&input, &mut state, &prepared, context.as_ref()).await {
+        let step = match run_iteration(&input, &mut state, &mut prepared, context.as_ref()).await {
             Err(AgentLoopError::Propagate(error))
                 if error.code() == "turn_continuation_budget_exhausted" =>
             {
@@ -150,7 +150,7 @@ fn restore_state(
 async fn run_iteration(
     input: &Invocation<'_>,
     state: &mut State,
-    prepared: &PreparedPolicy,
+    prepared: &mut PreparedPolicy,
     context: &dyn TurnContextProjection,
 ) -> Result<Step, AgentLoopError> {
     let timing = super::command_timing::CommandTiming::new("loop_iteration");
@@ -159,6 +159,11 @@ async fn run_iteration(
     let resumed_batch = state.resumed_batch.take();
     if !state.is_replaying(resumed_batch.as_ref()) {
         observe_steering(input, state).await?;
+        input
+            .policy
+            .refresh_instructions(GuidedInvocation::from(input), prepared)
+            .await
+            .map_err(propagated)?;
     }
     timing.mark("steering_done");
     let mut surface = match &resumed_batch {

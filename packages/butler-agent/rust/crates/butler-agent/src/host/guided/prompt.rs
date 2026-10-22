@@ -3,6 +3,7 @@
 mod attachments;
 mod diagnostics;
 mod material;
+mod work_tier;
 use diagnostics::request_usage;
 mod helpers;
 use helpers::{default_project_folder, js_truthy, json, nonempty_array};
@@ -340,6 +341,21 @@ async fn work_stream_context(
 }
 
 impl PromptPort for GuidedPrompt {
+    fn refresh_instructions<'a>(
+        &'a self,
+        invocation: GuidedInvocation<'a>,
+        instructions: &'a mut Option<String>,
+        cache_prefix: &'a mut Option<Value>,
+    ) -> PortFuture<'a, ()> {
+        Box::pin(async move {
+            if let Some(instructions) = instructions {
+                work_tier::configure(&self.state, invocation.turn, instructions, cache_prefix)
+                    .await?;
+            }
+            Ok(())
+        })
+    }
+
     fn render<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
@@ -348,9 +364,11 @@ impl PromptPort for GuidedPrompt {
             let turn = invocation.turn;
             let state = &self.state;
             let material = material::read(state, turn).await?;
-            let (prompt, instructions, components) =
+            let (prompt, mut instructions, components) =
                 material::render(state, invocation, &material).await?;
             let (prompt, sections) = prompt;
+            let mut cache_prefix = state.phase.stable_provider_cache_prefix.clone();
+            work_tier::configure(state, turn, &mut instructions, &mut cache_prefix).await?;
             let tools = state
                 .phase
                 .provider_tools
@@ -388,7 +406,7 @@ impl PromptPort for GuidedPrompt {
                     butler_data: Some(state.butler_data.clone()),
                     usage_attribution: Some(usage),
                     cache_scope: Some(format!("btcc-guided:{}", turn.session_id)),
-                    stable_provider_cache_prefix: state.phase.stable_provider_cache_prefix.clone(),
+                    stable_provider_cache_prefix: cache_prefix,
                     ..Default::default()
                 },
                 final_synthesis: FinalSynthesis::Never,

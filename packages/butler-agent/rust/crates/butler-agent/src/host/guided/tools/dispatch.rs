@@ -31,6 +31,20 @@ pub(super) async fn execute(
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    if matches!(
+        call.name.as_str(),
+        "run_command"
+            | "write_file"
+            | "edit_file"
+            | "tool_call"
+            | "call_mcp_tool"
+            | "library_organize"
+            | "transform_public_data_table"
+            | "bind_session_git_worktree"
+    ) && !super::work_model::effects_allowed(owner).await?
+    {
+        return super::work_model::effect_refusal(owner).await;
+    }
     let resolved = link_targets::resolve(owner, call)
         .await
         .map_err(ToolExecutionError::Integrity)?;
@@ -71,6 +85,15 @@ pub(super) async fn execute(
     if mcp::supports(&call.name) {
         return Box::pin(mcp::execute(owner, invocation, call)).await;
     }
+    execute_session(owner, invocation, call, call_id).await
+}
+
+async fn execute_session(
+    owner: &GuidedTools,
+    invocation: GuidedInvocation<'_>,
+    call: &ModelRoundToolCall,
+    call_id: &str,
+) -> Result<JsonDocument, ToolExecutionError> {
     if call.name == ToolName::DelegateToSteward {
         return Box::pin(steward::execute(owner, invocation, call)).await;
     }
@@ -97,6 +120,15 @@ pub(super) async fn execute(
             .map_err(ToolExecutionError::Integrity)?;
         return encoded(&json!({"ok":true,"status":if waiting{"waiting"}else{"no_active_worker"}}));
     }
+    execute_work_effect(owner, invocation, call, call_id).await
+}
+
+async fn execute_work_effect(
+    owner: &GuidedTools,
+    invocation: GuidedInvocation<'_>,
+    call: &ModelRoundToolCall,
+    call_id: &str,
+) -> Result<JsonDocument, ToolExecutionError> {
     if GuidedWorkTools::is_work_tool(&call.name) {
         return encoded(&execute_work(owner, call, call_id).await?);
     }
@@ -149,6 +181,14 @@ pub(super) async fn execute(
     if let Some(result) = domain_tool(owner, &invocation, call, call_id).await {
         return result;
     }
+    execute_context(owner, call, call_id).await
+}
+
+async fn execute_context(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+    call_id: &str,
+) -> Result<JsonDocument, ToolExecutionError> {
     let args = Value::Object(call.arguments.clone());
     if matches!(
         ToolName::parse(call.name.as_str()),
@@ -299,5 +339,27 @@ async fn domain_tool(
             Some(file_observation::execute(owner, call, call_id).await)
         }
         _ => None,
+    }
+}
+
+fn model_result(result: Result<Value, BtccError>) -> Result<JsonDocument, ToolExecutionError> {
+    match result {
+        Ok(value) => encoded(&value),
+        Err(error) if error.code() == "no_started_task" => encoded(&butler_work::store::refusal(
+            "no_started_task",
+            butler_work::store::NO_STARTED_TASK,
+        )),
+        Err(error) => {
+            let mut cause: Option<&(dyn std::error::Error + 'static)> = Some(&error);
+            while let Some(source) = cause {
+                if let Some(error) = source.downcast_ref::<butler_work::store::Error>()
+                    && let Some(value) = butler_work::store::from_error(error)
+                {
+                    return encoded(&value);
+                }
+                cause = source.source();
+            }
+            Err(ToolExecutionError::Integrity(error))
+        }
     }
 }

@@ -6207,7 +6207,8 @@
                 "spec",
                 "coverage",
                 "operations"
-              ]
+              ],
+              "description": "tasks: chains, steps, stacks, statuses, holds, task_graph_revision\ntask: one Task with parts (DAG), attempts, criteria, results\noperations: variants allowed now and why others are not"
             },
             "work_id": {
               "type": "string",
@@ -6319,13 +6320,16 @@
                             "type": "object",
                             "properties": {
                               "key": {
-                                "type": "string"
+                                "type": "string",
+                                "description": "batch-local name for @key"
                               },
                               "title": {
-                                "type": "string"
+                                "type": "string",
+                                "description": "short user-visible name"
                               },
                               "description": {
-                                "type": "string"
+                                "type": "string",
+                                "description": "what done looks like"
                               },
                               "criteria": {
                                 "type": "array",
@@ -6363,10 +6367,12 @@
                         "type": "string"
                       },
                       "title": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "short user-visible name"
                       },
                       "description": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "what done looks like"
                       },
                       "after_task_id": {
                         "type": "string",
@@ -6404,7 +6410,8 @@
                             "criterion_id"
                           ],
                           "additionalProperties": false
-                        }
+                        },
+                        "description": "criteria this Task must satisfy"
                       }
                     },
                     "required": [
@@ -6453,11 +6460,13 @@
                                 "criterion_id"
                               ],
                               "additionalProperties": false
-                            }
+                            },
+                            "description": "criteria this Task must satisfy"
                           }
                         },
                         "required": [],
-                        "additionalProperties": false
+                        "additionalProperties": false,
+                        "description": "only the named fields change"
                       },
                       "confirm_draft": {
                         "const": true,
@@ -6520,7 +6529,8 @@
                       "task_id",
                       "into_step_of_task_id"
                     ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "description": "merge into that Task's step"
                   },
                   {
                     "type": "object",
@@ -6542,7 +6552,8 @@
                       "op",
                       "task_id"
                     ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "description": "split the stack containing task_id into consecutive steps"
                   },
                   {
                     "type": "object",
@@ -6554,7 +6565,8 @@
                         "type": "string"
                       },
                       "reason": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "one line, shown in history"
                       }
                     },
                     "required": [
@@ -6562,7 +6574,8 @@
                       "task_id",
                       "reason"
                     ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "description": "followers re-link to its predecessor step; completed Tasks stay"
                   },
                   {
                     "type": "object",
@@ -6600,7 +6613,8 @@
                       "kind",
                       "title"
                     ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "description": "any DAG inside the Task; no cycles"
                   },
                   {
                     "type": "object",
@@ -6625,7 +6639,8 @@
                         "type": "array",
                         "items": {
                           "type": "string"
-                        }
+                        },
+                        "description": "replaces this part's predecessors within its Task"
                       }
                     },
                     "required": [
@@ -6645,7 +6660,8 @@
                         "type": "string"
                       },
                       "reason": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "one line, shown in history"
                       }
                     },
                     "required": [
@@ -6669,7 +6685,8 @@
                       "op",
                       "task_id"
                     ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "description": "claim the Task before its effects"
                   },
                   {
                     "type": "object",
@@ -6685,7 +6702,8 @@
                       "op",
                       "part_id"
                     ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "description": "claim one part of a started Task"
                   },
                   {
                     "type": "object",
@@ -6733,7 +6751,8 @@
                         "type": "string"
                       },
                       "result_revision": {
-                        "type": "integer"
+                        "type": "integer",
+                        "description": "the submitted result being judged"
                       },
                       "verdict": {
                         "type": "string",
@@ -6765,7 +6784,8 @@
                                 "node_revision",
                                 "criterion_id"
                               ],
-                              "additionalProperties": false
+                              "additionalProperties": false,
+                              "description": "criterion judged"
                             },
                             "met": {
                               "type": "boolean"
@@ -6774,10 +6794,12 @@
                               "type": "array",
                               "items": {
                                 "type": "string"
-                              }
+                              },
+                              "description": "tool evidence"
                             },
                             "note": {
-                              "type": "string"
+                              "type": "string",
+                              "description": "one line"
                             }
                           },
                           "required": [
@@ -6787,7 +6809,8 @@
                             "note"
                           ],
                           "additionalProperties": false
-                        }
+                        },
+                        "description": "criterion_ref (criterion judged), met, evidence_refs (tool evidence), note (one line)"
                       }
                     },
                     "required": [
@@ -6797,7 +6820,8 @@
                       "verdict",
                       "criterion_results"
                     ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "description": "judge every bound criterion; one unmet criterion means revise"
                   },
                   {
                     "type": "object",
@@ -6817,7 +6841,8 @@
                       "task_id",
                       "review_ref"
                     ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "description": "needs an accepted review at current revisions"
                   },
                   {
                     "type": "object",
@@ -6835,7 +6860,8 @@
                         "type": "string"
                       },
                       "checkpoint_ref": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "saved progress to resume from"
                       }
                     },
                     "required": [
@@ -6843,7 +6869,8 @@
                       "task_id",
                       "reason"
                     ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "description": "needs input or approval"
                   },
                   {
                     "type": "object",
@@ -6855,7 +6882,8 @@
                         "type": "string"
                       },
                       "reason": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "one line, shown in history"
                       }
                     },
                     "required": [
@@ -6863,7 +6891,8 @@
                       "task_id",
                       "reason"
                     ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "description": "cannot be done; holds later steps of its chain"
                   },
                   {
                     "type": "object",
@@ -6875,10 +6904,12 @@
                         "type": "string"
                       },
                       "node_id": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "the node and revision you revise; omit both for a new node"
                       },
                       "base_revision": {
-                        "type": "integer"
+                        "type": "integer",
+                        "description": "the node and revision you revise; omit both for a new node"
                       },
                       "node": {
                         "type": "object",
@@ -6908,14 +6939,16 @@
                           "criteria",
                           "constraints"
                         ],
-                        "additionalProperties": false
+                        "additionalProperties": false,
+                        "description": "title; goal (the outcome); criteria (observable checks); constraints (limits the request states)"
                       }
                     },
                     "required": [
                       "op",
                       "node"
                     ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "description": "publishes immutable content; returns a SpecRef"
                   },
                   {
                     "type": "object",
@@ -6944,78 +6977,39 @@
                             "body_hash"
                           ],
                           "additionalProperties": false
-                        }
+                        },
+                        "description": "refs returned by spec.propose in this or an earlier batch"
                       },
                       "expected_tree_version": {
-                        "type": "integer"
+                        "type": "integer",
+                        "description": "Spec tree version from your last read"
                       },
                       "impact_map": {
                         "type": "object",
-                        "properties": {
-                          "tasks": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "task_id": {
-                                  "type": "string"
-                                },
-                                "expected_revision": {
-                                  "type": "integer"
-                                },
-                                "acceptance_refs": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "object",
-                                    "properties": {
-                                      "node_id": {
-                                        "type": "string"
-                                      },
-                                      "node_revision": {
-                                        "type": "integer"
-                                      },
-                                      "criterion_id": {
-                                        "type": "string"
-                                      }
-                                    },
-                                    "required": [
-                                      "node_id",
-                                      "node_revision",
-                                      "criterion_id"
-                                    ],
-                                    "additionalProperties": false
-                                  }
-                                },
-                                "corrective": {
-                                  "type": "object",
-                                  "properties": {
-                                    "title": {
-                                      "type": "string"
-                                    },
-                                    "description": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "required": [
-                                    "title",
-                                    "description"
-                                  ],
-                                  "additionalProperties": false
-                                }
-                              },
-                              "required": [
-                                "task_id",
-                                "expected_revision",
-                                "acceptance_refs"
-                              ],
-                              "additionalProperties": false
+                        "additionalProperties": {
+                          "type": "object",
+                          "properties": {
+                            "action": {
+                              "type": "string",
+                              "enum": [
+                                "retain",
+                                "edit",
+                                "cancel",
+                                "add",
+                                "reverify"
+                              ]
+                            },
+                            "reason": {
+                              "type": "string"
                             }
-                          }
+                          },
+                          "required": [
+                            "action",
+                            "reason"
+                          ],
+                          "additionalProperties": false
                         },
-                        "required": [
-                          "tasks"
-                        ],
-                        "additionalProperties": false
+                        "description": "what each affected Task needs under the new Spec; every Task bound to a changed criterion must appear"
                       }
                     },
                     "required": [
@@ -7024,6 +7018,23 @@
                       "expected_tree_version"
                     ],
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "op": {
+                        "const": "work.escalate"
+                      },
+                      "reason": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "reason"
+                    ],
+                    "additionalProperties": false,
+                    "description": "raise this Tier 1 Work to Tier 2; brief, Work and Task ids are kept"
                   }
                 ]
               },
