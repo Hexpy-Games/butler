@@ -15,12 +15,14 @@ pub(super) fn start(application: &AppApplication) {
     let subscribers = application.subscribers.clone();
     let clock = application.dependencies.identity_clock.clone();
     let shutdown = application.dependencies.service_shutdown.clone();
+    let queue = application.queue_wake.clone();
     tokio::spawn(async move {
         loop {
             let change = tokio::select! {
                 () = shutdown.cancelled() => return,
                 change = changes.recv() => change,
             };
+            let chat = change.as_ref().ok().map(|(parent, _)| parent.clone());
             let (kind, payload) = match change {
                 Ok((parent, child)) => (
                     "subsession.changed",
@@ -43,6 +45,9 @@ pub(super) fn start(application: &AppApplication) {
                     "[gateway] subsession event unavailable: {}",
                     error.code()
                 );
+            }
+            if let Some(chat) = chat {
+                let _ = queue.chat(chat).await;
             }
         }
     });

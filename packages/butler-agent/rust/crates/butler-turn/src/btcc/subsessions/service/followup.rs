@@ -9,10 +9,10 @@ impl SubsessionService {
         let prior = self.prior_context(relation).await?;
         Ok(json!({"ok":false,"error":{
             "code":"delegated_session_closed","recoverable":true,
-            "message":"The prior delegated Work is closed. For a new user request, continue in this same turn: read the owning Task, add or select its next part, then delegate_to_steward with previous_relation_id and part_id or task_id. Do not ask the user to restart or end with a connection notice. An acceptance/closeout request for already closed Work needs no replacement. No child was steered."
+            "message":"The prior delegated Work is closed. For a new user request, continue in this same turn: read the owning Task, add or select its next part, then delegate_to_steward with previous_relation_id and optional part_id. Do not ask the user to restart or end with a connection notice. An acceptance/closeout request for already closed Work needs no replacement. No child was steered."
         },"next_action":{"tool":"delegate_to_steward",
             "previous_relation_id":relation.relation_id,
-            "task_id":relation.task_id},
+            "part_id":null},
             "prior_context":prior}))
     }
 
@@ -88,7 +88,7 @@ impl SubsessionService {
             (false, _) => "active: session_control for related follow-ups",
             (true, true) => "reported, Task open/blocked: session_control to its retained owner",
             (true, false) => {
-                "closed: new requests need work_read view=task and delegate_to_steward(previous_relation_id, part_id|task_id) in this turn"
+                "closed: new requests need work_read view=task and delegate_to_steward(previous_relation_id, part_id?) in this turn"
             }
         };
         Ok(format!(

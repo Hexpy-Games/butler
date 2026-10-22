@@ -181,24 +181,33 @@ impl AppApplication {
             .map_err(app_error)?;
 
         if inserted {
-            let visual = self
-                .admit_visual_localized(VisualAdmissionRequest {
+            self.finish_queued_visual(
+                &chat_id,
+                &queued_id,
+                VisualAdmissionRequest {
                     model_ref: controls.model.clone(),
                     files: inspected.files,
-                })
-                .await;
-            match visual {
-                Ok(attachments) => {
-                    self.finish_visual(&chat_id, &queued_id, attachments)
-                        .await?;
-                }
-                Err(error) => {
-                    self.fail_admission(&chat_id, &queued_id, &error).await?;
-                    return Err(error);
-                }
+                },
+            )
+            .await?;
+        }
+        self.queue_wake.chat(chat_id.clone()).await?;
+        self.queue_page(chat_id).await
+    }
+
+    async fn finish_queued_visual(
+        &self,
+        chat: &str,
+        queued: &str,
+        request: VisualAdmissionRequest,
+    ) -> Result<(), GatewayApplicationError> {
+        match self.admit_visual_localized(request).await {
+            Ok(attachments) => self.finish_visual(chat, queued, attachments).await,
+            Err(error) => {
+                self.fail_admission(chat, queued, &error).await?;
+                Err(error)
             }
         }
-        self.queue_page(chat_id).await
     }
 
     async fn update_session_queue_inner(

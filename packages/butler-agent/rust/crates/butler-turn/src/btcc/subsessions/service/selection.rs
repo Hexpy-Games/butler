@@ -155,6 +155,21 @@ impl SubsessionService {
         {
             return Ok(false);
         }
+        let target = candidate.child_session_id.clone();
+        let parent = query.parent.to_owned();
+        let stopped = self
+            .repository
+            .storage()
+            .work_model_read(move |db| {
+                Ok(butler_work::store::active_session_holds(db, &target)?
+                    .iter()
+                    .any(|hold| hold["kind"] == "stop" && hold["owner"] == parent))
+            })
+            .await
+            .map_err(BtccError::from)?;
+        if stopped {
+            return Ok(true);
+        }
         Ok(self
             .repository
             .open_relation(candidate.clone())
