@@ -104,8 +104,9 @@
   );
 }
 
-/* A row linked to a chart is focusable; its ring keeps --focus-ring-room of
-   clear space around the row, like the chart's own ring. */
+/* A row linked to a chart is focusable. Its ring is the shared one: its outer
+   edge stays within --focus-ring-room of the row, so a clipping parent that
+   leaves that room (Collapsible) shows the whole ring. */
 .row[data-linked="true"] {
   border-radius: var(--radius-control);
   outline: none;
@@ -113,5 +114,5 @@
 
 .row[data-linked="true"]:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
-  outline-offset: var(--focus-ring-room);
+  outline-offset: calc(var(--focus-ring-room) - var(--focus-ring-width));
 }

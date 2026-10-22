@@ -24,8 +24,8 @@ Pass display-ready label, value, description, meta, or swatch nodes.
   reports mouse hover and keyboard (`:focus-visible`) focus (`true`) and their
   end (`false`); a click alone leaves no highlight once the pointer leaves.
   The caller maps it to the chart, e.g.
-  `UsageBars emphasis`. It draws the shared focus ring with
-  `--focus-ring-room` of clear space.
+  `UsageBars emphasis`. It draws the shared focus ring, whose outer edge stays
+  within `--focus-ring-room` of the row.
 
 ```tsx
 <KeyValueRow label="하위 작업" value="4.5만 · 46%" valueTextSize="caption"
