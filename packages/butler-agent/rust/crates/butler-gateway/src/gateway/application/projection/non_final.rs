@@ -16,7 +16,7 @@ use crate::gateway::application::storage::CachedSql;
 use claim_status::current_claim_status;
 use operations::*;
 pub(in crate::gateway::application) use operations::{
-    FailedProjection, project_failed, settle_confirmed_stop,
+    FailedProjection, project_failed, project_suspended, settle_confirmed_stop,
 };
 use progress::*;
 pub(in crate::gateway::application) use runtime_progress::row_from_runtime_event;

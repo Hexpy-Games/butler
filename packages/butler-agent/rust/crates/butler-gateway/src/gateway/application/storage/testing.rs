@@ -90,6 +90,29 @@ impl Events {
         self.0.subscribe(listener)
     }
 
+    /// Projects suspension after a queued result has arrived under an active claim.
+    pub fn suspend(
+        &self,
+        db: &Connection,
+        chat: &str,
+        turn: &str,
+        claim: &str,
+    ) -> Result<(bool, bool), String> {
+        super::super::projection::project_suspended(
+            db,
+            &self.0,
+            chat,
+            turn,
+            Some(claim),
+            &serde_json::Map::from_iter([(
+                "suspension".into(),
+                serde_json::json!("waiting_for_worker"),
+            )]),
+            "2026-01-01T00:00:00Z",
+        )
+        .map_err(|error| error.to_string())
+    }
+
     pub fn append(&self, db: &Connection, event_type: &str) -> Result<(), String> {
         super::super::events::append(
             db,

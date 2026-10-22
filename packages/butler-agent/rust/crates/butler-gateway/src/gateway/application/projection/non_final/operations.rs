@@ -167,7 +167,7 @@ pub(super) fn project_resumed(
     Ok(())
 }
 
-pub(super) fn project_suspended(
+pub(in crate::gateway::application) fn project_suspended(
     db: &Connection,
     subscribers: &EventSubscribers,
     chat: &str,
@@ -222,7 +222,13 @@ pub(super) fn project_suspended(
         return Ok((false, false));
     }
     if suspension == Some("waiting_for_worker") {
-        return Ok((true, false));
+        let result_pending: bool = db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM session_queued_messages WHERE chat_id=?1 AND state='queued' AND state IN ('queued','dispatching') AND json_valid(control_resolution_json) AND json_type(control_resolution_json,'$.subsession_result')='object')",
+            [chat], |row|row.get(0),
+        ).map_err(AppStorageError::sqlite)?;
+        if !result_pending {
+            return Ok((true, false));
+        }
     }
     events::append(
         db,

@@ -13,6 +13,8 @@ mod final_result;
 mod final_turn_events;
 mod handoffs;
 mod non_final;
+#[cfg(feature = "test-support")]
+pub(super) use non_final::project_suspended;
 pub(in crate::gateway::application) use non_final::row_from_runtime_event;
 pub(super) use non_final::{
     FailedProjection, ProjectionIds, project_failed, settle_confirmed_stop,
