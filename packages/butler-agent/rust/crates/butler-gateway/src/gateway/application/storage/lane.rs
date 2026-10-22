@@ -20,12 +20,21 @@ pub(super) struct Operation {
 pub(super) fn run(
     db: &mut Connection,
     mut receiver: mpsc::Receiver<Operation>,
+    checkpoint: Option<&butler_platform::sqlite::CheckpointOwner>,
 ) -> StorageResult<()> {
     let mut opened = None;
     // Advance only after a successful sync, so a read-only batch retries failures.
     let mut synced_changes = db.total_changes();
     while let Some(first) = receiver.blocking_recv() {
+        if let Some(checkpoint) = checkpoint {
+            checkpoint.lane_busy();
+        }
         batch(db, first, &mut receiver, &mut opened, &mut synced_changes);
+        if receiver.is_empty()
+            && let Some(checkpoint) = checkpoint
+        {
+            checkpoint.lane_idle();
+        }
     }
     commit(db, &mut opened)?;
     sync(db, &mut synced_changes)
