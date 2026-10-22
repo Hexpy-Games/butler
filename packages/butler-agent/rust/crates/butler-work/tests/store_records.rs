@@ -211,7 +211,11 @@ fn identifiers_pin_crockford_format_and_monotonic_clock_regression() {
 #[test]
 fn every_store_statement_has_an_indexed_query_plan() {
     let db = db();
-    for (name, sql) in sql::ALL.iter().chain(butler_work::store::api::sql::ALL) {
+    for (name, sql) in sql::ALL
+        .iter()
+        .chain(butler_work::store::api::sql::ALL)
+        .chain(butler_work::store::execution::sql::ALL)
+    {
         let mut stmt = db.prepare(&format!("EXPLAIN QUERY PLAN {sql}")).unwrap();
         let n = stmt.parameter_count();
         let plan = stmt

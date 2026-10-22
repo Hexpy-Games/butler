@@ -150,6 +150,21 @@ impl Chain {
         next.remove(id)?;
         self.finish(next, running)
     }
+    /// Add a new Task alongside an existing Task in its step.
+    pub fn place_in_stack(
+        &self,
+        id: TaskId,
+        target: &TaskId,
+        running: &BTreeSet<TaskId>,
+    ) -> Result<Self, ChainError> {
+        if self.locate(&id).is_ok() {
+            return Err(ChainError::Membership);
+        }
+        let (index, _) = self.locate(target)?;
+        let mut next = self.clone();
+        next.steps[index].tasks.push(id);
+        self.finish(next, running)
+    }
     /// Join the next step's stack, or append a last step if the target is last.
     pub fn place_after(
         &self,

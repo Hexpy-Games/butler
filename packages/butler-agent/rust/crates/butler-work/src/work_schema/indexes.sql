@@ -11,7 +11,10 @@ CREATE INDEX IF NOT EXISTS wm_spec_nodes_work ON wm_spec_nodes(work_id);
 CREATE INDEX IF NOT EXISTS wm_spec_nodes_parent ON wm_spec_nodes(parent_node_id);
 CREATE INDEX IF NOT EXISTS wm_instructions_pending ON wm_instructions(target_session_id,status,received_seq)
  WHERE status IN ('accepted','waiting_for_turn','waiting_for_task','pending_safe_point');
-CREATE UNIQUE INDEX IF NOT EXISTS wm_attempts_lease ON wm_attempts(task_id) WHERE status='running';
+CREATE UNIQUE INDEX IF NOT EXISTS wm_attempts_lease ON wm_attempts(task_id) WHERE status='running' AND part_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS wm_attempts_part_lease ON wm_attempts(part_id) WHERE status='running' AND part_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS wm_attempts_task ON wm_attempts(task_id,started_at,id);
+CREATE INDEX IF NOT EXISTS wm_results_task ON wm_results(task_id,revision DESC);
 CREATE INDEX IF NOT EXISTS wm_attempts_running ON wm_attempts(session_id) WHERE status='running';
 CREATE INDEX IF NOT EXISTS wm_outbox_unpublished ON wm_outbox(published,seq) WHERE published=0;
 CREATE INDEX IF NOT EXISTS wm_cross_db_intents_pending ON wm_cross_db_intents(state,op_id) WHERE state='pending';

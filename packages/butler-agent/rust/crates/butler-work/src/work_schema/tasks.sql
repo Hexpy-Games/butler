@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS wm_task_parts (
   status TEXT NOT NULL CHECK (status IN ('pending','running','awaiting_review','completed','failed','cancelled')),
   part_rank TEXT NOT NULL,
   assignee_session_id TEXT,
+  revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
   UNIQUE (task_id,id)
 );
 CREATE TABLE IF NOT EXISTS wm_task_part_edges (

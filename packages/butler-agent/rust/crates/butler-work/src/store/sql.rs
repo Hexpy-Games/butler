@@ -7,8 +7,8 @@ macro_rules! statements {
 }
 statements! {
 WORK_STATE = "UPDATE wm_works SET run_state=?2,canon_status=?3,canon_status_source=?4,failure_reason=?5,run_generation=run_generation+(run_state<>?2),revision=revision+1,updated_at=?6 WHERE id=?1";
-RECOVER_PART = "UPDATE wm_task_parts SET status=?2 WHERE id=?1 AND status IN ('running','awaiting_review')";
-CANCEL_PARTS = "UPDATE wm_task_parts SET status='cancelled' WHERE task_id=?1 AND status IN ('pending','running','awaiting_review','failed')";
+RECOVER_PART = "UPDATE wm_task_parts SET status=?2,revision=revision+1 WHERE id=?1 AND status IN ('running','awaiting_review')";
+CANCEL_PARTS = "UPDATE wm_task_parts SET status='cancelled',revision=revision+1 WHERE task_id=?1 AND status IN ('pending','running','awaiting_review','failed')";
 WORK = "SELECT * FROM wm_works WHERE id=?1";
 PLAN = "SELECT * FROM wm_plans WHERE id=?1";
 INSERT_PLAN = "INSERT INTO wm_plans(id,project_id,title,description,due_on,status,visibility,created_at,updated_at,created_by) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?8,?9)";

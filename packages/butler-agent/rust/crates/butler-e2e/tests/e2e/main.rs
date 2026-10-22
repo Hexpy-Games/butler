@@ -266,6 +266,7 @@ mod turn_fenced_cancel;
 mod usage_delegated;
 
 mod work_model_api;
+mod work_model_execution;
 mod work_model_schema;
 
 mod work_model_cutover;

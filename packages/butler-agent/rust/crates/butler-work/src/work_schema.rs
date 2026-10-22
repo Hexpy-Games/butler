@@ -19,7 +19,29 @@ pub fn ensure(connection: &Connection) -> rusqlite::Result<()> {
 fn target(connection: &Connection) -> rusqlite::Result<()> {
     upgrade::p1(connection)?;
     upgrade_migration_state(connection)?;
+    upgrade_execution(connection)?;
     create(connection)
+}
+fn upgrade_execution(db: &Connection) -> rusqlite::Result<()> {
+    let columns = db
+        .prepare("PRAGMA table_info(wm_task_parts)")?
+        .query_map([], |r| r.get::<_, String>(1))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    if !columns.is_empty() && !columns.iter().any(|name| name == "revision") {
+        db.execute_batch("ALTER TABLE wm_task_parts ADD COLUMN revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0)")?;
+    }
+    use rusqlite::OptionalExtension;
+    let lease: Option<String> = db
+        .query_row(
+            "SELECT sql FROM sqlite_schema WHERE name='wm_attempts_lease'",
+            [],
+            |r| r.get(0),
+        )
+        .optional()?;
+    if lease.is_some_and(|sql| !sql.contains("part_id IS NULL")) {
+        db.execute_batch("DROP INDEX wm_attempts_lease")?;
+    }
+    Ok(())
 }
 fn create(connection: &Connection) -> rusqlite::Result<()> {
     connection.execute_batch(include_str!("work_schema/entities.sql"))?;

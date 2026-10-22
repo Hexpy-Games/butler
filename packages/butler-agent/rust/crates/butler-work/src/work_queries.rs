@@ -43,5 +43,5 @@ indexed_reads! {
     TaskPredecessors => ("SELECT pred FROM wm_task_edges WHERE work_id=?1 AND succ=?2", "wm_task_edges_successor"),
     CriterionConsumers => ("SELECT task_id FROM wm_task_criteria WHERE node_id=?1 AND node_revision=?2 AND criterion_id=?3", "wm_task_criteria_consumers"),
     WorkSpecNodes => ("SELECT * FROM wm_spec_nodes WHERE work_id=?1", "wm_spec_nodes_work"),
-    TaskLease => ("SELECT * FROM wm_attempts WHERE task_id=?1 AND status='running'", "wm_attempts_lease"),
+    TaskLease => ("SELECT * FROM wm_attempts WHERE task_id=?1 AND status='running' AND part_id IS NULL", "wm_attempts_lease"),
 }
