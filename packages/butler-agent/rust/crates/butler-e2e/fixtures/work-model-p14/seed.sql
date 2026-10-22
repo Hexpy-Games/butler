@@ -58,7 +58,7 @@ INSERT INTO wm_work_edges(pred_work_id,succ_work_id,chain_id) VALUES('wk_canon',
 INSERT INTO wm_work_edges(pred_work_id,succ_work_id,chain_id) VALUES('wk_schema','wk_api','ch_canon');
 INSERT INTO wm_work_edges(pred_work_id,succ_work_id,chain_id) VALUES('wk_store','wk_api','ch_canon');
 INSERT INTO wm_work_edges(pred_work_id,succ_work_id,chain_id) VALUES('wk_queue','wk_queue_ui','ch_queue');
-INSERT INTO wm_hold_decisions(id,chain_id,failed_work_id,held_step_index,question_message_id) VALUES('hd_queue','ch_queue','wk_queue',1,'msg_hold');
+INSERT INTO wm_hold_decisions(id,chain_id,failed_work_id,held_step_index,question_message_id,coverage_json) VALUES('hd_queue','ch_queue','wk_queue',1,'msg_hold','[{"id":"wk_queue","step":0,"state":"failed","generation":0}]');
 INSERT INTO wm_works(id,scope_kind,scope_ref,title,run_state,canon_status,canon_status_source,visibility,origin,plan_rank,revision,created_at,updated_at,created_by) VALUES('wk_passkey','project','butler','패스키 로그인','idle','planned','person','canon','board','G',1,1,1,'{"person":"fixture"}');
 INSERT INTO wm_works(id,scope_kind,scope_ref,title,run_state,canon_status,canon_status_source,visibility,origin,plan_rank,revision,created_at,updated_at,created_by) VALUES('wk_bookmarks','project','butler','다른 브라우저에서 북마크 가져오기','idle','planned','person','canon','board','W',1,1,1,'{"person":"fixture"}');
 INSERT INTO wm_works(id,scope_kind,scope_ref,home_session_id,title,run_state,visibility,origin,revision,created_at,updated_at,created_by) VALUES('wk_minutes','session','chat_minutes',NULL,'회의록 정리','idle','private','chat',1,1,1,'{"person":"fixture"}');

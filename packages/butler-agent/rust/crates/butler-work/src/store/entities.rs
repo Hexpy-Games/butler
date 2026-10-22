@@ -101,6 +101,16 @@ pub fn create_work(
     input: &NewWork,
     registration: &Registration,
 ) -> Result<Value> {
+    create_work_assigned(tx, ctx, input, registration, None)
+}
+
+pub(super) fn create_work_assigned(
+    tx: &Transaction<'_>,
+    ctx: &Context,
+    input: &NewWork,
+    registration: &Registration,
+    assignee: Option<&str>,
+) -> Result<Value> {
     ensure_work_counts(tx, (input.scope_kind.as_str(), &input.scope_ref))?;
     let (visibility, status) = match registration {
         Registration::Private => ("private", None),
@@ -119,7 +129,8 @@ pub fn create_work(
             visibility,
             status,
             ctx.now,
-            ctx.actor.to_string()
+            ctx.actor.to_string(),
+            assignee
         ],
     )?;
     count(

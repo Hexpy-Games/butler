@@ -1,6 +1,8 @@
 //! Required composition ports and owned App transport values.
 mod artifacts;
+mod work_model;
 pub use artifacts::*;
+pub use work_model::*;
 
 use super::sessions::{
     AppSessionWorkProgress, AppSessionWorkspaceProvisioner, AppWorkStreamReader,
@@ -337,6 +339,7 @@ pub struct AppApplicationDependencies {
     pub session_work_progress: Arc<dyn AppSessionWorkProgress>,
     pub work_streams: Arc<dyn AppWorkStreamReader>,
     pub subsessions: Arc<dyn AppSubsessionPort>,
+    pub work_model: Arc<dyn AppWorkModelPort>,
     pub branch_conversations: Arc<dyn AppBranchConversationReader>,
     pub session_title_generator: Arc<dyn AppSessionTitleGenerator>,
     pub branch_summarizer: Arc<dyn AppBranchSummarizer>,

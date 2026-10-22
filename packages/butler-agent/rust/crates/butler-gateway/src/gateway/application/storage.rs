@@ -8,7 +8,7 @@ mod lane;
 pub(super) mod metrics;
 mod operation;
 mod read_pool;
-mod schema;
+pub(in crate::gateway::application) mod schema;
 #[cfg(feature = "test-support")]
 pub mod testing;
 mod tuning;

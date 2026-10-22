@@ -201,7 +201,7 @@ fn identifiers_pin_crockford_format_and_monotonic_clock_regression() {
 #[test]
 fn every_store_statement_has_an_indexed_query_plan() {
     let db = db();
-    for (name, sql) in sql::ALL {
+    for (name, sql) in sql::ALL.iter().chain(butler_work::store::api::sql::ALL) {
         let mut stmt = db.prepare(&format!("EXPLAIN QUERY PLAN {sql}")).unwrap();
         let n = stmt.parameter_count();
         let plan = stmt
@@ -213,9 +213,42 @@ fn every_store_statement_has_an_indexed_query_plan() {
             .collect::<rusqlite::Result<Vec<_>>>()
             .unwrap()
             .join("\n");
+        if *name == "CHAIN_REVISION" {
+            assert!(
+                plan.contains(
+                    "SEARCH wm_work_chains USING INDEX sqlite_autoindex_wm_work_chains_1 (id=?)"
+                ),
+                "{plan}"
+            );
+        }
         assert!(
             !plan.contains("SCAN wm_") && !plan.contains("SCAN a") && !plan.contains("SCAN t"),
             "{name}: {plan}"
         );
     }
+}
+
+// test-category: pure-logic
+#[test]
+fn epic_creation_records_fields_without_a_synthetic_edit() {
+    let mut db = store_support::db();
+    let tx = db.transaction().unwrap();
+    let epic = write_api(
+        &tx,
+        &context(),
+        butler_work::store::api::Resource::CreateEpic,
+        "project",
+        json!({"title":"Title","description":"Description","assignee":"person"}),
+    )
+    .unwrap();
+    assert_eq!(epic["description"], "Description");
+    assert_eq!(epic["assignee"], "person");
+    let edits: i64 = tx
+        .query_row(
+            "SELECT count(*) FROM wm_audit WHERE entity_id=?1 AND op='edit'",
+            [epic["id"].as_str().unwrap()],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(edits, 0);
 }

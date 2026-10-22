@@ -26,6 +26,7 @@ prebuilt-ort = ["butler-gateway/prebuilt-ort", "butler-memory/prebuilt-ort"]
 static-ort = ["butler-gateway/static-ort", "butler-memory/static-ort"]
 
 [dependencies]
+butler-work = { path = "../butler-work" }
 butler-log = { path = "../butler-log" }
 butler-test-support = { path = "../butler-test-support", optional = true }
 butler-gateway = { path = "../butler-gateway", default-features = false }

@@ -7,6 +7,7 @@ use super::{AppApplication, events, service};
 
 pub(super) fn start(application: &AppApplication) {
     super::task_graphs::start_events(application);
+    super::work_model::start(application);
     let Some(mut changes) = application.dependencies.subsessions.changes() else {
         return;
     };

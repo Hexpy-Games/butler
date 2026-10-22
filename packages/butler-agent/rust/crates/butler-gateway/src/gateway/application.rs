@@ -2,6 +2,7 @@
 
 mod assets;
 mod data_reset;
+mod work_model;
 pub use assets::AppAssetCommand;
 mod admission;
 mod admission_identity;
@@ -18,7 +19,7 @@ mod events;
 mod thinking;
 use crate::gateway::shutdown_trace::measure as measure_shutdown;
 
-use errors::app_error;
+use errors::{app_error, public};
 mod browser_stills;
 mod devices;
 mod event_reads;
@@ -467,14 +468,6 @@ fn queue_owner_id(clock: &dyn AppIdentityClock) -> String {
     )
 }
 
-fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
-    GatewayApplicationError::Public {
-        status,
-        code: code.into(),
-        message: message.into(),
-        source: None,
-    }
-}
 #[expect(
     clippy::needless_pass_by_value,
     reason = "map_err/iterator adapter taking owned values"

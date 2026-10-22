@@ -45,12 +45,7 @@ pub(super) async fn dependencies(
         artifact_materializer: artifacts.clone(),
         message_files: artifacts,
         settings_facts: settings.clone(),
-        settings_mutations: Arc::new(AppSettingsMutation::new(
-            runtime.models.configuration.clone(),
-            runtime.profile.clone(),
-            installation.clone(),
-            data_root.to_path_buf(),
-        )),
+        settings_mutations: settings_mutations(&context),
         runtime_info: Arc::new(AppRuntimeInfo::open(installation)),
         model_catalog: Arc::new(AppModelCatalog::new(
             runtime.models.configuration.clone(),
@@ -84,6 +79,7 @@ pub(super) async fn dependencies(
         plan_decision_ledger: Arc::new(AppPlanDecisionLedger::new(runtime.project_ledger.clone())),
         work_streams: runtime.work_streams.clone(),
         subsessions: Arc::new(AppSubsessions::new(runtime, settings)),
+        work_model: runtime.work_model.clone(),
         branch_conversations: Arc::new(AppBranchConversations::new(runtime.conversations.clone())),
         session_title_generator: Arc::new(AppSessionTitleGeneratorAdapter::new(&runtime.models)),
         branch_summarizer: Arc::new(AppBranchSummarizerAdapter::new(&runtime.models)),
@@ -125,5 +121,14 @@ async fn usage_ports(
             lineage.clone(),
         )),
         Arc::new(AppContextRead::for_runtime(runtime, data_root, lineage).await?),
+    ))
+}
+
+fn settings_mutations(context: &Context<'_>) -> Arc<AppSettingsMutation> {
+    Arc::new(AppSettingsMutation::new(
+        context.runtime.models.configuration.clone(),
+        context.runtime.profile.clone(),
+        context.installation.clone(),
+        context.data_root.to_path_buf(),
     ))
 }
