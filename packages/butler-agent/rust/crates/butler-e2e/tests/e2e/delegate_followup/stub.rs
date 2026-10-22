@@ -133,6 +133,9 @@ async fn reply(
             template["arguments"]["request"] = OWNER.into();
         }
     }
+    if script.stopped && kind == "followup" && step == 0 {
+        template = json!({"type":"function_call","name":"work_read","arguments":{"view":"tasks"}});
+    }
     if script.routed.load(Ordering::SeqCst) && kind == "followup" {
         let instruction = MESSAGE;
         template = if step == 0 {

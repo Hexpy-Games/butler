@@ -212,22 +212,34 @@ fn assert_followup(
             .contains("closed: new requests need work_read view=task")
     );
     assert!(followups[0].to_string().contains("previous_relation_id"));
-    let feedback = followups[1]["input"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|i| i["output"].as_str())
-        .filter_map(|o| serde_json::from_str::<Value>(o).ok())
-        .find(|o| o.pointer("/output/error/code") == Some(&json!("delegated_session_closed")))
-        .unwrap();
-    assert_eq!(
-        feedback["output"]["next_action"]["previous_relation_id"],
-        relation
-    );
-    assert_eq!(
-        feedback["output"]["prior_context"]["result"]["status"],
-        if stopped { "cancelled" } else { "success" }
-    );
+    if stopped {
+        assert!(
+            followups[0]["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|tool| tool["name"] == "work_read")
+        );
+        let output = super::work_model_script::outputs(followups[1]);
+        assert_eq!(output[0]["ok"], true, "{output:?}");
+    } else {
+        let feedback = followups[1]["input"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|i| i["output"].as_str())
+            .filter_map(|o| serde_json::from_str::<Value>(o).ok())
+            .find(|o| o.pointer("/output/error/code") == Some(&json!("delegated_session_closed")))
+            .unwrap();
+        assert_eq!(feedback["output"]["prior_context"]["relation_id"], relation);
+        assert_eq!(feedback["output"]["next_action"]["tool"], "work_read");
+        assert_eq!(feedback["output"]["next_action"]["view"], "task");
+        assert!(feedback["output"]["next_action"]["task_id"].is_string());
+        assert_eq!(
+            feedback["output"]["prior_context"]["result"]["status"],
+            if stopped { "cancelled" } else { "success" }
+        );
+    }
     let child = requests[before..]
         .iter()
         .find(|body| {

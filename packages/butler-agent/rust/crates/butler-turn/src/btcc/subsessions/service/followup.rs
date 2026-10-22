@@ -10,9 +10,8 @@ impl SubsessionService {
         Ok(json!({"ok":false,"error":{
             "code":"delegated_session_closed","recoverable":true,
             "message":"The prior delegated Work is closed. For a new user request, continue in this same turn: read the owning Task, add or select its next part, then delegate_to_steward with previous_relation_id and optional part_id. Do not ask the user to restart or end with a connection notice. An acceptance/closeout request for already closed Work needs no replacement. No child was steered."
-        },"next_action":{"tool":"delegate_to_steward",
-            "previous_relation_id":relation.relation_id,
-            "part_id":null},
+        },"next_action":{"tool":"work_read","view":"task",
+            "task_id":relation.task_id},
             "prior_context":prior}))
     }
 
