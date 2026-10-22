@@ -12,7 +12,7 @@ use crate::gateway::application::{
 };
 use butler_core::public_text::trim_js_whitespace;
 
-pub(super) struct ProjectRow {
+pub(in crate::gateway::application) struct ProjectRow {
     id: String,
     pub(super) display_name: String,
     pub(super) status: String,
@@ -102,7 +102,7 @@ fn active_by_path(db: &Connection, path: &str) -> Result<Option<ProjectRow>, App
     Ok(row)
 }
 
-pub(super) fn active_by_id(
+pub(in crate::gateway::application) fn active_by_id(
     db: &Connection,
     id: &str,
 ) -> Result<Option<ProjectRow>, AppStorageError> {

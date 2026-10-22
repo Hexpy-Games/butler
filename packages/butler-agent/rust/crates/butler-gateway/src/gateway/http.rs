@@ -60,6 +60,7 @@ mod transcript_export;
 mod updates;
 mod wallpaper_modules;
 mod wallpapers;
+mod work_model;
 
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 

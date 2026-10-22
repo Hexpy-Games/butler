@@ -1,5 +1,7 @@
 //! Transaction operations. The caller owns an IMMEDIATE transaction and must
 //! roll it back on any error. No operation commits, opens a DB, or starts work.
+pub mod api;
+pub use api::{mark_outbox_published, read as read_api, write as write_api};
 mod counts;
 use counts::ensure_work_counts;
 mod entities;
@@ -142,10 +144,7 @@ pub(super) fn event(
             payload
         ],
     )?;
-    tx.execute(
-        sql::OUTBOX,
-        rusqlite::params!["work_model.changed", payload, ctx.now],
-    )?;
+    api::outbox(tx, ctx, kind, id, revision)?;
     Ok(())
 }
 pub(super) fn count(

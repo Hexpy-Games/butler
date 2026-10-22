@@ -68,6 +68,7 @@ async fn commands(
     uri: &Uri,
 ) -> Result<Response, HttpError> {
     match handler {
+        Handler::WorkModel => work_model::route(state, request, uri).await,
         Handler::TaskGraphs => task_graphs::route(state, request, uri).await,
         Handler::Subsessions => required(subsessions::route(state, request, uri).await?),
         Handler::Authority => authority::route(state, request, uri).await,

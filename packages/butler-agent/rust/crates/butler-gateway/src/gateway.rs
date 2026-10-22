@@ -86,14 +86,16 @@ pub use application::{
     AppSettingsFacts, AppSettingsFactsProvider, AppSettingsMutationPort, AppSourceDocument,
     AppSourceSnapshotRequest, AppSpaceCommand, AppSpaceMutationResult, AppSpaceOrigin,
     AppStartTopicConversationRequest, AppSubsessionPort, AppTaskGraphQuery, AppTurn,
-    AppUsageMonitorQuery, AppUsageMonitorView, AppWorkOperationalNoticeFact, AppWorkProgress,
+    AppUsageMonitorQuery, AppUsageMonitorView, AppWorkModelConflict, AppWorkModelEvent,
+    AppWorkModelPort, AppWorkModelRequest, AppWorkOperationalNoticeFact, AppWorkProgress,
     AppWorkStatusConversationFact, AppWorkStreamQuery, AppWorkStreamReader,
     AppWorkStreamTurnOutcome, AppWorkerActivityQuery, AppWorkerActivitySourcePage,
     AppWorkspaceMode, ArtifactFileCandidate, ArtifactMaterializationRequest,
     ArtifactMaterializationResult, ClaimedNativeSnapshot, EnqueueReceipt,
     MaterializedResponderFile, MemoryEventSink, OperationOutputChunk, OperationOutputView,
-    ProjectSnapshot, ResolvedNativeAssets, TranscriptExport, VisualAdmissionRequest,
-    project_task_graphs, task_graph_label, task_graph_model_label, task_graph_response,
+    ProjectSnapshot, ResolvedNativeAssets, TranscriptExport, UnavailableWorkModel,
+    VisualAdmissionRequest, project_task_graphs, task_graph_label, task_graph_model_label,
+    task_graph_response,
 };
 pub use application::{
     AppCardInput, AppProfileInput, AppSignInCommand, AppSignInUpsert, AppVaultCommand,
@@ -423,6 +425,9 @@ pub trait GatewayApplication:
         &self,
         turn_id: String,
     ) -> ApplicationFuture<MessageSendResult>;
+    fn work_model(&self, _request: AppWorkModelRequest) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn task_graph_read(&self, _query: AppTaskGraphQuery) -> ApplicationFuture<serde_json::Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }

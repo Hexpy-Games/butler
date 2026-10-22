@@ -434,6 +434,9 @@ impl GatewayApplication for AppApplication {
         let this = self.clone_handle();
         Box::pin(async move { this.retry_turn_with_current_controls_owned(turn_id).await })
     }
+    fn work_model(&self, request: AppWorkModelRequest) -> ApplicationFuture<Value> {
+        super::work_model::execute(self, request)
+    }
     fn task_graph_read(&self, query: AppTaskGraphQuery) -> ApplicationFuture<Value> {
         super::task_graphs::read(self, query)
     }

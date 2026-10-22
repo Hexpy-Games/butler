@@ -26,7 +26,7 @@ indexed_reads! {
     ConversationWork => ("SELECT * FROM wm_works WHERE home_session_id=?1
  AND visibility='canon' AND home_session_id IS NOT NULL", "wm_works_home"),
     PlanOverview => ("SELECT * FROM wm_works WHERE plan_id=?1 AND visibility='canon' ORDER BY plan_rank", "wm_works_plan"),
-    Backlog => ("SELECT * FROM wm_works WHERE scope_ref=?1 AND visibility='canon'
+    Backlog => ("SELECT * FROM wm_works WHERE scope_ref=?1 AND scope_kind='project' AND visibility='canon'
  AND plan_id IS NULL ORDER BY plan_rank", "wm_works_backlog"),
     PlanList => ("SELECT * FROM wm_plans WHERE project_id=?1 AND status=?2 ORDER BY due_on", "wm_plans_project"),
     TaskList => ("SELECT * FROM wm_tasks WHERE work_id=?1 ORDER BY task_rank", "wm_tasks_order"),

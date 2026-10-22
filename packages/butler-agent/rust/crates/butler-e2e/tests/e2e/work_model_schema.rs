@@ -1,5 +1,5 @@
 //! WMS: migration creates inert schemas and preserves a populated work model.
-#![allow(clippy::unwrap_used, reason = "test assertions")]
+#![allow(clippy::unwrap_used, clippy::panic, reason = "test assertions")]
 use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use butler_work::{
     work_chain::{Chain, Step},
@@ -187,7 +187,7 @@ async fn fresh_and_populated_schema_survive_restart() -> Result<(), HarnessError
         String::from_utf8_lossy(&output.stderr)
     );
     let db = Connection::open(&path)?;
-    let before = snapshot(&db)?;
+    let mut before = snapshot(&db)?;
     assert_eq!(
         db.query_row::<String, _, _>(
             "SELECT run_state FROM wm_works WHERE id='wk_schema'",
@@ -207,7 +207,8 @@ async fn fresh_and_populated_schema_survive_restart() -> Result<(), HarnessError
     drop(db);
     s.gw = s.agent.start_again().await?;
     s.agent.terminate().await?;
-    let db = Connection::open(path)?;
+    assert_publication(&s.sandbox.data, &mut before)?;
+    let db = Connection::open(&path)?;
     assert_eq!(before, snapshot(&db)?);
     validate_chains(&db)?;
     for query in work_queries::Query::all() {
@@ -215,5 +216,50 @@ async fn fresh_and_populated_schema_survive_restart() -> Result<(), HarnessError
         indexed(&db, sql, index)?;
     }
     drop(db);
+    // Already published source rows must not append duplicate App events.
+    s.gw = s.agent.start_again().await?;
+    s.agent.terminate().await?;
+    assert_publication(&s.sandbox.data, &mut before)?;
+    let db = Connection::open(path)?;
+    assert_eq!(before, snapshot(&db)?);
+    drop(db);
     s.finish().await
+}
+
+/// Publication is the sole startup mutation in P1. Assert both sides of the
+/// bridge and then keep the original exact snapshot check for every wm row.
+fn assert_publication(data: &std::path::Path, expected: &mut Snapshot) -> Result<(), HarnessError> {
+    let app = Connection::open(data.join("app-server/butler-client.sqlite"))?;
+    let rows = expected.get_mut("wm_outbox").unwrap();
+    assert_eq!(rows.len(), 2, "canon and queue invalidations");
+    for row in rows.iter_mut() {
+        let Value::Integer(seq) = row[0] else {
+            panic!("outbox sequence");
+        };
+        let Value::Text(ref topic) = row[1] else {
+            panic!("outbox topic");
+        };
+        let Value::Text(ref raw) = row[2] else {
+            panic!("outbox JSON");
+        };
+        let original: serde_json::Value = serde_json::from_str(raw)?;
+        let (id, event_topic, raw) = app.query_row(
+            "SELECT e.id,e.type,e.payload_json FROM app_work_model_events r JOIN events e ON e.id=r.event_id WHERE r.btcc_seq=?1",
+            [seq], |r| Ok((r.get::<_,i64>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?)),
+        )?;
+        let mut payload: serde_json::Value = serde_json::from_str(&raw)?;
+        assert_eq!(&event_topic, topic);
+        if topic == "canon.changed" {
+            assert_eq!(payload["event_seq"], id);
+            payload.as_object_mut().unwrap().remove("event_seq");
+        }
+        assert_eq!(payload, original);
+        row[3] = Value::Integer(1);
+    }
+    assert_eq!(
+        app.query_row::<usize, _, _>("SELECT count(*) FROM app_work_model_events", [], |r| r
+            .get(0))?,
+        rows.len()
+    );
+    Ok(())
 }
