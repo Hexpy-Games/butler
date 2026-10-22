@@ -24,6 +24,9 @@ async fn wma_03_done_rejects_running_and_releases_waiting_follower() -> Result<(
     assert_eq!(rejected.status, 409);
     assert_eq!(rejected.error_code(), Some("running"));
     assert_eq!(data(s.gw.get(path).await?, 200), running);
+    assert_eq!(running["chain_id"], "ch_canon");
+    assert!(running["graph_revision"].is_i64());
+    let stale_waiting = data(s.gw.get("/canon/epics/wk_schema").await?, 200);
     let q = queue(&s, &chat).await?;
     let q = data(
         edit_queue(
@@ -46,10 +49,33 @@ async fn wma_03_done_rejects_running_and_releases_waiting_follower() -> Result<(
         ]
     );
     let waiting = data(s.gw.get("/canon/epics/wk_schema").await?, 200);
+    let stale = s.gw.patch(
+        "/canon/epics/wk_schema",
+        json!({"expected_revision":waiting["revision"],"expected_graph_revision":stale_waiting["graph_revision"],"status":"done"}),
+    ).await?;
+    assert_eq!(stale.status, 409);
+    assert_eq!(stale.error_code(), Some("conflict"));
+    assert_eq!(
+        stale.body["error"]["current"]["revision"],
+        waiting["graph_revision"]
+    );
+    for page in [
+        overview(&s, &project).await?["plans"][0].clone(),
+        data(s.gw.get("/canon/plans/pl_p14").await?, 200),
+    ] {
+        let card = page["works"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|w| w["id"] == "wk_schema")
+            .unwrap();
+        assert_eq!(card["chain_id"], waiting["chain_id"]);
+        assert_eq!(card["graph_revision"], waiting["graph_revision"]);
+    }
     let done = data(
         s.gw.patch(
             "/canon/epics/wk_schema",
-            json!({"expected_revision":waiting["revision"],"expected_graph_revision":q["chains"][0]["graph_revision"],"status":"done"}),
+            json!({"expected_revision":waiting["revision"],"expected_graph_revision":waiting["graph_revision"],"status":"done"}),
         )
         .await?,
         200,

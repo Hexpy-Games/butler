@@ -39,6 +39,7 @@ fn cards(db: &Connection, plan: Option<&str>, project: &str) -> Result<Vec<Value
     for work in &mut works {
         let counts = progress(db, text(work, "id")?)?;
         work["task_counts"] = counts;
+        chain_revision(db, work)?;
         work["draft"] = json!(work["draft"] == 1);
     }
     Ok(works)
@@ -88,6 +89,7 @@ pub fn epic(db: &Connection, id: &str) -> Result<Value> {
     work["specs"] = json!(spec_tree(db, &nodes, None)?);
     work["tasks"] = json!(rows(db, Query::TaskList.sql(), [id])?);
     work["task_counts"] = progress(db, id)?;
+    chain_revision(db, &mut work)?;
     Ok(public_work(work))
 }
 fn spec_tree(db: &Connection, nodes: &[Value], parent: Option<&str>) -> Result<Vec<Value>> {
@@ -117,4 +119,12 @@ fn spec_tree(db: &Connection, nodes: &[Value], parent: Option<&str>) -> Result<V
 fn public_work(mut work: Value) -> Value {
     work["draft"] = json!(work["draft"] == 1);
     work
+}
+
+fn chain_revision(db: &Connection, work: &mut Value) -> Result<()> {
+    work["graph_revision"] = match work["chain_id"].as_str() {
+        Some(id) => json!(db.query_row(sql::CHAIN_REVISION, [id], |r| r.get::<_, i64>(0))?),
+        None => Value::Null,
+    };
+    Ok(())
 }
