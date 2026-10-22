@@ -6,6 +6,7 @@ import { probeFocusRing } from "../support/focus-ring-clipping";
 import { launchSmokeBrowser } from "../support/smoke-browser";
 import type { Locator, Page } from "playwright";
 import { usageView, quota, delegatedUsageView } from "../../packages/butler-app/client/ui/src/components/conversation/contextUsage.fixtures";
+import type { UsageMonitorView } from "../../packages/butler-app/client/ui/src/app/types";
 
 const dist = join(process.cwd(), "packages/butler-app/client/ui/dist");
 const shots = process.env.BUTLER_USAGE_SHOTS;
@@ -26,6 +27,10 @@ let maxGapDelta = 0;
 let maxShareDelta = 0;
 const popoverHeights: Record<string, number> = {};
 const chartHeights = new Map<string, number>();
+const splitHeightDeltas: number[] = [];
+/** Serve the delegated chat's slots without their subtask values: same totals and split rows, no hatch. */
+let trimSlots = false;
+type Slot = UsageMonitorView["timeline"]["slots"][number];
 const alignmentDeltas: number[] = [];
 let releaseLoading: (() => void)[] = [];
 function monitor(url: URL) {
@@ -35,11 +40,14 @@ function monitor(url: URL) {
   const hours = Number(url.searchParams.get("since_hours")) || 0;
   const session = url.searchParams.get("session_id");
   view.filters = { sessionId: session, sinceTs: hours ? now - hours * 3600000 : null, untilTs: hours ? now : null };
-  // A session's slots append its delegated total, then that work's requests, cached and output.
-  // The first hour's subtask parts are drawn; the last hour's are too thin and merge into solid.
-  view.timeline.slots = state === "empty" ? [] : delegated && session
-    ? [[now - 3600000, 1, 20000, 10000, 1000, 0, 0, 0, 0], [now - 1800000, 8, 41200, 28100, 3500, 44700, 8, 28100, 3500],
-      [now - 600000, 2, 28200, 21900, 2420, 320, 1, 0, 20]]
+  // Slots append the delegated total, then that work's requests, cached and output. The first
+  // hour's subtask parts are drawn; the last hour's are too thin and merge into solid. The
+  // gateway sends these only for a session; the all-chats view gets them here too, so only the
+  // client's session-scope gate keeps its bars solid.
+  const delegatedSlots: Slot[] = [[now - 3600000, 1, 20000, 10000, 1000, 0, 0, 0, 0], [now - 1800000, 8, 41200, 28100, 3500, 44700, 8, 28100, 3500],
+    [now - 600000, 2, 28200, 21900, 2420, 320, 1, 0, 20]];
+  view.timeline.slots = state === "empty" ? [] : delegated
+    ? delegatedSlots.map(slot => trimSlots && session ? slot.slice(0, 5) as Slot : slot)
     : [[now - 3600000, 1, 20000, 10000, 1000], [now - 600000, 2, 28200, 21900, 2420]];
   // As in the gateway, only a session view splits its usage by role.
   if (!session) delete view.model.byRole;
@@ -104,11 +112,22 @@ async function assertEmphasis(page: Page, parts: Locator, chart: Locator, label:
   assert.equal(await chart.getAttribute("data-emphasis"), null, `${label}: blur clears the emphasis`);
 }
 
-/** Reduced motion settles every column at once: nothing is still animating. */
-async function assertSettled(chart: Locator, label: string) {
-  await chart.page().waitForTimeout(400);
-  const running = await chart.evaluate(root => root.getAnimations({ subtree: true }).filter(animation => animation.playState === "running").length);
-  assert.equal(running, 0, `${label}: no running animation under reduced motion`);
+/** Records every transform animation a chart starts (column grow, FLIP, part grow), however short. */
+function recordChartTransforms() {
+  const animate = Element.prototype.animate;
+  const started: string[] = [];
+  (window as unknown as { usageBarsTransforms: string[] }).usageBarsTransforms = started;
+  Element.prototype.animate = function (this: Element, keyframes: Keyframe[] | PropertyIndexedKeyframes | null, options?: number | KeyframeAnimationOptions) {
+    const frames = Array.isArray(keyframes) ? keyframes : keyframes ? [keyframes] : [];
+    if (this.closest('[data-slot="usage-bars"]') && frames.some(frame => "transform" in frame || "scale" in frame)) started.push(this.className);
+    return animate.call(this, keyframes, options);
+  };
+}
+
+/** Reduced motion draws the final heights at once: no chart ever started a transform animation. */
+async function assertNoTransformMotion(page: Page, label: string) {
+  const started = await page.evaluate(() => (window as unknown as { usageBarsTransforms: string[] }).usageBarsTransforms.length);
+  assert.equal(started, 0, `${label}: ${started} transform animation(s) under reduced motion`);
 }
 
 /** Settings › Usage splits a delegating chat like the popover, with each part's requests. */
@@ -127,7 +146,7 @@ async function delegatedSettings(page: Page, locale: string, cell: string) {
   if (locale === "ko") assert.match(await parts.innerText(), /대화[\s\S]*5\.2만 · 53\.6% · 요청 3회[\s\S]*하위 작업[\s\S]*4\.5만 · 46\.4% · 요청 8회/u);
   else assert.match(await parts.innerText(), /Conversation[\s\S]*53\.6% · 3 requests[\s\S]*Subtasks[\s\S]*46\.4% · 8 requests/u);
   if (shots) await page.screenshot({ path: join(shots, `after-usage-${locale}-${cell}-delegated-chat.png`) });
-  await assertSettled(chart, "settings chat");
+  await assertNoTransformMotion(page, "settings chat");
   assert.equal((await assertBars(chart, "settings chat")).length, 3, "the first delegated hour splits all three types");
   await assertEmphasis(page, parts, chart, "settings");
   await chart.focus(); await page.keyboard.press("End"); await page.keyboard.press("ArrowLeft");
@@ -143,6 +162,7 @@ async function delegatedSettings(page: Page, locale: string, cell: string) {
 
 try {
   const page = await browser.newPage({ locale: "ko-KR", timezoneId: "Asia/Seoul", reducedMotion: "reduce" });
+  await page.addInitScript(recordChartTransforms);
   const errors: string[] = [];
   page.on("console", message => { if (message.type() === "error") console.error(message.text()); });
   page.on("pageerror", error => { errors.push(error.message); console.error(error.message); });
@@ -205,9 +225,25 @@ try {
     if (!before && scenario === "ready") assert.deepEqual(await assertBars(popoverChart, "popover ready"), [], "no hatch without delegated usage");
     if (scenario === "delegated") {
       if (!before) {
+        // The same chat without its subtask values keeps the split rows but draws no hatch; the
+        // split must not change the popover's height.
+        const reopen = async () => {
+          await page.keyboard.press("Escape"); await popover.waitFor({ state: "hidden" });
+          await Promise.all([page.waitForResponse(r => new URL(r.url()).pathname === "/usage-monitor"), trigger.click()]);
+          await popover.waitFor(); await page.waitForTimeout(400);
+        };
+        trimSlots = true; await reopen();
+        assert.deepEqual(await assertBars(popoverChart, "popover without subtask values"), [], "trimmed slots draw no hatch");
+        assert.equal(await parts.locator('[data-test-class="key-value-row"]').count(), 2, "trimmed slots keep the split rows");
+        const solidHeight = (await popover.boundingBox())!.height;
+        trimSlots = false; await reopen();
+        const splitDelta = Math.abs((await popover.boundingBox())!.height - solidHeight);
+        splitHeightDeltas.push(splitDelta);
+        assert(splitDelta <= 2, `the split changes the popover height by ${splitDelta}px`);
+        await assertNoTransformMotion(page, "popover live update");
         assert.equal(await parts.locator('[data-test-class="key-value-row"]').count(), 2);
         if (locale === "ko") assert.match(await parts.innerText(), /대화[\s\S]*5\.2만 · 53\.6%[\s\S]*하위 작업[\s\S]*4\.5만 · 46\.4%/u);
-        await assertSettled(popoverChart, "popover");
+        await assertNoTransformMotion(page, "popover");
         assert.equal((await assertBars(popoverChart, "popover")).length, 3, "the first delegated hour splits all three types");
         if (chartHeights.has(heightKey)) {
           const chartDelta = Math.abs((await popoverChart.boundingBox())!.height - chartHeights.get(heightKey)!);
@@ -349,7 +385,7 @@ try {
     }
   }
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ ok: true, cells, reads, allReads, before, heightDeltas, alignmentDeltas, popoverHeights, maxGapDelta, maxShareDelta }));
+  console.log(JSON.stringify({ ok: true, cells, reads, allReads, before, heightDeltas, alignmentDeltas, popoverHeights, splitHeightDeltas, maxGapDelta, maxShareDelta }));
 } finally {
   // The last loading cell deliberately holds a route. Settle it before teardown.
   releaseLoading.forEach(resolve => resolve());
