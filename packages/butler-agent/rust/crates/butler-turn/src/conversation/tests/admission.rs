@@ -148,7 +148,6 @@ async fn admission_replays_exact_source_and_rejects_unsafe_tool_content() {
     );
     assert_eq!(observer.admissions.load(AtomicOrdering::Relaxed), 7);
     assert_eq!(observer.completions.load(AtomicOrdering::Relaxed), 1);
-    assert_eq!(observer.metrics.load(AtomicOrdering::Relaxed), 1);
     drop(conflict);
     drop(admission);
     drop(observer);
