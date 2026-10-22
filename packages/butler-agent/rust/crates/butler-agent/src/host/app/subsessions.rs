@@ -43,6 +43,16 @@ impl AppSubsessions {
 }
 
 impl AppSubsessionPort for AppSubsessions {
+    fn has_active_child(&self, parent: String) -> ApplicationFuture<bool> {
+        let service = self.service.clone();
+        Box::pin(async move {
+            service
+                .should_wait_for_child(&parent)
+                .await
+                .map_err(GatewayApplicationError::internal_from)
+        })
+    }
+
     fn changes(&self) -> Option<tokio::sync::broadcast::Receiver<(String, String)>> {
         Some(self.service.subscribe_changes())
     }

@@ -258,6 +258,15 @@ async fn drain_chat(
     app: &AppApplication,
     chat_id: &str,
 ) -> Result<(), GatewayApplicationError> {
+    let parent = app.runtime_hint(chat_id).await?;
+    if app
+        .dependencies
+        .subsessions
+        .has_active_child(parent)
+        .await?
+    {
+        return Ok(());
+    }
     let chat = chat_id.to_owned();
     let rows = app
         .storage
@@ -299,7 +308,11 @@ async fn drain_chat(
                         claim_owner: owner,
                         lease_expires_at: lease,
                     },
-                    queue::ClaimOrder::Fifo,
+                    if row.result {
+                        queue::ClaimOrder::Immediate
+                    } else {
+                        queue::ClaimOrder::Fifo
+                    },
                     &now,
                     &subscribers,
                 )
@@ -334,16 +347,18 @@ async fn drain_chat(
 }
 
 struct QueuedRow {
+    result: bool,
     id: String,
     text: String,
     control_resolution_json: String,
 }
 fn queued_rows(db: &Connection, chat: &str) -> Result<Vec<QueuedRow>, AppStorageError> {
-    let mut statement = db.prepare_cached("SELECT id,text,control_resolution_json FROM session_queued_messages WHERE chat_id=?1 AND state='queued' AND NOT EXISTS (SELECT 1 FROM session_queue_pauses p WHERE p.chat_id=?1) ORDER BY rowid ASC LIMIT ?2")
+    let mut statement = db.prepare_cached("SELECT id,text,control_resolution_json,CASE WHEN json_valid(control_resolution_json) THEN json_type(control_resolution_json,'$.subsession_result')='object' ELSE 0 END AS is_result FROM session_queued_messages WHERE chat_id=?1 AND state='queued' AND NOT EXISTS (SELECT 1 FROM session_queue_pauses p WHERE p.chat_id=?1) ORDER BY is_result DESC,rowid ASC LIMIT ?2")
         .map_err(AppStorageError::sqlite)?;
     statement
         .query_map(params![chat, FIFO_WINDOW], |row| {
             Ok(QueuedRow {
+                result: row.get::<_, Option<bool>>(3)?.unwrap_or(false),
                 id: row.get(0)?,
                 text: row.get(1)?,
                 control_resolution_json: row.get(2)?,

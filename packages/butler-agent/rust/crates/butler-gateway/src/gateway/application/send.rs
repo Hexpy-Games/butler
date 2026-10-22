@@ -284,6 +284,11 @@ impl AppApplication {
         let client = client_id.to_owned();
         let owner = self.queue_owner.clone();
         let subscribers = self.subscribers.clone();
+        let order = if prepared.controls.subsession_result.is_some() {
+            queue::ClaimOrder::Immediate
+        } else {
+            queue::ClaimOrder::Fifo
+        };
         let claim = self.storage.execute(move |connection| {
             let id = connection.query_row("SELECT id FROM session_queued_messages WHERE chat_id=?1 AND client_message_id=?2",
                 params![chat,client], |row| row.get::<_,String>(0)).map_err(AppStorageError::sqlite)?;
@@ -296,7 +301,7 @@ impl AppApplication {
                     claim_owner: owner,
                     lease_expires_at: lease,
                 },
-                queue::ClaimOrder::Fifo,
+                order,
                 &now,
                 &subscribers,
             )

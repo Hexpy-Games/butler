@@ -221,6 +221,9 @@ pub(super) fn project_suspended(
     if !queue::settle(db, chat, turn, claim, None, None, now)? {
         return Ok((false, false));
     }
+    if suspension == Some("waiting_for_worker") {
+        return Ok((true, false));
+    }
     events::append(
         db,
         subscribers,

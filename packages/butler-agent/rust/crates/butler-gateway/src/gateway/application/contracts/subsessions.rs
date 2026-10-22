@@ -8,6 +8,11 @@ pub struct AppWorkerActivitySourcePage {
 }
 
 pub trait AppSubsessionPort: Send + Sync {
+    /// Canonical native attempt presence, used before releasing queued follow-ups.
+    fn has_active_child(&self, _parent: String) -> ApplicationFuture<bool> {
+        Box::pin(async { Ok(false) })
+    }
+
     /// Parent/child identities whose durable execution projection changed.
     fn changes(&self) -> Option<tokio::sync::broadcast::Receiver<(String, String)>> {
         None
