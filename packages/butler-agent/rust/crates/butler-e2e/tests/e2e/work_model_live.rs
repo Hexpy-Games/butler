@@ -125,11 +125,21 @@ async fn bootstrap_steps_effects_and_hidden_review() -> Result<(), HarnessError>
 async fn request_during_importing_keeps_its_message_and_finishes_after_switch()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    kept_request("importing").await
+}
+
+#[tokio::test]
+async fn request_during_postponed_cutover_runs_once_after_switch() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    kept_request("postponed_no_space").await
+}
+
+async fn kept_request(state: &str) -> Result<(), HarnessError> {
     use butler_e2e::e2e::scenario::accepted_turn_id;
     use serde_json::json;
     use std::time::{Duration, Instant};
     let (url, _requests, server) = stub::start().await?;
-    let s = Setup::new("WMU-CUTOVER-WAIT")?
+    let s = Setup::new(&format!("WMU-CUTOVER-{state}"))?
         .access(Access::FullAccess)
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", url)
@@ -155,10 +165,11 @@ async fn request_during_importing_keeps_its_message_and_finishes_after_switch()
         .await?;
     assert_eq!(other.status, 201, "{}", other.text);
     let other = other.data()["session"]["id"].as_str().unwrap();
-    database(&s, |db| {
+    let state = state.to_owned();
+    database(&s, move |db| {
         db.execute(
-            "UPDATE wm_migration SET state='importing',writer_epoch=0 WHERE singleton=1",
-            [],
+            "UPDATE wm_migration SET state=?1,writer_epoch=0 WHERE singleton=1",
+            [state],
         )
     })
     .await?;
