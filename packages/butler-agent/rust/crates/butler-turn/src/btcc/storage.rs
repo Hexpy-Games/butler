@@ -50,6 +50,8 @@ mod transitions;
 mod wake;
 mod work;
 mod work_model;
+mod work_model_cutover;
+pub use work_model_cutover::CutoverAdmission;
 
 pub(crate) use authority::{SqliteAuthorityReader, SqliteAuthorityRepository};
 pub use bootstrap::{

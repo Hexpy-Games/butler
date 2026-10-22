@@ -27,6 +27,11 @@ pub(super) fn run_connection_lane(
             })?;
         }
         let mut connection = sqlite::open(path).map_err(StorageError::sqlite)?;
+        butler_work::cutover::check_epoch(&connection).map_err(|e| StorageError::Port {
+            code: "work_model_newer_writer_epoch",
+            message: e.to_string(),
+            source: None,
+        })?;
         configure(&connection, profile)?;
         timing::install_writer(&connection);
         validate_activation(&connection, activation)?;

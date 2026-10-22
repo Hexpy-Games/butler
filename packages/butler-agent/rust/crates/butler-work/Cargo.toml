@@ -7,6 +7,8 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+butler-platform = { path = "../butler-platform" }
+chrono.workspace = true
 rusqlite.workspace = true
 serde.workspace = true
 thiserror.workspace = true

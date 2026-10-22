@@ -19,6 +19,7 @@ pub(super) mod storage_bootstrap;
 pub(super) mod stores;
 mod subsession_queue;
 mod web_owner;
+mod work_cutover;
 mod work_ports;
 use super::{AcceptedPlanProducer, CognitionPrompt, ConversationObserver};
 use super::{
@@ -43,11 +44,10 @@ use butler_runtime::operations::MetricFiles;
 use butler_turn::btcc;
 use butler_turn::btcc::{
     BtccError, BtccRepositories, ContextCompactionRepository, DefaultTurnPreparation,
-    DurableWorkService, GuidedContinuationBudgetFactory, HostDependencies, ModelRouteRetryConfig,
+    GuidedContinuationBudgetFactory, HostDependencies, ModelRouteRetryConfig,
     OperationResultRepository, PortFuture, PrincipalAuthority, ProductionAgentLoop,
-    SessionWorkRepository, SqliteSubsessionRepository, StorageEffectJournal,
-    StorageProgressPublication, ToolJournalRepository, TurnFacadeDependencies,
-    TurnModelExecutionFactory,
+    SqliteSubsessionRepository, StorageEffectJournal, StorageProgressPublication,
+    ToolJournalRepository, TurnFacadeDependencies, TurnModelExecutionFactory,
 };
 use butler_turn::workspace::{
     Commands, SessionWorkspaceRecovery, SessionWorktrees, WorkspaceFiles, WorkspaceMutations,
@@ -248,24 +248,22 @@ impl AgentRuntime {
             now.clone(),
             Arc::new(|| uuid::Uuid::new_v4().to_string()),
         ));
-        let session_work = Arc::new(SessionWorkRepository::new(stores.btcc.clone(), now.clone()));
-        let (project_work, work_model) =
-            work_ports::create(&stores.btcc, &project_ledger, now.clone());
-        let work_repository = Arc::new(
-            crate::host::guided::scope_selected_work::ScopeSelectedWorkRepository::new(
-                stores.bindings.clone(),
-                session_work.clone(),
-                Arc::new(
-                    crate::host::guided::project_work_provider::ProjectWorkProvider::new(
-                        project_ledger.clone(),
-                        project_work.clone(),
-                    ),
-                ),
-            ),
-        );
+        let work_ports::WorkPorts {
+            session_work,
+            project_work,
+            work_model,
+            work_service,
+            work_cutover,
+        } = work_ports::create(
+            &stores,
+            &project_ledger,
+            now.clone(),
+            &paths.data_root,
+            stop,
+        )
+        .await?;
         let (session_worktrees, workspace_recovery) =
             owners::workspace_services(&stores, &commands, &files, &host_environment, &paths);
-        let work_service = Arc::new(DurableWorkService::new(work_repository));
         let inbound_queue = Arc::new(butler_gateway::gateway::InboundQueue::new(&paths.data_root));
         let (subsessions, usage_lineage) = monitoring::session_usage_services(
             SqliteSubsessionRepository::new(stores.btcc.clone()),
@@ -360,6 +358,7 @@ impl AgentRuntime {
         let conversations = Arc::new(stores.conversations.clone());
         let progress = StorageProgressPublication::new(stores.btcc.clone());
         let owner = Arc::new(RuntimeOwners {
+            work_cutover,
             stores,
             project_work,
             project_tools,

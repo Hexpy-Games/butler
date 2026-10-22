@@ -89,5 +89,5 @@ vocabulary!(SpecSource { Local => "local", Repo => "repo" });
 vocabulary!(SpecState { Published => "published", Active => "active", Inactive => "inactive" });
 // Lifecycle and migration states are storage vocabulary, not runtime transitions.
 vocabulary!(SpecLifecycle { Draft => "draft", Active => "active", Retired => "retired" });
-vocabulary!(MigrationState { Pending => "pending", Importing => "importing", NeedsSource => "needs_source", Complete => "complete" });
+vocabulary!(MigrationState { Pending => "pending", BackingUp => "backing_up", Importing => "importing", NeedsSource => "needs_source", Complete => "complete", PostponedNoSpace => "postponed_no_space" });
 vocabulary!(ReviewVerdict { Accepted => "accepted", Rejected => "rejected" });

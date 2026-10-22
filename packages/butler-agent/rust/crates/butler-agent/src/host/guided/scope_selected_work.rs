@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use butler_turn::btcc::{
-    BtccError, CheckpointCommand, ClaimCloseoutCorrectionInput, ContinueWorkCommand,
+    BtccError, BtccStorage, CheckpointCommand, ClaimCloseoutCorrectionInput, ContinueWorkCommand,
     DispositionCommand, DurableWorkRepository, LegacyImport, PersistedWorkTurnScope, PortFuture,
     ReplacePlanCommand, ResolvedProjectWorkScope, ReviewCommand, SessionWorkRepository,
     StartWorkCommand, WorkContext, WorkTurnScope, WorkView,
@@ -23,6 +23,7 @@ pub(in crate::host) struct ScopeSelectedWorkRepository {
     bindings: SessionBindingStore,
     session: Arc<SessionWorkRepository>,
     projects: Arc<dyn ProjectWorkRepositoryProvider>,
+    storage: BtccStorage,
 }
 
 impl ScopeSelectedWorkRepository {
@@ -30,12 +31,29 @@ impl ScopeSelectedWorkRepository {
         bindings: SessionBindingStore,
         session: Arc<SessionWorkRepository>,
         projects: Arc<dyn ProjectWorkRepositoryProvider>,
+        storage: BtccStorage,
     ) -> Self {
         Self {
             bindings,
             session,
             projects,
+            storage,
         }
+    }
+
+    // Native composition creates this permanent marker before admitting any
+    // Turn. It is an epoch fence, never a user-selectable legacy mode.
+    async fn cutover_started(&self) -> Result<bool, BtccError> {
+        use rusqlite::OptionalExtension;
+        self.storage
+            .work_model_read(|db| {
+                Ok(db
+                    .query_row(butler_work::cutover::EPOCH, [], |r| r.get::<_, i64>(0))
+                    .optional()?
+                    .is_some())
+            })
+            .await
+            .map_err(BtccError::from)
     }
 
     async fn require_binding(&self, session_id: &str) -> Result<StoredSessionBinding, BtccError> {
@@ -50,6 +68,9 @@ impl ScopeSelectedWorkRepository {
         &self,
         scope: &WorkTurnScope,
     ) -> Result<Arc<dyn DurableWorkRepository>, BtccError> {
+        if self.cutover_started().await? {
+            return Err(scope_error("work_model_legacy_writers_retired"));
+        }
         let binding = self.require_binding(&scope.session_id).await?;
         let app_id = app_project_id(&binding);
         if session_owned(&binding) {
@@ -75,6 +96,9 @@ impl ScopeSelectedWorkRepository {
         &self,
         turn_id: &str,
     ) -> Result<Arc<dyn DurableWorkRepository>, BtccError> {
+        if self.cutover_started().await? {
+            return Err(scope_error("work_model_legacy_writers_retired"));
+        }
         let persisted = self
             .session
             .persisted_scope_for_turn(turn_id.to_owned())
@@ -120,6 +144,9 @@ impl ScopeSelectedWorkRepository {
         &self,
         binding: StoredSessionBinding,
     ) -> Result<Arc<dyn DurableWorkRepository>, BtccError> {
+        if self.cutover_started().await? {
+            return Err(scope_error("work_model_legacy_writers_retired"));
+        }
         let app_id = app_project_id(&binding).map(str::to_owned);
         let ledger_id = binding.ledger_project_id.clone();
         if app_id.as_deref().is_none_or(str::is_empty) {
@@ -142,6 +169,9 @@ impl ScopeSelectedWorkRepository {
 impl DurableWorkRepository for ScopeSelectedWorkRepository {
     fn load_context(&self, scope: WorkTurnScope) -> PortFuture<'_, Option<WorkContext>> {
         Box::pin(async move {
+            if self.cutover_started().await? {
+                return Ok(None);
+            }
             self.store_for_scope(&scope)
                 .await?
                 .load_context(scope)
@@ -153,6 +183,9 @@ impl DurableWorkRepository for ScopeSelectedWorkRepository {
         scope: WorkTurnScope,
     ) -> PortFuture<'_, Option<LegacyImport>> {
         Box::pin(async move {
+            if self.cutover_started().await? {
+                return Ok(None);
+            }
             self.store_for_scope(&scope)
                 .await?
                 .import_open_legacy_work(scope)
@@ -232,6 +265,9 @@ impl DurableWorkRepository for ScopeSelectedWorkRepository {
     }
     fn bound_work_for_turn(&self, turn_id: String) -> PortFuture<'_, Option<WorkView>> {
         Box::pin(async move {
+            if self.cutover_started().await? {
+                return Ok(None);
+            }
             self.store_for_turn(&turn_id)
                 .await?
                 .bound_work_for_turn(turn_id)

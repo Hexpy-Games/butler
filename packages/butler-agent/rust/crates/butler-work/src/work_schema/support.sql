@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS wm_legacy_map (
 
 CREATE TABLE IF NOT EXISTS wm_migration (
   singleton INTEGER PRIMARY KEY CHECK (singleton=1),
-  state TEXT NOT NULL CHECK (state IN ('pending','importing','needs_source','complete')),
+  state TEXT NOT NULL CHECK (state IN ('pending','backing_up','importing','needs_source','complete','postponed_no_space')),
   cursor_json TEXT NOT NULL CHECK (json_valid(cursor_json)),
   source_counts_json TEXT NOT NULL CHECK (json_valid(source_counts_json)),
   writer_epoch INTEGER NOT NULL,

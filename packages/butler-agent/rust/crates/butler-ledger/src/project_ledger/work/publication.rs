@@ -197,7 +197,7 @@ fn affected_work_ids(targets: &[ProjectWorkTarget]) -> Vec<String> {
     work_ids
 }
 
-fn observed_work(snapshot: Snapshot) -> Result<ProjectWorkObserveWork, BtccError> {
+pub(super) fn observed_work(snapshot: Snapshot) -> Result<ProjectWorkObserveWork, BtccError> {
     let current_refs = snapshot
         .manifest
         .get("bindingRefs")

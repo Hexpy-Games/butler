@@ -34,6 +34,7 @@ mod project_plan;
 pub mod storage;
 mod subsessions;
 mod task_graph_identity;
+pub use storage::CutoverAdmission;
 pub use storage::{
     TaskGraphChildRecord, TaskGraphRecords, TaskGraphReviewRecord, TaskGraphScope,
     TaskGraphWorkRecord, subsession_result_id,

@@ -22,6 +22,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // butler-work: inert SQL definitions and pure chain invariants.
         "work_schema" | "work_queries" | "work_rank" | "work_types" => &[],
         "work_chain" => &["work_types"],
+        // Cutover consumes transactional stores; schema and store stay independent.
+        "cutover" => &["store", "work_chain", "work_types", "work_schema"],
         "work_ids" => &[],
         "store" => &[
             "work_chain",

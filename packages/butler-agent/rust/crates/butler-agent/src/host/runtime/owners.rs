@@ -5,6 +5,7 @@ use crate::host::service::shutdown_trace::measure;
 use butler_runtime::skills::Skills;
 
 pub(super) struct RuntimeOwners {
+    pub(super) work_cutover: super::work_cutover::CutoverOwner,
     pub(super) stores: RuntimeStores,
     pub(super) project_work: Arc<ProjectWork>,
     pub(super) project_tools: Arc<crate::host::guided::project_tools::GuidedProjectTools>,
@@ -34,6 +35,7 @@ pub(super) struct RuntimeOwners {
 impl HostDependencies for RuntimeOwners {
     fn close(&self) -> PortFuture<'_, ()> {
         Box::pin(async move {
+            self.work_cutover.close().await;
             measure(
                 "runtime_context_maintenance",
                 self.context_maintenance.close(),

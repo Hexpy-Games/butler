@@ -1,0 +1,181 @@
+{
+  "ADMISSION_RECEIPT": [
+    "SEARCH wm_instructions USING INDEX sqlite_autoindex_wm_instructions_2 (idempotency_key=?)"
+  ],
+  "ADMIT": [],
+  "APP_PROJECT_BATCH": [
+    "SEARCH projects USING INDEX sqlite_autoindex_projects_1 (id>?)"
+  ],
+  "APP_SESSIONS": [
+    "SEARCH chats USING INDEX chats_project_artifacts_idx (project_id=?)"
+  ],
+  "BACKING_UP": [
+    "SEARCH wm_migration USING INTEGER PRIMARY KEY (rowid=?)"
+  ],
+  "BEGIN": [],
+  "BIND_IMPORTED_SPEC": [
+    "SEARCH wm_works USING INDEX sqlite_autoindex_wm_works_1 (id=?)"
+  ],
+  "CHAIN_STATE": [
+    "SEARCH wm_task_chains USING INDEX sqlite_autoindex_wm_task_chains_1 (id=?)"
+  ],
+  "CHECKPOINT": [
+    "SEARCH btcc_guided_work_checkpoint_revisions USING INDEX sqlite_autoindex_btcc_guided_work_checkpoint_revisions_2 (work_id=?)"
+  ],
+  "CLEAR_EDGES": [
+    "SEARCH wm_task_edges USING COVERING INDEX wm_task_edges_successor (work_id=?)"
+  ],
+  "CLEAR_PART_EDGES": [
+    "SEARCH wm_task_part_edges USING COVERING INDEX wm_task_part_edges_successor (task_id=?)"
+  ],
+  "COUNT_DELEGATION": [
+    "SEARCH wm_migration USING INTEGER PRIMARY KEY (rowid=?)"
+  ],
+  "COUNT_DIRECTION": [
+    "SEARCH wm_migration USING INTEGER PRIMARY KEY (rowid=?)"
+  ],
+  "COUNT_WORK": [
+    "SEARCH wm_migration USING INTEGER PRIMARY KEY (rowid=?)"
+  ],
+  "CURSOR": [
+    "SEARCH wm_migration USING INTEGER PRIMARY KEY (rowid=?)"
+  ],
+  "DELEGATION": [
+    "SEARCH d USING INDEX sqlite_autoindex_btcc_subsession_delegations_5 (root_work_id=?)",
+    "SEARCH r USING INDEX sqlite_autoindex_btcc_session_relations_1 (relation_id=?)"
+  ],
+  "DELEGATION_BATCH": [
+    "SEARCH btcc_subsession_delegations USING INDEX sqlite_autoindex_btcc_subsession_delegations_1 (delegation_id>?)"
+  ],
+  "DIRECTIONS": [
+    "SEARCH d USING INDEX wm_pending_directions (instruction_id>?)",
+    "SEARCH r USING INDEX sqlite_autoindex_btcc_session_relations_1 (relation_id=?)",
+    "SEARCH g USING INDEX sqlite_autoindex_btcc_subsession_delegations_2 (relation_id=?) LEFT-JOIN"
+  ],
+  "ENSURE_CHAIN": [],
+  "EPOCH": [
+    "SEARCH wm_migration USING INTEGER PRIMARY KEY (rowid=?)"
+  ],
+  "FEED": [
+    "SEARCH agent_task_graph_changes USING INTEGER PRIMARY KEY (rowid>?)"
+  ],
+  "HAS_MIGRATION": [
+    "SCAN CONSTANT ROW",
+    "SCALAR SUBQUERY 1",
+    "SCAN sqlite_schema"
+  ],
+  "HISTORY_0": [
+    "SEARCH btcc_guided_work_plan_revisions USING INDEX sqlite_autoindex_btcc_guided_work_plan_revisions_2 (work_id=?)"
+  ],
+  "HISTORY_1": [
+    "SEARCH btcc_guided_work_checkpoint_revisions USING INDEX sqlite_autoindex_btcc_guided_work_checkpoint_revisions_2 (work_id=?)"
+  ],
+  "HISTORY_2": [
+    "SEARCH btcc_guided_work_review_revisions USING INDEX sqlite_autoindex_btcc_guided_work_review_revisions_2 (work_id=?)"
+  ],
+  "HISTORY_3": [
+    "SEARCH btcc_guided_work_disposition_revisions USING INDEX idx_btcc_guided_work_dispositions_work (work_id=?)"
+  ],
+  "HISTORY_4": [
+    "SEARCH btcc_guided_work_results USING INDEX sqlite_autoindex_btcc_guided_work_results_3 (work_id=?)"
+  ],
+  "HISTORY_5": [
+    "SEARCH btcc_guided_turn_work_bindings USING INDEX idx_btcc_guided_turn_work_history (work_id=?)"
+  ],
+  "IMPORTING": [
+    "SEARCH wm_migration USING INTEGER PRIMARY KEY (rowid=?)"
+  ],
+  "IMPORT_WORK_FIELDS": [
+    "SEARCH wm_works USING INDEX sqlite_autoindex_wm_works_1 (id=?)"
+  ],
+  "INSERT_EDGE": [],
+  "INSERT_PART_EDGE": [],
+  "INSERT_TASK": [],
+  "INSTRUCTION": [],
+  "MAPPING": [
+    "SEARCH wm_legacy_map USING INDEX sqlite_autoindex_wm_legacy_map_1 (source=? AND source_id=?)"
+  ],
+  "MAP_DIRECTION": [],
+  "MAP_ENTITY": [],
+  "MAP_WORK": [],
+  "MARKER": [
+    "SEARCH wm_migration USING INTEGER PRIMARY KEY (rowid=?)"
+  ],
+  "NEEDS_SOURCE": [
+    "SEARCH wm_migration USING INTEGER PRIMARY KEY (rowid=?)"
+  ],
+  "PLAN": [
+    "SEARCH btcc_guided_work_plan_revisions USING INDEX sqlite_autoindex_btcc_guided_work_plan_revisions_2 (work_id=?)"
+  ],
+  "POSTPONE": [
+    "SEARCH wm_migration USING INTEGER PRIMARY KEY (rowid=?)"
+  ],
+  "REMEMBER_TARGET": [],
+  "RETIRE_PARTS": [
+    "SEARCH wm_task_parts USING INDEX wm_task_parts_order (task_id=?)"
+  ],
+  "RETIRE_TASKS": [
+    "SEARCH wm_tasks USING COVERING INDEX wm_tasks_progress (work_id=?)",
+    "SEARCH wm_task_edges USING COVERING INDEX wm_task_edges_chain (chain_id=?)",
+    "SEARCH wm_task_edges USING COVERING INDEX wm_task_edges_chain (chain_id=? AND pred=?)",
+    "SEARCH wm_task_edges USING COVERING INDEX wm_task_edges_chain (chain_id=?)",
+    "SEARCH wm_task_edges USING COVERING INDEX wm_task_edges_chain (chain_id=? AND pred=?)"
+  ],
+  "SAVE_CURSOR": [
+    "SEARCH wm_migration USING INTEGER PRIMARY KEY (rowid=?)"
+  ],
+  "SAVE_NEEDS_SOURCE": [
+    "SEARCH wm_migration USING INTEGER PRIMARY KEY (rowid=?)"
+  ],
+  "SESSION_BATCH": [
+    "SEARCH btcc_guided_works USING COVERING INDEX wm_legacy_session_work (session_id=? AND work_id>?)"
+  ],
+  "SPEC_VERSION": [
+    "SEARCH wm_spec_nodes USING INDEX sqlite_autoindex_wm_spec_nodes_1 (node_id=?)"
+  ],
+  "STATUS": [
+    "SEARCH wm_migration USING INTEGER PRIMARY KEY (rowid=?)"
+  ],
+  "SWITCH": [
+    "SEARCH wm_migration USING INTEGER PRIMARY KEY (rowid=?)"
+  ],
+  "TARGET_TASK_VERSIONS": [
+    "SEARCH wm_tasks USING INDEX sqlite_autoindex_wm_tasks_2 (work_id=?)"
+  ],
+  "TARGET_VERSION": [
+    "SEARCH wm_legacy_map USING INDEX sqlite_autoindex_wm_legacy_map_1 (source=? AND source_id=?)"
+  ],
+  "TARGET_WORK_VERSION": [
+    "SEARCH w USING INDEX sqlite_autoindex_wm_works_1 (id=?)",
+    "SEARCH n USING INDEX sqlite_autoindex_wm_spec_nodes_1 (node_id=?) LEFT-JOIN"
+  ],
+  "TASK_ASSIGNMENT": [
+    "SEARCH wm_tasks USING INDEX sqlite_autoindex_wm_tasks_1 (id=?)"
+  ],
+  "TASK_EVENT": [],
+  "TASK_EXISTS": [
+    "SCAN CONSTANT ROW",
+    "SCALAR SUBQUERY 1",
+    "SEARCH wm_tasks USING COVERING INDEX sqlite_autoindex_wm_tasks_1 (id=?)"
+  ],
+  "TASK_REVISION": [
+    "SEARCH wm_tasks USING INDEX sqlite_autoindex_wm_tasks_1 (id=?)"
+  ],
+  "UPDATE_TASK": [
+    "SEARCH wm_tasks USING INDEX sqlite_autoindex_wm_tasks_2 (work_id=? AND id=?)",
+    "SEARCH wm_task_edges USING COVERING INDEX wm_task_edges_chain (chain_id=?)",
+    "SEARCH wm_task_edges USING COVERING INDEX wm_task_edges_chain (chain_id=? AND pred=?)",
+    "SEARCH wm_task_edges USING COVERING INDEX wm_task_edges_chain (chain_id=?)",
+    "SEARCH wm_task_edges USING COVERING INDEX wm_task_edges_chain (chain_id=? AND pred=?)"
+  ],
+  "UPSERT_PART": [],
+  "WATERMARK": [
+    "SEARCH agent_task_graph_changes"
+  ],
+  "WORK": [
+    "SEARCH btcc_guided_works USING INDEX sqlite_autoindex_btcc_guided_works_1 (work_id=?)"
+  ],
+  "WORK_BATCH": [
+    "SEARCH btcc_guided_works USING COVERING INDEX sqlite_autoindex_btcc_guided_works_1 (work_id>?)"
+  ]
+}

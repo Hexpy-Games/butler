@@ -33,6 +33,11 @@ impl RuntimeStores {
         startup: &super::startup_trace::Trace,
     ) -> Result<Self, BtccError> {
         check_startup(stop)?;
+        let root = data_root.to_owned();
+        tokio::task::spawn_blocking(move || butler_work::cutover::check_epoch_path(&root))
+            .await
+            .map_err(|e| error("work_cutover_backup_worker", e))?
+            .map_err(|e| error("work_cutover_backup", e))?;
         let btcc = open_btcc(data_root, stop, correction, startup.nested()).await?;
         if let Err(error) = check_startup(stop) {
             let _ = btcc.close().await;

@@ -2,7 +2,8 @@
 mod events;
 use super::*;
 use AppWorkModelResource::{
-    BacklogOrder, Canon, CreateEpic, CreatePlan, EditEpic, EditPlan, Epic, Plan, PlanOrder, Queue,
+    BacklogOrder, Canon, CreateEpic, CreatePlan, Cutover, EditEpic, EditPlan, Epic, Plan,
+    PlanOrder, Queue,
 };
 pub(super) use events::start;
 
@@ -28,6 +29,9 @@ async fn validate_scope(
     app: &AppApplication,
     request: &AppWorkModelRequest,
 ) -> Result<(), GatewayApplicationError> {
+    if request.resource == Cutover {
+        return Ok(());
+    }
     let scope = if request.resource == Queue {
         app.dependencies
             .work_model
@@ -42,7 +46,7 @@ async fn validate_scope(
                     .await?
             }
             Canon | CreatePlan | CreateEpic | BacklogOrder => request.id.clone(),
-            Queue => return Err(GatewayApplicationError::internal()),
+            Cutover | Queue => return Err(GatewayApplicationError::internal()),
         };
         AppWorkModelScope::Project(project)
     };

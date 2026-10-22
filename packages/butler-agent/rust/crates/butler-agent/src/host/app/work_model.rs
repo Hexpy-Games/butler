@@ -10,10 +10,17 @@ use std::sync::Arc;
 
 pub(crate) struct AppWorkModel {
     storage: BtccStorage,
+    cutover_ready: Arc<tokio::sync::Notify>,
 }
 impl AppWorkModel {
-    pub(crate) fn new(storage: BtccStorage) -> Self {
-        Self { storage }
+    pub(crate) fn new(storage: BtccStorage, cutover_ready: Arc<tokio::sync::Notify>) -> Self {
+        Self {
+            storage,
+            cutover_ready,
+        }
+    }
+    pub(crate) fn start_cutover(&self) {
+        self.cutover_ready.notify_one();
     }
 }
 impl AppWorkModelPort for AppWorkModel {
@@ -25,6 +32,14 @@ impl AppWorkModelPort for AppWorkModel {
                 id,
                 input,
             } = request;
+            if resource == AppWorkModelResource::Cutover {
+                return storage
+                    .work_model_read(|db| {
+                        Ok(serde_json::to_value(butler_work::cutover::status(db)?)?)
+                    })
+                    .await
+                    .map_err(error);
+            }
             if let Some(input) = input {
                 // Same trusted local viewer as gateway/application/snapshot_input.rs.
                 // Display-profile names are mutable presentation, not identities.
@@ -34,13 +49,13 @@ impl AppWorkModelPort for AppWorkModel {
                 };
                 storage
                     .work_model_write(move |tx| {
-                        store::write_api(tx, &ctx, store_resource(resource), &id, input)
+                        store::write_api(tx, &ctx, store_resource(resource)?, &id, input)
                     })
                     .await
                     .map_err(error)
             } else {
                 storage
-                    .work_model_read(move |db| store::read_api(db, store_resource(resource), &id))
+                    .work_model_read(move |db| store::read_api(db, store_resource(resource)?, &id))
                     .await
                     .map_err(error)
             }
@@ -55,7 +70,7 @@ impl AppWorkModelPort for AppWorkModel {
         Box::pin(async move {
             storage
                 .work_model_read(move |db| {
-                    store::api::project_scope(db, store_resource(resource), &id)
+                    store::api::project_scope(db, store_resource(resource)?, &id)
                 })
                 .await
                 .map_err(error)
@@ -162,12 +177,13 @@ fn error(error: StorageError) -> GatewayApplicationError {
     }
 }
 
-fn store_resource(resource: AppWorkModelResource) -> store::api::Resource {
+fn store_resource(resource: AppWorkModelResource) -> store::Result<store::api::Resource> {
     use AppWorkModelResource::{
-        BacklogOrder, Canon, CreateEpic, CreatePlan, EditEpic, EditPlan, Epic, Plan, PlanOrder,
-        Queue,
+        BacklogOrder, Canon, CreateEpic, CreatePlan, Cutover, EditEpic, EditPlan, Epic, Plan,
+        PlanOrder, Queue,
     };
-    match resource {
+    Ok(match resource {
+        Cutover => return Err(store::Error::Invalid("cutover state is read-only")),
         Queue => store::api::Resource::Queue,
         Canon => store::api::Resource::Canon,
         Plan => store::api::Resource::Plan,
@@ -178,5 +194,5 @@ fn store_resource(resource: AppWorkModelResource) -> store::api::Resource {
         EditEpic => store::api::Resource::EditEpic,
         PlanOrder => store::api::Resource::PlanOrder,
         BacklogOrder => store::api::Resource::BacklogOrder,
-    }
+    })
 }

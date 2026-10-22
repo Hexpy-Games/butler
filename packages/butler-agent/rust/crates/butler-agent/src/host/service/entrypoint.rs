@@ -274,8 +274,10 @@ async fn start_runtime(
     stop: &StopSignal,
 ) -> Result<(), BtccError> {
     stop.check_startup()?;
+    runtime.work_model.start_cutover();
     runtime.context_maintenance.start();
-    runtime.subsessions.recover_dispatches().await?;
+    // Legacy child dispatches are source evidence after the automatic Work
+    // cutover. Task execution owns future recovery; never resume old writers.
     stop.check_startup()?;
     mark_ready(instance, app_endpoint, runtime, stop).await
 }

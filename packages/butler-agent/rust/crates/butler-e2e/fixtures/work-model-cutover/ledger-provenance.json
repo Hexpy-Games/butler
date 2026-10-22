@@ -1,0 +1,83 @@
+{
+  "occurrence": {
+    "schema": "butler.btcc-project-ledger-effect-occurrence.v2",
+    "occurrenceId": "c776af5c98111dd240aa92b67c3e97ec1372c0cffaa2341dd20cd74fee333ce1",
+    "status": "pending",
+    "ledgerProjectId": "legacy-ledger",
+    "ledgerRoot": "fixture-ledger-root",
+    "operationIdentity": {
+      "id": "ledger-create",
+      "kind": "mutation_call",
+      "mutationCallId": "ledger-create",
+      "requestSha256": "1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    "attempts": [
+      {
+        "number": 1,
+        "status": "admitted",
+        "requestSha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "expectedBase": {
+          "schema": "butler.btcc-project-ledger-head.v1",
+          "projectRoot": "fixture-ledger-root",
+          "sourceSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "sourceFileCount": 0,
+          "storageSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "storageEntryCount": 0
+        },
+        "targetPreconditions": [
+          {
+            "id": "ledger-only",
+            "kind": "work",
+            "parentId": null,
+            "state": "absent"
+          },
+          {
+            "id": "btcc-project-work-proof-eb6229344209af350c2462c48d20fe3c27601086b4103726507d0582fddfa2fd",
+            "kind": "reference",
+            "parentId": null,
+            "state": "absent"
+          }
+        ],
+        "publicationId": "fixture-publication-id"
+      }
+    ]
+  },
+  "receipt": {
+    "schema": "butler.btcc-project-ledger-publication-receipt.v1",
+    "occurrenceId": "c776af5c98111dd240aa92b67c3e97ec1372c0cffaa2341dd20cd74fee333ce1",
+    "publicationId": "fixture-publication-id",
+    "requestSha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "attemptNumber": 1,
+    "status": "observed",
+    "baseHead": {
+      "schema": "butler.btcc-project-ledger-head.v1",
+      "projectRoot": "fixture-ledger-root",
+      "sourceSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "sourceFileCount": 0,
+      "storageSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "storageEntryCount": 0
+    },
+    "candidateHead": {
+      "schema": "butler.btcc-project-ledger-head.v1",
+      "projectRoot": "fixture-ledger-root",
+      "sourceSha256": "6d72188d3aadd9b82528b4c6dbeabaf38d645c632493187df43f2cc1d8c73568",
+      "sourceFileCount": 2,
+      "storageSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "storageEntryCount": 0
+    }
+  },
+  "proof_id": "btcc-project-work-proof-eb6229344209af350c2462c48d20fe3c27601086b4103726507d0582fddfa2fd",
+  "proof": {
+    "schema": "butler.btcc-project-work-publication-proof.v1",
+    "record": {
+      "id": "ledger-only",
+      "kind": "work",
+      "parentId": null,
+      "title": "Ledger garden inventory",
+      "status": "in_progress",
+      "spec": "SPEC-BTCC-R3-WORK-LEDGER-SCOPE",
+      "schema": "project-ledger.work.v1",
+      "body": "{\"actionProgress\":[],\"allowedNextStages\":[\"conception\"],\"bindingRefs\":[],\"checkpointResultSequence\":0,\"checkpointRevision\":0,\"createdAt\":\"2026-10-01T00:00:00Z\",\"dispositionRevision\":0,\"materialFingerprint\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"materialSnapshot\":{\"actionProgress\":[],\"currentPlan\":null,\"effectBlockers\":[],\"effectWatermark\":null,\"latestCheckpoint\":null,\"materialFingerprint\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"resultRefs\":[],\"reviews\":[null,null,null],\"status\":\"open\",\"workId\":\"ledger-only\"},\"objective\":\"Ledger garden inventory\",\"operationIdentity\":{\"id\":\"ledger-create\",\"kind\":\"mutation_call\",\"mutationCallId\":\"ledger-create\",\"requestSha256\":\"1111111111111111111111111111111111111111111111111111111111111111\"},\"origin\":{\"messageId\":\"ledger-message\",\"turnId\":\"ledger-turn\"},\"planRevision\":0,\"resultRefs\":[],\"resultSequence\":0,\"reviewRevision\":0,\"schema\":\"butler.btcc-project-work.v1\",\"scope\":{\"appProjectId\":\"legacy-project\",\"ledgerProjectId\":\"legacy-ledger\"},\"sessionHead\":true,\"sessionId\":\"legacy-session\",\"status\":\"open\",\"updatedAt\":\"2026-10-01T00:00:00Z\",\"workId\":\"ledger-only\"}"
+    }
+  }
+}

@@ -1327,6 +1327,8 @@ dependencies = [
 name = "butler-work"
 version = "0.0.0"
 dependencies = [
+ "butler-platform",
+ "chrono",
  "rusqlite",
  "serde",
  "serde_json",

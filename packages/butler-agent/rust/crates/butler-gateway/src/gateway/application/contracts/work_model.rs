@@ -16,6 +16,7 @@ use serde_json::Value;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AppWorkModelResource {
+    Cutover,
     Queue,
     Canon,
     Plan,

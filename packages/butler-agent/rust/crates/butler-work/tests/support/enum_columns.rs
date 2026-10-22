@@ -84,6 +84,6 @@ pub(super) const COLUMNS: &[(&str, &str, &str)] = &[
     (
         "wm_migration",
         "state",
-        "'pending','importing','needs_source','complete'",
+        "'pending','backing_up','importing','needs_source','complete','postponed_no_space'",
     ),
 ];

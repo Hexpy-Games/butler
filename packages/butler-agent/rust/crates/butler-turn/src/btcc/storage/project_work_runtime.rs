@@ -180,3 +180,10 @@ impl ProjectWorkLegacyRuntime for SqliteProjectWorkRuntime {
         })
     }
 }
+
+pub(super) fn observe_for_cutover(
+    db: &Connection,
+    input: &ProjectWorkObserveWorks,
+) -> StorageResult<()> {
+    result::observe_works(db, input)
+}

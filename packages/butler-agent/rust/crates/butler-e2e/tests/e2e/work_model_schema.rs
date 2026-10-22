@@ -138,12 +138,20 @@ fn validate_local_fixture(db: &Connection) -> Result<(), HarnessError> {
 async fn fresh_and_populated_schema_survive_restart() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("WMS-01")?.start().await?;
+    super::work_model_cutover::completed(&s).await?;
     s.agent.terminate().await?;
     let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
     let db = Connection::open(&path)?;
     let fresh = snapshot(&db)?;
     assert_eq!(fresh.len(), 26);
-    assert!(fresh.values().all(Vec::is_empty));
+    assert_eq!(fresh["wm_migration"].len(), 1);
+    assert_eq!(fresh["wm_migration"][0][1], Value::Text("complete".into()));
+    assert!(
+        fresh
+            .iter()
+            .filter(|(name, _)| name.as_str() != "wm_migration")
+            .all(|(_, rows)| rows.is_empty())
+    );
     for query in work_queries::Query::all() {
         let index = query.index();
         assert_eq!(
@@ -299,6 +307,7 @@ async fn p1_schema_upgrades_before_start_and_second_start_is_identical() -> Resu
     let original = snapshot(&db)?;
     drop(db);
     s.restart().await?;
+    super::work_model_cutover::completed(&s).await?;
     s.agent.terminate().await?;
     let db = Connection::open(&path)?;
     let migrated = snapshot(&db)?;
@@ -377,10 +386,19 @@ async fn p1_schema_upgrades_before_start_and_second_start_is_identical() -> Resu
         "wm_audit",
         "wm_outbox",
         "wm_legacy_map",
-        "wm_migration",
     ] {
         assert_eq!(original[table], migrated[table], "{table}");
     }
+    assert!(original["wm_migration"].is_empty());
+    assert_eq!(migrated["wm_migration"].len(), 1);
+    assert_eq!(
+        migrated["wm_migration"][0][1],
+        Value::Text("complete".into())
+    );
+    assert_eq!(
+        migrated["wm_migration"][0][4],
+        Value::Integer(butler_work::cutover::WRITER_EPOCH)
+    );
     for query in work_queries::Query::all() {
         indexed(&db, query.sql(), query.index())?;
     }
