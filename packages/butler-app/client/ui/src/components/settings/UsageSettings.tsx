@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/app/api";
 import { appCopy, useAppLocale } from "@/app/copy";
 import type { UsageMonitorView } from "@/app/types";
-import { RefreshCcw, IconButton, Inline, SegmentedControl, Stack, Typo, UsageBars } from "@/butler-ds";
+import { RefreshCcw, IconButton, Inline, SegmentedControl, Stack, Typo, UsageBars, type UsageBarsEmphasis } from "@/butler-ds";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 import { UsageReadout } from "../usage/UsageReadout";
 import { usageClock, usageParts, usageShare, usageReadout, usageSeries, usageTimeline, usageTokens } from "../usage/usageTimeline";
@@ -71,6 +71,8 @@ export function UsageSettings() {
   const selected = selection.scope === scope ? selection.index : null;
   const timeline = useMemo(() => usageTimeline(result.view, 31), [result.view, locale]);
   const bucket = selected === null ? undefined : timeline.buckets[selected];
+  const parts = usageParts(result.view, bucket, true);
+  const [emphasis, setEmphasis] = useState<UsageBarsEmphasis | null>(null);
   const copy = appCopy.composer.usage;
   const ranges = [{ value: "24", label: copy.day }, { value: "168", label: copy.week }, { value: "720", label: copy.month }];
   const sessions = [...(result.allView?.topSessions ?? result.view?.topSessions ?? [])];
@@ -95,8 +97,8 @@ export function UsageSettings() {
         <UsageReadout view={result.view} values={usageReadout(result.view, bucket)} label={bucket?.label ?? label}
           panel selected={Boolean(bucket)} showCost delta={periodDelta(result.view, hours)} share={session && result.allView?.model.totalTokens
             ? usageShare((result.view?.model.totalTokens ?? 0) / result.allView.model.totalTokens) : undefined}
-          parts={usageParts(result.view, bucket, true)} />
-        <UsageBars {...timeline} series={usageSeries()} size="panel" yTicks={{ format: usageTokens }} selectedIndex={selected}
+          parts={parts} onEmphasis={setEmphasis} />
+        <UsageBars {...timeline} series={usageSeries()} size="panel" yTicks={{ format: usageTokens }} selectedIndex={selected} emphasis={parts ? emphasis : null}
           onSelect={index => setSelection({ scope, index })} state={!result.view ? "loading" : "ready"}
           emptyLabel={copy.noUsage} loadingLabel={copy.loading} ariaLabel={copy.chartLabel} />
         <UsageBreakdown loading={!result.view} onShowAll={showAll} view={result.view} sessions={sessions} allTotal={result.allView?.model.totalTokens ?? 0} selected={session} onSelect={setSession} />

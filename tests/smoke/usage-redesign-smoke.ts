@@ -4,7 +4,7 @@ import { readFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, extname, normalize, sep } from "node:path";
 import { probeFocusRing } from "../support/focus-ring-clipping";
 import { launchSmokeBrowser } from "../support/smoke-browser";
-import type { Page } from "playwright";
+import type { Locator, Page } from "playwright";
 import { usageView, quota, delegatedUsageView } from "../../packages/butler-app/client/ui/src/components/conversation/contextUsage.fixtures";
 
 const dist = join(process.cwd(), "packages/butler-app/client/ui/dist");
@@ -22,6 +22,8 @@ let cells = 0;
 let backendTitle = "Login form refactor";
 const heights = new Map<string, number>();
 const heightDeltas: number[] = [];
+const popoverHeights: Record<string, number> = {};
+const chartHeights = new Map<string, number>();
 const alignmentDeltas: number[] = [];
 let releaseLoading: (() => void)[] = [];
 function monitor(url: URL) {
@@ -31,9 +33,11 @@ function monitor(url: URL) {
   const hours = Number(url.searchParams.get("since_hours")) || 0;
   const session = url.searchParams.get("session_id");
   view.filters = { sessionId: session, sinceTs: hours ? now - hours * 3600000 : null, untilTs: hours ? now : null };
-  // A session's slots carry its delegated total last; the main-only slots match the ready chat.
+  // A session's slots append its delegated total, then that work's requests, cached and output.
+  // The first hour's subtask parts are drawn; the last hour's are too thin and merge into solid.
   view.timeline.slots = state === "empty" ? [] : delegated && session
-    ? [[now - 3600000, 1, 20000, 10000, 1000, 0], [now - 1800000, 8, 41200, 28100, 3500, 44700], [now - 600000, 2, 28200, 21900, 2420, 0]]
+    ? [[now - 3600000, 1, 20000, 10000, 1000, 0, 0, 0, 0], [now - 1800000, 8, 41200, 28100, 3500, 44700, 8, 28100, 3500],
+      [now - 600000, 2, 28200, 21900, 2420, 320, 1, 0, 20]]
     : [[now - 3600000, 1, 20000, 10000, 1000], [now - 600000, 2, 28200, 21900, 2420]];
   // As in the gateway, only a session view splits its usage by role.
   if (!session) delete view.model.byRole;
@@ -47,12 +51,68 @@ function monitor(url: URL) {
     view.model.cachedTokens = 0; view.topSessions = []; view.model.byModel = {}; view.tools.byTool = {}; }
   return view;
 }
+/** The first delegated hour (04:00Z): its total and each type's subtask tokens. */
+const splitHour = { key: String(Date.parse("2026-09-28T04:00:00Z")), total: 65700, subtask: { new: 13100, cache: 28100, output: 3500 } as Record<string, number> };
+/**
+ * Painted columns of a chart: no gap inside a column, each hatched part sized
+ * by its type's subtask share, and every split part at least 2px (thinner ones
+ * merge into the larger part's style). Returns the hatch keys drawn.
+ */
+async function assertBars(chart: Locator, label: string) {
+  const columns = await chart.evaluate(root => [...root.querySelectorAll<HTMLElement>("[data-usage-bars-column]")]
+    .filter(column => column.dataset.zero !== "true").map(column => {
+      const height = (element: Element) => element.getBoundingClientRect().height;
+      const segments = [...column.firstElementChild!.children];
+      return { height: height(column), segments: segments.map(height),
+        parts: segments.filter(segment => segment.getAttribute("data-split") === "true").flatMap(segment => [...segment.children].map(height)),
+        hatches: [...column.querySelectorAll("[data-usage-bars-hatch]")].map(part => ({ key: part.getAttribute("data-usage-bars-hatch")!, height: height(part) })) };
+    }));
+  assert(columns.length > 0, `${label}: painted columns`);
+  for (const column of columns) {
+    const sum = column.segments.reduce((total, value) => total + value, 0);
+    assert(Math.abs(sum - column.height) <= 1, `${label}: segments fill their column without gaps (${sum} of ${column.height})`);
+    assert(column.parts.every(part => part >= 1.9), `${label}: split parts are at least 2px (${column.parts})`);
+    for (const hatch of column.hatches) {
+      const [key, series] = hatch.key.split("/");
+      assert.equal(key, splitHour.key, `${label}: only the first delegated hour draws subtask parts; thin ones merge`);
+      const expected = column.height * splitHour.subtask[series!]! / splitHour.total;
+      assert(Math.abs(hatch.height - expected) <= 1, `${label}: ${series} subtask part ${hatch.height}px, expected ${expected}px`);
+    }
+  }
+  return columns.flatMap(column => column.hatches.map(hatch => hatch.key));
+}
+
+/** A linked legend row's hover or focus sets the chart's emphasis; leaving clears it. */
+async function assertEmphasis(page: Page, parts: Locator, chart: Locator, label: string) {
+  const rows = parts.locator('[data-test-class="key-value-row"][data-linked="true"]');
+  assert.equal(await rows.count(), 2, `${label}: both split rows link to the chart`);
+  await rows.nth(1).hover();
+  assert.equal(await chart.getAttribute("data-emphasis"), "subtask", `${label}: subtask row hover`);
+  await page.mouse.move(0, 0);
+  assert.equal(await chart.getAttribute("data-emphasis"), null, `${label}: leaving the row clears the emphasis`);
+  await rows.nth(1).focus();
+  assert.equal(await chart.getAttribute("data-emphasis"), "subtask", `${label}: subtask row focus`);
+  await rows.nth(0).focus();
+  assert.equal(await chart.getAttribute("data-emphasis"), "conversation", `${label}: conversation row focus`);
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  assert.equal(await chart.getAttribute("data-emphasis"), null, `${label}: blur clears the emphasis`);
+}
+
+/** Reduced motion settles every column at once: nothing is still animating. */
+async function assertSettled(chart: Locator, label: string) {
+  await chart.page().waitForTimeout(400);
+  const running = await chart.evaluate(root => root.getAnimations({ subtree: true }).filter(animation => animation.playState === "running").length);
+  assert.equal(running, 0, `${label}: no running animation under reduced motion`);
+}
+
 /** Settings › Usage splits a delegating chat like the popover, with each part's requests. */
 async function delegatedSettings(page: Page, locale: string, cell: string) {
   const parts = page.locator('[data-settings-section-id="usage-overview"] [data-test-class="usage-parts"]');
   await page.locator('[data-settings-section-id="usage-overview"]').waitFor();
   await page.getByRole("tabpanel").getByText("Login form refactor", { exact: true }).waitFor();
   assert.equal(await parts.count(), 0, "all chats have no split");
+  const chart = page.locator('[data-settings-section-id="usage-overview"] [data-slot="usage-bars"]');
+  assert.deepEqual(await assertBars(chart, "all chats"), [], "all-chats bars have no hatch");
   await Promise.all([page.waitForResponse(r => new URL(r.url()).searchParams.get("session_id") === "s1"),
     page.getByRole("tabpanel").getByRole("button", { name: /Login form refactor/u }).click()]);
   await parts.waitFor();
@@ -61,12 +121,15 @@ async function delegatedSettings(page: Page, locale: string, cell: string) {
   if (locale === "ko") assert.match(await parts.innerText(), /대화[\s\S]*5\.2만 · 53\.6% · 요청 3회[\s\S]*하위 작업[\s\S]*4\.5만 · 46\.4% · 요청 8회/u);
   else assert.match(await parts.innerText(), /Conversation[\s\S]*53\.6% · 3 requests[\s\S]*Subtasks[\s\S]*46\.4% · 8 requests/u);
   if (shots) await page.screenshot({ path: join(shots, `after-usage-${locale}-${cell}-delegated-chat.png`) });
-  const chart = page.locator('[data-settings-section-id="usage-overview"] [data-slot="usage-bars"]');
+  await assertSettled(chart, "settings chat");
+  assert.equal((await assertBars(chart, "settings chat")).length, 3, "the first delegated hour splits all three types");
+  await assertEmphasis(page, parts, chart, "settings");
   await chart.focus(); await page.keyboard.press("End"); await page.keyboard.press("ArrowLeft");
   await page.waitForTimeout(400);
   const bar = await parts.innerText();
-  assert.match(bar, locale === "ko" ? /2\.1만 · 32%[\s\S]*4\.5만 · 68%/u : /32%[\s\S]*68%/u, "a selected bar splits its own total");
-  assert.doesNotMatch(bar, locale === "ko" ? /요청/u : /request/u, "a bar has no per-part request count");
+  assert.match(bar, locale === "ko" ? /2\.1만 · 32% · 요청 1회[\s\S]*4\.5만 · 68% · 요청 8회/u : /32% · 1 request[\s\S]*68% · 8 requests/u,
+    "a selected bar splits its own total and requests");
+  assert.equal((await assertBars(chart, "settings selected")).length, 3, "a selected bar keeps its subtask parts");
   assert.deepEqual((await probeFocusRing(page))?.clips, [], "delegated chart focus ring");
   if (shots) await page.screenshot({ path: join(shots, `after-usage-${locale}-${cell}-delegated-bar.png`) });
   await page.keyboard.press("Escape");
@@ -119,6 +182,7 @@ try {
     await page.waitForTimeout(400);
     const height = (await popover.boundingBox())!.height;
     const heightKey = `${width}/${theme}`;
+    popoverHeights[`${heightKey}/${scenario}`] = Math.round(height * 10) / 10;
     if (scenario === "ready") heights.set(heightKey, height);
     if (!before && scenario === "loading" && heights.has(heightKey)) {
       const delta = Math.abs(height - heights.get(heightKey)!);
@@ -129,15 +193,29 @@ try {
     if (shots) await page.screenshot({ path: join(shots, `${before ? "before" : "after"}${auth === "subscription" ? "-subscription" : ""}-popover-${theme}-${width}-${scenario}.png`) });
     if (shots) await popover.screenshot({ path: join(shots, `crop-${before ? "before" : "after"}-${locale}-${theme}-${width}-${scenario}.png`) });
     const parts = popover.locator('[data-test-class="usage-parts"]');
+    const popoverChart = popover.locator('[data-slot="usage-bars"]');
     if (!before && scenario !== "delegated") assert.equal(await parts.count(), 0, "no split without delegated usage");
+    if (!before && scenario === "ready") chartHeights.set(heightKey, (await popoverChart.boundingBox())!.height);
+    if (!before && scenario === "ready") assert.deepEqual(await assertBars(popoverChart, "popover ready"), [], "no hatch without delegated usage");
     if (scenario === "delegated") {
       if (!before) {
         assert.equal(await parts.locator('[data-test-class="key-value-row"]').count(), 2);
         if (locale === "ko") assert.match(await parts.innerText(), /대화[\s\S]*5\.2만 · 53\.6%[\s\S]*하위 작업[\s\S]*4\.5만 · 46\.4%/u);
-        await popover.locator('[data-slot="usage-bars"]').focus(); await page.keyboard.press("Home");
+        await assertSettled(popoverChart, "popover");
+        assert.equal((await assertBars(popoverChart, "popover")).length, 3, "the first delegated hour splits all three types");
+        if (chartHeights.has(heightKey)) {
+          const chartDelta = Math.abs((await popoverChart.boundingBox())!.height - chartHeights.get(heightKey)!);
+          assert(chartDelta <= 1, `the split keeps the popover chart height (${chartDelta}px)`);
+        }
+        await assertEmphasis(page, parts, popoverChart, "popover");
+        await popoverChart.focus(); await page.keyboard.press("Home");
         if (locale === "ko") assert.match(await parts.innerText(), /2\.1만 · 32%[\s\S]*4\.5만 · 68%/u, "a selected bar splits its own total");
         await page.waitForTimeout(400);
         assert.equal(await parts.locator('[data-test-class="key-value-row"]').count(), 2, "selection keeps the split rows");
+        assert.equal((await assertBars(popoverChart, "popover selected")).length, 3, "a selected bar keeps its subtask parts");
+        const selectedDelta = Math.abs((await popover.boundingBox())!.height - height);
+        heightDeltas.push(selectedDelta);
+        assert(selectedDelta <= 2, `selecting a split bar keeps the popover height (${selectedDelta}px)`);
         if (shots) await popover.screenshot({ path: join(shots, `crop-after-${locale}-${theme}-${width}-delegated-selected.png`) });
       }
       if (before) { await page.keyboard.press("Escape"); await page.keyboard.press("Escape"); continue; }
@@ -265,7 +343,7 @@ try {
     }
   }
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ ok: true, cells, reads, allReads, before, heightDeltas, alignmentDeltas }));
+  console.log(JSON.stringify({ ok: true, cells, reads, allReads, before, heightDeltas, alignmentDeltas, popoverHeights }));
 } finally {
   // The last loading cell deliberately holds a route. Settle it before teardown.
   releaseLoading.forEach(resolve => resolve());
