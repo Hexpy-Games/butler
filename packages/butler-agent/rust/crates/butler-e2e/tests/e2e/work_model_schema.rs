@@ -172,8 +172,38 @@ async fn fresh_and_populated_schema_survive_restart() -> Result<(), HarnessError
     db.execute_batch("PRAGMA foreign_keys=ON")?;
     db.execute_batch(include_str!("../../fixtures/work-model-p14/seed.sql"))?;
     validate_local_fixture(&db)?;
-    let before = snapshot(&db)?;
     validate_chains(&db)?;
+    drop(db);
+    let output =
+        tokio::process::Command::new(butler_e2e::e2e::binary::fixture_binary("e2e-work-store")?)
+            .kill_on_drop(true)
+            .arg(&path)
+            .arg("wk_canon")
+            .output()
+            .await?;
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let db = Connection::open(&path)?;
+    let before = snapshot(&db)?;
+    assert_eq!(
+        db.query_row::<String, _, _>(
+            "SELECT run_state FROM wm_works WHERE id='wk_schema'",
+            [],
+            |r| r.get(0)
+        )?,
+        "held"
+    );
+    assert_eq!(
+        db.query_row::<i64, _, _>(
+            "SELECT count(*) FROM wm_hold_decisions WHERE chain_id='ch_canon' AND decision IS NULL",
+            [],
+            |r| r.get(0)
+        )?,
+        1
+    );
     drop(db);
     s.gw = s.agent.start_again().await?;
     s.agent.terminate().await?;

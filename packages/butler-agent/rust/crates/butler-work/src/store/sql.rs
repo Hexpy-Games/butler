@@ -1,0 +1,63 @@
+//! Every operational statement is declared here so query-plan coverage is total.
+macro_rules! statements {
+    ($($name:ident = $sql:literal;)+) => {
+        $(pub const $name: &str = $sql;)+
+        pub const ALL: &[(&str,&str)] = &[$((stringify!($name),$name)),+];
+    }
+}
+statements! {
+WORK = "SELECT * FROM wm_works WHERE id=?1";
+PLAN = "SELECT * FROM wm_plans WHERE id=?1";
+INSERT_PLAN = "INSERT INTO wm_plans(id,project_id,title,description,due_on,status,visibility,created_at,updated_at,created_by) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?8,?9)";
+EDIT_PLAN = "UPDATE wm_plans SET title=?2,description=?3,due_on=?4,status=?5,revision=revision+1,updated_at=?6 WHERE id=?1 AND revision=?7";
+INSERT_WORK = "INSERT INTO wm_works(id,scope_kind,scope_ref,title,description,origin,draft,visibility,canon_status,created_at,updated_at,created_by) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?10,?11)";
+EDIT_WORK = "UPDATE wm_works SET title=?2,description=?3,kind=?4,assignee=?5,draft=?6,tier=?7,revision=revision+1,updated_at=?8 WHERE id=?1 AND revision=?9";
+HOME = "UPDATE wm_works SET home_session_id=?2,revision=revision+1,updated_at=?3 WHERE id=?1 AND revision=?4";
+RANK = "UPDATE wm_works SET plan_id=?2,plan_rank=?3,revision=revision+1,updated_at=?4 WHERE id=?1 AND revision=?5";
+AUDIT = "INSERT INTO wm_audit(entity_kind,entity_id,revision,actor_json,op,at,payload_json) VALUES(?1,?2,?3,?4,?5,?6,?7)";
+OUTBOX = "INSERT INTO wm_outbox(topic,payload_json,created_at) VALUES(?1,?2,?3)";
+COUNT_ROW = "SELECT count FROM wm_counts WHERE scope_kind=?1 AND scope_ref=?2 AND key=?3";
+SCOPE_COUNTS = "SELECT run_state,count(*) AS count FROM wm_works WHERE scope_kind=?1 AND scope_ref=?2 GROUP BY run_state";
+COUNT = "INSERT INTO wm_counts(scope_kind,scope_ref,key,count) VALUES(?1,?2,?3,MAX(?4,0)) ON CONFLICT(scope_kind,scope_ref,key) DO UPDATE SET count=count+?4";
+CHAIN = "SELECT * FROM wm_work_chains WHERE id=?1";
+MEMBERS = "SELECT * FROM wm_works WHERE chain_id=?1 ORDER BY step_index,stack_position";
+INSERT_CHAIN = "INSERT INTO wm_work_chains(id,session_id,created_at) VALUES(?1,?2,?3)";
+BUMP_CHAIN = "UPDATE wm_work_chains SET graph_revision=graph_revision+1 WHERE id=?1 AND graph_revision=?2";
+CHAIN_STATE = "UPDATE wm_work_chains SET state=?2 WHERE id=?1";
+DELETE_EDGES = "DELETE FROM wm_work_edges WHERE chain_id=?1";
+INSERT_EDGE = "INSERT INTO wm_work_edges(pred_work_id,succ_work_id,chain_id) VALUES(?1,?2,?3)";
+MEMBERSHIP = "UPDATE wm_works SET run_generation=run_generation+(chain_id IS NOT ?2 OR step_index IS NOT ?3),chain_id=?2,step_index=?3,stack_position=?4,revision=revision+1,updated_at=?5 WHERE id=?1 AND revision=?6";
+PROVENANCE = "UPDATE wm_works SET queue_origin=?2,origin_message_id=?3 WHERE id=?1";
+STATE = "UPDATE wm_works SET run_generation=run_generation+(run_state<>?2),run_state=?2,canon_status=?3,canon_status_source=?4,hold_reason=?5,held_by_work_id=?6,failure_reason=?7,result_reported_at=?8,revision=revision+1,updated_at=?9 WHERE id=?1 AND revision=?10";
+CANCEL_TASK = "UPDATE wm_tasks SET status='cancelled',blocked_reason=?2,revision=revision+1,updated_at=?3 WHERE id=?1 AND revision=?4";
+TASK = "SELECT * FROM wm_tasks WHERE id=?1";
+TASKS = "SELECT * FROM wm_tasks WHERE work_id=?1 AND status IN ('draft','pending','running','awaiting_review','blocked','paused','stopped')";
+INSERT_HOLD = "INSERT INTO wm_hold_decisions(id,chain_id,failed_work_id,held_step_index,question_message_id,coverage_json) VALUES(?1,?2,?3,?4,?5,?6)";
+RESOLVE_HOLD = "UPDATE wm_hold_decisions SET resolved_at=?2,revision=revision+1 WHERE id=?1 AND revision=?3 AND resolved_at IS NULL";
+HOLD = "SELECT * FROM wm_hold_decisions WHERE id=?1";
+PENDING_HOLDS = "SELECT * FROM wm_hold_decisions WHERE chain_id=?1 AND decision IS NULL AND resolved_at IS NULL ORDER BY held_step_index";
+MOVE_SCOPE = "UPDATE wm_works SET scope_ref=?2,revision=revision+1,updated_at=?3 WHERE id=?1 AND revision=?4";
+DECIDED_HOLDS = "SELECT * FROM wm_hold_decisions WHERE chain_id=?1 AND decision='run_anyway' AND resolved_at IS NULL";
+REPOINT_HOLD = "UPDATE wm_hold_decisions SET failed_work_id=?2,coverage_json=?4,revision=revision+1 WHERE id=?1 AND revision=?3";
+DECIDE = "UPDATE wm_hold_decisions SET decision=?2,decided_at=?3,revision=revision+1 WHERE id=?1 AND revision=?4 AND decision IS NULL";
+INTENT = "SELECT * FROM wm_cross_db_intents WHERE op_id=?1";
+INSERT_INTENT = "INSERT INTO wm_cross_db_intents(op_id,kind,payload_json,state,created_at) VALUES(?1,?2,?3,'pending',?4) ON CONFLICT(op_id) DO NOTHING";
+PENDING_INTENTS = "SELECT * FROM wm_cross_db_intents WHERE state='pending' AND op_id>?1 ORDER BY op_id LIMIT ?2";
+APPLY_INTENT = "UPDATE wm_cross_db_intents SET state='applied',revision=revision+1 WHERE op_id=?1 AND revision=?2";
+MARKER = "SELECT * FROM wm_runtime_marker WHERE singleton=1";
+BOOT = "INSERT INTO wm_runtime_marker(singleton,boot_id,started_at) VALUES(1,?1,?2) ON CONFLICT(singleton) DO UPDATE SET boot_id=?1,started_at=?2,clean_shutdown_at=NULL";
+CLEAN = "UPDATE wm_runtime_marker SET clean_shutdown_at=?1 WHERE singleton=1 AND boot_id=?2";
+RECOVER_ATTEMPTS = "SELECT a.*,t.work_id FROM wm_attempts a JOIN wm_tasks t ON t.id=a.task_id WHERE a.session_id=?1 AND a.status='running' AND a.recovered_at IS NULL UNION ALL SELECT a.*,t.work_id FROM wm_attempts a JOIN wm_tasks t ON t.id=a.task_id WHERE a.session_id=?1 AND a.status='interrupted' AND a.recovered_at IS NULL ORDER BY started_at,id";
+RECOVER_TASK = "UPDATE wm_tasks SET status='pending',revision=revision+1,updated_at=?2 WHERE id=?1 AND revision=?3";
+INTERRUPT = "UPDATE wm_attempts SET status='interrupted',finished_at=?2,recovered_at=?2,revision=revision+1 WHERE id=?1 AND revision=?3 AND recovered_at IS NULL";
+NODE = "SELECT * FROM wm_spec_nodes WHERE node_id=?1";
+INSERT_NODE = "INSERT INTO wm_spec_nodes(node_id,scope_kind,scope_ref,work_id,parent_node_id,concern_id,visibility,lifecycle,source,created_at,updated_at,created_by) VALUES(?1,?2,?3,?4,?5,?6,?7,'draft','local',?8,?8,?9)";
+BODY = "SELECT hash,bytes FROM wm_spec_bodies WHERE hash=?1";
+PUT_BODY = "INSERT INTO wm_spec_bodies(hash,body,bytes) VALUES(?1,?2,?3) ON CONFLICT(hash) DO NOTHING";
+SPEC_REVISION = "SELECT * FROM wm_spec_revisions WHERE node_id=?1 AND revision=?2";
+PUBLISH = "INSERT INTO wm_spec_revisions(node_id,revision,body_hash,parser_version,state,authoring_instruction_id) VALUES(?1,?2,?3,?4,'published',?5)";
+CRITERION = "INSERT INTO wm_spec_criteria(node_id,revision,criterion_id,part_id,text) VALUES(?1,?2,?3,?4,?5)";
+NODE_BUMP = "UPDATE wm_spec_nodes SET revision=revision+1,updated_at=?2 WHERE node_id=?1 AND revision=?3";
+ACTIVATE = "UPDATE wm_spec_nodes SET active_revision=?2,lifecycle='active',revision=revision+1,updated_at=?3 WHERE node_id=?1 AND revision=?4 AND active_revision IS ?5";
+SPEC_STATE = "UPDATE wm_spec_revisions SET state=?3 WHERE node_id=?1 AND revision=?2";
+}
