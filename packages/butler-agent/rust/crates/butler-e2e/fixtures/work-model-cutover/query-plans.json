@@ -189,5 +189,8 @@
   ],
   "WORK_BATCH": [
     "SEARCH btcc_guided_works USING COVERING INDEX sqlite_autoindex_btcc_guided_works_1 (work_id>?)"
+  ],
+  "ADMISSION_APPLIED": [
+    "SEARCH wm_instructions USING INDEX sqlite_autoindex_wm_instructions_1 (id=?)"
   ]
 }

@@ -98,6 +98,7 @@ pub(super) const TARGET_WORK_VERSION: &str = "SELECT w.revision,w.task_graph_rev
 pub(super) const TARGET_TASK_VERSIONS: &str =
     "SELECT id,revision FROM wm_tasks WHERE work_id=?1 ORDER BY id";
 pub(super) const ADMIT: &str = "INSERT INTO wm_instructions(id,idempotency_key,target_session_id,sender,mode,body_ref,anchor_kind,anchor_id,boundary_seq,status,received_seq) VALUES(?1,?2,?3,?4,'queue',?5,'turn',?6,?7,'waiting_for_turn',?7) ON CONFLICT(idempotency_key) DO NOTHING";
+pub(super) const ADMISSION_APPLIED: &str = "UPDATE wm_instructions SET status='applied' WHERE id=?1 AND target_session_id=?2 AND status IN ('waiting_for_turn','delivered')";
 pub(super) const ADMISSION_RECEIPT: &str =
     "SELECT id,target_session_id,anchor_id,body_ref FROM wm_instructions WHERE idempotency_key=?1";
 
@@ -169,6 +170,7 @@ pub const ALL: &[(&str, &str)] = &[
     ("TARGET_WORK_VERSION", TARGET_WORK_VERSION),
     ("TARGET_TASK_VERSIONS", TARGET_TASK_VERSIONS),
     ("ADMIT", ADMIT),
+    ("ADMISSION_APPLIED", ADMISSION_APPLIED),
     ("ADMISSION_RECEIPT", ADMISSION_RECEIPT),
     ("TASK_ASSIGNMENT", TASK_ASSIGNMENT),
     ("APP_PROJECT_BATCH", APP_PROJECT_BATCH),

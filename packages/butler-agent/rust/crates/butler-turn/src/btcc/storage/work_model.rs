@@ -1,4 +1,4 @@
-//! Inert work-model port. SQL runs only on the BTCC writer/read lanes.
+//! Work-model port. SQL runs only on the BTCC writer/read lanes.
 use super::{BtccStorage, StorageError, StorageResult};
 use butler_work::store;
 use rusqlite::{Connection, TransactionBehavior};
@@ -45,7 +45,9 @@ fn work_error(error: store::Error) -> StorageError {
         store::Error::InvalidRank => "invalid_rank",
         store::Error::ConversationOccupied => "conversation_occupied",
         store::Error::CrossChat => "cross_chat",
-        store::Error::Invalid(_) | store::Error::Chain(_) => "work_model_invalid",
+        store::Error::Invalid(_) | store::Error::Chain(_) | store::Error::PartCycle { .. } => {
+            "work_model_invalid"
+        }
         store::Error::Json(_)
         | store::Error::BodyCodec(_)
         | store::Error::Id(_)

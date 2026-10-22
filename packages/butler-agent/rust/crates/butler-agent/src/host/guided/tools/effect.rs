@@ -75,6 +75,17 @@ async fn execute_effect(
     call: &ModelRoundToolCall,
     occurrence: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    if matches!(
+        ToolName::parse(&call.name),
+        Some(ToolName::RunCommand | ToolName::WriteFile | ToolName::EditFile)
+    ) && !super::work_model::effects_allowed(owner).await?
+    {
+        return ordinary(
+            "task_not_started",
+            "Call work_apply with task.start first, before this Task's file writes or commands.",
+            None,
+        );
+    }
     let scope = CommandScope {
         workspace_reference: owner.binding.workspace_reference.as_ref(),
         workspace_path: &owner.binding.workspace_path,
@@ -103,12 +114,9 @@ async fn execute_effect(
     if let Some(refusal) = admission_refusal(owner, call, decision).await? {
         return Ok(refusal);
     }
-    let work = owner
-        .work
-        .bound_work()
+    let work = runtime_work::bound(owner)
         .await
-        .map_err(ToolExecutionError::Integrity)?
-        .unwrap_or_else(|| runtime_work::untracked(owner));
+        .map_err(ToolExecutionError::Integrity)?;
     let contained = contained_run(owner, occurrence, decision, kind);
     let prepared = prepare(owner, call, occurrence, (scope, contained), &work).await;
     let (target, input, adapter) = match prepared {

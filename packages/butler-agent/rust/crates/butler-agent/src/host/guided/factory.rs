@@ -3,6 +3,7 @@
 mod authority;
 mod hooks;
 mod surface;
+mod work_model;
 mod workspace;
 
 #[cfg(test)]
@@ -111,7 +112,15 @@ impl GuidedTurnFactoryAdapter {
     async fn tool_surface(
         &self,
         phase: &mut butler_turn::btcc::GuidedPhaseSelection,
+        turn: &butler_turn::btcc::TurnRecord,
     ) -> Result<Vec<butler_turn::btcc::ModelRoundTool>, BtccError> {
+        work_model::configure(
+            phase,
+            self.preparation.catalog.snapshot(),
+            &self.preparation.journal.work_model_storage(),
+            &turn.session_id,
+        )
+        .await?;
         if phase.execution_policy.role == butler_turn::btcc::PolicyRole::Steward
             && phase.provider_tools.iter().any(|tool| {
                 tool.get("name").and_then(serde_json::Value::as_str) == Some("delegate_to_worker")
@@ -151,7 +160,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
             if let Some(consent) = consent {
                 workspace.set_consent(consent);
             }
-            let surface = self.tool_surface(&mut phase).await?;
+            let surface = self.tool_surface(&mut phase, start.turn).await?;
             let policy = &phase.execution_policy;
             let language = resolve_guided_response_language(start.turn, &self.documents).await;
             let (work, work_tools) =

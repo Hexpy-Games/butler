@@ -31,3 +31,39 @@ pub(in crate::host::guided::tools) fn untracked(owner: &GuidedTools) -> WorkView
         updated_at: String::new(),
     }
 }
+
+/// Effects share the new Work identity without reading or selecting legacy Work.
+pub(in crate::host::guided::tools) async fn bound(
+    owner: &GuidedTools,
+) -> Result<WorkView, butler_turn::btcc::BtccError> {
+    let session = owner.binding.source_session_id.clone();
+    let row = owner
+        .journal
+        .work_model_storage()
+        .work_model_read(move |db| butler_work::store::bound_work(db, &session, None))
+        .await?;
+    let mut work = untracked(owner);
+    if let Some(row) = row {
+        work.work_id = row["id"]
+            .as_str()
+            .ok_or_else(|| {
+                butler_turn::btcc::BtccError::relayed("work_model_invalid", "Work id required")
+            })?
+            .to_owned();
+        work.objective = row["title"].as_str().unwrap_or_default().to_owned();
+        if row["scope_kind"] == "project" {
+            work.scope = WorkScope::Project {
+                project_ref: row["scope_ref"]
+                    .as_str()
+                    .ok_or_else(|| {
+                        butler_turn::btcc::BtccError::relayed(
+                            "work_model_invalid",
+                            "Project scope required",
+                        )
+                    })?
+                    .to_owned(),
+            };
+        }
+    }
+    Ok(work)
+}

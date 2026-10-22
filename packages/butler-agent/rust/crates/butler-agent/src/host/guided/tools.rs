@@ -16,6 +16,7 @@ mod hooks;
 mod image;
 mod library;
 mod memory_write;
+mod work_model;
 pub(crate) use memory_write::MemoryWriteServices;
 mod browser;
 mod message;
@@ -285,7 +286,10 @@ impl GuidedTools {
         matches!(
             ToolName::parse(name),
             Some(
-                ToolName::AskUser
+                ToolName::WorkRead
+                    | ToolName::WorkApply
+                    | ToolName::SessionControl
+                    | ToolName::AskUser
                     | ToolName::ReadFile
                     | ToolName::RunCommand
                     | ToolName::WriteFile
@@ -332,14 +336,10 @@ impl GuidedTools {
                     | ToolName::SteerWorker
                     | ToolName::CancelSteward
                     | ToolName::WaitForWorker
-                    | ToolName::UpdateTodoList
-                    | ToolName::ListTodoList
                     | ToolName::GetContextMonitor
                     | ToolName::GetUsageMonitor
                     | ToolName::GetMemoryHealth
                     | ToolName::ListToolCapabilities
-                    | ToolName::ListWorkStreams
-                    | ToolName::UpdateWorkStreamState
                     | ToolName::CreateAutomation
                     | ToolName::UpdateAutomation
                     | ToolName::ListAutomations
@@ -355,7 +355,6 @@ impl GuidedTools {
                     | ToolName::LibraryOrganize
             )
         ) || browser::supports(name)
-            || GuidedWorkTools::is_work_tool(name)
             || crate::host::guided::project_tools::GuidedProjectTools::supports(name)
     }
 

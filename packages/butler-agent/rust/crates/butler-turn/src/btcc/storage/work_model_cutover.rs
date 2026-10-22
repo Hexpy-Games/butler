@@ -50,10 +50,11 @@ impl BtccStorage {
         &self,
     ) -> StorageResult<butler_work::cutover::CutoverStatus> {
         let mut status = self.work_model_read(butler_work::cutover::status).await?;
-        if self
-            .inner
-            .cutover_postponed
-            .load(std::sync::atomic::Ordering::Relaxed)
+        if status.state != butler_work::cutover::CutoverState::Done
+            && self
+                .inner
+                .cutover_postponed
+                .load(std::sync::atomic::Ordering::Relaxed)
         {
             status.state = butler_work::cutover::CutoverState::PostponedNoSpace;
         }
@@ -126,9 +127,6 @@ impl BtccStorage {
             let state = self.work_model_cutover_status().await?.state;
             match state {
                 CutoverState::Done => return Ok(CutoverAdmission::Ready(id)),
-                CutoverState::PostponedNoSpace | CutoverState::FailedBackup => {
-                    return Ok(CutoverAdmission::Pending(id));
-                }
                 CutoverState::Importing if !imported => {
                     let session = session.clone();
                     let after = cursor.clone();
@@ -148,7 +146,11 @@ impl BtccStorage {
                     imported = true;
                     continue;
                 }
-                CutoverState::Pending | CutoverState::BackingUp | CutoverState::Importing => {}
+                CutoverState::Pending
+                | CutoverState::BackingUp
+                | CutoverState::Importing
+                | CutoverState::PostponedNoSpace
+                | CutoverState::FailedBackup => {}
             }
             tokio::select! {
                 () = stop.cancelled() => return Ok(CutoverAdmission::Pending(id)),

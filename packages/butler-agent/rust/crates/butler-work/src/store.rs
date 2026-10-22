@@ -32,6 +32,7 @@ pub use recovery::*;
 use rusqlite::{Connection, OptionalExtension, Params, Row};
 use serde_json::{Value, json};
 pub use specs::*;
+pub use tool_read::bound_work;
 pub use transaction::Transaction;
 pub use transitions::*;
 use transitions::{recompute_work, set_state};
@@ -46,6 +47,8 @@ pub enum Error {
     NotFound,
     #[error("running")]
     Running,
+    #[error("part cycle in Task {task}: {path:?}")]
+    PartCycle { task: String, path: Vec<String> },
     #[error("invalid fractional rank")]
     InvalidRank,
     #[error("conversation already hosts a 과제")]

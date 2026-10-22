@@ -99,6 +99,7 @@ pub fn select_phase(
     let image_tool_admitted = turn_admits_zai_image_tool(&policy);
     let mut authorized = base_authorized(input, &policy);
     let phase = phase(&policy, catalog);
+    select_work_tools(&mut authorized, catalog, phase, &policy);
     let replay_mode = if enabled(input.operation_replay_flag) {
         ReplayMode::Available
     } else {
@@ -106,6 +107,7 @@ pub fn select_phase(
     };
     if !enabled(input.phase_surface_flag) {
         let mut provider = legacy_visible(&authorized, &policy);
+        provider.retain(|tool| tool.name != "session_control");
         push_missing(&mut provider, catalog, &EXACT_READ_TOOLS);
         return Ok(GuidedPhaseSelection {
             #[cfg(any(test, feature = "test-support"))]
@@ -337,4 +339,18 @@ fn require_profiles_offered(
         }
     }
     Ok(())
+}
+
+fn select_work_tools<'a>(
+    authorized: &mut Vec<&'a GuidedCatalogTool>,
+    catalog: &'a GuidedCatalogSnapshot,
+    phase: GuidedPhase,
+    policy: &GuidedExecutionPolicy,
+) {
+    authorized.retain(|tool| tool.name != "session_control");
+    if phase == GuidedPhase::Execution && policy.tracking_mode != "none" {
+        push_missing(authorized, catalog, &["work_read", "work_apply"]);
+    } else {
+        authorized.retain(|tool| !matches!(tool.name.as_str(), "work_read" | "work_apply"));
+    }
 }

@@ -204,6 +204,7 @@ pub fn operations(tier: u8, planning: bool, bound: bool) -> Value {
         }
     } else {
         available.push("work.create_light");
+        available.push("task.add");
         available.push("task.start");
         if tier == 2 {
             available.extend(["spec.propose", "spec.activate"]);

@@ -92,5 +92,8 @@ pub(super) async fn dispatch(
     if call.name == ToolName::AskUser {
         return execute(owner, call, call_id).await;
     }
+    if super::work_model::supports(&call.name) {
+        return super::work_model::execute(owner, invocation, call, call_id).await;
+    }
     super::dispatch::execute(owner, invocation, call, call_id).await
 }

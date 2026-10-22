@@ -16,7 +16,7 @@ mod target;
 mod version;
 mod work_batch;
 
-pub use admission::{ManagedAdmission, accept};
+pub use admission::{ManagedAdmission, accept, applied};
 pub use backup::{
     BackupFile, Manifest, TableBackup, check_epoch as check_epoch_path, frozen_inventory, prepare,
     prepare_with_cancel, valid,

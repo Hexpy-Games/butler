@@ -23,10 +23,6 @@
     "tool_search",
     "tool_describe",
     "tool_call",
-    "update_todo_list",
-    "list_todo_list",
-    "list_work_streams",
-    "update_work_stream_state",
     "recall_memory",
     "query_memory",
     "read_conversation_context",
@@ -3520,249 +3516,6 @@
       "durable": false
     },
     {
-      "name": "update_todo_list",
-      "definition": {
-        "type": "function",
-        "name": "update_todo_list",
-        "description": "Create or replace Butler's durable checklist for the current non-trivial multi-step work. Reuse stable ids across updates; Butler preserves retained order and appends new ids. Keep at most one item in_progress.",
-        "parameters": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "list_id": {
-              "type": "string",
-              "description": "Safe list id. Defaults to main."
-            },
-            "title": {
-              "type": "string",
-              "description": "Optional user-facing checklist title."
-            },
-            "todos": {
-              "type": "array",
-              "description": "Full current todo list. The first accepted order is durable; later array reordering does not move retained ids, and new ids append.",
-              "items": {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "description": "Stable safe id. Reuse the returned id on every later update; Butler assigns one when omitted initially."
-                  },
-                  "content": {
-                    "type": "string",
-                    "description": "Imperative form, e.g. Run validation."
-                  },
-                  "active_form": {
-                    "type": "string",
-                    "description": "Present continuous form, e.g. Running validation."
-                  },
-                  "status": {
-                    "type": "string",
-                    "enum": [
-                      "pending",
-                      "in_progress",
-                      "completed",
-                      "cancelled"
-                    ]
-                  },
-                  "phase": {
-                    "type": "string",
-                    "enum": [
-                      "conception",
-                      "planning",
-                      "execution",
-                      "review",
-                      "consolidation",
-                      "reporting"
-                    ],
-                    "description": "Optional Butler Turn Cognition Cycle phase for this step."
-                  },
-                  "priority": {
-                    "type": "string",
-                    "enum": [
-                      "low",
-                      "normal",
-                      "high"
-                    ]
-                  },
-                  "blocked_by": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "note": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "content",
-                  "active_form",
-                  "status"
-                ]
-              }
-            }
-          },
-          "required": [
-            "todos"
-          ]
-        },
-        "effectBoundary": "turn_local",
-        "concurrencySafe": false,
-        "interruptBehavior": "continue",
-        "transcriptVisibility": "visible"
-      },
-      "effectBoundary": "turn_local",
-      "category": "todo",
-      "tags": [
-        "todo",
-        "plan",
-        "progress",
-        "checklist"
-      ],
-      "durable": false
-    },
-    {
-      "name": "list_todo_list",
-      "definition": {
-        "type": "function",
-        "name": "list_todo_list",
-        "description": "Read Butler's durable checklist for the current work, including progress counts and the current in-progress item.",
-        "parameters": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "list_id": {
-              "type": "string",
-              "description": "Safe list id. Defaults to main."
-            },
-            "include_completed": {
-              "type": "boolean",
-              "description": "When true, include completed and cancelled items."
-            }
-          },
-          "required": []
-        },
-        "effectBoundary": "none",
-        "concurrencySafe": true,
-        "interruptBehavior": "continue",
-        "transcriptVisibility": "visible"
-      },
-      "effectBoundary": "none",
-      "category": "todo",
-      "tags": [
-        "todo",
-        "progress",
-        "checklist"
-      ],
-      "durable": false
-    },
-    {
-      "name": "list_work_streams",
-      "definition": {
-        "type": "function",
-        "name": "list_work_streams",
-        "description": "List Butler-owned durable WorkStreams for the active session or project. Use to preserve context switching across multiple async issues.",
-        "parameters": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "session_id": {
-              "type": "string",
-              "description": "Optional session id. Defaults to the active session."
-            },
-            "project_id": {
-              "type": "string",
-              "description": "Optional project id filter."
-            },
-            "include_terminal": {
-              "type": "boolean",
-              "description": "When true, include complete and failed streams."
-            }
-          },
-          "required": []
-        },
-        "effectBoundary": "none",
-        "concurrencySafe": true,
-        "interruptBehavior": "continue",
-        "transcriptVisibility": "visible"
-      },
-      "effectBoundary": "none",
-      "category": "work",
-      "tags": [
-        "workstream",
-        "fsm",
-        "state",
-        "async",
-        "project",
-        "작업",
-        "상태"
-      ],
-      "durable": false
-    },
-    {
-      "name": "update_work_stream_state",
-      "definition": {
-        "type": "function",
-        "name": "update_work_stream_state",
-        "description": "Advance or pause the active Butler-owned WorkStream through the issue-level state machine. Use for waiting_user, paused, recoverable, and explicit review/reporting transitions.",
-        "parameters": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "work_stream_id": {
-              "type": "string",
-              "description": "Optional work stream id. Defaults to the active stream for this session."
-            },
-            "state": {
-              "type": "string",
-              "enum": [
-                "routing",
-                "conception",
-                "planning",
-                "executing",
-                "reviewing",
-                "consolidating",
-                "reporting",
-                "waiting_user",
-                "paused",
-                "complete",
-                "failed",
-                "recoverable",
-                "cancelled"
-              ]
-            },
-            "active_step_id": {
-              "type": "string",
-              "description": "Optional active step id when the state points to a known todo step."
-            },
-            "status_note": {
-              "type": "string",
-              "description": "Short public-safe status note. Do not include hidden reasoning or raw private text."
-            }
-          },
-          "required": [
-            "state"
-          ]
-        },
-        "effectBoundary": "turn_local",
-        "concurrencySafe": false,
-        "interruptBehavior": "continue",
-        "transcriptVisibility": "visible"
-      },
-      "effectBoundary": "turn_local",
-      "category": "work",
-      "tags": [
-        "workstream",
-        "fsm",
-        "state",
-        "pause",
-        "resume",
-        "review"
-      ],
-      "durable": false
-    },
-    {
       "name": "control_work",
       "definition": {
         "type": "function",
@@ -4919,483 +4672,6 @@
         "cancel"
       ],
       "durable": false
-    },
-    {
-      "name": "start_work",
-      "definition": {
-        "type": "function",
-        "name": "start_work",
-        "description": "Explicitly start unrelated durable Work and bind this Turn to it. Use this before dependent tools or Plan changes when the current request is new Work. Ordinary tools never select Work automatically.",
-        "parameters": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "objective": {
-              "type": "string",
-              "minLength": 1,
-              "description": "The concise stable user-visible outcome for the new Work."
-            }
-          },
-          "required": [
-            "objective"
-          ]
-        }
-      },
-      "effectBoundary": "durable_work",
-      "category": "work",
-      "tags": [],
-      "durable": true
-    },
-    {
-      "name": "continue_work",
-      "definition": {
-        "type": "function",
-        "name": "continue_work",
-        "description": "Explicitly bind this Turn to the exact current open Work shown in context. Use only when the current request continues that Work; ordinary tools never select it.",
-        "parameters": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "work_id": {
-              "type": "string",
-              "minLength": 1,
-              "description": "The exact candidate Work id returned in the current Work context."
-            }
-          },
-          "required": [
-            "work_id"
-          ]
-        }
-      },
-      "effectBoundary": "durable_work",
-      "category": "work",
-      "tags": [],
-      "durable": true
-    },
-    {
-      "name": "replace_work_plan",
-      "definition": {
-        "type": "function",
-        "name": "replace_work_plan",
-        "description": "Open or revise the Plan for the Work explicitly selected by start_work or continue_work. Revision starts planning from any current stage without a prior result review; retain completed action keys and results. Use start_new only as a compatibility translation when older callers cannot use start_work. Ordinary tools never select Work; choose start_work or continue_work before this Plan operation. Keep objective as the overall multi-Turn user outcome; put the current milestone in actions and checkpoints. Choose execution_mode during planning: Butler uses steward for substantial execution or direct for a genuinely small direct action; Steward uses direct or workers; Worker uses direct. Planning, management, integration, review, validation, and reporting stay with the current role. Do not use this for simple conversation, stable knowledge, or a single-step read-only lookup. Use it for multi-source or multi-step research with a synthesized deliverable, even when source tools are read-only.",
-        "parameters": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "start_new": {
-              "type": "boolean",
-              "description": "True only when abandoning current open Work and starting unrelated Work.",
-              "default": false
-            },
-            "objective": {
-              "type": "string",
-              "minLength": 1,
-              "description": "The concise user-visible outcome this Work must produce."
-            },
-            "governing_refs": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "minLength": 1
-              },
-              "default": [],
-              "description": "A small list of existing governing specification or document references. Use workspace-relative paths or stable document ids; do not invent references."
-            },
-            "execution_mode": {
-              "type": "string",
-              "enum": [
-                "direct",
-                "steward",
-                "workers"
-              ],
-              "description": "Who executes Plan actions: direct = this role, steward = Butler delegates to Steward, workers = Steward delegates to Workers. Preserve completed action keys when revising ownership on an existing Plan."
-            },
-            "actions": {
-              "type": "array",
-              "minItems": 1,
-              "items": {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "action_key": {
-                    "type": "string",
-                    "minLength": 1,
-                    "description": "The concise stable user-visible action summary used for future progress updates, dependencies, and model continuation. Name the concrete action or outcome in the user's language, not a generic stage word."
-                  },
-                  "description": {
-                    "type": "string",
-                    "minLength": 1,
-                    "description": "Optional fuller detail for the action. Omit it when action_key already states the complete intended action clearly."
-                  },
-                  "dependency_keys": {
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    "default": []
-                  },
-                  "effect": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "description": "Mark a high-level persistent or external change planned by this action. For contained workspace and active Project Ledger work, use plain-language capability and outcome; do not enumerate files or invent internal target strings. An exact external-effect adapter may return ordinary feedback when it needs a more specific capability or logical target.",
-                    "properties": {
-                      "capability": {
-                        "type": "string",
-                        "minLength": 1,
-                        "description": "Plain-language change capability, or an exact tool name when the target boundary requires it."
-                      },
-                      "target": {
-                        "type": "string",
-                        "minLength": 1,
-                        "description": "User-meaningful outcome or exact logical target; never include a private absolute path."
-                      }
-                    },
-                    "required": [
-                      "capability",
-                      "target"
-                    ]
-                  }
-                },
-                "required": [
-                  "action_key"
-                ]
-              }
-            },
-            "checks": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "minLength": 1
-              },
-              "default": [],
-              "description": "Outcomes the delivered result must show, each observable with a tool before reporting (a produced page or chart viewed as the user will see it, a change seen working). Make each explicit constraint in the request its own check: a requested count, in the unit the request names and each one distinct; dates or ranges; other stated limits. Write outcomes, not report contents: never a check to list caveats or unverified items. Result and completion reviews test the result against them."
-            },
-            "presentation": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "enum": [
-                  "text",
-                  "cards",
-                  "table",
-                  "gallery",
-                  "facts",
-                  "metrics",
-                  "chart"
-                ]
-              },
-              "description": "Decide while planning how the answer will be shown, from what it will contain: cards for several comparable items, with one collected image each when the items have a visual appearance; table to compare their attributes; gallery for images; facts or metrics for key values; chart for numbers worth plotting; text when prose alone serves. The decision is recorded in the Plan: delegated work collects what the planned blocks need, and the report presents them with answer_blocks."
-            },
-            "intent": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "goal": {
-                  "type": "string"
-                },
-                "deliver": {
-                  "type": "string"
-                },
-                "next": {
-                  "type": "string"
-                },
-                "assume": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "goal"
-              ],
-              "description": "Conception, decided before the actions, which serve it. goal: what the user is really after, and why. deliver: unasked deliverables the goal clearly implies. next: their likely next request, prepared when cheap. assume: assumptions made instead of asking; ask only for user-only facts that would change the result. Recorded in the Plan and given to delegated work with the unchanged request."
-            }
-          },
-          "required": [
-            "objective",
-            "execution_mode",
-            "actions"
-          ]
-        }
-      },
-      "effectBoundary": "durable_work",
-      "category": "work",
-      "tags": [],
-      "durable": true
-    },
-    {
-      "name": "record_work_checkpoint",
-      "definition": {
-        "type": "function",
-        "name": "record_work_checkpoint",
-        "description": "Update the current Managed Work action checklist or concise progress summary when no Review is being recorded. Use it at a meaningful boundary, not to narrate every tool call. When execution starts or the current action changes, include action_updates that mark the current action active and any completed prior action done; the runtime records exactly the action keys you name. The runtime checks only known action keys and durable binding; this tool does not choose a Work stage.",
-        "parameters": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "action_updates": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "action_key": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "status": {
-                    "type": "string",
-                    "enum": [
-                      "pending",
-                      "active",
-                      "done",
-                      "blocked",
-                      "skipped"
-                    ]
-                  },
-                  "note": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                },
-                "required": [
-                  "action_key",
-                  "status"
-                ]
-              },
-              "default": []
-            },
-            "public_summary": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Optional short user-visible progress fact without secrets or private paths."
-            },
-            "next_step": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Optional next useful action in user-facing language."
-            }
-          }
-        }
-      },
-      "effectBoundary": "durable_work",
-      "category": "work",
-      "tags": [],
-      "durable": true
-    },
-    {
-      "name": "record_work_review",
-      "definition": {
-        "type": "function",
-        "name": "record_work_review",
-        "description": "Optionally record a concise Plan Review, result Review, or whole-Work completion Validation with the current action progress. Plan and result subjects enter review; completion enters validation against the original request, current Plan, and accepted result Review when those quality records are useful. Result and completion test the result against each Plan check and each explicit constraint in the request: a requested count, in the unit the request names and each one distinct, and its dates or limits. One that fails is revise, or partial when it cannot be met; never accept. The runtime derives the fixed graph transition from subject and verdict; never choose a raw stage. For a revised or partial result/completion, use correction_scope only to say whether correction belongs in planning or execution. When an accepted Plan enters execution, mark the first action to execute active in the same call's action_updates. The runtime validates only the fixed semantic mapping, known action keys, and durable bindings; it does not judge the Review or Validation meaning. Reviews and completion Validation are optional quality records, never completion blockers. They never change Work to completed; record_work_disposition is the sole closeout and Work-status authority. Accept a usable result once no remaining gap that matters can be closed with tools; partial means a material requested outcome remains unfinished. A review records judgment but never replaces real tool evidence.",
-        "parameters": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "subject": {
-              "type": "string",
-              "enum": [
-                "plan",
-                "result",
-                "completion"
-              ]
-            },
-            "verdict": {
-              "type": "string",
-              "enum": [
-                "accept",
-                "revise",
-                "partial"
-              ]
-            },
-            "correction_scope": {
-              "type": "string",
-              "enum": [
-                "planning",
-                "execution"
-              ],
-              "description": "For a revised or partial result/completion, state where correction belongs. Omit for accepted reviews and for Plan review, whose graph edge is deterministic."
-            },
-            "action_updates": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "action_key": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "status": {
-                    "type": "string",
-                    "enum": [
-                      "pending",
-                      "active",
-                      "done",
-                      "blocked",
-                      "skipped"
-                    ]
-                  },
-                  "note": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                },
-                "required": [
-                  "action_key",
-                  "status"
-                ]
-              },
-              "default": []
-            },
-            "summary": {
-              "type": "string",
-              "minLength": 1
-            },
-            "corrections": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "minLength": 1
-              },
-              "default": []
-            }
-          },
-          "required": [
-            "subject",
-            "verdict",
-            "summary"
-          ]
-        }
-      },
-      "effectBoundary": "durable_work",
-      "category": "work",
-      "tags": [],
-      "durable": true
-    },
-    {
-      "name": "record_work_disposition",
-      "definition": {
-        "type": "function",
-        "name": "record_work_disposition",
-        "description": "Atomically settle the exact bound Work. Completed requires all Plan actions done/skipped, no remaining actions, eligible evidence, no unresolved/in-flight effects. Open saves progress; delegated sessions continue actionable work with wait/approval. Open needs remaining actions or next_condition; blocked needs a concrete next_condition. No Plan/Review/stage sequence required. Missing child tool: blocked capability_handoff (capability_unavailable_in_child, requested_action tool_name/arguments); parent completes, never user homework.",
-        "parameters": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "work_id": {
-              "type": "string",
-              "minLength": 1,
-              "description": "The exact Work id explicitly bound to this Turn."
-            },
-            "disposition": {
-              "type": "string",
-              "enum": [
-                "completed",
-                "open",
-                "blocked"
-              ]
-            },
-            "summary": {
-              "type": "string",
-              "minLength": 1
-            },
-            "action_updates": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "action_key": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "status": {
-                    "type": "string",
-                    "enum": [
-                      "done",
-                      "skipped",
-                      "blocked"
-                    ]
-                  },
-                  "note": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                },
-                "required": [
-                  "action_key",
-                  "status"
-                ]
-              },
-              "default": []
-            },
-            "remaining_actions": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "minLength": 1
-              },
-              "default": []
-            },
-            "next_condition": {
-              "type": "string",
-              "minLength": 1
-            },
-            "followups": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "minLength": 1
-              },
-              "default": []
-            },
-            "capability_handoff": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "code": {
-                  "type": "string",
-                  "enum": [
-                    "capability_unavailable_in_child"
-                  ]
-                },
-                "requested_action": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "tool_name": {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    "arguments": {
-                      "type": "object",
-                      "additionalProperties": true
-                    }
-                  },
-                  "required": [
-                    "tool_name",
-                    "arguments"
-                  ]
-                }
-              },
-              "required": [
-                "code",
-                "requested_action"
-              ]
-            }
-          },
-          "required": [
-            "work_id",
-            "disposition",
-            "summary"
-          ]
-        }
-      },
-      "effectBoundary": "durable_work",
-      "category": "work",
-      "tags": [],
-      "durable": true
     },
     {
       "name": "request_service_restart",
@@ -6904,16 +6180,950 @@
         "file"
       ],
       "durable": false
+    },
+    {
+      "name": "work_read",
+      "definition": {
+        "type": "function",
+        "name": "work_read",
+        "description": "Read the bound Work: its brief, its Tasks laid out as chains of steps (a step is one Task or a flat stack that runs together), one Task's parts, criteria and attempts, Spec nodes, criterion coverage, or the operations available in this phase. Read before changing structure, and again after any rejection that reports a newer revision. Results are complete and revision-bound; page with `cursor` when `remaining` is non-zero. Reading never changes anything.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "view": {
+              "type": "string",
+              "enum": [
+                "summary",
+                "tasks",
+                "task",
+                "spec",
+                "coverage",
+                "operations"
+              ]
+            },
+            "work_id": {
+              "type": "string",
+              "description": "default: the Work bound to this conversation"
+            },
+            "task_id": {
+              "type": "string",
+              "description": "required for view=task"
+            },
+            "node_id": {
+              "type": "string",
+              "description": "Spec node for view=spec|coverage; default: the responsible node"
+            },
+            "revision": {
+              "type": "string",
+              "description": "read an exact past Spec revision"
+            },
+            "cursor": {
+              "type": "string",
+              "description": "continue a paged result"
+            }
+          },
+          "required": [
+            "view"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "effectBoundary": "none",
+      "category": "work",
+      "durable": true
+    },
+    {
+      "name": "work_apply",
+      "definition": {
+        "type": "function",
+        "name": "work_apply",
+        "description": "Change the bound Work in one all-or-nothing batch: bootstrap a brief Work, place Tasks, add hidden parts, record execution, or publish Spec detail. User-visible Tasks must form chains of steps, each step one Task or a flat stack; anything finer, or with dependencies that shape cannot express, goes into parts of one Task. Integrate and review are always parts. Send `expected_task_graph_revision` with any structure operation. A turn ending never completes a Task or a Work; only `task.complete` with an accepted review does. Later operations may refer to earlier ones by `@key`.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "description": "one line: why this change, in terms of the request"
+            },
+            "spec_ref": {
+              "type": "object",
+              "properties": {
+                "node_id": {
+                  "type": "string"
+                },
+                "revision": {
+                  "type": "integer"
+                },
+                "body_hash": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "node_id",
+                "revision",
+                "body_hash"
+              ],
+              "additionalProperties": false,
+              "description": "binding for edits to existing managed work; omit for bootstrap"
+            },
+            "expected_task_graph_revision": {
+              "type": "integer",
+              "description": "required when any structure op is present"
+            },
+            "expected_revisions": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "description": "per edited Task/part/Spec field set"
+            },
+            "operations": {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "op": {
+                        "const": "work.create_light"
+                      },
+                      "key": {
+                        "type": "string"
+                      },
+                      "goal": {
+                        "type": "string",
+                        "description": "the user-visible outcome"
+                      },
+                      "done_criteria": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "observable checks the final result must pass",
+                        "minItems": 2,
+                        "maxItems": 3
+                      },
+                      "tasks": {
+                        "type": "array",
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "key": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "description": {
+                                "type": "string"
+                              },
+                              "criteria": {
+                                "type": "array",
+                                "items": {
+                                  "type": "integer"
+                                },
+                                "description": "indexes into done_criteria"
+                              }
+                            },
+                            "required": [
+                              "title",
+                              "description"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "description": "ordered steps of one chain; an inner array of 2+ is a stack"
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "goal",
+                      "done_criteria",
+                      "tasks"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "op": {
+                        "const": "task.add"
+                      },
+                      "key": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "after_task_id": {
+                        "type": "string",
+                        "description": "join the step right after that Task's step, alongside what is there; if that Task is in the last step, become the new last step."
+                      },
+                      "join_step_of_task_id": {
+                        "type": "string",
+                        "description": "join that Task's step, running alongside it."
+                      },
+                      "step": {
+                        "type": "string",
+                        "enum": [
+                          "new"
+                        ],
+                        "description": "start a new independent chain that waits for nothing."
+                      },
+                      "acceptance_refs": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "node_id": {
+                              "type": "string"
+                            },
+                            "node_revision": {
+                              "type": "integer"
+                            },
+                            "criterion_id": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "node_id",
+                            "node_revision",
+                            "criterion_id"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "title",
+                      "description"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "op": {
+                        "const": "task.edit"
+                      },
+                      "task_id": {
+                        "type": "string"
+                      },
+                      "patch": {
+                        "type": "object",
+                        "properties": {
+                          "title": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "acceptance_refs": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "node_id": {
+                                  "type": "string"
+                                },
+                                "node_revision": {
+                                  "type": "integer"
+                                },
+                                "criterion_id": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "node_id",
+                                "node_revision",
+                                "criterion_id"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [],
+                        "additionalProperties": false
+                      },
+                      "confirm_draft": {
+                        "const": true,
+                        "description": "turns a queued draft into a real Task; needs acceptance_refs"
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "task_id",
+                      "patch"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "op": {
+                        "const": "task.move"
+                      },
+                      "task_id": {
+                        "type": "string"
+                      },
+                      "after_task_id": {
+                        "type": "string",
+                        "description": "join the step right after that Task's step, alongside what is there; if that Task is in the last step, become the new last step."
+                      },
+                      "join_step_of_task_id": {
+                        "type": "string",
+                        "description": "join that Task's step, running alongside it."
+                      },
+                      "step": {
+                        "type": "string",
+                        "enum": [
+                          "new"
+                        ],
+                        "description": "start a new independent chain that waits for nothing."
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "task_id"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "op": {
+                        "const": "task.join_stack"
+                      },
+                      "task_id": {
+                        "type": "string"
+                      },
+                      "into_step_of_task_id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "task_id",
+                      "into_step_of_task_id"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "op": {
+                        "const": "task.split_stack"
+                      },
+                      "task_id": {
+                        "type": "string"
+                      },
+                      "order": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "task_id"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "op": {
+                        "const": "task.delete"
+                      },
+                      "task_id": {
+                        "type": "string"
+                      },
+                      "reason": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "task_id",
+                      "reason"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "op": {
+                        "const": "part.add"
+                      },
+                      "key": {
+                        "type": "string"
+                      },
+                      "task_id": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "execute",
+                          "integrate",
+                          "review"
+                        ]
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "after_part_ids": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "task_id",
+                      "kind",
+                      "title"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "op": {
+                        "const": "part.edit"
+                      },
+                      "part_id": {
+                        "type": "string"
+                      },
+                      "patch": {
+                        "type": "object",
+                        "properties": {
+                          "title": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [],
+                        "additionalProperties": false
+                      },
+                      "after_part_ids": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "part_id",
+                      "patch"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "op": {
+                        "const": "part.remove"
+                      },
+                      "part_id": {
+                        "type": "string"
+                      },
+                      "reason": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "part_id",
+                      "reason"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "op": {
+                        "const": "task.start"
+                      },
+                      "task_id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "task_id"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "op": {
+                        "const": "part.start"
+                      },
+                      "part_id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "part_id"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "op": {
+                        "const": "task.submit"
+                      },
+                      "task_id": {
+                        "type": "string"
+                      },
+                      "part_id": {
+                        "type": "string"
+                      },
+                      "result_refs": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "evidence_refs": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "task_id",
+                      "result_refs",
+                      "evidence_refs"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "op": {
+                        "const": "task.review"
+                      },
+                      "key": {
+                        "type": "string"
+                      },
+                      "task_id": {
+                        "type": "string"
+                      },
+                      "result_revision": {
+                        "type": "integer"
+                      },
+                      "verdict": {
+                        "type": "string",
+                        "enum": [
+                          "accept",
+                          "revise"
+                        ]
+                      },
+                      "criterion_results": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "criterion_ref": {
+                              "type": "object",
+                              "properties": {
+                                "node_id": {
+                                  "type": "string"
+                                },
+                                "node_revision": {
+                                  "type": "integer"
+                                },
+                                "criterion_id": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "node_id",
+                                "node_revision",
+                                "criterion_id"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "met": {
+                              "type": "boolean"
+                            },
+                            "evidence_refs": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "note": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "criterion_ref",
+                            "met",
+                            "evidence_refs",
+                            "note"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "task_id",
+                      "result_revision",
+                      "verdict",
+                      "criterion_results"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "op": {
+                        "const": "task.complete"
+                      },
+                      "task_id": {
+                        "type": "string"
+                      },
+                      "review_ref": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "task_id",
+                      "review_ref"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "op": {
+                        "const": "task.block"
+                      },
+                      "task_id": {
+                        "type": "string"
+                      },
+                      "part_id": {
+                        "type": "string"
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "checkpoint_ref": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "task_id",
+                      "reason"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "op": {
+                        "const": "task.fail"
+                      },
+                      "task_id": {
+                        "type": "string"
+                      },
+                      "reason": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "task_id",
+                      "reason"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "op": {
+                        "const": "spec.propose"
+                      },
+                      "key": {
+                        "type": "string"
+                      },
+                      "node_id": {
+                        "type": "string"
+                      },
+                      "base_revision": {
+                        "type": "integer"
+                      },
+                      "node": {
+                        "type": "object",
+                        "properties": {
+                          "title": {
+                            "type": "string"
+                          },
+                          "goal": {
+                            "type": "string"
+                          },
+                          "criteria": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "constraints": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "title",
+                          "goal",
+                          "criteria",
+                          "constraints"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "node"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "op": {
+                        "const": "spec.activate"
+                      },
+                      "published_refs": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "node_id": {
+                              "type": "string"
+                            },
+                            "revision": {
+                              "type": "integer"
+                            },
+                            "body_hash": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "node_id",
+                            "revision",
+                            "body_hash"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "expected_tree_version": {
+                        "type": "integer"
+                      },
+                      "impact_map": {
+                        "type": "object",
+                        "properties": {
+                          "tasks": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "task_id": {
+                                  "type": "string"
+                                },
+                                "expected_revision": {
+                                  "type": "integer"
+                                },
+                                "acceptance_refs": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "node_id": {
+                                        "type": "string"
+                                      },
+                                      "node_revision": {
+                                        "type": "integer"
+                                      },
+                                      "criterion_id": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "node_id",
+                                      "node_revision",
+                                      "criterion_id"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "corrective": {
+                                  "type": "object",
+                                  "properties": {
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "description": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "title",
+                                    "description"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "task_id",
+                                "expected_revision",
+                                "acceptance_refs"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "tasks"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "published_refs",
+                      "expected_tree_version"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "description": "applied in order; any rejection rejects the batch"
+            }
+          },
+          "required": [
+            "reason",
+            "operations"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "effectBoundary": "persistent",
+      "category": "work",
+      "durable": true
+    },
+    {
+      "name": "session_control",
+      "definition": {
+        "type": "function",
+        "name": "session_control",
+        "description": "Send an instruction or control to a session you started for delegated work. `queue` delivers after that session finishes its current Task; `steer` reaches it at its next safe point, before its next model request or tool call. Use steer for corrections that must change work already under way, and stop only to end that work. Acknowledgement means the instruction was received, not that it was followed; check the reported result. You cannot control sessions you did not start. Available at Tier 2 only.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "target_session_id": {
+              "type": "string",
+              "description": "a session this session delegated to"
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "queue",
+                "steer"
+              ]
+            },
+            "instruction": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    },
+                    "attachment_refs": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "text"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "control": {
+                      "type": "string",
+                      "enum": [
+                        "pause",
+                        "stop",
+                        "resume"
+                      ]
+                    },
+                    "hold_id": {
+                      "type": "string",
+                      "description": "hold_id required for resume"
+                    }
+                  },
+                  "required": [
+                    "control"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "expected_control_epoch": {
+              "type": "integer",
+              "description": "from the last result for this session"
+            },
+            "idempotency_key": {
+              "type": "string",
+              "description": "reuse only when resending the identical instruction"
+            }
+          },
+          "required": [
+            "target_session_id",
+            "mode",
+            "instruction",
+            "expected_control_epoch",
+            "idempotency_key"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "effectBoundary": "persistent",
+      "category": "work",
+      "durable": true
     }
   ],
   "workerForbidden": [
     "complete_project_work"
   ],
   "workTracking": [
-    "update_todo_list",
-    "list_todo_list",
-    "list_work_streams",
-    "update_work_stream_state",
     "control_work"
   ],
   "projectInspection": [
@@ -7518,128 +7728,6 @@
       "concurrencySafe": true,
       "interruptBehavior": "continue",
       "transcriptVisibility": "visible"
-    },
-    "replace_work_plan": {
-      "type": "function",
-      "name": "replace_work_plan",
-      "description": "Open or revise the Plan for the Work explicitly selected by start_work or continue_work. Revision starts planning from any current stage without a prior result review; retain completed action keys and results. Use start_new only as a compatibility translation when older callers cannot use start_work. Ordinary tools never select Work; choose start_work or continue_work before this Plan operation. Keep objective as the overall multi-Turn user outcome; put the current milestone in actions and checkpoints. Choose execution_mode during planning: Butler uses steward for substantial execution or direct for a genuinely small direct action; Steward uses direct or workers; Worker uses direct. Planning, management, integration, review, validation, and reporting stay with the current role. Do not use this for simple conversation, stable knowledge, or a single-step read-only lookup. Use it for multi-source or multi-step research with a synthesized deliverable, even when source tools are read-only.",
-      "parameters": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "start_new": {
-            "type": "boolean",
-            "description": "True only when abandoning current open Work and starting unrelated Work.",
-            "default": false
-          },
-          "objective": {
-            "type": "string",
-            "minLength": 1,
-            "description": "The concise user-visible outcome this Work must produce."
-          },
-          "governing_refs": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1
-            },
-            "default": [],
-            "description": "A small list of existing governing specification or document references. Use workspace-relative paths or stable document ids; do not invent references."
-          },
-          "execution_mode": {
-            "type": "string",
-            "enum": [
-              "direct",
-              "steward",
-              "workers"
-            ],
-            "description": "Who executes Plan actions: direct = this role, steward = Butler delegates to Steward, workers = Steward delegates to Workers. Preserve completed action keys when revising ownership on an existing Plan."
-          },
-          "actions": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "action_key": {
-                  "type": "string",
-                  "minLength": 1,
-                  "description": "The concise stable user-visible action summary used for future progress updates, dependencies, and model continuation. Name the concrete action or outcome in the user's language, not a generic stage word."
-                },
-                "description": {
-                  "type": "string",
-                  "minLength": 1,
-                  "description": "Optional fuller detail for the action. Omit it when action_key already states the complete intended action clearly."
-                },
-                "dependency_keys": {
-                  "type": "array",
-                  "items": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "default": []
-                }
-              },
-              "required": [
-                "action_key"
-              ]
-            }
-          },
-          "checks": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1
-            },
-            "default": [],
-            "description": "Outcomes the delivered result must show, each observable with a tool before reporting (a produced page or chart viewed as the user will see it, a change seen working). Make each explicit constraint in the request its own check: a requested count, in the unit the request names and each one distinct; dates or ranges; other stated limits. Write outcomes, not report contents: never a check to list caveats or unverified items. Result and completion reviews test the result against them."
-          },
-          "presentation": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "text",
-                "cards",
-                "table",
-                "gallery",
-                "facts",
-                "metrics",
-                "chart"
-              ]
-            },
-            "description": "Decide while planning how the answer will be shown, from what it will contain: cards for several comparable items, with one collected image each when the items have a visual appearance; table to compare their attributes; gallery for images; facts or metrics for key values; chart for numbers worth plotting; text when prose alone serves. The decision is recorded in the Plan: delegated work collects what the planned blocks need, and the report presents them with answer_blocks."
-          },
-          "intent": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "goal": {
-                "type": "string"
-              },
-              "deliver": {
-                "type": "string"
-              },
-              "next": {
-                "type": "string"
-              },
-              "assume": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "goal"
-            ],
-            "description": "Conception, decided before the actions, which serve it. goal: what the user is really after, and why. deliver: unasked deliverables the goal clearly implies. next: their likely next request, prepared when cheap. assume: assumptions made instead of asking; ask only for user-only facts that would change the result. Recorded in the Plan and given to delegated work with the unchanged request."
-          }
-        },
-        "required": [
-          "objective",
-          "execution_mode",
-          "actions"
-        ]
-      }
     },
     "read_project_source": {
       "type": "function",
@@ -8367,90 +8455,6 @@
       "concurrencySafe": false,
       "interruptBehavior": "continue",
       "transcriptVisibility": "visible"
-    },
-    "record_work_review": {
-      "type": "function",
-      "name": "record_work_review",
-      "description": "Optionally record a concise Plan Review, result Review, or whole-Work completion Validation with the current action progress. Plan and result subjects enter review; completion enters validation against the original request, current Plan, and accepted result Review when those quality records are useful. Result and completion test the result against each Plan check and each explicit constraint in the request: a requested count, in the unit the request names and each one distinct, and its dates or limits. One that fails is revise, or partial when it cannot be met; never accept. The runtime derives the fixed graph transition from subject and verdict; never choose a raw stage. For a revised or partial result/completion, use correction_scope only to say whether correction belongs in planning or execution. When an accepted Plan enters execution, mark the first action to execute active in the same call's action_updates. The runtime validates only the fixed semantic mapping, known action keys, and durable bindings; it does not judge the Review or Validation meaning. Reviews and completion Validation are optional quality records, never completion blockers. They never change Work to completed; record_work_disposition is the sole closeout and Work-status authority. Accept a usable result once no remaining gap that matters can be closed with tools; partial means a material requested outcome remains unfinished. A review records judgment but never replaces real tool evidence.",
-      "parameters": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "subject": {
-            "type": "string",
-            "enum": [
-              "plan",
-              "result",
-              "completion"
-            ]
-          },
-          "verdict": {
-            "type": "string",
-            "enum": [
-              "accept",
-              "revise",
-              "partial"
-            ]
-          },
-          "correction_scope": {
-            "type": "string",
-            "enum": [
-              "planning",
-              "execution"
-            ],
-            "description": "For a revised or partial result/completion, state where correction belongs. Omit for accepted reviews and for Plan review, whose graph edge is deterministic."
-          },
-          "action_updates": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "action_key": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "status": {
-                  "type": "string",
-                  "enum": [
-                    "pending",
-                    "active",
-                    "done",
-                    "blocked",
-                    "skipped"
-                  ]
-                },
-                "note": {
-                  "type": "string",
-                  "minLength": 1
-                }
-              },
-              "required": [
-                "action_key",
-                "status"
-              ]
-            },
-            "default": []
-          },
-          "summary": {
-            "type": "string",
-            "minLength": 1
-          },
-          "corrections": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1
-            },
-            "default": []
-          }
-        },
-        "required": [
-          "subject",
-          "verdict",
-          "summary"
-        ]
-      }
     },
     "request_service_restart": {
       "type": "function",
@@ -9513,123 +9517,6 @@
       "interruptBehavior": "continue",
       "transcriptVisibility": "visible"
     },
-    "record_work_disposition": {
-      "type": "function",
-      "name": "record_work_disposition",
-      "description": "Atomically settle the bound Work; no mandatory Plan/Review/stages. Completed: all Plan actions done/skipped, none remaining, eligible evidence, no unresolved/in-flight effects. Open: progress plus remaining actions or next_condition; delegated children continue actionable work with wait/approval. Blocked: concrete next_condition. Missing child tool: blocked capability_handoff (capability_unavailable_in_child, requested_action tool_name/arguments); parent completes, never user homework.",
-      "parameters": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "work_id": {
-            "type": "string",
-            "minLength": 1,
-            "description": "The exact Work id explicitly bound to this Turn."
-          },
-          "disposition": {
-            "type": "string",
-            "enum": [
-              "completed",
-              "open",
-              "blocked"
-            ]
-          },
-          "summary": {
-            "type": "string",
-            "minLength": 1
-          },
-          "action_updates": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "action_key": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "status": {
-                  "type": "string",
-                  "enum": [
-                    "done",
-                    "skipped",
-                    "blocked"
-                  ]
-                },
-                "note": {
-                  "type": "string",
-                  "minLength": 1
-                }
-              },
-              "required": [
-                "action_key",
-                "status"
-              ]
-            },
-            "default": []
-          },
-          "remaining_actions": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1
-            },
-            "default": []
-          },
-          "next_condition": {
-            "type": "string",
-            "minLength": 1
-          },
-          "followups": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1
-            },
-            "default": []
-          },
-          "capability_handoff": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "capability_unavailable_in_child"
-                ]
-              },
-              "requested_action": {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "tool_name": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "arguments": {
-                    "type": "object",
-                    "additionalProperties": true
-                  }
-                },
-                "required": [
-                  "tool_name",
-                  "arguments"
-                ]
-              }
-            },
-            "required": [
-              "code",
-              "requested_action"
-            ]
-          }
-        },
-        "required": [
-          "work_id",
-          "disposition",
-          "summary"
-        ]
-      }
-    },
     "wait_for_worker": {
       "type": "function",
       "name": "wait_for_worker",
@@ -9962,78 +9849,6 @@
       "interruptBehavior": "continue",
       "transcriptVisibility": "visible"
     },
-    "list_todo_list": {
-      "type": "function",
-      "name": "list_todo_list",
-      "description": "Read Butler's durable checklist for the current work, including progress counts and the current in-progress item.",
-      "parameters": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "list_id": {
-            "type": "string",
-            "description": "Safe list id. Defaults to main."
-          },
-          "include_completed": {
-            "type": "boolean",
-            "description": "When true, include completed and cancelled items."
-          }
-        },
-        "required": []
-      },
-      "effectBoundary": "none",
-      "concurrencySafe": true,
-      "interruptBehavior": "continue",
-      "transcriptVisibility": "visible"
-    },
-    "update_work_stream_state": {
-      "type": "function",
-      "name": "update_work_stream_state",
-      "description": "Advance or pause the active Butler-owned WorkStream through the issue-level state machine. Use for waiting_user, paused, recoverable, and explicit review/reporting transitions.",
-      "parameters": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "work_stream_id": {
-            "type": "string",
-            "description": "Optional work stream id. Defaults to the active stream for this session."
-          },
-          "state": {
-            "type": "string",
-            "enum": [
-              "routing",
-              "conception",
-              "planning",
-              "executing",
-              "reviewing",
-              "consolidating",
-              "reporting",
-              "waiting_user",
-              "paused",
-              "complete",
-              "failed",
-              "recoverable",
-              "cancelled"
-            ]
-          },
-          "active_step_id": {
-            "type": "string",
-            "description": "Optional active step id when the state points to a known todo step."
-          },
-          "status_note": {
-            "type": "string",
-            "description": "Short public-safe status note. Do not include hidden reasoning or raw private text."
-          }
-        },
-        "required": [
-          "state"
-        ]
-      },
-      "effectBoundary": "turn_local",
-      "concurrencySafe": false,
-      "interruptBehavior": "continue",
-      "transcriptVisibility": "visible"
-    },
     "run_due_automations": {
       "type": "function",
       "name": "run_due_automations",
@@ -10202,97 +10017,6 @@
       "interruptBehavior": "continue",
       "transcriptVisibility": "visible"
     },
-    "update_todo_list": {
-      "type": "function",
-      "name": "update_todo_list",
-      "description": "Create or replace Butler's durable checklist for the current non-trivial multi-step work. Reuse stable ids across updates; Butler preserves retained order and appends new ids. Keep at most one item in_progress.",
-      "parameters": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "list_id": {
-            "type": "string",
-            "description": "Safe list id. Defaults to main."
-          },
-          "title": {
-            "type": "string",
-            "description": "Optional user-facing checklist title."
-          },
-          "todos": {
-            "type": "array",
-            "description": "Full current todo list. The first accepted order is durable; later array reordering does not move retained ids, and new ids append.",
-            "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "id": {
-                  "type": "string",
-                  "description": "Stable safe id. Reuse the returned id on every later update; Butler assigns one when omitted initially."
-                },
-                "content": {
-                  "type": "string",
-                  "description": "Imperative form, e.g. Run validation."
-                },
-                "active_form": {
-                  "type": "string",
-                  "description": "Present continuous form, e.g. Running validation."
-                },
-                "status": {
-                  "type": "string",
-                  "enum": [
-                    "pending",
-                    "in_progress",
-                    "completed",
-                    "cancelled"
-                  ]
-                },
-                "phase": {
-                  "type": "string",
-                  "enum": [
-                    "conception",
-                    "planning",
-                    "execution",
-                    "review",
-                    "consolidation",
-                    "reporting"
-                  ],
-                  "description": "Optional Butler Turn Cognition Cycle phase for this step."
-                },
-                "priority": {
-                  "type": "string",
-                  "enum": [
-                    "low",
-                    "normal",
-                    "high"
-                  ]
-                },
-                "blocked_by": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "note": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "content",
-                "active_form",
-                "status"
-              ]
-            }
-          }
-        },
-        "required": [
-          "todos"
-        ]
-      },
-      "effectBoundary": "turn_local",
-      "concurrencySafe": false,
-      "interruptBehavior": "continue",
-      "transcriptVisibility": "visible"
-    },
     "set_wallpaper": {
       "type": "function",
       "name": "set_wallpaper",
@@ -10407,25 +10131,6 @@
       "concurrencySafe": false,
       "interruptBehavior": "continue",
       "transcriptVisibility": "visible"
-    },
-    "start_work": {
-      "type": "function",
-      "name": "start_work",
-      "description": "Explicitly start unrelated durable Work and bind this Turn to it. Use this before dependent tools or Plan changes when the current request is new Work. Ordinary tools never select Work automatically.",
-      "parameters": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "objective": {
-            "type": "string",
-            "minLength": 1,
-            "description": "The concise stable user-visible outcome for the new Work."
-          }
-        },
-        "required": [
-          "objective"
-        ]
-      }
     },
     "call_mcp_tool": {
       "type": "function",
@@ -10955,78 +10660,6 @@
       "interruptBehavior": "continue",
       "transcriptVisibility": "visible"
     },
-    "record_work_checkpoint": {
-      "type": "function",
-      "name": "record_work_checkpoint",
-      "description": "Update the current Managed Work action checklist or concise progress summary when no Review is being recorded. Use it at a meaningful boundary, not to narrate every tool call. When execution starts or the current action changes, include action_updates that mark the current action active and any completed prior action done; the runtime records exactly the action keys you name. The runtime checks only known action keys and durable binding; this tool does not choose a Work stage.",
-      "parameters": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "action_updates": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "action_key": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "status": {
-                  "type": "string",
-                  "enum": [
-                    "pending",
-                    "active",
-                    "done",
-                    "blocked",
-                    "skipped"
-                  ]
-                },
-                "note": {
-                  "type": "string",
-                  "minLength": 1
-                }
-              },
-              "required": [
-                "action_key",
-                "status"
-              ]
-            },
-            "default": []
-          },
-          "public_summary": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Optional short user-visible progress fact without secrets or private paths."
-          },
-          "next_step": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Optional next useful action in user-facing language."
-          }
-        }
-      }
-    },
-    "continue_work": {
-      "type": "function",
-      "name": "continue_work",
-      "description": "Explicitly bind this Turn to the exact current open Work shown in context. Use only when the current request continues that Work; ordinary tools never select it.",
-      "parameters": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "work_id": {
-            "type": "string",
-            "minLength": 1,
-            "description": "The exact candidate Work id returned in the current Work context."
-          }
-        },
-        "required": [
-          "work_id"
-        ]
-      }
-    },
     "ingest_task_memory": {
       "type": "function",
       "name": "ingest_task_memory",
@@ -11124,34 +10757,6 @@
           "since_hours": {
             "type": "number",
             "description": "Optional lookback window in hours for timestamped metrics."
-          }
-        },
-        "required": []
-      },
-      "effectBoundary": "none",
-      "concurrencySafe": true,
-      "interruptBehavior": "continue",
-      "transcriptVisibility": "visible"
-    },
-    "list_work_streams": {
-      "type": "function",
-      "name": "list_work_streams",
-      "description": "List Butler-owned durable WorkStreams for the active session or project. Use to preserve context switching across multiple async issues.",
-      "parameters": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "session_id": {
-            "type": "string",
-            "description": "Optional session id. Defaults to the active session."
-          },
-          "project_id": {
-            "type": "string",
-            "description": "Optional project id filter."
-          },
-          "include_terminal": {
-            "type": "boolean",
-            "description": "When true, include complete and failed streams."
           }
         },
         "required": []
@@ -12305,8 +11910,6 @@
       "tool_describe",
       "tool_call",
       "start_topic_conversation",
-      "update_todo_list",
-      "list_todo_list",
       "recall_memory",
       "read_conversation_context",
       "list_conversation_sessions",

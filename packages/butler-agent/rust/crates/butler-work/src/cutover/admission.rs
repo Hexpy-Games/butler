@@ -49,3 +49,10 @@ pub fn accept(tx: &Transaction<'_>, input: &ManagedAdmission) -> Result<String> 
     }
     Ok(stored.0)
 }
+
+/// A successful structured batch consumes its pending admission in that same
+/// transaction. Replayed batches cannot regress or duplicate this receipt.
+pub fn applied(tx: &Transaction<'_>, instruction: &str, session: &str) -> Result<()> {
+    tx.execute(sql::ADMISSION_APPLIED, params![instruction, session])?;
+    Ok(())
+}

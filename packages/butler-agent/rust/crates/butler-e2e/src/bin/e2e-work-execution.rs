@@ -40,6 +40,7 @@ fn flow(tx: &Transaction<'_>) -> Result<()> {
         actor: json!({"origin":"chat"}),
     };
     seed(tx, &ctx)?;
+    cycle_feedback(tx, &ctx)?;
     let scope = ExecutionScope {
         session_id: "chat",
         turn_id: "turn",
@@ -250,5 +251,37 @@ fn seed(tx: &Transaction<'_>, ctx: &Context) -> Result<()> {
         )?;
         after = vec![id.into()];
     }
+    Ok(())
+}
+
+fn cycle_feedback(tx: &Transaction<'_>, ctx: &Context) -> Result<()> {
+    let task = read_task(tx, "task")?;
+    let work = read_work(tx, "work")?;
+    let part = read_part(tx, "execute")?;
+    let spec: serde_json::Value = serde_json::from_str(task["spec_ref"].as_str().unwrap())?;
+    let scope = apply::ApplyScope {
+        session_id: "chat".into(),
+        turn_id: "turn".into(),
+        instruction_id: String::new(),
+        work_id: Some("work".into()),
+        tier: 1,
+        planning: false,
+        floors: Default::default(),
+        child_session: false,
+    };
+    let raw = json!({"reason":"Adjust part dependencies","spec_ref":spec,
+        "expected_task_graph_revision":work["task_graph_revision"],"expected_revisions":{"execute":part["revision"]},
+        "operations":[{"op":"part.edit","part_id":"execute","patch":{},"after_part_ids":["review"]}]});
+    let result = apply::apply_tool(tx, ctx, &scope, "cycle-feedback", &raw)?;
+    assert_eq!(result["error"]["code"], "part_cycle");
+    assert_eq!(
+        result["error"]["message"],
+        "after_part_ids would create a cycle among parts of Task task (execute -> integrate -> review -> execute). Remove one of those links."
+    );
+    assert_eq!(
+        read_task(tx, "task")?,
+        task,
+        "rejection rolls back Task revision"
+    );
     Ok(())
 }

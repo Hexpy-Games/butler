@@ -27,6 +27,11 @@ pub struct ToolJournalRepository {
 }
 
 impl ToolJournalRepository {
+    /// Native Work tools share the journal's writer lane and read pool.
+    pub fn work_model_storage(&self) -> BtccStorage {
+        self.storage.clone()
+    }
+
     /// A journal over the store and clock.
     pub fn new(storage: BtccStorage, clock: Arc<dyn Fn() -> String + Send + Sync>) -> Self {
         Self { storage, clock }

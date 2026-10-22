@@ -111,7 +111,9 @@ pub fn bind_started_task(tx: &Transaction<'_>, session: &str, task: &str) -> Res
 pub fn effects_allowed(db: &Connection, session: &str) -> Result<bool> {
     let row = match one(db, sql::SESSION, [session]) {
         Ok(row) => row,
-        Err(Error::NotFound) => return Ok(true),
+        Err(Error::NotFound) => {
+            return Ok(super::bound_work(db, session, None)?.is_none());
+        }
         Err(error) => return Err(error),
     };
     if row["tier"] == 0 {

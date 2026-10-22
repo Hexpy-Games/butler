@@ -26,27 +26,17 @@ pub(super) fn cassette(
         let call = json!({"type":"function_call","id":format!("fc_{index}"),"call_id":format!("call_{index}"),"name":tool,"arguments":args.to_string(),"status":"completed"});
         let answer = json!({"type":"message","id":format!("msg_{index}"),"role":"assistant","status":"completed","content":[{"type":"output_text","text":"Project operation checked.","annotations":[]}]});
         let mut round = Vec::new();
-        let effect = prompt == COMMAND || prompt == WRITE;
-        let action = if prompt == COMMAND { "command" } else { "write" };
-        if effect {
-            for (step, name, arguments) in [
-                (0, "start_work", json!({"objective":prompt})),
-                (1, "replace_work_plan", json!({"objective":prompt,"execution_mode":"direct","actions":[{"action_key":action,"effect":{"capability":tool,"target":"project marker"}}],"checks":["Project marker contains the requested content"]})),
-                (2, "record_work_review", json!({"subject":"plan","verdict":"accept","summary":"Only the approved project write","action_updates":[{"action_key":action,"status":"active"}]})),
-            ] {
-                let item = json!({"type":"function_call","id":format!("work_{step}"),"call_id":format!("work_{step}"),"name":name,"arguments":arguments.to_string(),"status":"completed"});
-                exchanges.push(exchange(prompt, round.clone(), &item));
-                round.extend(["function_call".into(),"function_call_output".into(),"user".into()]);
-            }
+        if prompt == COMMAND {
+            let bootstrap = json!({"type":"function_call","id":"bootstrap","call_id":"bootstrap","name":"work_apply","arguments":json!({
+                "reason":"Write the requested project markers","operations":[
+                    {"op":"work.create_light","goal":"Write the project markers","done_criteria":["Command marker contains the requested content","Written marker contains the requested content"],"tasks":[[{"key":"markers","title":"Write project markers","description":"Apply the approved command and file writes"}]]},
+                    {"op":"task.start","task_id":"@markers"}
+                ]}).to_string(),"status":"completed"});
+            exchanges.push(exchange(prompt, round.clone(), &bootstrap));
+            round.extend(["function_call".into(),"function_call_output".into()]);
         }
         exchanges.push(exchange(prompt, round.clone(), &call));
         round.extend(["function_call".into(),"function_call_output".into()]);
-        if effect {
-            let work = if prompt == COMMAND { "{{ECHO_1}}" } else { "{{ECHO_2}}" };
-            let close = json!({"type":"function_call","id":format!("close_{index}"),"call_id":format!("close_{index}"),"name":"record_work_disposition","arguments":json!({"work_id":work,"disposition":"completed","summary":"Applied the approved project write","action_updates":[{"action_key":action,"status":"done"}]}).to_string(),"status":"completed"});
-            exchanges.push(exchange(prompt, round.clone(), &close));
-            round.extend(["function_call".into(),"function_call_output".into(),"user".into(),"user".into()]);
-        }
         exchanges.push(exchange(prompt, round, &answer));
     }
     Ok(Cassette {

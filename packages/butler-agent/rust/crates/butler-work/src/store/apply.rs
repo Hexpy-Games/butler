@@ -253,6 +253,17 @@ impl Batch<'_, '_> {
     }
     fn perform(&mut self, op: &Operation) -> Result<()> {
         let graph = self.work.as_ref().map(|_| self.graph()).transpose()?;
+        if self.scope.tier == 1
+            && self.scope.work_id.is_none()
+            && !matches!(
+                op,
+                Operation::CreateLight { .. } | Operation::Add { .. } | Operation::Start { .. }
+            )
+        {
+            return Err(Error::Invalid(
+                "Only work.create_light, task.add and task.start are available before Tier 1 bootstrap commits",
+            ));
+        }
         if self.scope.planning && op.execution() {
             return Err(Error::Invalid("execution is hidden during planning"));
         }

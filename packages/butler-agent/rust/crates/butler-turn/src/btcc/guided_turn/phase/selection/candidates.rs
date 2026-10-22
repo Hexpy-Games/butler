@@ -50,7 +50,7 @@ pub(super) fn provider_candidates(
             catalog
                 .tools
                 .iter()
-                .filter(|tool| tool.durable)
+                .filter(|tool| tool.durable && tool.name != "session_control")
                 .map(|tool| tool.name.clone()),
         );
     }

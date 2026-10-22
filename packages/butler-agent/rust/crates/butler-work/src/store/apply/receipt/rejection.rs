@@ -19,6 +19,7 @@ pub(super) fn response(
         Error::Conflict { .. } => ("stale_entity_revision", "The entity changed after your read. Call work_read, re-plan against its current revision, and resend.".into()),
         Error::Running => ("task_running_pinned", format!("Task {target} is running, so it cannot be moved, merged, split or deleted. Place the other Tasks around it, or make this change after it ends.")),
         Error::NotFound if target != "unknown" => ("unknown_task",format!("No Task {target} in this Work. Use an id from work_read view=tasks, or a @key defined earlier in this batch.")),
+        Error::PartCycle { task, path } => ("part_cycle", format!("after_part_ids would create a cycle among parts of Task {task} ({}). Remove one of those links.", path.join(" -> "))),
         Error::Chain(detail) => ("planner_constraint_violation",format!("Tasks must form chains of steps, each step one Task or a flat stack; {detail} breaks that. Write this breakdown as parts of one Task with part.add, ordered with after_part_ids, and keep integrate and review as parts.")),
         Error::Invalid("draft_unresolved") => ("draft_unresolved",format!("Task {target} is a draft from a queued message. Resolve it first: confirm it with acceptance_refs, fold it into a Task as parts, or delete it.")),
         Error::Invalid("review_not_accepted") => ("review_not_accepted",format!("Task {target} has no accepted review at its current result revision. Submit the result, record task.review for every bound criterion, then complete.")),

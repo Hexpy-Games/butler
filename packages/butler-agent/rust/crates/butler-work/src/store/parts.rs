@@ -157,5 +157,40 @@ fn validate_dag(db: &Connection, task: &str, id: &str, after: &[String]) -> Resu
         }
         edges.push((pred.clone(), id.into()));
     }
-    crate::work_chain::validate_part_dag(&nodes, &edges).map_err(|_| Error::Invalid("part_cycle"))
+    crate::work_chain::validate_part_dag(&nodes, &edges).map_err(|_| Error::PartCycle {
+        task: task.to_owned(),
+        path: cycle_path(id, &edges),
+    })
+}
+
+/// Existing edges are acyclic; an edit replaces only this part's incoming
+/// edges, so any new cycle passes through it.
+fn cycle_path(id: &str, edges: &[(String, String)]) -> Vec<String> {
+    use std::collections::{BTreeMap, VecDeque};
+    let mut outgoing: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    for (pred, succ) in edges {
+        outgoing.entry(pred).or_default().push(succ);
+    }
+    let mut parents: BTreeMap<&str, Option<&str>> = BTreeMap::from([(id, None)]);
+    let mut queue = VecDeque::from([id]);
+    while let Some(node) = queue.pop_front() {
+        for &next in outgoing.get(node).into_iter().flatten() {
+            if next == id {
+                let mut path = vec![node.to_owned()];
+                let mut previous = node;
+                while let Some(Some(parent)) = parents.get(previous) {
+                    path.push((*parent).to_owned());
+                    previous = parent;
+                }
+                path.reverse();
+                path.push(id.to_owned());
+                return path;
+            }
+            if let std::collections::btree_map::Entry::Vacant(entry) = parents.entry(next) {
+                entry.insert(Some(node));
+                queue.push_back(next);
+            }
+        }
+    }
+    Vec::new()
 }
