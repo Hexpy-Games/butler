@@ -64,13 +64,20 @@ impl AppWorkModelPort for AppWorkModel {
     fn work_scope(&self, id: String) -> ApplicationFuture<AppWorkModelScope> {
         let storage = self.storage.clone();
         Box::pin(async move {
-            storage.work_model_read(move |db| {
-                let (kind, id) = store::api::work_scope(db, &id)?;
-                Ok(match kind {
-                    butler_work::work_types::ScopeKind::Project => AppWorkModelScope::Project(id),
-                    butler_work::work_types::ScopeKind::Session => AppWorkModelScope::Session(id),
+            storage
+                .work_model_read(move |db| {
+                    let (kind, id) = store::api::work_scope(db, &id)?;
+                    Ok(match kind {
+                        butler_work::work_types::ScopeKind::Project => {
+                            AppWorkModelScope::Project(id)
+                        }
+                        butler_work::work_types::ScopeKind::Session => {
+                            AppWorkModelScope::Session(id)
+                        }
+                    })
                 })
-            }).await.map_err(error)
+                .await
+                .map_err(error)
         })
     }
     fn changes(&self) -> Option<tokio::sync::watch::Receiver<()>> {
