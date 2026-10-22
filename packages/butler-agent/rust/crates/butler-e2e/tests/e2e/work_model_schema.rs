@@ -285,10 +285,17 @@ async fn p1_schema_upgrades_before_start_and_second_start_is_identical() -> Resu
     s.agent.terminate().await?;
     let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
     let db = Connection::open(&path)?;
+    let fresh_schema = schema_objects(&db)?;
     for table in snapshot(&db)?.keys() {
         db.execute_batch(&format!("DROP TABLE {table}"))?;
     }
     db.execute_batch(include_str!("../../fixtures/work-model-p14/p1-shape.sql"))?;
+    db.execute_batch(include_str!("../../fixtures/work-model-p14/p1-values.sql"))?;
+    let original_works = db
+        .prepare("SELECT id FROM wm_works ORDER BY id")?
+        .query_map([], |r| r.get::<_, String>(0))?
+        .map(|id| Ok(butler_work::store::read_work(&db, &id?).unwrap()))
+        .collect::<rusqlite::Result<Vec<_>>>()?;
     let original = snapshot(&db)?;
     drop(db);
     s.restart().await?;
@@ -311,39 +318,53 @@ async fn p1_schema_upgrades_before_start_and_second_start_is_identical() -> Resu
     ] {
         assert_eq!(migrated[table], Vec::<Vec<Value>>::new());
     }
-    let works = &original["wm_works"];
-    assert_eq!(migrated["wm_works"].len(), works.len());
-    for row in works {
-        let Value::Text(id) = &row[0] else {
-            panic!("work id")
-        };
-        let current = butler_work::store::read_work(&db, id).unwrap();
-        assert_eq!(
-            current["title"].as_str(),
-            match &row[6] {
-                Value::Text(s) => Some(s.as_str()),
-                _ => None,
-            }
-        );
-        // P1 columns are pinned by the historical snapshot, independent of target DDL.
-        for (column, index) in [
-            ("canon_status", 11),
-            ("canon_status_source", 12),
-            ("plan_rank", 14),
-        ] {
-            assert_eq!(
-                current[column],
-                match &row[index] {
-                    Value::Text(s) => serde_json::json!(s),
-                    Value::Null => serde_json::Value::Null,
-                    _ => panic!("field"),
+    assert_eq!(migrated["wm_works"].len(), original_works.len());
+    for old in original_works {
+        let current = butler_work::store::read_work(&db, old["id"].as_str().unwrap()).unwrap();
+        for (column, value) in current.as_object().unwrap() {
+            let expected = match column.as_str() {
+                "task_graph_revision" => serde_json::json!(0),
+                "failure_reason" => serde_json::Value::Null,
+                "run_state"
+                    if !matches!(
+                        old[column].as_str(),
+                        Some("done" | "cancelled" | "paused" | "stopped")
+                    ) =>
+                {
+                    serde_json::json!("idle")
                 }
-            );
+                _ => old[column].clone(),
+            };
+            assert_eq!(*value, expected, "{}.{column}", old["id"]);
         }
     }
+    assert_eq!(schema_objects(&db)?, fresh_schema);
     assert_eq!(
-        butler_work::store::read_work(&db, "wk_queue_ui").unwrap()["run_state"],
-        "idle"
+        migrated["wm_session_exec"],
+        vec![vec![
+            Value::Text("upgrade-session".into()),
+            Value::Integer(2),
+            Value::Text("execution".into()),
+            Value::Text("running".into()),
+            Value::Integer(17),
+            Value::Null,
+            Value::Integer(31)
+        ]]
+    );
+    assert_eq!(
+        migrated["wm_counts"],
+        vec![vec![
+            Value::Text("project".into()),
+            Value::Text("butler".into()),
+            Value::Text("backlog_revision".into()),
+            Value::Integer(13)
+        ]]
+    );
+    assert!(
+        db.prepare("PRAGMA foreign_key_check")?
+            .query([])?
+            .next()?
+            .is_none()
     );
     for table in [
         "wm_plans",
@@ -355,7 +376,6 @@ async fn p1_schema_upgrades_before_start_and_second_start_is_identical() -> Resu
         "wm_runtime_marker",
         "wm_audit",
         "wm_outbox",
-        "wm_counts",
         "wm_legacy_map",
         "wm_migration",
     ] {
@@ -371,4 +391,10 @@ async fn p1_schema_upgrades_before_start_and_second_start_is_identical() -> Resu
     assert_eq!(snapshot(&db)?, migrated);
     drop(db);
     s.finish().await
+}
+
+fn schema_objects(db: &Connection) -> rusqlite::Result<Vec<(String, Option<String>)>> {
+    db.prepare("SELECT name,sql FROM sqlite_schema WHERE name GLOB 'wm_*' ORDER BY name")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect()
 }

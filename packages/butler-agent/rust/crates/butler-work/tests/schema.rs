@@ -198,58 +198,75 @@ fn p1_upgrade_preserves_works_and_unrelated_tables_and_is_idempotent() {
         "../../butler-e2e/fixtures/work-model-p14/p1-shape.sql"
     ))
     .unwrap();
-    let before = db
-        .prepare(
-            "SELECT id,title,canon_status,canon_status_source,plan_rank FROM wm_works ORDER BY id",
-        )
+    db.execute_batch(include_str!(
+        "../../butler-e2e/fixtures/work-model-p14/p1-values.sql"
+    ))
+    .unwrap();
+    let before: Vec<serde_json::Value> = db
+        .prepare("SELECT id FROM wm_works ORDER BY id")
         .unwrap()
-        .query_map([], |r| {
-            Ok((
-                r.get::<_, String>(0)?,
-                r.get::<_, String>(1)?,
-                r.get::<_, Option<String>>(2)?,
-                r.get::<_, Option<String>>(3)?,
-                r.get::<_, Option<String>>(4)?,
-            ))
-        })
+        .query_map([], |r| r.get::<_, String>(0))
         .unwrap()
-        .collect::<rusqlite::Result<Vec<_>>>()
-        .unwrap();
+        .map(|id| butler_work::store::read_work(&db, &id.unwrap()).unwrap())
+        .collect();
+    db.execute_batch("BEGIN IMMEDIATE").unwrap();
     work_schema::ensure(&db).unwrap();
+    assert!(
+        !db.pragma_query_value::<bool, _>(None, "defer_foreign_keys", |r| r.get(0))
+            .unwrap()
+    );
+    db.execute_batch("COMMIT").unwrap();
     work_schema::ensure(&db).unwrap();
-    let after = db
-        .prepare(
-            "SELECT id,title,canon_status,canon_status_source,plan_rank FROM wm_works ORDER BY id",
-        )
-        .unwrap()
-        .query_map([], |r| {
-            Ok((
-                r.get::<_, String>(0)?,
-                r.get::<_, String>(1)?,
-                r.get::<_, Option<String>>(2)?,
-                r.get::<_, Option<String>>(3)?,
-                r.get::<_, Option<String>>(4)?,
-            ))
-        })
-        .unwrap()
-        .collect::<rusqlite::Result<Vec<_>>>()
-        .unwrap();
-    assert_eq!(before, after);
+    for old in before {
+        let current = butler_work::store::read_work(&db, old["id"].as_str().unwrap()).unwrap();
+        for (column, value) in current.as_object().unwrap() {
+            let expected = match column.as_str() {
+                "task_graph_revision" => serde_json::json!(0),
+                "failure_reason" => serde_json::Value::Null,
+                "run_state"
+                    if !matches!(
+                        old[column].as_str(),
+                        Some("done" | "cancelled" | "paused" | "stopped")
+                    ) =>
+                {
+                    serde_json::json!("idle")
+                }
+                _ => old[column].clone(),
+            };
+            assert_eq!(*value, expected, "{}.{column}", old["id"]);
+        }
+    }
+    for table in ["wm_tasks", "wm_results", "wm_attempts"] {
+        assert_eq!(
+            db.query_row::<i64, _, _>(&format!("SELECT count(*) FROM {table}"), [], |r| r.get(0))
+                .unwrap(),
+            0
+        );
+    }
+    let session: (i64,String,String,i64,Option<String>,i64) = db.query_row("SELECT tier,phase,control_state,control_epoch,current_task_id,last_applied_seq FROM wm_session_exec", [],
+        |r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?))).unwrap();
     assert_eq!(
-        db.query_row::<i64, _, _>("SELECT count(*) FROM wm_tasks", [], |r| r.get(0))
-            .unwrap(),
-        0
+        session,
+        (2, "execution".into(), "running".into(), 17, None, 31)
     );
     assert_eq!(
-        db.query_row::<String, _, _>(
-            "SELECT run_state FROM wm_works WHERE id='wk_queue_ui'",
+        db.query_row::<i64, _, _>(
+            "SELECT count(*) FROM wm_counts WHERE key='works' OR key LIKE 'run_state:%'",
             [],
             |r| r.get(0)
         )
         .unwrap(),
-        "idle"
+        0
     );
-    assert_eq!(db.query_row::<i64,_,_>("SELECT count(*) FROM sqlite_schema WHERE name IN ('wm_work_chains','wm_work_edges','wm_hold_decisions')",[],|r|r.get(0)).unwrap(),0);
+    assert_eq!(
+        db.query_row::<i64, _, _>(
+            "SELECT count FROM wm_counts WHERE key='backlog_revision'",
+            [],
+            |r| r.get(0)
+        )
+        .unwrap(),
+        13
+    );
     assert!(
         db.prepare("PRAGMA foreign_key_check")
             .unwrap()
@@ -259,4 +276,54 @@ fn p1_upgrade_preserves_works_and_unrelated_tables_and_is_idempotent() {
             .unwrap()
             .is_none()
     );
+    let fresh = Connection::open_in_memory().unwrap();
+    work_schema::ensure(&fresh).unwrap();
+    assert_eq!(schema(&db), schema(&fresh));
+}
+fn schema(db: &Connection) -> Vec<(String, Option<String>)> {
+    db.prepare("SELECT name,sql FROM sqlite_schema WHERE name GLOB 'wm_*' ORDER BY name")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap()
+}
+
+// test-category: format-pin
+#[test]
+fn upgrade_rejects_foreign_key_violations_and_restores_deferral_on_error() {
+    let db = Connection::open_in_memory().unwrap();
+    db.execute_batch(include_str!(
+        "../../butler-e2e/fixtures/work-model-p14/p1-shape.sql"
+    ))
+    .unwrap();
+    db.execute_batch("PRAGMA foreign_keys=OFF; UPDATE wm_spec_nodes SET work_id='missing'; PRAGMA foreign_keys=ON; BEGIN IMMEDIATE").unwrap();
+    assert!(work_schema::ensure(&db).is_err());
+    assert!(
+        !db.pragma_query_value::<bool, _>(None, "defer_foreign_keys", |r| r.get(0))
+            .unwrap()
+    );
+    // Schema/data changes rolled back at the migration savepoint, even inside an outer transaction.
+    assert!(db.prepare("SELECT chain_id FROM wm_works").is_ok());
+    db.execute_batch("ROLLBACK").unwrap();
+}
+
+// test-category: format-pin
+#[test]
+fn local_work_vocabulary_rejects_remote_status_sources_and_github_origins() {
+    let db = Connection::open_in_memory().unwrap();
+    work_schema::ensure(&db).unwrap();
+    db.execute_batch("INSERT INTO wm_works(id,scope_kind,scope_ref,title,visibility,origin,created_by,created_at,updated_at) VALUES('local','project','project','title','canon','board','{}',1,1)").unwrap();
+    for (column, value) in [("canon_status_source", "remote"), ("origin", "github")] {
+        let error = db
+            .execute(
+                &format!("UPDATE wm_works SET {column}=?1 WHERE id='local'"),
+                [value],
+            )
+            .unwrap_err();
+        assert_eq!(
+            error.sqlite_error().unwrap().extended_code,
+            rusqlite::ffi::SQLITE_CONSTRAINT_CHECK
+        );
+    }
 }

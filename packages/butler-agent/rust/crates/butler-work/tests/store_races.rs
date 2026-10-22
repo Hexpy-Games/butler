@@ -114,7 +114,7 @@ fn hold_final_admission_has_one_winner() {
         )
     });
     assert_eq!(results.iter().filter(|r| r.is_ok()).count(), 1);
-    assert!(results.into_iter().any(|r|matches!(r,Err(Error::Conflict {current}) if current["revision"]==1 && !current["decision"].is_null())));
+    assert!(results.into_iter().any(|r|matches!(r,Err(Error::Conflict {current}) if current==serde_json::json!({"revision":graph(&file.open())}))));
 }
 // test-category: race
 #[test]
@@ -172,21 +172,19 @@ fn queue_edit_and_completion_serialize_in_both_orders_without_stale_edges() {
                 .transaction_with_behavior(TransactionBehavior::Immediate)
                 .unwrap();
             if completion_first {
-                assert!(matches!(
-                    edit_queue(
-                        &tx,
-                        &context(),
-                        "work",
-                        graph_revision,
-                        &[QueueEdit::JoinStack {
-                            chain_id: "ch".into(),
-                            task_id: "b".into(),
-                            target: "c".into()
-                        }]
-                    ),
-                    Err(Error::Conflict { .. })
-                ));
-                tx.rollback().unwrap();
+                edit_queue(
+                    &tx,
+                    &context(),
+                    "work",
+                    graph_revision,
+                    &[QueueEdit::JoinStack {
+                        chain_id: "ch".into(),
+                        task_id: "b".into(),
+                        target: "c".into(),
+                    }],
+                )
+                .unwrap();
+                tx.commit().unwrap();
             } else {
                 assert_eq!(
                     load_chain(&tx, "ch").unwrap().chain.steps[1].tasks[0].as_str(),

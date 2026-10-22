@@ -16,7 +16,7 @@ pub(super) const COLUMNS: &[(&str, &str, &str)] = &[
     (
         "wm_works",
         "canon_status_source",
-        "'runtime','person','remote'",
+        "'runtime','person'",
     ),
     (
         "wm_tasks",
@@ -32,7 +32,7 @@ pub(super) const COLUMNS: &[(&str, &str, &str)] = &[
     (
         "wm_works",
         "origin",
-        "'chat','dialog','board','mcp','migration','github'",
+        "'chat','dialog','board','mcp','migration'",
     ),
     (
         "wm_task_hold_decisions",

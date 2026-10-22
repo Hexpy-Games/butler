@@ -24,7 +24,7 @@ async fn wma_03_done_rules_and_task_graph_cas() -> Result<(), HarnessError> {
             "wk_queue",
             "ch_queue",
             &q["task_graph_revision"],
-            json!([{"op":"split_stack","chain_id":"ch_queue","index":1}]),
+            json!([{"op":"move_to_new_step","chain_id":"ch_queue","task_id":"tk_queue_ui","index":2}]),
         )
         .await?,
         200,
@@ -240,5 +240,40 @@ async fn wma_06_task_edits_preserve_canon_membership_and_support_heads() -> Resu
         ids(&latest["plans"][0]["works"])
     );
     assert_eq!(ids(&canon["backlog"]), ids(&latest["backlog"]));
+    s.finish().await
+}
+
+#[tokio::test]
+async fn wma_08_task_routes_require_an_active_work_scope() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let Seed { s, .. } = seeded("WMA-08", "
+        UPDATE wm_works SET scope_ref='missing-project' WHERE id='wk_passkey';
+        INSERT INTO wm_works(id,scope_kind,scope_ref,title,visibility,origin,created_at,updated_at,created_by)
+          SELECT 'session-work','session',home_session_id,'session work','private','chat',1,1,'{}'
+          FROM wm_works WHERE id='wk_canon';
+        INSERT INTO wm_task_chains(id,work_id,created_at) VALUES('session-chain','session-work',1);
+        INSERT INTO wm_tasks(id,work_id,spec_ref,title,status,origin,chain_id,step_index,stack_position,created_at,updated_at,created_by)
+          VALUES('session-task','session-work','{}','task','pending','planner','session-chain',0,0,1,1,'{}');").await?;
+    for (id, chain) in [("wk_canon", "ch_canon"), ("session-work", "session-chain")] {
+        let q = queue(&s, id).await?;
+        data(s.gw.post(&format!("/works/{id}/tasks/edits"),
+            json!({"ops":[{"op":"split_stack","chain_id":chain,"index":0}],"expected_task_graph_revision":q["task_graph_revision"]})).await?,200);
+    }
+    for (id, code) in [
+        ("wk_passkey", "project_not_found"),
+        ("wk_minutes", "session_not_found"),
+    ] {
+        let read = s.gw.get(&format!("/works/{id}/tasks")).await?;
+        assert_eq!(read.status, 404, "{}", read.text);
+        assert_eq!(read.error_code(), Some(code));
+        let write =
+            s.gw.post(
+                &format!("/works/{id}/tasks/edits"),
+                json!({"ops":[],"expected_task_graph_revision":1}),
+            )
+            .await?;
+        assert_eq!(write.status, 404, "{}", write.text);
+        assert_eq!(write.error_code(), Some(code));
+    }
     s.finish().await
 }
