@@ -82,7 +82,7 @@ async function assertBars(chart: Locator, label: string) {
   return columns.flatMap(column => column.hatches.map(hatch => hatch.key));
 }
 
-/** A linked legend row's hover or focus sets the chart's emphasis; leaving clears it. */
+/** A linked legend row's hover or keyboard focus sets the chart's emphasis; leaving clears it. */
 async function assertEmphasis(page: Page, parts: Locator, chart: Locator, label: string) {
   const rows = parts.locator('[data-test-class="key-value-row"][data-linked="true"]');
   assert.equal(await rows.count(), 2, `${label}: both split rows link to the chart`);
@@ -90,9 +90,11 @@ async function assertEmphasis(page: Page, parts: Locator, chart: Locator, label:
   assert.equal(await chart.getAttribute("data-emphasis"), "subtask", `${label}: subtask row hover`);
   await page.mouse.move(0, 0);
   assert.equal(await chart.getAttribute("data-emphasis"), null, `${label}: leaving the row clears the emphasis`);
-  await rows.nth(1).focus();
+  // Keyboard focus (:focus-visible) highlights; the rows are adjacent tab stops.
+  await rows.nth(0).focus(); await page.keyboard.press("Tab");
+  assert(await rows.nth(1).evaluate(row => row === document.activeElement), `${label}: Tab reaches the subtask row`);
   assert.equal(await chart.getAttribute("data-emphasis"), "subtask", `${label}: subtask row focus`);
-  await rows.nth(0).focus();
+  await page.keyboard.press("Shift+Tab");
   assert.equal(await chart.getAttribute("data-emphasis"), "conversation", `${label}: conversation row focus`);
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   assert.equal(await chart.getAttribute("data-emphasis"), null, `${label}: blur clears the emphasis`);
