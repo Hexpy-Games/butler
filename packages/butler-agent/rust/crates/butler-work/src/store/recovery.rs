@@ -8,6 +8,21 @@ pub enum PreviousShutdown {
     Crash,
     FirstBoot,
 }
+/// Indexed keyset walk at startup/shutdown, never on a request or polling path.
+pub fn next_recovery_session(db: &Connection, after: &str) -> Result<Option<String>> {
+    Ok(db
+        .query_row(sql::RECOVERY_SESSION, [after], |r| r.get(0))
+        .optional()?)
+}
+
+/// Called only after Turn futures and their effects have drained. Preserve the
+/// last durable checkpoint; shutdown must not invent a successful outcome.
+pub fn checkpoint_session(tx: &Transaction<'_>, ctx: &Context, session: &str) -> Result<()> {
+    if tx.execute(sql::CHECKPOINT_SESSION, params![session, ctx.now])? > 0 {
+        event(tx, ctx, "session", session, 0, "checkpoint_shutdown")?;
+    }
+    Ok(())
+}
 pub fn begin_boot(tx: &Transaction<'_>, ctx: &Context, boot_id: &str) -> Result<PreviousShutdown> {
     let previous = match one(tx, sql::MARKER, []) {
         Ok(row) if row["clean_shutdown_at"].is_null() => PreviousShutdown::Crash,

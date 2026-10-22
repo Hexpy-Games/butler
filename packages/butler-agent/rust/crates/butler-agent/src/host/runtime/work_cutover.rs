@@ -14,15 +14,17 @@ pub(super) struct CutoverOwner {
     stop: CancellationToken,
     tasks: TaskTracker,
     ready: Arc<tokio::sync::Notify>,
+    recovery: super::work_recovery::RecoveryOwner,
 }
 impl CutoverOwner {
     pub(super) fn ready(&self) -> Arc<tokio::sync::Notify> {
         self.ready.clone()
     }
-    pub(super) async fn close(&self) {
+    pub(super) async fn close(&self) -> Result<(), BtccError> {
         self.stop.cancel();
         self.tasks.close();
         self.tasks.wait().await;
+        self.recovery.close().await
     }
 }
 impl Drop for CutoverOwner {
@@ -41,10 +43,12 @@ pub(super) async fn start(
         .fence_legacy_work_writers()
         .await
         .map_err(BtccError::from)?;
+    let recovery = super::work_recovery::RecoveryOwner::start(storage.clone()).await?;
     let owner = CutoverOwner {
         stop: stop.child_token(),
         tasks: TaskTracker::new(),
         ready: Arc::new(tokio::sync::Notify::new()),
+        recovery,
     };
     let stopping = owner.stop.clone();
     let ready = owner.ready.clone();

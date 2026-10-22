@@ -35,7 +35,7 @@ pub(super) struct RuntimeOwners {
 impl HostDependencies for RuntimeOwners {
     fn close(&self) -> PortFuture<'_, ()> {
         Box::pin(async move {
-            self.work_cutover.close().await;
+            let work_recovery = self.work_cutover.close().await;
             measure(
                 "runtime_context_maintenance",
                 self.context_maintenance.close(),
@@ -96,6 +96,7 @@ impl HostDependencies for RuntimeOwners {
                 .and(conversation_reference)
                 .and(observer)
                 .and(work_streams)
+                .and(work_recovery)
                 .and(stores)
                 .and(embedding)
         })

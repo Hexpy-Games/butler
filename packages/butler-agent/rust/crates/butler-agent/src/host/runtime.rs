@@ -21,6 +21,7 @@ mod subsession_queue;
 mod web_owner;
 mod work_cutover;
 mod work_ports;
+mod work_recovery;
 use super::{AcceptedPlanProducer, CognitionPrompt, ConversationObserver};
 use super::{
     GuidedCatalog, GuidedPreparation, GuidedTurnFactoryAdapter, ResolvedInstallation,

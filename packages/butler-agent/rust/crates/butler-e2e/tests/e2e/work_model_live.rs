@@ -1,5 +1,6 @@
 //! WMU-01/02/18 through the real model-tool, effect and HTTP surfaces.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
+mod recovery;
 mod stub;
 use butler_e2e::e2e::{
     HarnessError,

@@ -8,6 +8,8 @@ macro_rules! statements {
 statements! {
 WORK_STATE = "UPDATE wm_works SET run_state=?2,canon_status=?3,canon_status_source=?4,failure_reason=?5,run_generation=run_generation+(run_state<>?2),revision=revision+1,updated_at=?6 WHERE id=?1";
 RECOVER_PART = "UPDATE wm_task_parts SET status=?2,revision=revision+1 WHERE id=?1 AND status IN ('running','awaiting_review')";
+RECOVERY_SESSION = "SELECT session_id FROM wm_attempts WHERE status='running' AND session_id>?1 AND recovered_at IS NULL UNION SELECT session_id FROM wm_attempts WHERE status='interrupted' AND session_id>?1 AND recovered_at IS NULL ORDER BY session_id LIMIT 1";
+CHECKPOINT_SESSION = "UPDATE wm_attempts SET status='interrupted',finished_at=?2,revision=revision+1 WHERE session_id=?1 AND status='running'";
 CANCEL_PARTS = "UPDATE wm_task_parts SET status='cancelled',revision=revision+1 WHERE task_id=?1 AND status IN ('pending','running','awaiting_review','failed')";
 WORK = "SELECT * FROM wm_works WHERE id=?1";
 PLAN = "SELECT * FROM wm_plans WHERE id=?1";
