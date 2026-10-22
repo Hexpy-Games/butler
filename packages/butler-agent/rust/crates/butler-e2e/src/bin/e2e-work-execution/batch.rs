@@ -39,7 +39,19 @@ pub(super) fn exercise(tx: &Transaction<'_>) -> Result<()> {
             {"op":"task.start","task_id":"@a"}
         ]}),
     )?;
-    let result = apply(tx, &ctx, &scope, &input)?;
+    let raw = serde_json::to_value(&input)?;
+    let result = butler_work::store::apply::apply_tool(tx, &ctx, &scope, "bootstrap-call", &raw)?;
+    assert_eq!(
+        butler_work::store::apply::apply_tool(tx, &ctx, &scope, "bootstrap-call", &raw)?,
+        result
+    );
+    let mut changed = raw.clone();
+    changed["reason"] = json!("A different request");
+    assert_eq!(
+        butler_work::store::apply::apply_tool(tx, &ctx, &scope, "bootstrap-call", &changed)?["error"]
+            ["code"],
+        "idempotency_conflict"
+    );
     let work = result["work"]["id"].as_str().unwrap();
     let chains: i64 = tx.query_row(
         "SELECT count(*) FROM wm_task_chains WHERE work_id=?1",
@@ -54,6 +66,85 @@ pub(super) fn exercise(tx: &Transaction<'_>) -> Result<()> {
     assert_eq!(read_task(tx, b)?["step_index"], 1);
     assert_eq!(read_task(tx, c)?["step_index"], 1);
     assert_eq!(read_task(tx, b)?["chain_id"], read_task(tx, c)?["chain_id"]);
+    let tasks = butler_work::store::tool_read::read(
+        tx,
+        "batch-chat",
+        &serde_json::from_value(json!({"view":"tasks"}))?,
+        1,
+        false,
+    )?;
+    assert_eq!(tasks["view"]["chains"].as_array().unwrap().len(), 1);
+    assert_eq!(tasks["remaining"], 0);
+    let document = butler_work::store::tool_read::read(
+        tx,
+        "batch-chat",
+        &serde_json::from_value(json!({"view":"task","task_id":a}))?,
+        1,
+        false,
+    )?;
+    assert_eq!(document["view"]["task"]["id"], a);
+    assert_eq!(document["view"]["attempts"].as_array().unwrap().len(), 1);
+    assert!(
+        butler_work::store::tool_read::read(
+            tx,
+            "outside-chat",
+            &serde_json::from_value(json!({"view":"task","work_id":work,"task_id":a}))?,
+            1,
+            false
+        )
+        .is_err()
+    );
+    let spec_view = butler_work::store::tool_read::read(
+        tx,
+        "batch-chat",
+        &serde_json::from_value(json!({"view":"spec"}))?,
+        1,
+        false,
+    )?;
+    assert_eq!(spec_view["view"]["criteria"].as_array().unwrap().len(), 2);
+    assert!(
+        spec_view["view"]["body"]
+            .as_str()
+            .unwrap()
+            .contains("Checked artifact")
+    );
+    let coverage = butler_work::store::tool_read::read(
+        tx,
+        "batch-chat",
+        &serde_json::from_value(json!({"view":"coverage"}))?,
+        1,
+        false,
+    )?;
+    assert_eq!(
+        coverage["view"]["criteria"][0]["tasks"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        coverage["view"]["criteria"][1]["tasks"]
+            .as_array()
+            .unwrap()
+            .len(),
+        3
+    );
+    let summary = butler_work::store::tool_read::read(
+        tx,
+        "batch-chat",
+        &serde_json::from_value(json!({"view":"summary"}))?,
+        1,
+        false,
+    )?;
+    assert_eq!(
+        summary["view"]["task_counts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["count"].as_i64().unwrap())
+            .sum::<i64>(),
+        4
+    );
     let node = result["work"]["spec_node_id"].as_str().unwrap();
     let (revision, hash): (i64, String) = tx.query_row(
         "SELECT revision,body_hash FROM wm_spec_revisions WHERE node_id=?1 AND state='active'",
@@ -97,6 +188,14 @@ pub(super) fn exercise(tx: &Transaction<'_>) -> Result<()> {
                 .is_err()
         );
     }
+    let canon = json!({"reason":"Change visibility","operations":[{"op":"task.edit","task_id":a,"patch":{"visibility":"canon"}}]});
+    let rejected = butler_work::store::apply::apply_tool(tx, &ctx, &bound, "canon-call", &canon)?;
+    assert_eq!(rejected["error"]["code"], "canon_write_forbidden");
+    assert_eq!(rejected["work"]["id"], work);
+    assert_eq!(
+        butler_work::store::apply::apply_tool(tx, &ctx, &bound, "canon-call", &canon)?,
+        rejected
+    );
     super::tiers::exercise(tx, &ctx, work, a)?;
     fail_task(tx, &ctx, a, "batch-chat", "task_failed")?;
     assert_eq!(read_task(tx, b)?["status"], "held");

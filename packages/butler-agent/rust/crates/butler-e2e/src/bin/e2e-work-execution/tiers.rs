@@ -55,6 +55,19 @@ pub(super) fn exercise(tx: &Transaction<'_>, ctx: &Context, work: &str, task: &s
     let attempt = ensure_task_effect(tx, task, "batch-chat")?;
     escalate(tx, ctx, work, task)?;
     assert_eq!(read_work(tx, work)?["tier"], 2);
+    let operations = butler_work::store::tool_read::read(
+        tx,
+        "batch-chat",
+        &serde_json::from_value(json!({"view":"operations"}))?,
+        1,
+        false,
+    )?;
+    assert!(
+        operations["operations"]["available"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("task.join_stack"))
+    );
     assert_eq!(read_task(tx, task)?, original);
     assert_eq!(ensure_task_effect(tx, task, "batch-chat")?, attempt);
     assert!(tiers::admit(tx, ctx, "batch-chat", work, 1, "smaller continuation").is_err());

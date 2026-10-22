@@ -1,6 +1,9 @@
 //! One model batch, one writer transaction. The host binds scope and tier.
 mod bootstrap;
 mod impact;
+mod receipt;
+pub use receipt::apply_tool;
+pub use receipt::sql as receipt_sql;
 mod structure;
 use super::{execution::*, tool_ops::*, *};
 use crate::work_ids::{IdGenerator, IdKind};
@@ -35,9 +38,18 @@ pub fn apply(
     scope: &ApplyScope,
     input: &Apply,
 ) -> Result<Value> {
+    apply_with_context(tx, ctx, scope, input, &mut None)
+}
+fn apply_with_context(
+    tx: &Transaction<'_>,
+    ctx: &Context,
+    scope: &ApplyScope,
+    input: &Apply,
+    failed: &mut Option<Operation>,
+) -> Result<Value> {
     let scope = tiers::selected_scope(tx, scope, input)?;
     tx.execute_batch("SAVEPOINT wm_apply")?;
-    let result = apply_batch(tx, ctx, &scope, input);
+    let result = apply_batch(tx, ctx, &scope, input, failed);
     match result {
         Ok(value) => {
             tx.execute_batch("RELEASE wm_apply")?;
@@ -54,6 +66,7 @@ fn apply_batch(
     ctx: &Context,
     scope: &ApplyScope,
     input: &Apply,
+    failed: &mut Option<Operation>,
 ) -> Result<Value> {
     if !(1..=2).contains(&scope.tier) {
         return Err(Error::Invalid("Work tools require Tier 1 or Tier 2"));
@@ -84,7 +97,9 @@ fn apply_batch(
     };
     batch.preflight()?;
     for op in &input.operations {
+        *failed = Some(op.clone());
         batch.perform(op)?;
+        *failed = None;
         let id = batch.id(IdKind::Operation)?;
         event(tx, ctx, "operation", &id, 0, "work_apply")?;
         batch.operation_ids.push(id);

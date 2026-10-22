@@ -25,3 +25,9 @@ CREATE INDEX IF NOT EXISTS wm_tasks_chain ON wm_tasks(chain_id,step_index,stack_
 CREATE INDEX IF NOT EXISTS wm_task_edges_chain ON wm_task_edges(chain_id,pred,succ);
 CREATE INDEX IF NOT EXISTS wm_task_parts_order ON wm_task_parts(task_id,part_rank);
 CREATE INDEX IF NOT EXISTS wm_task_part_edges_successor ON wm_task_part_edges(task_id,succ);
+
+CREATE INDEX IF NOT EXISTS wm_works_local_home ON wm_works(home_session_id,updated_at DESC,id) WHERE home_session_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS wm_task_parts_session ON wm_task_parts(assignee_session_id,part_rank,id) WHERE assignee_session_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS wm_tasks_session ON wm_tasks(assignee_session_id,work_id) WHERE assignee_session_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS wm_reviews_task ON wm_reviews(task_id,at,id);
+CREATE INDEX IF NOT EXISTS wm_audit_entity ON wm_audit(entity_kind,entity_id,seq);

@@ -146,6 +146,17 @@ fn flow(tx: &Transaction<'_>) -> Result<()> {
         |r| r.get(0),
     )?;
     assert_eq!(count, 1, "integrate/review stay hidden parts");
+    let document = butler_work::store::tool_read::read(
+        tx,
+        "chat",
+        &serde_json::from_value(json!({"view":"task","work_id":"work","task_id":"task"}))?,
+        1,
+        false,
+    )?;
+    assert_eq!(document["view"]["results"].as_array().unwrap().len(), 4);
+    assert_eq!(document["view"]["results"][0]["revision"], 4);
+    assert_eq!(document["view"]["results"][3]["revision"], 1);
+    assert_eq!(document["view"]["parts"].as_array().unwrap().len(), 3);
     tx.execute_batch("SAVEPOINT impact_flow")?;
     impact::exercise(tx, &ctx)?;
     tx.execute_batch("ROLLBACK TO impact_flow; RELEASE impact_flow")?;

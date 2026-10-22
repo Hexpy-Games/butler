@@ -20,6 +20,7 @@ mod specs;
 pub mod sql;
 pub mod tiers;
 pub mod tool_ops;
+pub mod tool_read;
 mod transaction;
 mod transitions;
 pub use entities::*;

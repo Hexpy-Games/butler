@@ -216,6 +216,8 @@ fn every_store_statement_has_an_indexed_query_plan() {
         .chain(butler_work::store::api::sql::ALL)
         .chain(butler_work::store::execution::sql::ALL)
         .chain(butler_work::store::tiers::sql::ALL)
+        .chain(butler_work::store::tool_read::sql::ALL)
+        .chain(butler_work::store::apply::receipt_sql::ALL)
     {
         let mut stmt = db.prepare(&format!("EXPLAIN QUERY PLAN {sql}")).unwrap();
         let n = stmt.parameter_count();
