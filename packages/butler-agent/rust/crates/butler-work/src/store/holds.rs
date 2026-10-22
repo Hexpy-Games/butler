@@ -10,17 +10,17 @@ pub fn undecided_holds(db: &Connection, chain_id: &str) -> Result<Vec<Value>> {
     rows(db, sql::PENDING_HOLDS, [chain_id])
 }
 fn failed(work: &Value) -> bool {
-    matches!(work["run_state"].as_str(), Some("failed" | "stopped"))
+    matches!(work["status"].as_str(), Some("failed" | "stopped"))
 }
 fn unstarted(work: &Value) -> bool {
     matches!(
-        work["run_state"].as_str(),
-        Some("idle" | "waiting" | "held")
+        work["status"].as_str(),
+        Some("pending" | "waiting" | "held")
     )
 }
 fn coverage(work: &Value) -> Value {
     json!({"id":work["id"],"step":work["step_index"],
-        "state":work["run_state"],"generation":work["run_generation"]})
+        "state":work["status"],"generation":work["revision"]})
 }
 pub(super) fn approval_covers(approvals: &[Value], work: &Value) -> Result<bool> {
     let mut covers = false;
@@ -86,7 +86,7 @@ pub(super) fn rederive_holds(
             .max_by_key(|pred| pred["step_index"].as_i64());
         if let Some(cause) = cause {
             let failure_step = cause["step_index"].as_i64().ok_or(Error::Invalid("step"))?;
-            let reason = if cause["run_state"] == "stopped" {
+            let reason = if cause["status"] == "stopped" {
                 "predecessor_stopped"
             } else {
                 "predecessor_failed"
@@ -95,14 +95,14 @@ pub(super) fn rederive_holds(
                 tx,
                 ctx,
                 text(member, "id")?,
-                RunState::Held,
+                TaskStatus::Held,
                 Some((reason, text(cause, "id")?)),
                 None,
                 None,
                 false,
             )?;
             // One question per failure boundary, at the first step that
-            // actually has held Works (earlier followers may already be running).
+            // actually has held Tasks (earlier followers may already be running).
             let entry = needed.entry(failure_step).or_insert((step, cause));
             entry.0 = entry.0.min(step);
         } else {
@@ -110,7 +110,11 @@ pub(super) fn rederive_holds(
                 tx,
                 ctx,
                 text(member, "id")?,
-                RunState::Waiting,
+                if member["step_index"] == 0 || member["status"] == "pending" {
+                    TaskStatus::Pending
+                } else {
+                    TaskStatus::Waiting
+                },
                 None,
                 None,
                 None,
@@ -136,7 +140,7 @@ fn reconcile_questions(
             .ok_or(Error::Invalid("step"))?;
         if let Some(cause) = needed.remove(&step) {
             let covered = step_coverage(members, cause);
-            if question["failed_work_id"] != cause["id"] || question["coverage_json"] != covered {
+            if question["failed_task_id"] != cause["id"] || question["coverage_json"] != covered {
                 let revision = question["revision"]
                     .as_i64()
                     .ok_or(Error::Invalid("revision"))?;
@@ -175,12 +179,12 @@ fn reconcile_questions(
     Ok(())
 }
 /// Mutation receipts include the durable question ids needed to post cards.
-pub(super) fn work_result(
+pub(super) fn task_result(
     db: &Connection,
     id: &str,
     previous_chain: Option<&str>,
 ) -> Result<Value> {
-    let mut work = read_work(db, id)?;
+    let mut work = read_task(db, id)?;
     let mut questions = match work["chain_id"].as_str() {
         Some(chain) => undecided_holds(db, chain)?,
         None => Vec::new(),
@@ -209,8 +213,8 @@ pub fn decide_hold(
     let chain_id = text(&row, "chain_id")?;
     let chain = load_chain(tx, chain_id)?;
     cas(
-        &one(tx, sql::CHAIN, [chain_id])?,
-        "graph_revision",
+        &read_work(tx, &chain.work_id)?,
+        "task_graph_revision",
         expected_graph_revision,
     )?;
     tx.execute(
@@ -220,7 +224,7 @@ pub fn decide_hold(
     if decision == Decision::Delete {
         let mut next = chain.chain.clone();
         for member in &chain.members {
-            if member["run_state"] != "held"
+            if member["status"] != "held"
                 || member["step_index"].as_i64() < row["held_step_index"].as_i64()
             {
                 continue;
@@ -230,20 +234,21 @@ pub fn decide_hold(
                 tx,
                 ctx,
                 work_id,
-                RunState::Cancelled,
+                TaskStatus::Cancelled,
                 None,
                 None,
                 None,
                 false,
             )?;
-            cancel_tasks(tx, ctx, work_id, "held steps deleted")?;
-            next = next.delete(&WorkId(work_id.into()), &running(&[&chain]))?;
+
+            next = next.delete(&TaskId(work_id.into()), &running(&[&chain]))?;
         }
         persist(tx, ctx, &[(&chain, &next)])?;
     } else {
         rederive_holds(tx, ctx, chain_id)?;
-        bump(tx, ctx, chain_id, expected_graph_revision)?;
     }
+    recompute_work(tx, ctx, &chain.work_id)?;
+    bump(tx, ctx, chain_id, expected_graph_revision)?;
     event(
         tx,
         ctx,

@@ -32,8 +32,8 @@ fn commands(request: &Request<Body>) -> Option<Handler> {
         (
             matches!(
                 parts.as_slice(),
-                ["sessions", _, "work-queue"]
-                    | ["sessions", _, "work-queue", "edits"]
+                ["works", _, "tasks"]
+                    | ["works", _, "tasks", "edits"]
                     | ["projects", _, "canon"]
                     | ["projects", _, "canon", "plans" | "epics"]
                     | ["projects", _, "canon", "backlog", "order"]

@@ -13,7 +13,7 @@ pub mod sql;
 mod transitions;
 pub use entities::*;
 pub use holds::*;
-use holds::{approval_covers, rederive_holds, work_result};
+use holds::{approval_covers, rederive_holds, task_result};
 pub use queue::*;
 use queue::{bump, persist, running, update_chain_state};
 pub use recovery::*;
@@ -21,7 +21,7 @@ use rusqlite::{Connection, OptionalExtension, Params, Row, Transaction};
 use serde_json::{Value, json};
 pub use specs::*;
 pub use transitions::*;
-use transitions::{cancel_tasks, set_state};
+use transitions::{recompute_work, set_state};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -112,7 +112,11 @@ pub(super) fn rows(db: &Connection, statement: &str, params: impl Params) -> Res
 pub(super) fn cas(row: &Value, field: &str, expected: i64) -> Result<()> {
     if row[field].as_i64() != Some(expected) {
         return Err(Error::Conflict {
-            current: row.clone(),
+            current: if field == "task_graph_revision" {
+                json!({"task_graph_revision":row[field]})
+            } else {
+                row.clone()
+            },
         });
     }
     Ok(())

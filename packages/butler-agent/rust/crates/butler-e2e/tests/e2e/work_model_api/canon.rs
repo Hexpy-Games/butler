@@ -103,15 +103,15 @@ async fn wma_01_canon_create_move_order_and_events() -> Result<(), HarnessError>
     drop(reconnect);
     drop(stream);
     for reply in [
-        s.gw.get("/sessions/missing/work-queue").await?,
+        s.gw.get("/works/missing/tasks").await?,
         s.gw.post(
-            "/sessions/missing/work-queue/edits",
-            json!({"ops":[],"expected_graph_revisions":{}}),
+            "/works/missing/tasks/edits",
+            json!({"ops":[],"expected_task_graph_revision":0}),
         )
         .await?,
     ] {
         assert_eq!(reply.status, 404);
-        assert_eq!(reply.error_code(), Some("session_not_found"));
+        assert_eq!(reply.error_code(), Some("work_model_not_found"));
     }
     s.finish().await
 }

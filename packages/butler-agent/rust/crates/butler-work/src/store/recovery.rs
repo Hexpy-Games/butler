@@ -1,5 +1,5 @@
 use super::*;
-use crate::work_types::RunState;
+use crate::work_types::TaskStatus;
 use rusqlite::params;
 use std::collections::BTreeSet;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,15 +36,22 @@ pub fn recover_session(
     previous: PreviousShutdown,
 ) -> Result<Vec<Value>> {
     let attempts = rows(tx, sql::RECOVER_ATTEMPTS, [session])?;
-    let mut works = BTreeSet::new();
+    let mut tasks = BTreeSet::new();
     for attempt in &attempts {
         let id = text(attempt, "id")?;
         tx.execute(
             sql::INTERRUPT,
             params![id, ctx.now, attempt["revision"].as_i64()],
         )?;
-        let work = text(attempt, "work_id")?;
-        works.insert(work.to_owned());
+        tasks.insert(text(attempt, "task_id")?.to_owned());
+        if let Some(part) = attempt["part_id"].as_str() {
+            let status = if previous == PreviousShutdown::Clean {
+                "pending"
+            } else {
+                "failed"
+            };
+            tx.execute(sql::RECOVER_PART, params![part, status])?;
+        }
         event(
             tx,
             ctx,
@@ -52,54 +59,34 @@ pub fn recover_session(
             id,
             attempt["revision"]
                 .as_i64()
-                .ok_or(Error::Invalid("attempt revision"))?
+                .ok_or(Error::Invalid("revision"))?
                 + 1,
             "interrupted",
         )?;
-        if previous == PreviousShutdown::Clean {
-            let task = one(tx, sql::TASK, [text(attempt, "task_id")?])?;
-            if !matches!(task["status"].as_str(), Some("completed" | "cancelled")) {
-                let revision = task["revision"]
-                    .as_i64()
-                    .ok_or(Error::Invalid("task revision"))?;
-                tx.execute(
-                    sql::RECOVER_TASK,
-                    params![text(&task, "id")?, ctx.now, revision],
-                )?;
-                event(
-                    tx,
-                    ctx,
-                    "task",
-                    text(&task, "id")?,
-                    revision + 1,
-                    "recover_pending",
-                )?;
-            }
-        }
     }
-    for id in &works {
-        let work = read_work(tx, id)?;
-        if matches!(work["run_state"].as_str(), Some("done" | "cancelled")) {
+    for id in &tasks {
+        let task = read_task(tx, id)?;
+        if !matches!(task["status"].as_str(), Some("running" | "in_review")) {
             continue;
         }
-        let revision = work["revision"]
+        let revision = task["revision"]
             .as_i64()
             .ok_or(Error::Invalid("revision"))?;
         if previous == PreviousShutdown::Clean {
-            transition(tx, ctx, id, revision, RunState::Waiting, false, None)?;
+            transition(tx, ctx, id, revision, TaskStatus::Pending, false, None)?;
         } else {
             transition(
                 tx,
                 ctx,
                 id,
                 revision,
-                RunState::Failed,
+                TaskStatus::Failed,
                 false,
                 Some("interrupted_by_crash"),
             )?;
         }
     }
-    works.iter().map(|id| work_result(tx, id, None)).collect()
+    tasks.iter().map(|id| task_result(tx, id, None)).collect()
 }
 /// Use this wrapper when a domain mutation needs an App DB projection. Replay
 /// returns the original receipt before invoking the mutation closure.

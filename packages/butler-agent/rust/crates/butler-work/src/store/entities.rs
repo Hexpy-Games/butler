@@ -182,11 +182,6 @@ pub fn assign_home(
 ) -> Result<Value> {
     let row = read_work(tx, id)?;
     cas(&row, "revision", expected_revision)?;
-    if let (Some(chain), Some(home)) = (row["chain_id"].as_str(), home)
-        && load_chain(tx, chain)?.session_id != home
-    {
-        return Err(Error::CrossChat);
-    }
     tx.execute(sql::HOME, params![id, home, ctx.now, expected_revision])
         .map_err(|err| {
             if err

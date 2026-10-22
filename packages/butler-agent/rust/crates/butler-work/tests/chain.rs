@@ -1,24 +1,24 @@
 #![allow(clippy::unwrap_used, reason = "test assertions")]
-use butler_work::work_chain::{Chain, ChainError, Placement, Step, validate_task_dag};
-use butler_work::work_types::WorkId;
+use butler_work::work_chain::{Chain, ChainError, Placement, Step, validate_part_dag};
+use butler_work::work_types::TaskId;
 use std::collections::BTreeSet;
 
-fn id(s: &str) -> WorkId {
-    WorkId(s.into())
+fn id(s: &str) -> TaskId {
+    TaskId(s.into())
 }
 fn chain(steps: &[&[&str]]) -> Chain {
     Chain {
         steps: steps
             .iter()
             .enumerate()
-            .map(|(index, works)| Step {
+            .map(|(index, tasks)| Step {
                 index,
-                works: works.iter().map(|s| id(s)).collect(),
+                tasks: tasks.iter().map(|s| id(s)).collect(),
             })
             .collect(),
     }
 }
-fn edges(c: &Chain) -> Vec<(WorkId, WorkId)> {
+fn edges(c: &Chain) -> Vec<(TaskId, TaskId)> {
     c.edges().unwrap()
 }
 
@@ -182,7 +182,7 @@ fn repeated_appends_create_contiguous_last_steps() {
     c.validate().unwrap();
     assert_eq!(c.steps.len(), 101);
     assert_eq!(edges(&c).len(), 100);
-    assert_eq!(c.steps[100].works, vec![last]);
+    assert_eq!(c.steps[100].tasks, vec![last]);
 }
 
 // test-category: pure-logic
@@ -260,7 +260,7 @@ fn edits_reject_unknown_work_step_and_duplicate_membership() {
 #[test]
 fn task_dag_accepts_acyclic_edges() {
     assert!(
-        validate_task_dag(
+        validate_part_dag(
             &["a".into(), "b".into(), "c".into()],
             &[("a".into(), "b".into()), ("a".into(), "c".into())]
         )
@@ -272,7 +272,7 @@ fn task_dag_accepts_acyclic_edges() {
 #[test]
 fn task_dag_rejects_unknown_successor() {
     assert_eq!(
-        validate_task_dag(&["a".into()], &[("a".into(), "z".into())]),
+        validate_part_dag(&["a".into()], &[("a".into(), "z".into())]),
         Err(ChainError::TaskDag)
     );
 }
@@ -281,7 +281,7 @@ fn task_dag_rejects_unknown_successor() {
 #[test]
 fn task_dag_rejects_unknown_predecessor() {
     assert_eq!(
-        validate_task_dag(&["a".into()], &[("z".into(), "a".into())]),
+        validate_part_dag(&["a".into()], &[("z".into(), "a".into())]),
         Err(ChainError::TaskDag)
     );
 }
@@ -290,7 +290,7 @@ fn task_dag_rejects_unknown_predecessor() {
 #[test]
 fn task_dag_rejects_self_edges() {
     assert_eq!(
-        validate_task_dag(&["a".into()], &[("a".into(), "a".into())]),
+        validate_part_dag(&["a".into()], &[("a".into(), "a".into())]),
         Err(ChainError::TaskDag)
     );
 }
@@ -300,7 +300,7 @@ fn task_dag_rejects_self_edges() {
 fn task_dag_rejects_duplicate_edges() {
     let edge = ("a".into(), "b".into());
     assert_eq!(
-        validate_task_dag(&["a".into(), "b".into()], &[edge.clone(), edge]),
+        validate_part_dag(&["a".into(), "b".into()], &[edge.clone(), edge]),
         Err(ChainError::TaskDag)
     );
 }
@@ -309,7 +309,7 @@ fn task_dag_rejects_duplicate_edges() {
 #[test]
 fn task_dag_rejects_cycles() {
     assert_eq!(
-        validate_task_dag(
+        validate_part_dag(
             &["a".into(), "b".into()],
             &[("a".into(), "b".into()), ("b".into(), "a".into())]
         ),
@@ -321,7 +321,7 @@ fn task_dag_rejects_cycles() {
 #[test]
 fn task_dag_rejects_duplicate_tasks() {
     assert_eq!(
-        validate_task_dag(&["a".into(), "a".into()], &[]),
+        validate_part_dag(&["a".into(), "a".into()], &[]),
         Err(ChainError::TaskDag)
     );
 }

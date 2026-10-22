@@ -32,14 +32,14 @@ async fn exercise(storage: &BtccStorage, id: String) -> std::result::Result<(), 
                 now: 200,
                 actor: json!({"person":"companion"}),
             };
-            let row = read_work(tx, &work_id)?;
+            let row = read_task(tx, &work_id)?;
             let revision = row["revision"].as_i64().ok_or(Error::Invalid("revision"))?;
             transition(
                 tx,
                 &ctx,
                 &work_id,
                 revision,
-                RunState::Failed,
+                TaskStatus::Failed,
                 false,
                 Some("task_failed"),
             )
@@ -61,7 +61,7 @@ async fn exercise(storage: &BtccStorage, id: String) -> std::result::Result<(), 
                 now: 201,
                 actor: json!({"person":"companion"}),
             };
-            transition(tx, &ctx, &id, 0, RunState::Done, true, None)
+            transition(tx, &ctx, &id, 0, TaskStatus::Completed, true, None)
         })
         .await
         .expect_err("stale revision");

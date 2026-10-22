@@ -1,7 +1,7 @@
 //! Local work-model port; the gateway never owns a BTCC connection.
 //!
-//! Queue edits use `{ops:[{op,...}], expected_graph_revisions:{chain_id:rev}}`.
-//! All graph tokens are checked before any edit; the entire request rolls back
+//! Task structure edits use `{ops:[{op,...}], expected_task_graph_revision:rev}`.
+//! The Work graph token is checked before any edit; the entire request rolls back
 //! on failure. `start_now` creates a ready root; runtime execution is admitted
 //! by the session execution owner when the runtime stack is enabled.
 //!
@@ -9,8 +9,8 @@
 //! once. Plan order CAS uses the Plan revision; backlog CAS uses the project's
 //! `backlog_revision` returned by GET canon, passed as `expected_revision`.
 //! Membership changes also advance these tokens. Inspector activity is absent
-//! until a canon activity table exists; tasks are read-only. Terminal epic
-//! status edits in a chain also require `expected_graph_revision` from the queue.
+//! until a canon activity table exists; Tasks support structure edits. Terminal epic
+//! status edits require `expected_task_graph_revision` from the Work.
 use super::{ApplicationFuture, GatewayApplicationError};
 use serde_json::Value;
 

@@ -125,7 +125,7 @@ fn error(error: StorageError) -> GatewayApplicationError {
             .and_then(|e| match e {
                 store::Error::Conflict { current } => current["revision"]
                     .as_i64()
-                    .or(current["graph_revision"].as_i64()),
+                    .or(current["task_graph_revision"].as_i64()),
                 _ => None,
             })
             .map(|revision| {

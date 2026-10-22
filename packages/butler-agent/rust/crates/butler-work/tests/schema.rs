@@ -34,7 +34,7 @@ fn every_request_query_uses_its_index() {
     assert!(!uses(
         &db,
         "SELECT * FROM wm_works WHERE title=?1",
-        "wm_works_chain"
+        "wm_tasks_chain"
     ));
 }
 
@@ -65,19 +65,21 @@ fn schema_constraints_and_idempotency() {
         db.query_row::<i64, _, _>("SELECT count(*) FROM wm_works", [], |r| r.get(0))
             .unwrap()
     );
-    db.execute_batch(
-        "INSERT INTO wm_work_chains(id,session_id,created_at) VALUES('x','chat',0),('y','other',0);
-        UPDATE wm_works SET chain_id='x',step_index=0,stack_position=0 WHERE id='a';
-        UPDATE wm_works SET chain_id='y',step_index=0,stack_position=0 WHERE id='c';
-        UPDATE wm_works SET chain_id='x',step_index=1,stack_position=0 WHERE id='d';",
+    db.execute_batch("INSERT INTO wm_task_chains(id,work_id,created_at) VALUES('x','a',0),('y','c',0);
+        INSERT INTO wm_tasks(id,work_id,spec_ref,title,status,origin,chain_id,step_index,stack_position,created_at,updated_at,created_by)
+        VALUES('ta','a','{}','A','pending','planner','x',0,0,0,0,'{}'),('tc','c','{}','C','pending','planner','y',0,0,0,0,'{}'),('td','a','{}','D','waiting','planner','x',1,0,0,0,'{}');").unwrap();
+    assert!(
+        db.execute(
+            "INSERT INTO wm_task_edges(work_id,pred,succ,chain_id) VALUES('a','ta','tc','x')",
+            []
+        )
+        .is_err()
+    );
+    db.execute(
+        "INSERT INTO wm_task_edges(work_id,pred,succ,chain_id) VALUES('a','ta','td','x')",
+        [],
     )
     .unwrap();
-    assert!(
-        db.execute("INSERT INTO wm_work_edges VALUES('a','c','x')", [])
-            .is_err()
-    );
-    db.execute("INSERT INTO wm_work_edges VALUES('a','d','x')", [])
-        .unwrap();
     for (table, column, values) in enum_columns::COLUMNS {
         rejects_unknown_enum(table, column);
         let sql = db
@@ -126,7 +128,15 @@ fn rejects_unknown_enum(table: &str, column: &str) {
             "'canon'".into()
         } else if let Some(default) = default {
             default
-        } else if name == "task_rank" {
+        } else if matches!(name.as_str(), "chain_id" | "step_index" | "stack_position")
+            && table == "wm_tasks"
+        {
+            if kind == "INTEGER" {
+                "0".into()
+            } else {
+                "'chain'".into()
+            }
+        } else if name == "part_rank" {
             "'V'".into()
         } else if name == "decided_at" {
             "1".into()
@@ -154,7 +164,7 @@ fn rejects_unknown_enum(table: &str, column: &str) {
     if let Some(i) = names.iter().position(|n| n == "visibility") {
         values[i] = "'canon'".into();
     }
-    for name in ["hold_reason", "held_by_work_id"] {
+    for name in ["hold_reason", "held_by_task_id"] {
         if let Some(i) = names.iter().position(|n| n == name) {
             values[i] = "NULL".into();
         }
@@ -176,5 +186,77 @@ fn rejects_unknown_enum(table: &str, column: &str) {
         error.sqlite_error().unwrap().extended_code,
         rusqlite::ffi::SQLITE_CONSTRAINT_CHECK,
         "{table}.{column}: {error}"
+    );
+}
+
+// test-category: format-pin
+#[test]
+fn p1_upgrade_preserves_works_and_unrelated_tables_and_is_idempotent() {
+    let db = Connection::open_in_memory().unwrap();
+    db.execute_batch("PRAGMA foreign_keys=ON").unwrap();
+    db.execute_batch(include_str!(
+        "../../butler-e2e/fixtures/work-model-p14/p1-shape.sql"
+    ))
+    .unwrap();
+    let before = db
+        .prepare(
+            "SELECT id,title,canon_status,canon_status_source,plan_rank FROM wm_works ORDER BY id",
+        )
+        .unwrap()
+        .query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, Option<String>>(2)?,
+                r.get::<_, Option<String>>(3)?,
+                r.get::<_, Option<String>>(4)?,
+            ))
+        })
+        .unwrap()
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .unwrap();
+    work_schema::ensure(&db).unwrap();
+    work_schema::ensure(&db).unwrap();
+    let after = db
+        .prepare(
+            "SELECT id,title,canon_status,canon_status_source,plan_rank FROM wm_works ORDER BY id",
+        )
+        .unwrap()
+        .query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, Option<String>>(2)?,
+                r.get::<_, Option<String>>(3)?,
+                r.get::<_, Option<String>>(4)?,
+            ))
+        })
+        .unwrap()
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .unwrap();
+    assert_eq!(before, after);
+    assert_eq!(
+        db.query_row::<i64, _, _>("SELECT count(*) FROM wm_tasks", [], |r| r.get(0))
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        db.query_row::<String, _, _>(
+            "SELECT run_state FROM wm_works WHERE id='wk_queue_ui'",
+            [],
+            |r| r.get(0)
+        )
+        .unwrap(),
+        "idle"
+    );
+    assert_eq!(db.query_row::<i64,_,_>("SELECT count(*) FROM sqlite_schema WHERE name IN ('wm_work_chains','wm_work_edges','wm_hold_decisions')",[],|r|r.get(0)).unwrap(),0);
+    assert!(
+        db.prepare("PRAGMA foreign_key_check")
+            .unwrap()
+            .query([])
+            .unwrap()
+            .next()
+            .unwrap()
+            .is_none()
     );
 }

@@ -39,12 +39,17 @@ pub(in crate::store) fn append(
             params!["canon.changed", payload.to_string(), ctx.now],
         )?;
     }
-    if kind == "chain" {
-        let row = one(tx, super::super::sql::CHAIN, [id])?;
-        let payload = json!({"session_id":row["session_id"],"revision":revision});
+    if kind == "task_graph" {
+        let row = read_work(tx, id)?;
+        let session = row["home_session_id"].as_str().or_else(|| {
+            (row["scope_kind"] == "session")
+                .then(|| row["scope_ref"].as_str())
+                .flatten()
+        });
+        let payload = json!({"scope":"tasks","work_id":id,"session_id":session,"task_graph_revision":revision});
         tx.execute(
             super::super::sql::OUTBOX,
-            params!["work_queue.changed", payload.to_string(), ctx.now],
+            params!["work_model.changed", payload.to_string(), ctx.now],
         )?;
     }
     Ok(())

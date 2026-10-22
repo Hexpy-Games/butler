@@ -8,8 +8,7 @@ macro_rules! statements {
 statements! {
 PLAN_SCOPE = "SELECT project_id FROM wm_plans WHERE id=?1 AND visibility='canon'";
 EPIC_SCOPE = "SELECT scope_ref FROM wm_works WHERE id=?1 AND visibility='canon'";
-CHAIN_REVISION = "SELECT graph_revision FROM wm_work_chains WHERE id=?1";
-CHAINS = "SELECT * FROM wm_work_chains WHERE session_id=?1 ORDER BY created_at,id";
+CHAINS = "SELECT * FROM wm_task_chains WHERE work_id=?1 ORDER BY created_at,id";
 PLANS = "SELECT * FROM wm_plans WHERE project_id=?1 AND visibility='canon' ORDER BY status DESC,due_on IS NULL,due_on,created_at,id";
 BACKLOG_REVISION = "SELECT count AS revision FROM wm_counts WHERE scope_kind='project' AND scope_ref=?1 AND key='backlog_revision'";
 BUMP_BACKLOG = "INSERT INTO wm_counts(scope_kind,scope_ref,key,count) VALUES('project',?1,'backlog_revision',1) ON CONFLICT(scope_kind,scope_ref,key) DO UPDATE SET count=count+1";

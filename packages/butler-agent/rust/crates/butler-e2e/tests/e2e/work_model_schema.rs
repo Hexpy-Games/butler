@@ -4,7 +4,7 @@ use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use butler_work::{
     work_chain::{Chain, Step},
     work_queries,
-    work_types::WorkId,
+    work_types::TaskId,
 };
 use rusqlite::{Connection, params_from_iter, types::Value};
 use sha2::Digest;
@@ -51,10 +51,10 @@ fn indexed(db: &Connection, sql: &str, expected: &str) -> rusqlite::Result<()> {
 }
 fn validate_chains(db: &Connection) -> Result<(), HarnessError> {
     let ids = db
-        .prepare("SELECT id FROM wm_work_chains ORDER BY id")?
+        .prepare("SELECT id FROM wm_task_chains ORDER BY id")?
         .query_map([], |r| r.get::<_, String>(0))?
         .collect::<Result<Vec<_>, _>>()?;
-    assert_eq!(ids.len(), 3);
+    assert_eq!(ids.len(), 4);
     for id in ids {
         let mut chain = Chain { steps: Vec::new() };
         let mut stmt = db.prepare(work_queries::Query::ChainMembers.sql())?;
@@ -70,15 +70,17 @@ fn validate_chains(db: &Connection) -> Result<(), HarnessError> {
             if index == chain.steps.len() {
                 chain.steps.push(Step {
                     index,
-                    works: Vec::new(),
+                    tasks: Vec::new(),
                 });
             }
-            assert_eq!(position, chain.steps[index].works.len());
-            chain.steps[index].works.push(WorkId(work));
+            assert_eq!(position, chain.steps[index].tasks.len());
+            chain.steps[index].tasks.push(TaskId(work));
         }
         chain.validate().unwrap();
-        let stored = db.prepare("SELECT pred_work_id,succ_work_id FROM wm_work_edges WHERE chain_id=?1 ORDER BY pred_work_id,succ_work_id")?
-            .query_map([&id],|r|Ok((WorkId(r.get(0)?),WorkId(r.get(1)?))))?.collect::<Result<Vec<_>,_>>()?;
+        let stored = db
+            .prepare("SELECT pred,succ FROM wm_task_edges WHERE chain_id=?1 ORDER BY pred,succ")?
+            .query_map([&id], |r| Ok((TaskId(r.get(0)?), TaskId(r.get(1)?))))?
+            .collect::<Result<Vec<_>, _>>()?;
         let mut computed = chain.edges().unwrap();
         computed.sort();
         assert_eq!(stored, computed);
@@ -140,7 +142,7 @@ async fn fresh_and_populated_schema_survive_restart() -> Result<(), HarnessError
     let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
     let db = Connection::open(&path)?;
     let fresh = snapshot(&db)?;
-    assert_eq!(fresh.len(), 25);
+    assert_eq!(fresh.len(), 26);
     assert!(fresh.values().all(Vec::is_empty));
     for query in work_queries::Query::all() {
         let index = query.index();
@@ -178,7 +180,7 @@ async fn fresh_and_populated_schema_survive_restart() -> Result<(), HarnessError
         tokio::process::Command::new(butler_e2e::e2e::binary::fixture_binary("e2e-work-store")?)
             .kill_on_drop(true)
             .arg(&path)
-            .arg("wk_canon")
+            .arg("tk_schema")
             .output()
             .await?;
     assert!(
@@ -189,16 +191,13 @@ async fn fresh_and_populated_schema_survive_restart() -> Result<(), HarnessError
     let db = Connection::open(&path)?;
     let mut before = snapshot(&db)?;
     assert_eq!(
-        db.query_row::<String, _, _>(
-            "SELECT run_state FROM wm_works WHERE id='wk_schema'",
-            [],
-            |r| r.get(0)
-        )?,
+        db.query_row::<String, _, _>("SELECT status FROM wm_tasks WHERE id='tk_crud'", [], |r| r
+            .get(0))?,
         "held"
     );
     assert_eq!(
         db.query_row::<i64, _, _>(
-            "SELECT count(*) FROM wm_hold_decisions WHERE chain_id='ch_canon' AND decision IS NULL",
+            "SELECT count(*) FROM wm_task_hold_decisions WHERE chain_id='ch_canon' AND decision IS NULL",
             [],
             |r| r.get(0)
         )?,
@@ -231,7 +230,7 @@ async fn fresh_and_populated_schema_survive_restart() -> Result<(), HarnessError
 fn assert_publication(data: &std::path::Path, expected: &mut Snapshot) -> Result<(), HarnessError> {
     let app = Connection::open(data.join("app-server/butler-client.sqlite"))?;
     let rows = expected.get_mut("wm_outbox").unwrap();
-    assert_eq!(rows.len(), 2, "canon and queue invalidations");
+    assert_eq!(rows.len(), 2, "canon and Task invalidations");
     for row in rows.iter_mut() {
         let Value::Integer(seq) = row[0] else {
             panic!("outbox sequence");
@@ -245,9 +244,8 @@ fn assert_publication(data: &std::path::Path, expected: &mut Snapshot) -> Result
         let original: serde_json::Value = serde_json::from_str(raw)?;
         let matches = app.prepare(
             "SELECT id,type,payload_json FROM events WHERE type=?1
-             AND json_extract(payload_json,'$.revision')=?2
-             AND (json_extract(payload_json,'$.id')=?3 OR json_extract(payload_json,'$.session_id')=?4)",
-        )?.query_map(rusqlite::params![topic, original["revision"].as_i64(), original["id"].as_str(), original["session_id"].as_str()],
+             AND (json_extract(payload_json,'$.id')=?2 OR json_extract(payload_json,'$.work_id')=?3)",
+        )?.query_map(rusqlite::params![topic, original["id"].as_str(), original["work_id"].as_str()],
             |r| Ok((r.get::<_,i64>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?)))?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         assert_eq!(matches.len(), 1, "one durable App event for btcc seq {seq}");
@@ -268,11 +266,109 @@ fn assert_publication(data: &std::path::Path, expected: &mut Snapshot) -> Result
     );
     assert_eq!(
         app.query_row::<usize, _, _>(
-            "SELECT count(*) FROM events WHERE type IN ('canon.changed','work_queue.changed')",
+            "SELECT count(*) FROM events WHERE type IN ('canon.changed','work_model.changed')",
             [],
             |r| r.get(0)
         )?,
         rows.len()
     );
     Ok(())
+}
+
+#[tokio::test]
+async fn p1_schema_upgrades_before_start_and_second_start_is_identical() -> Result<(), HarnessError>
+{
+    butler_e2e::gate!();
+    // Provision the fresh data folder through the normal activation protocol.
+    // Replacing the empty wm schema then models a P1 install before upgrade.
+    let mut s = Setup::new("WMS-02-UPGRADE")?.start().await?;
+    s.agent.terminate().await?;
+    let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
+    let db = Connection::open(&path)?;
+    for table in snapshot(&db)?.keys() {
+        db.execute_batch(&format!("DROP TABLE {table}"))?;
+    }
+    db.execute_batch(include_str!("../../fixtures/work-model-p14/p1-shape.sql"))?;
+    let original = snapshot(&db)?;
+    drop(db);
+    s.restart().await?;
+    s.agent.terminate().await?;
+    let db = Connection::open(&path)?;
+    let migrated = snapshot(&db)?;
+    for table in ["wm_work_chains", "wm_work_edges", "wm_hold_decisions"] {
+        assert!(!migrated.contains_key(table));
+    }
+    for table in [
+        "wm_tasks",
+        "wm_task_chains",
+        "wm_task_edges",
+        "wm_task_hold_decisions",
+        "wm_task_parts",
+        "wm_task_part_edges",
+        "wm_attempts",
+        "wm_results",
+        "wm_reviews",
+    ] {
+        assert_eq!(migrated[table], Vec::<Vec<Value>>::new());
+    }
+    let works = &original["wm_works"];
+    assert_eq!(migrated["wm_works"].len(), works.len());
+    for row in works {
+        let Value::Text(id) = &row[0] else {
+            panic!("work id")
+        };
+        let current = butler_work::store::read_work(&db, id).unwrap();
+        assert_eq!(
+            current["title"].as_str(),
+            match &row[6] {
+                Value::Text(s) => Some(s.as_str()),
+                _ => None,
+            }
+        );
+        // P1 columns are pinned by the historical snapshot, independent of target DDL.
+        for (column, index) in [
+            ("canon_status", 11),
+            ("canon_status_source", 12),
+            ("plan_rank", 14),
+        ] {
+            assert_eq!(
+                current[column],
+                match &row[index] {
+                    Value::Text(s) => serde_json::json!(s),
+                    Value::Null => serde_json::Value::Null,
+                    _ => panic!("field"),
+                }
+            );
+        }
+    }
+    assert_eq!(
+        butler_work::store::read_work(&db, "wk_queue_ui").unwrap()["run_state"],
+        "idle"
+    );
+    for table in [
+        "wm_plans",
+        "wm_spec_nodes",
+        "wm_spec_bodies",
+        "wm_spec_revisions",
+        "wm_spec_criteria",
+        "wm_instructions",
+        "wm_runtime_marker",
+        "wm_audit",
+        "wm_outbox",
+        "wm_counts",
+        "wm_legacy_map",
+        "wm_migration",
+    ] {
+        assert_eq!(original[table], migrated[table], "{table}");
+    }
+    for query in work_queries::Query::all() {
+        indexed(&db, query.sql(), query.index())?;
+    }
+    drop(db);
+    s.restart().await?;
+    s.agent.terminate().await?;
+    let db = Connection::open(path)?;
+    assert_eq!(snapshot(&db)?, migrated);
+    drop(db);
+    s.finish().await
 }

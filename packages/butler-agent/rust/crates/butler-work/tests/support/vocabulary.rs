@@ -1,8 +1,8 @@
 use butler_work::work_types::*;
 
 pub(super) fn roundtrips_match_sql() {
-    assert!("remote".parse::<CanonStatusSource>().is_err());
-    assert!("github".parse::<Origin>().is_err());
+    assert!("remote".parse::<CanonStatusSource>().is_ok());
+    assert!("github".parse::<Origin>().is_ok());
     macro_rules! pin {
         ($ty:ident, $table:literal, $column:literal) => {{
             let values = $ty::ALL
@@ -31,16 +31,16 @@ pub(super) fn roundtrips_match_sql() {
     pin!(RunState, "wm_works", "run_state");
     pin!(CanonStatus, "wm_works", "canon_status");
     pin!(CanonStatusSource, "wm_works", "canon_status_source");
-    pin!(HoldReason, "wm_works", "hold_reason");
-    pin!(QueueOrigin, "wm_works", "queue_origin");
+    pin!(HoldReason, "wm_tasks", "hold_reason");
+    pin!(QueueOrigin, "wm_tasks", "origin");
     pin!(Origin, "wm_works", "origin");
     pin!(Visibility, "wm_works", "visibility");
     pin!(ScopeKind, "wm_works", "scope_kind");
-    pin!(ChainState, "wm_work_chains", "state");
-    pin!(Decision, "wm_hold_decisions", "decision");
+    pin!(ChainState, "wm_task_chains", "state");
+    pin!(Decision, "wm_task_hold_decisions", "decision");
     pin!(PlanStatus, "wm_plans", "status");
     pin!(TaskStatus, "wm_tasks", "status");
-    pin!(TaskKind, "wm_tasks", "kind");
+    pin!(TaskKind, "wm_task_parts", "kind");
     pin!(AttemptStatus, "wm_attempts", "status");
     pin!(InstructionStatus, "wm_instructions", "status");
     pin!(InstructionMode, "wm_instructions", "mode");

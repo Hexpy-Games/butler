@@ -196,6 +196,16 @@ fn identifiers_pin_crockford_format_and_monotonic_clock_regression() {
         assert_eq!(id.len(), 29);
         previous = id;
     }
+    let alphabet = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+    let mut nibbles = std::collections::BTreeSet::new();
+    for i in 0..512 {
+        let id = IdGenerator::global_next(IdKind::Work, 1_000_000 + i).unwrap();
+        let bits = id[3..].bytes().fold(0u128, |v, c| {
+            (v << 5) | alphabet.iter().position(|x| *x == c).unwrap() as u128
+        });
+        nibbles.insert((bits >> 76) & 15);
+    }
+    assert_eq!(nibbles.len(), 16);
 }
 // test-category: format-pin
 #[test]
@@ -213,14 +223,6 @@ fn every_store_statement_has_an_indexed_query_plan() {
             .collect::<rusqlite::Result<Vec<_>>>()
             .unwrap()
             .join("\n");
-        if *name == "CHAIN_REVISION" {
-            assert!(
-                plan.contains(
-                    "SEARCH wm_work_chains USING INDEX sqlite_autoindex_wm_work_chains_1 (id=?)"
-                ),
-                "{plan}"
-            );
-        }
         assert!(
             !plan.contains("SCAN wm_") && !plan.contains("SCAN a") && !plan.contains("SCAN t"),
             "{name}: {plan}"
