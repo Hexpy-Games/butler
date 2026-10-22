@@ -102,6 +102,17 @@ async fn wma_01_canon_create_move_order_and_events() -> Result<(), HarnessError>
     );
     drop(reconnect);
     drop(stream);
+    for reply in [
+        s.gw.get("/sessions/missing/work-queue").await?,
+        s.gw.post(
+            "/sessions/missing/work-queue/edits",
+            json!({"ops":[],"expected_graph_revisions":{}}),
+        )
+        .await?,
+    ] {
+        assert_eq!(reply.status, 404);
+        assert_eq!(reply.error_code(), Some("session_not_found"));
+    }
     s.finish().await
 }
 
@@ -147,5 +158,27 @@ async fn wma_02_stale_epic_edit_returns_winning_revision() -> Result<(), Harness
     let missing = s.gw.get("/projects/missing/canon").await?;
     assert_eq!(missing.status, 404);
     assert_eq!(missing.error_code(), Some("project_not_found"));
+    // Corrupt persisted data is a server failure, never a client validation
+    // error; its codec details must not be exposed in the HTTP response.
+    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    db.execute_batch("PRAGMA ignore_check_constraints=ON")?;
+    db.execute(
+        "UPDATE wm_works SET tier='corrupt-tier' WHERE id=?1",
+        [work["id"].as_str().unwrap()],
+    )?;
+    let failed =
+        s.gw.patch(
+            &path,
+            json!({"expected_revision":winner["revision"],"title":"Edit"}),
+        )
+        .await?;
+    assert_eq!(failed.status, 500);
+    assert_eq!(failed.error_code(), Some("internal_error"));
+    assert_eq!(failed.body["error"]["message"], "Request failed.");
+    db.execute(
+        "UPDATE wm_works SET tier=1 WHERE id=?1",
+        [work["id"].as_str().unwrap()],
+    )?;
+    drop(db);
     s.finish().await
 }

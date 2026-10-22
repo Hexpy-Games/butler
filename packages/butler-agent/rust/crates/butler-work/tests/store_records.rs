@@ -93,6 +93,28 @@ fn plan_work_spec_cas_and_immutable_publication() {
         b"# Body\n"
     );
     tx.commit().unwrap();
+    {
+        let mut db = store_support::db();
+        let tx = db.transaction().unwrap();
+        let epic = write_api(
+            &tx,
+            &context(),
+            butler_work::store::api::Resource::CreateEpic,
+            "project",
+            json!({"title":"Title","description":"Description","assignee":"person"}),
+        )
+        .unwrap();
+        assert_eq!(epic["description"], "Description");
+        assert_eq!(epic["assignee"], "person");
+        let edits: i64 = tx
+            .query_row(
+                "SELECT count(*) FROM wm_audit WHERE entity_id=?1 AND op='edit'",
+                [epic["id"].as_str().unwrap()],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(edits, 0);
+    }
 }
 // test-category: pure-logic
 #[test]

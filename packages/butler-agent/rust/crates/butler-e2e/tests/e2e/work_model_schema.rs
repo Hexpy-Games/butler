@@ -154,7 +154,7 @@ async fn fresh_and_populated_schema_survive_restart() -> Result<(), HarnessError
         );
     }
     let app = Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
-    assert_eq!(app.query_row::<i64,_,_>("SELECT count(*) FROM sqlite_schema WHERE name IN ('app_canon_sidebar_order','app_canon_sidebar_order_position')",[],|r|r.get(0))?,2);
+    assert_eq!(app.query_row::<i64,_,_>("SELECT count(*) FROM sqlite_schema WHERE name IN ('app_canon_sidebar_order','app_canon_sidebar_order_position','app_work_model_events')",[],|r|r.get(0))?,3);
     app.execute_batch(
         "INSERT INTO app_canon_sidebar_order VALUES
         ('butler','plan','first','A','op'),('butler','plan','second','B',NULL),
@@ -243,14 +243,19 @@ fn assert_publication(data: &std::path::Path, expected: &mut Snapshot) -> Result
             panic!("outbox JSON");
         };
         let original: serde_json::Value = serde_json::from_str(raw)?;
-        let (id, event_topic, raw) = app.query_row(
-            "SELECT e.id,e.type,e.payload_json FROM app_work_model_events r JOIN events e ON e.id=r.event_id WHERE r.btcc_seq=?1",
-            [seq], |r| Ok((r.get::<_,i64>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?)),
-        )?;
-        let mut payload: serde_json::Value = serde_json::from_str(&raw)?;
-        assert_eq!(&event_topic, topic);
+        let matches = app.prepare(
+            "SELECT id,type,payload_json FROM events WHERE type=?1
+             AND json_extract(payload_json,'$.revision')=?2
+             AND (json_extract(payload_json,'$.id')=?3 OR json_extract(payload_json,'$.session_id')=?4)",
+        )?.query_map(rusqlite::params![topic, original["revision"].as_i64(), original["id"].as_str(), original["session_id"].as_str()],
+            |r| Ok((r.get::<_,i64>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?)))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        assert_eq!(matches.len(), 1, "one durable App event for btcc seq {seq}");
+        let (id, event_topic, raw) = &matches[0];
+        let mut payload: serde_json::Value = serde_json::from_str(raw)?;
+        assert_eq!(event_topic, topic);
         if topic == "canon.changed" {
-            assert_eq!(payload["event_seq"], id);
+            assert_eq!(payload["event_seq"], *id);
             payload.as_object_mut().unwrap().remove("event_seq");
         }
         assert_eq!(payload, original);
@@ -259,6 +264,14 @@ fn assert_publication(data: &std::path::Path, expected: &mut Snapshot) -> Result
     assert_eq!(
         app.query_row::<usize, _, _>("SELECT count(*) FROM app_work_model_events", [], |r| r
             .get(0))?,
+        0
+    );
+    assert_eq!(
+        app.query_row::<usize, _, _>(
+            "SELECT count(*) FROM events WHERE type IN ('canon.changed','work_queue.changed')",
+            [],
+            |r| r.get(0)
+        )?,
         rows.len()
     );
     Ok(())

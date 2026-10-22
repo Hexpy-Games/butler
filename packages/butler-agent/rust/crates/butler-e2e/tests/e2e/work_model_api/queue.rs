@@ -49,7 +49,7 @@ async fn wma_03_done_rejects_running_and_releases_waiting_follower() -> Result<(
     let done = data(
         s.gw.patch(
             "/canon/epics/wk_schema",
-            json!({"expected_revision":waiting["revision"],"status":"done"}),
+            json!({"expected_revision":waiting["revision"],"expected_graph_revision":q["chains"][0]["graph_revision"],"status":"done"}),
         )
         .await?,
         200,
@@ -94,6 +94,32 @@ async fn wma_04_queue_delete_split_cas_and_atomic_batch() -> Result<(), HarnessE
         ]
     );
     let stream = LiveEvents::subscribe(&s.gw, 0).await?;
+    let deleted = data(
+        edit_queue(
+            &s,
+            &chat,
+            "ch_canon",
+            &q["chains"][0]["graph_revision"],
+            json!([{"op":"delete","chain_id":"ch_canon","work_id":"wk_schema"},
+               {"op":"delete","chain_id":"ch_canon","work_id":"wk_store"}]),
+        )
+        .await?,
+        200,
+    );
+    assert_eq!(step_ids(&deleted), vec![vec!["wk_canon"], vec!["wk_api"]]);
+    assert_eq!(queue(&s, &chat).await?, deleted);
+    assert_eq!(deleted["session_id"], chat);
+    let changed = event(&stream, "work_queue.changed", &chat).await?;
+    assert_eq!(changed["payload"]["session_id"], chat);
+    assert_eq!(
+        deleted["chains"][0]["steps"][0]["works"][0]["home_session_id"],
+        chat
+    );
+    drop(stream);
+    s.finish().await?;
+    let Seed { s, chat, .. } = seeded("WMA-04-SPLIT", "").await?;
+    let q = queue(&s, &chat).await?;
+    let stream = LiveEvents::subscribe(&s.gw, 0).await?;
     let split = data(
         edit_queue(
             &s,
@@ -133,8 +159,8 @@ async fn wma_04_queue_delete_split_cas_and_atomic_batch() -> Result<(), HarnessE
     let invalid=edit_queue(&s,&chat,"ch_canon",&deleted["chains"][0]["graph_revision"],json!([{"op":"delete","chain_id":"ch_canon","work_id":"wk_api"},{"op":"delete","chain_id":"ch_canon","work_id":"missing"}])).await?;
     assert_eq!(invalid.status, 400);
     assert_eq!(queue(&s, &chat).await?, deleted);
-    let hint = deleted["session_id"].as_str().unwrap();
-    let changed = event(&stream, "work_queue.changed", hint).await?;
+    assert_eq!(deleted["session_id"], chat);
+    let changed = event(&stream, "work_queue.changed", &chat).await?;
     assert!(changed["payload"]["revision"].as_i64() > q["chains"][0]["graph_revision"].as_i64());
     drop(stream);
     s.finish().await
@@ -167,6 +193,14 @@ async fn wma_05_hold_decisions_survive_restart_and_resolve() -> Result<(), Harne
         released["chains"][0]["ready_work_ids"],
         json!(["wk_queue_ui"])
     );
+    assert_eq!(queue(&s, &held_chat).await?, released);
+    let states: Vec<_> = released["chains"][0]["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|step| step["works"][0]["run_state"].as_str().unwrap())
+        .collect();
+    assert_eq!(states, vec!["failed", "waiting", "waiting"]);
     // Runtime is not wired yet. Seed a genuine new failure transition while
     // stopped, then start again to answer the resulting fresh durable question.
     s.agent.terminate().await?;
@@ -207,6 +241,7 @@ async fn wma_05_hold_decisions_survive_restart_and_resolve() -> Result<(), Harne
     let deleted=data(edit_queue(&s,&held_chat,"ch_queue",&fresh["chains"][0]["graph_revision"],json!([{"op":"decide_hold","chain_id":"ch_queue","id":questions[0]["id"],"decision":"delete"}])).await?,200);
     assert_eq!(step_ids(&deleted), vec![vec!["wk_queue"]]);
     assert_eq!(deleted["chains"][0]["hold_questions"], json!([]));
+    assert_eq!(queue(&s, &held_chat).await?, deleted);
     s.agent.terminate().await?;
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
     assert_eq!(

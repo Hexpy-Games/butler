@@ -1,6 +1,6 @@
 //! Local-only queue and canon routes; normal gateway auth protects this handler.
 use super::*;
-use crate::gateway::AppWorkModelRequest;
+use crate::gateway::{AppWorkModelRequest, AppWorkModelResource::*};
 
 pub(super) async fn route(
     state: Arc<HttpState>,
@@ -10,16 +10,16 @@ pub(super) async fn route(
     let parts: Vec<_> = uri.path().trim_start_matches('/').split('/').collect();
     let (resource, id) = match (request.method(), parts.as_slice()) {
         (&Method::GET, ["sessions", id, "work-queue"])
-        | (&Method::POST, ["sessions", id, "work-queue", "edits"]) => ("queue", *id),
-        (&Method::GET, ["projects", id, "canon"]) => ("canon", *id),
-        (&Method::GET, ["canon", "plans", id]) => ("plan", *id),
-        (&Method::GET, ["canon", "epics", id]) => ("epic", *id),
-        (&Method::POST, ["projects", id, "canon", "plans"]) => ("create_plan", *id),
-        (&Method::PATCH, ["canon", "plans", id]) => ("edit_plan", *id),
-        (&Method::POST, ["canon", "plans", id, "order"]) => ("plan_order", *id),
-        (&Method::POST, ["projects", id, "canon", "backlog", "order"]) => ("backlog_order", *id),
-        (&Method::POST, ["projects", id, "canon", "epics"]) => ("create_epic", *id),
-        (&Method::PATCH, ["canon", "epics", id]) => ("edit_epic", *id),
+        | (&Method::POST, ["sessions", id, "work-queue", "edits"]) => (Queue, *id),
+        (&Method::GET, ["projects", id, "canon"]) => (Canon, *id),
+        (&Method::GET, ["canon", "plans", id]) => (Plan, *id),
+        (&Method::GET, ["canon", "epics", id]) => (Epic, *id),
+        (&Method::POST, ["projects", id, "canon", "plans"]) => (CreatePlan, *id),
+        (&Method::PATCH, ["canon", "plans", id]) => (EditPlan, *id),
+        (&Method::POST, ["canon", "plans", id, "order"]) => (PlanOrder, *id),
+        (&Method::POST, ["projects", id, "canon", "backlog", "order"]) => (BacklogOrder, *id),
+        (&Method::POST, ["projects", id, "canon", "epics"]) => (CreateEpic, *id),
+        (&Method::PATCH, ["canon", "epics", id]) => (EditEpic, *id),
         _ => {
             return Err(HttpError::public(
                 405,
@@ -38,12 +38,12 @@ pub(super) async fn route(
     let data = state
         .application
         .work_model(AppWorkModelRequest {
-            resource: resource.into(),
+            resource,
             id,
             input,
         })
         .await?;
-    let status = if resource.starts_with("create_") {
+    let status = if matches!(resource, CreatePlan | CreateEpic) {
         StatusCode::CREATED
     } else {
         StatusCode::OK

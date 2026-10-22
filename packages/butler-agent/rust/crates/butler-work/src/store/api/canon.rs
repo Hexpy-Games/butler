@@ -111,6 +111,7 @@ pub(super) fn edit_plan(
 #[serde(deny_unknown_fields)]
 struct EpicInput {
     expected_revision: Option<i64>,
+    expected_graph_revision: Option<i64>,
     title: Option<String>,
     description: Option<String>,
     status: Option<CanonStatus>,
@@ -127,13 +128,16 @@ pub(super) fn create_epic(
     value: Value,
 ) -> Result<Value> {
     let input: EpicInput = input(value)?;
-    if input.expected_revision.is_some() || input.status.is_some() {
+    if input.expected_revision.is_some()
+        || input.expected_graph_revision.is_some()
+        || input.status.is_some()
+    {
         return Err(Error::Invalid("invalid creation fields"));
     }
     let title_value = input.title.clone().unwrap_or_default();
     title(&title_value)?;
     let id = IdGenerator::global_next(IdKind::Work, ctx.now)?;
-    create_work(
+    super::super::entities::create_work_assigned(
         tx,
         ctx,
         &NewWork {
@@ -146,9 +150,8 @@ pub(super) fn create_epic(
             draft: false,
         },
         &Registration::Canon(person(ctx)?),
+        input.assignee.as_ref().and_then(|v| v.as_deref()),
     )?;
-    let row = read_work(tx, &id)?;
-    edit_fields(tx, ctx, &id, &row, &input)?;
     position(
         tx,
         ctx,
@@ -185,11 +188,17 @@ pub(super) fn edit_epic(
     edit_fields(tx, ctx, id, &row, &input)?;
     if let Some(status) = input.status {
         let row = read_work(tx, id)?;
-        let graph = row["chain_id"]
-            .as_str()
-            .map(|id| load_chain(tx, id).map(|c| c.graph_revision))
-            .transpose()?;
-        set_label(tx, ctx, id, revision(&row)?, status, &person(ctx)?, graph)?;
+        // Other members can change without advancing this Work's revision.
+        // Preserve the caller's graph CAS for terminal chain edits.
+        set_label(
+            tx,
+            ctx,
+            id,
+            revision(&row)?,
+            status,
+            &person(ctx)?,
+            input.expected_graph_revision,
+        )?;
     }
     epic(tx, id)
 }

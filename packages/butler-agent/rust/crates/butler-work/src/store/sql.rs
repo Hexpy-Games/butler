@@ -10,7 +10,7 @@ WORK = "SELECT * FROM wm_works WHERE id=?1";
 PLAN = "SELECT * FROM wm_plans WHERE id=?1";
 INSERT_PLAN = "INSERT INTO wm_plans(id,project_id,title,description,due_on,status,visibility,created_at,updated_at,created_by) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?8,?9)";
 EDIT_PLAN = "UPDATE wm_plans SET title=?2,description=?3,due_on=?4,status=?5,revision=revision+1,updated_at=?6 WHERE id=?1 AND revision=?7";
-INSERT_WORK = "INSERT INTO wm_works(id,scope_kind,scope_ref,title,description,origin,draft,visibility,canon_status,created_at,updated_at,created_by) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?10,?11)";
+INSERT_WORK = "INSERT INTO wm_works(id,scope_kind,scope_ref,title,description,origin,draft,visibility,canon_status,created_at,updated_at,created_by,assignee) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?10,?11,?12)";
 EDIT_WORK = "UPDATE wm_works SET title=?2,description=?3,kind=?4,assignee=?5,draft=?6,tier=?7,revision=revision+1,updated_at=?8 WHERE id=?1 AND revision=?9";
 HOME = "UPDATE wm_works SET home_session_id=?2,revision=revision+1,updated_at=?3 WHERE id=?1 AND revision=?4";
 RANK = "UPDATE wm_works SET plan_id=?2,plan_rank=?3,revision=revision+1,updated_at=?4 WHERE id=?1 AND revision=?5";

@@ -1,7 +1,7 @@
 //! Host-owned BTCC adapter; every SQL operation stays on its owning lane.
 use butler_gateway::gateway::{
     AppWorkModelConflict, AppWorkModelEvent, AppWorkModelPort, AppWorkModelRequest,
-    ApplicationFuture, GatewayApplicationError,
+    AppWorkModelResource, ApplicationFuture, GatewayApplicationError,
 };
 use butler_turn::btcc::{BtccStorage, StorageError};
 use butler_work::{store, work_queries::Query};
@@ -33,15 +33,32 @@ impl AppWorkModelPort for AppWorkModel {
                     actor: json!({"person":"app-user","via":"app"}),
                 };
                 storage
-                    .work_model_write(move |tx| store::write_api(tx, &ctx, &resource, &id, input))
+                    .work_model_write(move |tx| {
+                        store::write_api(tx, &ctx, store_resource(resource), &id, input)
+                    })
                     .await
                     .map_err(error)
             } else {
                 storage
-                    .work_model_read(move |db| store::read_api(db, &resource, &id))
+                    .work_model_read(move |db| store::read_api(db, store_resource(resource), &id))
                     .await
                     .map_err(error)
             }
+        })
+    }
+    fn project_scope(
+        &self,
+        resource: AppWorkModelResource,
+        id: String,
+    ) -> ApplicationFuture<String> {
+        let storage = self.storage.clone();
+        Box::pin(async move {
+            storage
+                .work_model_read(move |db| {
+                    store::api::project_scope(db, store_resource(resource), &id)
+                })
+                .await
+                .map_err(error)
         })
     }
     fn changes(&self) -> Option<tokio::sync::watch::Receiver<()>> {
@@ -123,5 +140,21 @@ fn error(error: StorageError) -> GatewayApplicationError {
         code: (*code).into(),
         message: message.clone(),
         source,
+    }
+}
+
+fn store_resource(resource: AppWorkModelResource) -> store::api::Resource {
+    use AppWorkModelResource::*;
+    match resource {
+        Queue => store::api::Resource::Queue,
+        Canon => store::api::Resource::Canon,
+        Plan => store::api::Resource::Plan,
+        Epic => store::api::Resource::Epic,
+        CreatePlan => store::api::Resource::CreatePlan,
+        EditPlan => store::api::Resource::EditPlan,
+        CreateEpic => store::api::Resource::CreateEpic,
+        EditEpic => store::api::Resource::EditEpic,
+        PlanOrder => store::api::Resource::PlanOrder,
+        BacklogOrder => store::api::Resource::BacklogOrder,
     }
 }

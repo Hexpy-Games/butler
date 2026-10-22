@@ -9,13 +9,28 @@
 //! once. Plan order CAS uses the Plan revision; backlog CAS uses the project's
 //! `backlog_revision` returned by GET canon, passed as `expected_revision`.
 //! Membership changes also advance these tokens. Inspector activity is absent
-//! until a canon activity table exists; tasks are read-only.
+//! until a canon activity table exists; tasks are read-only. Terminal epic
+//! status edits in a chain also require `expected_graph_revision` from the queue.
 use super::{ApplicationFuture, GatewayApplicationError};
 use serde_json::Value;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AppWorkModelResource {
+    Queue,
+    Canon,
+    Plan,
+    Epic,
+    CreatePlan,
+    EditPlan,
+    CreateEpic,
+    EditEpic,
+    PlanOrder,
+    BacklogOrder,
+}
+
 #[derive(Clone, Debug)]
 pub struct AppWorkModelRequest {
-    pub resource: String,
+    pub resource: AppWorkModelResource,
     pub id: String,
     pub input: Option<Value>,
 }
@@ -33,6 +48,14 @@ pub struct AppWorkModelConflict {
 
 pub trait AppWorkModelPort: Send + Sync + 'static {
     fn execute(&self, _request: AppWorkModelRequest) -> ApplicationFuture<Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    /// Indexed identity lookup only; never constructs an inspector or its cards.
+    fn project_scope(
+        &self,
+        _resource: AppWorkModelResource,
+        _id: String,
+    ) -> ApplicationFuture<String> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn changes(&self) -> Option<tokio::sync::watch::Receiver<()>> {

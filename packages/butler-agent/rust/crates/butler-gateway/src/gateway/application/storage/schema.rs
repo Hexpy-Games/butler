@@ -18,6 +18,7 @@ mod still_delivery;
 mod supporting;
 mod vault;
 mod wallpapers;
+pub(in crate::gateway::application) mod work_model;
 
 use std::path::Path;
 
@@ -44,6 +45,7 @@ pub(super) fn migrate(
     )?;
     library::create(connection)?;
     canon_sidebar::create(connection)?;
+    work_model::create(connection)?;
     still_delivery::recover(connection)?;
     super::history::schema::create(connection)?;
     security::create(connection)?;
