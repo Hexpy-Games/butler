@@ -8,6 +8,7 @@ mod directions;
 mod files;
 mod parents;
 mod records;
+mod worker_slots;
 
 pub use completion::turn_result_id as subsession_result_id;
 pub(crate) use directions::direction_turn_id;
@@ -52,6 +53,7 @@ pub struct StoredSubsessionDelegation {
     pub packet: SubsessionPacket,
     /// Absent on delegations created before dispatch intents were stored.
     pub dispatch_intent: Option<DispatchIntent>,
+    pub dispatch_state: Option<String>,
     pub anchor_message_id: String,
     pub ordinal: i64,
     pub safe_title: String,
@@ -71,6 +73,7 @@ pub struct StoredSubsessionDirection {
     pub relation_id: String,
     pub revision: i64,
     pub instruction: String,
+    pub defer_until_first_result: bool,
     pub created_at: String,
 }
 
@@ -136,13 +139,13 @@ impl SqliteSubsessionRepository {
                 [&input.parent_session_id], |row| row.get(0),
             ).map_err(StorageError::sqlite)?;
             let inserted = tx.execute(
-                "INSERT OR IGNORE INTO btcc_session_relations (relation_id,parent_session_id,parent_turn_id,child_session_id,anchor_message_id,ordinal,safe_title,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+                "INSERT OR IGNORE INTO btcc_session_relations (relation_id,parent_session_id,parent_turn_id,child_session_id,anchor_message_id,ordinal,safe_title,created_at,activity_owner_session_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,COALESCE((SELECT activity_owner_session_id FROM btcc_session_relations WHERE child_session_id=?2),?2))",
                 params![input.relation_id,input.parent_session_id,input.parent_turn_id,input.child_session_id,input.anchor_message_id,ordinal,input.safe_title,input.created_at],
             ).map_err(StorageError::sqlite)? == 1;
             if inserted {
                 tx.execute(
-                    "INSERT INTO btcc_subsession_delegations (delegation_id,relation_id,task_id,child_turn_id,root_work_id,packet_json,dispatch_intent_json,dispatch_state,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'pending',?8)",
-                    params![input.delegation_id,input.relation_id,input.task_id,input.child_turn_id,input.root_work_id,packet_json,intent_json,input.created_at],
+                    "INSERT INTO btcc_subsession_delegations (delegation_id,relation_id,task_id,child_turn_id,root_work_id,packet_json,dispatch_intent_json,dispatch_state,created_at,parent_session_id,child_role) VALUES (?1,?2,?3,?4,?5,?6,?7,'pending',?8,?9,?10)",
+                    params![input.delegation_id,input.relation_id,input.task_id,input.child_turn_id,input.root_work_id,packet_json,intent_json,input.created_at,input.parent_session_id,input.packet.child_role.as_str()],
                 ).map_err(StorageError::sqlite)?;
             }
             tx.commit().map_err(StorageError::sqlite)?;
@@ -239,8 +242,8 @@ impl SqliteSubsessionRepository {
         self.storage.execute(move |db| {
             let tx=db.transaction().map_err(StorageError::sqlite)?;
             let revision:i64=tx.query_row("SELECT COALESCE(MAX(revision),0)+1 FROM btcc_subsession_directions WHERE relation_id=?1",[&relation],|r|r.get(0)).map_err(StorageError::sqlite)?;
-            tx.execute("INSERT OR IGNORE INTO btcc_subsession_directions (instruction_id,relation_id,revision,source_parent_turn_id,source_message_id,instruction,status,created_at) VALUES (?1,?2,?3,?4,?5,?6,'pending',?7)",params![instruction_id,relation,revision,source_turn,source_message,instruction,now]).map_err(StorageError::sqlite)?;
-            let stored=tx.query_row("SELECT instruction_id,relation_id,revision,instruction,created_at FROM btcc_subsession_directions WHERE relation_id=?1 AND source_message_id=?2",params![relation,source_message],direction_row).map_err(StorageError::sqlite)?;
+            tx.execute("INSERT OR IGNORE INTO btcc_subsession_directions (instruction_id,relation_id,revision,source_parent_turn_id,source_message_id,instruction,status,created_at,defer_until_first_result) VALUES (?1,?2,?3,?4,?5,?6,'pending',?7,EXISTS(SELECT 1 FROM btcc_subsession_delegations WHERE relation_id=?2 AND child_role='worker' AND dispatch_state='pending'))",params![instruction_id,relation,revision,source_turn,source_message,instruction,now]).map_err(StorageError::sqlite)?;
+            let stored=tx.query_row("SELECT instruction_id,relation_id,revision,instruction,created_at,defer_until_first_result FROM btcc_subsession_directions WHERE relation_id=?1 AND source_message_id=?2",params![relation,source_message],direction_row).map_err(StorageError::sqlite)?;
             tx.commit().map_err(StorageError::sqlite)?;
             Ok(stored)
         }).await
@@ -250,14 +253,14 @@ impl SqliteSubsessionRepository {
         &self,
         relation: String,
     ) -> Result<Option<StoredSubsessionDirection>, StorageError> {
-        self.storage.execute(move |db| db.query_row("SELECT instruction_id,relation_id,revision,instruction,created_at FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending' ORDER BY revision LIMIT 1",[relation],direction_row).optional().map_err(StorageError::sqlite)).await
+        self.storage.execute(move |db| db.query_row("SELECT instruction_id,relation_id,revision,instruction,created_at,defer_until_first_result FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending' ORDER BY revision LIMIT 1",[relation],direction_row).optional().map_err(StorageError::sqlite)).await
     }
 
     pub(crate) async fn pending_directions(
         &self,
     ) -> Result<Vec<StoredSubsessionDirection>, StorageError> {
         self.storage.execute(move |db| {
-            let mut statement=db.prepare("SELECT instruction_id,relation_id,revision,instruction,created_at FROM btcc_subsession_directions WHERE status='pending' ORDER BY relation_id,revision").map_err(StorageError::sqlite)?;
+            let mut statement=db.prepare("SELECT instruction_id,relation_id,revision,instruction,created_at,defer_until_first_result FROM btcc_subsession_directions WHERE status='pending' ORDER BY relation_id,revision").map_err(StorageError::sqlite)?;
             let rows=statement.query_map([],direction_row).map_err(StorageError::sqlite)?;
             rows.collect::<Result<Vec<_>,_>>().map_err(StorageError::sqlite)
         }).await
@@ -273,8 +276,11 @@ impl SqliteSubsessionRepository {
             let tx=db.transaction().map_err(StorageError::sqlite)?;
             let relation:Option<String>=tx.query_row("SELECT relation_id FROM btcc_session_relations WHERE child_session_id=?1",[child],|r|r.get(0)).optional().map_err(StorageError::sqlite)?;
             let Some(relation)=relation else { return Ok(None) };
-            let direction=tx.query_row("SELECT instruction_id,relation_id,revision,instruction,created_at FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending' ORDER BY revision LIMIT 1",[&relation],direction_row).optional().map_err(StorageError::sqlite)?;
+            let direction=tx.query_row("SELECT instruction_id,relation_id,revision,instruction,created_at,defer_until_first_result FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending' ORDER BY revision LIMIT 1",[&relation],direction_row).optional().map_err(StorageError::sqlite)?;
             if let Some(value)=&direction {
+                if value.defer_until_first_result && !tx.query_row(worker_slots::FIRST_ENDED, [&relation], |r| r.get::<_,bool>(0)).map_err(StorageError::sqlite)? {
+                    return Ok(None);
+                }
                 tx.execute("UPDATE btcc_subsession_directions SET status='applied',applied_at=?2,applied_child_turn_id=?3 WHERE instruction_id=?1 AND status='pending'",params![value.instruction_id,now,child_turn]).map_err(StorageError::sqlite)?;
             }
             tx.commit().map_err(StorageError::sqlite)?;
@@ -448,4 +454,4 @@ impl SqliteSubsessionRepository {
     }
 }
 
-const SELECT: &str = "SELECT r.relation_id,d.delegation_id,d.task_id,r.parent_session_id,r.parent_turn_id,r.child_session_id,d.child_turn_id,d.root_work_id,d.packet_json,d.dispatch_intent_json,r.anchor_message_id,r.ordinal,r.safe_title,r.created_at FROM btcc_session_relations r JOIN btcc_subsession_delegations d ON d.relation_id=r.relation_id";
+const SELECT: &str = "SELECT r.relation_id,d.delegation_id,d.task_id,r.parent_session_id,r.parent_turn_id,r.child_session_id,d.child_turn_id,d.root_work_id,d.packet_json,d.dispatch_intent_json,r.anchor_message_id,r.ordinal,r.safe_title,r.created_at,d.dispatch_state FROM btcc_session_relations r JOIN btcc_subsession_delegations d ON d.relation_id=r.relation_id";

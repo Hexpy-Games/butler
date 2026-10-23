@@ -54,11 +54,11 @@ impl SqliteSubsessionRepository {
         parent: Option<String>,
         limit: usize,
     ) -> Result<(Vec<serde_json::Value>, Option<(String, String, String)>), StorageError> {
-        self.storage.execute(move |db| {
+        self.storage.read(move |db| {
             let mut sql = String::from("SELECT relation_id,created_at,activity_worker_id FROM btcc_session_relations WHERE activity_role IN ('worker','steward')");
             let mut args: Vec<String> = Vec::new();
             if !history { sql.push_str(" AND activity_terminal=0"); }
-            if let Some(parent) = parent { sql.push_str(" AND parent_session_id=?"); args.push(parent); }
+            if let Some(parent) = parent { sql.push_str(" AND activity_owner_session_id=?"); args.push(parent); }
             if let Some((time,worker,relation)) = after {
                 sql.push_str(" AND (created_at<? OR (created_at=? AND (activity_worker_id>? OR (activity_worker_id=? AND relation_id>?))))");
                 args.extend([time.clone(),time,worker.clone(),worker,relation]);
@@ -107,7 +107,7 @@ fn activity_child(
         _ => "waiting",
     };
     Ok(
-        serde_json::json!({"role":r.packet.child_role.as_str(),"title":r.safe_title,"status":status,"updated_at":r.created_at,
+        serde_json::json!({"activity_parent_session_id":activity_parent(db,r)?,"waiting_for_slot":r.packet.child_role==crate::btcc::ChildRole::Worker && r.dispatch_state.as_deref()==Some("pending"),"role":r.packet.child_role.as_str(),"title":r.safe_title,"status":status,"updated_at":r.created_at,
         "relation":{"relation_id":r.relation_id,"parent_session_id":r.parent_session_id,"parent_turn_id":r.parent_turn_id,"ordinal":r.ordinal,"safe_title":r.safe_title,"created_at":r.created_at},
         "result":result.map(|_|serde_json::json!({"task_id":r.task_id}))}),
     )
@@ -121,15 +121,15 @@ impl SqliteSubsessionRepository {
         history: bool,
         parent: Option<String>,
     ) -> Result<Vec<String>, StorageError> {
-        self.storage.execute(move |db| {
+        self.storage.read(move |db| {
             let ids=db.prepare_cached("SELECT relation_id FROM btcc_session_relations \
-                WHERE activity_worker_id=?1 AND (?2 OR activity_terminal=0) AND (?3 IS NULL OR parent_session_id=?3)")
+                WHERE activity_worker_id=?1 AND (?2 OR activity_terminal=0) AND (?3 IS NULL OR activity_owner_session_id=?3)")
                 .map_err(StorageError::sqlite)?.query_map(rusqlite::params![worker,history,parent],|row|row.get::<_,String>(0))
                 .map_err(StorageError::sqlite)?.collect::<Result<Vec<_>,_>>().map_err(StorageError::sqlite)?;
             let mut parents=Vec::new();
             for id in ids {
                 match super::decode::read(db,"r.relation_id=?1",&id) {
-                    Ok(Some(row))=>parents.push(row.parent_session_id),
+                    Ok(Some(row))=>parents.push(activity_parent(db,&row)?),
                     Ok(None)=>{},
                     Err(error) if error.code()==crate::btcc::StorageCode::SubsessionPacketInvalid.as_str()=>{},
                     Err(error)=>return Err(error),
@@ -193,4 +193,12 @@ impl SqliteSubsessionRepository {
             })
             .await
     }
+}
+
+fn activity_parent(
+    db: &rusqlite::Connection,
+    relation: &super::StoredSubsessionDelegation,
+) -> Result<String, StorageError> {
+    db.query_row("SELECT COALESCE(activity_owner_session_id,parent_session_id) FROM btcc_session_relations WHERE relation_id=?1",
+        [&relation.relation_id], |r| r.get(0)).map_err(StorageError::sqlite)
 }

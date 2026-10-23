@@ -19,6 +19,7 @@ struct RawDelegation {
     root_work_id: String,
     packet_json: String,
     dispatch_intent_json: Option<String>,
+    dispatch_state: Option<String>,
     anchor_message_id: String,
     ordinal: i64,
     safe_title: String,
@@ -41,6 +42,7 @@ fn raw_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RawDelegation> {
         ordinal: row.get(11)?,
         safe_title: row.get(12)?,
         created_at: row.get(13)?,
+        dispatch_state: row.get(14)?,
     })
 }
 
@@ -63,6 +65,7 @@ fn decode(raw: &RawDelegation) -> Result<StoredSubsessionDelegation, serde_json:
         root_work_id: raw.root_work_id.clone(),
         packet: serde_json::from_value::<SubsessionPacket>(packet)?,
         dispatch_intent,
+        dispatch_state: raw.dispatch_state.clone(),
         anchor_message_id: raw.anchor_message_id.clone(),
         ordinal: raw.ordinal,
         safe_title: raw.safe_title.clone(),
@@ -164,7 +167,7 @@ pub(super) fn pending(
     let mut pending = Vec::new();
     for raw in query_raw(
         db,
-        "WHERE d.dispatch_state='pending' ORDER BY r.created_at",
+        "WHERE d.dispatch_state='pending' ORDER BY d.created_at,d.rowid",
         [],
     )? {
         match decode_or_report(&raw) {
@@ -216,6 +219,7 @@ pub(super) fn direction_row(
         revision: row.get(2)?,
         instruction: row.get(3)?,
         created_at: row.get(4)?,
+        defer_until_first_result: row.get(5)?,
     })
 }
 

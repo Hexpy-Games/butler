@@ -39,7 +39,11 @@ impl SubsessionService {
                     "error":{"code":"delegation_already_finished","message":"This child has already returned its outcome. Resolve the reported blocker or revise the Plan/action and implementation approach before starting a new attempt. Do not wait for a terminal child."}}),
                 );
             }
-            return Ok(super::helpers::existing_delegation_output(&existing));
+            return Ok(if existing.dispatch_state.as_deref() == Some("pending") {
+                worker_output(&existing)
+            } else {
+                super::helpers::existing_delegation_output(&existing)
+            });
         }
         let ids = delegation::DelegationIds::derive(&delegation::WORKER, delegation_id);
         let now = (self.now)();
@@ -76,9 +80,7 @@ impl SubsessionService {
                 now,
             ))
             .await?;
-        Ok(
-            json!({"ok":true,"status":"queued","relation_id":stored.relation_id,"child_session_id":stored.child_session_id,"task_id":stored.task_id}),
-        )
+        Ok(worker_output(&stored))
     }
 }
 
@@ -116,4 +118,40 @@ fn executable_action<'a>(
         return Err(error(BtccCode::WorkerPlanActionDependencyIncomplete));
     }
     Ok(action)
+}
+
+impl SubsessionService {
+    /// Settings are read before admission, with no global lock across I/O.
+    pub(super) async fn release_worker_slots(&self, parent: &str) -> Result<(), BtccError> {
+        let cap = self.profiles.max_simultaneous_workers().await?.clamp(1, 10);
+        while let Some(stored) = self
+            .repository
+            .pending_worker(parent.into())
+            .await
+            .map_err(BtccError::from)?
+        {
+            self.ensure_child_binding(&stored).await?;
+            if !self
+                .repository
+                .dispatch_worker(parent.into(), stored.relation_id, cap, self.queue.clone())
+                .await?
+            {
+                break;
+            }
+            self.notify_execution_changed(&stored.child_session_id)
+                .await?;
+        }
+        Ok(())
+    }
+}
+
+pub(super) fn worker_output(stored: &crate::btcc::StoredSubsessionDelegation) -> Value {
+    let waiting = stored.dispatch_state.as_deref() == Some("pending");
+    let mut output = json!({"ok":true,"status":if waiting {"waiting"} else {"queued"},"delegation_id":stored.delegation_id,"relation_id":stored.relation_id,"child_session_id":stored.child_session_id,"task_id":stored.task_id});
+    if waiting {
+        output["message"] = json!(
+            "Worker queued: this session already has its maximum number of workers running. It starts automatically when one of them finishes; continue your own work — no retry needed."
+        );
+    }
+    output
 }

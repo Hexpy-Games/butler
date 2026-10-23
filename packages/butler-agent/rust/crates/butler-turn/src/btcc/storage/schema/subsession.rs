@@ -3,6 +3,7 @@ pub(in crate::btcc::storage) const SUBSESSION_SCHEMA: &str = r"
 CREATE TABLE IF NOT EXISTS btcc_session_relations (
   relation_id TEXT PRIMARY KEY,
   parent_session_id TEXT NOT NULL,
+  activity_owner_session_id TEXT,
   parent_turn_id TEXT NOT NULL,
   child_session_id TEXT NOT NULL UNIQUE,
   anchor_message_id TEXT NOT NULL,
@@ -20,6 +21,8 @@ CREATE TABLE IF NOT EXISTS btcc_subsession_delegations (
   root_work_id TEXT NOT NULL UNIQUE,
   packet_json TEXT NOT NULL,
   dispatch_intent_json TEXT,
+  parent_session_id TEXT,
+  child_role TEXT,
   dispatch_state TEXT CHECK (dispatch_state IS NULL OR dispatch_state IN ('pending', 'enqueued')),
   created_at TEXT NOT NULL,
   FOREIGN KEY(relation_id) REFERENCES btcc_session_relations(relation_id)
@@ -39,6 +42,7 @@ CREATE TABLE IF NOT EXISTS btcc_subsession_directions (
   created_at TEXT NOT NULL,
   applied_at TEXT,
   applied_child_turn_id TEXT,
+  defer_until_first_result INTEGER NOT NULL DEFAULT 0,
   UNIQUE(relation_id, revision),
   UNIQUE(relation_id, source_message_id),
   FOREIGN KEY(relation_id) REFERENCES btcc_session_relations(relation_id)

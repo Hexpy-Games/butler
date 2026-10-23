@@ -22,16 +22,27 @@ impl AppWorkerProfileReader {
 }
 
 impl WorkerProfileReader for AppWorkerProfileReader {
+    fn max_simultaneous_workers(&self) -> PortFuture<'_, u64> {
+        Box::pin(async move {
+            self.fetch()
+                .await?
+                .get("max_simultaneous_workers")
+                .and_then(Value::as_u64)
+                .filter(|n| (1..=10).contains(n))
+                .ok_or_else(|| error("worker_profile_settings_invalid"))
+        })
+    }
+
     fn list(&self) -> PortFuture<'_, Vec<WorkerProfile>> {
         Box::pin(async move {
-            let profiles = self.fetch().await?;
+            let profiles = self.profiles().await?;
             profiles.iter().map(parse_profile).collect()
         })
     }
 
     fn read(&self, profile_id: Option<String>) -> PortFuture<'_, WorkerProfile> {
         Box::pin(async move {
-            let profiles = self.fetch().await?;
+            let profiles = self.profiles().await?;
             let selected = profile_id.as_deref().unwrap_or("default");
             let profile = profiles
                 .iter()
@@ -47,7 +58,16 @@ impl WorkerProfileReader for AppWorkerProfileReader {
 }
 
 impl AppWorkerProfileReader {
-    async fn fetch(&self) -> Result<Vec<Value>, BtccError> {
+    async fn profiles(&self) -> Result<Vec<Value>, BtccError> {
+        self.fetch()
+            .await?
+            .get("worker_profiles")
+            .and_then(Value::as_array)
+            .cloned()
+            .ok_or_else(|| error("worker_profiles_missing"))
+    }
+
+    async fn fetch(&self) -> Result<Value, BtccError> {
         let endpoint = self
             .endpoint
             .snapshot()
@@ -80,10 +100,8 @@ impl AppWorkerProfileReader {
         let body: Value = serde_json::from_slice(&bytes)
             .map_err(|source| error("worker_profile_settings_invalid").with_source(source))?;
         body.get("data")
-            .and_then(|value| value.get("worker_profiles"))
-            .and_then(Value::as_array)
             .cloned()
-            .ok_or_else(|| error("worker_profiles_missing"))
+            .ok_or_else(|| error("worker_profile_settings_invalid"))
     }
 }
 

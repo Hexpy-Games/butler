@@ -63,6 +63,8 @@ fn activity_indexes(db: &Connection) -> rusqlite::Result<()> {
        CREATE INDEX IF NOT EXISTS idx_btcc_activity_identity ON btcc_session_relations(activity_worker_id); \
        CREATE INDEX IF NOT EXISTS idx_btcc_activity_open_page \
        ON btcc_session_relations(created_at DESC,activity_worker_id,relation_id) WHERE activity_terminal=0; \
+       CREATE INDEX IF NOT EXISTS idx_btcc_activity_owner_page ON btcc_session_relations(activity_owner_session_id,created_at DESC,activity_worker_id,relation_id);
+       CREATE INDEX IF NOT EXISTS idx_btcc_activity_owner_open_page ON btcc_session_relations(activity_owner_session_id,created_at DESC,activity_worker_id,relation_id) WHERE activity_terminal=0;
        CREATE INDEX IF NOT EXISTS idx_btcc_activity_parent_page \
        ON btcc_session_relations(parent_session_id,created_at DESC,activity_worker_id,relation_id); \
        CREATE INDEX IF NOT EXISTS idx_btcc_activity_parent_open_page \

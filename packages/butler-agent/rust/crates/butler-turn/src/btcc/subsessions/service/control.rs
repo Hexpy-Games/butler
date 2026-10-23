@@ -353,6 +353,20 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?
             .unwrap_or_else(|| requested.clone());
+        if relation.packet.child_role == crate::btcc::ChildRole::Worker
+            && relation.dispatch_state.as_deref() != Some("enqueued")
+        {
+            return Ok(());
+        }
+        if direction.defer_until_first_result
+            && !self
+                .repository
+                .worker_first_turn_ended(relation.relation_id.clone())
+                .await
+                .map_err(BtccError::from)?
+        {
+            return Ok(());
+        }
         let child = self
             .bindings
             .get_by_session_id(&relation.child_session_id)

@@ -429,6 +429,7 @@ export const koKrCopy: AppCopy = {
   },
   guided: {
     workerStatus: {
+      waiting: "대기",
       orienting: "구상 중", planning: "계획 중", verifying: "검토 중", reporting: "보고 중",
       complete: "완료", blocked: "진행이 막힘", failed: "실패", cancelled: "취소됨",
       recoverable: "이어서 진행 가능", executing: "작업 중", approval: "허용 대기 중",
@@ -1609,7 +1610,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     workerProfilesPanel: {
       add: "작업자 추가",
       addLimitReached: "작업자는 최대 12명까지 등록할 수 있습니다.",
-      maxSimultaneousWorkers: "최대 동시 작업자 수",
+      maxSimultaneousWorkers: "작업당 최대 작업자 수",
     },
     wallpaper: {
       moduleInvalid: "월페이퍼 파일이 올바르지 않습니다.", imageUnsupported: "JPG, PNG, WebP 이미지만 가능", imageTooLarge: "이미지가 너무 큽니다.",

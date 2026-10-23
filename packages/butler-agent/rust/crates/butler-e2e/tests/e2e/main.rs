@@ -268,3 +268,5 @@ mod usage_delegated;
 
 mod work_model_api;
 mod work_model_schema;
+
+mod worker_cap;

@@ -89,7 +89,8 @@ async fn workers(
     requested: Option<&str>,
 ) -> Result<Vec<Value>, GatewayApplicationError> {
     let Some(parent) = child
-        .pointer("/relation/parent_session_id")
+        .get("activity_parent_session_id")
+        .or_else(|| child.pointer("/relation/parent_session_id"))
         .and_then(Value::as_str)
     else {
         return Ok(Vec::new());

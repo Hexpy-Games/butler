@@ -214,18 +214,55 @@ impl SubsessionService {
                 error.code()
             );
         }
-        self.deliver_worker_results().await
+        self.deliver_worker_results().await?;
+        self.release_child_slot(session).await;
+        Ok(())
+    }
+
+    async fn release_child_slot(&self, session: &str) {
+        let released = async {
+            if let Some(relation) = self
+                .repository
+                .by_child(session.into())
+                .await
+                .map_err(BtccError::from)?
+                && relation.packet.child_role == ChildRole::Worker
+            {
+                self.release_worker_slots(&relation.parent_session_id)
+                    .await?;
+            }
+            Ok::<_, BtccError>(())
+        }
+        .await;
+        if let Err(error) = released {
+            butler_core::diagnostic!(
+                "[native-btcc] Worker slot release failed code={}",
+                error.code()
+            );
+        }
     }
     /// Re-dispatches pending children, directions and worker results after a restart.
     pub async fn recover_dispatches(&self) -> Result<(), BtccError> {
-        for stored in self
+        self.deliver_worker_results().await?;
+        let pending = self
             .repository
             .pending_dispatches()
             .await
-            .map_err(BtccError::from)?
-        {
-            self.ensure_child_binding(&stored).await?;
-            self.replay(&stored).await?;
+            .map_err(BtccError::from)?;
+        for stored in &pending {
+            self.ensure_child_binding(stored).await?;
+        }
+        let mut parents = std::collections::HashSet::new();
+        for stored in &pending {
+            if stored.packet.child_role != ChildRole::Worker
+                || parents.insert(&stored.parent_session_id)
+            {
+                if stored.packet.child_role == ChildRole::Worker {
+                    self.release_child_slot(&stored.child_session_id).await;
+                } else {
+                    self.replay(stored).await?;
+                }
+            }
         }
         self.recover_directions().await?;
         self.deliver_worker_results().await

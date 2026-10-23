@@ -8,6 +8,8 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
     // Retire the unused JSON index on existing databases as well as fresh installs.
     db.execute_batch("DROP INDEX IF EXISTS idx_btcc_graph_plan")?;
     ensure_dispatch_intent(db)?;
+    ensure_worker_slots(db)?;
+    ensure_activity_owner(db)?;
     let Some(definition) = table_definition(db, "btcc_steward_results")? else {
         return Ok(());
     };
@@ -154,4 +156,57 @@ fn table_columns(db: &Connection, table: &str) -> rusqlite::Result<Vec<String>> 
     statement
         .query_map([], |row| row.get(1))?
         .collect::<rusqlite::Result<Vec<_>>>()
+}
+
+fn ensure_worker_slots(db: &Connection) -> rusqlite::Result<()> {
+    ensure_column(
+        db,
+        "btcc_subsession_directions",
+        "defer_until_first_result",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
+    let backfill = !column_exists(db, "btcc_subsession_delegations", "parent_session_id")?;
+    ensure_column(
+        db,
+        "btcc_subsession_delegations",
+        "parent_session_id",
+        "TEXT",
+    )?;
+    ensure_column(db, "btcc_subsession_delegations", "child_role", "TEXT")?;
+    db.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_btcc_worker_slots
+           ON btcc_subsession_delegations(parent_session_id,child_role,dispatch_state,created_at);
+         CREATE INDEX IF NOT EXISTS idx_btcc_dispatch_pending
+           ON btcc_subsession_delegations(dispatch_state,created_at);",
+    )?;
+    if backfill {
+        db.execute_batch(
+            "UPDATE btcc_subsession_delegations AS d SET
+               parent_session_id=(SELECT parent_session_id FROM btcc_session_relations r WHERE r.relation_id=d.relation_id),
+               child_role=COALESCE(CASE WHEN json_valid(packet_json) THEN json_extract(packet_json,'$.child_role') END,
+                 CASE WHEN (SELECT child_session_id FROM btcc_session_relations r WHERE r.relation_id=d.relation_id) LIKE 'worker-%' THEN 'worker' ELSE 'steward' END);
+             UPDATE btcc_subsession_delegations AS d SET dispatch_state=NULL
+             WHERE child_role='worker' AND dispatch_state='enqueued'
+               AND EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=d.relation_id)
+               AND NOT EXISTS (SELECT 1 FROM btcc_subsession_directions i WHERE i.relation_id=d.relation_id AND i.status='pending')
+               AND NOT EXISTS (SELECT 1 FROM btcc_session_relations r JOIN btcc_turns t ON t.session_id=r.child_session_id
+                 WHERE r.relation_id=d.relation_id AND t.semantic_state='admitted'
+                   AND NOT EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=d.relation_id AND x.child_turn_id=t.turn_id));",
+        )?;
+    }
+    Ok(())
+}
+
+fn ensure_activity_owner(db: &Connection) -> rusqlite::Result<()> {
+    ensure_column(
+        db,
+        "btcc_session_relations",
+        "activity_owner_session_id",
+        "TEXT",
+    )?;
+    db.execute_batch(
+        "UPDATE btcc_session_relations AS r SET activity_owner_session_id=COALESCE(
+           (SELECT p.parent_session_id FROM btcc_session_relations p WHERE p.child_session_id=r.parent_session_id),r.parent_session_id)
+         WHERE activity_owner_session_id IS NULL;",
+    )
 }
