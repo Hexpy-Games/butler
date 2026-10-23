@@ -266,7 +266,8 @@ class HostLinks(unittest.TestCase):
     # test-category: security
     def test_preflight_runs_before_full_and_prebuilt_preparation(self):
         for flags in ([], ['--require-prebuilt']):
-            with self.subTest(flags=flags), patch.dict(os.environ, PKG_CONFIG_PATH='/tmp/pkg'), \
+            # Only the variable under test: Apple's git exports LIBRARY_PATH to hooks.
+            with self.subTest(flags=flags), patch.dict(os.environ, {'PKG_CONFIG_PATH': '/tmp/pkg'}, clear=True), \
                     patch.object(sys, 'argv', ['prepare-static-ort.py', *flags]), \
                     patch.object(recipe.host, 'rust_identity', side_effect=AssertionError('too late')):
                 with self.assertRaisesRegex(RuntimeError, 'PKG_CONFIG_PATH'):
