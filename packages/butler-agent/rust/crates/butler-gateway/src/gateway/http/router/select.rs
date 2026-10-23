@@ -41,8 +41,7 @@ fn commands(request: &Request<Body>) -> Option<Handler> {
                 parts.as_slice(),
                 ["works", _, "tasks"]
                     | ["works", _, "tasks", "edits"]
-                    | ["sessions", _, "works"]
-                    | ["sessions", _, "task-ownership"]
+                    | ["sessions", _, "works" | "task-ownership"]
                     | ["tasks", _, "session"]
                     | ["projects", _, "canon"]
                     | ["projects", _, "canon", "plans" | "epics"]

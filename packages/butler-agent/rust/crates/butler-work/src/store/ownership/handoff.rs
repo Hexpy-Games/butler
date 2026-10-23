@@ -163,7 +163,8 @@ fn continue_here(
         ctx,
         to,
         text(&work, "id")?,
-        work["tier"].as_u64().unwrap_or(1).max(1) as u8,
+        u8::try_from(work["tier"].as_u64().unwrap_or(1).max(1))
+            .map_err(|_| Error::Invalid("Work tier"))?,
         "task_session",
     )?;
     tiers::bind_started_task(tx, to, task)?;

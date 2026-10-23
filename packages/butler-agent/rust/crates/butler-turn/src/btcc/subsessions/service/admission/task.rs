@@ -37,10 +37,13 @@ pub(super) fn assign_target(
             params![attempt, task, input.parent_session_id],
         )?;
         store::open_task_session(tx, ctx, task)?;
-        at(&store::read_work(tx, work)?, "/tier")
-            .as_u64()
-            .unwrap_or(1)
-            .max(1) as u8
+        u8::try_from(
+            at(&store::read_work(tx, work)?, "/tier")
+                .as_u64()
+                .unwrap_or(1)
+                .max(1),
+        )
+        .map_err(|_| store::Error::Invalid("Work tier"))?
     };
     store::tiers::admit(
         tx,

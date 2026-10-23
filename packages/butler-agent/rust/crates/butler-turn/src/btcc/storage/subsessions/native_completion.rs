@@ -36,7 +36,7 @@ pub(super) fn settle(
         actor: serde_json::json!({"session":completion.session,"turn":completion.turn}),
     };
     let task = store::read_task(tx, &assigned.task_id)?;
-    if !task["handoff_to_session_id"].is_null() {
+    if !at(&task, "/handoff_to_session_id").is_null() {
         let checkpoint = store::put_body(
             tx,
             &serde_json::json!({
@@ -146,7 +146,9 @@ pub(super) fn resolve_outcome(
         return Ok(());
     };
     let task = store::read_task(tx, &child.task_id)?;
-    if child.part_id.is_none() && task["assignee_session_id"] != completion.session {
+    if child.part_id.is_none()
+        && at(&task, "/assignee_session_id").as_str() != Some(completion.session.as_str())
+    {
         completion.status = "cancelled".into();
         completion.summary = "다른 대화로 옮겨졌습니다".into();
         completion.failure_code = None;

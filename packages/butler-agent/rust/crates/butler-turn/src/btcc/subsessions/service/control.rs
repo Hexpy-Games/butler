@@ -375,7 +375,7 @@ impl SubsessionService {
                 }
                 if whole_task {
                     let task = store::read_task(db, &task_id)?;
-                    if task["assignee_session_id"] != target {
+                    if at(&task, "/assignee_session_id").as_str() != Some(target.as_str()) {
                         return Ok(true);
                     }
                 }

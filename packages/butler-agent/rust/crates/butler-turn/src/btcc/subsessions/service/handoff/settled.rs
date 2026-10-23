@@ -52,7 +52,9 @@ impl SubsessionService {
             .work_model_read(move |db| store::read_task(db, &task))
             .await
             .map_err(BtccError::from)?;
-        if row["handoff_to_session_id"].is_null() || row["owner_epoch"] != p["owner_epoch"] {
+        if at(&row, "/handoff_to_session_id").is_null()
+            || at(&row, "/owner_epoch") != at(p, "/owner_epoch")
+        {
             return Ok(());
         }
         let target = p["session_id"].as_str().unwrap_or_default();

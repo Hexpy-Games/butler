@@ -122,7 +122,10 @@ fn a_handoff_fences_late_effects_and_keeps_followers_ready()
     ));
     assert_eq!(read_task(&tx, "a").unwrap(), moved);
     assert_ne!(read_task(&tx, "b").unwrap()["status"], "held");
-    assert!(undecided_holds(&tx, "ch").unwrap().is_empty());
+    assert_eq!(
+        undecided_holds(&tx, "ch").unwrap(),
+        Vec::<serde_json::Value>::new()
+    );
     Ok(())
 }
 

@@ -156,7 +156,7 @@ async fn wmu_21_run_here_uses_the_current_conversation_only() -> Result<(), Harn
             .all(|r| r["assignee_session_id"] == "general" && r["reserved_session_id"].is_null())
     );
     assert_eq!(rows[0]["status"], "blocked");
-    assert!(app_rows(&s).await?.is_empty());
+    assert_eq!(app_rows(&s).await?, Vec::<Value>::new());
     let attempts = super::work_model_live::database(&s, |db| {
         db.query_row(
             "SELECT count(*) FROM wm_attempts WHERE session_id='butler/app-general'",

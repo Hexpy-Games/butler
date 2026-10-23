@@ -1,6 +1,7 @@
 //! Ownership requests and durable cancellation intents share native execution.
 mod settled;
 use super::*;
+use butler_core::json::at;
 use butler_work::store;
 
 impl SubsessionService {
@@ -29,7 +30,7 @@ impl SubsessionService {
                 store::record_intent(
                     tx,
                     &ctx,
-                    &format!("ownership_taken:{task}:{}", result["revision"]),
+                    &format!("ownership_taken:{task}:{}", at(&result, "/revision")),
                     "ownership_taken",
                     &json!({"task_id":task,"target_session_id":to}),
                 )?;

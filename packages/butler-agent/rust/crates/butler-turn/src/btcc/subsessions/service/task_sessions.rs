@@ -1,5 +1,6 @@
 //! Ready Tasks enter the existing steward admission path, without a worker cap.
 use super::*;
+use butler_core::json::at;
 use butler_work::{store, store::ReadyStart};
 
 impl SubsessionService {
@@ -35,11 +36,19 @@ impl SubsessionService {
             })
             .await
             .map_err(BtccError::from)?;
-        let text = |key: &str| row[key].as_str().unwrap_or_default().to_owned();
+        let text = |key: &str| {
+            row.get(key)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned()
+        };
         let input = admission::AssignmentRequest {
             parent_session_id: ready.coordinator_session,
-            parent_turn_id: context["turn_id"].as_str().unwrap_or(&ready.task_id).into(),
-            anchor_message_id: row["origin_message_id"]
+            parent_turn_id: at(&context, "/turn_id")
+                .as_str()
+                .unwrap_or(&ready.task_id)
+                .into(),
+            anchor_message_id: at(&row, "/origin_message_id")
                 .as_str()
                 .unwrap_or(&ready.task_id)
                 .into(),
@@ -56,7 +65,7 @@ impl SubsessionService {
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .into(),
-            access_mode: context["access_mode"]
+            access_mode: at(&context, "/access_mode")
                 .as_str()
                 .unwrap_or("read_only")
                 .into(),
