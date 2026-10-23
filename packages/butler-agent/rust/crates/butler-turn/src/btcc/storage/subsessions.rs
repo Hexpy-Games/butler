@@ -316,7 +316,7 @@ impl SqliteSubsessionRepository {
         work: String,
     ) -> Result<Option<Child>, StorageError> {
         self.storage
-            .execute(move |db| {
+            .read(move |db| {
                 if let Some(Child::Assigned(assigned)) =
                     native::read(db, "d.root_work_id=?1", &work)?
                 {
