@@ -88,6 +88,7 @@ async fn wma_sidebar_conversation_navigation_and_replay() -> Result<(), HarnessE
     assert_eq!(missing.status, 404);
     let hooks = std::fs::read_to_string(&hook_output)?;
     let hooks: Vec<Value> = hooks
+        .trim_start_matches('\u{feff}')
         .lines()
         .map(|line| serde_json::from_str(line).unwrap())
         .collect();
@@ -165,6 +166,7 @@ async fn wma_sidebar_conversation_navigation_and_replay() -> Result<(), HarnessE
         loop {
             let hooks = std::fs::read_to_string(&hook_output).unwrap_or_default();
             if hooks
+                .trim_start_matches('\u{feff}')
                 .lines()
                 .filter_map(|line| serde_json::from_str::<Value>(line).ok())
                 .filter(|h| h["source"] == "created")
@@ -180,6 +182,7 @@ async fn wma_sidebar_conversation_navigation_and_replay() -> Result<(), HarnessE
     .map_err(|_| std::io::Error::other("replay session hook missing"))?;
     let hooks = std::fs::read_to_string(&hook_output)?;
     let hooks: Vec<Value> = hooks
+        .trim_start_matches('\u{feff}')
         .lines()
         .map(|line| serde_json::from_str(line).unwrap())
         .collect();
