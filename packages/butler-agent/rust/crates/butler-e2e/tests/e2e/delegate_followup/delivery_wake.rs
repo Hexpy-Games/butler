@@ -58,14 +58,18 @@ async fn delivered_outbox_wakes_followup_after_result_turn_releases() -> Result<
     })
     .await
     .expect("dispatcher must hold the follow-up after the result releases")?;
-    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap();
-    let pending: i64 = db
-        .query_row(
+    let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
+    let pending: i64 = tokio::task::spawn_blocking(move || {
+        let db = rusqlite::Connection::open(path).unwrap();
+        db.query_row(
             "SELECT count(*) FROM btcc_subsession_outbox WHERE status='pending'",
             [],
             |r| r.get(0),
         )
-        .unwrap();
+        .unwrap()
+    })
+    .await
+    .unwrap();
     assert_eq!(pending, 1);
     assert!(
         !script

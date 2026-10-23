@@ -159,15 +159,6 @@ async fn delivered_transcript_final_projects_and_settles_exact_queue_claim() {
     .await
     .unwrap();
     app.start_dispatch().await.unwrap();
-    let mut plan_request = command("projection-id", "question");
-    plan_request.request.plan_mode = Some(json!(true));
-    let accepted = app.send_message(plan_request).await.unwrap();
-    assert!(
-        accepted.accepted.is_some(),
-        "ordinary admission retains main's startup behavior"
-    );
-    assert!(accepted.turn.is_some());
-    assert_eq!(native.0.lock().unwrap().len(), 1);
     // Publishing repeated changes must not wait behind a dispatcher held at readiness.
     tokio::time::timeout(std::time::Duration::from_secs(3), async {
         for _ in 0..128 {
@@ -177,6 +168,12 @@ async fn delivered_transcript_final_projects_and_settles_exact_queue_claim() {
     .await
     .expect("coalesced queue wakes must not block event publication");
     release.send(true).unwrap();
+    let mut plan_request = command("projection-id", "question");
+    plan_request.request.plan_mode = Some(json!(true));
+    let accepted = app.send_message(plan_request).await.unwrap();
+    assert!(accepted.accepted.is_some());
+    assert!(accepted.turn.is_some());
+    assert_eq!(native.0.lock().unwrap().len(), 1);
     tokio::time::timeout(std::time::Duration::from_secs(3), enqueued.notified())
         .await
         .unwrap();
