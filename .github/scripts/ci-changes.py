@@ -98,7 +98,7 @@ CI_CONSUMERS = (
         '.github/scripts/runtime-crates.json', '.github/scripts/ci_runtime_tests.py',
         '.github/scripts/ci_receipts.py', '.github/scripts/ci_main_failure.py',
         '.github/scripts/ci_main_baseline.py', '.github/scripts/ci-main-gate.py',
-        '.github/scripts/ci_windows_cascade_tests.py',
+        '.github/scripts/issue_links.py', '.github/scripts/ci_windows_cascade_tests.py',
         '.github/scripts/prepare-windows-zstd.py',
         '.github/scripts/*windows*safety.py')),
     (('rust',), ('.github/workflows/rust-*.yml', '.github/scripts/ci_runtime_crates.py',
