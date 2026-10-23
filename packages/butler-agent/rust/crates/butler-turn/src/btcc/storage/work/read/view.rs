@@ -319,5 +319,14 @@ fn effect_watermark(db: &Connection, work_id: &str) -> StorageResult<String> {
     let rows = statement.query_map([work_id], |row| Ok(serde_json::json!({
         "effect_id": row.get::<_, String>(0)?, "receipt_id": row.get::<_, String>(1)?, "status": row.get::<_, String>(2)?, "journal_revision": row.get::<_, u64>(3)?, "updated_at": row.get::<_, String>(4)?
     }))).map_err(StorageError::sqlite)?.collect::<Result<Vec<_>, _>>().map_err(StorageError::sqlite)?;
-    Ok(crate::btcc::identity::digest(&common::stable(&rows)?))
+    let rows = crate::btcc::identity::sqlite_stable_json(&serde_json::Value::Array(rows)).map_err(
+        |err| {
+            StorageError::new(
+                crate::btcc::StorageCode::DurableWorkSerializationFailed,
+                err.message(),
+            )
+            .with_source(err)
+        },
+    )?;
+    Ok(crate::btcc::identity::digest(&rows))
 }

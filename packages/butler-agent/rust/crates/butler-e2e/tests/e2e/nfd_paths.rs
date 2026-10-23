@@ -33,11 +33,18 @@ fn nfd_data(mut setup: Setup) -> Result<Setup, HarnessError> {
     Ok(setup)
 }
 
+/// Compares entry names, not lookups: APFS resolves the NFC name to the NFD
+/// folder, while it still lists only the name that was created.
 fn assert_no_nfc_twin(data: &Path) {
     let parent = data.parent().unwrap().parent().unwrap();
+    let names = fs::read_dir(parent)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect::<Vec<_>>();
+    assert!(names.iter().any(|name| *name == *NFD_NAME), "{names:?}");
     assert!(
-        !parent.join(NFC_NAME).exists(),
-        "a composed twin folder was created"
+        !names.iter().any(|name| *name == *NFC_NAME),
+        "a composed twin folder was created: {names:?}"
     );
 }
 
