@@ -51,6 +51,17 @@ fn schema_constraints_and_idempotency() {
     assert!(db.execute(insert, ["b", "idle", "canon"]).is_err());
     db.execute(insert, ["c", "idle", "private"]).unwrap();
     db.execute(insert, ["d", "idle", "private"]).unwrap();
+    let dispatch_index: String = db
+        .query_row(
+            "SELECT sql FROM sqlite_schema WHERE name='wm_intents_child_dispatch_parent'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(dispatch_index.contains(
+        "json_extract(payload_json,'$.delegation.parent_session_id'),state,created_at,op_id"
+    ));
+    assert!(dispatch_index.contains("WHERE kind='child_dispatch'"));
     let before: i64 = db
         .query_row("PRAGMA schema_version", [], |r| r.get(0))
         .unwrap();

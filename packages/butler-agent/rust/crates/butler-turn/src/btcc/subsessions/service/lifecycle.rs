@@ -140,6 +140,15 @@ impl SubsessionService {
             )
             .await
             .map_err(BtccError::from)?;
+        if let Some(child) = self
+            .repository
+            .by_child(session.into())
+            .await
+            .map_err(BtccError::from)?
+            && child.packet.child_role == ChildRole::Worker
+        {
+            self.release_worker_slot(&child.parent_session_id).await?;
+        }
         self.deliver_child_result(session, status).await
     }
 

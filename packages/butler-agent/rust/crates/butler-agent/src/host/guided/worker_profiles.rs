@@ -22,16 +22,27 @@ impl AppWorkerProfileReader {
 }
 
 impl WorkerProfileReader for AppWorkerProfileReader {
+    fn max_simultaneous(&self) -> PortFuture<'_, u32> {
+        Box::pin(async move {
+            let settings = self.fetch().await?;
+            Ok(settings
+                .pointer("/data/max_simultaneous_workers")
+                .and_then(Value::as_i64)
+                .unwrap_or(10)
+                .clamp(1, 10) as u32)
+        })
+    }
+
     fn list(&self) -> PortFuture<'_, Vec<WorkerProfile>> {
         Box::pin(async move {
-            let profiles = self.fetch().await?;
+            let profiles = profiles(&self.fetch().await?)?;
             profiles.iter().map(parse_profile).collect()
         })
     }
 
     fn read(&self, profile_id: Option<String>) -> PortFuture<'_, WorkerProfile> {
         Box::pin(async move {
-            let profiles = self.fetch().await?;
+            let profiles = profiles(&self.fetch().await?)?;
             let selected = profile_id.as_deref().unwrap_or("default");
             let profile = profiles
                 .iter()
@@ -47,7 +58,7 @@ impl WorkerProfileReader for AppWorkerProfileReader {
 }
 
 impl AppWorkerProfileReader {
-    async fn fetch(&self) -> Result<Vec<Value>, BtccError> {
+    async fn fetch(&self) -> Result<Value, BtccError> {
         let endpoint = self
             .endpoint
             .snapshot()
@@ -79,11 +90,7 @@ impl AppWorkerProfileReader {
             .map_err(|source| error("worker_profile_settings_invalid").with_source(source))?;
         let body: Value = serde_json::from_slice(&bytes)
             .map_err(|source| error("worker_profile_settings_invalid").with_source(source))?;
-        body.get("data")
-            .and_then(|value| value.get("worker_profiles"))
-            .and_then(Value::as_array)
-            .cloned()
-            .ok_or_else(|| error("worker_profiles_missing"))
+        Ok(body)
     }
 }
 
@@ -120,4 +127,11 @@ fn parse_profile(value: &Value) -> Result<WorkerProfile, BtccError> {
 
 fn error(code: &'static str) -> BtccError {
     BtccError::relayed(code, code)
+}
+
+fn profiles(body: &Value) -> Result<Vec<Value>, BtccError> {
+    body.pointer("/data/worker_profiles")
+        .and_then(Value::as_array)
+        .cloned()
+        .ok_or_else(|| error("worker_profiles_missing"))
 }

@@ -5,6 +5,7 @@ mod admission;
 mod control;
 mod cutover;
 mod delegation;
+mod dispatch;
 mod followup;
 mod helpers;
 mod projection;
@@ -88,6 +89,10 @@ pub struct WorkerProfile {
 
 /// Reads configured worker profiles.
 pub trait WorkerProfileReader: Send + Sync {
+    /// Per-session concurrent worker limit.
+    fn max_simultaneous(&self) -> PortFuture<'_, u32> {
+        Box::pin(async { Ok(10) })
+    }
     /// Every configured profile.
     fn list(&self) -> PortFuture<'_, Vec<WorkerProfile>>;
     /// The profile with `profile_id`, or the default profile.
@@ -141,6 +146,7 @@ pub struct SubsessionService {
     profiles: Arc<dyn WorkerProfileReader>,
     work: Arc<DurableWorkService>,
     now: Arc<dyn Fn() -> String + Send + Sync>,
+    dispatch_gate: Arc<tokio::sync::Mutex<()>>,
     changes: tokio::sync::broadcast::Sender<(String, String)>,
 }
 
@@ -161,6 +167,7 @@ impl SubsessionService {
             profiles,
             work,
             now,
+            dispatch_gate: Arc::new(tokio::sync::Mutex::new(())),
             changes: tokio::sync::broadcast::channel(256).0,
         }
     }
@@ -288,7 +295,7 @@ impl SubsessionService {
             return Ok(None);
         };
         self.ensure_child_binding(&existing).await?;
-        self.replay(&existing).await?;
+        self.dispatch_or_wait(&existing).await?;
         Ok(Some(existing))
     }
 

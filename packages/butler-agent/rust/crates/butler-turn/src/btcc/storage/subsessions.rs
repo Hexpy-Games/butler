@@ -217,7 +217,7 @@ impl SqliteSubsessionRepository {
         session: String,
     ) -> Result<Option<StoredSubsessionResumeTurn>, StorageError> {
         self.storage
-            .execute(move |db| {
+            .read(move |db| {
                 db.query_row(
                     crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_INDEXED_1,
                     [session],
@@ -362,7 +362,7 @@ impl SqliteSubsessionRepository {
     /// Whether the parent has a child without a result.
     pub async fn has_active_child(&self, parent: String) -> Result<bool, StorageError> {
         self.storage
-            .execute(move |db| {
+            .read(move |db| {
                 let count: i64 = db
                     .query_row(
                         crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_INDEXED_4,

@@ -4459,7 +4459,7 @@
       "definition": {
         "type": "function",
         "name": "delegate_to_worker",
-        "description": "Hand one part of your started Task to a Worker session for direct execution. The result comes back to your Task through `task.submit` and review. Tier 2 only.",
+        "description": "Hand one part of your started Task to a Worker session for direct execution. The result comes back to your Task through `task.submit` and review. Tier 2 only. This session runs only a limited number of Workers at once. Extra Workers wait and start automatically when one of this session's Workers finishes.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,

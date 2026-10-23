@@ -271,6 +271,11 @@ impl SubsessionService {
         relation: &Child,
         identity: &str,
     ) -> Result<Value, BtccError> {
+        if self.cancel_waiting(relation).await? {
+            return Ok(
+                json!({"relation_id":relation.relation_id,"child_turn_id":relation.child_turn_id,"status":"cancelled"}),
+            );
+        }
         let turn_id = self
             .repository
             .latest_turn(relation.child_session_id.clone())

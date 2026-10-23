@@ -1,0 +1,5 @@
+{
+  "WORKER_RUNNING_COUNT": "SEARCH r USING COVERING INDEX idx_btcc_relations_parent_role (parent_session_id=? AND activity_role=?)\nCORRELATED SCALAR SUBQUERY 2\nSEARCH a USING INDEX wm_attempts_running (session_id=?)\nCORRELATED SCALAR SUBQUERY 1\nSEARCH i USING INDEX sqlite_autoindex_wm_cross_db_intents_1 (op_id=?)",
+  "WORKER_NEXT_WAITING": "SEARCH i USING INDEX wm_intents_child_dispatch_parent (<expr>=? AND state=?)",
+  "WORKER_DISPATCH_PENDING": "SEARCH wm_cross_db_intents USING INDEX sqlite_autoindex_wm_cross_db_intents_1 (op_id=?)"
+}

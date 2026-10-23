@@ -13,7 +13,7 @@ impl SubsessionService {
             .map_err(BtccError::from)?
         {
             self.ensure_child_binding(&child).await?;
-            self.replay(&child).await?;
+            self.dispatch_or_wait(&child).await?;
         }
         self.repository
             .recover_legacy_results()
@@ -87,7 +87,7 @@ impl SubsessionService {
                 {
                     let child = Child::Assigned(stored);
                     self.ensure_child_binding(&child).await?;
-                    self.replay(&child).await?;
+                    self.dispatch_or_wait(&child).await?;
                 }
             }
         }

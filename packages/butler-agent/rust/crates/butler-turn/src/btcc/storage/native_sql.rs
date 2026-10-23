@@ -1,4 +1,8 @@
 //! Native runtime statements, shared with indexed query-plan pins.
+pub(crate) const WORKER_RUNNING_COUNT: &str = "SELECT count(*) FROM btcc_session_relations r WHERE r.parent_session_id=?1 AND r.activity_role='worker' AND EXISTS(SELECT 1 FROM wm_attempts a WHERE a.session_id=r.child_session_id AND a.status='running' AND NOT EXISTS(SELECT 1 FROM wm_cross_db_intents i WHERE i.op_id='child_dispatch:'||a.id AND i.state='pending'))";
+pub(crate) const WORKER_NEXT_WAITING: &str = "SELECT json_extract(i.payload_json,'$.delegation.child_session_id') FROM wm_cross_db_intents i WHERE i.kind='child_dispatch' AND json_extract(i.payload_json,'$.delegation.parent_session_id')=?1 AND i.state='pending' AND json_extract(i.payload_json,'$.delegation.packet.child_role')='worker' ORDER BY i.created_at,i.op_id LIMIT 1";
+pub(crate) const WORKER_DISPATCH_PENDING: &str =
+    "SELECT state='pending' FROM wm_cross_db_intents WHERE op_id=?1";
 pub(crate) const STORAGE_SUBSESSIONS_COMPLETION_1: &str = "SELECT a.id FROM wm_session_exec s JOIN wm_attempts a ON a.task_id=s.current_task_id WHERE s.session_id=?1 AND a.session_id=?1 AND a.turn_id=?2 ORDER BY a.started_at DESC LIMIT 1";
 pub(crate) const STORAGE_SUBSESSIONS_COMPLETION_2: &str =
     "SELECT 1 FROM btcc_subsession_outbox WHERE result_id=?1";
@@ -80,6 +84,13 @@ pub(crate) fn statements() -> Vec<(&'static str, String)> {
         .iter()
         .map(|(name, sql)| (*name, (*sql).to_owned()))
         .collect();
+    for (name, sql) in [
+        ("WORKER_RUNNING_COUNT", WORKER_RUNNING_COUNT),
+        ("WORKER_NEXT_WAITING", WORKER_NEXT_WAITING),
+        ("WORKER_DISPATCH_PENDING", WORKER_DISPATCH_PENDING),
+    ] {
+        statements.push((name, sql.to_owned()));
+    }
     statements.push((
         "SUBSESSIONS_SERVICE_REPORT_CHILD",
         SUBSESSIONS_SERVICE_REPORT_CHILD.to_owned(),

@@ -58,7 +58,9 @@ fn activity_indexes(db: &Connection) -> rusqlite::Result<()> {
             db.execute_batch(&format!("DROP TRIGGER IF EXISTS activity_{table}_{op}; CREATE TRIGGER activity_{table}_{op} AFTER {op} ON {table} BEGIN {body} END;"))?;
         }
     }
-    db.execute_batch("CREATE INDEX IF NOT EXISTS idx_btcc_activity_page \
+    db.execute_batch("CREATE INDEX IF NOT EXISTS idx_btcc_relations_parent_role \
+       ON btcc_session_relations(parent_session_id,activity_role,child_session_id); \
+       CREATE INDEX IF NOT EXISTS idx_btcc_activity_page \
        ON btcc_session_relations(created_at DESC,activity_worker_id,relation_id); \
        CREATE INDEX IF NOT EXISTS idx_btcc_activity_identity ON btcc_session_relations(activity_worker_id); \
        CREATE INDEX IF NOT EXISTS idx_btcc_activity_open_page \

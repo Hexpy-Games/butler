@@ -6,12 +6,13 @@ impl SubsessionService {
         request: WorkerDelegationRequest,
     ) -> Result<Value, BtccError> {
         let parent = self
-            .parent_binding(
-                &request.parent_session_id,
-                SessionRole::Steward,
-                BtccCode::ParentStewardSessionRequired,
-            )
-            .await?;
+            .bindings
+            .get_by_session_id(&request.parent_session_id)
+            .await
+            .map_err(BtccError::from)?
+            .ok_or_else(|| error(BtccCode::SubsessionParentBindingMissing))?;
+        // The assignment transaction checks the live Task/part lease. A chat
+        // executing its own Task has the same authority as a child session.
         let profile = self.profiles.read(request.profile_id.clone()).await?;
         let input = admission::AssignmentRequest {
             parent_session_id: request.parent_session_id,
@@ -25,7 +26,11 @@ impl SubsessionService {
             model_ref: profile.model_ref,
             reasoning_effort: profile.reasoning_effort,
             access_mode: request.access_mode,
-            parent_chat_id: None,
+            parent_chat_id: parent
+                .transport_bindings
+                .iter()
+                .find(|binding| binding.transport == "app" && !binding.peer_id.trim().is_empty())
+                .map(|binding| binding.peer_id.clone()),
             prior_context: None,
             implementation_brief: Some(request.implementation_brief),
             worker_prompt: profile.prompt,
@@ -36,6 +41,6 @@ impl SubsessionService {
             schedule_run: request.schedule_run,
         };
         let stored = self.admit_assignment(input, parent).await?;
-        Ok(delegation_output(&stored))
+        self.worker_output(&stored).await
     }
 }

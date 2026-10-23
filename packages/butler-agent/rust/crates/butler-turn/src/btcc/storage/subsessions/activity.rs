@@ -102,11 +102,22 @@ fn activity_child(
         )
         .optional()
         .map_err(StorageError::sqlite)?;
+    let pending = if let crate::btcc::Child::Assigned(assigned) = r {
+        db.query_row(
+            super::super::native_sql::WORKER_DISPATCH_PENDING,
+            [format!("child_dispatch:{}", assigned.attempt_id)],
+            |row| row.get::<_, bool>(0),
+        )
+        .map_err(StorageError::sqlite)?
+    } else {
+        false
+    };
     let status = match result.as_deref() {
         Some("success") => "completed",
         Some("cancelled") => "cancelled",
         Some("blocked") => "blocked",
         Some("failed") => "failed",
+        _ if pending => "waiting",
         _ if latest.as_deref() == Some("admitted") => "active",
         _ => "waiting",
     };
@@ -159,7 +170,7 @@ impl SqliteSubsessionRepository {
             )
         })?;
         self.storage
-            .execute(move |db| {
+            .read(move |db| {
                 let mut statement = db
                     .prepare_cached(
                         r"WITH RECURSIVE descendants(root,session,relation) AS (

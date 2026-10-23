@@ -6,6 +6,8 @@ use butler_work::{
     work_types::TaskKind,
 };
 use serde_json::json;
+#[path = "work_runtime_review/worker_cap.rs"]
+mod worker_cap;
 type Failure = Box<dyn std::error::Error + Send + Sync>;
 
 fn seed(tx: &Transaction<'_>) -> store::Result<()> {
@@ -235,6 +237,7 @@ async fn native_runtime_statements_use_indexes() -> std::result::Result<(), Fail
     storage
         .work_model_read(|db| {
             let mut recovery = serde_json::Map::new();
+            let mut workers = serde_json::Map::new();
             for (name, sql) in butler_turn::btcc::native_query_statements() {
                 let mut stmt = db.prepare(&format!("EXPLAIN QUERY PLAN {sql}"))?;
                 let n = stmt.parameter_count();
@@ -248,6 +251,9 @@ async fn native_runtime_statements_use_indexes() -> std::result::Result<(), Fail
                     )?
                     .collect::<rusqlite::Result<Vec<_>>>()?
                     .join("\n");
+                if name.starts_with("WORKER_") {
+                    workers.insert(name.into(), json!(plan));
+                }
                 if name.starts_with("LEGACY_RECOVERY_") {
                     recovery.insert(name.into(), json!(plan));
                 }
@@ -258,6 +264,10 @@ async fn native_runtime_statements_use_indexes() -> std::result::Result<(), Fail
                     "{name}: {plan}"
                 );
             }
+            let expected_workers: serde_json::Value = serde_json::from_str(include_str!(
+                "../fixtures/work-model-p14/worker-dispatch-plans.json"
+            ))?;
+            assert_eq!(json!(workers), expected_workers);
             assert_eq!(recovery.len(), 9, "all recovery statements are pinned");
             let expected: serde_json::Value = serde_json::from_str(include_str!(
                 "../fixtures/work-model-p14/native-recovery-plans.json"

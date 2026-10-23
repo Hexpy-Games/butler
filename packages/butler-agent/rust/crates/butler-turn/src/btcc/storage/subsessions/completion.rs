@@ -101,13 +101,15 @@ fn parent_input(
 ) -> ParentResultInput {
     let packet = &child.packet;
     match packet.child_role {
-        ChildRole::Worker => ParentResultInput::StewardQueue(WorkerResultInput {
-            text,
-            model_ref: packet.model_ref.clone(),
-            reasoning_effort: packet.reasoning_effort.clone(),
-            timestamp: now.into(),
-        }),
-        ChildRole::Steward => ParentResultInput::ButlerApp(Box::new(StewardResultInput {
+        ChildRole::Worker if packet.parent_chat_id.is_none() => {
+            ParentResultInput::StewardQueue(WorkerResultInput {
+                text,
+                model_ref: packet.model_ref.clone(),
+                reasoning_effort: packet.reasoning_effort.clone(),
+                timestamp: now.into(),
+            })
+        }
+        _ => ParentResultInput::ButlerApp(Box::new(StewardResultInput {
             relation_id: child.relation_id.clone(),
             result_id: result_id.into(),
             parent_session_id: child.parent_session_id.clone(),

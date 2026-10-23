@@ -333,7 +333,7 @@ async fn kept_request(state: &str) -> Result<(), HarnessError> {
     server.abort();
     s.finish().await
 }
-async fn database<T: Send + 'static>(
+pub(super) async fn database<T: Send + 'static>(
     s: &butler_e2e::e2e::scenario::Scenario,
     operation: impl FnOnce(&rusqlite::Connection) -> rusqlite::Result<T> + Send + 'static,
 ) -> Result<T, HarnessError> {

@@ -270,5 +270,6 @@ mod work_model_execution;
 mod work_model_live;
 mod work_model_schema;
 mod work_model_script;
+mod work_model_sessions;
 
 mod work_model_cutover;

@@ -40,18 +40,26 @@ impl SubsessionService {
         parent: crate::workspace::StoredSessionBinding,
     ) -> Result<Child, BtccError> {
         let session = input.parent_session_id.clone();
+        let worker = input.role == ChildRole::Worker;
         let task = self
             .repository
             .storage()
             .work_model_read(move |db| {
-                Ok(db
+                let task = db
                     .query_row(
                         crate::btcc::storage::native_sql::SUBSESSIONS_SERVICE_ADMISSION_INDEXED_1,
-                        [session],
+                        [&session],
                         |r| r.get::<_, Option<String>>(0),
                     )
                     .optional()?
-                    .flatten())
+                    .flatten();
+                if worker {
+                    let task = task
+                        .as_deref()
+                        .ok_or(store::Error::Invalid("no_started_task"))?;
+                    store::execution::ensure_task_effect(db, task, &session)?;
+                }
+                Ok(task)
             })
             .await
             .map_err(BtccError::from)?;
@@ -89,7 +97,7 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?;
         self.ensure_child_binding(&stored).await?;
-        self.replay(&stored).await?;
+        self.dispatch_or_wait(&stored).await?;
         Ok(stored)
     }
 }
