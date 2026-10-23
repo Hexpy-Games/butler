@@ -355,10 +355,16 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?
             .unwrap_or_else(|| requested.clone());
-        if relation.packet.child_role == crate::btcc::ChildRole::Worker
-            && relation.dispatch_state != SubsessionDispatchState::Enqueued
-        {
-            return Ok(());
+        if relation.packet.child_role == crate::btcc::ChildRole::Worker {
+            let current = self
+                .repository
+                .relation_by_id(relation.relation_id.clone())
+                .await
+                .map_err(BtccError::from)?
+                .ok_or_else(|| error(BtccCode::SubsessionRelationMissing))?;
+            if current.dispatch_state != SubsessionDispatchState::Enqueued {
+                return Box::pin(self.release_worker_slots(&relation.parent_session_id)).await;
+            }
         }
         if direction.defer_until_first_result
             && !self
@@ -384,7 +390,7 @@ impl SubsessionService {
             "steward"
         };
         let turn_id = crate::btcc::storage::direction_turn_id(&direction.instruction_id);
-        self.queue.enqueue(super::SubsessionEnqueue {
+        self.enqueue_child(super::SubsessionEnqueue {
             envelope: json!({
             "eventId":format!("subsession-direction:{}",direction.instruction_id),"transport":"app","accountId":"local",
             "peer":{"kind":"dm","id":relation.child_session_id,"parentId":relation.parent_session_id},
@@ -395,6 +401,6 @@ impl SubsessionService {
             "raw":{"source":"btcc-subsession-direction","instruction_id":direction.instruction_id}
             }),
             metadata: serde_json::Map::new(),
-        })
+        }).await
     }
 }

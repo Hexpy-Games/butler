@@ -214,9 +214,9 @@ impl SubsessionService {
                 error.code()
             );
         }
-        self.deliver_worker_results().await?;
+        let delivery = self.deliver_worker_results().await;
         self.release_child_slot(session).await;
-        Ok(())
+        delivery
     }
 
     async fn release_child_slot(&self, session: &str) {
@@ -243,29 +243,39 @@ impl SubsessionService {
     }
     /// Re-dispatches pending children, directions and worker results after a restart.
     pub async fn recover_dispatches(&self) -> Result<(), BtccError> {
-        self.deliver_worker_results().await?;
-        let pending = self
+        let mut parents = std::collections::HashMap::new();
+        for stored in self
             .repository
             .pending_dispatches()
             .await
-            .map_err(BtccError::from)?;
-        for stored in &pending {
-            self.ensure_child_binding(stored).await?;
-        }
-        let mut parents = std::collections::HashSet::new();
-        for stored in &pending {
-            if stored.packet.child_role != ChildRole::Worker
-                || parents.insert(&stored.parent_session_id)
-            {
-                if stored.packet.child_role == ChildRole::Worker {
-                    self.release_child_slot(&stored.child_session_id).await;
-                } else {
-                    self.replay(stored).await?;
-                }
+            .map_err(BtccError::from)?
+        {
+            self.ensure_child_binding(&stored).await?;
+            self.replay(&stored).await?;
+            if stored.packet.child_role == ChildRole::Worker {
+                parents.insert(stored.parent_session_id, stored.child_session_id);
             }
         }
+        // Admission committed before the foreign queue write. Replay those
+        // reservations too; queue event identities make this idempotent.
+        for stored in self
+            .repository
+            .enqueued_workers()
+            .await
+            .map_err(BtccError::from)?
+        {
+            self.ensure_child_binding(&stored).await?;
+            self.enqueue_worker(&stored).await?;
+            parents.insert(stored.parent_session_id, stored.child_session_id);
+        }
         self.recover_directions().await?;
-        self.deliver_worker_results().await
+        let delivery = self.deliver_worker_results().await;
+        // Delivery stays last in main's recovery order. Failed delivery must
+        // not prevent other parents from admitting work into their free slots.
+        for child in parents.values() {
+            self.release_child_slot(child).await;
+        }
+        delivery
     }
     /// Whether the parent session has an active child to wait for.
     pub async fn should_wait_for_child(&self, parent: &str) -> Result<bool, BtccError> {

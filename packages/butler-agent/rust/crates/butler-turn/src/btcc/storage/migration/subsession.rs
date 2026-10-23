@@ -9,7 +9,6 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
     db.execute_batch("DROP INDEX IF EXISTS idx_btcc_graph_plan")?;
     ensure_dispatch_intent(db)?;
     ensure_worker_slots(db)?;
-    ensure_activity_owner(db)?;
     let Some(definition) = table_definition(db, "btcc_steward_results")? else {
         return Ok(());
     };
@@ -205,18 +204,4 @@ fn ensure_worker_slots(db: &Connection) -> rusqlite::Result<()> {
         )?;
     }
     Ok(())
-}
-
-fn ensure_activity_owner(db: &Connection) -> rusqlite::Result<()> {
-    ensure_column(
-        db,
-        "btcc_session_relations",
-        "activity_owner_session_id",
-        "TEXT",
-    )?;
-    db.execute_batch(
-        "UPDATE btcc_session_relations AS r SET activity_owner_session_id=COALESCE(
-           (SELECT p.parent_session_id FROM btcc_session_relations p WHERE p.child_session_id=r.parent_session_id),r.parent_session_id)
-         WHERE activity_owner_session_id IS NULL;",
-    )
 }

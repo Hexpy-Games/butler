@@ -3,7 +3,6 @@ pub(in crate::btcc::storage) const SUBSESSION_SCHEMA: &str = r"
 CREATE TABLE IF NOT EXISTS btcc_session_relations (
   relation_id TEXT PRIMARY KEY,
   parent_session_id TEXT NOT NULL,
-  activity_owner_session_id TEXT,
   parent_turn_id TEXT NOT NULL,
   child_session_id TEXT NOT NULL UNIQUE,
   anchor_message_id TEXT NOT NULL,

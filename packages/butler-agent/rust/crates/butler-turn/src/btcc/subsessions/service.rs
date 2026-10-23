@@ -129,6 +129,8 @@ pub struct SubsessionService {
     profiles: Arc<dyn WorkerProfileReader>,
     work: Arc<DurableWorkService>,
     now: Arc<dyn Fn() -> String + Send + Sync>,
+    worker_cap: Arc<std::sync::atomic::AtomicU64>,
+    worker_cap_error_logged: Arc<std::sync::atomic::AtomicBool>,
     changes: tokio::sync::broadcast::Sender<(String, String)>,
 }
 
@@ -149,6 +151,8 @@ impl SubsessionService {
             profiles,
             work,
             now,
+            worker_cap: Arc::new(std::sync::atomic::AtomicU64::new(10)),
+            worker_cap_error_logged: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             changes: tokio::sync::broadcast::channel(256).0,
         }
     }
@@ -179,17 +183,13 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?
         {
-            let parent = if relation.packet.child_role == ChildRole::Worker {
-                self.browser_owner(session)
-                    .await?
-                    .unwrap_or(relation.parent_session_id)
-            } else {
+            let _ = self.changes.send((
                 relation
                     .packet
                     .parent_chat_id
-                    .unwrap_or(relation.parent_session_id)
-            };
-            let _ = self.changes.send((parent, session.into()));
+                    .unwrap_or(relation.parent_session_id),
+                session.into(),
+            ));
         }
         Ok(())
     }

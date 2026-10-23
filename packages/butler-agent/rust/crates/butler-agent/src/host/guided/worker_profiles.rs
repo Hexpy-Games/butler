@@ -101,7 +101,7 @@ impl AppWorkerProfileReader {
             .map_err(|source| error("worker_profile_settings_invalid").with_source(source))?;
         body.get("data")
             .cloned()
-            .ok_or_else(|| error("worker_profile_settings_invalid"))
+            .ok_or_else(|| error("worker_profiles_missing"))
     }
 }
 

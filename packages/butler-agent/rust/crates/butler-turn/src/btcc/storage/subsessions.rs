@@ -147,7 +147,7 @@ impl SqliteSubsessionRepository {
                 [&input.parent_session_id], |row| row.get(0),
             ).map_err(StorageError::sqlite)?;
             let inserted = tx.execute(
-                "INSERT OR IGNORE INTO btcc_session_relations (relation_id,parent_session_id,parent_turn_id,child_session_id,anchor_message_id,ordinal,safe_title,created_at,activity_owner_session_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,COALESCE((SELECT activity_owner_session_id FROM btcc_session_relations WHERE child_session_id=?2),?2))",
+                "INSERT OR IGNORE INTO btcc_session_relations (relation_id,parent_session_id,parent_turn_id,child_session_id,anchor_message_id,ordinal,safe_title,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
                 params![input.relation_id,input.parent_session_id,input.parent_turn_id,input.child_session_id,input.anchor_message_id,ordinal,input.safe_title,input.created_at],
             ).map_err(StorageError::sqlite)? == 1;
             if inserted {
@@ -251,6 +251,10 @@ impl SqliteSubsessionRepository {
             let tx=db.transaction().map_err(StorageError::sqlite)?;
             let revision:i64=tx.query_row("SELECT COALESCE(MAX(revision),0)+1 FROM btcc_subsession_directions WHERE relation_id=?1",[&relation],|r|r.get(0)).map_err(StorageError::sqlite)?;
             tx.execute("INSERT OR IGNORE INTO btcc_subsession_directions (instruction_id,relation_id,revision,source_parent_turn_id,source_message_id,instruction,status,created_at,defer_until_first_result) VALUES (?1,?2,?3,?4,?5,?6,'pending',?7,EXISTS(SELECT 1 FROM btcc_subsession_delegations WHERE relation_id=?2 AND child_role='worker' AND dispatch_state='pending'))",params![instruction_id,relation,revision,source_turn,source_message,instruction,now]).map_err(StorageError::sqlite)?;
+            // A finished Worker's follow-up competes for a slot again. This
+            // shares the delivery writer transaction boundary, so it cannot
+            // lose a direction racing the slot release.
+            tx.execute("UPDATE btcc_subsession_delegations SET dispatch_state='pending',slot_release_result_id=NULL WHERE relation_id=?1 AND child_role='worker' AND dispatch_state IS NULL AND EXISTS (SELECT 1 FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending')", [&relation]).map_err(StorageError::sqlite)?;
             let stored=tx.query_row("SELECT instruction_id,relation_id,revision,instruction,created_at,defer_until_first_result FROM btcc_subsession_directions WHERE relation_id=?1 AND source_message_id=?2",params![relation,source_message],direction_row).map_err(StorageError::sqlite)?;
             tx.commit().map_err(StorageError::sqlite)?;
             Ok(stored)
@@ -461,8 +465,9 @@ impl SqliteSubsessionRepository {
         self.storage.execute(move |db| {
             let tx = db.transaction().map_err(StorageError::sqlite)?;
             tx.execute("UPDATE btcc_subsession_outbox SET status='delivered',delivered_at=?2 WHERE result_id=?1 AND status='pending'",params![result,now]).map_err(StorageError::sqlite)?;
-            // Delivery has reached the parent before its Worker slot is freed.
-            tx.execute("UPDATE btcc_subsession_delegations SET dispatch_state=NULL,slot_release_result_id=NULL WHERE relation_id=(SELECT relation_id FROM btcc_steward_results WHERE result_id=?1) AND slot_release_result_id=?1", [&result]).map_err(StorageError::sqlite)?;
+            // Delivery reaches the parent before release. A pending direction or
+            // an admitted continuation retains the slot until its own result.
+            tx.execute("UPDATE btcc_subsession_delegations SET dispatch_state=NULL,slot_release_result_id=NULL WHERE relation_id=(SELECT relation_id FROM btcc_steward_results WHERE result_id=?1) AND slot_release_result_id=?1 AND NOT EXISTS (SELECT 1 FROM btcc_subsession_directions i WHERE i.relation_id=btcc_subsession_delegations.relation_id AND i.status='pending') AND NOT EXISTS (SELECT 1 FROM btcc_session_relations r JOIN btcc_turns t ON t.session_id=r.child_session_id WHERE r.relation_id=btcc_subsession_delegations.relation_id AND t.semantic_state='admitted' AND NOT EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=r.relation_id AND x.child_turn_id=t.turn_id))", [&result]).map_err(StorageError::sqlite)?;
             tx.commit().map_err(StorageError::sqlite)
         }).await
     }
