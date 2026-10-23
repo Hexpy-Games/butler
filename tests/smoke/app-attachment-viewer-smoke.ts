@@ -40,12 +40,12 @@ async function seed(server: NativeAppServerHandle, fixtures: FixtureFile[]): Pro
   return { sessionId, files };
 }
 
-async function openSession(page: Page) {
+async function openSession(page: Page, name = title) {
   const show = page.getByRole("button", { name: copy.titlebar.showLeftPanel, exact: true });
   await show.or(page.getByRole("button", { name: copy.titlebar.hideLeftPanel, exact: true })).waitFor();
   if (await show.isVisible()) await show.click();
-  await page.locator('[data-test-class="app-sidebar"]').getByText(title, { exact: true }).click();
-  await page.locator('[data-test-class="message-attachment-list"]').waitFor();
+  await page.locator('[data-test-class="app-sidebar"]').getByText(name, { exact: true }).click();
+  if (name === title) await page.locator('[data-test-class="message-attachment-list"]').waitFor();
 }
 
 /** Pictures decoded and videos at their first frame, so a capture shows what the user sees. */
@@ -107,6 +107,7 @@ async function rendererCells(fixtures: FixtureFile[], browser: Browser, large: F
     }
     console.log(`Renderer cells (${phase}): KO light/dark, 1280/375 captured`);
     if (!baseline) await measureLargePicture(browser, server, sessionId, large);
+    if (!baseline) await assertVideoDeferred(browser, server, fixtures);
   } finally { await server.stop(); }
 }
 
@@ -197,25 +198,37 @@ async function assertSandboxedTab(app: App, src: string, plainUrl: string) {
   assert.equal(result.status, "ok", "a sandboxed tab closes on ✕");
   assert.equal((await tabs(app)).some((tab) => tab.id === closing), false, "the closed tab is gone");
   assert.ok(moved, "a sandboxed tab navigates away");
-  await assertOwnerKeepsUnsavedPage(app, navigating);
+  await assertOwnerKeepsUnsavedPage(app, navigating, `${plainUrl}elsewhere`);
 }
 
-/** A page whose beforeunload asks still keeps its tab when the owner chooses to stay, and closes on leave. */
-async function assertOwnerKeepsUnsavedPage(app: App, id: string) {
-  await waitBrowser(() => app.main(`!globalThis.browserAgentSubject.tabs.get(${JSON.stringify(id)}).view.webContents.isLoading()`), "plain page loaded");
-  await app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(id)}).view.webContents.executeJavaScript("addEventListener('beforeunload', (event) => event.preventDefault()); true")`);
+/**
+ * A normal page whose onbeforeunload objects (unsaved state) keeps the owner's choice: "stay" keeps the tab
+ * on ✕ and keeps the page on an address-bar navigation; "leave" then closes it.
+ */
+async function assertOwnerKeepsUnsavedPage(app: App, id: string, elsewhere: string) {
+  const contents = `globalThis.browserAgentSubject.tabs.get(${JSON.stringify(id)}).view.webContents`;
+  await waitBrowser(() => app.main(`!${contents}.isLoading()`), "plain page loaded");
+  const page = await app.main<string>(`${contents}.getURL()`);
+  await app.main(`${contents}.executeJavaScript("window.onbeforeunload = (event) => { event.preventDefault(); return 'unsaved'; }; true")`);
   const dialog = async () => (await app.call<{ tabs: Array<{ id: string; dialog?: { id: string; type: string } }> }>("state")).tabs.find((tab) => tab.id === id)?.dialog;
-  for (const accept of [false, true]) {
-    const closing = app.call<{ status: string }>("close", { id });
-    await waitBrowser(async () => (await dialog())?.type === "confirm" || (await dialog())?.type === "beforeunload", "the page asks before closing");
-    assert.equal((await closing).status, "dialog_pending");
+  const answer = async (accept: boolean) => {
+    await waitBrowser(async () => Boolean(await dialog()), "the page asks first");
     await app.call("dialog", { id, dialog: (await dialog())!.id, accept });
-    if (!accept) {
-      await waitBrowser(async () => !(await dialog()), "stay answered");
-      assert.ok((await tabs(app)).some((tab) => tab.id === id), "staying keeps the page's tab");
-    } else await waitBrowser(async () => !(await tabs(app)).some((tab) => tab.id === id), "leaving closes the page's tab");
-  }
-  console.log("Page with unsaved state: stay keeps the tab, leave closes it: passed");
+    await waitBrowser(async () => !(await dialog()), "answered");
+  };
+  const closing = app.call<{ status: string }>("close", { id });
+  await answer(false);
+  assert.equal((await closing).status, "dialog_pending");
+  assert.ok((await tabs(app)).some((tab) => tab.id === id), "stay on ✕ keeps the tab");
+  await app.call("navigate", { id, value: elsewhere });
+  await answer(false);
+  await new Promise((done) => setTimeout(done, 500));
+  assert.equal(await app.main(`${contents}.getURL()`), page, "stay on a navigation keeps the page");
+  const leaving = app.call("close", { id });
+  await answer(true);
+  await leaving;
+  await waitBrowser(async () => !(await tabs(app)).some((tab) => tab.id === id), "leave closes the tab");
+  console.log("Page with unsaved state: stay keeps the tab on ✕ and the page on navigation; leave closes: passed");
 }
 
 /** An 8000×6000 JPEG in a 96px tile: the main thread's longest task and frame gap while it decodes. */
@@ -245,6 +258,37 @@ async function measureLargePicture(browser: Browser, server: NativeAppServerHand
       return { long: Math.round(state.tileLong), gap: Math.round(state.tileGap) };
     });
     console.log(`Large picture (${large.buffer.length} bytes, 8000x6000) in a 96px tile: decoded ${Date.now() - started} ms after send; longest main-thread task ${facts.long} ms; longest frame gap ${facts.gap} ms`);
+  } finally { await page.close(); }
+}
+
+/** The file server has no byte ranges: a video tile out of view (end of the composer row) fetches nothing until scrolled near. */
+async function assertVideoDeferred(browser: Browser, server: NativeAppServerHandle, fixtures: FixtureFile[]) {
+  const name = "영상 지연";
+  await server.api("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: name }) });
+  const page = await browser.newPage({ viewport: { width: 375, height: 800 } });
+  const videoResponses: string[] = [];
+  page.on("response", (response) => { if ((response.headers()["content-type"] ?? "").startsWith("video/")) videoResponses.push(response.url()); });
+  try {
+    await server.signIn(page);
+    await page.goto(server.url);
+    await openSession(page, name);
+    const others = fixtures.filter((file) => !file.mimeType.startsWith("video/"));
+    const files = [...others, ...others.map((file) => ({ ...file, name: `2-${file.name}` })), fixtures.find((file) => file.mimeType.startsWith("video/"))!];
+    await page.setInputFiles("input[type='file']", files.map(({ name: fileName, mimeType, buffer }) => ({ name: fileName, mimeType, buffer })));
+    const row = '[data-test-class~="composer-card"] [data-layout="row"]';
+    await page.waitForFunction((selector) => document.querySelectorAll(`${selector} [data-slot="attachment-tile"]`).length === 11, row);
+    const compact = page.locator('[data-slot="composer-compact-preview"]');
+    if (await compact.isVisible()) await compact.click();
+    // Tiles in view load; give them time, so a stray video request would land too.
+    await page.waitForTimeout(1500);
+    assert.equal(videoResponses.length, 0, "a video tile out of view fetches nothing");
+    assert.equal(await page.locator(`${row} [data-kind="video"] video`).count(), 0, "the out-of-view video tile shows its badge face only");
+    await page.locator(row).evaluate((node) => { node.scrollLeft = node.scrollWidth; });
+    await page.locator(`${row} [data-kind="video"] video`).waitFor({ state: "attached" });
+    await waitBrowser(async () => videoResponses.length > 0, "the scrolled-in video tile loads");
+    await page.waitForTimeout(500);
+    assert.equal(videoResponses.length, 1, "scrolled near, the video tile loads its first frame once");
+    console.log("Video tile out of view: no request; scrolled into view: one request: passed");
   } finally { await page.close(); }
 }
 

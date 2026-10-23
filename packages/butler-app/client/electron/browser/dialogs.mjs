@@ -87,6 +87,7 @@ export async function answerDialog(browser, tab, args, deliverStill) {
  * bare image) has no handler to ask and refuses the preflight; that, or an empty answer, is no objection.
  */
 export function unloadPreflight(contents) {
+  // An objecting page cannot reject: page-controls defines __butlerBeforeUnload non-configurable and it returns false explicitly.
   return contents.executeJavaScript("window.__butlerBeforeUnload?.() ?? true").then(answer => answer !== false, () => true);
 }
 export async function requestClose(browser, tab) {

@@ -1,11 +1,6 @@
 import { ComposerElements } from "../browser/ComposerElements";
 import { useAppLocale } from "@/app/copy.ts";
-import {
-  AttachmentList,
-  BookOpenText,
-  FileText,
-  Paperclip,
-} from "@/butler-ds";
+import { AttachmentList, BookOpenText } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { openImageViewer, type ViewerImage } from "../media/imageViewerState";
 import { useComposerStore } from "./composerStore";
@@ -54,10 +49,9 @@ export function ComposerAttachments() {
   );
 }
 
+/** Project documents keep their book glyph; every other file shows the DS default, as in the sent message. */
 function attachmentIcon(attachment: ComposerAttachment) {
-  if (attachment.kind === "project-document") return <BookOpenText size="sm" />;
-  if (attachment.kind === "text") return <FileText size="sm" />;
-  return <Paperclip size="sm" />;
+  return attachment.kind === "project-document" ? <BookOpenText size="sm" /> : undefined;
 }
 
 function blockedLabel(refusal: Parameters<typeof imageRefusalLabel>[0] | undefined) {

@@ -25,14 +25,39 @@ function Picture({ src, onFailed }: { src: string; onFailed: () => void }) {
   );
 }
 
-/** The first frame only: metadata preload, muted, never plays here. */
+/** Margin around the viewport at which a video tile starts loading its first frame. */
+const NEAR_VIEWPORT = "200px";
+
+/**
+ * True once the element comes near the viewport (or a clipping scroller's view), then stays true. A file
+ * server without byte ranges sends a whole video for its metadata, so a tile fetches nothing before this.
+ */
+function useNearViewport(): [(node: Element | null) => void, boolean] {
+  const [near, setNear] = useState(() => typeof IntersectionObserver === "undefined");
+  const observe = useCallback((node: Element | null) => {
+    if (!node || typeof IntersectionObserver === "undefined") return undefined;
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      setNear(true);
+      observer.disconnect();
+    }, { rootMargin: NEAR_VIEWPORT });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  return [near ? () => undefined : observe, near];
+}
+
+/** The first frame only, mounted once near the viewport: metadata preload, muted, never plays here. */
 function VideoFrame({ src, onFailed }: { src: string; onFailed: () => void }) {
   const [length, setLength] = useState<string>();
+  const [observe, near] = useNearViewport();
   return (
     <>
-      <video className={styles.picture} data-loaded={length !== undefined ? "true" : undefined} src={src} preload="metadata"
-        muted playsInline aria-hidden="true" tabIndex={-1} onError={onFailed}
-        onLoadedMetadata={(event) => setLength(videoLength(event.currentTarget.duration) ?? "")} />
+      {near ? (
+        <video className={styles.picture} data-loaded={length !== undefined ? "true" : undefined} src={src} preload="metadata"
+          muted playsInline aria-hidden="true" tabIndex={-1} onError={onFailed}
+          onLoadedMetadata={(event) => setLength(videoLength(event.currentTarget.duration) ?? "")} />
+      ) : <span ref={observe} className={styles.picture} aria-hidden="true" />}
       <TintedGlass className={dsClass(styles.badge)} radius="control" padding="none">
         <Play size="xs" />
         {length ? <Typo.Caption numeric="tabular">{length}</Typo.Caption> : null}
