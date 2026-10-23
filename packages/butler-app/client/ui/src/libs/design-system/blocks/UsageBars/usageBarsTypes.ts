@@ -5,6 +5,8 @@ import type { DsPrivateStyleProps } from "../../lib/dsProps";
 export type UsageBarsColor = "chart-1" | "chart-2" | "chart-3" | "chart-4" | "chart-5" | "chart-6";
 export type UsageBarsSize = "popover" | "panel";
 export type UsageBarsState = "ready" | "loading" | "empty";
+/** Linked-legend emphasis: `subtask` strengthens the hatch, `conversation` dims the hatched parts. */
+export type UsageBarsEmphasis = "conversation" | "subtask";
 
 /** One stacked series; the `series` order is the stacking order, bottom first. */
 export interface UsageBarsSeries {
@@ -18,6 +20,11 @@ export interface UsageBarsSegment {
   /** A `UsageBarsSeries.id`; segments with an unknown id or a value <= 0 are not drawn. */
   id: string;
   value: number;
+  /**
+   * Part of `value` that came from subtasks (0..value). It is drawn on top of
+   * the segment in the same color, hatched; the rest stays solid.
+   */
+  subtask?: number;
 }
 
 export interface UsageBarsBucket {
@@ -64,4 +71,6 @@ export interface UsageBarsProps extends DsPrivateStyleProps {
   note?: ReactNode;
   /** Name of the chart group and caption of its screen-reader table. */
   ariaLabel: string;
+  /** Set while a linked legend row is hovered or focused; null or omitted: rest. */
+  emphasis?: UsageBarsEmphasis | null;
 }

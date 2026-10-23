@@ -1208,6 +1208,7 @@ export interface SessionViewBridgeInput {
 }
 
 export interface SessionViewBridgeError {
+  current?: { revision: number };
   hook_reason?: string;
   schema: "butler.app.bridge-error.v1";
   code: string;
@@ -1343,8 +1344,8 @@ export interface UsageSectionBucketView {
 }
 
 export interface UsageMonitorView {
-  /** Session views append the slot's delegated tokens (prompt + output of every role other than "main"), on the same basis as prompt + output above. */
-  timeline: { slotMinutes: 15; slots: ([number, number, number, number, number] | [number, number, number, number, number, number])[] };
+  /** Session views append the slot's delegated tokens (prompt + output of every role other than "main"), then that work's requests, cached and output. */
+  timeline: { slotMinutes: 15; slots: ([number, number, number, number, number] | [number, number, number, number, number, number, number, number, number])[] };
   topSessions: { sessionId: string; title: string | null; kind: "chat" | "schedule" | "butler"; totalTokens: number; requests: number; lastUsedMs: number | null }[];
   previousPeriod: { totalTokens: number } | null;
   filters: {
@@ -1731,7 +1732,8 @@ export type AppView =
   | { kind: "settings"; section: SettingsSectionId }
   | { kind: "automations" }
   | { kind: "automation-detail"; automationId: string }
-  | { kind: "project-dashboard"; projectId: string };
+  | { kind: "project-dashboard"; projectId: string; epicId?: string }
+  | { kind: "plan-overview"; projectId: string; planId: string | null };
 
 export interface CommandPaletteResult {
   schedule?: CalendarSchedule | null;

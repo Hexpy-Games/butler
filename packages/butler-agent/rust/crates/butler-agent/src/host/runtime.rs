@@ -19,6 +19,7 @@ pub(super) mod storage_bootstrap;
 pub(super) mod stores;
 mod subsession_queue;
 mod web_owner;
+mod work_ports;
 use super::{AcceptedPlanProducer, CognitionPrompt, ConversationObserver};
 use super::{
     GuidedCatalog, GuidedPreparation, GuidedTurnFactoryAdapter, ResolvedInstallation,
@@ -44,9 +45,9 @@ use butler_turn::btcc::{
     BtccError, BtccRepositories, ContextCompactionRepository, DefaultTurnPreparation,
     DurableWorkService, GuidedContinuationBudgetFactory, HostDependencies, ModelRouteRetryConfig,
     OperationResultRepository, PortFuture, PrincipalAuthority, ProductionAgentLoop,
-    SessionWorkRepository, SqliteProjectWorkRuntime, SqliteSubsessionRepository,
-    StorageEffectJournal, StorageProgressPublication, ToolJournalRepository,
-    TurnFacadeDependencies, TurnModelExecutionFactory,
+    SessionWorkRepository, SqliteSubsessionRepository, StorageEffectJournal,
+    StorageProgressPublication, ToolJournalRepository, TurnFacadeDependencies,
+    TurnModelExecutionFactory,
 };
 use butler_turn::workspace::{
     Commands, SessionWorkspaceRecovery, SessionWorktrees, WorkspaceFiles, WorkspaceMutations,
@@ -248,17 +249,8 @@ impl AgentRuntime {
             Arc::new(|| uuid::Uuid::new_v4().to_string()),
         ));
         let session_work = Arc::new(SessionWorkRepository::new(stores.btcc.clone(), now.clone()));
-        let project_runtime = Arc::new(SqliteProjectWorkRuntime::new(
-            stores.btcc.clone(),
-            now.clone(),
-            Arc::new(project_ledger.clone()),
-        ));
-        let project_work = Arc::new(ProjectWork::new(
-            project_ledger.clone(),
-            project_runtime.clone(),
-            project_runtime.clone(),
-            project_runtime,
-        ));
+        let (project_work, work_model) =
+            work_ports::create(&stores.btcc, &project_ledger, now.clone());
         let work_repository = Arc::new(
             crate::host::guided::scope_selected_work::ScopeSelectedWorkRepository::new(
                 stores.bindings.clone(),
@@ -403,6 +395,7 @@ impl AgentRuntime {
             memory_acquisition,
             service_shutdown: stop.clone(),
             btcc: assembly.btcc,
+            work_model,
             host: assembly.host,
             bindings,
             models,

@@ -9,13 +9,15 @@ const copy = {
     newInput: "New input", cached: "Cached", output: "Output", chat: "Usage in this chat", period: "Usage by period",
     tokens: (value: string) => `${value} tokens`, justStarted: "Just started", noUsage: "No usage yet",
     noUsagePeriod: "No usage in this period", loading: "Loading usage", today: "Today", total: "Total", add: "Add a response",
-    replay: "Replay", range: "Switch range",
+    replay: "Replay", range: "Switch range", conversation: "Conversation", subtask: "Subtask", allChats: "All chats",
+    addSubtask: "Add a subtask response",
   },
   "ko-KR": {
     newInput: "새 입력", cached: "캐시", output: "출력", chat: "이 대화의 사용량", period: "기간별 사용량",
     tokens: (value: string) => `${value} 토큰`, justStarted: "방금 시작", noUsage: "아직 사용량이 없습니다",
     noUsagePeriod: "이 기간에 사용량이 없습니다", loading: "사용량 불러오는 중", today: "오늘", total: "합계", add: "응답 추가",
-    replay: "다시 재생", range: "기간 바꾸기",
+    replay: "다시 재생", range: "기간 바꾸기", conversation: "대화", subtask: "하위 작업", allChats: "전체 대화",
+    addSubtask: "하위 작업 응답 추가",
   },
 } as const;
 
@@ -55,14 +57,28 @@ export function sampleSlots(hours: number, seed = 1): UsageSlot[] {
   return slots;
 }
 
+/**
+ * A delegating chat: sampleSlots plus each slot's subtask part per type
+ * [start, new, cached, output, subtask new, subtask cached, subtask output].
+ * The subtask share varies by slot, from none to most of the slot.
+ */
+export function sampleSplitSlots(hours: number, seed = 1): UsageSlot[] {
+  return sampleSlots(hours, seed).map((slot, index) => {
+    const [start, fresh, cached, output] = slot as [number, number, number, number];
+    const share = [0, 0.3, 0.55, 0.7, 0.15, 0.45][(index + seed) % 6]!;
+    return [start, fresh, cached, output, Math.round(fresh * share * 0.8), Math.round(cached * share), Math.round(output * share * 1.2)];
+  });
+}
+
 export function toBuckets(locale: AppLocale, bucketing: UsageBucketing): UsageBarsBucket[] {
   const text = copy[locale];
   const date = new Intl.DateTimeFormat(locale, { month: "short", day: "numeric", hour: bucketing.stepHours < 24 ? "numeric" : undefined });
   return bucketing.buckets.map((bucket) => {
-    const [fresh = 0, cached = 0, output = 0] = bucket.values;
+    const [fresh = 0, cached = 0, output = 0, subNew, subCached, subOutput] = bucket.values;
     return {
       key: `${bucket.startMs}`,
-      segments: [{ id: "new", value: fresh }, { id: "cached", value: cached }, { id: "output", value: output }],
+      segments: [{ id: "new", value: fresh, subtask: subNew }, { id: "cached", value: cached, subtask: subCached },
+        { id: "output", value: output, subtask: subOutput }],
       label: date.format(bucket.startMs),
       valueText: text.tokens(compactTokens(locale, fresh + cached + output)),
     };
@@ -95,6 +111,11 @@ export function windowChart(locale: AppLocale, slots: readonly UsageSlot[], hour
 /** A ready-to-render sample: hours back from now, bucketed for `maxBars`. */
 export function sampleChart(locale: AppLocale, hours: number, maxBars?: number, seed?: number) {
   return windowChart(locale, sampleSlots(hours, seed), hours, maxBars);
+}
+
+/** A delegating chat over the `hours` before now; its segments carry subtask parts. */
+export function splitChart(locale: AppLocale, hours: number, maxBars?: number, seed?: number) {
+  return windowChart(locale, sampleSplitSlots(hours, seed), hours, maxBars);
 }
 
 /** Chat usage since the chat's first slot (the popover case). */

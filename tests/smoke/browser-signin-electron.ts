@@ -166,6 +166,7 @@ try {
     const looked = await internal("signin.lookup", mine);
     assert.equal(looked.reason, "signin_unavailable", "file store only: module off");
     console.log("fill: module off without the system keychain");
+    await noStoreOfferFlow();
   }
   await settingsShots();
   // The canary never reaches main's or the Agent's logs, results or the data folder.
@@ -215,8 +216,8 @@ async function fillFlow() {
   } finally { await security("DELETE", `/security/signins/${id}`); }
 }
 
-/** "로그인 저장" after the user signs in during a takeover; the password never reaches the renderer. */
-async function saveOfferFlow() {
+/** The user signs in themselves in a signed-in conversation tab (a trusted click on submit). */
+async function takeoverSignIn() {
   await app.call("signout", { site: "fixture-shop.test" });
   const opened = await internal("tab.open", undefined, { url: fixtures.url("login.fixture-shop.test", "/login"), signed_in: true });
   const tab = opened.tab as string;
@@ -224,13 +225,45 @@ async function saveOfferFlow() {
   await page(tab, `document.querySelector('[name=username]').value='owner@fixture.test';document.querySelector('[name=password]').value=${JSON.stringify(CANARY)}`);
   const point = await page<{ x: number; y: number }>(tab, "(()=>{const b=document.querySelector('button').getBoundingClientRect();return {x:Math.round(b.x+b.width/2),y:Math.round(b.y+b.height/2)}})()");
   await app.main(`(()=>{const w=${contents(tab)};w.sendInputEvent({type:'mouseDown',x:${point.x},y:${point.y},button:'left',clickCount:1});w.sendInputEvent({type:'mouseUp',x:${point.x},y:${point.y},button:'left',clickCount:1})})()`);
-  await waitBrowser(async () => Boolean((await tabOf(tab) as Tab & { saveOffer?: unknown }).saveOffer), "save offer");
+  return tab;
+}
+async function offerOf(tab: string) { return (await tabOf(tab) as Tab & { saveOffer?: unknown }).saveOffer; }
+
+/** Without the system keychain nothing can be saved: no offer. A failed save keeps the offer for another try. */
+async function noStoreOfferFlow() {
+  // Main asks the Agent once a sign-in is submitted; the offer would be published in the same turn as the answer.
+  await app.main("(()=>{const b=globalThis.browserAgentSubject,ask=b.signInStoreAvailable;globalThis.storeAnswers=[];b.signInStoreAvailable=async()=>{const value=await ask();globalThis.storeAnswers.push(value);return value}})()");
+  const tab = await takeoverSignIn();
+  // The page reports the sign-in on the submit button's click and on the form's submit.
+  await waitBrowser(() => app.main("globalThis.storeAnswers.length===2"), "store availability asked");
+  assert.deepEqual(await app.main("globalThis.storeAnswers"), [false, false], "the Agent has no password store");
+  assert.ok(!await offerOf(tab), "no save offer without a password store");
+  await internal("tab.close", tab);
+  // A store that is there but fails this save: the offer stays until a save succeeds.
+  await app.main("(()=>{const b=globalThis.browserAgentSubject;b.signInStoreAvailable=async()=>true;globalThis.saveAttempts=0;b.saveSignIn=async()=>{globalThis.saveAttempts++;return {ok:false,error:{code:'request_failed'}}}})()");
+  const failing = await takeoverSignIn();
+  await waitBrowser(async () => Boolean(await offerOf(failing)), "save offer");
+  const failed = await app.call<{ ok: boolean }>("save-signin", { id: failing });
+  assert.equal(failed.ok, false, JSON.stringify(failed));
+  assert.equal(await app.main("globalThis.saveAttempts"), 1);
+  assert.ok(await offerOf(failing), "a failed save keeps the offer");
+  await app.main("globalThis.browserAgentSubject.saveSignIn=async()=>({ok:true,data:{}})");
+  assert.equal((await app.call<{ ok: boolean }>("save-signin", { id: failing })).ok, true);
+  assert.ok(!await offerOf(failing), "a saved offer is cleared");
+  await internal("tab.close", failing);
+  console.log("save offer: none without a password store; kept after a failed save, cleared after a save");
+}
+
+/** "로그인 저장" after the user signs in during a takeover; the password never reaches the renderer. */
+async function saveOfferFlow() {
+  const tab = await takeoverSignIn();
+  await waitBrowser(async () => Boolean(await offerOf(tab)), "save offer");
   const snapshot = JSON.stringify(await state());
   assert.ok(!snapshot.includes(CANARY), "the offer never carries the password to the renderer");
   await app.page.expression("document.querySelector('body') && true");
   const saved = await app.call<{ ok: boolean }>("save-signin", { id: tab });
   assert.equal(saved.ok, true, JSON.stringify(saved));
-  assert.ok(!(await tabOf(tab) as Tab & { saveOffer?: unknown }).saveOffer, "offer cleared");
+  assert.ok(!await offerOf(tab), "offer cleared");
   const rows = await security("GET", "/security/signins");
   assert.equal(rows.body.data.sites.find((row: { site: string }) => row.site === "fixture-shop.test").entry.username, "owner@fixture.test");
   console.log("save offer: takeover sign-in saved to the keychain store");

@@ -13,6 +13,7 @@ mod agent_import;
 mod alias_index_drop;
 mod answer_blocks;
 mod anthropic_cache;
+mod anthropic_output_limit;
 mod anthropic_requests;
 mod anthropic_thinking_history;
 mod app_admission_history;
@@ -250,6 +251,7 @@ mod acceptance_payload_perf;
 mod storage_correction;
 
 mod session_titles;
+mod smart_groups;
 #[path = "storage_correction/seed.rs"]
 mod storage_correction_seed;
 
@@ -265,3 +267,6 @@ mod trace_spans;
 mod content_port;
 mod turn_fenced_cancel;
 mod usage_delegated;
+
+mod work_model_api;
+mod work_model_schema;

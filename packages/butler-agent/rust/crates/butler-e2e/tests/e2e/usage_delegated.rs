@@ -11,6 +11,8 @@ pub(crate) mod fixtures;
 mod inheritance;
 #[path = "usage_delegated/recovery.rs"]
 mod recovery;
+#[path = "usage_delegated/split.rs"]
+mod split;
 #[path = "usage_delegated/stub.rs"]
 mod stub;
 use butler_e2e::e2e::{HarnessError, cassette::Cassette, scenario::Setup};
@@ -143,6 +145,41 @@ async fn deleg_use_02_no_double_count_or_child_rows() -> Result<(), HarnessError
     assert_eq!(child.data()["timeline"]["slots"][0][5], 400.0);
     let slot = &child.data()["timeline"]["slots"][0];
     assert_eq!(slot[2].as_f64().unwrap() + slot[4].as_f64().unwrap(), 520.0);
+    assert_eq!(slot.as_array().unwrap().len(), 9);
+    assert_eq!(
+        (slot[6].clone(), slot[7].clone(), slot[8].clone()),
+        (1.into(), 10.0.into(), 0.0.into())
+    );
+    s.finish().await
+}
+#[tokio::test]
+async fn deleg_use_05_slot_carries_subtask_requests_cached_output() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("DELEG-USE-05")?.start().await?;
+    fixtures::append(
+        &s.sandbox.data,
+        &[
+            fixtures::row(ROOT, Some(ROOT), Some("main"), 100, 20),
+            fixtures::row("usage-a", Some(ROOT), Some("specialist"), 200, 30),
+            fixtures::row("usage-b", Some(ROOT), Some("specialist"), 300, 40),
+        ],
+    )?;
+    let view =
+        s.gw.get("/usage-monitor?session_id=general&since_hours=24")
+            .await?;
+    let slots = view.data()["timeline"]["slots"].as_array().unwrap();
+    let sum = |i: usize| slots.iter().map(|v| v[i].as_f64().unwrap()).sum::<f64>();
+    assert_eq!(sum(5), 570.0, "delegated prompt+output");
+    assert_eq!((sum(6), sum(7), sum(8)), (2.0, 20.0, 70.0));
+    assert_eq!((sum(1), sum(3), sum(4)), (3.0, 30.0, 90.0));
+    let all = s.gw.get("/usage-monitor?since_hours=24").await?;
+    assert!(
+        all.data()["timeline"]["slots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|v| v.as_array().unwrap().len() == 5)
+    );
     s.finish().await
 }
 #[tokio::test]

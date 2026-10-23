@@ -7,3 +7,4 @@ pub(super) mod runtime_ports;
 pub(in crate::host) mod schedule_clock;
 pub(super) mod server;
 pub(super) mod subsessions;
+pub(crate) mod work_model;

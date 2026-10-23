@@ -1,23 +1,41 @@
-import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
+import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
 import { FileText, ImageIcon } from "../../components/Icons";
-import { AttachmentList } from "./AttachmentList";
+import { BROKEN_PICTURE, fixturePicture } from "../../components/MediaFrame/fixtures";
+import { AttachmentList, type AttachmentListItem } from "./AttachmentList";
 
 export const meta: ShowcaseMeta = {
   title: "AttachmentList",
   category: "Composer",
-  tags: ["attachments", "files", "composer", "chips"],
+  tags: ["attachments", "files", "composer", "chips", "tiles"],
   status: "stable",
 };
 
 const THUMBNAIL = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' fill='%23e9eaec'/%3E%3Cpath d='m4 17 4.5-5 3.5 3 2.5-3 5.5 6H4Z' fill='%2371767d'/%3E%3C/svg%3E";
 
 const labels = {
-  "en-US": { preview: "Screenshot preview", empty: "No attachments", notes: "project-notes.md", shot: "settings-375.png", noImages: "Model doesn't accept images" },
-  "ko-KR": { preview: "스크린샷 미리보기", empty: "첨부 파일 없음", notes: "프로젝트-메모.md", shot: "설정-375.png", noImages: "이미지 미지원 모델" },
+  "en-US": { preview: "Screenshot preview", empty: "No attachments", notes: "project-notes.md", shot: "settings-375.png", noImages: "Model doesn't accept images",
+    lake: "lake.jpg", bowl: "lunch.jpg", report: "q2-report.pdf", draft: "contract-draft-v3.docx", license: "LICENSE", broken: "broken-photo.jpg", file: "File",
+    remove: (name: string) => `Remove ${name}` },
+  "ko-KR": { preview: "스크린샷 미리보기", empty: "첨부 파일 없음", notes: "프로젝트-메모.md", shot: "설정-375.png", noImages: "이미지 미지원 모델",
+    lake: "호수.jpg", bowl: "점심.jpg", report: "2분기_보고서.pdf", draft: "계약서_초안_v3.docx", license: "LICENSE", broken: "깨진_사진.jpg", file: "파일",
+    remove: (name: string) => `${name} 제거` },
 } as const;
 
 function text({ locale }: ShowcaseRenderContext) {
   return labels[locale];
+}
+
+/** A sent message's mixed files: pictures, a PDF, a Word file, an unknown type and a broken picture. */
+function tiles(context: ShowcaseRenderContext): AttachmentListItem[] {
+  const t = text(context);
+  return [
+    { id: "lake", name: t.lake, meta: "2.4 MB", thumbnail: { src: fixturePicture("place") } },
+    { id: "bowl", name: t.bowl, meta: "1.8 MB", thumbnail: { src: fixturePicture("recipe") } },
+    { id: "report", name: t.report, meta: "1.1 MB", extension: "PDF" },
+    { id: "draft", name: t.draft, meta: "86 KB", extension: "DOCX" },
+    { id: "license", name: t.license, meta: "4 KB", extension: t.file },
+    { id: "broken", name: t.broken, meta: "900 KB", extension: "JPG", thumbnail: { src: BROKEN_PICTURE } },
+  ];
 }
 
 export const stories: ShowcaseStory[] = [
@@ -55,5 +73,39 @@ export const stories: ShowcaseStory[] = [
       ]} />
     ),
   },
+  {
+    // MessageAttachments: 96px tiles, end-aligned and wrapping; every tile opens in the app (viewer or inspector).
+    name: "Message tiles (wrap)",
+    widths: ["320", "375", "app"],
+    render: (context) => <AttachmentList variant="tiles" tileLayout="wrap" items={tiles(context)} onOpen={() => undefined} />,
+  },
+  {
+    // ComposerAttachments: 64px tiles in one row that scrolls sideways; ✕ on hover/focus, always on touch.
+    name: "Composer tiles (row, removable)",
+    widths: ["320", "375", "app"],
+    render: (context) => (
+      <AttachmentList variant="tiles" tileLayout="row" items={[...tiles(context), ...tiles(context).map((item) => ({ ...item, id: `${item.id}-2` }))]}
+        onOpen={() => undefined} onRemove={() => undefined} removeLabel={text(context).remove} />
+    ),
+  },
+  {
+    // A picture the current model cannot take: greyed, with the reason in its tooltip; still removable.
+    name: "Composer tiles (image blocked)",
+    states: ["disabled"],
+    render: (context) => (
+      <AttachmentList variant="tiles" tileLayout="row" onOpen={() => undefined} onRemove={() => undefined} removeLabel={text(context).remove}
+        items={[{ ...tiles(context)[0]!, blockedReason: text(context).noImages }, tiles(context)[2]!]} />
+    ),
+  },
   { name: "Empty", render: (context) => <AttachmentList emptyLabel={text(context).empty} items={[]} /> },
 ];
+
+/** Tiles under the forced states: the face's ring and press, the ✕ shown on hover and focus. */
+export const stateMatrix: ShowcaseStateMatrix = {
+  states: ["default", "hover", "focus-visible", "active"],
+  variants: ["Picture", "File"],
+  render: (context) => (
+    <AttachmentList variant="tiles" tileLayout="row" onOpen={() => undefined} onRemove={() => undefined} removeLabel={text(context).remove}
+      items={[tiles(context)[context.variant === "File" ? 2 : 0]!]} />
+  ),
+};

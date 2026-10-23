@@ -54,13 +54,17 @@ export function wireAgentTab(browser, tab) {
     if (tab.agent) browser.close(tab.id); else controlTab(browser, tab, "user", true);
   });
 }
+const AUTO_ATTACH = { autoAttach: true, waitForDebuggerOnStart: false, flatten: true };
+/** CDP serves only Butler's own automation of a tab; its identity never needs it. */
 export function connectDebugger(browser, tab) {
   const contents=tab.view.webContents;
   if (tab.debuggerReady) return;
+  if (!contents.debugger.isAttached()) contents.debugger.attach("1.3");
   wireDialogs(browser,tab);
   tab.frameSessions=new Map();tab.frameAttachPromises=new Map();
   contents.debugger.on("message",(_event,method,value,sessionId)=>{
     noteNativeContext(tab,method,value,sessionId);
+    if (method === "Target.attachedToTarget") void contents.debugger.sendCommand("Target.setAutoAttach", AUTO_ATTACH, value.sessionId).catch(() => {});
     if(method==="Target.attachedToTarget" && value.targetInfo.type==="iframe") {
       const ready=(async()=>{
         await contents.debugger.sendCommand("Page.enable",{},value.sessionId);
@@ -72,7 +76,13 @@ export function connectDebugger(browser, tab) {
     }
     if(method==="Target.detachedFromTarget") {tab.frameAttachPromises.delete(value.sessionId);for(const [id,session] of tab.frameSessions)if(session===value.sessionId)tab.frameSessions.delete(id);}
   });
-  tab.debuggerReady=tab.identityReady.then(() => contents.debugger.sendCommand("Runtime.enable"));
+  // A view Butler created has no renderer until its first load, and renderer-scoped
+  // commands need one. A pop-up's view is already opening its own page. Loads wait
+  // for the web identity, so decide only once it is ready: a page queued behind it
+  // has started by then and must not be raced by a blank load.
+  const renderer = tab.identityReady.then(() => contents.getURL() || contents.isLoading() || tab.opener ? undefined : contents.loadURL("about:blank"));
+  tab.debuggerReady = renderer.then(() => contents.debugger.sendCommand("Target.setAutoAttach", AUTO_ATTACH))
+    .then(() => contents.debugger.sendCommand("Runtime.enable"));
   void tab.debuggerReady.then(() => contents.debugger.sendCommand("Emulation.setFocusEmulationEnabled",{enabled:true})).catch(()=>{});
 }
 export function emulation(tab) {
@@ -230,7 +240,7 @@ async function openTab(browser, { session, args, callId, signedIn, source, turn 
   connectDebugger(browser,tab);
   if (!await guardUrl(args.url, tab.view.webContents.session, tab.policy)) { browser.close(id); return { status: "refused", reason: "navigation_denied" }; }
   if (callId && browser.uses.get(callId) !== use) { browser.close(id); return { status: "unknown", reason: "cancelled" }; }
-  try { await tab.identityReady; await parsed(tab.view.webContents, args.url); }
+  try { await tab.identityReady; await tab.debuggerReady; await parsed(tab.view.webContents, args.url); }
   catch { browser.close(id); return { status: "unknown", reason: "navigation_failed" }; }
   if (callId && browser.uses.get(callId) !== use) { browser.close(id); return { status: "unknown", reason: "cancelled" }; }
   touch(browser, tab);

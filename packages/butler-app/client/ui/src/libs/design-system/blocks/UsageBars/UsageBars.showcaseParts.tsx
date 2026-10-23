@@ -16,7 +16,7 @@ function totalText(context: ShowcaseRenderContext, buckets: UsageBarsBucket[]): 
 }
 
 /** The caller's readout: the selected bucket, or the total. The block itself draws no tooltip. */
-function Readout({ context, buckets, selected }: { context: ShowcaseRenderContext; buckets: UsageBarsBucket[]; selected: number | null }) {
+export function Readout({ context, buckets, selected }: { context: ShowcaseRenderContext; buckets: UsageBarsBucket[]; selected: number | null }) {
   const bucket = selected === null ? undefined : buckets[selected];
   return (
     <Stack align="row" justify="between" gap="sm">

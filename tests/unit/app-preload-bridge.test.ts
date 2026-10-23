@@ -371,6 +371,15 @@ test("renderer and actual preload carry clear, reset and audited UI routes", asy
     ["GET", "/automations/a1/runs"], ["POST", "/automations/a1/run"],
     ["POST", "/automations/a1/pause"], ["POST", "/automations/a1/resume"], ["DELETE", "/automations/a1"],
     ["GET", "/authority-permissions"], ["POST", "/authority-permissions/revoke", { grants: [] }],
+    ["GET", "/projects/p1/canon/sidebar"],
+    ["POST", "/projects/p1/canon/sidebar-order", { group_key: "p1", work_ids: ["e1"] }],
+    ["POST", "/canon/epics/e1/conversation", {}],
+    ["GET", "/projects/p1/canon"], ["GET", "/canon/plans/p1"], ["GET", "/canon/epics/e1"], ["GET", "/works/w1/tasks"],
+    ["POST", "/projects/p1/canon/plans", { title: "Plan" }], ["PATCH", "/canon/plans/p1", { expected_revision: 1, due_on: null }],
+    ["POST", "/canon/plans/p1/order", { expected_revision: 1, work_ids: ["e1"] }],
+    ["POST", "/projects/p1/canon/backlog/order", { expected_revision: 2, work_ids: [] }],
+    ["POST", "/projects/p1/canon/epics", { title: "Epic", plan_id: null, assignee: null }],
+    ["PATCH", "/canon/epics/e1", { expected_revision: 3, status: "done", expected_task_graph_revision: 4 }],
     ["GET", "/sessions/s1/task-graphs"], ["GET", "/plans/p1/task-graph"], ["GET", "/tasks/t1/document"],
     ["GET", "/updates"], ["POST", "/updates/check"], ["POST", "/updates/apply", { component: "agent" }], ["POST", "/updates/cancel"],
   ];
@@ -382,6 +391,23 @@ test("renderer and actual preload carry clear, reset and audited UI routes", asy
   expect(calls.map(call => [call.method, call.path])).toEqual(routes.map(([method, path]) => [method, new URL(path, "http://localhost").pathname]));
   for (const [index, [, , body]] of routes.entries()) if (body) expect(calls[index]!.body).toEqual(body);
   expect(calls.filter(call => call.method === "GET").every(call => call.body === undefined)).toBe(true);
+});
+
+test("canon conflicts preserve the same numeric revision through browser and real preload", async () => {
+  const failure = { error: { code: "conflict", message: "Revision changed.", current: { revision: 9 } } };
+  const { bridge } = actualPreload(() => ({ ok: false, status: 409, json: async () => failure }));
+  await withBridge(bridge, async () => {
+    const error = await api("/canon/epics/e1", { method: "PATCH", body: JSON.stringify({ expected_revision: 8 }) }).catch(error => error);
+    expect({ ...(error as object) }).toEqual({ code: "conflict", status: 409, current: { revision: 9 } });
+  });
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(JSON.stringify(failure), { status: 409 })) as unknown as typeof fetch;
+  try {
+    await withBridge(undefined as unknown as Record<string, unknown>, async () => {
+      const error = await api("/canon/epics/e1", { method: "PATCH", body: "{}" }).catch(error => error);
+      expect({ ...(error as object) }).toEqual({ code: "conflict", status: 409, current: { revision: 9 } });
+    });
+  } finally { globalThis.fetch = previousFetch; }
 });
 
 test("preload refuses unlisted reset paths and methods without sending a request", async () => {

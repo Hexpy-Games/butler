@@ -39,13 +39,14 @@ pub(in crate::models::transport) async fn read(
     if let Some(value) = completed {
         return Ok(value);
     }
-    // Gemini has no terminator; its finishReason (or blocked prompt) closes the answer.
-    if let State::Gemini(state) = state
-        && let Some(value) = state.finish()
-    {
-        return Ok(value);
-    }
-    Err(protocol(provider, api, "provider_stream_interrupted"))
+    // Gemini has no terminator; its finishReason (or blocked prompt) closes the
+    // answer. An Anthropic message that reported its stop reason is complete too.
+    let finished = match state {
+        State::Gemini(state) => state.finish(),
+        State::Anthropic(mut state) => state.finish(false),
+        State::Responses(_) => None,
+    };
+    finished.ok_or_else(|| protocol(provider, api, "provider_stream_interrupted"))
 }
 
 enum State {

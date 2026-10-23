@@ -31,6 +31,7 @@ pub(crate) struct AgentRuntime {
     pub memory_acquisition: Arc<crate::host::embedding::worker::assets::Acquisition>,
     pub service_shutdown: tokio_util::sync::CancellationToken,
     pub btcc: Btcc,
+    pub work_model: Arc<crate::host::app::work_model::AppWorkModel>,
     pub bindings: SessionBindingStore,
     pub models: ProcessModels,
     pub context_budget: Arc<ContextBudgetOwner>,

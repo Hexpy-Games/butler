@@ -1,12 +1,18 @@
-//! Change-driven background checkpoints with a serialized commit-path backstop.
+//! Change-driven background checkpoints and idle finishes, with a commit-path ceiling.
+//! A fully backfilled threshold pass arms one finish on the background connection
+//! once the writer lane reports idle. The next writer BEGIN sees nBackfill ==
+//! mxFrame and takes read-lock 0; SQLite's walRestartLog resets the WAL on its
+//! first frame write. Continuous writes defer this reset until idle, while the
+//! 4x inline PASSIVE ceiling bounds growth (unless a reader pins the WAL).
 use super as sqlite;
-use rusqlite::{Connection, OpenFlags, config::DbConfig};
+use rusqlite::Connection;
+mod worker;
 use std::{
     cell::RefCell,
     marker::PhantomData,
     path::PathBuf,
     rc::Rc,
-    sync::{Arc, Mutex, PoisonError, TryLockError, mpsc},
+    sync::{Arc, Mutex, PoisonError, mpsc},
     thread,
     time::{Duration, Instant},
 };
@@ -45,7 +51,7 @@ pub enum CheckpointEvent {
     Checkpointed {
         /// Whether this work delayed the committing writer.
         inline: bool,
-        /// This writer pass finishes a fully backfilled background snapshot.
+        /// This background pass finishes a fully backfilled threshold snapshot.
         finish: bool,
         /// Checkpoint time, including backstop serialization with a running pass.
         elapsed: Duration,
@@ -77,6 +83,8 @@ struct Maintenance {
     pages: i32,
     progress: Mutex<Progress>,
     checkpoint: Mutex<()>,
+    #[cfg(feature = "test-support")]
+    stall_finish: Mutex<Option<Box<dyn FnOnce() + Send>>>,
 }
 struct Hook {
     maintenance: Arc<Maintenance>,
@@ -89,8 +97,11 @@ struct Progress {
     generation: u64,
     backfilled: i32,
     attempted: i32,
+    // Armed once by a fully backfilled threshold pass, consumed only at idle
+    // (or cleared on reset / a successful inline ceiling pass).
     finish_pending: bool,
-    writer_finishes: u64,
+    // Only the dedicated writer lane reports idle; owners default to busy.
+    lane_idle: bool,
 }
 impl Progress {
     fn committed(&mut self, frames: i32) {
@@ -157,12 +168,14 @@ impl CheckpointOwner {
             pages,
             progress: Mutex::new(Progress::default()),
             checkpoint: Mutex::new(()),
+            #[cfg(feature = "test-support")]
+            stall_finish: Mutex::new(None),
         });
         let background = maintenance.clone();
         let thread = thread::Builder::new()
             .name("sqlite-wal-checkpoint".into())
             .spawn(move || {
-                run(
+                worker::run(
                     &path,
                     synchronous,
                     cache_size,
@@ -183,6 +196,51 @@ impl CheckpointOwner {
         });
         db.wal_hook(Some(committed));
         Ok(Some(owner))
+    }
+
+    /// Mark active or queued lane work. Only takes the short metadata lock.
+    pub fn lane_busy(&self) {
+        HOOK.with(|hook| {
+            if let Some(hook) = hook.borrow().as_ref() {
+                hook.maintenance
+                    .progress
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .lane_idle = false;
+            }
+        });
+    }
+
+    /// Report an empty, inactive lane and coalesce a pending finish wake.
+    /// No SQLite or filesystem work runs here, and sending never waits.
+    pub fn lane_idle(&self) {
+        HOOK.with(|hook| {
+            if let Some(hook) = hook.borrow().as_ref() {
+                let mut progress = hook
+                    .maintenance
+                    .progress
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner);
+                progress.lane_idle = true;
+                if progress.finish_pending {
+                    let _ = hook.wake.try_send(());
+                }
+            }
+        });
+    }
+
+    /// Stall one worker finish after PASSIVE, while it holds checkpoint serialization.
+    #[cfg(feature = "test-support")]
+    pub fn stall_next_finish(&self, stall: impl FnOnce() + Send + 'static) {
+        HOOK.with(|hook| {
+            if let Some(hook) = hook.borrow().as_ref() {
+                *hook
+                    .maintenance
+                    .stall_finish
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner) = Some(Box::new(stall));
+            }
+        });
     }
 
     /// Drain the pending request and join maintenance on the writer's thread.
@@ -214,14 +272,13 @@ fn committed(wal: &rusqlite::hooks::Wal, pages: i32) -> rusqlite::Result<()> {
         if let Some(observer) = hook.observer {
             observer(CheckpointEvent::WalCommitted(pages));
         }
-        let (mut due, finish) = {
+        let mut due = {
             let mut progress = hook.progress.lock().unwrap_or_else(PoisonError::into_inner);
             progress.committed(pages);
-            let finish = std::mem::take(&mut progress.finish_pending);
-            (progress.due(hook.pages), finish)
+            progress.due(hook.pages)
         };
-        if finish || pages >= hook.pages.saturating_mul(HARD_LIMIT_MULTIPLIER) {
-            due = writer_pass(wal, pages, hook, finish);
+        if pages >= hook.pages.saturating_mul(HARD_LIMIT_MULTIPLIER) {
+            due = writer_pass(wal, pages, hook);
         }
         if due {
             let _ = wake.try_send(());
@@ -230,33 +287,16 @@ fn committed(wal: &rusqlite::hooks::Wal, pages: i32) -> rusqlite::Result<()> {
     Ok(())
 }
 
-fn writer_pass(wal: &rusqlite::hooks::Wal, pages: i32, hook: &Maintenance, finish: bool) -> bool {
-    // Only the ceiling may wait for maintenance. A skipped finish is re-armed
-    // when the running background pass publishes its completed snapshot.
+fn writer_pass(wal: &rusqlite::hooks::Wal, pages: i32, hook: &Maintenance) -> bool {
+    // Only the hard ceiling may delay a committing writer for maintenance.
     let started = Instant::now();
-    let guard = if pages >= hook.pages.saturating_mul(HARD_LIMIT_MULTIPLIER) {
-        hook.checkpoint
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-    } else {
-        match hook.checkpoint.try_lock() {
-            Ok(guard) => guard,
-            Err(TryLockError::Poisoned(error)) => error.into_inner(),
-            Err(TryLockError::WouldBlock) => {
-                return hook
-                    .progress
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .due(hook.pages);
-            }
-        }
-    };
+    let guard = hook
+        .checkpoint
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     let result = wal.checkpoint_v2(rusqlite::hooks::CheckpointMode::PASSIVE);
     let due = {
         let mut progress = hook.progress.lock().unwrap_or_else(PoisonError::into_inner);
-        if finish {
-            progress.writer_finishes = progress.writer_finishes.wrapping_add(1);
-        }
         if let Ok((log, backfilled)) = result.as_ref() {
             let generation = progress.generation;
             progress.completed(generation, *log, *backfilled);
@@ -269,126 +309,12 @@ fn writer_pass(wal: &rusqlite::hooks::Wal, pages: i32, hook: &Maintenance, finis
     drop(guard);
     checkpointed(
         hook,
-        if finish { "finish" } else { "inline" },
+        "inline",
         result.as_ref().copied().unwrap_or((pages, -1)),
         started.elapsed(),
         result.is_ok(),
     );
     due
-}
-
-fn run(
-    path: &std::path::Path,
-    synchronous: i64,
-    cache_size: i64,
-    ready: &mpsc::SyncSender<CheckpointResult<()>>,
-    requests: &mpsc::Receiver<()>,
-    maintenance: &Maintenance,
-) -> CheckpointResult<()> {
-    let Maintenance {
-        checkpoint,
-        progress,
-        pages,
-        ..
-    } = maintenance;
-    let pages = *pages;
-    let opened = open(path, synchronous, cache_size);
-    let connection = match opened {
-        Ok(connection) => connection,
-        Err(error) => {
-            let _ = ready.send(Err(error));
-            return Ok(());
-        }
-    };
-    let _ = ready.send(Ok(()));
-    while requests.recv().is_ok() {
-        let started = Instant::now();
-        let snapshot = {
-            let mut progress = progress.lock().unwrap_or_else(PoisonError::into_inner);
-            // A coalesced wake may be left behind a pass that already covered
-            // its frames. Do not run another SQL checkpoint for that request.
-            if !progress.due(pages) {
-                continue;
-            }
-            progress.attempted = progress.frames;
-            (
-                progress.generation,
-                progress.frames,
-                progress.writer_finishes,
-            )
-        };
-        if let Some(observer) = maintenance.observer {
-            observer(CheckpointEvent::Started);
-        }
-        let guard = checkpoint.lock().unwrap_or_else(PoisonError::into_inner);
-        let result = backfill(&connection, maintenance, started);
-        if let Ok((0, log, backfilled)) = result.as_ref() {
-            let mut progress = progress.lock().unwrap_or_else(PoisonError::into_inner);
-            progress.completed(snapshot.0, *log, *backfilled);
-            if progress.generation == snapshot.0
-                && *backfilled >= snapshot.1
-                && progress.writer_finishes == snapshot.2
-            {
-                progress.finish_pending = true;
-            }
-        }
-        drop(guard);
-        finish_pass(&connection, maintenance, started, result.is_ok());
-    }
-    connection
-        .close()
-        .map_err(|(_, error)| CheckpointError::from(error))
-}
-
-fn backfill(
-    connection: &sqlite::Connection,
-    maintenance: &Maintenance,
-    started: Instant,
-) -> rusqlite::Result<(i32, i32, i32)> {
-    let result = connection.query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |row| {
-        Ok((
-            row.get::<_, i32>(0)?,
-            row.get::<_, i32>(1)?,
-            row.get::<_, i32>(2)?,
-        ))
-    });
-    let (busy, log, backfilled) = result.as_ref().copied().unwrap_or((1, -1, -1));
-    checkpointed(
-        maintenance,
-        "background",
-        (log, backfilled),
-        started.elapsed(),
-        busy == 0,
-    );
-    result
-}
-
-fn finish_pass(
-    connection: &sqlite::Connection,
-    maintenance: &Maintenance,
-    started: Instant,
-    succeeded: bool,
-) {
-    // Preserve mapped WAL-index writeback on macOS, outside the SQL lane.
-    let synced = sqlite::sync_wal_index(connection);
-    if let Some(observer) = maintenance.observer {
-        observer(CheckpointEvent::Finished {
-            elapsed: started.elapsed(),
-            succeeded: succeeded && synced.is_ok(),
-        });
-    }
-}
-
-fn open(
-    path: &std::path::Path,
-    synchronous: i64,
-    cache_size: i64,
-) -> CheckpointResult<sqlite::Connection> {
-    let connection = sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
-    connection.pragma_update(None, "synchronous", synchronous)?;
-    connection.pragma_update(None, "cache_size", cache_size)?;
-    connection.set_db_config(DbConfig::SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE, true)?;
-    Ok(connection)
 }
 
 fn checkpointed(
@@ -419,7 +345,7 @@ fn checkpointed(
     }
     if let Some(observer) = observer {
         observer(CheckpointEvent::Checkpointed {
-            inline: mode != "background",
+            inline: mode == "inline",
             finish: mode == "finish",
             elapsed,
             frames,

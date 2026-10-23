@@ -2,7 +2,9 @@
 
 ## What is this component
 Stacked usage columns over time: one column per time bucket, its segments
-stacked bottom-up in `series` order. Two sizes share one look:
+stacked bottom-up in `series` order with no gaps: type is shown by color
+only. A segment can carry a subtask part, drawn hatched on top of it in the
+same color. Two sizes share one look:
 
 | size | plot height | column width | top radius |
 | --- | --- | --- | --- |
@@ -41,8 +43,10 @@ const { buckets } = bucketUsageSlots(timeline.slots, { toMs: now, maxBars: 24 })
 
 Props:
 
-- `buckets`: `{ key, segments: [{ id, value }], label, valueText }[]`. `label`
-  and `valueText` fill the sr-only table and the selection announcement.
+- `buckets`: `{ key, segments: [{ id, value, subtask? }], label, valueText }[]`.
+  `label` and `valueText` fill the sr-only table and the selection
+  announcement. `subtask` (0..`value`) is the part of the segment that came
+  from subtasks; see "Subtask split" below.
 - `series`: `{ id, color, label }[]`; order is the stacking order (bottom
   first). `color` is `chart-1` … `chart-6` (`--context-chart-*`). The block
   draws no legend; product legends reuse the same list.
@@ -60,12 +64,39 @@ Props:
   gutter stays while loading or empty (just "0"), so data arriving never
   shifts the plot.
 - `emptyLabel`, `loadingLabel`, `note`, `ariaLabel`.
+- `emphasis`: `"conversation"` | `"subtask"` | `null`, set while a linked
+  legend row is hovered or focused (`KeyValueRow onHighlightChange`).
 
 Non-zero buckets are at least 2px tall; segments split a column by their
 share of its total, so any unit (tokens, dollars, fractions) fills it.
+Segments and parts touch: a column has no gaps.
 Selecting a bucket dims the others to 40%. A selection whose bucket goes away
 (the buckets empty, or another bucket now sits at that index) is cleared with
 `onSelect(null)`.
+
+### Subtask split
+
+Pass `subtask` only for one chat's usage (session scope) that delegated work;
+never for all chats, whose bars stay solid. Each new / cached / output
+segment then splits into its conversation part (solid, below) and its
+subtask part (hatched, on top), with no gap between. The hatch is built from
+the segment's own color only, so it reads the same in both themes:
+
+```css
+repeating-linear-gradient(135deg, c 0 2px, color-mix(in srgb, c var(--hatch-alpha), transparent) 2px 4px)
+```
+
+`--hatch-alpha` is 40%. When either part of a segment would be under 2px
+(plot heights are fixed per size), the segment is drawn whole in the style of
+its larger part. An output part under 1px can still vanish under the top
+radius, as before.
+
+Pair the chart with two `KeyValueRow` legend rows on the cached color
+(`swatchColor="var(--context-chart-5)"`): conversation solid, subtask
+`swatchPattern="hatched"`. Their `onHighlightChange` sets `emphasis`:
+`subtask` raises the light stripes to 70%, `conversation` dims the hatched
+parts to 40%, like the selection dim. Selection, keys and Esc are unchanged;
+a selected bar keeps its hatched parts.
 
 ### Bucketing helper
 
@@ -97,13 +128,15 @@ Product containers that already hold usage numbers and copy.
 ## Best practice
 Keep bucketing in the caller (`bucketUsageSlots`), pass the same `series`
 list to the legend rows, and show the selected bucket in the readout above
-the chart. In a Radix popover, prevent its Esc dismissal while a bucket is
+the chart. Split a chat only when it delegated work (some subtask value is
+above zero). In a Radix popover, prevent its Esc dismissal while a bucket is
 selected (`onEscapeKeyDown`), so the first Esc clears the selection.
 
 ## Wrong use cases
 Do not use it for a single fraction (`ProgressMeter`), totals without a time
 axis (`UsageSummaryRows`) or multi-series charts that need a legend and a
-tooltip (`Chart`). Do not add a floating tooltip.
+tooltip (`Chart`). Do not add a floating tooltip. Do not split all-chats
+usage or draw gaps, outlines or surface-color lines between parts.
 
 ## Motion
 Transform-only (WAAPI through `animateMotion`):
@@ -114,9 +147,14 @@ Transform-only (WAAPI through `animateMotion`):
 - Same bucket count, new values (a live update, a session switch): each
   column eases from the height it painted to the new one over `--motion-slow`
   (FLIP via `scaleY`). An update in flight starts from what is on screen.
-- Selection dims over `--motion-fast`.
+- A hatched part that was not drawn before fades in over `--motion-base` and
+  grows up from its boundary over `--motion-slow`; the column FLIP above
+  carries existing parts.
+- Selection dims over `--motion-fast`; so do the legend emphasis (the hatch
+  lift and the hatched-part dim), as opacity fades.
 - Reduced motion (OS or the app setting): columns appear at their final
-  height at once; the dim stays an opacity fade.
+  height at once; new hatched parts only fade in; the dims stay opacity
+  fades.
 
 ## Accessibility
 One tab stop, `role="group"` named by `ariaLabel` (`role="status"` while
@@ -127,4 +165,4 @@ from the axis labels, so it reaches `--focus-ring-room` plus
 that room.
 
 ## Tags
-usage, tokens, chart, bars, stacked, timeline, context
+usage, tokens, chart, bars, stacked, timeline, context, subtask, hatch

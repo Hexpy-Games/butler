@@ -9,6 +9,7 @@ use super::super::memory_wiring_more::support as rules;
 use super::coverage_seed::{recovered, session};
 use super::coverage_support::{canonical, drain, graph, hold_gate, release_gate};
 use super::standalone_upgrade::reset_pending;
+use crate::memory_fixture::wait_parked;
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
@@ -59,6 +60,7 @@ async fn start() -> Result<Scenario, HarnessError> {
     rules::historical(&mut cassette);
     let s = Setup::new("MEM-TYPED-CORRUPT")?
         .stub_cassette(cassette)
+        .env("BUTLER_MEMORY_SYNC_TRACE", "1")
         .start()
         .await?;
     s.provider()?.set_memory_responder(rules::meaning);
@@ -190,8 +192,8 @@ async fn wait_current_complete(data: &Path, key: &str, revision: &Value) {
 
 async fn idle(s: &Scenario, key: &str, windows: &[Value]) {
     let data = &s.sandbox.data;
-    // Existing idle E2Es allow maintenance to finish before observing commits.
-    tokio::time::sleep(Duration::from_secs(10)).await;
+    // Observe commits only after the consumer parked with no work left.
+    wait_parked(s).await;
     let db = graph(data);
     let lock = butler_platform::sqlite::open(
         data.join("cognition/consolidation/locks/consolidation.lock.coord.sqlite"),

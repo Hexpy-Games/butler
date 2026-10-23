@@ -1,6 +1,6 @@
 //! Public classification of App storage failures; underlying causes stay private.
 
-use super::{AppStorageError, GatewayApplicationError, public};
+use super::{AppStorageError, GatewayApplicationError};
 
 pub(super) fn app_error(error: AppStorageError) -> GatewayApplicationError {
     if error.is_busy() {
@@ -46,5 +46,14 @@ pub(super) fn app_error(error: AppStorageError) -> GatewayApplicationError {
         | "space_group_not_found" => public(404, error.code(), &error.detail()),
         "turn_control_resolution_invalid" => public(500, error.code(), &error.detail()),
         _ => GatewayApplicationError::internal_from(error),
+    }
+}
+
+pub(super) fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
+    GatewayApplicationError::Public {
+        status,
+        code: code.into(),
+        message: message.into(),
+        source: None,
     }
 }

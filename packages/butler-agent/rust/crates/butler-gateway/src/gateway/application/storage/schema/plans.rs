@@ -53,6 +53,19 @@ pub(super) fn hot_queries_use_their_indexes() {
     ] {
         assert_uses(&connection, sql, EVENTS_INDEX);
     }
+    for sql in [super::work_model::RECEIPT, super::work_model::PRUNE] {
+        assert_uses(&connection, sql, "INTEGER PRIMARY KEY");
+    }
+    let sidebar = super::canon_sidebar::ORDERED_READ;
+    assert_uses(&connection, sidebar, "app_canon_sidebar_order_position");
+    assert!(!plan(&connection, sidebar).contains("SCAN app_canon_sidebar_order"));
+    assert!(
+        !plan(
+            &connection,
+            "SELECT * FROM app_canon_sidebar_order WHERE work_id=?1"
+        )
+        .contains("app_canon_sidebar_order_position")
+    );
     // The control: without the `turn_id<>''` term the events table is scanned.
     let unpinned = HAS_KIND_SQL.replace(" AND turn_id<>''", "");
     assert!(!plan(&connection, &unpinned).contains(EVENTS_INDEX));

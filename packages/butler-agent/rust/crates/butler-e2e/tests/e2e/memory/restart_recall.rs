@@ -1,5 +1,5 @@
 //! Immediate post-restart recall with the shared retained-history fixtures.
-use super::{ASK, batch, memory_stubs, recall_tool_ms};
+use super::{ASK, batch, idle_activity, memory_stubs, recall_tool_ms};
 use butler_e2e::e2e::HarnessError;
 use butler_platform::process_control::usage;
 use serde_json::Value;
@@ -163,11 +163,13 @@ async fn park(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), HarnessErro
 
 async fn idle(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), HarnessError> {
     let pid = s.agent.pid().unwrap();
-    let Some(before) = usage::sample(pid)? else {
+    if usage::sample(pid)?.is_none() {
         return Ok(());
-    };
-    tokio::time::sleep(Duration::from_secs(60)).await;
-    let after = usage::sample(pid)?.unwrap();
+    }
+    let samples = idle_activity::sample_window(pid, Duration::from_secs(60), 12)
+        .await?
+        .unwrap();
+    let (before, after) = (samples[0], samples[12]);
     assert!(usage::embedding_children(pid)?.is_none_or(|workers| workers.is_empty()));
     let reads = after.read_chars.zip(before.read_chars).map(|(a, b)| a - b);
     let writes = after
@@ -181,7 +183,10 @@ async fn idle(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), HarnessErro
     );
     assert!(reads.is_none_or(|bytes| bytes <= 1_000_000));
     assert!(writes.is_none_or(|bytes| bytes <= 1_000_000));
-    assert!(after.read_bytes - before.read_bytes <= 1_000_000);
+    idle_activity::assert_no_recurring_activity(
+        "idle agent physical reads",
+        &idle_activity::deltas(&samples, |sample| sample.read_bytes),
+    );
     assert!(after.write_bytes - before.write_bytes <= 1_000_000);
     Ok(())
 }
@@ -207,18 +212,17 @@ async fn restart_keeps_worker_and_deferred_vectors_idle_until_demand() -> Result
     let before = memory_stubs::unit_states(&s.sandbox.data)?;
     assert_eq!(before.0, 1);
     s.gw = s.agent.start_again().await?;
-    for _ in 0..2 {
-        if let Some(workers) = usage::embedding_children(s.agent.pid().unwrap())? {
-            assert!(workers.is_empty(), "startup spawned an embedding worker");
-        }
-        assert!(
-            !s.agent
-                .current_logs()
-                .await?
-                .contains("[embedding-worker] ready")
-        );
-        tokio::time::sleep(Duration::from_secs(5)).await;
+    // A consumer parked without a deadline has admitted no deferred work.
+    crate::memory_fixture::wait_parked(&s).await;
+    if let Some(workers) = usage::embedding_children(s.agent.pid().unwrap())? {
+        assert!(workers.is_empty(), "startup spawned an embedding worker");
     }
+    assert!(
+        !s.agent
+            .current_logs()
+            .await?
+            .contains("[embedding-worker] ready")
+    );
     assert_eq!(memory_stubs::unit_states(&s.sandbox.data)?, before);
     let first = batch::recall(&s, "general", ASK).await?;
     assert_complete(&first, &code, 3);

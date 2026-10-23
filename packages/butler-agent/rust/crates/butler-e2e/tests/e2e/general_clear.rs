@@ -7,6 +7,7 @@ use butler_platform::sqlite;
 use rusqlite::{OpenFlags, params};
 use serde_json::json;
 use std::time::{Duration, Instant};
+mod interrupted;
 mod ownership;
 mod support;
 use support::{

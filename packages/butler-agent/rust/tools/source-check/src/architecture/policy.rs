@@ -19,6 +19,17 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "json" => &["public_text"],
         // Typed hook envelopes preserve complete tool JSON.
         "hooks" => &["json"],
+        // butler-work: inert SQL definitions and pure chain invariants.
+        "work_schema" | "work_queries" | "work_rank" | "work_types" => &[],
+        "work_chain" => &["work_types"],
+        "work_ids" => &[],
+        "store" => &[
+            "work_chain",
+            "work_types",
+            "work_ids",
+            "work_rank",
+            "work_queries",
+        ],
         // butler-turn: BTCC owns the turn and reads the transcript and workspace.
         "btcc" => &["conversation", "workspace"],
         "conversation" | "workspace" => &[],

@@ -53,7 +53,15 @@ pub(super) fn run_connection_lane(
         return close(connection, &owner, checkpoint);
     }
     while let Some(operation) = receiver.blocking_recv() {
+        if let Some(checkpoint) = &checkpoint {
+            checkpoint.lane_busy();
+        }
         operation(&mut connection, &owner);
+        if receiver.is_empty()
+            && let Some(checkpoint) = &checkpoint
+        {
+            checkpoint.lane_idle();
+        }
     }
     close(connection, &owner, checkpoint)
 }
