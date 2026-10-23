@@ -3,7 +3,7 @@
   "CHAT_EXISTS": "SCAN CONSTANT ROW\nSCALAR SUBQUERY 1\nSEARCH chats USING COVERING INDEX sqlite_autoindex_chats_1 (id=?)",
   "COORDINATOR_PROJECT": "SEARCH chats USING INDEX sqlite_autoindex_chats_1 (id=?)",
   "BIND_CHAT": "SEARCH chats USING INDEX sqlite_autoindex_chats_1 (id=?)",
-  "REMOVE_NODE": "SEARCH app_space_nodes USING INDEX sqlite_autoindex_app_space_nodes_1 (node_key=?)",
+  "REMOVE_NODE": "SEARCH app_space_nodes USING INDEX sqlite_autoindex_app_space_nodes_1 (node_key=?)\nSEARCH app_space_nodes USING COVERING INDEX app_space_children (parent_key=?)",
   "INSERT_SESSION": "",
   "CHAT_TITLE": "SEARCH chats USING INDEX sqlite_autoindex_chats_1 (id=?)",
   "INSERT_PROMPT": "",

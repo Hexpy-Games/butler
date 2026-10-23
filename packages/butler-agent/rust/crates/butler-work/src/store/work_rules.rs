@@ -1,6 +1,5 @@
 //! Authored rules; exactly one block belongs in a managed Butler prompt.
 pub const TIER_ONE: &str = r#"Tier 1 (small multi-step job):
-- Bootstrap in one write with `work.create_light`.
 - Each Task you plan runs in its own session, which the runtime starts when its step is ready. Do not `task.start` those Tasks here. Their results come back to this conversation, and you report them.
 - When the user asks to do a 작업 in this conversation, set `run_here: true` on the operation that creates it. Then start and run it yourself.
 - Lay out Tasks as steps. Work that must wait goes in a later step; work that can run at the same time shares a step. No nested stacks, no parallel sub-chains, no links between chains.
@@ -11,7 +10,7 @@ pub const TIER_ONE: &str = r#"Tier 1 (small multi-step job):
 - When the job changes, change the Tasks with operations. A plan written only in prose does not exist.
 - Never move, merge, split or delete a running Task. Keep completed Tasks.
 - Report what happened. Use `task.block` when input or approval is needed and `task.fail` when the Task cannot be done. Never complete a Task or a Work because a turn is ending.
-- Call `work.escalate` before you delegate, before the job grows past the Tier 1 Task floor, or when the job is analysis or a report. Never delegate at Tier 1.
+- Call `work.escalate` before you delegate, before the job grows past the Tier 1 Task floor, or when the job is analysis or a report.
 - The user's request is the authoring grant: write and activate the brief without asking. Ask only for work beyond the request or for new effect authority.
 "#;
 pub const TIER_TWO: &str = r#"Tier 2 (designed or delegated work):

@@ -6246,7 +6246,7 @@
       "definition": {
         "type": "function",
         "name": "work_apply",
-        "description": "Change the bound Work in one all-or-nothing batch: bootstrap a brief Work, place Tasks, add hidden parts, record execution, or publish Spec detail. User-visible Tasks must form chains of steps, each step one Task or a flat stack; anything finer, or with dependencies that shape cannot express, goes into parts of one Task. Integrate and review are always parts. Send `expected_task_graph_revision` with any structure operation. A turn ending never completes a Task or a Work; only `task.complete` with an accepted review does. Later operations may refer to earlier ones by `@key`.",
+        "description": "Change the bound Work in one all-or-nothing batch. Later operations may refer to earlier ones by `@key`.",
         "parameters": {
           "type": "object",
           "properties": {
@@ -6368,8 +6368,7 @@
                         "const": "task.add"
                       },
                       "run_here": {
-                        "type": "boolean",
-                        "description": "true: this conversation runs the Task itself, with no separate session. Set only when the user asks to do it here. Default: the Task gets its own session. On work.create_light it applies to every Task in the brief."
+                        "type": "boolean"
                       },
                       "key": {
                         "type": "string"
