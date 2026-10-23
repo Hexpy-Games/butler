@@ -189,6 +189,9 @@ class WindowsSafety(command_coverage.WindowsCommandCoverage):
             jobs = workflow.read_text().split('\njobs:\n', 1)[-1]
             for block in re.split(r'(?m)^(?=  [\w-]+:\s*$)', jobs):
                 if 'fsutil' in block.lower():
+                    # The workspace default directory does not exist before checkout.
+                    step = block.split('- name: Enable short names on the hosted temp volume\n', 1)[1]
+                    self.assertIn('working-directory: ${{ runner.temp }}\n', step.split('      - ', 1)[0])
                     runner = re.search(r'(?m)^    runs-on:[ \t]*(.+)$', block)
                     hosting[f"{workflow.name}/{block.split(':', 1)[0].strip()}"] = runner and runner[1]
         self.assertEqual(hosting, {'windows-preview-smoke.yml/release': 'windows-latest',
