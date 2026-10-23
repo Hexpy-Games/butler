@@ -3,6 +3,7 @@ use super::{SubsessionService, error};
 use crate::btcc::subsessions::assignment::Child;
 use crate::btcc::{BtccCode, BtccError};
 use crate::workspace::SessionRole;
+use butler_core::json::at;
 impl SubsessionService {
     /// Select one eligible relation, or one closed relation for structured
     /// direction feedback. Open/blocked Work keeps its original owner.
@@ -180,7 +181,7 @@ impl SubsessionService {
                 .work_model_read(move |db| {
                     let task = butler_work::store::read_task(db, &task)?;
                     Ok(!matches!(
-                        task["status"].as_str(),
+                        at(&task, "/status").as_str(),
                         Some("completed" | "cancelled")
                     ))
                 })
