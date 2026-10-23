@@ -15,14 +15,19 @@ changes = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(changes)
 CRATES = 'packages/butler-agent/rust/crates/'
 WINDOWS = 'windows-preview-smoke.yml'
+NONE = dict.fromkeys(['build', 'stub', 'hosted-build', 'release', 'hosted'], False)
+# PRs never use the owner-PC runner unless labeled; main and labeled PRs do.
+HOSTED = dict(NONE, **{'hosted-build': True, 'hosted': True})
+NATIVE = dict(NONE, stub=True, hosted=True)
 
 
-def select(paths, event='pull_request', changed=None, command=lambda *args: 'head'):
+def select(paths, event='pull_request', changed=None, command=lambda *args: 'head', labels=()):
     with tempfile.TemporaryDirectory() as directory:
         env = dict(GITHUB_EVENT_NAME=event, GITHUB_REF='refs/heads/main', GITHUB_SHA='c' * 40,
                    GITHUB_REPOSITORY='owner/repo', GITHUB_RUN_ID='2',
                    GITHUB_OUTPUT=directory + '/output', GITHUB_STEP_SUMMARY=directory + '/summary')
-        payload = ({'pull_request': {'number': 1, 'base': {'sha': 'base'}, 'labels': []}}
+        payload = ({'pull_request': {'number': 1, 'base': {'sha': 'base'},
+                                    'labels': [{'name': label} for label in labels]}}
                    if event == 'pull_request' else {'before': 'b' * 40})
         with patch.dict(os.environ, env), patch.object(changes, 'command', side_effect=command), \
              patch.object(changes, 'changed', side_effect=changed or (lambda base: paths)), \
@@ -30,8 +35,7 @@ def select(paths, event='pull_request', changed=None, command=lambda *args: 'hea
              patch.object(changes, 'hashes', return_value=dict.fromkeys(changes.GROUPS, 'hash')):
             changes.select(payload, WINDOWS)
         output = dict(line.split('=', 1) for line in Path(env['GITHUB_OUTPUT']).read_text().splitlines())
-    jobs = json.loads(output['jobs'])
-    return jobs['stub'] and jobs['hosted'], json.loads(output['selection'])['base']
+    return json.loads(output['jobs']), json.loads(output['selection'])['base']
 
 
 def main_runs(*runs):
@@ -49,7 +53,9 @@ class WindowsRuntimeSelection(unittest.TestCase):
                      'butler-platform/src/secure_fs/contained_read.rs',
                      'butler-runtime/src/capabilities/grep_files/search.rs']:
             with self.subTest(path=path):
-                self.assertTrue(select([CRATES + path])[0])
+                self.assertEqual(select([CRATES + path])[0], HOSTED)
+                self.assertEqual(select([CRATES + path], labels=('ci:windows-native',))[0], NATIVE)
+                self.assertEqual(select([CRATES + path], 'push')[0], NATIVE)
 
     # test-category: pure-logic
     def test_agent_dependency_graph_changes_select_windows_smoke(self):
@@ -57,7 +63,7 @@ class WindowsRuntimeSelection(unittest.TestCase):
                      'third_party/notify-windows-ledger/src/lib.rs',
                      'packages/butler-agent/rust/Cargo.lock']:
             with self.subTest(path=path):
-                self.assertTrue(select([path])[0])
+                self.assertEqual(select([path])[0], HOSTED)
 
     # test-category: pure-logic
     def test_smoke_docs_ts_and_non_agent_crate_changes_skip_windows_smoke(self):
@@ -66,7 +72,7 @@ class WindowsRuntimeSelection(unittest.TestCase):
                       ['packages/butler-app/client/ui/src/app.tsx', 'packages/butler-i18n/src/locale.ts'],
                       [CRATES + 'butler-e2e/tests/e2e/turn.rs', CRATES + 'butler-test-support/src/lib.rs']]:
             with self.subTest(paths=paths):
-                self.assertFalse(select(paths)[0])
+                self.assertEqual(select(paths)[0], NONE)
 
     # test-category: pure-logic
     def test_closure_follows_linked_repository_crates_only(self):
@@ -116,9 +122,9 @@ class SkippedIsNotPass(unittest.TestCase):
         # The red commit changed the platform crate; this push changes only a smoke file.
         diffs = {green: [platform, smoke], red: [smoke]}
         for runs, base, selected in [
-                ([(3, red, 'failure'), (2, green, 'success')], green, True),
-                ([(3, red, 'cancelled'), (2, green, 'success')], green, True),
-                ([(4, red, 'success'), (2, green, 'success')], red, False)]:
+                ([(3, red, 'failure'), (2, green, 'success')], green, NATIVE),
+                ([(3, red, 'cancelled'), (2, green, 'success')], green, NATIVE),
+                ([(4, red, 'success'), (2, green, 'success')], red, NONE)]:
             with self.subTest(runs=runs):
                 command = lambda *args: main_runs(*runs) if args[:2] == ('gh', 'api') else 'head'
                 self.assertEqual(select([], 'push', lambda value: diffs[value], command), (selected, base))

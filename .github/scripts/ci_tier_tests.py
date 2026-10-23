@@ -65,7 +65,7 @@ class ApprovedTiers(unittest.TestCase):
             # Only Windows agent crate changes add the separate Windows smoke.
             agent = any(changes.windows_runtime(path, 'pull_request') for path in paths)
             allowed = (PR_FAST_JOBS if workflow == 'rust-quality.yml' else
-                       {'stub', 'hosted'} if workflow == 'windows-preview-smoke.yml' and agent else set())
+                       {'hosted-build', 'hosted'} if workflow == 'windows-preview-smoke.yml' and agent else set())
             self.assertLessEqual(selected, allowed, (paths, workflow, selected))
             if workflow == 'rust-quality.yml':
                 self.assertFalse(json.loads(outputs['parts'])['ui']['macos'])
@@ -100,24 +100,28 @@ class ApprovedTiers(unittest.TestCase):
         rust = 'packages/butler-agent/rust/crates/butler-core/src/lib.rs'
         windows = 'packages/butler-agent/rust/crates/butler-platform/src/process.rs'
         for event, paths, labels, native in [
-            ('pull_request', [rust], (), True),
-            ('pull_request', [windows], (), True),
-            ('pull_request', ['packages/butler-agent/rust/crates/butler-core/src/windows/native.rs'], (), True),
+            ('pull_request', [rust], (), 'hosted'),
+            ('pull_request', [windows], (), 'hosted'),
+            ('pull_request', ['packages/butler-agent/rust/crates/butler-core/src/windows/native.rs'], (), 'hosted'),
             ('pull_request', ['packages/butler-agent/rust/crates/butler-e2e/tests/e2e/new.rs'], (), False),
+            ('pull_request', [rust], ('ci:windows-native',), True),
             ('pull_request', ['packages/butler-agent/rust/crates/butler-e2e/tests/e2e/new.rs'], ('ci:windows-native',), True),
             ('push', [rust], (), True), ('push', ['README.md'], (), False),
             ('workflow_dispatch', [], (), True),
         ]:
             output = selection(paths, event, workflow, labels)
             jobs = json.loads(output['jobs'])
-            self.assertEqual(jobs, dict(build=False, release=False, stub=native, hosted=native))
+            # 'hosted': GitHub-hosted build and shards; True: owner-PC native stub and shards.
+            self.assertEqual(jobs, {'build': False, 'release': False, 'stub': native is True,
+                                    'hosted-build': native == 'hosted', 'hosted': bool(native)})
             results = {'changes': {'result': 'success', 'outputs': output}}
             results.update({name: {'result': 'success' if enabled else 'skipped'} for name, enabled in jobs.items()})
             env = dict(os.environ, RESULTS=json.dumps(results), CHECK_GROUPS=json.dumps(dict.fromkeys(jobs, 'jobs')))
             run = subprocess.run(['python3', str(ROOT / 'ci-check-selected.py')], env=env, capture_output=True, text=True)
             self.assertEqual(run.returncode, 0, run.stderr)
         integration = dict(package='true', windows='true', tier='integration')
-        self.assertTrue(all(changes.windows_preview_jobs(integration, 'push').values()))
+        self.assertEqual(changes.windows_preview_jobs(integration, 'push'),
+                         {'build': True, 'stub': True, 'hosted-build': False, 'release': True, 'hosted': True})
         source = (ROOT.parent / 'workflows' / workflow).read_text()
         self.assertIn('branches: [main,', source)
         self.assertIn('gh workflow run windows-preview-smoke.yml --ref <head-branch>', source)
@@ -332,7 +336,7 @@ class ApprovedTiers(unittest.TestCase):
             self.assertIn(f'/workflows/{workflow}/runs?', queries[0])
             output = dict(line.split('=', 1) for line in Path(env['GITHUB_OUTPUT']).read_text().splitlines())
             self.assertEqual(json.loads(output['jobs']),
-                             dict(build=False, release=False, stub=True, hosted=True))
+                             {'build': False, 'release': False, 'stub': True, 'hosted-build': False, 'hosted': True})
 
     # test-category: pure-logic
     def test_main_baseline_failure_selects_all_checks(self):

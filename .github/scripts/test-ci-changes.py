@@ -271,22 +271,22 @@ class Trust(unittest.TestCase):
 
     # test-category: pure-logic
     def test_windows_preview_installers_never_run_on_pull_requests(self):
-        # PRs run the native smoke only for Windows agent crates or Windows inputs.
+        # PRs run hosted shards only for Windows agent crates or Windows inputs.
         rust, workflow = 'packages/butler-agent/rust/crates/butler-core/src/lib.rs', '.github/workflows/e2e.yml'
         pr = {'pull_request': {'number': 12, 'base': {'sha': 'base'}}}
-        none = dict.fromkeys(['build', 'stub', 'release', 'hosted'], False)
-        native = dict(none, stub=True, hosted=True)
+        none = dict.fromkeys(['build', 'stub', 'hosted-build', 'release', 'hosted'], False)
+        hosted, native = dict(none, **{'hosted-build': True, 'hosted': True}), dict(none, stub=True, hosted=True)
         for event_name, ref, event, paths, expected in [
             ('pull_request', 'refs/pull/12/merge', pr, ['docs/notes.md', workflow], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['deploy/install.sh', 'packages/butler-npm/index.js'], none),
-            ('pull_request', 'refs/pull/12/merge', pr, [rust], native),
+            ('pull_request', 'refs/pull/12/merge', pr, [rust], hosted),
             ('pull_request', 'refs/pull/12/merge', pr, ['packages/butler-agent/rust/crates/butler-e2e/tests/e2e/new.rs'], none),
-            ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-preview-smoke.yml'], native),
-            ('pull_request', 'refs/pull/12/merge', pr, ['.github/actions/build-windows-agent/action.yml'], native),
-            ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-installer.yml'], native),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-preview-smoke.yml'], hosted),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/actions/build-windows-agent/action.yml'], hosted),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-installer.yml'], hosted),
             ('pull_request', 'refs/pull/12/merge', pr, ['.github/scripts/ci-changes.py'], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['.github/releases/v1.2.3.md'], none),
-            ('pull_request', 'refs/pull/12/merge', pr, ['deploy/windows-preview-smoke.ps1'], native),
+            ('pull_request', 'refs/pull/12/merge', pr, ['deploy/windows-preview-smoke.ps1'], hosted),
             ('workflow_dispatch', 'refs/heads/main', {}, [], native),
         ]:
             with self.subTest(event=event_name, paths=paths), tempfile.TemporaryDirectory() as temporary:

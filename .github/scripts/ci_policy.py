@@ -36,7 +36,13 @@ def rust_jobs(outputs, event):
 
 
 def windows_preview_jobs(outputs, event):
-    """Native smoke runs wherever its Windows inputs changed; builds are release-only."""
-    native = outputs['windows'] == 'true'
+    """Smoke runs wherever its Windows inputs changed; installers are release-only.
+
+    The owner-PC native stub runs on main/release, dispatch and ci:windows-native
+    PRs; other PRs build the hosted shards' harness on a GitHub-hosted runner.
+    """
+    windows = outputs['windows'] == 'true'
+    native = windows and (event != 'pull_request' or outputs.get('label') == 'true')
     installer = outputs['package'] == 'true' and outputs.get('tier') == 'integration'
-    return {'build': installer, 'stub': native, 'release': installer and native, 'hosted': native}
+    return {'build': installer, 'stub': native, 'hosted-build': windows and not native,
+            'release': installer and native, 'hosted': windows}

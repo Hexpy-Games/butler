@@ -388,8 +388,8 @@ def select(event, workflow):
     paths = [] if full else changed(base)
     required = set(GROUPS) if full else set().union(*(categories(p, os.environ['GITHUB_EVENT_NAME']) for p in paths))
     current = hashes(base or 'full')
-    native_required = (full or any(windows_native(p) or windows_runtime(p, os.environ['GITHUB_EVENT_NAME']) for p in paths) or
-                       any(label['name'] == 'ci:windows-native' for label in pr.get('labels', [])) or
+    label = any(label['name'] == 'ci:windows-native' for label in pr.get('labels', []))
+    native_required = (full or label or any(windows_native(p) or windows_runtime(p, os.environ['GITHUB_EVENT_NAME']) for p in paths) or
                        (os.environ['GITHUB_EVENT_NAME'] != 'pull_request' and 'rust' in required))
     # Windows stub receipts use the package group, including all Rust harness inputs.
     if workflow == 'windows-preview-smoke.yml':
@@ -436,7 +436,9 @@ def select(event, workflow):
     if level == 'smoke' and workflow == 'windows-preview-smoke.yml':
         parts = {'hosted': ci_parts.HOSTED}
         native = outputs['package'] == 'true' and native_required
-        jobs = windows_preview_jobs(dict(outputs, windows=str(native).lower()), os.environ['GITHUB_EVENT_NAME'])
+        jobs = windows_preview_jobs(dict(outputs, windows=str(native).lower(), label=str(label).lower()), os.environ['GITHUB_EVENT_NAME'])
+    elif workflow == 'windows-preview-smoke.yml':
+        jobs['hosted-build'] = False  # Integration builds on the owner PC.
     if os.environ['GITHUB_EVENT_NAME'] == 'pull_request' and workflow not in ('rust-quality.yml', 'windows-preview-smoke.yml'):
         jobs = dict.fromkeys(jobs, False)
     outputs.update({'parts': json.dumps(parts), 'docs-only': str(not required).lower(), 'electron': outputs['package'],
