@@ -12,7 +12,6 @@ use std::time::{Duration, Instant};
 
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::gateway::{TERMINAL, turn_state};
-use butler_e2e::e2e::provider::Pacing;
 use butler_e2e::e2e::scenario::{Scenario, Setup, accepted_turn_id};
 use serde_json::{Value, json};
 
@@ -47,14 +46,13 @@ async fn send(s: &Scenario, path: &str, text: &str) -> Result<(), HarnessError> 
 
 /// Starts the slow turn and stops it with `PAUSED` queued behind it.
 async fn stop_with_a_queued_message(s: &Scenario) -> Result<(), HarnessError> {
-    s.provider()?.set_pacing(Pacing {
-        scale: 1.0,
-        cap_ms: 300,
-        min_ms: 200,
-    });
+    let held = s.provider()?.hold_next_reply(LONG);
     let running = accepted_turn_id(&s.gw.say("general", LONG).await?)?;
     let deadline = Instant::now() + Duration::from_secs(20);
-    while s.provider()?.served() == 0 {
+    while !s.provider()?.requests().iter().any(|body| {
+        butler_e2e::e2e::matching::key("/codex/responses", body, &Default::default()).user_request
+            == LONG
+    }) {
         assert!(Instant::now() < deadline, "provider not reached");
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
@@ -67,6 +65,7 @@ async fn stop_with_a_queued_message(s: &Scenario) -> Result<(), HarnessError> {
         s.gw.wait_terminal("general", &running, Duration::from_secs(20))
             .await?;
     assert_eq!(turn_state(&turn), "cancelled", "{turn}");
+    held.release();
     Ok(())
 }
 

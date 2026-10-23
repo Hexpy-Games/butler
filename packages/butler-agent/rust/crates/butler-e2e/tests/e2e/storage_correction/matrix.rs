@@ -19,6 +19,7 @@ async fn storage_correction_crashes_queue_and_idle() -> Result<(), HarnessError>
             .await
     })
     .await?;
+    super::super::work_model_cutover::completed(&s).await?;
     s.agent.terminate().await?;
     let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
     let seeded = offline(&path, |path| {

@@ -77,6 +77,7 @@ async fn seeded(id: &str, extra: &str) -> Result<Seed, HarnessError> {
         chats.push(c["session"]["id"].as_str().unwrap().to_owned());
         hints.push(c["session"]["session_hint"].as_str().unwrap().to_owned());
     }
+    super::work_model_cutover::completed(&s).await?;
     s.agent.terminate().await?;
     // Static preview-14 data is seeded while stopped, before the measured start.
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
