@@ -8,6 +8,12 @@ pub(super) async fn settle_answer(
     reply: Reply,
     iteration: u32,
 ) -> Result<Step, AgentLoopError> {
+    if reply.truncated {
+        state.cut_answer = join_cut(&state.cut_answer, &reply.text);
+        return continue_answer(input, state, prepared,
+            "Your previous response reached the output token limit and was cut off. Continue it from where it stopped: begin by repeating its last line exactly, then write the rest. Do not restart or summarize what you already wrote."
+        ).await;
+    }
     if reply.text.is_empty() || reply.nonfinal {
         let reason = if reply.nonfinal {
             "Your previous response only reported progress, not a final answer. Continue the request or provide its completed result."
@@ -25,7 +31,7 @@ pub(super) async fn settle_answer(
             "Only progress/bookkeeping is recorded; the request may still be open. Check the original request against the results. Continue any unfinished work. If these records themselves satisfy the request, provide the substantive final answer now; otherwise progress is not completion."
         ).await;
     }
-    let mut text = reply.text;
+    let mut text = join_cut(&std::mem::take(&mut state.cut_answer), &reply.text);
     if let Some(synthesized) = synthesize_answer(input, state, prepared, &text).await? {
         reject_round_text(prepared);
         text = synthesized;
@@ -64,6 +70,17 @@ pub(super) async fn settle_answer(
                 .await
                 .map(Step::finished)
         }
+    }
+}
+
+/// Joins an answer cut off at the output limit with its continuation, which
+/// repeats the cut last line first; one that does not is appended as written.
+fn join_cut(cut: &str, next: &str) -> String {
+    let line = cut.rfind('\n').map_or(0, |index| index + 1);
+    if line < cut.len() && next.starts_with(&cut[line..]) {
+        format!("{}{next}", &cut[..line])
+    } else {
+        format!("{cut}{next}")
     }
 }
 

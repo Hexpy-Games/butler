@@ -72,6 +72,8 @@ impl Step {
 /// The assistant's reply for one iteration.
 struct Reply {
     nonfinal: bool,
+    /// The provider stopped at its output token limit.
+    truncated: bool,
     text: String,
     calls: Vec<ModelRoundToolCall>,
     /// Tool names the model wrote as text, sorted and deduplicated.
@@ -176,6 +178,7 @@ async fn run_iteration(
     let reply = match &resumed_batch {
         Some(batch) => Reply {
             nonfinal: false,
+            truncated: false,
             text: String::new(),
             calls: batch.calls.clone(),
             text_call_names: Vec::new(),
@@ -205,6 +208,7 @@ async fn run_iteration(
         return settle_answer(input, state, prepared, reply, iteration).await;
     }
     discard_round_text(prepared);
+    state.cut_answer.clear();
     run_tool_batch(
         input,
         state,
@@ -243,6 +247,7 @@ async fn obtain_reply(
             .push(assistant_message(String::new(), vec![call.clone()], None));
         return Ok(Reply {
             nonfinal: false,
+            truncated: false,
             text: String::new(),
             calls: vec![call],
             text_call_names: Vec::new(),
@@ -262,6 +267,7 @@ async fn obtain_reply(
     }
     Ok(Reply {
         nonfinal: result.nonfinal,
+        truncated: result.output_truncated,
         text,
         calls,
         text_call_names,
