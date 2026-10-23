@@ -10,9 +10,17 @@ export interface CanonCopy {
   taskStatuses: Record<"draft" | "waiting" | "pending" | "running" | "in_review" | "held" | "failed" | "completed" | "blocked" | "paused" | "stopped" | "cancelled", string>;
   done: (done: number, total: number) => string;
   tasks: (done: number, total: number) => string;
-  confirmed: (done: number, total: number) => string;
   due: (date: string) => string;
   ordinal: (n: number) => string;
   backlogCount: (n: number) => string;
   moved: (plan: string) => string;
+  personLabel: (name: string, self: boolean) => string;
+  cardStatusChanged: (title: string, status: string) => string;
+  drag: {
+    instructions: string; roleDescription: string;
+    lifted: (item: string, lane: string, position: number) => string;
+    over: (item: string, lane: string, position: number) => string;
+    dropped: (item: string, lane: string, position: number) => string;
+    cancelled: (item: string) => string; unchanged: (item: string) => string;
+  };
 }

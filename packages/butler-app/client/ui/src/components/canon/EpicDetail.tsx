@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { EpicDetail as Epic, EpicInput, PlanCards, WorkTasks, CanonStatus } from "@/app/canonApi.ts";
-import { ButtonContainer, IconButton, KeyValueRow, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Pencil, Stack, Typo } from "@/butler-ds";
+import { Box, ButtonContainer, IconButton, KeyValueRow, NativeSelect, NativeSelectOption, Pencil, Stack, Typo } from "@/butler-ds";
+import { CanonAvatar } from "./CanonAvatar.tsx";
 import { EpicEditForm } from "./EpicEditForm.tsx";
 import { CanonPersonSelect } from "./CanonPersonSelect.tsx";
 import { CanonPlanSelect } from "./CanonPlanSelect.tsx";
@@ -18,7 +19,7 @@ export function EpicDetail({ epic, plans, tasks, busy, onWrite }: {
   const ordinal = plan ? plan.works.findIndex(work => work.id === epic.id) + 1 : 0;
   const statusChanged = (status: CanonStatus) => void onWrite({ status,
     ...(["done", "cancelled"].includes(status) ? { expected_task_graph_revision: epic.task_graph_revision } : {}) }, copy.statusChanged);
-  return <Stack gap="xl" data-test-class="canon-epic-detail" data-epic-id={epic.id}>
+  return <Stack gap="lg" data-test-class="canon-epic-detail" data-epic-id={epic.id}>
     {editing ? <EpicEditForm epic={epic} busy={busy} onSave={onWrite} onClose={() => setEditing(false)} /> : <Stack gap="sm">
       <Stack align="row" cross="start" justify="between" gap="sm">
         <Typo.PanelTitle wrap="anywhere">{epic.title}</Typo.PanelTitle>
@@ -27,15 +28,15 @@ export function EpicDetail({ epic, plans, tasks, busy, onWrite }: {
       {epic.description && <Typo.Body wrap="pre">{epic.description}</Typo.Body>}
     </Stack>}
     <Stack gap="sm">
-      <KeyValueRow valueTextSize="caption" label={copy.status} value={<Select value={epic.canon_status} disabled={busy} onValueChange={value => statusChanged(value as CanonStatus)}>
-        <SelectTrigger aria-label={copy.status}><SelectValue /></SelectTrigger>
-        <SelectContent>{Object.entries(copy.statuses).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
-      </Select>} />
-      <KeyValueRow valueTextSize="caption" label={copy.assignee} value={<CanonPersonSelect value={epic.assignee} disabled={busy} onChange={assignee => void onWrite({ assignee })} />} />
-      <KeyValueRow valueTextSize="caption" label={copy.plan} value={<Stack align="row" gap="xs" cross="center" wrap>
-        <CanonPlanSelect plans={plans} value={epic.plan_id} disabled={busy}
-          onChange={plan_id => void onWrite({ plan_id }, copy.moved(plans.find(plan => plan.id === plan_id)?.title ?? copy.backlog))} />
-        {ordinal > 0 && <Typo.Caption>· {copy.ordinal(ordinal)}</Typo.Caption>}
+      <KeyValueRow valueTextSize="caption" label={copy.status} value={<NativeSelect size="sm" aria-label={copy.status} value={epic.canon_status} disabled={busy} onChange={event => statusChanged(event.target.value as CanonStatus)}>
+        {Object.entries(copy.statuses).map(([value, label]) => <NativeSelectOption key={value} value={value}>{label}</NativeSelectOption>)}
+      </NativeSelect>} />
+      <KeyValueRow valueTextSize="caption" label={copy.assignee} value={<Stack inline align="row" cross="center" gap="xs"><CanonAvatar person={epic.assignee} /><Box minWidth="0" shrink><CanonPersonSelect compact value={epic.assignee} disabled={busy} onChange={assignee => void onWrite({ assignee })} /></Box></Stack>} />
+      <KeyValueRow valueTextSize="caption" label={copy.plan} value={<Stack inline align="row" cross="center" gap="xs">
+        <Box minWidth="0" shrink>
+        <CanonPlanSelect compact plans={plans} value={epic.plan_id} disabled={busy}
+          onChange={plan_id => void onWrite({ plan_id }, copy.moved(plans.find(plan => plan.id === plan_id)?.title ?? copy.backlog))} /></Box>
+        {ordinal > 0 && <Typo.Caption wrap="nowrap" shrink={false}>· {copy.ordinal(ordinal)}</Typo.Caption>}
       </Stack>} />
     </Stack>
     <SpecTree nodes={epic.specs} />

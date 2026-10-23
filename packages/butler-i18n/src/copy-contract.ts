@@ -431,11 +431,10 @@ export interface AppCopy {
     sessionUnconfirmed: string;
     reviewed: string; disposition: string; result: string;
     reported: string; historyLedgerUnavailable: string; linkedResults: (count: number) => string;
-    currentPlan: string; disconnected: string;
+    disconnected: string;
     reportQuestion: string;
-    parentWork: string; allWork: string;
     periodDays: (days: number) => string; statisticsZone: (zone: string) => string;
-    boardKind: string; period: string; statisticsKind: string; materialsView: string;
+    period: string; statisticsKind: string; materialsView: string;
     briefing: string; suggestions: string; briefingPending: string; briefingUnavailable: string; summarized: string; addToComposer: string;
     briefingCoverage: (works: number, total: number, documents: number, reports: number, excluded: number) => string;
     conversationTarget: string; newProjectConversation: string; pendingConversation: string; sourceQuestion: string;
@@ -444,7 +443,8 @@ export interface AppCopy {
     results: string; noResults: string;
     overview: string; work: string; materials: string; history: string; statistics: string;
     position: string; remaining: string; completed: string; open: string; blocked: string;
-    abandoned: string; unknown: string; registered: string; noWork: string; unbound: string;
+    abandoned: string; unknown: string; registered: string;
+    unbound: string;
     unavailable: string; noRemaining: string; tasks: string; recorded: string; loadMore: string;
     description: string; editDescription: string; pin: string; unpin: string;
     /** Header menu item and dialog title for the project's wallpaper. */

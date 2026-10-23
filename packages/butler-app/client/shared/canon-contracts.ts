@@ -118,10 +118,6 @@ export interface CanonConflict extends Error {
   status: 409;
   current: { revision: number };
 }
-export function isCanonConflict(error: unknown): error is CanonConflict {
-  return error instanceof Error && "code" in error && error.code === "conflict" &&
-    "current" in error && typeof (error.current as { revision?: unknown })?.revision === "number";
-}
 export type WorkTaskEdit =
   | { op: "move_to_new_step"; chain_id: string; task_id: string; index: number }
   | { op: "join_stack"; chain_id: string; task_id: string; target: string }

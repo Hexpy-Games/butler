@@ -5,6 +5,7 @@ import { resolve, join } from "node:path";
 import type { Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
+import { captureCanonDrag, verifyCanonDrags } from "../support/canon-board-drags.ts";
 import { openCanonBoard, seedCanonBoard, verifyCanonFlows } from "../support/canon-board-scenarios.ts";
 
 const shots = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? ".tmp/canon-board-smoke");
@@ -49,11 +50,12 @@ try {
         await capture(page, `${name}-rest.png`); count++; continue;
       }
       const board = page.locator('[data-test-class="canon-board"]');
-      await board.getByRole("button", { name: "캐논", exact: true }).waitFor();
+      await board.locator("[data-kanban-item]").filter({ hasText: "캐논" }).getByRole("button").first().waitFor();
       assert.equal(await board.getByText(/GitHub|가져오기|동기화됨|마일스톤/).count(), 0);
       assert.equal(await board.getByRole("radio").count(), 0);
       await capture(page, `${name}-rest.png`); count++;
-      const card = board.getByRole("button", { name: "캐논", exact: true });
+      const card = board.locator("[data-kanban-item]").filter({ hasText: "캐논" }).getByRole("button").first();
+      assert.equal(await card.getByRole("img", { name: "나 (나)", exact: true }).count(), 1, "Assigned card has an Avatar after its title");
       await card.focus(); await card.press("Enter");
       await page.locator('[data-test-class="canon-epic-detail"]').waitFor();
       if (width === 1440) {
@@ -63,22 +65,34 @@ try {
         const close = await page.locator('[data-test-class="canon-detail-panel"]').getByRole("button", { name: "닫기", exact: true }).boundingBox();
         assert(close && close.y >= 0 && close.y + close.height < 844, "Selected detail opens in the phone viewport");
       }
+      const detailPanel = page.locator('[data-test-class="canon-detail-panel"]');
+      const planControl = await detailPanel.getByRole("combobox", { name: "계획", exact: true }).boundingBox();
+      const ordinal = await detailPanel.getByText("· 1번째", { exact: true }).boundingBox();
+      const panelBox = await detailPanel.boundingBox();
+      assert(planControl && ordinal && panelBox && ordinal.x + ordinal.width <= panelBox.x + panelBox.width,
+        "Plan ordinal stays inside the panel");
+      assert(Math.abs(ordinal.y + ordinal.height / 2 - planControl.y - planControl.height / 2) < 4, "Plan ordinal stays inline");
       await capture(page, `${name}-detail.png`); count++;
       await page.locator('[data-test-class="canon-detail-panel"]').getByRole("button", { name: "닫기", exact: true }).click();
       await board.locator('[data-canon-backlog]').getByRole("button", { name: "새 과제", exact: true }).click();
       await page.getByRole("dialog").waitFor();
       await capture(page, `${name}-create.png`); count++;
       await page.getByRole("dialog").getByRole("button", { name: "취소", exact: true }).click();
+      await captureCanonDrag(page, join(shots, `${name}-drag.png`)); count++;
       if (width === 390 && theme === "dark" && wallpaper) {
         await page.setViewportSize({ width: 1440, height: 900 });
+        await verifyCanonDrags(page, server, projectId, planId);
         await verifyCanonFlows(page, server, projectId, planId);
       }
       assert.deepEqual(errors, [], "No renderer errors");
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "No viewport overflow");
       console.log(JSON.stringify({ result: "ASSERTIONS_PASS", case: cell, screenshots: count,
-        flows: width === 390 && theme === "dark" && wallpaper ? "create,move,status,live-update,conflict,plan-create" : "visual",
+        flows: width === 390 && theme === "dark" && wallpaper ? "create,move,status,live-update,conflict,plan-create,plan-edit,pointer-reorder,pointer-status,pointer-plan,keyboard" : "visual",
         stubModelCalls: server.stubModelCalls.length }));
-    } catch (error) { contextFailure = error; }
+    } catch (error) {
+      if (page) { console.log("CASE_FAILURE", await page.locator("body").innerText()); await page.screenshot({ path: join(shots, `${cell}-failure.png`) }); }
+      contextFailure = error;
+    }
     finally { await closeCase(page, context, contextFailure); }
   }
 } catch (error) { failure = error; }

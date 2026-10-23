@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getCanon, getCanonEpic, getWorkTasks, editCanonEpic, type CanonOverview, type EpicDetail, type EpicInput, type WorkTasks } from "@/app/canonApi.ts";
 import { subscribeCanonChanges } from "@/app/canonEvents.ts";
 import { notifyStatus } from "@/app/notifications.ts";
+import { useCanonMove } from "./useCanonMove.ts";
 import { canonWriteFailure } from "./canonFeedback.ts";
 
 /** A mounted project owns its reads; event bursts coalesce and stale reads never win. */
@@ -16,7 +17,9 @@ export function useCanonBoard(projectId: string) {
   const selectedRef = useRef(selected);
   const mounted = useRef(true);
   selectedRef.current = selected;
+  const movingRef = useRef<{ current: boolean }>({ current: false });
   const refresh = useCallback(async () => {
+    if (movingRef.current.current) return;
     const epoch = ++generation.current;
     const id = selectedRef.current;
     try {
@@ -25,6 +28,8 @@ export function useCanonBoard(projectId: string) {
       setCanon(board); setDetail(epic); setTasks(queue); setError(null);
     } catch (error) { if (mounted.current && epoch === generation.current) setError(error); }
   }, [projectId]);
+  const drag = useCanonMove(canon, setCanon, refresh, () => { generation.current++; });
+  movingRef.current = drag.moving;
   useEffect(() => {
     mounted.current = true;
     let queued = false;
@@ -54,5 +59,5 @@ export function useCanonBoard(projectId: string) {
     } catch (error) { await canonWriteFailure(error, refresh); return false; }
     finally { if (mounted.current) setBusy(false); }
   };
-  return { canon, selected, detail, tasks, error, busy, refresh, select, write };
+  return { canon, selected, detail, tasks, error, busy, refresh, select, write, move: drag.move, moving: drag.moving.current };
 }

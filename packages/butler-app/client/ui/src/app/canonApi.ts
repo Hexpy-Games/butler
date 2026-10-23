@@ -1,7 +1,6 @@
 import { api } from "./api.ts";
 import type { CanonOverview, CanonOrderInput, EpicDetail, EpicInput, PlanDetail, PlanInput, WorkTasks } from "../../../shared/canon-contracts.ts";
 export type * from "../../../shared/canon-contracts.ts";
-export { isCanonConflict } from "../../../shared/canon-contracts.ts";
 const projectPath = (id: string) => `/projects/${encodeURIComponent(id)}/canon`;
 const planPath = (id: string) => `/canon/plans/${encodeURIComponent(id)}`;
 const epicPath = (id: string) => `/canon/epics/${encodeURIComponent(id)}`;

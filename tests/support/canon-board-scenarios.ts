@@ -10,7 +10,7 @@ export async function seedCanonBoard(server: NativeAppServerHandle): Promise<{ p
   const titles = ["캐논", "작업 큐", "시각화 블록", "문서", "이미지 도구", "ChatGPT 공식 로그인", "크레이트 분리"];
   const statuses: CanonStatus[] = ["in_progress", "done", "in_review", "planned", "blocked", "planned", "done"];
   for (const [index, title] of titles.entries()) {
-    const epic = await server.api<EpicDetail>(`${prefix}/epics`, post({ title, description: `${title}의 계획`, plan_id: plan.id }));
+    const epic = await server.api<EpicDetail>(`${prefix}/epics`, post({ title, description: `${title}의 계획`, plan_id: plan.id, assignee: index === 0 ? "app-user" : null }));
     await server.api(`/canon/epics/${epic.id}`, { method: "PATCH", body: JSON.stringify({
       expected_revision: epic.revision, status: statuses[index], expected_task_graph_revision: epic.task_graph_revision,
     }) });
@@ -43,20 +43,18 @@ export async function verifyCanonFlows(page: Page, server: NativeAppServerHandle
   await dialog.getByLabel("제목", { exact: true }).fill("생성한 과제");
   assert(await create.isEnabled());
   await create.click(); await waitToast(page, "과제를 만들었습니다");
-  const createdCard = board.locator('[data-canon-backlog] [data-epic-id]').filter({ hasText: "생성한 과제" });
-  await createdCard.waitFor(); assert.equal(await createdCard.getAttribute("aria-pressed"), "true");
+  const createdCard = board.locator('[data-canon-backlog] [data-kanban-item]').filter({ hasText: "생성한 과제" });
+  await createdCard.waitFor(); assert.equal(await createdCard.locator('[role="button"]').getAttribute("data-selected"), "true");
   const detail = page.locator('[data-test-class="canon-epic-detail"]');
   await detail.getByText("생성한 과제", { exact: true }).waitFor();
   let canon = await server.api<CanonOverview>(`/projects/${projectId}/canon`);
   const created = canon.backlog.find(epic => epic.title === "생성한 과제")!; assert(created);
-  await detail.getByRole("combobox", { name: "계획", exact: true }).click();
-  await page.getByRole("option", { name: "프리뷰 14", exact: true }).click();
+  await detail.getByRole("combobox", { name: "계획", exact: true }).selectOption(planId);
   await waitToast(page, "프리뷰 14에 넣었습니다");
-  await board.locator(`[data-plan-id="${planId}"] [data-canon-lane="planned"] [data-epic-id="${created.id}"]`).waitFor();
-  await detail.getByRole("combobox", { name: "상태", exact: true }).click();
-  await page.getByRole("option", { name: "검토 중", exact: true }).click();
+  await board.locator(`[data-plan-id="${planId}"] [data-canon-lane="planned"] [data-kanban-item="${created.id}"]`).waitFor();
+  await detail.getByRole("combobox", { name: "상태", exact: true }).selectOption("in_review");
   await waitToast(page, "상태를 바꿨습니다");
-  await board.locator(`[data-canon-lane="in_review"] [data-epic-id="${created.id}"]`).waitFor();
+  await board.locator(`[data-canon-lane="in_review"] [data-kanban-item="${created.id}"]`).waitFor();
   const saved = await server.api<EpicDetail>(`/canon/epics/${created.id}`);
   assert.equal(saved.plan_id, planId); assert.equal(saved.canon_status, "in_review");
   await verifyCanonConflict(page, server, created.id);
@@ -67,6 +65,13 @@ export async function verifyCanonFlows(page: Page, server: NativeAppServerHandle
   await board.getByText("다음 계획", { exact: true }).waitFor();
   canon = await server.api<CanonOverview>(`/projects/${projectId}/canon`);
   assert(canon.plans.some(plan => plan.title === "다음 계획"));
+  const section = board.locator("section").filter({ has: page.getByText("다음 계획", { exact: true }) }).first();
+  await section.getByRole("button", { name: "고치기", exact: true }).click();
+  await dialog.getByLabel("제목", { exact: true }).fill("고친 계획");
+  await dialog.getByRole("button", { name: "저장", exact: true }).click();
+  await board.getByText("고친 계획", { exact: true }).waitFor();
+  canon = await server.api<CanonOverview>(`/projects/${projectId}/canon`);
+  assert(canon.plans.some(plan => plan.title === "고친 계획"));
 }
 async function verifyCanonConflict(page: Page, server: NativeAppServerHandle, id: string): Promise<void> {
   const detail = page.locator('[data-test-class="canon-epic-detail"]');
