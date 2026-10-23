@@ -94,22 +94,26 @@ impl SpaceMutationOwner {
         }
         let previous = state.clone();
         let publish_to = subscribers.clone();
+        // Publishing on the storage lane keeps `space.changed` in commit order
+        // with events other operations append concurrently.
         let result = storage
             .execute(move |db| {
-                Ok(commands::execute(
+                let outcome = commands::execute(
                     db,
                     clock.as_ref(),
                     previous,
                     &command,
                     origin,
                     title.as_deref().unwrap_or("새 그룹"),
-                ))
+                );
+                if let Ok(outcome) = &outcome {
+                    events::publish(&publish_to, &outcome.event);
+                }
+                Ok(outcome)
             })
             .await
             .map_err(super::super::app_error)??;
         *state = result.history;
-        drop(state);
-        crate::gateway::application::events::publish(&publish_to, &result.event);
         Ok(result.result)
     }
 

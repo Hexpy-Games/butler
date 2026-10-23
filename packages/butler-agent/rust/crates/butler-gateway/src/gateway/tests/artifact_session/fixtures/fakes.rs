@@ -113,6 +113,7 @@ pub(super) fn test_dependencies() -> AppApplicationDependencies {
         subsessions: Arc::new(TestSessions),
         branch_conversations: Arc::new(TestBranchConversations),
         session_title_generator: Arc::new(TestBranchSummarizer),
+        session_topic_classifier: Arc::new(TestBranchSummarizer),
         branch_summarizer: Arc::new(TestBranchSummarizer),
         setup: crate::gateway::application::test_setup_port(),
     }
@@ -444,5 +445,15 @@ impl crate::gateway::AppSessionTitleGenerator for TestBranchSummarizer {
         _cancellation: tokio_util::sync::CancellationToken,
     ) -> crate::gateway::ApplicationFuture<String> {
         Box::pin(async { Ok("Generated chat title".into()) })
+    }
+}
+
+impl crate::gateway::AppSessionTopicClassifier for TestBranchSummarizer {
+    fn classify(
+        &self,
+        _input: crate::gateway::AppSessionTopicInput,
+        _cancellation: tokio_util::sync::CancellationToken,
+    ) -> crate::gateway::ApplicationFuture<String> {
+        Box::pin(async { Ok(r#"{"topic":null,"action":"none","target":null}"#.into()) })
     }
 }
