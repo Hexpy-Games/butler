@@ -115,6 +115,8 @@ const HAIRLINE_MAX_PX = 3;
 export const OFF_SCALE_ALLOWLIST: Record<string, readonly string[]> = {
   // Control and menu insets tuned to the 24-34px control heights and 32px menu rows.
   "libs/design-system/blocks/AttachmentList/AttachmentList.module.css": ["spacing:10"],
+  // The 64px file face's 6px inset fits "DOCX" beside its glyph.
+  "libs/design-system/blocks/AttachmentList/AttachmentTiles.module.css": ["spacing:6"],
   "libs/design-system/blocks/CommandPanel/CommandPanel.module.css": ["spacing:10", "spacing:14", "spacing:6"],
   "libs/design-system/blocks/FilteredSelectPopover/FilteredSelectPopover.module.css": ["spacing:32"],
   "libs/design-system/blocks/KeyValueRow/KeyValueRow.module.css": ["spacing:10"],
