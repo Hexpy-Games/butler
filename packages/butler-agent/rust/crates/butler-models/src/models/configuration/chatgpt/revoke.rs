@@ -45,6 +45,7 @@ async fn revoke(authority: &ChatGptAuthority, token: &str, client: &str) -> bool
     for attempt in 0..3 {
         let response = http
             .post(&discovery.revocation_endpoint)
+            .phase(butler_log::http::Phase::current().sensitive())
             .form(&[
                 ("token", token),
                 ("token_type_hint", "refresh_token"),

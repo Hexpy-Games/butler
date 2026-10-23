@@ -18,6 +18,7 @@ impl ModelConfiguration {
             .chatgpt_authority
             .client()?
             .post(&attempt.discovery.token_endpoint)
+            .phase(butler_log::http::Phase::current().sensitive())
             .header(reqwest::header::ACCEPT, "application/json")
             .form(&[
                 ("grant_type", "authorization_code"),

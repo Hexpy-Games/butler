@@ -155,6 +155,7 @@ async fn setup_09_sign_in_completes_with_the_flows_pkce() -> Result<(), HarnessE
     butler_e2e::gate!();
     let token = FakeChatGptAuthority::start().await?;
     let s = with_callback_port("SETUP-09", &token).await?;
+    super::outbound_http::logging(&s, "full").await?;
 
     let flow = start(&s.gw, json!({})).await?;
     let port = port(&flow);
@@ -189,6 +190,22 @@ async fn setup_09_sign_in_completes_with_the_flows_pkce() -> Result<(), HarnessE
         serde_json::from_slice(&std::fs::read(s.sandbox.data.join("auth/chatgpt.json"))?)?;
     assert_eq!(profile["email"], OAUTH_EMAIL);
     assert_eq!(profile["subject"], "e2e-subject");
+
+    let rows = super::outbound_http::http_calls(
+        &s, &format!("{}/api/accounts/oauth/token", token.issuer),
+    ).await?;
+    assert_eq!(rows.len(), 1);
+    for row in &rows {
+        assert_eq!(row["attrs"]["purpose"], "oauth");
+        assert_eq!(row["attrs"]["status"], 200);
+        assert!(row.get("content").is_none_or(|body| body.is_null()
+            || body.as_object().is_some_and(serde_json::Map::is_empty)));
+        assert!(row.get("body_ref").is_none_or(Value::is_null));
+    }
+    let text = serde_json::to_string(&rows)?;
+    for secret in ["code", "access_token", "refresh_token", "id_token", "oai_is"] {
+        assert!(!text.contains(secret), "token body reached HTTP logs");
+    }
 
     let existing = start(&s.gw, json!({})).await?;
     assert_eq!(existing["status"], "profile_exists", "{existing}");

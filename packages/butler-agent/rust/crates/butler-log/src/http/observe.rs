@@ -56,7 +56,7 @@ impl Attempt {
             "request_bytes":body.map(<[u8]>::len), "purpose":purpose.name,
             "phase":phase.name, "retry":phase.retry, "start":row.ts,
         });
-        let upload = super::upload::Capture::attach(request);
+        let upload = super::upload::Capture::attach(request, phase.sensitive);
         Self {
             row,
             start: Instant::now(),
@@ -67,7 +67,7 @@ impl Attempt {
             response: super::capture::Capture::new(request.headers()),
             error_body: Vec::new(),
             phase: phase.clone(),
-            capture: full(),
+            capture: full() && !phase.sensitive,
             failed: false,
             sse: false,
             line: super::sse::Line::default(),
@@ -105,7 +105,7 @@ impl Attempt {
         }
         self.bytes += bytes.len() as u64;
         self.chunks += 1;
-        if self.failed && detailed() && self.response.is_text() {
+        if self.failed && !self.phase.sensitive && detailed() && self.response.is_text() {
             let remaining = 4096 - self.error_body.len();
             self.error_body
                 .extend_from_slice(&bytes[..bytes.len().min(remaining)]);
@@ -175,7 +175,7 @@ impl Drop for Attempt {
         let response = std::mem::take(&mut self.response);
         let upload = self.upload.clone();
         let headers = std::mem::take(&mut self.request_headers);
-        let failed = self.failed && detailed();
+        let failed = self.failed && !self.phase.sensitive && detailed();
         let capture = self.capture && full();
         if let Some(log) = crate::global() {
             let retained = response.retained_bytes() + upload.retained_bytes() + 16384;
