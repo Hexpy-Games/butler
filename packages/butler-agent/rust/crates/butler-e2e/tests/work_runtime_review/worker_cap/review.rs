@@ -182,3 +182,39 @@ async fn interrupted_child_recovers_without_waiting_workers_or_app()
     );
     f.close().await
 }
+
+// test-category: pure-logic
+#[tokio::test]
+async fn child_progress_excludes_parent_sibling_and_cancelled_parts()
+-> std::result::Result<(), Failure> {
+    butler_e2e::gate!();
+    let f = Fixture::open().await?;
+    let first = f.service.delegate_worker(request("First")).await?;
+    let second = f.service.delegate_worker(request("Second")).await?;
+    let session = first["child_session_id"].as_str().unwrap().to_owned();
+    f.storage.work_model_write(move |tx| {
+        for (id, owner, status) in [
+            ("parent-part", "parent", "completed"),
+            ("child-done", session.as_str(), "completed"),
+            ("child-cancelled", session.as_str(), "cancelled"),
+        ] {
+            tx.execute("INSERT INTO wm_task_parts(id,task_id,kind,title,status,part_rank,assignee_session_id) SELECT ?1,task_id,'execute',?1,?2,?1,?3 FROM wm_attempts WHERE session_id=?4", rusqlite::params![id,status,owner,session])?;
+        }
+        Ok(())
+    }).await?;
+    let view = f.service.app_projection("parent").await?;
+    let children = view["workers"].as_array().unwrap();
+    let first_view = children
+        .iter()
+        .find(|c| c["session_id"] == first["child_session_id"])
+        .unwrap();
+    let second_view = children
+        .iter()
+        .find(|c| c["session_id"] == second["child_session_id"])
+        .unwrap();
+    assert_eq!(first_view["approved_plan_total"], 2, "{view}");
+    assert_eq!(first_view["approved_plan_completed"], 1, "{view}");
+    assert_eq!(second_view["approved_plan_total"], 1, "{view}");
+    assert_eq!(second_view["approved_plan_completed"], 0, "{view}");
+    f.close().await
+}

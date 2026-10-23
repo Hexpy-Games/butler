@@ -32,8 +32,8 @@ async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), 
     let view = s.gw.get("/session-view?session_id=general").await?;
     let child = &view.data()["steward_children"][0];
     assert_sidebar_work(&s, true).await?;
-    assert_eq!(child["approved_plan_total"], 2, "{child}");
-    assert_eq!(child["approved_plan_completed"], 1, "{child}");
+    assert_eq!(child["approved_plan_total"], 1, "{child}");
+    assert_eq!(child["approved_plan_completed"], 0, "{child}");
     assert!(
         child["activity_rows"]
             .as_array()
@@ -69,7 +69,7 @@ async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), 
     assert_eq!(complete["relation"]["relation_id"], relation);
     assert_eq!(complete["session_id"], child_id);
     assert_eq!(complete["result"]["status"], "success", "{complete}");
-    assert_eq!(complete["approved_plan_completed"], 2);
+    assert_eq!(complete["approved_plan_completed"], 1);
     assert!(
         complete["result"]["summary"]
             .as_str()
@@ -107,7 +107,7 @@ async fn delivered_steward_result_reports_blocked_work() -> Result<(), HarnessEr
     assert_eq!(child["result"]["status"], "blocked", "{child}");
     assert_eq!(child["result"]["work_status"], "blocked", "{child}");
     assert_eq!(child["status"], "failed", "{child}");
-    assert_eq!(child["approved_plan_completed"], 1);
+    assert_eq!(child["approved_plan_completed"], 0);
     let own =
         s.gw.get(&format!(
             "/session-view?session_id={}",
@@ -175,7 +175,7 @@ pub(super) async fn unfinished_disposition_recovers_in_child() -> Result<(), Har
             .all(|r| !r.to_string().contains("occurred 5 times")),
         "child counts leaked to parent"
     );
-    assert_eq!(child["approved_plan_completed"], 2);
+    assert_eq!(child["approved_plan_completed"], 1);
     loop {
         let messages = s.gw.messages("general").await?;
         if messages.iter().any(|message| {

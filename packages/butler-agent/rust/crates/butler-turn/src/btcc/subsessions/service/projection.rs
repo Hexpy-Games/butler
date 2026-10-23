@@ -283,15 +283,15 @@ impl SubsessionService {
     }
 
     async fn plan_counters(&self, child: &Child, projection: &mut Value) -> Result<(), BtccError> {
-        if let Child::Assigned(assigned) = child {
-            let task = assigned.task_id.clone();
+        if let Child::Assigned(_) = child {
+            let session = child.child_session_id.clone();
             let (total, completed) = self
                 .repository
                 .storage()
                 .work_model_read(move |db| {
                     Ok(db.query_row(
                         crate::btcc::storage::native_sql::SUBSESSIONS_SERVICE_TASK_PART_COUNTS,
-                        [task],
+                        [session],
                         |r| Ok((r.get::<_, u32>(0)?, r.get::<_, u32>(1)?)),
                     )?)
                 })

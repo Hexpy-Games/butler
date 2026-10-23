@@ -251,7 +251,7 @@ async fn native_runtime_statements_use_indexes() -> std::result::Result<(), Fail
                     )?
                     .collect::<rusqlite::Result<Vec<_>>>()?
                     .join("\n");
-                if name.starts_with("WORKER_") {
+                if name.starts_with("WORKER_") || name == "SUBSESSIONS_SERVICE_TASK_PART_COUNTS" {
                     workers.insert(name.into(), json!(plan));
                 }
                 if name.starts_with("LEGACY_RECOVERY_") {
