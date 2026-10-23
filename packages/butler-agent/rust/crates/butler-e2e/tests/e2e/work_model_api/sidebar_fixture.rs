@@ -2,15 +2,15 @@ use super::*;
 #[tokio::test]
 async fn wma_sidebar_seeded_visibility_and_plan_order() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    let reserved = butler_work::work_ids::task_session_id("tk_crud");
+    let extra = format!(
+        "UPDATE wm_works SET assignee='app-user' WHERE id='wk_passkey'; UPDATE wm_tasks SET reserved_session_id='{reserved}' WHERE id='tk_crud';"
+    );
     let Seed {
         s,
         project: project_id,
         chat,
-    } = seeded(
-        "WMA-SIDEBAR-FIXTURE",
-        "UPDATE wm_works SET assignee='app-user' WHERE id='wk_passkey';",
-    )
-    .await?;
+    } = seeded("WMA-SIDEBAR-FIXTURE", &extra).await?;
     assert_eq!(
         s.gw.post("/canon/epics/wk_minutes/conversation", json!({}))
             .await?
@@ -32,12 +32,26 @@ async fn wma_sidebar_seeded_visibility_and_plan_order() -> Result<(), HarnessErr
             .iter()
             .any(|n| n["entityId"] == chat || n["entity_id"] == chat)
     );
+    let opened = data(s.gw.post("/tasks/tk_crud/session", json!({})).await?, 200);
+    assert_eq!(opened["session_id"], reserved);
     create_plan(&s, &project_id, "Another plan").await?;
     let before = overview(&s, &project_id).await?;
     let view = data(
         s.gw.get(&format!("/projects/{project_id}/canon/sidebar"))
             .await?,
         200,
+    );
+    let coordinator = view["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|g| g["rows"].as_array().unwrap())
+        .find(|r| r["id"] == "wk_canon")
+        .unwrap();
+    assert_eq!(coordinator["task_sessions"][0]["task_id"], "tk_crud");
+    assert_eq!(
+        coordinator["task_sessions"][0]["session_id"],
+        opened["session_id"]
     );
     assert_eq!(view["groups"][0]["key"], "backlog");
     assert_eq!(ids(&view["groups"][0]["rows"]), vec!["wk_passkey"]);

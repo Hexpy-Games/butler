@@ -21,10 +21,23 @@ pub(crate) async fn sidebar(
     project: String,
 ) -> Result<Value, GatewayApplicationError> {
     let value = canon(app, project.clone()).await?;
-    app.storage
+    let view = app
+        .storage
         .read(move |db| order::view(db, &project, value))
         .await
-        .map_err(app_error)
+        .map_err(app_error)?;
+    nested(app, view).await
+}
+
+async fn nested(app: &AppApplication, mut view: Value) -> Result<Value, GatewayApplicationError> {
+    for group in view["groups"].as_array_mut().into_iter().flatten() {
+        for row in group["rows"].as_array_mut().into_iter().flatten() {
+            if let Some(chat) = row["home_session_id"].as_str() {
+                row["task_sessions"] = app.task_sessions_owned(chat).await?;
+            }
+        }
+    }
+    Ok(view)
 }
 
 pub(crate) async fn reorder(
@@ -51,7 +64,8 @@ pub(crate) async fn reorder(
     };
     let clock = app.dependencies.identity_clock.clone();
     let subscribers = app.subscribers.clone();
-    app.storage
+    let view = app
+        .storage
         .execute(move |db| {
             order::replace(db, &project, &input)?;
             let seq: i64 = db
@@ -73,7 +87,8 @@ pub(crate) async fn reorder(
             order::view(db, &project, value)
         })
         .await
-        .map_err(app_error)
+        .map_err(app_error)?;
+    nested(app, view).await
 }
 
 pub(crate) async fn conversation(

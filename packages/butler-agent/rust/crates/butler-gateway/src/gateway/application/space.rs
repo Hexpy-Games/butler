@@ -50,17 +50,26 @@ impl AppApplication {
                 let Some(chat) = node["entityId"].as_str() else {
                     continue;
                 };
-                let session = self.runtime_hint(chat).await?;
-                let request = super::AppWorkModelRequest {
-                    resource: super::AppWorkModelResource::SessionWorks,
-                    id: session,
-                    input: None,
-                };
-                let works = self.dependencies.work_model.execute(request).await?;
-                node["task_sessions"] = nested_sessions(&self.storage, works).await?;
+                node["task_sessions"] = self.task_sessions_owned(chat).await?;
             }
         }
         Ok(space)
+    }
+
+    pub(super) async fn task_sessions_owned(
+        &self,
+        chat: &str,
+    ) -> Result<Value, GatewayApplicationError> {
+        if self.dependencies.work_model.changes().is_none() {
+            return Ok(serde_json::json!([]));
+        }
+        let request = super::AppWorkModelRequest {
+            resource: super::AppWorkModelResource::SessionWorks,
+            id: self.runtime_hint(chat).await?,
+            input: None,
+        };
+        let works = self.dependencies.work_model.execute(request).await?;
+        nested_sessions(&self.storage, works).await
     }
 }
 
