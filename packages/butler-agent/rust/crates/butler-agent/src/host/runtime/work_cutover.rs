@@ -25,6 +25,12 @@ impl CutoverOwner {
         service
             .recover_native_assignments(self.recovery.interrupted.as_ref().clone())
             .await?;
+        self.tasks
+            .spawn(crate::host::app::work_model::task_steps::run(
+                service.repository().storage().clone(),
+                service.clone(),
+                self.stop.child_token(),
+            ));
         let replay = service.clone();
         let stop = self.stop.child_token();
         self.tasks.spawn(async move {

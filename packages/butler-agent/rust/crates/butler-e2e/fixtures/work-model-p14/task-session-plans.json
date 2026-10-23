@@ -1,0 +1,13 @@
+{
+  "PENDING_PROJECTIONS": "SEARCH wm_cross_db_intents USING INDEX wm_cross_db_intents_pending (state=?)\nUSE TEMP B-TREE FOR ORDER BY",
+  "PENDING_CONTROLS": "SEARCH wm_cross_db_intents USING INDEX wm_intents_pending_kind (kind=?)",
+  "RESERVE": "SEARCH wm_tasks USING INDEX sqlite_autoindex_wm_tasks_1 (id=?)",
+  "START_WORK": "SEARCH wm_works USING INDEX sqlite_autoindex_wm_works_1 (id=?)",
+  "STALE_OWNER": "SCAN CONSTANT ROW\nSCALAR SUBQUERY 1\nSEARCH t USING INDEX sqlite_autoindex_wm_tasks_1 (id=?)\nSEARCH a USING INDEX wm_attempts_task (task_id=?)\nSCALAR SUBQUERY 2\nSEARCH t USING INDEX sqlite_autoindex_wm_tasks_1 (id=?)\nSEARCH a USING INDEX wm_attempts_running (session_id=?)",
+  "TAKE_RESERVED": "SEARCH wm_tasks USING INDEX sqlite_autoindex_wm_tasks_1 (id=?)",
+  "BEGIN_HANDOFF": "SEARCH wm_tasks USING INDEX sqlite_autoindex_wm_tasks_1 (id=?)",
+  "MOVE_OWNER": "SEARCH wm_tasks USING INDEX sqlite_autoindex_wm_tasks_1 (id=?)",
+  "HOLD_REASON": "SEARCH wm_holds USING INDEX sqlite_autoindex_wm_holds_1 (id=?)",
+  "HANDOFF_PENDING": "SEARCH wm_tasks USING INDEX wm_tasks_handoff (id>?)",
+  "LATEST_CHECKPOINT": "SEARCH wm_attempts USING INDEX wm_attempts_task (task_id=?)"
+}

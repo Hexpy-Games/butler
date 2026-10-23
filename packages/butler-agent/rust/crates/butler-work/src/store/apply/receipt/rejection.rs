@@ -14,6 +14,12 @@ pub(super) fn response(
     let target = target(op).unwrap_or("unknown");
     let (code, message) = match error {
         Error::Conflict { current } => conflict_rejection(current, target),
+        Error::Invalid("stale_owner") => (
+            "stale_owner",
+            format!(
+                "This session no longer owns Task {target}; it moved to another conversation, and your change was not applied. Stop working on this Task, do not resend, and call work_read view=tasks before doing anything else."
+            ),
+        ),
         Error::Invalid("tier1_floor_exceeded") => {
             ("tier1_floor_exceeded", model_text::TIER1_FLOOR.into())
         }

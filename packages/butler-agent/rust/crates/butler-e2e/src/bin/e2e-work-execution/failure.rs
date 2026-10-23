@@ -11,6 +11,7 @@ pub(super) fn exercise(tx: &Transaction<'_>, ctx: &Context) -> Result<()> {
             tx,
             ctx,
             &NewTask {
+                session: butler_work::store::TaskSession::Own,
                 id: id.into(),
                 work_id: "work".into(),
                 title: id.into(),
@@ -97,6 +98,7 @@ fn revision_fence(tx: &Transaction<'_>, ctx: &Context) -> Result<()> {
         tx,
         ctx,
         &NewTask {
+            session: butler_work::store::TaskSession::Own,
             id: "fenced".into(),
             work_id: "work".into(),
             title: "Continue".into(),

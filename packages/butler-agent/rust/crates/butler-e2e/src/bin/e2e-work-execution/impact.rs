@@ -20,6 +20,7 @@ pub(super) fn exercise(tx: &Transaction<'_>, ctx: &Context) -> Result<()> {
         tx,
         ctx,
         &NewTask {
+            session: butler_work::store::TaskSession::Own,
             id: "impact-active".into(),
             work_id: "work".into(),
             title: "Apply the result".into(),

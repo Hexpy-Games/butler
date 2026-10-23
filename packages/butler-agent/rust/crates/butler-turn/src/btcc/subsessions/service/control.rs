@@ -7,7 +7,7 @@ use rusqlite::OptionalExtension;
 use serde_json::{Value, json};
 
 use super::selection::{RelationPurpose, RelationQuery};
-use super::{SubsessionService, direction_text, error};
+use super::{ChildRole, SubsessionService, direction_text, error};
 use crate::btcc::BtccCode;
 use crate::btcc::{BtccError, StoredSubsessionDirection};
 use crate::workspace::SessionRole;
@@ -353,7 +353,9 @@ impl SubsessionService {
     }
 
     async fn direction_held(&self, relation: &Child) -> Result<bool, BtccError> {
-        if relation.child_role == SessionRole::Worker && self.dispatch_pending(relation).await? {
+        if relation.packet.child_role == ChildRole::Worker
+            && self.dispatch_pending(relation).await?
+        {
             return Ok(true);
         }
         let target = relation.child_session_id.clone();
@@ -368,6 +370,12 @@ impl SubsessionService {
                 use butler_work::store;
                 if !store::active_session_holds(db, &target)?.is_empty() {
                     return Ok(true);
+                }
+                if assigned_part.is_none() {
+                    let task = store::read_task(db, &task_id)?;
+                    if task["assignee_session_id"] != target {
+                        return Ok(true);
+                    }
                 }
                 if let Some(part) = assigned_part {
                     let part = store::read_part(db, &part)?;

@@ -17,6 +17,10 @@ macro_rules! indexed_reads {
 }
 
 indexed_reads! {
+    SessionWorks => ("SELECT * FROM wm_works WHERE home_session_id=?1 AND home_session_id IS NOT NULL UNION SELECT * FROM wm_works WHERE scope_kind='session' AND scope_ref=?1 ORDER BY created_at,id", "wm_works_local_home"),
+    ReadyWorks => ("SELECT * FROM wm_works WHERE started_at IS NOT NULL AND run_state IN ('idle','running','in_review','blocked','failed') ORDER BY run_state,id", "wm_works_started"),
+    ReservedTask => ("SELECT * FROM wm_tasks WHERE reserved_session_id=?1 AND reserved_session_id IS NOT NULL", "wm_tasks_reserved"),
+
     TaskChains => ("SELECT id,state,created_at FROM wm_task_chains
  WHERE work_id=?1 AND state=?2 ORDER BY created_at,id", "wm_task_chains_queue"),
     ChainMembers => ("SELECT id,step_index,stack_position,status,result_reported_at

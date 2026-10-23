@@ -272,6 +272,7 @@ fn every_store_statement_has_an_indexed_query_plan() {
         .iter()
         .chain(butler_work::store::api::sql::ALL)
         .chain(butler_work::store::execution::sql::ALL)
+        .chain(butler_work::store::ownership::sql::ALL)
         .chain(butler_work::store::tiers::sql::ALL)
         .chain(butler_work::store::tool_read::sql::ALL)
         .chain(butler_work::store::apply::receipt_sql::ALL)

@@ -139,6 +139,7 @@ impl Batch<'_, '_> {
     }
     fn add(&mut self, op: &Operation) -> Result<()> {
         let Operation::Add {
+            run_here,
             key,
             title,
             description,
@@ -170,6 +171,7 @@ impl Batch<'_, '_> {
             .transpose()?
             .unwrap_or(self.id(IdKind::Chain)?);
         let task = NewTask {
+            session: TaskSession::for_creation(run_here.unwrap_or(false), &self.scope.session_id),
             id: id.clone(),
             work_id: work,
             title: title.into(),

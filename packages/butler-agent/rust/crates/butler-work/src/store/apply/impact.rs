@@ -234,6 +234,7 @@ impl Batch<'_, '_> {
             self.tx,
             self.ctx,
             &NewTask {
+                session: TaskSession::Own,
                 id: id.clone(),
                 work_id: self.work()?.into(),
                 title: draft.title.clone(),

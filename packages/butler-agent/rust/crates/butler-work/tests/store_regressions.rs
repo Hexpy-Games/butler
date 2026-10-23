@@ -132,6 +132,7 @@ fn terminal_works_reject_task_admission() {
                 &tx,
                 &context(),
                 &NewTask {
+                    session: butler_work::store::TaskSession::Own,
                     id: "new".into(),
                     work_id: "work".into(),
                     title: "new".into(),

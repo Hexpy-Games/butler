@@ -8,6 +8,15 @@ use counts::ensure_work_counts;
 mod entities;
 mod task_fields;
 pub use task_fields::*;
+pub mod ownership;
+pub mod scheduler;
+use ownership::reserve_task_session;
+pub use ownership::sql as ownership_sql;
+pub use ownership::{
+    TaskSession, acknowledge_intent, complete_handoff, ensure_owner_epoch, open_task_session,
+    take_here,
+};
+pub use scheduler::{ReadyStart, ready_starts};
 mod task_placement;
 pub use task_placement::*;
 pub mod apply;
@@ -64,6 +73,8 @@ pub enum Error {
     Conflict { current: Value },
     #[error("not found")]
     NotFound,
+    #[error("owned_elsewhere")]
+    OwnedElsewhere { detail: Value },
     #[error("running")]
     Running,
     #[error("part cycle in Task {task}: {path:?}")]

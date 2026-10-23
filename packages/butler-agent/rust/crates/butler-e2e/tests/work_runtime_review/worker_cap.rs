@@ -228,7 +228,7 @@ fn bootstrap(tx: &Transaction<'_>) -> store::Result<()> {
         {"op":"spec.propose","key":"s","node":{"title":"Reports","goal":"Build reports","criteria":["Checked"],"constraints":[]}},
         {"op":"spec.propose","key":"d","node":{"title":"Detail","goal":"Build reports","criteria":["Verified"],"constraints":[]}},
         {"op":"spec.activate","published_refs":[spec,detail],"expected_tree_version":0},
-        {"op":"task.add","key":"t","title":"Reports","description":"Build reports","step":"new","acceptance_refs":[
+        {"op":"task.add","run_here":true,"key":"t","title":"Reports","description":"Build reports","step":"new","acceptance_refs":[
             {"node_id":"@s","node_revision":1,"criterion_id":"c0"},{"node_id":"@d","node_revision":1,"criterion_id":"c0"}]},
         {"op":"task.start","task_id":"@t"}]}),
     )?;

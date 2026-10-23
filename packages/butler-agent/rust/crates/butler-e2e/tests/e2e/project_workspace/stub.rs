@@ -29,7 +29,7 @@ pub(super) fn cassette(
         if prompt == COMMAND {
             let bootstrap = json!({"type":"function_call","id":"bootstrap","call_id":"bootstrap","name":"work_apply","arguments":json!({
                 "reason":"Write the requested project markers","operations":[
-                    {"op":"work.create_light","goal":"Write the project markers","done_criteria":["Command marker contains the requested content","Written marker contains the requested content"],"tasks":[[{"key":"markers","title":"Write project markers","description":"Apply the approved command and file writes"}]]},
+                    {"op":"work.create_light","run_here":true,"goal":"Write the project markers","done_criteria":["Command marker contains the requested content","Written marker contains the requested content"],"tasks":[[{"key":"markers","title":"Write project markers","description":"Apply the approved command and file writes"}]]},
                     {"op":"task.start","task_id":"@markers"}
                 ]}).to_string(),"status":"completed"});
             exchanges.push(exchange(prompt, round.clone(), &bootstrap));

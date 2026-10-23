@@ -216,6 +216,7 @@ fn seed(tx: &Transaction<'_>, ctx: &Context) -> Result<()> {
         tx,
         ctx,
         &NewTask {
+            session: butler_work::store::TaskSession::Own,
             id: "task".into(),
             work_id: "work".into(),
             title: "Deliver".into(),

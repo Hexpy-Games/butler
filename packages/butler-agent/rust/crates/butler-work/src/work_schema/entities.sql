@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS wm_works (
   assignee TEXT,
   plan_rank TEXT CHECK (plan_rank IS NULL OR (length(plan_rank)>0 AND plan_rank NOT GLOB '*[^0-9A-Za-z]*' AND plan_rank NOT GLOB '*0')),
   failure_reason TEXT,
+  started_at INTEGER,
   task_graph_revision INTEGER NOT NULL DEFAULT 0 CHECK (task_graph_revision >= 0),
   draft INTEGER NOT NULL DEFAULT 0 CHECK (draft IN (0,1)),
   tier INTEGER NOT NULL DEFAULT 1 CHECK (tier IN (1,2)),

@@ -1,6 +1,8 @@
 //! Authored rules; exactly one block belongs in a managed Butler prompt.
 pub const TIER_ONE: &str = r#"Tier 1 (small multi-step job):
-- Bootstrap in one write: `work.create_light` and the first `task.start` in the same `work_apply` batch. No separate planning round.
+- Bootstrap in one write with `work.create_light`.
+- Each Task you plan runs in its own session, which the runtime starts when its step is ready. Do not `task.start` those Tasks here. Their results come back to this conversation, and you report them.
+- When the user asks to do a 작업 in this conversation, set `run_here: true` on the operation that creates it. Then start and run it yourself.
 - Lay out Tasks as steps. Work that must wait goes in a later step; work that can run at the same time shares a step. No nested stacks, no parallel sub-chains, no links between chains.
 - Put anything finer, or any dependency the step shape cannot express, into parts of one Task. Integrate and review are parts, never Tasks.
 - Start a Task before its effects. Submit results with evidence, judge every bound criterion, and complete only on an accepted review.
@@ -13,6 +15,8 @@ pub const TIER_ONE: &str = r#"Tier 1 (small multi-step job):
 - The user's request is the authoring grant: write and activate the brief without asking. Ask only for work beyond the request or for new effect authority.
 "#;
 pub const TIER_TWO: &str = r#"Tier 2 (designed or delegated work):
+- Each Task you plan runs in its own session, which the runtime starts when its step is ready. Do not `task.start` those Tasks here. Their results come back to this conversation, and you report them.
+- When the user asks to do a 작업 in this conversation, set `run_here: true` on the operation that creates it. Then start and run it yourself.
 - Lay out Tasks as steps. Work that must wait goes in a later step; work that can run at the same time shares a step. No nested stacks, no parallel sub-chains, no links between chains.
 - Put anything finer, or any dependency the step shape cannot express, into parts of one Task. Integrate and review are parts, never Tasks.
 - Start a Task before its effects. Submit results with evidence, judge every bound criterion, and complete only on an accepted review.

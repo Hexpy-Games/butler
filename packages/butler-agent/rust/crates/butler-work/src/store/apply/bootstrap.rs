@@ -10,6 +10,7 @@ impl Batch<'_, '_> {
         goal: &str,
         criteria: &[String],
         tasks: &[Vec<TaskDraft>],
+        run_here: bool,
     ) -> Result<()> {
         if self.work.is_some() {
             return Err(Error::Invalid("bootstrap is only available once"));
@@ -44,13 +45,14 @@ impl Batch<'_, '_> {
         )?;
         self.tx
             .execute(sql::WORK_SPEC, params![work, spec.node_id, self.scope.tier])?;
-        self.bootstrap_tasks(tasks, &spec, criteria.len())
+        self.bootstrap_tasks(tasks, &spec, criteria.len(), run_here)
     }
     fn bootstrap_tasks(
         &mut self,
         tasks: &[Vec<TaskDraft>],
         spec: &SpecRef,
         criteria_count: usize,
+        run_here: bool,
     ) -> Result<()> {
         let work = self.work()?.to_owned();
         let mut previous: Option<String> = None;
@@ -64,6 +66,7 @@ impl Batch<'_, '_> {
                     self.id(IdKind::Chain)?
                 };
                 let task = NewTask {
+                    session: TaskSession::for_creation(run_here, &self.scope.session_id),
                     id: id.clone(),
                     work_id: work.clone(),
                     title: draft.title.clone(),
@@ -141,6 +144,8 @@ impl Batch<'_, '_> {
             &Registration::Private,
         )?;
         assign_home(self.tx, self.ctx, &id, 0, Some(&self.scope.session_id))?;
+        self.tx
+            .execute(ownership::sql::START_WORK, params![id, self.ctx.now])?;
         self.work = Some(id);
         Ok(())
     }

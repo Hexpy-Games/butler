@@ -7,15 +7,23 @@ use butler_turn::btcc::{BtccStorage, StorageError};
 use butler_work::{store, work_queries::Query};
 use serde_json::{Value, json};
 use std::sync::Arc;
+mod task_sessions;
+pub(crate) mod task_steps;
 
 pub(crate) struct AppWorkModel {
     storage: BtccStorage,
+    subsessions: Arc<butler_turn::btcc::SubsessionService>,
     cutover_ready: Arc<tokio::sync::Notify>,
 }
 impl AppWorkModel {
-    pub(crate) fn new(storage: BtccStorage, cutover_ready: Arc<tokio::sync::Notify>) -> Self {
+    pub(crate) fn new(
+        storage: BtccStorage,
+        cutover_ready: Arc<tokio::sync::Notify>,
+        subsessions: Arc<butler_turn::btcc::SubsessionService>,
+    ) -> Self {
         Self {
             storage,
+            subsessions,
             cutover_ready,
         }
     }
@@ -26,12 +34,16 @@ impl AppWorkModel {
 impl AppWorkModelPort for AppWorkModel {
     fn execute(&self, request: AppWorkModelRequest) -> ApplicationFuture<Value> {
         let storage = self.storage.clone();
+        let subsessions = self.subsessions.clone();
         Box::pin(async move {
             let AppWorkModelRequest {
                 resource,
                 id,
                 input,
             } = request;
+            if resource == AppWorkModelResource::TaskOwnership {
+                return task_sessions::ownership(&subsessions, id, input).await;
+            }
             if resource == AppWorkModelResource::Cutover {
                 return storage
                     .work_model_cutover_status()
@@ -81,6 +93,33 @@ impl AppWorkModelPort for AppWorkModel {
             storage
                 .work_model_read(move |db| {
                     let (kind, id) = store::api::work_scope(db, &id)?;
+                    Ok(match kind {
+                        butler_work::work_types::ScopeKind::Project => {
+                            AppWorkModelScope::Project(id)
+                        }
+                        butler_work::work_types::ScopeKind::Session => {
+                            AppWorkModelScope::Session(id)
+                        }
+                    })
+                })
+                .await
+                .map_err(error)
+        })
+    }
+    fn pending_task_session_intents(&self) -> ApplicationFuture<Vec<Value>> {
+        task_sessions::pending(self.storage.clone())
+    }
+    fn task_session_applied(&self, op: String) -> ApplicationFuture<()> {
+        task_sessions::applied(self.storage.clone(), op)
+    }
+    fn task_scope(&self, id: String) -> ApplicationFuture<AppWorkModelScope> {
+        let storage = self.storage.clone();
+        Box::pin(async move {
+            storage
+                .work_model_read(move |db| {
+                    let task = store::read_task(db, &id)?;
+                    let work = task["work_id"].as_str().ok_or(store::Error::NotFound)?;
+                    let (kind, id) = store::api::work_scope(db, work)?;
                     Ok(match kind {
                         butler_work::work_types::ScopeKind::Project => {
                             AppWorkModelScope::Project(id)
@@ -179,11 +218,13 @@ fn error(error: StorageError) -> GatewayApplicationError {
 fn store_resource(resource: AppWorkModelResource) -> store::Result<store::api::Resource> {
     use AppWorkModelResource::{
         BacklogOrder, Canon, CreateEpic, CreatePlan, Cutover, EditEpic, EditPlan, Epic, Plan,
-        PlanOrder, Queue,
+        PlanOrder, Queue, SessionWorks, TaskOwnership, TaskSession,
     };
     Ok(match resource {
-        Cutover => return Err(store::Error::Invalid("cutover state is read-only")),
+        TaskOwnership | Cutover => return Err(store::Error::Invalid("cutover state is read-only")),
         Queue => store::api::Resource::Queue,
+        SessionWorks => store::api::Resource::SessionWorks,
+        TaskSession => store::api::Resource::TaskSession,
         Canon => store::api::Resource::Canon,
         Plan => store::api::Resource::Plan,
         Epic => store::api::Resource::Epic,

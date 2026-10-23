@@ -20,6 +20,7 @@ fn target(connection: &Connection) -> rusqlite::Result<()> {
     upgrade::p1(connection)?;
     upgrade_migration_state(connection)?;
     upgrade_execution(connection)?;
+    upgrade::p2_2(connection)?;
     upgrade_dispatch_index(connection)?;
     create(connection)?;
     upgrade_tiers(connection)

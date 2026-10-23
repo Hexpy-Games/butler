@@ -14,6 +14,8 @@ mod result_delivery;
 mod selection;
 mod session_control;
 pub use session_control::SessionControlRequest;
+mod handoff;
+mod task_sessions;
 #[cfg(test)]
 pub(crate) mod tests;
 mod worker;
@@ -240,6 +242,7 @@ impl SubsessionService {
             anchor_message_id: request.anchor_message_id,
             request: request.request,
 
+            task_id: None,
             part_id: request.part_id,
             role: ChildRole::Steward,
             safe_title: request.safe_title,

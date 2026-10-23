@@ -184,6 +184,7 @@ pub(super) fn update_chain_state(tx: &Transaction<'_>, id: &str) -> Result<()> {
 
 #[derive(Debug, Clone)]
 pub struct NewTask {
+    pub session: TaskSession,
     pub id: String,
     pub work_id: String,
     pub title: String,
@@ -255,6 +256,7 @@ pub fn create_task(
             ctx.actor.to_string()
         ],
     )?;
+    reserve_task_session(tx, ctx, task)?;
     persist(tx, ctx, &[(&old, &next)])?;
     recompute_work(tx, ctx, &task.work_id)?;
     bump_work(tx, ctx, &task.work_id, expected_task_graph_revision)?;

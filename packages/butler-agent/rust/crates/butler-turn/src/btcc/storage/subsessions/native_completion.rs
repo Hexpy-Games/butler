@@ -35,7 +35,19 @@ pub(super) fn settle(
         now: chrono::Utc::now().timestamp_millis(),
         actor: serde_json::json!({"session":completion.session,"turn":completion.turn}),
     };
-    if attempt.1 == "running" {
+    let task = store::read_task(tx, &assigned.task_id)?;
+    if !task["handoff_to_session_id"].is_null() {
+        let checkpoint = store::put_body(
+            tx,
+            &serde_json::json!({
+                "summary":completion.summary,"evidence_refs":completion.evidence_refs,
+                "parts":store::parts::task_parts(tx,&assigned.task_id)?,
+                "task":task,
+            })
+            .to_string(),
+        )?;
+        store::complete_handoff(tx, &ctx, &assigned.task_id, &checkpoint)?;
+    } else if attempt.1 == "running" {
         finish(
             tx,
             &ctx,
@@ -133,10 +145,17 @@ pub(super) fn resolve_outcome(
     let Child::Assigned(child) = child else {
         return Ok(());
     };
+    let task = store::read_task(tx, &child.task_id)?;
+    if child.part_id.is_none() && task["assignee_session_id"] != completion.session {
+        completion.status = "cancelled".into();
+        completion.summary = "다른 대화로 옮겨졌습니다".into();
+        completion.failure_code = None;
+        completion.failure_reason = None;
+        return Ok(());
+    }
     if completion.status != "success" {
         return Ok(());
     }
-    let task = store::read_task(tx, &child.task_id)?;
     if matches!(at(&task, "/status").as_str(), Some("blocked" | "failed")) {
         completion.status = at(&task, "/status").as_str().unwrap_or("failed").into();
         completion.failure_reason = at(&task, "/blocked_reason")

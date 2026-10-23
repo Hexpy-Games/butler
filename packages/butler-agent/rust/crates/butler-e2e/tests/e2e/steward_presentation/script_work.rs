@@ -82,7 +82,7 @@ fn start(body: &Value) -> Value {
         &native::apply(
             body,
             json!([
-                {"op":"task.add","key":"t","title":OWNER,"description":OWNER,"step":"new","acceptance_refs":acceptance},
+                {"op":"task.add","run_here":true,"key":"t","title":OWNER,"description":OWNER,"step":"new","acceptance_refs":acceptance},
                 {"op":"task.start","task_id":"@t"}
             ]),
         ),

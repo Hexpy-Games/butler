@@ -149,7 +149,7 @@ fn assigned_part_transitions() {
     };
     tx.execute("INSERT INTO wm_instructions(id,idempotency_key,target_session_id,sender,mode,body_ref,anchor_kind,anchor_id,boundary_seq,status,received_seq) VALUES('request','request','parent','{}','queue','','turn','turn',0,'applied',0)", []).unwrap();
     let input = serde_json::from_value(json!({"reason":"build", "operations":[
-        {"op":"work.create_light","goal":"build", "done_criteria":["runs","verified"],
+        {"op":"work.create_light","run_here":true,"goal":"build", "done_criteria":["runs","verified"],
          "tasks":[[{"key":"task","title":"build","description":"build","criteria":[0,1]}]]},
         {"op":"task.start","task_id":"@task"}]}))
     .unwrap();

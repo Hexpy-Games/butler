@@ -174,6 +174,7 @@ pub fn release(
     let mut receipt = json!({"ok":true,"hold_id":id,"control_epoch":epoch,"status":"accepted"});
     if holds.is_empty()
         && row["kind"] == "stop"
+        && row["reason"] != "handoff"
         && let Some(task) = one(tx, tiers::sql::SESSION, [session])?["current_task_id"].as_str()
     {
         receipt["instruction_id"] =

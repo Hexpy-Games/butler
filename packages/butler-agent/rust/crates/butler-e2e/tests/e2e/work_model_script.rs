@@ -103,7 +103,7 @@ pub(super) fn bootstrap(goal: &str, checks: &[&str]) -> Value {
         {"op":"spec.propose","key":"s","node":{"title":goal,"goal":goal,"criteria":checks,"constraints":[]}},
         {"op":"spec.propose","key":"detail","node":{"title":"Execution detail","goal":goal,"criteria":["Bounded output verified"],"constraints":[]}},
         {"op":"spec.activate","published_refs":[spec,detail],"expected_tree_version":0},
-        {"op":"task.add","key":"t","title":goal,"description":goal,"step":"new","acceptance_refs":criteria},
+        {"op":"task.add","run_here":true,"key":"t","title":goal,"description":goal,"step":"new","acceptance_refs":criteria},
         {"op":"task.start","task_id":"@t"}
     ]})
 }
@@ -133,7 +133,7 @@ pub(super) fn extend(body: &Value, goal: &str) -> Value {
     apply(
         body,
         json!([
-            {"op":"task.add","key":"t","title":goal,"description":goal,"step":"new","acceptance_refs":view(body)["criteria"]},
+            {"op":"task.add","run_here":true,"key":"t","title":goal,"description":goal,"step":"new","acceptance_refs":view(body)["criteria"]},
             {"op":"task.start","task_id":"@t"}
         ]),
     )

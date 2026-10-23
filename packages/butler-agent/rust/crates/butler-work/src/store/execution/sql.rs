@@ -20,7 +20,7 @@ PENDING_REPORT = "SELECT attempt_id FROM wm_delegation_reports WHERE task_id=?1 
 DELIVER_REPORT = "UPDATE wm_delegation_reports SET delivered_at=coalesce(delivered_at,?2) WHERE attempt_id=?1 RETURNING task_id";
 END_REPORT = "UPDATE wm_delegation_reports SET delivery_ended_at=coalesce(delivery_ended_at,?3) WHERE attempt_id=?1 AND parent_session_id=?2 RETURNING task_id";
 DELEGATED_PART = "SELECT id FROM wm_task_parts WHERE task_id=?1 AND assignee_session_id IS NOT NULL AND assignee_session_id<>?2 LIMIT 1";
-TASK_OWNER = "UPDATE wm_tasks SET assignee_session_id=?2 WHERE id=?1";
+TASK_OWNER = "UPDATE wm_tasks SET assignee_session_id=?2,reserved_session_id=NULL,owner_epoch=owner_epoch+(assignee_session_id IS NOT ?2) WHERE id=?1";
 TASK_REASON = "UPDATE wm_tasks SET blocked_reason=?2 WHERE id=?1";
 TASK_COMPLETION = "UPDATE wm_tasks SET completion_revision=?2 WHERE id=?1";
 CRITERIA = "SELECT node_id,node_revision,criterion_id FROM wm_task_criteria WHERE task_id=?1 ORDER BY node_id,node_revision,criterion_id";
@@ -35,7 +35,7 @@ ATTEMPTS = "SELECT * FROM wm_attempts WHERE task_id=?1 ORDER BY started_at,id";
 SESSION_PART_LEASE = "SELECT * FROM wm_attempts WHERE session_id=?2 AND task_id=?1 AND status='running' AND part_id IS NOT NULL LIMIT 1";
 LEASE = "SELECT * FROM wm_attempts WHERE task_id=?1 AND status='running' AND part_id IS NULL";
 PART_LEASE = "SELECT * FROM wm_attempts WHERE part_id=?1 AND status='running' AND part_id IS NOT NULL";
-INSERT_ATTEMPT = "INSERT INTO wm_attempts(id,task_id,part_id,task_revision,spec_ref,session_id,turn_id,lease_epoch,status,started_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?4,'running',?8)";
+INSERT_ATTEMPT = "INSERT INTO wm_attempts(id,task_id,part_id,task_revision,spec_ref,session_id,turn_id,lease_epoch,status,started_at,owner_epoch) VALUES(?1,?2,?3,?4,?5,?6,?7,?4,'running',?8,(SELECT owner_epoch FROM wm_tasks WHERE id=?2))";
 CONTINUE_ATTEMPT = "UPDATE wm_attempts SET turn_id=?3,revision=revision+1 WHERE id=?1 AND session_id=?2 AND status='running'";
 FINISH_ATTEMPT = "UPDATE wm_attempts SET status=?2,finished_at=?3,checkpoint_ref=?4,revision=revision+1 WHERE id=?1 AND status='running'";
 FINISH_TASK_ATTEMPTS = "UPDATE wm_attempts SET status=?2,finished_at=?3,checkpoint_ref=?4,revision=revision+1 WHERE task_id=?1 AND status='running'";

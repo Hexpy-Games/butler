@@ -118,3 +118,12 @@ fn public_work(mut work: Value) -> Value {
     work["draft"] = json!(work["draft"] == 1);
     work
 }
+
+/// Chain creation, step and stack order are the single nested-session order.
+pub(super) fn session_works(db: &Connection, session: &str) -> Result<Value> {
+    let mut works = rows(db, Query::SessionWorks.sql(), [session])?;
+    for work in &mut works {
+        work["tasks"] = queue(db, text(work, "id")?)?;
+    }
+    Ok(json!({"works":works}))
+}

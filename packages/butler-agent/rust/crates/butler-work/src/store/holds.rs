@@ -10,7 +10,8 @@ pub fn undecided_holds(db: &Connection, chain_id: &str) -> Result<Vec<Value>> {
     rows(db, sql::PENDING_HOLDS, [chain_id])
 }
 fn failed(work: &Value) -> bool {
-    matches!(work["status"].as_str(), Some("failed" | "stopped"))
+    work["status"] == "failed"
+        || (work["status"] == "stopped" && work["handoff_to_session_id"].is_null())
 }
 fn unstarted(work: &Value) -> bool {
     matches!(

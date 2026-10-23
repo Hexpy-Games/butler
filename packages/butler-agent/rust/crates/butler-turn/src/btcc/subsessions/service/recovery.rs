@@ -27,6 +27,7 @@ impl SubsessionService {
         &self,
         interrupted: Vec<Value>,
     ) -> Result<(), BtccError> {
+        self.recover_handoffs().await?;
         self.replay_pending_assignments(false).await?;
         for attempt in interrupted {
             let Some(session) = at(&attempt, "/session_id").as_str() else {

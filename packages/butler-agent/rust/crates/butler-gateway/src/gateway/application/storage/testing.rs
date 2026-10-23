@@ -126,3 +126,8 @@ impl Events {
         .map_err(|error| error.to_string())
     }
 }
+
+/// The same App Task projection statements used by the real writer and reader.
+pub fn task_session_query_statements() -> Vec<(&'static str, String)> {
+    super::super::work_model::task_session_queries()
+}

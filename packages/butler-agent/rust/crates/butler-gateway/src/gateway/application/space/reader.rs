@@ -25,6 +25,7 @@ pub(in crate::gateway::application) fn read(
              FROM app_space_nodes n
              LEFT JOIN chats c ON c.id=n.session_id
              LEFT JOIN app_space_groups g ON g.id=n.group_id
+             WHERE NOT EXISTS(SELECT 1 FROM app_task_sessions ts WHERE ts.session_id=n.session_id)
              ORDER BY n.position,n.node_key",
         )
         .map_err(AppStorageError::sqlite)?;

@@ -129,7 +129,7 @@ async fn apply(
     };
     let ctx = store::Context {
         now: chrono::Utc::now().timestamp_millis(),
-        actor: json!({"session_id":scope.session_id,"turn_id":scope.turn_id,"origin":"chat"}),
+        actor: json!({"session_id":scope.session_id,"turn_id":scope.turn_id,"origin":"chat","access_mode":owner.binding.access_mode.as_str()}),
     };
     let call_id = call_id.to_owned();
     let value = storage

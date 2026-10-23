@@ -110,7 +110,7 @@ fn kept_next(body: &Value, out: &[Value]) -> Value {
             call(
                 91,
                 "work_apply",
-                &json!({"reason":"Must not run after pending", "operations":[{"op":"work.create_light","goal":"Duplicate execution","done_criteria":["Written","Checked"],"tasks":[[{"title":"Duplicate","description":"Must not run"}]]}]})
+                &json!({"reason":"Must not run after pending", "operations":[{"op":"work.create_light","run_here":true,"goal":"Duplicate execution","done_criteria":["Written","Checked"],"tasks":[[{"title":"Duplicate","description":"Must not run"}]]}]})
             )
         ])
     } else {
@@ -145,7 +145,7 @@ fn next(out: &[Value]) -> Value {
             0,
             "work_apply",
             &json!({"reason":"Write and verify two markers","operations":[
-            {"op":"work.create_light","goal":"Write and verify markers","done_criteria":["Requested marker written","Result checked"],
+            {"op":"work.create_light","run_here":true,"goal":"Write and verify markers","done_criteria":["Requested marker written","Result checked"],
              "tasks":[[{"key":"write","title":"Write marker","description":"Write the marker"}],[{"key":"verify","title":"Verify marker","description":"Integrate and review the marker"}]]},
             {"op":"task.start","task_id":"@write"}]}),
         );

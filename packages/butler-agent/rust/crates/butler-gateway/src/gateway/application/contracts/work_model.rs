@@ -17,6 +17,9 @@ use serde_json::Value;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AppWorkModelResource {
     Cutover,
+    SessionWorks,
+    TaskSession,
+    TaskOwnership,
     Queue,
     Canon,
     Plan,
@@ -67,6 +70,15 @@ pub trait AppWorkModelPort: Send + Sync + 'static {
     }
     /// Work identity only, resolved by primary key on the BTCC read lane.
     fn work_scope(&self, _id: String) -> ApplicationFuture<AppWorkModelScope> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    fn pending_task_session_intents(&self) -> ApplicationFuture<Vec<Value>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+    fn task_session_applied(&self, _op: String) -> ApplicationFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
+    fn task_scope(&self, _id: String) -> ApplicationFuture<AppWorkModelScope> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn changes(&self) -> Option<tokio::sync::watch::Receiver<()>> {

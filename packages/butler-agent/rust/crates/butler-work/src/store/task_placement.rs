@@ -57,6 +57,7 @@ pub fn create_task_in_stack(
             ctx.actor.to_string()
         ],
     )?;
+    reserve_task_session(tx, ctx, task)?;
     persist(tx, ctx, &[(&chain, &next)])?;
     recompute_work(tx, ctx, &task.work_id)?;
     super::queue::bump_work(tx, ctx, &task.work_id, expected_task_graph_revision)?;

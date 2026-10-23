@@ -6,6 +6,8 @@ use butler_work::{
     work_types::TaskKind,
 };
 use serde_json::json;
+#[path = "work_runtime_review/ownership_races.rs"]
+mod ownership_races;
 #[path = "work_runtime_review/worker_cap.rs"]
 mod worker_cap;
 type Failure = Box<dyn std::error::Error + Send + Sync>;
@@ -35,7 +37,7 @@ fn seed(tx: &Transaction<'_>) -> store::Result<()> {
     };
     let input = serde_json::from_value(
         json!({"reason":"Build and verify requested output", "operations":[
-            {"op":"work.create_light", "goal":"Build output", "done_criteria":["Built", "Verified"],
+            {"op":"work.create_light","run_here":true, "goal":"Build output", "done_criteria":["Built", "Verified"],
              "tasks":[[{"key":"t", "title":"Build", "description":"Verified output"}]]},
             {"op":"task.start", "task_id":"@t"}
         ]}),
@@ -238,7 +240,15 @@ async fn native_runtime_statements_use_indexes() -> std::result::Result<(), Fail
         .work_model_read(|db| {
             let mut recovery = serde_json::Map::new();
             let mut workers = serde_json::Map::new();
-            for (name, sql) in butler_turn::btcc::native_query_statements() {
+            let mut sessions = serde_json::Map::new();
+            for (name, sql) in butler_turn::btcc::native_query_statements()
+                .into_iter()
+                .chain(
+                    store::ownership_sql::ALL
+                        .iter()
+                        .map(|(name, sql)| (*name, (*sql).to_owned())),
+                )
+            {
                 let mut stmt = db.prepare(&format!("EXPLAIN QUERY PLAN {sql}"))?;
                 let n = stmt.parameter_count();
                 let plan = stmt
@@ -251,6 +261,12 @@ async fn native_runtime_statements_use_indexes() -> std::result::Result<(), Fail
                     )?
                     .collect::<rusqlite::Result<Vec<_>>>()?
                     .join("\n");
+                if store::ownership_sql::ALL
+                    .iter()
+                    .any(|(key, _)| *key == name)
+                {
+                    sessions.insert(name.into(), json!(plan));
+                }
                 if name.starts_with("WORKER_") || name == "SUBSESSIONS_SERVICE_TASK_PART_COUNTS" {
                     workers.insert(name.into(), json!(plan));
                 }
@@ -268,6 +284,10 @@ async fn native_runtime_statements_use_indexes() -> std::result::Result<(), Fail
                 "../fixtures/work-model-p14/worker-dispatch-plans.json"
             ))?;
             assert_eq!(json!(workers), expected_workers);
+            let expected_sessions: serde_json::Value = serde_json::from_str(include_str!(
+                "../fixtures/work-model-p14/task-session-plans.json"
+            ))?;
+            assert_eq!(json!(sessions), expected_sessions);
             assert_eq!(recovery.len(), 9, "all recovery statements are pinned");
             let expected: serde_json::Value = serde_json::from_str(include_str!(
                 "../fixtures/work-model-p14/native-recovery-plans.json"

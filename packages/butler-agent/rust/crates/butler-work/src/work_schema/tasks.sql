@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS wm_tasks (
   description TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL CHECK (status IN ('draft','waiting','pending','running','in_review','held','failed','completed','blocked','paused','stopped','cancelled')),
   assignee_session_id TEXT,
+  reserved_session_id TEXT,
+  owner_epoch INTEGER NOT NULL DEFAULT 0 CHECK (owner_epoch>=0),
+  handoff_to_session_id TEXT,
   blocked_reason TEXT,
   supersedes_task_id TEXT REFERENCES wm_tasks(id),
   completion_revision INTEGER,
@@ -38,7 +41,10 @@ CREATE TABLE IF NOT EXISTS wm_tasks (
   CHECK (status='cancelled' OR chain_id IS NOT NULL),
   CHECK ((status='held') = (hold_reason IS NOT NULL)),
   CHECK ((status='held') = (held_by_task_id IS NOT NULL)),
-  CHECK ((status='failed') = (failure_reason IS NOT NULL))
+  CHECK ((status='failed') = (failure_reason IS NOT NULL)),
+  CHECK (status NOT IN ('running','in_review') OR assignee_session_id IS NOT NULL),
+  CHECK (status IN ('running','in_review') OR assignee_session_id IS NULL OR reserved_session_id IS NULL),
+  CHECK (handoff_to_session_id IS NULL OR assignee_session_id IS NOT NULL)
 );
 
 CREATE TABLE IF NOT EXISTS wm_task_edges (
@@ -108,6 +114,7 @@ CREATE TABLE IF NOT EXISTS wm_attempts (
   session_id TEXT NOT NULL,
   turn_id TEXT,
   lease_epoch INTEGER NOT NULL,
+  owner_epoch INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL CHECK (status IN ('running','succeeded','failed','interrupted')),
   checkpoint_ref TEXT,
   started_at INTEGER NOT NULL,

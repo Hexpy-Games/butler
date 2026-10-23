@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS wm_holds (
   owner TEXT NOT NULL,
   kind TEXT NOT NULL CHECK (kind IN ('pause','stop')),
   released_at INTEGER
-);
+, reason TEXT);
 
 CREATE TABLE IF NOT EXISTS wm_cross_db_intents (
   op_id TEXT PRIMARY KEY NOT NULL,

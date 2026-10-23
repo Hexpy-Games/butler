@@ -54,6 +54,7 @@ pub struct SpecDraft {
 pub enum Operation {
     #[serde(rename = "work.create_light")]
     CreateLight {
+        run_here: Option<bool>,
         tier: Option<u8>,
         key: Option<String>,
         goal: String,
@@ -64,6 +65,7 @@ pub enum Operation {
     Escalate { reason: String },
     #[serde(rename = "task.add")]
     Add {
+        run_here: Option<bool>,
         key: Option<String>,
         title: String,
         description: String,

@@ -88,8 +88,8 @@ fn reject_growth(tx: &Transaction<'_>, ctx: &Context, work: &str, task: &str) ->
         "spec_ref":spec,
         "expected_task_graph_revision":before["task_graph_revision"],
         "operations":[
-            {"op":"task.add","title":"Follow up","description":"First outcome","step":"new"},
-            {"op":"task.add","title":"Verify follow-up","description":"Second outcome","step":"new"}
+            {"op":"task.add","run_here":true,"title":"Follow up","description":"First outcome","step":"new"},
+            {"op":"task.add","run_here":true,"title":"Verify follow-up","description":"Second outcome","step":"new"}
         ]
     }))?;
     let scope = ApplyScope {
@@ -132,7 +132,7 @@ fn escalate(tx: &Transaction<'_>, ctx: &Context, work: &str, task: &str) -> Resu
         "operations":[
             {"op":"spec.propose","key":"detail","node":{"title":"Method","goal":"Verify the outcome","criteria":["Method checked"],"constraints":[]}},
             {"op":"spec.activate","expected_tree_version":0,"published_refs":[{"node_id":"@detail","revision":1,"body_hash":"@detail"}]},
-            {"op":"task.add","title":"Check method","description":"Verify the method","step":"new","acceptance_refs":[{"node_id":"@detail","node_revision":1,"criterion_id":"c0"}]},
+            {"op":"task.add","run_here":true,"title":"Check method","description":"Verify the method","step":"new","acceptance_refs":[{"node_id":"@detail","node_revision":1,"criterion_id":"c0"}]},
             {"op":"work.escalate","reason":"delegation required"}
         ]
     }))?;

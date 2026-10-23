@@ -24,6 +24,13 @@ pub fn start_task(
 ) -> Result<Value> {
     let row = read_task(tx, id)?;
     cas(&row, "revision", expected)?;
+    if let Some(owner) = row["assignee_session_id"].as_str()
+        && owner != scope.session_id
+    {
+        return Err(Error::OwnedElsewhere {
+            detail: ownership::owned_elsewhere(tx, id, scope.session_id)?.ok_or(Error::NotFound)?,
+        });
+    }
     if row["status"] == "draft" {
         return Err(Error::Invalid("draft_unresolved"));
     }
@@ -42,8 +49,8 @@ pub fn start_task(
     {
         return Err(Error::Invalid("Task lease belongs to another session"));
     }
-    transition(tx, ctx, id, expected, TaskStatus::Running, false, None)?;
     tx.execute(sql::TASK_OWNER, params![id, scope.session_id])?;
+    transition(tx, ctx, id, expected, TaskStatus::Running, false, None)?;
     let attempt = if let Some(lease) = lease {
         tx.execute(
             sql::CONTINUE_ATTEMPT,
@@ -54,7 +61,11 @@ pub fn start_task(
         insert_attempt(tx, ctx, id, None, scope, attempt_id)?;
         attempt_id.to_owned()
     };
-    Ok(json!({"task":read_task(tx,id)?,"attempt_id":attempt}))
+    let checkpoint: Option<String> = tx
+        .query_row(ownership::sql::LATEST_CHECKPOINT, [id], |r| r.get(0))
+        .optional()?
+        .flatten();
+    Ok(json!({"task":read_task(tx,id)?,"attempt_id":attempt,"prior_context":checkpoint}))
 }
 fn insert_attempt(
     tx: &Transaction<'_>,
@@ -142,11 +153,18 @@ pub(super) fn revision(row: &Value) -> Result<i64> {
     row["revision"].as_i64().ok_or(Error::Invalid("revision"))
 }
 pub(super) fn task_lease(db: &Connection, id: &str, session: &str) -> Result<Value> {
+    ownership::ensure_owner_epoch(db, id, session)?;
     let task = read_task(db, id)?;
+    if !task["handoff_to_session_id"].is_null() {
+        return Err(Error::Invalid("handoff_in_progress"));
+    }
     if !matches!(task["status"].as_str(), Some("running" | "in_review")) {
         return Err(Error::Invalid("Task must be started before effects"));
     }
     let lease = one(db, sql::LEASE, [id])?;
+    if lease["owner_epoch"] != task["owner_epoch"] {
+        return Err(Error::Invalid("stale_owner"));
+    }
     if lease["session_id"] != session {
         return Err(Error::Invalid("Task lease belongs to another session"));
     }
@@ -155,11 +173,16 @@ pub(super) fn task_lease(db: &Connection, id: &str, session: &str) -> Result<Val
 /// Called immediately before admitting an effect, on the same writer lane as
 /// its receipt. A later active Spec revision fences an earlier Task binding.
 pub fn ensure_task_effect(db: &Connection, id: &str, session: &str) -> Result<Value> {
+    ownership::ensure_owner_epoch(db, id, session)?;
     let lease = match task_lease(db, id, session) {
         Ok(lease) => lease,
+        Err(error @ Error::Invalid("stale_owner" | "handoff_in_progress")) => return Err(error),
         Err(Error::Invalid(_)) => one(db, sql::SESSION_PART_LEASE, params![id, session])?,
         Err(error) => return Err(error),
     };
+    if lease["owner_epoch"] != read_task(db, id)?["owner_epoch"] {
+        return Err(Error::Invalid("stale_owner"));
+    }
     super::task_fields::validate_task_criteria(db, id)?;
     Ok(lease)
 }
@@ -182,6 +205,7 @@ pub fn submit_task(
         result_refs,
         evidence_refs,
     } = *submission;
+    ownership::ensure_owner_epoch(tx, task, scope.session_id)?;
     super::task_fields::validate_task_criteria(tx, task)?;
     let attempt = if let Some(id) = part {
         submit_part(tx, ctx, task, id, scope.session_id)?
@@ -230,6 +254,7 @@ fn submit_part(
     if row["task_id"] != task {
         return Err(Error::Invalid("part belongs to another Task"));
     }
+    ownership::ensure_owner_epoch(tx, task, session)?;
     let lease = one(tx, sql::PART_LEASE, [id])?;
     if lease["session_id"] != session {
         return Err(Error::Invalid("part lease belongs to another session"));
@@ -300,6 +325,7 @@ pub fn fail_part(
 ) -> Result<Value> {
     let part = parts::read_part(tx, id)?;
     let task = text(&part, "task_id")?;
+    ownership::ensure_owner_epoch(tx, task, session)?;
     let lease = one(tx, sql::PART_LEASE, [id])?;
     if lease["session_id"] != session {
         return Err(Error::Invalid("part lease belongs to another session"));
@@ -381,6 +407,7 @@ fn block_part(
     if row["task_id"] != task {
         return Err(Error::Invalid("part belongs to another Task"));
     }
+    ownership::ensure_owner_epoch(tx, task, session)?;
     let lease = one(tx, sql::PART_LEASE, [id])?;
     if lease["session_id"] != session {
         return Err(Error::Invalid("part lease belongs to another session"));

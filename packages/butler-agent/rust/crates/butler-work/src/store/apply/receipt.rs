@@ -44,8 +44,13 @@ pub fn apply_tool(
         Ok(rejection::canon())
     } else {
         match serde_json::from_value::<Apply>(raw.clone()) {
-            Ok(input) => match apply_with_context(tx, ctx, scope, &input, &mut failed) {
+            Ok(input) => match check_ownership(tx, scope, &input)
+                .and_then(|()| apply_with_context(tx, ctx, scope, &input, &mut failed))
+            {
                 Ok(value) => Ok(value),
+                Err(Error::OwnedElsewhere { detail }) => {
+                    ownership::ownership_prompt(tx, ctx, &scope.session_id, &detail)
+                }
                 Err(Error::Sqlite(error)) => Err(Error::Sqlite(error)),
                 Err(Error::BodyCodec(error)) => Err(Error::BodyCodec(error)),
                 Err(error) => rejection::response(tx, scope, &error, failed.as_ref()),
@@ -89,4 +94,16 @@ fn forbidden_canon(value: &Value) -> bool {
         Value::Array(items) => items.iter().any(forbidden_canon),
         _ => false,
     }
+}
+
+fn check_ownership(db: &Connection, scope: &ApplyScope, input: &Apply) -> Result<()> {
+    for op in &input.operations {
+        if let Operation::Start { task_id } = op
+            && !task_id.starts_with('@')
+            && let Some(detail) = ownership::owned_elsewhere(db, task_id, &scope.session_id)?
+        {
+            return Err(Error::OwnedElsewhere { detail });
+        }
+    }
+    Ok(())
 }

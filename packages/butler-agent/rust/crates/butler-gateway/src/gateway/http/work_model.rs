@@ -4,7 +4,7 @@ use crate::gateway::{
     AppWorkModelRequest,
     AppWorkModelResource::{
         BacklogOrder, Canon, CreateEpic, CreatePlan, Cutover, EditEpic, EditPlan, Epic, Plan,
-        PlanOrder, Queue,
+        PlanOrder, Queue, SessionWorks, TaskOwnership, TaskSession,
     },
 };
 
@@ -15,6 +15,9 @@ pub(super) async fn route(
 ) -> Result<Response, HttpError> {
     let parts: Vec<_> = uri.path().trim_start_matches('/').split('/').collect();
     let (resource, id) = match (request.method(), parts.as_slice()) {
+        (&Method::GET, ["sessions", id, "works"]) => (SessionWorks, *id),
+        (&Method::POST, ["tasks", id, "session"]) => (TaskSession, *id),
+        (&Method::POST, ["sessions", id, "task-ownership"]) => (TaskOwnership, *id),
         (&Method::GET, ["work-model", "cutover"]) => (Cutover, ""),
         (&Method::GET, ["works", id, "tasks"])
         | (&Method::POST, ["works", id, "tasks", "edits"]) => (Queue, *id),

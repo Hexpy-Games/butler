@@ -6296,6 +6296,10 @@
                       "op": {
                         "const": "work.create_light"
                       },
+                      "run_here": {
+                        "type": "boolean",
+                        "description": "true: this conversation runs the Task itself, with no separate session. Set only when the user asks to do it here. Default: the Task gets its own session. On work.create_light it applies to every Task in the brief."
+                      },
                       "key": {
                         "type": "string"
                       },
@@ -6362,6 +6366,10 @@
                     "properties": {
                       "op": {
                         "const": "task.add"
+                      },
+                      "run_here": {
+                        "type": "boolean",
+                        "description": "true: this conversation runs the Task itself, with no separate session. Set only when the user asks to do it here. Default: the Task gets its own session. On work.create_light it applies to every Task in the brief."
                       },
                       "key": {
                         "type": "string"

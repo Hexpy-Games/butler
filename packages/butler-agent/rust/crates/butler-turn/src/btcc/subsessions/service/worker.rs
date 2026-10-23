@@ -20,6 +20,7 @@ impl SubsessionService {
             anchor_message_id: request.anchor_message_id,
             request: request.objective,
 
+            task_id: None,
             part_id: request.part_id,
             role: ChildRole::Worker,
             safe_title: request.safe_title,

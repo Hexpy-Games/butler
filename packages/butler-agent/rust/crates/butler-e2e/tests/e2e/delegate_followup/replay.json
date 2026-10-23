@@ -55,6 +55,7 @@
           },
           {
             "op": "task.add",
+            "run_here": true,
             "key": "t",
             "title": "AI 연구를 조사해 주세요.",
             "description": "AI 연구를 조사해 주세요.",
@@ -175,6 +176,7 @@
         "operations": [
           {
             "op": "task.add",
+            "run_here": true,
             "key": "t",
             "title": "AI 연구를 조사해 주세요.",
             "description": "AI 연구를 조사해 주세요.",

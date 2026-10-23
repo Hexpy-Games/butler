@@ -46,3 +46,9 @@ CREATE INDEX IF NOT EXISTS wm_cutover_replay_turn ON wm_cross_db_intents(json_ex
 CREATE INDEX IF NOT EXISTS wm_intents_child_dispatch_parent
  ON wm_cross_db_intents(json_extract(payload_json,'$.delegation.parent_session_id'),state,created_at)
  WHERE kind='child_dispatch';
+
+CREATE INDEX IF NOT EXISTS wm_tasks_owner_active ON wm_tasks(assignee_session_id,id)
+ WHERE status IN ('running','in_review','paused','blocked','stopped');
+CREATE INDEX IF NOT EXISTS wm_tasks_reserved ON wm_tasks(reserved_session_id) WHERE reserved_session_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS wm_tasks_handoff ON wm_tasks(id) WHERE handoff_to_session_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS wm_works_started ON wm_works(run_state,id) WHERE started_at IS NOT NULL;

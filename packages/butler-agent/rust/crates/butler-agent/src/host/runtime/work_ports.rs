@@ -71,7 +71,11 @@ pub(super) async fn create(
     )
     .await?;
     Ok(WorkPorts {
-        work_model: Arc::new(AppWorkModel::new(stores.btcc.clone(), work_cutover.ready())),
+        work_model: Arc::new(AppWorkModel::new(
+            stores.btcc.clone(),
+            work_cutover.ready(),
+            subsessions.clone(),
+        )),
         project_work,
         session_work,
         work_service,

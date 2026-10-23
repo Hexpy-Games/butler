@@ -40,6 +40,7 @@ pub(super) fn work_error(error: store::Error) -> StorageError {
     }
     let code = match &error {
         store::Error::Conflict { .. } => "conflict",
+        store::Error::OwnedElsewhere { .. } => "owned_elsewhere",
         store::Error::Running => "running",
         store::Error::NotFound => "work_model_not_found",
         store::Error::InvalidRank => "invalid_rank",

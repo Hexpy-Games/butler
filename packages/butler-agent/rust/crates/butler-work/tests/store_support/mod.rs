@@ -47,6 +47,7 @@ pub(crate) fn add(db: &mut Connection, id: &str, chain: &str, after: Option<&str
         &tx,
         &context(),
         &NewTask {
+            session: butler_work::store::TaskSession::Own,
             id: id.into(),
             work_id: "work".into(),
             title: id.into(),
@@ -84,6 +85,13 @@ pub(crate) fn runtime(db: &mut Connection, id: &str, state: TaskStatus, reported
         runtime(db, id, TaskStatus::Running, false);
     }
     let tx = Transaction::new(db.transaction().unwrap()).unwrap();
+    if state == TaskStatus::Running {
+        tx.execute(
+            butler_work::store::execution_sql::TASK_OWNER,
+            rusqlite::params![id, "session"],
+        )
+        .unwrap();
+    }
     transition(
         &tx,
         &context(),

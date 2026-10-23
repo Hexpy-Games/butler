@@ -4,6 +4,7 @@ mod impact;
 mod receipt;
 pub use receipt::apply_tool;
 pub use receipt::sql as receipt_sql;
+mod runtime;
 mod structure;
 use super::{execution::*, tool_ops::*, *};
 use crate::work_ids::{IdGenerator, IdKind};
@@ -31,6 +32,7 @@ struct Batch<'a, 'conn> {
     keys: BTreeMap<String, String>,
     revisions: BTreeMap<String, i64>,
     operation_ids: Vec<String>,
+    task_contexts: BTreeMap<String, Value>,
 }
 pub fn apply(
     tx: &Transaction<'_>,
@@ -74,17 +76,6 @@ fn apply_batch(
     if input.reason.trim().is_empty() || input.operations.is_empty() {
         return Err(Error::Invalid("reason and operations required"));
     }
-    if scope.tier == 1
-        && scope.work_id.is_none()
-        && !input
-            .operations
-            .iter()
-            .any(|op| matches!(op, Operation::Start { .. }))
-    {
-        return Err(Error::Invalid(
-            "Tier 1 bootstrap must start its first Task in the same batch",
-        ));
-    }
     let mut batch = Batch {
         tx,
         ctx,
@@ -94,6 +85,7 @@ fn apply_batch(
         keys: BTreeMap::new(),
         revisions: BTreeMap::new(),
         operation_ids: Vec::new(),
+        task_contexts: BTreeMap::new(),
     };
     batch.preflight()?;
     for op in &input.operations {
@@ -125,7 +117,7 @@ fn apply_batch(
     batch.revisions.insert(work_id.into(), revision(&work)?);
     Ok(
         json!({"ok":true,"operation_ids":batch.operation_ids,"keys":batch.keys,
-        "entity_revisions":batch.revisions,"task_graph_revision":work["task_graph_revision"],
+        "task_contexts":batch.task_contexts,"entity_revisions":batch.revisions,"task_graph_revision":work["task_graph_revision"],
         "changed":true,"remaining":0,"work":work}),
     )
 }
@@ -293,13 +285,20 @@ impl Batch<'_, '_> {
         }
         match op {
             Operation::CreateLight {
+                run_here,
                 tier: _,
                 key,
                 goal,
                 done_criteria,
                 tasks,
-            } => self.bootstrap(key.as_deref(), goal, done_criteria, tasks),
-            Operation::Escalate { .. } => Ok(()),
+            } => self.bootstrap(
+                key.as_deref(),
+                goal,
+                done_criteria,
+                tasks,
+                run_here.unwrap_or(false),
+            ),
+            Operation::Escalate { .. } => self.start_work(),
             Operation::Add { .. }
             | Operation::Edit { .. }
             | Operation::Move { .. }
@@ -320,160 +319,11 @@ impl Batch<'_, '_> {
         }
         Ok(())
     }
-    fn execute(&mut self, op: &Operation) -> Result<()> {
-        if matches!(op, Operation::Complete { .. } | Operation::Submit { .. })
-            && let Some(hold) = control::active_holds(self.tx, &self.scope.session_id)?.first()
-        {
-            return Err(Error::Conflict {
-                current: json!({"instruction_id":hold["id"]}),
-            });
-        }
-        if matches!(op, Operation::Complete { .. } | Operation::Submit { .. })
-            && let Some(instruction) =
-                control::next_pending(self.tx, &self.scope.session_id, true)?.first()
-        {
-            return Err(Error::Conflict {
-                current: json!({"instruction_id":instruction["id"]}),
-            });
-        }
-        let (task_id, part_id) = self.execution_target(op)?;
-        if matches!(
-            op,
-            Operation::Start { .. } | Operation::PartStart { .. } | Operation::Submit { .. }
-        ) {
-            self.start_or_submit(op, &task_id, part_id.as_deref())?;
-        } else {
-            self.settle(op, &task_id)?;
-        }
-        let current = revision(&read_task(self.tx, &task_id)?)?;
-        self.revisions.insert(task_id, current);
-        Ok(())
-    }
-    fn execution_target(&self, op: &Operation) -> Result<(String, Option<String>)> {
-        Ok(match op {
-            Operation::PartStart { part_id } => {
-                let row = self.part(part_id)?;
-                (
-                    text(&row, "task_id")?.into(),
-                    Some(text(&row, "id")?.to_owned()),
-                )
-            }
-            Operation::Start { task_id }
-            | Operation::Submit { task_id, .. }
-            | Operation::Review { task_id, .. }
-            | Operation::Complete { task_id, .. }
-            | Operation::Block { task_id, .. }
-            | Operation::Fail { task_id, .. } => {
-                let row = self.task(task_id)?;
-                (text(&row, "id")?.to_owned(), None)
-            }
-            _ => return Err(Error::Invalid("not an execution op")),
-        })
-    }
-    fn start_or_submit(&self, op: &Operation, id: &str, part_id: Option<&str>) -> Result<()> {
-        let scope = self.execution_scope();
-        match op {
-            Operation::Start { .. } => {
-                start_task(
-                    self.tx,
-                    self.ctx,
-                    id,
-                    revision(&read_task(self.tx, id)?)?,
-                    &scope,
-                    &self.id(IdKind::Attempt)?,
-                )?;
-            }
-            Operation::PartStart { .. } => {
-                let part = part_id.ok_or(Error::Invalid("part id"))?;
-                start_part(
-                    self.tx,
-                    self.ctx,
-                    part,
-                    revision(&parts::read_part(self.tx, part)?)?,
-                    &scope,
-                    &self.id(IdKind::Attempt)?,
-                )?;
-            }
-            Operation::Submit {
-                part_id,
-                result_refs,
-                evidence_refs,
-                ..
-            } => {
-                let part = part_id.as_ref().map(|p| self.resolve(p)).transpose()?;
-                submit_task(
-                    self.tx,
-                    self.ctx,
-                    id,
-                    &scope,
-                    &Submission {
-                        part_id: part.as_deref(),
-                        result_id: &self.id(IdKind::Result)?,
-                        result_refs,
-                        evidence_refs,
-                    },
-                )?;
-            }
-            _ => return Err(Error::Invalid("not a start/submit op")),
-        }
-        Ok(())
-    }
-    fn settle(&mut self, op: &Operation, id: &str) -> Result<()> {
-        match op {
-            Operation::Review {
-                key,
-                result_revision,
-                verdict,
-                criterion_results,
-                ..
-            } => {
-                let review = self.id(IdKind::Review)?;
-                review_task(
-                    self.tx,
-                    self.ctx,
-                    id,
-                    &self.scope.session_id,
-                    &ReviewInput {
-                        result_revision: *result_revision,
-                        review_id: &review,
-                        accept: matches!(verdict, Verdict::Accept),
-                        judgments: criterion_results,
-                    },
-                )?;
-                self.remember(key.as_deref(), &review)?;
-            }
-            Operation::Complete { review_ref, .. } => {
-                complete_task(
-                    self.tx,
-                    self.ctx,
-                    id,
-                    &self.scope.session_id,
-                    &self.resolve(review_ref)?,
-                    !self.scope.child_session,
-                )?;
-            }
-            Operation::Block {
-                part_id,
-                reason,
-                checkpoint_ref,
-                ..
-            } => {
-                let part = part_id.as_ref().map(|p| self.resolve(p)).transpose()?;
-                block_task(
-                    self.tx,
-                    self.ctx,
-                    id,
-                    part.as_deref(),
-                    &self.scope.session_id,
-                    reason,
-                    checkpoint_ref.as_deref(),
-                )?;
-            }
-            Operation::Fail { reason, .. } => {
-                fail_task(self.tx, self.ctx, id, &self.scope.session_id, reason)?;
-            }
-            _ => return Err(Error::Invalid("not an execution op")),
-        }
+    fn start_work(&self) -> Result<()> {
+        self.tx.execute(
+            ownership::sql::START_WORK,
+            rusqlite::params![self.work()?, self.ctx.now],
+        )?;
         Ok(())
     }
 }

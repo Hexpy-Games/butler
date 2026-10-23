@@ -32,7 +32,7 @@ pub(super) fn exercise(tx: &Transaction<'_>) -> Result<()> {
     };
     let input: Apply = serde_json::from_value(
         json!({"reason":"Deliver the requested artifact","operations":[
-            {"op":"work.create_light","goal":"Checked artifact","done_criteria":["Artifact exists","Checks pass"],
+            {"op":"work.create_light","run_here":true,"goal":"Checked artifact","done_criteria":["Artifact exists","Checks pass"],
                 "tasks":[[{"key":"a","title":"Build","description":"Create artifact","criteria":[0]},{"key":"s","title":"Prepare","description":"Prepare checks","criteria":[1]}],
                     [{"key":"b","title":"Check","description":"Verify artifact","criteria":[1]},
                      {"key":"c","title":"Document","description":"Describe artifact","criteria":[0,1]}]]},

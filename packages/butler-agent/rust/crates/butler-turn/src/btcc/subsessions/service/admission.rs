@@ -1,4 +1,5 @@
 //! One writer transaction admits the assignment and its recoverable dispatch.
+mod task;
 use super::*;
 use crate::btcc::subsessions::assignment::{Child, ChildAssignment};
 use crate::btcc::{PacketExecutionMode, StoredSubsessionDelegation, SubsessionPacket};
@@ -12,6 +13,7 @@ pub(super) struct AssignmentRequest {
     pub anchor_message_id: String,
     pub request: String,
 
+    pub task_id: Option<String>,
     pub part_id: Option<String>,
     pub role: ChildRole,
     pub safe_title: Option<String>,
@@ -40,11 +42,13 @@ impl SubsessionService {
         parent: crate::workspace::StoredSessionBinding,
     ) -> Result<(Child, Option<u32>), BtccError> {
         let session = input.parent_session_id.clone();
-        let task = self
-            .repository
-            .storage()
-            .work_model_read(move |db| {
-                let task = db
+        let task = if let Some(task) = &input.task_id {
+            Some(task.clone())
+        } else {
+            self.repository
+                .storage()
+                .work_model_read(move |db| {
+                    let task = db
                     .query_row(
                         crate::btcc::storage::native_sql::SUBSESSIONS_SERVICE_ADMISSION_INDEXED_1,
                         [&session],
@@ -52,10 +56,11 @@ impl SubsessionService {
                     )
                     .optional()?
                     .flatten();
-                Ok(task)
-            })
-            .await
-            .map_err(BtccError::from)?;
+                    Ok(task)
+                })
+                .await
+                .map_err(BtccError::from)?
+        };
         let target = input
             .part_id
             .as_ref()
@@ -77,7 +82,11 @@ impl SubsessionService {
             target,
             input.request
         ]);
-        let id = delegation::delegation_id(naming, &identity)?;
+        let id = if let Some(task) = &input.task_id {
+            butler_work::work_ids::task_delegation_id(task)
+        } else {
+            delegation::delegation_id(naming, &identity)?
+        };
         if let Some(existing) = self.replay_existing(&id).await? {
             return Ok(existing);
         }
@@ -116,27 +125,7 @@ fn assign(
     {
         return Err(store::Error::Invalid("assignment outside parent Work"));
     }
-    store::tiers::delegation_floor(tx, work)?;
-    let child = store::ExecutionScope {
-        session_id: &ids.child_session_id,
-        turn_id: &ids.child_turn_id,
-    };
-    let part_id = part
-        .as_deref()
-        .ok_or(store::Error::Invalid("no_started_task"))?;
-    let revision = at(&store::read_part(tx, part_id)?, "/revision")
-        .as_i64()
-        .ok_or(store::Error::Invalid("revision"))?;
-    store::assign_part(
-        tx,
-        &ctx,
-        part_id,
-        revision,
-        &input.parent_session_id,
-        &child,
-        &attempt,
-    )?;
-    store::tiers::admit(tx, &ctx, &ids.child_session_id, work, 2, "delegated")?;
+    task::assign_target(tx, &ctx, input, ids, work, &task, part.as_deref(), &attempt)?;
     store::tiers::bind_started_task(tx, &ids.child_session_id, &task)?;
     persist(tx, input, parent, ids, now, work, &task, part, &attempt)
 }
@@ -178,6 +167,17 @@ fn resolve_target(
     current: Option<&str>,
     ids: &delegation::DelegationIds,
 ) -> store::Result<(String, Option<String>)> {
+    if let Some(task) = &input.task_id {
+        let row = store::read_task(tx, task)?;
+        if at(&row, "/reserved_session_id").as_str() != Some(&ids.child_session_id)
+            || !store::ready_tasks(tx, string(&row, "chain_id")?)?
+                .iter()
+                .any(|id| id == task)
+        {
+            return Err(store::Error::Invalid("Task reservation is no longer ready"));
+        }
+        return Ok((task.clone(), None));
+    }
     let task = current.ok_or(store::Error::Invalid("no_started_task"))?;
     store::execution::ensure_task_effect(tx, task, &input.parent_session_id).map_err(|error| {
         match error {

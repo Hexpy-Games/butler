@@ -16,6 +16,8 @@ pub use reads::{canon, epic, plan, queue};
 #[derive(Clone, Copy, Debug)]
 pub enum Resource {
     Queue,
+    SessionWorks,
+    TaskSession,
     Canon,
     Plan,
     Epic,
@@ -28,6 +30,7 @@ pub enum Resource {
 }
 use Resource::{
     BacklogOrder, Canon, CreateEpic, CreatePlan, EditEpic, EditPlan, Epic, Plan, PlanOrder, Queue,
+    SessionWorks, TaskSession,
 };
 
 /// Work identity only; no Tasks, cards or spec bodies are read for App scope checks.
@@ -47,7 +50,9 @@ pub fn project_scope(db: &Connection, resource: Resource, id: &str) -> Result<St
     let sql = match resource {
         Plan | EditPlan | PlanOrder => sql::PLAN_SCOPE,
         Epic | EditEpic => sql::EPIC_SCOPE,
-        Queue | Canon | CreatePlan | CreateEpic | BacklogOrder => return Ok(id.to_owned()),
+        SessionWorks | TaskSession | Queue | Canon | CreatePlan | CreateEpic | BacklogOrder => {
+            return Ok(id.to_owned());
+        }
     };
     db.query_row(sql, [id], |row| row.get(0))
         .optional()?
@@ -57,6 +62,8 @@ pub fn project_scope(db: &Connection, resource: Resource, id: &str) -> Result<St
 pub fn read(db: &Connection, resource: Resource, id: &str) -> Result<Value> {
     match resource {
         Queue => queue(db, id),
+        SessionWorks => reads::session_works(db, id),
+        TaskSession => read_task(db, id),
         Canon => canon(db, id),
         Plan => plan(db, id),
         Epic => epic(db, id),
@@ -73,6 +80,7 @@ pub fn write(
     input: Value,
 ) -> Result<Value> {
     match resource {
+        TaskSession => ownership::open_task_session(tx, ctx, id),
         Queue => queue::edit(tx, ctx, id, input),
         CreatePlan => canon::create_plan(tx, ctx, id, input),
         EditPlan => canon::edit_plan(tx, ctx, id, input),
@@ -80,7 +88,9 @@ pub fn write(
         EditEpic => canon::edit_epic(tx, ctx, id, input),
         PlanOrder => canon::order(tx, ctx, Some(id), id, input),
         BacklogOrder => canon::order(tx, ctx, None, id, input),
-        Canon | Plan | Epic => Err(Error::Invalid("write requires an editable resource")),
+        SessionWorks | Canon | Plan | Epic => {
+            Err(Error::Invalid("write requires an editable resource"))
+        }
     }
 }
 fn input<T: serde::de::DeserializeOwned>(value: Value) -> Result<T> {

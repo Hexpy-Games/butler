@@ -98,3 +98,28 @@ impl IdGenerator {
             )
     }
 }
+
+/// A Task id is never reused, including after detach or deletion. These digest
+/// namespaces match the native steward delegation identity format.
+pub fn task_delegation_id(task: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let identity = serde_json::json!(["task-session", task]);
+    format!(
+        "delegation-{:x}",
+        Sha256::digest(format!("btcc.subsession.delegation.v1\0{identity}"))
+    )
+}
+pub fn task_session_id(task: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let delegation = task_delegation_id(task);
+    let relation = format!(
+        "relation-{:x}",
+        Sha256::digest(format!("btcc.subsession.relation.v1\0{delegation}"))
+    );
+    let relation = &relation[..49];
+    let digest = format!(
+        "{:x}",
+        Sha256::digest(format!("btcc.subsession.child-session.v1\0{relation}"))
+    );
+    format!("steward-{}", &digest[..32])
+}

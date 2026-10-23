@@ -81,6 +81,21 @@ pub fn recover_session(
     }
     for id in &tasks {
         let task = read_task(tx, id)?;
+        if !task["handoff_to_session_id"].is_null() {
+            let checkpoint: Option<String> = tx
+                .query_row(ownership::sql::LATEST_CHECKPOINT, [id], |r| r.get(0))
+                .optional()?
+                .flatten();
+            let checkpoint = match checkpoint {
+                Some(checkpoint) => checkpoint,
+                None => put_body(
+                    tx,
+                    &json!({"interrupted_attempts":attempts,"task_id":id}).to_string(),
+                )?,
+            };
+            ownership::complete_handoff(tx, ctx, id, &checkpoint)?;
+            continue;
+        }
         if !matches!(task["status"].as_str(), Some("running" | "in_review")) {
             continue;
         }

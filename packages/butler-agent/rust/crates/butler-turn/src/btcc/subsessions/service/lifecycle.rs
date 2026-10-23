@@ -28,6 +28,7 @@ impl SubsessionService {
             .storage()
             .work_model_write(move |tx| {
                 use rusqlite::OptionalExtension;
+                butler_work::store::ensure_owner_epoch(tx, &assigned.task_id, &session)?;
                 let existing: bool = tx
                     .query_row(
                         crate::btcc::storage::native_sql::SUBSESSIONS_SERVICE_LIFECYCLE_1,
@@ -123,6 +124,7 @@ impl SubsessionService {
             )
             .await
             .map_err(BtccError::from)?;
+        self.drain_task_controls().await?;
         self.deliver_child_result(session, status).await?;
         if let Some(child) = self
             .repository

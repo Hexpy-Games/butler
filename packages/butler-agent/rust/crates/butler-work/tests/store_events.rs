@@ -55,6 +55,8 @@ fn transaction_coalesces_progress_holds_and_structure_and_rolls_back() {
     let before = events(&db);
     for commit in [false, true] {
         let tx = Transaction::new(db.transaction().unwrap()).unwrap();
+        tx.execute(execution_sql::TASK_OWNER, rusqlite::params!["a", "session"])
+            .unwrap();
         for state in [
             TaskStatus::Running,
             TaskStatus::InReview,

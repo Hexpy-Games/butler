@@ -39,6 +39,50 @@ impl AppApplication {
     }
 
     pub(crate) async fn read_space_owned(&self) -> Result<Value, GatewayApplicationError> {
-        self.space_mutations.read(&self.storage).await
+        let mut space = self.space_mutations.read(&self.storage).await?;
+        if self.dependencies.work_model.changes().is_some()
+            && let Some(nodes) = space["nodes"].as_array_mut()
+        {
+            for node in nodes {
+                if node["kind"] != "session" {
+                    continue;
+                }
+                let Some(chat) = node["entityId"].as_str() else {
+                    continue;
+                };
+                let session = self.runtime_hint(chat).await?;
+                let request = super::AppWorkModelRequest {
+                    resource: super::AppWorkModelResource::SessionWorks,
+                    id: session,
+                    input: None,
+                };
+                let works = self.dependencies.work_model.execute(request).await?;
+                node["task_sessions"] = nested_sessions(&self.storage, works).await?;
+            }
+        }
+        Ok(space)
     }
+}
+
+async fn nested_sessions(
+    storage: &super::storage::AppStorage,
+    works: Value,
+) -> Result<Value, GatewayApplicationError> {
+    storage.read(move |db| {
+        let mut nested = Vec::new();
+        for work in works["works"].as_array().into_iter().flatten() {
+            for chain in work["tasks"]["chains"].as_array().into_iter().flatten() {
+                for step in chain["steps"].as_array().into_iter().flatten() {
+                    for task in step["tasks"].as_array().into_iter().flatten() {
+                        let owner = task["assignee_session_id"].as_str().or(task["reserved_session_id"].as_str());
+                        let Some(owner) = owner else {continue;};
+                        use rusqlite::OptionalExtension;
+                        let chat: Option<String> = db.query_row(super::work_model::LOOKUP_SESSION,[owner],|r|r.get(0)).optional().map_err(super::AppStorageError::sqlite)?;
+                        if let Some(chat) = chat { nested.push(serde_json::json!({"session_id":chat,"task_id":task["id"],"work_id":work["id"],"title":task["title"],"status":task["status"]})); }
+                    }
+                }
+            }
+        }
+        Ok(serde_json::json!(nested))
+    }).await.map_err(super::app_error)
 }
