@@ -3,13 +3,14 @@ use super::*;
 use butler_turn::{btcc::*, workspace::*};
 use std::sync::{
     Arc, Mutex,
-    atomic::{AtomicU32, Ordering},
+    atomic::{AtomicBool, AtomicU32, Ordering},
 };
 
 #[derive(Default)]
-struct Queue(Mutex<Vec<String>>);
+struct Queue(Mutex<Vec<String>>, Mutex<Vec<serde_json::Value>>);
 impl SubsessionChildQueue for Queue {
     fn enqueue(&self, input: SubsessionEnqueue) -> std::result::Result<(), BtccError> {
+        self.1.lock().unwrap().push(input.envelope.clone());
         self.0.lock().unwrap().push(
             input.envelope["routingHints"]["sessionId"]
                 .as_str()
@@ -27,10 +28,31 @@ impl SubsessionChildQueue for Queue {
         Ok(None)
     }
 }
-struct Profiles(AtomicU32);
+struct Profiles(
+    AtomicU32,
+    AtomicBool,
+    tokio::sync::watch::Sender<bool>,
+    tokio::sync::Notify,
+);
 impl WorkerProfileReader for Profiles {
+    fn wait_ready(&self) -> PortFuture<'_, ()> {
+        Box::pin(async {
+            let mut ready = self.2.subscribe();
+            self.3.notify_one();
+            ready.wait_for(|ready| *ready).await.unwrap();
+            Ok(())
+        })
+    }
     fn max_simultaneous(&self) -> PortFuture<'_, u32> {
-        Box::pin(async { Ok(self.0.load(Ordering::SeqCst)) })
+        Box::pin(async {
+            if self.1.load(Ordering::SeqCst) || !*self.2.borrow() {
+                return Err(BtccError::relayed(
+                    "settings_unavailable",
+                    "Settings unavailable",
+                ));
+            }
+            Ok(self.0.load(Ordering::SeqCst))
+        })
     }
     fn list(&self) -> PortFuture<'_, Vec<WorkerProfile>> {
         Box::pin(async { Ok(vec![]) })
@@ -109,7 +131,12 @@ impl Fixture {
             })
             .await?;
         let queue = Arc::new(Queue::default());
-        let profiles = Arc::new(Profiles(AtomicU32::new(1)));
+        let profiles = Arc::new(Profiles(
+            AtomicU32::new(1),
+            AtomicBool::new(false),
+            tokio::sync::watch::channel(true).0,
+            tokio::sync::Notify::new(),
+        ));
         let service = service(&storage, &bindings, queue.clone(), profiles.clone());
         Ok(Self {
             _fixture: fixture,
@@ -337,3 +364,6 @@ async fn cancelling_waiting_worker_settles_intent_without_dispatch()
     );
     f.close().await
 }
+
+#[path = "worker_cap/review.rs"]
+mod review;

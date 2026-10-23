@@ -40,7 +40,7 @@ impl SubsessionService {
             }),
             schedule_run: request.schedule_run,
         };
-        let stored = self.admit_assignment(input, parent).await?;
-        self.worker_output(&stored).await
+        let (stored, cap) = self.admit_assignment(input, parent).await?;
+        self.worker_output(&stored, cap).await
     }
 }

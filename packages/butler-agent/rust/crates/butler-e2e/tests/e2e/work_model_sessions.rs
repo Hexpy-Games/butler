@@ -4,7 +4,7 @@ mod stub;
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
-    scenario::{Scenario, Setup},
+    scenario::{Scenario, Setup, accepted_turn_id},
 };
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
@@ -41,7 +41,7 @@ async fn cap(s: &Scenario, value: u32) -> Result<(), HarnessError> {
 }
 async fn workers(s: &Scenario) -> Result<Vec<Value>, HarnessError> {
     super::work_model_live::database(s, |db| {
-        db.prepare("SELECT i.state,a.status,a.id,r.parent_session_id,r.child_session_id,json_extract(i.payload_json,'$.delegation.packet.objective') FROM btcc_session_relations r JOIN wm_attempts a ON a.session_id=r.child_session_id JOIN wm_cross_db_intents i ON i.op_id='child_dispatch:'||a.id WHERE r.activity_role='worker' ORDER BY i.created_at,i.op_id")?
+        db.prepare("SELECT i.state,a.status,a.id,r.parent_session_id,r.child_session_id,json_extract(i.payload_json,'$.delegation.packet.objective') FROM btcc_session_relations r JOIN wm_attempts a ON a.session_id=r.child_session_id JOIN wm_cross_db_intents i ON i.op_id='child_dispatch:'||a.id WHERE r.activity_role='worker' ORDER BY i.created_at,i.rowid")?
             .query_map([], |r| Ok(json!({"intent":r.get::<_,String>(0)?,"attempt":r.get::<_,String>(1)?,"id":r.get::<_,String>(2)?,"parent":r.get::<_,String>(3)?,"child":r.get::<_,String>(4)?,"objective":r.get::<_,String>(5)?})))?
             .collect::<rusqlite::Result<Vec<_>>>()
     }).await
@@ -51,11 +51,20 @@ async fn wait_workers(
     expected: usize,
     applied: usize,
 ) -> Result<Vec<Value>, HarnessError> {
+    wait_finished(s, expected, applied, 0).await
+}
+async fn wait_finished(
+    s: &Scenario,
+    expected: usize,
+    applied: usize,
+    finished: usize,
+) -> Result<Vec<Value>, HarnessError> {
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         let rows = workers(s).await?;
         if rows.len() == expected
             && rows.iter().filter(|r| r["intent"] == "applied").count() == applied
+            && rows.iter().filter(|r| r["attempt"] == "succeeded").count() >= finished
         {
             return Ok(rows);
         }
@@ -69,7 +78,8 @@ async fn wmu_22_workers_wait_release_fifo_and_lowering_never_stops_them() -> Res
     butler_e2e::gate!();
     let (s, script, server) = start("WMU-22", 3, true).await?;
     s.turn("general", JOB).await?;
-    s.turn("general", DISPATCH).await?;
+    let accepted = s.gw.say("general", DISPATCH).await?;
+    let dispatch_turn = accepted_turn_id(&accepted)?;
     for output in script
         .requests
         .lock()
@@ -143,8 +153,29 @@ async fn wmu_22_workers_wait_release_fifo_and_lowering_never_stops_them() -> Res
         current,
         "lowering the cap stops neither running worker"
     );
+    script.dispatch_more.add_permits(1);
+    let pending = wait_workers(&s, 4, 3).await?;
+    assert_eq!(pending[3]["intent"], "pending");
+    assert_eq!(
+        pending
+            .iter()
+            .filter(|r| r["attempt"] == "running" && r["intent"] == "applied")
+            .count(),
+        2
+    );
     script.release[1].add_permits(1);
+    wait_finished(&s, 4, 3, 2).await?;
+    assert_eq!(
+        workers(&s).await?[3]["intent"],
+        "pending",
+        "lowered cap still has one running worker"
+    );
     script.release[2].add_permits(1);
+    wait_finished(&s, 4, 4, 3).await?;
+    assert_eq!(workers(&s).await?[3]["intent"], "applied");
+    script.release[3].add_permits(1);
+    s.gw.wait_terminal("general", &dispatch_turn, Duration::from_secs(60))
+        .await?;
     s.finish().await?;
     server.abort();
     Ok(())

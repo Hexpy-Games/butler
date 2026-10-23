@@ -20,6 +20,7 @@ fn target(connection: &Connection) -> rusqlite::Result<()> {
     upgrade::p1(connection)?;
     upgrade_migration_state(connection)?;
     upgrade_execution(connection)?;
+    upgrade_dispatch_index(connection)?;
     create(connection)?;
     upgrade_tiers(connection)
 }
@@ -55,6 +56,16 @@ fn upgrade_execution(db: &Connection) -> rusqlite::Result<()> {
         .optional()?;
     if lease.is_some_and(|sql| !sql.contains("part_id IS NULL")) {
         db.execute_batch("DROP INDEX wm_attempts_lease")?;
+    }
+    Ok(())
+}
+fn upgrade_dispatch_index(db: &Connection) -> rusqlite::Result<()> {
+    let hashed_tie: bool = db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM pragma_index_info('wm_intents_child_dispatch_parent') WHERE name='op_id')",
+        [], |r| r.get(0),
+    )?;
+    if hashed_tie {
+        db.execute_batch("DROP INDEX wm_intents_child_dispatch_parent")?;
     }
     Ok(())
 }

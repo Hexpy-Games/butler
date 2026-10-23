@@ -89,6 +89,10 @@ pub struct WorkerProfile {
 
 /// Reads configured worker profiles.
 pub trait WorkerProfileReader: Send + Sync {
+    /// Wait for the settings endpoint before startup replay.
+    fn wait_ready(&self) -> PortFuture<'_, ()> {
+        Box::pin(async { Ok(()) })
+    }
     /// Per-session concurrent worker limit.
     fn max_simultaneous(&self) -> PortFuture<'_, u32> {
         Box::pin(async { Ok(10) })
@@ -249,7 +253,7 @@ impl SubsessionService {
             worker_profile: None,
             schedule_run: request.schedule_run,
         };
-        let stored = self.admit_assignment(input, parent).await?;
+        let (stored, _) = self.admit_assignment(input, parent).await?;
         if self
             .repository
             .result_for_relation(stored.relation_id.clone())
@@ -285,7 +289,7 @@ impl SubsessionService {
     async fn replay_existing(
         &self,
         delegation_id: &str,
-    ) -> Result<Option<crate::btcc::subsessions::assignment::Child>, BtccError> {
+    ) -> Result<Option<(Child, Option<u32>)>, BtccError> {
         let Some(existing) = self
             .repository
             .by_delegation(delegation_id.to_owned())
@@ -295,8 +299,8 @@ impl SubsessionService {
             return Ok(None);
         };
         self.ensure_child_binding(&existing).await?;
-        self.dispatch_or_wait(&existing).await?;
-        Ok(Some(existing))
+        let cap = self.dispatch_or_wait(&existing).await?;
+        Ok(Some((existing, cap)))
     }
 
     async fn create_child_binding(

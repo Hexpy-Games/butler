@@ -140,16 +140,22 @@ impl SubsessionService {
             )
             .await
             .map_err(BtccError::from)?;
+        self.deliver_child_result(session, status).await?;
         if let Some(child) = self
             .repository
             .by_child(session.into())
             .await
             .map_err(BtccError::from)?
             && child.packet.child_role == ChildRole::Worker
+            && let Err(error) = self.release_worker_slot(&child.parent_session_id).await
         {
-            self.release_worker_slot(&child.parent_session_id).await?;
+            // The dispatch intent stays pending for the next slot event or startup.
+            butler_core::diagnostic!(
+                "[native-btcc] worker slot release failed code={}",
+                error.code()
+            );
         }
-        self.deliver_child_result(session, status).await
+        Ok(())
     }
 
     async fn deliver_child_result(&self, session: &str, _status: &str) -> Result<(), BtccError> {

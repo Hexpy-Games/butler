@@ -39,7 +39,11 @@ pub(in crate::gateway::application) fn append_relation_workers(
             .and_then(Value::as_str)
             .or_else(|| relation.get("safe_title").and_then(Value::as_str))
             .unwrap_or("Native child Work");
-        let phase = worker_phase(status);
+        let phase = if child["waiting_for_slot"] == true {
+            "waiting"
+        } else {
+            worker_phase(status)
+        };
         let ordinal = relation.get("ordinal").and_then(Value::as_u64).unwrap_or(0);
         let label = if role == "steward" {
             "Steward"
@@ -57,7 +61,7 @@ pub(in crate::gateway::application) fn append_relation_workers(
             .or_else(|| relation.get("created_at").and_then(Value::as_str))
             .unwrap_or("");
         let mut worker = worker_status_reference(
-            status,
+            phase,
             json!({
                 "worker_id": worker_id,
                 "activity_kind": "worker",
@@ -81,7 +85,6 @@ pub(in crate::gateway::application) fn append_relation_workers(
 fn worker_phase(status: &str) -> &'static str {
     match status {
         "active" => "executing",
-        "waiting" => "waiting",
         "completed" => "complete",
         "blocked" => "blocked",
         "failed" => "failed",
@@ -103,8 +106,8 @@ fn worker_status_line(status: &str) -> &'static str {
     }
 }
 
-fn worker_status_reference(status: &str, mut worker: Value) -> Value {
-    if status == "waiting" {
+fn worker_status_reference(phase: &str, mut worker: Value) -> Value {
+    if phase == "waiting" {
         butler_core::json::object_mut(&mut worker).insert(
             "status_reference".into(),
             json!({"key":"workerStatus","parameters":{"phase":"waiting"}}),

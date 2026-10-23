@@ -210,9 +210,11 @@ impl SubsessionService {
                 .waiting_for_children(&relation.child_session_id)
                 .await?;
         let mut projection = json!({"role":role,"relation":relation_view,"session_id":relation.child_session_id,"title":title,"status":status,"active_turn":if status=="active" && !retryable{turn.clone()}else{None},"latest_turn":turn,"waiting_for_children":waiting_for_children,"result":result_view,"updated_at":relation.created_at,"model_ref":relation.packet.model_ref,"terminal":result_view.is_some()});
-        if let Some((id, _)) = &latest {
-            self.plan_counters(id, &mut projection).await?;
-        }
+        let waiting_for_slot = relation.packet.child_role == crate::btcc::ChildRole::Worker
+            && self.dispatch_pending(relation).await?;
+        butler_core::json::object_mut(&mut projection)
+            .insert("waiting_for_slot".into(), json!(waiting_for_slot));
+        self.plan_counters(relation, &mut projection).await?;
         Ok(projection)
     }
 }
@@ -280,7 +282,38 @@ impl SubsessionService {
         })?
     }
 
-    async fn plan_counters(&self, turn_id: &str, projection: &mut Value) -> Result<(), BtccError> {
+    async fn plan_counters(&self, child: &Child, projection: &mut Value) -> Result<(), BtccError> {
+        if let Child::Assigned(assigned) = child {
+            let task = assigned.task_id.clone();
+            let (total, completed) = self
+                .repository
+                .storage()
+                .work_model_read(move |db| {
+                    Ok(db.query_row(
+                        crate::btcc::storage::native_sql::SUBSESSIONS_SERVICE_TASK_PART_COUNTS,
+                        [task],
+                        |r| Ok((r.get::<_, u32>(0)?, r.get::<_, u32>(1)?)),
+                    )?)
+                })
+                .await
+                .map_err(BtccError::from)?;
+            projection["approved_plan_total"] = json!(total);
+            projection["approved_plan_completed"] = json!(completed);
+        } else if let Some(turn) = projection
+            .pointer("/latest_turn/id")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+        {
+            self.legacy_plan_counters(&turn, projection).await?;
+        }
+        Ok(())
+    }
+
+    async fn legacy_plan_counters(
+        &self,
+        turn_id: &str,
+        projection: &mut Value,
+    ) -> Result<(), BtccError> {
         let work = match self.work.bound_work_for_turn(turn_id.to_owned()).await {
             Ok(work) => work,
             // Legacy children without a durable Work binding have no plan.

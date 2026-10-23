@@ -62,6 +62,18 @@ pub(super) async fn assert_waiting_children(
         s.gw.get("/session-view?session_id=steward-legacy-b")
             .await?;
     assert_eq!(own.data()["waiting_for_children"], true);
+    let activity = s.gw.get("/worker-activity?include_history=true").await?;
+    let idle = activity.data()["workers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|worker| worker["worker_id"] == "worker-relation-c")
+        .unwrap();
+    assert_eq!(
+        idle["phase"], "orienting",
+        "a child without a pending dispatch retains its thinking label"
+    );
+    assert!(idle.get("status_reference").is_none());
     s.agent.terminate().await?;
     {
         let db =

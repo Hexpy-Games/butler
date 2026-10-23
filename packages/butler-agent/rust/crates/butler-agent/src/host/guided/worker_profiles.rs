@@ -22,6 +22,18 @@ impl AppWorkerProfileReader {
 }
 
 impl WorkerProfileReader for AppWorkerProfileReader {
+    fn wait_ready(&self) -> PortFuture<'_, ()> {
+        Box::pin(async move {
+            let mut changes = self.endpoint.subscribe_changes();
+            while self.endpoint.snapshot().is_none() {
+                changes.changed().await.map_err(|source| {
+                    error("worker_profile_settings_unavailable").with_source(source)
+                })?;
+            }
+            Ok(())
+        })
+    }
+
     fn max_simultaneous(&self) -> PortFuture<'_, u32> {
         Box::pin(async move {
             let settings = self.fetch().await?;

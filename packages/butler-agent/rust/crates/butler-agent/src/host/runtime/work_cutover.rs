@@ -18,17 +18,20 @@ pub(super) struct CutoverOwner {
     recovery: super::work_recovery::RecoveryOwner,
 }
 impl CutoverOwner {
-    pub(super) async fn bind_subsessions(
-        &self,
-        service: Arc<butler_turn::btcc::SubsessionService>,
-    ) -> Result<(), BtccError> {
-        service
-            .recover_native_assignments(self.recovery.interrupted.as_ref().clone())
-            .await?;
+    pub(super) fn bind_subsessions(&self, service: Arc<butler_turn::btcc::SubsessionService>) {
+        let interrupted = self.recovery.interrupted.as_ref().clone();
         let replay = service.clone();
         let stop = self.stop.child_token();
         self.tasks.spawn(async move {
-            if let Err(error) = replay.replay_kept_requests(stop).await {
+            let recovery = async {
+                replay.recover_native_assignments(interrupted).await?;
+                replay.replay_kept_requests(stop.clone()).await
+            };
+            let result = tokio::select! {
+                result = recovery => result,
+                () = stop.cancelled() => return,
+            };
+            if let Err(error) = result {
                 butler_core::diagnostic!(
                     "[work-cutover] receipt replay failed code={}",
                     error.code()
@@ -36,7 +39,6 @@ impl CutoverOwner {
             }
         });
         let _ = self.subsessions.set(service);
-        Ok(())
     }
     pub(super) fn ready(&self) -> Arc<tokio::sync::Notify> {
         self.ready.clone()

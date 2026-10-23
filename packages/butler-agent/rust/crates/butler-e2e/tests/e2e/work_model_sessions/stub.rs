@@ -8,6 +8,7 @@ use tokio::sync::Semaphore;
 pub(super) struct Script {
     pub requests: Mutex<Vec<Value>>,
     pub release: Vec<Semaphore>,
+    pub dispatch_more: Semaphore,
     workers: usize,
     here: bool,
 }
@@ -18,7 +19,8 @@ pub(super) async fn start(
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let script = Arc::new(Script {
         requests: Mutex::default(),
-        release: (0..workers).map(|_| Semaphore::new(0)).collect(),
+        dispatch_more: Semaphore::new(0),
+        release: (0..=workers).map(|_| Semaphore::new(0)).collect(),
         workers,
         here,
     });
@@ -67,6 +69,9 @@ async fn reply(
         }
     } else if request == DISPATCH {
         if step < script.workers {
+            dispatch(step)
+        } else if step == script.workers && script.here {
+            script.dispatch_more.acquire().await.unwrap().forget();
             dispatch(step)
         } else {
             message("The reports are assigned.")

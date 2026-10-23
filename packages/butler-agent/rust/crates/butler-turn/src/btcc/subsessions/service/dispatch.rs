@@ -4,18 +4,22 @@ use crate::btcc::storage::native_sql;
 use rusqlite::OptionalExtension;
 
 impl SubsessionService {
-    pub(super) async fn dispatch_or_wait(&self, child: &Child) -> Result<(), BtccError> {
+    pub(super) async fn dispatch_or_wait(&self, child: &Child) -> Result<Option<u32>, BtccError> {
         if child.packet.child_role != ChildRole::Worker {
             let _gate = self.dispatch_gate.lock().await;
-            return self.replay(child).await;
+            self.replay(child).await?;
+            return Ok(None);
         }
-        self.release_worker_slot(&child.parent_session_id).await
+        self.release_worker_slot(&child.parent_session_id)
+            .await
+            .map(Some)
     }
 
-    pub(super) async fn release_worker_slot(&self, parent: &str) -> Result<(), BtccError> {
-        let _gate = self.dispatch_gate.lock().await;
+    pub(super) async fn release_worker_slot(&self, parent: &str) -> Result<u32, BtccError> {
         let cap = self.profiles.max_simultaneous().await?.clamp(1, 10);
-        self.drain_workers(parent, cap).await
+        let _gate = self.dispatch_gate.lock().await;
+        self.drain_workers(parent, cap).await?;
+        Ok(cap)
     }
 
     async fn drain_workers(&self, parent: &str, cap: u32) -> Result<(), BtccError> {
@@ -54,10 +58,15 @@ impl SubsessionService {
         }
     }
 
-    pub(super) async fn worker_output(&self, child: &Child) -> Result<Value, BtccError> {
+    pub(super) async fn worker_output(
+        &self,
+        child: &Child,
+        cap: Option<u32>,
+    ) -> Result<Value, BtccError> {
         let mut output = delegation_output(child);
-        if self.dispatch_pending(child).await? {
-            let cap = self.profiles.max_simultaneous().await?.clamp(1, 10);
+        if let Some(cap) = cap
+            && self.dispatch_pending(child).await?
+        {
             let fields = butler_core::json::object_mut(&mut output);
             fields.insert("status".into(), json!("waiting"));
             fields.insert("message".into(), json!(format!(
@@ -68,7 +77,7 @@ impl SubsessionService {
         Ok(output)
     }
 
-    async fn dispatch_pending(&self, child: &Child) -> Result<bool, BtccError> {
+    pub(super) async fn dispatch_pending(&self, child: &Child) -> Result<bool, BtccError> {
         let Child::Assigned(assigned) = child else {
             return Ok(false);
         };

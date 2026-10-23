@@ -119,8 +119,8 @@ async fn delivered_steward_result_reports_blocked_work() -> Result<(), HarnessEr
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap();
     let status: String = db
         .query_row(
-            "SELECT status FROM btcc_guided_works WHERE session_id=?1",
-            [child["session_id"].as_str().unwrap()],
+            "SELECT status FROM wm_tasks WHERE id=?1",
+            [child["result"]["task_id"].as_str().unwrap()],
             |row| row.get(0),
         )
         .unwrap();
@@ -400,7 +400,7 @@ fn assert_direction(
     );
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap();
     let applied: i64 = db.query_row(
-        "SELECT count(*) FROM btcc_subsession_directions WHERE relation_id=?1 AND status='applied'",
+        "SELECT count(*) FROM wm_instructions WHERE json_extract(sender,'$.parent.relation_id')=?1 AND mode='steer' AND status='applied'",
         [relation],
         |row| row.get(0),
     ).unwrap();

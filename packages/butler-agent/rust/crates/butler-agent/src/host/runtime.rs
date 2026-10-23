@@ -272,8 +272,7 @@ impl AgentRuntime {
             (worker_profiles, app_endpoint.clone()),
             work_service.clone(),
             &work_cutover,
-        )
-        .await?;
+        )?;
         let restart_tool_journal =
             Arc::new(ToolJournalRepository::new(stores.btcc.clone(), now.clone()));
         let restart_effect_journal = Arc::new(StorageEffectJournal::new(stores.btcc.clone(), now));

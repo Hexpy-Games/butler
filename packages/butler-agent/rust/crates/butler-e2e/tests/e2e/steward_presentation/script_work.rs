@@ -19,7 +19,19 @@ pub(super) fn parent_item(step: usize, body: &Value, presented: bool) -> Value {
         ),
         2 => revise(body, presented),
         4 => start(body),
-        5 => call("delegate", "delegate_to_steward", &json!({"request":OWNER})),
+        5 => {
+            let compare = native::outputs(body)
+                .iter()
+                .rev()
+                .find_map(|output| output.pointer("/keys/compare"))
+                .cloned()
+                .unwrap();
+            call(
+                "delegate",
+                "delegate_to_steward",
+                &json!({"request":OWNER,"part_id":compare}),
+            )
+        }
         _ => {
             json!({"type":"message","id":"answer","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Direction delivered.","annotations":[]}]})
         }
@@ -83,7 +95,11 @@ fn start(body: &Value) -> Value {
             body,
             json!([
                 {"op":"task.add","key":"t","title":OWNER,"description":OWNER,"step":"new","acceptance_refs":acceptance},
-                {"op":"task.start","task_id":"@t"}
+                {"op":"task.start","task_id":"@t"},
+                {"op":"part.add","key":"read","task_id":"@t","kind":"execute","title":"Read approach A"},
+                {"op":"part.add","key":"compare","task_id":"@t","kind":"execute","title":"Compare approaches"},
+                {"op":"part.start","part_id":"@read"},
+                {"op":"task.submit","task_id":"@t","part_id":"@read","result_refs":["Approach A read"],"evidence_refs":["a.txt"]}
             ]),
         ),
     )

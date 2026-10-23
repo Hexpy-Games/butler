@@ -58,10 +58,18 @@ fn schema_constraints_and_idempotency() {
             |r| r.get(0),
         )
         .unwrap();
-    assert!(dispatch_index.contains(
-        "json_extract(payload_json,'$.delegation.parent_session_id'),state,created_at,op_id"
-    ));
+    assert!(
+        dispatch_index.contains(
+            "json_extract(payload_json,'$.delegation.parent_session_id'),state,created_at"
+        )
+    );
     assert!(dispatch_index.contains("WHERE kind='child_dispatch'"));
+    assert!(!dispatch_index.contains("op_id"));
+    db.execute_batch("DROP INDEX wm_intents_child_dispatch_parent;
+        CREATE INDEX wm_intents_child_dispatch_parent ON wm_cross_db_intents(json_extract(payload_json,'$.delegation.parent_session_id'),state,created_at,op_id) WHERE kind='child_dispatch';").unwrap();
+    work_schema::ensure(&db).unwrap();
+    let hashed_tie: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM pragma_index_info('wm_intents_child_dispatch_parent') WHERE name='op_id')", [], |r| r.get(0)).unwrap();
+    assert!(!hashed_tie);
     let before: i64 = db
         .query_row("PRAGMA schema_version", [], |r| r.get(0))
         .unwrap();

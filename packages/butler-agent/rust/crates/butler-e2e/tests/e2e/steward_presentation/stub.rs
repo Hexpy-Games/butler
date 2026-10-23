@@ -168,11 +168,16 @@ fn raw_text(item: &Value) -> String {
 }
 
 pub(crate) fn child_lane(body: &Value) -> bool {
-    body["tools"]
+    let tools = body["tools"]
         .as_array()
         .into_iter()
         .flatten()
+        .collect::<Vec<_>>();
+    let child_tools = tools
+        .iter()
         .any(|tool| tool["name"] == "delegate_to_worker")
+        && !tools.iter().any(|tool| tool["name"] == "answer_blocks");
+    child_tools
         || body["input"].as_array().into_iter().flatten().any(|item| {
             item["role"] == "user"
                 && (user_text(item).starts_with("role: steward")

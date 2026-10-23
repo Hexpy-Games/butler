@@ -357,6 +357,9 @@ impl SubsessionService {
         relation: &Child,
         requested: &StoredSubsessionDirection,
     ) -> Result<(), BtccError> {
+        if self.dispatch_pending(relation).await? {
+            return Ok(());
+        }
         let target = relation.child_session_id.clone();
         let assigned_part = match relation {
             Child::Assigned(assigned) => assigned.part_id.clone(),

@@ -44,5 +44,5 @@ CREATE INDEX IF NOT EXISTS wm_cutover_replay_turn ON wm_cross_db_intents(json_ex
   WHERE kind='cutover_replay' AND state='applied';
 
 CREATE INDEX IF NOT EXISTS wm_intents_child_dispatch_parent
- ON wm_cross_db_intents(json_extract(payload_json,'$.delegation.parent_session_id'),state,created_at,op_id)
+ ON wm_cross_db_intents(json_extract(payload_json,'$.delegation.parent_session_id'),state,created_at)
  WHERE kind='child_dispatch';

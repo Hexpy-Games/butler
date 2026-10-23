@@ -51,6 +51,7 @@ impl SubsessionService {
     }
 
     pub(super) async fn replay_pending_assignments(&self) -> Result<(), BtccError> {
+        self.profiles.wait_ready().await?;
         let mut after = String::new();
         loop {
             let cursor = after.clone();
