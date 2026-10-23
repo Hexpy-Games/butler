@@ -96,6 +96,9 @@ export async function verifySidebarOrder(page: Page, server: NativeAppServerHand
   const handle = page.locator('[data-test-class="canon-plan-epics"] [data-sortable-handle]').first();
   await handle.focus(); await page.keyboard.press("Space");
   await page.getByText(/^Dragging .+ Use arrow keys to move it\.$/u).waitFor();
+  // dnd-kit's KeyboardSensor adds its keydown listener in a zero-delay timer after the lift; a timer
+  // queued now runs after it, so the arrow key reaches the sensor instead of scrolling the page.
+  await page.evaluate(() => new Promise(resolve => setTimeout(resolve)));
   await page.keyboard.press("ArrowDown");
   await page.locator('[data-test-class="canon-plan-epics"] [data-drop-target="true"]').waitFor();
   const ordered = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === `/canon/plans/${planId}/order`);
