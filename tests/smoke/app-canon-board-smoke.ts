@@ -4,28 +4,37 @@ import { mkdirSync } from "node:fs";
 import { resolve, join } from "node:path";
 import type { Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
-import { launchSmokeBrowser } from "../support/smoke-browser.ts";
+import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
 import { openCanonBoard, seedCanonBoard, verifyCanonFlows } from "../support/canon-board-scenarios.ts";
 
 const shots = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? ".tmp/canon-board-smoke");
 mkdirSync(shots, { recursive: true });
+const cases = [1440, 390].flatMap(width => ["light", "dark"].flatMap(theme => ["plain", "wallpaper"].map(surface => `${width}-${theme}-${surface}`)));
+if (await runSmokeCases(cases, "BUTLER_CANON_SMOKE_CASE", import.meta.path, { isolate: true })) process.exit(0);
+const selectedCase = process.env.BUTLER_CANON_SMOKE_CASE;
 const before = process.env.BUTLER_SMOKE_BASELINE === "1";
 const server = await createNativeAppServer({ uiRoot: resolve(process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist") });
 let browser: Awaited<ReturnType<typeof launchSmokeBrowser>> | undefined;
 let count = 0;
+let failure: unknown;
+let cleanupErrors: unknown[] = [];
 try {
   const { projectId, planId } = await seedCanonBoard(server);
   browser = await launchSmokeBrowser();
-  for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (const wallpaper of [false, true]) {
+  for (const cell of cases.filter(cell => !selectedCase || cell === selectedCase)) {
+    const [widthText, theme, surface] = cell.split("-");
+    const width = Number(widthText), wallpaper = surface === "wallpaper";
     await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: theme,
       main_screen_theme: wallpaper ? "silk" : "none", wallpaper: {
         source: wallpaper ? { kind: "live", module: "butler.silk" } : { kind: "none" }, motion: "paused", pauseOnBattery: false,
       },
     }) });
     const context = await browser.newContext({ viewport: { width, height: width === 390 ? 844 : 900 }, reducedMotion: "reduce" });
+    let page: Page | undefined;
+    let contextFailure: unknown;
     try {
       await server.signIn(context);
-      const page = await context.newPage();
+      page = await context.newPage();
       const errors: string[] = [];
       page.on("pageerror", error => errors.push(error.message));
       await page.addInitScript(() => localStorage.setItem("butler:app-ui-state:v1", JSON.stringify({
@@ -47,8 +56,13 @@ try {
       const card = board.getByRole("button", { name: "캐논", exact: true });
       await card.focus(); await card.press("Enter");
       await page.locator('[data-test-class="canon-epic-detail"]').waitFor();
-      await card.click();
-      await page.locator('[data-test-class="canon-epic-detail"]').waitFor();
+      if (width === 1440) {
+        await card.click();
+        await page.locator('[data-test-class="canon-epic-detail"]').waitFor();
+      } else {
+        const close = await page.locator('[data-test-class="canon-detail-panel"]').getByRole("button", { name: "닫기", exact: true }).boundingBox();
+        assert(close && close.y >= 0 && close.y + close.height < 844, "Selected detail opens in the phone viewport");
+      }
       await capture(page, `${name}-detail.png`); count++;
       await page.locator('[data-test-class="canon-detail-panel"]').getByRole("button", { name: "닫기", exact: true }).click();
       await board.locator('[data-canon-backlog]').getByRole("button", { name: "새 과제", exact: true }).click();
@@ -61,12 +75,25 @@ try {
       }
       assert.deepEqual(errors, [], "No renderer errors");
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "No viewport overflow");
-    } finally { await context.close(); }
+      console.log(JSON.stringify({ result: "ASSERTIONS_PASS", case: cell, screenshots: count,
+        flows: width === 390 && theme === "dark" && wallpaper ? "create,move,status,live-update,conflict,plan-create" : "visual",
+        stubModelCalls: server.stubModelCalls.length }));
+    } catch (error) { contextFailure = error; }
+    finally { await closeCase(page, context, contextFailure); }
   }
-  console.log(JSON.stringify({ result: "PASS", screenshots: count, directory: shots, stubModelCalls: server.stubModelCalls.length }));
-} finally {
-  await browser?.close();
-  await server.stop();
+} catch (error) { failure = error; }
+finally {
+  const cleanup = await Promise.allSettled([browser?.close(), server.stop()]);
+  cleanupErrors = cleanup.flatMap(result => result.status === "rejected" ? [result.reason] : []);
+}
+if (failure || cleanupErrors.length) throw new AggregateError([...(failure ? [failure] : []), ...cleanupErrors], "Canon smoke failed");
+console.log(JSON.stringify({ result: "PASS", case: selectedCase, screenshots: count, directory: shots, stubModelCalls: server.stubModelCalls.length }));
+async function closeCase(page: Page | undefined, context: import("playwright").BrowserContext, failure: unknown): Promise<void> {
+  const errors: unknown[] = failure ? [failure] : [];
+  // Close the live page before its single-process browser; always retain the first failure.
+  try { await page?.close(); } catch (error) { errors.push(error); }
+  try { await context.close(); } catch (error) { errors.push(error); }
+  if (errors.length) throw new AggregateError(errors, "Canon case failed");
 }
 async function capture(page: Page, filename: string): Promise<void> {
   // Scroll the real selected surface into view on phones; desktop keeps the whole board.
