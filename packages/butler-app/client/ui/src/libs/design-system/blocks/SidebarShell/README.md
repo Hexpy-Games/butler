@@ -27,7 +27,10 @@ clipped row, focus ring included, through the same scrollbar. Native sticky
 owns branch push-off. The scroll frame keeps `--focus-ring-room` of paint room
 on its inline start and block edges (content pads it back, rows keep their
 place), and the sticky clips leave the same room on their other edges, so a
-row's focus ring is never cut by the shell, its fades or a folder clip.
+row's focus ring is never cut by the shell, its fades or a folder clip. With a
+ring inside, each edge fade turns solid no further in than the scroll is from
+that end (a scroll timeline, no frame lag), so a row focused back to a scroll
+end keeps its whole ring; at rest the fades are unchanged.
 
 ## What is this component
 

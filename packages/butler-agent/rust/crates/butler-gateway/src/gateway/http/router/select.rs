@@ -28,6 +28,13 @@ fn family(path: &str, root: &str) -> bool {
 fn commands(request: &Request<Body>) -> Option<Handler> {
     let path = request.uri().path();
     let parts = path.trim_start_matches('/').split('/').collect::<Vec<_>>();
+    if matches!(
+        parts.as_slice(),
+        ["canon", "epics", _, "conversation"]
+            | ["projects", _, "canon", "sidebar" | "sidebar-order"]
+    ) {
+        return Some(Handler::CanonSidebar);
+    }
     let routes = [
         (
             matches!(

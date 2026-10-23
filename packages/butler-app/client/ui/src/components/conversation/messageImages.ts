@@ -1,7 +1,7 @@
 import { createContext, useContext } from "react";
 import { fromMarkdown } from "mdast-util-from-markdown";
 import type { Root, RootContent } from "mdast";
-import type { MessageRecord, SessionArtifactSummary } from "@/app/types";
+import type { MessageFileRef, MessageRecord, SessionArtifactSummary } from "@/app/types";
 import { openImageViewer, type ViewerImage } from "../media/imageViewerState";
 import { markdownImageFile, messageFileUrl } from "./messageMedia";
 
@@ -26,7 +26,13 @@ function markdownImages(text: string): Array<{ src: string; alt: string }> {
   });
 }
 
-/** The message's pictures in reading order: images in its text, then its other image files. */
+/** How the viewer shows an attached file: a picture, a video, or not at all. */
+export function attachmentViewerKind(file: Pick<MessageFileRef, "kind" | "mime_type">): "image" | "video" | undefined {
+  if (file.kind === "image") return "image";
+  return file.mime_type.toLowerCase().startsWith("video/") ? "video" : undefined;
+}
+
+/** The message's pictures in reading order: images in its text, then its other image and video files. */
 export function messageViewerImages(message: MessageRecord): Keyed[] {
   const attachments = message.attachments ?? [];
   const artifacts = message.artifacts ?? [];
@@ -39,10 +45,13 @@ export function messageViewerImages(message: MessageRecord): Keyed[] {
     if (file?.url) add({ key: file.url, src: messageFileUrl(file), alt, caption: alt || undefined, sessionId });
     else if (/^(https?:|data:image\/|\/)/iu.test(src)) add({ key: src, src, alt, caption: alt || undefined, sessionId });
   }
-  const files: Array<Pick<SessionArtifactSummary, "kind" | "url" | "signed_url" | "title">> = artifacts.length
-    ? artifacts : attachments.map((file) => ({ kind: file.kind === "image" ? "image" : "file", url: file.url, signed_url: file.signed_url, title: file.safe_name }));
+  // An attachment-backed artifact shares its attachment's key, so each file shows once.
+  const files: Array<Pick<SessionArtifactSummary, "kind" | "url" | "signed_url" | "title">> = [...artifacts,
+    ...attachments.map((file) => ({ kind: attachmentViewerKind(file) ?? "file", url: file.url, signed_url: file.signed_url, title: file.safe_name }))];
   for (const file of files) {
-    if (file.kind === "image" && file.url) add({ key: file.url, src: messageFileUrl(file), alt: file.title, sessionId });
+    if ((file.kind === "image" || file.kind === "video") && file.url) {
+      add({ key: file.url, src: messageFileUrl(file), alt: file.title, kind: file.kind, sessionId });
+    }
   }
   return images;
 }

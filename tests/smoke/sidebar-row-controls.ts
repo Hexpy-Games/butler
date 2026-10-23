@@ -3,12 +3,12 @@ import type { Page } from "playwright";
 
 export async function checkSidebarRowControls(page: Page, screenshot: string) {
   const sidebar = page.locator('[data-test-class="app-sidebar"]');
-  const radii = await sidebar.getByRole("tablist").evaluate(el => {
+  const radii = await sidebar.getByRole("radiogroup").evaluate(el => {
     const token = getComputedStyle(el).getPropertyValue("--radius-control").trim();
-    return { token, values: [el, ...el.querySelectorAll('[role="tab"]')].map(node => getComputedStyle(node).borderRadius) };
+    return { token, values: [el, ...el.querySelectorAll('[role="radio"]')].map(node => getComputedStyle(node).borderRadius) };
   });
   assert(radii.values.every(radius => radius === radii.token), JSON.stringify(radii));
-  await sidebar.getByRole("tab").nth(1).click();
+  await sidebar.getByRole("radio").nth(1).click();
   await page.waitForTimeout(100);
   const row = sidebar.locator('[data-test-class="tree-row"]:has([data-slot="nav-row-meta"])').first();
   await row.waitFor();
@@ -52,8 +52,8 @@ export async function checkSidebarRowControls(page: Page, screenshot: string) {
   await page.keyboard.press("Escape");
   await page.mouse.move(page.viewportSize()!.width - 2, page.viewportSize()!.height - 2);
   await page.screenshot({ path: screenshot });
-  await sidebar.getByRole("tab").nth(2).click();
+  await sidebar.getByRole("radio").nth(2).click();
   assert.equal(await sidebar.getByRole("button", { name: "그룹 만들기", exact: true }).count(), 0);
   assert.equal(await sidebar.getByText("확인이 필요한 대화도 포함합니다.", { exact: true }).count(), 0);
-  await sidebar.getByRole("tab").nth(0).click();
+  await sidebar.getByRole("radio").nth(0).click();
 }

@@ -18,6 +18,7 @@ use super::coverage_support::{
     Variant, apply, canonical, chats, compare, coverage, drain, graph, hold_gate, incomplete_jobs,
     recall, release_gate, start,
 };
+use crate::memory_fixture::wait_parked;
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::scenario::Scenario;
 use butler_platform::sqlite;
@@ -227,12 +228,13 @@ async fn second_changes(
 }
 
 /// A completed standalone projection stays complete without idle writes or
-/// repeated source-change notices after the consumer is free to poll.
+/// repeated source-change notices once the freed consumer has parked.
 pub(super) async fn idle(s: &Scenario, gate: sqlite::Connection) -> sqlite::Connection {
     let data = &s.sandbox.data;
     release_gate(&gate);
     drop(gate);
     drain(data, &[]).await;
+    wait_parked(s).await;
     let db = graph(data);
     let version = || {
         db.pragma_query_value::<u64, _>(None, "data_version", |row| row.get(0))

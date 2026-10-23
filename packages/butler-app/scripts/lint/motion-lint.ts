@@ -72,8 +72,11 @@ const REDUCED_MOTION_EXEMPT = new Set(["libs/design-system/components/Spinner/Sp
 const GEOMETRY_MORPH: Record<string, readonly string[]> = {
   "libs/design-system/blocks/SetupWizardShell/SetupWizardMorph.module.css": ["left", "width", "height", "clip-path"],
 };
-/** Registered paint-only custom properties (the shared scroll-fade mask). */
-const ALLOWED_CUSTOM_PROPERTY = /^--scroll-fade-/u;
+/**
+ * Registered paint-only custom properties: the shared scroll-fade mask and
+ * the KanbanBoard scrollbar thumb strength.
+ */
+const ALLOWED_CUSTOM_PROPERTY = /^--(?:scroll-fade-|kanban-scrollbar-alpha$)/u;
 
 const MOTION_PROPERTY = /^(?:transition|animation)(?:-timing-function)?$/u;
 const KEYWORD_EASING = /(?<![\w-])(?:ease|ease-in|ease-out|ease-in-out|linear|step-start|step-end)(?![\w(-])/u;

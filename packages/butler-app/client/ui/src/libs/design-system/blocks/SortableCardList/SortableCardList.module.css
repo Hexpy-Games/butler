@@ -56,6 +56,15 @@
   cursor: grabbing;
 }
 
+/* The overlay's grip: the IconButton box without the button, so the lifted card keeps the row's columns. */
+.handleStatic {
+  display: inline-grid;
+  place-items: center;
+  width: var(--icon-button-size, var(--control-height-md));
+  max-width: 100%;
+  height: var(--icon-button-size, var(--control-height-md));
+}
+
 .leading {
   display: inline-grid;
   place-items: center;
