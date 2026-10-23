@@ -12,8 +12,14 @@ mod types;
 
 pub use context::read_prior_public_context;
 pub use hydration::hydrate_conversation_source;
-pub(in crate::cognition) use identity::projection_hash as projection_hash_for_graph;
-pub(in crate::cognition) use inventory::{CanonicalInventory, read_canonical_inventory};
+pub(in crate::cognition) use identity::{
+    projection_hash as projection_hash_for_graph, recovered_parts_hash,
+};
+pub(in crate::cognition) use inventory::{
+    CandidateKind, CoverageRead, EligibleSource, FaultScope, InventoryCandidate, InventoryCoverage,
+    SourceFault, inventory_coverage, read_canonical_inventory,
+    sync_needed as inventory_sync_needed, sync_step as inventory_sync_step,
+};
 pub(in crate::cognition) use planner::assert_conversation_source_current;
 pub use planner::prepare_conversation_source;
 pub(in crate::cognition) use recall::{
@@ -26,8 +32,8 @@ pub use typed::{
     ingest_task_outcome_memory, list_chat_instructions, list_remembered_rules,
 };
 pub(in crate::cognition) use typed::{
-    TypedMemoryLifecycle, TypedMemoryRecord, hydrate_typed_source, read_typed_memory_lifecycle,
-    read_typed_record,
+    TypedMemoryLifecycle, TypedMemoryRecord, hydrate_typed_source, read_projection_record,
+    read_typed_memory_lifecycle, read_typed_record,
 };
 pub(in crate::cognition) use typed_plan::{TypedPlan, TypedSpan, prepare as prepare_typed_source};
 pub use types::{

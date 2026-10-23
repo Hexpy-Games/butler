@@ -104,7 +104,7 @@ async fn offline_generated_toolchains() -> Result<(), HarnessError> {
             }
             let command = fixture(tool, &root, &setup)?;
             let preparation = command_sandbox::prepare_project_write(&root, &setup.sandbox.data)?;
-            let inventory = command_sandbox::discover_project_secrets(&root)?;
+            let inventory = command_sandbox::discover_project_entries(&root)?;
             let invocation = invoke(&command, &root, &setup);
             let policy: Value = serde_json::from_str(&invocation.arguments[1])?;
             let output = run(invocation, &root, &setup.sandbox.home);
@@ -177,8 +177,10 @@ fn fixture(tool: &str, root: &Path, setup: &Setup) -> Result<String, HarnessErro
                 root.join("package.json"),
                 r#"{"name":"minimal","version":"1.0.0","dependencies":{"local":"file:./local"}}"#,
             )?;
+            // npm versions differ on whether file: dependencies are packed.
+            // This fixture exercises links; npm_tarball covers extraction.
             Ok(format!(
-                "npm install --offline --package-lock=false --cache '{}'",
+                "npm install --offline --install-links=false --package-lock=false --cache '{}'",
                 setup
                     .sandbox
                     .data
@@ -223,7 +225,7 @@ async fn fresh_git_init_is_quarantined_even_when_metadata_is_denied() -> Result<
     let mut setup = Setup::new("LINUX-FRESH-GIT")?;
     let root = &setup.sandbox.workspace;
     std::fs::create_dir_all(setup.sandbox.data.join("tmp/project-write"))?;
-    let inventory = command_sandbox::discover_project_secrets(root)?;
+    let inventory = command_sandbox::discover_project_entries(root)?;
     let output = run(
         invoke("git init --quiet", root, &setup),
         root,

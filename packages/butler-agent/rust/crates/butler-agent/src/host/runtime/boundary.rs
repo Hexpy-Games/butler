@@ -72,6 +72,7 @@ impl MemoryStartup<'_> {
                         paths: cognition_paths,
                         unclean_previous_exit: paths.unclean_previous_exit,
                         fresh: self.fresh,
+                        stop: self.stop,
                     },
                     coordinator,
                     provider,
@@ -155,4 +156,39 @@ pub(super) fn prompt_paths(
         data_root: paths.data_root.clone(),
         memory_rules_root: cognition.explicit_rules_root(&paths.data_root),
     }
+}
+
+/// Process-scoped reset and workspace guards are ready before any store opens.
+pub(super) struct ProcessState {
+    pub data_reset: Arc<crate::host::service::data_reset::Control>,
+    pub protected_roots: Vec<std::path::PathBuf>,
+    pub collation: Arc<butler_core::locale::LocaleCollation>,
+    pub writes: Arc<butler_core::configuration::ConfigurationWrites>,
+}
+pub(super) async fn open_process_state(
+    paths: &super::RuntimePaths,
+    db: &Path,
+    installation: &crate::host::ResolvedInstallation,
+    locale: &str,
+    stop: &tokio_util::sync::CancellationToken,
+) -> Result<ProcessState, BtccError> {
+    super::stores::check_startup(stop)?;
+    validate_data_installation_boundary(&paths.data_root, &paths.installation_root)?;
+    let collation = Arc::new(butler_core::locale::LocaleCollation::new(locale).map_err(setup)?);
+    let writes = Arc::new(butler_core::configuration::ConfigurationWrites::new());
+    let data_reset = crate::host::service::data_reset::Control::open(
+        paths.data_root.clone(),
+        paths.requested_data_root.clone(),
+        db.to_owned(),
+        installation.clone(),
+    )
+    .await?;
+    let protected_roots =
+        crate::host::service::data_reset::protected_roots(paths.data_root.clone()).await?;
+    Ok(ProcessState {
+        data_reset,
+        protected_roots,
+        collation,
+        writes,
+    })
 }

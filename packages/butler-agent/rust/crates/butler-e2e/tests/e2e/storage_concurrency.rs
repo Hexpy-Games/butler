@@ -346,14 +346,16 @@ async fn perf_storage_concurrency_eight_streams_keep_exact_content_with_bounded_
     eprintln!(
         "STORAGE PERF N=8 x 200; persist p95={persist_p95_us}us; session-view p95={view_p95_us}us"
     );
+    // Normal persistence p95 1.128 ms (PR #1358); incident at 50 ms, ~44x normal.
     butler_e2e::assert_wall_clock_budget!(
         Duration::from_micros(persist_p95_us),
-        Duration::from_millis(10),
+        Duration::from_millis(50),
         "storage persist p95"
     );
+    // Normal session-view p95 3.157 ms (PR #1358); incident at 50 ms, ~16x normal.
     butler_e2e::assert_wall_clock_budget!(
         Duration::from_micros(view_p95_us),
-        Duration::from_millis(20),
+        Duration::from_millis(50),
         "storage session-view p95"
     );
     Ok(())

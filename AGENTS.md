@@ -6,13 +6,13 @@ This file holds the standing repository and agent rules. Each feedback-log entry
 
 - **Tests:** E2E first in `packages/butler-agent/rust/crates/butler-e2e`, stub tier. Non-E2E tests require `// test-category: <category>`: `race`, `security`, `pure-logic` or `format-pin`. Source-check ratchets `source-check-tests.txt`; counts may only go down. UI behavior uses harness/smoke tests, no unit tests or screen recordings.
 - **Code shape:** files ≤500 lines, production functions ≤80 lines. OS-specific code only in `butler-platform`; no unsafe code. Keep code readable and minimal; never game checks.
-- **Owner-scale performance:** design and verify against App DB ~1.3 GB, 600+ chats/~300k events, BTCC DB ~7 GB, 2,440 transcripts/1.5 GB (largest 290 MB), and metrics >300 MB. No full scans on request paths, blocking I/O on Tokio workers (use `spawn_blocking`), or per-poll whole-file reads. Idle work must be change-driven.
+- **Performance design:** No full scans on request paths, blocking I/O on Tokio workers (use `spawn_blocking`), or per-poll whole-file reads. Idle work must be change-driven.
 - **E2E auth:** stub/replay only; authorized live cassette recording uses only `openai/gpt-6-luna` with the owner's `~/.butler-e2e-auth` profile.
 - **UI copy:** a few words, disabled state with tooltip, or brief toast; no banners. Korean: “예약 작업” (never “자동화”), “버틀러”. English: “schedule”.
 - **Security:** never print tokens or widen access defaults. Approval cards show the exact action.
 - **Issue links:** a PR body names each issue with a closing keyword (`Fixes #N`), or `Part of #N` / `Related #N` when it stays open; never a bare `#N` or `Refs #N`. The `issue-links` PR check reports violations, and merging into `release/**` also closes the `Fixes` issues.
 - **Native dependencies:** static ORT recipe: [Rust README](packages/butler-agent/rust/README.md) and #293.
-- **Windows owner runners:** `butler-win` uses only the existing toolchain and job files in the workspace or `RUNNER_TEMP`; never run installer/setup actions, machine/user package installs, or registry, startup, service or PATH writes. Missing required tools must fail clearly, without installation.
+- **Self-hosted Windows runners:** use only the existing toolchain and job files in the workspace or `RUNNER_TEMP`; never run installer/setup actions, machine/user package installs, or registry, startup, service or PATH writes. Missing required tools must fail clearly, without installation.
 - **Owner-machine procedure:** touch the live install, owner data, or port 18765 only when explicitly requested and the owner is present. Back up DBs first; stop gracefully with `butler-agent stop --data ~/.butler`. Never `pkill`/`killall`.
 
 ## Documents
@@ -38,6 +38,13 @@ This routine requires Ledger access and publication authorization. Codex workers
 - **Root causes.** Fix the cause, not the symptom. Never skip, weaken or retry tests to get green. Never raise timeouts or loosen performance budgets. If you can't reproduce a failure, say so; don't claim a cause you haven't shown.
 - **No special cases (zero tolerance).** Production code must never contain domain-specific or test-specific cases. That means no branches, strings, paths or names keyed to a test fixture, cassette, E2E command, acceptance scenario, site, app, owner value (host name, user name, folder) or CI environment. A fix must be a general rule that would also be correct for inputs no test uses. If only a special case makes a test pass, stop and report. Every Codex PR gets an independent review for this.
 - **Scope discipline.** Do only the task. Report a problem only with evidence on the task's path (a reproduced failure or a measured number); no hypothetical or "potential" issues. Something clearly broken outside the task gets one line in the final message under "Out of scope, not touched"; no investigation, no fix. Touch only the files the task needs: no extra refactors, renames, cleanups or tests. Don't tune differences within noise (tens of ms or under ~5%) unless the task's stated budget is missed.
+- **Performance failure criteria (owner, 2026-10-20).** Work on real problems, not numbers. Performance is a problem only when a user would actually notice it:
+  - a visible stall or freeze;
+  - typing or clicking that feels laggy;
+  - waits of seconds the user sits through;
+  - Butler holding the machine's CPU, memory, disk or network while the user does nothing.
+  Keep perf checks, but put each failure line at an incident-level threshold: the point where the result is a real problem. A path that normally takes about 10 ms fails at a few hundred ms, not at 11 or 20 ms. Base each line on today's measured normal, an order of magnitude above it or where a user would notice, whichever comes first. A small change below that line, such as 10 ms becoming 20 ms, is not a failure, not a fix task and not an issue. Existing product budgets the owner set stay: startup, idle disk writes ≤1 MB/60 s, 1 s refusal latency. Test timeouts detect hangs only.
+  - Idle cost is performance too. Never preload, prewarm or keep a resident worker or process for a speculative speedup, such as loading a model or spawning a spare shell. Load on demand. A rare wait of a few seconds is acceptable; a constant background cost is not.
 - **Performance without cutting quality.** Meet a latency or throughput budget by doing less *work*, never by returning less *content*. Truncating, dropping fields, skipping items, lowering fidelity or serving stale cached data to pass a budget is a failure. Every timed perf check must also assert that the response is complete and correct (counts, order, latest state).
 - **Flaky tests.** Don't retry, skip, or mark tests ignored to get green. A test that fails on main without a code change gets a GitHub issue the same day and a fix within 48 hours. Re-run CI only with that issue linked in a PR comment.
 - **Before pushing:** Fetch origin and merge your base if it moved, then run `scripts/prepush`; it must pass; if TS/UI changed, also follow the TypeScript validation rule.
@@ -65,6 +72,9 @@ This routine requires Ledger access and publication authorization. Codex workers
 
 Newest first. The coordinator adds an entry whenever a mistake repeats. Each entry gives the rule, then what happened.
 
+- **2026-10-20: Never kill by name pattern on shared hosts.** `pkill`/`killall` are blocked in WSL Codex tasks. Kill only PIDs you started and recorded.
+  - What happened: a verification agent ran `pkill -f "cargo test"` on the shared WSL host and could have killed other sessions' test runs. Earlier, an agent killed an owner-PC PowerShell PID it only guessed was its own.
+
 - **2026-10-16: Stay on the task; no invented issues, no noise-level tuning, no scope expansion.** Out-of-scope findings are one line, untouched.
   - What happened: worker runs repeatedly reported issues that did not exist, tuned 10-20 ms differences, and widened changes beyond the task's purpose.
 
@@ -77,7 +87,7 @@ Newest first. The coordinator adds an entry whenever a mistake repeats. Each ent
 - **2026-10-09: Spawned test Apps must not outlive the harness: stdio to a file, kill the child PID on every exit path.**
   - What happened: an orphaned smoke Electron (ppid 1) logged to a closed pipe and raised an EPIPE error dialog on the owner's screen.
 
-- **2026-10-09: Never change DS components or blocks inside a product commit.** A change under `libs/design-system/{components,blocks,shadcn}` or the root DS CSS needs owner approval and a `DS-Approved: <who, when, where>` commit trailer (the `ds-approval` check warns when it is missing). Fix a DS bug in the DS, never with a product-side workaround, and never edit a test only to match new CSS.
+- **2026-10-09: Never change DS components or blocks inside a product commit.** A change under `libs/design-system/{components,blocks,shadcn}` or the root DS CSS needs owner approval: a `DS-Approved: <who, when, where>` commit trailer or the `ds-approved` PR label. The `ds-approval` check fails, and blocks the merge, when both are missing. Fix a DS bug in the DS, never with a product-side workaround, and never edit a test only to match new CSS.
   - What happened: plain `DisclosureRow` titles sat at the top of the hover fill three times. The block was rewritten inside unrelated commits (`2278cb00b`, `92775d8cf`), the source-string test was edited to match, and an earlier fix (`12ada184c`) worked around it in one screen only.
 
 - **2026-10-07: Owner-PC runners: never use installer/setup actions or registry/PATH writes; use the existing toolchain.**

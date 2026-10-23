@@ -77,10 +77,21 @@ impl ChatGptPlanState {
                 let sequence = self.next();
                 self.emit(observer, &serde_json::json!({"type":"text_delta","streamId":self.stream_id(event),"sequence":sequence,"textDelta":delta,"target":"final_candidate","raw":event}));
             }
-        } else if kind.contains("reasoning") && kind.ends_with(".delta") {
-            if let Some(delta) = event.get("delta").and_then(Value::as_str) {
+        } else if matches!(
+            kind,
+            "response.reasoning_summary_part.added"
+                | "response.reasoning_summary_text.delta"
+                | "response.reasoning_summary.delta"
+                | "response.reasoning_text.delta"
+        ) {
+            let delta = if kind == "response.reasoning_summary_part.added" {
+                Some("\n\n")
+            } else {
+                event.get("delta").and_then(Value::as_str)
+            };
+            if let Some(delta) = delta {
                 let sequence = self.next();
-                self.emit(observer, &serde_json::json!({"type":"reasoning_delta","streamId":self.stream_id(event),"sequence":sequence,"textDelta":delta,"charCount":delta.encode_utf16().count(),"raw":event}));
+                self.emit(observer, &serde_json::json!({"type":"reasoning_delta","display":if kind == "response.reasoning_text.delta" { "internal" } else { "summary" },"streamId":self.stream_id(event),"sequence":sequence,"textDelta":delta,"charCount":delta.encode_utf16().count(),"raw":event}));
             }
         } else if kind == "response.output_item.added" {
             if let Some(item) = event.get("item")

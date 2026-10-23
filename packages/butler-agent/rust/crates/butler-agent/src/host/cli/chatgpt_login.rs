@@ -13,6 +13,7 @@ pub(crate) async fn run(
     let data = tokio::task::spawn_blocking(move || installation.validate_data_root(&requested))
         .await
         .map_err(HostError::from_error)??;
+    super::http_logs::prepare(&data);
     let owner = models::open_status_models(data)
         .await
         .map_err(HostError::from_error)?;

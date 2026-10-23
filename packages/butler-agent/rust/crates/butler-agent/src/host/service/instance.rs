@@ -20,6 +20,7 @@ mod delivery;
 mod gateway_state;
 mod legacy;
 mod probe;
+mod publication;
 mod record;
 #[cfg(feature = "e2e-fixtures")]
 mod record_fault;
@@ -41,6 +42,7 @@ pub(crate) use delivery::{
 pub(crate) use gateway_state::mark_gateway_state;
 pub(crate) use legacy::refuse_live_legacy_process;
 pub(crate) use probe::instance_lock_is_held_read_only;
+pub(crate) use record::read_record_async;
 use record::{
     acquire_record_update_lock, instance_record_path, read_record_at, record_update_lock_path,
     write_record,
@@ -84,7 +86,7 @@ pub(crate) struct InstanceRecord {
 /// the guard is dropped (the lock is unlocked explicitly then, and released
 /// by the host if the process dies first), and the record it published.
 pub(crate) struct InstanceGuard {
-    _lock: InstanceLock,
+    lock: Option<InstanceLock>,
     record_path: PathBuf,
     record_update_lock_path: PathBuf,
     installation: ResolvedInstallation,
@@ -200,79 +202,13 @@ impl InstanceGuard {
         let _record_update_lock = acquire_record_update_lock(&record_update_lock_path)?;
         write_record(&record_path, &record)?;
         Ok(Self {
-            _lock: lock,
+            lock: Some(lock),
             record_path,
             record_update_lock_path,
             installation: installation.clone(),
             record,
             unclean_previous_exit,
         })
-    }
-
-    pub(crate) fn mark_ready(
-        &mut self,
-        app_enabled: bool,
-        app_endpoint: Option<String>,
-        app_auth_required: bool,
-        ready_at: String,
-    ) -> Result<(), crate::host::HostError> {
-        let data_root = self
-            .record_path
-            .parent()
-            .and_then(Path::parent)
-            .ok_or_else(|| "native_service_instance_record_path_invalid".to_owned())?;
-        validate_write_destinations(data_root, &self.installation)?;
-        let _record_update_lock = acquire_record_update_lock(&self.record_update_lock_path)?;
-        let mut current = read_record_at(&self.record_path)?.ok_or_else(|| {
-            "native_service_instance_ambiguous: instance record is missing".to_owned()
-        })?;
-        if current.nonce != self.record.nonce {
-            return Err("native_service_instance_changed".into());
-        }
-        if current.state == "stopping" {
-            return Err("native_service_start_cancelled".into());
-        }
-        if current.state != "starting" {
-            return Err("native_service_instance_ambiguous: invalid startup transition".into());
-        }
-        // A new instance reaching ready ends any earlier stop or restart intent.
-        clear_stop_intent(data_root).map_err(|source| {
-            crate::host::HostError::new("native_service_instance_state_unavailable")
-                .with_source(source)
-        })?;
-        current.state = "ready".into();
-        current.app_enabled = app_enabled;
-        current.app_endpoint = app_endpoint;
-        current.app_auth_required = app_auth_required;
-        current.ready_at = Some(ready_at);
-        write_record(&self.record_path, &current)?;
-        self.record = current;
-        Ok(())
-    }
-
-    pub(crate) fn publish_control(
-        &mut self,
-        endpoint: String,
-        token: String,
-    ) -> Result<(), crate::host::HostError> {
-        let data_root = self
-            .record_path
-            .parent()
-            .and_then(Path::parent)
-            .ok_or_else(|| "native_service_instance_record_path_invalid".to_owned())?;
-        validate_write_destinations(data_root, &self.installation)?;
-        let _record_update_lock = acquire_record_update_lock(&self.record_update_lock_path)?;
-        let mut current = read_record_at(&self.record_path)?.ok_or_else(|| {
-            "native_service_instance_ambiguous: instance record is missing".to_owned()
-        })?;
-        if current.nonce != self.record.nonce {
-            return Err("native_service_instance_changed".into());
-        }
-        current.control_endpoint = Some(endpoint);
-        current.control_token = Some(token);
-        write_record(&self.record_path, &current)?;
-        self.record = current;
-        Ok(())
     }
 
     pub(crate) fn nonce(&self) -> &str {
@@ -298,14 +234,41 @@ impl InstanceGuard {
     }
 }
 
+impl InstanceGuard {
+    /// Explicit shutdown already runs on a blocking thread and waits for release.
+    pub(crate) fn release(mut self) {
+        if let Some(lock) = self.lock.take() {
+            release_record_at(
+                &self.record_path,
+                &self.installation,
+                &self.record.nonce,
+                true,
+            );
+            drop(lock);
+        }
+    }
+}
+
 impl Drop for InstanceGuard {
     fn drop(&mut self) {
-        release_record_at(
-            &self.record_path,
-            &self.installation,
-            &self.record.nonce,
-            true,
-        );
+        let Some(lock) = self.lock.take() else { return };
+        let path = self.record_path.clone();
+        let installation = self.installation.clone();
+        let nonce = self.record.nonce.clone();
+        let release = move || {
+            release_record_at(&path, &installation, &nonce, true);
+            drop(lock);
+        };
+        // Finish before cancellation returns or the runtime shuts down. A
+        // multi-thread worker hands its other tasks off while release blocks.
+        // block_in_place is unsupported on current-thread runtimes.
+        if tokio::runtime::Handle::try_current().is_ok_and(|runtime| {
+            runtime.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread
+        }) {
+            tokio::task::block_in_place(release);
+        } else {
+            release();
+        }
     }
 }
 
@@ -443,6 +406,7 @@ fn open_lock(path: &Path, create: bool) -> Result<File, crate::host::HostError> 
         .parent()
         .ok_or_else(|| "service_lock_path_invalid".to_owned())?;
     if create {
+        super::data_ownership::initialize_for_lock(parent)?;
         secure_fs::create_private_dir_all(parent).map_err(|source| {
             crate::host::HostError::new("service_lock_directory_unavailable").with_source(source)
         })?;
@@ -473,11 +437,11 @@ fn open_lock(path: &Path, create: bool) -> Result<File, crate::host::HostError> 
 }
 
 fn instance_lock_path(data_root: &Path) -> PathBuf {
-    data_root.join("state/butler-agent-native-service.lock")
+    data_root.join(crate::host::service::paths::INSTANCE_LOCK)
 }
 
 fn admission_lock_path(data_root: &Path) -> PathBuf {
-    data_root.join("state/butler-agent-native-service-start.lock")
+    data_root.join(crate::host::service::paths::ADMISSION_LOCK)
 }
 
 #[cfg(test)]

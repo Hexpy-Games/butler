@@ -12,6 +12,10 @@ mod capabilities;
 mod capability_stub;
 #[path = "windows_commands/file_paths.rs"]
 mod file_paths;
+#[path = "windows_commands/file_replace.rs"]
+mod file_replace;
+#[path = "windows_commands/file_sharing.rs"]
+mod file_sharing;
 #[path = "windows_commands/invalid_batch.rs"]
 mod invalid_batch;
 #[path = "windows_commands/observation.rs"]
@@ -90,6 +94,13 @@ async fn run(case: &str, command: &str) -> Result<Value, HarnessError> {
         .stub_cassette(stub::cassette(command)?)
         .env("BUTLER_E2E_CANARY", "must-not-reach-command");
     installed_bundle(&mut setup);
+    if std::env::var_os("BUTLER_E2E_APP_PAYLOAD").is_some()
+        || std::env::var_os("BUTLER_E2E_INSTALLED_ROOT").is_some()
+    {
+        // Installed releases have no fixture clock. Preserve the configured
+        // fixture's already-ran daily jobs using the real UTC clock instead.
+        setup = setup.env("BUTLER_E2E_APP_NOW", chrono::Utc::now().to_rfc3339());
+    }
     let downloads = setup.sandbox.home.join("Downloads");
     std::fs::create_dir_all(&downloads)?;
     std::fs::write(downloads.join("보고서.txt"), "document")?;

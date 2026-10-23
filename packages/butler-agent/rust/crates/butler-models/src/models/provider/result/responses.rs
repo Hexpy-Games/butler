@@ -24,13 +24,15 @@ pub(super) fn decode(value: &Value, model: &str, provider: &str, round: u32) -> 
     let calls = output
         .iter()
         .filter(|item| item.get("type").and_then(Value::as_str) == Some("function_call"))
-        .filter_map(|item| {
+        .enumerate()
+        .filter_map(|(index, item)| {
             call(
                 item.get("call_id"),
                 Some(&Value::String(
                     super::super::chatgpt_plan::call_name(item).into(),
                 )),
                 item.get("arguments"),
+                index,
             )
         })
         .collect();

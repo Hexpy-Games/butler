@@ -13,6 +13,7 @@ mod messages;
 mod schema;
 mod sessions;
 mod source;
+mod source_changes;
 mod summaries;
 mod text_projection;
 mod turn_outcome;
@@ -20,11 +21,11 @@ mod turns;
 mod types;
 
 pub use admission::{
-    AdmissionEventVisibility, AdmissionMetric, AdmissionSource, CompletionMetric,
-    CompletionObservation, ConversationAdmissionObserver, ConversationAdmissionTurn,
-    ConversationAdmissionTurnInput, ConversationEnvelope, ConversationObserverFuture,
-    ConversationOriginFacts, DurableSessionBinding, RuntimeAdmissionEvent,
-    classify_conversation_origin, conversation_session_id_for_durable_session,
+    AdmissionEventVisibility, AdmissionMetric, AdmissionSource, CompletionObservation,
+    ConversationAdmissionObserver, ConversationAdmissionTurn, ConversationAdmissionTurnInput,
+    ConversationEnvelope, ConversationObserverFuture, ConversationOriginFacts,
+    DurableSessionBinding, RuntimeAdmissionEvent, classify_conversation_origin,
+    conversation_session_id_for_durable_session,
 };
 pub use error::{ConversationCode, ConversationError};
 pub use historical_origin::classify_historical_origins;
@@ -36,7 +37,8 @@ pub use history_window::HistoryWindow;
 pub use source::{
     Archived, CanonicalMemoryReadBinding, ConversationScalar, ConversationSourceReader,
     MessageOrigins, PageOrder, PublicMemoryScope, PublicMemorySnapshot, PublicSessionRow,
-    RecallOutcomeRow, decode_message_scalars, scalar_for_part,
+    RecallOutcomeEntry, RecallOutcomeRow, SourceChange, SourceChangeKind, SourceChangeMark,
+    decode_message_scalars, scalar_for_part,
 };
 pub use text_projection::{ToolParts, text_for_message, text_for_part};
 pub use types::*;

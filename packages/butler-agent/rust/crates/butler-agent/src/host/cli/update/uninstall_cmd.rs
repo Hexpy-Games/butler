@@ -13,7 +13,6 @@ use std::process::ExitCode;
 
 use butler_platform::command_launcher::Removal;
 use butler_platform::service_registration::{self, Activation};
-use butler_platform::user_dirs;
 use serde_json::{Value, json};
 
 use super::context::Context;
@@ -116,7 +115,7 @@ fn plan(context: &Context, options: &Options) -> (Value, String) {
 
 /// Stops the service if one runs, so no process holds files being removed.
 async fn stop_service(context: &Context) -> Result<bool, CliError> {
-    match service::running_instance(&context.data_root) {
+    match service::running_instance_async(&context.data_root).await {
         Ok(None) => Ok(false),
         Ok(Some(_)) => service::stop_running(context.installation.clone(), &context.data_root)
             .await
@@ -140,7 +139,10 @@ async fn hold_data(
     let guard = service::admit(&context.installation, &context.data_root)
         .await
         .map_err(|error| CliError::failed("service_busy", error.message().to_owned()))?;
-    if matches!(service::running_instance(&context.data_root), Ok(Some(_))) {
+    if matches!(
+        service::running_instance_async(&context.data_root).await,
+        Ok(Some(_))
+    ) {
         return Err(CliError::failed(
             "service_running",
             "the service started again; stop it and retry",
@@ -202,40 +204,13 @@ fn inside(path: &Path, directory: &Path) -> bool {
             .is_ok_and(|resolved| path.starts_with(resolved))
 }
 
-/// What a Butler data folder holds: any of these marks a folder as one.
-const DATA_MARKERS: [&str; 4] = ["butler.config.json", "state", "agent-runtime", "config"];
-
-/// A data folder is only deleted when it is a real directory of its own:
-/// not a link, not the home directory or one of its parents, not a system
-/// folder, and not the Agent home or something that contains it.
 fn purge_allowed(context: &Context) -> Result<(), CliError> {
-    let unsafe_path = |message: &'static str| CliError::failed("unsafe_path", message);
-    let path = &context.data_root;
-    // The path as the user gave it: the resolved one is never a link.
-    let named = std::fs::symlink_metadata(&context.requested_data);
-    if named.is_ok_and(|metadata| metadata.file_type().is_symlink()) {
-        return Err(unsafe_path("the data folder is a symbolic link"));
-    }
-    let populated = std::fs::read_dir(path).is_ok_and(|mut entries| entries.next().is_some());
-    if populated && !DATA_MARKERS.iter().any(|marker| path.join(marker).exists()) {
-        return Err(unsafe_path(
-            "the folder does not look like a Butler data folder",
-        ));
-    }
-    let home = user_dirs::home_dir().and_then(|home| home.canonical().ok());
-    let overlaps_home = home
-        .as_ref()
-        .is_some_and(|home| path == home || home.starts_with(path));
-    let agent_home = context.home.root().canonical().ok();
-    let overlaps_agent = agent_home
-        .as_ref()
-        .is_some_and(|agent| path.starts_with(agent) || agent.starts_with(path));
-    if overlaps_home || overlaps_agent || user_dirs::is_system_folder(path) {
-        return Err(unsafe_path(
-            "the data folder is not a folder Butler may delete",
-        ));
-    }
-    Ok(())
+    crate::host::service::purge_policy::allowed(
+        &context.data_root,
+        &context.requested_data,
+        context.home.root(),
+    )
+    .map_err(|message| CliError::failed("unsafe_path", message))
 }
 
 fn purge(data_root: &Path) -> Result<(), CliError> {

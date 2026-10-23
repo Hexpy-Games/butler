@@ -101,7 +101,7 @@ async fn session_effects_without_plan_pass_scan_and_restart() -> Result<(), Harn
     assert!(!path.with_extension("sqlite.corrupt").exists());
     assert!(!path.with_extension("sqlite.findings").exists());
     s.agent.terminate().await?;
-    // The owner's legacy code-only verdict must also clear without row repair.
+    // The legacy code-only verdict must also clear.
     std::fs::write(
         path.with_extension("sqlite.corrupt"),
         "agent_btcc_migration_reference_check_failed",
@@ -135,10 +135,7 @@ async fn orphan_effect_plan_warns_preserves_rows_and_compacts() -> Result<(), Ha
         [],
     )?;
     let before = snapshot(&path)?;
-    std::fs::write(
-        path.with_extension("sqlite.corrupt"),
-        "agent_btcc_migration_reference_check_failed",
-    )?;
+    crate::btcc_corrupt_startup::write_verdict(&path, true)?;
     s.gw = s.agent.start_again().await?;
     assert_warning(&s, &path, 2)?;
     let log = std::fs::read_to_string(s.sandbox.logs.join("agent-2.log"))?;
@@ -228,10 +225,7 @@ async fn effect_plan_requires_same_work_for_btcc_plans() -> Result<(), HarnessEr
         db.execute("UPDATE btcc_guided_effects SET plan_revision_id=?1", [plan])?;
         drop(db);
         let before = snapshot(&path)?;
-        std::fs::write(
-            path.with_extension("sqlite.corrupt"),
-            "agent_btcc_migration_reference_check_failed",
-        )?;
+        crate::btcc_corrupt_startup::write_verdict(&path, true)?;
         s.gw = s.agent.start_again().await?;
         assert!(s.gw.healthy().await);
         assert!(!path.with_extension("sqlite.corrupt").exists());

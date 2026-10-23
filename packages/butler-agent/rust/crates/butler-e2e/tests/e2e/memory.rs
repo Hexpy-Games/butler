@@ -355,5 +355,30 @@ mod recall_judge;
 #[path = "memory/fts.rs"]
 mod fts;
 
+#[path = "memory/coverage.rs"]
+mod coverage;
+#[path = "memory/coverage_mirror.rs"]
+mod coverage_mirror;
+#[path = "memory/coverage_restore.rs"]
+mod coverage_restore;
+#[path = "memory/coverage_seed.rs"]
+mod coverage_seed;
+#[path = "memory/coverage_support.rs"]
+mod coverage_support;
+
 #[path = "memory/model_choice.rs"]
 mod model_choice;
+
+#[path = "memory/lock_retry.rs"]
+mod lock_retry;
+
+#[path = "memory/standalone_upgrade.rs"]
+mod standalone_upgrade;
+
+#[path = "memory/orphaned.rs"]
+mod orphaned;
+#[path = "memory/typed_pending.rs"]
+mod typed_pending;
+
+#[path = "memory/typed_corrupt.rs"]
+mod typed_corrupt;

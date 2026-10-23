@@ -2,7 +2,12 @@
 use super::*;
 use std::{io::Read, process::Stdio, time::Instant};
 
-fn launch(invocation: &Invocation, cwd: &Path, home: &Path) -> (Duration, Duration) {
+fn launch(
+    invocation: &Invocation,
+    cwd: &Path,
+    home: &Path,
+    inventory: bool,
+) -> (Duration, Duration) {
     let mut command = Command::new(&invocation.program);
     command
         .args(&invocation.arguments)
@@ -12,6 +17,10 @@ fn launch(invocation: &Invocation, cwd: &Path, home: &Path) -> (Duration, Durati
         .stderr(Stdio::piped());
     butler_platform::process_control::isolate_group(&mut command);
     let started = Instant::now();
+    if inventory {
+        let secrets = command_sandbox::discover_project_entries(cwd).unwrap();
+        assert!(secrets.is_empty());
+    }
     let mut child = command.spawn().unwrap();
     let pid = child.id();
     // The first built-in printf signals that policy setup and shell startup
@@ -57,11 +66,11 @@ async fn perf_trampoline_start_latency_and_process_identity() -> Result<(), Harn
     let (mut baseline_complete, mut contained_complete) = (Vec::new(), Vec::new());
     for index in 0..60 {
         let (a, b) = if index % 2 == 0 {
-            let b = launch(&sandbox, &cwd, &setup.sandbox.home);
-            (launch(&plain, &cwd, &setup.sandbox.home), b)
+            let b = launch(&sandbox, &cwd, &setup.sandbox.home, true);
+            (launch(&plain, &cwd, &setup.sandbox.home, false), b)
         } else {
-            let a = launch(&plain, &cwd, &setup.sandbox.home);
-            (a, launch(&sandbox, &cwd, &setup.sandbox.home))
+            let a = launch(&plain, &cwd, &setup.sandbox.home, false);
+            (a, launch(&sandbox, &cwd, &setup.sandbox.home, true))
         };
         baseline.push(a.0);
         contained.push(b.0);
@@ -72,15 +81,16 @@ async fn perf_trampoline_start_latency_and_process_identity() -> Result<(), Harn
     added.sort_by(f64::total_cmp);
     let p50 = added[29];
     let p95 = added[56];
-    // WSL needs an execution-denial Landlock rule for each Windows drive.
-    let (host, budget) = if command_sandbox::wsl_test_host() {
-        ("WSL", Duration::from_micros(3500))
+    let host = if command_sandbox::wsl_test_host() {
+        "WSL"
     } else {
-        ("native Linux", Duration::from_millis(2))
+        "native Linux"
     };
+    // Normal added p95 2.22 ms (PR #1358); incident at roughly 20x.
+    let incident = Duration::from_millis(50);
     eprintln!(
-        "LINUX-START-LATENCY host={host} added_p50_budget_ms={:.3} N=60 baseline_p50_ms={:.3} baseline_p95_ms={:.3} contained_p50_ms={:.3} contained_p95_ms={:.3} added_p50_ms={p50:.3} added_p95_ms={p95:.3}",
-        budget.as_secs_f64() * 1000.0,
+        "LINUX-START-LATENCY host={host} added_p95_incident_ms={:.3} N=60 baseline_p50_ms={:.3} baseline_p95_ms={:.3} contained_p50_ms={:.3} contained_p95_ms={:.3} added_p50_ms={p50:.3} added_p95_ms={p95:.3}",
+        incident.as_secs_f64() * 1000.0,
         percentile(&baseline, 50),
         percentile(&baseline, 95),
         percentile(&contained, 50),
@@ -94,9 +104,9 @@ async fn perf_trampoline_start_latency_and_process_identity() -> Result<(), Harn
         percentile(&contained_complete, 95)
     );
     butler_e2e::assert_wall_clock_budget!(
-        Duration::from_secs_f64(p50.max(0.0) / 1000.0),
-        budget,
-        "Linux added launch latency p50",
+        Duration::from_secs_f64(p95.max(0.0) / 1000.0),
+        incident,
+        "Linux added launch latency p95",
     );
     setup.sandbox.mark_success();
     Ok(())

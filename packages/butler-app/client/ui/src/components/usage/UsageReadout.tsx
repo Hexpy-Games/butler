@@ -1,12 +1,16 @@
 import type { ReactNode } from "react";
 import { appCopy, getAppLocale } from "@/app/copy";
-import { AnimatedNumber, Inline, KeyValueRow, Stack, Typo, Skeleton } from "@/butler-ds";
+import { AnimatedNumber, Collapsible, Inline, KeyValueRow, Stack, Typo, Skeleton, type UsageBarsEmphasis } from "@/butler-ds";
 import type { UsageMonitorView } from "@/app/types";
 import { usageClock, usageReadout, usageSeries, usageTokens } from "./usageTimeline";
 
-export function UsageReadout({ view, values, label, selected, showCost, delta, share, children, panel = false, unit, stale = false }: {
+export function UsageReadout({ view, values, label, selected, showCost, delta, share, parts, onEmphasis, children, panel = false, unit, stale = false }: {
   view: UsageMonitorView | null; values: ReturnType<typeof usageReadout>; label: string;
   selected: boolean; showCost: boolean; delta?: string; share?: string; children?: ReactNode; panel?: boolean; unit?: string; stale?: boolean;
+  /** The total's split by who made the calls; shown only when work was delegated. */
+  parts?: { id: string; emphasis: UsageBarsEmphasis; label: string; value: string }[] | null;
+  /** A part row's hover or focus, for the chart's `emphasis` (null on leave). */
+  onEmphasis?: (emphasis: UsageBarsEmphasis | null) => void;
 }) {
   const copy = appCopy.composer.usage;
   const series = usageSeries();
@@ -39,5 +43,12 @@ export function UsageReadout({ view, values, label, selected, showCost, delta, s
       {showCost && !selected && panel ? <KeyValueRow label={copy.estimatedCost} value={costText} valueTextSize="caption" /> : null}
       {!selected && share ? <KeyValueRow label={copy.share} value={share} valueTextSize="caption" /> : null}
     </Stack>
+    <Collapsible open={Boolean(parts?.length)}>
+      <Stack align={panel ? "row" : "column"} gap={panel ? "lg" : "none"} wrap={panel} rowGap={panel ? "xs" : undefined} data-test-class="usage-parts">
+        {parts?.map((part) => <KeyValueRow key={part.id} label={part.label} value={part.value} valueTextSize="caption"
+          swatchColor="var(--context-chart-5)" swatchPattern={part.emphasis === "subtask" ? "hatched" : "solid"}
+          onHighlightChange={onEmphasis ? (highlighted) => onEmphasis(highlighted ? part.emphasis : null) : undefined} />)}
+      </Stack>
+    </Collapsible>
   </Stack>;
 }

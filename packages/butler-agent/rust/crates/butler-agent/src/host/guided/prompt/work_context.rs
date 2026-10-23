@@ -67,7 +67,21 @@ fn corrections(rows: &mut Vec<String>, label: &str, values: &[String]) {
     }
 }
 
-pub(in crate::host) fn render(context: Option<&WorkContext>) -> Option<String> {
+fn original_request_row(context: &WorkContext, current_turn_id: &str) -> String {
+    if context.original_request.turn_id == current_turn_id {
+        "Original request (highest priority): the request this Turn received, stated once in its request section.".into()
+    } else {
+        format!(
+            "Original request (highest priority): {}",
+            line(&context.original_request.content, None)
+        )
+    }
+}
+
+pub(in crate::host) fn render(
+    context: Option<&WorkContext>,
+    current_turn_id: &str,
+) -> Option<String> {
     let context = context?;
     let work = &context.work;
     let plan = work.current_plan.as_ref();
@@ -328,9 +342,6 @@ pub(in crate::host) fn render(context: Option<&WorkContext>) -> Option<String> {
         }
     }
     rows.push("Prior operation requests and results remain available through list_operation_results and read_operation_results; this context contains current Work state, not a duplicate of execution history.".into());
-    rows.push(format!(
-        "Original request (highest priority): {}",
-        line(&context.original_request.content, None)
-    ));
+    rows.push(original_request_row(context, current_turn_id));
     Some(rows.join("\n"))
 }

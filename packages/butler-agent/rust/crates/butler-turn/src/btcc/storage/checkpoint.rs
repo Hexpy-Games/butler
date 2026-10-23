@@ -11,6 +11,12 @@ impl CheckpointOwner {
             .map(|owner| owner.map(Self))
             .map_err(error)
     }
+    pub(super) fn lane_busy(&self) {
+        self.0.lane_busy();
+    }
+    pub(super) fn lane_idle(&self) {
+        self.0.lane_idle();
+    }
     pub(super) fn close(self) -> StorageResult<()> {
         self.0.close().map_err(error)
     }

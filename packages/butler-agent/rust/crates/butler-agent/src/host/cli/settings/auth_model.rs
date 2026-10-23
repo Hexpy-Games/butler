@@ -14,7 +14,7 @@ pub(super) fn auth_status(
     data_root: &Path,
     installation: &ResolvedInstallation,
 ) -> ExitCode {
-    let env_path = data_root.join(".env");
+    let env_path = data_root.join(butler_platform::data_paths::ENVIRONMENT);
     let environment = match path::read_private_environment(installation, data_root, &env_path) {
         Ok(environment) => environment,
         Err(error) => return report_error(command.name(), options.json, &error),

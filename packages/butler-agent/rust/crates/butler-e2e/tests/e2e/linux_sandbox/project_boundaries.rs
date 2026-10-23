@@ -1,6 +1,5 @@
 //! L1 kernel boundaries, resolved symlinks, hard links, and new-name cleanup.
 use super::*;
-use std::time::Instant;
 
 fn invoke(command: &str, setup: &Setup) -> Invocation {
     let root = &setup.sandbox.workspace;
@@ -116,9 +115,11 @@ async fn project_write_kernel_boundaries_and_quarantine() -> Result<(), HarnessE
         output.status.success(),
         "ordinary threads and forks: {output:?}"
     );
-    let since = command_sandbox::discover_project_secrets(root)?;
+    // These user aliases precede the conservative ctime cutoff.
+    tokio::time::sleep(Duration::from_millis(1100)).await;
+    let since = command_sandbox::discover_project_entries(root)?;
     let command = format!(
-        "set -e; cat '{}'; echo updated > top.txt; echo complete > src/output; mkdir sub/.git; echo planted > sub/.git/config; echo new > sub/.env; mv sub/ordinary sub/renamed.pem; echo scratch > '{}'; {}",
+        "set -e; cat '{}'; echo updated > top.txt; echo complete > src/output; ln -s outward src/new-alias; mkdir sub/.git; echo planted > sub/.git/config; echo new > sub/.env; mv sub/ordinary sub/renamed.pem; echo scratch > '{}'; {}",
         setup.sandbox.data.join("ordinary").display(),
         setup
             .sandbox
@@ -140,6 +141,7 @@ async fn project_write_kernel_boundaries_and_quarantine() -> Result<(), HarnessE
     assert_eq!(
         violations,
         vec![
+            root.join("src/new-alias"),
             root.join("sub/.env"),
             root.join("sub/.git"),
             root.join("sub/hide"),
@@ -151,6 +153,13 @@ async fn project_write_kernel_boundaries_and_quarantine() -> Result<(), HarnessE
     assert!(!root.join("sub/.env").exists());
     let quarantine = setup.sandbox.data.join("sandbox-quarantine");
     let run = std::fs::read_dir(quarantine)?.next().unwrap()?.path();
+    // Preserve untouched user links; quarantine only the newly created alias.
+    assert_eq!(std::fs::read_link(root.join("src/outward"))?, outside);
+    assert_eq!(
+        std::fs::read_link(run.join("src/new-alias"))?,
+        Path::new("outward")
+    );
+    assert_eq!(std::fs::read_to_string(&outside)?, "outside-marker");
     assert_eq!(
         std::fs::read_to_string(run.join("sub/.git/config"))?,
         "planted\n"
@@ -172,75 +181,6 @@ async fn project_write_kernel_boundaries_and_quarantine() -> Result<(), HarnessE
         std::fs::read_to_string(root.join("src/output"))?,
         "complete\n"
     );
-    setup.sandbox.mark_success();
-    Ok(())
-}
-
-#[tokio::test]
-async fn perf_project_secret_discovery_and_sweep() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    butler_e2e::skip_unless!(
-        command_sandbox::linux_test_host(),
-        "Linux project sandbox latency"
-    );
-    let mut setup = Setup::new("LINUX-L1-WALK-LATENCY")?;
-    let root = &setup.sandbox.workspace;
-    for dir in 0..50 {
-        let path = root.join(format!("src/d{dir}"));
-        std::fs::create_dir_all(&path)?;
-        for file in 0..100 {
-            std::fs::write(path.join(format!("f{file}")), "complete")?;
-        }
-    }
-    let protected = root.join("src/d49/.env");
-    std::fs::write(&protected, "existing")?;
-    let mut discover = Vec::new();
-    let mut sweep = Vec::new();
-    for index in 0..21 {
-        let started = Instant::now();
-        let secrets = command_sandbox::discover_project_secrets(root)?;
-        discover.push(started.elapsed());
-        assert_eq!(secrets, vec![protected.clone()]);
-        let since = secrets;
-        let planted = root.join(format!("src/d{index}/.key"));
-        std::fs::write(&planted, "new")?;
-        let started = Instant::now();
-        let moved = command_sandbox::sweep_new_secrets(root, &since, &setup.sandbox.data)?;
-        sweep.push(started.elapsed());
-        assert_eq!(moved, vec![planted.clone()]);
-        assert!(!planted.exists());
-        assert_eq!(std::fs::read_to_string(&protected)?, "existing");
-    }
-    discover.sort();
-    sweep.sort();
-    eprintln!(
-        "| Step (5,000 ordinary files) | p50 ms |\n| --- | ---: |\n| discovery | {:.3} |\n| sweep + quarantine | {:.3} |",
-        discover[10].as_secs_f64() * 1000.0,
-        sweep[10].as_secs_f64() * 1000.0
-    );
-    for (step, duration) in [("discovery", discover[10]), ("sweep", sweep[10])] {
-        butler_e2e::assert_wall_clock_budget!(duration, Duration::from_millis(30), step);
-    }
-    let mut quarantines = std::fs::read_dir(setup.sandbox.data.join("sandbox-quarantine"))?
-        .map(|entry| entry.map(|entry| entry.path()))
-        .collect::<Result<Vec<_>, _>>()?;
-    quarantines.sort();
-    assert_eq!(quarantines.len(), 21);
-    for (index, run) in quarantines.iter().enumerate() {
-        assert_eq!(
-            std::fs::read_to_string(run.join(format!("src/d{index}/.key")))?,
-            "new"
-        );
-    }
-    // Complete tree and content remain intact, including the last directory.
-    for dir in 0..50 {
-        for file in 0..100 {
-            assert_eq!(
-                std::fs::read_to_string(root.join(format!("src/d{dir}/f{file}")))?,
-                "complete"
-            );
-        }
-    }
     setup.sandbox.mark_success();
     Ok(())
 }

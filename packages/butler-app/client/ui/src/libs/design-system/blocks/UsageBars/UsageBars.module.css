@@ -1,13 +1,18 @@
-/* UsageBars: stacked columns on a hairline baseline. Columns are divs sized
-   by --usage-bars-fraction of the plot; motion is transform-only (WAAPI in
-   useUsageBarsMotion), so this sheet only fades the selection dim. Reduced
-   motion keeps that fade (the DS rule: reduced motion is an opacity fade). */
+/* UsageBars: gapless stacked columns on a hairline baseline. Columns are divs
+   sized by --usage-bars-fraction of the plot; type is shown by color only and
+   a subtask part by hatch only. Column motion is transform-only (WAAPI in
+   useUsageBarsMotion), so this sheet only fades the selection dim and the
+   linked-legend emphasis. Reduced motion keeps those fades (the DS rule:
+   reduced motion is an opacity fade). */
 .root {
   --usage-bars-plot-height: 56px;
   --usage-bars-column-max: 14px;
   /* Room above the tallest column so the top tick label stays inside the plot. */
   --usage-bars-headroom: 0px;
   --usage-bars-dim: 0.4;
+  /* Hatch emphasis: this layer over the --hatch-alpha (40%) hatch lifts its
+     light stripes to 70% (0.4 + 0.5 × 0.6). */
+  --usage-bars-hatch-lift: 50%;
 
   position: relative;
   display: grid;
@@ -71,8 +76,7 @@
   min-width: 0;
 }
 
-/* Non-zero columns are at least 2px tall. Size containment lets the stack
-   drop its 1px separators on short columns (below). */
+/* Non-zero columns are at least 2px tall. */
 .column {
   width: min(calc(100% - 2px), var(--usage-bars-column-max));
   height: max(
@@ -81,7 +85,6 @@
   );
   overflow: hidden;
   border-radius: 2px 2px 0 0;
-  container-type: size;
   transform-origin: center bottom;
   transition: opacity var(--motion-fast) var(--motion-ease-standard);
 }
@@ -102,45 +105,99 @@
 .stack {
   display: flex;
   flex-direction: column-reverse;
-  gap: 1px;
   height: 100%;
 }
 
-@container (height < 6px) {
-  .stack {
-    gap: 0;
-  }
-}
-
-/* Each segment's basis is its share of the column; the 1px separators come
-   out of every segment in proportion (flex-shrink weighs by basis). */
+/* Each segment's basis is its share of the column; segments and parts touch
+   with no gap. */
 .segment {
   flex: 0 1 calc(var(--usage-bars-share) * 100%);
   min-height: 0;
 }
 
 .segment[data-color="chart-1"] {
-  background: var(--context-chart-1);
+  --usage-bars-color: var(--context-chart-1);
 }
 
 .segment[data-color="chart-2"] {
-  background: var(--context-chart-2);
+  --usage-bars-color: var(--context-chart-2);
 }
 
 .segment[data-color="chart-3"] {
-  background: var(--context-chart-3);
+  --usage-bars-color: var(--context-chart-3);
 }
 
 .segment[data-color="chart-4"] {
-  background: var(--context-chart-4);
+  --usage-bars-color: var(--context-chart-4);
 }
 
 .segment[data-color="chart-5"] {
-  background: var(--context-chart-5);
+  --usage-bars-color: var(--context-chart-5);
 }
 
 .segment[data-color="chart-6"] {
-  background: var(--context-chart-6);
+  --usage-bars-color: var(--context-chart-6);
+}
+
+/* A split segment: the solid conversation part below, the hatched subtask
+   part on top. */
+.segment[data-split="true"] {
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+.part {
+  flex: 0 1 calc(var(--usage-bars-part) * 100%);
+  min-height: 0;
+}
+
+.segment[data-pattern="solid"],
+.part[data-pattern="solid"] {
+  background: var(--usage-bars-color);
+}
+
+/* The hatch is built from the segment's own color only: no surface-color
+   lines in either theme. The parts grow from their lower boundary. */
+.segment[data-pattern="hatched"],
+.part[data-pattern="hatched"] {
+  position: relative;
+  transform-origin: center bottom;
+  transition: opacity var(--motion-fast) var(--motion-ease-standard);
+}
+
+.segment[data-pattern="hatched"],
+.part[data-pattern="hatched"],
+.segment[data-pattern="hatched"]::after,
+.part[data-pattern="hatched"]::after {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--usage-bars-color) 0 2px,
+    color-mix(in srgb, var(--usage-bars-color) var(--hatch-alpha), transparent)
+      2px 4px
+  );
+}
+
+.segment[data-pattern="hatched"]::after,
+.part[data-pattern="hatched"]::after {
+  --hatch-alpha: var(--usage-bars-hatch-lift);
+
+  position: absolute;
+  inset: 0;
+  content: "";
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--motion-ease-standard);
+}
+
+/* A linked subtask row raises the hatch; a linked conversation row dims the
+   hatched parts like the selection dim. */
+.root[data-emphasis="subtask"] .segment[data-pattern="hatched"]::after,
+.root[data-emphasis="subtask"] .part[data-pattern="hatched"]::after {
+  opacity: 1;
+}
+
+.root[data-emphasis="conversation"] .segment[data-pattern="hatched"],
+.root[data-emphasis="conversation"] .part[data-pattern="hatched"] {
+  opacity: var(--usage-bars-dim);
 }
 
 .gridline {

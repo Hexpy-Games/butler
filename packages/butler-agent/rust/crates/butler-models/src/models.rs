@@ -1,5 +1,10 @@
 //! Immutable model catalog snapshots and source-compatible token estimation.
 
+mod attachment_text;
+pub use attachment_text::{
+    MAX_INLINE_BYTES, NotInlined, decode_text, display_name, is_pdf, is_text, listing_line,
+    message_file_path, not_inlined_block,
+};
 mod catalog;
 mod configuration;
 mod diagnostics;
@@ -65,10 +70,11 @@ pub use catalog::{
 };
 pub use catalog::{
     ApiKeyBilling, CredentialStorage, CredentialView, DEFAULT_PROVIDER, HostedApiShape,
-    ImageLimitField, ImageLimitSources, ImageProbeEvidence, LEGACY_DEFAULT_MODEL, LocalModelConfig,
-    LocalModelPlatform, LocalModelSource, ModelCatalogSnapshot, ModelCatalogSnapshotInput,
-    ModelPreset, ModelPricing, ModelProviderMetadata, ModelTier, NextPrices, ParsedModelRef,
-    ParsedModelRefSource, PromptPriceTier, ProviderAuthMethod, ProviderPresets, ReasoningEffort,
+    ImageLimitField, ImageLimitSources, ImageProbeEvidence, LEGACY_DEFAULT_MODEL,
+    LocalImageDiscovery, LocalModelConfig, LocalModelPlatform, LocalModelSource,
+    ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelPreset, ModelPricing,
+    ModelProviderMetadata, ModelTier, NextPrices, ParsedModelRef, ParsedModelRefSource,
+    PromptPriceTier, ProviderAuthMethod, ProviderPresets, ReasoningEffort,
     RegisteredHostedModelConfig, RequestTokens, TokenEstimate, TokenEstimateInput,
     TokenEstimatorKind, TokenPrices, configured_default_model,
     default_hosted_provider_api_base_url, default_model_at, normalize_hosted_api_base_url,
@@ -91,7 +97,7 @@ pub use configuration::{
     CredentialMigrationFailure, CredentialMigrationReport, CredentialStoreError,
     CredentialStorePolicy, CredentialStoreView, DeletedCredential, FileOverride, SecretBackend,
     SecretStoreFacts, SecretStoreMode, StoreReason, credential_file_summary,
-    credential_store_policy,
+    credential_store_policy, reset_secret_keys,
 };
 pub use configuration::{
     DiscoveredLocalModel, HostedModelMutation, LocalModelMutation, McpModelTarget,

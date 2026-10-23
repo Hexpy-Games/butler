@@ -26,7 +26,7 @@ async fn storage_correction_crashes_queue_and_idle() -> Result<(), HarnessError>
         db.execute_batch("INSERT INTO btcc_inbound_inbox(inbox_id,session_id,trigger_key,turn_id,admission_input_hash,command_json,status) VALUES('corr-active','general','corr-active','corr-active','fixture','{}','constructed');
         INSERT INTO btcc_turns(turn_id,session_id,inbox_id,trigger_key,original_message_id,original_message,admission_snapshot_ref,model_selection_json,context_json,semantic_state,revision,execution_fence) VALUES('corr-active','general','corr-active','corr-active','corr-active','Synthetic admitted','fixture','{}','{}','admitted',1,1);")?;
         drop(db);
-        seed::seed(path, &seed::Profile::small(), "corr-active")?;
+        seed::seed(path, &seed::Profile::small())?;
         // Three unclaimed but admitted Full rows, unreachable by dispatch.
         let db = Connection::open(path)?;
         db.execute("INSERT INTO btcc_model_round_acceptances(acceptance_id,turn_id,round_id,route_digest,candidate_index,checkpoint_id,checkpoint_revision,model_ref,transport_attempt,normalized_response_json,created_at) SELECT 'active-'||rowid,'corr-active','active-'||rowid,route_digest,candidate_index,checkpoint_id,checkpoint_revision,model_ref,transport_attempt,normalized_response_json,created_at FROM btcc_model_round_acceptances LIMIT 3", [])?;
@@ -261,10 +261,7 @@ async fn storage_progress_extends_native_startup_deadline() -> Result<(), Harnes
     let mut s = fault_setup("CORR-STARTUP-DEADLINE")?.start().await?;
     s.agent.terminate().await?;
     let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
-    offline(&path, |path| {
-        seed::seed(path, &seed::Profile::small(), "none")
-    })
-    .await?;
+    offline(&path, |path| seed::seed(path, &seed::Profile::small())).await?;
     let release = s.sandbox.root.join("correction-release");
     s.agent
         .launch
@@ -309,10 +306,7 @@ async fn storage_correction_end_near_deadline_keeps_readiness_grace() -> Result<
     let mut s = fault_setup("CORR-END-DEADLINE")?.start().await?;
     s.agent.terminate().await?;
     let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
-    offline(&path, |path| {
-        seed::seed(path, &seed::Profile::small(), "none")
-    })
-    .await?;
+    offline(&path, |path| seed::seed(path, &seed::Profile::small())).await?;
     let release = s.sandbox.root.join("correction-release");
     s.agent
         .launch

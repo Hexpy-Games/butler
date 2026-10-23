@@ -133,7 +133,7 @@ Run Clippy on the crates you changed; the example selects the Agent's static bui
 
 Test changed behavior E2E first: `BUTLER_E2E_TIER=stub cargo test --locked -p butler-e2e`. Use stub or replay only. Non-E2E tests require a `// test-category: race`, `security`, `pure-logic` or `format-pin` marker directly above the test function; source-check ratchets the counts in `source-check-tests.txt`, which may only decrease. Live cassette recording, when explicitly required, uses only `openai/gpt-6-luna`. The [harness README](packages/butler-agent/rust/crates/butler-e2e/README.md) covers tiers and recording.
 
-Keep source files at most 500 lines and production functions at most 80 lines. OS-specific code belongs only in `butler-platform`; unsafe code is forbidden. Performance checks must verify complete, current results at owner scale (600+ chats, about 300k events and multi-GB stores). Follow the detailed request-path and idle-work rules in [AGENTS.md](AGENTS.md).
+Keep source files at most 500 lines and production functions at most 80 lines. OS-specific code belongs only in `butler-platform`; unsafe code is forbidden. Performance checks must verify complete, current results. Follow the detailed request-path and idle-work rules in [AGENTS.md](AGENTS.md).
 
 ## Design system
 
@@ -178,7 +178,7 @@ A release is a `vX.Y.Z` (or `vX.Y.Z-preview.N`) tag on a proven commit of `relea
    - `packages/butler-npm/package.json`: the installer package version (the publish job sets it from the tag)
    - `packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml`
 2. Refresh the lockfiles: `bun install`, `npm --prefix packages/butler-app/client/electron install`, and `cargo update --workspace` in `packages/butler-agent/rust`.
-3. Write the release notes in `.github/releases/vX.Y.Z.md`. Preview tags (`vX.Y.Z-preview.N`) use `.github/releases/vX.Y.Z-preview.md`, and their macOS builds are not notarized.
+3. Write the release notes in `.github/releases/vX.Y.Z.md`. Preview tags (`vX.Y.Z-preview.N`) use `.github/releases/vX.Y.Z-preview.md`. Every macOS release, preview or stable, is signed, notarized and stapled.
 4. Merge the notes/version changes into main, then cut `release/<v>` from `origin/main` (hotfixes may start from the last tag). The push starts integration and derives both test-build versions from the release branch.
 5. The owner installs the Mac and Windows test builds while integration runs. Fix failures through `fix/<v>-<slug>` PRs into the candidate. Do not rerun passing jobs with unchanged inputs or retry flaky tests to get green; search existing issues first and link an open issue.
 6. After complete integration proof and real-machine approval, the coordinator tags that exact SHA `v<v>`. Previews have standing approval; stable tags require the owner's explicit confirmation. `release.yml` blocks builds until every integration workflow gate, including live E2E on that SHA, is green directly or through matching integration receipts.
@@ -198,9 +198,9 @@ The app release gate fails when the bundled agent version changes and the app ve
 
 Windows preview releases include the unsigned Agent and Squirrel App installer.
 
-### Live E2E OAuth setup (Windows owner runner)
+### Live E2E OAuth setup (self-hosted Windows runner)
 
-On the owner's `butler-win` runner, sign in once in PowerShell:
+On a self-hosted Windows runner, sign in once in PowerShell:
 
 ```powershell
 $env:CODEX_HOME = "$HOME\.butler-e2e-auth"; npx -y @openai/codex login

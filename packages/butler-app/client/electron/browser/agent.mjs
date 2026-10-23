@@ -54,13 +54,17 @@ export function wireAgentTab(browser, tab) {
     if (tab.agent) browser.close(tab.id); else controlTab(browser, tab, "user", true);
   });
 }
+const AUTO_ATTACH = { autoAttach: true, waitForDebuggerOnStart: false, flatten: true };
+/** CDP serves only Butler's own automation of a tab; its identity never needs it. */
 export function connectDebugger(browser, tab) {
   const contents=tab.view.webContents;
   if (tab.debuggerReady) return;
+  if (!contents.debugger.isAttached()) contents.debugger.attach("1.3");
   wireDialogs(browser,tab);
   tab.frameSessions=new Map();tab.frameAttachPromises=new Map();
   contents.debugger.on("message",(_event,method,value,sessionId)=>{
     noteNativeContext(tab,method,value,sessionId);
+    if (method === "Target.attachedToTarget") void contents.debugger.sendCommand("Target.setAutoAttach", AUTO_ATTACH, value.sessionId).catch(() => {});
     if(method==="Target.attachedToTarget" && value.targetInfo.type==="iframe") {
       const ready=(async()=>{
         await contents.debugger.sendCommand("Page.enable",{},value.sessionId);
@@ -72,7 +76,13 @@ export function connectDebugger(browser, tab) {
     }
     if(method==="Target.detachedFromTarget") {tab.frameAttachPromises.delete(value.sessionId);for(const [id,session] of tab.frameSessions)if(session===value.sessionId)tab.frameSessions.delete(id);}
   });
-  tab.debuggerReady=tab.identityReady.then(() => contents.debugger.sendCommand("Runtime.enable"));
+  // A view Butler created has no renderer until its first load, and renderer-scoped
+  // commands need one. A pop-up's view is already opening its own page. Loads wait
+  // for the web identity, so decide only once it is ready: a page queued behind it
+  // has started by then and must not be raced by a blank load.
+  const renderer = tab.identityReady.then(() => contents.getURL() || contents.isLoading() || tab.opener ? undefined : contents.loadURL("about:blank"));
+  tab.debuggerReady = renderer.then(() => contents.debugger.sendCommand("Target.setAutoAttach", AUTO_ATTACH))
+    .then(() => contents.debugger.sendCommand("Runtime.enable"));
   void tab.debuggerReady.then(() => contents.debugger.sendCommand("Emulation.setFocusEmulationEnabled",{enabled:true})).catch(()=>{});
 }
 export function emulation(tab) {
@@ -139,7 +149,7 @@ async function executeCall(browser, frame, tracked) {
   return drainEvents(browser, frame, result);
 }
 async function executeFrame(browser, frame) {
-  if (!browser.enabled()) return { status: "refused", reason: "browsing_disabled" };
+  if (browser.disposing || !browser.enabled()) return { status: "refused", reason: "browsing_disabled" };
   const { op, session, args = {} } = frame;
   if (!/^[a-zA-Z0-9_-]{1,128}$/u.test(session ?? "")) return { status: "refused", reason: "invalid_session" };
   const owner = `conversation:${session}`;
@@ -150,7 +160,7 @@ async function executeFrame(browser, frame) {
   }
   if (op === "tab.open") return openAgent(browser, frame);
   const tab = browser.tabs.get(frame.tab);
-  if (!tab || tab.owner !== owner) return { status: "refused", reason: "not_your_tab" };
+  if (!tab || tab.closeDrain || tab.owner !== owner) return { status: "refused", reason: "not_your_tab" };
   if (INTERACTIONS.has(op)) tab.acted = true;
   if (op === "tab.selection") return browser.selection.result(tab, session);
   if (tab.profile === "signed_in" && !["tab.cancel", "tab.wait", "tab.waiting"].includes(op) && !applySignedInPolicy(tab, args.policy))
@@ -165,7 +175,7 @@ async function executeFrame(browser, frame) {
   if (op === "tab.waiting") { tab.waitingTurn = frame.turn_id; tab.waiting = Boolean(tab.dialog) || args.value === true; browser.publish(); return { status: "ok" }; }
   if (tab.holder === "user") return { status: "not_dispatched", reason: "user_control" };
   if (op === "tab.close") return requestClose(browser,tab);
-  if (op === "tab.dialog") return answerDialog(browser,tab,args);
+  if (op === "tab.dialog") return answerDialog(browser,tab,args,frame.deliverStill);
   if (tab.dialog) return pendingDialog(tab);
   touch(browser, tab);
   browser.pointer.action(tab, frame.pointer);
@@ -193,8 +203,10 @@ async function executeFrame(browser, frame) {
     // Tabs act independently; only a second batch on a tab whose batch still runs is refused.
     if (tab.busy) return { status: "not_dispatched", reason: "browser_busy" };
     tab.busy = true; tab.cancelled = false; tab.callId = frame.call_id; browser.publish();
-    try { return await actBatch(tab, { ...args, deadline_ms: frame.deadline_ms }, session); }
-    finally { tab.busy = false; browser.publish(); }
+    try {
+      tab.activeAct = actBatch(tab, { ...args, deliveryId: frame.id, deliverStill: frame.deliverStill, deadline_ms: frame.deadline_ms }, session);
+      return await tab.activeAct;
+    } finally { tab.activeAct = null; tab.busy = false; browser.publish(); }
   }
   return { status: "refused", reason: "unsupported_op" };
 }
@@ -228,7 +240,7 @@ async function openTab(browser, { session, args, callId, signedIn, source, turn 
   connectDebugger(browser,tab);
   if (!await guardUrl(args.url, tab.view.webContents.session, tab.policy)) { browser.close(id); return { status: "refused", reason: "navigation_denied" }; }
   if (callId && browser.uses.get(callId) !== use) { browser.close(id); return { status: "unknown", reason: "cancelled" }; }
-  try { await tab.identityReady; await parsed(tab.view.webContents, args.url); }
+  try { await tab.identityReady; await tab.debuggerReady; await parsed(tab.view.webContents, args.url); }
   catch { browser.close(id); return { status: "unknown", reason: "navigation_failed" }; }
   if (callId && browser.uses.get(callId) !== use) { browser.close(id); return { status: "unknown", reason: "cancelled" }; }
   touch(browser, tab);

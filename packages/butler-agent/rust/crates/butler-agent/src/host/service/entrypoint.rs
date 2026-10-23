@@ -208,8 +208,8 @@ async fn serve(
     } = admission::prepare(&runtime, config, writer.clone(), instance, stop).await?;
     startup.phase("admission");
 
-    let parent_client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
+    let parent_client = butler_log::http::loopback()
+        .redirect(butler_log::http::RedirectPolicy::none())
         .build()
         .map_err(io)?;
     let foreground_lease = capture_foreground_lease(instance)?;
@@ -262,7 +262,7 @@ async fn serve(
     )
     .await;
     let close = close_serving(control, &gateway, &dispatcher, &progress).await;
-    drop(readiness);
+    admission::cancel_reset_queue(&runtime, &queue).await?;
     result.and(close).map(|()| session_id)
 }
 
@@ -314,8 +314,9 @@ async fn start_control(
             return Err(failure("gateway_control_unavailable", message.to_string()));
         }
     };
-    if let Err(message) =
-        instance.publish_control(control.endpoint().to_owned(), control.token().to_owned())
+    if let Err(message) = instance
+        .publish_control(control.endpoint().to_owned(), control.token().to_owned())
+        .await
     {
         let _ = control.close().await;
         let _ = dispatcher.close().await;
@@ -365,6 +366,7 @@ async fn mark_ready(
                 .is_some_and(|active| active.local_auth.required),
             SystemIdentity.now_iso(),
         )
+        .await
         .map_err(|message| {
             // A controller marked the record `stopping` first.
             let code = if message.message() == START_CANCELLED {

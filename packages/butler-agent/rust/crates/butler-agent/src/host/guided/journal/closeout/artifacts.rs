@@ -142,6 +142,10 @@ fn final_artifact(value: &Value) -> Option<FinalArtifact> {
             .and_then(Value::as_str)
             .map(str::to_owned),
         deliverable,
+        staged_path: item
+            .get("staged_path")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
         safe_path_label: path,
         mime_type: Some(mime),
         size_bytes,
@@ -273,6 +277,7 @@ pub(super) fn with_changed_files(
             kind: ArtifactKind::File,
             title: label.rsplit('/').next().unwrap_or(label).to_owned(),
             mime_type: Some(mime_for(label).into()),
+            staged_path: None,
             safe_path_label: std::path::Path::new(workspace)
                 .join(label)
                 .to_string_lossy()

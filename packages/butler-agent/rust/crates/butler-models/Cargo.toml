@@ -8,6 +8,8 @@ publish.workspace = true
 
 [dependencies]
 ring.workspace = true
+sse-stream = "0.2.4"
+pin-project-lite = "0.2"
 butler-log = { path = "../butler-log" }
 butler-core = { path = "../butler-core" }
 butler-platform = { path = "../butler-platform" }
@@ -29,6 +31,7 @@ sha2.workspace = true
 # Key fingerprints and wiped key buffers (#217).
 hmac.workspace = true
 zeroize.workspace = true
+tracing.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 thiserror.workspace = true

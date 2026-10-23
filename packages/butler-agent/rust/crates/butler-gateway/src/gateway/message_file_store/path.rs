@@ -10,53 +10,92 @@ use crate::gateway::ArtifactFileCandidate;
 pub(super) struct AllowedPaths {
     cwd: PathBuf,
     roots: Vec<PathBuf>,
-    canonical: Vec<PathBuf>,
+    file_grants: HashSet<PathBuf>,
+    inventory: std::sync::Arc<butler_platform::secure_fs::SecretInventory>,
 }
 
 impl AllowedPaths {
-    pub(super) fn new(roots: &[PathBuf]) -> std::io::Result<Self> {
+    pub(super) fn new(
+        data: &Path,
+        roots: &[PathBuf],
+        file_grants: &[PathBuf],
+    ) -> std::io::Result<Self> {
         let cwd = std::env::current_dir()?;
         let roots: Vec<_> = roots.iter().map(|root| absolute(root, &cwd)).collect();
-        let canonical = roots
-            .iter()
-            .map(|root| {
-                butler_platform::secure_fs::canonicalize(root).unwrap_or_else(|_| root.clone())
-            })
-            .collect();
         Ok(Self {
+            inventory: butler_platform::secure_fs::SecretInventory::cached(data),
             cwd: cwd.clone(),
             roots,
-            canonical,
+            file_grants: file_grants
+                .iter()
+                .map(|path| absolute(path, &cwd))
+                .collect(),
         })
     }
 
+    pub(super) fn already_seen(
+        &self,
+        candidate: &ArtifactFileCandidate,
+        seen: &HashSet<PathBuf>,
+    ) -> bool {
+        candidate.candidate_paths.iter().any(|path| {
+            let absolute = absolute(path, &self.cwd);
+            seen.contains(&absolute)
+                || butler_platform::secure_fs::canonicalize(absolute)
+                    .is_ok_and(|path| seen.contains(&path))
+        })
+    }
+
+    /// `Err(true)` when a candidate path was refused rather than absent.
     pub(super) fn first_readable(
         &self,
         candidate: &ArtifactFileCandidate,
         seen: &HashSet<PathBuf>,
-    ) -> Option<PathBuf> {
+    ) -> Result<(PathBuf, std::fs::File), bool> {
+        let mut refused = false;
         for original in &candidate.candidate_paths {
             let original = absolute(original, &self.cwd);
             let selected = original;
-            if seen.contains(&selected) || !self.roots.iter().any(|root| selected.starts_with(root))
-            {
+            if seen.contains(&selected) {
                 continue;
             }
-            let Ok(metadata) = std::fs::symlink_metadata(&selected) else {
+            let directory = self
+                .roots
+                .iter()
+                .filter(|root| selected.starts_with(root))
+                .max_by_key(|root| root.components().count());
+            // File grants never override the containment of a configured project/data root.
+            let (root, exact) = match directory {
+                Some(root) => (root.as_path(), false),
+                None if self.file_grants.contains(&selected) => {
+                    (selected.parent().ok_or(refused)?, true)
+                }
+                None => continue,
+            };
+            let Ok(relative) = selected.strip_prefix(root) else {
                 continue;
             };
-            if !metadata.is_file() || metadata.file_type().is_symlink() {
-                continue;
-            }
-            let Ok(real) = butler_platform::secure_fs::canonicalize(&selected) else {
-                continue;
-            };
-            if self.canonical.iter().any(|root| real.starts_with(root)) {
-                return Some(real);
+            match butler_platform::secure_fs::open_contained(root, relative, &self.inventory) {
+                Ok(file) if exact && !exact_file(&selected, &file) => {}
+                Ok(file) => return Ok((selected, file)),
+                Err(error) => refused |= error.kind() == std::io::ErrorKind::PermissionDenied,
             }
         }
-        None
+        Err(refused)
     }
+}
+
+// A file-scoped grant authorizes that regular leaf, not links to its siblings.
+fn exact_file(path: &Path, file: &std::fs::File) -> bool {
+    let (Ok(expected), Ok(opened)) = (std::fs::symlink_metadata(path), file.metadata()) else {
+        return false;
+    };
+    let expected_id = butler_platform::secure_fs::identity(&expected).id;
+    expected.is_file()
+        && !expected.file_type().is_symlink()
+        && (!butler_platform::secure_fs::FILE_IDS
+            || expected_id.is_some()
+                && expected_id == butler_platform::secure_fs::identity(&opened).id)
 }
 
 fn absolute(path: &Path, cwd: &Path) -> PathBuf {

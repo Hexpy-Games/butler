@@ -26,6 +26,7 @@ const MAX_COMPACTION_SUMMARY_CHARS: usize = 32_000;
 mod telemetry;
 
 pub(crate) struct AppContextRead {
+    lineage: Arc<butler_runtime::operations::UsageLineage>,
     data_root: PathBuf,
     budget: Arc<ContextBudgetOwner>,
     compactions: ContextCompactionRepository,
@@ -38,11 +39,13 @@ impl AppContextRead {
     pub(crate) async fn for_runtime(
         runtime: &crate::host::runtime::AgentRuntime,
         data_root: &Path,
+        lineage: Arc<butler_runtime::operations::UsageLineage>,
     ) -> Result<Self, butler_turn::btcc::BtccError> {
         Self::open(
             data_root.to_path_buf(),
             runtime.context_budget.clone(),
             runtime.context_compactions.clone(),
+            lineage,
         )
         .await
     }
@@ -50,12 +53,14 @@ impl AppContextRead {
         data_root: PathBuf,
         budget: Arc<ContextBudgetOwner>,
         compactions: ContextCompactionRepository,
+        lineage: Arc<butler_runtime::operations::UsageLineage>,
     ) -> Result<Self, butler_turn::btcc::BtccError> {
         let root = data_root.clone();
         let catalog = budget.catalog().clone();
+        let owners = lineage.owners.clone();
         let (telemetry, usage) = tokio::task::spawn_blocking(move || {
             let mut telemetry = telemetry::Index::open(&root);
-            let mut usage = SessionUsageIndex::default();
+            let mut usage = SessionUsageIndex::with_owners(owners);
             usage.read_with_rows(
                 &root,
                 "",
@@ -76,7 +81,9 @@ impl AppContextRead {
             )
             .with_source(error)
         })?;
+        lineage.resolve().await;
         Ok(Self {
+            lineage,
             data_root,
             budget,
             compactions,
@@ -94,11 +101,27 @@ impl AppContextReadPort for AppContextRead {
         let usage = self.usage.clone();
         let telemetry = self.telemetry.clone();
         let turn = query.turn_id.clone();
+        let lineage = self.lineage.clone();
         Box::pin(async move {
             let (mut facts, native_summary) = tokio::try_join!(
                 async {
+                    let read = lineage.read.clone().lock_owned().await;
+                    let refresh = (
+                        root.clone(),
+                        budget.clone(),
+                        usage.clone(),
+                        telemetry.clone(),
+                    );
                     tokio::task::spawn_blocking(move || {
-                        read_facts(&root, &budget, &usage, &telemetry, &query)
+                        refresh_usage(&refresh.0, &refresh.1, &refresh.2, &refresh.3);
+                    })
+                    .await
+                    .map_err(GatewayApplicationError::internal_from)?;
+                    lineage.resolve().await;
+                    tokio::task::spawn_blocking(move || {
+                        let session = usage.lock().session_usage(&query.runtime_session_id);
+                        drop(read);
+                        read_facts(&root, &budget, session, &telemetry, &query)
                     })
                     .await
                     .map_err(GatewayApplicationError::internal_from)?
@@ -115,14 +138,14 @@ impl AppContextReadPort for AppContextRead {
 fn read_facts(
     root: &Path,
     budget: &ContextBudgetOwner,
-    usage: &Mutex<SessionUsageIndex>,
+    session: SessionUsage,
     telemetry: &Mutex<telemetry::Index>,
     query: &AppContextReadQuery,
 ) -> Result<AppContextReadFacts, GatewayApplicationError> {
     let snapshot = budget
         .snapshot_blocking()
         .map_err(GatewayApplicationError::internal_from)?;
-    let (telemetry, session) = read_telemetry(root, usage, telemetry, query, budget.catalog());
+    let telemetry = telemetry.lock().read_shared_prompt(root, query);
     let evaluated = snapshot.evaluate_working(&WorkingContextBudgetInput {
         model_ref: Some(query.model_ref.clone()),
         working_context_tokens: 0.0,
@@ -182,27 +205,22 @@ fn configured_text(path: &Path) -> bool {
         .is_ok_and(|value| !butler_core::public_text::trim_js_whitespace(&value).is_empty())
 }
 
-fn read_telemetry(
+fn refresh_usage(
     root: &Path,
+    budget: &ContextBudgetOwner,
     usage: &Mutex<SessionUsageIndex>,
     telemetry: &Mutex<telemetry::Index>,
-    query: &AppContextReadQuery,
-    catalog: &ModelCatalog,
-) -> (Telemetry, SessionUsage) {
-    let pricing = |model: &str| catalog.pricing(model);
-    let mut usage = usage.lock();
-    let mut telemetry = telemetry.lock();
-    let session = usage.read_with_rows(
+) {
+    usage.lock().read_with_rows(
         root,
-        &query.runtime_session_id,
-        &pricing,
-        &mut *telemetry,
+        "",
+        &|model| budget.catalog().pricing(model),
+        &mut *telemetry.lock(),
         (
             telemetry::Index::reset_prompt,
             telemetry::Index::fold_prompt_row,
         ),
     );
-    (telemetry.read_shared_prompt(root, query), session)
 }
 
 async fn read_native_summary(

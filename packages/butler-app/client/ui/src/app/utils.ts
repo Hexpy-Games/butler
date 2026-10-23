@@ -1627,7 +1627,7 @@ function shouldPreserveActiveSnapshotOverStaleTerminal(
   );
 }
 
-function isTerminalProgressState(state: string): boolean {
+export function isTerminalProgressState(state: string): boolean {
   return (
     state === "failed" ||
     state === "cancelled" ||

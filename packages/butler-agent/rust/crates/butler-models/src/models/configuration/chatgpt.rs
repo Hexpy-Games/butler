@@ -89,7 +89,9 @@ pub fn signed_in(registration: &Value) -> bool {
 
 impl ModelConfiguration {
     pub async fn chatgpt_paths(&self) -> Result<store::Paths, Error> {
-        let path = self.data_root.join(".env");
+        let path = self
+            .data_root
+            .join(butler_platform::data_paths::ENVIRONMENT);
         let private = tokio::task::spawn_blocking(move || {
             butler_core::configuration::read_private_environment(&path)
         })

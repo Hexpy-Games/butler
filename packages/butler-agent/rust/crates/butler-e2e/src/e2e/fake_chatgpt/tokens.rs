@@ -34,9 +34,10 @@ pub(super) fn jwks() -> Value {
 }
 pub(super) async fn exchange(
     State(state): State<Arc<Authority>>,
+    headers: axum::http::HeaderMap,
     Form(params): Form<BTreeMap<String, String>>,
 ) -> Response {
-    state.record("token", &params);
+    state.record("token", &params, &headers);
     if params
         .get("grant_type")
         .is_some_and(|g| g == "refresh_token")

@@ -28,6 +28,7 @@ MOCK
 cat > "$work/bin/xcrun" <<'MOCK'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$POLICY_CALLS"
+if [ "${POLICY_NOTARY_OK:-}" = 1 ] && [ "$1 $2" = "notarytool history" ]; then exit 0; fi
 exit 1
 MOCK
 cat > "$work/bin/codesign" <<'MOCK'
@@ -46,49 +47,55 @@ export PATH="$work/bin:$PATH"
 # list setup changed; isolated steps must sign with that HOME, not their own.
 export POLICY_RUNNER_HOME="$work/runner-home"
 mkdir -p "$POLICY_RUNNER_HOME"
-export GITHUB_REF_NAME=v0.1.0-preview.1
-HOME="$POLICY_RUNNER_HOME" "$script" setup > "$work/log" 2>&1
-if [ -e "$POLICY_CALLS" ] || [ -e "$work/butler-signing-keys/AuthKey.p8" ]; then
-  echo 'preview used notary credentials' >&2; exit 1
-fi
-grep -q '^BUTLER_SIGN_IDENTITY=ABCDEF$' "$GITHUB_ENV"
-grep -Fxq "BUTLER_SIGN_HOME=$POLICY_RUNNER_HOME" "$GITHUB_ENV"
-mkdir -p "$work/Fake.app/Contents"
-printf 'fake plist\n' > "$work/Fake.app/Contents/Info.plist"
-# Isolated HOME differs: only credential tools use the runner profile.
-HOME="$work/isolated-home" BUTLER_SIGN_IDENTITY=ABCDEF BUTLER_SIGN_HOME="$POLICY_RUNNER_HOME" \
-  "$script" sign-app "$work/Fake.app" > "$work/log" 2>&1
-HOME="$POLICY_RUNNER_HOME" BUTLER_SIGN_HOME="$POLICY_RUNNER_HOME" "$script" cleanup > "$work/log" 2>&1
-[ -d "$POLICY_RUNNER_HOME" ] || { echo 'cleanup removed the runner HOME' >&2; exit 1; }
-export POLICY_CERT_FAIL=1
-: > "$GITHUB_ENV"
-HOME="$POLICY_RUNNER_HOME" "$script" setup > "$work/log" 2>&1
-grep -q '^BUTLER_SIGN_IDENTITY=-$' "$GITHUB_ENV"
-unset POLICY_CERT_FAIL
-export BUTLER_SIGN_IDENTITY=-
-for command in notarize verify-agent verify-app verify-dmg; do
-  "$script" "$command" "$work/Fake.app" > "$work/log" 2>&1
+# Previews and stable releases share one policy: Developer ID, notarization, staple.
+for ref in v0.1.0-preview.1 v0.1.0; do
+  export GITHUB_REF_NAME=$ref
+  rm -f "$POLICY_CALLS"
+  : > "$GITHUB_ENV"
+  POLICY_NOTARY_OK=1 HOME="$POLICY_RUNNER_HOME" "$script" setup > "$work/log" 2>&1
+  grep -q 'notarytool history' "$POLICY_CALLS" || { echo "$ref skipped the notary key check" >&2; exit 1; }
+  [ -s "$work/butler-signing-keys/AuthKey.p8" ] || { echo "$ref has no notary key" >&2; exit 1; }
+  grep -q '^BUTLER_SIGN_IDENTITY=ABCDEF$' "$GITHUB_ENV"
+  grep -Fxq "BUTLER_SIGN_HOME=$POLICY_RUNNER_HOME" "$GITHUB_ENV"
+  grep -q '^BUTLER_NOTARY_KEY_PATH=' "$GITHUB_ENV"
+  mkdir -p "$work/Fake.app/Contents"
+  printf 'fake plist\n' > "$work/Fake.app/Contents/Info.plist"
+  # Isolated HOME differs: only credential tools use the runner profile.
+  HOME="$work/isolated-home" BUTLER_SIGN_IDENTITY=ABCDEF BUTLER_SIGN_HOME="$POLICY_RUNNER_HOME" \
+    "$script" sign-app "$work/Fake.app" > "$work/log" 2>&1
+  HOME="$POLICY_RUNNER_HOME" BUTLER_SIGN_HOME="$POLICY_RUNNER_HOME" "$script" cleanup > "$work/log" 2>&1
+  [ -d "$POLICY_RUNNER_HOME" ] || { echo 'cleanup removed the runner HOME' >&2; exit 1; }
+  for identity in - ""; do
+    if BUTLER_SIGN_IDENTITY=$identity "$script" verify-agent "$work/agent" > "$work/log" 2>&1; then
+      echo "$ref accepted signing identity '$identity'" >&2; exit 1
+    fi
+  done
+  if HOME="$POLICY_RUNNER_HOME" "$script" setup > "$work/log" 2>&1; then
+    echo "$ref accepted rejected notary credentials" >&2; exit 1
+  fi
+  if BUTLER_SIGN_IDENTITY=ABCDEF env -u BUTLER_NOTARY_KEY_PATH "$script" notarize "$work/agent" > "$work/log" 2>&1; then
+    echo "$ref accepted missing notary credentials" >&2; exit 1
+  fi
+  if BUTLER_SIGN_IDENTITY=ABCDEF "$script" verify-dmg "$work/Fake.dmg" > "$work/log" 2>&1; then
+    echo "$ref accepted missing staple" >&2; exit 1
+  fi
+  grep -q 'stapler validate' "$POLICY_CALLS" || { echo "$ref skipped staple validation" >&2; exit 1; }
+  if POLICY_CERT_FAIL=1 HOME="$POLICY_RUNNER_HOME" "$script" setup > "$work/log" 2>&1; then
+    echo "$ref accepted certificate setup failure" >&2; exit 1
+  fi
+  if grep -q '^BUTLER_SIGN_IDENTITY=-$' "$GITHUB_ENV"; then echo "$ref fell back to ad-hoc" >&2; exit 1; fi
 done
-[ ! -e "$POLICY_CALLS" ] || { echo 'preview called notary/stapler' >&2; exit 1; }
-echo 'policy: preview preserves Developer ID, falls back to ad-hoc, skips notary/stapler'
-export GITHUB_REF_NAME=v0.1.0
-if "$script" verify-agent "$work/agent" > "$work/log" 2>&1; then
-  echo 'stable accepted ad-hoc signing' >&2; exit 1
+# Apple can't notarize ad-hoc signatures: unsigned packages skip it, releases refuse "-".
+rm -f "$POLICY_CALLS"
+if BUTLER_SIGN_IDENTITY=- "$script" notarize "$work/Fake.app" > "$work/log" 2>&1; then
+  echo 'release accepted an ad-hoc identity for notarization' >&2; exit 1
 fi
-export BUTLER_SIGN_IDENTITY=ABCDEF
-if HOME="$POLICY_RUNNER_HOME" "$script" setup > "$work/log" 2>&1; then
-  echo 'stable accepted rejected notary credentials' >&2; exit 1
+BUTLER_SIGN_REQUIRED='' BUTLER_SIGN_IDENTITY=- env -u BUTLER_NOTARY_KEY_PATH -u BUTLER_NOTARY_KEY_ID -u BUTLER_NOTARY_ISSUER_ID \
+  "$script" notarize "$work/Fake.app" > "$work/log" 2>&1
+grep -q 'skipping notarization and stapling' "$work/log" || { echo 'ad-hoc notarize did not skip' >&2; exit 1; }
+if [ -s "$POLICY_CALLS" ]; then echo 'ad-hoc notarize reached Apple tools' >&2; exit 1; fi
+if BUTLER_SIGN_REQUIRED='' BUTLER_SIGN_IDENTITY=ABCDEF env -u BUTLER_NOTARY_KEY_PATH \
+  "$script" notarize "$work/Fake.app" > "$work/log" 2>&1; then
+  echo 'a real identity skipped notarization without notary credentials' >&2; exit 1
 fi
-grep -q 'notarytool history' "$POLICY_CALLS"
-if env -u BUTLER_NOTARY_KEY_PATH "$script" notarize "$work/agent" > "$work/log" 2>&1; then
-  echo 'stable accepted missing notary credentials' >&2; exit 1
-fi
-if "$script" verify-dmg "$work/Fake.dmg" > "$work/log" 2>&1; then
-  echo 'stable accepted missing staple' >&2; exit 1
-fi
-grep -q 'stapler validate' "$POLICY_CALLS"
-export POLICY_CERT_FAIL=1
-if HOME="$POLICY_RUNNER_HOME" "$script" setup > "$work/log" 2>&1; then
-  echo 'stable accepted certificate setup failure' >&2; exit 1
-fi
-echo 'policy: stable requires Developer ID and valid notary credentials'
+echo 'policy: previews and stable require Developer ID, valid notary credentials and stapling'

@@ -6,7 +6,7 @@ pub(super) mod folder;
 mod git;
 mod mutations;
 mod owner;
-mod rows;
+pub(super) mod rows;
 pub(super) mod token;
 
 use crate::gateway::application::storage::AppStorageCode;

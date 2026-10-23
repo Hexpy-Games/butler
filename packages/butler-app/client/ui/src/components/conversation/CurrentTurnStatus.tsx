@@ -13,6 +13,7 @@ import { useElapsedTime } from "./hooks/useElapsedTime";
 
 export function CurrentTurnStatus({
   markKey,
+  thinkingLine,
   operation,
   modelRoundWait,
   publicActivity,
@@ -22,6 +23,7 @@ export function CurrentTurnStatus({
   waitingForAnswer = false,
 }: {
   markKey?: string;
+  thinkingLine?: string;
   operation?: ProgressRow;
   modelRoundWait?: ProgressRow;
   publicActivity?: ProgressRow;
@@ -44,8 +46,9 @@ export function CurrentTurnStatus({
   const waitingLabel = waitingForAnswer ? appCopy.interfaceStatus.answerWaiting
     : handoffTool === "browser_sign_in_wait" ? appCopy.interfaceStatus.signInWaiting
       : handoffTool === "browser_wait_for_user" || handoffTool === "browser_pay_wait" ? appCopy.interfaceStatus.tabWaiting : appCopy.interfaceStatus.approvalWaiting;
+  const summaryLine = !waitingForApproval && !operation && !providerRecovery && modelRoundWait ? thinkingLine : undefined;
   const fullLabel = waitingForApproval ? waitingLabel : operationLabel ?? (providerRecovery ? interfaceProgressLabel(providerRecovery) : undefined) ??
-    (modelRoundWait ? appCopy.interfaceStatus.generating : undefined) ?? (publicActivity ? interfaceProgressLabel(publicActivity) : undefined) ??
+    (modelRoundWait ? summaryLine ?? appCopy.interfaceStatus.generating : undefined) ?? (publicActivity ? interfaceProgressLabel(publicActivity) : undefined) ??
     phaseLabel ??
     appCopy.interfaceStatus.generating;
   return (
@@ -59,6 +62,7 @@ export function CurrentTurnStatus({
         markKey={markKey}
         markTheme={markTheme}
         state="active"
+        shimmer={!summaryLine}
       >
         <div data-test-class="turn-current-status-content">
           {waitingForApproval ? <Typo.Body as="p">{fullLabel}</Typo.Body> : operation ? (
@@ -66,7 +70,7 @@ export function CurrentTurnStatus({
           ) : providerRecovery ? (
             <CurrentPhaseActivity row={providerRecovery} />
           ) : modelRoundWait ? (
-            <CurrentModelRoundWaiting row={modelRoundWait} />
+            <CurrentModelRoundWaiting row={modelRoundWait} line={summaryLine} />
           ) : publicActivity ? (
             <CurrentPhaseActivity row={publicActivity} />
           ) : phaseLabel ? (

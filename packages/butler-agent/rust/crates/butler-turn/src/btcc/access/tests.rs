@@ -9,7 +9,7 @@ use CapabilityKind::{
     Exempt, FileEdit, FileRead, FolderSwitch, FullOnly, InternalRead, Network, OtherEffect,
     ProjectRecord, Schedule, SettingsWrite, WebRequest,
 };
-use TargetScope::{NoTarget, Outside, ProjectFolder, Protected};
+use TargetScope::{Attachment, NoTarget, Outside, ProjectFolder, Protected};
 use butler_core::tool_protocol::ToolName;
 
 // Independent owner cells; None is a wildcard, not an implementation branch.
@@ -36,6 +36,7 @@ const ALLOW: &[(
     (AskExceptReads, ButlerOutput, None, None),
     (AskExceptReads, DeliverFiles, None, None),
     (AskExceptReads, FileRead, Some(ProjectFolder), None),
+    (AskExceptReads, FileRead, Some(Attachment), None),
     (
         AskAlways,
         CommandObservation { sandboxed: true },
@@ -80,6 +81,7 @@ const ALLOW: &[(
     (Auto, ButlerOutput, None, None),
     (Auto, DeliverFiles, None, None),
     (Auto, FileRead, Some(ProjectFolder), None),
+    (Auto, FileRead, Some(Attachment), None),
     (
         Auto,
         CommandObservation { sandboxed: true },
@@ -204,7 +206,7 @@ fn access_boundary_matches_the_owner_table() {
     );
     for mode in AccessMode::ALL {
         for &kind in KINDS {
-            for scope in [NoTarget, ProjectFolder, Outside, Protected] {
+            for scope in [NoTarget, ProjectFolder, Attachment, Outside, Protected] {
                 for risk in [ApprovalRisk::Low, ApprovalRisk::Medium, ApprovalRisk::High] {
                     for taint in [TurnTaint::Clean, TurnTaint::External] {
                         let request = AccessRequest {
@@ -458,6 +460,7 @@ fn contained_read_rechecks_swapped_secret() {
     std::fs::write(root.join(".env"), "SECRET_IN_ENV").unwrap();
     let data = root.with_extension("data");
     let roots = ScopeRoots {
+        attachments: &[],
         project: Some(&root),
         butler_data: &data,
         protected_ledger_roots: &[],
@@ -470,6 +473,7 @@ fn contained_read_rechecks_swapped_secret() {
         let files = WorkspaceFiles::new(1);
         let result = files
             .read_one(ReadFileInput {
+                butler_data: data.clone(),
                 root: root.clone(),
                 path: "a.txt".into(),
                 path_form: PathForm::Contained,

@@ -9,6 +9,7 @@ import type { AppInfoView, SettingsView } from "@/app/types.ts";
 import { InlineReference, KeyValueRow, SettingsField, Switch, Typo } from "@/butler-ds";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 import { OpenSourceLicenses } from "./OpenSourceLicenses";
+import { DiagnosticsExportField } from "./DiagnosticsExportField";
 
 export function AboutSettings() {
   const locale = useAppLocale();
@@ -103,6 +104,9 @@ export function AboutSettings() {
       </SettingsSection>
       <SettingsSection id="open-source" kind="info" title={locale === "ko-KR" ? "라이선스" : "Licenses"}>
         <OpenSourceLicenses />
+      </SettingsSection>
+      <SettingsSection id="diagnostics" kind="form" title={sections.diagnostics}>
+        <DiagnosticsExportField />
       </SettingsSection>
       <SettingsSection id="developer" kind="form" title={sections.developer}>
         <SettingsField

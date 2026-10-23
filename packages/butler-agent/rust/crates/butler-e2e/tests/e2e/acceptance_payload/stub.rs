@@ -41,7 +41,7 @@ pub(in super::super) async fn start(
         rounds,
     });
     let app = Router::new()
-        // The owner-scale synthetic input is about 2.4 MB; retain the complete body.
+        // The history synthetic input is about 2.4 MB; retain the complete body.
         .route("/v1/responses", post(reply))
         .route_layer(axum::middleware::from_fn(
             butler_e2e::e2e::chatgpt_wire::validate,

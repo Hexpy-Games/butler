@@ -228,6 +228,12 @@ fn record_stage(
     name: &'static str,
     started: Instant,
 ) {
+    if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+        butler_core::diagnostic!(
+            "[memory-recall] stage={name} duration_ms={:.3}",
+            started.elapsed().as_secs_f64() * 1_000.0
+        );
+    }
     if let Some(sink) = metrics {
         sink.record(RecallMetric::Stage {
             name,

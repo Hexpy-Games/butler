@@ -7,6 +7,7 @@ pub(super) fn handler(request: &Request<Body>) -> Option<Handler> {
         (family(path, "/logs"), Handler::Logs),
         (family(path, "/library"), Handler::Library),
         (family(path, "/browser-history"), Handler::History),
+        (family(path, "/browser-stills"), Handler::BrowserStills),
         (path.starts_with("/internal/browser"), Handler::Browser),
         (path.starts_with("/__o/"), Handler::NotFound),
         (path.starts_with("/previews/"), Handler::Preview),
@@ -28,6 +29,19 @@ fn commands(request: &Request<Body>) -> Option<Handler> {
     let path = request.uri().path();
     let parts = path.trim_start_matches('/').split('/').collect::<Vec<_>>();
     let routes = [
+        (
+            matches!(
+                parts.as_slice(),
+                ["works", _, "tasks"]
+                    | ["works", _, "tasks", "edits"]
+                    | ["projects", _, "canon"]
+                    | ["projects", _, "canon", "plans" | "epics"]
+                    | ["projects", _, "canon", "backlog", "order"]
+                    | ["canon", "plans" | "epics", _]
+                    | ["canon", "plans", _, "order"]
+            ),
+            Handler::WorkModel,
+        ),
         (
             matches!(
                 parts.as_slice(),
@@ -65,11 +79,7 @@ fn monitors(request: &Request<Body>) -> Option<Handler> {
         (
             matches!(
                 path,
-                "/usage-monitor"
-                    | "/work-status"
-                    | "/worker-activity"
-                    | "/system-events"
-                    | "/developer-logs"
+                "/usage-monitor" | "/work-status" | "/worker-activity" | "/system-events"
             ) || path.starts_with("/worker-activity/")
                 || (path.starts_with("/sessions/") && path.contains("/worker-activity")),
             Handler::Monitors,

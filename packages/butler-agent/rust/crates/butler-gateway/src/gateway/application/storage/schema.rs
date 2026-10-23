@@ -1,6 +1,7 @@
 //! Existing App schema migration in its source-defined order.
 
 mod assets;
+mod canon_sidebar;
 mod core;
 mod library;
 mod message_ownership;
@@ -13,9 +14,11 @@ mod security;
 mod session_reads;
 mod signins;
 mod space;
+mod still_delivery;
 mod supporting;
 mod vault;
 mod wallpapers;
+pub(in crate::gateway::application) mod work_model;
 
 use std::path::Path;
 
@@ -41,6 +44,9 @@ pub(super) fn migrate(
         "INTEGER NOT NULL DEFAULT 0",
     )?;
     library::create(connection)?;
+    canon_sidebar::create(connection)?;
+    work_model::create(connection)?;
+    still_delivery::recover(connection)?;
     super::history::schema::create(connection)?;
     security::create(connection)?;
     // Open-turn lookups filter on the state alone; databases that predate the

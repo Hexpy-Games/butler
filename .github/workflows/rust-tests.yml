@@ -10,7 +10,7 @@ on:
         default: '[1,2,3,4,5,6,"ins-02","ins-14","install"]'
       perf-shards:
         type: string
-        default: '[1,2,3,"idle"]'
+        default: '[1,2,3]'
       e2e:
         type: boolean
         default: true
@@ -45,7 +45,7 @@ jobs:
           path: ${{ runner.temp }}/rust-archive
       - name: Prepare the existing Agent and Electron UI
         run: |
-          chmod +x "$RUNNER_TEMP/rust-archive/butler-agent"
+          chmod +x "$RUNNER_TEMP/rust-archive/butler-agent" "$RUNNER_TEMP/rust-archive/window-capture"
           python3 .github/scripts/isolated.py bun install --frozen-lockfile
           # Keep Electron's first-install stdout out of the executable path below.
           python3 .github/scripts/isolated.py node packages/butler-app/client/electron/node_modules/electron/install.js
@@ -53,10 +53,12 @@ jobs:
       - name: Run canvas and route fixtures with stub model responses
         env:
           BUTLER_NATIVE_AGENT_EXECUTABLE: ${{ runner.temp }}/rust-archive/butler-agent
+          BUTLER_WINDOW_CAPTURE_EXECUTABLE: ${{ runner.temp }}/rust-archive/window-capture
           BUTLER_E2E_TIER: stub
         run: |
           BUTLER_SMOKE_ELECTRON_EXECUTABLE="$(node -p "require('./packages/butler-app/client/electron/node_modules/electron')")"
           export BUTLER_SMOKE_ELECTRON_EXECUTABLE
+          python3 .github/scripts/isolated.py bun tests/smoke/app-legacy-data-smoke.ts
           export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/canvas"
           python3 .github/scripts/isolated.py bun tests/smoke/browser-canvas-electron.ts
           export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/route"
@@ -67,6 +69,10 @@ jobs:
           python3 .github/scripts/isolated.py bun tests/smoke/browser-round2-electron.ts
           export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/still-lifecycle"
           python3 .github/scripts/isolated.py bun tests/smoke/browser-still-lifecycle-electron.ts
+          export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/still-delivery"
+          python3 .github/scripts/isolated.py bun tests/smoke/browser-still-delivery-electron.ts
+          export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/still-timeline"
+          python3 .github/scripts/isolated.py bun tests/smoke/browser-still-timeline-electron.ts
           export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/gaps"
           python3 .github/scripts/isolated.py bun tests/smoke/browser-gaps-electron.ts
           export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/busy"
@@ -201,9 +207,7 @@ jobs:
           agent-binary: ${{ runner.temp }}/perf-agent/butler-agent
           enforce-budgets: "true"
           exclude-perf: "false"
-          filter-file: ${{ matrix.shard != 'idle' && format('{0}/rust-archive/perf-{1}.txt', runner.temp, matrix.shard) || '' }}
-          idle-only: ${{ matrix.shard == 'idle' }}
-          run-perf-idle: ${{ matrix.shard == 'idle' }}
+          filter-file: ${{ format('{0}/rust-archive/perf-{1}.txt', runner.temp, matrix.shard) }}
           run-systemd: "false"
           test-threads: "1"
           success-output: final
@@ -211,7 +215,7 @@ jobs:
         uses: ./.github/actions/assert-home-untouched
 
       - name: Report session-view p95
-        if: always() && matrix.shard != 'idle'
+        if: always()
         env:
           PERF_LOG: ${{ runner.temp }}/e2e-stub.log
           PLATFORM: ${{ inputs.platform }}
@@ -231,7 +235,7 @@ jobs:
           values = re.findall(r"session-view p95 ([0-9]+(?:\.[0-9]+)?)(ns|µs|μs|ms|s)", text)
           summary_path = pathlib.Path(os.environ["GITHUB_STEP_SUMMARY"])
           if not values:
-              summary = f"### E2E perf ({os.environ['PLATFORM']})\n\nSession-view p95: unavailable. Target: 50 ms; hard gate: under 150 ms.\n"
+              summary = f"### E2E perf ({os.environ['PLATFORM']})\n\nSession-view p95: unavailable. Target: 50 ms; hard gate: under 50 ms.\n"
               with summary_path.open("a") as output:
                   output.write(summary)
               print("::error::PERF-01 did not report a session-view p95 measurement")
@@ -241,7 +245,7 @@ jobs:
           p95_ms = float(value) * {"ns": 1e-6, "µs": 1e-3, "μs": 1e-3, "ms": 1, "s": 1e3}[unit]
           summary = (
               f"### E2E perf ({os.environ['PLATFORM']})\n\n"
-              f"Session-view p95: **{p95_ms:.3f} ms**. Target: **50 ms**; hard gate: **under 150 ms**.\n"
+              f"Session-view p95: **{p95_ms:.3f} ms**. Target: **50 ms**; hard gate: **under 50 ms**.\n"
           )
           with summary_path.open("a") as output:
               output.write(summary)

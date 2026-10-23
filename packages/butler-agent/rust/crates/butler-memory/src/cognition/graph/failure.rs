@@ -124,10 +124,10 @@ pub(super) fn settle(
     } = owner;
     let tx = connection.transaction().map_err(db_error)?;
     let row=tx.query_row(
-        "SELECT state,attempt_count,recovery_revision,input_sha256,output_json,provider_evidence_json,recovery_base_attempt_count \
+        "SELECT state,attempt_count,recovery_revision,input_sha256,output_json,provider_evidence_json \
          FROM memory_projection_windows WHERE window_ref=?1 AND job_id=?2 AND owner_nonce=?3 AND state IN ('running','planned')",
         params![window,job,nonce],|r| Ok((r.get::<_,String>(0)?,r.get::<_,i64>(1)?,r.get::<_,Option<String>>(2)?,
-            r.get::<_,Option<String>>(3)?,r.get::<_,Option<String>>(4)?,r.get::<_,Option<String>>(5)?,r.get::<_,i64>(6)?)),
+            r.get::<_,Option<String>>(3)?,r.get::<_,Option<String>>(4)?,r.get::<_,Option<String>>(5)?)),
     ).optional().map_err(db_error)?.ok_or_else(changed)?;
     let planned = row.0 == "planned";
     let kind = if planned {
@@ -148,21 +148,24 @@ pub(super) fn settle(
         params![attempt_ref,window,job,row.1,code,row.3,if planned {None} else {row.4},
             if planned {None} else {row.5},now,kind,i64::from(provider.made() && !planned),nonce,row.2]).map_err(db_error)?;
     let attempts: i64 = if planned {
-        tx.query_row("SELECT COUNT(*) FROM memory_projection_attempts WHERE window_ref=?1 AND attempt_kind='apply' AND recovery_revision IS ?2",
+        tx.query_row("SELECT COUNT(*) FROM memory_projection_attempts WHERE window_ref=?1 AND attempt_kind='apply' AND state='failed' AND error_code!='memory_write_busy' AND recovery_revision IS ?2",
             params![window,row.2],|r|r.get(0)).map_err(db_error)?
     } else {
-        tx.query_row("SELECT COUNT(DISTINCT invocation_ref) FROM memory_projection_attempts WHERE window_ref=?1 AND provider_invoked=1 AND recovery_revision IS ?2",
-            params![window,row.2],|r|r.get(0)).map_err(db_error)?
+        super::projection::failed_provider_attempt_count(&tx, window, row.2.as_deref())?
     };
     if planned && code == "memory_extract_candidate_changed" {
-        let exhausted = row.1 - row.6 >= 3;
+        let exhausted = attempts >= 3;
         if tx.execute("UPDATE memory_projection_windows SET state=?1,error_code=?2,next_attempt_at=?3,
             input_json=NULL,input_sha256=NULL,input_migration_note=NULL,output_json=NULL,provider_evidence_json=NULL,normalized_plan_json=NULL,
             owner_pid=NULL,owner_nonce=NULL,started_at=NULL WHERE window_ref=?4 AND job_id=?5 AND owner_nonce=?6",
             params![if exhausted{"failed"}else{"pending"},if exhausted{"memory_projection_attempts_exhausted"}else{code},
                 if exhausted{None}else{Some(now)},window,job,nonce]).map_err(db_error)?!=1{return Err(changed())}
     } else {
-        let retry_at = if repair == RepairBudget::Remaining && retryable(code) && attempts < 3 {
+        // Contention is infrastructure delay, even after a provider call. It
+        // always retains its stage/output and never spends the failure budget.
+        let retry_at = if code == "memory_write_busy" {
+            Some(retry_at(now, row.1)?)
+        } else if repair == RepairBudget::Remaining && retryable(code) && attempts < 3 {
             Some(retry_at(now, attempts)?)
         } else {
             None
@@ -191,7 +194,7 @@ fn retryable(code: &str) -> bool {
                 | "memory_vector_io_transient"
         )
 }
-fn retry_at(now: &str, attempts: i64) -> CognitionResult<String> {
+pub(super) fn retry_at(now: &str, attempts: i64) -> CognitionResult<String> {
     let parsed = DateTime::parse_from_rfc3339(now).map_err(|source| {
         CognitionError::new(CognitionCode::MemoryGraphUnavailable, "invalid clock")
             .with_source(source)

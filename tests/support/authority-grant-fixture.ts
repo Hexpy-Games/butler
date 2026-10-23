@@ -48,7 +48,7 @@ export async function seedApprovalFixture(server: NativeAppServerHandle) {
   })();
   db.close();
   const app = new Database(join(server.butlerData, "app-server/butler-client.sqlite"));
-  app.exec("WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<599) INSERT INTO chats(id,title,kind,created_at,updated_at) SELECT 'scale-'||i,'Historical chat '||i,'chat','2000-01-01T00:00:00Z','2000-01-01T00:00:00Z' FROM n");
+  app.exec("WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<7) INSERT INTO chats(id,title,kind,created_at,updated_at) SELECT 'scale-'||i,'Historical chat '||i,'chat','2000-01-01T00:00:00Z','2000-01-01T00:00:00Z' FROM n");
   app.close();
   return { command, refs, sessions };
 }

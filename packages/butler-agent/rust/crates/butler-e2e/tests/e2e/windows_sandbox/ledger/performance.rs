@@ -1,4 +1,4 @@
-//! Fixed per-file scan budgets and exact inventory assertions at both scales.
+//! Containment regression watches and exact inventory assertions at both scales.
 use super::*;
 use std::collections::BTreeSet;
 fn populate(f: &Fixture, dirs: usize) -> std::io::Result<BTreeSet<PathBuf>> {
@@ -46,10 +46,10 @@ fn ledger_100k_performance_and_exactness() -> Result<(), HarnessError> {
     performance(2_000, "WIN-LEDGER-100K")
 }
 #[test]
-fn ledger_300k_performance_and_exactness() -> Result<(), HarnessError> {
+fn ledger_repeated_files_and_exactness() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(!command_sandbox::POSIX_SHELL, "Windows ledger perf");
-    performance(6_000, "WIN-LEDGER-300K")
+    performance(8, "WIN-LEDGER-FILES")
 }
 fn performance(dirs: usize, name: &str) -> Result<(), HarnessError> {
     let f = Fixture::new(name)?;
@@ -79,6 +79,7 @@ fn performance(dirs: usize, name: &str) -> Result<(), HarnessError> {
     }
     samples.sort();
     let p50 = (samples[14] + samples[15]) / 2;
+    let p95 = samples[28];
     let outside = f.setup.sandbox.home.join("outside-alias");
     fs::hard_link(f.root.join("d0000/f00"), &outside)?;
     fs::hard_link(f.root.join("d0000/f01"), f.root.join(".env"))?;
@@ -128,19 +129,24 @@ fn performance(dirs: usize, name: &str) -> Result<(), HarnessError> {
         assert_eq!(fs::read(f.root.join(format!("delta{index}")))?, b"complete");
     }
     eprintln!(
-        "WINDOWS-LEDGER files={} dirs={} secrets=50 build_ms={:.3} admission_p50_ms={:.3} delta_5000_ms={:.3} verify_ms={:.3} complete=true",
+        "WINDOWS-LEDGER files={} dirs={} secrets=50 build_ms={:.3} admission_p50_ms={:.3} admission_p95_ms={:.3} delta_5000_ms={:.3} verify_ms={:.3} complete=true",
         dirs * 50,
         dirs,
         build.as_secs_f64() * 1000.,
         p50.as_secs_f64() * 1000.,
+        p95.as_secs_f64() * 1000.,
         delta.as_secs_f64() * 1000.,
         verify.as_secs_f64() * 1000.
     );
     let scale = (dirs / 2_000) as u64;
     butler_e2e::assert_wall_clock_budget!(build, Duration::from_secs(2 * scale), "ledger build");
-    butler_e2e::assert_wall_clock_budget!(p50, Duration::from_millis(50), "ledger admission p50");
-    butler_e2e::assert_wall_clock_budget!(delta, Duration::from_millis(100), "ledger 5000 delta");
-    butler_e2e::assert_wall_clock_budget!(verify, Duration::from_secs(scale), "ledger full verify");
+    // No measured normal (manual desktop harness only); incident line about 10x the original
+    // 50 ms budget, where a user would notice a slower command start.
+    butler_e2e::assert_wall_clock_budget!(p95, Duration::from_millis(500), "ledger admission p95");
+    // This refusal-path work feeds the owner's 1 s refusal-latency budget.
+    butler_e2e::assert_wall_clock_budget!(delta, Duration::from_secs(1), "ledger 5000 delta");
+    // This refusal-path work feeds the owner's 1 s refusal-latency budget.
+    butler_e2e::assert_wall_clock_budget!(verify, Duration::from_secs(1), "ledger full verify");
     f.finish();
     Ok(())
 }

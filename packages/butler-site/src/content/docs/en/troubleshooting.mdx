@@ -63,7 +63,7 @@ If a `code` in `errors` is `bundled_agent_version_missing`, the app could not re
   ]}
 >
   <TabPanel value="macos">
-    The Butler app is not notarized by Apple, so macOS may block it the first time you open it. Choose **Open Anyway** in **System Settings → Privacy & Security**.
+    The Butler app is notarized by Apple, so it opens like other apps. If macOS asks whether to open an app downloaded from the internet, choose **Open**.
   </TabPanel>
   <TabPanel value="windows">
     Windows preview builds are unsigned. If SmartScreen appears, choose **More info**, then **Run anyway**, but only when you trust the source of the build. The installer is `ButlerSetup-<version>-x64.exe` on [GitHub Releases](https://github.com/Hexpy-Games/butler/releases).
@@ -147,23 +147,19 @@ For the standalone Agent, `butler update --check` checks for a new version. `but
 
 ## Check the logs
 
-### Developer logs in the app
-
-Developer logs show the assembled model request context and the raw response for each model turn.
+### Logs in the app
 
 <Steps>
-  1. In **Settings → About**, turn on **Developer mode** in the **Developer** area.
-  2. When **Logs** appears in the **App and system** group of the Settings list, open it.
-  3. Choose **Failed model turn** in the filter to see only failed requests.
-  4. Open an entry and check the **Context**, **Request**, **Response** and **Metadata** tabs.
+  1. In **Settings → About**, turn on **Developer mode**.
+  2. Open **Logs** in the **App and system** group.
+  3. Search messages, errors and IDs, or filter by level, source, category and period. Turn on **Live** to follow new entries.
+  4. Open an entry for its fields and, for HTTP entries, the **Request**, **Response** and **JSON** tabs.
 </Steps>
 
-Use the search field to find models, sessions, sections and response content, or filter by session ID. With developer mode on, you can also open Chrome DevTools in this app window.
-
-Developer logs are recorded only while **Diagnostics** in **Settings → Privacy** is on, and are saved to `app/developer-logs/model-turns.jsonl` in the data folder. If you turn **Diagnostics** off, the **Logs** item disappears too.
+Without developer mode, use **Export diagnostics** in **Settings → About**. It saves the logs as a zip, without chat content.
 
 <Notice tone="warning">
-  Developer logs can include raw requests and responses that contain your conversations. Check the content before you share it with anyone.
+  At **Full**, logs include prompts, replies and request bodies. Check an export before you share it.
 </Notice>
 
 ### Service logs of the standalone Agent

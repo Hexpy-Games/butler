@@ -1,18 +1,11 @@
 name: DS approval
 
-# DS primitives, blocks and tokens are frozen without owner approval. A PR that
-# changes them without a `DS-Approved:` commit trailer or the `ds-approved` label
-# gets a warning annotation; the check never fails.
+# DS changes without owner approval fail the rust-quality gate.
+# rust-quality calls this on every pull_request event, including label changes.
 # See .github/scripts/ds-approval.py.
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
-    paths:
-      - 'packages/butler-app/client/ui/src/libs/design-system/components/**'
-      - 'packages/butler-app/client/ui/src/libs/design-system/blocks/**'
-      - 'packages/butler-app/client/ui/src/libs/design-system/shadcn/**'
-      - 'packages/butler-app/client/ui/src/libs/design-system/*.css'
+  workflow_call:
 
 permissions:
   contents: read
@@ -28,7 +21,7 @@ jobs:
         with:
           sparse-checkout: .github/scripts
 
-      - name: Warn on DS primitive, block and token changes without owner approval
+      - name: Require owner approval for DS primitive, block and token changes
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}

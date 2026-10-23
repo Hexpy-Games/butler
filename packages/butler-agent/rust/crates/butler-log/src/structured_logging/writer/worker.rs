@@ -10,6 +10,21 @@ struct State {
     cleanup_backoff: Duration,
 }
 impl Logger {
+    fn clear_storage(&self) -> io::Result<u64> {
+        use std::io::Write;
+        let mut storage = self.0.storage.lock();
+        let generation = uuid::Uuid::new_v4().to_string();
+        butler_platform::secure_fs::replace_private(
+            &storage.root.join("clear-generation"),
+            |file| file.write_all(generation.as_bytes()),
+            std::convert::identity,
+        )?;
+        let mut view = self.config();
+        view.clear_generation = Some(generation);
+        *self.0.config.write() = Arc::new(view);
+        storage.clear()
+    }
+
     pub(super) fn run(&self, rx: &mpsc::Receiver<Command>) -> io::Result<()> {
         let mut state = State::default();
         self.schedule_cleanup(&mut state);
@@ -35,7 +50,7 @@ impl Logger {
             if let Command::Dropped = command {
                 self.report(self.report_drops());
                 self.report(self.0.storage.lock().flush(false));
-            } else if let Command::Record(..) = command {
+            } else if matches!(command, Command::Record(..) | Command::Deferred(..)) {
                 pending = self.batch(command, rx);
             } else if let Command::Control(command) = command
                 && self.control(command, &mut state)
@@ -90,9 +105,24 @@ impl Logger {
             let Some(command) = pending.take() else {
                 break;
             };
-            let Command::Record(row, lossy, bytes, ack) = command else {
-                pending = Some(command);
-                break;
+            let (row, lossy, bytes, ack) = match command {
+                Command::Record(row, lossy, bytes, ack) => (row, lossy, bytes, ack),
+                Command::Deferred(make, bytes) => {
+                    let row = Encoded::new(make(), &self.snapshot().effective);
+                    self.0.deferred.fetch_sub(bytes, Ordering::Relaxed);
+                    match row {
+                        Ok(row) => (row, false, 0, None),
+                        Err(error) => {
+                            self.report_error(&error);
+                            pending = rx.try_recv().ok();
+                            continue;
+                        }
+                    }
+                }
+                command => {
+                    pending = Some(command);
+                    break;
+                }
             };
             if !lossy {
                 self.0.queue.bytes.fetch_sub(bytes, Ordering::Relaxed);
@@ -152,11 +182,15 @@ impl Logger {
                 let _ = reply.send(result);
             }
             Control::Clear(reply) => {
-                let _ = reply.send(self.0.storage.lock().clear());
+                let _ = reply.send(self.clear_storage());
             }
             Control::Shutdown(reply) => {
-                let result = self.0.storage.lock().close();
+                let result = self.close(true);
                 let _ = reply.send(result);
+                return true;
+            }
+            Control::ShutdownBounded(reply) => {
+                let _ = reply.send(self.close(false));
                 return true;
             }
             #[cfg(feature = "e2e-fixtures")]
@@ -174,5 +208,26 @@ impl Logger {
             }
         }
         false
+    }
+    fn close(&self, durable: bool) -> io::Result<()> {
+        #[cfg(feature = "e2e-fixtures")]
+        close_delay();
+        let mut storage = self.0.storage.lock();
+        if durable {
+            storage.close()
+        } else {
+            storage.close_producer()
+        }
+    }
+}
+
+/// Model a stuck close without blocking a Tokio worker or changing shipped builds.
+#[cfg(feature = "e2e-fixtures")]
+fn close_delay() {
+    if let Some(delay) = std::env::var("BUTLER_E2E_LOG_CLOSE_DELAY_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+    {
+        std::thread::sleep(Duration::from_millis(delay));
     }
 }

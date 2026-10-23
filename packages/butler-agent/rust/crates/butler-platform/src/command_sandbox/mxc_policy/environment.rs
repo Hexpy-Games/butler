@@ -168,8 +168,19 @@ pub fn credential_roots(env: &BTreeMap<String, String>) -> Result<Vec<WinPath>, 
     if let Some(path) = get(env, "CODEX_AUTH_JSON").filter(|p| !p.is_empty()) {
         roots.push(WinPath::categorized(path, "CODEX_AUTH_JSON")?);
     }
+    append_butler_roots(env, &mut roots)?;
+    Ok(roots)
+}
+
+fn append_butler_roots(
+    env: &BTreeMap<String, String>,
+    roots: &mut Vec<WinPath>,
+) -> Result<(), String> {
     if let Some(data) = get(env, "BUTLER_DATA") {
         let data = WinPath::categorized(data, "BUTLER_DATA")?;
+        for path in crate::data_paths::GATEWAY_CREDENTIAL_DIRS {
+            roots.push(data.join(path)?);
+        }
         for key in [
             "BUTLER_CODEX_AUTH_PROFILE",
             "BUTLER_OPENAI_AUTH_PROFILE",
@@ -183,5 +194,5 @@ pub fn credential_roots(env: &BTreeMap<String, String>) -> Result<Vec<WinPath>, 
             }
         }
     }
-    Ok(roots)
+    Ok(())
 }

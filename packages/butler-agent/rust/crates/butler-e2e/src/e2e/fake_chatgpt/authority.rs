@@ -19,8 +19,11 @@ pub(super) fn router(state: Arc<Authority>) -> Router {
         .route("/v1/models", get(super::models::list))
         .with_state(state)
 }
-async fn discovery(State(state): State<Arc<Authority>>) -> Json<serde_json::Value> {
-    state.record("discovery", &BTreeMap::new());
+async fn discovery(
+    State(state): State<Arc<Authority>>,
+    headers: axum::http::HeaderMap,
+) -> Json<serde_json::Value> {
+    state.record("discovery", &BTreeMap::new(), &headers);
     let issuer = &state.issuer;
     Json(
         json!({"issuer":issuer,"authorization_endpoint":format!("{issuer}/api/accounts/authorize"),
@@ -28,15 +31,19 @@ async fn discovery(State(state): State<Arc<Authority>>) -> Json<serde_json::Valu
         "jwks_uri":format!("{issuer}/.well-known/jwks.json")}),
     )
 }
-async fn jwks(State(state): State<Arc<Authority>>) -> Json<serde_json::Value> {
-    state.record("jwks", &BTreeMap::new());
+async fn jwks(
+    State(state): State<Arc<Authority>>,
+    headers: axum::http::HeaderMap,
+) -> Json<serde_json::Value> {
+    state.record("jwks", &BTreeMap::new(), &headers);
     Json(tokens::jwks())
 }
 async fn authorize(
     State(state): State<Arc<Authority>>,
+    headers: axum::http::HeaderMap,
     Query(params): Query<BTreeMap<String, String>>,
 ) -> Response {
-    state.record("authorize", &params);
+    state.record("authorize", &params, &headers);
     if !valid_authorize(&params) {
         return StatusCode::BAD_REQUEST.into_response();
     }
@@ -136,9 +143,10 @@ fn valid_authorize(p: &BTreeMap<String, String>) -> bool {
 }
 async fn revoke(
     State(state): State<Arc<Authority>>,
+    headers: axum::http::HeaderMap,
     Form(params): Form<BTreeMap<String, String>>,
 ) -> StatusCode {
-    state.record("revoke", &params);
+    state.record("revoke", &params, &headers);
     if state.faults().revoke_503 {
         StatusCode::SERVICE_UNAVAILABLE
     } else {

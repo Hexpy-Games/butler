@@ -97,6 +97,7 @@ impl AppServer {
         owners: AppServerOwners,
         listener: TcpListener,
     ) -> Result<Self, BtccError> {
+        app_config.validate()?;
         let artifacts = Arc::new(AppMessageFiles::new(
             data_root,
             super::schedule_clock::clock(),
@@ -150,6 +151,12 @@ impl AppServer {
         runtime.answer_drafts.set_sink(Arc::new(move |payload| {
             if let Some(application) = draft_application.upgrade() {
                 application.publish_answer_draft(payload);
+            }
+        }));
+        let thinking_application = Arc::downgrade(&application);
+        runtime.thinking.set_sink(Arc::new(move |payload| {
+            if let Some(application) = thinking_application.upgrade() {
+                application.publish_thinking(payload);
             }
         }));
         let gateway_config = gateway_config(app_config, data_root, installation, owners.local_auth);
@@ -284,7 +291,7 @@ fn gateway_config(
     let mut config = app_config.gateway_config();
     config.local_auth = local_auth;
     config.output_data = Some(data_root.to_path_buf());
-    config.favicon_cache_root = Some(data_root.join("cache/favicons"));
+    config.favicon_cache_root = Some(data_root.join(butler_platform::data_paths::FAVICONS));
     config.static_ui_root = Some(installation.resources().join("app-client/dist"));
     config.security_store = Some(Arc::new(AppSecurityStore::new(
         data_root.to_path_buf(),

@@ -5,7 +5,7 @@ import type { AppModelSummary, ModelCatalogView } from "../../packages/butler-ap
 /** Only external authentication/discovery is stubbed; settings and completion stay durable in the native gateway. */
 export async function firstRunStub(gateway: NativeAppServerHandle) {
   const state = {
-    oauthStatus: "pending", label: "yeonwoo@example.com", started: 0, cancelled: 0,
+    oauthStatus: "pending", label: "person@example.test", started: 0, cancelled: 0,
     holdCommit: false, failCommit: false, readiness: "ready", local: false, localCalls: 0, localModels: 1,
     importEmpty: false, importRuns: 0, importUndos: 0, agentSources: [] as string[], agentRequests: [] as Record<string, unknown>[], agentPassthrough: false,
     memoryModel: "unset" as "unset" | "off" | "ready",

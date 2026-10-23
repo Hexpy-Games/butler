@@ -10,7 +10,7 @@ use crate::host::service::shutdown_trace::measure;
 use crate::host::{AgentRuntime, ServiceConfiguration, SystemIdentity};
 
 pub(super) async fn deliver_parent_results(
-    client: &reqwest::Client,
+    client: &butler_log::http::Client,
     repository: &butler_turn::btcc::SqliteSubsessionRepository,
     base: &str,
     auth: &butler_gateway::gateway::LocalAuthConfig,
@@ -90,10 +90,14 @@ pub(super) fn failure(code: impl Into<String>, message: impl Into<String>) -> Bt
 pub(super) async fn close_runtime(runtime: Arc<AgentRuntime>) -> Result<(), BtccError> {
     match Arc::try_unwrap(runtime) {
         Ok(runtime) => runtime.close().await,
-        Err(_) => Err(failure(
-            "native_runtime_owner_leaked",
-            "Native runtime has an owner after service shutdown",
-        )),
+        Err(runtime) => {
+            // A leaked Arc must not bypass producer drain and final storage close.
+            let _ = runtime.close().await;
+            Err(failure(
+                "native_runtime_owner_leaked",
+                "Native runtime has an owner after service shutdown",
+            ))
+        }
     }
 }
 
@@ -197,11 +201,17 @@ pub(super) async fn acquire_instance(
             supervised,
         )
     };
-    let instance = if butler_platform::secure_fs::OWNER_ONLY {
-        acquire()
-    } else {
-        tokio::task::spawn_blocking(acquire).await.map_err(io)?
-    };
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    tokio::task::spawn_blocking(move || {
+        // Cancellation may precede completion of the starting record write.
+        // Release an undelivered guard here, before this blocking job ends.
+        if let Err(Ok(instance)) = sender.send(acquire()) {
+            instance.release();
+        }
+    })
+    .await
+    .map_err(io)?;
+    let instance = receiver.await.map_err(io)?;
     instance.map_err(|message| {
         failure("native_service_instance_unavailable", message.to_string()).with_source(message)
     })
@@ -257,6 +267,7 @@ pub(super) async fn open_runtime(
         AgentRuntime::open(
             RuntimePaths {
                 data_root: config.data_root.clone(),
+                requested_data_root: config.requested_data_root.clone(),
                 installation_root: config.installation.root().to_path_buf(),
                 executable_path: config.installation.executable().to_path_buf(),
                 resource_root: config.installation.resources().to_path_buf(),

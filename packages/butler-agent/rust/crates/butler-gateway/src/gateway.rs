@@ -43,8 +43,8 @@ pub use crate::gateway::inbound_queue::{
 };
 pub use crate::gateway::message_file_store::AppMessageFiles;
 pub use application::settings::{
-    DiagnosticsSettingsReader, command_sandbox_enabled, diagnostics_enabled_readonly,
-    startup_log_config, stored_ui_language_readonly,
+    command_sandbox_enabled, diagnostics_enabled_readonly, producer_log_config, startup_log_config,
+    stored_ui_language_readonly,
 };
 pub use application::{
     AppAdmissionAuthority, AppApplication, AppApplicationConfig, AppApplicationDependencies,
@@ -54,8 +54,8 @@ pub use application::{
     AppBranchSummaryInput, AppCancellation, AppChatKind, AppChatSummary, AppContextBudgetFacts,
     AppContextConfigurationFacts, AppContextReadFacts, AppContextReadPort, AppContextReadQuery,
     AppContextUsage, AppCreateProjectRequest, AppCreateProjectResult, AppCreateSessionInput,
-    AppCreateSessionRequest, AppCreateSessionResult, AppDeveloperLogsQuery, AppExecutorReadiness,
-    AppFileDownload, AppFileUpload, AppFileWrite, AppGrantRef, AppGrantView, AppIdentityClock,
+    AppCreateSessionRequest, AppCreateSessionResult, AppExecutorReadiness, AppFileDownload,
+    AppFileUpload, AppFileWrite, AppGrantRef, AppGrantView, AppIdentityClock,
     AppLedgerSourceRequest, AppLibraryChange, AppLibraryCommand, AppLibraryQuery, AppMemoryCommand,
     AppMemoryPort, AppMessageFileSnapshot, AppMessageFileStorage, AppModelCatalogCommand,
     AppModelCatalogPort, AppModelFallbackFacts, AppModelMetadata, AppMonitorPage,
@@ -86,14 +86,16 @@ pub use application::{
     AppSettingsFacts, AppSettingsFactsProvider, AppSettingsMutationPort, AppSourceDocument,
     AppSourceSnapshotRequest, AppSpaceCommand, AppSpaceMutationResult, AppSpaceOrigin,
     AppStartTopicConversationRequest, AppSubsessionPort, AppTaskGraphQuery, AppTurn,
-    AppUsageMonitorQuery, AppUsageMonitorView, AppWorkOperationalNoticeFact, AppWorkProgress,
-    AppWorkStatusConversationFact, AppWorkStreamQuery, AppWorkStreamReader,
-    AppWorkStreamTurnOutcome, AppWorkerActivityQuery, AppWorkerActivitySourcePage,
-    AppWorkspaceMode, ArtifactFileCandidate, ArtifactMaterializationRequest, ClaimedNativeSnapshot,
+    AppUsageMonitorQuery, AppUsageMonitorView, AppWorkModelConflict, AppWorkModelEvent,
+    AppWorkModelPort, AppWorkModelRequest, AppWorkModelResource, AppWorkModelScope,
+    AppWorkOperationalNoticeFact, AppWorkProgress, AppWorkStatusConversationFact,
+    AppWorkStreamQuery, AppWorkStreamReader, AppWorkStreamTurnOutcome, AppWorkerActivityQuery,
+    AppWorkerActivitySourcePage, AppWorkspaceMode, ArtifactFileCandidate,
+    ArtifactMaterializationRequest, ArtifactMaterializationResult, ClaimedNativeSnapshot,
     EnqueueReceipt, MaterializedResponderFile, MemoryEventSink, OperationOutputChunk,
     OperationOutputView, ProjectSnapshot, ResolvedNativeAssets, TranscriptExport,
-    VisualAdmissionRequest, project_task_graphs, task_graph_label, task_graph_model_label,
-    task_graph_response,
+    UnavailableWorkModel, VisualAdmissionRequest, project_task_graphs, task_graph_label,
+    task_graph_model_label, task_graph_response,
 };
 pub use application::{
     AppCardInput, AppProfileInput, AppSignInCommand, AppSignInUpsert, AppVaultCommand,
@@ -154,6 +156,12 @@ pub use session_controls_contract::GatewaySessionControls;
 ///
 /// Every method is required. Composition cannot replace absent persistence or
 /// BTCC readiness with process-liveness guesses or an optional callback.
+mod data_reset;
+pub use data_reset::{AppDataResetPort, FullResetRequest, ResetNonce};
+
+mod browser_still_delivery;
+pub use browser_still_delivery::AppBrowserStillCommand;
+
 pub trait GatewayApplication:
     GatewayMutationCommands
     + GatewayProjectDashboard
@@ -165,6 +173,19 @@ pub trait GatewayApplication:
     + Sync
     + 'static
 {
+    fn browser_still(
+        &self,
+        command: AppBrowserStillCommand,
+    ) -> ApplicationFuture<serde_json::Value> {
+        let _ = command;
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    fn data_reset(&self) -> Option<Arc<dyn AppDataResetPort>> {
+        None
+    }
+    fn accept_full_reset(&self, _input: serde_json::Value) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     /// Read a bounded page of saved browser items.
     fn library(&self, command: AppLibraryCommand) -> ApplicationFuture<serde_json::Value> {
         let _ = command;
@@ -257,10 +278,6 @@ pub trait GatewayApplication:
         chat_id: String,
     ) -> ApplicationFuture<AppWorkStatusConversationFact>;
     fn list_system_events(&self, page: AppMonitorPage) -> ApplicationFuture<serde_json::Value>;
-    fn list_developer_logs(
-        &self,
-        query: AppDeveloperLogsQuery,
-    ) -> ApplicationFuture<serde_json::Value>;
     fn read_app_info(&self) -> ApplicationFuture<serde_json::Value>;
     fn model_catalog(
         &self,
@@ -408,6 +425,9 @@ pub trait GatewayApplication:
         &self,
         turn_id: String,
     ) -> ApplicationFuture<MessageSendResult>;
+    fn work_model(&self, _request: AppWorkModelRequest) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn task_graph_read(&self, _query: AppTaskGraphQuery) -> ApplicationFuture<serde_json::Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
@@ -476,3 +496,5 @@ pub use application::project_folder;
 pub fn http_route_templates() -> Vec<&'static str> {
     http::route_templates()
 }
+
+pub use http::reset_browser_secret_keys;

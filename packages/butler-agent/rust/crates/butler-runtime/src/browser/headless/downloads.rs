@@ -23,7 +23,8 @@ pub type PortFuture = Pin<Box<dyn Future<Output = Result<Value, String>> + Send>
 pub trait DownloadPort: Send + Sync {
     /// `{workspace_path, turn_id, message_id}` for the conversation.
     fn prepare(&self, session: String) -> PortFuture;
-    /// Publishes `downloads/<filename>` as a session output: `{output_id, view}`.
+    /// Publishes `downloads/<filename>` as a session output: `{output_id, view}`,
+    /// or `{skipped_files}` when the file is refused as a credential.
     fn publish(
         &self,
         session: String,
@@ -103,7 +104,7 @@ fn copy_new(from: &Path, to: &Path) -> io::Result<()> {
 
 impl Downloads {
     pub(crate) fn new(root: &Path) -> Arc<Self> {
-        let directory = root.join("downloads");
+        let directory = root.join(butler_platform::data_paths::DOWNLOADS);
         let totals = std::fs::read(directory.join("budget.json"))
             .ok()
             .and_then(|bytes| serde_json::from_slice::<HashMap<String, u64>>(&bytes).ok())
@@ -318,7 +319,7 @@ impl Downloads {
         let context = port.prepare(session.clone()).await?;
         let root = std::fs::canonicalize(context["workspace_path"].as_str().unwrap_or(""))
             .map_err(|e| e.to_string())?;
-        let directory = root.join("downloads");
+        let directory = root.join(butler_platform::data_paths::DOWNLOADS);
         std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
         if std::fs::canonicalize(&directory).map_err(|e| e.to_string())? != directory {
             return Err("download_symlink_refused".into());

@@ -42,14 +42,25 @@ export function readAppLocalAuth({ butlerData }) {
   };
 }
 
+/**
+ * The Agent's full reset journal. While it exists the Agent may still move
+ * the data folder away and then writes a new token itself.
+ */
+export function fullResetPending({ butlerData }) {
+  return existsSync(join(butlerData, "state", "full-reset.json"));
+}
+
 export function prepareAppLocalAuth({
   butlerData,
+  readOnly = false,
   now = () => new Date(),
   generateToken = () => randomBytes(32).toString("base64url"),
 }) {
   const path = appLocalAuthPath(butlerData);
   const existing = readAppLocalAuth({ butlerData });
   if (existing) return existing;
+  // Refused or resetting data folders are read-only; reuse a token only if one exists.
+  if (readOnly || fullResetPending({ butlerData })) return { filePath: path, created: false, token: null };
   const token = generateToken();
   if (typeof token !== "string" || token.length < 32) {
     throw new Error("App local auth token generation failed");
@@ -100,6 +111,7 @@ export function buildBundledAgentSupervisorEnv({
 
 export function createBundledAgentSupervisor({
   butlerData,
+  readOnly = false,
   resolveGateway,
   spawnProcess,
   healthCheck,
@@ -174,7 +186,15 @@ export function createBundledAgentSupervisor({
   let lastExited = null;
   let pollTimer = null;
 
+  function assertWritable() {
+    if (!readOnly) return;
+    const error = new Error("legacy_data_blocked");
+    error.code = "legacy_data_blocked";
+    throw error;
+  }
+
   async function ensureReady() {
+    assertWritable();
     for (;;) {
       const generation = restartGeneration;
       try {
@@ -199,7 +219,7 @@ export function createBundledAgentSupervisor({
   }
 
   async function ensureReadyOnce() {
-    localAuth = localAuth ?? prepareAppLocalAuth({ butlerData });
+    localAuth = localAuth ?? prepareAppLocalAuth({ butlerData, readOnly });
     if (explicitServerUrl) {
       await waitForExplicitServerReady();
       return;
@@ -379,7 +399,9 @@ export function createBundledAgentSupervisor({
     rememberChildInstance();
   }
 
-  async function start(gateway = resolveGateway()) {
+  async function start(gateway) {
+    assertWritable();
+    if (gateway === undefined) gateway = resolveGateway();
     if (child) {
       recordError("already_starting");
       throw new Error("Butler app server is already starting but is not healthy yet.");
@@ -391,7 +413,7 @@ export function createBundledAgentSupervisor({
     childSpawnError = null;
     childInstance = null;
     attached = null;
-    localAuth = localAuth ?? prepareAppLocalAuth({ butlerData });
+    localAuth = localAuth ?? prepareAppLocalAuth({ butlerData, readOnly });
     onGatewayStarting(gateway);
     const env = buildBundledAgentSupervisorEnv({
       baseEnv,
@@ -823,7 +845,7 @@ export function createBundledAgentSupervisor({
   }
 
   function authHeaders() {
-    localAuth = localAuth ?? prepareAppLocalAuth({ butlerData });
+    localAuth = localAuth ?? prepareAppLocalAuth({ butlerData, readOnly });
     return localAuth.token
       ? { authorization: `Bearer ${localAuth.token}` }
       : {};
@@ -897,9 +919,13 @@ export function createBundledAgentSupervisor({
     if (!healthy) {
       return { healthy: false, ready: false, timedOut: health.timedOut };
     }
-    const readiness = await runBoundedProbe(() =>
+    let readiness = await runBoundedProbe(() =>
       readinessCheck(localAuth, activeGateway, portOverride),
     );
+    // The Agent may have written a new token (a reset) after health passed.
+    if (!readiness.value && reloadLocalAuth()) {
+      readiness = await runBoundedProbe(() => readinessCheck(localAuth, activeGateway, portOverride));
+    }
     return {
       healthy: true,
       ready: readiness.value,

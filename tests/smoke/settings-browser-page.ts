@@ -44,7 +44,7 @@ async function matrix(locale: "ko" | "en", theme: "light" | "dark") {
     assert.equal(await section(page, "sign-ins").count(), 0);
     assert.equal(await section(page, "browser-import").count(), 0);
     assert.equal(await section(page, "headless-browser").count(), 0);
-    for (const id of ["grants", "saved-keys", "diagnostics"]) await section(page, id).waitFor();
+    for (const id of ["grants", "saved-keys"]) await section(page, id).waitFor();
   } else {
     await section(page, "sign-ins").locator('[data-test-class="sign-in-row"]').waitFor();
     await section(page, "browser-import").getByText(copy.settings.browserImport.passwords, { exact: true }).waitFor();
@@ -57,7 +57,7 @@ async function matrix(locale: "ko" | "en", theme: "light" | "dark") {
     await open("browser", copy.settings.sections.browser);
     await section(page, "sign-ins").locator('[data-test-class="sign-in-row"]').waitFor();
     await section(page, "browser-import").getByText(copy.settings.browserImport.passwords, { exact: true }).waitFor();
-    assert.deepEqual(await page.locator("[data-settings-section-id]").evaluateAll(nodes => nodes.map(n => n.getAttribute("data-settings-section-id"))), ["browser-history", "sign-ins", "browser-import"]);
+    assert.deepEqual(await page.locator("[data-settings-section-id]").evaluateAll(nodes => nodes.map(n => n.getAttribute("data-settings-section-id"))), ["browser-history", "sign-ins", "browser-import", "payment-methods", "profiles", "purchase-sites"]);
     await capture(`browser-${key}`);
     const group = page.getByText(copy.settings.groups.appAndSystem, { exact: true }).locator("..");
     assert(await group.count(), "app and system group remains visible");

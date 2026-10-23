@@ -106,6 +106,7 @@ impl ModelConfiguration {
                 .get(format!("{}/models", self.chatgpt_api_base()))
                 .timeout(std::time::Duration::from_secs(10))
                 .header("authorization", authorization.as_str())
+                .purpose(butler_log::http::Purpose::new("provider_models"))
                 .send()
                 .await
                 .map_err(|_| "provider_model_unavailable")?;
@@ -157,7 +158,6 @@ impl ModelConfiguration {
         let auth = super::super::auth::AuthOwner {
             data_root: &self.data_root,
             environment: &environment,
-            client: &self.client,
             clock: &self.clock,
             revision: &self.account_revision,
         }

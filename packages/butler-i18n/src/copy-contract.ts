@@ -289,6 +289,7 @@ interface ConversationCopy {
   };
   work: ConversationWorkCopy;
   stoppedStatus: string;
+  attachmentUnavailable: string;
   fileChanges: {
     regionLabel: string;
     title: string;
@@ -324,7 +325,7 @@ export interface BrowserCopy {
     copy: string; selectAll: string; paste: string;
   };
   history: { erase: string; title: string; search: string; clear: string; butlerOnly: string; empty: string; hour: string; today: string; week: string; all: string; suggestions: string; };
-  tabCount: string; tabMoved: string; agentControl: string; handBack: string; stills: string; still: string;
+  tabCount: string; tabMoved: string; agentControl: string; handBack: string; stills: string; still: string; stillPending: string; stillUnavailable: string; stillFailure: Record<string, string>;
   title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string;
   reload: string; stop: string; loading: string; crashed: string; empty: string; conversationEmpty: string; updateRequired: string; restartRequired: string; failed: string;
   openOutput: string; output: string; show: string; hide: string; active: string; openConversation: string; moveToConversation: string;
@@ -377,6 +378,41 @@ export interface LibraryCopy {
   bulkTagsTitle: (count: number) => string; source: string; saved: string; size: string; none: string; cancel: string; create: string;
   save: string; move: string; close: string; deleteItem: string; tileLabel: (name: string, meta: string) => string;
   deleteSelected: (count: number) => string; deleteSelectedBody: string; selectionActions: string;
+}
+
+/** Span names the message trace titles in the reader's language. */
+export type TraceStepName =
+  | "http.server" | "turn.admit" | "turn.queue" | "turn.dispatch" | "turn.run" | "turn.deliver"
+  | "route.select" | "context.build" | "model.request" | "retry.wait" | "http.request" | "stream.receive"
+  | "tool.call" | "mcp.call" | "memory.write" | "memory.recall" | "schedule.run";
+
+/** Settings › 로그 › 메시지 추적 and its 로그 보기 entry points. */
+export interface LogTraceCopy {
+  title: string;
+  viewLogs: string;
+  /** A schedule's overflow menu: its latest run that started a turn. */
+  latestRunLogs: string;
+  openCommand: string;
+  openCommandHint: string;
+  viewWhole: string;
+  sections: { summary: string; steps: string };
+  fields: Record<"result" | "duration" | "model" | "started" | "chat" | "traceId", string>;
+  outcome: Record<"ok" | "error", string>;
+  retries: (count: number) => string;
+  failed: string;
+  wait: string;
+  running: string;
+  partial: string;
+  notFound: string;
+  loadFailed: string;
+  copyId: string;
+  seconds: (value: string) => string;
+  spoken: (start: string, length: string) => string;
+  depth: (level: number) => string;
+  /** Step titles by span name; other names show the agent's own title. */
+  steps: Record<TraceStepName, string>;
+  /** Detail labels by attribute key; other keys show as written. */
+  attrs: Record<string, string>;
 }
 
 /** Browser copy (`browser.*`): chrome, page band, pointer, picking, library, page dialogs and sign-in settings. */
@@ -492,7 +528,6 @@ export interface AppCopy {
     noSpecs: string;
     uiCrashed: string;
     panelCrashed: string;
-    copyDiagnostics: string;
     retry: string;
     reload: string;
     custom: string;
@@ -729,6 +764,7 @@ export interface AppCopy {
     relocationDescription: (source: string, target: string) => string;
   };
   interfaceStatus: {
+    thinking: string;
     generalCategory: string;
     countSummary: (kind: "filesRead" | "files" | "matches" | "documents" | "results", count: string | number, truncated?: boolean) => string;
     bytes: (count: number) => string;
@@ -925,6 +961,7 @@ export interface AppCopy {
     attachImage: string;
     imagesUnsupported: string;
     imageSupportUnknown: string;
+    imageInputOff: string;
     imageTypeUnsupported: string;
     imageTooLarge: string;
     featureDrawer: string;
@@ -972,6 +1009,8 @@ export interface AppCopy {
     usage: {
       codexProvider: string;
       thisChat: string;
+      conversationPart: string;
+      delegatedPart: string;
       bucketUnit: (hours: number) => string;
       calls: (count: string) => string;
       requests: (count: string) => string;
@@ -1110,6 +1149,7 @@ export interface AppCopy {
       prompt: string;
       interval: string;
       accessMode: string;
+      model: string;
       invalid: string;
     };
     runs: {
@@ -1279,7 +1319,7 @@ export interface AppCopy {
       downloadMeta: string; downloadedBytes: string; cancelled: string;
     };
     updateErrors: Record<"download" | "damaged" | "incompatible" | "storage" | "apply" | "generic", string>;
-    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "agentImport" | "paymentMethods" | "profiles" | "purchaseSites", string>;
+    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "fullReset" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "agentImport" | "paymentMethods" | "profiles" | "purchaseSites", string>;
     pageSectionDescriptions: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "learning" | "grants", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     grants: {
@@ -1291,6 +1331,11 @@ export interface AppCopy {
       targetUnknown: string; deletedChat: string; loadFailed: string; revokeFailed: string;
     };
     modelsAdvanced: { title: string; contents: string };
+    /** Settings > General > reset everything (desktop only); the user types `phrase` to confirm. */
+    fullReset: {
+      label: string; description: string; action: string; title: string; body: string; removed: string; kept: string;
+      field: (phrase: string) => string; phrase: string; confirm: string; mismatch: string; resetting: string; desktopOnly: string;
+    };
     memory: {
       reset: string; resetChatTitle: string; resetProfileTitle: string; resetProjectTitle: string;
       resetBody: string; resetProfileBody: string; resetProjectBody: string; removed: string; kept: string;
@@ -1318,7 +1363,6 @@ export interface AppCopy {
       mcpServers: string;
       skills: string;
       usageMonitor: string;
-      developerLogs: string;
       systemEvents: string;
       archives: string;
       about: string;
@@ -1434,6 +1478,7 @@ export interface AppCopy {
       model: string;
       reasoning: string;
       theme: string;
+      showThinking: string;
       conversationBackground: string; conversationOverlay: string; conversationPlain: string;
       wallpaper: string;
       wallpaperMotion: string;
@@ -1450,7 +1495,6 @@ export interface AppCopy {
       bridgeMode: string;
       serverUrl: string;
       defaultProjectFolder: string;
-      diagnostics: string;
       appName: string;
       appVersion: string;
       appRepository: string;
@@ -1566,8 +1610,6 @@ export interface AppCopy {
       mcpServers: string;
       mcpSecrets: string;
       skills: string;
-      developerLogs: string;
-      developerLogsEmpty: string;
       searchSettings: string;
       searchProvider: string;
       searchProviderApiKey: (envVar: string) => string;
@@ -1580,42 +1622,60 @@ export interface AppCopy {
       desktopTray: string;
       developerMode: string;
     };
-    developerLogViewer: {
-      filters: {
-        allKinds: string;
-        modelTurn: string;
-        modelTurnError: string;
-      };
-      tabs: {
-        context: string;
-        request: string;
-        response: string;
-        metadata: string;
-      };
-      labels: {
-        sections: (count: number) => string;
-        contextChars: (count: string) => string;
-        responseChars: (count: string) => string;
-        liveConfig: string;
-        sectionCount: string;
-        references: string;
-        promptChars: string;
-        renderedPromptContext: string;
-        input: string;
-        text: string;
-        raw: string;
-        provider: string;
-        runtime: string;
-        routeReason: string;
-        project: string;
-        rawText: string;
-        secrets: string;
-        route: string;
-        included: string;
-        excluded: string;
-        redacted: string;
-        notRedacted: string;
-      };
+    logs: {
+      sections: { level: string; viewer: string; storage: string };
+      levelLabel: string;
+      levels: Record<"minimal" | "standard" | "detailed" | "full", string>;
+      levelMeta: Record<"minimal" | "standard" | "detailed" | "full", string>;
+      fullConfirmTitle: string;
+      fullConfirmBody: string;
+      fullConfirm: string;
+      fullActive: (minutes: number) => string;
+      turnOff: string;
+      freed: (size: string) => string;
+      categories: string;
+      categoriesChanged: (count: number) => string;
+      categoryInherit: string;
+      severity: Record<"error" | "warn" | "info" | "debug" | "trace", string>;
+      search: string;
+      filters: { level: string; source: string; category: string; period: string };
+      allLevels: string;
+      allSources: string;
+      allCategories: string;
+      sources: Record<"app" | "agent", string>;
+      periods: Record<"hour" | "day" | "week" | "all", string>;
+      live: string;
+      liveLost: string;
+      newLines: (count: number) => string;
+      empty: string;
+      loadFailed: string;
+      tabs: { request: string; response: string; json: string };
+      fields: Record<"time" | "message" | "level" | "category" | "process" | "event" | "duration" | "trace" | "span" | "chat" | "turn" | "error" | "method" | "url" | "status" | "headers" | "body", string>;
+      bodyUnavailable: string;
+      bodyFailed: string;
+      copy: string;
+      copied: string;
+      copyJson: string;
+      stores: Record<"app" | "main" | "debug" | "bodies", string>;
+      storeMeta: (used: string, limit: string, retention: string) => string;
+      retentionHours: (hours: number) => string;
+      retentionDays: (days: number) => string;
+      exportMenu: string;
+      exportTitle: string;
+      exportRange: string;
+      includeBodies: string;
+      exportAction: string;
+      exported: string;
+      exportFailed: string;
+      clearMenu: string;
+      clearTitle: string;
+      clearBody: string;
+      cleared: (size: string) => string;
+      clearFailed: string;
+      diagnosticsLabel: string;
+      diagnosticsDescription: string;
+      diagnosticsExport: string;
+      trace: LogTraceCopy;
     };
     nativeNotifications: {
       status: {
@@ -1639,6 +1699,12 @@ export interface AppCopy {
       remoteAccessDescription: string;
       addresses: string;
       noAddresses: string;
+      bindErrors: {
+        address_in_use: string;
+        permission_denied: string;
+        address_unavailable: string;
+        bind_failed: string;
+      };
       copyAddress: string;
       copied: string;
       code: string;
@@ -1754,8 +1820,6 @@ export interface AppCopy {
       mcpArgs: string;
       mcpEnv: string;
       mcpHeaders: string;
-      developerLogSearch: string;
-      developerLogSession: string;
     };
     errors: {
       saveFailed: string;
@@ -1771,7 +1835,6 @@ export interface AppCopy {
       loadUpdates: string;
       checkUpdates: string;
       applyUpdate: string;
-      loadDeveloperLogs: string;
     };
     localModels: {
       apiKey: string;
@@ -1803,6 +1866,7 @@ export interface AppCopy {
       modelId: string;
       displayName: string;
       maxContext: string;
+      imageInput: string;
       registeredLocalModels: string;
       customOpenAiCompatible: string;
       discoveredStatus: (count: number) => string;
@@ -2074,12 +2138,16 @@ export interface AppCopy {
     attachmentFailed: string;
     attachmentRetry: (names: string) => string;
     attachmentTooLarge: string;
+    attachmentEmpty: (names: string) => string;
     attachmentSizeLimit: (names: string, limit: string) => string;
     reconnecting: string;
     reconnectingShort: string;
     agentStopped: string;
     agentRestarting: string;
     agentRestartFailed: string;
+    /** A browser client saw the desktop app reset Butler. */
+    agentReset: string;
+    reconnect: string;
     agentStart: string;
     agentStartFailed: string;
     dashboardLoading: string;

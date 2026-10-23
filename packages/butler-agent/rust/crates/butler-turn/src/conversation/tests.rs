@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use serde_json::json;
 
 use super::admission::{
-    AdmissionEventVisibility, AdmissionMetric, CompletionMetric, CompletionObservation,
+    AdmissionEventVisibility, AdmissionMetric, CompletionObservation,
     ConversationAdmissionObserver, ConversationAdmissionTurnInput, ConversationEnvelope,
     ConversationObserverFuture, ConversationOriginFacts, DurableSessionBinding,
     RuntimeAdmissionEvent, classify_conversation_origin,
@@ -56,7 +56,6 @@ impl ConversationLocaleCollation for TestCollation {
 struct TestObserver {
     admissions: AtomicU64,
     completions: AtomicU64,
-    metrics: AtomicU64,
 }
 
 impl ConversationAdmissionObserver for TestObserver {
@@ -67,11 +66,6 @@ impl ConversationAdmissionObserver for TestObserver {
 
     fn completion_observation(&self, _: CompletionObservation) -> ConversationObserverFuture<'_> {
         self.completions.fetch_add(1, AtomicOrdering::Relaxed);
-        Box::pin(async { Ok(()) })
-    }
-
-    fn completion_metric(&self, _: CompletionMetric) -> ConversationObserverFuture<'_> {
-        self.metrics.fetch_add(1, AtomicOrdering::Relaxed);
         Box::pin(async { Ok(()) })
     }
 }

@@ -5,7 +5,6 @@ use std::path::Path;
 
 mod conversation_metrics;
 mod cycle_metrics;
-mod developer_log;
 mod install;
 mod log_redaction;
 mod log_tail;
@@ -18,14 +17,12 @@ mod service_readiness;
 mod status_summary;
 mod update;
 mod usage_cost;
+mod usage_owners;
+pub use usage_owners::{UsageLineage, UsageOwners, UsageScope};
 mod web_search_metrics;
 
 pub use conversation_metrics::{AdmissionMeasure, ConversationMetrics};
 pub use cycle_metrics::CycleMetrics;
-pub use developer_log::{
-    DeveloperDiagnosticsSettingsPort, DeveloperLogStore, DeveloperLogWriteAuthority,
-    OperationsDeveloperLogCapture,
-};
 pub use install::{
     Activated, AgentHome, BINARY, HomeLock, HomeRemoval, Installed, InstalledVersion,
     LauncherPaths, LauncherState, LauncherSync, RESOURCES, Switched, sha256_file, sha256_tree,
@@ -55,8 +52,8 @@ pub use update::{
     UpdateProgress, UpdateProgressSink, UpdateRequest, effective_update_previews, version_newer,
 };
 pub use usage_cost::{
-    CostReason, SessionUsage, SessionUsageIndex, SessionUsageView, UsageCostView, UsageEvent,
-    UsageTotals,
+    CostReason, SessionRoleUsage, SessionUsage, SessionUsageIndex, SessionUsageView, UsageCostView,
+    UsageEvent, UsageTotals,
 };
 pub use web_search_metrics::WebSearchMetrics;
 

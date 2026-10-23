@@ -47,10 +47,11 @@ SITE_CHECK_INPUTS = ('tests/smoke/ds-site-*', 'tests/smoke/font-assets-check.ts'
 SIGNING = ('deploy/macos*', 'packages/butler-app/scripts/release/*',
            'packages/butler-app/client/electron/*',
            'packages/butler-agent/rust/scripts/package-standalone-agent.py',
+           'packages/butler-agent/rust/scripts/check_host_links.py',
            'VERSION', 'package.json', 'bun.lock', 'bun.lockb')
 # Native Windows smoke inputs beyond Rust; other CI configuration stays out.
 WINDOWS = ('deploy/windows**', '.github/workflows/**windows**', '.github/actions/**windows**/**',
-           '.github/actions/rust-agent-setup/**', '.github/scripts/**windows**',
+           '.github/actions/release-python/**', '.github/actions/rust-agent-setup/**', '.github/scripts/**windows**',
            'windows**', '**/windows**', '**/windows**/**',
            'packages/butler-agent/rust/crates/butler-platform/**',
            'packages/butler-agent/rust/crates/butler-e2e/tests/e2e/windows_**')
@@ -69,6 +70,7 @@ CI_LINT_ONLY = (
     '.github/scripts/ci_consumer_test_support.py',
     '.github/scripts/ci_rust_inputs.py', '.github/scripts/ci_input_tests.py',
     '.github/scripts/ci_tier_tests.py', '.github/scripts/ci_receipts.py',
+    '.github/scripts/ci_ds_approval_tests.py',
     '.github/scripts/ci_main_failure.py', '.github/scripts/ci_main_baseline.py',
     '.github/scripts/ci-main-gate.py', '.github/scripts/ci_windows_cascade_tests.py',
     '.github/scripts/ci-check-selected.py', '.github/scripts/ds-approval.py',
@@ -82,12 +84,14 @@ CI_CONSUMERS = (
     (('licenses',), (
         '.github/scripts/test-*.py', '.github/scripts/ds-approval.py',
         '.github/scripts/cargo-artifact-cache.py', '.github/scripts/agent-provenance.py',
-        '.github/scripts/integration-proof.py', '.github/scripts/check-gate.py',
+        '.github/scripts/integration-proof.py', '.github/scripts/recover-release.py',
+        '.github/scripts/check-gate.py',
         '.github/scripts/ci-check-selected.py', '.github/scripts/cargo-target-release.py',
         '.github/scripts/runner_cache.py', '.github/scripts/ci-changes.py',
         '.github/scripts/ci_policy.py', '.github/scripts/ci_parts.py',
         '.github/scripts/ci_consumer_test_support.py', '.github/scripts/ci_rust_inputs.py',
         '.github/scripts/ci_input_tests.py', '.github/scripts/ci_tier_tests.py',
+        '.github/scripts/ci_ds_approval_tests.py',
         '.github/scripts/ci_receipts.py', '.github/scripts/ci_main_failure.py',
         '.github/scripts/ci_main_baseline.py', '.github/scripts/ci-main-gate.py',
         '.github/scripts/ci_windows_cascade_tests.py',
@@ -106,10 +110,12 @@ CI_CONSUMERS = (
         '.github/scripts/agent-provenance.py', '.github/scripts/cargo-artifact-cache.py',
         '.github/scripts/cargo-target-release.py', '.github/scripts/runner_cache.py',
         '.github/scripts/check-gate.py', '.github/scripts/ci_policy.py',
+        '.github/actions/release-python/**',
         '.github/actions/rust-agent-setup/*', '.github/actions/build-agent-archive/*',
         '.github/workflows/linux-packages.yml', '.github/workflows/macos-app-package.yml',
         '.github/scripts/*windows*safety.py', '.github/scripts/prepare-windows-zstd.py')),
     (NATIVE_CI, ('.github/workflows/macos-*.yml',)),
+    (('signing',), ('.github/workflows/macos-selftest.yml',)),
     (('ui',), ('.github/workflows/bun-*.yml',)),
     (NATIVE_CI + ('site', 'ds', 'workflows'), ('.github/actions/bun-setup/*',)),
     (('site', 'ds', 'workflows'), ('.github/workflows/*site*.yml',)),
@@ -117,7 +123,7 @@ CI_CONSUMERS = (
                                '.github/actions/*windows*/**', '.github/scripts/*windows*')),
     (('workflows',), ('.github/actions/build-windows-agent/*',
                       '.github/actions/package-windows-app/*',
-                      '.github/actions/windows-owner-*/*',
+                      '.github/actions/windows-runner-*/*',
                       '.github/actions/windows-preview-gate/*',
                       '.github/workflows/windows-powershell-diagnostics.yml',
                       '.github/workflows/windows-released-smoke.yml')),
@@ -197,6 +203,12 @@ def command(*args):
 
 
 def changed(base, head='HEAD'):
+    # Diff from the merge base so commits that reached the base branch after
+    # this branch forked are not counted as this change's paths.
+    try:
+        base = command('git', 'merge-base', base, head)
+    except subprocess.CalledProcessError:
+        pass
     # --no-renames includes both removed and added paths; NUL handles any name.
     raw = subprocess.check_output(['git', 'diff', '--no-renames', '--name-only', '-z', base, head])
     return raw.decode().split('\0')[:-1]
@@ -267,9 +279,9 @@ ARTIFACTS = {
     'linux-perf-archive': ['perf-rust-linux-x64'],
     'macos-perf-archive': ['perf-rust-darwin-arm64'],
     'linux-arm64-perf-archive': ['perf-rust-linux-arm64'],
-    'linux-native': ['agent-payload-linux-x64', 'agent-perf-fixture-linux-x64'],
-    'macos-native': ['agent-payload-darwin-arm64', 'agent-perf-fixture-darwin-arm64'],
-    'linux-arm64-native': ['agent-payload-linux-arm64', 'agent-perf-fixture-linux-arm64'],
+    'linux-native': ['agent-payload-linux-x64'],
+    'macos-native': ['agent-payload-darwin-arm64'],
+    'linux-arm64-native': ['agent-payload-linux-arm64'],
     'macos-updates': ['macos-update-agent-builds'],
     'install-x64': ['agent-linux-x64', 'butler-npm-x64'], 'install-arm64': ['agent-linux-arm64'],
     'install-macos': ['agent-darwin-arm64'],
@@ -317,6 +329,16 @@ def reuse_inputs(repository, pr, workflow, branch, current, job_inputs, receipts
     except (subprocess.CalledProcessError, ValueError, OSError, KeyError, TypeError) as error:
         print(f'Reuse unavailable ({type(error).__name__}); unmatched checks will run.')
     return reuse, job_reuse
+
+
+def couple_perf_native(job_reuse):
+    # Perf consumes a fixture produced in its own run. Reuse the pair only
+    # when both jobs passed; a partial pair must execute together.
+    for platform in ('linux', 'linux-arm64', 'macos'):
+        pair = (platform + '-native', platform + '-perf')
+        if not all(name in job_reuse for name in pair):
+            for name in pair:
+                job_reuse.pop(name, None)
 
 
 def main_base(workflow):
@@ -379,6 +401,8 @@ def select(event, workflow):
             print(f'Reuse unavailable ({type(error).__name__}); unmatched checks will run.')
             receipts = []
     reuse, job_reuse = reuse_inputs(repository, pr.get('number'), workflow, branch, current, job_inputs, receipts) if smoke_pr or candidate else ({}, {})
+    if candidate and workflow == 'rust-quality.yml':
+        couple_perf_native(job_reuse)
     parts, part_reuse, part_artifacts = ci_parts.select(workflow, job_inputs, receipts or []) if candidate else ({}, {}, [])
     outputs = {group: str(group in required and group not in reuse).lower() for group in GROUPS}
     jobs = {name: name not in job_reuse for name in job_inputs}

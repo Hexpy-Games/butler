@@ -2,16 +2,15 @@
 # Split a function and regenerate: cargo run -p butler-source-check -- --bless .
 # Entries may only shrink or disappear; new entries need review.
 src/capabilities/catalog/bridge.rs	search_native	101
-src/capabilities/catalog/validation.rs	validate	165
 src/capabilities/edit_file.rs	execute	89
 src/capabilities/edit_file/normalize.rs	batch	87
 src/capabilities/edit_file/result.rs	batch_result	112
-src/capabilities/grep_files.rs	execute	111
+src/capabilities/grep_files.rs	execute	107
 src/capabilities/grep_files/args.rs	normalize	94
 src/capabilities/grep_files/response.rs	success	192
 src/capabilities/grep_files/search.rs	execute	121
 src/capabilities/list_files.rs	execute	149
-src/capabilities/read_file.rs	execute	228
+src/capabilities/read_file.rs	execute	208
 src/capabilities/write_file.rs	execute	130
 src/context/compaction.rs	compact_transcript	188
 src/context/conversation/format.rs	compile_prompt_material_context_plan	110
@@ -29,7 +28,6 @@ src/context/tool_output.rs	ToolOutput::new	84
 src/context/tool_output/budget.rs	budget	152
 src/context/tool_output/evidence.rs	read	106
 src/context/tool_output/reader.rs	read	116
-src/operations/developer_log/capture/entry.rs	terminal_entry	147
 src/operations/status_summary/context.rs	read_context_for_session	87
 src/operations/status_summary/health.rs	read_health	83
 src/web_access/html/extraction.rs	markdown_from_html	89

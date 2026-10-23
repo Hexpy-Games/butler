@@ -27,14 +27,13 @@ pub(super) fn seed(data: &Path, chat: &str) -> Result<Expected, HarnessError> {
         "metadata":{"padding":"x".repeat(1800)}
     }))?;
     line.push(b'\n');
-    let rows = 290_000_000 / line.len() as u64 + 1;
+    let rows = 8_192 / line.len() as u64 + 1;
     let mut output = BufWriter::new(fs::File::create(&path)?);
     for _ in 0..rows {
         output.write_all(&line)?;
     }
     output.flush()?;
     // Settled history was acknowledged by an earlier process. Make that true
-    // on disk too: its first new append must not fsync 290 MB of fixture writes.
     let sync_started = std::time::Instant::now();
     output.get_ref().sync_all()?;
     eprintln!(

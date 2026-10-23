@@ -43,6 +43,23 @@ pub struct Output {
     pub turn_id: String,
     pub title: String,
     pub revisions: Vec<Revision>,
+    /// Refused project-relative paths from this publication, never silent loss.
+    /// A publication whose every file was refused returns no revisions.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skipped_files: Vec<String>,
+}
+/// The entry was refused: report the refusals, store and revise nothing.
+fn refused(request: PublishRequest, snapshot: super::snapshot::Snapshot, id: String) -> Output {
+    Output {
+        kind: snapshot.kind,
+        output_id: id,
+        session_id: request.session_id,
+        message_id: request.message_id,
+        turn_id: request.turn_id,
+        title: request.title,
+        revisions: Vec::new(),
+        skipped_files: snapshot.skipped,
+    }
 }
 pub struct PublishRequest {
     pub workspace: PathBuf,
@@ -56,7 +73,7 @@ pub struct PublishRequest {
 impl OutputStore {
     pub fn new(data: &Path) -> Self {
         Self {
-            root: data.join("outputs"),
+            root: data.join(butler_platform::data_paths::OUTPUTS),
         }
     }
     fn manifest(&self, id: &str) -> std::io::Result<PathBuf> {
@@ -97,14 +114,28 @@ impl OutputStore {
         super::index::messages(&self.root.join("index.sqlite"), session, turns)
     }
     pub fn publish(&self, request: PublishRequest) -> std::io::Result<(Output, usize)> {
+        let data = self.root.parent().ok_or_else(|| error("data_root"))?;
+        self.publish_with_inventory(
+            request,
+            &butler_platform::secure_fs::SecretInventory::cached(data),
+        )
+    }
+    pub fn publish_with_inventory(
+        &self,
+        request: PublishRequest,
+        inventory: &butler_platform::secure_fs::SecretInventory,
+    ) -> std::io::Result<(Output, usize)> {
         let _lock = CHANGES
             .lock()
             .map_err(|_| error("output_store_unavailable"))?;
         if request.title.chars().count() > 200 {
             return Err(error("output_title_too_long"));
         }
-        let snapshot = super::snapshot::collect(&request)?;
+        let snapshot = super::snapshot::collect(&request, inventory)?;
         let id = self.publication_id(&request.session_id, &snapshot.source)?;
+        if snapshot.files.is_empty() {
+            return Ok((refused(request, snapshot, id), 0));
+        }
         let path = self.manifest(&id)?;
         let mut output = if path.exists() {
             self.read(&id)?
@@ -117,8 +148,10 @@ impl OutputStore {
                 turn_id: request.turn_id.clone(),
                 title: request.title.clone(),
                 revisions: Vec::new(),
+                skipped_files: Vec::new(),
             }
         };
+        output.skipped_files = snapshot.skipped;
         let mut hashes = BTreeMap::new();
         let mut written = 0;
         for (name, bytes) in snapshot.files {

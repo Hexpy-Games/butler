@@ -3,11 +3,15 @@ import { animateMotion, motionDuration } from "../../lib/motion";
 
 /** Marks the animated column elements inside the plot. */
 export const USAGE_BARS_COLUMN_ATTRIBUTE = "data-usage-bars-column";
+/** Marks a hatched (subtask) part; the value is "<bucket key>/<series id>". */
+export const USAGE_BARS_HATCH_ATTRIBUTE = "data-usage-bars-hatch";
 
 interface Drawn {
   count: number;
   /** Layout heights (px) of the columns as last drawn, before any transform. */
   heights: number[];
+  /** Hatched parts as last drawn. */
+  hatches: Set<string>;
 }
 
 /** This hook's column animations; the CSS selection-dim transition is left alone. */
@@ -49,11 +53,24 @@ function flip(columns: HTMLElement[], painted: number[], heights: number[]): voi
 }
 
 /**
- * Column motion on transforms only. Changes are keyed by `signature` (the
- * drawn heights), so a selection change never replays motion. An update in
- * flight starts from what is painted now, so motion is interruptible. Reduced
- * motion (OS or app) draws the final state at once: animateMotion drops
- * transform-only keyframes.
+ * A hatched part that was not drawn before fades in over --motion-base and
+ * grows up from its boundary with the part below over --motion-slow. Reduced
+ * motion keeps only the fade.
+ */
+function appear(parts: HTMLElement[]): void {
+  for (const part of parts) {
+    animateMotion(part, [{ opacity: 0 }, { opacity: 1 }], { duration: "base", easing: "standard" });
+    animateMotion(part, [{ transform: "scaleY(0)" }, { transform: "scaleY(1)" }], { duration: "slow", easing: "decelerate" });
+  }
+}
+
+/**
+ * Column motion on transforms only; new hatched parts also fade in. Changes
+ * are keyed by `signature` (the drawn heights and hatched parts), so a
+ * selection change never replays motion. An update in flight starts from what
+ * is painted now, so motion is interruptible. Reduced motion (OS or app)
+ * draws the final heights at once: animateMotion drops transform-only
+ * keyframes, and a new hatched part only fades in.
  */
 export function useUsageBarsMotion(plotRef: RefObject<HTMLElement | null>, ready: boolean, signature: string): void {
   const drawn = useRef<Drawn | null>(null);
@@ -69,8 +86,11 @@ export function useUsageBarsMotion(plotRef: RefObject<HTMLElement | null>, ready
     const painted = sameShape ? columns.map((column, index) => (last.heights[index] ?? 0) * paintedScale(column)) : [];
     for (const column of columns) for (const animation of columnMotion(column)) animation.cancel();
     const heights = columns.map((column) => column.offsetHeight);
-    drawn.current = { count: columns.length, heights };
+    const parts = [...plot.querySelectorAll<HTMLElement>(`[${USAGE_BARS_HATCH_ATTRIBUTE}]`)];
+    const hatches = new Set(parts.map((part) => part.getAttribute(USAGE_BARS_HATCH_ATTRIBUTE)!));
+    drawn.current = { count: columns.length, heights, hatches };
     if (sameShape) flip(columns, painted, heights);
     else grow(columns);
+    appear(parts.filter((part) => !last?.hatches.has(part.getAttribute(USAGE_BARS_HATCH_ATTRIBUTE)!)));
   }, [plotRef, ready, signature]);
 }

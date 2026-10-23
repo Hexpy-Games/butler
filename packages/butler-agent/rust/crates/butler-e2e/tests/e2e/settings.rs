@@ -14,9 +14,6 @@ use butler_e2e::e2e::gateway::Gateway;
 use butler_e2e::e2e::scenario::Setup;
 use serde_json::{Value, json};
 
-#[path = "settings/diagnostics_reader.rs"]
-mod diagnostics_reader;
-
 fn controls(turn: &Value) -> (&str, &str) {
     (
         turn["execution_controls"]["model_ref"]
@@ -106,7 +103,7 @@ async fn set_02_unavailable_and_malformed_settings_are_rejected() -> Result<(), 
     let baseline_updates = count_settings_updates(&live);
 
     for field in ["model", "consolidation_model", "recall_judge_model"] {
-        for model in ["openai/gpt-0", "anthropic/claude-opus-4-7"] {
+        for model in ["openai/gpt-0", "xai/grok-4.20-multi-agent"] {
             let reply = s.gw.patch("/settings", json!({ field: model })).await?;
             assert_eq!(reply.status, 400, "{field}={model}: {}", reply.text);
             assert_eq!(

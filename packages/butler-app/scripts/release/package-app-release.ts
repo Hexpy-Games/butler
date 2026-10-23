@@ -116,8 +116,8 @@ function createNativeMacReleasePackage(options: AppReleasePackageOptions): AppRe
     item.updaterSha256 = artifact.updaterSha256;
     item.dependencyClosure = artifact.nativeClosure;
     const teamId = process.env.BUTLER_SIGN_TEAM_ID?.trim();
-    if (process.env.BUTLER_SIGN_IDENTITY?.trim() && teamId) item.signing = { teamId, notarized: !isPreviewRelease() };
-    if (isPreviewRelease() && !teamId) item.signing = { teamId: "", notarized: false };
+    // A configured identity reaches here only after notarize and staple succeeded.
+    if (process.env.BUTLER_SIGN_IDENTITY?.trim() && teamId) item.signing = { teamId, notarized: true };
     if (!item.dependencyClosure) throw new Error("signed native mac App closure is missing");
     const releaseManifestPath = join(outDir, "app-release-manifest.json");
     writeJson(releaseManifestPath, manifest);
@@ -187,6 +187,14 @@ function packagePlatform(input: {
   normalizeMacBundle(input.root, appBundle);
   verifyMacBundleIcon(appReleaseIconPath(input.root), appBundle);
   signMacBundle(input.root, appBundle);
+  const hostLinks = spawnSync(process.env.PYTHON3 || "python3", [
+    join(input.root, "packages/butler-agent/rust/scripts/check_host_links.py"),
+    "--platform", "darwin", appBundle,
+  ], { encoding: "utf8" });
+  if (hostLinks.status !== 0) {
+    throw new Error(`App host-link guard failed: ${hostLinks.stderr || hostLinks.error || hostLinks.stdout}`);
+  }
+  process.stdout.write(hostLinks.stdout);
   const nativeClosure = closureFromNativeMacBundle(appBundle, input.manifest);
   verifyNativeMacBundle(appBundle, nativeClosure);
   runMacSigning(input.root, "notarize", appBundle);

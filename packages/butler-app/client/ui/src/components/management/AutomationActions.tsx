@@ -6,6 +6,7 @@ import {
   Play,
   RotateCcw,
   Save,
+  Terminal,
   Trash2,
 } from "@/butler-ds";
 import {
@@ -30,6 +31,8 @@ import { Stack } from "@/butler-ds";
 import { Typo } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { useAutomationStore } from "@/stores/automationStore";
+import { openLogTrace } from "@/stores/logTraceStore.ts";
+import { useDeveloperMode } from "@/hooks/useDeveloperMode.ts";
 
 interface AutomationActionsProps {
   onBack: () => void;
@@ -51,6 +54,10 @@ export function AutomationActions({
   const title = useAutomationStore((state) => state.title);
   const state = useAutomationStore((state) => state.state);
   const saving = useAutomationStore((state) => state.saving);
+  // Developer mode: the latest run that started a turn, as 메시지 추적.
+  const developerMode = useDeveloperMode();
+  const runTurnId = useAutomationStore((state) => state.runs.find((run) => run.turn_id)?.turn_id);
+  const latestTurnId = developerMode ? runTurnId : undefined;
   const copy = appCopy.automations;
   const detailTitle = isNew ? copy.new : title || copy.detailFallback;
 
@@ -109,6 +116,11 @@ export function AutomationActions({
                     <Clock3 size="sm" /> {copy.pause}
                   </DropdownMenuItem>
                 )}
+                {latestTurnId ? (
+                  <DropdownMenuItem onSelect={() => openLogTrace({ turnId: latestTurnId })} data-test-class="automation-run-logs">
+                    <Terminal size="sm" /> {appCopy.settings.logs.trace.latestRunLogs}
+                  </DropdownMenuItem>
+                ) : null}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem variant="destructive" onSelect={onDelete}>
                   <Trash2 size="sm" /> {appCopy.common.delete}

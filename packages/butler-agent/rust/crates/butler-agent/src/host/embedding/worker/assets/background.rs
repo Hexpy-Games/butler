@@ -27,36 +27,31 @@ fn manifest() -> Manifest {
         ],
     }
 }
-/// E2E fixture sources: fixed filenames, local HTTP only; production hashes stay frozen.
+/// The separate fault build can substitute small local assets; shipped hashes stay frozen.
 #[cfg(feature = "e2e-fixtures")]
 fn fixture_manifest() -> Option<Manifest> {
-    if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
-        && let Ok(raw) = std::env::var("BUTLER_E2E_EMBED_MANIFEST")
-        && let Ok(value) = serde_json::from_str::<Manifest>(&raw)
-        && value.assets.len() == 4
-        && value.assets.iter().zip(pinned_assets()).all(|(a, pinned)| {
-            a.relative == pinned.relative && a.bytes > 0 && a.bytes < 1024 * 1024
-        })
-        && !value.sources.is_empty()
-        && value.sources.iter().all(|url| {
-            reqwest::Url::parse(url)
-                .is_ok_and(|url| url.scheme() == "http" && url.host_str() == Some("127.0.0.1"))
-        })
-    {
-        return Some(value);
-    }
-    let stub_sources = std::env::var("BUTLER_E2E_EMBED_SOURCES")
-        .ok()
-        .filter(|url| {
-            std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
-                && reqwest::Url::parse(url)
-                    .is_ok_and(|u| u.scheme() == "http" && u.host_str() == Some("127.0.0.1"))
+    let pinned = pinned_assets();
+    let names: Vec<_> = pinned.iter().map(|asset| asset.relative.as_str()).collect();
+    if let Some(value) = crate::host::faults::embedding_manifest(&names) {
+        return Some(Manifest {
+            assets: value
+                .assets
+                .into_iter()
+                .map(|asset| Asset {
+                    relative: asset.relative,
+                    bytes: asset.bytes,
+                    sha256: asset.sha256,
+                })
+                .collect(),
+            sources: value.sources,
         });
-    stub_sources.map(|source| Manifest {
-        assets: pinned_assets(),
-        sources: vec![source],
+    }
+    crate::host::faults::embedding_sources().map(|sources| Manifest {
+        assets: pinned,
+        sources,
     })
 }
+
 pub(super) async fn run(root: PathBuf, state: watch::Sender<MemoryModelProgress>) {
     let manifest = manifest();
     let total = manifest.assets.iter().map(|a| a.bytes).sum();
@@ -77,7 +72,7 @@ pub(super) async fn run(root: PathBuf, state: watch::Sender<MemoryModelProgress>
     let result = if complete(&root.join(MODEL_ROOT), &manifest.assets) {
         cleanup_complete_staging(&root, &root.join(MODEL_ROOT))
     } else {
-        match reqwest::Client::builder()
+        match butler_log::http::external(butler_log::http::Purpose::new("embedding_download"))
             .connect_timeout(Duration::from_secs(15))
             .read_timeout(Duration::from_secs(30))
             .build()

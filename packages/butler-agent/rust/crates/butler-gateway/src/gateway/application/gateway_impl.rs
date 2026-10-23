@@ -1,6 +1,10 @@
 use super::*;
-
+use crate::gateway::AppBrowserStillCommand;
 impl GatewayApplication for AppApplication {
+    fn browser_still(&self, command: AppBrowserStillCommand) -> ApplicationFuture<Value> {
+        let this = self.clone_handle();
+        Box::pin(async move { this.browser_still_owned(command).await })
+    }
     fn assets(&self, command: AppAssetCommand) -> ApplicationFuture<Value> {
         let this = self.clone_handle();
         Box::pin(async move { this.assets_owned(command).await })
@@ -41,9 +45,6 @@ impl GatewayApplication for AppApplication {
     }
     fn list_system_events(&self, page: AppMonitorPage) -> ApplicationFuture<Value> {
         self.dependencies.monitoring.system_events(page)
-    }
-    fn list_developer_logs(&self, query: AppDeveloperLogsQuery) -> ApplicationFuture<Value> {
-        self.dependencies.monitoring.developer_logs(query)
     }
     fn runtime_session_hint(&self, chat: String) -> ApplicationFuture<String> {
         let this = self.clone_handle();
@@ -259,26 +260,21 @@ impl GatewayApplication for AppApplication {
     fn setup(&self) -> Result<Arc<dyn super::AppSetupPort>, GatewayApplicationError> {
         Ok(self.dependencies.setup.clone())
     }
+    fn data_reset(&self) -> Option<Arc<dyn crate::gateway::AppDataResetPort>> {
+        self.dependencies.data_reset.clone()
+    }
+    fn accept_full_reset(&self, input: Value) -> ApplicationFuture<Value> {
+        self.reset_data_owned(input)
+    }
     fn read_settings(&self) -> ApplicationFuture<serde_json::Value> {
-        let this = self.clone_handle();
-        Box::pin(async move { this.worker_profile_settings().await })
+        self.settings_read_owned()
     }
     fn update_settings(&self, input: serde_json::Value) -> ApplicationFuture<serde_json::Value> {
         let this = self.clone_handle();
         Box::pin(async move { this.update_settings_owned(input).await })
     }
-    fn list_mcp_servers(&self) -> ApplicationFuture<serde_json::Value> {
-        let client = self.dependencies.mcp_client.clone();
-        Box::pin(async move {
-            client.list_servers().map_err(|source| {
-                GatewayApplicationError::public(
-                    500,
-                    "mcp_registry_unavailable",
-                    "MCP server registry is unavailable.",
-                )
-                .with_source(source)
-            })
-        })
+    fn list_mcp_servers(&self) -> ApplicationFuture<Value> {
+        self.list_mcp_servers_owned()
     }
     fn list_mcp_capabilities(
         &self,
@@ -437,6 +433,9 @@ impl GatewayApplication for AppApplication {
     ) -> ApplicationFuture<MessageSendResult> {
         let this = self.clone_handle();
         Box::pin(async move { this.retry_turn_with_current_controls_owned(turn_id).await })
+    }
+    fn work_model(&self, request: AppWorkModelRequest) -> ApplicationFuture<Value> {
+        super::work_model::execute(self, request)
     }
     fn task_graph_read(&self, query: AppTaskGraphQuery) -> ApplicationFuture<Value> {
         super::task_graphs::read(self, query)

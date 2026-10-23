@@ -2,6 +2,11 @@
 
 use std::io;
 
+/// Whether waiting for a child adds that child's lifetime I/O to the parent's
+/// counters. An idle window must begin after this transfer, rather than treating
+/// the child's earlier model/file reads as new parent I/O.
+pub const INCLUDES_REAPED_CHILD_IO: bool = cfg!(target_os = "linux");
+
 /// Host load averages (one, five and fifteen minutes), for perf evidence.
 pub fn load_average() -> io::Result<Option<[f64; 3]>> {
     #[cfg(target_os = "linux")]

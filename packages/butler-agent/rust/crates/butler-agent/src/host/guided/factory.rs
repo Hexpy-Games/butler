@@ -3,6 +3,7 @@
 mod authority;
 mod hooks;
 mod surface;
+mod workspace;
 
 #[cfg(test)]
 mod tests;
@@ -59,6 +60,8 @@ pub(crate) struct GuidedTurnFactoryAdapter {
 
 struct BoundTurn<'a> {
     inputs: Option<GuidedTurnInputs>,
+    _stages: butler_platform::secure_fs::StageScope,
+    _root_pins: Vec<Arc<butler_platform::secure_fs::RootPin>>,
     progress: &'a dyn AgentLoopProgress,
     base: &'a dyn ModelRoundPort,
 }
@@ -140,7 +143,14 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 budget,
                 source_revision,
             } = self.preparation.prepare(&start).await?;
-            let workspace_path = self.resolved_workspace(&workspace, &mut phase).await?;
+            let (workspace_path, root_pins, inventory) =
+                self.resolved_workspace(&workspace, &mut phase).await?;
+            let consent = workspace.consent();
+            let workspace = butler_turn::workspace::WorkspaceReference::new(&workspace_path);
+            workspace.set_read_inventory(inventory.clone());
+            if let Some(consent) = consent {
+                workspace.set_consent(consent);
+            }
             let surface = self.tool_surface(&mut phase).await?;
             let policy = &phase.execution_policy;
             let language = resolve_guided_response_language(start.turn, &self.documents).await;
@@ -176,26 +186,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 )),
                 self.effects.clone(),
                 self.preparation.authority.clone(),
-                crate::host::GuidedFileEffects::new(
-                    self.capabilities.clone(),
-                    crate::host::RegisteredWriteContext {
-                        workspace_reference: Some(workspace.clone()),
-                        workspace_path: workspace_path.clone(),
-                        butler_data: self.butler_data.clone(),
-                        protected_ledger_roots: self.protected_ledger_roots.clone(),
-                        allowed_tools_and_effects: None,
-                        mutation_scope: None,
-                        installation_root: Some(self.installation_root.clone()),
-                        contained: false,
-                    },
-                    butler_turn::workspace::EffectFileScope {
-                        workspace: workspace_path.clone(),
-                        butler_data: self.butler_data.clone(),
-                        protected_roots: self.protected_ledger_roots.clone(),
-                        installation_root: Some(self.installation_root.clone()),
-                        contained: false,
-                    },
-                ),
+                self.file_effects(&workspace, &workspace_path),
                 self.memory_query.clone(),
                 self.memory_recall.clone(),
                 self.memory_writes.clone(),
@@ -214,8 +205,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 self.monitoring.clone(),
                 self.attachment_context.clone(),
                 self.session_worktrees.clone(),
-                self.web_access
-                    .session_for_turn(start.turn.original_message.clone()),
+                web_session(&self.web_access, start.turn, &phase),
                 self.app_endpoint.clone(),
                 semantic.authority.as_ref(),
                 GuidedToolBinding {
@@ -237,17 +227,14 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                         .map(|cursor| cursor.call_id.clone()),
                     turn_guard: TurnGuard::new(&start.turn.context, semantic.authority.as_ref()),
                     current_user_message: start.turn.original_message.clone(),
-                    memory: CanonicalMemoryReadBinding {
-                        runtime_session_id: start.turn.session_id.clone(),
-                        turn_id: start.turn.turn_id.clone(),
-                        project_id: bound_project_id(
-                            policy.project_id.as_deref(),
-                            &start.turn.context,
-                        ),
-                    },
+                    memory: memory_binding(start.turn, policy.project_id.as_deref()),
                     project_id: policy.project_id.clone(),
                     project_folder: project_folder(&workspace, &phase),
                     project_sources: project_sources(&start.turn.context),
+                    attachment_files: super::attachment_files::from_context(
+                        &start.turn.context,
+                        &self.butler_data,
+                    ),
                     visible_names: surface.iter().map(|t| t.name.clone()).collect(),
                     authorized_names: phase.authorized_names.iter().cloned().collect(),
                     required_names: policy.required_tools.iter().cloned().collect(),
@@ -318,7 +305,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 source_revision,
                 stream_relay: Some(stream_relay),
             };
-            Ok(bound_turn(inputs, &start))
+            Ok(bound_turn(inputs, &start, root_pins, &self.butler_data))
         })
     }
 }
@@ -385,39 +372,25 @@ fn project_folder(
     consented.then(|| PathBuf::from(&policy.workspace_path))
 }
 
-impl GuidedTurnFactoryAdapter {
-    /// Keep the model's policy root and tool reference on the same recovered path.
-    async fn resolved_workspace(
-        &self,
-        workspace: &butler_turn::workspace::WorkspaceReference,
-        phase: &mut butler_turn::btcc::GuidedPhaseSelection,
-    ) -> Result<PathBuf, BtccError> {
-        let path = workspace.get().map_err(|e| error(e.code()))?;
-        phase.execution_policy.workspace_path = path.to_string_lossy().into_owned();
-        if matches!(
-            butler_gateway::gateway::command_sandbox_enabled(
-                self.monitoring.app_database_path.clone()
-            )
-            .await,
-            Ok(true)
-        ) {
-            let inventory_root = path.clone();
-            tokio::task::spawn_blocking(move || {
-                if butler_platform::command_sandbox::project_write_available() {
-                    butler_platform::command_sandbox::prewarm_project(&inventory_root);
-                }
-            });
-        }
-        Ok(path)
-    }
-}
-
 fn bound_turn<'a>(
     inputs: GuidedTurnInputs,
     start: &GuidedTurnStart<'a>,
+    root_pins: Vec<Arc<butler_platform::secure_fs::RootPin>>,
+    data: &std::path::Path,
 ) -> Box<dyn BoundGuidedTurn + 'a> {
     Box::new(BoundTurn {
         inputs: Some(inputs),
+        _root_pins: root_pins,
+        _stages: butler_platform::secure_fs::StageScope::new(
+            data,
+            &start.turn.turn_id,
+            start
+                .turn
+                .context
+                .pointer("/executionPolicy/subsession")
+                .filter(|value| value.is_object())
+                .map(|_| start.turn.session_id.clone()),
+        ),
         progress: start.progress,
         base: start.base,
     })
@@ -428,4 +401,29 @@ fn app_session_id(context: &serde_json::Value) -> Option<String> {
         .get("appSessionId")
         .and_then(serde_json::Value::as_str)
         .map(str::to_owned)
+}
+
+fn web_session(
+    access: &butler_runtime::web_access::WebAccess,
+    turn: &butler_turn::btcc::TurnRecord,
+    phase: &butler_turn::btcc::GuidedPhaseSelection,
+) -> butler_runtime::web_access::WebSession {
+    let policy = &phase.execution_policy;
+    access
+        .session_for_turn(turn.original_message.clone())
+        .with_usage(
+            policy.usage_root(&turn.session_id).map(str::to_owned),
+            policy.usage_role().into(),
+        )
+}
+
+fn memory_binding(
+    turn: &butler_turn::btcc::TurnRecord,
+    project_id: Option<&str>,
+) -> CanonicalMemoryReadBinding {
+    CanonicalMemoryReadBinding {
+        runtime_session_id: turn.session_id.clone(),
+        turn_id: turn.turn_id.clone(),
+        project_id: bound_project_id(project_id, &turn.context),
+    }
 }

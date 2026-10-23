@@ -1,5 +1,5 @@
+use crate::project_ledger::publication::timing::fs;
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::path::Path;
 
 use serde_json::Value;
@@ -22,6 +22,9 @@ pub(in crate::project_ledger) fn validate_publication_candidate(
     updates: &[ProjectLedgerRecordUpdate],
     collation: &LocaleCollation,
 ) -> Result<(), ProjectWorkPublicationError> {
+    let _phase = crate::project_ledger::publication::timing::Phase::new(
+        "publication_validate_publication_candidate",
+    );
     let ids = updates
         .iter()
         .filter_map(|update| match update.kind.as_ref() {
@@ -129,7 +132,7 @@ fn candidate_or_committed(
     path: &str,
 ) -> Result<Option<String>, ProjectWorkPublicationError> {
     let selected = candidate.join(path);
-    let selected = if selected.exists() {
+    let selected = if fs::exists(&selected) {
         selected
     } else {
         committed.join(path)

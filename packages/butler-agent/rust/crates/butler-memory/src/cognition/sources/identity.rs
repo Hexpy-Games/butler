@@ -66,7 +66,7 @@ pub(super) fn episode_revision(
     projection_hash(&EpisodeRevision { scalars, tail })
 }
 
-pub(super) fn recovered_parts_hash(
+pub(in crate::cognition) fn recovered_parts_hash(
     message: &butler_turn::conversation::ConversationMessageWithParts,
 ) -> Result<String, CognitionSourceError> {
     let mut json = String::from("[");

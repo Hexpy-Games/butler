@@ -5,6 +5,8 @@ pub const ANTHROPIC_ADAPTIVE_MODELS: &[&str] = &[
     "claude-opus-5",
     "claude-sonnet-5",
     "claude-haiku-5",
+    "claude-opus-4-7",
+    "claude-sonnet-4-6",
 ];
 pub const ANTHROPIC_BUDGET_MODEL: &str = "claude-haiku-4-5";
 pub const OPENCODE_THINKING_MODEL: &str = "glm-5.3";

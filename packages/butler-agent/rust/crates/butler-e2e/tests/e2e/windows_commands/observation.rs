@@ -31,6 +31,10 @@ async fn run(access: Access, protected: Option<&str>) -> Result<(), HarnessError
         |target| {
             let path = match target {
                 "data" => setup.sandbox.data.join("canary.txt"),
+                "gateway" => setup
+                    .sandbox
+                    .data
+                    .join(butler_platform::data_paths::LOCAL_AUTH),
                 _ => setup.sandbox.home.join(".ssh/id_ed25519"),
             };
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -42,7 +46,7 @@ async fn run(access: Access, protected: Option<&str>) -> Result<(), HarnessError
             }
         },
     );
-    let refused = protected == Some("credentials");
+    let refused = matches!(protected, Some("credentials" | "gateway"));
     let (url, script, server) = provider::start(&command).await?;
     let local = setup.sandbox.home.join("AppData/Local");
     let roaming = setup.sandbox.home.join("AppData/Roaming");
@@ -222,7 +226,7 @@ async fn observation_data_uses_normal_approval_and_credentials_stay_refused()
         "host has read-only sandbox"
     );
     for access in [Access::AskAlways, Access::FullAccess] {
-        for target in ["data", "credentials"] {
+        for target in ["data", "credentials", "gateway"] {
             run(access, Some(target)).await?;
         }
     }

@@ -25,6 +25,7 @@ pub(crate) struct AppServiceConfiguration {
     pub(crate) enabled: bool,
     pub(crate) folder_selection_secret: Option<String>,
     gateway: GatewayConfig,
+    content_port: Result<Option<u16>, String>,
     /// Why the token or the folder secret is unavailable; the gateway then
     /// refuses every client (`local_auth_unconfigured`).
     credential_errors: Vec<LocalCredentialError>,
@@ -110,7 +111,7 @@ impl AppServiceConfiguration {
 
     /// The same, creating missing credential files when `files` allows.
     pub(crate) fn capture_with(data_root: &Path, files: CredentialFiles) -> Self {
-        let settings = fs::read(data_root.join("gateways/app.json"))
+        let settings = fs::read(data_root.join(butler_platform::data_paths::GATEWAY_CONFIG))
             .ok()
             .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
             .unwrap_or(Value::Null);
@@ -128,6 +129,7 @@ impl AppServiceConfiguration {
             })
             .unwrap_or_else(|| "127.0.0.1".to_owned());
         let env_port = env::var("BUTLER_APP_SERVER_PORT").ok();
+        let content_port = content_port();
         let cli_port = argv_port();
         let harness_port = env_port.is_some() || cli_port.is_some();
         let port = normalize_port(
@@ -146,7 +148,7 @@ impl AppServiceConfiguration {
         let db_configured = configured_db.is_some();
         let db_path = configured_db
             .map(PathBuf::from)
-            .unwrap_or_else(|| data_root.join("app-server/butler-client.sqlite"));
+            .unwrap_or_else(|| data_root.join(butler_platform::data_paths::APP_DB));
         // Local auth is enforced whoever started the agent: the token (and
         // the folder secret) belong to the data folder.
         let LocalCredentials {
@@ -173,10 +175,18 @@ impl AppServiceConfiguration {
                 let mut gateway =
                     gateway_config(LocalAuthConfig::required(token), settings, admin.ok());
                 gateway.headless_browser = headless;
+                gateway.content_port = content_port.as_ref().ok().copied().flatten();
                 gateway
             },
             credential_errors,
+            content_port,
         }
+    }
+
+    pub(crate) fn validate(&self) -> Result<(), butler_turn::btcc::BtccError> {
+        self.content_port.as_ref().map(|_| ()).map_err(|message| {
+            butler_turn::btcc::BtccError::relayed("app_configuration_invalid", message.clone())
+        })
     }
 
     /// Refresh only authority after binding; keep the reserved address and DB.
@@ -216,6 +226,7 @@ impl AppServiceConfiguration {
             dev_cors_origin: self.gateway.dev_cors_origin.clone(),
             allowed_hosts: self.gateway.allowed_hosts.clone(),
             content_hosts: self.gateway.content_hosts.clone(),
+            content_port: self.gateway.content_port,
             output_data: self.gateway.output_data.clone(),
             browser_import: self.gateway.browser_import.clone(),
             remote_access_enabled: self.gateway.remote_access_enabled,
@@ -298,6 +309,7 @@ fn gateway_config(
             .filter(|name| !name.is_empty())
             .collect(),
         content_hosts: settings.content_hosts,
+        content_port: None,
         output_data: None,
         browser_import: Default::default(),
         remote_access_enabled: settings.remote_access_enabled,
@@ -331,4 +343,22 @@ fn signed_url_ttl() -> Duration {
             butler_core::json::saturating_u64(seconds.floor()).min(MAX_SIGNED_URL_TTL_SECONDS)
         });
     Duration::from_secs(seconds)
+}
+
+fn content_port() -> Result<Option<u16>, String> {
+    let value = match env::var("BUTLER_APP_CONTENT_PORT") {
+        Ok(value) => value,
+        Err(env::VarError::NotPresent) => return Ok(None),
+        Err(env::VarError::NotUnicode(_)) => {
+            return Err("BUTLER_APP_CONTENT_PORT must be a u16 port".to_owned());
+        }
+    };
+    let value = trim_js_whitespace(&value);
+    if value.is_empty() {
+        return Ok(None);
+    }
+    value
+        .parse::<u16>()
+        .map(Some)
+        .map_err(|_| "BUTLER_APP_CONTENT_PORT must be a u16 port".to_owned())
 }

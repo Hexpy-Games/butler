@@ -225,6 +225,7 @@ fn candidate(
     deadline: Instant,
 ) -> GrepCandidate {
     GrepCandidate {
+        butler_data: scope.butler_data.clone(),
         root: scope.root.clone(),
         path_form: scope.path_form,
         protected_roots: scope.protected_roots.clone(),

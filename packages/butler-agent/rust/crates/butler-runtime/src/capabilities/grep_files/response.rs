@@ -47,10 +47,8 @@ pub(super) fn success(
         .reads
         .iter()
         .filter(|candidate| {
-            matches!(
-                candidate.read.reason,
-                Some("max_bytes_per_file" | "io_error")
-            )
+            candidate.read.skipped
+                && !matches!(candidate.read.reason, Some("binary" | "invalid_utf8"))
         })
         .collect();
     let mut partial_reasons = Vec::new();
@@ -97,7 +95,7 @@ pub(super) fn success(
         Some(if partial_reasons.contains(&"io_error") {
             "io_error"
         } else {
-            "max_bytes_per_file"
+            partial_reasons.first().copied().unwrap_or("incomplete")
         })
     } else {
         listed.stopped_by.map(ListStop::as_str)
@@ -198,7 +196,7 @@ pub(super) fn success(
         result["unsearched_files"] = json!(
             partial
                 .iter()
-                .map(|candidate| { json!({"path":candidate.path,"reason":candidate.read.reason}) })
+                .map(|candidate| { json!({"path":candidate.path,"reason":candidate.read.reason,"recovery_hint":candidate_hint(candidate.read.reason)}) })
                 .collect::<Vec<_>>()
         );
     }
@@ -212,8 +210,10 @@ pub(super) fn success(
     } else if incomplete {
         result["recovery_hint"] = json!(if partial_reasons.contains(&"io_error") {
             "Search encountered a candidate I/O error; inspect unsearched_files and check workspace permissions."
-        } else {
+        } else if partial_reasons.contains(&"max_bytes_per_file") {
             "Some candidates exceeded max_bytes_per_file; read relevant unsearched_files with read_file using line ranges."
+        } else {
+            "Inspect unsearched_files; choose existing regular files inside the workspace and outside credential stores."
         });
     } else if listed.stopped_by.is_some() && !supports_cursor {
         result["recovery_hint"] = json!(if listed.stopped_by == Some(ListStop::IoError) {
@@ -226,4 +226,16 @@ pub(super) fn success(
         result["next_cursor"] = json!(cursor);
     }
     result
+}
+
+fn candidate_hint(reason: Option<&str>) -> &'static str {
+    match reason {
+        Some("safety_refused" | "sensitive_path_blocked" | "path_escape") => {
+            "Choose an ordinary workspace file outside credential stores."
+        }
+        Some("not_found") => "Restart discovery or choose an existing file.",
+        Some("not_a_file" | "not_a_directory") => "Choose an existing regular file.",
+        Some("max_bytes_per_file") => "Use read_file with line ranges.",
+        _ => "Check the path and OS account permissions, then retry.",
+    }
 }

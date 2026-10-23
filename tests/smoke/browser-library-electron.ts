@@ -40,6 +40,8 @@ try {
   app.stub.set([
     () => ({ name: "write_file", arguments: { path: "redesign/live.html", content: "<h1>Live Library</h1>" } }),
     () => ({ name: "output_publish", arguments: { path: "redesign", title: "Live Library" } }),
+    // #1223: Only explicitly delivered files become Library documents.
+    () => ({ name: "deliver_files", arguments: { files: [{ path: "redesign/index.html", title: "Browser fixture" }, { path: "redesign/live.html", title: "Live Library" }] } }),
   ]);
   await app.send("Publish a second document"); await app.delivered();
   await waitBrowser(() => app.page.expression("document.querySelectorAll('[data-library-kind=document] [data-library-card]').length===2 && document.querySelector('[data-library-kind=output]').textContent.includes('Live Library')"), "Library reflects committed documents and output without polling");

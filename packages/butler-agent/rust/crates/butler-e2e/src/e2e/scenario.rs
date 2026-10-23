@@ -91,6 +91,7 @@ pub struct Setup {
     access: Access,
     source: Source,
     env: Vec<(String, String)>,
+    unset_env: Vec<String>,
     model: Option<ModelChoice>,
     stub_credential: bool,
     record_into: Option<std::path::PathBuf>,
@@ -153,7 +154,7 @@ impl Setup {
         self
     }
 
-    /// Records cassette traffic into `dir` (LIVE-09 drift check), whatever
+    /// Records cassette traffic into `dir`, whatever
     /// `BUTLER_E2E_RECORD` says.
     pub fn record_into(mut self, dir: std::path::PathBuf) -> Self {
         self.record_into = Some(dir);
@@ -232,6 +233,7 @@ impl Setup {
             replay_only,
             extends,
             record_budget,
+            unset_env,
         } = self;
         let app_now = sources::fixture_app_now(&env);
         let mut launch = Launch::new(&sandbox)?;
@@ -288,6 +290,9 @@ impl Setup {
         }
         for (key, value) in env {
             launch.set_env(&key, value);
+        }
+        for key in unset_env {
+            launch.unset_env(&key);
         }
         match fixture {
             Fixture::Ready => fixtures::ready(&sandbox.data, &choice.model, &app_now)?,

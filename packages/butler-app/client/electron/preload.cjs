@@ -111,6 +111,13 @@ async function requestBridgeResult(path, options = {}) {
   }
 }
 
+const TRACEPARENT = /^00-(?!0{32})[0-9a-f]{32}-(?!0{16})[0-9a-f]{16}-[0-9a-f]{2}$/u;
+
+/** A user action's W3C trace context, forwarded to the local agent only when well formed. */
+function traceHeaders(traceparent) {
+  return typeof traceparent === "string" && TRACEPARENT.test(traceparent) ? { traceparent } : {};
+}
+
 function wallpaperPath(id, suffix = "") {
   return `/wallpapers/${encodeURIComponent(String(id ?? ""))}${suffix}`;
 }
@@ -248,6 +255,20 @@ function normalizeLocalServerUrl(value) {
   return url.toString();
 }
 
+function recordWorkAction(path, options) {
+  const traceparent = options.headers?.traceparent;
+  const action = path === "/messages" || path === "/session-queue" ? "send"
+    : /\/turns\/[^/]+\/cancel$/u.test(path) ? "stop"
+    : /\/turns\/[^/]+\/retry(?:-current)?$/u.test(path) ? "retry"
+    : /\/sessions\/[^/]+\/controls$/u.test(path) && options.method === "PATCH" ? "model_pick" : null;
+  if (!action) return;
+  const body = typeof options.body === "string" ? JSON.parse(options.body) : {};
+  const turn_id = path.match(/^\/turns\/([^/]+)/u)?.[1];
+  ipcRenderer.send("butler:app-log", { level: "INFO", category: "app.ui", event: `ui.${action}`,
+    ...(traceparent ? { traceparent } : {}), ...(body.chat_id ? { chat_id: body.chat_id } : {}),
+    ...(turn_id ? { turn_id: decodeURIComponent(turn_id) } : {}), attrs: {} });
+}
+
 async function requestJson(path, options = {}) {
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   await ensureLocalServer();
@@ -274,6 +295,7 @@ async function requestJson(path, options = {}) {
     error.status = response.status;
     throw error;
   }
+  recordWorkAction(path, options);
   return body.data;
 }
 
@@ -451,6 +473,54 @@ function subscribeLiveEvents({ cursor = 0 } = {}, handlers = {}) {
   };
 }
 
+/** A redacted log body (GET /logs/bodies/{ref}) as text. */
+async function readLogBody(reference) {
+  await ensureLocalServer();
+  const path = `/logs/bodies/${encodeURIComponent(String(reference ?? ""))}`;
+  const response = await fetch(new URL(path, await currentServerUrl()), { headers: await localAuthHeaders() });
+  if (!response.ok) {
+    const error = new Error(`Log body request failed with status ${response.status}.`);
+    error.status = response.status;
+    throw error;
+  }
+  return await response.text();
+}
+
+/** GET /logs/live: `log` events carry one record; `lagged` counts are skipped. */
+function subscribeLogs(handlers = {}) {
+  const abortController = new AbortController();
+  let closed = false;
+  const deliver = (value) => {
+    if (value && typeof value === "object") handlers.onRecord?.(value);
+  };
+  void (async () => {
+    try {
+      await ensureLocalServer();
+      const response = await fetch(new URL("/logs/live", await currentServerUrl()), {
+        headers: { accept: "text/event-stream", ...(await localAuthHeaders()) },
+        signal: abortController.signal,
+      });
+      if (!response.ok || !response.body) throw new Error(`Log stream failed with status ${response.status}.`);
+      const reader = response.body.getReader();
+      handlers.onOpen?.();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (!closed) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer = drainSseRecords(buffer + decoder.decode(value, { stream: true }), deliver);
+      }
+      if (!closed) throw new Error("Log stream ended.");
+    } catch (error) {
+      if (!closed && error?.name !== "AbortError") handlers.onError?.();
+    }
+  })();
+  return () => {
+    closed = true;
+    abortController.abort();
+  };
+}
+
 function messageCacheKey(chatId) {
   return `${messageCachePrefix}${encodeURIComponent(String(chatId || "general"))}`;
 }
@@ -617,6 +687,7 @@ function writeAppUiStateCache(snapshot) {
 }
 
 const butlerApp = Object.freeze({
+  log: row => ipcRenderer.send("butler:app-log", row),
   organizeLibrary: ({ path, method, body }) => {
     const route = new URL(path, "http://butler.invalid");
     const allowed = /^\/library\/(groups|tags|facets|items)(\/|$)/.test(route.pathname);
@@ -640,6 +711,11 @@ const butlerApp = Object.freeze({
   platform: process.platform,
   startupIssue: process.argv.includes("--butler-legacy-data") ? "legacy-data" : null,
   recoverLegacyData: (action) => ipcRenderer.invoke("butler:legacy-data-recovery", action),
+  // Settings > General > reset everything. The phrase is checked in the renderer;
+  // main sends the request with the admin credential, then relaunches.
+  requestFullReset: ({ operationId } = {}) => ipcRenderer.invoke("butler:full-reset-request", { operationId }),
+  relaunchAfterFullReset: () => ipcRenderer.invoke("butler:full-reset-relaunch"),
+  fullResetFailed: process.argv.includes("--butler-full-reset-failed"),
   recordUiCrash: (input) => ipcRenderer.invoke("butler:ui-crash", input),
   recordWallpaperState: (line) => ipcRenderer.send("butler:wallpaper-state", line),
   readUiCrashLog: () => ipcRenderer.invoke("butler:ui-crash-log"),
@@ -886,8 +962,9 @@ const butlerApp = Object.freeze({
     method: "DELETE",
   }),
   getSessionControls: ({ sessionId }) => requestJson(`/sessions/${encodeURIComponent(sessionId)}/controls`),
-  updateSessionControls: ({ sessionId, controls }) => requestJson(`/sessions/${encodeURIComponent(sessionId)}/controls`, {
+  updateSessionControls: ({ sessionId, controls, traceparent }) => requestJson(`/sessions/${encodeURIComponent(sessionId)}/controls`, {
     method: "PATCH",
+    headers: traceHeaders(traceparent),
     body: JSON.stringify(controls ?? {}),
   }),
   decideSessionPlan: ({ sessionId, planId, action, instruction } = {}) => requestJson(
@@ -941,8 +1018,9 @@ const butlerApp = Object.freeze({
       body: form,
     });
   },
-  sendMessage: ({ chatId, text, contentParts, clientMessageId, model, reasoningEffort, accessMode, planMode, queuePolicy, attachments }) => requestBridgeResult("/messages", {
+  sendMessage: ({ chatId, text, contentParts, clientMessageId, model, reasoningEffort, accessMode, planMode, queuePolicy, attachments, traceparent }) => requestBridgeResult("/messages", {
     method: "POST",
+    headers: traceHeaders(traceparent),
     body: JSON.stringify({
       chat_id: chatId,
       text,
@@ -1002,8 +1080,9 @@ const butlerApp = Object.freeze({
       },
     );
   },
-  queueMessage: ({ chatId, text, contentParts, model, reasoningEffort, accessMode, planMode, attachments }) => requestBridgeResult("/session-queue", {
+  queueMessage: ({ chatId, text, contentParts, model, reasoningEffort, accessMode, planMode, attachments, traceparent }) => requestBridgeResult("/session-queue", {
     method: "POST",
+    headers: traceHeaders(traceparent),
     body: JSON.stringify({
       chat_id: chatId,
       text,
@@ -1031,16 +1110,19 @@ const butlerApp = Object.freeze({
   deleteQueuedMessage: ({ queuedMessageId } = {}) => requestJson(`/session-queue/${encodeURIComponent(queuedMessageId ?? "")}`, {
     method: "DELETE",
   }),
-  retryTurn: ({ turnId }) => requestJson(`/turns/${encodeURIComponent(turnId)}/retry`, {
+  retryTurn: ({ turnId, traceparent }) => requestJson(`/turns/${encodeURIComponent(turnId)}/retry`, {
     method: "POST",
+    headers: traceHeaders(traceparent),
     body: JSON.stringify({}),
   }),
-  retryTurnWithCurrentControls: ({ turnId }) => requestJson(`/turns/${encodeURIComponent(turnId)}/retry-current`, {
+  retryTurnWithCurrentControls: ({ turnId, traceparent }) => requestJson(`/turns/${encodeURIComponent(turnId)}/retry-current`, {
     method: "POST",
+    headers: traceHeaders(traceparent),
     body: JSON.stringify({}),
   }),
-  cancelTurn: ({ turnId }) => requestJson(`/turns/${encodeURIComponent(turnId)}/cancel`, {
+  cancelTurn: ({ turnId, traceparent }) => requestJson(`/turns/${encodeURIComponent(turnId)}/cancel`, {
     method: "POST",
+    headers: traceHeaders(traceparent),
     body: JSON.stringify({}),
   }),
   cancelSteward: ({ relationId, parentSessionId }) => requestJson(
@@ -1056,6 +1138,9 @@ const butlerApp = Object.freeze({
       method: "POST",
       body: JSON.stringify({ parent_session_id: parentSessionId }),
     },
+  ),
+  getBrowserStills: ({ id, sessionId, wait }) => requestJson(
+    `/browser-stills/${encodeURIComponent(id)}?${new URLSearchParams({ session_id: sessionId, wait: wait ? "1" : "0" })}`,
   ),
   getOperationOutput: ({ turnId, requestId, resultId, offset = 0 }) => {
     const params = new URLSearchParams({
@@ -1224,12 +1309,16 @@ const butlerApp = Object.freeze({
   // Envelope, not a throw: the renderer needs the public error code
   // (e.g. settings_model_unavailable) to show localized, actionable copy.
   // A `security` change carries the admin credential, which only main holds.
-  updateSettings: (settings) => settings?.security !== undefined
+  updateSettings: async (settings) => {
+    const result = await (settings?.security !== undefined
     ? requestSecurity("updateSecuritySettings", settings)
     : requestBridgeResult("/settings", {
       method: "PATCH",
       body: JSON.stringify(settings ?? {}),
-    }),
+    }));
+    if (result.ok !== false && (settings?.diagnostics_enabled !== undefined || settings?.developer_mode_enabled !== undefined)) await ipcRenderer.invoke("butler:app-log-change");
+    return result;
+  },
   // Envelopes keep the code and status of the gateway's local-only rule.
   getSecurity: () => requestSecurity("getSecurity"),
   issuePairingCode: () => requestSecurity("issuePairingCode"),
@@ -1294,17 +1383,26 @@ const butlerApp = Object.freeze({
     const query = params.toString();
     return requestJson(query ? `/system-events?${query}` : "/system-events");
   },
-  listDeveloperLogs: ({ limit, offset, sessionId, turnId, kind, query: search } = {}) => {
-    const params = new URLSearchParams();
-    if (limit !== undefined) params.set("limit", String(limit));
-    if (offset !== undefined) params.set("offset", String(offset));
-    if (sessionId) params.set("session_id", sessionId);
-    if (turnId) params.set("turn_id", turnId);
-    if (kind) params.set("kind", kind);
-    if (search) params.set("query", search);
-    const query = params.toString();
-    return requestJson(query ? `/developer-logs?${query}` : "/developer-logs");
+  // Settings > Logs JSON routes (GET /logs, /logs/config, /logs/storage, /logs/trace; PUT config; DELETE).
+  logs: ({ path, method = "GET", body } = {}) => {
+    const url = new URL(String(path ?? ""), "http://local");
+    const trace = url.pathname === "/logs/trace" || /^\/logs\/trace\/[0-9a-f]{32}$/u.test(url.pathname);
+    if (!trace && !["/logs", "/logs/config", "/logs/storage"].includes(url.pathname)) {
+      throw new Error("Unsupported log route.");
+    }
+    return requestJson(url.pathname + url.search, {
+      method: String(method).toUpperCase(),
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    }).then(async result => {
+      if (String(method).toUpperCase() === "PUT") await ipcRenderer.invoke("butler:app-log-change");
+      if (String(method).toUpperCase() === "DELETE") await ipcRenderer.invoke("butler:app-log-change", "clear");
+      return result;
+    });
   },
+  readLogBody: ({ reference } = {}) => readLogBody(reference),
+  subscribeLogs: (handlers = {}) => subscribeLogs(handlers),
+  exportLogs: ({ since, includeBodies } = {}) =>
+    ipcRenderer.invoke("butler:export-logs", { since, includeBodies: includeBodies === true }),
   getUsageMonitor: ({ sessionId, sinceHours } = {}) => {
     const params = new URLSearchParams();
     if (sessionId) params.set("session_id", sessionId);
@@ -1377,7 +1475,7 @@ const butlerApp = Object.freeze({
   // Schedule saves return the bridge envelope so a refused save keeps its
   // code and status (the form shows 400s inline). An omitted accessMode lets
   // the gateway use the target conversation's current mode.
-  createAutomation: ({ title, promptBody, targetSessionId, intervalSeconds, accessMode, schedule, scheduleType, runAt, startAt }) => requestBridgeResult("/automations", {
+  createAutomation: ({ title, promptBody, targetSessionId, intervalSeconds, accessMode, model, schedule, scheduleType, runAt, startAt }) => requestBridgeResult("/automations", {
     method: "POST",
     body: JSON.stringify({
       title,
@@ -1385,13 +1483,14 @@ const butlerApp = Object.freeze({
       target_session_id: targetSessionId,
       interval_seconds: intervalSeconds,
       access_mode: accessMode,
+      model,
       schedule,
       schedule_type: scheduleType,
       run_at: runAt,
       start_at: startAt,
     }),
   }),
-  updateAutomation: ({ automationId, title, promptBody, targetSessionId, intervalSeconds, state, accessMode, schedule, scheduleType, runAt, startAt }) =>
+  updateAutomation: ({ automationId, title, promptBody, targetSessionId, intervalSeconds, state, accessMode, model, schedule, scheduleType, runAt, startAt }) =>
     requestBridgeResult(`/automations/${encodeURIComponent(automationId)}`, {
       method: "PATCH",
       body: JSON.stringify({
@@ -1401,6 +1500,7 @@ const butlerApp = Object.freeze({
         interval_seconds: intervalSeconds,
         state,
         access_mode: accessMode,
+        model,
         schedule,
         schedule_type: scheduleType,
         run_at: runAt,
@@ -1553,6 +1653,11 @@ contextBridge.exposeInMainWorld("butlerBrowser", {
     const listener = (_event, point) => handler(point);
     ipcRenderer.on("butler-browser:pointer", listener);
     return () => ipcRenderer.removeListener("butler-browser:pointer", listener);
+  },
+  onStill: (handler) => {
+    const listener = (_event, receipt) => handler(receipt);
+    ipcRenderer.on("butler-browser:still-delivered", listener);
+    return () => ipcRenderer.removeListener("butler-browser:still-delivered", listener);
   },
   onHistory: (handler) => {
     const listener = () => handler(); ipcRenderer.on("butler-browser:history", listener);

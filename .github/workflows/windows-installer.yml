@@ -40,19 +40,19 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/windows-owner-setup
+      - uses: ./.github/actions/windows-runner-setup
         with:
           workflow: ${{ inputs.native-cache || 'windows-agent-v1' }}
       - uses: ./.github/actions/build-windows-agent
         with:
-          owner-runner: 'true'
+          self-hosted-runner: 'true'
           profile: ci-fast
           cache-key: windows-installer
           version: ${{ (needs.changes.outputs.candidate || inputs.candidate-version) && '0.1.0-preview.0' || '0.1.0-preview.90' }}
           artifact-base-url: http://127.0.0.1/unused
       - uses: ./.github/actions/package-windows-app
         with:
-          owner-runner: 'true'
+          self-hosted-runner: 'true'
           version: ${{ (needs.changes.outputs.candidate || inputs.candidate-version) && '0.1.0-preview.0' || '0.1.0-preview.90' }}
       - name: Preserve the first packages
         shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
@@ -61,14 +61,14 @@ jobs:
           Move-Item dist/release/agent dist/release/agent-first
       - uses: ./.github/actions/build-windows-agent
         with:
-          owner-runner: 'true'
+          self-hosted-runner: 'true'
           profile: ci-fast
           cache-key: windows-installer
           version: ${{ needs.changes.outputs.candidate || inputs.candidate-version || '0.1.0-preview.91' }}
           artifact-base-url: http://127.0.0.1/unused
       - uses: ./.github/actions/package-windows-app
         with:
-          owner-runner: 'true'
+          self-hosted-runner: 'true'
           version: ${{ needs.changes.outputs.candidate || inputs.candidate-version || '0.1.0-preview.91' }}
       - name: Compile existing public update E2Es without running them
         shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
@@ -86,10 +86,10 @@ jobs:
           path: dist/release/installer-transport/
           if-no-files-found: error
           compression-level: 0
-      - name: Verify owner registration and clean job profile
+      - name: Verify runner registration and clean job profile
         if: always()
         shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
-        run: ./deploy/windows-owner-cleanup.ps1
+        run: ./deploy/windows-self-hosted-cleanup.ps1
 
   verify:
     name: Verify Windows install update uninstall

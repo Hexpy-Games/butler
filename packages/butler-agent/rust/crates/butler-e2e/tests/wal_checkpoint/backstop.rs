@@ -44,6 +44,7 @@ fn stalled_worker_uses_inline_ceiling_and_recovers_after_reader_release()
         .unwrap();
     // Release maintenance before joining it even if an assertion panics.
     let release_worker = resume;
+    owner.lane_busy();
     store.insert_many(1100);
     paused.recv().unwrap();
     assert_eq!(BACKGROUND.load(SeqCst), 1);
@@ -88,6 +89,7 @@ fn stalled_worker_uses_inline_ceiling_and_recovers_after_reader_release()
         BACKGROUND.load(SeqCst)
     );
     release_worker.send(()).unwrap();
+    owner.lane_idle();
     owner.close().unwrap();
     Ok(())
 }
@@ -109,6 +111,7 @@ fn reader_pinned_partial_pass_waits_for_a_threshold_of_new_frames()
         .unwrap()
         .unwrap();
     let release = resume;
+    owner.lane_busy();
     store.insert_many(1100);
     backfilled.recv().unwrap();
     let (log, done) = frames(&store.path);
@@ -119,6 +122,7 @@ fn reader_pinned_partial_pass_waits_for_a_threshold_of_new_frames()
     let (tail, _) = frames(&store.path);
     assert!(tail > log && tail - log < 1000);
     release.send(()).unwrap();
+    owner.lane_idle();
     owner.close().unwrap();
     assert_eq!(PASSES.load(SeqCst), 1, "partial pass retried small commits");
     assert_eq!(frames(&store.path), (tail, done));

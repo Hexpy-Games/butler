@@ -19,6 +19,17 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "json" => &["public_text"],
         // Typed hook envelopes preserve complete tool JSON.
         "hooks" => &["json"],
+        // butler-work: inert SQL definitions and pure chain invariants.
+        "work_schema" | "work_queries" | "work_rank" | "work_types" => &[],
+        "work_chain" => &["work_types"],
+        "work_ids" => &[],
+        "store" => &[
+            "work_chain",
+            "work_types",
+            "work_ids",
+            "work_rank",
+            "work_queries",
+        ],
         // butler-turn: BTCC owns the turn and reads the transcript and workspace.
         "btcc" => &["conversation", "workspace"],
         "conversation" | "workspace" => &[],
@@ -53,6 +64,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "coordination" | "lenient" | "js_json" => &[],
         // butler-gateway and the host binary are single-domain crates.
         "gateway" | "host" | "structured_logging" => &[],
+        // Outbound transport produces records through the structured logging facade.
+        "http" => &["structured_logging"],
         // butler-e2e: dev-only harness around the built binary; one domain.
         "e2e" => &[],
         _ => return None,
@@ -66,13 +79,14 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // keeps its per-OS implementations as private children. The private
         // Windows process table serves instance identity and liveness.
         // SQLite owns host VFS selection and file synchronization; DB state and schema stay in callers.
-        "cpu" | "memory" | "desktop" | "launcher" | "network" | "process_table" | "secure_fs"
+        "data_paths" | "cpu" | "memory" | "desktop" | "launcher" | "network" | "process_table"
         | "storage_size" | "stdio" | "time_zone" | "user_auth" | "user_dirs" | "diagnostics"
         | "account_dirs" | "process_priority" => &[],
+        "secure_fs" => &["data_paths", "user_dirs"],
         // SQLite synchronization, credentials, install pointers and post-run
         // quarantine consume the secure filesystem facade.
         "sqlite" | "fs_space" | "secrets" | "install_link" => &["secure_fs"],
-        "command_sandbox" => &["secure_fs", "account_dirs"],
+        "command_sandbox" => &["secure_fs", "account_dirs", "data_paths"],
         "process_control" => &["process_table"],
         // The headless browser's DevTools pipe runs in a contained process tree.
         "browser_process" => &["process_control"],

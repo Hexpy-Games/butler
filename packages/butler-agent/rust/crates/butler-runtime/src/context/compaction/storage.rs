@@ -56,7 +56,7 @@ pub fn compaction_snapshot_path(data_root: &Path, session_id: &str) -> PathBuf {
         })
         .collect::<String>();
     data_root
-        .join("context/compactions")
+        .join(butler_platform::data_paths::COMPACTIONS)
         .join(format!("{safe_id}.jsonl"))
 }
 

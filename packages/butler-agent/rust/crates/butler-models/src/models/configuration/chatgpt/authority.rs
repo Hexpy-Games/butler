@@ -36,10 +36,10 @@ impl ChatGptAuthority {
             cache: Mutex::new(None),
         }
     }
-    pub fn client(&self) -> Result<reqwest::Client, Error> {
-        reqwest::Client::builder()
+    pub fn client(&self) -> Result<butler_log::http::Client, Error> {
+        butler_log::http::external(butler_log::http::Purpose::new("oauth"))
             .timeout(Duration::from_secs(10))
-            .redirect(reqwest::redirect::Policy::none())
+            .redirect(butler_log::http::RedirectPolicy::none())
             .build()
             .map_err(|_| "oauth_discovery_unavailable")
     }
@@ -142,7 +142,7 @@ fn validate_url(value: &str, issuer: &str) -> Result<(), Error> {
 }
 
 pub async fn bounded_json(
-    response: Result<reqwest::Response, reqwest::Error>,
+    response: Result<reqwest::Response, butler_log::http::Error>,
 ) -> Result<Value, Error> {
     let mut response = response.map_err(|_| "oauth_exchange_failed")?;
     if !response.status().is_success() {

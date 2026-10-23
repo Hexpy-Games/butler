@@ -61,7 +61,9 @@ fn journal_dir(root: &Path, data: &Path) -> io::Result<std::path::PathBuf> {
     use std::os::unix::ffi::OsStrExt;
     let real = root.canonicalize()?;
     let digest = Sha256::digest(real.as_os_str().as_bytes());
-    Ok(data.join("sandbox-generated").join(format!("{digest:x}")))
+    Ok(data
+        .join(crate::data_paths::SANDBOX_GENERATED)
+        .join(format!("{digest:x}")))
 }
 
 pub(super) fn prepare(

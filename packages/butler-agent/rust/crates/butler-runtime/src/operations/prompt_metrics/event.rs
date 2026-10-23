@@ -15,6 +15,8 @@ pub(super) fn line(
 ) -> Result<String, ModelRoundError> {
     let attribution = input.usage_attribution;
     let event = Event {
+        root_session_id: attribution.and_then(|a| a.root_session_id),
+        role: attribution.and_then(|a| a.role),
         ts: timestamp,
         model: input.model,
         scope: input.scope,
@@ -64,6 +66,10 @@ struct Event<'a> {
     ts: i64,
     model: &'a str,
     scope: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    root_session_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    role: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     turn_id: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]

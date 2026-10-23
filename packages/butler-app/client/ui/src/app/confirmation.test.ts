@@ -1,7 +1,7 @@
 // test-category: security
 import { afterAll, afterEach, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
-import { confirmAction, useConfirmationStore } from "./confirmation.ts";
+import { confirmAction, typedConfirmationMatches, useConfirmationStore } from "./confirmation.ts";
 import { useSettingsUIStore } from "../stores/settingsUIStore.ts";
 
 const originalDocument = globalThis.document;
@@ -66,4 +66,12 @@ test("settings navigation waits for the unsaved-change dialog before leaving", a
 afterAll(() => {
   Object.assign(globalThis, { document: originalDocument, HTMLElement: originalHTMLElement });
   dom.window.close();
+});
+
+test("typed confirmation matches only the exact phrase after NFC and trim", () => {
+  expect(typedConfirmationMatches("동의합니다".normalize("NFD"), "동의합니다")).toBe(true);
+  expect(typedConfirmationMatches("  I agree ", "I agree")).toBe(true);
+  expect(typedConfirmationMatches("동의합", "동의합니다")).toBe(false);
+  expect(typedConfirmationMatches("i agree", "I agree")).toBe(false);
+  expect(typedConfirmationMatches("", "I agree")).toBe(false);
 });

@@ -218,14 +218,15 @@ impl Installer {
             "{}/{VERSION}/{platform}/chrome-headless-shell-{platform}.zip",
             base.trim_end_matches('/')
         );
-        let response = reqwest::Client::builder()
-            .connect_timeout(Duration::from_secs(20))
-            .build()
-            .map_err(|_| "browser_download_failed")?
-            .get(url)
-            .send()
-            .await
-            .map_err(|_| "browser_download_failed")?;
+        let response =
+            butler_log::http::external(butler_log::http::Purpose::new("browser_install"))
+                .connect_timeout(Duration::from_secs(20))
+                .build()
+                .map_err(|_| "browser_download_failed")?
+                .get(url)
+                .send()
+                .await
+                .map_err(|_| "browser_download_failed")?;
         if !response.status().is_success() {
             return Err("browser_download_failed");
         }

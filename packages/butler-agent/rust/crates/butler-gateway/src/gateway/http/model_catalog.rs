@@ -168,6 +168,10 @@ fn local_registration(value: &Value) -> bool {
             && positive_number(input.get("context_window_tokens"))
             && optional_positive_number(input.get("max_output_tokens"))
             && optional_ratio(input.get("reasoning_budget_ratio"))
+            && input
+                .get("image_input")
+                .is_none_or(|value| value.is_null() || value.is_boolean())
+            && !input.contains_key("image_discovery")
             && optional_string(input.get("display_name"))
             && optional_api_key(input.get("api_key"))
             && input

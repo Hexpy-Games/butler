@@ -74,7 +74,7 @@ pub(super) fn candidate(
         allowed_roots.push(PathBuf::from(root));
     }
     allowed_roots.push(butler_data.join("artifacts/public-data"));
-    let candidates = file_candidates(&message, &mut allowed_roots);
+    let (candidates, file_grants) = file_candidates(&message, &allowed_roots);
     let changed_files = changed_files(&message);
     let plan = message
         .get("plan")
@@ -103,6 +103,7 @@ pub(super) fn candidate(
         delivery_metadata,
         materialization: ArtifactMaterializationRequest {
             allowed_roots,
+            file_grants,
             candidates,
             existing_content_keys,
         },
@@ -133,10 +134,11 @@ pub(super) fn worker_materialization(
         roots.push(PathBuf::from(root));
     }
     roots.push(butler_data.join("artifacts/public-data"));
-    let candidates = file_candidates(&message, &mut roots);
+    let (candidates, file_grants) = file_candidates(&message, &roots);
     Ok(
         (!candidates.is_empty()).then(|| ArtifactMaterializationRequest {
             allowed_roots: roots,
+            file_grants,
             candidates,
             existing_content_keys: Vec::new(),
         }),
@@ -147,19 +149,19 @@ pub(super) fn worker_materialization(
 /// Permit that exact output file, never its folder or an arbitrary artifact path.
 fn file_candidates(
     message: &Map<String, Value>,
-    roots: &mut Vec<PathBuf>,
-) -> Vec<ArtifactFileCandidate> {
-    let base_roots = roots.clone();
+    roots: &[PathBuf],
+) -> (Vec<ArtifactFileCandidate>, Vec<PathBuf>) {
+    let mut file_grants = Vec::new();
     let outputs = message.get("changedFiles").and_then(Value::as_array);
     for file in outputs.into_iter().flatten() {
         if let Some(path) = file.get("path").and_then(Value::as_str) {
             let path = PathBuf::from(path);
             if path.is_absolute() {
-                roots.push(path);
+                file_grants.push(path);
             } else if butler_turn::workspace::safe_workspace_path(path.to_str().unwrap_or(""))
                 .is_some()
             {
-                roots.extend(base_roots.iter().map(|root| root.join(&path)));
+                file_grants.extend(roots.iter().map(|root| root.join(&path)));
             }
         }
     }
@@ -173,13 +175,15 @@ fn file_candidates(
             .as_str()
             .is_some_and(|source| butler_turn::workspace::safe_workspace_path(source).is_some());
         if (item["deliverable"] == true || native_source)
-            && let Some(label) = item["safePathLabel"].as_str()
+            && let Some(label) = item["stagedPath"]
+                .as_str()
+                .or_else(|| item["safePathLabel"].as_str())
             && std::path::Path::new(label).is_absolute()
         {
-            roots.push(PathBuf::from(label));
+            file_grants.push(PathBuf::from(label));
         }
     }
-    artifacts(message.get("artifacts"), roots)
+    (artifacts(message.get("artifacts"), roots), file_grants)
 }
 
 fn delivery_metadata(metadata: &Map<String, Value>) -> Option<Map<String, Value>> {
@@ -261,13 +265,14 @@ fn artifacts(value: Option<&Value>, roots: &[PathBuf]) -> Vec<ArtifactFileCandid
         .flatten()
         .filter_map(|item| {
             let object = item.as_object()?;
-            let local = text(object.get("localPath"));
+            let local = text(object.get("stagedPath")).or_else(|| text(object.get("localPath")));
             let label = text(object.get("safePathLabel"));
             let mut paths = Vec::new();
+            let staged = object.contains_key("stagedPath");
             if let Some(path) = local {
                 paths.push(PathBuf::from(path));
             }
-            if let Some(label) = label.as_ref() {
+            if !staged && let Some(label) = label.as_ref() {
                 for root in roots {
                     paths.push(root.join(label));
                 }

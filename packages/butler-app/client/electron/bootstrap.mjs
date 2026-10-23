@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { APP_RENDERER_SCHEME_PRIVILEGES } from "./app-renderer-protocol.mjs";
 import { startupTiming } from "./startup-timing.mjs";
 import { configureChromiumFeatures } from "./butler-platform/chromium-features.mjs";
+import { plainChromiumUserAgent } from "./butler-platform/browser-identity.mjs";
 
 // Electron's ESM facade evaluates every API getter, including nativeTheme.
 // Keep it unloaded until ready, after Chromium rebuilds its feature list.
@@ -18,10 +19,9 @@ startupTiming("entry");
 app.commandLine.appendSwitch("disable-domain-blocking-for-3d-apis");
 app.once("will-finish-launching", () => startupTiming("will_finish_launching"));
 app.setName("Butler");
-if (process.env.BUTLER_E2E_TIER === "stub" && process.env.BUTLER_APP_SMOKE_DEBUG_PORT) {
-  app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
-  app.commandLine.appendSwitch("remote-debugging-port", process.env.BUTLER_APP_SMOKE_DEBUG_PORT);
-}
+// Every session and worker of this process, web tabs included, reports one plain
+// Chromium identity. Set before the first web contents; sessions inherit it.
+app.userAgentFallback = plainChromiumUserAgent(process.versions.chrome);
 const backgroundLaunch = process.argv.some((arg) =>
   ["--squirrel-install", "--squirrel-updated", "--squirrel-uninstall", "--squirrel-obsolete",
     "--butler-menu-bar-helper", "--butler-quit-main-ui",

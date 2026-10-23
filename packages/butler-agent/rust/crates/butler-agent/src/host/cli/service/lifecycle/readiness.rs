@@ -10,11 +10,11 @@ use serde::Deserialize;
 use super::probe_auth::{is_loopback_endpoint, probe_tokens};
 use super::{
     APP_RESPAWN_TIMEOUT, INSTANCE_PUBLISH_TIMEOUT, LOCK_WITHOUT_RECORD, POLL_INTERVAL,
-    START_TIMEOUT, active_service,
+    START_TIMEOUT, active_service_async,
 };
 use crate::host::ServiceConfiguration;
 use crate::host::service::instance::{
-    InstanceRecord, instance_is_locked, read_record, record_process_gone,
+    InstanceRecord, instance_is_locked, read_record_async, record_process_gone,
 };
 
 pub(super) async fn wait_until_ready(
@@ -24,8 +24,9 @@ pub(super) async fn wait_until_ready(
 ) -> Result<InstanceRecord, crate::host::HostError> {
     let mut deadline = Instant::now() + START_TIMEOUT;
     let mut progress = StorageProgress::default();
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
+    crate::host::cli::http_logs::prepare(&config.data_root);
+    let client = butler_log::http::loopback()
+        .redirect(butler_log::http::RedirectPolicy::none())
         .timeout(Duration::from_secs(2))
         .build()
         .map_err(|source| {
@@ -45,7 +46,7 @@ pub(super) async fn wait_until_ready(
         {
             return Err("native_service_start_failed: child exited before readiness".into());
         }
-        let active = match active_service(&config.data_root) {
+        let active = match active_service_async(&config.data_root).await {
             Ok(active) => active,
             Err(error) if child.is_some() && error.message() == LOCK_WITHOUT_RECORD => None,
             Err(error) => return Err(error),
@@ -100,7 +101,7 @@ pub(super) async fn wait_until_registered(
         {
             return Err("native_service_start_failed: child exited before ownership record".into());
         }
-        match active_service(data_root) {
+        match active_service_async(data_root).await {
             Ok(Some(record)) if record.cli_supervisor_pid == Some(child.id()) => return Ok(record),
             Ok(Some(_)) => return Err("native_service_start_identity_changed".into()),
             Ok(None) => {}
@@ -123,7 +124,7 @@ pub(super) async fn wait_for_app_respawn(
 ) -> Result<InstanceRecord, crate::host::HostError> {
     let deadline = Instant::now() + APP_RESPAWN_TIMEOUT;
     loop {
-        match active_service(data_root) {
+        match active_service_async(data_root).await {
             Ok(Some(record)) if record.nonce != previous_nonce => return Ok(record),
             Ok(_) => {}
             Err(error) if error.message() == LOCK_WITHOUT_RECORD => {}
@@ -147,7 +148,7 @@ pub(super) async fn wait_for_app_respawn(
 /// only after its App gateway is listening, and the caller has already checked
 /// the DATA lock and the process identity.
 async fn app_health_ready(
-    client: &reqwest::Client,
+    client: &butler_log::http::Client,
     config: &ServiceConfiguration,
     record: &InstanceRecord,
 ) -> bool {
@@ -191,7 +192,11 @@ struct ReadinessView {
     raw_text_included: bool,
 }
 
-async fn readiness_probe(client: &reqwest::Client, url: &str, token: Option<&str>) -> bool {
+async fn readiness_probe(
+    client: &butler_log::http::Client,
+    url: &str,
+    token: Option<&str>,
+) -> bool {
     let mut request = client.get(url);
     if let Some(token) = token {
         request = request.bearer_auth(token);
@@ -220,7 +225,7 @@ pub(super) async fn wait_for_stop(
     let deadline = Instant::now() + timeout;
     loop {
         let locked = instance_is_locked(data_root)?;
-        let current = read_record(data_root)?;
+        let current = read_record_async(data_root).await?;
         let replaced = current
             .as_ref()
             .is_some_and(|record| record.nonce != stopped.nonce);

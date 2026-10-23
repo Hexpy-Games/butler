@@ -1,6 +1,7 @@
 import { appLocaleFromLanguage, getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 /** P2a-2 public guided tools, ownership, authority and native hand-back in the real App. */
 import { Database } from "bun:sqlite";
+import { expectBrowserStills } from "../support/browser-still-delivery";
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { loadavg } from "node:os";
@@ -89,7 +90,7 @@ try {
   for(const row of rows.filter(row=>row.tool_result_id && row.tool_call_id)) {
     const turn=(sessionView.latest_turn as {id:string}).id;
     const raw=await app.gateway.api<{content:string}>(`/turns/${turn}/operations/${row.tool_call_id}/output?result_id=${row.tool_result_id}&offset=0`).catch(()=>null);
-    if(row.safe_tool_name==="browser_act" && raw) {const receipt=JSON.parse(raw.content);assert.equal(receipt.steps.length,process.env.BUTLER_BROWSER_SOAK==="1"?1:process.env.BUTLER_BROWSER_CONTEXT_BYTES==="1"?10:2);assert.ok(receipt.steps.every((step:{status:string;still_file?:unknown})=>step.status==="completed" && step.still_file));}
+    if(row.safe_tool_name==="browser_act" && raw) {const receipt=JSON.parse(raw.content);assert.equal(receipt.steps.length,process.env.BUTLER_BROWSER_SOAK==="1"?1:process.env.BUTLER_BROWSER_CONTEXT_BYTES==="1"?10:2);assert.ok(receipt.steps.every((step:{status:string})=>step.status==="completed"));await expectBrowserStills(app.gateway,receipt);}
     summaries.push({name:row.safe_tool_name,input:row.safe_input_label,keys:raw?Object.keys(JSON.parse(raw.content)):[],hasStill:raw?.content.includes('still_file'),size:raw?.content.length});
   }
   writeFileSync(join(evidence,"timeline-projection.json"),JSON.stringify(summaries,null,2));

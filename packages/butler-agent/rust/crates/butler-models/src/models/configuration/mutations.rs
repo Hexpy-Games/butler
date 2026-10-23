@@ -24,6 +24,8 @@ pub struct LocalModelMutation {
     pub context_window_tokens: f64,
     pub max_output_tokens: Option<f64>,
     pub reasoning_budget_ratio: Option<f64>,
+    /// Outer None preserves the declaration; Some(None) clears it.
+    pub image_input: Option<Option<bool>>,
     pub source: LocalModelSource,
 }
 
@@ -306,7 +308,7 @@ fn io_error(source: std::io::Error) -> ModelCatalogError {
         source: source.into(),
     }
 }
-fn json_error(source: serde_json::Error) -> ModelCatalogError {
+pub(super) fn json_error(source: serde_json::Error) -> ModelCatalogError {
     ModelCatalogError::Storage {
         message: "Model configuration could not be serialized.",
         source: source.into(),

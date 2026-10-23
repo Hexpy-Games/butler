@@ -6,6 +6,8 @@
     reason = "test assertions"
 )]
 
+mod background;
+
 use std::time::Duration;
 
 use butler_e2e::e2e::HarnessError;
@@ -127,7 +129,7 @@ async fn use_01_subscription_turn_reports_quota_usage_and_cost() -> Result<(), H
     super::memory_fixture::initialize_empty(&setup.sandbox.data)?;
     let mut s = setup.start().await?;
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
-    let (_, turn) = s.turn("general", PROMPT).await?;
+    let (turn_id, turn) = s.turn("general", PROMPT).await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
     // While recording, the cassette is written only at the end.
     let recorded = if s.recording() {
@@ -165,34 +167,9 @@ async fn use_01_subscription_turn_reports_quota_usage_and_cost() -> Result<(), H
     let again = s.gw.get("/session-view?session_id=general").await?;
     assert_eq!(again.data()["usage"], usage);
 
-    // A delivered chat precedes background extraction. Wait for its completed
-    // usage row, rather than racing it or guessing a delay. The empty meaning
-    // stub performs exactly one request and requires no further binding stages.
-    let mut observed_scopes = Value::Null;
-    let monitor = tokio::time::timeout(Duration::from_secs(10), async {
-        loop {
-            let monitor = s.gw.get("/usage-monitor?since_hours=1").await?;
-            observed_scopes = monitor.data()["model"]["byScopeUsage"].clone();
-            if monitor.data()["model"]["byScopeUsage"]
-                .as_object()
-                .is_some_and(|scopes| {
-                    scopes.iter().any(|(scope, tokens)| {
-                        scope.starts_with("memory-extract:") && tokens["requestCount"] == 1
-                    })
-                })
-            {
-                return Ok::<_, HarnessError>(monitor);
-            }
-        }
-    })
-    .await
-    .map_err(|_| {
-        butler_e2e::e2e::harness_error(format!(
-            "background extraction usage did not complete: memory_requests={} replay_misses={} scopes={observed_scopes}",
-            s.provider().map(|p| p.memory_requests().len()).unwrap_or(0),
-            s.provider().map(|p| p.misses().len()).unwrap_or(0),
-        ))
-    })??;
+    // One revision contains separate user and assistant windows. Wait for the
+    // complete job, not the transient usage total after its first request.
+    let monitor = background::wait(&s, &turn_id).await?;
     assert_eq!(monitor.status, 200, "{}", monitor.text);
     let cost = &monitor.data()["cost"];
     assert_eq!(cost["available"], true, "{cost}");
@@ -228,6 +205,10 @@ async fn use_01_subscription_turn_reports_quota_usage_and_cost() -> Result<(), H
     let view = s.gw.get("/session-view?session_id=general").await?;
     assert_eq!(view.data()["usage"], usage, "usage changed across restart");
     assert_eq!(view.data()["context"]["auth_mode"], "subscription");
+    if let Some(recorded) = &recorded {
+        let after = s.gw.get("/usage-monitor?since_hours=1").await?;
+        assert_monitor_cost(after.data(), recorded);
+    }
     s.finish().await
 }
 
@@ -246,22 +227,24 @@ fn assert_monitor_cost(monitor: &Value, recorded: &Recorded) {
         "{conversation}"
     );
     let memory = &work["memory"];
-    assert_eq!(memory["requestCount"], 1);
+    assert_eq!(memory["requestCount"], 2);
     let scopes = monitor["model"]["byScopeUsage"].as_object().unwrap();
-    let (_, tokens) = scopes
+    let memory_scopes: Vec<_> = scopes
         .iter()
-        .find(|(scope, _)| scope.starts_with("memory-extract:"))
-        .expect("background memory tokens");
-    assert_eq!(tokens["requestCount"], 1, "{tokens}");
-    assert_eq!(tokens["promptTokens"], 100.0, "{tokens}");
-    assert_eq!(tokens["outputTokens"], 20.0, "{tokens}");
+        .filter(|(scope, _)| scope.starts_with("memory-extract:"))
+        .collect();
+    assert_eq!(memory_scopes.len(), 1, "{scopes:?}");
+    let (_, tokens) = memory_scopes[0];
+    assert_eq!(tokens["requestCount"], 2, "{tokens}");
+    assert_eq!(tokens["promptTokens"], 200.0, "{tokens}");
+    assert_eq!(tokens["outputTokens"], 40.0, "{tokens}");
     assert_eq!(memory["pricedModelRefs"], json!(["gpt-6-luna"]));
-    let background_usd = (100.0 * 0.10 + 20.0 * 0.50) / 1e6;
+    let background_usd = (200.0 * 0.10 + 40.0 * 0.50) / 1e6;
     assert!(
         (memory["estimatedUsd"].as_f64().unwrap() - background_usd).abs() < 1e-15,
         "{memory}"
     );
-    assert_eq!(monitor["model"]["requestCount"], 2);
+    assert_eq!(monitor["model"]["requestCount"], 3);
     assert!(
         (monitor["cost"]["estimatedUsd"].as_f64().unwrap()
             - recorded_cost(recorded)

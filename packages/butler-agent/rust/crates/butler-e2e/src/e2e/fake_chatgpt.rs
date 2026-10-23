@@ -35,6 +35,7 @@ pub struct Faults {
 pub struct Seen {
     pub path: String,
     pub params: BTreeMap<String, String>,
+    pub headers: BTreeMap<String, String>,
 }
 pub(super) struct State {
     pub issuer: String,
@@ -141,13 +142,22 @@ impl Drop for FakeChatGptAuthority {
     }
 }
 impl State {
-    fn record(&self, path: &str, params: &BTreeMap<String, String>) {
+    fn record(
+        &self,
+        path: &str,
+        params: &BTreeMap<String, String>,
+        headers: &axum::http::HeaderMap,
+    ) {
         self.seen
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push(Seen {
                 path: path.into(),
                 params: params.clone(),
+                headers: headers
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or_default().to_owned()))
+                    .collect(),
             });
     }
     fn faults(&self) -> Faults {

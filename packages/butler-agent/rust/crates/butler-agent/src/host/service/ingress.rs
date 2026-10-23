@@ -155,6 +155,9 @@ impl IngressDispatcher {
         }
     }
 
+    pub(crate) fn shutdown_token(&self) -> tokio_util::sync::CancellationToken {
+        self.shutdown.clone()
+    }
     pub(crate) async fn poll(&self) -> Result<IngressPoll, IngressError> {
         let mut state = self.lifecycle.lock().await;
         if state.closing {
@@ -188,7 +191,7 @@ impl IngressDispatcher {
                 }
             }
         }
-        if summary.interrupted > 0 {
+        if summary.interrupted > 0 || self.shutdown.is_cancelled() {
             return Ok(summary);
         }
         recover_stale(self.queue.clone(), state.active_queue_ids.clone()).await?;
@@ -219,14 +222,18 @@ impl IngressDispatcher {
                 subsessions: self.subsessions.clone(),
                 restart_handoff: self.restart_handoff.clone(),
             };
-            let handle = state.tasks.spawn(async move {
-                let result = dispatch::one(item, deps).await;
-                DispatchDone {
-                    session,
-                    queue_id,
-                    result,
+            use tracing::Instrument;
+            let handle = state.tasks.spawn(
+                async move {
+                    let result = dispatch::one(item, deps).await;
+                    DispatchDone {
+                        session,
+                        queue_id,
+                        result,
+                    }
                 }
-            });
+                .instrument(tracing::Span::current()),
+            );
             state.task_keys.insert(handle.id(), key);
         }
         Ok(summary)

@@ -1,5 +1,6 @@
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import { Grid } from "../Grid";
+import { Input } from "../Input";
 import { Stack } from "../Stack";
 import { Tag } from "../Tag";
 import { Typo } from "../Typo";
@@ -12,8 +13,8 @@ export const meta: ShowcaseMeta = {
 };
 
 const labels = {
-  "en-US": { label: "Provider usage and remaining quota for this month", total: "12,480", xs: "xs", sm: "sm", md: "md", lg: "lg" },
-  "ko-KR": { label: "이번 달 제공자별 사용량과 남은 한도", total: "12,480", xs: "xs", sm: "sm", md: "md", lg: "lg" },
+  "en-US": { label: "Provider usage and remaining quota for this month", total: "12,480", xs: "xs", sm: "sm", md: "md", lg: "lg", field: "Search chats", period: "Last 24 hours" },
+  "ko-KR": { label: "이번 달 제공자별 사용량과 남은 한도", total: "12,480", xs: "xs", sm: "sm", md: "md", lg: "lg", field: "대화 검색", period: "최근 24시간" },
 } as const;
 
 function text({ locale }: ShowcaseRenderContext) {
@@ -51,6 +52,18 @@ export const stories: ShowcaseStory[] = [
         <Grid.Item alignSelf="end"><Tag>alignSelf=end</Tag></Grid.Item>
         <Typo.Body>{text(context).label}</Typo.Body>
       </Grid>
+    ),
+  },
+  {
+    // UsageSettings toolbar: the field stops at 320px; once the row wraps it spans the row.
+    name: "Field width",
+    render: (context) => (
+      <Stack align="row" cross="center" justify="between" gap="md" wrap>
+        <Stack.Item grow basis="md" minWidth="0" maxWidth="field">
+          <Input aria-label={text(context).field} placeholder={text(context).field} />
+        </Stack.Item>
+        <Tag>{text(context).period}</Tag>
+      </Stack>
     ),
   },
   {

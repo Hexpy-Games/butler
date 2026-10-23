@@ -37,7 +37,7 @@ impl ModelConfiguration {
                 "Provider API key credential is not registered.",
             ));
         }
-        let environment_path = root.join(".env");
+        let environment_path = root.join(butler_platform::data_paths::ENVIRONMENT);
         let private_environment = tokio::task::spawn_blocking(move || {
             butler_core::configuration::read_private_environment(&environment_path)
                 .unwrap_or_default()
@@ -56,7 +56,6 @@ impl ModelConfiguration {
             data_root: root,
             environment: &environment,
             clock: &self.clock,
-            client: &self.client,
             revision: &self.account_revision,
         };
         if registered.is_some_and(|value| value.auth_type == ProviderAuthMethod::ChatGptOauth) {

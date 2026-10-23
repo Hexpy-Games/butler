@@ -10,8 +10,8 @@ import { useUsageBarsSelection } from "./useUsageBarsSelection";
 import styles from "./UsageBars.module.css";
 
 export type {
-  UsageBarsAxisLabel, UsageBarsBucket, UsageBarsColor, UsageBarsProps, UsageBarsSegment, UsageBarsSeries, UsageBarsSize,
-  UsageBarsState, UsageBarsYTicks,
+  UsageBarsAxisLabel, UsageBarsBucket, UsageBarsColor, UsageBarsEmphasis, UsageBarsProps, UsageBarsSegment, UsageBarsSeries,
+  UsageBarsSize, UsageBarsState, UsageBarsYTicks,
 } from "./usageBarsTypes";
 
 const DEFAULT_MIN_SLOTS = 8;
@@ -20,18 +20,19 @@ const DEFAULT_MIN_SLOTS = 8;
  * Stacked usage columns over time: a 56px popover strip or a panel chart with
  * y ticks. Presenter only: buckets, series colors, labels and copy come from
  * props; the selected bucket's readout lives in the caller (no tooltip). One
- * tab stop; arrows move the selection.
+ * tab stop; arrows move the selection. A segment's `subtask` part is drawn
+ * hatched on top of it; `emphasis` follows a linked legend row.
  */
 export function UsageBars({
   buckets, series, size = "popover", state = "ready", selectedIndex, onSelect, axisLabels = [], minSlots = DEFAULT_MIN_SLOTS,
-  yTicks, emptyLabel, loadingLabel, note, ariaLabel, className, style,
+  yTicks, emptyLabel, loadingLabel, note, ariaLabel, emphasis, className, style,
 }: UsageBarsProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const plotRef = useRef<HTMLDivElement>(null);
   const ticks = size === "panel" && yTicks !== undefined;
   const geometry = useMemo(
-    () => usageBarsGeometry(state === "ready" ? buckets : [], series, { minSlots: Math.max(minSlots, buckets.length), ticks }),
-    [buckets, minSlots, series, state, ticks],
+    () => usageBarsGeometry(state === "ready" ? buckets : [], series, { minSlots: Math.max(minSlots, buckets.length), ticks, size }),
+    [buckets, minSlots, series, size, state, ticks],
   );
   const ready = state === "ready" && !geometry.blank;
   const keys = useMemo(() => (ready ? geometry.columns.map((column) => column.key) : []), [geometry, ready]);
@@ -39,13 +40,16 @@ export function UsageBars({
   const { selected, plotHandlers, rootHandlers } = useUsageBarsSelection({
     keys, slots: geometry.slots, selectedIndex, onSelect, rootRef, plotRef,
   });
-  const signature = useMemo(() => geometry.columns.map((column) => column.fraction.toFixed(4)).join(","), [geometry]);
+  // Heights and hatched parts: a change in either redraws; a selection change does not.
+  const signature = useMemo(() => geometry.columns.map((column) => [column.fraction, ...column.segments.map((segment) => segment.subtask)]
+    .map((value) => value.toFixed(4)).join(":")).join(","), [geometry]);
   useUsageBarsMotion(plotRef, ready, signature);
   const selectedBucket = selected === null ? undefined : buckets[selected];
 
   return (
     <div ref={rootRef} className={cn(styles.root, className)} style={style} data-slot="usage-bars" data-size={size}
       data-state={state} data-ticks={ticks ? "true" : undefined} data-selected={selected === null ? undefined : "true"}
+      data-emphasis={ready && emphasis ? emphasis : undefined}
       role={state === "loading" ? "status" : "group"} aria-label={ariaLabel} aria-busy={state === "loading" || undefined}
       tabIndex={ready ? 0 : undefined} {...(ready ? rootHandlers : {})}>
       {/* The gutter stays while loading or empty (just "0"), so data arriving never shifts the plot. */}

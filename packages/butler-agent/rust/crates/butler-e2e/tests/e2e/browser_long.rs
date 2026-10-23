@@ -20,7 +20,9 @@ const OBSERVATIONS: usize = 64;
 async fn browser_long_run_keeps_newest_pixels_and_bounded_requests() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let started = std::time::Instant::now();
-    let setup = Setup::new("BROWSER-LONG")?.stub_cassette(cassette()?);
+    let cassette = cassette()?;
+    let expected_rounds = cassette.exchanges.len();
+    let setup = Setup::new("BROWSER-LONG")?.stub_cassette(cassette);
     let s = setup.start().await?;
     let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
     let stream = reqwest::Client::new()
@@ -32,11 +34,14 @@ async fn browser_long_run_keeps_newest_pixels_and_bounded_requests() -> Result<(
     let host = tokio::spawn(serve_host(stream, admin));
     eprintln!("browser-long setup_ms={}", started.elapsed().as_millis());
     let turn_started = std::time::Instant::now();
-    s.turn("general", "Long browser task").await?;
-    eprintln!(
-        "browser-long turn_ms={}",
-        turn_started.elapsed().as_millis()
-    );
+    // Hang detector derived from the 2 s/round budget, owner-approved 2026-10-20.
+    let timeout = Duration::from_secs(expected_rounds as u64 * 2);
+    let (turn_id, turn) = s
+        .turn_within("general", "Long browser task", timeout)
+        .await?;
+    let turn_elapsed = turn_started.elapsed();
+    assert_eq!(turn["state"], "delivered");
+    eprintln!("browser-long turn_ms={}", turn_elapsed.as_millis());
     let text_only = tokio::time::timeout(Duration::from_secs(30), host)
         .await
         .unwrap()
@@ -46,7 +51,20 @@ async fn browser_long_run_keeps_newest_pixels_and_bounded_requests() -> Result<(
         "exactly the look-never observation skipped the screenshot"
     );
     let requests = s.provider()?.requests();
+    assert_eq!(requests.len(), expected_rounds);
     assert_observations(&requests);
+    let per_round_ms = turn_elapsed.as_secs_f64() * 1000.0 / requests.len() as f64;
+    eprintln!(
+        "browser-long provider_rounds={} overhead_ms_per_round={per_round_ms:.3}",
+        requests.len()
+    );
+    if per_round_ms > 1000.0 {
+        eprintln!("browser-long watch: overhead {per_round_ms:.3}ms/round > 1000ms");
+    }
+    assert!(
+        per_round_ms < 2000.0,
+        "browser-long overhead {per_round_ms:.3}ms/round >= 2000ms"
+    );
     let last = requests.last().unwrap().to_string();
     assert!(
         !last.contains("image_budget_exhausted"),
@@ -70,6 +88,13 @@ async fn browser_long_run_keeps_newest_pixels_and_bounded_requests() -> Result<(
         "text-only observation: {plain}"
     );
     assert!(plain["output"].get("image").is_none());
+    let byte_limit = byte_limit(&s.model.model);
+    let rows = super::browser_prefix::diagnostics(&s.sandbox.data)?;
+    let rows: Vec<_> = rows
+        .into_iter()
+        .filter(|row| row["turnId"] == turn_id)
+        .collect();
+    super::browser_prefix::assert_prunes(&requests, &rows);
     let sizes: Vec<usize> = requests.iter().map(|r| r.to_string().len()).collect();
     let pixels = format!(
         "data:image/jpeg;base64,{}",
@@ -78,8 +103,11 @@ async fn browser_long_run_keeps_newest_pixels_and_bounded_requests() -> Result<(
         ))
     );
     for (index, request) in requests.iter().enumerate().skip(3) {
-        let images = pictured(request);
-        assert!(images <= 2, "request {index} carries {images} images");
+        let stale_bytes = stale_full_bytes(request);
+        assert!(
+            stale_bytes <= byte_limit * 3 / 8,
+            "request {index} has {stale_bytes} stale full bytes (limit {byte_limit})"
+        );
         let newest = request["input"]
             .as_array()
             .unwrap()
@@ -102,17 +130,16 @@ async fn browser_long_run_keeps_newest_pixels_and_bounded_requests() -> Result<(
             "request {index}: the newest observation carries its pixels"
         );
     }
-    // Superseded observations shrink to stubs: growth per round is text, not pixels.
-    let early = sizes[6];
-    let late = sizes[sizes.len() - 4];
-    let per_round = (late - early) / (sizes.len() - 10);
+    let early = sizes[3];
+    let newest = pixels.len() + 16 * 1024;
+    let maximum = *sizes.iter().max().unwrap();
     eprintln!(
-        "request bytes: first-observation={early} last-observation={late} per-round={per_round} max={}",
-        sizes.iter().max().unwrap()
+        "request bytes: first-observation={early} last-observation={} max={maximum} byte-limit={byte_limit}",
+        sizes[sizes.len() - 4]
     );
     assert!(
-        per_round < 4 * 1024,
-        "{per_round} bytes per round: superseded pixels stay out of context"
+        maximum <= early + newest + byte_limit * 3 / 8,
+        "max request {maximum} exceeds first observation + newest + stale guard"
     );
     s.finish().await
 }
@@ -142,13 +169,46 @@ fn assert_observations(requests: &[Value]) {
     }
 }
 
-fn pictured(request: &Value) -> usize {
-    request["input"]
+fn byte_limit(model: &str) -> usize {
+    let catalog: Value = serde_json::from_str(include_str!(
+        "../../../butler-models/src/models/catalog/static-catalog.json"
+    ))
+    .unwrap();
+    let model = catalog["models"]
         .as_array()
         .unwrap()
         .iter()
-        .filter(|item| item["output"].to_string().contains("input_image"))
-        .count()
+        .find(|row| row["model_ref"] == model)
+        .unwrap();
+    usize::try_from(
+        model["context_window_tokens"]
+            .as_u64()
+            .unwrap_or(200_000)
+            .saturating_mul(2)
+            .clamp(192 * 1024, 4 * 1024 * 1024),
+    )
+    .unwrap()
+}
+
+fn stale_full_bytes(request: &Value) -> usize {
+    let mut observations = super::browser_prefix::outputs(request);
+    observations.pop();
+    observations
+        .into_iter()
+        .filter(|(v, _)| v["output"]["status"] != "superseded")
+        .map(|(v, image)| {
+            v.to_string().len()
+                + if image {
+                    STANDARD
+                        .encode(include_bytes!(
+                            "../../fixtures/browser-route/observation.jpg"
+                        ))
+                        .len()
+                } else {
+                    0
+                }
+        })
+        .sum()
 }
 
 fn output(request: &Value) -> Value {

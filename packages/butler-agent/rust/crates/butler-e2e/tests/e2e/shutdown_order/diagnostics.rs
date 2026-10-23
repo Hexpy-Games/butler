@@ -4,6 +4,17 @@ use std::time::Instant;
 
 use butler_e2e::e2e::{scenario::Scenario, stop_intent::instance_record};
 
+pub(super) fn print_shutdown(scenario: &Scenario) {
+    for line in scenario
+        .agent
+        .logs()
+        .lines()
+        .filter(|line| line.contains("[native-shutdown]"))
+    {
+        eprintln!("{line}");
+    }
+}
+
 pub(super) fn snapshot(scenario: &Scenario, started: Instant) -> String {
     let record = instance_record(&scenario.sandbox.data);
     let record = match record {

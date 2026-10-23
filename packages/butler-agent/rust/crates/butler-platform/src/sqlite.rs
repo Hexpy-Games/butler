@@ -11,7 +11,7 @@ use std::path::Path;
 
 /// Startup scans can traverse overflow pages without a copy per page. macOS
 /// uses the caller's bounded page cache: mapping amplifies physical reads on
-/// the full owner-scale integrity scan on the hosted runner.
+/// the full history integrity scan on the hosted runner.
 /// Callers close or unmap the temporary window before serving requests.
 pub const VALIDATION_MMAP_BYTES: i64 = if cfg!(target_os = "macos") {
     0

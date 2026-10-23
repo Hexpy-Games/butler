@@ -6,6 +6,22 @@ pub(in crate::gateway::http) async fn route(
     request: Request<Body>,
     client: Client,
 ) -> Result<Response, HttpError> {
+    if state
+        .application
+        .data_reset()
+        .is_some_and(|p| p.resetting())
+        && !matches!(
+            *request.method(),
+            Method::GET | Method::HEAD | Method::OPTIONS
+        )
+        && request.uri().path() != "/data/reset"
+    {
+        return Err(HttpError::public(
+            503,
+            "service_resetting",
+            "Service is resetting.",
+        ));
+    }
     let uri = request.uri().clone();
     let Some(handler) = super::select::handler(&request) else {
         return if request.method() == Method::GET {
@@ -20,11 +36,13 @@ pub(in crate::gateway::http) async fn route(
         };
     };
     match handler {
+        Handler::DataReset => data_reset::route(state, request).await,
         Handler::NotFound => Err(HttpError::public(404, "not_found", "Route not found.")),
         Handler::Logs => logs::route(state, request, &uri).await,
         Handler::Library => library::route(state, request).await,
         Handler::History => library::history::route(state, request).await,
         Handler::Browser => browser_host::route(state, request, &client).await,
+        Handler::BrowserStills => browser_stills::route(state, request).await,
         Handler::Preview => content::preview::view(&state, &request),
         Handler::Output => content::view(state, request).await,
         Handler::Security => security_settings::route(state, request).await,
@@ -50,6 +68,7 @@ async fn commands(
     uri: &Uri,
 ) -> Result<Response, HttpError> {
     match handler {
+        Handler::WorkModel => work_model::route(state, request, uri).await,
         Handler::TaskGraphs => task_graphs::route(state, request, uri).await,
         Handler::Subsessions => required(subsessions::route(state, request, uri).await?),
         Handler::Authority => authority::route(state, request, uri).await,

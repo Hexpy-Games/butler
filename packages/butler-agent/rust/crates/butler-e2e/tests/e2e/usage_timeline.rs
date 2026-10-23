@@ -356,8 +356,8 @@ async fn usage_schedule_kind_uses_recorded_runs() -> Result<(), HarnessError> {
         VALUES('opaque-chat-id','Daily report','chat','opaque-runtime-id','2026-01-01','2026-01-01');
         INSERT INTO app_automations(id,title,prompt_body,target_kind,target_session_id,interval_seconds,state,last_run_state,created_at,updated_at)
         VALUES('a','Daily report','Report','chat','opaque-chat-id',3600,'paused','delivered','2026-01-01','2026-01-01');").unwrap();
-    db.execute("INSERT INTO app_automation_runs(id,automation_id,target_session_id,state,trigger,started_at,turn_id)
-        VALUES('r','a','opaque-chat-id','delivered','scheduled',?1,'unrelated-turn')",[(now - chrono::Duration::hours(25)).to_rfc3339()]).unwrap();
+    db.execute("INSERT INTO app_automation_runs(id,automation_id,target_session_id,state,trigger,started_at,completed_at,turn_id)
+        VALUES('r','a','opaque-chat-id','delivered','scheduled',?1,?1,'unrelated-turn')",[(now - chrono::Duration::hours(25)).to_rfc3339()]).unwrap();
     // A schedule targeting this chat is insufficient: the actual usage turn must match.
     let reply = s.gw.get("/usage-monitor?since_hours=24").await?;
     assert_eq!(reply.data()["topSessions"][0]["kind"], "chat");
@@ -366,9 +366,9 @@ async fn usage_schedule_kind_uses_recorded_runs() -> Result<(), HarnessError> {
         [],
     )
     .unwrap();
-    // A matching turn on a run outside the range must still be excluded.
+    // Dispatch completed before the range; usage in its turn still belongs to the schedule.
     let reply = s.gw.get("/usage-monitor?since_hours=24").await?;
-    assert_eq!(reply.data()["topSessions"][0]["kind"], "chat");
+    assert_eq!(reply.data()["topSessions"][0]["kind"], "schedule");
     db.execute(
         "UPDATE app_automation_runs SET started_at=?1",
         [(now - chrono::Duration::seconds(2)).to_rfc3339()],
@@ -395,6 +395,22 @@ async fn usage_schedule_kind_uses_recorded_runs() -> Result<(), HarnessError> {
     assert_eq!(reply.data()["topSessions"][0]["requests"], 2);
     let reply = s.gw.get("/usage-monitor?since_hours=24").await?;
     assert_eq!(reply.data()["topSessions"][0]["kind"], "schedule");
+    // Both runtime scope spellings belong to the same session. Missing turn
+    // provenance in either one prevents schedule classification, without losing usage.
+    let mut log = fs::OpenOptions::new().append(true).open(&path)?;
+    writeln!(
+        log,
+        "{}",
+        json!({"ts":now.timestamp_millis()-1000,"scope":"opaque-runtime-id",
+        "model":"m","promptTokens":10,"cachedTokens":3,"totalTokens":12})
+    )?;
+    drop(log);
+    let reply = s.gw.get("/usage-monitor?since_hours=24").await?;
+    let entry = &reply.data()["topSessions"][0];
+    assert_eq!(entry["kind"], "chat");
+    assert_eq!(entry["requests"], 2);
+    assert_eq!(entry["totalTokens"], 24.0);
+    assert_timeline(reply.data());
     // Deleted chats retain conversation provenance without inventing Butler work.
     db.execute("DELETE FROM app_automation_runs", []).unwrap();
     db.execute("DELETE FROM app_automations", []).unwrap();

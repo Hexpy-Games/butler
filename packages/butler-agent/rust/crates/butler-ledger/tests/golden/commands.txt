@@ -4795,6 +4795,8 @@ Err(
 }
 
 ##### files
+--- file project-ledger/projects/.project-ledger-locks/demo.generation
+"<uuid:5>"
 --- file project-ledger/projects/demo/decisions/dec-1.md
 ---
 schema: "project-ledger.decision.v1"

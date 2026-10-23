@@ -7,7 +7,7 @@ use axum::{
 };
 use std::{collections::BTreeMap, sync::Arc};
 pub(super) async fn list(State(state): State<Arc<Authority>>, headers: HeaderMap) -> Response {
-    state.record("models", &BTreeMap::new());
+    state.record("models", &BTreeMap::new(), &headers);
     let mut faults = state
         .faults
         .lock()

@@ -43,12 +43,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        env:
-          # Process scope only; the runner service policy remains unchanged.
-          PSExecutionPolicyPreference: Bypass
-        with:
-          python-version: '3.12'
+      - uses: ./.github/actions/release-python
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.99.0
@@ -67,8 +62,8 @@ jobs:
           RUSTC_WRAPPER: ''
         run: |
           python .github/scripts/isolated.py python .github/scripts/ci-store-publish.py native-deps "$NATIVE_TARGET"
-  windows-owner:
-    name: Publish windows-owner
+  windows-self-hosted:
+    name: Publish windows-self-hosted
     runs-on: [self-hosted, Windows, X64, butler-win, "${{ (startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/')) && 'butler-win-release' || 'butler-win-shared' }}"]
     timeout-minutes: 90
     defaults:
@@ -80,15 +75,15 @@ jobs:
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/windows-owner-discovery
-      - name: Verify existing owner toolchain
+      - uses: ./.github/actions/windows-runner-discovery
+      - name: Verify existing runner toolchain
         run: |
           $ErrorActionPreference = 'Continue'
-          python -c "import sys; sys.exit('Owner runner requires existing Python 3.12 on PATH; installers are forbidden') if sys.version_info[:2] != (3, 12) else print(sys.version)"
+          python -c "import sys; sys.exit('Self-hosted Windows runner requires existing Python 3.12 on PATH; installers are forbidden') if sys.version_info[:2] != (3, 12) else print(sys.version)"
           $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { throw 'Existing Python 3.12 is required; no installation attempted' }
           foreach ($tool in @('rustc', 'cargo', 'cl', 'cmake')) {
-            if (!(Get-Command $tool -ErrorAction SilentlyContinue)) { throw "Owner runner requires existing $tool on PATH; installers are forbidden" }
+            if (!(Get-Command $tool -ErrorAction SilentlyContinue)) { throw "Self-hosted Windows runner requires existing $tool on PATH; installers are forbidden" }
           }
           $ErrorActionPreference = 'Continue'
           rustc --version
@@ -98,11 +93,11 @@ jobs:
             if (![Environment]::GetEnvironmentVariable($name)) { throw "Existing MSVC developer environment requires $name; no host changes attempted" }
           }
       - uses: ./.github/actions/setup-oras
-      - name: Build and publish owner-toolset SDK
+      - name: Build and publish runner-toolset SDK
         env:
           GH_TOKEN: ${{ github.token }}
           NATIVE_TARGET: windows-x64
-          CARGO_TARGET_DIR: ${{ github.workspace }}/target/windows-owner/native-deps
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target/windows-self-hosted/native-deps
           RUSTC_WRAPPER: ''
         run: |
           $ErrorActionPreference = 'Continue'

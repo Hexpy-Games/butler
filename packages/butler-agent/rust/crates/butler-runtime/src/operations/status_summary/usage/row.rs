@@ -24,6 +24,8 @@ pub(super) struct UsageRow {
     pub(super) auth_mode: Option<Arc<str>>,
     pub(super) billing_account: Option<Arc<str>>,
     pub(super) scope: Arc<str>,
+    pub(super) root_session_id: Option<Arc<str>>,
+    pub(super) role: Option<Arc<str>>,
     pub(super) phase: Option<Arc<str>>,
     pub(super) prompt: f64,
     pub(super) cached: f64,
@@ -107,6 +109,14 @@ impl UsageRow {
             auth_mode: event["authMode"].as_str().map(|s| names.get(s)),
             billing_account: event["billingAccount"].as_str().map(|s| names.get(s)),
             scope: names.get(scope),
+            root_session_id: event
+                .get("rootSessionId")
+                .and_then(Value::as_str)
+                .map(|v| names.get(v)),
+            role: event
+                .get("role")
+                .and_then(Value::as_str)
+                .map(|v| names.get(v)),
             phase,
             prompt,
             cached,
@@ -133,6 +143,8 @@ impl UsageRow {
             ts: self.ts_ms?,
             model: self.model.to_string(),
             scope: self.scope.to_string(),
+            root_session_id: None,
+            role: None,
             prompt_tokens: self.prompt,
             cached_tokens: self.cached,
             cache_write_tokens: self.cache_write,

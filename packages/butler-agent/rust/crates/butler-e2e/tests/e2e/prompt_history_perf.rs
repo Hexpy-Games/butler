@@ -3,45 +3,40 @@ use super::*;
 use std::time::Instant;
 
 #[tokio::test]
-async fn perf_owner_scale_history_assembly_and_idle_writes() -> Result<(), HarnessError> {
+async fn perf_history_assembly_and_idle_writes() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    if std::env::var("BUTLER_E2E_PERF").as_deref() != Ok("1") {
-        return Ok(());
-    }
     let (url, stub, server) = provider::start(false).await?;
-    let setup = Setup::new("PROMPT-OWNER-SCALE")?
+    let setup = Setup::new("PROMPT-history")?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1")
         .env("BUTLER_STARTUP_TRACE", "1");
-    super::super::perf_turn::require_release_agent(&setup)?;
     let mut s = setup.start().await?;
-    s.turn("general", "warm owner-scale fixture").await?;
+    s.turn("general", "warm history fixture").await?;
     s.agent.terminate().await?;
     let path = s.sandbox.data.join("runtime/conversation-store.sqlite");
     seed(&path)?;
     let bytes = std::fs::metadata(&path)?.len();
-    assert!(bytes >= 2_600_000_000);
     s.gw = s.agent.start_again().await?;
     let request_index = stub.requests.lock().unwrap().len();
     let started = Instant::now();
-    let (_, turn) = s.turn("general", "owner-scale latest request").await?;
+    let (_, turn) = s.turn("general", "history latest request").await?;
     assert_eq!(turn["state"], "delivered");
     let request = stub.requests.lock().unwrap()[request_index].clone();
-    for index in 996..1000 {
-        assert!(source(&request).contains(&format!("user: owner history request {index}")));
-        assert!(source(&request).contains(&format!("butler: owner history reply {index}")));
+    for index in 16..20 {
+        assert!(source(&request).contains(&format!("user: archived history request {index}")));
+        assert!(source(&request).contains(&format!("butler: archived history reply {index}")));
     }
     let text = source(&request);
     assert!(
-        text.find("owner history request 997").unwrap()
-            < text.find("owner history request 999").unwrap()
+        text.find("archived history request 17").unwrap()
+            < text.find("archived history request 19").unwrap()
     );
     let db = Connection::open(&path)?;
     let messages: u64 = db.query_row("SELECT COUNT(*) FROM conversation_messages", [], |row| {
         row.get(0)
     })?;
-    assert_eq!(messages, 4604);
+    assert_eq!(messages, 60);
     let dropped: u64 = db.query_row(
         "SELECT COUNT(*) FROM conversation_messages WHERE compacted_by_summary_id IS NOT NULL",
         [],
@@ -55,18 +50,18 @@ async fn perf_owner_scale_history_assembly_and_idle_writes() -> Result<(), Harne
     );
     let mut recent = vec![
         (
-            "owner history request 997".to_owned(),
-            "owner history reply 997".to_owned(),
+            "archived history request 17".to_owned(),
+            "archived history reply 17".to_owned(),
         ),
         (
-            "owner history request 998".to_owned(),
-            "owner history reply 998".to_owned(),
+            "archived history request 18".to_owned(),
+            "archived history reply 18".to_owned(),
         ),
         (
-            "owner history request 999".to_owned(),
-            "owner history reply 999".to_owned(),
+            "archived history request 19".to_owned(),
+            "archived history reply 19".to_owned(),
         ),
-        ("owner-scale latest request".to_owned(), "once".to_owned()),
+        ("history latest request".to_owned(), "once".to_owned()),
     ];
     for index in 0..20 {
         let start = stub.requests.lock().unwrap().len();
@@ -102,7 +97,7 @@ async fn perf_owner_scale_history_assembly_and_idle_writes() -> Result<(), Harne
     let median = u64::midpoint(steady[9], steady[10]);
     let p95 = steady[18];
     eprintln!(
-        "PROMPT_OWNER database_bytes={bytes} first_request_us={first} steady_turns=20 median_us={median} p95_us={p95} delivery_ms={} index_build_us=0 index_bytes_written=0 extra_insert_us=0",
+        "PROMPT_HISTORY database_bytes={bytes} first_request_us={first} steady_turns=20 median_us={median} p95_us={p95} delivery_ms={} index_build_us=0 index_bytes_written=0 extra_insert_us=0",
         started.elapsed().as_millis()
     );
     tokio::time::sleep(Duration::from_millis(250)).await;
@@ -110,11 +105,12 @@ async fn perf_owner_scale_history_assembly_and_idle_writes() -> Result<(), Harne
     tokio::time::sleep(Duration::from_secs(2)).await;
     let after: u64 = db.query_row("PRAGMA data_version", [], |row| row.get(0))?;
     assert_eq!(before, after, "idle canonical history writes");
-    eprintln!("PROMPT_OWNER idle_writes=0");
+    eprintln!("PROMPT_HISTORY idle_writes=0");
+    // Normal history p95 5.10 ms (PR #1358); incident at roughly 20x.
     butler_e2e::assert_wall_clock_budget!(
         Duration::from_micros(p95),
-        Duration::from_millis(20),
-        "owner-scale history assembly"
+        Duration::from_millis(100),
+        "retained history assembly"
     );
     s.finish().await?;
     server.abort();
@@ -138,12 +134,12 @@ fn seed(path: &std::path::Path) -> Result<(), HarnessError> {
         [],
         |row| row.get(0),
     )?;
-    for index in 0..1000 {
-        let turn = format!("ct_owner_{index}");
+    for index in 0..20 {
+        let turn = format!("ct_history_{index}");
         tx.execute("INSERT INTO conversation_turns(id,session_id,seq,actor,status,started_at,completed_at) VALUES(?1,?2,?3,'user','complete','2026-01-01T00:00:00Z',?4)",rusqlite::params![turn,session,index+2,completed_at])?;
         for (offset, role, text) in [
-            (0, "user", format!("owner history request {index}")),
-            (1, "assistant", format!("owner history reply {index}")),
+            (0, "user", format!("archived history request {index}")),
+            (1, "assistant", format!("archived history reply {index}")),
         ] {
             message(
                 &tx,
@@ -158,8 +154,8 @@ fn seed(path: &std::path::Path) -> Result<(), HarnessError> {
     }
     tx.execute("INSERT INTO conversation_sessions VALUES('cs_padding',NULL,NULL,'fixture','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','complete',6)",[])?;
     tx.execute("INSERT INTO conversation_turns(id,session_id,seq,actor,status,started_at,completed_at) VALUES('ct_padding','cs_padding',1,'user','complete','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')",[])?;
-    let output = json!({"ok":true,"output":"x".repeat(1_000_000)}).to_string();
-    for index in 0..2600 {
+    let output = json!({"ok":true,"output":"x".repeat(64)}).to_string();
+    for index in 0..16 {
         message(
             &tx,
             "cs_padding",

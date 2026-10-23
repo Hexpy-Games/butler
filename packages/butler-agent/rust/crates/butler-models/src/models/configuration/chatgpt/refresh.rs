@@ -20,7 +20,11 @@ pub(in crate::models::configuration) async fn resolve(
     if !forced && (now < expiry.saturating_sub(300_000) || (now < expiry && now < earliest)) {
         return Ok(raw);
     }
-    let client = owner.client.clone();
+    let client = butler_log::http::external(butler_log::http::Purpose::new("oauth"))
+        .redirect(butler_log::http::RedirectPolicy::none())
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|_| chatgpt_error("provider_auth_refresh_unavailable"))?;
     let clock = owner.clock.clone();
     let revision = owner.revision.clone();
     tokio::spawn(async move {
@@ -77,7 +81,7 @@ pub(in crate::models::configuration) async fn resolve(
     .await
     .map_err(|_| chatgpt_error("provider_auth_refresh_unavailable"))?
 }
-async fn exchange(client: &reqwest::Client, raw: &Value) -> Option<Value> {
+async fn exchange(client: &butler_log::http::Client, raw: &Value) -> Option<Value> {
     let issuer = raw["issuer"].as_str()?.trim_end_matches('/');
     let mut response = client
         .post(format!("{issuer}/api/accounts/oauth/token"))

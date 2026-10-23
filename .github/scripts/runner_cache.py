@@ -236,7 +236,7 @@ def record_size(base, target):
 
 
 def auxiliary_caches():
-    base = namespace(os.environ['OWNER_CACHE_ROOT'])
+    base = namespace(os.environ['RUNNER_CACHE_ROOT'])
     cap = budget('BUTLER_DEPENDENCY_CACHE_MAX_GB', 10)
     for name in ('npm', 'bun', 'nuget'):
         directory = base / name

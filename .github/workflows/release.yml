@@ -18,6 +18,11 @@ on:
         options: [self, hosted]
         default: self
         description: Windows build host (select a release tag as the ref)
+      macos_signing_check:
+        description: On a branch ref, build, sign, notarize and staple macOS without publishing
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -46,6 +51,14 @@ jobs:
     needs: integration-proof
     if: ${{ !inputs.reuse_run_id && startsWith(github.ref, 'refs/tags/v') }}
     uses: ./.github/workflows/release-macos.yml
+    secrets: inherit
+
+  # Tag runs never take this path; their native-release job does the same checks.
+  macos-signing-check:
+    if: ${{ inputs.macos_signing_check && !inputs.reuse_run_id && !startsWith(github.ref, 'refs/tags/') }}
+    uses: ./.github/workflows/release-macos.yml
+    with:
+      verify_only: true
     secrets: inherit
 
   agent-linux-x64:
@@ -77,13 +90,13 @@ jobs:
       CARGO_TARGET_DIR: ${{ github.workspace }}/target/windows-release
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/windows-owner-setup
+      - uses: ./.github/actions/windows-runner-setup
         if: inputs.runner != 'hosted'
         with:
           workflow: windows-agent-v1
       - uses: ./.github/actions/build-windows-agent
         with:
-          owner-runner: ${{ inputs.runner != 'hosted' }}
+          self-hosted-runner: ${{ inputs.runner != 'hosted' }}
           profile: release
           cache-key: package-windows-x64
           artifact-base-url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
@@ -99,7 +112,7 @@ jobs:
           $env:CARGO_HOME = "$env:USERPROFILE/.cargo"
           $env:RUSTUP_HOME = "$env:USERPROFILE/.rustup"
           $agent = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/butler-agent.exe"
-          ../../../deploy/windows-basic-capabilities.ps1 -Agent $agent
+          ../../../deploy/windows-basic-capabilities.ps1 -Agent $agent -WithoutE2eFixtures
       - name: Upload Windows basic capability log
         if: always()
         uses: actions/upload-artifact@v4
@@ -108,10 +121,10 @@ jobs:
           path: ${{ runner.temp }}/windows-basic-capabilities.log
           if-no-files-found: warn
           retention-days: 14
-      - name: Check owner registration and remove job profile
+      - name: Check runner registration and remove job profile
         if: always() && inputs.runner != 'hosted'
         shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
-        run: ./deploy/windows-owner-cleanup.ps1
+        run: ./deploy/windows-self-hosted-cleanup.ps1
 
   agent-windows:
     name: Verify unsigned Windows x64 Agent preview
@@ -128,12 +141,22 @@ jobs:
       - name: Smoke the installed archive
         shell: pwsh
         run: |
+          $env:PREVIEW_ROOT = Join-Path $env:RUNNER_TEMP 'windows-verify'
+          New-Item -ItemType Directory -Force "$env:PREVIEW_ROOT/logs" | Out-Null
           try { ./deploy/windows-preview-smoke.ps1 }
           finally {
             if ($env:WINDOWS_PREVIEW_TEMP_ROOT -and (Test-Path $env:WINDOWS_PREVIEW_TEMP_ROOT)) {
               . "$env:GITHUB_WORKSPACE/deploy/windows-job-tree.ps1"; Remove-JobTree $env:WINDOWS_PREVIEW_TEMP_ROOT
             }
           }
+      - name: Upload installed ZIP failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-windows-stub-logs
+          path: ${{ runner.temp }}/windows-verify/logs/
+          if-no-files-found: warn
+          retention-days: 14
 
   app-windows:
     name: Package unsigned Windows Squirrel App
@@ -149,22 +172,22 @@ jobs:
         with:
           name: agent-windows-x64
           path: dist/release/agent
-      - uses: ./.github/actions/windows-owner-setup
+      - uses: ./.github/actions/windows-runner-setup
         if: inputs.runner != 'hosted'
         with:
           workflow: win-installer-release
       - uses: ./.github/actions/package-windows-app
         with:
-          owner-runner: ${{ inputs.runner != 'hosted' }}
+          self-hosted-runner: ${{ inputs.runner != 'hosted' }}
       - uses: actions/upload-artifact@v4
         with:
           name: app-windows-x64
           path: dist/release/app-windows/*
           if-no-files-found: error
-      - name: Verify owner registration and clean job profile
+      - name: Verify runner registration and clean job profile
         if: always() && inputs.runner != 'hosted'
         shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
-        run: ./deploy/windows-owner-cleanup.ps1
+        run: ./deploy/windows-self-hosted-cleanup.ps1
 
   # Runs after the macOS job, whose single-platform manifests it replaces with
   # the merged ones (the update manifest lists one artifact per platform).

@@ -14,6 +14,9 @@ use std::{
 #[derive(Clone, Default)]
 pub(super) struct Admission(Arc<AtomicBool>);
 impl Admission {
+    pub(super) fn is_granted(&self) -> bool {
+        self.0.load(Ordering::Relaxed)
+    }
     pub(super) fn grant(&self) {
         self.0.store(true, Ordering::Relaxed);
     }
@@ -35,17 +38,22 @@ pub(super) async fn finish(
     } else {
         "INFO"
     };
-    let Some(log) = butler_log::global().filter(|log| log.enabled("http.server", level)) else {
-        return;
-    };
     let route = if admitted {
         route.map(MatchedPath::as_str).unwrap_or("<unmatched>")
     } else {
         "<unmatched>"
     };
-    let mut row = butler_log::Record::new(level, "http.server", "http.request", "Gateway request");
-    row.duration_ms = Some(start.elapsed().as_secs_f64() * 1000.0);
-    row.attrs =
-        serde_json::json!({"method":method.as_str(),"route":route,"status":status.as_u16()});
-    let _ = log.record_written(row).await;
+    let elapsed = start.elapsed();
+    let started_at = chrono::Utc::now() - chrono::Duration::from_std(elapsed).unwrap_or_default();
+    tracing::Span::current()
+        .record("log_level", level)
+        .record("method", method.as_str())
+        .record("route", route)
+        .record("status", status.as_u16())
+        .record(
+            "start",
+            started_at.to_rfc3339_opts(chrono::SecondsFormat::Micros, true),
+        )
+        .record("access_log", true);
+    butler_log::TraceContext::finish_current_span().await;
 }

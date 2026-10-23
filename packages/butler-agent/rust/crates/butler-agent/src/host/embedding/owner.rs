@@ -8,7 +8,7 @@ use std::{
     path::PathBuf,
     sync::{
         Arc,
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering},
     },
 };
 
@@ -32,13 +32,20 @@ mod supervision;
 
 use execute::run_item;
 use queue::PendingResponse;
+use readiness::WorkerReadiness;
+#[cfg(test)]
+mod prewarm_tests;
 #[cfg(test)]
 mod readiness_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod verification_tests;
 mod wire;
 
-use wire::{WorkerChild, exchange, initialize, kill_and_reap, spawn_worker};
+use wire::{WorkerChild, initialize, kill_and_reap, receive_embedding, send_frame, spawn_worker};
+
+const WORKER_RESPONSE_TIMEOUT: Duration = Duration::from_secs(300);
 
 use queue::{
     MAX_FRAME_BYTES, MAX_QUEUE_BYTES, MAX_QUEUE_REQUESTS, Pending, QueueState, deadline_instant,
@@ -55,7 +62,7 @@ struct Inner {
     data_root: PathBuf,
     executable: PathBuf,
     next_id: AtomicU64,
-    warm: AtomicBool,
+    readiness: WorkerReadiness,
     /// The user's memory-model choice with the model present; off starts no child.
     enabled: AtomicBool,
     /// A switch to off asks the actor to reap a live child.
@@ -83,7 +90,7 @@ impl EmbeddingOwner {
             data_root,
             executable,
             next_id: AtomicU64::new(1),
-            warm: AtomicBool::new(false),
+            readiness: WorkerReadiness::default(),
             enabled: AtomicBool::new(false),
             release: AtomicBool::new(false),
             release_signal: Notify::new(),
@@ -141,7 +148,7 @@ impl EmbeddingOwner {
     /// (Windows refuses to delete files a live process holds).
     pub(crate) async fn disable(&self) {
         self.inner.enabled.store(false, Ordering::Release);
-        self.inner.warm.store(false, Ordering::Release);
+        self.inner.readiness.clear();
         self.inner.release.store(true, Ordering::Release);
         self.inner.release_signal.notify_waiters();
         self.inner.released.send_replace(false);
@@ -179,6 +186,7 @@ impl EmbeddingOwner {
         let requested_texts = request.texts.len();
         let resplit = request.resplit;
         let max_embeddings = request.max_embeddings;
+        let interactive_query = execute::drainable_query(&request);
         let wire = WorkerRequest {
             id,
             op: WorkerOperation::Embed,
@@ -204,11 +212,8 @@ impl EmbeddingOwner {
             requested_texts,
             resplit,
             max_embeddings,
-            cold_start_allowed: matches!(
-                request.request_class,
-                EmbeddingRequestClass::Interactive | EmbeddingRequestClass::Background
-            ),
-            background: request.request_class == EmbeddingRequestClass::Background,
+            request_class: request.request_class,
+            interactive_query,
             cancellation: admitted_cancel.clone(),
             deadline,
             response: PendingResponse::Embedding(sender),
@@ -241,7 +246,7 @@ impl Drop for EmbeddingOwner {
 
 impl CognitionEmbeddingPort for EmbeddingOwner {
     fn is_warm(&self) -> bool {
-        self.enabled() && self.inner.warm.load(Ordering::Acquire)
+        self.enabled() && self.inner.readiness.is_warm()
     }
 
     fn enabled(&self) -> bool {
@@ -270,6 +275,17 @@ impl Inner {
         if state.closed {
             return Err(error(CognitionCode::EmbedOwnerClosed));
         }
+        // Only another queued, owner-owned prewarm guarantees a future check/load.
+        // Active work can be failing; caller-owned work can expire or cancel.
+        if matches!(pending.response, PendingResponse::Prewarm)
+            && state
+                .interactive
+                .iter()
+                .chain(&state.background)
+                .any(|item| matches!(item.response, PendingResponse::Prewarm))
+        {
+            return Ok(());
+        }
         if state.queued_requests >= MAX_QUEUE_REQUESTS
             || state.queued_bytes + pending.bytes > MAX_QUEUE_BYTES
         {
@@ -277,6 +293,12 @@ impl Inner {
         }
         state.queued_requests += 1;
         state.queued_bytes += pending.bytes;
+        if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+            butler_core::diagnostic!(
+                "[embedding-worker] queued class={class:?} texts={}",
+                pending.requested_texts
+            );
+        }
         match class {
             EmbeddingRequestClass::Interactive | EmbeddingRequestClass::WarmInteractive => {
                 state.interactive.push_back(pending);
@@ -296,7 +318,7 @@ impl Inner {
             return;
         }
         state.closed = true;
-        self.warm.store(false, Ordering::Release);
+        self.readiness.clear();
         for pending in state.interactive.drain(..) {
             pending
                 .response
@@ -348,14 +370,19 @@ async fn run_actor(inner: Arc<Inner>) {
     let mut child: Option<WorkerChild> = None;
     #[cfg(feature = "e2e-fixtures")]
     initialize_for_ownership_test(&inner, &mut child).await;
-    run_loop(&inner, &mut child).await;
+    run_loop(
+        &inner,
+        &mut child,
+        butler_memory::cognition::signal_memory_work,
+    )
+    .await;
 }
 
-async fn run_loop(inner: &Inner, child: &mut Option<WorkerChild>) {
+async fn run_loop(inner: &Inner, child: &mut Option<WorkerChild>, signal_memory_work: impl Fn()) {
     loop {
         if inner.release.swap(false, Ordering::AcqRel) {
+            inner.readiness.clear();
             kill_and_reap(child).await;
-            inner.warm.store(false, Ordering::Release);
         }
         inner.released.send_replace(child.is_none());
         let next = {
@@ -367,11 +394,19 @@ async fn run_loop(inner: &Inner, child: &mut Option<WorkerChild>) {
             }
         };
         if let Some(item) = next {
+            let previous_worker = child
+                .as_ref()
+                .filter(|process| process.initialized)
+                .and_then(|process| process.child.id());
             let result = run_item(inner, child, &item).await;
-            let ready = child.as_ref().is_some_and(|process| process.initialized);
-            if inner.warm.swap(ready, Ordering::AcqRel) != ready && ready {
+            let ready = inner.enabled.load(Ordering::Acquire)
+                && !inner.shutdown.is_cancelled()
+                && child.as_ref().is_some_and(|process| process.initialized);
+            if inner.readiness.publish(ready) {
+                signal_memory_work();
+            }
+            if ready && child.as_ref().and_then(|process| process.child.id()) != previous_worker {
                 butler_core::diagnostic!("[embedding-worker] ready");
-                butler_memory::cognition::signal_memory_work();
             }
             item.response.send(result);
             let mut state = inner.state.lock();
@@ -386,7 +421,7 @@ async fn run_loop(inner: &Inner, child: &mut Option<WorkerChild>) {
             tokio::select! {
                 () = inner.notify.notified() => {},
                 () = inner.shutdown.cancelled() => {},
-                _ = process.child.wait() => { *child = None; inner.warm.store(false, Ordering::Release); },
+                _ = process.child.wait() => { *child = None; inner.readiness.clear(); },
             }
         } else {
             tokio::select! {
@@ -395,8 +430,8 @@ async fn run_loop(inner: &Inner, child: &mut Option<WorkerChild>) {
             }
         }
     }
+    inner.readiness.clear();
     kill_and_reap(child).await;
-    inner.warm.store(false, Ordering::Release);
     inner.released.send_replace(true);
 }
 

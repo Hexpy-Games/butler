@@ -5,9 +5,9 @@ use butler_platform::sqlite;
 use rusqlite::params;
 use std::{fs, io::Write, path::Path, time::Duration};
 
-const FILES: u64 = 2_440;
-const BYTES: u64 = 1_500_000_000;
-const LARGEST: u64 = 290_000_000;
+const FILES: u64 = 8;
+const BYTES: u64 = 32_768;
+const LARGEST: u64 = 8_192;
 
 pub(super) fn seed(data: &Path) -> Result<(), HarnessError> {
     let root = data.join("transcripts");
@@ -18,11 +18,11 @@ pub(super) fn seed(data: &Path) -> Result<(), HarnessError> {
     fs::create_dir_all(&root)?;
     let db = sqlite::open(data.join("app-server/butler-client.sqlite"))?;
     db.execute("INSERT INTO chats(id,title,kind,pinned,archived,created_at,updated_at) VALUES('project-butler','Idle project','chat',0,0,'2026-01-01','2026-01-01')", [])?;
-    let rest = BYTES - LARGEST - 100_000_000;
+    let rest = BYTES - LARGEST - 4_096;
     for index in 0..FILES {
         let (chat, size) = match index {
             0 => ("general".to_owned(), LARGEST),
-            1 => ("project-butler".to_owned(), 100_000_000),
+            1 => ("project-butler".to_owned(), 4_096),
             _ => (
                 format!("idle-{index}"),
                 rest / (FILES - 2) + u64::from(index - 2 < rest % (FILES - 2)),

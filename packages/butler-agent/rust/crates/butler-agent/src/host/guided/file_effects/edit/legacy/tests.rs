@@ -16,6 +16,7 @@ fn reconstructs_same_durable_identity_before_and_after_a_single_edit() {
     let root = std::env::temp_dir().join(format!("butler-legacy-edit-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir(&root).unwrap();
     let scope = EffectFileScope {
+        inventory: None,
         workspace: root.clone(),
         butler_data: root.join("data"),
         protected_roots: vec![],

@@ -68,6 +68,7 @@ pub(super) fn apply(
     credentials: &[PathBuf],
     masked: &[PathBuf],
     mounts: &HashMap<PathBuf, u64>,
+    timing: &mut super::timing::Timing,
 ) -> Result<(), Error> {
     // The trampoline already closed both lists over aliases and mount views.
     let masked: HashSet<_> = masked.iter().collect();
@@ -89,8 +90,11 @@ pub(super) fn apply(
     for (_, secrets) in &projects {
         blocked.extend(secrets.iter().cloned());
     }
+    timing.mark("projects_rescan");
     let deny_execute = execution_denials()?;
+    timing.mark("execution_denials");
     let blocked = Denied::new(blocked.into_iter().collect(), &deny_execute, mounts);
+    timing.mark("denied_chain");
     // READ_DIR grants recurse too: permit directory names, while withholding
     // READ_FILE/EXECUTE prevents access to denied contents. Landlock cannot
     // hide directory entries without also preventing ordinary parent listings.
@@ -116,6 +120,7 @@ pub(super) fn apply(
         let excluded = Denied::new(excluded.into_iter().collect(), &deny_execute, mounts);
         grant_complement(rules, real, &excluded, &deny_execute, read)?;
     }
+    timing.mark("grant_complement");
     grant(
         rules,
         Path::new("/dev/null"),
@@ -131,7 +136,11 @@ pub(super) fn entry_aliases(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>, Error> 
     let mut resolved = HashMap::new();
     let mut targets = Vec::new();
     for path in &paths {
-        if std::fs::symlink_metadata(path).is_ok_and(|entry| entry.file_type().is_symlink()) {
+        let metadata = match std::fs::symlink_metadata(path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            result => result?,
+        };
+        if metadata.file_type().is_symlink() {
             targets.push(canonical_or_missing(path, &mut resolved)?);
         }
     }
@@ -172,7 +181,20 @@ fn canonical_or_missing(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             let parent = path.parent().ok_or("private root has no parent")?;
             let name = path.file_name().ok_or("private root has no name")?;
-            canonical_or_missing(parent, resolved)?.join(name)
+            let parent = canonical_or_missing(parent, resolved)?;
+            let candidate = parent.join(name);
+            // Resolve a dangling leaf only after sharing the parent's result.
+            // Expanding the full path here would rewalk every ancestor.
+            match std::fs::read_link(&candidate) {
+                Ok(_) => super::unresolved::target(&candidate)?,
+                Err(_) => candidate,
+            }
+        }
+        Err(error)
+            if error.kind() == std::io::ErrorKind::PermissionDenied
+                || error.raw_os_error() == Some(nix::libc::ELOOP) =>
+        {
+            super::unresolved::target(path)?
         }
         Err(error) => return Err(error.into()),
     };
@@ -186,7 +208,7 @@ fn canonical_or_missing(
 // every component with readlink. O_PATH follows aliases without reading data.
 // Keep the fd alive until procfs returns its physical path; on hosts without
 // procfs, retain the standard canonicalization behavior.
-fn resolved_path(path: &Path) -> std::io::Result<PathBuf> {
+pub(in crate::command_sandbox) fn resolved_path(path: &Path) -> std::io::Result<PathBuf> {
     use nix::{fcntl::OFlag, sys::stat::Mode};
     use std::os::fd::AsRawFd;
     let fd = nix::fcntl::open(path, OFlag::O_PATH | OFlag::O_CLOEXEC, Mode::empty())?;
@@ -201,11 +223,9 @@ pub(super) fn project_secrets(root: &Path) -> Result<Vec<PathBuf>, Error> {
             secrets.push(entry.path());
         }
     }
-    // Do not deny a public external target merely because a secret-named
-    // symlink points to it: Seatbelt does not deny that target either. The
-    // lexical guard covers secret-named symlinks, which Landlock cannot carve
-    // out independently of their target.
-    Ok(secrets)
+    // A protected name protects the object too, including external targets.
+    // Resolve before complement grants can recursively re-allow that object.
+    entry_aliases(secrets)
 }
 
 fn grant_complement(

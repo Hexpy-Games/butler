@@ -1,6 +1,6 @@
 use butler_platform::secure_fs::Canonical as _;
 use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use butler_platform::secure_fs::{self, FileMode, Writability};
@@ -74,7 +74,18 @@ pub(super) fn observe(path: GuardedPath, parent: Parent) -> Result<Snapshot, Mut
             "target_not_regular_file",
         ));
     }
-    let bytes = fs::read(&path.absolute)
+    let mut file = match &path.read_scope {
+        Some(scope) => super::super::contained_reader::open(
+            &scope.0,
+            &path.absolute.to_string_lossy(),
+            super::super::PathForm::Contained,
+            &scope.1,
+        ),
+        None => fs::File::open(&path.absolute),
+    }
+    .map_err(|error| failure::io("observe_read", Some(path.public.clone()), &error))?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)
         .map_err(|error| failure::io("observe_read", Some(path.public.clone()), &error))?;
     let mode = secure_fs::file_mode(&metadata);
     Ok(Snapshot {
@@ -275,6 +286,7 @@ fn verify_unchanged(prepared: &Prepared) -> Result<(), MutationFailure> {
     let path = prepared.before.path.public.clone();
     let current = observe(
         GuardedPath {
+            read_scope: prepared.before.path.read_scope.clone(),
             public: path.clone(),
             absolute: prepared.before.path.absolute.clone(),
             real: prepared.before.path.real.clone(),
@@ -313,8 +325,15 @@ fn atomic_replace(
     timing.mark("temporary_synced");
     verify_unchanged(prepared)?;
     timing.mark("unchanged_verified");
-    publish_temporary(prepared, temporary, observer)
-        .map_err(|error| mutation_io(prepared, temporary, &error))
+    let mut retry_failure = None;
+    let mut before_retry = || {
+        verify_unchanged(prepared).map_err(|failure| {
+            retry_failure = Some(failure);
+            std::io::Error::other("replacement snapshot changed")
+        })
+    };
+    publish_temporary(prepared, temporary, observer, &mut before_retry)
+        .map_err(|error| retry_failure.unwrap_or_else(|| mutation_io(prepared, temporary, &error)))
 }
 
 fn write_temporary(
@@ -346,9 +365,10 @@ fn publish_temporary(
     prepared: &Prepared,
     temporary: &Path,
     observer: &dyn CommitObserver,
+    before_retry: &mut dyn FnMut() -> std::io::Result<()>,
 ) -> std::io::Result<bool> {
     if prepared.before.exists {
-        fs::rename(temporary, &prepared.before.path.absolute)
+        secure_fs::replace_file(temporary, &prepared.before.path.absolute, before_retry)
             .map_err(|error| failure::inspect_io("rename", error))?;
         Ok(false)
     } else {

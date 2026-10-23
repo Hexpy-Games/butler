@@ -1,3 +1,4 @@
+import { receiveModelThinking, reconcileModelThinking, abandonModelThinking } from "@/app/modelThinking";
 import { subscribeNativeUpdateProgress, refreshUpdateProgress } from "@/stores/updateProgressStore";
 import { receiveUpdateProgress } from "@/stores/updateProgressStore";
 import { authorityPermissionsChanged } from "@/app/authorityPermissionEvents.ts";
@@ -16,6 +17,7 @@ import { useEffect, useRef } from "react";
 import { receiveAnswerDraft, abandonAnswerDrafts } from "@/app/answerDrafts";
 import { createLiveEventConnection } from "./liveEventConnection.ts";
 import { subscribeAgentRuntimeState } from "@/app/agentRuntime.ts";
+import { chromeEnvironment } from "@/app/chromeEnvironment.ts";
 import { showDesktopNotification } from "@/app/nativeNotifications.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { SettingsView, TimelineEvent } from "@/app/types.ts";
@@ -73,6 +75,8 @@ export function useLiveSessionEvents(): void {
 
     const applyEvent = (event: TimelineEvent) => {
       if (cancelled) return;
+      if (receiveModelThinking(event)) return;
+      reconcileModelThinking(event);
       if (receiveAnswerDraft(event)) return;
       if (event.type === "session.cleared" && typeof event.id === "number") {
         useButlerStore.getState().resetGeneralConversation(event.id);
@@ -85,6 +89,7 @@ export function useLiveSessionEvents(): void {
       if (event.type.startsWith("authority.")) authorityPermissionsChanged();
       receiveTaskGraphEvent(event);
       if (event.type === "security.device_paired") pairedDevicesChanged();
+      if (event.type === "data.reset_started" && chromeEnvironment() === "browser") useButlerStore.setState({ agentNotice: "reset" });
       // Read on any device: clear the dot here and drop navigation loads from before the read.
       if (event.type === "session.read" && typeof event.payload?.session_id === "string") {
         applySessionRead(event.payload.session_id);
@@ -184,7 +189,7 @@ export function useLiveSessionEvents(): void {
       cursor: () => eventCursorRef.current,
       onEvent: applyEvent,
       onLostChange: (liveConnectionLost) => {
-        if (liveConnectionLost) abandonAnswerDrafts();
+        if (liveConnectionLost) { abandonAnswerDrafts(); abandonModelThinking(); }
         if (useButlerStore.getState().liveConnectionLost !== liveConnectionLost) {
           useButlerStore.setState({ liveConnectionLost });
           if (!liveConnectionLost && !cancelled) void refreshUpdateProgress();
@@ -207,6 +212,7 @@ export function useLiveSessionEvents(): void {
     return () => {
       cancelled = true;
       disconnect();
+      abandonModelThinking();
       reconciliation.dispose();
 
       navigationReconciliation.dispose();

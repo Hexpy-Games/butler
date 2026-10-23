@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 const TITLE: &str = "Planning a Simple Reply";
 
-async fn start(name: &str) -> Result<(Scenario, String), HarnessError> {
+pub(super) async fn start(name: &str) -> Result<(Scenario, String), HarnessError> {
     start_with_title(name, TITLE, None).await
 }
 
@@ -54,7 +54,7 @@ fn non_title_turn_reply(request: &Value) -> Option<ResponseRecord> {
     (!is_title_request(request)).then(|| title_response("Attachment received."))
 }
 
-async fn chat(s: &Scenario, title: &str, prompt: &str) -> Result<String, HarnessError> {
+pub(super) async fn chat(s: &Scenario, title: &str, prompt: &str) -> Result<String, HarnessError> {
     let reply =
         s.gw.post(
             "/sessions",
@@ -149,11 +149,29 @@ async fn title_01_first_exchange_replaces_provisional_title() -> Result<(), Harn
 async fn title_02_user_rename_wins() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, prompt) = start("TITLE-02").await?;
+    super::outbound_http::logging(&s, "detailed").await?;
     let chat = chat(&s, &provisional(&prompt), &prompt).await?;
     let held = s.provider()?.hold_next_reply("User message:");
-    let (_, turn) = s.turn(&chat, &prompt).await?;
+    let (turn_id, turn) = s.turn(&chat, &prompt).await?;
     assert_eq!(turn["state"], "delivered");
     wait_requests(&s, 1).await;
+    let trace = s.gw.get(&format!("/logs/trace?turn_id={turn_id}")).await?;
+    assert_eq!(trace.status, 200, "{}", trace.text);
+    let spans = trace.data()["spans"].as_array().unwrap();
+    for name in ["turn.admit", "http.server"] {
+        let span = spans.iter().find(|span| span["name"] == name).unwrap();
+        assert!(
+            span["duration_ms"].is_number(),
+            "{name} held by title: {}",
+            trace.text
+        );
+    }
+    let title_span = spans
+        .iter()
+        .find(|span| span["name"] == "session.title")
+        .unwrap();
+    assert!(title_span["parent_span_id"].is_null());
+    assert!(title_span["duration_ms"].is_null());
     s.gw.patch(
         &format!("/sessions/{chat}"),
         json!({"title":"My chosen title"}),
@@ -231,7 +249,7 @@ async fn title_04_general_and_custom_titles_untouched() -> Result<(), HarnessErr
     s.finish().await
 }
 
-fn provisional(prompt: &str) -> String {
+pub(super) fn provisional(prompt: &str) -> String {
     let line = prompt
         .trim()
         .split_once('\n')

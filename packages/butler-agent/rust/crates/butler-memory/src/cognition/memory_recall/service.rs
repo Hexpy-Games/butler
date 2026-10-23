@@ -214,6 +214,7 @@ impl MemoryRecall {
         self
     }
 
+    #[tracing::instrument(name = "memory.recall", level = "debug", skip_all, fields(count = tracing::field::Empty), err)]
     pub(crate) async fn recall(&self, request: RecallRequest) -> CognitionResult<RecallResponse> {
         let input = validate::normalize(request, |value| (self.parse_date)(value))?;
         let token = self.operation_token()?;
@@ -223,7 +224,7 @@ impl MemoryRecall {
             data_root: self.data_root.clone(),
             environment: self.environment.clone(),
             input,
-            deadline_at: (self.clock)() + 5_000,
+            deadline_at: (self.clock)() + super::budget::TOTAL_MS,
             initialization_ms: 0,
             caller_cancel,
             parse_date: self.parse_date.clone(),
@@ -240,17 +241,23 @@ impl MemoryRecall {
         // Detached on purpose: the operation token/guard moved into the task keeps the
         // owner's close waiting for it, and the result returns through the oneshot,
         // so a cancelled caller cannot abandon the operation midway.
-        tokio::spawn(async move {
-            let _token = token;
-            let _ = sender.send(operation.run().await);
-        });
-        receiver.await.map_err(|source| {
+        use tracing::Instrument;
+        tokio::spawn(
+            async move {
+                let _token = token;
+                let _ = sender.send(operation.run().await);
+            }
+            .instrument(tracing::Span::current()),
+        );
+        let response = receiver.await.map_err(|source| {
             CognitionError::new(
                 CognitionCode::MemoryRecallOperationFailed,
                 "memory_recall_operation_failed",
             )
             .with_source(source)
-        })?
+        })??;
+        tracing::Span::current().record("count", response.results.len());
+        Ok(response)
     }
 
     /// Stops admitting operations and waits for running ones to finish.

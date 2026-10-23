@@ -151,6 +151,7 @@ export function createFirstRunSetupBridge({
           }),
           startedAt,
         });
+        if (errorCode === "legacy_data_blocked") throw error;
       }
       return statusView(session);
     },
@@ -218,6 +219,7 @@ function failPendingChecks(checks) {
 
 function setupErrorCode(error) {
   if (
+    error?.code === "legacy_data_blocked" ||
     error?.code === "service_registration_unavailable" ||
     error?.code === "agent_service_not_ready" ||
     error?.code === "agent_service_failed" ||

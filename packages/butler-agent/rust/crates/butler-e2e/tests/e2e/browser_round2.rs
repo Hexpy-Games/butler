@@ -18,6 +18,14 @@ async fn browser_zoom_history_and_upload_scope() -> Result<(), HarnessError> {
     let setup = Setup::new("BROWSER-ROUND2")?.stub_cassette(cassette()?);
     std::fs::create_dir_all(setup.sandbox.data.join("auth"))?;
     std::fs::write(setup.sandbox.data.join("auth/token.json"), "{}")?;
+    for path in [
+        "state/app-gateway/project-folder-token-secret",
+        "sandbox-quarantine/entry",
+    ] {
+        let path = setup.sandbox.data.join(path);
+        std::fs::create_dir_all(path.parent().unwrap())?;
+        std::fs::write(path, "private-fixture")?;
+    }
     std::fs::write(setup.sandbox.data.join("../outside.txt"), "outside")?;
     let s = setup.start().await?;
     let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
@@ -68,21 +76,30 @@ async fn browser_zoom_history_and_upload_scope() -> Result<(), HarnessError> {
     for (index, reason) in [
         (7, "upload_outside_workspace"),
         (8, "upload_sensitive_file"),
+        (9, "upload_sensitive_file"),
+        (10, "upload_sensitive_file"),
     ] {
         assert_eq!(output(&requests[index])["output"]["reason"], reason);
     }
     let last = requests.last().unwrap();
-    assert!(
-        last.to_string().contains("An older close-up"),
-        "a newer observation supersedes the close-up pixels"
-    );
+    for previous in &requests[1..] {
+        let input = previous["input"].as_array().unwrap();
+        assert_eq!(
+            &last["input"].as_array().unwrap()[..input.len()],
+            input,
+            "under-budget observations and close-ups stay byte-identical"
+        );
+    }
     let images = last["input"]
         .as_array()
         .unwrap()
         .iter()
         .filter(|item| item["output"].to_string().contains("input_image"))
         .count();
-    assert_eq!(images, 1, "only the newest observation keeps pixels");
+    assert_eq!(
+        images, 3,
+        "under-budget observations and zoom retain pixels"
+    );
     s.finish().await
 }
 
@@ -197,6 +214,11 @@ fn cassette() -> Result<Cassette, HarnessError> {
         ("browser_observe", json!({"tab":"t1"})),
         ("browser_act", upload("../outside.txt")),
         ("browser_act", upload("auth/token.json")),
+        (
+            "browser_act",
+            upload("state/app-gateway/project-folder-token-secret"),
+        ),
+        ("browser_act", upload("sandbox-quarantine/entry")),
         (
             "browser_act",
             json!({"tab":"t1","observation":"o2","steps":[{"action":"back"}]}),

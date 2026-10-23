@@ -60,6 +60,7 @@ pub(super) fn decode(
         (provider == "openai").then(|| openai_continuation(&response, request, legacy_projection));
     retain_rejected_text(&mut continuation, text.as_deref(), &text_tool_call_names);
     ModelRoundResult {
+        reasoning_summary: None,
         nonfinal: nonfinal(&response, carrier),
         text,
         tool_calls: calls,
@@ -201,7 +202,10 @@ fn anthropic(value: &Value, model: &str) -> Fields {
     let calls = content
         .iter()
         .filter(|item| item.get("type").and_then(Value::as_str) == Some("tool_use"))
-        .filter_map(|item| call(item.get("id"), item.get("name"), item.get("input")))
+        .enumerate()
+        .filter_map(|(index, item)| {
+            call(item.get("id"), item.get("name"), item.get("input"), index)
+        })
         .collect();
     (
         nonempty(text),
@@ -250,6 +254,7 @@ fn gemini(value: &Value, model: &str, round: u32) -> Fields {
                 Some(&id),
                 Some(&Value::String(name.into())),
                 function.get("args"),
+                index,
             )
         })
         .collect();
@@ -266,7 +271,8 @@ fn gemini(value: &Value, model: &str, round: u32) -> Fields {
             model,
             number(value.pointer("/usageMetadata/promptTokenCount")),
             number(value.pointer("/usageMetadata/cachedContentTokenCount")).unwrap_or(0.0),
-            number(value.pointer("/usageMetadata/candidatesTokenCount")).unwrap_or(0.0),
+            number(value.pointer("/usageMetadata/candidatesTokenCount")).unwrap_or(0.0)
+                + number(value.pointer("/usageMetadata/thoughtsTokenCount")).unwrap_or(0.0),
             number(value.pointer("/usageMetadata/totalTokenCount")),
         ),
         reported,
@@ -288,11 +294,13 @@ fn chat(value: &Value, model: &str) -> Fields {
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
-        .filter_map(|item| {
+        .enumerate()
+        .filter_map(|(index, item)| {
             call(
                 item.get("id"),
                 item.pointer("/function/name"),
                 item.pointer("/function/arguments"),
+                index,
             )
         })
         .collect();
@@ -429,32 +437,10 @@ fn openai_usage(value: &Value, model: &str, round: u32) -> Option<Value> {
         serde_json::json!({"model":model,"promptTokens":prompt,"cachedTokens":cached.unwrap_or(0.0),"totalTokens":total,"outputTokens":output,"roundIndex":round}),
     )
 }
-fn call(
-    id: Option<&Value>,
-    name: Option<&Value>,
-    arguments: Option<&Value>,
-) -> Option<ModelRoundToolCall> {
-    let id = id?.as_str()?.to_owned();
-    let name = name?.as_str()?.to_owned();
-    let raw = arguments
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-        .or_else(|| arguments.and_then(|value| butler_core::json::stringify(value).ok()))
-        .unwrap_or_else(|| "{}".into());
-    let parsed = serde_json::from_str::<Value>(&raw)
-        .ok()
-        .and_then(|value| value.as_object().cloned())
-        .unwrap_or_default();
-    Some(ModelRoundToolCall {
-        id,
-        name,
-        arguments: parsed,
-        raw_arguments: raw,
-        origin: None,
-    })
-}
 mod local;
 
 mod anthropic_history;
 
+mod call;
 mod responses;
+use call::call;

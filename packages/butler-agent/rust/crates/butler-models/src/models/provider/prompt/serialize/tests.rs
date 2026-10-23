@@ -46,6 +46,8 @@ fn config(model_ref: &str) -> ProviderRequestConfig {
 
 fn usage() -> PromptUsageAttribution<'static> {
     PromptUsageAttribution {
+        root_session_id: None,
+        role: None,
         turn_id: None,
         phase: None,
         round_index: None,
@@ -208,6 +210,21 @@ fn newly_registered_hosted_models_use_their_source_wire_reasoning() {
     .body;
     assert_eq!(anthropic["thinking"], json!({"type":"adaptive"}));
     assert_eq!(anthropic["output_config"], json!({"effort":"high"}));
+
+    for (model, effort, expected) in [
+        ("anthropic/claude-opus-4-7", ReasoningEffort::Xhigh, "xhigh"),
+        ("anthropic/claude-sonnet-4-6", ReasoningEffort::Max, "max"),
+    ] {
+        let request = self::request(&effort, &usage);
+        let body = body(&request, &config(model), Carrier::Anthropic)
+            .unwrap()
+            .body;
+        assert_eq!(body["thinking"]["type"], "adaptive", "{model}");
+        assert_eq!(body["output_config"]["effort"], expected, "{model}");
+        assert!(body["thinking"].get("budget_tokens").is_none());
+        assert!(body.get("budget_tokens").is_none());
+        assert!(body.get("temperature").is_none());
+    }
 
     let go = body(
         &request,

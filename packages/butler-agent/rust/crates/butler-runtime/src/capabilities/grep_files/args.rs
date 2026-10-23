@@ -153,3 +153,15 @@ pub(super) fn normalize(args: &Map<String, Value>) -> Result<Options, Value> {
         limits,
     })
 }
+
+/// Parse the call and keep its model-facing argument error at this boundary.
+pub(super) fn call_arguments(
+    call: &Value,
+) -> Result<std::borrow::Cow<'_, Map<String, Value>>, Value> {
+    super::arguments::parse(call).map_err(|(code, detail)| {
+        json!({"ok":false,"error":code,"detail":detail,
+            "message":"Tool arguments must be a JSON object.",
+            "recovery_hint":"Retry grep_files with pattern and bounded root/glob options.",
+            "evidence_capability_receipts":super::evidence::grep_limitation(code)})
+    })
+}

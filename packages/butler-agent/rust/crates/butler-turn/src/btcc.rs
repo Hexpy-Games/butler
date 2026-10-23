@@ -9,11 +9,17 @@ mod access;
 pub mod agent_loop;
 mod authority;
 mod capability_handoff;
+mod thinking;
+mod tool_arguments;
 pub use authority::questions::{
     AnsweredQuestion, QuestionBinding, QuestionKind, QuestionOption, UserQuestion,
     UserQuestionAnswer, UserQuestionResponse, UserQuestions,
 };
 pub use capability_handoff::{CapabilityHandoff, CapabilityHandoffCode, RequestedCapabilityAction};
+pub use thinking::set_capture as set_thinking_capture;
+pub use tool_arguments::{
+    decode_object, normalize_direct_arguments, normalize_then_validate, validate_native_arguments,
+};
 mod continuation_budget;
 mod contracts;
 pub mod effects;
@@ -30,7 +36,7 @@ mod subsessions;
 mod task_graph_identity;
 pub use storage::{
     TaskGraphChildRecord, TaskGraphRecords, TaskGraphReviewRecord, TaskGraphScope,
-    TaskGraphWorkRecord,
+    TaskGraphWorkRecord, subsession_result_id,
 };
 pub use task_graph_identity::{decode as decode_task_graph_id, encode as encode_task_graph_id};
 mod turn;
@@ -61,8 +67,7 @@ pub use turn::{
     DefaultTurnPreparation, DeliveryOutbox, ExecutionRoute, FinalDisposition, HostDependencies,
     ModelRoundAcceptanceWrite, ModelRoundKey, ModelRouteEventWrite, ModelRouteWrite, PortFuture,
     PreparedConversation, ProgressEvent, StateExecutionClaim, SuspensionReason, TerminalOutcome,
-    TurnCheckpoint, TurnDeveloperLogCapturePort, TurnDeveloperLogExecution, TurnDeveloperLogFuture,
-    TurnFacadeDependencies, TurnRecord, TurnSemanticState, TurnStore, WakeIdentity,
+    TurnCheckpoint, TurnFacadeDependencies, TurnRecord, TurnSemanticState, TurnStore, WakeIdentity,
 };
 pub use turn::{
     AttemptFailure, AttemptHistory, CanonicalMessageStore, DeliveryStatus, FailureDisposition,
@@ -231,6 +236,8 @@ impl Btcc {
 
     /// Stops a turn and reports how it ended.
     pub async fn stop_turn(&self, request: StopRequest) -> Result<TurnOutcome, BtccError> {
+        #[cfg(feature = "e2e-fixtures")]
+        test_pause::reach("stop_persist", &request.turn_id).await;
         self.inner.stop_turn(&request.turn_id).await
     }
 
@@ -272,3 +279,9 @@ pub fn assemble(dependencies: &TurnFacadeDependencies) -> BtccAssembly {
         host: BtccHost { inner },
     }
 }
+
+#[cfg(feature = "e2e-fixtures")]
+mod test_pause;
+#[cfg(feature = "e2e-fixtures")]
+#[doc(hidden)]
+pub use test_pause::reach as pause_for_test;

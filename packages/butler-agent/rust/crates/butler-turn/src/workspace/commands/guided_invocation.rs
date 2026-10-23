@@ -16,11 +16,7 @@ fn project_write_shell(
 ) -> Result<command_sandbox::Invocation, command_sandbox::SandboxError> {
     let data = &input.butler_data;
     let scratch = Scratch::new(data, true);
-    let writable = [
-        scratch.temporary.as_path(),
-        scratch.cache.as_path(),
-        scratch.artifacts.as_path(),
-    ];
+    let writable = scratch.writable_roots();
     // App project folders live under the data folder; the default deny already
     // covers it otherwise, so deny it explicitly only when it is not an ancestor.
     let mut denied: Vec<&Path> =

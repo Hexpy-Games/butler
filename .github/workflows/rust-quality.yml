@@ -31,7 +31,7 @@ defaults:
 
 jobs:
   changes:
-    # Metadata re-evaluations run only gate; they cannot cancel a full CI run.
+    # Metadata re-evaluations run gate and DS approval; they cannot cancel a full CI run.
     if: ${{ !contains(fromJSON('["labeled", "unlabeled", "edited"]'), github.event.action) }}
     uses: ./.github/workflows/ci-changes.yml
     with:
@@ -58,16 +58,7 @@ jobs:
   selftest:
     needs: changes
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['selftest']
-    name: no-identity and ad-hoc self-test
-    runs-on: macos-15
-    defaults:
-      run:
-        working-directory: ${{ github.workspace }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - run: python3 .github/scripts/isolated.py bun install --frozen-lockfile --ignore-scripts
-      - run: python3 .github/scripts/isolated.py deploy/macos/selftest.sh
+    uses: ./.github/workflows/macos-selftest.yml
 
   linux-clippy:
     needs: changes
@@ -86,6 +77,7 @@ jobs:
       runner: ubuntu-24.04
       platform: linux-x64
       # Match the trusted main snapshot; a different ORT mode forces cold PR builds.
+      perf-fixture: ${{ needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['linux-perf'] }}
       ort-mode: static-ort
 
   linux-archive:
@@ -146,6 +138,7 @@ jobs:
     with:
       runner: ubuntu-24.04-arm
       platform: linux-arm64
+      perf-fixture: ${{ needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['linux-arm64-perf'] }}
       ort-mode: static-ort
 
   linux-arm64-archive:
@@ -238,6 +231,7 @@ jobs:
     with:
       runner: macos-15
       platform: darwin-arm64
+      perf-fixture: ${{ needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['macos-perf'] }}
       ort-mode: static-ort
 
   macos-updates:
@@ -364,6 +358,10 @@ jobs:
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs)['ds']
     uses: ./.github/workflows/ds-site.yml
 
+  ds-approval:
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/ds-approval.yml
+
   lint:
     needs: changes
     if: always() && !cancelled() && needs.changes.result == 'success' && fromJSON(needs.changes.outputs.jobs).lint
@@ -407,6 +405,7 @@ jobs:
         run: |
           python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-smoke-reuse.py
           python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-pr-workspace.py
+          python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-fixture-scope.py
       - name: Guard shared Windows runner resources
         working-directory: ${{ github.workspace }}
         run: python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-invariants.py --windows-safety
@@ -419,6 +418,10 @@ jobs:
           python3 .github/scripts/isolated.py python3 .github/scripts/test-cargo-units.py
           python3 .github/scripts/isolated.py python3 .github/scripts/test-runner-cache.py
           python3 .github/scripts/isolated.py python3 .github/scripts/test-native-deps.py
+          python3 .github/scripts/isolated.py python3 .github/scripts/test-host-links.py
+      - name: Validate release publication recovery
+        working-directory: ${{ github.workspace }}
+        run: python3 .github/scripts/isolated.py python3 .github/scripts/test-recover-release.py
       - name: Validate integration proof and branch policy
         working-directory: ${{ github.workspace }}
         env:
@@ -439,7 +442,7 @@ jobs:
   gate:
     name: ${{ github.event_name == 'workflow_dispatch' && 'dispatch gate' || 'gate' }}
     if: always()
-    needs: [changes, lint, windows-check, shellcheck, selftest, linux-clippy, linux-native, linux-perf-archive, linux-perf, macos-native, macos-updates, macos-perf-archive, macos-perf, linux-arm64-native, linux-arm64-perf-archive, linux-arm64-perf, linux-archive, linux-tests, macos-archive, macos-tests, macos-package, linux-arm64-archive, linux-arm64-tests, linux-package-x64, linux-package-arm64, install-x64, install-arm64, install-macos, install-merge, ui, site, ds]
+    needs: [changes, lint, windows-check, shellcheck, selftest, linux-clippy, linux-native, linux-perf-archive, linux-perf, macos-native, macos-updates, macos-perf-archive, macos-perf, linux-arm64-native, linux-arm64-perf-archive, linux-arm64-perf, linux-archive, linux-tests, macos-archive, macos-tests, macos-package, linux-arm64-archive, linux-arm64-tests, linux-package-x64, linux-package-arm64, install-x64, install-arm64, install-macos, install-merge, ui, site, ds, ds-approval]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -469,6 +472,11 @@ jobs:
           EVENT: ${{ github.event_name }}
         working-directory: ${{ github.workspace }}
         run: python3 .github/scripts/isolated.py python3 .github/scripts/check-gate.py
+      - name: Require DS approval
+        if: always() && github.event_name == 'pull_request'
+        env:
+          RESULT: ${{ needs.ds-approval.result }}
+        run: test "$RESULT" = success
 
   # Emit compatibility contexts only where a ruleset still requires them:
   # release ruleset 24548681 (until preview.13); main 17887396 requires gate only.

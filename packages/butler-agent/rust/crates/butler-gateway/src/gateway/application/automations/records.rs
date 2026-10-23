@@ -4,7 +4,7 @@ use rusqlite::{Connection, OptionalExtension, Row};
 use super::contracts::{AutomationRunSummary, AutomationSummary};
 use crate::gateway::application::storage::{AppStorageCode, AppStorageError};
 
-const COLUMNS: &str = "a.id,a.title,a.prompt_body,a.target_kind,a.target_session_id,a.interval_seconds,a.state,a.next_run_at,a.last_run_at,a.last_run_state,a.last_safe_error_code,a.run_count,a.consecutive_failure_count,a.created_at,a.updated_at,COALESCE(c.title,'Unavailable session'),a.access_mode,a.schedule_type,a.run_at,a.start_at,a.schedule_json";
+const COLUMNS: &str = "a.id,a.title,a.prompt_body,a.target_kind,a.target_session_id,a.interval_seconds,a.state,a.next_run_at,a.last_run_at,a.last_run_state,a.last_safe_error_code,a.run_count,a.consecutive_failure_count,a.created_at,a.updated_at,COALESCE(c.title,'Unavailable session'),a.access_mode,a.schedule_type,a.run_at,a.start_at,a.schedule_json,a.model";
 
 #[derive(Clone)]
 pub(super) struct AutomationRow {
@@ -29,6 +29,7 @@ pub(super) struct AutomationRow {
     pub updated: String,
     pub target_label: String,
     pub access: AccessMode,
+    pub model: Option<String>,
 }
 
 pub(super) struct QueuedRunRow {
@@ -166,6 +167,7 @@ pub(super) fn summary(value: AutomationRow) -> AutomationSummary {
         start_at: value.start_at,
         schedule: value.schedule,
         access_mode: value.access,
+        model: value.model,
         next_run_at: value.next,
         last_run_at: value.last,
         last_run_state: value.last_state,
@@ -196,6 +198,7 @@ fn row_at(item: &Row<'_>, at: usize) -> rusqlite::Result<AutomationRow> {
         run_at: item.get(at + 18)?,
         start_at: item.get(at + 19)?,
         schedule: schedule_at(item, at + 20)?,
+        model: item.get(at + 21)?,
         state: item.get(at + 6)?,
         next: item.get(at + 7)?,
         last: item.get(at + 8)?,

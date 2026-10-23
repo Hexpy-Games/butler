@@ -70,6 +70,9 @@ pub(super) fn apply_transaction(connection: &mut Connection) -> rusqlite::Result
     )?;
     startup_indexes::cutover(&transaction)?;
     transaction.execute_batch(super::schema::task_graphs::SCHEMA)?;
+    // Keep the Work rebuild last: it validates all FKs before restoring deferral,
+    // so no later migration can accidentally rely on deferred constraints.
+    butler_work::work_schema::ensure(&transaction)?;
     transaction.commit()
 }
 

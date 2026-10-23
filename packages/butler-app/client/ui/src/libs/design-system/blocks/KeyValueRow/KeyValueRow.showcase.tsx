@@ -1,6 +1,8 @@
-import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
+import { useState } from "react";
+import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
 import { Grid } from "../../components/Grid";
 import { Stack } from "../../components/Stack";
+import { Typo } from "../../components/Typo";
 import { KeyValueRow } from "./KeyValueRow";
 
 export const meta: ShowcaseMeta = {
@@ -19,6 +21,7 @@ const labels = {
       { label: "Files", description: "Pinned project documents", value: "6.2K", meta: "9%", color: "var(--context-chart-3)" },
     ],
     provider: "Provider", runtime: "Runtime", secrets: "Secrets", redacted: "Redacted",
+    conversation: "Conversation", subtask: "Subtask", hint: "Hover or focus a row", emphasized: (label: string) => `Chart emphasis: ${label}`,
   },
   "ko-KR": {
     gateway: "게이트웨이", ready: "준비됨", branch: "Git 브랜치", workspace: "작업 공간", local: "로컬", changes: "변경 사항", clean: "깨끗함",
@@ -28,11 +31,31 @@ const labels = {
       { label: "파일", description: "고정한 프로젝트 문서", value: "6.2K", meta: "9%", color: "var(--context-chart-3)" },
     ],
     provider: "제공자", runtime: "런타임", secrets: "비밀 값", redacted: "가려짐",
+    conversation: "대화", subtask: "하위 작업", hint: "행에 마우스를 올리거나 포커스하세요", emphasized: (label: string) => `차트 강조: ${label}`,
   },
 } as const;
 
 function text({ locale }: ShowcaseRenderContext) {
   return labels[locale];
+}
+
+/** UsageBars legend: 대화 solid, 하위 작업 hatched on the cached color; hover or focus reports to the chart. */
+function SplitLegend({ context }: { context: ShowcaseRenderContext }) {
+  const copy = text(context);
+  const [highlighted, setHighlighted] = useState<string | null>(null);
+  const rows = [
+    { label: copy.conversation, value: "5.2K · 53.6%", pattern: "solid" as const },
+    { label: copy.subtask, value: "4.5K · 46.4%", pattern: "hatched" as const },
+  ];
+  return (
+    <Stack gap="xs">
+      <Typo.Caption tone="tertiary">{highlighted ? copy.emphasized(highlighted) : copy.hint}</Typo.Caption>
+      {rows.map((row) => (
+        <KeyValueRow key={row.label} label={row.label} value={row.value} valueTextSize="caption" swatchColor="var(--context-chart-5)"
+          swatchPattern={row.pattern} onHighlightChange={(on) => setHighlighted(on ? row.label : null)} />
+      ))}
+    </Stack>
+  );
 }
 
 export const stories: ShowcaseStory[] = [
@@ -65,6 +88,13 @@ export const stories: ShowcaseStory[] = [
     ),
   },
   {
+    // UsageReadout split rows: the hatched swatch matches the chart's subtask parts.
+    name: "Linked legend with hatched swatch",
+    states: ["hover", "focus-visible"],
+    widths: ["320", "375", "app"],
+    render: (context) => <SplitLegend context={context} />,
+  },
+  {
     // DeveloperLogMetadataPanel: two-column grid of facts.
     name: "Metadata grid",
     render: (context) => (
@@ -76,3 +106,15 @@ export const stories: ShowcaseStory[] = [
     ),
   },
 ];
+
+export const stateMatrix: ShowcaseStateMatrix = {
+  states: ["default", "hover", "focus-visible"],
+  variants: ["solid", "hatched"],
+  render: ({ locale, variant }) => {
+    const copy = labels[locale];
+    return (
+      <KeyValueRow label={variant === "hatched" ? copy.subtask : copy.conversation} value="4.5K · 46.4%" valueTextSize="caption"
+        swatchColor="var(--context-chart-5)" swatchPattern={variant === "hatched" ? "hatched" : "solid"} onHighlightChange={() => undefined} />
+    );
+  },
+};

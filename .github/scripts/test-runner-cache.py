@@ -17,6 +17,9 @@ from unittest.mock import patch
 spec = importlib.util.spec_from_file_location('snapshots', Path(__file__).with_name('cargo-target-release.py'))
 snapshots = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(snapshots)
+# Cache namespaces reject every linked ancestor. Keep test roots under the
+# canonical temp dir: macOS's default TMPDIR sits under the /var link.
+tempfile.tempdir = os.path.realpath(tempfile.gettempdir())
 
 MAX_PATH = 260
 # POSIX keeps exactly two leading slashes through joins and directory listings,
@@ -49,7 +52,7 @@ def windows_max_path():
             return real(*map(checked, args), **kwargs)
         return call
 
-    # Python 3.14 renamed tarfile's link step; the owner runners' 3.12.10 has `makelink`.
+    # Python 3.14 renamed tarfile's link step; the self-hosted Windows runners' 3.12.10 has `makelink`.
     link_step = 'makelink_with_filter' if hasattr(tarfile.TarFile, 'makelink_with_filter') else 'makelink'
     makelink = getattr(tarfile.TarFile, link_step)
 
@@ -229,7 +232,7 @@ class RunnerEviction(unittest.TestCase):
             for name, size in [('npm', 50), ('bun', 150), ('nuget', 250)]:
                 (base / name).mkdir()
                 (base / name / 'package').write_bytes(b'x' * size)
-            with patch.dict(os.environ, OWNER_CACHE_ROOT=str(base),
+            with patch.dict(os.environ, RUNNER_CACHE_ROOT=str(base),
                             BUTLER_DEPENDENCY_CACHE_MAX_GB=str(100 / 1024**3)), \
                     contextlib.redirect_stderr(io.StringIO()) as messages:
                 snapshots.runner_cache.auxiliary_caches()
@@ -297,7 +300,7 @@ class RunnerEviction(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
             subprocess.run(['git', 'init', '-q', str(root)], check=True)
-            # Owner runner stage directories are about 100 characters long.
+            # Self-hosted Windows runner stage directories are about 100 characters long.
             target = root / ('p' * (90 - len(str(root)))) / 'runner-cache' / 'compatible-windows-x64'
             produced = root / 'produced'
             unit = 'x86_64-pc-windows-msvc/release/build/datafusion-functions-aggregate-common-' + 'a' * 16
@@ -327,7 +330,7 @@ class RunnerEviction(unittest.TestCase):
 
     # test-category: security
     def test_snapshot_record_reads_target_past_windows_max_path(self):
-        """Persistent owner targets put the longest Cargo unit paths past MAX_PATH."""
+        """Persistent runner targets put the longest Cargo unit paths past MAX_PATH."""
         def unit(profile, name, value, mtime):
             directory = profile / '.fingerprint' / name
             directory.mkdir(parents=True)

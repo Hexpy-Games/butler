@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     fs::File,
-    io::{self, BufRead, BufReader, Write},
+    io::{self, BufRead, BufReader, Seek, SeekFrom, Write},
     path::Path,
 };
 
@@ -40,9 +40,10 @@ impl Block {
         self.len += len;
         self.levels |= 1 << severity(&row.level);
         for (kind, id) in [
-            ("trace", &row.trace_id),
-            ("turn", &row.turn_id),
-            ("chat", &row.chat_id),
+            ("trace", row.trace_id.as_deref()),
+            ("turn", row.turn_id.as_deref()),
+            ("chat", row.chat_id.as_deref()),
+            ("message", row.attrs["message_id"].as_str()),
         ] {
             if let Some(id) = id {
                 for bit in bits(kind, id) {
@@ -66,7 +67,10 @@ fn bits(kind: &str, id: &str) -> [usize; 3] {
     })
 }
 pub(crate) fn add(blocks: &mut Vec<Block>, row: &Record, offset: u64, len: u64, source: &str) {
-    if blocks.last().is_none_or(|b| b.len + len > BLOCK_BYTES) {
+    if blocks
+        .last()
+        .is_none_or(|b| b.len + len > BLOCK_BYTES || b.offset + b.len != offset)
+    {
         blocks.push(Block::new(offset, source));
     }
     if let Some(block) = blocks.last_mut() {
@@ -74,13 +78,35 @@ pub(crate) fn add(blocks: &mut Vec<Block>, row: &Record, offset: u64, len: u64, 
     }
 }
 pub(crate) fn save(path: &Path, blocks: &[Block]) -> io::Result<()> {
+    save_mode(path, blocks, true)
+}
+/// Publish live producer records without adding fsync to request completion.
+/// The segment itself is synced separately when an ERROR batch requires it.
+pub(crate) fn publish(path: &Path, blocks: &[Block]) -> io::Result<()> {
+    save_mode(path, blocks, false)
+}
+fn save_mode(path: &Path, blocks: &[Block], durable: bool) -> io::Result<()> {
     let tmp = path.with_extension("idx.tmp");
     let mut file = super::files::create(&tmp, false)?;
     serde_json::to_writer(&mut file, blocks)?;
     file.flush()?;
-    super::files::sync(&file)?;
-    butler_platform::secure_fs::rename(&tmp, &path.with_extension("idx"))?;
-    super::files::sync_parent(path)
+    if durable {
+        super::files::sync(&file)?;
+    }
+    drop(file);
+    if durable {
+        butler_platform::secure_fs::rename(&tmp, &path.with_extension("idx"))?;
+        super::files::sync_parent(path)?;
+    } else {
+        // Live indexes need atomic visibility, not Windows write-through. A
+        // durable rename would put filesystem synchronization back on CLI exit.
+        butler_platform::secure_fs::replace_file(
+            &tmp,
+            &path.with_extension("idx"),
+            &mut || Ok(()),
+        )?;
+    }
+    Ok(())
 }
 pub(crate) fn load(path: &Path) -> io::Result<Vec<Block>> {
     Ok(serde_json::from_reader(BufReader::new(File::open(
@@ -89,9 +115,20 @@ pub(crate) fn load(path: &Path) -> io::Result<Vec<Block>> {
 }
 /// Startup repair only. Bound malformed line allocation as well as normal read blocks.
 pub(crate) fn rebuild(path: &Path, source: &str) -> io::Result<Vec<Block>> {
+    let (blocks, _) = extend(path, source, Vec::new(), 0)?;
+    save(path, &blocks)?;
+    Ok(blocks)
+}
+/// App indexes and complete-line checkpoints stay in agent memory; never write to App directories.
+pub(crate) fn extend(
+    path: &Path,
+    source: &str,
+    mut blocks: Vec<Block>,
+    mut offset: u64,
+) -> io::Result<(Vec<Block>, u64)> {
     let mut reader = BufReader::new(File::open(path)?);
-    let mut blocks = Vec::new();
-    let mut offset = 0;
+    let mut complete_offset = offset;
+    reader.seek(SeekFrom::Start(offset))?;
     let mut line = Vec::new();
     let mut oversized = false;
     loop {
@@ -112,6 +149,7 @@ pub(crate) fn rebuild(path: &Path, source: &str) -> io::Result<Vec<Block>> {
         reader.consume(end);
         offset += u64::try_from(end).map_err(io::Error::other)?;
         if complete {
+            complete_offset = offset;
             if !oversized && let Ok(row) = serde_json::from_slice::<Record>(&line) {
                 let len = u64::try_from(line.len()).map_err(io::Error::other)?;
                 add(&mut blocks, &row, offset - len, len, source);
@@ -120,6 +158,5 @@ pub(crate) fn rebuild(path: &Path, source: &str) -> io::Result<Vec<Block>> {
             oversized = false;
         }
     }
-    save(path, &blocks)?;
-    Ok(blocks)
+    Ok((blocks, complete_offset))
 }

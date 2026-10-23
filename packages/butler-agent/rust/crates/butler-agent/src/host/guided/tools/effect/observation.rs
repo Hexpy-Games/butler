@@ -28,10 +28,10 @@ pub(super) async fn execute(
     if input.get("state_effect").is_none() {
         input["state_effect"] = "read_only".into();
     }
-    let decision = super::super::access::decision(owner, call, &input)
+    let access = super::super::access::decision(owner, call, &input)
         .await
         .map_err(ToolExecutionError::Integrity)?;
-    let needs_approval = matches!(decision, AccessDecision::Ask(_))
+    let needs_approval = matches!(access.decision, AccessDecision::Ask(_))
         || super::super::access::resumes(owner, occurrence);
     let approval = if needs_approval {
         match gate(owner, call, occurrence, &input).await? {

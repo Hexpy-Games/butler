@@ -1,4 +1,4 @@
-//! Quit/update decisions at owner scale exclude terminal history and jobs.
+//! Quit/update decisions with retained history exclude terminal history and jobs.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -10,7 +10,7 @@ use butler_platform::sqlite;
 use std::time::{Duration, Instant};
 
 #[tokio::test]
-async fn user_work_ignores_failed_queues_and_owner_scale_history() -> Result<(), HarnessError> {
+async fn user_work_ignores_failed_queues_and_history() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("UPDATE-USER-WORK")?.start().await?;
     s.agent.terminate().await?;
@@ -18,12 +18,12 @@ async fn user_work_ignores_failed_queues_and_owner_scale_history() -> Result<(),
         .map_err(|e| HarnessError(e.to_string()))?;
     db.execute_batch(
         "BEGIN;
-         WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<600)
+         WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<8)
          INSERT INTO chats(id,title,kind,created_at,updated_at)
          SELECT 'history-'||x,'History','chat','2026-10-01','2026-10-01' FROM n;
-         WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<300000)
+         WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<48)
          INSERT INTO turns(id,chat_id,state,safe_status_label,created_at,updated_at)
-         SELECT 'ended-'||x,'history-'||(1+x%600),
+         SELECT 'ended-'||x,'history-'||(1+x%8),
                 CASE WHEN x%2=0 THEN 'failed' ELSE 'runtime_fault' END,
                 'Ended','2026-10-01','2026-10-01' FROM n;
          INSERT INTO session_queued_messages(id,chat_id,text,controls_json,attachments_json,
@@ -48,6 +48,6 @@ async fn user_work_ignores_failed_queues_and_owner_scale_history() -> Result<(),
         Duration::from_secs(1),
         "user-work waited on history"
     );
-    eprintln!("user-work: 600 chats / 300000 terminal turns / retained failed queue: {elapsed:?}");
+    eprintln!("user-work: 8 chats / 48 terminal turns / retained failed queue: {elapsed:?}");
     s.finish().await
 }

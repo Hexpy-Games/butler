@@ -1,4 +1,7 @@
 //! Tracked bounded host lane for passive metrics and durable completion jobs.
+//!
+//! A completed turn is handed to the lane and published there: its durable
+//! memory notice never delays the answer, and `close` still drains it.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -9,9 +12,8 @@ use tokio::sync::{Mutex, mpsc, oneshot};
 use butler_memory::cognition::{CognitionPathEnvironment, CompletionNotice, CompletionPublisher};
 use butler_runtime::operations::{AdmissionMeasure, ConversationMetrics, MetricFiles};
 use butler_turn::conversation::{
-    AdmissionMetric, AdmissionSource, CompletionMetric, CompletionObservation,
-    ConversationAdmissionObserver, ConversationCode, ConversationError, ConversationIdentityClock,
-    ConversationObserverFuture,
+    AdmissionMetric, AdmissionSource, CompletionObservation, ConversationAdmissionObserver,
+    ConversationCode, ConversationError, ConversationIdentityClock, ConversationObserverFuture,
 };
 
 mod prewarm;
@@ -23,14 +25,7 @@ enum Job {
         AdmissionMetric,
         oneshot::Sender<Result<(), ConversationError>>,
     ),
-    Completion(
-        CompletionNotice,
-        oneshot::Sender<Result<(), ConversationError>>,
-    ),
-    Metric(
-        CompletionMetric,
-        oneshot::Sender<Result<(), ConversationError>>,
-    ),
+    Completion(CompletionNotice),
 }
 
 struct State {
@@ -76,19 +71,9 @@ impl ConversationObserver {
                             let _ = result.send(Ok(()));
                             prewarm.on_admission(&input);
                         }
-                        Job::Completion(input, result) => {
-                            let outcome = publisher.publish(&input).map_err(|error| {
-                                ConversationError::port(
-                                    error.code(),
-                                    error.message().clone(),
-                                    error,
-                                )
-                            });
-                            let _ = result.send(outcome);
-                        }
-                        Job::Metric(input, result) => {
-                            metrics.completion(input.project_scoped, input.succeeded);
-                            let _ = result.send(Ok(()));
+                        Job::Completion(input) => {
+                            let published = publisher.publish(&input);
+                            metrics.completion(input.project_id.is_some(), published.is_ok());
                         }
                     }
                 }
@@ -102,18 +87,21 @@ impl ConversationObserver {
         })
     }
 
+    async fn enqueue(&self, job: Job) -> Result<(), ConversationError> {
+        let state = self.state.lock().await;
+        let sender = state.sender.as_ref().ok_or_else(closed)?;
+        sender
+            .send(job)
+            .await
+            .map_err(|source| closed().with_source(source))
+    }
+
     async fn submit(
         &self,
         job: impl FnOnce(oneshot::Sender<Result<(), ConversationError>>) -> Job,
     ) -> Result<(), ConversationError> {
         let (reply, result) = oneshot::channel();
-        let state = self.state.lock().await;
-        let sender = state.sender.as_ref().ok_or_else(closed)?;
-        sender
-            .send(job(reply))
-            .await
-            .map_err(|source| closed().with_source(source))?;
-        drop(state);
+        self.enqueue(job(reply)).await?;
         result
             .await
             .map_err(|source| closed().with_source(source))?
@@ -158,11 +146,7 @@ impl ConversationAdmissionObserver for ConversationObserver {
             outcome_generation: observation.outcome_generation,
             completed_at: observation.completed_at,
         };
-        Box::pin(async move { self.submit(|reply| Job::Completion(input, reply)).await })
-    }
-
-    fn completion_metric(&self, metric: CompletionMetric) -> ConversationObserverFuture<'_> {
-        Box::pin(async move { self.submit(|reply| Job::Metric(metric, reply)).await })
+        Box::pin(async move { self.enqueue(Job::Completion(input)).await })
     }
 }
 

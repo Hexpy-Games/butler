@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 #[derive(Clone)]
 pub(super) struct Client {
-    client: reqwest::Client,
+    client: butler_log::http::Client,
     base: String,
     bearer: String,
     admin: String,
@@ -31,7 +31,13 @@ impl Client {
         // freshly resolved above/on every call. Trust-store loading is blocking.
         let client = owner
             .browser_http
-            .get_or_try_init(|| tokio::task::spawn_blocking(reqwest::Client::new))
+            .get_or_try_init(|| async {
+                tokio::task::spawn_blocking(|| butler_log::http::loopback().build())
+                    .await
+                    .ok()
+                    .and_then(Result::ok)
+                    .ok_or(())
+            })
             .await
             .ok()?
             .clone();
@@ -81,7 +87,7 @@ impl Client {
                 Err(_) => json!({"status":"unknown","reason":"browser_host_lost"}),
             }
         };
-        let result = tokio::select! {
+        let mut result = tokio::select! {
             ()=signal.cancelled()=>{
                 let _ = self.client.post(format!("{}/internal/browser/calls",self.base))
                     .bearer_auth(&self.bearer).header("x-butler-admin",&self.admin)
@@ -91,6 +97,10 @@ impl Client {
             },
             result=request=>result
         };
+        // Internal phase timings stop at the model-facing transport boundary.
+        if let Some(record) = result.as_object_mut() {
+            record.remove("settleMs");
+        }
         let count = if op == "tab.act" {
             args["steps"].as_array().map_or(0, Vec::len)
         } else {

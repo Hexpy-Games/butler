@@ -38,42 +38,53 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     let (sender, receiver) = oneshot::channel();
     let tab = frame["tab"].as_str().map(str::to_owned);
     let sent = json!({"args":{"policy":frame["args"]["policy"],"entry_id":frame["args"]["entry_id"],"fill_token":frame["args"]["fill_token"],"kind":frame["args"]["kind"],"item_id":frame["args"]["item_id"]},"tab":frame["tab"],"turn_id":frame["turn_id"]});
-    if let Some(refused) = dispatch(&state, frame, count, deadline, &id, sender)? {
+    if let Some(refused) = dispatch_reserved(&state, frame, count, deadline, &id, sender).await? {
         return Ok(refused);
     }
     let _pending = PendingCall {
         state: state.clone(),
-        id,
+        id: id.clone(),
     };
-    let mut result = tokio::select! {
-        () = state.shutdown.cancelled() => json!({"status":"unknown","reason":"browser_host_lost"}),
+    let (mut result, answered) = tokio::select! {
+        () = state.shutdown.cancelled() => (json!({"status":"unknown","reason":"browser_host_lost"}), false),
         result = tokio::time::timeout(Duration::from_millis(deadline + 500),receiver) => match result {
-            Ok(Ok(value)) => value,
-            Ok(Err(_)) => json!({"status":"unknown","reason":"browser_host_lost"}),
-            Err(_) => json!({"status":"unknown","reason":"timeout"}),
+            Ok(Ok(value)) => (value, true),
+            Ok(Err(_)) => (json!({"status":"unknown","reason":"browser_host_lost"}), false),
+            Err(_) => (json!({"status":"unknown","reason":"timeout"}), false),
         }
     };
+    // Delivered replies were fenced under the hub lock when accepted. A later
+    // detach must not turn an executed call into a claim it never dispatched.
+    if !answered {
+        let hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
+        recheck_owner(&hub, &session, tab.as_deref(), &op, &mut result);
+    }
+    super::signed_in::recheck(&sent, &mut result);
+    finish_result(&state, &session, &op, &sent, &mut result).await?;
+    if op == "tab.act" {
+        super::still_delivery::finish(&state, &id, &session, &mut result).await?;
+    }
+    response(count, result)
+}
+
+pub(super) fn recheck_owner(
+    hub: &super::Inner,
+    session: &str,
+    tab: Option<&str>,
+    op: &str,
+    result: &mut Value,
+) {
     if let Some(tab) = tab
-        && state
-            .browser
-            .0
-            .lock()
-            .map_err(|_| HttpError::Internal)?
-            .tabs
-            .check(&session, &tab, "tab.cancel")
-            == Err("not_your_tab")
+        && hub.tabs.check(session, tab, "tab.cancel") == Err("not_your_tab")
     {
         // A moved page's observation must not cross the new conversation boundary.
         if op == "tab.act" {
             result["reason"] = json!("owner_changed");
             result["status"] = json!("interrupted");
         } else {
-            result = json!({"status":"not_dispatched","reason":"owner_changed"});
+            *result = json!({"status":"not_dispatched","reason":"owner_changed"});
         }
     }
-    super::signed_in::recheck(&sent, &mut result);
-    finish_result(&state, &session, &op, &sent, &mut result).await?;
-    response(count, result)
 }
 
 /// Signed-in fence and sign-in ops answered before (or instead of) native dispatch.
@@ -112,6 +123,33 @@ async fn signed_in_call(
     }
     super::fill::prepare(state, frame, &tab).await
 }
+/// A reservation is settled even when dispatch returns a transport error.
+async fn dispatch_reserved(
+    state: &Arc<HttpState>,
+    frame: Value,
+    count: usize,
+    deadline: u64,
+    id: &str,
+    sender: oneshot::Sender<Value>,
+) -> Result<Option<Response>, HttpError> {
+    let act = frame["op"] == "tab.act";
+    let session = frame["session"].as_str().unwrap_or_default().to_owned();
+    if act {
+        super::still_delivery::reserve(state, id, &frame).await?;
+    }
+    let dispatched = dispatch(state, frame, count, deadline, id, sender);
+    if act && !matches!(dispatched, Ok(None)) {
+        super::still_delivery::finish(
+            state,
+            id,
+            &session,
+            &mut json!({"reason":"dispatch_interrupted"}),
+        )
+        .await?;
+    }
+    dispatched
+}
+
 fn dispatch(
     state: &Arc<HttpState>,
     mut frame: Value,
@@ -264,6 +302,7 @@ pub(super) async fn events(state: Arc<HttpState>, value: Value) -> Result<Respon
         .ok_or_else(|| error(400, "invalid_snapshot"))?;
     let (handed_back, handovers) = {
         let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
+        hub.still_backlog = value["still_backlog"].as_u64().unwrap_or(0);
         let handovers = hub.tabs.handovers(tabs);
         let changed: Vec<Value> = tabs
             .iter()
@@ -277,6 +316,7 @@ pub(super) async fn events(state: Arc<HttpState>, value: Value) -> Result<Respon
         hub.tabs
             .replace(tabs)
             .map_err(|_| error(400, "invalid_snapshot"))?;
+        super::hidden::hand_over(&state, &mut hub);
         (changed, handovers)
     };
     state.browser.2.notify_waiters();
@@ -302,6 +342,10 @@ pub(in crate::gateway::http) async fn close_owner(
 }
 
 pub(super) async fn still(state: Arc<HttpState>, mut value: Value) -> Result<Response, HttpError> {
+    if value.get("act_id").is_some() {
+        let result = super::still_delivery::upload(&state, &value).await?;
+        return super::super::json(StatusCode::OK, result);
+    }
     let session = value["session"].as_str().unwrap_or("").to_owned();
     {
         let hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;

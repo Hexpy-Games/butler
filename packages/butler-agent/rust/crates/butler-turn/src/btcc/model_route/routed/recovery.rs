@@ -144,6 +144,12 @@ impl RoutedRound<'_> {
                 reason: "visual_fallback_disabled".into(),
             });
         }
+        tracing::warn!(
+            category = "model",
+            event = "model.fallback",
+            reason = "candidate_failed",
+            "Selecting fallback route"
+        );
         route.active_cursor += 1;
         if !route.consumed_attempts.iter().any(|value| value == key) {
             route.consumed_attempts.push(key.into());
@@ -180,6 +186,7 @@ impl RoutedRound<'_> {
         Ok(())
     }
 
+    #[tracing::instrument(name = "retry.wait", level = "warn", skip_all, fields(attempt, attempts = max), err)]
     pub(super) async fn backoff(
         &self,
         attempt: u32,

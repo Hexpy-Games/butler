@@ -65,37 +65,34 @@ fn metadata(db: &Connection, ids: &[String]) -> Result<Metadata, AppStorageError
         .map_err(AppStorageError::sqlite)
 }
 
-/// Read runs, never telemetry turn ids. The expression index bounds ranged
-/// reads even when durable timestamps use different RFC3339 UTC offsets.
-pub(super) fn schedule_turns(
+// Usage lives in the Host's incremental log index, not an App SQL table.
+// Probe only the turns needed to classify a session, with one prepared
+// statement. Dispatch completion time does not bound a turn's usage.
+pub(crate) const SCHEDULE_TURN_SQL: &str = "
+    SELECT EXISTS (
+        SELECT 1 FROM app_automation_runs r WHERE r.turn_id=?1
+    ) OR EXISTS (
+        SELECT 1 FROM session_queued_messages q
+        JOIN app_automation_runs r ON r.queued_message_id=q.id
+        WHERE q.turn_id=?1
+    )";
+
+pub(super) fn scheduled_sessions(
     db: &Connection,
-    since_ts: Option<f64>,
+    view: &super::AppUsageMonitorView,
 ) -> Result<HashSet<String>, AppStorageError> {
-    let predicate = if since_ts.is_some() {
-        "WHERE julianday(r.started_at) >= julianday(?1 / 1000.0, 'unixepoch')"
-    } else {
-        ""
-    };
-    let sql = format!(
-        "SELECT r.turn_id,q.turn_id FROM app_automation_runs r
-        LEFT JOIN session_queued_messages q ON q.id=r.queued_message_id {predicate}"
-    );
-    let mut statement = db.prepare(&sql).map_err(AppStorageError::sqlite)?;
-    let args: Vec<f64> = since_ts.into_iter().collect();
-    let rows = statement
-        .query_map(params_from_iter(args), |row| {
-            Ok([row.get::<_, Option<String>>(0)?, row.get(1)?])
-        })
+    let mut statement = db
+        .prepare(SCHEDULE_TURN_SQL)
         .map_err(AppStorageError::sqlite)?;
-    let mut turns = HashSet::new();
-    for row in rows {
-        turns.extend(row.map_err(AppStorageError::sqlite)?.into_iter().flatten());
-    }
-    Ok(turns)
+    view.monitor.scheduled_sessions(&view.view, |turn| {
+        statement
+            .query_row([turn], |row| row.get(0))
+            .map_err(AppStorageError::sqlite)
+    })
 }
 
 /// Resolve App ids through their durable binding; telemetry scopes stay intact.
-pub(super) fn runtime_session(
+pub(in crate::gateway::application) fn runtime_session(
     db: &Connection,
     id: &str,
 ) -> Result<(String, Option<String>), AppStorageError> {

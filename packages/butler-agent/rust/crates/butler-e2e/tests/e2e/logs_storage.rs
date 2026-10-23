@@ -8,6 +8,38 @@ use std::{
 };
 
 #[test]
+fn logs_secondary_producer_preserves_service_segments_and_refreshes_latest()
+-> Result<(), Box<dyn std::error::Error>> {
+    butler_e2e::gate!();
+    let root = root();
+    let service = Logger::open(&root, Config::full())?;
+    let payload = "complete content ".repeat(2000);
+    let mut row = Record::new("DEBUG", "http.client", "service", "service body");
+    row.content = Some(serde_json::json!({"response":payload}));
+    service.record(row)?;
+    let before = service.query(&Query::default())?;
+    let reference = before.rows[0].body_ref.as_deref().unwrap();
+    let body = service.body(reference)?;
+    let producer = Logger::producer(&root, Config::default())?;
+    producer.record(Record::new("ERROR", "http.client", "cli.first", "first"))?;
+    producer.flush()?;
+    assert_eq!(service.query(&Query::default())?.rows.len(), 2);
+    producer.record(Record::new("ERROR", "http.client", "cli.latest", "latest"))?;
+    producer.shutdown()?;
+    let after = service.query(&Query::default())?;
+    assert_eq!(after.rows.len(), 3);
+    assert_eq!(after.rows[0].event, "cli.latest");
+    assert_eq!(service.body(reference)?, body);
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&body)?["response"],
+        payload
+    );
+    service.shutdown()?;
+    fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[test]
 fn logs_old_name_recent_record_survives_restart() -> Result<(), Box<dyn std::error::Error>> {
     butler_e2e::gate!();
     let root = root();
@@ -175,6 +207,11 @@ fn logs_body_references_require_bounded_frame() -> Result<(), Box<dyn std::error
             .kind(),
         std::io::ErrorKind::InvalidData
     );
+    let multipart = log.body(&format!("{name}:0:{}:2", compressed.len()));
+    assert_eq!(
+        multipart.err().map(|error| error.kind()),
+        Some(std::io::ErrorKind::InvalidData)
+    );
     log.shutdown()?;
     fs::remove_dir_all(root)?;
     Ok(())
@@ -222,11 +259,9 @@ fn logs_expiry_reverts_before_cleanup_and_retries() -> Result<(), Box<dyn std::e
     butler_e2e::gate!();
     let root = root();
     let log = Logger::open(&root, Config::full())?;
-    let mut row = record(1, "TRACE");
-    row.content = Some(serde_json::json!("body ".repeat(3000)));
-    log.record(row)?;
+    log.record(record(1, "TRACE"))?;
     log.flush()?;
-    let blocked = root.join("logs/app/bodies");
+    let blocked = root.join("logs/agent/bodies");
     fs::create_dir_all(blocked.parent().unwrap())?;
     // A regular file in place of the directory causes a portable deletion error.
     fs::write(&blocked, b"blocked")?;
@@ -303,32 +338,34 @@ fn logs_export_skips_corruption_and_reports_count() -> Result<(), Box<dyn std::e
 fn logs_drained_batch_is_visible_without_flush_or_fsync() -> Result<(), Box<dyn std::error::Error>>
 {
     butler_e2e::gate!();
-    let root = root();
-    let log = Logger::open(&root, Config::detailed())?;
-    let paused = log.pause_writer()?;
-    for n in 0..100 {
-        log.record(record(n, if n % 2 == 0 { "INFO" } else { "DEBUG" }))?;
-    }
-    drop(paused);
-    // This command waits for preceding records, without requesting a flush.
-    assert_eq!(log.sync_count()?, 0, "ordinary batches must not fsync");
-    for (lane, parity) in [("main", 0), ("debug", 1)] {
-        let mut rows = Vec::new();
-        for entry in fs::read_dir(root.join("logs/agent").join(lane))? {
-            let path = entry?.path();
-            if path.extension().is_some_and(|ext| ext == "jsonl") {
-                for line in fs::read_to_string(path)?.lines() {
-                    rows.push(serde_json::from_str::<Record>(line)?);
+    for open in [Logger::open, Logger::producer] {
+        let root = root();
+        let log = open(&root, Config::detailed())?;
+        let paused = log.pause_writer()?;
+        for n in 0..100 {
+            log.record(record(n, if n % 2 == 0 { "INFO" } else { "DEBUG" }))?;
+        }
+        drop(paused);
+        // This command waits for preceding records, without requesting a flush.
+        assert_eq!(log.sync_count()?, 0, "ordinary batches must not fsync");
+        for (lane, parity) in [("main", 0), ("debug", 1)] {
+            let mut rows = Vec::new();
+            for entry in fs::read_dir(root.join("logs/agent").join(lane))? {
+                let path = entry?.path();
+                if path.extension().is_some_and(|ext| ext == "jsonl") {
+                    for line in fs::read_to_string(path)?.lines() {
+                        rows.push(serde_json::from_str::<Record>(line)?);
+                    }
                 }
             }
+            assert_eq!(rows.len(), 50, "{lane} records remain buffered");
+            for (n, row) in rows.iter().enumerate() {
+                assert_eq!(row.msg, format!("row {}", n * 2 + parity));
+            }
         }
-        assert_eq!(rows.len(), 50, "{lane} records remain buffered");
-        for (n, row) in rows.iter().enumerate() {
-            assert_eq!(row.msg, format!("row {}", n * 2 + parity));
-        }
+        log.shutdown()?;
+        fs::remove_dir_all(root)?;
     }
-    log.shutdown()?;
-    fs::remove_dir_all(root)?;
     Ok(())
 }
 
@@ -356,5 +393,86 @@ fn logs_dropped_notice_is_visible_without_flush() -> Result<(), Box<dyn std::err
     assert_eq!(rows[0].attrs["dropped"]["INFO"], 1);
     log.shutdown()?;
     fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn logs_producer_close_publishes_latest_index_to_open_service()
+-> Result<(), Box<dyn std::error::Error>> {
+    butler_e2e::gate!();
+    let root = root();
+    let service = Logger::open(&root, Config::detailed())?;
+    let producer = Logger::producer(&root, Config::detailed())?;
+    producer.record_written(record(0, "INFO")).await?;
+    assert_eq!(service.query(&Query::default())?.rows.len(), 1);
+    let index = fs::read_dir(root.join("logs/agent/main"))?
+        .map(|entry| entry.map(|entry| entry.path()))
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .find(|path| path.extension().is_some_and(|ext| ext == "idx"))
+        .unwrap();
+    let old_index = fs::read(&index)?;
+    let mut reader = fs::File::open(&index)?;
+    producer.record(record(1, "INFO"))?;
+    let start = Instant::now();
+    producer
+        .shutdown_bounded(Duration::from_millis(250))
+        .await?;
+    let elapsed = start.elapsed();
+    // Query the running service before startup repair can rebuild any index.
+    let rows = service.query(&Query::default())?.rows;
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].msg, "row 1");
+    assert_eq!(rows[1].msg, "row 0");
+    assert_ne!(fs::read(index)?, old_index);
+    let mut retained = Vec::new();
+    reader.read_to_end(&mut retained)?;
+    assert_eq!(retained, old_index, "open readers retain their snapshot");
+    drop(reader);
+    eprintln!(
+        "LOG-PRODUCER live_index_close_ms={:.3} rows=2",
+        elapsed.as_secs_f64() * 1000.0
+    );
+    service.shutdown()?;
+    fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn logs_producer_bounded_close_preserves_complete_records()
+-> Result<(), Box<dyn std::error::Error>> {
+    butler_e2e::gate!();
+    for _ in 0..10 {
+        let root = root();
+        let log = Logger::producer(&root, Config::full())?;
+        let paused = log.pause_writer()?;
+        let payload = "complete body ".repeat(2000);
+        for n in 0..4 {
+            let mut row = record(n, if n % 2 == 0 { "INFO" } else { "DEBUG" });
+            row.content = Some(serde_json::json!({"payload": payload}));
+            log.record(row)?;
+        }
+        let start = Instant::now();
+        drop(paused);
+        log.shutdown_bounded(Duration::from_millis(250)).await?;
+        let elapsed = start.elapsed();
+        let reopened = Logger::open(&root, Config::full())?;
+        let rows = reopened.query(&Query::default())?.rows;
+        assert_eq!(rows.len(), 4);
+        for (n, row) in rows.iter().rev().enumerate() {
+            assert_eq!(row.msg, format!("row {n}"));
+            let body = reopened.body(row.body_ref.as_deref().unwrap())?;
+            assert_eq!(
+                serde_json::from_slice::<serde_json::Value>(&body)?["payload"],
+                payload
+            );
+        }
+        eprintln!(
+            "LOG-PRODUCER close_ms={:.3} rows=4 complete_bodies=4",
+            elapsed.as_secs_f64() * 1000.0
+        );
+        reopened.shutdown()?;
+        fs::remove_dir_all(root)?;
+    }
     Ok(())
 }

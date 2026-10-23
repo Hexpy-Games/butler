@@ -94,6 +94,7 @@ async fn runtime_interrupt_keeps_process_and_drains_followups_truthfully()
     butler_e2e::gate!();
     let s = Setup::new("INTERRUPT-IN-PROCESS")?
         .env("BUTLER_E2E_INTERRUPT_TOOL", "delegate_to_steward")
+        .env("BUTLER_E2E_INTERRUPT_REPORT_FAILURES", "1")
         .stub_cassette(stub::cassette(
             "delegate_to_steward",
             &json!({"request":"test"}),
@@ -101,7 +102,6 @@ async fn runtime_interrupt_keeps_process_and_drains_followups_truthfully()
         .start()
         .await?;
     std::fs::write(s.sandbox.data.join("e2e-interrupt-tool"), b"once")?;
-    std::fs::write(s.sandbox.data.join("e2e-interrupt-report"), b"once")?;
     let pid = s.agent.pid();
     let turn = accepted_turn_id(&s.gw.say("general", stub::PROMPT).await?)?;
     s.gw.post(
@@ -137,5 +137,13 @@ async fn runtime_interrupt_keeps_process_and_drains_followups_truthfully()
     );
     assert_eq!(s.agent.pid(), pid);
     assert!(s.gw.healthy().await);
+    assert_eq!(
+        s.agent
+            .logs()
+            .matches("interruption report unavailable code=inbound_delivery_interrupted")
+            .count(),
+        1,
+        "the report must exercise one failed delivery before recovery"
+    );
     s.finish().await
 }

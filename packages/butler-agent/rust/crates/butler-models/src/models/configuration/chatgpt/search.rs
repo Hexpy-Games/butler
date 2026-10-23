@@ -51,7 +51,6 @@ impl ModelConfiguration {
             data_root: &self.data_root,
             environment: &environment,
             clock: &self.clock,
-            client: &self.client,
             revision: &self.account_revision,
         }
         .resolve_chatgpt(rejected)

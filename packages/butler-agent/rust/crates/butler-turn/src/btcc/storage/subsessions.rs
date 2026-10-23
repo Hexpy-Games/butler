@@ -6,8 +6,10 @@ mod completion;
 mod decode;
 mod directions;
 mod files;
+mod parents;
 mod records;
 
+pub use completion::turn_result_id as subsession_result_id;
 pub(crate) use directions::direction_turn_id;
 pub use records::*;
 

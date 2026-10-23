@@ -4,13 +4,23 @@ use std::path::{Path, PathBuf};
 use super::{CommandError, GuidedAccess, GuidedCommandInput, GuidedCommandOutput};
 
 pub(super) struct Prepared {
-    paths: Vec<PathBuf>,
+    paths: butler_platform::command_sandbox::ProjectEntries,
     lease: Option<butler_platform::command_sandbox::ProjectWritePreparation>,
 }
 
 impl Prepared {
-    fn sweep(self, root: &Path, data: &Path) -> std::io::Result<Vec<PathBuf>> {
-        let result = butler_platform::command_sandbox::sweep_new_secrets(root, &self.paths, data);
+    fn sweep(
+        self,
+        root: &Path,
+        data: &Path,
+        inventory: &butler_platform::secure_fs::SecretInventory,
+    ) -> std::io::Result<Vec<PathBuf>> {
+        let result = butler_platform::command_sandbox::sweep_with_inventory(
+            root,
+            &self.paths,
+            data,
+            inventory,
+        );
         if let Some(lease) = self.lease {
             lease.release();
         }
@@ -31,7 +41,7 @@ impl std::ops::Deref for Prepared {
 pub(super) async fn before_run(input: &GuidedCommandInput) -> Result<Prepared, CommandError> {
     if input.access != GuidedAccess::ProjectWrite {
         return Ok(Prepared {
-            paths: Vec::new(),
+            paths: Default::default(),
             lease: None,
         });
     }
@@ -39,7 +49,7 @@ pub(super) async fn before_run(input: &GuidedCommandInput) -> Result<Prepared, C
     let data = input.butler_data.clone();
     tokio::task::spawn_blocking(move || {
         let lease = butler_platform::command_sandbox::prepare_project_write(&root, &data)?;
-        let paths = butler_platform::command_sandbox::discover_project_secrets(&root)?;
+        let paths = butler_platform::command_sandbox::discover_project_entries(&root)?;
         Ok(Prepared {
             paths,
             lease: Some(lease),
@@ -69,10 +79,15 @@ pub(super) async fn after_run(
     }
     let root = input.workspace_root.clone();
     let data = input.butler_data.clone();
-    let swept = tokio::task::spawn_blocking(move || since.sweep(&root, &data))
-        .await
-        .map_err(|error| CommandError::io(std::io::Error::other(error)))
-        .and_then(|result| result.map_err(CommandError::io));
+    let environment = input.host_environment.clone();
+    let swept = tokio::task::spawn_blocking(move || {
+        let inventory =
+            butler_platform::secure_fs::SecretInventory::for_environment(&data, &environment);
+        since.sweep(&root, &data, &inventory)
+    })
+    .await
+    .map_err(|error| CommandError::io(std::io::Error::other(error)))
+    .and_then(|result| result.map_err(CommandError::io));
 
     let violations = match swept {
         Ok(paths) => paths,

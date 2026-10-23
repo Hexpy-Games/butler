@@ -178,6 +178,14 @@ pub(super) fn rename(from: &Path, to: &Path) -> io::Result<()> {
     fs::rename(from, to)
 }
 
+pub(super) fn replace_file(
+    from: &Path,
+    to: &Path,
+    _before_retry: &mut dyn FnMut() -> io::Result<()>,
+) -> io::Result<()> {
+    fs::rename(from, to)
+}
+
 pub(super) fn record_key(key: &str) -> std::borrow::Cow<'_, str> {
     std::borrow::Cow::Borrowed(key)
 }

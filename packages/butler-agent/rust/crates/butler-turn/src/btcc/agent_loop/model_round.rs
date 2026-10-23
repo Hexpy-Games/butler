@@ -1,3 +1,6 @@
+mod projection;
+use projection::project_context;
+
 use crate::btcc::{AgentLoopError, BtccError};
 
 use super::contracts::{
@@ -48,8 +51,10 @@ pub(super) async fn run_model_round(
         &identity.round_id,
         Status::Started,
         Some(&started_model_ref),
+        None,
     )
-    .await;
+    .await
+    .map_err(AgentLoopError::Propagate)?;
     timing.mark("waiting_published");
     let round = Round {
         input,
@@ -108,7 +113,16 @@ async fn attempt_round(
     surface: &mut ToolSurface,
 ) -> Result<ModelRoundResult, AttemptError> {
     let timing = super::command_timing::CommandTiming::new("model_projection");
-    super::browser_context::supersede(&mut state.messages);
+    // Within a turn, already-sent messages are append-only between compactions.
+    // Stale browser results are stubbed in one batch only when over budget.
+    super::browser_context::prune(
+        &mut state.messages,
+        &mut state.browser_prune,
+        state.compacted_through,
+        crate::btcc::continuation_budget::model_context_byte_limit(
+            round.input.semantic.model.context_window_tokens,
+        ),
+    );
     identify_messages(&mut state.messages, &mut state.next_item_ordinal);
     let mut response_item_id = next_item_id(&mut state.next_item_ordinal);
     let replay = replay_transcript(round, state).await?;
@@ -121,6 +135,7 @@ async fn attempt_round(
         response_item_id = next_item_id(&mut state.next_item_ordinal);
         projection = project_context(round, state, &replay, surface, &response_item_id).await?;
     }
+    state.compacted_through = projection.compacted_through.unwrap_or(0);
     timing.mark("before_send");
     let mut response = send_request(round, state, &replay, surface, &projection).await?;
     accept_response(round, state, &mut response, response_item_id).await?;
@@ -145,34 +160,6 @@ async fn replay_transcript(
         )
         .await
         .map_err(replay_error)
-}
-
-async fn project_context(
-    round: &Round<'_, '_>,
-    state: &State,
-    replay: &ReplayPreparation,
-    surface: &ToolSurface,
-    response_item_id: &str,
-) -> Result<ContextProjection, AttemptError> {
-    let input = round.input;
-    let model_ref = input.model_execution.active_model_ref();
-    let source = ContextProjectionSource {
-        model_ref: &model_ref,
-        round_id: &round.identity.round_id,
-        response_item_id,
-        semantic_messages: &state.messages,
-        transport_messages: replay.messages.as_deref().unwrap_or(&state.messages),
-        tools: &surface.tools,
-    };
-    input
-        .policy
-        .prepare_context(
-            round.context,
-            GuidedInvocation::from(input),
-            context_input(input, round.prepared, source),
-        )
-        .await
-        .map_err(context_error)
 }
 
 /// Re-reads steering after a rebase that may have hidden a new user request.
@@ -320,8 +307,10 @@ async fn accept_response(
         round_id,
         Status::Completed,
         Some(&completed_model_ref),
+        response.reasoning_summary.take().as_deref(),
     )
-    .await;
+    .await
+    .map_err(AttemptError::Contract)?;
     if let Some(ordinal) = identify_response(response, response_item_id) {
         state.next_item_ordinal = state.next_item_ordinal.max(ordinal.saturating_add(1));
     }
@@ -357,7 +346,14 @@ async fn fail_round(
     } else {
         Status::Failed
     };
-    model_waiting(input.progress, round_id, status, Some(&failed_model_ref)).await;
+    let _ = model_waiting(
+        input.progress,
+        round_id,
+        status,
+        Some(&failed_model_ref),
+        None,
+    )
+    .await;
     map_attempt(original, input, iteration)
 }
 
@@ -403,38 +399,6 @@ fn output_serialization_error(
         )
         .with_source(error),
     )
-}
-
-#[derive(Clone, Copy)]
-struct ContextProjectionSource<'a> {
-    model_ref: &'a str,
-    round_id: &'a str,
-    response_item_id: &'a str,
-    semantic_messages: &'a [super::contracts::ModelRoundMessage],
-    transport_messages: &'a [super::contracts::ModelRoundMessage],
-    tools: &'a [super::contracts::ModelRoundTool],
-}
-
-fn context_input<'a>(
-    input: &'a Invocation<'_>,
-    prepared: &'a PreparedPolicy,
-    source: ContextProjectionSource<'a>,
-) -> super::contracts::ContextProjectionInput<'a> {
-    super::contracts::ContextProjectionInput {
-        round_id: source.round_id,
-        response_item_id: source.response_item_id,
-        semantic_messages: source.semantic_messages,
-        transport_messages: source.transport_messages,
-        model_ref: source.model_ref,
-        instructions: prepared.instructions.as_deref(),
-        tools: source.tools,
-        tool_choice: prepared.tool_choice,
-        attachments: &prepared.images.attachments,
-        butler_data: prepared.request.butler_data.as_deref(),
-        max_model_facing_bytes: crate::btcc::continuation_budget::model_context_byte_limit(
-            input.semantic.model.context_window_tokens,
-        ),
-    }
 }
 
 fn replay_error(error: OperationResultError) -> AttemptError {

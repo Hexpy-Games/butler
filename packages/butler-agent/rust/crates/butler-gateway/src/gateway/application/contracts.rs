@@ -1,6 +1,8 @@
 //! Required composition ports and owned App transport values.
 mod artifacts;
+mod work_model;
 pub use artifacts::*;
+pub use work_model::*;
 
 use super::sessions::{
     AppSessionWorkProgress, AppSessionWorkspaceProvisioner, AppWorkStreamReader,
@@ -44,6 +46,16 @@ pub struct EnqueueReceipt {
 pub trait AppNativeIngress: Send + Sync + 'static {
     fn enqueue(&self, turn: AppTurn) -> ApplicationFuture<EnqueueReceipt>;
     fn find(&self, turn: AppTurn) -> ApplicationFuture<Option<EnqueueReceipt>>;
+    /// The claim an unfailed durable native record of this message attempt
+    /// delivers under: the one carrying `claim`, else a live one.
+    fn delivering_claim(
+        &self,
+        _message_id: String,
+        _turn_attempt: u64,
+        _claim: Option<String>,
+    ) -> ApplicationFuture<Option<String>> {
+        Box::pin(async { Ok(None) })
+    }
     fn enqueue_cancel(&self, _cancel: AppCancellation) -> ApplicationFuture<EnqueueReceipt> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
@@ -82,12 +94,6 @@ pub trait AppAdmissionAuthority: Send + Sync + 'static {
         request: AppSourceSnapshotRequest,
     ) -> ApplicationFuture<MaterializedResponderFile>;
     fn admit_visual(&self, request: VisualAdmissionRequest) -> ApplicationFuture<Value>;
-}
-pub trait AppArtifactMaterializer: Send + Sync + 'static {
-    fn materialize(
-        &self,
-        request: ArtifactMaterializationRequest,
-    ) -> ApplicationFuture<Vec<MaterializedResponderFile>>;
 }
 pub trait AppMessageFileStorage: Send + Sync + 'static {
     fn replace_browser_still(
@@ -155,20 +161,6 @@ pub trait AppBranchSummarizer: Send + Sync + 'static {
         input: AppBranchSummaryInput,
         cancellation: tokio_util::sync::CancellationToken,
     ) -> ApplicationFuture<AppBranchSummary>;
-}
-
-#[derive(Clone, Debug)]
-pub struct AppSessionTitleInput {
-    pub text: String,
-    pub model_ref: String,
-}
-
-pub trait AppSessionTitleGenerator: Send + Sync + 'static {
-    fn generate(
-        &self,
-        input: AppSessionTitleInput,
-        cancellation: tokio_util::sync::CancellationToken,
-    ) -> ApplicationFuture<String>;
 }
 
 #[derive(Clone, Debug)]
@@ -315,6 +307,7 @@ pub struct VisualAdmissionRequest {
 pub struct AppApplicationDependencies {
     /// User lifecycle hooks, absent for applications without the host dispatcher.
     pub hooks: Option<Arc<dyn butler_core::hooks::HookPort>>,
+    pub data_reset: Option<Arc<dyn crate::gateway::AppDataResetPort>>,
     /// Process stop fences queue admission before active turns are interrupted.
     pub service_shutdown: tokio_util::sync::CancellationToken,
     pub updates: Arc<butler_runtime::operations::AppUpdateService>,
@@ -346,6 +339,7 @@ pub struct AppApplicationDependencies {
     pub session_work_progress: Arc<dyn AppSessionWorkProgress>,
     pub work_streams: Arc<dyn AppWorkStreamReader>,
     pub subsessions: Arc<dyn AppSubsessionPort>,
+    pub work_model: Arc<dyn AppWorkModelPort>,
     pub branch_conversations: Arc<dyn AppBranchConversationReader>,
     pub session_title_generator: Arc<dyn AppSessionTitleGenerator>,
     pub branch_summarizer: Arc<dyn AppBranchSummarizer>,
@@ -399,6 +393,8 @@ pub trait AppContextReadPort: Send + Sync {
     fn read(&self, query: AppContextReadQuery) -> ApplicationFuture<AppContextReadFacts>;
 }
 
+mod session_titles;
+pub use session_titles::{AppSessionTitleGenerator, AppSessionTitleInput};
 mod subsessions;
 pub use subsessions::{
     AppSessionViewPage, AppSubsessionPort, AppTaskGraphQuery, AppWorkerActivitySourcePage,

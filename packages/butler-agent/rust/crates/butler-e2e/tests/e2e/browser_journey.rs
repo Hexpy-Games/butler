@@ -100,10 +100,11 @@ async fn user_browser_journey_projects_pixels_and_reply_crop_then_releases()
                 .is_some_and(|parts| parts.iter().any(|part| part["type"] == "input_image"))
         })
         .count();
-    assert_eq!(
-        visual, 2,
+    assert!(
+        visual >= 2,
         "newest observation and actual reply capture retain pixels"
     );
+    assert_full_history(&requests);
     assert!(
         input
             .iter()
@@ -122,6 +123,7 @@ async fn user_browser_journey_projects_pixels_and_reply_crop_then_releases()
         .iter()
         .filter_map(|item| item["output"].as_array())
         .filter(|parts| parts.iter().any(|part| part["type"] == "input_image"))
+        .rev()
         .find_map(|parts| {
             let result: Value = serde_json::from_str(
                 parts.iter().find(|p| p["type"] == "input_text")?["text"].as_str()?,
@@ -136,15 +138,15 @@ async fn user_browser_journey_projects_pixels_and_reply_crop_then_releases()
                 .and_then(|part| serde_json::from_str(part["text"].as_str()?).ok())
         })
         .unwrap();
-    for item in input {
-        let Some(raw) = item["output"].as_str() else {
-            continue;
-        };
-        let Ok(value) = serde_json::from_str::<Value>(raw) else {
-            continue;
-        };
+    assert_eq!(latest["output"]["status"], "ok");
+    let observations = super::browser_prefix::outputs(last);
+    for (index, (value, _)) in observations.iter().enumerate() {
         if value["output"]["status"] == "superseded" {
-            assert_eq!(value["output"]["superseded_by"], latest["output"]["obs"]);
+            assert!(
+                observations.iter().skip(index + 1).any(|(later, _)| {
+                    later["output"]["obs"] == value["output"]["superseded_by"]
+                })
+            );
             assert!(
                 value["output"]["recovery"]
                     .as_str()
@@ -312,7 +314,7 @@ fn cassette() -> Result<Cassette, HarnessError> {
         ),
         (
             "read_operation_results",
-            json!({"result_ref":"x","sha256":"x","revision":null,"work_id":null,"offset":0,"length":1}),
+            json!({"result_ref":"x","sha256":"0".repeat(64),"revision":null,"work_id":null,"offset":0,"length":1}),
         ),
         ("browser_open", json!({"url":"https://example.com"})),
         ("browser_observe", observe.clone()),
@@ -385,4 +387,43 @@ fn cassette() -> Result<Cassette, HarnessError> {
     );
     cassette.exchanges.push(last);
     Ok(cassette)
+}
+
+fn assert_full_history(requests: &[Value]) {
+    let mut first = std::collections::HashMap::new();
+    let mut stubs = std::collections::HashMap::new();
+    for request in requests {
+        for item in request["input"].as_array().unwrap() {
+            if item["type"] != "function_call_output" {
+                continue;
+            }
+            let text = item["output"]
+                .as_array()
+                .and_then(|parts| parts.iter().find(|p| p["type"] == "input_text"))
+                .map(|part| &part["text"])
+                .unwrap_or(&item["output"]);
+            if text
+                .as_str()
+                .and_then(|text| serde_json::from_str::<Value>(text).ok())
+                .is_some_and(|value| {
+                    value["output"]["status"] == "superseded"
+                        || value["output"]["superseded"] == true
+                })
+            {
+                let stub = stubs
+                    .entry(item["call_id"].to_string())
+                    .or_insert_with(|| item.clone());
+                assert_eq!(stub, item, "written stubs are final");
+                continue;
+            }
+            assert!(!stubs.contains_key(&item["call_id"].to_string()));
+            let original = first
+                .entry(item["call_id"].to_string())
+                .or_insert_with(|| item.clone());
+            assert_eq!(
+                original, item,
+                "full results stay byte-identical to their first send"
+            );
+        }
+    }
 }

@@ -23,7 +23,7 @@ inputs:
     required: false
     default: release
     description: Cargo profile (release for tags, ci-fast for previews)
-  owner-runner:
+  self-hosted-runner:
     required: false
     default: 'false'
     description: Use installed tools and persistent verified native cache
@@ -31,7 +31,7 @@ runs:
   using: composite
   steps:
     - uses: ilammy/msvc-dev-cmd@v1
-      if: inputs.owner-runner != 'true'
+      if: inputs.self-hosted-runner != 'true'
       with:
         arch: x64
     - uses: actions/download-artifact@v4
@@ -50,7 +50,7 @@ runs:
         $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     - uses: ./.github/actions/rust-agent-setup
-      if: inputs.owner-runner != 'true'
+      if: inputs.self-hosted-runner != 'true'
       with:
         native-deps: static-ort
         artifact-cache-platform: windows-x64
@@ -60,16 +60,16 @@ runs:
         cargo-target-dir: ${{ inputs.cargo-target-dir }}
         prepared-static-ort: ${{ inputs.native-deps-artifact != '' }}
     - uses: oven-sh/setup-bun@v2
-      if: inputs.owner-runner != 'true'
+      if: inputs.self-hosted-runner != 'true'
     - uses: actions/setup-node@v4
-      if: inputs.owner-runner != 'true'
+      if: inputs.self-hosted-runner != 'true'
       with:
         node-version: 22
     - name: Build renderer
       working-directory: ${{ github.workspace }}
       shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
       run: |
-        $profileRoot = if ($env:OWNER_JOB_ROOT) { $env:OWNER_JOB_ROOT } else { $env:RUNNER_TEMP }
+        $profileRoot = if ($env:RUNNER_JOB_ROOT) { $env:RUNNER_JOB_ROOT } else { $env:RUNNER_TEMP }
         $env:HOME = Join-Path $profileRoot ([guid]::NewGuid())
         $env:BUTLER_DATA = Join-Path $profileRoot ([guid]::NewGuid())
         New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
@@ -90,7 +90,7 @@ runs:
       run: |
         $env:CARGO_HOME = "$env:USERPROFILE/.cargo"
         $env:RUSTUP_HOME = "$env:USERPROFILE/.rustup"
-        $profileRoot = if ($env:OWNER_JOB_ROOT) { $env:OWNER_JOB_ROOT } else { $env:RUNNER_TEMP }
+        $profileRoot = if ($env:RUNNER_JOB_ROOT) { $env:RUNNER_JOB_ROOT } else { $env:RUNNER_TEMP }
         $env:HOME = Join-Path $profileRoot ([guid]::NewGuid())
         $env:BUTLER_DATA = Join-Path $profileRoot ([guid]::NewGuid())
         New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
@@ -103,8 +103,8 @@ runs:
         $env:TARGET_SNAPSHOT_PROFILE = '${{ inputs.profile }}'
         $env:TARGET_SNAPSHOT_FEATURES = 'butler-agent/static-ort'
         $env:CARGO_BUILD_TARGET = 'x86_64-pc-windows-msvc'
-        # Owner setup bypasses rust-agent-setup; restore after setting exact flags.
-        if ('${{ inputs.owner-runner }}' -eq 'true') {
+        # Runner setup bypasses rust-agent-setup; restore after setting exact flags.
+        if ('${{ inputs.self-hosted-runner }}' -eq 'true') {
           $ErrorActionPreference = 'Continue'
           $env:CARGO_TARGET_DIR = python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" target windows-x64 static-ort native
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -117,22 +117,24 @@ runs:
         cargo build --timings -j 8 --locked --profile ${{ inputs.profile }} --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox
         $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        if ('${{ inputs.owner-runner }}' -eq 'true') {
+        if ('${{ inputs.self-hosted-runner }}' -eq 'true') {
           $ErrorActionPreference = 'Continue'
           python "$env:GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" save-local windows-x64 static-ort native
           $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         }
-        $binary = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/${{ inputs.profile }}/butler-agent.exe"
-        # A runner has development DLLs installed. Refuse a dependency they hide.
-        $ErrorActionPreference = 'Continue'
-        $imports = & dumpbin /dependents $binary
-        $ErrorActionPreference = 'Stop'
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        $imports | Write-Output
-        foreach ($line in $imports) {
-          if ($line.Trim() -match '(?i)^(onnxruntime|vcruntime|msvcp|concrt|ucrtbase).*\.dll$') {
-            throw 'Agent has an unpackaged runtime dependency'
+        foreach ($name in @('butler-agent.exe', 'butler-sandbox.exe')) {
+          $binary = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/${{ inputs.profile }}/$name"
+          # A runner has development DLLs installed. Refuse a dependency they hide.
+          $ErrorActionPreference = 'Continue'
+          $imports = & dumpbin /dependents $binary
+          $ErrorActionPreference = 'Stop'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $imports | Write-Output
+          foreach ($line in $imports) {
+            if ($line.Trim() -match '(?i)^(onnxruntime|vcruntime|msvcp|concrt|ucrtbase).*\.dll$') {
+              throw "${binary}: $($line.Trim()): unpackaged runtime dependency"
+            }
           }
         }
     - name: Upload Cargo build timings
@@ -147,7 +149,7 @@ runs:
       working-directory: ${{ github.workspace }}
       shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
       run: |
-        $profileRoot = if ($env:OWNER_JOB_ROOT) { $env:OWNER_JOB_ROOT } else { $env:RUNNER_TEMP }
+        $profileRoot = if ($env:RUNNER_JOB_ROOT) { $env:RUNNER_JOB_ROOT } else { $env:RUNNER_TEMP }
         $env:HOME = Join-Path $profileRoot ([guid]::NewGuid())
         $env:BUTLER_DATA = Join-Path $profileRoot ([guid]::NewGuid())
         New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null

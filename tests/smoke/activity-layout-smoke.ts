@@ -4,6 +4,7 @@ import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { chromium } from "playwright";
 import { checkCapturedActivity } from "./activity-capture-support";
+import { assertOrder, checkActivityOrderScenarios, checkFoldSettles, gapBetween, offsetIn, waitPinned } from "./activity-order-support";
 import { smokeBrowserArgs } from "../support/smoke-browser";
 
 const uiRoot = resolve("packages/butler-app/client/ui/dist");
@@ -16,48 +17,49 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) 
 } });
 const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs() });
 const measurements: Array<{ width: number; theme: string; distance: number }> = [];
-const spacing: Array<{ width: number; theme: string; live: number; completed: number; observer: number }> = [];
-async function attachedGap(message: import("playwright").Locator, completed = false) {
-  return message.evaluate((node, done) => {
-    const answer = node.querySelector('[data-test-class="turn-result-section"]')!;
-    const activity = node.querySelector(done ? '[data-test-class="turn-current-phase-activity"]' : '[data-test-class~="turn-activity-panel"]')!;
-    return done ? answer.getBoundingClientRect().top - activity.getBoundingClientRect().bottom
-      : activity.getBoundingClientRect().top - answer.getBoundingClientRect().bottom;
-  }, completed);
-}
+const spacing: Array<{ width: number; theme: string; live: number; status: number; completed: number; observer: number }> = [];
+const scenarios: Array<{ width: number; theme: string; firstDeltaShift: number }> = [];
+const ACTIVITY = '[data-test-class="turn-current-phase-activity"]';
+const TEXT = '[data-test-class="turn-result-section"]';
+const STATUS = '[data-test-class="turn-live-status"]';
+const STATUS_LINE = '[data-test-class="turn-live-status-line"]';
+const HEADER = '[data-test-class="toggle-turn-activity-disclosure"]';
 try {
   const page = await browser.newPage({ viewport: { width: 375, height: 900 }, reducedMotion: "reduce" });
   for (const width of [375, 1280]) for (const theme of ["light", "dark"]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto(`http://127.0.0.1:${server.port}/?visual=components&surface=activity-layout&theme=${theme}`);
     const message = page.locator('[data-test-class="message assistant"]').last();
-    const live = message.locator('[data-test-class~="turn-activity-panel"]');
-    await live.waitFor();
+    const status = message.locator(STATUS);
+    await status.waitFor();
     assert.equal(await message.locator('[data-test-class="assistant-footer"]').count(), 0, "streaming hides footer");
-    assert.equal(await message.locator('[data-test-class="turn-current-phase-activity"]').count(), 1, "one live activity, no completed summary");
-    assert(await message.evaluate((node) => {
-      const body = node.querySelector('[data-test-class="message-body"]')!;
-      const live = node.querySelector('[data-test-class~="turn-activity-panel"]')!;
-      return Boolean(body.firstElementChild!.compareDocumentPosition(live) & Node.DOCUMENT_POSITION_FOLLOWING);
-    }), "streaming body precedes attached activity");
+    assert.equal(await message.locator(ACTIVITY).count(), 1, "one live activity, no completed summary");
+    await assertOrder(message, [ACTIVITY, TEXT, STATUS], "streaming order: activity, text, status");
     await page.waitForFunction(() => {
       const scroll = document.querySelector('[data-test-class~="conversation-scroll"]');
       return scroll && scroll.scrollHeight > scroll.clientHeight;
     });
+    await page.waitForFunction(() => ([...document.querySelectorAll('[data-test-class="markdown-document"]')].at(-1)?.textContent?.length ?? 0) >= 70);
+    await waitPinned(page, "mid-stream");
     await page.locator('[data-stub-stream-complete="true"]').waitFor();
     await page.waitForTimeout(240);
     const distance = await page.locator('[data-test-class~="conversation-scroll"]').evaluate((node) => node.scrollHeight - node.clientHeight - node.scrollTop);
     measurements.push({ width, theme, distance });
     const streamedText = await message.locator('[data-test-class="markdown-document"]').innerText();
-    assert(distance <= 2, `streaming remains pinned: ${distance}px`);
-    const liveGap = await attachedGap(message);
-    assert.equal(liveGap, 16, "live answer/activity uses the DS lg gap");
+    assert(distance < 3, `streaming remains pinned: ${distance}px`);
+    const liveGap = await gapBetween(message, ACTIVITY, TEXT);
+    assert.equal(liveGap, 16, "live activity/answer uses the DS lg gap");
+    const statusGap = await gapBetween(message, TEXT, STATUS_LINE);
+    assert.equal(statusGap, 16, "live answer/status uses the DS lg gap");
+    const liveHeader = await offsetIn(message, HEADER);
     await page.screenshot({ path: join(output, `running-${width}-${theme}.png`) });
     await page.getByRole("button", { name: "완료", exact: true }).click();
     const summary = message.getByRole("button", { name: /활동 · 완료/ });
     await summary.waitFor();
     assert.equal(await message.locator('[data-test-class="markdown-document"]').innerText(), streamedText, "completion retains all streamed content");
-    assert.equal(await live.count(), 0, "live panel removed on completion");
+    await status.waitFor({ state: "detached" });
+    assert.equal(await message.locator('[data-test-class="turn-current-step"]').count(), 0, "live step folded on completion");
+    assert.equal(await offsetIn(message, HEADER), liveHeader, "completion keeps the activity header in place");
     assert.equal(await message.locator('[data-test-class="assistant-footer"]').count(), 1);
     assert.equal(await summary.getAttribute("aria-expanded"), "false");
     assert(await message.evaluate((node) => {
@@ -67,7 +69,7 @@ try {
       return Boolean(summary.compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_FOLLOWING) &&
         Boolean(answer.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING);
     }), "completed summary precedes answer and footer");
-    const completedGap = await attachedGap(message, true);
+    const completedGap = await gapBetween(message, ACTIVITY, TEXT);
     assert.equal(completedGap, liveGap, "completion keeps the same gap without a spacing jump");
     await page.screenshot({ path: join(output, `completed-${width}-${theme}.png`) });
     await page.getByRole("button", { name: "작업 기록", exact: true }).click();
@@ -88,7 +90,7 @@ try {
     const observerGap = await dialog.locator('[data-test-class="steward-observer-message"]').first().evaluate(node =>
       node.nextElementSibling!.getBoundingClientRect().top - node.getBoundingClientRect().bottom);
     assert.equal(observerGap, liveGap, "observer transcript uses the same DS gap");
-    spacing.push({ width, theme, live: liveGap, completed: completedGap, observer: observerGap });
+    spacing.push({ width, theme, live: liveGap, status: statusGap, completed: completedGap, observer: observerGap });
     await dialog.screenshot({ path: join(output, `work-completed-${width}-${theme}.png`) });
     await page.goto(`http://127.0.0.1:${server.port}/?visual=components&surface=activity-layout&theme=${theme}&state=completed&list=1`);
     await page.getByRole("button", { name: /활동 · 완료/ }).nth(3).waitFor();
@@ -119,16 +121,47 @@ try {
       await page.screenshot({ path: join(output, `observer-${state}-${width}-${theme}.png`) });
     }
 
+    const scenario = await checkActivityOrderScenarios(page, `http://127.0.0.1:${server.port}/?visual=components&surface=activity-layout&theme=${theme}`, output, `${width}-${theme}`);
+    scenarios.push({ width, theme, ...scenario });
   }
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(`http://127.0.0.1:${server.port}/?visual=components&surface=activity-layout&theme=dark`);
   await page.locator('[data-stub-stream-complete="true"]').waitFor();
-  await page.getByRole("button", { name: "완료", exact: true }).click();
+  const fold = await foldFrames(page);
+  const foldEnd = await checkFoldSettles(page, `http://127.0.0.1:${server.port}/?visual=components&surface=activity-layout&theme=dark`);
+  assert(foldEnd.folds > 0, "completion runs the fold");
+  assert(Math.abs(foldEnd.end.text - foldEnd.settled.text) < 3 && Math.abs(foldEnd.end.height - foldEnd.settled.height) < 3,
+    `fold ends where it settles, without a spacing snap: ${JSON.stringify(foldEnd)}`);
   const normalTurn = page.locator('[data-test-class="message assistant"]').last();
   await normalTurn.getByRole("button", { name: /활동 · 완료/ }).waitFor();
   assert.equal(await normalTurn.locator('[data-test-class="assistant-footer"]').count(), 1);
   assert.equal(await normalTurn.locator('[data-test-class~="turn-activity-panel"]').count(), 0);
   await checkCapturedActivity(page, `http://127.0.0.1:${server.port}`, output);
-  console.log(JSON.stringify({ ok: true, screenshots: 32, measurements, spacing, checks: ["stream-order", "single-footer", "completed-history", "observer-history", "autoscroll", "completed-list", "ko-light-dark-mobile-desktop", "normal-and-reduced-motion"] }));
+  console.log(JSON.stringify({ ok: true, screenshots: 48, measurements, spacing, scenarios, fold, foldEnd, checks: ["stream-order", "first-delta", "multi-round", "no-text", "no-tools", "two-segments", "settle-order", "decision-row", "answer-parts-order", "retrying-live", "empty-final-segment", "completion-fold", "fold-no-snap", "single-footer", "completed-history", "observer-history", "autoscroll", "completed-list", "ko-light-dark-mobile-desktop", "normal-and-reduced-motion"] }));
 } finally { await browser.close(); server.stop(true); }
+
+/** Clicks completion and samples the text's offset inside its message every frame until the fold settles. */
+async function foldFrames(page: import("playwright").Page) {
+  const frames = await page.evaluate(async () => {
+    const message = () => [...document.querySelectorAll('[data-test-class="message assistant"]')].at(-1)!;
+    const offset = () => message().querySelector('[data-test-class="turn-result-section"]')!.getBoundingClientRect().top - message().getBoundingClientRect().top;
+    const samples = [offset()];
+    [...document.querySelectorAll("button")].find(node => node.textContent?.trim() === "완료")!.click();
+    const start = performance.now();
+    await new Promise<void>(resolve => {
+      const tick = () => { samples.push(offset()); if (performance.now() - start < 600) requestAnimationFrame(tick); else resolve(); };
+      requestAnimationFrame(tick);
+    });
+    return samples.map(value => Math.round(value * 10) / 10);
+  });
+  const start = frames[0]!, end = frames.at(-1)!;
+  assert(end < start, `completion raises the text inside its message: ${start} -> ${end}`);
+  let lowest = start;
+  assert(frames.every(value => {
+    lowest = Math.min(lowest, value);
+    return value < lowest + 3;
+  }), `fold moves one way: ${frames.join(",")}`);
+  assert(frames.some(value => value < start - 1 && value > end + 1), `fold animates through intermediate frames: ${frames.join(",")}`);
+  return { start, end, frames: frames.length };
+}

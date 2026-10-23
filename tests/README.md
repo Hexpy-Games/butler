@@ -52,8 +52,6 @@ Inventory of the previous sampling gates (all replaced):
 - `smoke/app-layout-smoke.ts`: bloom saturation/cell/mean/minimum luminance and
   silk coverage/spread thresholds replaced with actual module/tone readiness;
   assistant mark alpha scan replaced with draw completion. Geometry retained.
-- `smoke/ds-viewer-navigation-smoke.ts`: hero screenshot luminance thresholds
-  replaced with completed-frame tone matching the chrome theme.
 - `smoke/question-input-geometry.ts`: CSS colour normalization no longer reads
   canvas pixels; focus contrast >=3:1, token, clipping and geometry gates remain.
 - Unused `support/drawn-webgl-frame.ts` and `wallpaper-frame-sampler.ts` deleted.

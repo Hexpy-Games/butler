@@ -9,10 +9,29 @@
 //! returns `None`. Renames that replace a file retry on Windows while
 //! another process briefly holds it ([`rename`]).
 
+mod inventory;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) use inventory::credential_roots;
+#[cfg(target_os = "macos")]
+pub(crate) use inventory::secret_pattern;
+pub use inventory::{RootPin, SecretInventory, environment_data, secret_name};
+mod stage;
+pub use stage::{
+    ReaderStaging, StageScope, StagedFiles, handoff_staged, reclaim_handoff, remove_staged,
+    reset_reader_staging, stage_file,
+};
+mod device;
+pub use device::same_device;
+mod read_retry;
+pub use read_retry::{read_replaced_file, read_retry_allowed};
 mod contained_read;
+pub use contained_read::{ContainedReadCache, open_contained, open_directory_no_follow};
+#[cfg(unix)]
+mod contained;
 mod exact_name;
 pub use exact_name::exact_entry_exists;
 mod fault;
+pub mod replace_retry;
 mod replacement;
 mod timing;
 pub use fault::{abort_point, checkpoint as fault_checkpoint, hold_point, write as fault_write};
@@ -193,6 +212,22 @@ pub fn remove_tree(path: &Path) -> io::Result<()> {
     }
 }
 
+/// Removes a symbolic link itself, including a Windows directory link.
+pub fn unlink(path: &Path) -> io::Result<()> {
+    let metadata = fs::symlink_metadata(path)?;
+    if !metadata.file_type().is_symlink() {
+        return Err(io::Error::other("Expected a symbolic link"));
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::FileTypeExt;
+        if metadata.file_type().is_symlink_dir() {
+            return fs::remove_dir(path);
+        }
+    }
+    fs::remove_file(path)
+}
+
 /// Restricts an existing file to its owner; `None` without [`OWNER_ONLY`].
 pub fn restrict_file(path: &Path) -> Option<io::Result<()>> {
     sys::restrict_file(path)
@@ -246,7 +281,15 @@ pub fn no_follow(options: &mut OpenOptions) -> Option<&mut OpenOptions> {
 
 /// Reads a regular file below an anchored root, refusing symlink components.
 pub fn open_read_beneath(root: &Path, relative: &Path) -> io::Result<File> {
-    contained_read::open(root, relative)
+    contained_read::open(root, relative, false)
+}
+
+/// Truncates a regular file through an anchored handle, refusing every symlink
+/// component. Opens without truncation until the file type has been verified.
+pub fn truncate_file_beneath(root: &Path, relative: &Path) -> io::Result<()> {
+    let file = contained_read::open(root, relative, true)?;
+    file.set_len(0)?;
+    file.sync_all()
 }
 
 /// Opens the file at `path` for reading, refusing a symbolic link as the
@@ -278,6 +321,20 @@ pub fn sync_path(path: impl AsRef<Path>) -> io::Result<()> {
 /// is retried for up to a second there before the error is returned.
 pub fn rename(from: &Path, to: &Path) -> io::Result<()> {
     sys::rename(from, to)
+}
+
+/// Publishes a replacement file using native [`fs::rename`] semantics,
+/// preserving already open readers where supported. Windows retries confirmed
+/// sharing conflicts for up to a second and retains the native POSIX fallback.
+/// The caller must flush the prepared file first; unlike [`rename`], this does
+/// not request Windows write-through. `before_retry` runs after each backoff,
+/// immediately before another replacement attempt; an error aborts publication.
+pub fn replace_file(
+    from: &Path,
+    to: &Path,
+    before_retry: &mut dyn FnMut() -> io::Result<()>,
+) -> io::Result<()> {
+    sys::replace_file(from, to, before_retry)
 }
 
 /// A logical record key as a regular filename component. Unix keeps its
@@ -424,35 +481,14 @@ pub fn hard_link_unsupported(error: &io::Error) -> bool {
     error.kind() == io::ErrorKind::Unsupported || sys::hard_link_unsupported(error)
 }
 
-/// Component-wise containment after the caller resolves file-system aliases.
-/// Windows comparisons ignore case and normalize a needless verbatim prefix;
-/// Unix comparisons retain case. A sibling with a shared string prefix is out.
-pub fn path_is_within(target: &Path, root: &Path) -> bool {
-    path_compare::is_within(target, root)
-}
-
 mod path_compare;
-pub use path_compare::{ambiguous_path, relative_path, windows_ambiguous_spelling};
+pub use path_compare::{ambiguous_path, path_is_within, relative_path, windows_ambiguous_spelling};
 
-/// An equivalent native path spelling for public-path regression scenarios.
 #[cfg(feature = "test-support")]
-pub fn workspace_test_alias(path: &Path) -> PathBuf {
-    #[cfg(windows)]
-    {
-        let text = path.to_string_lossy().to_uppercase();
-        PathBuf::from(format!(r"\\?\{text}"))
-    }
-    #[cfg(not(windows))]
-    {
-        path.parent()
-            .unwrap_or(path)
-            .join(".")
-            .join(path.file_name().unwrap_or_default())
-    }
-}
+pub use fixture_links::workspace_test_alias;
 #[cfg(feature = "test-support")]
 pub mod fixture_links;
 #[cfg(feature = "test-support")]
 pub mod fixture_locks;
 mod path_identity;
-pub use path_identity::{same_file, same_metadata};
+pub use path_identity::{same_file, same_metadata, same_open_file};

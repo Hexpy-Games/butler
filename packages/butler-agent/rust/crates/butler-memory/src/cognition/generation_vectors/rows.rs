@@ -97,15 +97,13 @@ impl GenerationVectorStore {
     }
 
     /// Caller retains the write lease until the SDK mutation and receipt query
-    /// finish. `compact` merges fragments past the limit after the write; a
-    /// batch passes false and compacts once at its end ([`Self::maintain`]).
+    /// finish. Physical maintenance runs separately after releasing the lease.
     pub(crate) fn upsert<'a>(
         &'a self,
         lease: &CognitionWriteLease,
         target: &'a MemoryGenerationTarget,
         generation: &'a MemoryGenerationHandle,
         rows: &'a [GenerationVectorRow],
-        compact: bool,
     ) -> impl Future<Output = CognitionResult<String>> + Send + 'a {
         let lock = self.paths.consolidation_lock(&self.data_root);
         let lease_check = lease
@@ -151,46 +149,50 @@ impl GenerationVectorStore {
             let receipt = persisted_receipt_in_table(&table, generation, rows)
                 .await?
                 .ok_or_else(|| error(CognitionCode::MemoryVectorReceiptMismatch))?;
-            // A maintenance failure never fails a write that already landed.
-            if compact {
-                let _ = lance_maintenance::compact_if_fragmented(&table).await;
-            }
             Ok(receipt)
         }
     }
 
-    /// Compacts a fragmented table and prunes old versions, under the lease.
-    /// Nothing is written when the table is within both limits.
-    pub(crate) fn maintain<'a>(
-        &'a self,
-        lease: &CognitionWriteLease,
-        target: &'a MemoryGenerationTarget,
-        generation: &'a MemoryGenerationHandle,
-    ) -> impl Future<Output = CognitionResult<()>> + Send + 'a {
-        let lease_check = lease
-            .assert_for_path(&self.paths.consolidation_lock(&self.data_root))
-            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
-        async move {
-            lease_check?;
-            assert_mutation_authority(&self.data_root, &self.paths, target, generation)?;
+    /// Physical, best-effort maintenance after durable rows and receipts are
+    /// published and the caller has released its write lease. The generation
+    /// handle pins the directory; Lance commits immutable replacement fragments
+    /// optimistically, so concurrent writes remain authoritative.
+    pub(crate) async fn maintain(
+        &self,
+        target: &MemoryGenerationTarget,
+        generation: &MemoryGenerationHandle,
+        prune: bool,
+    ) -> CognitionResult<()> {
+        let store = Self::new(self.data_root.clone(), self.paths.clone());
+        let (target, generation) = (target.clone(), generation.clone());
+        let root = tokio::task::spawn_blocking(move || -> CognitionResult<Option<PathBuf>> {
+            assert_mutation_authority(&store.data_root, &store.paths, &target, &generation)?;
             let root = generation.root.join("butler.lance");
-            ensure_data_authority(&self.data_root, &[&generation.root, &root])?;
-            if !root.exists() {
-                return Ok(());
-            }
-            let table = match lance_store::shared(&root, TABLE).await {
-                Ok(table) => table,
-                Err(lancedb::Error::TableNotFound { .. }) => return Ok(()),
-                Err(source) => return Err(unavailable(source)),
-            };
-            lance_maintenance::compact_if_fragmented(&table)
-                .await
-                .map_err(unavailable)?;
+            ensure_data_authority(&store.data_root, &[&generation.root, &root])?;
+            Ok(root.exists().then_some(root))
+        })
+        .await
+        .map_err(|source| error(CognitionCode::VectorStoreUnavailable).with_source(source))??;
+        let Some(root) = root else {
+            return Ok(());
+        };
+        // Use the serving handle, as vector optimize does. In LanceDB 0.27.2
+        // DatasetConsistencyWrapper::update cannot replace a newer cached
+        // version with an older one; reads also check the committed manifest.
+        let table = match lance_store::shared(&root, TABLE).await {
+            Ok(table) => table,
+            Err(lancedb::Error::TableNotFound { .. }) => return Ok(()),
+            Err(source) => return Err(unavailable(source)),
+        };
+        lance_maintenance::compact_if_fragmented(&table)
+            .await
+            .map_err(unavailable)?;
+        if prune {
             lance_maintenance::prune_old_versions(&table)
                 .await
                 .map_err(unavailable)?;
-            Ok(())
         }
+        Ok(())
     }
 }
 

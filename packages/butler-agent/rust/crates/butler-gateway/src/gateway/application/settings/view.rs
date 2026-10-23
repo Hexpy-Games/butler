@@ -283,6 +283,10 @@ fn appearance(stored: &Map<String, Value>, output: &mut Map<String, Value>) {
                 .unwrap_or(true)
         ),
     );
+    output.insert(
+        "show_thinking".into(),
+        json!(stored.get("show_thinking").and_then(Value::as_bool) == Some(true)),
+    );
     main_screen(stored, output);
     output.insert(
         "translucent_sidebar".into(),

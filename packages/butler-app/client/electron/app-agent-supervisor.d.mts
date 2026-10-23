@@ -23,14 +23,18 @@ export function readAppLocalAuth(input: { butlerData: string }): {
   token: string;
 } | null;
 
+export function fullResetPending(input: { butlerData: string }): boolean;
+
+/** `token` is null when a refused or resetting data folder has no existing token. */
 export function prepareAppLocalAuth(input: {
   butlerData: string;
+  readOnly?: boolean;
   now?: () => Date;
   generateToken?: () => string;
 }): {
   filePath: string;
   created: boolean;
-  token: string;
+  token: string | null;
 };
 
 export function buildBundledAgentSupervisorEnv(input: {
@@ -47,6 +51,7 @@ export function buildBundledAgentSupervisorEnv(input: {
 
 export function createBundledAgentSupervisor(input: {
   butlerData: string;
+  readOnly?: boolean;
   resolveGateway: () => {
     command: string;
     args: string[];
@@ -79,11 +84,11 @@ export function createBundledAgentSupervisor(input: {
     stdin?: { writable: boolean; end(): unknown };
   };
   healthCheck: (
-    localAuth?: { filePath: string; created: boolean; token: string } | null,
+    localAuth?: { filePath: string; created: boolean; token: string | null } | null,
     portOverride?: number | null,
   ) => boolean | Promise<boolean>;
   readinessCheck?: (
-    localAuth?: { filePath: string; created: boolean; token: string } | null,
+    localAuth?: { filePath: string; created: boolean; token: string | null } | null,
     activeGateway?: Record<string, unknown> | null,
     portOverride?: number | null,
   ) => boolean | Promise<boolean>;

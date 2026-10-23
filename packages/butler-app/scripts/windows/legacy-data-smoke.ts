@@ -1,13 +1,14 @@
+import { launchInstalledApp } from "./installed-app-debug.ts";
 /** Legacy-data refusal and recovery on a disposable Windows runner. */
 import { strict as assert } from "node:assert";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
-import { freePort } from "../../../../tests/support/native-app-server.ts";
-import { alive, bridge, click, ownedProcesses, powershell, readJson, waitFor } from "./installer-smoke-support.ts";
+import { freeGatewayPort, freePort } from "../../../../tests/support/native-app-server.ts";
+import { bridge, click, ownedProcesses, ownedSurvivors, ownedDiagnostics, powershell, readJson, waitFor, waitForOwnedExit, type OwnedProcesses } from "./installer-smoke-support.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
 
 if (process.platform !== "win32" || process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_ENVIRONMENT !== "github-hosted") {
@@ -18,13 +19,14 @@ assert.ok(existsSync(executable), "Portable Butler executable is missing");
 const root = mkdtempSync(join(tmpdir(), "butler-legacy-e2e-"));
 const home = join(root, "home");
 const data = join(home, ".butler");
-const owned = new Set<number>();
+const owned: OwnedProcesses = new Map();
 const debugPort = await freePort();
-const agentPort = await freePort();
+// The Agent also binds its content origin on agentPort + 1.
+const agentPort = await freeGatewayPort();
 const env = { ...windowsPowerShellEnvironment(), HOME: home, USERPROFILE: home, BUTLER_DATA: data,
   LOCALAPPDATA: join(root, "local"), APPDATA: join(root, "roaming"), BUTLER_SECRET_STORE: "file",
   BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1", BUTLER_E2E_TIER: "stub", BUTLER_PROVIDER_QUOTA_POLLING: "0",
-  BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"), BUTLER_APP_SMOKE_DEBUG_PORT: String(debugPort),
+  BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"),
   BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
 };
 let page: ElectronPage | null = null;
@@ -36,9 +38,8 @@ try {
   writeFileSync(join(data, "app-server/butler-client.sqlite"), "fake Butler 0.0.20 legacy database\n");
   writeFileSync(join(data, "keep.txt"), "preserve original data\n");
   const original = snapshot(data);
-  const app = spawn(executable, [], { env, stdio: "ignore" });
+  const app = launchInstalledApp(executable, debugPort, env, owned);
   assert.ok(app.pid, "Desktop did not spawn");
-  owned.add(app.pid);
   ownedProcesses(data, owned);
   page = await electronPage(debugPort);
   phase = "recovery copy";
@@ -60,14 +61,25 @@ try {
     })()`);
     assert.deepEqual(layout, { labelAbove: true, overflow: false });
   }
-  assert.deepEqual(snapshot(data), original, "Recovery screen wrote into legacy data");
-  assert.ok(!existsSync(join(data, "app/runtime/foreground/instance.json")), "Agent started against legacy data");
+  for (const [action, request] of [
+    ["health", "window.butlerApp.health()"],
+    ["startAgent", "window.butlerApp.startAgent()"],
+    ["repair", 'window.butlerApp.startSetup({mode:"repair"})'],
+  ]) {
+    phase = `blocked Agent ${action}`;
+    const error = await page.expression<string | null>(
+      `${request}.then(() => null, error => error.message)`,
+    );
+    assert.match(error ?? "", /legacy_data_blocked/u, `Blocked ${action} must reject`);
+    assert.deepEqual(snapshot(data), original, `Blocked ${action} request wrote into legacy data`);
+    assert.ok(!existsSync(join(data, "app/runtime/foreground/instance.json")), "Agent started against legacy data");
+  }
   phase = "folder and restart";
   assert.deepEqual(await bridge(page, "recoverLegacyData", "open-folder"), { ok: true });
   renameSync(data, join(home, ".butler-0.0.20"));
   await click(page, "Restart");
   page.close(); page = null;
-  await waitFor(() => !alive(app.pid!), "legacy App quit for restart");
+  await waitFor(() => app.exitCode !== null || app.signalCode !== null, "legacy App quit for restart");
   await waitFor(() => existsSync(join(data, "app/runtime/foreground/instance.json")), "fresh Agent instance");
   ownedProcesses(data, owned);
   page = await electronPage(debugPort);
@@ -79,7 +91,7 @@ try {
   phase = "recovery quit";
   await page.expression("setTimeout(() => window.butlerApp.quitApp({confirmed:true}), 50); true");
   page.close(); page = null;
-  await waitFor(() => [...owned].every(pid => !alive(pid)), "recovery App and Agent stopped");
+  await waitForOwnedExit(owned, "recovery App and Agent stopped");
   assert.equal(protocolRegistry(), registryBefore, "Protocol registry changed");
   console.log(JSON.stringify({ ok: true, legacyDataPreserved: true, recoveryCopy: ["ko", "en"],
     folderAction: true, restartToFreshAgent: true, protocolRegistryUnchanged: true, leftoverProcesses: 0,
@@ -90,14 +102,14 @@ try {
   console.error(JSON.stringify({ phase, page: await page?.diagnostics(),
     startup: readJson(join(data, "app/runtime/foreground/startup-progress.json")),
     failure: readJson(join(data, "app/runtime/foreground/startup-failure.json")),
-    owned: [...owned].map(pid => ({ pid, alive: alive(pid) })) }));
+    owned: ownedDiagnostics(owned) }));
   throw error;
 } finally {
   page?.close();
   ownPortableProcesses();
   ownedProcesses(data, owned);
-  for (const pid of owned) if (alive(pid)) { try { process.kill(pid, "SIGKILL"); } catch {} }
-  await waitFor(() => [...owned].every(pid => !alive(pid)), "legacy smoke process cleanup");
+  for (const { pid } of ownedSurvivors(owned)) { try { process.kill(pid, "SIGKILL"); } catch {} }
+  await waitForOwnedExit(owned, "legacy smoke process cleanup");
   await waitFor(() => closeOpenedFolder() === 0, "legacy folder window closed");
   rmSync(root, { recursive: true, force: true });
   assert.equal(protocolRegistry(), registryBefore, "Protocol registry changed during legacy smoke");
@@ -108,8 +120,8 @@ function ownPortableProcesses() {
   // This unique extracted executable belongs only to this disposable test.
   const pids = JSON.parse(powershell(`ConvertTo-Json -Compress -InputObject @(
     Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $env:BUTLER_LEGACY_EXECUTABLE } |
-      ForEach-Object { $_.ProcessId })`, { ...env, BUTLER_LEGACY_EXECUTABLE: executable }));
-  for (const pid of pids) owned.add(pid);
+      ForEach-Object { @{ pid = $_.ProcessId; created = ([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds() } })`, { ...env, BUTLER_LEGACY_EXECUTABLE: executable }));
+  for (const { pid, created } of pids) owned.set(pid, { created, notAfter: created });
 }
 
 function closeOpenedFolder(): number {
@@ -133,7 +145,7 @@ function snapshot(folder: string): Record<string, string> {
   const visit = (relative: string) => {
     for (const entry of readdirSync(join(folder, relative), { withFileTypes: true })) {
       const path = join(relative, entry.name);
-      if (entry.isDirectory()) visit(path);
+      if (entry.isDirectory()) { files[path] = "directory"; visit(path); }
       else files[path] = createHash("sha256").update(readFileSync(join(folder, path))).digest("hex");
     }
   };

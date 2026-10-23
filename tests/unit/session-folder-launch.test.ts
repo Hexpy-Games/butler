@@ -4,8 +4,8 @@ import {
   createSessionFolderLauncher,
 } from "../../packages/butler-app/client/electron/session-folder-launch.mjs";
 
-const windowsFolder = String.raw`C:\Users\yeonw\Work Area\프로젝트 세션`;
-const linuxFolder = "/home/yeonw/Work Area/프로젝트 세션";
+const windowsFolder = String.raw`C:\Users\tester\Work Area\프로젝트 세션`;
+const linuxFolder = "/home/tester/Work Area/프로젝트 세션";
 
 function commandResolver(commands: Record<string, string>) {
   return (command: string) => commands[command] ?? null;
@@ -17,7 +17,7 @@ describe("session folder launch command construction", () => {
     const commands = commandResolver({
       "explorer.exe": String.raw`C:\Windows\explorer.exe`,
       "wt.exe": String.raw`C:\Program Files\Windows Terminal\wt.exe`,
-      "code.cmd": String.raw`C:\Users\yeonw\AppData\Programs\VS Code\bin\code.cmd`,
+      "code.cmd": String.raw`C:\Users\tester\AppData\Programs\VS Code\bin\code.cmd`,
       "cmd.exe": String.raw`C:\Windows\System32\cmd.exe`,
     });
 
@@ -36,7 +36,7 @@ describe("session folder launch command construction", () => {
         "/s",
         "/c",
         "call",
-        String.raw`C:\Users\yeonw\AppData\Programs\VS Code\bin\code.cmd`,
+        String.raw`C:\Users\tester\AppData\Programs\VS Code\bin\code.cmd`,
         windowsFolder,
       ],
     });

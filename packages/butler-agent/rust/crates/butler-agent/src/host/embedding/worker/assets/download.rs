@@ -1,7 +1,8 @@
 //! Bounded source failover and verified Range continuation.
 use super::{Asset, matches_asset};
+use butler_log::http::Client;
 use futures_util::StreamExt;
-use reqwest::{Client, StatusCode, header};
+use reqwest::{StatusCode, header};
 use std::{
     fs::{self, File},
     io::Write,
@@ -18,19 +19,7 @@ pub(super) async fn with_retries(
     progress: &mut impl FnMut(&str, u64),
 ) -> Result<(), &'static str> {
     #[cfg(feature = "e2e-fixtures")]
-    if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
-        && !sources.iter().all(|source| {
-            reqwest::Url::parse(source)
-                .is_ok_and(|url| url.scheme() == "http" && url.host_str() == Some("127.0.0.1"))
-        })
-    {
-        eprintln!(
-            "embed_asset_real_download_forbidden_in_stub: BUTLER_E2E_TIER=stub requires \
-             local BUTLER_E2E_EMBED_SOURCES or BUTLER_E2E_EMBED_MANIFEST; \
-             supply cached assets with BUTLER_E2E_EMBEDDING_ASSETS"
-        );
-        return Err("embed_asset_real_download_forbidden_in_stub");
-    }
+    crate::host::faults::local_asset_sources(sources)?;
     let mut failure = "embed_asset_download_failed";
     for attempt in 0..3 {
         for (index, source) in sources.iter().enumerate() {
@@ -40,7 +29,11 @@ pub(super) async fn with_retries(
                 asset.relative.rsplit('/').next().unwrap_or(&asset.relative)
             };
             let url = format!("{source}/{relative}");
-            match download(client, &url, asset, part, baseline, progress).await {
+            let retry = u32::try_from(attempt * sources.len() + index).unwrap_or(u32::MAX);
+            let request = client
+                .get(&url)
+                .phase(butler_log::http::Phase::new("download", retry));
+            match download(request, asset, part, baseline, progress).await {
                 Ok(()) => return Ok(()),
                 Err(error) => failure = error,
             }
@@ -53,8 +46,7 @@ pub(super) async fn with_retries(
 }
 
 async fn download(
-    client: &Client,
-    url: &str,
+    request: butler_log::http::RequestBuilder,
     asset: &Asset,
     part: &Path,
     baseline: u64,
@@ -70,7 +62,7 @@ async fn download(
         start = 0;
     }
     progress("downloading", baseline + start);
-    let mut request = client.get(url).header(header::ACCEPT_ENCODING, "identity");
+    let mut request = request.header(header::ACCEPT_ENCODING, "identity");
     if start > 0 {
         request = request.header(header::RANGE, format!("bytes={start}-"));
     }

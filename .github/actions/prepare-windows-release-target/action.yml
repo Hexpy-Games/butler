@@ -1,4 +1,4 @@
-name: Prepare owner Windows release target
+name: Prepare self-hosted Windows release target
 description: Build and publish the unchanged static ORT release profile for tag reuse
 runs:
   using: composite

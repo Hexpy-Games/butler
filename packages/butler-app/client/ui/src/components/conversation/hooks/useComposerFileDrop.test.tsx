@@ -3,6 +3,8 @@
 
 import { afterEach, expect, mock, test } from "bun:test";
 import { JSDOM } from "jsdom";
+import { toast } from "sonner";
+import { appCopy } from "@/app/copy.ts";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { MessageFileRef } from "@/app/types.ts";
@@ -258,6 +260,12 @@ test("window capture drop reaches the attachment upload boundary once", async ()
   expect(container.querySelector("[data-uploaded-count]")?.textContent).toBe(
     "1",
   );
+  await act(async () => {
+    dispatchDrag(outside, dom.window, "drop", fileList(dom, "e.bin", "application/octet-stream", ""), ["Files"]);
+  });
+  expect(uploadMessageFileMock).toHaveBeenCalledTimes(1);
+  expect(container.querySelector("[data-uploaded-count]")?.textContent).toBe("1");
+  expect(toast.getHistory().some((entry) => "title" in entry && entry.title === appCopy.feedback.attachmentEmpty("e.bin"))).toBe(true);
   await act(async () => root.unmount());
 });
 
@@ -314,8 +322,8 @@ type TestDragEvent = Event & {
   };
 };
 
-function fileList(dom: JSDOM, name: string, type: string): FileList {
-  const file = new dom.window.File(["file"], name, { type });
+function fileList(dom: JSDOM, name: string, type: string, content = "file"): FileList {
+  const file = new dom.window.File([content], name, { type });
   return {
     0: file,
     length: 1,

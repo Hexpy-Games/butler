@@ -1,3 +1,8 @@
+#![allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_types,
+    reason = "test crate HTTP drivers"
+)]
 //! All current scenarios share one integration-test link.
 mod acceptance_payload;
 mod access;
@@ -12,13 +17,16 @@ mod anthropic_requests;
 mod anthropic_thinking_history;
 mod app_admission_history;
 mod app_db_schema;
+mod app_retention;
 mod app_state;
-mod app_storage_scale;
 mod ask_user;
+mod attachment_reach;
+mod attachment_types;
 mod authority_parallel_batch;
 mod authority_permissions;
 mod automation;
 mod briefing_effort;
+mod briefing_shutdown;
 mod browser_agent;
 mod browser_approval;
 mod browser_batch;
@@ -34,13 +42,18 @@ mod browser_long;
 mod browser_naver;
 mod browser_outputs;
 mod browser_parallel;
+mod browser_prefix;
 mod browser_preview;
 mod browser_round2;
 mod browser_selection;
 mod browser_signin;
 mod browser_speed;
+mod browser_still_busy;
+mod browser_still_delivery;
+mod browser_tool_args;
 mod browser_usage;
 mod cassette_lint;
+mod catalog_provider_truth;
 mod chatgpt_plan_usage;
 mod chatgpt_session;
 mod chatgpt_sign_in;
@@ -56,6 +69,7 @@ mod conversation_background;
 mod credential_store;
 mod credentials;
 mod custom_model_errors;
+mod custom_model_images;
 mod default_model;
 mod downloads_live;
 mod durable_configuration;
@@ -63,6 +77,7 @@ mod durable_files;
 mod embed_download;
 mod error_library;
 mod favicons;
+mod full_reset;
 mod gateway_browser;
 #[path = "gateway_pairing.rs"]
 mod gateway_pairing;
@@ -103,8 +118,10 @@ mod memory_idle;
 mod memory_import;
 mod memory_model_cleanup;
 mod memory_wiring;
+mod metric_retention;
 mod migration;
-mod monitoring_scale;
+mod model_thinking;
+mod monitoring_history;
 mod onboarding;
 mod onboarding_form;
 mod outbox_identity;
@@ -122,6 +139,8 @@ mod prompt_history;
 mod prompt_history_cache;
 mod prompt_layout;
 mod queue_admission_shutdown;
+#[cfg(debug_assertions)]
+mod queue_claim_crash;
 mod queue_notifications;
 mod queue_pause;
 mod queue_shutdown;
@@ -130,6 +149,7 @@ mod recovery;
 mod reduce_motion;
 mod schedule_calendar;
 mod schedule_chat;
+mod schedule_model;
 mod schedule_sleep_wake;
 mod schedule_store;
 mod schedules;
@@ -163,6 +183,7 @@ mod token_cache;
 #[path = "support/token_metrics.rs"]
 mod token_metrics;
 mod tools;
+mod tools_direct_args;
 mod tools_effects;
 mod turn;
 mod turn_continuation;
@@ -174,7 +195,7 @@ mod update_discovery;
 mod update_progress;
 mod updates;
 mod usage;
-mod usage_scale;
+mod usage_history;
 mod usage_timeline;
 mod user_work;
 mod wall_clock_budget;
@@ -191,11 +212,10 @@ mod memory_stubs;
 #[path = "support/schedule_cassette.rs"]
 mod schedule_cassette;
 
+mod btcc_corrupt_startup;
 mod btcc_cutover;
-#[path = "support/btcc_scale.rs"]
-mod btcc_scale;
+mod btcc_history;
 mod btcc_startup_integrity;
-mod btcc_startup_scale;
 mod cli_project_folder;
 mod data_perf;
 mod delegate_followup;
@@ -215,9 +235,11 @@ mod schedule_handoff;
 mod session_folder;
 mod storage_concurrency;
 mod supervisor_ownership;
-#[path = "support/transcript_scale.rs"]
+#[path = "support/terminal_history.rs"]
+mod terminal_history;
+#[path = "support/transcript_history.rs"]
 #[allow(clippy::unwrap_used, reason = "test fixture assertions")]
-mod transcript_scale;
+mod transcript_history;
 
 #[path = "support/memory_reset_support.rs"]
 mod memory_reset_support;
@@ -238,3 +260,14 @@ mod web_speed;
 
 mod logs_request_completion;
 mod structured_logs;
+
+mod outbound_http;
+
+mod trace_spans;
+
+mod content_port;
+mod turn_fenced_cancel;
+mod usage_delegated;
+
+mod work_model_api;
+mod work_model_schema;

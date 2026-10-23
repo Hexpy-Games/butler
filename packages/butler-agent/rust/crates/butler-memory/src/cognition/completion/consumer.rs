@@ -4,10 +4,10 @@ mod blocking;
 mod catchup;
 mod feedback;
 mod idle;
+mod inventory;
 mod probe;
 mod process;
 mod vector_schedule;
-pub use vector_schedule::{VECTOR_BACKLOG_CAP, VECTOR_MAX_AGE_HOURS};
 
 use parking_lot::Mutex;
 use std::{path::PathBuf, sync::Arc, sync::atomic::AtomicBool, time::Instant};
@@ -68,6 +68,7 @@ pub struct MemorySyncConsumer {
     catchup_progress: Arc<Mutex<Option<(PathBuf, crate::cognition::graph::CatchupState)>>>,
     probe: Arc<probe::ProbeReader>,
     vector_batch: Arc<AtomicBool>,
+    inventory: Arc<inventory::InventoryWake>,
 }
 
 impl MemorySyncConsumer {
@@ -108,6 +109,7 @@ impl MemorySyncConsumer {
             catchup_progress: Arc::new(Mutex::new(None)),
             probe: Arc::new(probe::ProbeReader::default()),
             vector_batch: Arc::new(AtomicBool::new(false)),
+            inventory: Arc::new(inventory::InventoryWake::started()),
         }
     }
 
@@ -142,6 +144,12 @@ impl MemorySyncConsumer {
         self
     }
 
+    /// Stop background execution with its owner, retaining durable queued work.
+    pub fn with_cancellation(mut self, parent: &CancellationToken) -> Self {
+        self.shutdown = parent.child_token();
+        self
+    }
+
     /// Processes the next queue entry or projection step.
     pub async fn poll_once(&self) -> CognitionResult<MemorySyncPoll> {
         self.poll_with(false, self.shutdown.clone()).await
@@ -173,12 +181,14 @@ impl MemorySyncConsumer {
         cancellation: CancellationToken,
     ) -> CognitionResult<MemorySyncPoll> {
         let permit = tokio::select! {
-            permit = self.admission.clone().acquire_owned() => permit.map_err(|source| closed().with_source(source))?,
+            biased;
+            () = self.shutdown.cancelled() => return Err(closed()),
             () = cancellation.cancelled() => return Err(closed()),
+            permit = self.admission.clone().acquire_owned() => permit.map_err(|source| closed().with_source(source))?,
         };
         let token = {
             let closing = self.closing.lock();
-            if *closing {
+            if *closing || self.shutdown.is_cancelled() || cancellation.is_cancelled() {
                 return Err(closed());
             }
             self.tasks.token()
@@ -196,6 +206,7 @@ impl MemorySyncConsumer {
             catchup_at: self.catchup_at.clone(),
             unclean_start: self.unclean_start.clone(),
             catchup_progress: self.catchup_progress.clone(),
+            inventory: self.inventory.clone(),
             probe: self.probe.clone(),
             vector_batch: self.vector_batch.clone(),
             daily_batch,
@@ -245,7 +256,7 @@ impl MemorySyncConsumer {
             .map_err(|source| closed().with_source(source))?;
         let token = {
             let closing = self.closing.lock();
-            if *closing || cancellation.is_cancelled() {
+            if *closing || self.shutdown.is_cancelled() || cancellation.is_cancelled() {
                 return Err(closed());
             }
             self.tasks.token()
@@ -263,6 +274,7 @@ impl MemorySyncConsumer {
             catchup_at: self.catchup_at.clone(),
             unclean_start: self.unclean_start.clone(),
             catchup_progress: self.catchup_progress.clone(),
+            inventory: self.inventory.clone(),
             probe: self.probe.clone(),
             vector_batch: self.vector_batch.clone(),
             daily_batch: false,

@@ -29,6 +29,7 @@ async fn q_02_shutdown_finishes_an_in_flight_queue_admission() -> Result<(), Har
         .env("BUTLER_E2E_HOLD_QUEUE_MESSAGE", HELD_MESSAGE)
         .start()
         .await?;
+    super::outbound_http::logging(&s, "detailed").await?;
     s.provider()?.set_pacing(Pacing {
         scale: 1.0,
         cap_ms: 300,
@@ -112,5 +113,14 @@ async fn q_02_shutdown_finishes_an_in_flight_queue_admission() -> Result<(), Har
         1
     );
     assert_eq!(s.provider()?.served(), 2);
+    let trace =
+        s.gw.get(&format!("/logs/trace?turn_id={held_turn_id}"))
+            .await?;
+    assert_eq!(trace.status, 200, "{}", trace.text);
+    assert_eq!(trace.data()["turn_id"], held_turn_id);
+    let spans = trace.data()["spans"].as_array().unwrap();
+    let run = spans.iter().find(|s| s["name"] == "turn.run").unwrap();
+    assert_eq!(run["attrs"]["turn_id"], held_turn_id);
+    assert!(run["parent_span_id"].is_null());
     s.finish().await
 }

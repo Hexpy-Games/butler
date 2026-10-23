@@ -12,7 +12,7 @@ use crate::cognition::CognitionCode;
 use crate::cognition::{
     CognitionError, CognitionResult, ConversationSourceNotice, assert_conversation_source_current,
 };
-use butler_turn::conversation::ConversationSourceReader;
+use butler_turn::conversation::{ConversationSourceReader, SourceChangeMark};
 
 /// Where one projection job stands across its stages.
 #[derive(Clone, Debug, PartialEq)]
@@ -57,7 +57,7 @@ pub enum JobOutcome {
 }
 
 #[derive(Clone, Debug)]
-pub(in crate::cognition) struct PendingSemanticJob {
+pub(crate) struct PendingSemanticJob {
     pub job_id: String,
     pub session_id: Option<String>,
     pub source_key: String,
@@ -70,6 +70,10 @@ pub(in crate::cognition) struct PendingSemanticJob {
 pub(in crate::cognition) struct CatchupState {
     pub outcome: Option<String>,
     pub message: Option<String>,
+    /// Last reconciled source change, including edits behind the append cursor.
+    pub change_mark: Option<SourceChangeMark>,
+    /// Head observed before reading this change page; only the feed continues to it.
+    pub change_head: Option<u64>,
     /// Canonical public revision at which the current sweep began.
     pub sweep_revision: Option<u64>,
     pub source_identity: Option<String>,
@@ -85,6 +89,9 @@ const SWEEP_REVISION: &str = "canonical_catchup_sweep_revision";
 const SOURCE_IDENTITY: &str = "canonical_catchup_source_identity";
 const SWEEP_DONE: &str = "canonical_catchup_sweep_done";
 const SWEPT_AT: &str = "canonical_catchup_swept_at_ms";
+const CHANGE_SEQ: &str = "canonical_catchup_change_seq";
+const CHANGE_KEY: &str = "canonical_catchup_change_key";
+const CHANGE_HEAD: &str = "canonical_catchup_change_head";
 
 pub(super) fn catchup_state(connection: &Connection) -> CognitionResult<CatchupState> {
     let read = |key| -> CognitionResult<Option<String>> {
@@ -98,9 +105,16 @@ pub(super) fn catchup_state(connection: &Connection) -> CognitionResult<CatchupS
             .map(|value| value.filter(|item| !item.is_empty()))
             .map_err(db_error)
     };
+    let change_seq = read(CHANGE_SEQ)?.and_then(|value| value.parse().ok());
+    let change_key = read(CHANGE_KEY)?.unwrap_or_default();
     Ok(CatchupState {
         outcome: read(OUTCOME_CURSOR)?,
         message: read(MESSAGE_CURSOR)?,
+        change_mark: change_seq.map(|seq| SourceChangeMark {
+            seq,
+            key: change_key,
+        }),
+        change_head: read(CHANGE_HEAD)?.and_then(|value| value.parse().ok()),
         sweep_revision: read(SWEEP_REVISION)?.and_then(|value| value.parse().ok()),
         source_identity: read(SOURCE_IDENTITY)?,
         sweep_done: read(SWEEP_DONE)?.as_deref() == Some("1"),
@@ -116,6 +130,29 @@ pub(super) fn save_catchup_state(
     for (key, value) in [
         (OUTCOME_CURSOR, state.outcome.clone().unwrap_or_default()),
         (MESSAGE_CURSOR, state.message.clone().unwrap_or_default()),
+        (
+            CHANGE_HEAD,
+            state
+                .change_head
+                .map(|head| head.to_string())
+                .unwrap_or_default(),
+        ),
+        (
+            CHANGE_SEQ,
+            state
+                .change_mark
+                .as_ref()
+                .map(|mark| mark.seq.to_string())
+                .unwrap_or_default(),
+        ),
+        (
+            CHANGE_KEY,
+            state
+                .change_mark
+                .as_ref()
+                .map(|mark| mark.key.clone())
+                .unwrap_or_default(),
+        ),
         (
             SWEEP_REVISION,
             state
@@ -146,7 +183,8 @@ pub(super) fn save_catchup_state(
 
 /// The observation ids among `ids` that a registered job already recorded.
 /// The jobs table is small next to the memory graph, so one pass over its
-/// observation lists answers the whole batch.
+/// observation lists answers the whole batch. A terminal source failure must
+/// be validated again when catch-up sees that observation after undo/restore.
 pub(super) fn registered_observations(
     connection: &Connection,
     ids: &[String],
@@ -154,17 +192,26 @@ pub(super) fn registered_observations(
     let mut found = HashSet::new();
     for batch in ids.chunks(256) {
         let marks = vec!["?"; batch.len()].join(",");
+        let codes = vec!["?"; super::source_validity::CODES.len()].join(",");
         let mut statement = connection
             .prepare(&format!(
                 "SELECT DISTINCT observed.value FROM memory_projection_jobs j, \
                  json_each(j.observed_completion_job_ids) observed \
-                 WHERE observed.value IN ({marks})"
+                 WHERE observed.value IN ({marks}) AND NOT EXISTS (\
+                 SELECT 1 FROM memory_projection_windows w WHERE w.job_id=j.job_id \
+                 AND w.state='failed' AND w.error_code IN ({codes}))"
             ))
             .map_err(db_error)?;
         let rows = statement
-            .query_map(rusqlite::params_from_iter(batch), |row| {
-                row.get::<_, String>(0)
-            })
+            .query_map(
+                rusqlite::params_from_iter(
+                    batch
+                        .iter()
+                        .map(String::as_str)
+                        .chain(super::source_validity::CODES),
+                ),
+                |row| row.get::<_, String>(0),
+            )
             .map_err(db_error)?;
         for row in rows {
             found.insert(row.map_err(db_error)?);
@@ -181,18 +228,18 @@ pub(super) fn pending_semantic(
     now: &str,
 ) -> CognitionResult<Option<PendingSemanticJob>> {
     connection.query_row(
-        "SELECT j.job_id,c.conversation_session_id,c.source_key,c.source_hash,j.extraction_version
+        &format!("SELECT j.job_id,c.conversation_session_id,c.source_key,c.source_hash,j.extraction_version
          FROM memory_projection_windows w
          JOIN memory_projection_jobs j ON j.job_id=w.job_id
          JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision
          WHERE w.state IN ('pending','planned') AND w.owner_nonce IS NULL
            AND (w.state='planned' OR w.output_json IS NOT NULL OR (
              SELECT COUNT(DISTINCT a.invocation_ref) FROM memory_projection_attempts a
-             WHERE a.window_ref=w.window_ref AND a.provider_invoked=1
+             WHERE a.window_ref=w.window_ref AND {charged}
                AND a.recovery_revision IS w.recovery_revision) < 3)
            AND (w.next_attempt_at IS NULL OR w.next_attempt_at<=?1)
          GROUP BY j.job_id
-         ORDER BY j.last_served_at IS NOT NULL,j.last_served_at,j.created_at,j.job_id LIMIT 1",
+         ORDER BY j.last_served_at IS NOT NULL,j.last_served_at,j.created_at,j.job_id LIMIT 1", charged=super::projection::CHARGED_PROVIDER_ATTEMPT),
         [now],
         |row| Ok(PendingSemanticJob {
             job_id: row.get(0)?, session_id: row.get(1)?, source_key: row.get(2)?,
@@ -258,6 +305,7 @@ pub(super) fn replay(
         )
         .map_err(db_error)?;
     }
+    super::source_validity::revive(&tx, &job_id, now)?;
     tx.commit().map_err(db_error)?;
     Ok(Some(job_id))
 }

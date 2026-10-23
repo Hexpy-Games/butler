@@ -118,6 +118,8 @@ export interface AppModelSummary {
   credential_masked_value?: string;
   /** Catalog image capability; absent means unknown. */
   image_input_support?: "supported" | "unsupported" | "unknown";
+  /** Where image capability came from, e.g. "provider_catalog", "provider_discovery", or "user" (the user's declaration). */
+  image_capability_source?: string;
   image_accepted_mime_types?: string[];
   image_max_inline_bytes?: number;
 }
@@ -221,6 +223,8 @@ export interface LocalModelRegistrationRequest extends LocalModelDiscoveryReques
   max_output_tokens?: number;
   reasoning_budget_ratio?: number;
   source?: "discovered" | "manual";
+  /** The user's image input declaration; absent keeps the stored one. */
+  image_input?: boolean;
 }
 
 export interface LocalModelRegistrationResult {
@@ -497,70 +501,9 @@ export interface AppInfoView {
   developer_mode_enabled: boolean;
 }
 
-export interface DeveloperLogSectionView {
-  id: string;
-  title: string;
-  region: string;
-  char_count: number;
-  content: string;
-}
-
-export interface DeveloperLogEntryView {
-  schema: "butler.developer-log.v1";
-  id: string;
-  kind: "model_turn" | "model_turn_error";
-  created_at: string;
-  session_id: string;
-  turn_id: string | null;
-  role: string;
-  transport: string;
-  route: {
-    session_id: string | null;
-    role: string | null;
-    reason: string | null;
-    project_id: string | null;
-  };
-  model: {
-    requested_model_ref: string;
-    provider_id: string | null;
-    runtime_adapter_id: string | null;
-  };
-  context: {
-    live_config_hash: string | null;
-    region_order: readonly string[];
-    sections: DeveloperLogSectionView[];
-    references: Array<{
-      kind: string;
-      id: string;
-      label?: string;
-      metadata?: Record<string, unknown>;
-    }>;
-    prompt_context: string;
-  };
-  request: {
-    input_text: string;
-    metadata: Record<string, unknown>;
-  };
-  response: {
-    text: string;
-    raw: unknown;
-  };
-  privacy: {
-    raw_text_included: true;
-    secrets_redacted: true;
-    local_only: true;
-  };
-}
-
-export interface DeveloperLogListView {
-  developer_mode_enabled: true;
-  entries: DeveloperLogEntryView[];
-  pagination: PaginationView;
-  generated_at: string;
-  raw_text_included: true;
-}
-
 export interface SettingsView {
+  /** Opaque id of the agent's data; it changes when Butler is reset. */
+  data_generation?: string;
   update_previews?: boolean;
   bridge_mode: "local" | "external";
   gateway_profile: "electron";
@@ -615,7 +558,13 @@ export interface SettingsView {
   composer_decoration: { theme: "none" | "shoreline" | "cherry"; character: boolean };
   translucent_sidebar: boolean;
   smart_grouping_enabled: boolean;
+  show_thinking: boolean;
   diagnostics_enabled: boolean;
+  /** Structured log preset; developer mode only (agents before #1218 omit it). */
+  log_level?: "minimal" | "standard" | "detailed" | "full";
+  log_category_levels?: Record<string, string>;
+  /** The full-logging lease: when it ends and the preset it returns to. */
+  log_full?: { expires_at: string; previous: string } | null;
   desktop_notifications: DesktopNotificationSettingsView;
   desktop_tray_enabled: boolean;
   web_search: WebSearchSettingsView;
@@ -650,6 +599,8 @@ export interface SecurityView {
   bind_addresses: string[];
   /** Empty while remote access is off. */
   lan_urls: string[];
+  /** LAN bind failures; older gateways may omit the stable code. */
+  bind_errors?: { address: string; code?: string; error: string }[];
   /** Extra host names the gateway answers (tunnels, reverse proxies). */
   allowed_hosts: string[];
   content_hosts?: string[];
@@ -1031,6 +982,8 @@ export interface ProgressRow {
   safe_tool_name?: string;
   safe_input_label?: string;
   tool_call_id?: string;
+  thinking_title?: string;
+  thinking_body?: string;
   tool_result_id?: string;
   tool_result_byte_length?: number;
   bridge_phase?: string;
@@ -1390,7 +1343,8 @@ export interface UsageSectionBucketView {
 }
 
 export interface UsageMonitorView {
-  timeline: { slotMinutes: 15; slots: [number, number, number, number, number][] };
+  /** Session views append the slot's delegated tokens (prompt + output of every role other than "main"), then that work's requests, cached and output. */
+  timeline: { slotMinutes: 15; slots: ([number, number, number, number, number] | [number, number, number, number, number, number, number, number, number])[] };
   topSessions: { sessionId: string; title: string | null; kind: "chat" | "schedule" | "butler"; totalTokens: number; requests: number; lastUsedMs: number | null }[];
   previousPeriod: { totalTokens: number } | null;
   filters: {
@@ -1404,6 +1358,8 @@ export interface UsageMonitorView {
     byScopeUsage: Record<string, UsageTokenBucketView>;
     byModel: Record<string, UsageTokenBucketView>;
     bySection: Record<string, UsageSectionBucketView>;
+    /** Session views only: the chat's calls by role ("main" = the chat itself; any other role is delegated work), included in the totals above. */
+    byRole?: Record<string, UsageTokenBucketView>;
   };
   webSearch: {
     requestCount: number;
@@ -1732,6 +1688,11 @@ export interface TimelineEvent {
     event_id?: string;
     /** `settings.updated`: the changed settings subset. */
     settings?: Record<string, unknown>;
+    /** Ephemeral `turn.thinking` display summary, scoped to one model round. */
+    round_id?: string;
+    stream_id?: string;
+    line?: string | null;
+    summary?: string;
     tainted?: boolean;
     /** `automation.run`: the run's conversation and its safe error code. */
     target_session_id?: string;
@@ -1805,6 +1766,8 @@ export interface AutomationSummary {
   next_run_at?: string | null;
   /** The access the schedule's runs get; it never changes the target conversation's mode. */
   access_mode: AccessMode;
+  /** The schedule's own model; absent or null means none is set and runs follow the target chat's model. An update that omits it or sends null leaves it unchanged. */
+  model?: string | null;
 }
 
 export interface AutomationRunSummary {
@@ -1812,6 +1775,8 @@ export interface AutomationRunSummary {
   state: string;
   safe_error_code?: string;
   started_at: string;
+  /** The turn the run started, once it started one. */
+  turn_id?: string;
 }
 
 export interface SessionOption {

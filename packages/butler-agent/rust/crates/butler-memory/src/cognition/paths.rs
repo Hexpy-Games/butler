@@ -34,7 +34,7 @@ impl CognitionPathEnvironment {
     pub fn cognition_root(&self, data_root: &Path) -> PathBuf {
         trimmed(self.cognition_home.as_ref())
             .map(PathBuf::from)
-            .unwrap_or_else(|| data_root.join("cognition"))
+            .unwrap_or_else(|| data_root.join(butler_platform::data_paths::COGNITION))
     }
 
     /// The memory root.

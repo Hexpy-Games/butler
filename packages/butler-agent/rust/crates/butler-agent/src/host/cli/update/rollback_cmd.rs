@@ -45,7 +45,7 @@ async fn rollback(
         lock.activate(&target.dir)
             .map_err(|error| install_error(&error))?
     };
-    let before = context.running_record();
+    let before = context.running_record().await;
     let service = if options.no_restart {
         json!({"wasRunning": null, "restarted": false})
     } else {
@@ -64,7 +64,7 @@ async fn rollback(
             }
         }
     };
-    let launchers = context.refresh_launchers();
+    let launchers = context.refresh_launchers().await;
     let data = json!({
         "active": switched.active,
         "previous": switched.previous,

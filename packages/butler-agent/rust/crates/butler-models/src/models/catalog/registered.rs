@@ -213,6 +213,7 @@ pub fn normalize_hosted_api_base_url(value: Option<&Value>) -> Option<String> {
     if text.is_empty() {
         return None;
     }
+    butler_log::register_endpoint(text);
     let mut url = Url::parse(text).ok()?;
     if !matches!(url.scheme(), "http" | "https") {
         return None;

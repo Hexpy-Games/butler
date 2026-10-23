@@ -9,7 +9,6 @@ pub(super) struct AuthOwner<'a> {
     pub(super) data_root: &'a Path,
     pub(super) environment: &'a ModelConfigurationEnvironment,
     pub(super) clock: &'a Arc<dyn ModelConfigurationClock>,
-    pub(super) client: &'a reqwest::Client,
     pub(super) revision: &'a tokio::sync::watch::Sender<u64>,
 }
 /// A provider authentication failure: a static wire code and user-facing

@@ -179,7 +179,9 @@ fn merged(
         expires_or_decay: input
             .expires_or_decay
             .or(previous.and_then(|value| value.expires_or_decay)),
-        promoted_at: None,
+        promoted_at: previous
+            .filter(|value| value.status == CandidateStatus::Promoted)
+            .and_then(|value| value.promoted_at.clone()),
         id,
     }
 }

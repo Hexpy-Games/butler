@@ -53,7 +53,15 @@ pub(super) fn run_connection_lane(
         return close(connection, &owner, checkpoint);
     }
     while let Some(operation) = receiver.blocking_recv() {
+        if let Some(checkpoint) = &checkpoint {
+            checkpoint.lane_busy();
+        }
         operation(&mut connection, &owner);
+        if receiver.is_empty()
+            && let Some(checkpoint) = &checkpoint
+        {
+            checkpoint.lane_idle();
+        }
     }
     close(connection, &owner, checkpoint)
 }
@@ -90,9 +98,13 @@ pub(super) fn close(
     } else {
         Ok(())
     };
+    let path = connection.path().map(std::path::PathBuf::from);
     let closed = connection
         .close()
         .map_err(|(_, error)| StorageError::sqlite(error));
+    if let Some(path) = path {
+        bootstrap::refresh_after_close(&path);
+    }
     checkpoint
         .and(released)
         .and(transaction)

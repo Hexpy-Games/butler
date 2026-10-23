@@ -6,7 +6,7 @@
     reason = "test assertions"
 )]
 
-use super::ask_user::{scale, stub};
+use super::ask_user::{history, stub};
 
 use butler_e2e::e2e::{
     HarnessError,
@@ -39,10 +39,10 @@ async fn pending(name: &str) -> Result<(Scenario, String, Value), HarnessError> 
 }
 
 #[tokio::test]
-async fn perf_ask_user_pending_question_session_view_p95_under_150ms() -> Result<(), HarnessError> {
+async fn perf_ask_user_pending_question_session_view_p95() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, turn, question) = pending("ASK-USER-PERF").await?;
-    scale::seed_history(&s, &question).await?;
+    history::seed_history(&s, &question).await?;
     let mut samples = Vec::with_capacity(20);
     for _ in 0..20 {
         let started = Instant::now();
@@ -60,6 +60,7 @@ async fn perf_ask_user_pending_question_session_view_p95_under_150ms() -> Result
     let p50 = samples[9];
     let p95 = samples[18];
     eprintln!("ask_user session-view p50 {p50:?}; p95 {p95:?}");
-    butler_e2e::assert_wall_clock_budget!(p95, Duration::from_millis(150), "session-view p95");
+    // Normal pending-question view p95 6.00 ms (PR #1358); visible at 100 ms.
+    butler_e2e::assert_wall_clock_budget!(p95, Duration::from_millis(100), "session-view p95");
     s.finish().await
 }

@@ -196,6 +196,7 @@ fn tool_row(kind: &str, p: &Map<String, Value>, id: &str, row: &mut Map<String, 
     insert(row, "safe_input_label", input);
     copy(p, row, "toolCallId", "tool_call_id");
     copy(p, row, "resultId", "tool_result_id");
+    copy(p, row, "thinkingTitle", "thinking_title");
     integer(p, row, "resultByteLength", "tool_result_byte_length");
     copy(p, row, "bridgePhase", "bridge_phase");
     copy(p, row, "semanticBlockId", "semantic_block_id");

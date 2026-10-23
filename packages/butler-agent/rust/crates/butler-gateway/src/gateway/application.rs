@@ -1,6 +1,8 @@
 //! Durable application service behind the native App HTTP facade.
 
 mod assets;
+mod data_reset;
+mod work_model;
 pub use assets::AppAssetCommand;
 mod admission;
 mod admission_identity;
@@ -14,9 +16,10 @@ mod contracts;
 mod errors;
 mod event_outbox;
 mod events;
+mod thinking;
 use crate::gateway::shutdown_trace::measure as measure_shutdown;
 
-use errors::app_error;
+use errors::{app_error, public};
 mod browser_stills;
 mod devices;
 mod event_reads;
@@ -30,6 +33,7 @@ mod handle;
 mod hooks;
 mod internal_continuation;
 mod library;
+mod still_delivery;
 pub use library::{AppLibraryChange, AppLibraryCommand, AppLibraryQuery};
 mod signins;
 pub use signins::*;
@@ -106,9 +110,9 @@ pub use contracts::*;
 use events::EventSubscribers;
 pub use model_catalog::{AppModelCatalogCommand, AppModelCatalogPort};
 pub use monitoring::{
-    AppBoundWorkStatusFact, AppDeveloperLogsQuery, AppMonitorPage, AppMonitoringPort,
-    AppUsageMonitorQuery, AppUsageMonitorView, AppWorkOperationalNoticeFact,
-    AppWorkStatusConversationFact, AppWorkerActivityQuery,
+    AppBoundWorkStatusFact, AppMonitorPage, AppMonitoringPort, AppUsageMonitorQuery,
+    AppUsageMonitorView, AppWorkOperationalNoticeFact, AppWorkStatusConversationFact,
+    AppWorkerActivityQuery,
 };
 pub(crate) use monitoring::{
     work_status as app_work_status, worker_activity as app_worker_activity,
@@ -321,6 +325,7 @@ impl AppApplication {
             chatgpt_events: setup_events::AccountRelay::default(),
             quota_events: Arc::default(),
         };
+        application.initialize_thinking_preference().await?;
         application.recover_for_open().await?;
         Ok(application)
     }
@@ -462,14 +467,6 @@ fn queue_owner_id(clock: &dyn AppIdentityClock) -> String {
     )
 }
 
-fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
-    GatewayApplicationError::Public {
-        status,
-        code: code.into(),
-        message: message.into(),
-        source: None,
-    }
-}
 #[expect(
     clippy::needless_pass_by_value,
     reason = "map_err/iterator adapter taking owned values"

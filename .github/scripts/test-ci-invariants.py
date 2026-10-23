@@ -467,18 +467,14 @@ class Coverage(unittest.TestCase):
                 if test['filter-match']['status'] == 'matches'}
         perf_selections = json.loads((directory / 'perf-selection.json').read_text())
         selected = [(binary, name) for shard in perf_selections for binary, name in shard]
-        idle = {case for case in perf if case[1].startswith('idle_resources::')}
-        owner = {case for case in perf if case[1].startswith('data_perf::')}
         self.assertEqual(len(selected), len(set(selected)))
-        self.assertEqual(set(selected) | idle | owner, perf)
-        self.assertTrue(idle, 'The complete idle observation must remain selected')
-        self.assertTrue(owner, 'The complete owner-scale observation must remain selected')
+        self.assertEqual(set(selected), perf)
         runnable = {case for case, test in tests.items() if not test['ignored']}
         disk = {case for case in tests if case[1].endswith('idle_disk_writes_and_cpu_stay_bounded')}
         self.assertEqual((set(ordinary) | installs | perf | disk) & runnable, runnable)
         print(f'Compiled inventory: {len(tests)} tests, {len(tests) - len(runnable)} existing ignored; '
               f'ordinary {list(map(len, selections))}, install {list(map(len, groups))}, '
-              f'perf {list(map(len, perf_selections))} + {len(idle)} full idle + {len(owner)} full owner observation(s).')
+              f'perf {list(map(len, perf_selections))}.')
 
 
 if __name__ == '__main__':

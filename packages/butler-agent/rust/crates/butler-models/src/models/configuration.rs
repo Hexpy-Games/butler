@@ -1,5 +1,7 @@
 //! Fresh filesystem facts and request-owned snapshots of shared catalog construction.
 
+mod reset_secrets;
+pub use reset_secrets::reset_secret_keys;
 mod metadata;
 pub use metadata::ModelContextMetadataRead;
 
@@ -16,6 +18,7 @@ mod discovery;
 mod environment;
 mod key_check;
 mod local_credentials;
+mod local_image_startup;
 mod logging;
 mod mcp;
 mod mutations;
@@ -56,7 +59,7 @@ use std::{
     sync::Arc,
 };
 
-use reqwest::Client;
+use butler_log::http::Client;
 use serde_json::Value;
 
 use super::{
@@ -184,8 +187,9 @@ impl ModelConfiguration {
             &collation,
         )?;
         if let Some(secret) = &environment.openai_api_key {
-            butler_log::register_secret(secret);
+            butler_log::register_secret_for("environment:openai", secret);
         }
+        logging::register_environment_endpoints(&environment);
         let secrets = ProviderSecrets::new(environment.secret_store);
         let chatgpt_authority = Arc::new(chatgpt::authority::ChatGptAuthority::new(
             environment.chatgpt_auth_issuer.as_deref(),
@@ -368,7 +372,6 @@ impl ModelConfiguration {
             data_root: &self.data_root,
             environment: &environment,
             clock: &self.clock,
-            client: &self.client,
             revision: &self.account_revision,
         }
         .resolve_openai()
@@ -404,8 +407,8 @@ impl ModelConfiguration {
         } else {
             None
         };
-        let client = Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
+        let client = butler_log::http::external(butler_log::http::Purpose::new("model_discovery"))
+            .redirect(butler_log::http::RedirectPolicy::none())
             .build()
             .map_err(|source| ModelCatalogError::Storage {
                 message: "Local model discovery could not start.",

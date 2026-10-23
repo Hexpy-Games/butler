@@ -7,6 +7,7 @@ pub(crate) mod command;
 pub(super) mod doctor;
 pub(crate) mod error;
 pub(super) mod gateway;
+mod http_logs;
 pub(super) mod observability;
 pub(super) mod open;
 pub(super) mod public;

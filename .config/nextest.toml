@@ -20,3 +20,8 @@ slow-timeout = { period = "6m", terminate-after = 1 }
 [[profile.default.overrides]]
 filter = 'test(/^browser_outputs::perf_published_outputs_idle_ten_minutes_without_writes$/)'
 slow-timeout = { period = "12m", terminate-after = 1 }
+
+# PERF-IDLE: 120-second startup grace and ten full 60-second idle windows.
+[[profile.default.overrides]]
+filter = 'test(/^idle_resources::perf_idle_history_reads_and_footprint$/)'
+slow-timeout = { period = "15m", terminate-after = 1 }

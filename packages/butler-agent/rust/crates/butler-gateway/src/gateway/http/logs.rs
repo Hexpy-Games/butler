@@ -71,6 +71,20 @@ pub(super) async fn route(
                     .map_err(|_| HttpError::Internal)?,
             )
         }
+        (&Method::GET, path) if path == "/logs/trace" || path.starts_with("/logs/trace/") => {
+            let parameters = query(uri);
+            let id = path.strip_prefix("/logs/trace/").map(str::to_owned);
+            let result = blocking(move || match id {
+                Some(id) => log.trace(&id),
+                None => log.resolve_trace(
+                    parameters.get("turn_id").cloned(),
+                    parameters.get("chat_id").cloned(),
+                    parameters.get("message_id").map(String::as_str),
+                ),
+            })
+            .await?;
+            envelope(serde_json::to_value(result).map_err(|_| HttpError::Internal)?)
+        }
         (&Method::GET, "/logs/config") => {
             envelope(serde_json::to_value(log.config()).map_err(|_| HttpError::Internal)?)
         }
@@ -80,7 +94,12 @@ pub(super) async fn route(
                 .map_err(|_| HttpError::Internal)?,
         ),
         (&Method::DELETE, "/logs") => {
-            envelope(value!({"freed_bytes":blocking(move || log.clear()).await?}))
+            let freed = blocking(move || log.clear()).await?;
+            state
+                .application
+                .publish_gateway_event("logs.cleared", serde_json::Map::new())
+                .await?;
+            envelope(value!({"agent_freed_bytes":freed}))
         }
         (&Method::GET, "/logs/live") => live(&log, &state, request).await,
         (&Method::POST, "/logs/export") => export(request, log, developer).await,

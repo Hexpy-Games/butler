@@ -43,6 +43,7 @@ class Paths(unittest.TestCase):
             'notes.md': set(),
             '.github/pull_request_template.md': set(),
             '.github/workflows/windows.yml': {'rust', 'ui', 'package'},
+            'packages/butler-agent/rust/scripts/check_host_links.py': {'rust', 'package', 'install', 'linux-package', 'signing'},
             'new-build-config.ini': set(changes.GROUPS) - {'workflows'},
         }
         workflow = (ROOT.parent / 'workflows/rust-quality.yml').read_text()
@@ -52,6 +53,12 @@ class Paths(unittest.TestCase):
         for path, expected in cases.items():
             with self.subTest(path=path):
                 self.assertEqual(changes.categories(path), expected)
+
+    # test-category: pure-logic
+    def test_release_python_invalidates_native_consumers(self):
+        path = '.github/actions/release-python/action.yml'
+        self.assertTrue(changes.windows_native(path))
+        self.assertTrue(set(changes.NATIVE_CI).issubset(changes.categories(path)))
 
     # test-category: pure-logic
     def test_github_inputs_follow_consumers_and_unknowns_fail_closed(self):
@@ -65,7 +72,7 @@ class Paths(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(changes.categories(path), set(changes.GROUPS))
         for path in ['.github/releases/v1.2.3.md',
-                     '.github/actions/windows-owner-setup/README.md']:
+                     '.github/actions/windows-runner-setup/README.md']:
             self.assertEqual(changes.categories(path), set())
 
     # test-category: pure-logic
@@ -198,6 +205,36 @@ jobs:
             finally:
                 os.chdir(original)
 
+
+    def test_changed_ignores_base_branch_commits_after_the_fork(self):
+        original = Path.cwd()
+        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as temporary:
+            root = Path(temporary)
+            try:
+                os.chdir(root)
+                def git(*args):
+                    return changes.command('git', *args)
+                git('init', '-q', '-b', 'main')
+                git('config', 'user.email', 'ci@example.invalid')
+                git('config', 'user.name', 'CI test')
+                (root / 'README.md').write_text('start')
+                git('add', '.')
+                git('commit', '-qm', 'fork point')
+                git('switch', '-qc', 'docs')
+                (root / 'AGENTS.md').write_text('docs change')
+                git('add', '.')
+                git('commit', '-qm', 'docs only')
+                git('switch', '-q', 'main')
+                rust = root / 'packages/butler-agent/rust/src/lib.rs'
+                rust.parent.mkdir(parents=True)
+                rust.write_text('main moved on')
+                git('add', '.')
+                git('commit', '-qm', 'later main commit')
+                main_tip = git('rev-parse', 'HEAD')
+                git('switch', '-q', 'docs')
+                self.assertEqual(changes.changed(main_tip), ['AGENTS.md'])
+            finally:
+                os.chdir(original)
 
 class Trust(unittest.TestCase):
     # test-category: security
@@ -449,24 +486,11 @@ class TrimContracts(unittest.TestCase):
         self.assertIn('artifact: ${{ fromJSON(needs.paths.outputs.artifacts) }}', source)
         self.assertNotIn('"run":0', source)
 
-    # test-category: format-pin
-    def test_ds_filter_covers_every_protected_directory_and_root_css(self):
-        source = (ROOT.parent / 'workflows/ds-approval.yml').read_text()
-        spec = importlib.util.spec_from_file_location('ds_approval', ROOT / 'ds-approval.py')
-        ds = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(ds)
-        globs = re.findall(r"^      - '([^']+)'$", source, re.M)
-        for path in ['components/button.tsx', 'blocks/nested/card.ts', 'shadcn/nested/token.css', 'tokens.css']:
-            protected = ds.protected([ds.DS + path])
-            self.assertTrue(protected)
-            self.assertTrue(changes.matches(protected[0], tuple(globs)), protected)
-        self.assertFalse(changes.matches('packages/butler-app/client/ui/src/app.tsx', tuple(globs)))
-
-
 # Keep the derived dependency checks in the existing CI-script test entrypoint.
 from ci_windows_cascade_tests import WindowsCascade
 from ci_input_tests import DerivedInputs
 from ci_tier_tests import Precision, ApprovedTiers
+from ci_ds_approval_tests import DSApproval, DSApprovalWiring
 
 
 if __name__ == '__main__':

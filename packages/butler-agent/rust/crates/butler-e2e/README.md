@@ -41,6 +41,12 @@ The harness builds `butler-agent` itself with `butler-agent/e2e-fixtures` unless
 for browser import scenarios also need this feature to inject isolated profile
 and key sources. Never enable it in shipped agents.
 
+Put scenarios that require compiled-in hooks in a `requires_e2e_fixtures` module,
+including their hook-arming helpers. The installed Windows runner passes
+`--skip ::requires_e2e_fixtures::` to both test listing and execution. Stub/debug
+runs omit that filter. This requirement belongs to the target executable, not
+the harness's `debug_assertions`; new scenarios in these modules inherit it.
+
 Every fault, barrier, fixed clock and storage/idle probe that a scenario arms with a
 `BUTLER_E2E_*` variable exists only in that fixture build (`e2e-fixtures` in each
 product crate). Shipped binaries contain none of them, and `butler-source-check`
@@ -80,7 +86,7 @@ The live tier passes the test profile to the agent as an absolute
 `BUTLER_CODEX_AUTH_PROFILE` (refreshes are written back to it; the harness
 never reads the token values) and runs without `OPENAI_API_KEY`, so the
 subscription is used. CI uses the dedicated Codex login described in
-[CONTRIBUTING.md](../../../../../CONTRIBUTING.md#live-e2e-oauth-setup-windows-owner-runner),
+[CONTRIBUTING.md](../../../../../CONTRIBUTING.md#live-e2e-oauth-setup-self-hosted-windows-runner),
 selected with `BUTLER_E2E_CODEX_AUTH_JSON`. A Butler test login
 (`butler auth login --data ~/.butler-e2e-auth`) also works. Without either,
 the harness falls back to the read-only Codex CLI file and LIVE-10 is
@@ -132,13 +138,10 @@ it makes the test login expire, as LIVE-10 does, and the agent writes the
 refreshed login back to the same profile; replay runs with a refreshable
 placeholder login.
 
-## Owner-scale usage and updates
+## history usage and updates
 
-USE-06 (`tests/usage_scale.rs`) writes an owner-sized data folder at test time
-(44,000 usage rows and about 320 MB of transcripts, nothing committed) and
-asserts that `/usage-monitor` answers a window or a session in milliseconds
-without reading the transcripts, that the all-time view is a cache hit on its
-second read, and that a session counts only its own usage. USE-07
+USE-06 (`tests/e2e/usage_history.rs`) uses 1,600 usage rows and eight small transcripts
+to check complete window, session and cached all-time results. USE-07
 (`tests/updates.rs`) points `BUTLER_UPDATE_MANIFEST` at a local server that
 delays its answer and asserts that `GET /updates` never waits for it.
 
@@ -233,70 +236,19 @@ injected product operations. App and maintenance owners also honor the same
 stub fixture clock in both profiles; a fixture day must not become a due daily
 job on the host's real date.
 
-## Idle resources at owner scale (PERF-IDLE)
+## Retained history and storage correctness
 
-`idle_resources` combines the PERF-01 and storage-concurrency App seeds
-(over 1,100 chats, 500,000 events and 3 GB), 30,000
-native canonical messages, 30,000 completed memory windows, 888,000 metric
-records, 10,000 settled BTCC requests exceeding 7 GB, and 2,440 synthetic
-transcripts totaling 1.5 GB (largest 290 MB).
-Two transcripts have EOF checkpoints and unfinished streaming turns: durable
-unfinished state must not arm a transcript poll. The App live stream remains
-connected, quota polling is enabled against the local replay, and an explicit
-refresh proves the provider path before idle.
+The App retention, terminal history, transcript history, memory restart recall,
+coverage mirror, permissions, monitoring and usage scenarios use small synthetic
+fixtures. They check complete content, ordering, identities, current state,
+selective reclamation and recovery through the real service in the stub tier.
+Fixture sizes follow the assertions being exercised, independently of any
+individual installation.
 
-It runs in the opt-in `perf` tier with a release agent. After the existing
-two-minute startup grace and committed memory readiness, ten 60-second samples
-retain the original 100 MB memory and 1 MB/minute read budgets and content
-checks. Every buffered/physical write counter must remain unchanged, as must
-App/BTCC data versions, all DATA file metadata and native write notifications.
-An opt-in stub-only in-memory counter at projection source opens catches
-cached transcript reads even where the OS exposes only physical reads. Host
-load averages accompany each sample. After idle, an external append must
-advance the exact checkpoint through filesystem notification without a
-foreground refresh.
-
-From `packages/butler-agent/rust`, with the build caches set before isolating HOME:
-
-```sh
-export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
-export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
-cargo build --release -p butler-agent -j 8
-BUTLER_E2E_TIER=perf BUTLER_E2E_BIN="$CARGO_TARGET_DIR/release/butler-agent" \
-  cargo test --release -p butler-e2e --test e2e idle_resources -- --nocapture --test-threads=1
-```
-
-Use `cargo test` for this several-minute measurement, independently of the
-normal stub CI suite. Native counters live in `butler-platform`: Linux supplies
-procfs, macOS supplies footprint/disk I/O, and Windows supplies resident memory
-and `GetProcessIoCounters` via sysinfo. Windows I/O includes buffered/network
-transfers, a conservative storage upper bound; it is not a physical-disk-only
-counter. Unsupported systems report the measurement unavailable. Linux RSS is
-deliberately stricter than private heap size, but is not macOS `phys_footprint`.
-
-
-## Storage concurrency comparison
-
-`storage_concurrency` seeds a 1.3 GB App DB with 600 chats and 300,000 events,
-then streams eight turns with 200 deltas each. The perf test checks exact rows,
-ordered deltas, complete messages and current committed views while reporting
-commits per turn, WAL bytes per turn, persistence p95 and session-view p95.
-Run with a release agent, `BUTLER_E2E_TIER=stub`, `BUTLER_E2E_PERF=1` and one
-test thread. Storage instrumentation and stream controls are opt-in on the
-stub/perf tiers in both build profiles.
-
-The before run normally disables read pools and App delta/transaction batching.
-`BUTLER_E2E_STORAGE_MAIN_BIN` instead selects a separately built main agent for
-that run. That binary needs the same opt-in commit/WAL/operation counters and
-raw-delta/eight-stream controls; its storage implementation stays unchanged.
-Both runs disable automatic checkpoints while counting WAL bytes, so the WAL
-measurement includes all retained frames rather than only the last checkpoint
-cycle. `idle_resources` additionally observes App and BTCC `data_version` over
-the entire ten-minute idle interval and requires zero commits. Its fixture contains 5,000
-turns, 500,000 App events, 30,000 native messages, 30,000 completed memory jobs,
-more than 300 MB of metrics and 10,000 settled BTCC requests exceeding 7 GB.
-The transcript corpus has the owner-scale count, total bytes and largest-file
-size. These are synthetic fixtures; the owner's private data is never copied.
+`storage_concurrency` uses eight historical chats and 48 events before streaming
+eight turns with 200 deltas each. It checks exact persisted rows, ordered deltas,
+complete messages and current committed views. Optional storage instrumentation
+reports commits, WAL bytes and latency without changing the stream assertions.
 
 ## Wall-clock budgets in CI
 
@@ -310,9 +262,7 @@ The dedicated Linux release job sets that flag and runs with one test thread.
 `.github/scripts/e2e-perf-filter.py` selects `perf_*` tests plus whole binaries
 containing the helper (including helper modules), and prints every budget's
 source location before execution. The contention binary is also retained for its
-minimum lock-hold assertion. PERF-IDLE uses its documented separate release
-`cargo test` runner, because its five-minute sampling exceeds nextest's existing
-watchdog. Performance budgets remain unchanged.
+minimum lock-hold assertion.
 
 The hooks idle observation runs in the serial perf tier with all three 60-second
 windows. Its six-minute nextest deadline accommodates the 180-second observation,
@@ -343,10 +293,8 @@ Budgets before PR #441's revision and after this correction (strict `<` bounds):
 | USE-06 warm / new transcripts / appended rows / all-time reads (7) | 300 ms each | enforced | enforced |
 | PERF-01 retention settles | 120 s | enforced | enforced |
 | PERF-01 session-view p95 | 150 ms | enforced | enforced |
-| PERF-01 owner-scale delivery | empty delivery × 3 + 2 s | enforced | enforced |
+| PERF-01 history delivery | empty delivery × 3 + 2 s | enforced | enforced |
 | PERF-ASK-USER session-view p95 | 150 ms | enforced | enforced |
-| PERF-IDLE memory, each of 3 windows | 100 MB | skipped (stub tier) | enforced |
-| PERF-IDLE rchar / disk reads, each of 3 windows | 1 MB each | skipped (stub tier) | enforced |
 
 Thus 31 upper wall-clock assertion sites become 34, with every previous bound
 preserved. The new helper-contract E2E additionally proves that equality with a
@@ -373,150 +321,8 @@ run `scripts/archive-relocation.sh /tmp/e2e.tar.zst` from the Rust workspace
 It extracts to a new directory, verifies the fixture executable belongs to the
 archive, and runs the unchanged hung-MCP shutdown assertions there.
 
-## Turn overhead at owner scale (PERF-02)
+## Tool round correctness
 
-`perf_turn::perf_02_round_overhead_at_large_context` scripts 60 `read_file`
-rounds with distinct 22 KB prose files, then a final answer. It measures the gap
-from the end of each provider reply to arrival of the next complete request,
-excluding synthetic-provider matching and model time. Only samples whose next
-request transcript (`input`, excluding tools and instructions) is at least
-1.4 MB enter the owner-scale p95; it must be below 20 ms.
-Every request must contain the exact results so far, with their call IDs and
-order; the final request carries all 60 files. Final delivery is checked too.
-The diagnostic prefix hashes, token counts and longest common prefixes are
-checked against an independent reconstruction with the uncached tokenizer.
-
-This scenario uses the existing release-branch perf selector and
-`BUTLER_E2E_PERF=1`; PR smoke excludes `perf_*`.
-
-PERF-02 checks the selected agent's embedded build profile through
-`--version --json` before starting the turn. A debug or unknown profile fails
-with release build instructions, including when `BUTLER_E2E_BIN` overrides the
-usual executable path. The harness itself may use either profile.
-
-Run locally with a release agent:
-
-```sh
-BUTLER_E2E_TIER=stub BUTLER_E2E_PERF=1 BUTLER_E2E_SKIP_BUILD=1 \
-BUTLER_E2E_BIN="$CARGO_TARGET_DIR/release/butler-agent" \
-python3 ../../../.github/scripts/isolated.py cargo test -p butler-e2e \
-  --test e2e perf_02_ -- --nocapture --test-threads=1
-```
-
-Linux x86_64 release measurements on 2026-10-06, before at `ca0212d27`
-(the earlier SSE scan and message-facts cache), after with exact token-block
-reuse, fewer serialization passes, and shared catalog construction:
-
-| Measurement | Before | After |
-| --- | ---: | ---: |
-| Transcript bytes | 1,455,703 | 1,455,703 |
-| Final request bytes | 1,508,906 | 1,508,906 |
-| Owner-scale samples | 3 | 3 |
-| Per-round p50 | 145.1 ms | 19.2 ms |
-| Per-round p95 | 147.3 ms | 19.3 ms |
-
-Both runs passed the exact history and final-delivery assertions. The after
-run also passed the independent token assertions and the unchanged 20 ms gate.
-The measured tree includes `origin/main` at `3379b7a6f` (the thin CLI split);
-`98581771a` was subsequently merged with CI/docs changes only.
-The margin is small: the instrumented run measured 20.4 ms p95 and failed the
-gate. No assertion or budget was changed.
-
-Profiling used the same release agent and scenario, with
-`perf record -e cpu-clock:u -F 1999 -g --clockid mono --call-graph dwarf,32768`.
-Samply unwound the captured DWARF stacks; a flamegraph was generated from
-resolved stacks. `BUTLER_E2E_PROFILE=1` prints monotonic endpoints so analysis
-includes only the three owner-scale reply-to-request gaps. There were 918
-before and 138 after agent CPU samples; profiled p95 was 163.0 and 20.4 ms.
-Inclusive percentages overlap. These are the top ten named application/library
-frames, excluding generic Rust/Tokio/libc executor frames:
-
-| Before frame | CPU % | After frame | CPU % |
-| --- | ---: | --- | ---: |
-| `CoreBPE::encode_ordinary` | 81.26 | `driver::obtain_reply` | 44.20 |
-| `driver::obtain_reply` | 62.20 | `driver::run_iteration` | 42.03 |
-| `fancy_regex::Matches::next` | 59.15 | `ProductionAgentLoop::run` | 28.26 |
-| `fancy_regex::Regex::find_from_pos_with_option_flags` | 56.43 | `TurnContextProjection::project` | 22.46 |
-| `fancy_regex::vm::run` | 54.47 | `model_round::project_context` | 22.46 |
-| `catalog::estimate_tokens` | 52.83 | `RoutedRound::run` | 21.74 |
-| `CoreBPE::count_ordinary` | 52.72 | `ModelProvider::run` | 21.74 |
-| `RoutedRound::run` | 34.53 | `RoutedRound::run_round` | 21.01 |
-| `ModelProvider::run` | 34.42 | `TokenizerOwner::block` | 15.94 |
-| `RoutedRound::run_round` | 33.66 | `TurnContext::compacted` | 13.04 |
-
-Repeated full-history regex/BPE work was the main cause. The replacement caches
-exact source blocks only at proven o200k pre-tokenizer boundaries; counting
-reuses lengths and encoding retains every token. Entries are bounded by bytes
-and count, and changed bytes miss the cache. Context pressure and byte admission
-share one serialization, request encoding reuses serialized diagnostic input,
-unchanged diagnostic components reuse their bytes/hashes after ordered value
-comparison, and image admission walks the already parsed body once. Catalog
-construction reuses identical dynamic facts after fresh file reads, with fresh
-observation times and current secret resolution. Unrelated tool results
-are not parsed as work anchors. The earlier SSE scan and message-facts cache
-were reverted.
-
-Remaining after-profile work includes string escaping (11.59%), fresh-block BPE
-(10.14%), SQLite statement preparation (12.32%), and SHA-256 (7.97%). Catalog
-construction was 6.90% before its reuse; the final cache path is 0.72%. SQLite
-and catalog state still remain current on each round.
-
-Landing verification on the same Linux x86_64 host, with both agent and harness
-in release mode and fresh HOME/BUTLER_DATA per run, initially failed at
-20.1 ms p95. Subsequent serialization-only and diagnostic-hash changes still
-failed at 20.4 and 20.5 ms. Reprofiling identified remaining string escaping
-and SHA-256 work. Context sizing now reuses ordered serialized components;
-diagnostic prefixes extend an exact SHA state after comparing all old bytes;
-and the turn-owned request-digest cache reuses unchanged plain-message bytes
-and extends the digest before the final array/object delimiters. Passthrough
-JSON always uses the original request writer. All caches are bounded, and
-mutations/truncations restart digest computation.
-
-The first qualifying three consecutive unprofiled runs passed the unchanged
-20 ms gate before CI exposed the fragmented-stream scan:
-
-| Run | p95 per round | Transcript bytes | Final request bytes |
-| --- | ---: | ---: | ---: |
-| 1 | 18.6 ms | 1,455,703 | 1,508,906 |
-| 2 | 17.5 ms | 1,455,703 | 1,508,906 |
-| 3 | 18.1 ms | 1,455,703 | 1,508,906 |
-
-Each run passed exact history, order/call-ID, final-delivery and independently
-reconstructed prefix hash/token assertions. Existing format pins also compare
-cached request digests with fresh serialization after append, mutation,
-truncation and reordered passthrough JSON.
-
-CI then exposed the expanded 200 KB fragmented SSE test timing out on both
-Linux and macOS. Delimiter search now remembers its cursor and frame-size
-validation counts only new UTF-8 bytes, retaining incomplete sequences and
-exact lossy-decoder semantics. The local test fell from 1.33 to 0.68 seconds
-without changing its content or timeout. After that change, PERF-02 passed
-18.5/18.1 ms but failed its third run at 32.1 ms. A new profile identified
-unchanged-block hash-table lookups; bounded ordered token chains now compare
-complete bytes at the same position instead of rehashing unchanged blocks.
-
-Final-tree verification passed three consecutive unprofiled release runs at
-**19.5 / 18.5 / 17.5 ms p95**, each with the same 1,455,703-byte transcript,
-1,508,906-byte request and all correctness assertions above. Format, strict
-Clippy, source-check, touched-crate tests, runtime integration tests and the
-12 existing context/token/tool/branch stub E2Es passed on this tree.
-
-## Model-round continuation storage
-
-`acceptance_payload` drives the dev-only `e2e-round-store` companion through a
-loopback Codex stub. The companion imports the actual provider serializer and
-TurnStore; the harness remains separate from product crates. This qualifies
-legacy `statelessInput` carriers even though the App now uses bounded context.
-It checks crash resend bytes, the Full-loader oracle, invalid chains, duplicate
-acceptance eviction and authority checkpoint boundaries.
-
-`acceptance_payload_perf_1` seeds 400 synthetic accepted rounds through the
-public record port. Set `BUTLER_ACCEPTANCE_PERF_EVIDENCE` to a scratch JSON path
-to opt in. The report includes all round payload sizes, retained WAL frames,
-open/reconstruction timing and cold-memo resend timing. It checks the full wire
-input and serialized result before enforcing the three-second replay budget.
-`BUTLER_E2E_ROUND_STORE_BIN` selects a companion built against another revision;
-`BUTLER_ACCEPTANCE_PERF_BASELINE=1` reports that revision's Full format and gate.
-`BUTLER_ACCEPTANCE_PERF_CACHE` labels an externally dropped cache; by default the
-report says warm. Drop the OS cache only when the host permits it.
-All runs must use the isolated runner or fresh `HOME` and `BUTLER_DATA`.
+`perf_turn` scripts six distinct file reads and a final answer. Every request
+retains complete, ordered tool history, and the final delivered answer is
+checked exactly. Timing helpers retain the existing per-round budget.

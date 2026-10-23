@@ -26,6 +26,9 @@ pub(super) fn json<T: Serialize>(status: StatusCode, value: T) -> Result<Respons
 }
 
 pub(crate) enum HttpError {
+    Conflict {
+        revision: i64,
+    },
     Public {
         status: u16,
         code: String,
@@ -50,6 +53,7 @@ impl HttpError {
 
     pub(super) fn status(&self) -> StatusCode {
         match self {
+            Self::Conflict { .. } => StatusCode::CONFLICT,
             Self::Public { status, .. } => {
                 StatusCode::from_u16(*status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
             }
@@ -61,6 +65,18 @@ impl HttpError {
 
 impl From<GatewayApplicationError> for HttpError {
     fn from(error: GatewayApplicationError) -> Self {
+        if let GatewayApplicationError::Public {
+            code,
+            source: Some(source),
+            ..
+        } = &error
+            && code == "conflict"
+            && let Some(current) = source.downcast_ref::<crate::gateway::AppWorkModelConflict>()
+        {
+            return Self::Conflict {
+                revision: current.revision,
+            };
+        }
         match error {
             GatewayApplicationError::Public {
                 status,
@@ -88,6 +104,11 @@ impl From<GatewayApplicationError> for HttpError {
 }
 
 pub(super) fn error_response(error: &HttpError) -> Response {
+    if let HttpError::Conflict { revision } = error {
+        return json(StatusCode::CONFLICT, serde_json::json!({"protocol_version":APP_PROTOCOL_VERSION,
+            "error":{"code":"conflict","message":"Revision changed.","current":{"revision":revision}}}))
+            .unwrap_or_else(|_| Response::new(Body::empty()));
+    }
     if matches!(error, HttpError::PayloadTooLarge) {
         return super::payload_too_large_response();
     }
@@ -98,6 +119,7 @@ pub(super) fn error_response(error: &HttpError) -> Response {
             message,
         } => (*status, code.as_str(), message.as_str()),
         HttpError::PayloadTooLarge => (413, "payload_too_large", "Request body is too large."),
+        HttpError::Conflict { .. } => (409, "conflict", "Revision changed."),
         HttpError::Internal => (500, "internal_error", "Request failed."),
     };
     let envelope = ApiErrorEnvelope {

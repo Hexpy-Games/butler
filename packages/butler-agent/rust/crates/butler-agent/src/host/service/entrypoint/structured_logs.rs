@@ -64,6 +64,8 @@ pub(super) async fn run_until_stopped(
     let user_home = butler_platform::user_dirs::home_dir()
         .filter(|home| !home.as_os_str().is_empty())
         .ok_or_else(|| failure("native_home_unavailable", "User home is unavailable"))?;
+    let journal_seen =
+        crate::host::service::data_reset::recover(explicit_data, &user_home, &installation).await?;
     let mut config =
         support::capture_configuration(explicit_data, &user_home, &installation).await?;
     let listener = if config.app.enabled {
@@ -71,8 +73,6 @@ pub(super) async fn run_until_stopped(
     } else {
         None
     };
-    config = support::initialize_credentials(config).await?;
-    report_credential_errors(&config, logs);
     let executable = butler_platform::process_names::current_exe().map_err(io)?;
     let mut instance = support::acquire_instance(
         &config,
@@ -80,6 +80,10 @@ pub(super) async fn run_until_stopped(
         holds_foreground_lease(foreground_lease),
     )
     .await?;
+    crate::host::service::data_reset::initialize_owned(&config, &user_home, journal_seen).await?;
+    config = support::initialize_credentials(config).await?;
+    report_credential_errors(&config, logs);
+    let staging = reader_staging(config.data_root.clone()).await?;
     let port = listener
         .as_ref()
         .and_then(|listener| listener.local_addr().ok())
@@ -94,11 +98,44 @@ pub(super) async fn run_until_stopped(
         &mut instance,
     )
     .await;
-    let closed = structured_logs.close().await;
-    tokio::task::spawn_blocking(move || drop(instance))
+    let closed = crate::host::service::shutdown_trace::measure(
+        "structured_logs_close",
+        structured_logs.close(),
+    )
+    .await;
+    if let Err(error) = tokio::task::spawn_blocking(move || staging.cleanup())
+        .await
+        .map_err(io)
+        .and_then(|result| result.map_err(io))
+    {
+        eprintln!("[agent] reader staging cleanup failed; startup will retry: {error}");
+    }
+    // serve_initialized has joined App DB/artifact jobs, native dispatcher,
+    // BTCC/conversation/binding stores, memory/cognition, developer capture and
+    // transcript writer. Browser owners are joined by the HTTP listener;
+    // metrics have no independent writer. A close error forbids reset apply.
+    let reset = if result.is_ok() && closed.is_ok() {
+        crate::host::service::shutdown_trace::measure(
+            "data_reset_apply",
+            crate::host::service::data_reset::finish(config.data_root.clone()),
+        )
+        .await
+    } else {
+        Ok(())
+    };
+    tokio::task::spawn_blocking(move || instance.release())
         .await
         .map_err(|error| failure("native_service_instance_release_failed", error.to_string()))?;
-    result.and_then(|session| closed.map(|()| session))
+    result.and_then(|session| closed.and(reset).map(|()| session))
+}
+
+async fn reader_staging(
+    data: std::path::PathBuf,
+) -> Result<butler_platform::secure_fs::ReaderStaging, BtccError> {
+    tokio::task::spawn_blocking(move || butler_platform::secure_fs::ReaderStaging::new(data))
+        .await
+        .map_err(io)?
+        .map_err(io)
 }
 
 async fn serve_initialized(

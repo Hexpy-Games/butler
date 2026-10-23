@@ -1,3 +1,4 @@
+import { relaunchInstalledAppForDebugging } from "./installed-app-debug.ts";
 /** Install the actual published preview, launch, use a stub chat, and uninstall. */
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
@@ -6,9 +7,9 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFi
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
-import { freePort } from "../../../../tests/support/native-app-server.ts";
+import { freeGatewayPort, freePort } from "../../../../tests/support/native-app-server.ts";
 import { FIRST_RUN_CONSENT_VERSION } from "../../client/ui/src/app/onboarding.ts";
-import { alive, assertShortcuts, bridge, ownedProcesses, powershell, readJson, removeProfile, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
+import { assertShortcuts, bridge, ownedProcesses, ownedSurvivors, powershell, readJson, removeProfile, shortcutPaths, waitFor, waitForOwnedExit, type OwnedProcesses } from "./installer-smoke-support.ts";
 import { smokeProviderReply, type SmokeProviderCalls } from "./smoke-provider.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
 import { proveReleasedDownloads, releasedDownloadsReply, type DownloadsProof } from "./released-downloads-smoke.ts";
@@ -24,9 +25,10 @@ const expected = readFileSync(installer + ".sha256", "utf8").trim().split(/\s+/u
 assert.equal(createHash("sha256").update(readFileSync(installer)).digest("hex"), expected);
 const root = realpathSync.native(mkdtempSync(join(tmpdir(), "butler-released-e2e-")));
 const data = join(root, "data");
-const owned = new Set<number>();
+const owned: OwnedProcesses = new Map();
 const debugPort = await freePort();
-const agentPort = await freePort();
+// The Agent also binds its content origin on agentPort + 1.
+const agentPort = await freeGatewayPort();
 let page: ElectronPage | null = null;
 const calls: SmokeProviderCalls = { chat: 0, memory: 0, memorySpeakers: new Set<string>() };
 const downloads: DownloadsProof = { requests: 0 };
@@ -39,7 +41,7 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async request 
 } });
 const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), USERPROFILE: join(root, "home"), BUTLER_DATA: data,
   LOCALAPPDATA: join(root, "local"), APPDATA: join(root, "roaming"), BUTLER_SECRET_STORE: "file",
-  BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"), BUTLER_APP_SMOKE_DEBUG_PORT: String(debugPort),
+  BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"),
   BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_E2E_TIER: "stub", BUTLER_PROVIDER_QUOTA_POLLING: "0",
   // Released agents keep the real clock; a zone where it is afternoon makes the daily briefing due.
   TZ: afternoonZone(new Date()),
@@ -55,14 +57,21 @@ try {
   assert.equal(powershell("Test-Path 'HKCU:\\Software\\Classes\\butler'", env), "False");
   for (const folder of [env.HOME, data, env.LOCALAPPDATA, env.APPDATA, dirname(shortcuts[1]!)]) mkdirSync(folder, { recursive: true });
   writeFileSync(join(data, "sentinel.txt"), "released data retained\n");
+  // Setup's auto-launched App runs the day's scheduled cycle before the smoke connects; a briefing
+  // needs both a model and a reasoning effort then (the later updateSettings uses the same values).
   writeFileSync(join(data, "butler.config.json"), JSON.stringify({ user: { name: "E2E", language: "en" },
-    metrics: { enabled: false }, system: { defaultModel: "openai/gpt-6-luna" } }));
+    metrics: { enabled: false }, system: { defaultModel: "openai/gpt-6-luna" }, reasoning_effort: "low" }));
   const now = new Date().toISOString();
   mkdirSync(join(data, "personalization"), { recursive: true });
   writeFileSync(join(data, "personalization/onboarding.json"), JSON.stringify({ schema: "butler.first_chat_onboarding.v1",
     status: "complete", gateway: "any", fields: {}, skipped_fields: [], created_at: now, updated_at: now, completed_at: now }));
   run(installer, []);
   await waitFor(() => existsSync(updater), "released one-click install");
+  // The auto-launched App runs the day's scheduled cycle (the briefing under test) at startup;
+  // let it record that run before the debug relaunch quits it.
+  await waitFor(() => Date.parse(readJson(join(data, "state/scheduler/consolidation-cycle.json"))?.lastRunAt) >= started,
+    "auto-launched scheduled cycle recorded");
+  await relaunchInstalledAppForDebugging(join(installed, "Butler.exe"), debugPort, env, owned);
   page = await electronPage(debugPort);
   assert.equal((await bridge(page, "getAppInfo")).version, version);
   assert.equal((await bridge(page, "health")).ok, true);
@@ -88,7 +97,7 @@ try {
   ownedProcesses(data, owned);
   await page.expression("setTimeout(() => window.butlerApp.quitApp({confirmed:true}), 50); true");
   page.close(); page = null;
-  await waitFor(() => [...owned].every(pid => !alive(pid)), "released App and Agent quit");
+  await waitForOwnedExit(owned, "released App and Agent quit");
   run(updater, ["--uninstall", "--silent"]);
   uninstalled = true;
   await waitFor(() => !existsSync(stub), "released uninstall");
@@ -103,7 +112,7 @@ try {
 } finally {
   page?.close();
   ownedProcesses(data, owned);
-  for (const pid of owned) if (alive(pid)) { try { process.kill(pid, "SIGKILL"); } catch {} }
+  for (const { pid } of ownedSurvivors(owned)) { try { process.kill(pid, "SIGKILL"); } catch {} }
   if (!uninstalled && existsSync(updater)) run(updater, ["--uninstall", "--silent"]);
   server.stop(true);
   removeProfile(root, env);

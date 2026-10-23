@@ -1,3 +1,4 @@
+import { prepareAppLocalAuth } from "../../packages/butler-app/client/electron/app-agent-supervisor.mjs";
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -221,6 +222,7 @@ describe("App foreground lifecycle", () => {
     expect(refused).toEqual({ dataRoot: root, legacyDataBlocked: true, writableRoot: null });
     expect(writeAppForegroundStartupFailure(refused.writableRoot, { supervisorPhase: "idle" }))
       .toMatchObject({ error_code: "app_startup_failed", raw_text_included: false });
+    expect(prepareAppLocalAuth({ butlerData: root, readOnly: refused.legacyDataBlocked }).token).toBeNull();
     expect(tree()).toEqual(before);
 
     mkdirSync(join(root, "agent-runtime"));

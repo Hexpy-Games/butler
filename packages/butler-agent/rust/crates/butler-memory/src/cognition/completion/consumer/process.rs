@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
 
-use super::{MemorySyncPoll, catchup, paused};
+use super::{MemorySyncPoll, catchup, inventory, paused};
 mod cache;
 mod index_retirement;
 mod projection;
@@ -15,14 +15,13 @@ mod typed;
 pub(super) mod vector;
 use crate::cognition::generation::{resolve_active_generation, resolve_generation};
 use crate::cognition::registration::{ProjectSemanticWindowInput, ProjectionSourceNotice};
-use crate::cognition::sources::read_typed_record;
 use crate::cognition::{
     CognitionConversationSourceNotice, CognitionError, CognitionResult,
     ConversationRegistrationOutcome, MemoryGenerationTarget, RegisterConversationSourceInput,
 };
 use crate::coordination::CognitionWaitClass;
 use crate::lenient::{Arg, Obj};
-use butler_turn::conversation::{ConversationSourceReader, conversation_store_path};
+use butler_turn::conversation::conversation_store_path;
 
 mod input;
 pub(super) use input::Input;
@@ -112,12 +111,14 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
     let root = input.environment.memory_root(&input.data_root);
     let mut processed = false;
     let mut queued = false;
+    let mut head = None;
     let mut queue_error = None;
     let queue_root = root.clone();
     match super::blocking::run(move || super::super::queue::peek(&queue_root)).await {
         Ok(Some(entry)) => {
             queued = true;
             let request: SyncRequest = crate::lenient::view(&entry);
+            head = request.job_id.valid().cloned();
             match process_entry(&input, &root, &request).await {
                 Ok(did_process) => processed = did_process,
                 Err(error) => queue_error = Some(error),
@@ -132,6 +133,10 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
     if queued {
         input.catchup_at.lock().take();
     }
+    input.inventory.queue_head(head.as_deref(), processed);
+    // The inventory mirror is independent of the queue and catch-up; their
+    // failures must not keep it behind.
+    let indexing = inventory::run(&input).await;
     let caught_up = match catchup::run_if_due(&input).await {
         Ok(caught_up) => caught_up,
         Err(catchup_error) => match queue_error {
@@ -146,13 +151,15 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
         return Err(error);
     }
     let projected = projection::process(&input).await?;
-    Ok(if processed || caught_up || projected {
-        MemorySyncPoll::Processed
-    } else if queued {
-        MemorySyncPoll::Deferred
-    } else {
-        MemorySyncPoll::Idle
-    })
+    Ok(
+        if processed || caught_up || indexing == inventory::Step::More || projected {
+            MemorySyncPoll::Processed
+        } else if queued || indexing == inventory::Step::Busy {
+            MemorySyncPoll::Deferred
+        } else {
+            MemorySyncPoll::Idle
+        },
+    )
 }
 
 /// Registers the conversation turn a v3 request names once its completion
@@ -346,9 +353,8 @@ pub(super) async fn project_next(
         Err(error) if error.code() == "memory_generation_unavailable" => return Ok((false, None)),
         Err(error) => return Err(error),
     };
-    // Recovery takes the write lease, so it runs only when a window is held
-    // by an owner that may have died.
-    if input.probe.recoverable_windows(&handle.graph_path).await? {
+    // Recovery also advances bounded, once-only graph data repairs.
+    let repaired = if input.probe.recoverable_windows(&handle.graph_path).await? {
         input
             .registration
             .recover_semantic_windows(
@@ -362,19 +368,21 @@ pub(super) async fn project_next(
                     }),
                 input.shutdown.child_token(),
             )
-            .await?;
-    }
+            .await?
+    } else {
+        false
+    };
     let pending = input
         .probe
         .pending_job(&handle.graph_path, &(input.clock)())
         .await?;
     let Some(pending) = pending else {
-        return Ok((false, Some(handle)));
+        return Ok((repaired, Some(handle)));
     };
     let job_id = pending.job_id.clone();
-    let owned = input.clone();
-    let generation = handle.clone();
-    let notice = super::blocking::run(move || pending_notice(&owned, &generation, pending)).await?;
+    // Resolve source authority under the claim lease, so invalid sources settle
+    // durably rather than escaping before the queue can advance.
+    let notice = ProjectionSourceNotice::Pending(pending);
     let projected = input
         .registration
         .project_semantic_window(ProjectSemanticWindowInput {
@@ -393,64 +401,6 @@ pub(super) async fn project_next(
         })
         .await?;
     Ok((projected.is_some(), Some(handle)))
-}
-
-/// The source notice of a pending semantic job, checked against the
-/// current canonical conversation or typed record.
-fn pending_notice(
-    input: &Input,
-    handle: &crate::cognition::MemoryGenerationHandle,
-    pending: crate::cognition::graph::PendingSemanticJob,
-) -> CognitionResult<ProjectionSourceNotice> {
-    let notice = if let Some(turn_id) = pending.source_key.strip_prefix("conversation_turn:") {
-        let canonical = ConversationSourceReader::open(&canonical_path(handle, &input.data_root))
-            .map_err(CognitionError::from)?;
-        let outcome = canonical
-            .read_turn_outcome(turn_id)
-            .map_err(CognitionError::from)?
-            .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?;
-        canonical.close().map_err(CognitionError::from)?;
-        ProjectionSourceNotice::Conversation(CognitionConversationSourceNotice::Turn {
-            session_id: pending
-                .session_id
-                .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?,
-            turn_id: turn_id.into(),
-            outcome_generation: outcome.generation,
-            extraction_version: pending.extraction_version,
-        })
-    } else if let Some(message_id) = pending.source_key.strip_prefix("conversation_message:") {
-        ProjectionSourceNotice::Conversation(CognitionConversationSourceNotice::Standalone {
-            session_id: pending
-                .session_id
-                .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?,
-            message_id: message_id.into(),
-            source_hash: pending.source_hash,
-            extraction_version: pending.extraction_version,
-        })
-    } else if let Some((kind, record_id)) = pending.source_key.split_once(':')
-        && matches!(kind, "task_report" | "explicit_record")
-    {
-        let owner = read_typed_record(
-            &handle.source_root,
-            &handle.source_root.join("cognition/memory"),
-            kind,
-            record_id,
-        )?
-        .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?;
-        if owner.content_hash != pending.source_hash {
-            return Err(error(CognitionCode::MemorySourceChanged));
-        }
-        ProjectionSourceNotice::Typed {
-            source_kind: kind.into(),
-            record_id: record_id.into(),
-            revision: owner.revision,
-            content_hash: owner.content_hash,
-            operation_id: owner.operation_id,
-        }
-    } else {
-        return Err(error(CognitionCode::MemoryProjectionSourceInvalid));
-    };
-    Ok(notice)
 }
 
 pub(super) fn resolve_input_generation(

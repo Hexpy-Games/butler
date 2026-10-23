@@ -22,6 +22,7 @@ const UPDATE_KEYS: &[&str] = &[
     "multiline_send_behavior",
     "appearance_theme",
     "collapse_message_box",
+    "show_thinking",
     "reduce_motion",
     "main_screen_theme",
     "main_screen_theme_preset",
@@ -111,6 +112,7 @@ pub(super) fn is_request(value: &Value) -> bool {
     input
         .get("command_sandbox_enabled")
         .is_none_or(Value::is_boolean)
+        && input.get("show_thinking").is_none_or(Value::is_boolean)
         && input.get("reduce_motion").is_none_or(Value::is_boolean)
         && input
             .get("collapse_message_box")

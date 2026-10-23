@@ -102,7 +102,9 @@ async fn child_repetition_and_parent_redelegation_have_separate_feedback()
 async fn wait_blocked(s: &Scenario, relation: &str) -> Result<Value, HarnessError> {
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
-        let all = children(s).await?;
+        let view = s.gw.get("/session-view?session_id=general").await?;
+        let parent = view.data();
+        let all = parent["steward_children"].as_array().unwrap();
         let child = all
             .iter()
             .find(|c| c["relation"]["relation_id"] == relation)
@@ -116,6 +118,8 @@ async fn wait_blocked(s: &Scenario, relation: &str) -> Result<Value, HarnessErro
                 .filter(|m| m["text"] == "원문 확인 결과를 정리했습니다.")
                 .count() as u64
                 >= child["relation"]["ordinal"].as_u64().unwrap()
+                && parent["active_turn"].is_null()
+                && parent["latest_turn"]["state"] == "delivered"
             {
                 return Ok(child.clone());
             }

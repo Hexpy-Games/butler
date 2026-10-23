@@ -37,13 +37,42 @@ pub(super) fn discover_project_secrets(root: &Path) -> std::io::Result<Vec<PathB
 #[cfg(unix)]
 pub(super) fn sweep_new_secrets(
     root: &Path,
-    since: &[PathBuf],
+    since: &super::ProjectEntries,
     data: &Path,
+    inventory: &crate::secure_fs::SecretInventory,
 ) -> std::io::Result<Vec<PathBuf>> {
-    let found = tree::walk(root, false)?
-        .into_iter()
-        .map(|relative| root.join(relative))
-        .collect();
+    let (names, links) = tree::entries(root, false)?;
+    let mut found: Vec<_> = names.into_iter().map(|path| root.join(path)).collect();
+    let mut targets = inventory.resolved_paths();
+    targets.extend(
+        found
+            .iter()
+            .filter_map(|path| crate::secure_fs::canonicalize(path).ok()),
+    );
+    targets.extend(inventory.paths().iter().cloned());
+    for path in links.into_iter().map(|path| root.join(path)) {
+        use std::os::unix::fs::MetadataExt;
+        let metadata = std::fs::symlink_metadata(&path)?;
+        let changed = std::time::UNIX_EPOCH
+            + std::time::Duration::new(
+                metadata.ctime().try_into().unwrap_or(0),
+                metadata.ctime_nsec().try_into().unwrap_or(0),
+            );
+        if changed < since.started {
+            continue;
+        }
+        let target = crate::command_sandbox::linux::complement::resolved_path(&path)
+            .or_else(|_| crate::command_sandbox::linux::unresolved::target(&path));
+        if target.is_ok_and(|target| {
+            targets
+                .iter()
+                .any(|root| crate::secure_fs::path_is_within(&target, root))
+        }) {
+            found.push(path);
+        }
+    }
+    found.sort();
+    found.dedup();
     quarantine_new(root, since, data, found)
 }
 
@@ -61,7 +90,7 @@ pub(in crate::command_sandbox) fn quarantine_new(
     if secrets.is_empty() {
         return Ok(secrets);
     }
-    let quarantine = data.join("sandbox-quarantine");
+    let quarantine = data.join(crate::data_paths::SANDBOX_QUARANTINE);
     crate::secure_fs::create_private_dir_all(&quarantine)?;
     crate::secure_fs::restrict_directory(&quarantine).transpose()?;
     let run = quarantine.join(format!(

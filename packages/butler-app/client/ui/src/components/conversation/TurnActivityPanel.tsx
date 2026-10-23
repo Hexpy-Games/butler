@@ -1,6 +1,8 @@
-import { useId } from "react";
+import { useThinkingRows } from "./useThinkingRows";
+import { useModelThinking } from "@/app/modelThinking";
+import { useId, type ReactNode } from "react";
 import { useAppLocale } from "@/app/copy.ts";
-import { projectTurnActivity } from "@/app/conversation-progress";
+import { projectTurnActivity, type TurnActivityProjection } from "@/app/conversation-progress";
 import type { ProgressRow } from "@/app/types.ts";
 import { CurrentTurnStatus } from "./CurrentTurnStatus";
 import { TurnActivityTimeline } from "./TurnActivityTimeline";
@@ -10,46 +12,22 @@ import { TurnActivityPending } from "./TurnActivityPending";
 import { appCopy } from "@/app/copy.ts";
 import { CollapsedTurnActivity } from "./WorkBlocks";
 
-export function TurnActivityPanel({
-  rows,
-  state,
-  turnId,
-  startedAt,
-}: {
+/** Live progress of the running turn, attached to its message or its own row. */
+export interface LiveTurnActivity {
   rows: ProgressRow[];
   state?: string;
   turnId?: string;
   startedAt?: string;
-}) {
+}
+
+/** Activity row before the first answer text: the work, then the live status line. */
+export function TurnActivityPanel({ rows, state, turnId, startedAt }: LiveTurnActivity) {
   useAppLocale();
   // Pending and current status are different trees, so the status mark remounts when work
   // arrives; one key per panel lets it continue the morph instead of restarting from the logo.
   const markKey = useId();
-  const {
-    decisions,
-    modelRoundWait,
-    operation,
-    phaseActivities,
-    publicActivity,
-    readModels,
-    semanticState,
-    workBlocks,
-  } = projectTurnActivity(rows, turnId);
-  const showDecision = decisions.length > 0 &&
-    !publicActivity &&
-    !modelRoundWait &&
-    !operation;
-  if (
-    decisions.length === 0 &&
-    workBlocks.length === 0 &&
-    phaseActivities.length === 0 &&
-    !publicActivity &&
-    !modelRoundWait &&
-    !operation
-  ) {
-    return <TurnActivityPending markKey={markKey} readModels={readModels} state={state} />;
-  }
-
+  const projection = projectTurnActivity(useThinkingRows(rows, turnId), turnId);
+  if (!hasLiveWork(projection)) return <TurnActivityStatus markKey={markKey} rows={rows} state={state} turnId={turnId} startedAt={startedAt} />;
   return (
     <Stack
       as="section"
@@ -57,30 +35,49 @@ export function TurnActivityPanel({
       data-test-class="turn-activity-panel turn-work-panel turn-decision-work-panel"
       aria-label={appCopy.conversation.work.historyRegionLabel}
     >
-      {phaseActivities.length > 0 ? (
-        <TurnActivityTimeline
-          activities={phaseActivities}
-          currentState={semanticState}
-          live
-          turnId={turnId}
-        />
-      ) : workBlocks.length > 0 ? (
-        <CollapsedTurnActivity blocks={workBlocks} live turnId={turnId} />
-      ) : showDecision ? (
-        <TurnDecisionRow decision={decisions.at(-1)!} />
-      ) : null}
-      <CurrentTurnStatus
-        markKey={markKey}
-        state={state}
-        waitingForAnswer={rows.some((row) => row.safe_tool_name === "ask_user")}
-        modelRoundWait={modelRoundWait}
-        operation={operation}
-        publicActivity={publicActivity}
-        phaseLabel={phaseActivities.at(-1)?.summary}
-        startedAt={startedAt ?? earliestProgressTimestamp(rows)}
-      />
+      {projection.phaseActivities.length > 0
+        ? <TurnActivityTimeline activities={projection.phaseActivities} currentState={projection.semanticState} live turnId={turnId} />
+        : liveTurnWork(projection, turnId)}
+      <TurnActivityStatus markKey={markKey} rows={rows} state={state} turnId={turnId} startedAt={startedAt} />
     </Stack>
   );
+}
+
+/** Live work that has no phase timeline: work blocks, or the latest decision. */
+export function liveTurnWork(projection: TurnActivityProjection, turnId?: string): ReactNode {
+  const { decisions, modelRoundWait, operation, publicActivity, workBlocks } = projection;
+  if (workBlocks.length > 0) return <CollapsedTurnActivity blocks={workBlocks} live turnId={turnId} />;
+  const showDecision = decisions.length > 0 && !publicActivity && !modelRoundWait && !operation;
+  return showDecision ? <TurnDecisionRow decision={decisions.at(-1)!} /> : null;
+}
+
+/** The live status line: pending label before any work, then the current step and timer. */
+export function TurnActivityStatus({ markKey: sharedMarkKey, rows, state, turnId, startedAt }: LiveTurnActivity & { markKey?: string }) {
+  useAppLocale();
+  const thinkingLine = useModelThinking(store => turnId ? store.lines[turnId] : undefined);
+  const ownMarkKey = useId();
+  const markKey = sharedMarkKey ?? ownMarkKey;
+  const projection = projectTurnActivity(useThinkingRows(rows, turnId), turnId);
+  const { modelRoundWait, operation, phaseActivities, publicActivity, readModels } = projection;
+  if (!hasLiveWork(projection)) return <TurnActivityPending markKey={markKey} readModels={readModels} state={state} />;
+  return (
+    <CurrentTurnStatus
+      thinkingLine={thinkingLine}
+      markKey={markKey}
+      state={state}
+      waitingForAnswer={rows.some((row) => row.safe_tool_name === "ask_user")}
+      modelRoundWait={modelRoundWait}
+      operation={operation}
+      publicActivity={publicActivity}
+      phaseLabel={phaseActivities.at(-1)?.summary}
+      startedAt={startedAt ?? earliestProgressTimestamp(rows)}
+    />
+  );
+}
+
+function hasLiveWork({ decisions, workBlocks, phaseActivities, publicActivity, modelRoundWait, operation }: TurnActivityProjection) {
+  return decisions.length > 0 || workBlocks.length > 0 || phaseActivities.length > 0 ||
+    Boolean(publicActivity || modelRoundWait || operation);
 }
 
 function earliestProgressTimestamp(rows: ProgressRow[]): string | undefined {

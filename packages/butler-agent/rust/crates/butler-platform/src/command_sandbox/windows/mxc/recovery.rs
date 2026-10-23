@@ -28,7 +28,7 @@ fn available(policy: &Path) -> io::Result<bool> {
     }
 }
 fn reconcile_scratch(data: &Path) -> io::Result<()> {
-    let root = data.join("tmp/project-write");
+    let root = data.join(crate::data_paths::PROJECT_WRITE_TMP);
     let entries = match fs::read_dir(&root) {
         Ok(entries) => entries,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
@@ -37,7 +37,7 @@ fn reconcile_scratch(data: &Path) -> io::Result<()> {
     for entry in entries {
         let entry = entry?;
         let policy = data
-            .join("sandbox/policies")
+            .join(crate::data_paths::SANDBOX_POLICIES)
             .join(entry.file_name())
             .with_extension("json");
         if !policy.exists() && available(&policy)? {
@@ -49,7 +49,7 @@ fn reconcile_scratch(data: &Path) -> io::Result<()> {
 }
 
 pub(super) fn reconcile_policies(data: &Path) -> std::io::Result<()> {
-    let directory = data.join("sandbox/policies");
+    let directory = data.join(crate::data_paths::SANDBOX_POLICIES);
     let entries = match fs::read_dir(&directory) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -57,7 +57,7 @@ pub(super) fn reconcile_policies(data: &Path) -> std::io::Result<()> {
         }
         Err(error) => return Err(error),
     };
-    let scratch_root = data.join("tmp/project-write");
+    let scratch_root = data.join(crate::data_paths::PROJECT_WRITE_TMP);
     for entry in entries {
         if let Err(error) = reconcile_policy(entry, &scratch_root) {
             eprintln!("sandbox policy reconciliation failed: {error}");

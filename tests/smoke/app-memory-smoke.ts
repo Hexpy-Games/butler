@@ -46,9 +46,11 @@ function inventory(state: string) {
   return { revision: 12, kinds: state === "unavailable" ? [] : kinds,
     operation: state === "cleanup-waiting" || state === "cleanup-running" ? { operation_id: operationId, phase: state === "cleanup-waiting" ? "preparing" : "removing", sequence: 1, bytes_reclaimed: 312 * 1024 ** 2 } : undefined };
 }
+// The App may be between live streams (the gateway ends one after stream.reconcile_required); deliver on the open one.
 async function emit(page: Page, phase: string, kind?: string) {
+  await page.waitForFunction(() => (window as unknown as { memorySmokeStreams: EventSource[] }).memorySmokeStreams.some(stream => stream.readyState === EventSource.OPEN));
   await page.evaluate(({ phase, operationId, kind }) => {
-    const streams = (window as unknown as { memorySmokeStreams: EventSource[] }).memorySmokeStreams;
+    const streams = (window as unknown as { memorySmokeStreams: EventSource[] }).memorySmokeStreams.filter(stream => stream.readyState === EventSource.OPEN);
     for (const stream of streams) stream.onmessage?.(new MessageEvent("message", { data: JSON.stringify({ id: 10001, type: "memory.operation", payload: { kind, operation_id: operationId, phase, sequence: 2, bytes_reclaimed: 512 * 1024 ** 2 } }) }));
   }, { phase, operationId, kind });
 }

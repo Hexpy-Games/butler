@@ -49,6 +49,17 @@ def fixture(path, platform='linux', kind='file', mode=0o555, checksum=None):
 
 class NativeArchiveSafety(unittest.TestCase):
     # test-category: security
+    def test_host_link_failure_has_clear_packaging_error(self):
+        for platform, architecture, inspection in (
+                ('darwin', 'arm64', ['arm64']),
+                ('linux', 'x64', ['Machine: Advanced Micro Devices X86-64', ''])):
+            with self.subTest(platform=platform), \
+                 patch.object(native.packager, 'inspect', side_effect=inspection), \
+                 patch.object(native.packager, 'check_path', side_effect=RuntimeError('outside allowed roots')):
+                with self.assertRaisesRegex(SystemExit, 'Host-link guard failed.*outside allowed roots'):
+                    native.packager.verify_binary(Path('agent'), platform, architecture)
+
+    # test-category: security
     def test_linux_helper_is_complete_and_macos_keeps_its_layout(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

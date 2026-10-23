@@ -8,7 +8,7 @@ mod lane;
 pub(super) mod metrics;
 mod operation;
 mod read_pool;
-mod schema;
+pub(in crate::gateway::application) mod schema;
 #[cfg(feature = "test-support")]
 pub mod testing;
 mod tuning;
@@ -354,7 +354,7 @@ fn run_connection_lane(
         let drained = checkpoint::close(checkpoint);
         return drained.and(close_connection(connection));
     }
-    let result = lane::run(&mut connection, receiver);
+    let result = lane::run(&mut connection, receiver, checkpoint.as_ref());
     let drained = checkpoint::close(checkpoint);
     let saved = metrics.save(path);
     let closed = close_connection(connection);

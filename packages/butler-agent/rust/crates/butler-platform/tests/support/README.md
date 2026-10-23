@@ -12,7 +12,7 @@ From a clean checkout, with `CARGO_TARGET_DIR`, `CARGO_HOME`, `RUSTUP_HOME`,
 `ORT_LIB_PATH` and `PROTOC` set to the existing build caches/tools, run:
 
 ```powershell
-.\rebuild-windows-sandbox-harness.ps1 -Destination C:\Users\yeonw\work\windows-sandbox-e2e
+.\rebuild-windows-sandbox-harness.ps1 -Destination C:\Users\tester\work\windows-sandbox-e2e
 ```
 
 The script builds only the agent, sandbox helper and E2E harness. It runs SSH row
@@ -36,7 +36,7 @@ published bundles, pins, requests and evidence.
 ## Start once, then request remotely
 
 In the owner's normal, non-admin desktop session, double-click
-`C:\Users\yeonw\work\windows-sandbox-e2e\start-desktop-runner.cmd` once. Leave the
+`C:\Users\tester\work\windows-sandbox-e2e\start-desktop-runner.cmd` once. Leave the
 visible console open. A process-scoped kill-on-close Job Object stops the matrix
 and its descendants when the console closes, including children without consoles.
 There is no installation, autostart, registry entry or scheduled task.

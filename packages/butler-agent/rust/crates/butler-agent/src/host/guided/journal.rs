@@ -58,7 +58,7 @@ impl JournalPort for GuidedJournal {
         Box::pin(async move {
             self.check_turn(invocation)?;
             Ok(TextCallDisposition::Continue(format!(
-                "You wrote these tool names as text: {}. They were not executed. Use the selected native tool-call definitions and schema-valid arguments, or answer directly when no tool is needed.",
+                "These tool calls were written as text and were not run: {}. Call the tool through the tool-call channel with one JSON object of arguments that matches its schema, or answer directly when no tool is needed.",
                 names.join(", ")
             )))
         })
@@ -114,6 +114,18 @@ impl JournalPort for GuidedJournal {
             let pending = result.output.as_ref().is_some_and(|value| {
                 value.field("authority_pending").ok().flatten() == Some("true")
             });
+            if pending {
+                // The binding ends at suspension; preserve completed declarations
+                // before its transient reader scope is released.
+                let workspace = invocation
+                    .turn
+                    .context
+                    .pointer("/executionPolicy/workspacePath")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("");
+                let closeout = closeout::collect(&self.journal, &self.turn_id, workspace).await?;
+                closeout::handoff(closeout, &self.turn_id).await?;
+            }
             Ok(pending.then_some(ToolOutcome::Suspend(SuspensionReason::AuthorityPending)))
         })
     }
@@ -141,16 +153,18 @@ impl JournalPort for GuidedJournal {
                 .and_then(serde_json::Value::as_str)
                 == Some("steward");
             if result.is_none() && !workers {
-                return Ok(closeout::without_pictured(own));
+                return closeout::handoff(closeout::without_pictured(own), &self.turn_id).await;
             }
             let child = self
                 .subsessions
                 .delivered_files(invocation.turn.session_id.clone(), result, workers)
                 .await
                 .map_err(BtccError::from)?;
-            Ok(closeout::without_pictured(closeout::merge_files(
-                child, own,
-            )))
+            closeout::handoff(
+                closeout::without_pictured(closeout::merge_files(child, own)),
+                &self.turn_id,
+            )
+            .await
         })
     }
 }

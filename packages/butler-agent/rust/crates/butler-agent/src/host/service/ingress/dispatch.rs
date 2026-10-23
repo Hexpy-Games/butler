@@ -14,6 +14,8 @@ use super::{
 };
 use crate::host::service::restart_handoff::RestartHandoff;
 use butler_gateway::gateway::{ClaimedInboundEvent, InboundQueue, QueuedInboundEvent};
+#[cfg(feature = "e2e-fixtures")]
+use butler_turn::btcc::pause_for_test;
 use butler_turn::btcc::{Btcc, StopRequest, TurnOutcomeKind};
 use butler_turn::workspace::SessionBindingStore;
 
@@ -96,7 +98,10 @@ pub(super) fn eligible_for_claim(
     batch_sessions.insert(session)
 }
 
-pub(super) async fn one(item: ClaimedInboundEvent, deps: DispatchDependencies) -> IngressPoll {
+mod trace;
+pub(super) use trace::one;
+
+async fn one_traced(item: ClaimedInboundEvent, deps: DispatchDependencies) -> IngressPoll {
     let DispatchDependencies {
         shutdown,
         queue,
@@ -136,6 +141,7 @@ pub(super) async fn one(item: ClaimedInboundEvent, deps: DispatchDependencies) -
     match result {
         Ok(executed) => handled(&item, executed, &queue, &restart_handoff).await,
         Err(error) => {
+            tracing::error!(category = "turn", event = "turn.failed", error = %error, "Turn dispatch failed");
             let subsessions = subsessions.as_ref();
             let poll = failed(
                 &item,
@@ -167,6 +173,10 @@ async fn failed(
     delivery: &dyn IngressDelivery,
     subsessions: &butler_turn::btcc::SubsessionService,
 ) -> IngressPoll {
+    #[cfg(feature = "e2e-fixtures")]
+    if let Ok(envelope) = Envelope::from_record(&item.record) {
+        pause_for_test("dispatch_failed", bind::routed_turn_id(&envelope)).await;
+    }
     // BTCC supplies a stable code here, never the provider body or prompt.
     // Keep that cause observable when the outer queue error is generic.
     if error.code == "inbound_turn_interrupted"
@@ -373,7 +383,7 @@ async fn execute(
             .pointer("/metadata/kind")
             .and_then(serde_json::Value::as_str)
             == Some("final_result");
-        if !delivery.deliver(binding.session_id.clone(), action).await? {
+        if !trace::deliver(delivery, &binding.session_id, action).await? {
             return Err(super::IngressError::new(
                 "inbound_delivery_interrupted",
                 "App result delivery unavailable",

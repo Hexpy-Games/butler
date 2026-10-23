@@ -9,9 +9,11 @@ use std::sync::Arc;
 #[derive(Clone, Copy)]
 pub(super) enum Handler {
     NotFound,
+    DataReset,
     Authority,
     Automations,
     Browser,
+    BrowserStills,
     Cancel,
     Controls,
     Artifacts,
@@ -60,12 +62,25 @@ pub(super) enum Handler {
     Space,
     Subsessions,
     TaskGraphs,
+    WorkModel,
     Updates,
     Wallpapers,
     #[cfg(feature = "e2e-fixtures")]
     Expire,
     #[cfg(feature = "e2e-fixtures")]
     LogWriter,
+}
+impl Handler {
+    pub(super) fn action(self, method: &axum::http::Method) -> Option<&'static str> {
+        use axum::http::Method;
+        match (self, method) {
+            (Self::Messages, &Method::POST) => Some("message.send"),
+            (Self::Cancel, &Method::POST) => Some("turn.cancel"),
+            (Self::Retry, &Method::POST) => Some("turn.retry"),
+            (Self::Controls, &Method::PATCH) => Some("session.controls"),
+            _ => None,
+        }
+    }
 }
 pub(super) fn routes() -> Router<Arc<HttpState>> {
     let mut router = Router::new();
@@ -81,6 +96,7 @@ pub(crate) fn templates() -> Vec<&'static str> {
 const ROUTES: &[(&str, Handler)] = &[
     ("/authority-requests", Handler::Authority),
     ("/app-info", Handler::Shell),
+    ("/data/reset", Handler::DataReset),
     ("/archives", Handler::Shell),
     ("/artifacts", Handler::Artifacts),
     ("/authority-permissions", Handler::Authority),
@@ -110,7 +126,6 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/context-details", Handler::Subsessions),
     ("/credentials", Handler::Setup),
     ("/credentials/{id}", Handler::Setup),
-    ("/developer-logs", Handler::Monitors),
     ("/events", Handler::Events),
     ("/events/live", Handler::Live),
     ("/favicons", Handler::Favicons),
@@ -119,6 +134,7 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/hooks/runs", Handler::Hooks),
     ("/hooks/{id}", Handler::Hooks),
     ("/hooks/{id}/test", Handler::Hooks),
+    ("/browser-stills/{id}", Handler::BrowserStills),
     ("/internal/browser-host", Handler::Browser),
     ("/internal/browser-host/downloads", Handler::Browser),
     ("/internal/browser-host/events", Handler::Browser),
@@ -156,6 +172,8 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/logs/export", Handler::Logs),
     ("/logs/live", Handler::Logs),
     ("/logs/storage", Handler::Logs),
+    ("/logs/trace", Handler::Logs),
+    ("/logs/trace/{trace_id}", Handler::Logs),
     ("/mcp-capabilities", Handler::Mcp),
     ("/mcp-servers", Handler::Mcp),
     ("/mcp-servers/{id}", Handler::Mcp),
@@ -193,6 +211,15 @@ const ROUTES: &[(&str, Handler)] = &[
         Handler::Personalization,
     ),
     ("/plans/{id}/task-graph", Handler::TaskGraphs),
+    ("/works/{id}/tasks", Handler::WorkModel),
+    ("/works/{id}/tasks/edits", Handler::WorkModel),
+    ("/projects/{id}/canon", Handler::WorkModel),
+    ("/canon/plans/{id}", Handler::WorkModel),
+    ("/canon/epics/{id}", Handler::WorkModel),
+    ("/projects/{id}/canon/plans", Handler::WorkModel),
+    ("/canon/plans/{id}/order", Handler::WorkModel),
+    ("/projects/{id}/canon/backlog/order", Handler::WorkModel),
+    ("/projects/{id}/canon/epics", Handler::WorkModel),
     ("/previews/{*path}", Handler::Preview),
     ("/project-sessions", Handler::ProjectSessions),
     ("/projects", Handler::Projects),

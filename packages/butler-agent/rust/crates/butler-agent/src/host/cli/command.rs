@@ -182,9 +182,13 @@ pub async fn main(args: Vec<OsString>, build_info: crate::BuildInfo) -> ExitCode
             return ExitCode::from(2);
         }
     };
-    Command::classify(&command_args)
+    let result = Command::classify(&command_args)
         .run(installation, command_args)
-        .await
+        .await;
+    if let Err(error) = butler_log::http::shutdown().await {
+        eprintln!("http_logging_close_failed: {error}");
+    }
+    result
 }
 
 fn print_version() -> ExitCode {

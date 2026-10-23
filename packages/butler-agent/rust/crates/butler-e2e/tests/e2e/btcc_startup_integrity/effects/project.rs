@@ -88,10 +88,7 @@ async fn scan_and_startup(mut s: Scenario) -> Result<(), HarnessError> {
     assert!(!path.with_extension("sqlite.corrupt").exists());
     assert!(!path.with_extension("sqlite.findings").exists());
     s.agent.terminate().await?;
-    std::fs::write(
-        path.with_extension("sqlite.corrupt"),
-        "agent_btcc_migration_reference_check_failed",
-    )?;
+    crate::btcc_corrupt_startup::write_verdict(&path, true)?;
     s.gw = s.agent.start_again().await?;
     assert!(s.gw.healthy().await);
     assert!(!path.with_extension("sqlite.corrupt").exists());

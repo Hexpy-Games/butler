@@ -42,6 +42,10 @@ pub(super) fn tool() -> ModelRoundTool {
 }
 
 pub(super) fn check(body: &Value) {
+    assert_eq!(
+        body["generationConfig"]["thinkingConfig"]["includeThoughts"],
+        true
+    );
     let declaration = &body["tools"][0]["functionDeclarations"][0];
     let projected = declaration
         .get("parametersJsonSchema")

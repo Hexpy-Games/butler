@@ -41,7 +41,14 @@ async fn execute(
         .await
         .map_err(|_| unavailable())?;
     if endpoint.is_none() {
-        gateway::require_stopped(data, installation).map_err(|_| unavailable())?;
+        let stopped_data = data.to_path_buf();
+        let stopped_installation = installation.clone();
+        tokio::task::spawn_blocking(move || {
+            gateway::require_stopped(&stopped_data, &stopped_installation)
+        })
+        .await
+        .map_err(|_| unavailable())?
+        .map_err(|_| unavailable())?;
     }
     let data = data.to_path_buf();
     let installation = installation.clone();
@@ -131,9 +138,9 @@ async fn online_request(
         .local_auth
         .token()
         .ok_or_else(unavailable)?;
-    let client = reqwest::Client::builder()
+    let client = butler_log::http::loopback()
         .timeout(Duration::from_secs(30))
-        .redirect(reqwest::redirect::Policy::none())
+        .redirect(butler_log::http::RedirectPolicy::none())
         .build()
         .map_err(|_| unavailable())?;
     let mut request = client

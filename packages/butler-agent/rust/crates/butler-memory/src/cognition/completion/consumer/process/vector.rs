@@ -98,7 +98,7 @@ async fn process_generation(
     };
     let Some((units, current)) = units else {
         if input.daily_batch {
-            finish_batch(input, generation).await;
+            maintain(input, generation, true).await;
         }
         return Ok(false);
     };
@@ -297,16 +297,6 @@ async fn embed_request(
     units: &[ClaimedVectorUnit],
 ) -> CognitionResult<crate::cognition::EmbeddingResult> {
     let deadline = epoch_ms().saturating_add(30_000);
-    let request_class = if input.daily_batch
-        || input.target.is_some()
-        || input
-            .vector_batch
-            .load(std::sync::atomic::Ordering::Acquire)
-    {
-        EmbeddingRequestClass::Background
-    } else {
-        EmbeddingRequestClass::WarmBackground
-    };
     let embedded = embedding
         .embed(
             EmbeddingRequest {
@@ -317,7 +307,7 @@ async fn embed_request(
                 mode: EmbeddingMode::CheckedCls,
                 resplit: true,
                 max_embeddings: Some(EMBED_TEXTS),
-                request_class,
+                request_class: EmbeddingRequestClass::WarmBackground,
                 deadline_at_epoch_ms: Some(deadline),
             },
             input.shutdown.child_token(),
@@ -376,9 +366,7 @@ async fn write_rows(
         }
     };
     let current = resolve_generation(&input.data_root, &input.environment, &target)?;
-    store
-        .upsert(&lease, &target, &current, rows, !input.daily_batch)
-        .await?;
+    store.upsert(&lease, &target, &current, rows).await?;
     assert_current(input, &current, units, Admission::Ignored)?;
     let final_generation = resolve_generation(&input.data_root, &input.environment, &target)?;
     if final_generation.generation_id != current.generation_id
@@ -394,24 +382,31 @@ async fn write_rows(
     graph.complete_vector_quantum(units, &receipts, &(input.clock)())?;
     graph.close()?;
     drop(lease);
+    if !input.daily_batch {
+        maintain(input, &current, false).await;
+    }
     Ok(())
 }
 
-/// The end of a daily or backfill drain: one compaction and one version prune
-/// for everything its batches wrote. Best effort; daily optimize repeats it.
-async fn finish_batch(input: &Input, generation: &MemoryGenerationHandle) {
-    let Ok(lease) = acquire(input, "memory-vector-maintain").await else {
-        return;
-    };
-    if assert_generation_current(input, generation, Admission::Required).is_err() {
+/// Maintenance never owns the write lease or delays shutdown. Cancellation
+/// can leave unreferenced fragments, but cannot roll back the rows/receipts
+/// already committed by write_rows. Lance's versioned compaction preserves
+/// concurrent inserts and updates; pruning keeps unverified files.
+async fn maintain(input: &Input, generation: &MemoryGenerationHandle, prune: bool) {
+    if input.shutdown.is_cancelled() {
         return;
     }
     let store = GenerationVectorStore::new(input.data_root.clone(), input.environment.clone());
-    if let Err(failure) = store
-        .maintain(&lease, &target(input, generation), generation)
-        .await
-    {
-        butler_core::diagnostic!("[memory-vector-batch] maintenance {}", failure.code());
+    let target = target(input, generation);
+    tokio::select! {
+        biased;
+        () = input.shutdown.cancelled() => {},
+        result = store.maintain(&target, generation, prune) => {
+            if let Err(failure) = result {
+                butler_core::diagnostic!("[memory-vector-batch] maintenance {}", failure.code());
+            }
+            input.coordinator.invalidate_inventory();
+        }
     }
 }
 

@@ -18,6 +18,7 @@ use butler_core::public_text::trim_js_whitespace;
 ///
 /// The object is persisted as `btcc_turns.context_json`; its key order and
 /// omission rules are part of that format.
+#[tracing::instrument(name = "context.build", level = "debug", skip_all, fields(sections = sections(assembly).count()), err)]
 pub(super) async fn snapshot(
     repositories: &BtccRepositories,
     binding: &StoredSessionBinding,
@@ -299,6 +300,9 @@ fn execution_policy(
 
 fn subsession_json(value: &SubsessionMetadata) -> Value {
     let mut out = Map::new();
+    if let Some(root) = &value.root_session_id {
+        out.insert("rootSessionId".into(), root.clone().into());
+    }
     out.insert("relationId".into(), value.relation_id.clone().into());
     out.insert("delegationId".into(), value.delegation_id.clone().into());
     out.insert("taskId".into(), value.task_id.clone().into());

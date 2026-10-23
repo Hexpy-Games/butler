@@ -13,6 +13,7 @@ interface LocalModelUnsavedGuardProps {
   modelId: string;
   displayName: string;
   context: string;
+  imageInputChanged: boolean;
 }
 
 export function useLocalModelUnsavedGuard({
@@ -24,6 +25,7 @@ export function useLocalModelUnsavedGuard({
   modelId,
   displayName,
   context,
+  imageInputChanged,
 }: LocalModelUnsavedGuardProps) {
   const setLeaveGuard = useSettingsUIStore((state) => state.setModelRouteLeaveGuard);
   const warning = appCopy.settings.localModels.unsavedChanges;
@@ -34,6 +36,7 @@ export function useLocalModelUnsavedGuard({
     isEditing &&
       baseline &&
       (apiKey !== undefined ||
+        imageInputChanged ||
         platform !== baseline.platform ||
         serverUrl !== baseline.serverUrl ||
         modelId !== baseline.modelId ||

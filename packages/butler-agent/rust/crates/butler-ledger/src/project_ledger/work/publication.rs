@@ -4,8 +4,8 @@ use std::future::Future;
 use serde_json::Value;
 
 use butler_turn::btcc::{
-    BtccError, ProjectWorkBinding, ProjectWorkObserveWork, ProjectWorkObserveWorks,
-    ProjectWorkOperationIdentity, ProjectWorkOperationKind,
+    BtccError, ProjectWorkBinding, ProjectWorkLocateInput, ProjectWorkObserveWork,
+    ProjectWorkObserveWorks, ProjectWorkOperationIdentity, ProjectWorkOperationKind,
 };
 
 use super::super::publication::{
@@ -36,6 +36,25 @@ impl ProjectWorkRepository {
             + Send
             + 'static,
     {
+        super::super::publication::timing::measure(
+            self.publish_inner(identity, prepare, projection),
+        )
+        .await
+    }
+
+    async fn publish_inner<F, Fut>(
+        &self,
+        identity: ProjectWorkOperationIdentity,
+        prepare: F,
+        projection: Projection,
+    ) -> Result<ProjectWorkPublicationOutcome, BtccError>
+    where
+        F: FnOnce() -> Fut + Send + 'static,
+        Fut: Future<Output = Result<Option<Vec<ProjectLedgerRecordUpdate>>, BtccError>>
+            + Send
+            + 'static,
+    {
+        let _phase = super::super::publication::timing::Phase::new("publication_with_projection");
         let outcome = self
             .shared
             .ledger
@@ -102,17 +121,40 @@ impl ProjectWorkRepository {
             if !sessions.insert(item.view.session_id.clone()) {
                 continue;
             }
-            let head = if item.manifest.get("sessionHead").and_then(Value::as_bool) == Some(true) {
-                item.clone()
-            } else {
-                self.relation_from_ids(&item.view.session_id, None, None)
-                    .await?
-                    .head
-                    .ok_or_else(|| invalid("project_work_session_head_invalid"))?
+            let head = match affected.iter().find(|candidate| {
+                candidate.view.session_id == item.view.session_id
+                    && candidate
+                        .manifest
+                        .get("sessionHead")
+                        .and_then(Value::as_bool)
+                        == Some(true)
+            }) {
+                Some(head) => head.clone(),
+                None => self.projected_session_head(&item.view.session_id).await?,
             };
             heads.push((item.view.session_id.clone(), head));
         }
         Ok(heads)
+    }
+
+    async fn projected_session_head(&self, session_id: &str) -> Result<Snapshot, BtccError> {
+        let located = self
+            .shared
+            .projection
+            .locate_canonical_works(ProjectWorkLocateInput {
+                scope: self.scope.clone(),
+                session_id: Some(session_id.to_owned()),
+                turn_id: None,
+            })
+            .await?;
+        self.relation_from_ids(
+            session_id,
+            None,
+            located.session_head_work_id.map(|id| vec![id]),
+        )
+        .await?
+        .head
+        .ok_or_else(|| invalid("project_work_session_head_invalid"))
     }
 }
 

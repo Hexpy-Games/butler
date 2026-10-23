@@ -461,6 +461,7 @@
 | Offer a secondary action next to a primary one | `Button` |  |
 | Offer copy or branch actions on messages without a visible button | `ContextMenu` |  |
 | One action | `Button` | `SplitButton` |
+| One chat's usage with its subtask share: pass each segment's subtask value; it is drawn hatched on top of the segment | `UsageBars` |  |
 | One group in the inspector | `InspectorPanel` | `InspectorShell` |
 | One list of documents | `CardList` | `KanbanBoard` |
 | One message | `MessageRow` | `ConversationShell` |
@@ -871,7 +872,7 @@ A compact single-choice radiogroup that changes what one panel shows.
 - Not for: Switching between panels of content → `Tabs`
 - Not for: More than five options or long labels → `Select`
 - Not for: An on/off setting → `Switch`
-- Tokens: `--selection`, `--radius-control`, `--motion-fast`, `--control-height-sm`
+- Tokens: `--selection`, `--radius-control`, `--motion-fast`, `--control-height-md`, `--control-height-xs`, `--control-hit-target`
 
 ### Select
 
@@ -973,7 +974,7 @@ A non-modal glass layer anchored to a control, for choosers and small panels.
 - Not for: A plain list of actions → `DropdownMenu`
 - Not for: A task that needs focus and a backdrop → `Dialog`
 - Not for: A label that explains a control → `Tooltip`
-- Tokens: `--tinted-glass-bg`, `--radius-popover`, `--motion-enter-overlay`, `--motion-scale-menu`, `--z-popover`
+- Tokens: `--tinted-glass-bg`, `--radius-popover`, `--motion-enter-overlay`, `--motion-exit-fast`, `--motion-scale-menu`, `--motion-distance-md`, `--popover-sheet-gutter`, `--z-popover`
 
 ### Tooltip
 
@@ -1011,7 +1012,7 @@ Switches between sibling panels of content in the same place.
 - Use for: Page sections with the line variant
 - Not for: Filtering or changing what one panel shows → `SegmentedControl`
 - Not for: Navigating to another page → `NavRow`
-- Tokens: `--selection`, `--radius-control`, `--tabs-line-indicator-gap`, `--motion-fast`
+- Tokens: `--selection`, `--radius-control`, `--tabs-line-indicator-gap`, `--motion-fast`, `--focus-ring`, `--focus-ring-room`
 
 ## Components · Layout
 
@@ -1101,7 +1102,7 @@ Layout item props (grow, shrink, basis, minWidth, alignSelf, span, invisible) th
 - Use for: Reserve space for a hidden item
 - Not for: Padding or a surface → `Box`
 - Not for: Spacing between siblings → `Stack`
-- Tokens: `--layout-basis-xs`, `--layout-basis-sm`, `--layout-basis-md`, `--layout-basis-lg`
+- Tokens: `--layout-basis-xs`, `--layout-basis-sm`, `--layout-basis-md`, `--layout-basis-lg`, `--layout-max-width-field`, `--layout-wrap-width-field`
 
 ### PageContainer
 
@@ -2265,7 +2266,7 @@ A label/value fact row with optional description, meta and a swatch bound to the
 - Use for: A chart legend row with a value
 - Not for: Two to five facts on one line → `MetaList`
 - Not for: A row with a title and trailing meta that is not a fact → `ListRow`
-- Tokens: `--context-chart-1`, `--context-chart-2`, `--text-secondary`, `--space-xs`
+- Tokens: `--context-chart-1`, `--context-chart-2`, `--context-chart-5`, `--hatch-alpha`, `--text-secondary`, `--space-xs`, `--focus-ring-room`
 
 ### ProgressMeter
 
@@ -2639,11 +2640,12 @@ Stacked usage columns over time (tokens per hour or day) with a keyboard- and po
 
 - Use for: Token or request usage over time in the context popover (size popover) or a usage page (size panel)
 - Use for: Usage split into stacked parts (new input, cached, output) per time bucket
+- Use for: One chat's usage with its subtask share: pass each segment's subtask value; it is drawn hatched on top of the segment
 - Not for: A single share of a budget → `ProgressMeter`
 - Not for: Totals as rows without a time axis → `UsageSummaryRows`
 - Not for: Activity per calendar day over weeks → `ActivityHeatmap`
 - Not for: Generic multi-series charts with legends and tooltips → `Chart`
-- Tokens: `--context-chart-1`, `--context-chart-2`, `--context-chart-5`, `--chart-height-panel`, `--line`, `--text-tertiary`, `--focus-ring-room`, `--focus-ring-width`, `--motion-deliberate`, `--motion-slow`, `--motion-fast`
+- Tokens: `--context-chart-1`, `--context-chart-2`, `--context-chart-5`, `--chart-height-panel`, `--line`, `--text-tertiary`, `--focus-ring-room`, `--focus-ring-width`, `--hatch-alpha`, `--motion-deliberate`, `--motion-slow`, `--motion-base`, `--motion-fast`
 
 ## Blocks · Documents & Artifacts
 

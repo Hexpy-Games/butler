@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/app/api";
 import { appCopy, useAppLocale } from "@/app/copy";
 import type { UsageMonitorView } from "@/app/types";
-import { RefreshCcw, IconButton, Inline, SegmentedControl, Stack, Typo, UsageBars } from "@/butler-ds";
+import { RefreshCcw, IconButton, Inline, SegmentedControl, Stack, Typo, UsageBars, type UsageBarsEmphasis } from "@/butler-ds";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 import { UsageReadout } from "../usage/UsageReadout";
-import { usageClock, usageShare, usageReadout, usageSeries, usageTimeline, usageTokens } from "../usage/usageTimeline";
+import { usageClock, usageParts, usageShare, usageReadout, usageSeries, usageTimeline, usageTokens } from "../usage/usageTimeline";
 import { UsageBreakdown } from "./UsageBreakdown";
 import { UsageSessionSelect, usageSessionTitle } from "./UsageSessionSelect";
 import { UsageProviderPanel } from "./UsageProviderPanel";
@@ -71,6 +71,8 @@ export function UsageSettings() {
   const selected = selection.scope === scope ? selection.index : null;
   const timeline = useMemo(() => usageTimeline(result.view, 31), [result.view, locale]);
   const bucket = selected === null ? undefined : timeline.buckets[selected];
+  const parts = usageParts(result.view, bucket, true);
+  const [emphasis, setEmphasis] = useState<UsageBarsEmphasis | null>(null);
   const copy = appCopy.composer.usage;
   const ranges = [{ value: "24", label: copy.day }, { value: "168", label: copy.week }, { value: "720", label: copy.month }];
   const sessions = [...(result.allView?.topSessions ?? result.view?.topSessions ?? [])];
@@ -83,7 +85,7 @@ export function UsageSettings() {
       state={result.error && !result.view ? "error" : "ready"} errorMessage={appCopy.interfacePanels.usageFailed} onRetry={refresh}>
       <Stack gap="lg">
         <Inline justify="between" cross="start" gap="md" wrap>
-          <Stack grow basis="md" gap="xs" minWidth="0"><Typo.Caption>{copy.chats}</Typo.Caption>
+          <Stack grow basis="md" gap="xs" minWidth="0" maxWidth="field"><Typo.Caption>{copy.chats}</Typo.Caption>
             <UsageSessionSelect triggerRef={pickerTrigger} open={pickerOpen} onOpenChange={setPickerOpen} range={ranges.find(r => r.value === String(hours))!.label} sessions={sessions} value={session} onChange={setSession} /></Stack>
           <Stack gap="xs" grow><Typo.Caption>{copy.period}</Typo.Caption>
             <Inline justify="between" cross="center" gap="md">
@@ -94,8 +96,9 @@ export function UsageSettings() {
         </Inline>
         <UsageReadout view={result.view} values={usageReadout(result.view, bucket)} label={bucket?.label ?? label}
           panel selected={Boolean(bucket)} showCost delta={periodDelta(result.view, hours)} share={session && result.allView?.model.totalTokens
-            ? usageShare((result.view?.model.totalTokens ?? 0) / result.allView.model.totalTokens) : undefined} />
-        <UsageBars {...timeline} series={usageSeries()} size="panel" yTicks={{ format: usageTokens }} selectedIndex={selected}
+            ? usageShare((result.view?.model.totalTokens ?? 0) / result.allView.model.totalTokens) : undefined}
+          parts={parts} onEmphasis={setEmphasis} />
+        <UsageBars {...timeline} series={usageSeries()} size="panel" yTicks={{ format: usageTokens }} selectedIndex={selected} emphasis={parts ? emphasis : null}
           onSelect={index => setSelection({ scope, index })} state={!result.view ? "loading" : "ready"}
           emptyLabel={copy.noUsage} loadingLabel={copy.loading} ariaLabel={copy.chartLabel} />
         <UsageBreakdown loading={!result.view} onShowAll={showAll} view={result.view} sessions={sessions} allTotal={result.allView?.model.totalTokens ?? 0} selected={session} onSelect={setSession} />

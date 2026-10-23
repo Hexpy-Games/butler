@@ -19,6 +19,7 @@ pub struct Query {
     pub trace_id: Option<String>,
     pub turn_id: Option<String>,
     pub chat_id: Option<String>,
+    pub message_id: Option<String>,
     pub since: Option<String>,
     pub until: Option<String>,
     pub cursor: Option<String>,
@@ -34,6 +35,7 @@ impl Default for Query {
             trace_id: None,
             turn_id: None,
             chat_id: None,
+            message_id: None,
             since: None,
             until: None,
             cursor: None,
@@ -73,6 +75,7 @@ impl Query {
                 ("trace", &self.trace_id),
                 ("turn", &self.turn_id),
                 ("chat", &self.chat_id),
+                ("message", &self.message_id),
             ]
             .into_iter()
             .all(|(kind, id)| id.as_ref().is_none_or(|id| b.contains(kind, id)))
@@ -96,6 +99,10 @@ impl Query {
             ]
             .into_iter()
             .all(|(q, r)| q.as_ref().is_none_or(|q| Some(q) == r.as_ref()))
+            && self
+                .message_id
+                .as_deref()
+                .is_none_or(|id| r.attrs["message_id"].as_str() == Some(id))
             && self
                 .q
                 .as_ref()
@@ -146,7 +153,14 @@ impl Reader {
             if *scanned + b.len > SCAN_LIMIT {
                 return Ok(false);
             }
-            let mut file = File::open(&self.path)?;
+            let mut file = match File::open(&self.path) {
+                Ok(file) => file,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                    self.pos = 0;
+                    return Ok(true);
+                }
+                Err(error) => return Err(error),
+            };
             file.seek(SeekFrom::Start(b.offset))?;
             let mut bytes = vec![0; usize::try_from(b.len).map_err(io::Error::other)?];
             file.read_exact(&mut bytes)?;
@@ -168,6 +182,14 @@ impl Reader {
     }
 }
 pub(crate) fn query(root: &Path, catalog: &Catalog, q: &Query) -> io::Result<Page> {
+    query_bounded(root, catalog, q, 200)
+}
+pub(crate) fn query_bounded(
+    root: &Path,
+    catalog: &Catalog,
+    q: &Query,
+    maximum: usize,
+) -> io::Result<Page> {
     let mut normalized = q.clone();
     normalized.since = timestamp(q.since.as_deref())?;
     normalized.until = timestamp(q.until.as_deref())?;
@@ -224,9 +246,9 @@ pub(crate) fn query(root: &Path, catalog: &Catalog, q: &Query) -> io::Result<Pag
             front: None,
         });
     }
-    merge(readers, q, filter)
+    merge(readers, q, filter, maximum)
 }
-fn merge(mut readers: Vec<Reader>, q: &Query, filter: String) -> io::Result<Page> {
+fn merge(mut readers: Vec<Reader>, q: &Query, filter: String, maximum: usize) -> io::Result<Page> {
     let mut rows = Vec::new();
     let mut scanned = 0;
     loop {
@@ -249,7 +271,7 @@ fn merge(mut readers: Vec<Reader>, q: &Query, filter: String) -> io::Result<Page
             readers[next].pos = offset;
             rows.push(row);
         }
-        if rows.len() >= q.limit.clamp(1, 200) {
+        if rows.len() >= q.limit.clamp(1, maximum) {
             break;
         }
     }

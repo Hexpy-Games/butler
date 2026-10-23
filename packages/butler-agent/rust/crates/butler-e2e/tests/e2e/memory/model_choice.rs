@@ -241,6 +241,12 @@ async fn mem_off_then_on_backfills_then_off_releases() -> Result<(), HarnessErro
         Ok(s.gw.get("/setup/readiness").await?.data()["memory_model"]["state"] == "ready")
     })
     .await?;
+    // Model selection downloads assets; only user demand loads the worker.
+    assert_eq!(count(&graph, COMPLETE), 0);
+    if let Some(workers) = embedding_workers(&s)? {
+        assert_eq!(workers, 0, "model selection must not load a worker");
+    }
+    finds(&s, ASK, "청자비밀번호").await?;
     let open = "SELECT COUNT(*) FROM memory_vector_units WHERE state IN ('pending','running')";
     wait(Duration::from_secs(300), || async {
         Ok(count(&graph, open) == 0 && count(&graph, COMPLETE) > 0)

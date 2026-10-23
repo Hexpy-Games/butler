@@ -270,6 +270,7 @@ fn boolean_settings(input: &Map<String, Value>, output: &mut Map<String, Value>)
         "plan_mode_default",
         "translucent_sidebar",
         "collapse_message_box",
+        "show_thinking",
         "reduce_motion",
         "diagnostics_enabled",
         "command_sandbox_enabled",

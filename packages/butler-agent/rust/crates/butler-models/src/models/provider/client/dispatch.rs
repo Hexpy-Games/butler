@@ -4,12 +4,13 @@ use super::*;
 pub(super) struct PreparedHttp<'a> {
     pub body: Option<serde_json::Value>,
     pub capability_revision: Option<String>,
-    pub http: reqwest::RequestBuilder,
+    pub http: butler_log::http::RequestBuilder,
     pub serialized_bytes: usize,
     pub admission: request_admission::PreparedRequestAdmission<'a>,
     pub trace: super::super::request_trace::RequestTrace,
     pub continuation: Option<super::super::continuation::LegacyProjection>,
     pub identity: Option<serde_json::Value>,
+    pub summary: bool,
     pub thinking_binding: Option<super::super::anthropic_thinking::Binding>,
 }
 
@@ -20,6 +21,7 @@ impl ModelProvider {
         config: &'a super::super::ProviderRequestConfig,
         route: (serialize::Carrier, transport::ResponseMode, &'static str),
         include_usage: bool,
+        include_summary: bool,
     ) -> Result<PreparedHttp<'a>, ModelRoundError> {
         let (carrier, mode, api) = route;
         let serialize::PreparedBody {
@@ -28,6 +30,14 @@ impl ModelProvider {
             continuation,
             thinking_binding,
         } = serialize::body_with_visual(request, config, carrier).await?;
+        if (!include_summary || !self.summaries.supported(config))
+            && config.metadata.provider_id == "openai"
+            && let Some(reasoning) = body["reasoning"].as_object_mut()
+        {
+            reasoning.remove("summary");
+        }
+        let summary =
+            super::super::thinking_summary::requested(&body, &config.metadata.provider_id);
         if !include_usage && let Some(body) = body.as_object_mut() {
             body.remove("stream_options");
         }
@@ -68,6 +78,7 @@ impl ModelProvider {
             trace,
             continuation,
             thinking_binding,
+            summary,
             identity: provider_cache_identity,
         })
     }
@@ -125,6 +136,7 @@ impl ModelProvider {
                 body: prepared.body,
                 capability_revision: prepared.capability_revision,
                 carrier,
+                summary: prepared.summary,
                 continuation: prepared.continuation,
                 thinking_binding: prepared.thinking_binding,
                 identity: prepared.identity,

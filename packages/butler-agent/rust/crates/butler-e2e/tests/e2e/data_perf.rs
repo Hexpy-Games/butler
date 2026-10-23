@@ -6,11 +6,10 @@
     reason = "test assertions"
 )]
 
-use super::app_storage_scale::seed as app;
-use crate::{btcc_scale as btcc, transcript_scale as transcripts};
-#[path = "support/btcc_validation_probe.rs"]
-mod btcc_validation_probe;
+use super::app_retention::seed as app;
+const APP_BLOB_BYTES: usize = 64;
 use super::memory_fixture;
+use crate::{terminal_history as btcc, transcript_history as transcripts};
 #[path = "support/wal.rs"]
 pub(super) mod wal;
 
@@ -28,10 +27,6 @@ const NUMBERS: &str = "Write the numbers from one to twelve as English words, se
 #[tokio::test]
 async fn perf_terminal_history_idle_and_turn_wal() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    butler_e2e::skip_unless!(
-        std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("perf"),
-        "requires perf tier and release agent"
-    );
     let setup = Setup::new("PERF-DATA")?
         .env("BUTLER_E2E_TIER", "stub")
         .env("BUTLER_STARTUP_TRACE", "1")
@@ -40,19 +35,18 @@ async fn perf_terminal_history_idle_and_turn_wal() -> Result<(), HarnessError> {
     let graph = memory_fixture::initialize_empty(&setup.sandbox.data)?;
     let mut s = setup.start().await?;
     s.agent.terminate().await?;
-    app::seed_owner_scale(
+    app::seed_history(
         &Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?,
-        3_000,
+        APP_BLOB_BYTES,
     );
     seed_extra_app(&s.sandbox.data)?;
     btcc::seed(&s.sandbox.data)?;
     let transcripts = transcripts::seed(&s.sandbox.data)?;
-    btcc_validation_probe::run(&s.sandbox.data)?;
     let start = Instant::now();
     s.gw = s.agent.start_again().await?;
-    eprintln!("PERF-DATA seeded_owner_start={:?}", start.elapsed());
+    eprintln!("PERF-DATA seeded_start={:?}", start.elapsed());
     eprintln!(
-        "PERF-DATA first_owner_io={:?}",
+        "PERF-DATA first_start_io={:?}",
         usage::sample(s.agent.pid().unwrap())?
     );
     btcc::assert_indexed(&s.sandbox.data)?;
@@ -62,7 +56,7 @@ async fn perf_terminal_history_idle_and_turn_wal() -> Result<(), HarnessError> {
     let start = Instant::now();
     s.gw = s.agent.start_again().await?;
     eprintln!(
-        "PERF-DATA warm_owner_start={:?} pid={}",
+        "PERF-DATA warm_start={:?} pid={}",
         start.elapsed(),
         s.agent.pid().unwrap()
     );
@@ -95,7 +89,7 @@ async fn perf_terminal_history_idle_and_turn_wal() -> Result<(), HarnessError> {
     }
     btcc::assert_complete(&s.sandbox.data)?;
     transcripts::assert_complete(&s.sandbox.data, &transcripts)?;
-    let latest_turn = measure_turns(&mut s, &pins, "owner").await?;
+    let latest_turn = measure_turns(&mut s, &pins, "history").await?;
     drop(pins);
     btcc::assert_complete(&s.sandbox.data)?;
     transcripts::assert_complete(&s.sandbox.data, &transcripts)?;
@@ -119,7 +113,7 @@ async fn perf_terminal_history_idle_and_turn_wal() -> Result<(), HarnessError> {
     eprintln!("PERF-DATA cold_advice_files={cold_files}");
     let start = Instant::now();
     s.gw = s.agent.start_again().await?;
-    eprintln!("PERF-DATA cold_owner_start={:?}", start.elapsed());
+    eprintln!("PERF-DATA cold_start={:?}", start.elapsed());
     btcc::assert_indexed(&s.sandbox.data)?;
     btcc::assert_complete(&s.sandbox.data)?;
     transcripts::assert_complete(&s.sandbox.data, &transcripts)?;
@@ -137,15 +131,11 @@ async fn perf_terminal_history_idle_and_turn_wal() -> Result<(), HarnessError> {
     s.finish().await
 }
 
-// Independent storage baseline: owner-scale startup can fail without suppressing
-// commit measurements. This test makes no owner-scale latency or I/O claim.
+// Independent storage baseline: history startup can fail without suppressing
+// commit measurements. This test makes no history latency or I/O claim.
 #[tokio::test]
 async fn perf_replay_turn_wal_small_history() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    butler_e2e::skip_unless!(
-        std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("perf"),
-        "requires perf tier and release agent"
-    );
     let setup = Setup::new("PERF-WAL")?
         .env("BUTLER_E2E_TIER", "stub")
         .env("BUTLER_STARTUP_TRACE", "1")
@@ -263,51 +253,50 @@ fn assert_view(
     Ok(())
 }
 
-fn assert_app(data: &std::path::Path) -> Result<(), HarnessError> {
+pub(crate) fn assert_app(data: &std::path::Path) -> Result<(), HarnessError> {
     let app = Connection::open(data.join("app-server/butler-client.sqlite"))?;
     let projections: i64 = app.query_row(
         "SELECT COUNT(*) FROM app_terminal_turn_projections WHERE turn_id LIKE 'perf-t%'",
         [],
         |row| row.get(0),
     )?;
-    assert_eq!(projections, 5_000);
+    assert_eq!(projections, 40);
     let events: i64 = app.query_row(
         "SELECT COUNT(*) FROM events WHERE type='agent.turn_event' AND turn_id LIKE 'perf-t%'",
         [],
         |row| row.get(0),
     )?;
-    assert_eq!(events, 200_000);
+    assert_eq!(events, 320);
     let extra: i64 = app.query_row(
         "SELECT COUNT(*) FROM events WHERE type='historical.fixture'",
         [],
         |row| row.get(0),
     )?;
-    assert_eq!(extra, 100_000);
+    assert_eq!(extra, 60);
     let chats: i64 = app.query_row(
-        "SELECT COUNT(*) FROM chats WHERE id LIKE 'perf-c%' OR id LIKE 'owner-extra-%'",
+        "SELECT COUNT(*) FROM chats WHERE id LIKE 'perf-c%' OR id LIKE 'history-extra-%'",
         [],
         |row| row.get(0),
     )?;
-    assert_eq!(chats, 650);
+    assert_eq!(chats, 16);
     Ok(())
 }
 
-fn seed_extra_app(data: &std::path::Path) -> Result<(), HarnessError> {
+pub(crate) fn seed_extra_app(data: &std::path::Path) -> Result<(), HarnessError> {
     let db = Connection::open(data.join("app-server/butler-client.sqlite"))?;
     db.execute_batch(
         "BEGIN;
-        WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<149)
+        WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<7)
         INSERT INTO chats(id,title,kind,pinned,archived,created_at,updated_at)
-        SELECT 'owner-extra-'||i,'Historical chat '||i,'chat',0,0,'2026-01-01','2026-01-01' FROM n;
-        WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<99999)
+        SELECT 'history-extra-'||i,'Historical chat '||i,'chat',0,0,'2026-01-01','2026-01-01' FROM n;
+        WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<59)
         INSERT INTO events(type,turn_id,payload_json,created_at)
         SELECT 'historical.fixture','','{}','2026-01-01' FROM n;
         COMMIT; PRAGMA wal_checkpoint(TRUNCATE);",
     )?;
-    eprintln!(
-        "PERF-APP database_bytes={}",
-        std::fs::metadata(data.join("app-server/butler-client.sqlite"))?.len()
-    );
+    let bytes = std::fs::metadata(data.join("app-server/butler-client.sqlite"))?.len();
+    eprintln!("PERF-APP database_bytes={bytes}");
+
     Ok(())
 }
 

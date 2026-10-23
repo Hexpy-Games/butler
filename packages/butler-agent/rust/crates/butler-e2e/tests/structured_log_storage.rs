@@ -218,131 +218,6 @@ fn logs_never_contain_secrets() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn perf_logs_owner_scale_query() -> Result<(), Box<dyn std::error::Error>> {
-    butler_e2e::gate!();
-    let root = root();
-    let log = Logger::open(&root, Config::full()).unwrap();
-    let padding = "x".repeat(54);
-    let mut errors = Vec::new();
-    let mut oldest_turn = Vec::new();
-    let mut ground = Vec::new();
-    let mut newest_ground = Vec::new();
-    for n in 0..1_250_000 {
-        let level = if n % 100_003 == 0 {
-            "ERROR"
-        } else if n % 5 == 0 {
-            "INFO"
-        } else {
-            "DEBUG"
-        };
-        let mut r = record(n, level);
-        r.attrs = json!({"padding":padding});
-        if n % 100 == 1 {
-            use sha2::{Digest, Sha256};
-            use std::fmt::Write;
-            let mut content = String::with_capacity(44800);
-            for i in 0..700 {
-                write!(&mut content, "{:x}", Sha256::digest(format!("{n}:{i}"))).unwrap();
-            }
-            r.content = Some(json!(content));
-        }
-        if level == "ERROR" {
-            errors.push(r.msg.clone());
-        }
-        if r.turn_id.as_deref() == Some("turn-1") {
-            oldest_turn.push(r.msg.clone());
-        }
-        if n >= 1_249_800 {
-            newest_ground.push(r.clone());
-        }
-        ground.push(r.msg.clone());
-        log.record_reliable(r).unwrap();
-    }
-    log.shutdown().unwrap();
-    let log = Logger::open(&root, Config::full()).unwrap();
-    let stores = log.storage().unwrap();
-    for (id, minimum) in [
-        ("agent/main", 60 * 1024 * 1024),
-        ("agent/debug", 240 * 1024 * 1024),
-        ("agent/bodies", 240 * 1024 * 1024),
-    ] {
-        let store = stores.stores.iter().find(|s| s.id == id).unwrap();
-        assert!(
-            store.bytes >= minimum && store.bytes <= store.limit_bytes,
-            "{id}: {}",
-            store.bytes
-        );
-        eprintln!("LOG-PERF-01 store={id} bytes={}", store.bytes);
-    }
-    let start = Instant::now();
-    let page = log.query(&Query::default()).unwrap();
-    assert_eq!(
-        page.rows.iter().map(|r| r.msg.clone()).collect::<Vec<_>>(),
-        ground.iter().rev().take(200).cloned().collect::<Vec<_>>()
-    );
-    assert!(page.scanned_bytes <= 32 * 1024 * 1024);
-    for (row, expected) in page.rows.iter().zip(newest_ground.iter().rev()) {
-        let mut actual = serde_json::to_value(row)?;
-        let mut original = serde_json::to_value(expected)?;
-        for key in ["content", "content_len", "content_hash", "body_ref"] {
-            actual.as_object_mut().unwrap().remove(key);
-            original.as_object_mut().unwrap().remove(key);
-        }
-        assert_eq!(actual, original, "complete metadata survives query");
-        assert!(row.content.is_none());
-        if let Some(content) = &expected.content {
-            use sha2::{Digest, Sha256};
-            let bytes = serde_json::to_vec(content)?;
-            assert_eq!(row.content_len, Some(bytes.len()));
-            assert_eq!(
-                row.content_hash.as_deref(),
-                Some(&format!("{:x}", Sha256::digest(&bytes))[..8])
-            );
-            let body = log.body(row.body_ref.as_deref().unwrap())?;
-            assert_eq!(
-                serde_json::from_slice::<serde_json::Value>(&body)?,
-                *content
-            );
-        } else {
-            assert!(
-                row.body_ref.is_none() && row.content_len.is_none() && row.content_hash.is_none()
-            );
-        }
-    }
-
-    let turn = walk(
-        &log,
-        Query {
-            turn_id: Some("turn-1".into()),
-            ..Query::default()
-        },
-    );
-    assert_eq!(
-        turn.iter().map(|r| r.msg.clone()).collect::<Vec<_>>(),
-        oldest_turn.into_iter().rev().collect::<Vec<_>>()
-    );
-    let rows = walk(
-        &log,
-        Query {
-            level: Some("ERROR".into()),
-            ..Query::default()
-        },
-    );
-    assert_eq!(
-        rows.iter().map(|r| r.msg.clone()).collect::<Vec<_>>(),
-        errors.into_iter().rev().collect::<Vec<_>>()
-    );
-    butler_e2e::assert_wall_clock_budget!(start.elapsed(), Duration::from_secs(5), "LOG-PERF-01");
-    eprintln!(
-        "LOG-PERF-01 rows=1250000 latest_scanned_bytes={}",
-        page.scanned_bytes
-    );
-    log.shutdown().unwrap();
-    fs::remove_dir_all(root).unwrap();
-    Ok(())
-}
-
-#[test]
 fn logs_tracing_updates_filters_and_inherits_span_ids() -> Result<(), Box<dyn std::error::Error>> {
     butler_e2e::gate!();
     use std::sync::{
@@ -402,7 +277,11 @@ fn logs_tracing_updates_filters_and_inherits_span_ids() -> Result<(), Box<dyn st
         })
         .unwrap()
         .rows;
-    assert_eq!(rows.len(), 2);
+    assert_eq!(rows.len(), 3);
+    assert!(
+        rows.iter()
+            .any(|row| row.event == "span.start" && row.msg == "turn")
+    );
     for row in &rows {
         assert_eq!(row.span_id.as_deref(), Some("span-context"));
         assert_eq!(row.parent_span_id.as_deref(), Some("parent-context"));
@@ -438,15 +317,54 @@ fn logs_tracing_updates_filters_and_inherits_span_ids() -> Result<(), Box<dyn st
         let _entered = span.enter();
         tracing::info!(target:"butler.turn", category="turn", event="context.probe", "context");
     }
-    assert_eq!(
-        log.query(&Query {
+    let rows = log
+        .query(&Query {
             trace_id: Some("low-level-context".into()),
             ..Query::default()
         })?
-        .rows
-        .len(),
-        1
+        .rows;
+    assert_eq!(rows.len(), 3);
+    for event in ["context.probe", "span.start", "span.end"] {
+        assert_eq!(rows.iter().filter(|row| row.event == event).count(), 1);
+    }
+    let context = butler_log::TraceContext {
+        trace_id: Some("abcdef0123456789abcdef0123456789".into()),
+        ..Default::default()
+    };
+    drop(context.span("worker.claim"));
+    drop(context.span("worker.finish"));
+    let trace = log.trace(context.trace_id.as_deref().unwrap())?;
+    assert_eq!(
+        trace
+            .spans
+            .iter()
+            .map(|s| s.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["worker.claim", "worker.finish"]
     );
+    // Previously persisted access records used a child ID rather than the server ID.
+    let mut server = Record::new("INFO", "http.server", "span.end", "http.server");
+    server.trace_id = context.trace_id.clone();
+    server.span_id = Some("1234567890abcdef".into());
+    server.duration_ms = Some(3.0);
+    let mut access = server.clone();
+    access.event = "http.request".into();
+    access.span_id = Some("fedcba0987654321".into());
+    access.parent_span_id = server.span_id.clone();
+    access.attrs = json!({"method":"POST", "route":"/messages", "status":202});
+    log.record_reliable(server)?;
+    log.record_reliable(access)?;
+    let trace = log.trace(context.trace_id.as_deref().unwrap())?;
+    let inbound: Vec<_> = trace
+        .spans
+        .iter()
+        .filter(|s| s.category == "http.server")
+        .collect();
+    assert_eq!(inbound.len(), 1);
+    assert_eq!(inbound[0].name, "http.server");
+    assert_eq!(inbound[0].attrs["route"], "/messages");
+    assert_eq!(inbound[0].attrs["status"], 202);
+    assert!(inbound[0].has_details);
     log.shutdown().unwrap();
     fs::remove_dir_all(root).unwrap();
     Ok(())
@@ -497,3 +415,62 @@ mod regressions;
 
 #[path = "e2e/logs_queue.rs"]
 mod queue;
+
+#[path = "structured_log_storage/perf.rs"]
+mod perf;
+
+#[test]
+fn app_segments_index_live_tails_without_producer_indexes() -> Result<(), Box<dyn std::error::Error>>
+{
+    butler_e2e::gate!();
+    use std::io::Write;
+    let root = root();
+    let log = Logger::open(&root, Config::default())?;
+    let dir = root.join("logs/app/main");
+    fs::create_dir_all(&dir)?;
+    let path = dir.join(format!(
+        "{}-0001.jsonl",
+        chrono::Utc::now().format("%Y%m%dT%H%M%SZ")
+    ));
+    let mut file = fs::File::create(&path)?;
+    let mut row = record(1, "INFO");
+    row.process = "app.renderer".into();
+    row.trace_id = Some("0123456789abcdef0123456789abcdef".into());
+    let line = serde_json::to_vec(&row)?;
+    file.write_all(&line)?;
+    let query = Query {
+        source: "app".into(),
+        ..Query::default()
+    };
+    assert!(
+        log.query(&query)?.rows.is_empty(),
+        "partial line is not indexed"
+    );
+    file.write_all(b"\n")?;
+    assert_eq!(log.query(&query)?.rows.len(), 1);
+    file.write_all(&line)?;
+    file.write_all(b"\n")?;
+    assert_eq!(
+        log.query(&query)?.rows.len(),
+        2,
+        "new tail is discovered once"
+    );
+    assert_eq!(log.query(&query)?.rows.len(), 2, "unchanged file is stable");
+    log.shutdown()?;
+    let reopened = Logger::open(&root, Config::default())?;
+    assert_eq!(
+        reopened.query(&query)?.rows.len(),
+        2,
+        "App index rebuilds on reopen"
+    );
+    reopened.shutdown()?;
+    assert!(
+        !path.with_extension("idx").exists(),
+        "Agent never writes App indexes"
+    );
+    fs::remove_dir_all(root)?;
+    Ok(())
+}
+
+#[path = "structured_log_storage/app.rs"]
+mod app;

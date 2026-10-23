@@ -18,16 +18,8 @@ pub(super) async fn run(
     let prefix = provider.prefix_history.prepare(body, config)?;
     let physical = super::admission(provider, request, config, body, serialized.clone(), carrier)?;
     let http = build_http(provider, config, carrier, mode, serialized.clone());
-    let trace = super::super::request_trace::RequestTrace::new(
-        provider,
-        prefix,
-        request.cache_scope,
-        request.usage_attribution.and_then(|a| a.phase),
-        request.usage_attribution.and_then(|a| a.round_index),
-        "background",
-        request.butler_data,
-    )
-    .await?;
+    let trace =
+        super::super::request_trace::RequestTrace::prompt(provider, prefix, request).await?;
     let request_bytes = serialized.len();
     let observe = || {
         provider
@@ -69,7 +61,7 @@ fn build_http(
     carrier: Carrier,
     mode: ResponseMode,
     serialized: Bytes,
-) -> reqwest::RequestBuilder {
+) -> butler_log::http::RequestBuilder {
     let mut http = provider
         .client
         .post(config.endpoint.clone())

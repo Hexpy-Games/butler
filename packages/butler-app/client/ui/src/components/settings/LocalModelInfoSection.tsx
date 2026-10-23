@@ -3,7 +3,7 @@ import { Button, Save, Stack, Typo } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { LocalModelDiscoveryResult } from "@/app/types.ts";
 import { LocalModelDiscoveryForm } from "./LocalModelDiscoveryForm";
-import { LocalModelManualForm } from "./LocalModelManualForm";
+import { LocalModelManualForm, type LocalModelImageInput } from "./LocalModelManualForm";
 import { SettingsSection } from "./SettingsFormComponents";
 
 interface LocalModelInfoSectionProps {
@@ -16,6 +16,7 @@ interface LocalModelInfoSectionProps {
   setManualDisplayName: (value: string) => void;
   manualContext: string;
   setManualContext: (value: string) => void;
+  imageInput: LocalModelImageInput;
   status: string;
   hasUnsavedChanges: boolean;
   canRegister: boolean;
@@ -34,6 +35,7 @@ export function LocalModelInfoSection({
   setManualDisplayName,
   manualContext,
   setManualContext,
+  imageInput,
   status,
   hasUnsavedChanges,
   canRegister,
@@ -65,6 +67,7 @@ export function LocalModelInfoSection({
           setManualDisplayName={setManualDisplayName}
           manualContext={manualContext}
           setManualContext={setManualContext}
+          imageInput={imageInput}
         />
         <Button type="button" disabled={!canRegister} onClick={onRegister}>
           <Save size="md" />{" "}

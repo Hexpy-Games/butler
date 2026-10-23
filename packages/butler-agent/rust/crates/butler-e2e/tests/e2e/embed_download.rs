@@ -39,7 +39,11 @@ async fn stub_rejects_real_model_sources_before_network_or_retry() -> Result<(),
             "EMBED-STUB-GUARD failed_after_ms={} bytes_done=0",
             started.elapsed().as_millis()
         );
-        assert!(s.agent.logs().contains("BUTLER_E2E_TIER=stub requires"));
+        assert!(
+            s.agent
+                .logs()
+                .contains("BUTLER_E2E_EMBED_LOCAL_ONLY=1 requires")
+        );
         let root = s.sandbox.data.join("cache/models/Xenova/bge-m3");
         assert!(
             snapshot(&root)?
@@ -148,6 +152,7 @@ async fn corrupt_assets_fail_verification_without_publication() -> Result<(), Ha
         .env("BUTLER_E2E_EMBED_MANIFEST", server.manifest())
         .start()
         .await?;
+    super::outbound_http::logging(&s, "detailed").await?;
     choose(&s.gw, true).await?;
     let failed = model_until(&s.gw, "failed").await?;
     assert_eq!(failed["reason"], "embed_asset_hash_mismatch");
@@ -159,6 +164,14 @@ async fn corrupt_assets_fail_verification_without_publication() -> Result<(), Ha
             .join(".native-embedding-acquire/tokenizer.json.part")
             .exists()
     );
+    let rows = super::outbound_http::http_calls(&s, &server.address).await?;
+    assert_eq!(rows.len(), server.requests());
+    let mut retries: Vec<_> = rows
+        .iter()
+        .map(|row| row["attrs"]["retry"].as_u64().unwrap())
+        .collect();
+    retries.sort_unstable();
+    assert_eq!(retries, [0, 1, 2, 3, 4, 5]);
     s.finish().await
 }
 

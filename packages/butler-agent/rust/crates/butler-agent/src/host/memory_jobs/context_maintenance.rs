@@ -173,7 +173,7 @@ async fn run_daily_jobs(
         minute,
         now_ms,
         cancellation,
-        daily.session_sync(cancellation),
+        |_, _| daily.session_sync(cancellation),
     ))
     .await
     {
@@ -189,7 +189,7 @@ async fn run_daily_jobs(
         minute,
         now_ms,
         cancellation,
-        daily.consolidation_cycle(cancellation),
+        |run_id, started| daily.consolidation_cycle(run_id, started, cancellation),
     )
     .await
     {
@@ -265,7 +265,9 @@ pub(crate) async fn run_tick(
 }
 
 fn state_path(data_root: &std::path::Path) -> PathBuf {
-    data_root.join("state/scheduler/context-maintenance.json")
+    data_root
+        .join(butler_platform::data_paths::SCHEDULER)
+        .join("context-maintenance.json")
 }
 
 fn should_run(data_root: &std::path::Path, day: &str, minute: u16) -> bool {
