@@ -10,6 +10,7 @@ use butler_e2e::e2e::{
 };
 const DESIGN: &str = "Design the requested outcome before execution.";
 const CONTROL: &str = "Queue an instruction for the delegated work.";
+const KEPT_JOB: &str = "Prepare a marker, then write, integrate and review the result.";
 const JOB: &str = "Write a marker, then integrate and review the result.";
 
 #[tokio::test]
@@ -138,7 +139,7 @@ async fn kept_request(state: &str) -> Result<(), HarnessError> {
     use butler_e2e::e2e::scenario::accepted_turn_id;
     use serde_json::json;
     use std::time::{Duration, Instant};
-    let (url, _requests, server) = stub::start().await?;
+    let (url, requests, server) = stub::start().await?;
     let s = Setup::new(&format!("WMU-CUTOVER-{state}"))?
         .access(Access::FullAccess)
         .stub_cassette(Cassette::load("TOOL-01")?)
@@ -173,7 +174,7 @@ async fn kept_request(state: &str) -> Result<(), HarnessError> {
         )
     })
     .await?;
-    let turn = accepted_turn_id(&s.gw.say("general", JOB).await?)?;
+    let turn = accepted_turn_id(&s.gw.say("general", KEPT_JOB).await?)?;
     let deadline = Instant::now() + Duration::from_secs(60);
     loop {
         let admitted = database(&s, |db| {
@@ -199,6 +200,18 @@ async fn kept_request(state: &str) -> Result<(), HarnessError> {
     );
     s.gw.wait_terminal("general", &turn, Duration::from_secs(60))
         .await?;
+    let original = s.gw.messages("general").await?;
+    assert!(
+        original
+            .iter()
+            .any(|m| m["role"] == "assistant" && m["text"] == butler_work::store::CUTOVER_PENDING),
+        "{original:?}"
+    );
+    assert_eq!(
+        stub::requests_for(&requests, KEPT_JOB).len(),
+        2,
+        "Pending ends the original turn without further model calls"
+    );
     s.turn("general", "What is two plus two while the update runs?")
         .await?;
     let messages_before_replay = s.gw.messages("general").await?.len();
@@ -271,7 +284,51 @@ async fn kept_request(state: &str) -> Result<(), HarnessError> {
     assert_eq!(receipt.2, "applied");
     assert_eq!(
         zstd::stream::decode_all(receipt.3.as_slice())?,
-        JOB.as_bytes()
+        KEPT_JOB.as_bytes()
+    );
+    let messages = s.gw.messages("general").await?;
+    assert_eq!(
+        messages
+            .iter()
+            .filter(|m| m["role"] == "user" && m["text"] == KEPT_JOB)
+            .count(),
+        1,
+        "replay reuses the original user message: {messages:?}"
+    );
+    let user_id = |rows: &[serde_json::Value]| {
+        rows.iter()
+            .find(|m| m["role"] == "user" && m["text"] == KEPT_JOB)
+            .unwrap()["id"]
+            .clone()
+    };
+    assert_eq!(
+        user_id(&messages),
+        user_id(&original),
+        "the original user identity is retained"
+    );
+    let executions = database(&s, |db| db.query_row(
+        "SELECT count(*) FROM btcc_guided_tool_calls WHERE tool_name='write_file' AND json_extract(arguments_json,'$.path') IN ('preflight.txt','marker.txt') AND json_extract(result_json,'$.error.code') IS NULL",
+        [], |r| r.get::<_,i64>(0))).await?;
+    assert_eq!(
+        executions, 2,
+        "one Tier 0 preflight and one managed effect across both turns"
+    );
+    assert_eq!(
+        tokio::fs::read_to_string(s.sandbox.data.join("preflight.txt")).await?,
+        "prepared"
+    );
+    let original_turn = turn.clone();
+    let original_calls = database(&s, move |db| {
+        db.query_row(
+            "SELECT count(*) FROM btcc_guided_tool_calls WHERE turn_id=?1",
+            [original_turn],
+            |r| r.get::<_, i64>(0),
+        )
+    })
+    .await?;
+    assert_eq!(
+        original_calls, 2,
+        "no further calls from the pending batch are admitted"
     );
     server.abort();
     s.finish().await

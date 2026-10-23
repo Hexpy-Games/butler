@@ -52,6 +52,11 @@ const COLUMNS: &[(&str, &str, &str)] = &[
     ("turns", "safe_status_content_json", "TEXT"),
     ("turns", "execution_model_json", "TEXT"),
     ("session_queued_messages", "client_message_id", "TEXT"),
+    (
+        "session_queued_messages",
+        "replay_source_message_id",
+        "TEXT",
+    ),
     ("session_queued_messages", "input_identity_digest", "TEXT"),
     ("session_queued_messages", "control_resolution_json", "TEXT"),
     ("session_queued_messages", "trace_context_json", "TEXT"),

@@ -6,6 +6,7 @@ pub(super) struct Material {
     documents: documents::DocumentProjection,
     pub effects: String,
     pub prior_tools: String,
+    pub kept_turn: String,
     pub attachments: String,
     pub work_stream: String,
     pub images: Vec<Value>,
@@ -28,6 +29,13 @@ pub(super) async fn read(
         .await
         .map_err(BtccError::from)?;
     let prior_tools = super::prior_tool::render(prior)?;
+    let kept_turn = state
+        .journal
+        .work_model_storage()
+        .kept_work_model_transcript(turn.session_id.clone(), &turn.original_message_id)
+        .await
+        .map_err(BtccError::from)?
+        .unwrap_or_default();
     let effects = match state.work.context.as_ref() {
         Some(work) => state
             .effects
@@ -49,6 +57,7 @@ pub(super) async fn read(
         documents,
         effects,
         prior_tools,
+        kept_turn,
         attachments,
         work_stream,
         images,

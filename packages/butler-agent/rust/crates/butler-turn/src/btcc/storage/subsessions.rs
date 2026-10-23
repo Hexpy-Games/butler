@@ -9,7 +9,7 @@ mod directions;
 mod files;
 mod native;
 mod native_completion;
-mod native_recovery;
+pub(crate) mod native_recovery;
 mod parents;
 mod records;
 

@@ -286,21 +286,8 @@ async fn execute(
         binding.role,
         butler_turn::workspace::SessionRole::Worker | butler_turn::workspace::SessionRole::Steward
     );
-    if internal_subsession
-        && matches!(
-            outcome.result,
-            TurnOutcomeKind::Delivered(_)
-                | TurnOutcomeKind::AlreadyDelivered(_)
-                | TurnOutcomeKind::Cancelled { .. }
-                | TurnOutcomeKind::AlreadyCancelled { .. }
-        )
-    {
-        subsessions
-            .report_parent_turn(&binding.session_id, &envelope.message.id)
-            .await
-            .map_err(|error| {
-                super::IngressError::new("subsession_report_commit_failed", error.code())
-            })?;
+    if internal_subsession && report::ended(&outcome.result) {
+        report::end(&envelope, &binding.session_id, subsessions).await?;
     }
     if internal_subsession {
         complete_subsession_child(

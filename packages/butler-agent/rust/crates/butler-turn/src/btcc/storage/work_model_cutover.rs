@@ -1,6 +1,8 @@
 //! The new native runtime fences legacy mutations on its owning connection.
 //! The fence is connection-local: older binaries can still write their source
 //! tables, and their seven existing feed triggers drive downgrade reconciliation.
+pub(super) mod admission;
+pub(super) mod transcript;
 use super::{BtccStorage, StorageError, StorageResult};
 use crate::btcc::ProjectWorkObserveWorks;
 use rusqlite::{
@@ -111,37 +113,8 @@ impl BtccStorage {
         input: butler_work::cutover::ManagedAdmission,
         stop: &tokio_util::sync::CancellationToken,
     ) -> StorageResult<CutoverAdmission> {
-        if let Some(receipt) = input.message_id.strip_prefix("cutover-message:") {
-            let receipt = receipt.to_owned();
-            let session = input.session_id.clone();
-            let original = self.work_model_read(move |db| {
-                use rusqlite::OptionalExtension;
-                Ok(db.query_row("SELECT id FROM wm_instructions WHERE id=?1 AND target_session_id=?2 AND status IN ('waiting_for_turn','delivered','applied')",rusqlite::params![receipt,session],|r|r.get::<_,String>(0)).optional()?)
-            }).await?;
-            if let Some(id) = original {
-                return Ok(CutoverAdmission::Ready(id));
-            }
-        }
         let (id, ready) = self
-            .work_model_write(move |tx| {
-                let id = butler_work::cutover::accept(tx, &input)?;
-                let ready = butler_work::cutover::status(tx)?.state
-                    == butler_work::cutover::CutoverState::Done;
-                if !ready {
-                    let ctx = butler_work::store::Context {
-                        now: chrono::Utc::now().timestamp_millis(),
-                        actor: serde_json::json!({"runtime":"cutover"}),
-                    };
-                    butler_work::store::record_intent(
-                        tx,
-                        &ctx,
-                        &format!("cutover_wait:{id}"),
-                        "cutover_wait",
-                        &serde_json::json!({"instruction_id":id,"turn_id":input.turn_id}),
-                    )?;
-                }
-                Ok((id, ready))
-            })
+            .work_model_write(move |tx| admission::admit(tx, &input))
             .await?;
         if !stop.is_cancelled() && ready {
             Ok(CutoverAdmission::Ready(id))

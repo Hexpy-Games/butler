@@ -36,3 +36,9 @@ CREATE INDEX IF NOT EXISTS wm_holds_active ON wm_holds(target,kind,id) WHERE rel
 
 CREATE INDEX IF NOT EXISTS wm_intents_pending_kind ON wm_cross_db_intents(kind,op_id) WHERE state='pending';
 CREATE INDEX IF NOT EXISTS wm_instructions_turn ON wm_instructions(target_session_id,anchor_kind,anchor_id);
+
+CREATE INDEX IF NOT EXISTS wm_delegation_reports_parent ON wm_delegation_reports(parent_session_id,attempt_id)
+  WHERE delivered_at IS NULL OR delivery_ended_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS wm_cutover_replay_turn ON wm_cross_db_intents(json_extract(payload_json,'$.session_id'),json_extract(payload_json,'$.turn_id'))
+  WHERE kind='cutover_replay' AND state='applied';

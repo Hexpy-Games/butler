@@ -1,4 +1,6 @@
 //! WMU-03/09/11 run through the scripted provider and ordinary gateway.
+mod delivery_end;
+mod legacy_recovery;
 mod stub;
 use butler_e2e::e2e::{
     HarnessError,

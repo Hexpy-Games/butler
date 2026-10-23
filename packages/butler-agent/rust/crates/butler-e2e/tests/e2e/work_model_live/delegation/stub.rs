@@ -6,7 +6,7 @@ use butler_e2e::e2e::{HarnessError, matching, sanitize::Placeholders};
 use serde_json::{Value, json};
 use std::sync::{
     Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU8, Ordering},
 };
 use tokio::sync::Notify;
 
@@ -41,6 +41,7 @@ pub(super) struct Script {
     pub hold_report: AtomicBool,
     pub defer_review: AtomicBool,
     pub use_worker: AtomicBool,
+    pub result_ending: AtomicU8,
 }
 impl Default for Script {
     fn default() -> Self {
@@ -56,6 +57,7 @@ impl Default for Script {
             hold_report: AtomicBool::new(true),
             defer_review: AtomicBool::new(false),
             use_worker: AtomicBool::new(false),
+            result_ending: AtomicU8::new(0),
         }
     }
 }
@@ -102,6 +104,29 @@ async fn reply(
             .as_str()
             .is_some_and(|text| text.starts_with("You run one delegated Work"))
     {
+        if step >= 2 {
+            match script.result_ending.load(Ordering::SeqCst) {
+                1 => {
+                    return (
+                        [("content-type", "text/event-stream")],
+                        super::super::super::token_cache::wire(&call(
+                            step,
+                            "wait_for_worker",
+                            &json!({}),
+                        )),
+                    )
+                        .into_response();
+                }
+                2 if step >= 3 => {
+                    return (
+                        axum::http::StatusCode::BAD_REQUEST,
+                        "scripted provider failure after result",
+                    )
+                        .into_response();
+                }
+                _ => {}
+            }
+        }
         worker::result(step, &body)
     } else if request.starts_with("role: steward")
         || request.contains("Resume the assigned Task from its retained checkpoint.")
@@ -131,7 +156,11 @@ async fn reply(
     } else if request.contains("Delegated result") && script.defer_review.load(Ordering::SeqCst) {
         message(DEFERRED)
     } else if request.contains("Delegated result") {
-        result(step, &body, request)
+        if script.result_ending.load(Ordering::SeqCst) == 3 && step >= 3 {
+            call(step, "work_read", &json!({"view":"tasks"}))
+        } else {
+            result(step, &body, request)
+        }
     } else {
         message("{}")
     };

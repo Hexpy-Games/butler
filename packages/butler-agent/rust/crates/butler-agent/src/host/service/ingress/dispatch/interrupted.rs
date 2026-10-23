@@ -145,6 +145,14 @@ pub(super) async fn settle_closing_child(
     {
         return Some(retry_child_close(item, queue, &code).await);
     }
+    if let Ok(envelope) = bind::Envelope::from_record(&item.record)
+        && let Ok(binding) = bind::existing_control_binding(&envelope, bindings).await
+        && super::report::end(&envelope, &binding.session_id, subsessions)
+            .await
+            .is_err()
+    {
+        return Some(retry_child_close(item, queue, &code).await);
+    }
     settle(item, queue, bindings, delivery, status).await
 }
 

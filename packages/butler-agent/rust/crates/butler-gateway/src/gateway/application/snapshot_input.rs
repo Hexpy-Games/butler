@@ -17,7 +17,7 @@ impl AppApplication {
     ) -> Result<AppTurn, GatewayApplicationError> {
         let queued_id = claim.queued_message_id.clone();
         let claim_id = claim.claim_id.clone();
-        let (snapshot, conversation_access, default_project_folder) = self
+        let (snapshot, conversation_access, default_project_folder, replay_message) = self
             .storage
             .execute(move |db| claimed_input(db, &queued_id, &claim_id))
             .await
@@ -87,6 +87,7 @@ impl AppApplication {
             assets,
             &conversation_access,
             default_project_folder,
+            replay_message,
         ))
     }
 }
@@ -96,11 +97,12 @@ fn claimed_input(
     db: &Connection,
     queued_id: &str,
     claim_id: &str,
-) -> Result<(ClaimedNativeSnapshot, AccessMode, String), AppStorageError> {
+) -> Result<(ClaimedNativeSnapshot, AccessMode, String, Option<String>), AppStorageError> {
     let snapshot = claimed_snapshot(db, queued_id, claim_id)?;
     let access = settings::conversation_access_mode(db, &snapshot.chat_id)?;
     let folder = projects::effective_root(db)?.to_string_lossy().into_owned();
-    Ok((snapshot, access, folder))
+    let replay = db.query_row("SELECT CASE WHEN replay_source_message_id IS NOT NULL THEN client_message_id END FROM session_queued_messages WHERE id=?1", [queued_id], |r| r.get(0)).map_err(AppStorageError::sqlite)?;
+    Ok((snapshot, access, folder, replay))
 }
 
 fn claimed_snapshot(
@@ -185,7 +187,9 @@ fn rebuilt_turn(
     assets: ResolvedNativeAssets,
     conversation_access: &AccessMode,
     default_project_folder: String,
+    replay_message: Option<String>,
 ) -> AppTurn {
+    let message_id = replay_message.unwrap_or_else(|| snapshot.message_id.clone());
     let mut context = Map::new();
     context.insert("version".into(), Value::from(1));
     context.insert("defaultProjectFolder".into(), default_project_folder.into());
@@ -204,7 +208,7 @@ fn rebuilt_turn(
     );
     context.insert(
         "conversation".into(),
-        json!({"chatId":snapshot.chat_id,"userMessageId":snapshot.message_id,
+        json!({"chatId":snapshot.chat_id,"userMessageId":message_id,
             "turnId":snapshot.turn_id,"turnAttempt":snapshot.turn_attempt}),
     );
     if let Some(project) = snapshot.project.as_ref() {
@@ -231,7 +235,7 @@ fn rebuilt_turn(
     }
     AppTurn {
         chat_id: snapshot.chat_id,
-        message_id: snapshot.message_id,
+        message_id,
         turn_id: snapshot.turn_id,
         turn_attempt: snapshot.turn_attempt,
         text: snapshot.text,

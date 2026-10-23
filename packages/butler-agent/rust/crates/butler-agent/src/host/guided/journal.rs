@@ -111,6 +111,15 @@ impl JournalPort for GuidedJournal {
     ) -> PortFuture<'a, Option<ToolOutcome>> {
         Box::pin(async move {
             self.check_turn(invocation)?;
+            if result
+                .error
+                .as_ref()
+                .is_some_and(|error| error.code == "work_cutover_pending")
+            {
+                return Ok(Some(ToolOutcome::Answer(
+                    butler_work::store::CUTOVER_PENDING.into(),
+                )));
+            }
             let pending = result.output.as_ref().is_some_and(|value| {
                 value.field("authority_pending").ok().flatten() == Some("true")
             });

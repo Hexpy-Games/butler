@@ -88,7 +88,7 @@ pub(super) async fn record_result(
             result: result.clone(),
         },
     );
-    if !result.ok || check == OutcomeCheck::RecordOnly {
+    if check == OutcomeCheck::RecordOnly {
         return Ok(None);
     }
     input
@@ -118,6 +118,9 @@ pub(super) async fn finish_outcome(
     outcome: Option<ToolOutcome>,
 ) -> Result<Option<AgentLoopResult>, AgentLoopError> {
     match outcome {
+        Some(ToolOutcome::Answer(content)) => finish(input, state, Ending::Answer(&content))
+            .await
+            .map(Some),
         Some(ToolOutcome::Suspend(reason)) => finish(input, state, Ending::Suspend(reason))
             .await
             .map(Some),

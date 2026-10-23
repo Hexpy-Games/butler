@@ -145,16 +145,11 @@ pub(super) async fn run_sequential_batch(
         if concurrent_results.is_empty() || (resumed && index == start) {
             emit_tool_call(input, prepared_call, batch.iteration);
         }
-        let position = if index == start {
-            RefusedCall::Pending
-        } else {
-            RefusedCall::Following
-        };
         let result = batch_result(
             input,
             prepared_call,
             refusal,
-            position,
+            start,
             index,
             resumed.then_some(start),
             &concurrent_results,
@@ -177,7 +172,7 @@ pub(super) async fn run_sequential_batch(
         }
         let result = result.result;
         results.push(result.clone());
-        record_batch_result(
+        if let Some(answer) = record_batch_result(
             input,
             state,
             prepared_call,
@@ -186,7 +181,12 @@ pub(super) async fn run_sequential_batch(
             &mut first_suspension,
             concurrent_call_ids.get(index).map(String::as_str),
         )
-        .await?;
+        .await?
+        {
+            return finish(input, state, Ending::Answer(&answer))
+                .await
+                .map(Step::finished);
+        }
         if concurrent_results.is_empty() && first_suspension.is_some() {
             break;
         }
@@ -208,13 +208,13 @@ async fn record_batch_result(
     iteration: u32,
     first_suspension: &mut Option<SuspensionReason>,
     restored_call_id: Option<&str>,
-) -> Result<(), AgentLoopError> {
+) -> Result<Option<String>, AgentLoopError> {
     let check = if first_suspension.is_none() {
         OutcomeCheck::Evaluate
     } else {
         OutcomeCheck::RecordOnly
     };
-    if let Some(super::super::contracts::ToolOutcome::Suspend(reason)) = record_result(
+    match record_result(
         input,
         state,
         &prepared.call,
@@ -225,9 +225,13 @@ async fn record_batch_result(
     )
     .await?
     {
-        *first_suspension = Some(reason);
+        Some(super::super::contracts::ToolOutcome::Suspend(reason)) => {
+            *first_suspension = Some(reason)
+        }
+        Some(super::super::contracts::ToolOutcome::Answer(content)) => return Ok(Some(content)),
+        None => {}
     }
-    Ok(())
+    Ok(None)
 }
 
 fn collect_modification(pending: &mut Vec<String>, prepared: &PreparedPolicy) {
@@ -253,7 +257,7 @@ async fn batch_result(
     input: &Invocation<'_>,
     prepared: &PreparedCall<'_>,
     refusal: Option<Refusal>,
-    position: RefusedCall,
+    start: usize,
     index: usize,
     resumed_start: Option<usize>,
     concurrent: &[ExecutedCall],
@@ -266,6 +270,7 @@ async fn batch_result(
             pending_authority: result.pending_authority.clone(),
         });
     }
+    let position = if index == start { RefusedCall::Pending } else { RefusedCall::Following };
     // Concurrent siblings are independent; denial applies only to this call.
     let refusal = refusal.filter(|_| concurrent.is_empty() || Some(index) == resumed_start);
     match refusal {

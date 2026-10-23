@@ -384,6 +384,8 @@ pub struct ToolError {
 /// A tool result that ends the loop early.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ToolOutcome {
+    /// End after this result with an authored acknowledgement.
+    Answer(String),
     Suspend(crate::btcc::SuspensionReason),
 }
 

@@ -2,6 +2,7 @@
 
 use super::*;
 use butler_core::json::at;
+use rusqlite::OptionalExtension;
 
 impl SubsessionService {
     /// Verifies an initial assignment, or claims a continuation's new attempt.
@@ -165,7 +166,8 @@ impl SubsessionService {
         };
         let attempt = attempt.to_owned();
         let session = session.to_owned();
-        self.repository
+        let child = self
+            .repository
             .storage()
             .work_model_write(move |tx| {
                 butler_work::store::end_delegated_delivery(
@@ -173,10 +175,21 @@ impl SubsessionService {
                     &admission::context(),
                     &attempt,
                     &session,
-                )
+                )?;
+                Ok(tx
+                    .query_row(
+                        crate::btcc::storage::native_sql::SUBSESSIONS_SERVICE_REPORT_CHILD,
+                        [&attempt],
+                        |r| r.get::<_, String>(0),
+                    )
+                    .optional()?)
             })
             .await
-            .map_err(BtccError::from)
+            .map_err(BtccError::from)?;
+        if let Some(child) = child {
+            self.notify_execution_changed(&child).await?;
+        }
+        Ok(())
     }
     /// Whether the parent session has an active child to wait for.
     pub async fn should_wait_for_child(&self, parent: &str) -> Result<bool, BtccError> {

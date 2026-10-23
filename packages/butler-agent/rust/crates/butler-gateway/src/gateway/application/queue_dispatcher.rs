@@ -258,9 +258,7 @@ async fn drain_chat(
     app: &AppApplication,
     chat_id: &str,
 ) -> Result<(), GatewayApplicationError> {
-    if active_child(app, chat_id).await? {
-        return Ok(());
-    }
+    let child_pending = active_child(app, chat_id).await?;
     let chat = chat_id.to_owned();
     let rows = app
         .storage
@@ -268,6 +266,9 @@ async fn drain_chat(
         .await
         .map_err(app_error)?;
     for row in rows {
+        if child_pending && !row.result {
+            return Ok(());
+        }
         if cancellation.is_cancelled() {
             return Ok(());
         }

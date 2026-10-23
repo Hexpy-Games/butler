@@ -60,6 +60,7 @@ async fn reply(
         .count();
     let item = match key.user_request.as_str() {
         super::JOB => next(&out),
+        super::KEPT_JOB => kept_next(&body, &out),
         "Write the single follow-up marker." if step == 0 => call(
             0,
             "write_file",
@@ -87,6 +88,34 @@ async fn reply(
         super::super::token_cache::wire(&item),
     )
         .into_response()
+}
+fn kept_next(body: &Value, out: &[Value]) -> Value {
+    let history = body.to_string();
+    if out.is_empty() && !history.contains("preflight.txt") {
+        return call(
+            90,
+            "write_file",
+            &json!({"path":"preflight.txt","content":"prepared"}),
+        );
+    }
+    let managed = if out.first().is_some_and(|v| v.get("keys").is_none()) {
+        &out[1..]
+    } else {
+        out
+    };
+    let item = next(managed);
+    if managed.is_empty() && !history.contains(butler_work::store::CUTOVER_PENDING) {
+        json!([
+            item,
+            call(
+                91,
+                "work_apply",
+                &json!({"reason":"Must not run after pending", "operations":[{"op":"work.create_light","goal":"Duplicate execution","done_criteria":["Written","Checked"],"tasks":[[{"title":"Duplicate","description":"Must not run"}]]}]})
+            )
+        ])
+    } else {
+        item
+    }
 }
 fn answer() -> Value {
     json!({"type":"message","id":"msg_done","role":"assistant","status":"completed",

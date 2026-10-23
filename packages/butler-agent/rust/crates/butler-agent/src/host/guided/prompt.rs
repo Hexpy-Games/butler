@@ -119,6 +119,9 @@ fn source_prompt(
     if !material.attachments.is_empty() {
         entries.push("attachments", material.attachments.clone());
     }
+    if !material.kept_turn.is_empty() {
+        entries.push("cutover-original-turn", material.kept_turn.clone());
+    }
     if !material.prior_tools.is_empty() {
         entries.push("prior-tools", material.prior_tools.clone());
     }

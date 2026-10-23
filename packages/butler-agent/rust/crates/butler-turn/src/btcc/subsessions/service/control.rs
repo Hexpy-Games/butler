@@ -3,6 +3,7 @@ mod resume;
 use crate::btcc::subsessions::assignment::Child;
 
 use butler_core::json::at;
+use rusqlite::OptionalExtension;
 use serde_json::{Value, json};
 
 use super::selection::{RelationPurpose, RelationQuery};
@@ -57,6 +58,25 @@ impl SubsessionService {
             return Ok(false);
         };
         if state != "admitted" {
+            return Ok(false);
+        }
+        let waiting_turn = turn.clone();
+        let waiting = self
+            .repository
+            .storage()
+            .work_model_read(move |db| {
+                Ok(db
+                    .query_row(
+                        crate::btcc::storage::native_sql::SUBSESSIONS_SERVICE_WAITING_TURN,
+                        [waiting_turn],
+                        |_| Ok(()),
+                    )
+                    .optional()?
+                    .is_some())
+            })
+            .await
+            .map_err(BtccError::from)?;
+        if waiting {
             return Ok(false);
         }
         Ok(!self

@@ -81,3 +81,82 @@ async fn admission_returns_pending_through_postponed_and_failed_backup()
     }
     Ok(())
 }
+
+// test-category: race
+#[tokio::test]
+async fn delivered_cutover_receipt_belongs_only_to_the_replay_turn()
+-> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    butler_e2e::gate!();
+    let fixture = TestStorageFixture::activated();
+    let storage = BtccStorage::open(fixture.config("replay-owner")).await?;
+    storage
+        .work_model_write(|tx| {
+            cutover::begin(tx, CutoverState::Pending)?;
+            Ok(())
+        })
+        .await?;
+    let original = ManagedAdmission {
+        message_id: "kept-request".into(),
+        session_id: "session".into(),
+        turn_id: "original".into(),
+        body: "Build the requested output".into(),
+        received_seq: 1,
+        sender: json!({"user":{"principal_id":"person"}}),
+    };
+    let stop = CancellationToken::new();
+    let CutoverAdmission::Pending(id) = storage.admit_work_model(original.clone(), &stop).await?
+    else {
+        panic!("cutover must postpone");
+    };
+    let delivered = id.clone();
+    storage
+        .work_model_write(move |tx| {
+            cutover::resume(tx, CutoverState::Importing)?;
+            let ctx = store::Context {
+                now: 1,
+                actor: json!({"runtime":"cutover"}),
+            };
+            while cutover::batch(tx, &ctx)? {}
+            store::deliver_instruction(tx, &ctx, &delivered, "waiting_for_turn")?;
+            Ok(())
+        })
+        .await?;
+    assert!(
+        matches!(
+            storage.admit_work_model(original.clone(), &stop).await?,
+            CutoverAdmission::Pending(_)
+        ),
+        "the original turn cannot consume a replay receipt"
+    );
+    let replay = ManagedAdmission {
+        turn_id: "replay".into(),
+        message_id: format!("cutover-message:{id}"),
+        ..original.clone()
+    };
+    assert_eq!(
+        storage.admit_work_model(replay.clone(), &stop).await?,
+        CutoverAdmission::Ready(id.clone())
+    );
+    let applied = id.clone();
+    storage
+        .work_model_write(move |tx| cutover::applied(tx, &applied, "session"))
+        .await?;
+    assert_eq!(
+        storage.admit_work_model(replay.clone(), &stop).await?,
+        CutoverAdmission::Ready(id.clone())
+    );
+    assert!(matches!(
+        storage
+            .admit_work_model(
+                ManagedAdmission {
+                    turn_id: "other-replay".into(),
+                    ..replay
+                },
+                &stop
+            )
+            .await?,
+        CutoverAdmission::Pending(_)
+    ));
+    storage.close().await?;
+    Ok(())
+}

@@ -1,0 +1,11 @@
+{
+  "LEGACY_RECOVERY_1": "SEARCH d USING INDEX idx_btcc_legacy_dispatch_recovery (dispatch_state=?)\nCORRELATED SCALAR SUBQUERY 1\nSEARCH m USING COVERING INDEX sqlite_autoindex_wm_legacy_map_1 (source=? AND source_id=?)\nCORRELATED SCALAR SUBQUERY 2\nSEARCH i USING COVERING INDEX sqlite_autoindex_wm_cross_db_intents_1 (op_id=?)\nSEARCH r USING INDEX sqlite_autoindex_btcc_session_relations_1 (relation_id=?)",
+  "LEGACY_RECOVERY_2": "SEARCH x USING INTEGER PRIMARY KEY (rowid>?)\nCORRELATED SCALAR SUBQUERY 1\nSEARCH m USING COVERING INDEX sqlite_autoindex_wm_legacy_map_1 (source=? AND source_id=?)",
+  "LEGACY_RECOVERY_3": "SEARCH r USING INDEX sqlite_autoindex_btcc_session_relations_2 (child_session_id=?)\nSEARCH d USING INDEX sqlite_autoindex_btcc_subsession_delegations_2 (relation_id=?)\nSEARCH m USING INDEX sqlite_autoindex_wm_legacy_map_1 (source=? AND source_id=?)",
+  "LEGACY_RECOVERY_4": "SEARCH wm_legacy_map USING INDEX sqlite_autoindex_wm_legacy_map_1 (source=? AND source_id=?)",
+  "LEGACY_RECOVERY_5": "",
+  "LEGACY_RECOVERY_6": "",
+  "LEGACY_RECOVERY_7": "SEARCH btcc_session_relations USING INDEX sqlite_autoindex_btcc_session_relations_1 (relation_id=?)\nSCALAR SUBQUERY 1\nSEARCH btcc_subsession_delegations USING INDEX sqlite_autoindex_btcc_subsession_delegations_1 (delegation_id=?)",
+  "LEGACY_RECOVERY_8": "SEARCH wm_tasks USING INDEX wm_tasks_progress (work_id=? AND status=?)\nUSE TEMP B-TREE FOR ORDER BY",
+  "LEGACY_RECOVERY_9": ""
+}

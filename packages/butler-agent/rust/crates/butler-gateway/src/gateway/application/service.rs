@@ -244,7 +244,7 @@ impl AppApplication {
         let id = claim.queued_message_id.clone();
         let chat = claim.chat_id.clone();
         let fence = claim.claim_id.clone();
-        self.storage.execute(move|db| db.query_row("SELECT client_message_id FROM session_queued_messages WHERE id=?1 AND chat_id=?2 AND state='dispatching' AND claim_id=?3",params![id,chat,fence],|row|row.get(0)).map_err(AppStorageError::sqlite)).await.map_err(app_error)
+        self.storage.execute(move|db| db.query_row("SELECT coalesce(replay_source_message_id,client_message_id) FROM session_queued_messages WHERE id=?1 AND chat_id=?2 AND state='dispatching' AND claim_id=?3",params![id,chat,fence],|row|row.get(0)).map_err(AppStorageError::sqlite)).await.map_err(app_error)
     }
 
     pub(super) async fn queued_result(
@@ -399,8 +399,24 @@ pub(super) fn accept_turn(
             |row| row.get(0),
         )
         .map_err(AppStorageError::sqlite)?;
-    tx.execute("INSERT INTO messages(id,chat_id,turn_id,role,text,content_parts_json,status,created_at,updated_at,retryable) VALUES(?1,?2,?3,'user',?4,?5,'sent',?6,?6,0)",params![message_id,claim.chat_id,turn_id,text,content,now]).map_err(AppStorageError::sqlite)?;
-    attach_queued_files(&tx, &claim.queued_message_id, message_id)?;
+    let replay: bool = tx
+        .query_row(
+            "SELECT replay_source_message_id IS NOT NULL FROM session_queued_messages WHERE id=?1",
+            [&claim.queued_message_id],
+            |r| r.get(0),
+        )
+        .map_err(AppStorageError::sqlite)?;
+    if replay {
+        tx.query_row(
+            "SELECT 1 FROM messages WHERE id=?1 AND chat_id=?2 AND role='user' AND text=?3",
+            params![message_id, claim.chat_id, text],
+            |_| Ok(()),
+        )
+        .map_err(AppStorageError::sqlite)?;
+    } else {
+        tx.execute("INSERT INTO messages(id,chat_id,turn_id,role,text,content_parts_json,status,created_at,updated_at,retryable) VALUES(?1,?2,?3,'user',?4,?5,'sent',?6,?6,0)",params![message_id,claim.chat_id,turn_id,text,content,now]).map_err(AppStorageError::sqlite)?;
+        attach_queued_files(&tx, &claim.queued_message_id, message_id)?;
+    }
     tx.execute("UPDATE turns SET user_message_id=?1,state='thinking',safe_status_label='Thinking',cancellable=1,updated_at=?2 WHERE id=?3",params![message_id,now,turn_id]).map_err(AppStorageError::sqlite)?;
     if !queue::link_dispatch(&tx, claim, message_id, turn_id, now)? {
         return Err(AppStorageError::new(

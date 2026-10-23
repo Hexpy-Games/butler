@@ -1,4 +1,4 @@
-//! W-C advances only after the parent's final action reaches the App.
+//! W-C settles when the result-carrying turn ends, including suspension and failure.
 use super::*;
 
 pub(super) async fn deliver(
@@ -32,36 +32,49 @@ pub(super) async fn deliver(
         delivered += 1;
         final_delivered |= final_action;
     }
-    let ended = matches!(
-        outcome.result,
-        TurnOutcomeKind::Delivered(_)
-            | TurnOutcomeKind::AlreadyDelivered(_)
-            | TurnOutcomeKind::Cancelled { .. }
-            | TurnOutcomeKind::AlreadyCancelled { .. }
-    );
-    if ended {
-        let result = envelope
-            .execution_controls
-            .as_ref()
-            .map(butler_turn::btcc::ExecutionControls::verify)
-            .transpose()
-            .map_err(|error| {
-                super::super::IngressError::new("subsession_report_context_invalid", error.code())
-            })?
-            .and_then(|controls| controls.subsession_result);
-        let identity = result
-            .as_ref()
-            .map(|result| result.result_id.as_str())
-            .unwrap_or(&envelope.message.id);
-        subsessions
-            .report_parent_turn(&binding.session_id, identity)
-            .await
-            .map_err(|error| {
-                super::super::IngressError::new("subsession_report_commit_failed", error.code())
-            })?;
+    if ended(&outcome.result) {
+        end(envelope, &binding.session_id, subsessions).await?;
     }
     Ok(Executed {
         delivered,
         eligible_turn_id: final_delivered.then_some(eligible).flatten(),
     })
+}
+
+pub(super) fn ended(outcome: &TurnOutcomeKind) -> bool {
+    matches!(
+        outcome,
+        TurnOutcomeKind::Delivered(_)
+            | TurnOutcomeKind::AlreadyDelivered(_)
+            | TurnOutcomeKind::Cancelled { .. }
+            | TurnOutcomeKind::AlreadyCancelled { .. }
+            | TurnOutcomeKind::Suspended { .. }
+    )
+}
+
+pub(super) async fn end(
+    envelope: &Envelope,
+    session: &str,
+    subsessions: &butler_turn::btcc::SubsessionService,
+) -> Result<(), super::super::IngressError> {
+    let result = envelope
+        .execution_controls
+        .as_ref()
+        .map(butler_turn::btcc::ExecutionControls::verify)
+        .transpose()
+        .map_err(|error| {
+            super::super::IngressError::new("subsession_report_context_invalid", error.code())
+        })?
+        .and_then(|controls| controls.subsession_result);
+    let identity = result
+        .as_ref()
+        .map(|result| result.result_id.as_str())
+        .unwrap_or(&envelope.message.id);
+    subsessions
+        .report_parent_turn(session, identity)
+        .await
+        .map_err(|error| {
+            super::super::IngressError::new("subsession_report_commit_failed", error.code())
+        })?;
+    Ok(())
 }

@@ -49,17 +49,24 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?;
         for (op, revision, instruction, event) in pending {
-            self.queue
-                .replay_kept_request(event, instruction.clone())
-                .await?;
+            let delivering = instruction.clone();
             storage
                 .work_model_write(move |tx| {
                     store::deliver_instruction(
                         tx,
                         &admission::context(),
-                        &instruction,
+                        &delivering,
                         "waiting_for_turn",
                     )?;
+                    Ok(())
+                })
+                .await
+                .map_err(BtccError::from)?;
+            self.queue
+                .replay_kept_request(event, instruction.clone())
+                .await?;
+            storage
+                .work_model_write(move |tx| {
                     store::mark_intent_applied(tx, &admission::context(), &op, revision)?;
                     Ok(())
                 })

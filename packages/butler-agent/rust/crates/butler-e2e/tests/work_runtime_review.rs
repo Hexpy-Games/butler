@@ -234,6 +234,7 @@ async fn native_runtime_statements_use_indexes() -> std::result::Result<(), Fail
     let (_fixture, storage) = open().await?;
     storage
         .work_model_read(|db| {
+            let mut recovery = serde_json::Map::new();
             for (name, sql) in butler_turn::btcc::native_query_statements() {
                 let mut stmt = db.prepare(&format!("EXPLAIN QUERY PLAN {sql}"))?;
                 let n = stmt.parameter_count();
@@ -247,6 +248,9 @@ async fn native_runtime_statements_use_indexes() -> std::result::Result<(), Fail
                     )?
                     .collect::<rusqlite::Result<Vec<_>>>()?
                     .join("\n");
+                if name.starts_with("LEGACY_RECOVERY_") {
+                    recovery.insert(name.into(), json!(plan));
+                }
                 assert!(
                     !plan.lines().any(|line| line.starts_with("SCAN ")
                         && !line.contains("USING ")
@@ -254,6 +258,11 @@ async fn native_runtime_statements_use_indexes() -> std::result::Result<(), Fail
                     "{name}: {plan}"
                 );
             }
+            assert_eq!(recovery.len(), 9, "all recovery statements are pinned");
+            let expected: serde_json::Value = serde_json::from_str(include_str!(
+                "../fixtures/work-model-p14/native-recovery-plans.json"
+            ))?;
+            assert_eq!(json!(recovery), expected);
             Ok(())
         })
         .await?;
@@ -386,6 +395,64 @@ async fn terminal_work_leases_do_not_gate_later_direct_turns() -> std::result::R
             Ok(())
         })
         .await?;
+    storage.close().await?;
+    Ok(())
+}
+
+// test-category: race
+#[tokio::test]
+async fn submitted_children_still_gate_the_queue_until_their_result_turns_end()
+-> std::result::Result<(), Failure> {
+    butler_e2e::gate!();
+    let (_fixture, storage) = open().await?;
+    storage
+        .work_model_write(|tx| {
+            let task = read_part(tx, "first")?["task_id"]
+                .as_str()
+                .unwrap()
+                .to_owned();
+            for child in ["first", "second"] {
+                submit_task(
+                    tx,
+                    &context(),
+                    &task,
+                    &ExecutionScope {
+                        session_id: child,
+                        turn_id: child,
+                    },
+                    &Submission {
+                        part_id: Some(child),
+                        result_id: child,
+                        result_refs: &["output".into()],
+                        evidence_refs: &["check".into()],
+                    },
+                )?;
+            }
+            Ok(())
+        })
+        .await?;
+    let children = SqliteSubsessionRepository::new(storage.clone());
+    assert!(
+        children.has_active_child("parent".into()).await?,
+        "submitting is not delivery to the parent"
+    );
+    storage
+        .work_model_write(|tx| {
+            for child in ["first", "second"] {
+                deliver_delegated_result(tx, &context(), child)?;
+            }
+            end_delegated_delivery(tx, &context(), "first", "parent")?;
+            Ok(())
+        })
+        .await?;
+    assert!(
+        children.has_active_child("parent".into()).await?,
+        "one delivering turn remains"
+    );
+    storage
+        .work_model_write(|tx| end_delegated_delivery(tx, &context(), "second", "parent"))
+        .await?;
+    assert!(!children.has_active_child("parent".into()).await?);
     storage.close().await?;
     Ok(())
 }
