@@ -237,14 +237,14 @@ async fn setup_09_sign_in_completes_with_the_flows_pkce() -> Result<(), HarnessE
         assert!(row.get("body_ref").is_none_or(Value::is_null));
     }
     let text = serde_json::to_string(&rows)?;
-    for secret in [
-        "code",
-        "access_token",
-        "refresh_token",
-        "id_token",
-        "oai_is",
-    ] {
-        assert!(!text.contains(secret), "token body reached HTTP logs");
+    // The code, the verifier and every token issued (access, refresh, ID).
+    let issued = token.issued();
+    assert_eq!(issued.len(), 4, "one code and one token set");
+    for secret in issued.iter().chain([&form["code_verifier"]]) {
+        assert!(
+            !text.contains(secret.as_str()),
+            "token body reached HTTP logs"
+        );
     }
 
     let existing = start(&s.gw, json!({})).await?;

@@ -76,6 +76,7 @@ async fn authorize(
         return StatusCode::BAD_REQUEST.into_response();
     };
     let code = uuid::Uuid::new_v4().to_string();
+    state.issue(&code);
     redirect
         .query_pairs_mut()
         .append_pair(

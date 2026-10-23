@@ -24,6 +24,8 @@ pub(super) struct State {
     pub grants: Mutex<BTreeMap<String, BTreeMap<String, String>>>,
     pub registrations: Mutex<usize>,
     pub clients: Mutex<BTreeSet<String>>,
+    /// Every code and token this authority handed out, in issue order.
+    pub issued: Mutex<Vec<String>>,
 }
 pub struct FakeChatGptAuthority {
     pub issuer: String,
@@ -42,6 +44,7 @@ impl FakeChatGptAuthority {
             grants: Mutex::new(BTreeMap::new()),
             registrations: Mutex::new(0),
             clients: Mutex::new(BTreeSet::new()),
+            issued: Mutex::new(Vec::new()),
         });
         let router = authority::router(state.clone());
         let task = tokio::spawn(async move {
@@ -74,6 +77,14 @@ impl FakeChatGptAuthority {
             "expires_at":chrono::Utc::now().timestamp_millis()+3_600_000,
             "scopes":butler_models::models::chatgpt::SCOPES.split_whitespace().collect::<Vec<_>>(),
             "plan_notice_acknowledged_at":chrono::Utc::now().to_rfc3339()})
+    }
+    /// The secret values (authorization codes, access, refresh and ID tokens) issued so far.
+    pub fn issued(&self) -> Vec<String> {
+        self.state
+            .issued
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
     pub fn seen(&self) -> Vec<Seen> {
         self.state
@@ -109,6 +120,12 @@ impl Drop for FakeChatGptAuthority {
     }
 }
 impl State {
+    fn issue(&self, secret: &str) {
+        self.issued
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(secret.into());
+    }
     fn record(
         &self,
         path: &str,

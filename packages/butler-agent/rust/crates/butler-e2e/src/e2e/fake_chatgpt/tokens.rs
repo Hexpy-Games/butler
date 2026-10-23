@@ -73,6 +73,7 @@ pub(super) async fn exchange(
             .into_response();
     }
     let token = id_token(&state, &grant);
+    state.issue(&token);
     let mut response = issue(&state, get("client_id"));
     response["id_token"] = token.into();
     Json(response).into_response()
@@ -101,12 +102,15 @@ fn id_token(state: &Authority, grant: &BTreeMap<String, String>) -> String {
 
 pub(super) fn issue(state: &Authority, client: &str) -> Value {
     let refresh = format!("refresh-{}", uuid::Uuid::new_v4());
+    let access = format!("access-{}", uuid::Uuid::new_v4());
+    state.issue(&access);
+    state.issue(&refresh);
     state
         .refresh
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .insert(refresh.clone(), client.into());
-    json!({"access_token":format!("access-{}",uuid::Uuid::new_v4()), "refresh_token":refresh,
+    json!({"access_token":access, "refresh_token":refresh,
         "token_type":"Bearer", "expires_in":3600, "earliest_refresh_at":null,
         "scope":butler_models::models::chatgpt::SCOPES})
 }

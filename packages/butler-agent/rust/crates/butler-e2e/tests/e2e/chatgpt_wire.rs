@@ -5,12 +5,19 @@
     clippy::panic,
     reason = "test assertions"
 )]
-use butler_e2e::e2e::{HarnessError, scenario::Setup};
+use butler_e2e::e2e::{HarnessError, provider::Script, scenario::Setup};
 use serde_json::{Value, json};
 #[tokio::test]
 async fn siwc_15_discovery_visibility_registration_and_offline_cache() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let s = Setup::new("SIWC-15")?.start().await?;
+    let s = Setup::new("SIWC-15")?
+        .synthetic(Script {
+            rounds: 0,
+            path_for: Box::new(|_| String::new()),
+            final_text: "catalog-ok".into(),
+        })
+        .start()
+        .await?;
     let authority = s.authority.as_ref().unwrap();
     authority.models(vec![
         json!({"slug":"gpt-6-luna","display_name":"Luna","visibility":"list"}),
