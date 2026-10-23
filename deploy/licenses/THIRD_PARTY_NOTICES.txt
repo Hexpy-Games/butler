@@ -257,7 +257,7 @@ Copyright (c) 2021-present Floating UI contributors
 =====
 @hugeicons/core-free-icons 4.1.4
 MIT
-License: https://raw.githubusercontent.com/hugeicons/hugeicons/9c48f3723dfb243909fa83501aa7c6423ab972c0/LICENSE.md
+License: https://raw.githubusercontent.com/hugeicons/hugeicons/c1b280d3964e115dfdefb58241f6d93ca68f7b6d/LICENSE.md
 Copyright (c) 2025 Hugeicons
 
 =====
@@ -1313,6 +1313,7 @@ parse-entities 4.0.2
 MIT
 License: https://www.npmjs.com/package/parse-entities/v/4.0.2
 Copyright (c) Titus Wormer <mailto:tituswormer@gmail.com>
+Copyright (c) Microsoft Corporation.
 
 =====
 pretendard 1.3.9

@@ -5,21 +5,21 @@
     "deploy/licenses/generate.mjs": "eb413c424649cc6ef3bc734cb1a9479cf8ddffb3af398601a974268c229d7c34",
     "deploy/licenses/inputs.mjs": "f9a38331fa5a8f26f9d745f0cf3bfaea028f2d5dc7c8e8aa4d7af1b923cb5124",
     "deploy/licenses/refresh.py": "bddecf7f564eb6da112439c87fca94158f22497a5094dd53d9389ff918ced71b",
-    "packages/butler-agent/rust/Cargo.lock": "248b281a5912b34158a0d14cf2957d09a5a5a8a9b0f187f8c3bd507a2c827078",
-    "packages/butler-agent/rust/Cargo.toml": "6ae5d8ed3c0078217f6c1186cdcdaecc2ccc97739a9b6a99418b3e2a52449572",
+    "packages/butler-agent/rust/Cargo.lock": "b0e497d2e18fbc3039783f26839e594ef643d57d52bc1e049dfc8c7462105448",
+    "packages/butler-agent/rust/Cargo.toml": "89702b6b80895f911ba3785aec3b60181bf98dd3391d38e441b552ca14643111",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
     "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "bb3608c84f7dfea4387cae387fae1241709c45001fce35129f3bab3c594587f6",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
     "packages/butler-agent/rust/crates/butler-agent/src/host/embedding/worker/assets.rs": "f11dc3b1952a178092fbf7da589b8c39e28021c4975f884e236cd71c78c8d7a9",
     "packages/butler-agent/rust/crates/butler-core/Cargo.toml": "5af0d77e72e26b381caea14946683d7b94d79a2f7304d524842fa26ea213d1dc",
     "packages/butler-agent/rust/crates/butler-core/src/js_date/parse/LICENSE.txt": "a0af5aa0d38e4c35e56c8e42a43a4b1e462619a26332e43249bb0772ad06a3e2",
-    "packages/butler-agent/rust/crates/butler-e2e/Cargo.toml": "de4604858f1e868d2d98d1443e5efd3b230d29f96dc5408129041739fa77e417",
+    "packages/butler-agent/rust/crates/butler-e2e/Cargo.toml": "d758931f855ead279ac022144bf506eff68b8e55b8560798510e6818ad326d71",
     "packages/butler-agent/rust/crates/butler-gateway/Cargo.toml": "a97b7489b48eca15e83ea079103e2f30c05e992981323d1d3f47491513ac65ec",
     "packages/butler-agent/rust/crates/butler-ledger/Cargo.toml": "ccc46a2a8bb225eebcdf7858d73f5bddd3742ea57477e0208ca3c16464815b54",
     "packages/butler-agent/rust/crates/butler-log/Cargo.toml": "0f3523ba15e21a586f5c9d8bd883dce4100c7d1e7f95c0064da9af990c20f0bc",
     "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "e56bfc747329099c83768897038d0d40f2ba1efdf0ec5399eee1b976de5653c1",
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "4356081083793e9aaf34c237ce7c4d0c93b0b6d7ae75d9c197bb3f4202ba43b4",
-    "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "05394b3ece4ee9eacea3177173c30c0584ac63b9007a403ba0f3b09b9aa4c62b",
+    "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "ba7731194c7b0861643761f24121b85c1f713897b2bb44eaccd48b8271d49c1f",
     "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "6ac2ceefd558c7be96a1b15da080aa3c45f7b6c5183be7df932ac3e0c504912e",
     "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "1f671f10eb14f65013f8551fbdc090412327b993de5676681b9765ce5d9ed5a7",
     "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "15317b3544cdbcfacc5d46ab5b1cbddb1faa34c50ceca49221fdea0fa35a4592",
@@ -637,12 +637,12 @@
         "dd0ddf9ab9520a4f378d51d863dd7ccdad7ddd225dc8cef0c934ac07bb0d5f4b"
       ],
       "files": [
-        "https://raw.githubusercontent.com/hugeicons/hugeicons/9c48f3723dfb243909fa83501aa7c6423ab972c0/LICENSE.md",
-        "https://raw.githubusercontent.com/hugeicons/hugeicons/9c48f3723dfb243909fa83501aa7c6423ab972c0/README.md (free icons MIT declaration)"
+        "https://raw.githubusercontent.com/hugeicons/hugeicons/c1b280d3964e115dfdefb58241f6d93ca68f7b6d/LICENSE.md",
+        "https://raw.githubusercontent.com/hugeicons/hugeicons/c1b280d3964e115dfdefb58241f6d93ca68f7b6d/README.md (free icons MIT declaration)"
       ],
       "integrity": "sha512-vkMvlnW7Atqh7juhZCadYDvqABWcEeVAkavAK6HJBFbYkLCme5CN51Oc91D5j5ruDja+HQPjMfWkTxxulcwvAQ==",
       "links": [
-        "https://raw.githubusercontent.com/hugeicons/hugeicons/9c48f3723dfb243909fa83501aa7c6423ab972c0/LICENSE.md"
+        "https://raw.githubusercontent.com/hugeicons/hugeicons/c1b280d3964e115dfdefb58241f6d93ca68f7b6d/LICENSE.md"
       ],
       "copyright": [
         "Copyright (c) 2025 Hugeicons"
@@ -1302,10 +1302,12 @@
         "App/Agent browser renderer"
       ],
       "evidenceSha256": [
+        "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
         "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
       ],
       "files": [
-        "LICENSE"
+        "LICENSE",
+        "node_modules/@radix-ui/react-slot/LICENSE"
       ],
       "integrity": "sha512-Fh9rGN0MoI4ZFUNyfFVNU4y9LUz93u9/0K+yLgA2bwRojxM8JU1DyvvMBabnZPBgMWREAJvU2jjVzq+LrFUglw==",
       "links": [
@@ -1578,10 +1580,12 @@
         "App/Agent browser renderer"
       ],
       "evidenceSha256": [
+        "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
         "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
       ],
       "files": [
-        "LICENSE"
+        "LICENSE",
+        "node_modules/@radix-ui/react-slot/LICENSE"
       ],
       "integrity": "sha512-72F2T+PLlphrqLcAotYPp0uJMr5SjP5SL01wfEspJbru5Zs5vQaSHb4VB3ZMJPimgHHCHG7gMOeOB9H3Hdmtxg==",
       "links": [
@@ -1693,10 +1697,12 @@
         "App/Agent browser renderer"
       ],
       "evidenceSha256": [
+        "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
         "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
       ],
       "files": [
-        "LICENSE"
+        "LICENSE",
+        "node_modules/@radix-ui/react-slot/LICENSE"
       ],
       "integrity": "sha512-m9gTwRkhy2lvCPe6QJp4d3G1TYEUHn/FzJUtq9MjH46an1wJU+GdoGC5VLof8RX8Ft/DlpshApkhswDLZzHIcQ==",
       "links": [
@@ -4647,17 +4653,20 @@
         "App/Agent browser renderer"
       ],
       "evidenceSha256": [
-        "5d0698266086f217bb11ea0499d33453e401fe479fb9126ad04e625e63d3557b"
+        "5d0698266086f217bb11ea0499d33453e401fe479fb9126ad04e625e63d3557b",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
       ],
       "files": [
-        "license"
+        "license",
+        "node_modules/@types/unist/LICENSE"
       ],
       "integrity": "sha512-GG2AQYWoLgL877gQIKeRPGO1xF9+eG1ujIb5soS5gPvLQ1y2o8FL90w2QWNdf9I361Mpp7726c+lj3U0qK1uGw==",
       "links": [
         "https://www.npmjs.com/package/parse-entities/v/4.0.2"
       ],
       "copyright": [
-        "Copyright (c) Titus Wormer <mailto:tituswormer@gmail.com>"
+        "Copyright (c) Titus Wormer <mailto:tituswormer@gmail.com>",
+        "Copyright (c) Microsoft Corporation."
       ]
     },
     {
