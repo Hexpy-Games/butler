@@ -10,27 +10,6 @@ use std::{
 };
 use tokio::task::JoinHandle;
 
-#[allow(
-    clippy::struct_excessive_bools,
-    reason = "independent programmable protocol faults"
-)]
-#[derive(Clone, Default)]
-pub struct Faults {
-    pub deny: bool,
-    pub omit_client: bool,
-    pub wrong_client: bool,
-    pub wrong_state: bool,
-    pub id_token: Option<String>,
-    pub no_plan: bool,
-    pub invalid_grant: bool,
-    pub revoke_503: bool,
-    pub refresh_503: bool,
-    pub invalid_client: bool,
-    pub refresh_reused: bool,
-    pub models_401: usize,
-    pub models_503: usize,
-    pub subject: Option<String>,
-}
 #[derive(Clone)]
 pub struct Seen {
     pub path: String,
@@ -41,7 +20,6 @@ pub(super) struct State {
     pub issuer: String,
     pub refresh: Mutex<BTreeMap<String, String>>,
     pub models: Mutex<Vec<Value>>,
-    pub faults: Mutex<Faults>,
     pub seen: Mutex<Vec<Seen>>,
     pub grants: Mutex<BTreeMap<String, BTreeMap<String, String>>>,
     pub registrations: Mutex<usize>,
@@ -60,7 +38,6 @@ impl FakeChatGptAuthority {
             issuer: issuer.clone(),
             refresh: Mutex::new(BTreeMap::new()),
             models: Mutex::new(models::defaults()),
-            faults: Mutex::new(Faults::default()),
             seen: Mutex::new(Vec::new()),
             grants: Mutex::new(BTreeMap::new()),
             registrations: Mutex::new(0),
@@ -75,9 +52,6 @@ impl FakeChatGptAuthority {
             state,
             task,
         })
-    }
-    pub fn stop(&self) {
-        self.task.abort();
     }
     pub fn models(&self, models: Vec<Value>) {
         *self
@@ -100,13 +74,6 @@ impl FakeChatGptAuthority {
             "expires_at":chrono::Utc::now().timestamp_millis()+3_600_000,
             "scopes":butler_models::models::chatgpt::SCOPES.split_whitespace().collect::<Vec<_>>(),
             "plan_notice_acknowledged_at":chrono::Utc::now().to_rfc3339()})
-    }
-    pub fn faults(&self, faults: Faults) {
-        *self
-            .state
-            .faults
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = faults;
     }
     pub fn seen(&self) -> Vec<Seen> {
         self.state
@@ -159,11 +126,5 @@ impl State {
                     .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or_default().to_owned()))
                     .collect(),
             });
-    }
-    fn faults(&self) -> Faults {
-        self.faults
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
     }
 }

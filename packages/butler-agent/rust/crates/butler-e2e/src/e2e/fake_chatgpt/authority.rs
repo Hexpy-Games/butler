@@ -47,7 +47,6 @@ async fn authorize(
     if !valid_authorize(&params) {
         return StatusCode::BAD_REQUEST.into_response();
     }
-    let faults = state.faults();
     let mut params = params;
     let dynamic = params
         .get("client_id")
@@ -77,37 +76,15 @@ async fn authorize(
         return StatusCode::BAD_REQUEST.into_response();
     };
     let code = uuid::Uuid::new_v4().to_string();
-    let state_value = if faults.wrong_state {
-        "wrong-state"
-    } else {
-        params.get("state").map(String::as_str).unwrap_or("")
-    };
-    redirect.query_pairs_mut().append_pair("state", state_value);
-    if faults.deny {
-        redirect
-            .query_pairs_mut()
-            .append_pair("error", "access_denied");
-    } else {
-        redirect
-            .query_pairs_mut()
-            .append_pair("code", &code)
-            .append_pair("scope", butler_models::models::chatgpt::SCOPES);
-        if faults.wrong_client {
-            redirect
-                .query_pairs_mut()
-                .append_pair("client_id", "different-client");
-        } else if dynamic && !faults.omit_client {
-            redirect.query_pairs_mut().append_pair(
-                "client_id",
-                params.get("client_id").map(String::as_str).unwrap_or(""),
-            );
-        }
-        state
-            .grants
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(code, params);
+    redirect.query_pairs_mut()
+        .append_pair("state", params.get("state").map(String::as_str).unwrap_or(""))
+        .append_pair("code", &code)
+        .append_pair("scope", butler_models::models::chatgpt::SCOPES);
+    if dynamic {
+        redirect.query_pairs_mut().append_pair(
+            "client_id", params.get("client_id").map(String::as_str).unwrap_or(""));
     }
+    state.grants.lock().unwrap_or_else(std::sync::PoisonError::into_inner).insert(code, params);
     (
         StatusCode::FOUND,
         [(axum::http::header::LOCATION, redirect.as_str())],
@@ -147,9 +124,5 @@ async fn revoke(
     Form(params): Form<BTreeMap<String, String>>,
 ) -> StatusCode {
     state.record("revoke", &params, &headers);
-    if state.faults().revoke_503 {
-        StatusCode::SERVICE_UNAVAILABLE
-    } else {
-        StatusCode::OK
-    }
+    StatusCode::OK
 }

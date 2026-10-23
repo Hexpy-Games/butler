@@ -55,7 +55,6 @@ mod browser_usage;
 mod cassette_lint;
 mod catalog_provider_truth;
 mod chatgpt_plan_usage;
-mod chatgpt_session;
 mod chatgpt_sign_in;
 mod chatgpt_wire;
 mod cli_launcher;

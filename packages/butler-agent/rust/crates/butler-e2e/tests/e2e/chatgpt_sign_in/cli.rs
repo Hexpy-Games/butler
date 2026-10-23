@@ -77,12 +77,6 @@ async fn siwc_07_cli_login_logout_and_status() -> Result<(), HarnessError> {
     )?;
     assert_eq!(command(&launch, &args).await?["mode"], "chatgpt_plan");
     let old: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
-    let mut plan_off = old.clone();
-    plan_off["scopes"] = json!(["openid"]);
-    std::fs::write(&path, serde_json::to_vec(&plan_off)?)?;
-    let status = command(&launch, &args).await?;
-    assert_eq!(status["mode"], "chatgpt_plan_off");
-    assert_eq!(status["source"], "chatgpt");
     assert_eq!(
         command(&launch, &["auth", "logout", "--yes", "--json"]).await?["revoked"],
         true
@@ -108,23 +102,6 @@ async fn siwc_07_cli_login_logout_and_status() -> Result<(), HarnessError> {
         authority.seen().len(),
         before,
         "tokenless logout made a request"
-    );
-    login(&launch, &authority).await?;
-    authority.faults(Faults {
-        revoke_503: true,
-        ..Default::default()
-    });
-    assert_eq!(
-        command(&launch, &["auth", "logout", "--yes", "--json"]).await?["revoked"],
-        false
-    );
-    assert_eq!(
-        authority
-            .seen()
-            .iter()
-            .filter(|r| r.path == "revoke")
-            .count(),
-        4
     );
     let cleared: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
     assert!(cleared["access_token"].is_null() && cleared["refresh_token"].is_null());

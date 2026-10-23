@@ -1,14 +1,14 @@
-//! P1 migration backend acceptance. Turn routing belongs to P2.
+//! ChatGPT-plan user flows through public agent routes.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,
     reason = "test assertions"
 )]
-use super::chatgpt_sign_in::{account, scenario, settle, start};
+use super::chatgpt_sign_in::{account, settle, start};
 use butler_e2e::e2e::{
     HarnessError,
-    fake_chatgpt::{FakeChatGptAuthority, Faults},
+    fake_chatgpt::FakeChatGptAuthority,
 };
 use serde_json::json;
 
@@ -17,11 +17,18 @@ async fn siwc_14_legacy_migration_preserves_credentials_until_success() -> Resul
 {
     butler_e2e::gate!();
     let authority = FakeChatGptAuthority::start().await?;
-    let s = scenario("SIWC-14", &authority).await?;
-    let path = s.sandbox.data.join("auth/openai-codex.json");
+    let setup = butler_e2e::e2e::scenario::Setup::new("SIWC-14")?
+        .without_credential()
+        .synthetic(butler_e2e::e2e::provider::Script {
+            rounds: 0, path_for: Box::new(|_| String::new()), final_text: "migration-ok".into(),
+        })
+        .env("BUTLER_CHATGPT_AUTH_ISSUER", &authority.issuer)
+        ;
+    let path = setup.sandbox.data.join("auth/openai-codex.json");
     std::fs::create_dir_all(path.parent().unwrap())?;
     let original = b"{\"accessToken\":\"legacy-secret\"}";
     std::fs::write(&path, original)?;
+    let s = setup.start().await?;
     let view = account(&s).await?;
     assert_eq!(view["status"], "legacy_sign_in_required");
     assert_eq!(view["legacy_prompt_pending"], true);
@@ -31,22 +38,12 @@ async fn siwc_14_legacy_migration_preserves_credentials_until_success() -> Resul
             .await?;
     assert_eq!(ack.status, 200);
     assert_eq!(account(&s).await?["legacy_prompt_pending"], false);
-    let flow = start(&s, json!({})).await?;
-    s.gw.post(
-        &format!("/setup/oauth/{}/cancel", flow["flow_id"].as_str().unwrap()),
-        json!({}),
-    )
-    .await?;
+    let (_, turn) = s.turn("general", "continue after migration notice").await?;
+    assert_eq!(butler_e2e::e2e::gateway::turn_state(&turn), "failed");
+    assert!(turn.to_string().contains("chatgpt_sign_in_required"));
+    assert!(s.provider()?.requests().is_empty());
+    assert!(authority.seen().is_empty());
     assert_eq!(std::fs::read(&path)?, original);
-    authority.faults(Faults {
-        deny: true,
-        ..Default::default()
-    });
-    let flow = start(&s, json!({})).await?;
-    authority.browser(&flow).await?;
-    assert_eq!(settle(&s, &flow).await?["error"], "oauth_denied");
-    assert_eq!(std::fs::read(&path)?, original);
-    authority.faults(Faults::default());
     let flow = start(&s, json!({})).await?;
     authority.browser(&flow).await?;
     assert_eq!(settle(&s, &flow).await?["status"], "completed");

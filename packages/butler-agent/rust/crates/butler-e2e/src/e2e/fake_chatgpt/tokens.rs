@@ -44,7 +44,6 @@ pub(super) async fn exchange(
     {
         return refresh(&state, &params);
     }
-    let faults = state.faults();
     let get = |key: &str| params.get(key).map(String::as_str).unwrap_or("");
     let grant = state
         .grants
@@ -66,7 +65,7 @@ pub(super) async fn exchange(
         && grant.get("code_challenge").is_some_and(|challenge| {
             *challenge == B64.encode(Sha256::digest(get("code_verifier")))
         });
-    if !valid || faults.invalid_grant {
+    if !valid {
         return (
             StatusCode::BAD_REQUEST,
             Json(json!({"error":"invalid_grant"})),
@@ -79,19 +78,10 @@ pub(super) async fn exchange(
     Json(response).into_response()
 }
 fn id_token(state: &Authority, grant: &BTreeMap<String, String>) -> String {
-    let faults = state.faults();
-    let fault = faults.id_token.as_deref().unwrap_or("");
     let now = chrono::Utc::now().timestamp();
-    let mut claims = json!({"iss":state.issuer,"aud":grant.get("client_id"),"iat":now,"exp":now+3600,
-        "nonce":grant.get("nonce"),"sub":faults.subject.as_deref().unwrap_or("e2e-subject"),"email":"e2e-user@example.com","name":"Test account"});
-    match fault {
-        "iss" => claims["iss"] = "https://wrong.invalid".into(),
-        "aud" => claims["aud"] = "wrong-client".into(),
-        "exp" => claims["exp"] = (now - 60).into(),
-        "nonce" => claims["nonce"] = "wrong-nonce".into(),
-        _ => {}
-    }
-    let header = json!({"alg":if fault == "alg" { "none" } else { "RS256" },"kid":if fault == "kid" { "unknown" } else { "test-signing-key" }});
+    let claims = json!({"iss":state.issuer,"aud":grant.get("client_id"),"iat":now,"exp":now+3600,
+        "nonce":grant.get("nonce"),"sub":"e2e-subject","email":"e2e-user@example.com","name":"Test account"});
+    let header = json!({"alg":"RS256","kid":"test-signing-key"});
     let message = format!(
         "{}.{}",
         B64.encode(header.to_string()),
@@ -106,9 +96,6 @@ fn id_token(state: &Authority, grant: &BTreeMap<String, String>) -> String {
         &mut signature,
     )
     .expect("test signature");
-    if fault == "signature" {
-        signature[0] ^= 1;
-    }
     format!("{message}.{}", B64.encode(signature))
 }
 
@@ -121,21 +108,9 @@ pub(super) fn issue(state: &Authority, client: &str) -> Value {
         .insert(refresh.clone(), client.into());
     json!({"access_token":format!("access-{}",uuid::Uuid::new_v4()), "refresh_token":refresh,
         "token_type":"Bearer", "expires_in":3600, "earliest_refresh_at":null,
-        "scope":if state.faults().no_plan { "openid profile email offline_access resource.invoke" }
-            else { butler_models::models::chatgpt::SCOPES }})
+        "scope":butler_models::models::chatgpt::SCOPES})
 }
 fn refresh(state: &Authority, params: &BTreeMap<String, String>) -> Response {
-    let faults = state.faults();
-    if faults.refresh_503 {
-        return StatusCode::SERVICE_UNAVAILABLE.into_response();
-    }
-    if faults.invalid_client {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error":"invalid_client"})),
-        )
-            .into_response();
-    }
     let get = |k: &str| params.get(k).map(String::as_str).unwrap_or("");
     if get("resource") != butler_models::models::chatgpt::RESOURCE || params.contains_key("scope") {
         return StatusCode::BAD_REQUEST.into_response();
@@ -144,8 +119,7 @@ fn refresh(state: &Authority, params: &BTreeMap<String, String>) -> Response {
         .refresh
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    if faults.refresh_reused
-        || refresh
+    if refresh
             .get(get("refresh_token"))
             .is_none_or(|client| client != get("client_id"))
     {

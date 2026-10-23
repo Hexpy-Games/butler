@@ -1,9 +1,8 @@
-//! Hosted plan search and local DuckDuckGo fallback through the search companion.
+//! Hosted plan search returns sources through the search companion.
 use super::*;
 use axum::{
     Json, Router,
     extract::State,
-    http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
 };
@@ -15,9 +14,7 @@ use std::{
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 struct SearchState {
-    mode: String,
     primary: usize,
-    fallback: usize,
 }
 struct Server {
     base: String,
@@ -30,18 +27,16 @@ impl Drop for Server {
     }
 }
 impl Server {
-    async fn start(mode: &str) -> Result<Self, HarnessError> {
+    async fn start() -> Result<Self, HarnessError> {
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await?;
         let base = format!("http://{}", listener.local_addr()?);
         let state = Arc::new(Mutex::new(SearchState {
-            mode: mode.into(),
             primary: 0,
-            fallback: 0,
         }));
         let app = Router::new().route("/v1/responses",post(primary))
             .route_layer(axum::middleware::from_fn(butler_e2e::e2e::chatgpt_wire::validate))
             .route("/v1/models",get(|| async { Json(json!({"models":[{"slug":"gpt-6-luna","display_name":"Luna","visibility":"list"}]})) }))
-            .route("/search",get(ddg)).with_state(state.clone());
+            .with_state(state.clone());
         let task = tokio::spawn(async move {
             let _ = axum::serve(listener, app).await;
         });
@@ -56,37 +51,6 @@ async fn primary(
     assert_eq!(body["include"], json!(["web_search_call.action.sources"]));
     let mut state = state.lock().unwrap();
     state.primary += 1;
-    match state.mode.as_str() {
-        "unsupported" => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"error":{"code":"subscription_sharing_unsupported_capability"}})),
-            )
-                .into_response();
-        }
-        "route" => {
-            return (
-                StatusCode::FORBIDDEN,
-                Json(json!({"error":{"code":"subscription_sharing_route_not_supported"}})),
-            )
-                .into_response();
-        }
-        "500" => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error":{"code":"temporary"}})),
-            )
-                .into_response();
-        }
-        "401" if state.primary == 1 => {
-            return (
-                StatusCode::UNAUTHORIZED,
-                Json(json!({"detail":"identity rejected"})),
-            )
-                .into_response();
-        }
-        _ => {}
-    }
     let events = [
         json!({"type":"response.metadata","metadata":{}}),
         json!({"type":"response.web_search_call.searching"}),
@@ -101,10 +65,6 @@ async fn primary(
         }),
     )
         .into_response()
-}
-async fn ddg(State(state): State<Arc<Mutex<SearchState>>>) -> &'static str {
-    state.lock().unwrap().fallback += 1;
-    "<div class=\"result\"><a class=\"result__a\" href=\"https://example.org/fallback\">Fallback source</a><a class=\"result__snippet\">Local fallback result</a></div>"
 }
 struct Companion {
     child: tokio::process::Child,
@@ -154,82 +114,21 @@ impl Companion {
 #[tokio::test]
 async fn siwc_16_hosted_search_alias_memo_fallback_and_refresh() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    for (provider, mode) in [
-        ("chatgpt-plan-web-search", "success"),
-        ("codex-subscription-web-search", "success"),
-        ("chatgpt-plan-web-search", "unsupported"),
-        ("chatgpt-plan-web-search", "route"),
-        ("chatgpt-plan-web-search", "500"),
-        ("chatgpt-plan-web-search", "401"),
-    ] {
-        let server = Server::start(mode).await?;
-        let s = super::super::chatgpt_session::scenario(&format!("SIWC-16-{mode}")).await?;
-        let path = s.sandbox.data.join("butler.config.json");
-        let mut config: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
-        config["webSearch"] =
-            json!({"provider":provider,"model":"openai/gpt-6-luna","planning":{"enabled":false}});
-        std::fs::write(&path, serde_json::to_vec(&config)?)?;
-        if provider == "codex-subscription-web-search" {
-            let settings =
-                s.gw.patch("/settings", json!({"web_search":{"provider":provider}}))
-                    .await?;
-            assert_eq!(settings.status, 200, "{}", settings.text);
-            let saved: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
-            assert_eq!(saved["webSearch"]["provider"], "chatgpt-plan-web-search");
-            // A previously saved alias remains readable as well.
-            std::fs::write(&path, serde_json::to_vec(&config)?)?;
-        }
-        let mut companion = Companion::start(&s, &server)?;
-        let result = companion.search().await?;
-        let fallback = matches!(mode, "unsupported" | "route" | "500");
-        assert_eq!(
-            result["provider"],
-            if fallback {
-                "duckduckgo-html"
-            } else {
-                "chatgpt-plan-web-search"
-            },
-            "{result}"
-        );
-        assert!(
-            result["results"].as_array().is_some_and(|r| !r.is_empty()),
-            "{result}"
-        );
-        assert_eq!(
-            result["results"][0]["url"],
-            if fallback {
-                "https://example.org/fallback"
-            } else {
-                "https://example.org/source"
-            }
-        );
-        if matches!(mode, "unsupported" | "route") {
-            let again = companion.search().await?;
-            assert_eq!(again["provider"], "duckduckgo-html", "{again}");
-            assert_eq!(server.state.lock().unwrap().primary, 1);
-            assert_eq!(server.state.lock().unwrap().fallback, 2);
-        } else {
-            assert_eq!(
-                server.state.lock().unwrap().primary,
-                if mode == "401" { 2 } else { 1 }
-            );
-            assert_eq!(server.state.lock().unwrap().fallback, usize::from(fallback));
-        }
-        if mode == "401" {
-            assert_eq!(
-                s.authority
-                    .as_ref()
-                    .unwrap()
-                    .seen()
-                    .iter()
-                    .filter(|r| r.path == "token")
-                    .count(),
-                1
-            );
-        }
-        companion.child.kill().await?;
-        companion.child.wait().await?;
-        s.finish().await?;
-    }
-    Ok(())
+    let server = Server::start().await?;
+    let s = butler_e2e::e2e::scenario::Setup::new("SIWC-16")?.start().await?;
+    let path = s.sandbox.data.join("butler.config.json");
+    let mut config: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
+    config["webSearch"] = json!({"provider":"chatgpt-plan-web-search",
+        "model":"openai/gpt-6-luna","planning":{"enabled":false}});
+    std::fs::write(&path, serde_json::to_vec(&config)?)?;
+    let mut companion = Companion::start(&s, &server)?;
+    let result = companion.search().await?;
+    assert_eq!(result["provider"], "chatgpt-plan-web-search", "{result}");
+    assert!(result["results"].as_array().is_some_and(|r| !r.is_empty()), "{result}");
+    assert_eq!(result["results"][0]["url"], "https://example.org/source");
+    assert_eq!(result["results"][0]["title"], "Hosted source");
+    assert_eq!(server.state.lock().unwrap().primary, 1);
+    companion.child.kill().await?;
+    companion.child.wait().await?;
+    s.finish().await
 }

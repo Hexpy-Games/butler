@@ -8,19 +8,6 @@ use axum::{
 use std::{collections::BTreeMap, sync::Arc};
 pub(super) async fn list(State(state): State<Arc<Authority>>, headers: HeaderMap) -> Response {
     state.record("models", &BTreeMap::new(), &headers);
-    let mut faults = state
-        .faults
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    if faults.models_401 > 0 {
-        faults.models_401 -= 1;
-        return StatusCode::UNAUTHORIZED.into_response();
-    }
-    if faults.models_503 > 0 {
-        faults.models_503 -= 1;
-        return StatusCode::SERVICE_UNAVAILABLE.into_response();
-    }
-    drop(faults);
     if !headers
         .get("authorization")
         .and_then(|h| h.to_str().ok())

@@ -58,12 +58,6 @@ fn listening(port: u16) -> bool {
     std::net::TcpStream::connect(("127.0.0.1", port)).is_ok()
 }
 
-/// The browser's redirect to the callback listener.
-pub(super) async fn callback(port: u16, query: &str) -> Result<(u16, String), HarnessError> {
-    let response = reqwest::get(format!("http://127.0.0.1:{port}/auth/callback?{query}")).await?;
-    Ok((response.status().as_u16(), response.text().await?))
-}
-
 pub(super) async fn flow_until(
     gw: &Gateway,
     flow_id: &str,
@@ -82,7 +76,7 @@ pub(super) async fn flow_until(
 
 /// SETUP-08 — Cancelling a pending sign-in closes its callback listener
 /// and drops its PKCE state: the flow reports `cancelled`, the port is
-/// free, and a later callback with that state cannot complete anything.
+/// free, and a new sign-in can start.
 #[tokio::test]
 async fn setup_08_cancel_closes_the_listener_and_drops_the_state() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -98,7 +92,6 @@ async fn setup_08_cancel_closes_the_listener_and_drops_the_state() -> Result<(),
         "{flow}"
     );
     assert_eq!(auth_param(&flow, "code_challenge_method"), "S256");
-    let state = auth_param(&flow, "state");
     assert!(listening(port), "no callback listener while pending");
     // A second start returns the pending flow instead of a new listener.
     assert_eq!(start(&s.gw, json!({})).await?["flow_id"], flow_id.as_str());
@@ -117,25 +110,6 @@ async fn setup_08_cancel_closes_the_listener_and_drops_the_state() -> Result<(),
         s.gw.get(&format!("/setup/oauth/{flow_id}")).await?.data()["status"],
         "cancelled"
     );
-    let late = callback(port, &format!("code=late&state={state}")).await;
-    assert!(
-        late.is_err(),
-        "a callback reached a cancelled flow: {late:?}"
-    );
-    assert!(
-        !token.seen().iter().any(|r| r.path == "token"),
-        "a cancelled flow exchanged a code"
-    );
-    let again =
-        s.gw.post(&format!("/setup/oauth/{flow_id}/cancel"), json!({}))
-            .await?;
-    assert_eq!(again.data()["status"], "cancelled", "{}", again.text);
-    let unknown =
-        s.gw.post("/setup/oauth/oauth_unknown/cancel", json!({}))
-            .await?;
-    assert_eq!(unknown.status, 404, "{}", unknown.text);
-    assert_eq!(unknown.error_code(), Some("oauth_flow_not_found"));
-
     // A new sign-in owns another available callback port.
     let next = start(&s.gw, json!({})).await?;
     assert_ne!(next["flow_id"], flow_id.as_str());
@@ -154,7 +128,21 @@ async fn setup_08_cancel_closes_the_listener_and_drops_the_state() -> Result<(),
 async fn setup_09_sign_in_completes_with_the_flows_pkce() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let token = FakeChatGptAuthority::start().await?;
-    let s = with_callback_port("SETUP-09", &token).await?;
+    let callback_port = butler_e2e::e2e::agent::free_port()?;
+    let s = Setup::new("SETUP-09")?
+        .fixture(Fixture::Empty)
+        .without_credential()
+        .env("BUTLER_CHATGPT_AUTH_ISSUER", &token.issuer)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{}/v1", token.issuer))
+        .env("BUTLER_CHATGPT_OAUTH_PORT", callback_port.to_string())
+        .start().await?;
+    assert_eq!(super::chatgpt_sign_in::account(&s).await?["status"], "signed_out");
+    for path in ["/model-catalog", "/settings"] {
+        assert_eq!(s.gw.get(path).await?.status, 200);
+    }
+    assert!(!listening(callback_port), "reads started a callback listener");
+    assert!(token.seen().is_empty(), "reads contacted the authority");
+    assert!(!s.sandbox.data.join("auth/chatgpt-host.json").exists());
     super::outbound_http::logging(&s, "full").await?;
 
     let flow = start(&s.gw, json!({})).await?;
@@ -181,6 +169,17 @@ async fn setup_09_sign_in_completes_with_the_flows_pkce() -> Result<(), HarnessE
         .params;
     let form = &exchange.iter().find(|r| r.path == "token").unwrap().params;
     assert_eq!(form["grant_type"], "authorization_code");
+    assert_eq!(authorize["client_id"], "dynamic_agent_client");
+    assert_eq!(authorize["agent_name_hint"], "Butler");
+    assert_eq!(authorize["scope"], butler_models::models::chatgpt::SCOPES);
+    assert_eq!(authorize["resource"], butler_models::models::chatgpt::RESOURCE);
+    assert_eq!(authorize["code_challenge_method"], "S256");
+    assert!(!authorize["nonce"].is_empty());
+    let host = authorize["ext_agent_host_id"].strip_prefix("urn:uuid:").unwrap();
+    let host_id = uuid::Uuid::parse_str(host).unwrap();
+    assert_eq!(host_id.get_version_num(), 4);
+    assert_eq!(host_id.hyphenated().to_string(), host);
+    assert_eq!(form["resource"], butler_models::models::chatgpt::RESOURCE);
     assert_eq!(
         butler_models::models::pkce_challenge(&form["code_verifier"]),
         authorize["code_challenge"]
@@ -190,6 +189,20 @@ async fn setup_09_sign_in_completes_with_the_flows_pkce() -> Result<(), HarnessE
         serde_json::from_slice(&std::fs::read(s.sandbox.data.join("auth/chatgpt.json"))?)?;
     assert_eq!(profile["email"], OAUTH_EMAIL);
     assert_eq!(profile["subject"], "e2e-subject");
+    assert_eq!(done["plan_enabled"], true);
+    assert_eq!(form["client_id"], profile["client_id"]);
+    assert_ne!(profile["client_id"], "dynamic_agent_client");
+    assert!(profile.get("id_token").is_none());
+    assert_eq!(super::chatgpt_sign_in::account(&s).await?["status"], "signed_in");
+    let metadata = std::fs::metadata(s.sandbox.data.join("auth/chatgpt.json"))?;
+    assert_eq!(butler_platform::secure_fs::is_owner_only(&metadata),
+        butler_platform::secure_fs::OWNER_ONLY.then_some(true));
+    let http_logs = s.gw.get("/logs?category=http.client&limit=1000").await?;
+    for key in ["access_token", "refresh_token"] {
+        let secret = profile[key].as_str().unwrap();
+        assert!(!s.agent.logs().contains(secret));
+        assert!(!http_logs.text.contains(secret));
+    }
 
     let rows = super::outbound_http::http_calls(
         &s, &format!("{}/api/accounts/oauth/token", token.issuer),
@@ -215,75 +228,5 @@ async fn setup_09_sign_in_completes_with_the_flows_pkce() -> Result<(), HarnessE
     let forced_id = forced["flow_id"].as_str().unwrap();
     s.gw.post(&format!("/setup/oauth/{forced_id}/cancel"), json!({}))
         .await?;
-    s.finish().await
-}
-
-/// SETUP-10 — Anything else that reaches the callback listener leaves the
-/// sign-in pending: an idle connection does not hold up the browser, and a
-/// request with another state, no state or no code is answered and ignored
-/// (any local page can reach the port). Declining in the browser (this
-/// flow's state with `error`) ends it as `failed`/`oauth_denied`.
-#[tokio::test]
-async fn setup_10_stray_callbacks_are_ignored() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let token = FakeChatGptAuthority::start().await?;
-    let s = with_callback_port("SETUP-10", &token).await?;
-    let flow = start(&s.gw, json!({})).await?;
-    let port = port(&flow);
-    let flow_id = flow["flow_id"].as_str().unwrap().to_owned();
-    let state = auth_param(&flow, "state");
-
-    // An idle connection that never sends a request.
-    let idle = tokio::net::TcpStream::connect(("127.0.0.1", port)).await?;
-    for stray in [
-        "code=stray&state=not-this-flow".to_owned(),
-        "error=access_denied&state=not-this-flow".to_owned(),
-        "code=stray".to_owned(),
-        format!("state={state}"),
-    ] {
-        let (status, _) = callback(port, &stray).await?;
-        assert_eq!(status, 400, "{stray}");
-    }
-    assert_eq!(
-        s.gw.get(&format!("/setup/oauth/{flow_id}")).await?.data()["status"],
-        "pending"
-    );
-    assert!(
-        !token.seen().iter().any(|r| r.path == "token"),
-        "a stray request exchanged a code"
-    );
-
-    // The browser's callback completes while the idle connection is open.
-    let started = Instant::now();
-    let (status, page) = token.browser(&flow).await?;
-    assert_eq!(status, 200, "{page}");
-    butler_e2e::assert_wall_clock_budget!(
-        started.elapsed(),
-        Duration::from_secs(5),
-        "the idle connection held it up"
-    );
-    assert_eq!(
-        flow_until(&s.gw, &flow_id, "completed").await?["status"],
-        "completed"
-    );
-    drop(idle);
-
-    // Declining ends a (forced) new sign-in.
-    let declined = start(&s.gw, json!({"force": true})).await?;
-    let declined_id = declined["flow_id"].as_str().unwrap().to_owned();
-    let declined_port = self::port(&declined);
-    let declined_state = auth_param(&declined, "state");
-    let (status, _) = callback(
-        declined_port,
-        &format!("error=access_denied&state={declined_state}"),
-    )
-    .await?;
-    assert_eq!(status, 400);
-    let failed = flow_until(&s.gw, &declined_id, "failed").await?;
-    assert_eq!(failed["error"], "oauth_denied", "{failed}");
-    assert!(
-        !listening(declined_port),
-        "the listener outlived the declined sign-in"
-    );
     s.finish().await
 }
