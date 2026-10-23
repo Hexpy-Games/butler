@@ -68,7 +68,7 @@ export const guidance: ShowcaseGuidance = {
   ],
   recipes: [
     { name: "Plan lanes", description: "One KanbanLane per status; lanes keep one height so the board stays level.", render: () => <PlanLanes /> },
-    { name: "Scrolling status lanes", description: "`scroll`: more lanes than fit stay in one row at --kanban-lane-min-width and scroll sideways with an edge fade.", render: () => <ScrollingLanes /> },
+    { name: "Scrolling status lanes", description: "`scroll`: more lanes than fit stay in one row at --kanban-lane-min-width and scroll sideways with an edge fade. With a mouse or trackpad, a thin scrollbar fades in under the lanes while the pointer is over the board or focus is inside it.", render: () => <ScrollingLanes /> },
     {
       name: "Drag between lanes",
       description: "KanbanDragScope around the boards, `laneId` on each KanbanLane, KanbanCard per item. `onMove` gets { itemId, fromLaneId, toLaneId, beforeItemId } (null = lane end): same lane = reorder, other lane = status change, other board = move to that group. applyKanbanMove applies it to lanes of ids.",
@@ -100,7 +100,8 @@ export const guidance: ShowcaseGuidance = {
     "Pick-up, every keyboard step, the drop and a cancel are announced in a polite live region.",
     "Touch drags start with a long press, so swiping still scrolls the page and the boards.",
     "`canDrop` hides lanes that cannot take a card; keyboard moves skip them.",
+    "A `scroll` board that overflows shows its scrollbar on pointer hover and while focus is inside; it sits in its own lane under the cards, so it never covers a card or a focus ring.",
   ],
   tokens: ["--kanban-lane-height", "--kanban-lane-min-width", "--kanban-lane-min-height", "--kanban-card-min-width", "--kanban-drop-line",
-    "--shadow-drag-lift", "--motion-scale-lift", "--motion-base", "--motion-ease-emphasized", "--space-md", "--line", "--accent"],
+    "--shadow-drag-lift", "--motion-scale-lift", "--motion-base", "--motion-fast", "--motion-ease-emphasized", "--motion-ease-standard", "--space-md", "--line", "--text-tertiary", "--accent"],
 };
