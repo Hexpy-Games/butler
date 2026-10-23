@@ -269,13 +269,18 @@ impl SubsessionService {
             parents.insert(stored.parent_session_id, stored.child_session_id);
         }
         self.recover_directions().await?;
-        let delivery = self.deliver_worker_results().await;
+        if let Err(error) = self.deliver_worker_results().await {
+            butler_core::diagnostic!(
+                "[native-btcc] Worker recovery delivery deferred code={}",
+                error.code()
+            );
+        }
         // Delivery stays last in main's recovery order. Failed delivery must
         // not prevent other parents from admitting work into their free slots.
         for child in parents.values() {
             self.release_child_slot(child).await;
         }
-        delivery
+        Ok(())
     }
     /// Whether the parent session has an active child to wait for.
     pub async fn should_wait_for_child(&self, parent: &str) -> Result<bool, BtccError> {
