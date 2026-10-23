@@ -22,7 +22,7 @@ ROOTS = (
 )
 # Stub-tier E2E modules that drive model tool calls through dispatch and handlers.
 E2E = ('tools', 'tools_effects', 'tools_direct_args', 'browser_tool_args',
-       'memory_wiring_more', 'ask_user')
+       'memory_wiring_more', 'ask_user', 'nfd_paths')
 
 
 def module_base(root):
