@@ -9,10 +9,12 @@ use butler_e2e::e2e::{
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 const JOB: &str = "Prepare the bounded reports with workers.";
+const DISPATCH: &str = "Delegate the bounded reports for the Task running here.";
 
 async fn start(
     id: &str,
     workers: usize,
+    here: bool,
 ) -> Result<
     (
         Scenario,
@@ -21,7 +23,7 @@ async fn start(
     ),
     HarnessError,
 > {
-    let (url, script, server) = stub::start(workers).await?;
+    let (url, script, server) = stub::start(workers, here).await?;
     let s = Setup::new(id)?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", url)
@@ -65,8 +67,18 @@ async fn wait_workers(
 async fn wmu_22_workers_wait_release_fifo_and_lowering_never_stops_them() -> Result<(), HarnessError>
 {
     butler_e2e::gate!();
-    let (s, script, server) = start("WMU-22", 3).await?;
+    let (s, script, server) = start("WMU-22", 3, true).await?;
     s.turn("general", JOB).await?;
+    s.turn("general", DISPATCH).await?;
+    for output in script
+        .requests
+        .lock()
+        .unwrap()
+        .iter()
+        .flat_map(super::work_model_script::outputs)
+    {
+        assert_ne!(output["ok"], false, "{output}");
+    }
     let rows = wait_workers(&s, 3, 2).await?;
     assert!(rows.iter().all(|r| r["attempt"] == "running"));
     assert_eq!(
@@ -77,13 +89,21 @@ async fn wmu_22_workers_wait_release_fifo_and_lowering_never_stops_them() -> Res
         vec![&json!("Report piece 2")]
     );
     let pending = rows.iter().find(|r| r["intent"] == "pending").unwrap();
-    let parent = pending["parent"].as_str().unwrap();
-    let view =
-        s.gw.get(&format!("/session-view?session_id={parent}"))
-            .await?;
+    let view = s.gw.get("/session-view?session_id=general").await?;
     assert_eq!(view.status, 200, "{view:?}");
     assert!(view.data()["workers"].as_array().unwrap().iter().any(|worker|
         worker["session_id"] == pending["child"] && worker["status"] == "waiting"), "{view:?}");
+    let activity = s.gw.get("/sessions/general/worker-activity").await?;
+    assert_eq!(activity.status, 200, "{activity:?}");
+    assert!(
+        activity.data()["workers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|worker| worker["objective"] == "Report piece 2"
+                && worker["status_line"] == "Waiting"),
+        "{activity:?}"
+    );
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         let found = script
@@ -130,7 +150,7 @@ async fn wmu_22_workers_wait_release_fifo_and_lowering_never_stops_them() -> Res
 #[tokio::test]
 async fn wmu_23_two_sessions_each_run_two_workers() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (s, script, server) = start("WMU-23", 2).await?;
+    let (s, script, server) = start("WMU-23", 2, false).await?;
     let response =
         s.gw.post("/sessions", json!({"kind":"chat","title":"Other reports"}))
             .await?;

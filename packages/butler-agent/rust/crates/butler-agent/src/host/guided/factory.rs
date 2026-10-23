@@ -121,11 +121,9 @@ impl GuidedTurnFactoryAdapter {
             &turn.session_id,
         )
         .await?;
-        if phase.execution_policy.role == butler_turn::btcc::PolicyRole::Steward
-            && phase.provider_tools.iter().any(|tool| {
-                tool.get("name").and_then(serde_json::Value::as_str) == Some("delegate_to_worker")
-            })
-        {
+        if phase.provider_tools.iter().any(|tool| {
+            tool.get("name").and_then(serde_json::Value::as_str) == Some("delegate_to_worker")
+        }) {
             let profiles = self.subsessions.enabled_worker_profiles().await?;
             surface::with_worker_profile_choices(phase, &profiles)?;
         }

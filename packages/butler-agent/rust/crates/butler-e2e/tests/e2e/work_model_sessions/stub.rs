@@ -9,15 +9,18 @@ pub(super) struct Script {
     pub requests: Mutex<Vec<Value>>,
     pub release: Vec<Semaphore>,
     workers: usize,
+    here: bool,
 }
 pub(super) async fn start(
     workers: usize,
+    here: bool,
 ) -> Result<(String, Arc<Script>, tokio::task::JoinHandle<()>), HarnessError> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let script = Arc::new(Script {
         requests: Mutex::default(),
         release: (0..workers).map(|_| Semaphore::new(0)).collect(),
         workers,
+        here,
     });
     let url = format!("http://{}", listener.local_addr()?);
     let app = Router::new()
@@ -52,6 +55,22 @@ async fn reply(
         worker(step, index, &body)
     } else if request.starts_with("role: steward") {
         steward(step, script.workers, &body)
+    } else if request == JOB && script.here {
+        if step == 0 {
+            call(
+                "bootstrap",
+                "work_apply",
+                &native::bootstrap(JOB, &["Reports verified"]),
+            )
+        } else {
+            message("The Task is running here.")
+        }
+    } else if request == DISPATCH {
+        if step < script.workers {
+            dispatch(step)
+        } else {
+            message("The reports are assigned.")
+        }
     } else if request == JOB {
         match step {
             0 => call(
