@@ -44,6 +44,7 @@ pub(super) async fn start(id: &str, variants: &[Variant]) -> Result<Scenario, Ha
     Setup::new(id)?
         .stub_cassette(cassette)
         .env("BUTLER_METRICS_ENABLED", "1")
+        .env("BUTLER_MEMORY_SYNC_TRACE", "1")
         .start()
         .await
 }
