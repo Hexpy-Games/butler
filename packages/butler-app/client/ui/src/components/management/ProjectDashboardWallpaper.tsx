@@ -1,24 +1,35 @@
-import { Wallpaper, type WallpaperSetting } from "@/butler-ds";
+import { useMemo, useSyncExternalStore } from "react";
+import { Wallpaper, type WallpaperContentRect, type WallpaperSetting } from "@/butler-ds";
 import { useElementClientRect } from "@/hooks/useElementClientRect.ts";
 
-/**
- * The dashboard wallpaper: fills the ManagementPage background (the main
- * pane only) and tells modules where the header panel is so they keep it
- * clear. Its own state, so header measurements re-render only this layer.
- */
-export function ProjectDashboardWallpaper({ wallpaper, header }: {
+export interface ComposerRectChannel {
+  get: () => WallpaperContentRect | undefined;
+  set: (rect: WallpaperContentRect) => void;
+  subscribe: (listener: () => void) => () => void;
+}
+
+/** The composer's latest rect, delivered to the wallpaper without re-rendering its page. */
+export function createComposerRectChannel(): ComposerRectChannel {
+  let rect: WallpaperContentRect | undefined;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => rect,
+    set: (next) => { rect = next; for (const listener of listeners) listener(); },
+    subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
+  };
+}
+
+/** Geometry updates stay in the wallpaper layer, as they do in the chat view. */
+export function ProjectDashboardWallpaper({ wallpaper, column, composer: composerChannel, paperOverlay }: {
   wallpaper: WallpaperSetting;
-  header: HTMLElement | null;
+  column: HTMLElement | null;
+  composer: ComposerRectChannel;
+  paperOverlay: number;
 }) {
-  const contentRect = useElementClientRect(header);
-  return (
-    <Wallpaper
-      scope="container"
-      source={wallpaper.source}
-      motion={wallpaper.motion}
-      pauseOnBattery={wallpaper.pauseOnBattery}
-      contentRect={contentRect}
-      dataTestClass="project-dashboard-wallpaper"
-    />
-  );
+  const composer = useSyncExternalStore(composerChannel.subscribe, composerChannel.get);
+  const rect = useElementClientRect(column);
+  const columnRect = useMemo(() => rect ? { x: rect.x, y: rect.y, width: rect.width, height: 0 } : undefined, [rect]);
+  return <Wallpaper scope="container" source={wallpaper.source} motion={wallpaper.motion}
+    pauseOnBattery={wallpaper.pauseOnBattery} columnRect={columnRect} contentRect2={composer}
+    paperOverlay={paperOverlay} dataTestClass="project-dashboard-wallpaper" />;
 }

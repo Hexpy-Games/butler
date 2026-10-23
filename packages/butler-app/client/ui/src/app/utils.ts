@@ -1740,6 +1740,7 @@ export function activeTitleForView(
   if (view.kind === "settings") return { title: appCopy.settings.title };
   if (view.kind === "automations" || view.kind === "automation-detail")
     return { title: appCopy.automations.title };
+  if (view.kind === "plan-overview") return { title: appCopy.canon.overview };
   if (view.kind === "project-dashboard")
     return { title: appCopy.sidebar.projectDashboard };
   return { title: activeChat.shortTitle, subtitle: activeChat.location ?? activeChat.project };

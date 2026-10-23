@@ -1,3 +1,4 @@
+import { useActiveCanonEpic } from "../canon/useActiveCanonEpic.ts";
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { ComposerCardCompactPreview } from "@/butler-ds";
@@ -6,12 +7,13 @@ import { focusComposer } from "./editor/focusComposer";
 
 export function ComposerCompactPreview() {
   useAppLocale();
+  const epic = useActiveCanonEpic();
   const large = useComposerStore((store) => store.large);
   const setEngaged = useComposerStore((store) => store.setEngaged);
   const text = useComposerStore((store) => store.text);
   const textAreaRef = useComposerStore((store) => store.textAreaRef);
   const preview = text.trim() ||
-    (large
+    (epic ? appCopy.canon.epicPlaceholder : large
       ? appCopy.composer.placeholder
       : appCopy.composer.placeholderFollowUp);
   const engage = () => {

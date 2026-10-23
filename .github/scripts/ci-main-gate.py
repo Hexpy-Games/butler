@@ -8,6 +8,7 @@ import subprocess
 import sys
 
 from ci_main_baseline import latest_main_run
+from issue_links import references
 
 
 def command(*args):
@@ -36,21 +37,24 @@ def bypass(pr, repository):
     return False
 
 
-def issue_bypass(pr, repository, run):
-    # Only current reporter evidence for this workflow grants an issue bypass.
-    numbers = re.findall(r'https://github\.com/' + re.escape(repository)
-                         + r'/issues/(\d+)\b', pr.get('body') or '')
-    numbers += re.findall(r'(?<![\w/])#(\d+)\b', pr.get('body') or '')
-    for number in dict.fromkeys(numbers):
-        try:
-            issue = api(f'repos/{repository}/issues/{number}')
-        except (subprocess.CalledProcessError, OSError, ValueError, KeyError, TypeError):
-            continue
-        if (issue.get('state') == 'open' and not issue.get('pull_request')
+def failure_issues(repository, run):
+    """Open reporter issues carrying current evidence for this failing workflow run."""
+    try:
+        issues = api(f'repos/{repository}/issues?state=open&creator=github-actions%5Bbot%5D&per_page=100')
+        return [issue['number'] for issue in issues
+                if not issue.get('pull_request')
                 and issue.get('user', {}).get('login') == 'github-actions[bot]'
-                and current_failure(issue.get('body') or '', run)):
-            return True
-    return False
+                and current_failure(issue.get('body') or '', run)]
+    except (subprocess.CalledProcessError, OSError, ValueError, KeyError, TypeError):
+        return []
+
+
+def declares_fix(pr, repository, issues):
+    # A fix/ branch or a git-revert title must close the current failure issue.
+    if not (pr['head']['ref'].startswith('fix/') or (pr.get('title') or '').startswith('Revert')):
+        return False
+    closed, _, _ = references(repository, pr.get('body') or '')
+    return bool(closed & set(issues))
 
 
 def current_failure(body, run):
@@ -76,8 +80,12 @@ def main_gate(event, repository, event_name):
         except (subprocess.CalledProcessError, OSError, ValueError, KeyError, TypeError):
             print('::warning::Main CI API unavailable; merge block skipped.')
             return 0
-        if run and run['conclusion'] == 'failure' and not issue_bypass(pr, repository, run):
-            print(f'Main CI failed: {run["html_url"]}; use fix/revert-pr-*, ci:main-fix, or link an open main-failure issue.')
+        if not run or run['conclusion'] != 'failure':
+            continue
+        issues = failure_issues(repository, run)
+        if not declares_fix(pr, repository, issues):
+            target = ' or '.join(f'#{n}' for n in issues) or 'the main-failure issue'
+            print(f'Main is failing ({run["html_url"]}), so only fixes for {target} or `ci:main-fix` PRs can merge.')
             return 1
     return 0
 

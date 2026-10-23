@@ -129,6 +129,8 @@ fn binding(
         runtime_session_id: session,
         turn_id: turn,
         project_id: project,
+        usage_root: None,
+        usage_role: None,
     })
 }
 

@@ -4,7 +4,7 @@ use super::{
     query::PreparedSelection,
     selection::Selection,
 };
-use crate::cognition::recall::RecallRequest;
+use crate::cognition::recall::{RecallRequest, RecallRuntime};
 mod model;
 pub use model::{ConfiguredRecallJudge, RecallJudgeModelFuture, RecallJudgeModelSource};
 use serde::Serialize;
@@ -47,7 +47,7 @@ pub trait RecallJudgePort: Send + Sync {
     /// Rank these summary-only candidates; None means disabled.
     fn rank<'a>(
         &'a self,
-        question: &'a str,
+        runtime: &'a RecallRuntime,
         candidates: &'a [RecallJudgeCandidate],
         cancellation: CancellationToken,
     ) -> RecallJudgeFuture<'a>;
@@ -88,7 +88,7 @@ pub(super) async fn run(
         let result = tokio::select! {
             () = shutdown.cancelled() => return,
             () = caller.cancelled() => return,
-            result = tokio::time::timeout(Duration::from_secs(8), port.rank(&input.runtime.current_user_message, &prepared.candidates, cancel)) => result,
+            result = tokio::time::timeout(Duration::from_secs(8), port.rank(&input.runtime, &prepared.candidates, cancel)) => result,
         };
         match result {
             Ok(Ok(Some(reply))) => {
