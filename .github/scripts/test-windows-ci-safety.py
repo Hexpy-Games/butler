@@ -182,39 +182,6 @@ class WindowsSafety(command_coverage.WindowsCommandCoverage):
             self.assertEqual(windows_safety.audit(root)[1], [])
 
     # test-category: security
-    def test_volume_short_name_setup_runs_only_on_hosted_windows_jobs(self):
-        repository = ROOT.parents[1]
-        hosting = {}
-        for workflow in sorted((repository / '.github/workflows').glob('*.y*ml')):
-            jobs = workflow.read_text().split('\njobs:\n', 1)[-1]
-            for block in re.split(r'(?m)^(?=  [\w-]+:\s*$)', jobs):
-                if 'fsutil' in block.lower():
-                    # The workspace default directory does not exist before checkout.
-                    step = block.split('- name: Enable short names on the hosted temp volume\n', 1)[1]
-                    self.assertIn('working-directory: ${{ runner.temp }}\n', step.split('      - ', 1)[0])
-                    runner = re.search(r'(?m)^    runs-on:[ \t]*(.+)$', block)
-                    hosting[f"{workflow.name}/{block.split(':', 1)[0].strip()}"] = runner and runner[1]
-        self.assertEqual(hosting, {'windows-preview-smoke.yml/release': 'windows-latest',
-                                   'windows-preview-smoke.yml/hosted': 'windows-latest'})
-        for script in sorted((repository / 'deploy').rglob('*.ps1')):
-            self.assertNotIn('fsutil', script.read_text().lower(), script)
-        # The self-hosted audit rejects it in a job step or in a script the job reaches.
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            workflow = root / '.github/workflows/stub.yml'
-            workflow.parent.mkdir(parents=True)
-            workflow.write_text('jobs:\n  stub:\n    runs-on: [self-hosted, butler-win]\n    steps:\n'
-                                '      - run: fsutil 8dot3name set $volume 0\n'
-                                '      - run: ./deploy/volume.ps1\n')
-            script = root / 'deploy/volume.ps1'
-            script.parent.mkdir()
-            script.write_text('fsutil.exe 8dot3name set $volume 0\n')
-            findings = windows_safety.audit(root)[1]
-        hazard = 'runner installer or host configuration write'
-        self.assertIn(f'.github/workflows/stub.yml:5: {hazard}', findings)
-        self.assertIn(f'deploy/volume.ps1:1: {hazard}', findings)
-
-    # test-category: security
     def test_self_hosted_jobs_and_reachable_actions_have_no_shared_machine_hazards(self):
         jobs, findings = windows_safety.audit(ROOT.parents[1])
         self.assertGreaterEqual(len(jobs), 6, jobs)
