@@ -34,7 +34,7 @@ export function PlanOverview({ projectId, planId }: { projectId: string; planId:
     <ManagementPagePanel>
       {state.error ? <Notice tone="error" message={appCopy.interfaceFeedback.requestFailed} action={<Button onClick={() => void state.refresh()}>{appCopy.feedback.retry}</Button>} /> :
         !state.canon ? <ProgressMeter indeterminate label={appCopy.feedback.dashboardLoading} /> :
-          planId && !state.plan ? <Notice tone="info" message={appCopy.feedback.projectMissing} /> :
+          planId && !state.plan ? <Notice tone="info" message={copy.planMissing} /> :
             <PlanEpicList projectId={projectId} rows={state.rows} plans={state.canon.plans} backlog={!planId} busy={state.busy}
               onWrite={(epic, input, message) => void state.write(epic, input, message)} onReorder={ids => void state.reorder(ids)} onCreate={() => setDialog("create")} />}
     </ManagementPagePanel>

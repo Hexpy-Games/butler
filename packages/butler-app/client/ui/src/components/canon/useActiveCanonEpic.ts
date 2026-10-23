@@ -30,10 +30,9 @@ export function useActiveCanonEpic() {
   useEffect(() => {
     if (!projectId) return;
     if (!useCanonSidebarState.getState().sessions[sessionId]) void readProject(projectId).catch(() => {});
-    return subscribeCanonChanges(event => {
-      if (event && event.project_id !== projectId) return;
+    return subscribeCanonChanges(() => {
       refreshProject(projectId);
-    });
+    }, { projectId });
   }, [projectId, sessionId]);
   return match;
 }

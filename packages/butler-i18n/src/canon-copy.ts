@@ -1,6 +1,6 @@
 export interface CanonCopy {
   overview: string; openOverview: string; noPlan: string; personalOrder: string;
-  sharedOrder: string; backlogOrderHelp: string; sharedGrip: string; changePlan: string;
+  sharedOrder: string; backlogOrderHelp: string; sharedGrip: string; planMissing: string; changePlan: string;
   noEpics: string; noDescription: string; conversationFailed: string; epicPlaceholder: string;
   newInGroup: (group: string) => string; epicCount: (n: number) => string;
   epicCaption: (group: string) => string;

@@ -27,7 +27,7 @@ export function SpaceRowBranch({ row, depth, label, actions }: { row: SpaceRowDa
   return <CollapsibleNavGroup dataTestClass="tree-row" indented stickyDepth={depth} expanded={expanded}
     onToggle={() => useOrganization.getState().toggle(rowKey)} icon={<SpaceGlyph row={row} />} label={label} actions={actions}
     ariaDescription={!expanded && unreadInside ? appCopy.space.unread : undefined}>
-    {expanded && row.project && <CanonSidebarGroups projectId={row.project.id} depth={depth + 1} />}
+    {row.project && <CanonSidebarGroups projectId={row.project.id} depth={depth + 1} expanded={expanded} />}
     <CollapsibleList scope={rowKey}>{children.slice(0, limit).map(child => <SpaceRow key={child.node.key} rowKey={child.node.key} depth={depth + 1} />)}</CollapsibleList>
     {children.length > limit && <div onDragOver={event => {
       if (!useSpaceDrag.getState().source) return;

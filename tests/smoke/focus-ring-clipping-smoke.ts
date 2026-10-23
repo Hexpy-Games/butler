@@ -223,9 +223,12 @@ async function auditCell(page: Page, cell: Cell) {
   await page.locator('[data-test-class="canon-sidebar-group"]').first().waitFor();
   // Sidebar: top items, favorites, the spaces tree, nested rows and groups.
   await auditScope(page, cell, "sidebar", '[data-test-class="app-sidebar"]', 200);
-  await page.locator('[data-canon-group="focus-plan"] [data-test-class="canon-sidebar-group"]').getByRole("button", { name: "화면 계획", exact: true }).click();
+  await capture(page, `sidebar-${cell.width}-${cell.theme}-${cell.background}`);
+  await page.locator('[data-canon-group="focus-plan"] [data-test-class="canon-sidebar-group"]').click({ button: "right" });
+  await page.getByRole("menuitem", { name: copy.canon.overview, exact: true }).click();
   await page.locator('[data-test-class="canon-plan-epics"]').waitFor();
   await auditScope(page, cell, "plan-overview", '[data-test-class="canon-plan-overview"]', 80);
+  await capture(page, `plan-overview-${cell.width}-${cell.theme}-${cell.background}`);
   await open(page, cell);
   // Conversation: answer cards' buttons, the agent tab rail and the composer.
   if (cell.width < 768) await page.keyboard.press("Escape");

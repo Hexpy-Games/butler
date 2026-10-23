@@ -1,8 +1,8 @@
 import { appCopy } from "@/app/copy.ts";
 import { NativeSelect, NativeSelectOption, ButtonContainer, DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, IconButton, MoreHorizontal } from "@/butler-ds";
 import type { EpicCard, EpicInput, CanonPlan, CanonStatus } from "@/app/canonApi.ts";
-export function PlanEpicActions({ epic, plans, busy, onWrite }: {
-  epic: EpicCard; plans: CanonPlan[]; busy: boolean;
+export function PlanEpicActions({ epic, plans, busy, onWrite, onOpen }: {
+  onOpen: () => void; epic: EpicCard; plans: CanonPlan[]; busy: boolean;
   onWrite: (epic: EpicCard, input: EpicInput, message: string) => void;
 }) {
   const copy = appCopy.canon;
@@ -18,6 +18,7 @@ export function PlanEpicActions({ epic, plans, busy, onWrite }: {
     <DropdownMenu><DropdownMenuTrigger asChild>
       <IconButton label={appCopy.space.rowMenu(epic.title)} disabled={busy}><MoreHorizontal /></IconButton>
     </DropdownMenuTrigger><DropdownMenuContent align="end">
+      <DropdownMenuItem onSelect={onOpen}>{copy.openConversation}</DropdownMenuItem>
       <DropdownMenuSub><DropdownMenuSubTrigger>{copy.changePlan}</DropdownMenuSubTrigger><DropdownMenuSubContent>
         {options.map(plan => <DropdownMenuItem key={plan.id ?? "backlog"} disabled={epic.plan_id === plan.id}
           onSelect={() => onWrite(epic, { plan_id: plan.id }, copy.moved(plan.title))}>{plan.title}</DropdownMenuItem>)}

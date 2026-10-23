@@ -1,5 +1,6 @@
 import { appCopy } from "@/app/copy.ts";
 import { linkCanonConversation, type EpicCard } from "@/app/canonApi.ts";
+import { sessionFromNavigation } from "@/app/utils.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { notifyError } from "@/app/notifications.ts";
 
@@ -13,7 +14,7 @@ export async function openEpicConversation(_projectId: string, epic: EpicCard): 
   try {
     const id = epic.home_session_id ?? (await linkCanonConversation(epic.id)).session_id;
     const app = useButlerStore.getState();
-    await app.refreshNavigation();
+    if (!sessionFromNavigation(app.navigation, id)) await app.refreshNavigation();
     app.openSession(id);
   } catch (error) { notifyError(error, appCopy.canon.conversationFailed); }
 }

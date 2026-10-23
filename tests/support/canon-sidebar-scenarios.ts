@@ -17,13 +17,14 @@ export async function seedCanonSidebar(server: NativeAppServerHandle) {
 export async function showCanonSidebar(page: Page) {
   const show = page.getByRole("button", { name: "사이드바 보기", exact: true });
   if (await show.isVisible()) await show.click();
-  const project = page.locator('[data-tree-item^="p:"] [data-test-class="tree-row"]').first();
+  const project = page.locator('[data-tree-item^="p:"] [data-test-class="tree-row"]').filter({ hasText: "캐논 보드" });
   if (await project.getAttribute("aria-expanded") === "false") await project.click();
   await page.locator('[data-canon-group]').first().waitFor();
 }
 export async function openPlan(page: Page, planId: string | null) {
   await showCanonSidebar(page);
-  await page.locator(`[data-canon-group="${planId ?? "backlog"}"] [data-test-class="canon-sidebar-group"]`).getByRole("button", { name: planId ? "프리뷰 14" : "백로그", exact: true }).click();
+  await page.locator(`[data-canon-group="${planId ?? "backlog"}"] [data-test-class="canon-sidebar-group"]`).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "계획 개요", exact: true }).click();
   await page.locator('[data-test-class="canon-plan-overview"]').waitFor();
   // The row lives inside a drawer at phone widths; navigation closes it normally.
 }
@@ -71,8 +72,13 @@ export async function verifySidebarOrder(page: Page, server: NativeAppServerHand
   const rows = page.locator(`[data-canon-group="${planId}"] [data-canon-epic]`);
   const ids = await rows.evaluateAll(rows => rows.map(row => row.getAttribute("data-canon-epic")!));
   const saved = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === `${path}/sidebar-order`);
-  const box = await rows.nth(1).boundingBox(); assert(box);
-  await rows.first().dragTo(rows.nth(1), { targetPosition: { x: box.width / 2, y: box.height - 2 } });
+  const source = await rows.first().boundingBox(), target = await rows.nth(1).boundingBox();
+  assert(source && target);
+  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height - 2, { steps: 12 });
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height - 1);
+  await page.mouse.up();
   assert((await saved).ok()); await waitToast(page, "내 사이드바 순서만 바뀝니다");
   const sidebar = await server.api<CanonSidebar>(`${path}/sidebar`);
   const personal = sidebar.groups.find(group => group.key === planId)!.rows.map(row => row.id);

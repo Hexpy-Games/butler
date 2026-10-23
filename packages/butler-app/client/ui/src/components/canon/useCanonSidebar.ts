@@ -6,31 +6,31 @@ import { appCopy } from "@/app/copy.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import { canonWriteFailure } from "./canonFeedback.ts";
 
-export function useCanonSidebar(projectId: string) {
+export function useCanonSidebar(projectId: string, expanded: boolean) {
   const sidebar = useCanonSidebarState(state => state.projects[projectId]);
   const [busy, setBusy] = useState(false);
   const epoch = useRef(0), writing = useRef(false), mounted = useRef(true);
-  const [error, setError] = useState<unknown>(null);
   const refresh = useCallback(async () => {
     if (writing.current || !mounted.current) return;
     const generation = ++epoch.current;
     try {
       const data = await getCanonSidebar(projectId);
       if (generation !== epoch.current) return;
-      useCanonSidebarState.getState().rememberSidebar(data); setError(null);
-    } catch (error) { if (generation === epoch.current) setError(error); }
+      useCanonSidebarState.getState().rememberSidebar(data);
+    } catch (error) { if (generation === epoch.current) notifyError(error, appCopy.interfaceFeedback.requestFailed); }
   }, [projectId]);
   useEffect(() => {
-    mounted.current = true;
+    mounted.current = expanded;
+    if (!expanded) return () => { mounted.current = false; epoch.current++; };
     void refresh();
     let queued = false;
-    const unsubscribe = subscribeCanonChanges(event => {
-      if (queued || (event && event.project_id !== projectId)) return;
+    const unsubscribe = subscribeCanonChanges(() => {
+      if (queued) return;
       queued = true;
       queueMicrotask(() => { queued = false; void refresh(); });
-    });
+    }, { projectId, sidebar: true });
     return () => { mounted.current = false; epoch.current++; unsubscribe(); };
-  }, [projectId, refresh]);
+  }, [projectId, refresh, expanded]);
   const reorder = async (groupKey: string, ids: string[]) => {
     if (!sidebar || writing.current) return;
     epoch.current++; writing.current = true; setBusy(true);
@@ -43,7 +43,7 @@ export function useCanonSidebar(projectId: string) {
       notifyStatus(appCopy.canon.personalOrder);
     } catch (error) {
       useCanonSidebarState.getState().rememberSidebar(sidebar);
-      notifyError(error, appCopy.interfaceFeedback.requestFailed);
+      await canonWriteFailure(error, async () => {});
     } finally { writing.current = false; setBusy(false); await refresh(); }
   };
   const move = async (epic: EpicCard, groupKey: string, title: string) => {
@@ -55,5 +55,5 @@ export function useCanonSidebar(projectId: string) {
     } catch (error) { await canonWriteFailure(error, async () => {}); }
     finally { writing.current = false; setBusy(false); await refresh(); }
   };
-  return { sidebar, refresh, reorder, move, busy, error };
+  return { sidebar, refresh, reorder, move, busy };
 }

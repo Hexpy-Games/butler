@@ -34,12 +34,11 @@ export function useCanonBoard(projectId: string) {
   useEffect(() => {
     mounted.current = true;
     let queued = false;
-    const unsubscribe = subscribeCanonChanges(event => {
-      if (event && event.project_id !== projectId) return;
+    const unsubscribe = subscribeCanonChanges(() => {
       if (queued) return;
       queued = true;
       queueMicrotask(() => { queued = false; if (mounted.current) void refresh(); });
-    });
+    }, { projectId });
     return () => { mounted.current = false; generation.current++; unsubscribe(); };
   }, [projectId, refresh]);
   useEffect(() => { void refresh(); }, [refresh, selected]);
