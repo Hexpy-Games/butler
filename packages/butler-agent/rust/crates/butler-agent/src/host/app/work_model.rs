@@ -113,6 +113,19 @@ impl AppWorkModelPort for AppWorkModel {
                 .map_err(error)
         })
     }
+    fn task_session_states(&self, sessions: Vec<String>) -> ApplicationFuture<Vec<Value>> {
+        let storage = self.storage.clone();
+        Box::pin(async move {
+            storage.work_model_read(move |db| {
+                let mut stmt=db.prepare(store::ownership_sql::SESSION_STATES)?;
+                Ok(stmt.query_map([serde_json::to_string(&sessions)?],|r| Ok(json!({
+                    "session_id":r.get::<_,String>(0)?,"task_id":r.get::<_,String>(1)?,"work_id":r.get::<_,String>(2)?,
+                    "title":r.get::<_,String>(3)?,"status":r.get::<_,String>(4)?,"home_session_id":r.get::<_,Option<String>>(5)?,
+                    "chain_id":r.get::<_,Option<String>>(6)?,"step_index":r.get::<_,Option<i64>>(7)?,"stack_position":r.get::<_,Option<i64>>(8)?,"chain_created_at":r.get::<_,Option<i64>>(9)?
+                })))?.collect::<rusqlite::Result<Vec<_>>>()?)
+            }).await.map_err(error)
+        })
+    }
     fn pending_task_session_intents(&self) -> ApplicationFuture<Vec<Value>> {
         task_sessions::pending(self.storage.clone())
     }

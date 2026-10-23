@@ -76,16 +76,7 @@ async fn apply(
     raw: Value,
 ) -> Result<JsonDocument, ToolExecutionError> {
     let storage = owner.journal.work_model_storage();
-    let inbox = invocation.turn.inbox_id.clone();
-    let session = owner.binding.source_session_id.clone();
-    let (received_seq, sender) = storage.work_model_read(move |db| {
-        use rusqlite::OptionalExtension;
-        let seq = db.query_row("SELECT rowid FROM btcc_inbound_inbox WHERE inbox_id=?1",[inbox],|r|r.get(0))?;
-        let parent:Option<(String,String)> = db.query_row("SELECT parent_session_id,relation_id FROM btcc_session_relations WHERE child_session_id=?1",[session],|r|Ok((r.get(0)?,r.get(1)?))).optional()?;
-        let sender = parent.map(|(session,relation)|json!({"parent":{"session_id":session,"relation_id":relation,"relation_epoch":0}}))
-            .unwrap_or_else(||json!({"user":{"principal_id":"app-user"}}));
-        Ok((seq,sender))
-    }).await.map_err(integrity)?;
+    let (received_seq, sender) = instruction_origin(owner, invocation.turn).await?;
     let receipt = storage
         .admit_work_model(
             ManagedAdmission {
@@ -177,4 +168,26 @@ fn integrity(error: butler_turn::btcc::StorageError) -> ToolExecutionError {
 }
 fn encoded(value: &Value) -> Result<JsonDocument, ToolExecutionError> {
     JsonDocument::from_value(value).map_err(super::effect::wire_error)
+}
+
+async fn instruction_origin(
+    owner: &GuidedTools,
+    turn: &butler_turn::btcc::TurnRecord,
+) -> Result<(i64, Value), ToolExecutionError> {
+    let storage = owner.journal.work_model_storage();
+    let inbox = turn.inbox_id.clone();
+    let session = owner.binding.source_session_id.clone();
+    let runtime_instruction = turn
+        .context
+        .get("runtimeInstructionId")
+        .and_then(Value::as_str)
+        .is_some();
+    storage.work_model_read(move |db| {
+        use rusqlite::OptionalExtension;
+        let seq = db.query_row("SELECT rowid FROM btcc_inbound_inbox WHERE inbox_id=?1",[inbox],|r|r.get(0))?;
+        let parent:Option<(String,String)> = db.query_row("SELECT parent_session_id,relation_id FROM btcc_session_relations WHERE child_session_id=?1",[session],|r|Ok((r.get(0)?,r.get(1)?))).optional()?;
+        let sender = if runtime_instruction {json!({"runtime":"instruction"})} else {parent.map(|(session,relation)|json!({"parent":{"session_id":session,"relation_id":relation,"relation_epoch":0}}))
+            .unwrap_or_else(||json!({"user":{"principal_id":"app-user"}}))};
+        Ok((seq,sender))
+    }).await.map_err(integrity)
 }

@@ -30,10 +30,18 @@ pub(crate) async fn sidebar(
 }
 
 async fn nested(app: &AppApplication, mut view: Value) -> Result<Value, GatewayApplicationError> {
+    let chats = view["groups"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|g| g["rows"].as_array().into_iter().flatten())
+        .filter_map(|r| r["home_session_id"].as_str().map(str::to_owned))
+        .collect();
+    let mut nested = app.task_sessions_owned(chats).await?;
     for group in view["groups"].as_array_mut().into_iter().flatten() {
         for row in group["rows"].as_array_mut().into_iter().flatten() {
             if let Some(chat) = row["home_session_id"].as_str() {
-                row["task_sessions"] = app.task_sessions_owned(chat).await?;
+                row["task_sessions"] = nested.remove(chat).unwrap_or_else(|| json!([]));
             }
         }
     }

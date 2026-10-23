@@ -25,7 +25,7 @@ use super::storage::AppStorageError;
 /// splices this same text.
 macro_rules! owner_visible {
     () => {
-        "NOT (m.role='user' AND (\
+        "m.role<>'system' AND NOT (m.role='user' AND (\
          (m.text GLOB 'Subsession result'||char(10)||'*' \
           AND m.text GLOB '*'||char(10)||'Relation ref: relation-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]*' \
           AND m.text GLOB '*'||char(10)||'Result ref: steward-result-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]*') \

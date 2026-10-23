@@ -22,17 +22,13 @@ pub(super) fn execute(
             request.id = app.runtime_hint(&request.id).await?;
         }
         let resource = request.resource;
-        let session = request.id.clone();
 
         let mut result = app.dependencies.work_model.execute(request).await?;
-        if matches!(resource, TaskSession | SessionWorks | TaskOwnership) {
+        if matches!(resource, TaskSession | TaskOwnership) {
             task_sessions::drain(&app).await?;
         }
         app.storage
             .read(move |db| {
-                if resource == SessionWorks {
-                    result["decisions"] = task_sessions::decisions(db, &session)?;
-                }
                 public_sessions(db, &mut result)?;
                 Ok(result)
             })
@@ -133,7 +129,7 @@ pub(super) fn public_sessions(
     Ok(())
 }
 
-pub(super) use task_sessions::sql::LOOKUP_SESSION;
+pub(super) use task_sessions::sql;
 #[cfg(feature = "test-support")]
 pub(super) fn task_session_queries() -> Vec<(&'static str, String)> {
     task_sessions::sql::ALL

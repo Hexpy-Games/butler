@@ -84,6 +84,9 @@ pub trait AppWorkModelPort: Send + Sync + 'static {
     fn work_scope(&self, _id: String) -> ApplicationFuture<AppWorkModelScope> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
+    fn task_session_states(&self, _sessions: Vec<String>) -> ApplicationFuture<Vec<Value>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
     fn pending_task_session_intents(&self) -> ApplicationFuture<Vec<Value>> {
         Box::pin(async { Ok(Vec::new()) })
     }

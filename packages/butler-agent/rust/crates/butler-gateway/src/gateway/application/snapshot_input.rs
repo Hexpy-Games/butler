@@ -133,6 +133,7 @@ fn claimed_snapshot(
                 let ledger_project_id: Option<String> = row.get(13)?;
                 let resolution = parse_value(resolution_json.as_deref().unwrap_or("{}"), 9)?;
                 Ok(ClaimedNativeSnapshot {
+                    runtime_instruction_id: string_field(&resolution, "runtime_instruction_id"),
                     session_id: row
                         .get::<_, Option<String>>(16)?
                         .unwrap_or_else(|| session_hint(&chat_id)),
@@ -233,6 +234,8 @@ fn rebuilt_turn(
     if let Some(value) = snapshot.plan_id.as_ref() {
         context.insert("planId".into(), value.clone().into());
     }
+    let sender_id =
+        runtime_instruction_sender(&mut context, snapshot.runtime_instruction_id.as_deref());
     AppTurn {
         chat_id: snapshot.chat_id,
         message_id,
@@ -243,7 +246,7 @@ fn rebuilt_turn(
         session_id: snapshot.session_id,
         account_id: "local".into(),
         peer_kind: "dm".into(),
-        sender_id: APP_PERSON_ID.into(),
+        sender_id: sender_id.into(),
         sender_display_name: "Butler App".into(),
         project_id: snapshot.project.map(|project| project.id),
         execution_controls: snapshot.execution_controls,
@@ -365,4 +368,16 @@ fn populate_snapshot_assets(
         }
     }
     Ok(())
+}
+
+fn runtime_instruction_sender(
+    context: &mut Map<String, Value>,
+    instruction: Option<&str>,
+) -> &'static str {
+    if let Some(id) = instruction {
+        context.insert("runtimeInstructionId".into(), id.into());
+        "butler-runtime"
+    } else {
+        APP_PERSON_ID
+    }
 }

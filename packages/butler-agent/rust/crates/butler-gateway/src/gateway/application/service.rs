@@ -414,7 +414,14 @@ pub(super) fn accept_turn(
         )
         .map_err(AppStorageError::sqlite)?;
     } else {
-        tx.execute("INSERT INTO messages(id,chat_id,turn_id,role,text,content_parts_json,status,created_at,updated_at,retryable) VALUES(?1,?2,?3,'user',?4,?5,'sent',?6,?6,0)",params![message_id,claim.chat_id,turn_id,text,content,now]).map_err(AppStorageError::sqlite)?;
+        let role: String = tx
+            .query_row(
+                work_model::sql::INPUT_ROLE,
+                [&claim.queued_message_id],
+                |r| r.get(0),
+            )
+            .map_err(AppStorageError::sqlite)?;
+        tx.execute("INSERT INTO messages(id,chat_id,turn_id,role,text,content_parts_json,status,created_at,updated_at,retryable) VALUES(?1,?2,?3,?7,?4,?5,'sent',?6,?6,0)",params![message_id,claim.chat_id,turn_id,text,content,now,role]).map_err(AppStorageError::sqlite)?;
         attach_queued_files(&tx, &claim.queued_message_id, message_id)?;
     }
     tx.execute("UPDATE turns SET user_message_id=?1,state='thinking',safe_status_label='Thinking',cancellable=1,updated_at=?2 WHERE id=?3",params![message_id,now,turn_id]).map_err(AppStorageError::sqlite)?;

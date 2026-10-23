@@ -1,5 +1,6 @@
 //! WMU-19/20/21 through scripted model turns, public routes and App projection.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
+mod canon;
 mod stub;
 #[path = "../../../butler-agent/src/host/guided/tools/work_model/ownership/sql.rs"]
 mod title_sql;
@@ -91,10 +92,14 @@ async fn wmu_19_reservations_open_on_demand_and_nest_in_task_order() -> Result<(
         .to_owned();
     *script.task.lock().unwrap() = rows[1]["id"].as_str().unwrap().to_owned();
     s.turn(&requester, TAKE).await?;
-    let card = s.gw.get(&format!("/sessions/{requester}/works")).await?;
-    let decision = &card.data()["decisions"][0];
-    assert_eq!(decision["state"], "reserved", "{card:?}");
-    assert!(decision["message"].as_str().unwrap().contains("‘검토’는"));
+    let decision = ownership_result(&script);
+    assert_eq!(decision["state"], "reserved", "{decision:?}");
+    assert!(
+        decision["message"]
+            .as_str()
+            .unwrap()
+            .contains("its own conversation")
+    );
     assert_eq!(
         app_rows(&s).await?.len(),
         1,
@@ -175,7 +180,7 @@ async fn wmu_21_run_here_uses_the_current_conversation_only() -> Result<(), Harn
     let taken =
         s.gw.post(
             &format!("/sessions/{target}/task-ownership"),
-            json!({"task_id":task,"decision":"take_here","expected_revision":rows[0]["revision"]}),
+            json!({"task_id":task,"decision":"take_here","expected_revision":rows[0]["revision"],"expected_owner_epoch":rows[0]["owner_epoch"]}),
         )
         .await?;
     assert_eq!(taken.status, 200, "{taken:?}");
@@ -197,13 +202,20 @@ async fn wmu_20_open_or_take_running_task_continues_checkpoint_without_holding_f
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, script, server) = start("WMU-20").await?;
-    s.turn("general", PLAN).await?;
+    let coordinator =
+        s.gw.post("/sessions", json!({"kind":"chat","title":"Plan pieces"}))
+            .await?;
+    let coordinator = coordinator.data()["session"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    s.turn(&coordinator, PLAN).await?;
     tokio::time::timeout(Duration::from_secs(30), script.child_ready.acquire())
         .await
         .unwrap()
         .unwrap()
         .forget();
-    let first = tasks(&s).await?[0].clone();
+    let first = tasks_for(&s, &coordinator).await?[0].clone();
     let task = first["id"].as_str().unwrap().to_owned();
     *script.task.lock().unwrap() = task.clone();
     let created =
@@ -211,28 +223,30 @@ async fn wmu_20_open_or_take_running_task_continues_checkpoint_without_holding_f
             .await?;
     let chat = created.data()["session"]["id"].as_str().unwrap().to_owned();
     s.turn(&chat, TAKE).await?;
-    let card = s.gw.get(&format!("/sessions/{chat}/works")).await?;
-    let decision = &card.data()["decisions"][0];
-    assert_eq!(decision["state"], "running", "{card:?}");
-    assert!(decision["message"].as_str().unwrap().contains("‘초안’은"));
+    let decision = ownership_result(&script);
+    assert_eq!(decision["state"], "running", "{decision:?}");
+    assert!(decision["message"].as_str().unwrap().contains("‘초안’"));
     let revision = decision["revision"].clone();
     let open =
         s.gw.post(
             &format!("/sessions/{chat}/task-ownership"),
-            json!({"task_id":task,"decision":"open","expected_revision":revision}),
+            json!({"task_id":task,"decision":"open","expected_revision":revision,"expected_owner_epoch":decision["owner_epoch"]}),
         )
         .await?;
     assert_eq!(open.data()["session_id"], first["assignee_session_id"]);
+    super::work_model_live::database(&s,|db| {
+        db.execute("INSERT INTO wm_cross_db_intents(op_id,kind,payload_json,state,created_at) VALUES('task_continue:000-missing','task_continue','{\"task_id\":\"removed\",\"session_id\":\"unavailable\"}','pending',0)",[])
+    }).await?;
     let moved =
         s.gw.post(
             &format!("/sessions/{chat}/task-ownership"),
-            json!({"task_id":task,"decision":"take_here","expected_revision":revision}),
+            json!({"task_id":task,"decision":"take_here","expected_revision":revision,"expected_owner_epoch":decision["owner_epoch"]}),
         )
         .await?;
     assert_eq!(moved.status, 200, "{moved:?}");
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
-        let now = tasks(&s).await?;
+        let now = tasks_for(&s, &coordinator).await?;
         if now[0]["assignee_session_id"] == chat && now[0]["status"] == "blocked" {
             assert_eq!(
                 now[0]["owner_epoch"].as_i64(),
@@ -244,6 +258,43 @@ async fn wmu_20_open_or_take_running_task_continues_checkpoint_without_holding_f
         assert!(Instant::now() < deadline, "{now:?}\n{}", s.agent.logs());
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
+    let path = s.sandbox.data.join("app-server/butler-client.sqlite");
+    let visible = tokio::task::spawn_blocking(move || {
+        let db = rusqlite::Connection::open(path)?;
+        db.query_row(
+            "SELECT count(*) FROM messages WHERE role='user' AND (text LIKE 'Continue Task %' OR text='Continue.')",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+    })
+    .await
+    .unwrap()?;
+    let messages = s.gw.messages(&chat).await?;
+    assert!(
+        !messages
+            .iter()
+            .any(|m| m["text"] == "Continue." || m["role"] == "system"),
+        "{messages:?}"
+    );
+    let latest = tasks_for(&s, &coordinator).await?;
+    let stale=s.gw.post(&format!("/sessions/{chat}/task-ownership"),json!({"task_id":task,"decision":"take_here","expected_revision":latest[0]["revision"],"expected_owner_epoch":first["owner_epoch"]})).await?;
+    assert_eq!(stale.status, 409, "{stale:?}");
+    assert_eq!(
+        stale.body["error"]["message"],
+        "이미 다른 대화로 옮겨졌습니다"
+    );
+    let navigation = s.gw.get("/navigation").await?;
+    let old_session = &first["assignee_session_id"];
+    let retained = navigation.data()["space"]["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|node| node["task_sessions"].as_array().into_iter().flatten())
+        .any(|row| row["session_id"] == *old_session && row["task_id"] == task);
+    assert!(
+        visible == 0 && retained,
+        "visible continuation rows={visible}, retained old conversation={retained}: {navigation:?}"
+    );
     let evidence=super::work_model_live::database(&s,|db|db.query_row("SELECT a.status,a.checkpoint_ref,h.reason FROM wm_attempts a JOIN wm_holds h ON h.target=a.session_id WHERE a.task_id=?1 AND h.reason='handoff' ORDER BY a.started_at LIMIT 1",[task],|r|Ok((r.get::<_,String>(0)?,r.get::<_,Option<String>>(1)?,r.get::<_,String>(2)?)))).await?;
     assert_eq!(evidence.0, "interrupted");
     assert!(evidence.1.is_some());
@@ -314,9 +365,23 @@ async fn app_query_plans(s: &Scenario) -> Result<(), HarnessError> {
         let expected: Value = serde_json::from_str(include_str!(
             "../../fixtures/work-model-p14/task-session-app-plans.json"
         ))?;
+        eprintln!("App session query plans: {}", json!(plans));
         assert_eq!(json!(plans), expected);
         Ok(())
     })
     .await
     .unwrap()
+}
+
+fn ownership_result(script: &stub::Script) -> Value {
+    script
+        .requests
+        .lock()
+        .unwrap()
+        .iter()
+        .rev()
+        .flat_map(super::work_model_script::outputs)
+        .find(|r| r["error"]["code"] == "owned_elsewhere")
+        .unwrap()["error"]
+        .clone()
 }

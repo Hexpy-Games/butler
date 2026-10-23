@@ -12,14 +12,20 @@ pub(super) fn create(db: &Connection) -> Result<(), AppStorageError> {
         task_id TEXT NOT NULL, work_id TEXT NOT NULL, op_id TEXT NOT NULL UNIQUE
     );
     CREATE INDEX IF NOT EXISTS app_task_sessions_work ON app_task_sessions(work_id,task_id);
-    CREATE TABLE IF NOT EXISTS app_session_decisions (
-        id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
-        task_id TEXT NOT NULL, payload_json TEXT NOT NULL CHECK(json_valid(payload_json)), decision TEXT
-    );
-    CREATE INDEX IF NOT EXISTS app_session_decisions_pending ON app_session_decisions(session_id,id) WHERE decision IS NULL",
-
+    DROP TABLE IF EXISTS app_session_decisions",
     )
-    .map_err(AppStorageError::sqlite)
+    .map_err(AppStorageError::sqlite)?;
+    let columns = db
+        .prepare("PRAGMA table_info(app_task_sessions)")
+        .map_err(AppStorageError::sqlite)?
+        .query_map([], |r| r.get::<_, String>(1))
+        .map_err(AppStorageError::sqlite)?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(AppStorageError::sqlite)?;
+    if !columns.iter().any(|c| c == "coordinator_session_id") {
+        db.execute_batch("ALTER TABLE app_task_sessions ADD COLUMN coordinator_session_id TEXT REFERENCES chats(id)").map_err(AppStorageError::sqlite)?;
+    }
+    db.execute_batch("CREATE INDEX IF NOT EXISTS app_task_sessions_coordinator ON app_task_sessions(coordinator_session_id,task_id,session_id)").map_err(AppStorageError::sqlite)
 }
 
 pub(in crate::gateway::application) const RECEIPT: &str =

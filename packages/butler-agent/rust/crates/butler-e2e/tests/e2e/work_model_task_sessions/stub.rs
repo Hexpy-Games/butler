@@ -70,6 +70,17 @@ async fn reply(
         } else {
             message("The pieces are planned.")
         }
+    } else if request == super::canon::REQUEST {
+        match out.len() {
+            0 => call("brief", "work_read", &json!({"view":"spec"})),
+            1 => call("layout", "work_read", &json!({"view":"tasks"})),
+            2 => call(
+                "add",
+                "work_apply",
+                &json!({"reason":"Prepare requested artifact","spec_ref":native::spec(&body),"expected_task_graph_revision":native::graph(&body),"operations":[{"op":"task.add","title":"New artifact","description":"Prepare and verify the artifact","step":"new","acceptance_refs":[{"node_id":"sp_canon","node_revision":1,"criterion_id":"edit"}]}]}),
+            ),
+            _ => message("The artifact is planned."),
+        }
     } else if request.starts_with("role: steward") {
         match out.len() {
             0 => call("tasks", "work_read", &json!({"view":"tasks"})),
@@ -95,7 +106,10 @@ async fn reply(
         } else {
             message("Choose where to continue this piece.")
         }
-    } else if request.starts_with("Continue Task ") {
+    } else if body["instructions"]
+        .as_str()
+        .is_some_and(|s| s.contains("Continue Task "))
+    {
         match out.len() {
             0 => call(
                 "task",

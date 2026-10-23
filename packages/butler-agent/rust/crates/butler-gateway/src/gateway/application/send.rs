@@ -1,6 +1,7 @@
 //! Message admission, durable reservation, claim, and native enqueue flow.
 
 use rusqlite::params;
+use serde_json::json;
 
 use super::*;
 use super::{
@@ -22,7 +23,7 @@ impl AppApplication {
         &self,
         command: SendMessageCommand,
     ) -> Result<MessageSendResult, GatewayApplicationError> {
-        Box::pin(self.send_with_attachment_source(command, None)).await
+        Box::pin(self.send_with_attachment_source(command, None, None)).await
     }
 
     pub(super) async fn send_with_reused_attachments(
@@ -30,7 +31,8 @@ impl AppApplication {
         command: SendMessageCommand,
         source_user_message_id: String,
     ) -> Result<MessageSendResult, GatewayApplicationError> {
-        Box::pin(self.send_with_attachment_source(command, Some(source_user_message_id))).await
+        Box::pin(self.send_with_attachment_source(command, Some(source_user_message_id), None))
+            .await
     }
 
     #[tracing::instrument(name = "turn.admit", skip_all, fields(trace_root = true, chat_id = %command.chat_id), err)]
@@ -38,6 +40,7 @@ impl AppApplication {
         &self,
         command: SendMessageCommand,
         reused_from_message_id: Option<String>,
+        runtime_instruction: Option<String>,
     ) -> Result<MessageSendResult, GatewayApplicationError> {
         self.recover_expired().await?;
         let chat_id = command.chat_id.clone();
@@ -91,8 +94,15 @@ impl AppApplication {
                 )
                 .await;
         }
-        self.send_new(chat_id, client_id, request, inspected, settings_facts)
-            .await
+        self.send_new(
+            chat_id,
+            client_id,
+            request,
+            inspected,
+            settings_facts,
+            runtime_instruction,
+        )
+        .await
     }
 
     async fn send_new(
@@ -102,9 +112,13 @@ impl AppApplication {
         request: crate::gateway::MessageSendRequest,
         inspected: admission::Inspected,
         settings_facts: Arc<AppSettingsFacts>,
+        runtime_instruction: Option<String>,
     ) -> Result<MessageSendResult, GatewayApplicationError> {
-        self.prompt_hook(&chat_id, &client_id, &request, &inspected)
-            .await?;
+        let internal = runtime_instruction.is_some();
+        if !internal {
+            self.prompt_hook(&chat_id, &client_id, &request, &inspected)
+                .await?;
+        }
         let mut prepared = inspected.prepared;
         let has_project_refs = request.content_parts.as_ref().is_some_and(|content| {
             content
@@ -145,6 +159,7 @@ impl AppApplication {
                 prepared.project_sources.clone(),
                 request.clone(),
                 settings_facts,
+                runtime_instruction,
             )
             .await?;
         let prepared = ResolvedAppAdmission {
@@ -158,6 +173,7 @@ impl AppApplication {
         let title_model = prepared.controls.model.clone();
         let result = self.dispatch(&chat_id, &client_id, prepared).await;
         if inserted
+            && !internal
             && result.as_ref().is_ok_and(|sent| sent.accepted.is_some())
             && request.subsession_result.is_none()
         {
@@ -174,6 +190,7 @@ impl AppApplication {
         sources: Value,
         request: crate::gateway::MessageSendRequest,
         settings_facts: Arc<AppSettingsFacts>,
+        runtime_instruction: Option<String>,
     ) -> Result<(bool, ControlResolution), GatewayApplicationError> {
         let mut context = butler_log::TraceContext::current();
         context.enqueued_at =
@@ -211,14 +228,18 @@ impl AppApplication {
                     &reservation_base.created_at,
                 )?;
                 let mut reservation = reservation_base;
-                reservation.control_resolution_json =
-                    stringify(&resolved.persisted).map_err(|source| {
-                        AppStorageError::new(
-                            AppStorageCode::SettingsJsonFailed,
-                            "Settings could not be encoded.",
-                        )
-                        .with_source(source)
-                    })?;
+                let mut persisted = resolved.persisted.clone();
+                if let Some(id) = runtime_instruction {
+                    persisted["runtime_instruction_id"] = json!(id);
+                }
+
+                reservation.control_resolution_json = stringify(&persisted).map_err(|source| {
+                    AppStorageError::new(
+                        AppStorageCode::SettingsJsonFailed,
+                        "Settings could not be encoded.",
+                    )
+                    .with_source(source)
+                })?;
                 reservation.controls_json =
                     stringify(&resolved.persisted["controls"]).map_err(|source| {
                         AppStorageError::new(
@@ -315,5 +336,25 @@ impl AppApplication {
             return self.queued_result(chat_id, client_id).await;
         };
         self.start_turn(claim, prepared).await
+    }
+}
+
+impl AppApplication {
+    /// Only the BTCC instruction projection calls this private admission path.
+    pub(super) async fn send_runtime_instruction(
+        &self,
+        chat_id: String,
+        instruction: String,
+    ) -> Result<(), GatewayApplicationError> {
+        let command = SendMessageCommand {
+            chat_id,
+            request: crate::gateway::MessageSendRequest {
+                text: Some(json!("Continue.")),
+                client_message_id: Some(json!(format!("work-instruction:{instruction}"))),
+                ..Default::default()
+            },
+        };
+        Box::pin(self.send_with_attachment_source(command, None, Some(instruction))).await?;
+        Ok(())
     }
 }

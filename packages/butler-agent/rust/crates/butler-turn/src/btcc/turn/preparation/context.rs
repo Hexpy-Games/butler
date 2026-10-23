@@ -218,6 +218,14 @@ fn insert_request_refs(
     {
         context.insert("planId".into(), plan.into());
     }
+    if let Some(id) = request
+        .app_turn_context
+        .as_ref()
+        .and_then(|v| v.get("runtimeInstructionId"))
+        .and_then(Value::as_str)
+    {
+        context.insert("runtimeInstructionId".into(), id.into());
+    }
 }
 
 /// The persisted attachment entry: empty strings and non-finite sizes are
