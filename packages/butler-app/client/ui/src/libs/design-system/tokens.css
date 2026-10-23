@@ -283,6 +283,8 @@
   --adaptive-inspector-width: min(100vw, 430px);
   --adaptive-panel-bg: var(--neutral-white);
   --windows-sidebar-overlay-filter: saturate(1.3) blur(24px);
+  /* The image viewer scrim blurs the app behind it with the same overlay filter. */
+  --image-viewer-overlay-filter: saturate(1.3) blur(24px);
   --adaptive-scrim-bg: rgba(0, 0, 0, 0.12);
   /* Sidebar header row: the floating sidebar toggle is a standard IconButton
      centered in the titlebar row. It starts at the sidebar content inset,
@@ -799,7 +801,7 @@
   --switch-inline-track-bg: rgba(0, 0, 0, 0.14);
   --dialog-overlay-bg: rgba(0, 0, 0, 0.12);
   --command-overlay-bg: rgba(0, 0, 0, 0.06);
-  --image-viewer-overlay-bg: rgba(0, 0, 0, 0.78);
+  --image-viewer-overlay-bg: rgba(248, 249, 250, 0.88);
   --chrome-button-bg: rgba(0, 0, 0, 0.18);
   --chrome-divider-bg: rgba(0, 0, 0, 0.12);
   --danger-line: rgba(190, 56, 54, 0.24);
@@ -1221,7 +1223,7 @@
   --switch-inline-track-bg: rgba(255, 255, 255, 0.14);
   --dialog-overlay-bg: rgba(0, 0, 0, 0.34);
   --command-overlay-bg: rgba(0, 0, 0, 0.26);
-  --image-viewer-overlay-bg: rgba(0, 0, 0, 0.86);
+  --image-viewer-overlay-bg: rgba(31, 32, 35, 0.88);
   --chrome-button-bg: rgba(255, 255, 255, 0.11);
   --chrome-divider-bg: rgba(255, 255, 255, 0.1);
   --danger-line: rgba(190, 56, 54, 0.28);
@@ -1420,7 +1422,7 @@
   --switch-inline-track-bg: rgba(0, 0, 0, 0.14);
   --dialog-overlay-bg: rgba(0, 0, 0, 0.12);
   --command-overlay-bg: rgba(0, 0, 0, 0.06);
-  --image-viewer-overlay-bg: rgba(0, 0, 0, 0.78);
+  --image-viewer-overlay-bg: rgba(248, 249, 250, 0.88);
   --chrome-button-bg: rgba(0, 0, 0, 0.18);
   --chrome-divider-bg: rgba(0, 0, 0, 0.12);
   --danger-line: rgba(190, 56, 54, 0.24);

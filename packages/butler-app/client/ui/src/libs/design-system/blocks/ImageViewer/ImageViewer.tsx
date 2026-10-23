@@ -18,7 +18,7 @@ export interface ImageViewerProps {
 }
 
 /**
- * A modal image viewer (lightbox): the picture fitted to the window on a dimmed scrim, previous/next
+ * A modal image viewer (lightbox): the picture fitted to the window on a blurred surface-tone scrim, previous/next
  * through its set (buttons and the arrow keys), the caption and source line, the container's actions and
  * Close (also Esc and a click on the scrim). Focus is trapped and returns to the opener; reduced motion
  * keeps only the fade. Pictures fit the screen; there is no zoom. A `video` item plays with native controls.

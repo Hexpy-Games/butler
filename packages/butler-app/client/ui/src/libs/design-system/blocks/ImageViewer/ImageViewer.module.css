@@ -1,10 +1,12 @@
-/* The scrim dims the app in both themes; the chrome sits on tinted-glass
-   capsules, so its text follows the theme on top of the dark scrim. */
+/* The scrim is the theme's surface tone, blurring the app behind it; the
+   chrome sits on tinted-glass capsules whose text follows the theme. */
 .overlay {
   position: fixed;
   inset: 0;
   z-index: var(--z-dialog);
   background: var(--image-viewer-overlay-bg);
+  -webkit-backdrop-filter: var(--image-viewer-overlay-filter);
+  backdrop-filter: var(--image-viewer-overlay-filter);
 }
 
 .overlay[data-state="open"] {
@@ -82,6 +84,7 @@
   max-width: 100%;
   max-height: 100%;
   border-radius: var(--radius-control);
+  box-shadow: var(--shadow-card);
   object-fit: contain;
   animation: image-viewer-enter var(--motion-base) var(--motion-ease-standard);
 }

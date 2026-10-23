@@ -2712,13 +2712,13 @@ A group (a scrap group or a bookmark folder) as a folder card: a mosaic of its n
 
 `import { ImageViewer } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=blocks/ImageViewer`
 
-Shows one picture of a set large on a dimmed scrim (a lightbox): previous/next through the set, its caption and source, and the container's actions.
+Shows one picture of a set large on a blurred scrim in the theme's surface tone (a lightbox): previous/next through the set, its caption and source, and the container's actions.
 
 - Use for: A picture in a message, an answer card or gallery, or an activity screenshot the user wants to see large
 - Use for: Paging through the pictures of one message or one block
 - Not for: A file or document preview inside a panel → `ArtifactPreview`
 - Not for: A form or a decision in a modal → `Dialog`
-- Tokens: `--image-viewer-overlay-bg`, `--z-dialog`, `--radius-control`, `--space-3`, `--motion-base`, `--motion-scale-dialog`
+- Tokens: `--image-viewer-overlay-bg`, `--image-viewer-overlay-filter`, `--shadow-card`, `--z-dialog`, `--radius-control`, `--space-3`, `--motion-base`, `--motion-scale-dialog`
 
 ### KanbanBoard
 

@@ -2,7 +2,9 @@
 
 ## What is this block
 `ImageViewer` is the app's one lightbox: a modal that shows one picture of a
-set large on a dimmed scrim (`--image-viewer-overlay-bg`, dark in both themes).
+set large on a scrim in the theme's surface tone (`--image-viewer-overlay-bg`,
+light or dark with the theme) that blurs the app behind it
+(`--image-viewer-overlay-filter`); the picture lifts off it on `--shadow-card`.
 
 - a bar: the position (“2 / 5”) on the start side; the container's `actions`
   (IconButtons) and Close on the end side, on tinted-glass capsules
