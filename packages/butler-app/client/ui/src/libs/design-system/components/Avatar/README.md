@@ -10,13 +10,13 @@ To show who an item is assigned to, right after its title, and whether an agent 
 Sidebar rows (`NavRow` label, after the title), board cards and list rows (`xs`), panel titles and activity rows (`sm`), headers (`md`).
 
 ## Why to use this component
-One look for people across the sidebar, board and inspector; the badge shows agent work without another column, and never shifts layout.
+One look for people across the sidebar, board and inspector; the badge shows agent work without another column and never resizes the circle (a small end margin holds its overhang).
 
 ## Motion
 The badge pops in from `--motion-scale-check` while fading in over `--motion-base` (decelerate) and fades out over `--motion-exit-base` (accelerate). Both are transitions, so a badge that comes back mid-exit reverses in place. Reduced motion sets the scale token to 1: a plain fade. The circle itself does not move.
 
 ## How to use this component
-`<Avatar name="연우" label="연우 · Claude Code 작업 중" badge={<AgentGlyph />} />`. `tone="self"` for the signed-in person, `"other"` for anyone else. `label` is the accessible name and the tooltip. `decorative` when the name is written next to it. `initials` overrides the derived initial.
+`<Avatar name="하린" label="하린 · Claude Code 작업 중" badge={<AgentGlyph />} />`. `tone="self"` for the signed-in person, `"other"` for anyone else. `label` is the accessible name and the tooltip. `decorative` when the name is written next to it. `initials` overrides the derived initial.
 
 ## Who can use this component
 Product components and blocks.

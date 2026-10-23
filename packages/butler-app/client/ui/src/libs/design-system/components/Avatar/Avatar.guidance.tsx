@@ -22,7 +22,7 @@ function AgentWorking() {
   return (
     <Inline gap="xs" wrap={false}>
       <Typo.Text truncate>Visualization blocks</Typo.Text>
-      <Avatar name="Yeonwoo" label="Yeonwoo · Claude Code working" badge={<Bot />} />
+      <Avatar name="Harin" label="Harin · Claude Code working" badge={<Bot />} />
     </Inline>
   );
 }
@@ -32,8 +32,8 @@ function AgentWorking() {
 function NamedAssignee() {
   return (
     <Inline gap="xs" wrap={false}>
-      <Avatar name="Yeonwoo" size="sm" decorative />
-      <Typo.Text>Yeonwoo</Typo.Text>
+      <Avatar name="Harin" size="sm" decorative />
+      <Typo.Text>Harin</Typo.Text>
       <Typo.Caption tone="secondary">· Claude Code working</Typo.Caption>
     </Inline>
   );
@@ -73,8 +73,8 @@ export const guidance: ShowcaseGuidance = {
     },
   ],
   content: [
-    "People only: the name is a person's display name; Hangul names show the first syllable (연우 → 연), Latin names the first letter uppercased (minji → M).",
-    "The label is product copy and doubles as the tooltip: \"연우 (나)\", \"minji 님\", \"연우 · Claude Code 작업 중\".",
+    "People only: the name is a person's display name; Hangul names show the first syllable (하린 → 하), Latin names the first letter uppercased (minji → M).",
+    "The label is product copy and doubles as the tooltip: \"하린 (나)\", \"minji 님\", \"하린 · Claude Code 작업 중\".",
     "tone self is the signed-in person; other is everyone else.",
   ],
   accessibility: [

@@ -12,7 +12,7 @@ function graphemes(text: string): string[] {
 /**
  * The one-grapheme initial an Avatar shows: the first letter or digit of the
  * name (the first grapheme when it has none), uppercased when that keeps it
- * one letter. "연우" → "연", "minji" → "M", "@minji" → "M".
+ * one letter. "하린" → "하", "minji" → "M", "@minji" → "M".
  */
 export function avatarInitials(name: string): string {
   const parts = graphemes(name.trim());

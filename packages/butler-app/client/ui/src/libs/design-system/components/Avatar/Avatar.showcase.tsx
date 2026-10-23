@@ -21,13 +21,13 @@ export const meta: ShowcaseMeta = {
 
 const labels = {
   "en-US": {
-    me: "Yeonwoo", minji: "minji", dohyun: "Dohyun", elodie: "Élodie", meTip: "Yeonwoo (me)", minjiTip: "minji",
-    working: "Yeonwoo · Claude Code working", task: "Visualization blocks", task2: "Docs", caption: "2nd · Tasks 1/3",
+    me: "Harin", minji: "minji", dohyun: "Dohyun", elodie: "Élodie", meTip: "Harin (me)", minjiTip: "minji",
+    working: "Harin · Claude Code working", task: "Visualization blocks", task2: "Docs", caption: "2nd · Tasks 1/3",
     run: "Working", toggle: "Toggle agent", sidebar: "Sidebar",
   },
   "ko-KR": {
-    me: "연우", minji: "minji", dohyun: "도현", elodie: "Élodie", meTip: "연우 (나)", minjiTip: "minji 님",
-    working: "연우 · Claude Code 작업 중", task: "시각화 블록", task2: "문서", caption: "2번째 · 작업 1/3",
+    me: "하린", minji: "minji", dohyun: "도현", elodie: "Élodie", meTip: "하린 (나)", minjiTip: "minji 님",
+    working: "하린 · Claude Code 작업 중", task: "시각화 블록", task2: "문서", caption: "2번째 · 작업 1/3",
     run: "작업 중", toggle: "에이전트 표시 바꾸기", sidebar: "사이드바",
   },
 } as const;

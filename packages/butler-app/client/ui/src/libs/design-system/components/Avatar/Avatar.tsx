@@ -23,7 +23,7 @@ export interface AvatarProps extends DsBaseProps<HTMLAttributes<HTMLSpanElement>
    * this person. It pops in and fades out; `null`/`undefined` hides it.
    */
   badge?: ReactNode;
-  /** Accessible name and tooltip, e.g. "Yeonwoo · Claude Code working". Defaults to `name` (no tooltip). */
+  /** Accessible name and tooltip, e.g. "Harin · Claude Code working". Defaults to `name` (no tooltip). */
   label?: string;
   /** Hidden from assistive tech when the name is already written beside it. */
   decorative?: boolean;
@@ -46,7 +46,8 @@ function AvatarBadge({ badge }: { badge: ReactNode }) {
 /**
  * A person's initial in a small circle, shown right after an item's title
  * for its assignee. The optional badge marks an agent working for them.
- * The box is always the size token; the badge never shifts layout.
+ * The circle's box is always the size token; while a badge shows, an end
+ * margin holds its overhang, so content after the avatar moves by that much.
  */
 export function Avatar({
   name, initials, size = "xs", tone = "self", badge, label, decorative = false, className, ...props
