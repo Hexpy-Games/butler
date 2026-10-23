@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import { attachNativeWorlds } from "./native-worlds.mjs";
 import { addressUrl, browsingEnabled, createLossBreaker, webUrl } from "./policy.mjs";
 import { createTabRestore } from "./restore.mjs";
-import { backgroundTab, controlTab, emulation, wireAgentTab, executeBrowser, viewedTab } from "./agent.mjs";
+import { backgroundTab, controlTab, emulation, hearTab, wireAgentTab, executeBrowser, viewedTab } from "./agent.mjs";
 import { wireUserDialogs, publicDialog, prepareUserNavigation } from "./user-dialogs.mjs";
 import { popupHandler, allowPopup, syncPopup, closePopups, publishPopup } from "./popups.mjs";
 import { resolveDialog, requestClose } from "./dialogs.mjs";
@@ -165,6 +165,8 @@ class UserBrowser {
     }
     const supplied = Boolean(tab.view);
     tab.view ??= new WebContentsView({ webPreferences: this.pagePreferences(tab) });
+    // A page Butler opens stays silent until the user takes the tab over.
+    if (tab.muted) tab.view.webContents.setAudioMuted(true);
     tab.wired = true;
     tab.session = tab.view.webContents.session;
     tab.identityReady = configureWebSession(tab.session);
@@ -201,7 +203,7 @@ class UserBrowser {
     if (profile === "signed_out" && !this.conversationPartitions.has(partitionOwner)) this.conversationPartitions.set(partitionOwner, `butler-conv-${randomUUID()}`);
     const tab = { id: shortId("t", id => this.tabs.has(id)), owner, profile, popup: Boolean(popupSource), opener: popupSource?.id, popupParentUrl: popupSource?.url, stills: this.stillPreferences.get(owner) !== false, partition: input.partition ?? (profile === "signed_in" ? "persist:butler-web" : this.conversationPartitions.get(partitionOwner)),
       preview: input.preview_id ?? (url && new URL(url).pathname.startsWith("/__p/") ? new URL(url).pathname.slice(5) : undefined),
-      agent: input.agent === true, policy: input.policy ?? {}, epoch: 1, holder: owner === "mine" ? "user" : "agent", sticky: false, waiting: false, busy: false, observation: null, url, title: "", favicon: "", status: "idle", canBack: false, canForward: false,
+      agent: input.agent === true, muted: input.agent === true, policy: input.policy ?? {}, epoch: 1, holder: owner === "mine" ? "user" : "agent", sticky: false, waiting: false, busy: false, observation: null, url, title: "", favicon: "", status: "idle", canBack: false, canForward: false,
       still: "", view: null, attached: null, slot: null, bounds: null, covered: false, capture: null };
     tab.onStillChanged = () => this.publish();
     this.tabs.set(tab.id, tab);
@@ -342,7 +344,7 @@ class UserBrowser {
     const previousOwner = tab.owner;
     if (toGroupId !== tab.owner) this.downloads.cancelTab(tabId);
     if (toGroupId !== tab.owner) { void resolveDialog(this, tab, { accept: false }, "owner_changed"); closePopups(this, tab); }
-    if (toGroupId !== tab.owner) { closeUse(this, tab); tab.owner = toGroupId; tab.epoch++; tab.observation = null; tab.holder = toGroupId === "mine" ? "user" : "agent"; tab.sticky = false; tab.waiting = false; tab.waitingTurn = null; tab.pausedTurns = null; tab.pointer = null; }
+    if (toGroupId !== tab.owner) { closeUse(this, tab); tab.owner = toGroupId; tab.epoch++; tab.observation = null; tab.holder = toGroupId === "mine" ? "user" : "agent"; if (toGroupId === "mine") hearTab(tab); tab.sticky = false; tab.waiting = false; tab.waitingTurn = null; tab.pausedTurns = null; tab.pointer = null; }
     const ordered = [...this.tabs.values()].filter((item) => item.id !== tabId);
     const peers = ordered.filter((item) => item.owner === tab.owner);
     const before = peers[Math.max(0, index)];

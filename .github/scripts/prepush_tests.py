@@ -142,7 +142,7 @@ class PrepushChecks(unittest.TestCase):
         self.assertIn('cargo-zigbuild/zig', errors.getvalue())
         self.assertIn('xwin', errors.getvalue())
         self.assertIn('ran 0, skipped 2 (CI still checks them)', summary.getvalue())
-        self.assertTrue(all(c[0] in ('fmt', 'source-check', 'clippy ' + host) for c in calls))
+        self.assertTrue(all(c[0] in ('fmt', 'source-check', 'runtime-crates', 'clippy ' + host) for c in calls))
 
     # test-category: pure-logic
     def test_ready_cross_targets_run_and_lint_or_build_failure_fails(self):
