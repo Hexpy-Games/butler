@@ -11,7 +11,7 @@ use super::{
     ConversationCode, ConversationOriginEvidence, ConversationResult, HistoricalOriginCandidate,
     SourceEvidence, evidence_error, evidence_unavailable, sha256,
 };
-use butler_core::json::{CanonicalKeyOrder, canonical_json};
+use butler_core::json::{CanonicalKeyOrder, canonical_json, canonical_json_exact};
 
 fn open(data_root: &Path) -> rusqlite::Result<Option<sqlite::Connection>> {
     let path = data_root.join("agent-runtime/btcc.sqlite");
@@ -238,7 +238,8 @@ fn load_admission(db: &Connection, turn: &str) -> Option<Option<TurnAdmission>> 
 }
 
 /// The admission snapshot's digest and context, when its record hashes to
-/// its digest and is exactly the canonical `{"context": ..}` object.
+/// its digest and is exactly the canonical `{"context": ..}` object, with
+/// strings as stored.
 fn verified_snapshot(db: &Connection, snapshot_ref: &str) -> Option<(String, Value)> {
     let record: Option<(String, String)> = db
         .query_row(
@@ -255,7 +256,8 @@ fn verified_snapshot(db: &Connection, snapshot_ref: &str) -> Option<(String, Val
     let snapshot: Value = serde_json::from_str(&record_json).ok()?;
     let context = snapshot.get("context")?;
     if !context.is_object()
-        || canonical_json(&json!({"context":context}), CanonicalKeyOrder::Utf16Lexical).ok()?
+        || canonical_json_exact(&json!({"context":context}), CanonicalKeyOrder::Utf16Lexical)
+            .ok()?
             != record_json
     {
         return None;
