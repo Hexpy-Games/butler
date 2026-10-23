@@ -87,7 +87,7 @@ impl WorkerProfileReader for Profiles {
     }
 }
 pub(super) struct Fixture {
-    _fixture: TestStorageFixture,
+    fixture: TestStorageFixture,
     pub(super) storage: BtccStorage,
     pub(super) bindings: SessionBindingStore,
     pub(super) service: SubsessionService,
@@ -125,7 +125,7 @@ impl Fixture {
             now,
         );
         let f = Self {
-            _fixture: fixture,
+            fixture,
             storage,
             bindings,
             service,
@@ -239,7 +239,7 @@ impl Fixture {
     }
     pub(super) async fn restart(&mut self) -> Result<(), ServiceError> {
         self.storage.close().await?;
-        self.storage = BtccStorage::open(self._fixture.config("cap-service")).await?;
+        self.storage = BtccStorage::open(self.fixture.config("cap-service")).await?;
         let now: Arc<dyn Fn() -> String + Send + Sync> =
             Arc::new(|| "2026-10-24T00:00:00.000Z".into());
         self.service = SubsessionService::new(

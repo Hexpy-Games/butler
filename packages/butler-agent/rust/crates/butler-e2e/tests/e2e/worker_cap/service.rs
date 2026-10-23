@@ -281,20 +281,21 @@ async fn cb_11_cancelled_first_turn_followup_uses_continuation() -> Result<(), S
         .await?;
     f.direction("first")?;
     f.service.recover_dispatches().await?;
-    let inputs = f.queue.inputs.lock().unwrap();
-    assert!(
-        inputs
-            .iter()
-            .any(|i| i.envelope["eventId"] == "subsession-direction:direction")
-    );
-    assert_eq!(
-        inputs
-            .iter()
-            .filter(|i| i.envelope["eventId"] == "dispatch-first")
-            .count(),
-        1
-    );
-    drop(inputs);
+    {
+        let inputs = f.queue.inputs.lock().unwrap();
+        assert!(
+            inputs
+                .iter()
+                .any(|i| i.envelope["eventId"] == "subsession-direction:direction")
+        );
+        assert_eq!(
+            inputs
+                .iter()
+                .filter(|i| i.envelope["eventId"] == "dispatch-first")
+                .count(),
+            1
+        );
+    }
     f.close().await
 }
 
