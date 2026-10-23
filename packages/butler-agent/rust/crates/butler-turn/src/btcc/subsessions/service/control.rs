@@ -363,7 +363,8 @@ impl SubsessionService {
             Child::Assigned(assigned) => assigned.part_id.clone(),
             Child::Legacy(_) => None,
         };
-        let whole_task = matches!(relation, Child::Assigned(assigned) if assigned.part_id.is_none());
+        let whole_task =
+            matches!(relation, Child::Assigned(assigned) if assigned.part_id.is_none());
         let task_id = relation.task_id.clone();
         self.repository
             .storage()

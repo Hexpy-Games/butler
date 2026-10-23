@@ -19,9 +19,11 @@ pub(super) async fn label(owner: &GuidedTools, value: &mut Value) {
         )
         .ok()?;
         let derived = session.strip_prefix("butler/app-").unwrap_or(&session);
-        db.query_row(sql::SESSION_TITLE, rusqlite::params![session, derived], |r| {
-            r.get::<_, Option<String>>(0)
-        })
+        db.query_row(
+            sql::SESSION_TITLE,
+            rusqlite::params![session, derived],
+            |r| r.get::<_, Option<String>>(0),
+        )
         .ok()
         .flatten()
     })
