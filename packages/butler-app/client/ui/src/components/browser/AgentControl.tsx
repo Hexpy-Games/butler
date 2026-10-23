@@ -18,7 +18,7 @@ function signinStepLabel(step: string) {
 async function saveSignIn(tab: BrowserTab) {
   const result = await browserCall("save-signin", { id: tab.id }) as { ok?: boolean } | undefined;
   if (result?.ok) notifyStatus(appCopy.browser.signinSaved, { tone: "ok" });
-  else notifyError(result, appCopy.settings.signIns.failed);
+  else notifyError(result, appCopy.browser.signinSaveFailed);
 }
 
 /** "로그인 저장" after the user signed in during a takeover. */
