@@ -1,3 +1,4 @@
+import { CANON_COPY } from "./canon.ts";
 import { TASK_GRAPH_COPY } from "./task-graph.ts";
 import { lifecycleCopy } from "../lifecycle.ts";
 import { additionalToolLabels } from "./tool-labels-en.ts";
@@ -304,6 +305,7 @@ function englishProjectFallbackSuggestions(
 
 export const enUsCopy: AppCopy = {
   shell: { footerNav: "Updates and settings", update: { downloading: "Downloading update", working: "Preparing update", ready: "Update ready", failed: "Update failed", restart: "Restart" } },
+  canon: CANON_COPY["en-US"],
   taskGraph: TASK_GRAPH_COPY["en-US"],
   lifecycle: lifecycleCopy.en,
   browser: {
@@ -397,11 +399,10 @@ export const enUsCopy: AppCopy = {
     sessionUnconfirmed: "Conversation link unconfirmed",
     reviewed: "Review recorded", disposition: "Disposition recorded", result: "Tool result registered",
     reported: "Published reply", historyLedgerUnavailable: "Project record history is unavailable. Showing delivered conversation replies only.", linkedResults: (count) => `${count} published artifacts`,
-    currentPlan: "Active plan", disconnected: "Disconnected. Showing the last observed state.",
+    disconnected: "Disconnected. Showing the last observed state.",
     reportQuestion: "Ask about this report and its unverified points",
-    parentWork: "Parent Work", allWork: "All Work",
     periodDays: (days) => `Last ${days} days`, statisticsZone: (zone) => `Calendar days in ${zone}`,
-    boardKind: "Board type", period: "Period", statisticsKind: "Count by", materialsView: "Materials view",
+    period: "Period", statisticsKind: "Count by", materialsView: "Materials view",
     briefing: "From the project records", suggestions: "Worth exploring next", briefingPending: "Summarizing the selected records. You can keep browsing or start a conversation.",
     briefingUnavailable: "A summary is unavailable. The project records and conversation composer are still available.",
     summarized: "Summary of selected records, not a new verification", addToComposer: "Ask about this",
@@ -417,7 +418,7 @@ export const enUsCopy: AppCopy = {
     overview: "Overview", work: "Work", materials: "Materials", history: "History", statistics: "Statistics",
     position: "Project status", remaining: "Remaining work", completed: "Execution completed", open: "Open work",
     blocked: "Blocked work", abandoned: "Abandoned work", unknown: "Unverified work", registered: "Registered work",
-    noWork: "No work has been registered yet.", unbound: "No project records are linked to this project.",
+    unbound: "No project records are linked to this project.",
     unavailable: "Project records are unavailable. Completion has not been inferred.",
     noRemaining: "No remaining work is recorded.", tasks: "Child Tasks", recorded: "Based on registered work", loadMore: "Show more",
   },
