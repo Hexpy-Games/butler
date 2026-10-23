@@ -111,13 +111,28 @@ pub enum CanonicalKeyOrder {
 }
 
 /// `JSON.stringify` of `value` with keys in `order`, for digests and
-/// comparisons that must not depend on insertion order.
+/// comparisons that must not depend on insertion order. Strings and keys are
+/// NFC-normalized, so canonically equivalent text has one identity.
 pub fn canonical_json(value: &Value, order: CanonicalKeyOrder) -> Result<String, JsonError> {
     encode(
         value,
         match order {
             CanonicalKeyOrder::Utf16Lexical => JsonOrder::LexicalCanonical,
             CanonicalKeyOrder::JsPropertyEnumeration => JsonOrder::PropertyCanonical,
+        },
+        None,
+    )
+}
+
+/// [`canonical_json`] key order with every string and key kept exactly, for
+/// stored documents that are parsed back. NFC is lossy for data such as file
+/// paths: on Linux an NFD name and its NFC form are different files.
+pub fn canonical_json_exact(value: &Value, order: CanonicalKeyOrder) -> Result<String, JsonError> {
+    encode(
+        value,
+        match order {
+            CanonicalKeyOrder::Utf16Lexical => JsonOrder::LexicalExact,
+            CanonicalKeyOrder::JsPropertyEnumeration => JsonOrder::PropertyExact,
         },
         None,
     )
@@ -177,6 +192,8 @@ fn encode(value: &Value, order: JsonOrder<'_>, omit: Option<&str>) -> Result<Str
 enum JsonOrder<'a> {
     LexicalCanonical,
     PropertyCanonical,
+    LexicalExact,
+    PropertyExact,
     Insertion,
     PropertySorted(&'a dyn Fn(&str, &str) -> std::cmp::Ordering),
 }
@@ -225,7 +242,7 @@ fn write_value(
                 .collect::<Vec<_>>();
             children.sort_by(|left, right| {
                 let lexical = || left.0.encode_utf16().cmp(right.0.encode_utf16());
-                if matches!(order, JsonOrder::LexicalCanonical) {
+                if matches!(order, JsonOrder::LexicalCanonical | JsonOrder::LexicalExact) {
                     return lexical();
                 }
                 match (array_index(&left.0), array_index(&right.0)) {
@@ -327,7 +344,10 @@ fn normalized<'a>(value: &'a str, order: JsonOrder<'_>) -> Cow<'a, str> {
         JsonOrder::LexicalCanonical | JsonOrder::PropertyCanonical => {
             Cow::Owned(value.nfc().collect())
         }
-        JsonOrder::Insertion | JsonOrder::PropertySorted(_) => Cow::Borrowed(value),
+        JsonOrder::LexicalExact
+        | JsonOrder::PropertyExact
+        | JsonOrder::Insertion
+        | JsonOrder::PropertySorted(_) => Cow::Borrowed(value),
     }
 }
 

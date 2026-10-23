@@ -1184,6 +1184,9 @@ export interface AppCopy {
     save: string;
     saved: string;
     saveFailed: string;
+    openInApp: string;
+    openInAppBlocked: string;
+    openInAppFailed: string;
     loading: string;
     unsupported: string;
     loadFailed: string;
