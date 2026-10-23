@@ -80,6 +80,22 @@
   text-decoration: none;
 }
 
+/* onOpen: the name is a button that opens the file in the app. */
+button.name {
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+button.name:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 .item[data-blocked="true"] .name,
 .item[data-blocked="true"] .icon {
   color: var(--interactive-disabled-fg);

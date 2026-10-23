@@ -291,6 +291,8 @@ interface ConversationCopy {
   work: ConversationWorkCopy;
   stoppedStatus: string;
   attachmentUnavailable: string;
+  /** File-type label on an attachment tile whose extension is unknown. */
+  attachmentFileType: string;
   fileChanges: {
     regionLabel: string;
     title: string;

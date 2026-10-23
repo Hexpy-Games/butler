@@ -74,7 +74,8 @@ export function artifactPreviewMode(
   if (artifact.kind === "image" || IMAGE_EXTENSIONS.includes(extension)) {
     return "image";
   }
-  if ([".html", ".htm"].includes(extension)) return "html";
+  // A page Butler made runs on the content host; the user's own uploaded page is untrusted and shows as source.
+  if ([".html", ".htm"].includes(extension)) return artifact.kind === "attachment" ? "text" : "html";
   if (extension === ".pdf" || artifact.kind === "report") return "pdf";
   if (extension === ".md") return "markdown";
   if (

@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, ImageIcon, XIcon } from "../../components/Icons"
 import { TintedGlass } from "../../components/TintedGlass";
 import { Typo } from "../../components/Typo";
 import { dsClass } from "../../lib/internal";
+import { cn } from "../../lib/utils";
 import { SiteIcon } from "../../lib/SiteIcon";
 import styles from "./ImageViewer.module.css";
 
@@ -22,6 +23,8 @@ export interface ImageViewerSource {
 export interface ImageViewerImage {
   src: string;
   alt: string;
+  /** `video` plays on the stage with native controls; it never autoplays and preloads metadata only. */
+  kind?: "image" | "video";
   caption?: string;
   source?: ImageViewerSource;
 }
@@ -67,6 +70,12 @@ function Picture({ image, failedLabel }: { image: ImageViewerImage; failedLabel:
         <ImageIcon size="xl" />
         <Typo.Caption tone="secondary">{failedLabel}</Typo.Caption>
       </TintedGlass>
+    );
+  }
+  if (image.kind === "video") {
+    return (
+      <video key={image.src} className={cn(styles.picture, styles.video)} src={image.src} aria-label={image.alt}
+        controls playsInline preload="metadata" onError={() => setFailed(image.src)} />
     );
   }
   return <img key={image.src} className={styles.picture} src={image.src} alt={image.alt} draggable={false} onError={() => setFailed(image.src)} />;

@@ -4,6 +4,7 @@ import { shellRegistrationAllowed as profileAllowsShellRegistration } from "./sh
 import * as desktopShell from "./desktop-shell.mjs";
 import { watchStorageCorrection } from "./app-storage-correction.mjs";
 import { isLifecycleWindow } from "./lifecycle-window.mjs";
+import { defaultWindowBounds } from "./window-bounds.mjs";
 import { prepareStartupRetry, restoreLaunchServerEnvironment } from "./app-relaunch-context.mjs";
 import { isStartupWindow, startupPending, configureStartupActions, startupStage, startupTiming, startupTimings, failStartup, waitForStartupRenderer, completeStartup } from "./startup-window.mjs";
 import { createUiCrashStore } from "./ui-crash-store.mjs";
@@ -21,6 +22,7 @@ import {
   nativeImage,
   nativeTheme,
   protocol,
+  screen,
   session,
   shell,
 } from "electron";
@@ -2256,14 +2258,14 @@ async function createWindow() {
     rendererUrl = await testRendererConnection(serverUrl, appServerFetch);
     rendererOrigin = rendererOriginForUrl(rendererUrl);
   }
+  const bounds = defaultWindowBounds(screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea);
   const win = new BrowserWindow({
     show: false,
-    width: 960,
-    height: 710,
+    ...bounds,
     // Width: the compact Browser toolbar's minimum (nav, narrow address, More, insets).
     // Height: the new-chat hero and first suggestion row need 480 or more above the composer.
-    minWidth: 344,
-    minHeight: 480,
+    minWidth: Math.min(344, bounds.width),
+    minHeight: Math.min(480, bounds.height),
     title: appDisplayName,
     icon: appIconForWindow(),
     frame: isLinux ? false : undefined,

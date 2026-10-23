@@ -9,7 +9,7 @@ import { closeImageViewer, useImageViewerState, type ViewerImage } from "./image
 function viewerImage(image: ViewerImage, checked: (time: string) => string): ImageViewerImage {
   const site = siteOf(image.source);
   const time = checkedLabel(image.checked);
-  return { src: image.src, alt: image.alt, caption: image.caption ?? (image.alt || undefined),
+  return { src: image.src, alt: image.alt, kind: image.kind, caption: image.caption ?? (image.alt || undefined),
     source: site ? { site, checked: time ? checked(time) : undefined, icon: image.source ? faviconSrc(image.source) : undefined } : undefined };
 }
 
@@ -29,8 +29,8 @@ export function ImageViewerHost() {
     {/* A 서랍 scrap belongs to a page; a picture without one is copied, not saved. */}
     {current.source ? <DoneIconButton key={index} icon={<Library size="sm" />} label={blocks.saveToLibrary} doneLabel={blocks.savedToLibrary}
       announce={false} onAction={() => saveViewerImage(current)} onError={answerActionFailed} /> : null}
-    <DoneIconButton key={`copy-${index}`} icon={<Copy size="sm" />} label={copy.copyImage} doneLabel={copy.imageCopied}
-      announce={false} onAction={() => copyViewerImage(current)} onError={answerActionFailed} />
+    {current.kind === "video" ? null : <DoneIconButton key={`copy-${index}`} icon={<Copy size="sm" />} label={copy.copyImage} doneLabel={copy.imageCopied}
+      announce={false} onAction={() => copyViewerImage(current)} onError={answerActionFailed} />}
   </> : undefined;
   return <ImageViewer images={shown} index={index} onIndexChange={(next) => useImageViewerState.setState({ index: next })}
     onClose={closeImageViewer} actions={actions}
