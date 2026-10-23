@@ -101,6 +101,18 @@ async fn reader(path: &Path, repository: &SqliteSubsessionRepository, storage: B
         UPDATE btcc_session_relations SET activity_terminal=0;
         UPDATE btcc_subsession_delegations SET dispatch_state='pending'").await;
     expect(repository, true).await;
+    update(
+        path,
+        "UPDATE btcc_subsession_delegations SET dispatch_intent_json=NULL",
+    )
+    .await;
+    expect(repository, false).await;
+    update(
+        path,
+        "UPDATE btcc_subsession_delegations SET dispatch_intent_json='{}'",
+    )
+    .await;
+    expect(repository, true).await;
     let (entered, ready) = tokio::sync::oneshot::channel();
     let (release, blocked) = std::sync::mpsc::channel();
     let busy = tokio::spawn(TestStorageFixture::hold_writer(storage, entered, blocked));
