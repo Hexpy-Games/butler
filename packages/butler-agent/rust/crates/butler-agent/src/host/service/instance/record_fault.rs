@@ -90,9 +90,10 @@ pub(super) fn write_finished() {
 }
 
 /// Stops at `point` (`startup`: DATA taken, record not yet written;
-/// `release` and `deadline`: record removed, DATA not yet unlocked) while the
-/// record lock is held, until the test creates the release file.
-pub(super) fn hold(point: &str) {
+/// `release` and `deadline`: record removed, DATA not yet unlocked; both
+/// while the record lock is held; `initialize`: the instance is published
+/// and its owners are not yet open) until the test creates the release file.
+pub(crate) fn hold(point: &str) {
     if std::env::var("BUTLER_E2E_RECORD_HOLD").as_deref() != Ok(point) {
         return;
     }

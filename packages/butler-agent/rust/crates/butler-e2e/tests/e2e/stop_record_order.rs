@@ -152,6 +152,42 @@ mod requires_e2e_fixtures {
         assert_stopped(&s, &stop, pid);
         s.finish().await
     }
+
+    #[tokio::test]
+    async fn startup_deadline_releases_the_published_instance() -> Result<(), HarnessError> {
+        butler_e2e::gate!();
+        // `butler stop` reaches a starting service by signal only; the shutdown
+        // flag is read once it serves.
+        if !butler_platform::process_control::SIGNALS {
+            return Ok(());
+        }
+        let setup = Setup::new("STOP-STARTUP-DEADLINE")?;
+        let release = setup.sandbox.root.join("record-hold-release");
+        let mut s = setup.start().await?;
+        s.agent.terminate().await?;
+        s.agent
+            .launch
+            .set_env("BUTLER_E2E_RECORD_HOLD", "initialize");
+        s.agent
+            .launch
+            .set_env("BUTLER_E2E_RECORD_HOLD_RELEASE", release.to_string_lossy());
+        let pid = s.agent.start_process()?;
+        let reached = hold_reached("initialize");
+        let deadline = Instant::now() + Duration::from_secs(60);
+        while !s.agent.logs().contains(&reached) {
+            assert!(Instant::now() < deadline, "startup never reached its hold");
+            assert!(s.agent.is_running(), "startup exited before its hold");
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        // Startup stays held, so only the shutdown deadline ends the service.
+        let stop = s.agent.cli_reaping(&["stop", "--json"]).await?;
+        fs::write(&release, b"release")?;
+        assert_stopped(&s, &stop, pid);
+        let logs = s.agent.logs();
+        assert!(logs.contains("stop deadline reached"), "{logs}");
+        assert!(logs.contains("instance_release:data_unlocked"), "{logs}");
+        s.finish().await
+    }
 }
 
 fn held(setup: Setup, point: &str, release: &Path) -> Setup {

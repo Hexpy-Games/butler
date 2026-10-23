@@ -51,6 +51,8 @@ use record::{
     acquire_record_update_lock, instance_record_path, read_record_at, record_update_lock_path,
     write_record,
 };
+#[cfg(feature = "e2e-fixtures")]
+pub(crate) use record_fault::hold as hold_e2e;
 pub(crate) use release::InstanceRelease;
 pub(crate) use restart::RestartIdentity;
 pub(crate) use stop_intent::{

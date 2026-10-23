@@ -80,6 +80,7 @@ pub(super) async fn run_until_stopped(
         holds_foreground_lease(foreground_lease),
     )
     .await?;
+    attach_instance(stop, &instance);
     crate::host::service::data_reset::initialize_owned(&config, &user_home, journal_seen).await?;
     config = support::initialize_credentials(config).await?;
     report_credential_errors(&config, logs);
@@ -129,6 +130,14 @@ pub(super) async fn run_until_stopped(
     result.and_then(|session| closed.and(reset).map(|()| session))
 }
 
+/// From here a forced exit releases the record and DATA lock first.
+fn attach_instance(stop: &StopSignal, instance: &crate::host::service::instance::InstanceGuard) {
+    stop.attach(instance.deadline_release());
+    // Stands in for a startup step that blocks its worker.
+    #[cfg(feature = "e2e-fixtures")]
+    crate::host::service::instance::hold_e2e("initialize");
+}
+
 async fn reader_staging(
     data: std::path::PathBuf,
 ) -> Result<butler_platform::secure_fs::ReaderStaging, BtccError> {
@@ -150,7 +159,6 @@ async fn serve_initialized(
     ),
     instance: &mut crate::host::service::instance::InstanceGuard,
 ) -> Result<String, BtccError> {
-    stop.attach(instance.deadline_release());
     stop.check_startup()?;
     repair_cli_launcher(config, logs);
     let app_endpoint = Arc::new(ActiveAppEndpoint::new());
