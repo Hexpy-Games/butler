@@ -2,6 +2,9 @@
 use super::{SqliteSubsessionRepository, StorageError};
 use rusqlite::params_from_iter;
 
+#[cfg(test)]
+pub(super) mod tests;
+
 /// A child's parent and optional policy role from the relation index.
 type ParentLink = (String, String, Option<String>);
 
@@ -72,6 +75,38 @@ impl SqliteSubsessionRepository {
                     }
                 }
                 Ok(links)
+            })
+            .await
+    }
+}
+
+/// Queue admission reads only legacy execution state. An approval-held child is
+/// idle; a pending result still owns its place until admission to the parent.
+const QUEUE_WAITS_FOR_CHILD: &str = "SELECT EXISTS(
+    SELECT 1 FROM btcc_session_relations r
+    JOIN btcc_subsession_delegations d ON d.relation_id=r.relation_id
+    WHERE r.parent_session_id=?1 AND (
+        (r.activity_terminal=0 AND (
+            EXISTS(SELECT 1 FROM btcc_turns t WHERE t.turn_id=(
+                SELECT latest.turn_id FROM btcc_turns latest
+                WHERE latest.session_id=r.child_session_id ORDER BY latest.rowid DESC LIMIT 1)
+                AND ((t.semantic_state IN ('admitted','delivery_committed')
+                      AND t.suspension_reason IS NULL)
+                     OR t.suspension_reason='waiting_for_worker'))
+            OR (d.dispatch_state IN ('pending','enqueued') AND d.dispatch_intent_json IS NOT NULL
+                AND NOT EXISTS(SELECT 1 FROM btcc_turns t WHERE t.session_id=r.child_session_id))))
+        OR EXISTS(SELECT 1 FROM btcc_steward_results x
+            JOIN btcc_subsession_outbox o ON o.result_id=x.result_id
+            WHERE x.relation_id=r.relation_id AND o.status='pending')))
+";
+
+impl SqliteSubsessionRepository {
+    /// A pure read through the read pool, independent of the BTCC writer lane.
+    pub async fn queue_waits_for_child(&self, parent: String) -> Result<bool, StorageError> {
+        self.storage
+            .read(move |db| {
+                db.query_row(QUEUE_WAITS_FOR_CHILD, [parent], |row| row.get(0))
+                    .map_err(StorageError::sqlite)
             })
             .await
     }

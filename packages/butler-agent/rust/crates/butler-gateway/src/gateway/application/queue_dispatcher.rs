@@ -39,12 +39,16 @@ impl QueueWake {
     }
 
     pub(super) async fn chat(&self, chat_id: String) -> Result<(), GatewayApplicationError> {
+        self.wake(Some(chat_id)).await
+    }
+
+    pub(super) async fn wake(&self, chat: Option<String>) -> Result<(), GatewayApplicationError> {
         // Terminal projection still settles claims after queue admission stops.
         // Persisted waiting input will be dispatched by the next process.
         if self.cancellation.is_cancelled() {
             return Ok(());
         }
-        match self.sender.send(Command::Wake(Some(chat_id))).await {
+        match self.sender.send(Command::Wake(chat)).await {
             Ok(()) => Ok(()),
             Err(_) if self.cancellation.is_cancelled() => Ok(()),
             Err(error) => Err(GatewayApplicationError::internal_from(error)),
@@ -277,35 +281,18 @@ async fn drain_chat(
         if active {
             return Ok(());
         }
-        let now = app.dependencies.identity_clock.now_iso();
-        let lease = app
-            .dependencies
-            .identity_clock
-            .iso_after_millis(queue::SESSION_QUEUE_LEASE_MILLIS as u64);
-        let claim_id = app.dependencies.identity_clock.new_uuid();
-        let owner = app.queue_owner.clone();
-        let subscribers = app.subscribers.clone();
-        let chat = chat_id.to_owned();
-        let queued = row.id.clone();
-        let claim = app
-            .storage
-            .execute(move |db| {
-                queue::claim(
-                    db,
-                    &queue::QueueClaim {
-                        queued_message_id: queued,
-                        chat_id: chat,
-                        claim_id,
-                        claim_owner: owner,
-                        lease_expires_at: lease,
-                    },
-                    queue::ClaimOrder::Fifo,
-                    &now,
-                    &subscribers,
-                )
-            })
-            .await
-            .map_err(app_error)?;
+        // Results can resume the parent while other children still run. The
+        // first user row is the barrier; later rows must not pass it.
+        if !row.is_result
+            && app
+                .dependencies
+                .subsessions
+                .queue_waits_for_child(app.runtime_hint(chat_id).await?)
+                .await?
+        {
+            return Ok(());
+        }
+        let claim = claim_row(app, chat_id, row.id.clone()).await?;
         let Some(claim) = claim else { continue };
         let Ok(resolution) = settings::resolution_from_persisted(&row.control_resolution_json)
         else {
@@ -333,17 +320,61 @@ async fn drain_chat(
     Ok(())
 }
 
+async fn claim_row(
+    app: &AppApplication,
+    chat_id: &str,
+    queued: String,
+) -> Result<Option<queue::QueueClaim>, GatewayApplicationError> {
+    let now = app.dependencies.identity_clock.now_iso();
+    let lease = app
+        .dependencies
+        .identity_clock
+        .iso_after_millis(queue::SESSION_QUEUE_LEASE_MILLIS as u64);
+    let claim_id = app.dependencies.identity_clock.new_uuid();
+    let owner = app.queue_owner.clone();
+    let subscribers = app.subscribers.clone();
+    let chat = chat_id.to_owned();
+    app.storage
+        .execute(move |db| {
+            queue::claim(
+                db,
+                &queue::QueueClaim {
+                    queued_message_id: queued,
+                    chat_id: chat,
+                    claim_id,
+                    claim_owner: owner,
+                    lease_expires_at: lease,
+                },
+                queue::ClaimOrder::Fifo,
+                &now,
+                &subscribers,
+            )
+        })
+        .await
+        .map_err(app_error)
+}
+
 struct QueuedRow {
+    is_result: bool,
     id: String,
     text: String,
     control_resolution_json: String,
 }
+pub(super) const QUEUED_ROWS_SQL: &str = "SELECT id,text,control_resolution_json,
+    CASE WHEN json_valid(control_resolution_json)
+         THEN json_type(control_resolution_json,'$.subsession_result') IS 'object' ELSE 0 END AS is_result
+    FROM session_queued_messages WHERE chat_id=?1 AND state='queued'
+    AND NOT EXISTS (SELECT 1 FROM session_queue_pauses p WHERE p.chat_id=?1)
+    ORDER BY is_result DESC,rowid LIMIT ?2";
+
 fn queued_rows(db: &Connection, chat: &str) -> Result<Vec<QueuedRow>, AppStorageError> {
-    let mut statement = db.prepare_cached("SELECT id,text,control_resolution_json FROM session_queued_messages WHERE chat_id=?1 AND state='queued' AND NOT EXISTS (SELECT 1 FROM session_queue_pauses p WHERE p.chat_id=?1) ORDER BY rowid ASC LIMIT ?2")
+    let mut statement = db
+        .prepare_cached(QUEUED_ROWS_SQL)
         .map_err(AppStorageError::sqlite)?;
     statement
         .query_map(params![chat, FIFO_WINDOW], |row| {
             Ok(QueuedRow {
+                is_result: row.get(3)?,
                 id: row.get(0)?,
                 text: row.get(1)?,
                 control_resolution_json: row.get(2)?,

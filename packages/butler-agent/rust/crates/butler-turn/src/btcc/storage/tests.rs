@@ -73,6 +73,8 @@ async fn opener_cuts_over_an_r2_nonterminal_turn_without_reexecuting_it() {
     assert_eq!(outbox_status, "pending");
     assert!(evidence.contains("btcc.r3.legacy-turn-cutover.v2"));
     cancelled_reader_joins_on_close(storage).await;
+    // The gateway's execution-presence read shares these reader-pool guarantees.
+    subsessions::queue_presence_excludes_held_children_and_does_not_wait_for_writer().await;
 }
 
 async fn cancelled_reader_joins_on_close(storage: BtccStorage) {

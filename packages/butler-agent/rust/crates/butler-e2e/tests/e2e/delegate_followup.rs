@@ -7,6 +7,8 @@
 )]
 #[path = "delegate_followup/failure.rs"]
 mod failure;
+#[path = "delegate_followup/ordering.rs"]
+mod ordering;
 #[path = "delegate_followup/project.rs"]
 mod project;
 #[path = "delegate_followup/stub.rs"]

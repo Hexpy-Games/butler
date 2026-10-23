@@ -275,6 +275,17 @@ impl AppApplication {
         client_id: &str,
         prepared: ResolvedAppAdmission,
     ) -> Result<MessageSendResult, GatewayApplicationError> {
+        // Recovery can publish child results before native ingress is ready.
+        // Keep admission durable until the dispatcher's readiness signal arrives.
+        if !self
+            .dependencies
+            .executor_readiness
+            .readiness()?
+            .btcc_executor_ready
+        {
+            self.queue_wake.chat(chat_id.to_owned()).await?;
+            return self.queued_result(chat_id, client_id).await;
+        }
         let claim_id = self.dependencies.identity_clock.new_uuid();
         let now = self.dependencies.identity_clock.now_iso();
         let lease = self

@@ -90,6 +90,12 @@ pub(super) fn migrate(
         )
         .map_err(AppStorageError::sqlite)?;
     migration::backfill_queue_identity(connection)?;
+    connection.execute_batch(
+        "CREATE INDEX IF NOT EXISTS session_queued_messages_result_order_idx
+         ON session_queued_messages(chat_id,state,
+           (CASE WHEN json_valid(control_resolution_json)
+                 THEN json_type(control_resolution_json,'$.subsession_result') IS 'object' ELSE 0 END) DESC)"
+    ).map_err(AppStorageError::sqlite)?;
     schedule_access::backfill(connection)?;
     migration::create_post_backfill_indexes(connection)?;
     run_backfills_once(connection)?;

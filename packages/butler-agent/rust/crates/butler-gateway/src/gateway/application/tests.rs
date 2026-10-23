@@ -1,3 +1,4 @@
+mod child_results;
 mod controls;
 
 mod projection_burst;
@@ -126,8 +127,14 @@ async fn message_and_turn_cursors_preserve_distinct_public_rules() {
     let _ = std::fs::remove_file(path);
 }
 
+// test-category: race
 #[tokio::test]
 async fn delivered_transcript_final_projects_and_settles_exact_queue_claim() {
+    // Exact-claim lifecycle coverage: startup readiness, suspended delegation,
+    // and final delivery must all retain and release the right queued input.
+    child_results::recovered_child_result_waits_for_executor_readiness_before_claiming().await;
+    child_results::child_result_queued_under_parent_claim_runs_on_suspension_without_other_wake()
+        .await;
     let native = Arc::new(Native(Mutex::new(Vec::new())));
     let root = std::env::temp_dir().join(format!(
         "butler-h1b-projection-{}-{}",
