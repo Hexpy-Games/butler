@@ -50,7 +50,7 @@ impl SqliteSubsessionRepository {
             let key = format!("parent-direction:{relation}:{source_message}");
             let receipt = store::admit_instruction(tx, &context(), &store::SessionInstruction {
                 target: &child.child_session_id, sender: serde_json::json!({"parent":{"session_id":child.parent_session_id,"relation_id":relation,"relation_epoch":0}}),
-                mode: "queue", body: serde_json::json!({"text":instruction}), idempotency_key: &key,
+                mode: "steer", body: serde_json::json!({"text":instruction}), idempotency_key: &key,
                 expected_control_epoch: epoch, anchor_task: &child.task_id })?;
             let rows = store::pending_instructions(tx, &child.child_session_id, false)?;
             rows.iter().find(|r| at(r, "/id")==at(&receipt, "/instruction_id")).map(|r| direction(r,&relation)).ok_or(store::Error::NotFound)

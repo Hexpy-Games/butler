@@ -33,6 +33,7 @@ pub(crate) const SUBSESSIONS_SERVICE_REPORT_CHILD: &str =
     "SELECT session_id FROM wm_attempts WHERE id=?1";
 pub(crate) const SUBSESSIONS_SERVICE_LIFECYCLE_2: &str =
     "UPDATE btcc_session_relations SET activity_terminal=0 WHERE relation_id=?1";
+pub(crate) const SUBSESSIONS_SERVICE_LATEST_PART: &str = "SELECT part_id FROM wm_attempts WHERE task_id=?1 AND session_id=?2 ORDER BY started_at DESC,id DESC LIMIT 1";
 pub(crate) const SUBSESSIONS_SERVICE_CUTOVER_1: &str = "SELECT c.op_id,c.revision,i.id,t.trigger_key FROM wm_cross_db_intents c JOIN wm_instructions i ON i.id=json_extract(c.payload_json,'$.instruction_id') JOIN btcc_turns t ON t.turn_id=i.anchor_id WHERE c.kind='cutover_wait' AND c.state='pending' AND i.status IN ('waiting_for_turn','delivered')";
 
 pub(crate) const STORAGE_SUBSESSIONS_NATIVE_INDEXED_1: &str = "SELECT a.id,a.turn_id,a.status,a.checkpoint_ref,a.finished_at,p.status \
@@ -103,6 +104,10 @@ pub(crate) fn statements() -> Vec<(&'static str, String)> {
     statements.push((
         "SUBSESSIONS_SERVICE_WAITING_TURN",
         SUBSESSIONS_SERVICE_WAITING_TURN.to_owned(),
+    ));
+    statements.push((
+        "SUBSESSIONS_SERVICE_LATEST_PART",
+        SUBSESSIONS_SERVICE_LATEST_PART.to_owned(),
     ));
     for (name, predicate) in [
         ("ASSIGNMENT_CHILD", "r.child_session_id=?1"),

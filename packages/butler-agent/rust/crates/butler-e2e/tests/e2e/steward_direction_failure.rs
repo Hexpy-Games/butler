@@ -25,8 +25,12 @@ fn directions(s: &Scenario, relation: &str) -> Vec<Direction> {
     let db = db(s);
     let mut statement = db
         .prepare(
-            "SELECT instruction,status,applied_child_turn_id FROM btcc_subsession_directions \
-             WHERE relation_id=?1 ORDER BY revision",
+            "SELECT i.body_ref,i.status,t.turn_id \
+             FROM wm_instructions i \
+             JOIN btcc_session_relations r ON r.child_session_id=i.target_session_id \
+             LEFT JOIN btcc_turns t ON t.original_message_id='subsession-direction-message:'||i.id \
+             WHERE r.relation_id=?1 AND i.idempotency_key LIKE 'parent-direction:%' \
+             ORDER BY i.received_seq",
         )
         .unwrap();
     statement
@@ -34,7 +38,17 @@ fn directions(s: &Scenario, relation: &str) -> Vec<Direction> {
             Ok((row.get(0)?, row.get(1)?, row.get(2)?))
         })
         .unwrap()
-        .map(Result::unwrap)
+        .map(|row| {
+            let (body, status, turn): Direction = row.unwrap();
+            let content: Value =
+                serde_json::from_str(&butler_work::store::tool_read::body(&db, &body).unwrap())
+                    .unwrap();
+            (
+                content["body"]["text"].as_str().unwrap().to_owned(),
+                status,
+                turn,
+            )
+        })
         .collect()
 }
 
@@ -42,7 +56,10 @@ fn result_status(s: &Scenario, relation: &str, turn: &str) -> Option<String> {
     use rusqlite::OptionalExtension;
     db(s)
         .query_row(
-            "SELECT status FROM btcc_steward_results WHERE relation_id=?1 AND child_turn_id=?2",
+            "SELECT CASE WHEN a.status IN ('failed','interrupted') THEN 'failed' ELSE 'success' END \
+             FROM wm_attempts a JOIN btcc_session_relations r ON r.child_session_id=a.session_id \
+             JOIN btcc_subsession_outbox o ON o.result_id='result-'||a.id \
+             WHERE r.relation_id=?1 AND a.turn_id=?2",
             [relation, turn],
             |row| row.get(0),
         )
@@ -54,9 +71,12 @@ fn result_status(s: &Scenario, relation: &str, turn: &str) -> Option<String> {
 fn reopen_first_direction(s: &Scenario, relation: &str) {
     let changed = db(s)
         .execute(
-            "UPDATE btcc_subsession_directions SET status='pending',applied_at=NULL,\
-             applied_child_turn_id=NULL WHERE relation_id=?1 AND instruction=?2",
-            [relation, stub::DIRECTION],
+            "UPDATE wm_instructions SET status='pending_safe_point' WHERE id=(\
+             SELECT i.id FROM wm_instructions i \
+             JOIN btcc_session_relations r ON r.child_session_id=i.target_session_id \
+             WHERE r.relation_id=?1 AND i.idempotency_key LIKE 'parent-direction:%' \
+             ORDER BY i.received_seq LIMIT 1)",
+            [relation],
         )
         .unwrap();
     assert_eq!(changed, 1, "first direction missing");
@@ -301,7 +321,9 @@ fn assert_settled_once(s: &Scenario, script: &stub::Script, relation: &str) {
     let db = db(s);
     let one = |sql: &str| count(&db, sql, relation);
     assert_eq!(
-        one("SELECT count(*) FROM btcc_steward_results WHERE relation_id=?1"),
+        one(
+            "SELECT count(*) FROM wm_attempts a JOIN btcc_session_relations r ON r.child_session_id=a.session_id JOIN btcc_subsession_outbox o ON o.result_id='result-'||a.id WHERE r.relation_id=?1"
+        ),
         3
     );
     assert_eq!(

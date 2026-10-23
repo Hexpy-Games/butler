@@ -1,7 +1,8 @@
 //! Child work, completion and dispatch recovery of subsessions.
 
+mod continuation;
+
 use super::*;
-use butler_core::json::at;
 use rusqlite::OptionalExtension;
 
 impl SubsessionService {
@@ -23,48 +24,30 @@ impl SubsessionService {
         let session = session.to_owned();
         let turn = turn.to_owned();
         let notifying_session = session.clone();
-        self.repository.storage().work_model_write(move |tx| {
-            use butler_work::store;
-            use rusqlite::OptionalExtension;
-            let existing: bool = tx.query_row(crate::btcc::storage::native_sql::SUBSESSIONS_SERVICE_LIFECYCLE_1,rusqlite::params![assigned.task_id,session,turn],|_|Ok(())).optional()?.is_some();
-            if existing { return Ok(()) }
-            if let Some(part)=&assigned.part_id
-                && store::continue_part_turn(tx,&admission::context(),part,&session,&turn)? {
-                return Ok(())
-            }
-            let instruction = store::pending_instructions(tx,&session,false)?.into_iter()
-                .find(|row| crate::btcc::storage::direction_turn_id(at(row, "/id").as_str().unwrap_or_default())==turn)
-                .ok_or(store::Error::Invalid("child turn has no assignment"))?;
-            let ctx=admission::context();
-            let task=store::read_task(tx,&assigned.task_id)?;
-            if let Some(part)=&assigned.part_id {
-                let part_row=store::read_part(tx,part)?;
-                if at(&part_row,"/status")=="completed" {
-                    return Err(store::Error::Invalid("The assigned part is completed. Delegate a new part for the continuation."));
+        self.repository
+            .storage()
+            .work_model_write(move |tx| {
+                use rusqlite::OptionalExtension;
+                let existing: bool = tx
+                    .query_row(
+                        crate::btcc::storage::native_sql::SUBSESSIONS_SERVICE_LIFECYCLE_1,
+                        rusqlite::params![assigned.task_id, session, turn],
+                        |_| Ok(()),
+                    )
+                    .optional()?
+                    .is_some();
+                if existing {
+                    return Ok(());
                 }
-                if at(&task,"/status")=="in_review" {
-                    return Err(store::Error::Invalid("The Task is in review. Finish its review before continuing execution."));
-                }
-                if !matches!(at(&task, "/status").as_str(),Some("running"|"in_review")) {
-                    let lease:bool=tx.query_row(store::execution_sql::LEASE,[&assigned.task_id],|_|Ok(true)).optional()?.unwrap_or(false);
-                    if lease {
-                        store::transition(tx,&ctx,&assigned.task_id,at(&task,"/revision").as_i64().ok_or(store::Error::Invalid("revision"))?,butler_work::work_types::TaskStatus::Running,false,None)?;
-                    } else {
-                        store::start_task(tx,&ctx,&assigned.task_id,at(&task, "/revision").as_i64().ok_or(store::Error::Invalid("revision"))?,
-                            &store::ExecutionScope{session_id:&assigned.parent_session_id,turn_id:&assigned.parent_turn_id},&format!("parent-attempt:{turn}"))?;
-                    }
-                }
-                tx.execute(store::execution_sql::PART_STATE,rusqlite::params![part,"pending",Option::<&str>::None])?;
-                let revision=at(&store::read_part(tx,part)?, "/revision").as_i64().ok_or(store::Error::Invalid("revision"))?;
-                store::assign_part(tx,&ctx,part,revision,&assigned.parent_session_id,&store::ExecutionScope{session_id:&session,turn_id:&turn},&format!("attempt:{turn}"))?;
-            } else {
-                store::start_task(tx,&ctx,&assigned.task_id,at(&task, "/revision").as_i64().ok_or(store::Error::Invalid("revision"))?,
-                    &store::ExecutionScope{session_id:&session,turn_id:&turn},&format!("attempt:{turn}"))?;
-            }
-            tx.execute(crate::btcc::storage::native_sql::SUBSESSIONS_SERVICE_LIFECYCLE_2,[&assigned.relation_id])?;
-            let _=instruction;
-            Ok(())
-        }).await.map_err(BtccError::from)?;
+                continuation::claim(tx, &assigned, &session, &turn)?;
+                tx.execute(
+                    crate::btcc::storage::native_sql::SUBSESSIONS_SERVICE_LIFECYCLE_2,
+                    [&assigned.relation_id],
+                )?;
+                Ok(())
+            })
+            .await
+            .map_err(BtccError::from)?;
         self.notify_execution_changed(&notifying_session).await
     }
     /// Compatibility for callers transitioning to the native assignment port.
