@@ -38,6 +38,21 @@ async fn cancel_continuation(running: bool) -> Result<(), HarnessError> {
             .await
             .unwrap();
     }
+    script.fourth.add_permits(1);
+    let (_, all) = workers(&s, "general", 4).await?;
+    assert_eq!(all[3]["status"], "waiting");
+    assert_eq!(script.started.lock().unwrap().len(), 3);
+    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    let count: u64 = db.query_row(
+        butler_turn::btcc::storage::RUNNING_WORKERS_SQL,
+        [&parent],
+        |r| r.get(0),
+    )?;
+    assert_eq!(
+        count, 2,
+        "live continuations must count after their direction is consumed"
+    );
+    drop(db);
     let relation = rows[0]["relation"]["relation_id"].as_str().unwrap();
     let response =
         s.gw.post(
@@ -62,10 +77,11 @@ async fn cancel_continuation(running: bool) -> Result<(), HarnessError> {
         );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    script.fourth.add_permits(1);
-    script.release("red-1");
-    script.release("red-2");
+    if !running {
+        script.release("red-1");
+    }
     started(&script, 4).await;
+    script.release("red-2");
     script.release("red-3");
     let (_, all) = workers(&s, "general", 4).await?;
     closed(&s, all[3]["session_id"].as_str().unwrap()).await?;

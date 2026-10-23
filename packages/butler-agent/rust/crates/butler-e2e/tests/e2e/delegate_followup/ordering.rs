@@ -38,11 +38,11 @@ async fn ordered(endpoint: &str, restart: bool) -> Result<(), HarnessError> {
         .await
         .unwrap();
     // A message while the child runs starts a normal parent turn, preserving steering.
-    let busy = s.gw.say("general", stub::BUSY).await?;
-    let busy_turn = accepted_turn_id(&busy)?;
+    s.gw.say("general", stub::BUSY).await?;
     tokio::time::timeout(Duration::from_secs(20), script.busy.notified())
         .await
         .unwrap();
+    let busy_turn = admitted_message_turn(&s, stub::BUSY).await?;
     let followups = ["Keep the first note.", "Keep the second note."];
     for text in followups {
         let queued =
@@ -92,6 +92,21 @@ async fn ordered(endpoint: &str, restart: bool) -> Result<(), HarnessError> {
     s.finish().await?;
     server.abort();
     Ok(())
+}
+
+async fn admitted_message_turn(s: &Scenario, text: &str) -> Result<String, HarnessError> {
+    let events = butler_e2e::e2e::events::LiveEvents::subscribe(&s.gw, 0).await?;
+    let message = events
+        .wait_for(Duration::from_secs(20), |event| {
+            event["type"] == "message.created"
+                && event["payload"]["message"]["role"] == "user"
+                && event["payload"]["message"]["text"] == text
+        })
+        .await?;
+    Ok(message["payload"]["message"]["turn_id"]
+        .as_str()
+        .unwrap()
+        .into())
 }
 
 async fn quit(s: &mut Scenario) -> Result<(), HarnessError> {
