@@ -18,7 +18,7 @@ macro_rules! indexed_reads {
 
 indexed_reads! {
     SessionWorks => ("SELECT * FROM wm_works WHERE home_session_id=?1 AND home_session_id IS NOT NULL UNION SELECT * FROM wm_works WHERE scope_kind='session' AND scope_ref=?1 ORDER BY created_at,id", "wm_works_local_home"),
-    ReadyWorks => ("SELECT * FROM wm_works WHERE started_at IS NOT NULL AND run_state IN ('idle','running','in_review','blocked','failed') ORDER BY run_state,id", "wm_works_started"),
+    ReadyWorks => ("SELECT w.*,i.op_id AS ready_op,i.revision AS ready_revision FROM wm_cross_db_intents i JOIN wm_works w ON w.id=json_extract(i.payload_json,'$.work_id') WHERE i.kind='ready_start' AND i.state='pending' ORDER BY i.op_id", "wm_intents_pending_kind"),
     ReservedTask => ("SELECT * FROM wm_tasks WHERE reserved_session_id=?1 AND reserved_session_id IS NOT NULL", "wm_tasks_reserved"),
 
     TaskChains => ("SELECT id,state,created_at FROM wm_task_chains

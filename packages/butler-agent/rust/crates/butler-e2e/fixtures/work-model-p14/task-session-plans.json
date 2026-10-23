@@ -1,13 +1,20 @@
 {
-  "PENDING_PROJECTIONS": "SEARCH wm_cross_db_intents USING INDEX wm_cross_db_intents_pending (state=?)\nUSE TEMP B-TREE FOR ORDER BY",
+  "HANDOFF_PENDING": "SEARCH wm_tasks USING INDEX wm_tasks_handoff (id>?)",
+  "HANDOFF_READY": "SEARCH i USING INDEX wm_intents_pending_kind (kind=?)\nSEARCH t USING INDEX sqlite_autoindex_wm_tasks_1 (id=?)\nSEARCH turn USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN\nCORRELATED SCALAR SUBQUERY 1\nSEARCH btcc_turns USING COVERING INDEX idx_btcc_turns_session (session_id=?)\nCORRELATED SCALAR SUBQUERY 2\nSEARCH a USING INDEX wm_attempts_task (task_id=?)\nSEARCH o USING COVERING INDEX sqlite_autoindex_btcc_subsession_outbox_2 (result_id=?)\nUSE TEMP B-TREE FOR ORDER BY",
+  "PENDING_PROJECTIONS": "SEARCH wm_cross_db_intents USING INDEX wm_intents_pending_kind (kind=?)",
   "PENDING_CONTROLS": "SEARCH wm_cross_db_intents USING INDEX wm_intents_pending_kind (kind=?)",
+  "STARTUP_READY": "SEARCH wm_works USING INDEX wm_works_started (run_state=?)",
+  "READY_CHANGED": "",
+  "SESSION_STATES": "SCAN r VIRTUAL TABLE INDEX 1:\nSEARCH i USING INDEX wm_intents_task_session (<expr>=?)\nSEARCH t USING INDEX sqlite_autoindex_wm_tasks_1 (id=?)\nSEARCH w USING INDEX sqlite_autoindex_wm_works_1 (id=?)\nSEARCH c USING INDEX sqlite_autoindex_wm_task_chains_1 (id=?) LEFT-JOIN",
+  "RUNTIME_INSTRUCTION": "SEARCH wm_instructions USING INDEX sqlite_autoindex_wm_instructions_1 (id=?)",
   "RESERVE": "SEARCH wm_tasks USING INDEX sqlite_autoindex_wm_tasks_1 (id=?)",
+  "PERSON_REQUEST": "SCAN CONSTANT ROW\nSCALAR SUBQUERY 1\nSEARCH wm_instructions USING INDEX sqlite_autoindex_wm_instructions_1 (id=?)",
   "START_WORK": "SEARCH wm_works USING INDEX sqlite_autoindex_wm_works_1 (id=?)",
   "STALE_OWNER": "SCAN CONSTANT ROW\nSCALAR SUBQUERY 1\nSEARCH t USING INDEX sqlite_autoindex_wm_tasks_1 (id=?)\nSEARCH a USING INDEX wm_attempts_task (task_id=?)\nSCALAR SUBQUERY 2\nSEARCH t USING INDEX sqlite_autoindex_wm_tasks_1 (id=?)\nSEARCH a USING INDEX wm_attempts_running (session_id=?)",
   "TAKE_RESERVED": "SEARCH wm_tasks USING INDEX sqlite_autoindex_wm_tasks_1 (id=?)",
   "BEGIN_HANDOFF": "SEARCH wm_tasks USING INDEX sqlite_autoindex_wm_tasks_1 (id=?)",
   "MOVE_OWNER": "SEARCH wm_tasks USING INDEX sqlite_autoindex_wm_tasks_1 (id=?)",
+  "CLEAR_HANDOFF": "SEARCH wm_tasks USING INDEX sqlite_autoindex_wm_tasks_1 (id=?)",
   "HOLD_REASON": "SEARCH wm_holds USING INDEX sqlite_autoindex_wm_holds_1 (id=?)",
-  "HANDOFF_PENDING": "SEARCH wm_tasks USING INDEX wm_tasks_handoff (id>?)",
   "LATEST_CHECKPOINT": "SEARCH wm_attempts USING INDEX wm_attempts_task (task_id=?)"
 }

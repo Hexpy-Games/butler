@@ -16,7 +16,7 @@ pub use ownership::{
     TaskSession, acknowledge_intent, complete_handoff, ensure_owner_epoch, open_task_session,
     take_here,
 };
-pub use scheduler::{ReadyStart, ready_starts};
+pub use scheduler::{ReadyStart, acknowledge_ready, ready_starts};
 mod task_placement;
 pub use task_placement::*;
 pub mod apply;
@@ -187,6 +187,7 @@ pub(super) fn event(
         effects.changed = true;
         return Ok(());
     }
+    scheduler::changed(tx, ctx, kind, id)?;
     let payload =
         json!({"entity_kind":kind,"entity_id":id,"revision":revision,"op":op}).to_string();
     tx.execute(

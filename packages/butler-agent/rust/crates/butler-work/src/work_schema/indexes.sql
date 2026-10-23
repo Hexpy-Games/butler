@@ -52,3 +52,5 @@ CREATE INDEX IF NOT EXISTS wm_tasks_owner_active ON wm_tasks(assignee_session_id
 CREATE INDEX IF NOT EXISTS wm_tasks_reserved ON wm_tasks(reserved_session_id) WHERE reserved_session_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS wm_tasks_handoff ON wm_tasks(id) WHERE handoff_to_session_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS wm_works_started ON wm_works(run_state,id) WHERE started_at IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS wm_intents_task_session ON wm_cross_db_intents(json_extract(payload_json,'$.session_id')) WHERE kind='task_session_chat';

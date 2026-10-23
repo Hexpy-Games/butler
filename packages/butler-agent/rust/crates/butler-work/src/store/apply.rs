@@ -114,6 +114,20 @@ fn apply_batch(
         }
     }
     let work = read_work(tx, work_id)?;
+    if work["home_session_id"] == scope.session_id
+        && !scope.child_session
+        && input.operations.iter().any(Operation::structure)
+    {
+        let person: bool = tx.query_row(
+            ownership::sql::PERSON_REQUEST,
+            [&scope.instruction_id],
+            |r| r.get(0),
+        )?;
+        if person {
+            batch.start_work()?;
+        }
+    }
+    let work = read_work(tx, work_id)?;
     batch.revisions.insert(work_id.into(), revision(&work)?);
     Ok(
         json!({"ok":true,"operation_ids":batch.operation_ids,"keys":batch.keys,
@@ -324,6 +338,7 @@ impl Batch<'_, '_> {
             ownership::sql::START_WORK,
             rusqlite::params![self.work()?, self.ctx.now],
         )?;
+        scheduler::changed(self.tx, self.ctx, "work", self.work()?)?;
         Ok(())
     }
 }

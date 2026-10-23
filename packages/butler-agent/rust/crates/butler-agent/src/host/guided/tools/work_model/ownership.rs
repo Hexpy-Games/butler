@@ -31,7 +31,7 @@ pub(super) async fn label(owner: &GuidedTools, value: &mut Value) {
     .ok()
     .flatten();
     if let Some(title) = title
-        && let Ok(message) = store::ownership::ownership_message(&value["error"], &title)
+        && let Ok(message) = store::ownership::ownership_message(&value["error"], Some(&title))
     {
         value["error"]["message"] = json!(message);
     }

@@ -22,9 +22,21 @@ impl CutoverOwner {
         &self,
         service: Arc<butler_turn::btcc::SubsessionService>,
     ) -> Result<(), BtccError> {
-        service
+        if let Err(error) = service
             .recover_native_assignments(self.recovery.interrupted.as_ref().clone())
-            .await?;
+            .await
+        {
+            butler_core::diagnostic!(
+                "[work-cutover] native assignment recovery failed code={}",
+                error.code()
+            );
+        }
+        service
+            .repository()
+            .storage()
+            .work_model_write(|tx| store::scheduler::recover_ready(tx, &context()))
+            .await
+            .map_err(BtccError::from)?;
         self.tasks
             .spawn(crate::host::app::work_model::task_steps::run(
                 service.repository().storage().clone(),

@@ -15,24 +15,6 @@ pub(super) fn applied(storage: BtccStorage, op: String) -> ApplicationFuture<()>
     Box::pin(async move {
         storage
             .work_model_write(move |tx| {
-                let (kind, payload): (String, String) =
-                    tx.query_row(store::sql::INTENT, [&op], |r| {
-                        Ok((r.get("kind")?, r.get("payload_json")?))
-                    })?;
-                if kind == "task_continue" {
-                    let payload: Value = serde_json::from_str(&payload)?;
-                    if let Some(id) = payload["instruction_id"].as_str() {
-                        store::deliver_instruction(
-                            tx,
-                            &store::Context {
-                                now: chrono::Utc::now().timestamp_millis(),
-                                actor: json!({"runtime":"app_projection"}),
-                            },
-                            id,
-                            "waiting_for_task",
-                        )?;
-                    }
-                }
                 store::acknowledge_intent(
                     tx,
                     &store::Context {
@@ -62,8 +44,11 @@ pub(super) async fn ownership(
     let expected = input["expected_revision"]
         .as_i64()
         .ok_or_else(GatewayApplicationError::internal)?;
+    let expected_epoch = input["expected_owner_epoch"]
+        .as_i64()
+        .ok_or_else(GatewayApplicationError::internal)?;
     let result = service
-        .task_ownership(&session, task, decision, expected)
+        .task_ownership(&session, task, decision, expected, expected_epoch)
         .await
         .map_err(GatewayApplicationError::internal_from)?;
     if result["error"]["code"] == "conflict" {

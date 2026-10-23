@@ -8,39 +8,26 @@ impl SubsessionService {
             .repository
             .storage()
             .work_model_read(|db| {
-                let mut stmt = db.prepare(crate::btcc::storage::native_sql::HANDOFF_PENDING)?;
+                let mut stmt = db.prepare(crate::btcc::storage::native_sql::HANDOFF_READY)?;
                 Ok(stmt
-                    .query_map([""], |r| {
-                        Ok((
-                            r.get::<_, String>("id")?,
-                            r.get::<_, String>("assignee_session_id")?,
-                        ))
-                    })?
+                    .query_map([], |r| r.get::<_, String>("id"))?
                     .collect::<rusqlite::Result<Vec<_>>>()?)
             })
             .await
             .map_err(BtccError::from)?;
-        for (task, owner) in tasks {
-            if let Some((turn, state)) = self
-                .repository
-                .latest_turn(owner.clone())
-                .await
-                .map_err(BtccError::from)?
-                && state == "admitted"
-                && !self
-                    .repository
-                    .has_turn_result(owner.clone(), turn)
-                    .await
-                    .map_err(BtccError::from)?
-            {
-                continue;
-            }
-            self.repository.storage().work_model_write(move |tx| {
+        for task in tasks {
+            let result=self.repository.storage().work_model_write(move |tx| {
                 let checkpoint: Option<String>=tx.query_row(store::ownership_sql::LATEST_CHECKPOINT,[&task],|r|r.get(0)).optional()?.flatten();
                 let checkpoint=match checkpoint {Some(c)=>c,None=>store::put_body(tx,&json!({"task":store::read_task(tx,&task)?,"parts":store::parts::task_parts(tx,&task)?}).to_string())?};
                 store::complete_handoff(tx,&admission::context(),&task,&checkpoint)?;
                 Ok(())
-            }).await.map_err(BtccError::from)?;
+            }).await;
+            if let Err(error) = result {
+                butler_core::diagnostic!(
+                    "[task-sessions] handoff reconcile failed code={}",
+                    BtccError::from(error).code()
+                );
+            }
         }
         self.drain_task_controls().await
     }

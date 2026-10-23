@@ -10,6 +10,9 @@ pub fn assign_task(
     attempt: &str,
 ) -> Result<Value> {
     let row = read_task(tx, task)?;
+    if row["reserved_session_id"] != child.session_id || !row["assignee_session_id"].is_null() {
+        return Err(Error::Conflict { current: row });
+    }
     if !matches!(row["status"].as_str(), Some("pending" | "waiting")) {
         return Err(Error::Invalid("assigned Task must be ready"));
     }

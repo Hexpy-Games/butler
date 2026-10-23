@@ -24,6 +24,12 @@ pub(super) fn set_state(
     reported: bool,
 ) -> Result<bool> {
     let row = read_task(tx, id)?;
+    if matches!(
+        state,
+        TaskStatus::Completed | TaskStatus::Cancelled | TaskStatus::Failed
+    ) {
+        ownership::clear_handoff(tx, ctx, &row)?;
+    }
     let result = if state == TaskStatus::Completed {
         row["result_reported_at"]
             .as_i64()
@@ -267,6 +273,7 @@ pub(super) fn cancel_tasks(
     let tasks = rows(tx, sql::TASKS, [id])?;
     for task in &tasks {
         let task_id = text(task, "id")?;
+        ownership::clear_handoff(tx, ctx, task)?;
         tx.execute(
             sql::CANCEL_TASK,
             params![task_id, reason, ctx.now, task["revision"].as_i64()],

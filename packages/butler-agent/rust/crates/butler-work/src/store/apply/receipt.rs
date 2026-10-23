@@ -48,9 +48,7 @@ pub fn apply_tool(
                 .and_then(|()| apply_with_context(tx, ctx, scope, &input, &mut failed))
             {
                 Ok(value) => Ok(value),
-                Err(Error::OwnedElsewhere { detail }) => {
-                    ownership::ownership_prompt(tx, ctx, &scope.session_id, &detail)
-                }
+                Err(Error::OwnedElsewhere { detail }) => ownership::ownership_rejection(&detail),
                 Err(Error::Sqlite(error)) => Err(Error::Sqlite(error)),
                 Err(Error::BodyCodec(error)) => Err(Error::BodyCodec(error)),
                 Err(error) => rejection::response(tx, scope, &error, failed.as_ref()),

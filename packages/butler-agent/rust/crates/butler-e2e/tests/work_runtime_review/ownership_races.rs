@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, reason = "test assertions")]
 #[path = "../../../butler-work/tests/store_support/mod.rs"]
-mod store_support;
+pub(super) mod store_support;
 use butler_work::{store::*, work_schema, work_types::*};
 use rusqlite::{Connection, TransactionBehavior};
 use std::{

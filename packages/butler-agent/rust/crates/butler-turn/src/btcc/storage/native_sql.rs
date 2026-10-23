@@ -1,4 +1,6 @@
 //! Native runtime statements, shared with indexed query-plan pins.
+pub(crate) const HANDOFF_READY: &str = "SELECT t.id FROM wm_cross_db_intents i JOIN wm_tasks t ON t.id=json_extract(i.payload_json,'$.task_id') LEFT JOIN btcc_turns turn ON turn.rowid=(SELECT rowid FROM btcc_turns WHERE session_id=t.assignee_session_id ORDER BY rowid DESC LIMIT 1) WHERE i.kind='handoff_check' AND i.state='pending' AND t.handoff_to_session_id IS NOT NULL AND (turn.turn_id IS NULL OR turn.semantic_state<>'admitted' OR EXISTS(SELECT 1 FROM wm_attempts a JOIN btcc_subsession_outbox o ON o.result_id='result-'||a.id WHERE a.task_id=t.id AND a.session_id=t.assignee_session_id AND a.turn_id=turn.turn_id)) ORDER BY t.id";
+#[cfg(feature = "test-support")]
 pub(crate) const HANDOFF_PENDING: &str = butler_work::store::ownership_sql::HANDOFF_PENDING;
 pub(crate) const SUBSESSIONS_SERVICE_TASK_PART_COUNTS: &str = "SELECT count(*),coalesce(sum(status='completed'),0) FROM wm_task_parts WHERE assignee_session_id=?1 AND status<>'cancelled'";
 pub(crate) const WORKER_RUNNING_COUNT: &str = "SELECT count(*) FROM btcc_session_relations r WHERE r.parent_session_id=?1 AND r.activity_role='worker' AND EXISTS(SELECT 1 FROM wm_attempts a WHERE a.session_id=r.child_session_id AND a.status='running' AND NOT EXISTS(SELECT 1 FROM wm_cross_db_intents i WHERE i.op_id='child_dispatch:'||a.id AND i.state='pending'))";
@@ -89,6 +91,7 @@ pub(crate) fn statements() -> Vec<(&'static str, String)> {
         .collect();
     for (name, sql) in [
         ("HANDOFF_PENDING", HANDOFF_PENDING),
+        ("HANDOFF_READY", HANDOFF_READY),
         ("WORKER_RUNNING_COUNT", WORKER_RUNNING_COUNT),
         ("WORKER_NEXT_WAITING", WORKER_NEXT_WAITING),
         (

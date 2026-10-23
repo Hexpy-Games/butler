@@ -247,7 +247,7 @@ fn submit_part(
     if row["task_id"] != task {
         return Err(Error::Invalid("part belongs to another Task"));
     }
-    ownership::ensure_owner_epoch(tx, task, session)?;
+    ownership::ensure_owner_mutation(tx, task, session)?;
     let lease = one(tx, sql::PART_LEASE, [id])?;
     if lease["session_id"] != session {
         return Err(Error::Invalid("part lease belongs to another session"));
@@ -318,7 +318,7 @@ pub fn fail_part(
 ) -> Result<Value> {
     let part = parts::read_part(tx, id)?;
     let task = text(&part, "task_id")?;
-    ownership::ensure_owner_epoch(tx, task, session)?;
+    ownership::ensure_owner_mutation(tx, task, session)?;
     let lease = one(tx, sql::PART_LEASE, [id])?;
     if lease["session_id"] != session {
         return Err(Error::Invalid("part lease belongs to another session"));
@@ -400,7 +400,7 @@ fn block_part(
     if row["task_id"] != task {
         return Err(Error::Invalid("part belongs to another Task"));
     }
-    ownership::ensure_owner_epoch(tx, task, session)?;
+    ownership::ensure_owner_mutation(tx, task, session)?;
     let lease = one(tx, sql::PART_LEASE, [id])?;
     if lease["session_id"] != session {
         return Err(Error::Invalid("part lease belongs to another session"));

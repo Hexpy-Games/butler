@@ -200,7 +200,7 @@ impl SqliteSubsessionRepository {
         session: String,
     ) -> Result<Option<(String, String)>, StorageError> {
         self.storage
-            .execute(move |db| {
+            .read(move |db| {
                 db.query_row(
                     crate::btcc::storage::native_sql::STORAGE_SUBSESSIONS_1,
                     [session],

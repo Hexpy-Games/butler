@@ -1,5 +1,7 @@
 //! Real service races, with a captured queue and a mutable settings port.
 use super::*;
+#[path = "worker_cap/handoff_recovery.rs"]
+mod handoff_recovery;
 use butler_turn::{btcc::*, workspace::*};
 use std::sync::{
     Arc, Mutex,

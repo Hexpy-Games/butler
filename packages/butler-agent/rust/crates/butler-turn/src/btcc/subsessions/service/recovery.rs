@@ -27,7 +27,12 @@ impl SubsessionService {
         &self,
         interrupted: Vec<Value>,
     ) -> Result<(), BtccError> {
-        self.recover_handoffs().await?;
+        if let Err(error) = self.recover_handoffs().await {
+            butler_core::diagnostic!(
+                "[task-sessions] handoff recovery failed code={}",
+                error.code()
+            );
+        }
         self.replay_pending_assignments(false).await?;
         for attempt in interrupted {
             let Some(session) = at(&attempt, "/session_id").as_str() else {

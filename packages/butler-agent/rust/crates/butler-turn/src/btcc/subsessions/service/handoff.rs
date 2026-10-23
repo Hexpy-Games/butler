@@ -11,6 +11,7 @@ impl SubsessionService {
         task: &str,
         decision: &str,
         expected: i64,
+        expected_epoch: i64,
     ) -> Result<Value, BtccError> {
         let to = session.to_owned();
         let task = task.to_owned();
@@ -26,15 +27,11 @@ impl SubsessionService {
                 if decision != "take_here" {
                     return Err(store::Error::Invalid("ownership decision"));
                 }
-                let result = store::take_here(tx, &ctx, &task, &to, expected)?;
-                store::record_intent(
-                    tx,
-                    &ctx,
-                    &format!("ownership_taken:{task}:{}", at(&result, "/revision")),
-                    "ownership_taken",
-                    &json!({"task_id":task,"target_session_id":to}),
-                )?;
-                Ok(result)
+                let row = store::read_task(tx, &task)?;
+                if row["owner_epoch"] != expected_epoch {
+                    return Err(store::Error::Conflict { current: row });
+                }
+                store::take_here(tx, &ctx, &task, &to, expected)
             })
             .await;
         let result = match result {
@@ -79,31 +76,52 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?;
         for (op, _kind, payload) in intents {
-            let p: Value = serde_json::from_str(&payload)
-                .map_err(|e| error(BtccCode::SubsessionIdentityInvalid).with_source(e))?;
-            Box::pin(self.enqueue_handoff_stop(&op, &p)).await?;
-            self.repository
-                .storage()
-                .work_model_write(move |tx| {
-                    store::acknowledge_intent(tx, &admission::context(), &op)?;
-                    Ok(())
-                })
-                .await
-                .map_err(BtccError::from)?;
+            if let Err(error) = self.deliver_task_intent(op, payload).await {
+                butler_core::diagnostic!(
+                    "[task-sessions] intent delivery failed code={}",
+                    error.code()
+                );
+            }
         }
         Ok(())
     }
+    async fn deliver_task_intent(&self, op: String, payload: String) -> Result<(), BtccError> {
+        let p: Value = serde_json::from_str(&payload)
+            .map_err(|e| error(BtccCode::SubsessionIdentityInvalid).with_source(e))?;
+        Box::pin(self.enqueue_handoff_stop(&op, &p)).await?;
+        self.repository
+            .storage()
+            .work_model_write(move |tx| store::acknowledge_intent(tx, &admission::context(), &op))
+            .await
+            .map_err(BtccError::from)
+    }
     pub(super) async fn recover_handoffs(&self) -> Result<(), BtccError> {
-        self.repository.storage().work_model_write(|tx| {
-            let tasks = tx.prepare(store::ownership_sql::HANDOFF_PENDING)?.query_map([""],|r|r.get::<_,String>("id"))?.collect::<rusqlite::Result<Vec<_>>>()?;
-            for task in tasks {
+        let tasks = self
+            .repository
+            .storage()
+            .work_model_read(|db| {
+                Ok(db
+                    .prepare(store::ownership_sql::HANDOFF_PENDING)?
+                    .query_map([""], |r| r.get::<_, String>("id"))?
+                    .collect::<rusqlite::Result<Vec<_>>>()?)
+            })
+            .await
+            .map_err(BtccError::from)?;
+        for task in tasks {
+            let result = self.repository.storage().work_model_write(move |tx| {
                 use rusqlite::OptionalExtension;
                 let checkpoint: Option<String> = tx.query_row(store::ownership_sql::LATEST_CHECKPOINT,[&task],|r|r.get(0)).optional()?.flatten();
                 let checkpoint = match checkpoint { Some(c)=>c,None=>store::put_body(tx,"The previous session was interrupted during handoff; inspect the retained Task results before continuing.")? };
                 store::complete_handoff(tx,&admission::context(),&task,&checkpoint)?;
+                Ok(())
+            }).await;
+            if let Err(error) = result {
+                butler_core::diagnostic!(
+                    "[task-sessions] handoff recovery failed code={}",
+                    BtccError::from(error).code()
+                );
             }
-            Ok(())
-        }).await.map_err(BtccError::from)?;
+        }
         self.drain_task_controls().await
     }
 }

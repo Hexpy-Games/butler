@@ -20,7 +20,11 @@ pub fn take_here(
     if matches!(row["status"].as_str(), Some("running" | "in_review")) {
         return begin_handoff(tx, ctx, &row, to, expected);
     }
-    if tx.execute(sql::TAKE_RESERVED, params![task, to, ctx.now, expected])? != 1 {
+    if tx.execute(
+        sql::TAKE_RESERVED,
+        params![task, to, ctx.now, expected, row["owner_epoch"].as_i64()],
+    )? != 1
+    {
         return Err(Error::Conflict {
             current: read_task(tx, task)?,
         });
@@ -37,7 +41,11 @@ fn begin_handoff(
     expected: i64,
 ) -> Result<Value> {
     let task = text(row, "id")?;
-    if tx.execute(sql::BEGIN_HANDOFF, params![task, to, ctx.now, expected])? != 1 {
+    if tx.execute(
+        sql::BEGIN_HANDOFF,
+        params![task, to, ctx.now, expected, row["owner_epoch"].as_i64()],
+    )? != 1
+    {
         return Err(Error::Conflict {
             current: read_task(tx, task)?,
         });
@@ -69,6 +77,13 @@ fn begin_handoff(
         "handoff_stop",
         &json!({"task_id":task,"session_id":old,"owner_epoch":row["owner_epoch"]}),
     )?;
+    record_intent(
+        tx,
+        ctx,
+        &format!("handoff_check:{task}:{}", row["owner_epoch"]),
+        "handoff_check",
+        &json!({"task_id":task}),
+    )?;
     event(tx, ctx, "task", task, expected + 1, "begin_handoff")?;
     read_task(tx, task)
 }
@@ -84,7 +99,13 @@ pub fn complete_handoff(
     let Some(to) = row["handoff_to_session_id"].as_str() else {
         return Ok(row);
     };
-    let old = text(&row, "assignee_session_id")?;
+    if matches!(
+        row["status"].as_str(),
+        Some("completed" | "cancelled" | "failed")
+    ) {
+        clear_handoff(tx, ctx, &row)?;
+        return read_task(tx, task);
+    }
     tx.execute(
         execution_sql::FINISH_TASK_ATTEMPTS,
         params![task, "interrupted", ctx.now, checkpoint],
@@ -124,20 +145,7 @@ pub fn complete_handoff(
         false,
         None,
     )?;
-    for instruction in pending_instructions(tx, old, true)? {
-        if instruction["idempotency_key"].as_str()
-            == Some(&format!("handoff:{task}:{}", row["owner_epoch"]))
-        {
-            let id = text(&instruction, "id")?;
-            deliver_instruction(tx, ctx, id, text(&instruction, "status")?)?;
-            apply_instruction(tx, ctx, id)?;
-        }
-    }
-    for hold in active_session_holds(tx, old)? {
-        if hold["reason"] == "handoff" && hold["owner"] == to {
-            release_session_hold(tx, ctx, text(&hold, "id")?, control_epoch(tx, old)?)?;
-        }
-    }
+    clear_handoff(tx, ctx, &row)?;
     continue_here(tx, ctx, task, to, true)?;
     event(
         tx,
@@ -179,7 +187,7 @@ fn continue_here(
         ctx,
         &SessionInstruction {
             target: to,
-            sender: ctx.actor.clone(),
+            sender: json!({"runtime":"task_ownership"}),
             mode: "queue",
             body: json!({"text":instruction}),
             idempotency_key: &format!("continue:{task}:{}", row["owner_epoch"]),
@@ -194,5 +202,40 @@ fn continue_here(
         "task_continue",
         &json!({"session_id":to,"task_id":task,"instruction_id":receipt["instruction_id"],"text":instruction}),
     )?;
+    Ok(())
+}
+
+/// Clear the stop instruction and its hold atomically with the terminal change.
+pub(in crate::store) fn clear_handoff(
+    tx: &Transaction<'_>,
+    ctx: &Context,
+    row: &Value,
+) -> Result<()> {
+    let Some(to) = row["handoff_to_session_id"].as_str() else {
+        return Ok(());
+    };
+    let task = text(row, "id")?;
+    let old = text(row, "assignee_session_id")?;
+    for instruction in pending_instructions(tx, old, true)? {
+        if instruction["idempotency_key"].as_str()
+            == Some(&format!("handoff:{task}:{}", row["owner_epoch"]))
+        {
+            let id = text(&instruction, "id")?;
+            deliver_instruction(tx, ctx, id, text(&instruction, "status")?)?;
+            apply_instruction(tx, ctx, id)?;
+        }
+    }
+    for hold in active_session_holds(tx, old)? {
+        if hold["reason"] == "handoff" && hold["owner"] == to {
+            release_session_hold(tx, ctx, text(&hold, "id")?, control_epoch(tx, old)?)?;
+        }
+    }
+    let op = format!("handoff_check:{task}:{}", row["owner_epoch"]);
+    match one(tx, super::super::sql::INTENT, [&op]) {
+        Ok(_) => acknowledge_intent(tx, ctx, &op)?,
+        Err(Error::NotFound) => {}
+        Err(error) => return Err(error),
+    }
+    tx.execute(sql::CLEAR_HANDOFF, [task])?;
     Ok(())
 }

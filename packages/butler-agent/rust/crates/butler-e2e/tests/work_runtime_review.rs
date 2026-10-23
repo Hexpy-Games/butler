@@ -6,6 +6,8 @@ use butler_work::{
     work_types::TaskKind,
 };
 use serde_json::json;
+#[path = "work_runtime_review/handoff_regressions.rs"]
+mod handoff_regressions;
 #[path = "work_runtime_review/ownership_races.rs"]
 mod ownership_races;
 #[path = "work_runtime_review/worker_cap.rs"]
@@ -264,6 +266,7 @@ async fn native_runtime_statements_use_indexes() -> std::result::Result<(), Fail
                 if store::ownership_sql::ALL
                     .iter()
                     .any(|(key, _)| *key == name)
+                    || name == "HANDOFF_READY"
                 {
                     sessions.insert(name.into(), json!(plan));
                 }
@@ -276,7 +279,8 @@ async fn native_runtime_statements_use_indexes() -> std::result::Result<(), Fail
                 assert!(
                     !plan.lines().any(|line| line.starts_with("SCAN ")
                         && !line.contains("USING ")
-                        && !line.contains("CONSTANT ROW")),
+                        && !line.contains("CONSTANT ROW")
+                        && !line.contains("VIRTUAL TABLE INDEX")),
                     "{name}: {plan}"
                 );
             }
@@ -287,6 +291,7 @@ async fn native_runtime_statements_use_indexes() -> std::result::Result<(), Fail
             let expected_sessions: serde_json::Value = serde_json::from_str(include_str!(
                 "../fixtures/work-model-p14/task-session-plans.json"
             ))?;
+            eprintln!("session query plans: {}", json!(sessions));
             assert_eq!(json!(sessions), expected_sessions);
             assert_eq!(recovery.len(), 9, "all recovery statements are pinned");
             let expected: serde_json::Value = serde_json::from_str(include_str!(

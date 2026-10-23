@@ -4,6 +4,7 @@ use rusqlite::params;
 
 mod handoff;
 pub mod sql;
+pub(super) use handoff::clear_handoff;
 pub use handoff::*;
 
 #[derive(Debug, Clone)]
@@ -87,28 +88,13 @@ pub fn owned_elsewhere(db: &Connection, task: &str, session: &str) -> Result<Opt
         "running"
     };
     Ok(Some(
-        json!({"task_id":task,"session_id":owner,"state":state,"revision":row["revision"],"title":row["title"]}),
+        json!({"task_id":task,"session_id":owner,"state":state,"revision":row["revision"],"owner_epoch":row["owner_epoch"],"title":row["title"]}),
     ))
 }
 
-/// The receipt survives the rejected batch's savepoint rollback.
-pub fn ownership_prompt(
-    tx: &Transaction<'_>,
-    ctx: &Context,
-    session: &str,
-    detail: &Value,
-) -> Result<Value> {
-    let task = text(detail, "task_id")?;
-    let mut payload = detail.clone();
-    payload["target_session_id"] = json!(session);
-    record_intent(
-        tx,
-        ctx,
-        &format!("ownership_prompt:{session}:{task}:{}", detail["revision"]),
-        "ownership_prompt",
-        &payload,
-    )?;
-    let message = ownership_message(detail, text(detail, "title")?)?;
+/// The rejection is part of the tool transcript; BTCC ownership stays authoritative.
+pub fn ownership_rejection(detail: &Value) -> Result<Value> {
+    let message = ownership_message(detail, None)?;
     let mut error = detail.clone();
     error["code"] = json!("owned_elsewhere");
     error["message"] = json!(message);
@@ -116,9 +102,14 @@ pub fn ownership_prompt(
 }
 
 /// App presentation can resolve a conversation title without changing the receipt.
-pub fn ownership_message(detail: &Value, title: &str) -> Result<String> {
+pub fn ownership_message(detail: &Value, title: Option<&str>) -> Result<String> {
     let task = text(detail, "task_id")?;
     let state = text(detail, "state")?;
+    let Some(title) = title else {
+        return Ok(format!(
+            "Task {task} is planned to run in its own conversation. The user now sees a card to open that conversation or do it here. Tell them in one line and wait for their choice. Do not retry task.start or work around it."
+        ));
+    };
     Ok(if state == "running" {
         format!(
             "Task {task} is running in another conversation, ‘{title}’. The user now sees a card to open that conversation or move the Task here. Tell them in one line and wait for their choice. Do not retry task.start or work around it."
@@ -141,6 +132,15 @@ pub fn acknowledge_intent(tx: &Transaction<'_>, ctx: &Context, op: &str) -> Resu
             op,
             row["revision"].as_i64().ok_or(Error::Invalid("revision"))?,
         )?;
+    }
+    Ok(())
+}
+
+/// Fence part mutations while ownership is settling as well as after its epoch moves.
+pub fn ensure_owner_mutation(db: &Connection, task: &str, session: &str) -> Result<()> {
+    ensure_owner_epoch(db, task, session)?;
+    if !read_task(db, task)?["handoff_to_session_id"].is_null() {
+        return Err(Error::Invalid("handoff_in_progress"));
     }
     Ok(())
 }

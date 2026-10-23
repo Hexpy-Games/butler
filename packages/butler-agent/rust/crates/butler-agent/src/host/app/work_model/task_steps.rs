@@ -20,12 +20,23 @@ pub(crate) async fn run(
                 );
             }
             let ready = storage.work_model_read(store::ready_starts).await?;
-            for task in ready {
-                if let Err(error) = service.start_task_session(task).await {
-                    butler_core::diagnostic!(
-                        "[task-sessions] assignment failed code={}",
-                        error.code()
-                    );
+            for batch in ready {
+                let mut failed = false;
+                for task in batch.starts {
+                    if let Err(error) = service.start_task_session(task).await {
+                        failed = true;
+                        butler_core::diagnostic!(
+                            "[task-sessions] assignment failed code={}",
+                            error.code()
+                        );
+                    }
+                }
+                if !failed {
+                    storage
+                        .work_model_write(move |tx| {
+                            store::acknowledge_ready(tx, &batch.op, batch.revision)
+                        })
+                        .await?;
                 }
             }
             Ok::<(), butler_turn::btcc::StorageError>(())
