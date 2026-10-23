@@ -104,7 +104,12 @@ fn a_handoff_fences_late_effects_and_keeps_followers_ready()
     ownership::take_here(&tx, &context(), "a", "new", revision(&tx, "a")).unwrap();
     assert_ne!(read_task(&tx, "b").unwrap()["status"], "held");
     let checkpoint = put_body(&tx, "finished step one; step two remains").unwrap();
-    ownership::complete_handoff(&tx, &context(), "a", &checkpoint).unwrap();
+    tx.execute(
+        "UPDATE wm_attempts SET checkpoint_ref=?1 WHERE id='old'",
+        [&checkpoint],
+    )
+    .unwrap();
+    recover_session(&tx, &context(), "session", PreviousShutdown::Crash).unwrap();
     let moved = read_task(&tx, "a").unwrap();
     assert_eq!(
         moved["owner_epoch"].as_i64(),
