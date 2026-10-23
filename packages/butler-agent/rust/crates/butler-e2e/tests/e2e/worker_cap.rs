@@ -13,8 +13,6 @@ mod plans;
 pub(crate) mod recovery;
 #[path = "worker_cap/regressions.rs"]
 mod regressions;
-#[path = "worker_cap/requires_e2e_fixtures.rs"]
-mod requires_e2e_fixtures;
 #[path = "worker_cap/stub.rs"]
 pub(crate) mod stub;
 use butler_e2e::e2e::{

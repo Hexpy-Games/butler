@@ -181,7 +181,12 @@ pub(super) fn dispatch_candidates(
     let mut pending = Vec::new();
     for raw in query_raw(db, filter, [])? {
         match decode_or_report(&raw) {
-            Some(stored) if dispatchable(db, &stored)? => pending.push(stored),
+            Some(stored)
+                if stored.packet.child_role != crate::btcc::ChildRole::Worker
+                    || dispatchable(db, &stored)? =>
+            {
+                pending.push(stored)
+            }
             _ => {
                 let tx = db.transaction().map_err(StorageError::sqlite)?;
                 close_undecodable(&tx, &raw)?;
@@ -230,7 +235,7 @@ fn dispatchable(
 
 fn close_undecodable(db: &rusqlite::Connection, raw: &RawDelegation) -> Result<(), StorageError> {
     db.execute(
-        "INSERT OR IGNORE INTO btcc_steward_results (result_id,relation_id,task_id,child_session_id,child_turn_id,status,code,summary,acceptance_evidence_json,changed_artifacts_json,created_at) VALUES (?1,?2,?3,?4,?5,'failed','delegation_context_incomplete','The delegation record cannot be dispatched.','[]','[]',strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
+        "INSERT OR IGNORE INTO btcc_steward_results (result_id,relation_id,task_id,child_session_id,child_turn_id,status,code,summary,acceptance_evidence_json,changed_artifacts_json,created_at) VALUES (?1,?2,?3,?4,?5,'failed','delegation_context_incomplete','The delegation record is unreadable.','[]','[]',strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
         params![format!("result-unreadable-{}", raw.relation_id), raw.relation_id, raw.task_id, raw.child_session_id, raw.child_turn_id],
     )
     .map_err(StorageError::sqlite)?;
@@ -239,7 +244,7 @@ fn close_undecodable(db: &rusqlite::Connection, raw: &RawDelegation) -> Result<(
         [&raw.delegation_id],
     )
     .map_err(StorageError::sqlite)?;
-    db.execute("UPDATE btcc_subsession_directions SET status='applied',applied_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE relation_id=?1 AND status='pending'", [&raw.relation_id]).map_err(StorageError::sqlite)?;
+    db.execute("UPDATE btcc_subsession_directions SET status='applied',applied_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE relation_id=?1 AND status='pending' AND EXISTS (SELECT 1 FROM btcc_session_relations WHERE relation_id=?1 AND activity_role='worker')", [&raw.relation_id]).map_err(StorageError::sqlite)?;
     Ok(())
 }
 

@@ -32,12 +32,6 @@ impl Gate {
 pub(crate) struct Script {
     count: usize,
     pub(crate) steer: AtomicBool,
-    pub(crate) hold_dispatch: AtomicBool,
-    pub(crate) retry_same_turn: AtomicBool,
-    pub(crate) dispatch_ready: Gate,
-    pub(crate) dispatch_release: Gate,
-    pub(crate) dispatch_output: Mutex<Option<Value>>,
-    pub(crate) retry_release: Gate,
     pub(crate) hold_continuation: AtomicBool,
     pub(crate) continuation_release: Gate,
     pub(crate) followup: AtomicBool,
@@ -62,12 +56,6 @@ pub(crate) async fn start(
     let script = Arc::new(Script {
         count,
         steer: AtomicBool::new(false),
-        hold_dispatch: AtomicBool::new(false),
-        retry_same_turn: AtomicBool::new(true),
-        dispatch_ready: Gate::new(),
-        dispatch_release: Gate::new(),
-        dispatch_output: Mutex::new(None),
-        retry_release: Gate::new(),
         hold_continuation: AtomicBool::new(false),
         continuation_release: Gate::new(),
         followup: AtomicBool::new(false),
@@ -134,43 +122,6 @@ async fn reply(
         })
     })) {
         script.waiting_wording.store(true, Ordering::SeqCst);
-    }
-    if key.user_request == "Retry pending Workers" {
-        return (
-            [("content-type", "text/event-stream")],
-            wire(
-                &steward(step + 3, group, script.count, &body),
-                &format!("next-turn-{step}"),
-            ),
-        )
-            .into_response();
-    }
-    if role == "steward" && script.hold_dispatch.load(Ordering::SeqCst) {
-        if step == 2 {
-            script.dispatch_ready.add_permits(1);
-            script.dispatch_release.wait().await;
-        } else if step == 3 {
-            *script.dispatch_output.lock().unwrap() = body["input"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .rev()
-                .find_map(|v| {
-                    v["output"]
-                        .as_str()
-                        .and_then(|s| serde_json::from_str(s).ok())
-                });
-            script.retry_release.wait().await;
-            if !script.retry_same_turn.load(Ordering::SeqCst) {
-                return (axum::http::StatusCode::BAD_REQUEST,
-                    Json(json!({"error":{"type":"invalid_request_error","message":"Injected provider failure"}}))).into_response();
-            }
-            return (
-                [("content-type", "text/event-stream")],
-                wire(&steward(2, group, script.count, &body), "retry-dispatch"),
-            )
-                .into_response();
-        }
     }
     if continuation {
         if step == 0 {

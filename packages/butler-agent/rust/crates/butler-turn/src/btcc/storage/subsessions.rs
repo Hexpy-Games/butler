@@ -10,6 +10,7 @@ mod parents;
 mod records;
 mod worker_admission;
 mod worker_cancel;
+mod worker_failure;
 pub use worker_admission::{
     COMPLETE_WORKER_SQL, RESET_DIRECTION_DISPATCH_SQL, RESTORE_WAITING_DIRECTION_SQL,
     RETRY_WORKER_SQL, RUNNING_WORKERS_SQL, WAITING_WORKERS_SQL, WORKER_RESULT_MARKER_SQL,

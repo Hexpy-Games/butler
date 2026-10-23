@@ -279,10 +279,12 @@ impl SubsessionService {
             .map_err(BtccError::from)?
         {
             if stored.packet.child_role == ChildRole::Worker {
-                if let Err(error) = self.ensure_child_binding(&stored).await {
+                if let Err(error) = self.prepare_child_binding(&stored).await
+                    && !Self::worker_publish_error_is_permanent(&error)
+                {
                     failed_parents.insert(stored.parent_session_id);
                     butler_core::diagnostic!(
-                        "[native-btcc] Worker binding deferred code={}",
+                        "[native-btcc] Worker recovery binding deferred code={}",
                         error.code()
                     );
                 }

@@ -29,16 +29,8 @@ impl SubsessionService {
         let identity = packets::worker_identity(&request, &profile);
         let delegation_id = delegation::delegation_id(&delegation::WORKER, &identity)?;
         if let Some(existing) = self.replay_existing(&delegation_id).await? {
-            if let Some(result) = self
-                .repository
-                .result_for_relation(existing.relation_id.clone())
-                .await
-                .map_err(BtccError::from)?
-            {
-                return Ok(
-                    json!({"ok":false,"relation_id":existing.relation_id,"result":result,
-                    "error":{"code":"delegation_already_finished","message":"This child has already returned its outcome. Resolve the reported blocker or revise the Plan/action and implementation approach before starting a new attempt. Do not wait for a terminal child."}}),
-                );
+            if let Some(output) = self.finished_worker_output(&existing).await? {
+                return Ok(output);
             }
             return Ok(
                 if existing.dispatch_state == SubsessionDispatchState::Pending {
@@ -156,14 +148,9 @@ impl SubsessionService {
             if stored.packet.child_role != ChildRole::Worker {
                 return Err(error);
             }
-            self.repository
-                .worker_publish_failed(stored.relation_id.clone(), marker)
-                .await
-                .map_err(BtccError::from)?;
-            butler_core::diagnostic!(
-                "[native-btcc] Worker binding deferred code={}",
-                error.code()
-            );
+            if self.worker_publish_error(stored, marker, &error).await? {
+                return Err(error);
+            }
             return Err(worker_start_failed());
         }
         Ok(())
@@ -184,17 +171,55 @@ impl SubsessionService {
         }
         .await;
         if let Err(error) = published {
+            if self.worker_publish_error(stored, marker, &error).await? {
+                return Ok(());
+            }
+            return Err(worker_start_failed());
+        }
+        Ok(())
+    }
+
+    /// Known invalid identities and envelopes cannot improve on retry. I/O,
+    /// storage availability and interrupted tasks keep their durable retry path.
+    async fn worker_publish_error(
+        &self,
+        stored: &crate::btcc::StoredSubsessionDelegation,
+        marker: Option<String>,
+        error: &BtccError,
+    ) -> Result<bool, BtccError> {
+        let permanent = Self::worker_publish_error_is_permanent(error);
+        if permanent {
+            self.repository
+                .fail_worker_publish(stored.relation_id.clone(), marker, error.code().into())
+                .await
+                .map_err(BtccError::from)?;
+        } else {
             self.repository
                 .worker_publish_failed(stored.relation_id.clone(), marker)
                 .await
                 .map_err(BtccError::from)?;
-            butler_core::diagnostic!(
-                "[native-btcc] Worker publish deferred code={}",
-                error.code()
-            );
-            return Err(worker_start_failed());
         }
-        Ok(())
+        butler_core::diagnostic!(
+            "[native-btcc] Worker publish failed terminal={} code={}",
+            permanent,
+            error.code()
+        );
+        Ok(permanent)
+    }
+
+    pub(super) fn worker_publish_error_is_permanent(error: &BtccError) -> bool {
+        matches!(
+            error.code(),
+            "subsession_child_binding_mismatch"
+                | "subsession_parent_binding_missing"
+                | "subsession_dispatch_intent_invalid"
+                | "subsession_direction_child_binding_missing"
+                | "subsession_relation_missing"
+                | "inbound_envelope_invalid"
+                | "inbound_queue_encode_failed"
+                | "inbound_queue_path_invalid"
+                | "inbound_queue_time_invalid"
+        )
     }
 
     /// Settings changes retry durable waiting work without polling.
@@ -301,15 +326,20 @@ impl SubsessionService {
 fn worker_start_failed() -> BtccError {
     BtccError::detected(
         BtccCode::WorkerStartFailed,
-        "Couldn't start the Worker; call it again.",
+        "The Worker could not be started, and nothing is running for it yet. Call delegate_to_worker again with the same request; retrying is safe and will not start it twice.",
     )
 }
 
 impl SubsessionService {
-    async fn worker_output(
+    pub(super) async fn worker_output(
         &self,
         stored: &crate::btcc::StoredSubsessionDelegation,
     ) -> Result<Value, BtccError> {
+        if stored.dispatch_state == SubsessionDispatchState::Inactive
+            && let Some(output) = self.finished_worker_output(stored).await?
+        {
+            return Ok(output);
+        }
         let cap = self.cached_worker_cap();
         let waiting = stored.dispatch_state == SubsessionDispatchState::Pending;
         if waiting
@@ -329,5 +359,20 @@ impl SubsessionService {
             ));
         }
         Ok(output)
+    }
+
+    async fn finished_worker_output(
+        &self,
+        stored: &crate::btcc::StoredSubsessionDelegation,
+    ) -> Result<Option<Value>, BtccError> {
+        let result = self
+            .repository
+            .result_for_relation(stored.relation_id.clone())
+            .await
+            .map_err(BtccError::from)?;
+        Ok(result.map(|result| {
+            json!({"ok":false,"relation_id":stored.relation_id,"result":result,
+                "error":{"code":"delegation_already_finished","message":"This child has already returned its outcome. Resolve the reported blocker or revise the Plan/action and implementation approach before starting a new attempt. Do not wait for a terminal child."}})
+        }))
     }
 }

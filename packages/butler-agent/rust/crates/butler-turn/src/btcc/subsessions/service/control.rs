@@ -273,8 +273,13 @@ impl SubsessionService {
                 ),
             ]),
         })?;
-        if relation.packet.child_role == crate::btcc::ChildRole::Worker {
-            self.admit_waiting(&relation.parent_session_id).await?;
+        if relation.packet.child_role == crate::btcc::ChildRole::Worker
+            && let Err(error) = self.admit_waiting(&relation.parent_session_id).await
+        {
+            butler_core::diagnostic!(
+                "[native-btcc] Worker post-cancel admission deferred code={}",
+                error.code()
+            );
         }
         Ok(
             json!({"relation_id":relation.relation_id,"child_turn_id":turn_id,"status":"cancelling","request_id":request_id}),

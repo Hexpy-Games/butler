@@ -18,7 +18,6 @@ pub(super) const SOLVABLE: &[&str] = &[
     "delegation_mutation_scope_required",
     "steward_delegation_input_invalid",
     "worker_delegation_input_invalid",
-    "worker_start_failed",
     "steward_delegation_plan_mode_required",
     "worker_delegation_plan_mode_required",
     "worker_plan_action_missing",
@@ -111,10 +110,6 @@ pub(super) fn result(error: &BtccError) -> Result<JsonDocument, ToolExecutionErr
         "code":error.code(),"message":message,"recoverable":true,
         "next_action":"Inspect the current Work, Plan execution_mode, action status and dependency results in context. Correct the named field using the tool schema (or describe_tools for a discovered tool). Resolve pending dependencies first; choose a permitted action or revise the Plan before retrying. Wait for an active child through the existing delegation flow, using wait_for_worker when it is available. Ask the user only for an input or decision that they alone can provide."
     }});
-    if error.code() == "worker_start_failed" {
-        value["error"]["next_action"] =
-            "Call delegate_to_worker again with the same request.".into();
-    }
     if error.code().starts_with("effect_") {
         value["error"]["next_action"] = repair(error.code()).into();
     }
