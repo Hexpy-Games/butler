@@ -27,7 +27,7 @@ impl SubsessionService {
         &self,
         interrupted: Vec<Value>,
     ) -> Result<(), BtccError> {
-        self.replay_pending_assignments().await?;
+        self.replay_pending_assignments(false).await?;
         for attempt in interrupted {
             let Some(session) = at(&attempt, "/session_id").as_str() else {
                 continue;
@@ -50,8 +50,12 @@ impl SubsessionService {
         self.deliver_worker_results().await
     }
 
-    pub(super) async fn replay_pending_assignments(&self) -> Result<(), BtccError> {
-        self.profiles.wait_ready().await?;
+    /// Release only waiting workers once their configured cap is available.
+    pub async fn recover_waiting_workers(&self) -> Result<(), BtccError> {
+        self.replay_pending_assignments(true).await
+    }
+
+    async fn replay_pending_assignments(&self, workers: bool) -> Result<(), BtccError> {
         let mut after = String::new();
         loop {
             let cursor = after.clone();
@@ -86,6 +90,12 @@ impl SubsessionService {
                     .await
                     .map_err(BtccError::from)?
                 {
+                    if (stored.delegation.packet.child_role == ChildRole::Worker) != workers {
+                        continue;
+                    }
+                    if workers {
+                        self.profiles.wait_ready().await?;
+                    }
                     let child = Child::Assigned(stored);
                     self.ensure_child_binding(&child).await?;
                     self.dispatch_or_wait(&child).await?;

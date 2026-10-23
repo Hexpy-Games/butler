@@ -32,6 +32,51 @@ async fn crash_interrupted_child_returns_one_failure_and_runs_the_queue() -> Res
     interrupted_queue(true).await
 }
 
+#[tokio::test]
+async fn startup_recovers_interrupted_child_before_first_turn_without_waiting_workers()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (url, script, server) = stub::start().await?;
+    let mut s = started("STEWARD-STARTUP-RECOVERY", &url, &script).await?;
+    let view = s.gw.get("/session-view?session_id=general").await?;
+    let relation = view.data()["steward_children"][0]["relation"]["relation_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(
+        count(
+            &db(&s),
+            "SELECT count(*) FROM btcc_session_relations WHERE activity_role='worker' AND parent_session_id=?1",
+            "general"
+        ),
+        0
+    );
+    // The App endpoint is published after AgentRuntime construction. Recovery
+    // must finish during construction, before a live turn can be admitted.
+    s.crash_and_restart().await?;
+    assert_eq!(
+        count(
+            &db(&s),
+            "SELECT count(*) FROM btcc_subsession_outbox WHERE relation_id=?1 AND input_json LIKE '%status: failed%' AND input_json LIKE '%child_turn_interrupted%'",
+            &relation
+        ),
+        1
+    );
+    let (_, turn) = s.turn("general", stub::QUEUED).await?;
+    assert_eq!(turn["state"], "delivered", "{turn}");
+    assert_eq!(
+        count(
+            &db(&s),
+            "SELECT count(*) FROM btcc_subsession_outbox WHERE relation_id=?1 AND input_json LIKE '%status: failed%'",
+            &relation
+        ),
+        1
+    );
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
 async fn started(id: &str, url: &str, script: &stub::Script) -> Result<Scenario, HarnessError> {
     let setup = steward_presentation::setup(id, url)?;
     for name in ["a.txt", "b.txt"] {

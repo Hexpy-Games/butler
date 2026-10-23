@@ -38,7 +38,7 @@ type SessionUsageServices = (
 );
 
 /// Compose the two owners from the same durable relation repository.
-pub(super) fn session_usage_services(
+pub(super) async fn session_usage_services(
     stores: &super::stores::RuntimeStores,
     data_root: &Path,
     (profiles, endpoint): (
@@ -66,6 +66,6 @@ pub(super) fn session_usage_services(
             butler_models::models::ModelConfigurationClock::now_iso(&super::SystemIdentity)
         }),
     ));
-    cutover.bind_subsessions(subsessions.clone());
+    cutover.bind_subsessions(subsessions.clone()).await?;
     Ok((subsessions, lineage, queue))
 }

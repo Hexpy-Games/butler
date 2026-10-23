@@ -89,7 +89,7 @@ pub struct WorkerProfile {
 
 /// Reads configured worker profiles.
 pub trait WorkerProfileReader: Send + Sync {
-    /// Wait for the settings endpoint before startup replay.
+    /// Wait for the settings endpoint before releasing waiting workers.
     fn wait_ready(&self) -> PortFuture<'_, ()> {
         Box::pin(async { Ok(()) })
     }

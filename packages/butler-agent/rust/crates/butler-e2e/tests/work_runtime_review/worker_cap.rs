@@ -306,6 +306,7 @@ async fn recovery_rebuilds_slots_and_lowered_setting_waits_for_release()
     f.queue.0.lock().unwrap().clear();
     f.service = service(&f.storage, &f.bindings, f.queue.clone(), f.profiles.clone());
     f.service.recover_native_assignments(vec![]).await?;
+    f.service.recover_waiting_workers().await?;
     assert_eq!(f.counts().await?, (2, 1));
     assert_eq!(
         f.queue.0.lock().unwrap().as_slice(),
@@ -313,6 +314,7 @@ async fn recovery_rebuilds_slots_and_lowered_setting_waits_for_release()
     );
     f.profiles.0.store(1, Ordering::SeqCst);
     f.service.recover_native_assignments(vec![]).await?;
+    f.service.recover_waiting_workers().await?;
     assert_eq!(f.counts().await?, (2, 1));
     f.finish(&first, "cancelled").await?;
     assert_eq!(f.counts().await?, (1, 1));
