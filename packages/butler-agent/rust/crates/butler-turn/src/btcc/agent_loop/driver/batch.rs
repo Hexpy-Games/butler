@@ -226,7 +226,7 @@ async fn record_batch_result(
     .await?
     {
         Some(super::super::contracts::ToolOutcome::Suspend(reason)) => {
-            *first_suspension = Some(reason)
+            *first_suspension = Some(reason);
         }
         Some(super::super::contracts::ToolOutcome::Answer(content)) => return Ok(Some(content)),
         None => {}
