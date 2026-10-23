@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { dashboardInspectorTarget, useCanonDetailSelection } from "@/app/canonDetailLayout.ts";
 import { useActiveCanonEpic } from "../canon/useActiveCanonEpic.ts";
 import { EpicInspector } from "../canon/EpicInspector.tsx";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
@@ -50,6 +51,9 @@ export function Inspector({ id }: InspectorProps = {}) {
   const setView = useButlerStore((state) => state.setView);
   const controlWorker = useButlerStore((state) => state.controlWorker);
   const isOpen = useButlerStore(selectEffectiveRightOpen);
+  // SCRATCH PROTOTYPE: a 과제 opened from the project dashboard board.
+  const view = useButlerStore((state) => state.view);
+  const dashboardEpic = dashboardInspectorTarget(view, useCanonDetailSelection(state => state.target));
 
   useEffect(() => { if (epic) setRightTab("epic"); }, [sessionId, epic?.epic.id, setRightTab]);
 
@@ -65,6 +69,13 @@ export function Inspector({ id }: InspectorProps = {}) {
     tabs.unshift(["epic", appCopy.canon.epic, <FileText size="md" />]);
     tabs.splice(tabs.findIndex(([id]) => id === "automations"), 1);
   }
+
+  if (dashboardEpic) return <InspectorShell activeTab="epic" id={id} open={isOpen} onTabChange={() => {}}
+    tabs={[{ id: "epic", label: appCopy.canon.epic, icon: <FileText size="md" /> }]}>
+    <ErrorBoundary key={dashboardEpic.epicId} scope="inspector-epic">
+      <EpicInspector key={dashboardEpic.epicId} projectId={dashboardEpic.projectId} epicId={dashboardEpic.epicId} />
+    </ErrorBoundary>
+  </InspectorShell>;
 
   return <InspectorShell activeTab={activeTab} id={id} open={isOpen} onTabChange={setRightTab}
     tabs={tabs.filter(([id]) => visibleInspectorTab(id, developerMode) === id).map(([id, label, icon]) => ({ id, label, icon }))}>

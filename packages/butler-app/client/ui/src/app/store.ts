@@ -119,6 +119,7 @@ import {
   freezeMessageActivity as freezeMessageWorkBlocksForRecord,
 } from "./conversation-progress";
 import { isServerBackedSessionId } from "./sessionIds.ts";
+import { dashboardInspectorTarget } from "./canonDetailLayout.ts";
 import { turnProgressOf } from "./turnProgress.ts";
 import { finishVisibleCancellation } from "./cancellation/finish-visible-cancellation.ts";
 
@@ -2524,7 +2525,9 @@ export const selectActiveChat = (state: ButlerStore) =>
 export const selectActiveSessionView = (state: ButlerStore) =>
   state.view.kind === "session";
 export const selectRightAvailable = (state: ButlerStore) =>
-  selectActiveSessionView(state) && isServerBackedSessionId(state.activeChatId);
+  (selectActiveSessionView(state) && isServerBackedSessionId(state.activeChatId)) ||
+  // SCRATCH PROTOTYPE: the dashboard's 과제 opens in the inspector (canonDetailLayout).
+  Boolean(dashboardInspectorTarget(state.view));
 export const selectEffectiveRightOpen = (state: ButlerStore) =>
   state.rightOpen && selectRightAvailable(state);
 export const selectViewTitle = (state: ButlerStore) =>

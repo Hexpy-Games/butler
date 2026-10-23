@@ -4,9 +4,10 @@ import { useButlerStore } from "@/app/store.ts";
 import { prepareDashboardSend, useProjectDashboardState } from "@/app/projectDashboardState.ts";
 import { projectDraftId } from "@/app/utils.ts";
 import type { ComposerControls } from "@/app/types.ts";
+import type { WallpaperContentRect } from "@/butler-ds";
 
-export function ProjectDashboardComposer({ projectId, onReserveChange }: {
-  projectId: string; onReserveChange: (height: number) => void;
+export function ProjectDashboardComposer({ projectId, onReserveChange, onWallpaperRect }: {
+  projectId: string; onReserveChange: (height: number) => void; onWallpaperRect?: (rect: WallpaperContentRect) => void;
 }) {
   const update = useProjectDashboardState((state) => state.update);
   const [sending, setSending] = useState(false);
@@ -26,7 +27,7 @@ export function ProjectDashboardComposer({ projectId, onReserveChange }: {
       } });
     } finally { inFlight.current = false; setSending(false); }
   };
-  return <Composer large={false} onReserveChange={onReserveChange} scope={{
+  return <Composer large={false} onReserveChange={onReserveChange} onWallpaperRect={onWallpaperRect} scope={{
       draftKey: `dashboard:${projectId}`, targetChatId: projectDraftId(projectId), isSending: sending, onSend: send,
     }} />;
 }
