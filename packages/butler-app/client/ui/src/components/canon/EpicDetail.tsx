@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type Ref } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { EpicDetail as Epic, EpicInput, PlanCards, WorkTasks, CanonStatus } from "@/app/canonApi.ts";
 import { Box, ButtonContainer, IconButton, KeyValueRow, NativeSelect, NativeSelectOption, Pencil, Stack, Typo } from "@/butler-ds";
@@ -8,8 +8,8 @@ import { CanonPersonSelect } from "./CanonPersonSelect.tsx";
 import { CanonPlanSelect } from "./CanonPlanSelect.tsx";
 import { SpecTree } from "./SpecTree.tsx";
 import { EpicProgress } from "./EpicProgress.tsx";
-export function EpicDetail({ epic, plans, tasks, busy, onWrite }: {
-  epic: Epic; plans: PlanCards[]; tasks: WorkTasks | null; busy: boolean;
+export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef }: {
+  titleRef?: Ref<HTMLElement>; epic: Epic; plans: PlanCards[]; tasks: WorkTasks | null; busy: boolean;
   onWrite: (input: EpicInput, message?: string) => Promise<boolean>;
 }) {
   useAppLocale();
@@ -22,7 +22,7 @@ export function EpicDetail({ epic, plans, tasks, busy, onWrite }: {
   return <Stack gap="lg" data-test-class="canon-epic-detail" data-epic-id={epic.id}>
     {editing ? <EpicEditForm epic={epic} busy={busy} onSave={onWrite} onClose={() => setEditing(false)} /> : <Stack gap="sm">
       <Stack align="row" cross="start" justify="between" gap="sm">
-        <Typo.PanelTitle wrap="anywhere">{epic.title}</Typo.PanelTitle>
+        <Typo.PanelTitle as="h3" tabIndex={-1} ref={titleRef} wrap="anywhere">{epic.title}</Typo.PanelTitle>
         <ButtonContainer size="sm"><IconButton label={copy.edit} disabled={busy} onClick={() => setEditing(true)}><Pencil size="sm" /></IconButton></ButtonContainer>
       </Stack>
       {epic.description && <Typo.Body wrap="pre">{epic.description}</Typo.Body>}
