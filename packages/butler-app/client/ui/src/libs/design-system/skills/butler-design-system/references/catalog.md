@@ -424,6 +424,7 @@
 | Inspector sections (Summary, Files, Workers) | `Tabs` |  |
 | Items grouped by status | `KanbanBoard` | `SplitBrowser` |
 | Items grouped by status | `KanbanBoard` | `TaskGraphCanvas` |
+| Items people move between statuses or groups by dragging (several boards on one page share one KanbanDragScope) | `KanbanBoard` |  |
 | Keep a trailing item from shrinking | `Layout` |  |
 | Key numbers on a dashboard or usage page | `MetricCard` |  |
 | Label/value facts | `KeyValueRow` | `ListRow` |
@@ -469,6 +470,7 @@
 | One number with a trend | `MetricCard` | `ItemCard` |
 | One or more page elements are picked (PageCard overlay) | `SelectionBar` |  |
 | One or two always-visible actions | `ButtonContainer` | `OverflowActionMenu` |
+| One ordered list people reorder | `SortableCardList` | `KanbanBoard` |
 | One row with an action | `SurfacePanel` | `FormSection` |
 | One saved item | `LibraryCard` | `GroupTile` |
 | One tab's preview elsewhere (an approval) | `LiveTabCard` | `TabRail` |
@@ -2722,12 +2724,14 @@ Shows one picture of a set large on a dimmed scrim (a lightbox): previous/next t
 
 `import { KanbanBoard } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=blocks/KanbanBoard`
 
-Lanes of documents side by side; each lane scrolls at a fixed height under its title.
+Lanes of cards side by side; inside a KanbanDragScope cards move within a lane, between lanes and between boards.
 
 - Use for: Plans or tasks grouped by status
+- Use for: Items people move between statuses or groups by dragging (several boards on one page share one KanbanDragScope)
 - Not for: One list of documents → `CardList`
+- Not for: One ordered list people reorder → `SortableCardList`
 - Not for: Categories with a detail list → `SplitBrowser`
-- Tokens: `--kanban-lane-height`, `--kanban-lane-min-width`, `--space-md`, `--line`
+- Tokens: `--kanban-lane-height`, `--kanban-lane-min-width`, `--kanban-lane-min-height`, `--kanban-card-min-width`, `--kanban-drop-line`, `--shadow-drag-lift`, `--motion-scale-lift`, `--motion-base`, `--motion-ease-emphasized`, `--space-md`, `--line`, `--accent`
 
 ### LibraryCard
 
