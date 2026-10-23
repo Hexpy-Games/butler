@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import type { Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
-import { seedCanonSidebar, showCanonSidebar, openPlan, createFromSidebar, showEpicInspector, verifySidebarOrder, verifyInspectorConflict } from "../support/canon-sidebar-scenarios.ts";
+import { seedCanonSidebar, showCanonSidebar, openPlan, createFromSidebar, showEpicInspector, verifySidebarOrder, verifyInspectorConflict, verifyOverviewLayout, verifySidebarLongPress, verifyEmptyEpicConversation } from "../support/canon-sidebar-scenarios.ts";
 
 const shots = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? ".tmp/canon-sidebar-smoke");
 mkdirSync(shots, { recursive: true });
@@ -41,7 +41,8 @@ try {
     const prefix = `${process.env.BUTLER_SMOKE_BASELINE === "1" ? "before" : "after"}-${selected}`;
     await capture(page, `${prefix}-sidebar`);
     if (process.env.BUTLER_SMOKE_BASELINE !== "1") {
-      await openPlan(page, planId); await capture(page, `${prefix}-overview`);
+      await verifySidebarLongPress(page, planId);
+      await openPlan(page, planId); await verifyOverviewLayout(page, width); await capture(page, `${prefix}-overview`);
       await showCanonSidebar(page);
       await page.locator(`[data-canon-group="${planId}"]`).getByRole("button", { name: "프리뷰 14에 새 과제", exact: true }).click();
       await page.getByRole("dialog").waitFor(); await capture(page, `${prefix}-dialog`);
@@ -53,6 +54,8 @@ try {
           .and(page.locator('button:not([data-slot="adaptive-shell-scrim"])')).click();
         await page.locator('[data-slot="adaptive-shell-sidebar"][data-open="true"]').waitFor({ state: "hidden" });
       }
+      await verifyEmptyEpicConversation(page, server, created.session_id);
+      await capture(page, `${prefix}-empty-conversation`);
       await showEpicInspector(page); await capture(page, `${prefix}-conversation`);
       await verifyInspectorConflict(page, server, created.work.id);
       if (width === 1440) await verifySidebarOrder(page, server, projectId, planId);

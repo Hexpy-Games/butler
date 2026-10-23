@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import type { CanonSidebarGroup as Group, EpicCard } from "@/app/canonApi.ts";
 import { useOrganization } from "@/app/space/organization.ts";
-import { ButtonContainer, ChevronDown, ChevronRight, CollapsibleNavGroup, Folder, IconButton, ListChecks, NavDropTarget, NavRowSwap, OverflowActionMenu, Plus } from "@/butler-ds";
+import { ButtonContainer, ChevronDown, ChevronRight, CollapsibleNavGroup, Folder, IconButton, ListChecks, NavDropTarget, NavRowSwap, OverflowActionMenu, Plus, Typo } from "@/butler-ds";
 import { useLongPressAction } from "../layout/useLongPressAction.ts";
 import { CanonEpicRow } from "./CanonEpicRow.tsx";
 import { openPlanOverview } from "./canonNavigation.ts";
@@ -17,6 +17,8 @@ export function CanonSidebarGroup({ projectId, group, depth, busy, onCreate, onE
   const expanded = useOrganization(state => !state.collapsed.includes(key));
   const toggle = () => useOrganization.getState().toggle(key);
   const [menuOpen, setMenuOpen] = useState(false), [over, setOver] = useState(false);
+  const labelRef = useRef<HTMLElement>(null);
+  const isHeader = (target: EventTarget) => Boolean(labelRef.current && (target as Element).closest('[role="button"]')?.contains(labelRef.current));
   const longPress = useLongPressAction(() => setMenuOpen(true));
   const source = useCanonSidebarDrag(state => state.source);
   const valid = source?.projectId === projectId && source.groupKey !== group.key;
@@ -35,11 +37,11 @@ export function CanonSidebarGroup({ projectId, group, depth, busy, onCreate, onE
     ids.splice(ids.indexOf(target) + Number(after), 0, source); onReorder(ids);
   };
   return <>
-    <NavDropTarget {...longPress} onPointerDown={event => {
-      event.stopPropagation();
-      if ((event.target as Element).closest('[data-test-class="canon-sidebar-group"]')) longPress.onPointerDown(event);
+    <NavDropTarget {...longPress} onClickCapture={event => { if (isHeader(event.target)) longPress.onClickCapture(event); }} onPointerDown={event => {
+      if (!isHeader(event.target)) return;
+      event.stopPropagation(); longPress.onPointerDown(event);
     }} onContextMenu={event => {
-      if (!(event.target as Element).closest('[data-test-class="canon-sidebar-group"]')) return;
+      if (!isHeader(event.target)) return;
       event.preventDefault(); event.stopPropagation(); setMenuOpen(true);
     }} data-canon-group={group.key} drop={valid && over ? "inside" : undefined}
       onDragOver={event => {
@@ -56,7 +58,7 @@ export function CanonSidebarGroup({ projectId, group, depth, busy, onCreate, onE
       }}>
       <CollapsibleNavGroup indented stickyDepth={depth} dataTestClass="canon-sidebar-group" expanded={expanded} onToggle={toggle}
         icon={group.kind === "backlog" ? <Folder /> : <ListChecks />} actions={actions}
-        label={title}>
+        label={<Typo.Text as="span" ref={labelRef}>{title}</Typo.Text>}>
         {group.rows.map(epic => <CanonEpicRow key={epic.id} projectId={projectId} groupKey={group.key} epic={epic} busy={busy} onDrop={reorder} />)}
       </CollapsibleNavGroup>
     </NavDropTarget>

@@ -5,6 +5,7 @@ import { projectSpace } from "@/app/space/projection.ts";
 import { useSessionUnread } from "@/app/space/unread.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { EpicCard } from "@/app/canonApi.ts";
+import { useLongPressAction } from "../layout/useLongPressAction.ts";
 import { SpaceActivity } from "../space/SpaceActivity.tsx";
 import { SpaceRowMenu } from "../space/SpaceRowMenu.tsx";
 import { SpaceIdentity } from "../space/SpaceIdentity.tsx";
@@ -20,10 +21,11 @@ export function CanonEpicRow({ projectId, groupKey, epic, busy, onDrop }: {
   const active = useButlerStore(state => state.activeChatId === epic.home_session_id && state.view.kind === "session");
   const unread = useSessionUnread(row?.session);
   const [menuOpen, setMenuOpen] = useState(false);
+  const longPress = useLongPressAction(() => { if (row) setMenuOpen(true); });
   const [drop, setDrop] = useState<"before" | "after">();
   const source = useCanonSidebarDrag(state => state.source);
   const valid = source?.projectId === projectId && source.groupKey === groupKey && source.epic.id !== epic.id;
-  return <NavDropTarget data-canon-epic={epic.id} drop={valid ? drop : undefined}
+  return <NavDropTarget {...longPress} onPointerDown={event => { event.stopPropagation(); longPress.onPointerDown(event); }} data-canon-epic={epic.id} drop={valid ? drop : undefined}
     dragging={source?.epic.id === epic.id} draggable={!busy}
     onDragStart={event => {
       event.stopPropagation(); event.dataTransfer.effectAllowed = "move";

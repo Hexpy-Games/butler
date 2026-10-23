@@ -115,3 +115,39 @@ export async function verifyInspectorConflict(page: Page, server: NativeAppServe
   assert.equal((await conflict).status(), 409); await waitToast(page, "다른 사람이 먼저 고쳤습니다");
   await detail.getByText("서버에서 고친 과제", { exact: true }).waitFor();
 }
+
+export async function verifyOverviewLayout(page: Page, width: number) {
+  const rows = page.locator('[data-test-class="canon-plan-epics"] [data-sortable-id]');
+  for (const row of await rows.all()) {
+    const select = row.getByRole("combobox"), menu = row.getByRole("button", { name: /메뉴/u });
+    const selectBox = await select.boundingBox(), menuBox = await menu.boundingBox();
+    assert(selectBox && menuBox);
+    assert(Math.abs(selectBox.y - menuBox.y) < 2, "Status and menu share one line");
+    const box = await row.boundingBox(); assert(box);
+    assert(box.x >= 0 && box.x + box.width <= width + 1, "Overview row stays in viewport");
+    assert(await row.getByRole("img", { name: "나", exact: true }).count() <= 1);
+  }
+}
+export async function verifySidebarLongPress(page: Page, planId: string) {
+  const group = page.locator(`[data-canon-group="${planId}"]`);
+  const header = group.locator('[data-test-class="canon-sidebar-group"]');
+  await header.dispatchEvent("pointerdown", { pointerType: "touch", isPrimary: true });
+  await page.getByRole("menuitem", { name: "계획 개요", exact: true }).waitFor();
+  assert.equal(await page.getByRole("menuitem").first().innerText(), "계획 개요");
+  await header.dispatchEvent("pointerup", { pointerType: "touch", isPrimary: true });
+  await page.keyboard.press("Escape");
+  const row = group.locator('[data-canon-epic]').filter({ has: page.getByRole("button", { name: /메뉴/u }) }).first();
+  await row.dispatchEvent("pointerdown", { pointerType: "touch", isPrimary: true });
+  await page.getByRole("menu").waitFor();
+  assert.equal(await page.getByRole("menuitem", { name: "계획 개요", exact: true }).count(), 0, "Child long press opens only its own menu");
+  await row.dispatchEvent("pointerup", { pointerType: "touch", isPrimary: true });
+  await page.keyboard.press("Escape");
+}
+export async function verifyEmptyEpicConversation(page: Page, server: NativeAppServerHandle, sessionId: string) {
+  const view = await server.api<{ messages: unknown[] }>(`/session-view?session_id=${encodeURIComponent(sessionId)}`);
+  assert.equal(view.messages.length, 0, "New Epic conversation has no system or user messages");
+  const empty = page.locator('[data-test-class="new-chat-empty-state"]');
+  await empty.getByRole("heading", { name: "사이드바에서 만든 과제", exact: true }).waitFor();
+  await empty.getByText("프리뷰 14 · 과제", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "메시지 입력", exact: true }).getByText("이 과제에 대해 말해 보세요", { exact: true }).waitFor();
+}

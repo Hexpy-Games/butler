@@ -1,7 +1,7 @@
 import type { CanonCopy } from "../canon-copy.ts";
 export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
   "ko-KR": {
-    overview: "계획 개요", openOverview: "계획 개요 열기", noPlan: "계획 없음",
+    overview: "계획 개요", noPlan: "계획 없음",
     personalOrder: "내 사이드바 순서만 바뀝니다", sharedOrder: "기준 순서 · 끌어서 바꾸기",
     backlogOrderHelp: "계획으로 옮기려면 ⋯ 메뉴", sharedGrip: "모두에게 같은 순서", planMissing: "계획을 찾을 수 없습니다", changePlan: "계획 바꾸기",
     noEpics: "아직 과제가 없습니다", noDescription: "설명 없음", conversationFailed: "대화를 열지 못했습니다",
@@ -34,7 +34,7 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
     },
   },
   "en-US": {
-    overview: "Plan overview", openOverview: "Open Plan overview", noPlan: "No Plan",
+    overview: "Plan overview", noPlan: "No Plan",
     personalOrder: "Only your sidebar order changed", sharedOrder: "Shared order · Drag to reorder",
     backlogOrderHelp: "Use the ⋯ menu to move to a Plan", sharedGrip: "Same order for everyone", planMissing: "Plan not found", changePlan: "Change Plan",
     noEpics: "No Epics yet", noDescription: "No description", conversationFailed: "Could not open conversation",

@@ -13,8 +13,8 @@ export function PlanEpicList({ projectId, rows, plans, backlog, busy, onWrite, o
   const copy = appCopy.canon;
   const items = rows.map((epic, index) => ({
     id: epic.id, label: epic.title,
-    leading: <Typo.Caption numeric="tabular">{index + 1}</Typo.Caption>,
     title: <Stack as="span" inline align="row" cross="center" gap="xs" minWidth="0">
+      <Typo.Caption tone="secondary" numeric="tabular">{index + 1} ·</Typo.Caption>
       <CanonStatusGlyph status={epic.canon_status} />
       <Typo.Text truncate>{epic.title}</Typo.Text>
       <CanonAvatar person={epic.assignee} />
