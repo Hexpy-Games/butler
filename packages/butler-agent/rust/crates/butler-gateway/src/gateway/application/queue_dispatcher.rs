@@ -294,13 +294,6 @@ async fn drain_chat(
         if active {
             return Ok(());
         }
-        // Results can resume the parent while other children still run. The
-        // first user row is the barrier; later rows must not pass it.
-        if !row.is_result && app.wait_for_child(chat_id).await? {
-            #[cfg(feature = "e2e-fixtures")]
-            super::queue_wait_fixture::observed(app, chat_id).await?;
-            return Ok(());
-        }
         let claim = claim_row(app, chat_id, row.id.clone()).await?;
         let Some(claim) = claim else { continue };
         let Ok(resolution) = settings::resolution_from_persisted(&row.control_resolution_json)
@@ -364,7 +357,6 @@ async fn claim_row(
 }
 
 struct QueuedRow {
-    is_result: bool,
     id: String,
     text: String,
     control_resolution_json: String,
@@ -383,7 +375,6 @@ fn queued_rows(db: &Connection, chat: &str) -> Result<Vec<QueuedRow>, AppStorage
     statement
         .query_map(params![chat, FIFO_WINDOW], |row| {
             Ok(QueuedRow {
-                is_result: row.get(3)?,
                 id: row.get(0)?,
                 text: row.get(1)?,
                 control_resolution_json: row.get(2)?,

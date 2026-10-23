@@ -5,7 +5,6 @@ use std::sync::atomic::Ordering;
 #[tokio::test]
 async fn blocked_project_followup_rejected_plan_reaches_terminal() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let observer = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let (url, script, server) = stub::start(false).await?;
     script.blocked.store(true, Ordering::SeqCst);
     script.routed.store(true, Ordering::SeqCst);
@@ -13,10 +12,6 @@ async fn blocked_project_followup_rejected_plan_reaches_terminal() -> Result<(),
     let s = Setup::new("PROJECT-FOLLOWUP-PLAN-REJECTION")?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", url)
-        .env(
-            "BUTLER_E2E_QUEUE_WAIT_OBSERVER",
-            observer.local_addr()?.to_string(),
-        )
         .start()
         .await?;
     let project =
@@ -59,30 +54,6 @@ async fn blocked_project_followup_rejected_plan_reaches_terminal() -> Result<(),
     tokio::time::timeout(Duration::from_secs(30), script.held.notified())
         .await
         .expect("revised plan must remain readable before its new review");
-    let queued =
-        s.gw.post(
-            "/messages",
-            json!({"chat_id":parent,
-        "text":"Keep the continued-work note.",
-        "client_message_id":uuid::Uuid::new_v4().to_string()}),
-        )
-        .await?;
-    assert_eq!(queued.status, 202, "{queued:?}");
-    assert!(queued.data()["queued"]["id"].is_string(), "{queued:?}");
-    assert!(queued.data()["accepted"].is_null(), "{queued:?}");
-    tokio::time::timeout(Duration::from_secs(10), async {
-        use tokio::io::AsyncReadExt;
-        loop {
-            let (mut socket, _) = observer.accept().await?;
-            let mut observed = String::new();
-            socket.read_to_string(&mut observed).await?;
-            if observed == turn["id"].as_str().unwrap() {
-                return Ok::<_, HarnessError>(());
-            }
-        }
-    })
-    .await
-    .expect("continued child must hold the follow-up")?;
     let revised = record(&manifest_path)?;
     let feedback = {
         let requests = script.requests.lock().unwrap();
@@ -122,34 +93,6 @@ async fn blocked_project_followup_rejected_plan_reaches_terminal() -> Result<(),
     assert_eq!(second["session_id"], first["session_id"]);
     assert_eq!(second["result"]["status"], "success", "{second}");
     assert_terminal(&s, &second).await?;
-    let deadline = Instant::now() + Duration::from_secs(30);
-    loop {
-        let messages = s.gw.messages(parent).await?;
-        if let Some(user) = messages
-            .iter()
-            .position(|m| m["role"] == "user" && m["text"] == "Keep the continued-work note.")
-            && messages.iter().any(|m| {
-                m["turn_id"] == messages[user]["turn_id"]
-                    && m["role"] == "assistant"
-                    && m["status"] == "delivered"
-            })
-        {
-            let result = messages
-                .iter()
-                .rposition(|m| m["text"] == "원문 확인 결과를 정리했습니다.")
-                .unwrap();
-            assert!(
-                result < user,
-                "continued result must precede the note: {messages:?}"
-            );
-            break;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "continued follow-up stuck: {messages:?}"
-        );
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
     assert_eq!(std::fs::read(&disposition_path)?, disposition_bytes);
     let settled = record(&manifest_path)?;
     assert_eq!(settled["dispositionRevision"], 2);

@@ -268,19 +268,6 @@ impl AppApplication {
         Ok(())
     }
 
-    pub(super) async fn wait_for_child(
-        &self,
-        chat_id: &str,
-    ) -> Result<bool, GatewayApplicationError> {
-        let parent = self.runtime_hint(chat_id).await?;
-        Ok(self.dependencies.subsessions.queue_waits_for_child(parent).await
-            .unwrap_or_else(|error| {
-                static LOGGED: std::sync::Once = std::sync::Once::new();
-                LOGGED.call_once(|| tracing::warn!(%error, "Child presence unavailable; retaining normal queue admission"));
-                false
-            }))
-    }
-
     #[tracing::instrument(name = "turn.claim", skip_all, fields(trace_root = true, chat_id, message_id = client_id), err)]
     async fn dispatch(
         &self,
@@ -288,18 +275,14 @@ impl AppApplication {
         client_id: &str,
         prepared: ResolvedAppAdmission,
     ) -> Result<MessageSendResult, GatewayApplicationError> {
-        let is_result = prepared.controls.subsession_result.is_some();
         // Recovery can publish results before native ingress is ready. Ordinary
         // sends retain normal first-message title and organization admission.
-        let wait = if is_result {
-            !self
+        let wait = prepared.controls.subsession_result.is_some()
+            && !self
                 .dependencies
                 .executor_readiness
                 .readiness()?
-                .btcc_executor_ready
-        } else {
-            self.wait_for_child(chat_id).await?
-        };
+                .btcc_executor_ready;
         if wait {
             self.queue_wake.chat(chat_id.to_owned()).await?;
             return self.queued_result(chat_id, client_id).await;

@@ -1,10 +1,7 @@
 //! Exercise the claim-release race with an acknowledged dispatcher drain.
 use super::super::*;
 use super::support::*;
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
+use std::sync::Arc;
 use tokio::sync::Notify;
 
 pub(super) struct ObservedNative {
@@ -25,35 +22,6 @@ impl AppNativeIngress for ObservedNative {
     }
     fn stop_confirmed(&self, turn: String) -> ApplicationFuture<bool> {
         self.native.stop_confirmed(turn)
-    }
-}
-
-pub(super) struct WaitingChildren(pub(super) Arc<AtomicBool>);
-impl AppSubsessionPort for WaitingChildren {
-    fn queue_waits_for_child(&self, _: String) -> ApplicationFuture<bool> {
-        let active = self.0.load(Ordering::SeqCst);
-        Box::pin(async move { Ok(active) })
-    }
-    fn projection(
-        &self,
-        session: String,
-        page: Option<AppSessionViewPage>,
-    ) -> ApplicationFuture<serde_json::Value> {
-        UnprovidedSessions.projection(session, page)
-    }
-    fn cancel(&self, parent: String, relation: String) -> ApplicationFuture<serde_json::Value> {
-        UnprovidedSessions.cancel(parent, relation)
-    }
-    fn resume(&self, parent: String, relation: String) -> ApplicationFuture<serde_json::Value> {
-        UnprovidedSessions.resume(parent, relation)
-    }
-    fn read_operation_output_chunks(
-        &self,
-        turn: String,
-        request: String,
-        result: String,
-    ) -> ApplicationFuture<Vec<operation_output::OperationOutputChunk>> {
-        UnprovidedSessions.read_operation_output_chunks(turn, request, result)
     }
 }
 

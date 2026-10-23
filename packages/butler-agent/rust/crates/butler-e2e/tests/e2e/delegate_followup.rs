@@ -5,15 +5,11 @@
     clippy::panic,
     reason = "test assertions"
 )]
-#[path = "delegate_followup/delivery_wake.rs"]
-mod delivery_wake;
 #[path = "delegate_followup/failure.rs"]
 mod failure;
-#[path = "delegate_followup/ordering.rs"]
-mod ordering;
 #[path = "delegate_followup/project.rs"]
 mod project;
-#[path = "delegate_followup/presence.rs"]
+#[path = "delegate_followup/ordering.rs"]
 mod requires_e2e_fixtures;
 #[path = "delegate_followup/stub.rs"]
 pub(crate) mod stub;

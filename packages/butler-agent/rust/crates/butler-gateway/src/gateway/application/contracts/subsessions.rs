@@ -8,11 +8,6 @@ pub struct AppWorkerActivitySourcePage {
 }
 
 pub trait AppSubsessionPort: Send + Sync {
-    /// Read-only delegated execution presence before dispatching queued user input.
-    fn queue_waits_for_child(&self, _parent: String) -> ApplicationFuture<bool> {
-        Box::pin(async { Ok(false) })
-    }
-
     /// Parent/child identities whose durable execution projection changed.
     fn changes(&self) -> Option<tokio::sync::broadcast::Receiver<(String, String)>> {
         None

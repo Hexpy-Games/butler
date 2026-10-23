@@ -139,7 +139,6 @@ async fn delivered_transcript_final_projects_and_settles_exact_queue_claim() {
     std::fs::create_dir_all(root.join("transcripts")).unwrap();
     let path = root.join("app.sqlite");
     let enqueued = Arc::new(tokio::sync::Notify::new());
-    let children = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let (release, ready) = tokio::sync::watch::channel(false);
     let mut deps = dependencies(native.clone(), 100);
     deps.native_ingress = Arc::new(child_results::ObservedNative {
@@ -147,7 +146,6 @@ async fn delivered_transcript_final_projects_and_settles_exact_queue_claim() {
         enqueued: enqueued.clone(),
     });
     deps.executor_readiness = Arc::new(child_results::ReadinessGate(ready));
-    deps.subsessions = Arc::new(child_results::WaitingChildren(children.clone()));
     let app = AppApplication::open(
         AppApplicationConfig {
             database_path: path,
@@ -312,7 +310,6 @@ async fn delivered_transcript_final_projects_and_settles_exact_queue_claim() {
         .await
         .unwrap();
     assert_eq!(native.0.lock().unwrap()[1].text, "Child output 1");
-    children.store(true, std::sync::atomic::Ordering::SeqCst);
     let mut result = command("result-3", "Child output 3");
     result.request.subsession_result = Some(butler_turn::btcc::SubsessionResultContext {
         relation_id: "relation-3".into(),

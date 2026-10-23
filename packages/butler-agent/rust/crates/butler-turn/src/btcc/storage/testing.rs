@@ -85,13 +85,6 @@ pub struct Fixture {
 }
 
 impl Fixture {
-    /// Pin the real queue lookup against an opened E2E database.
-    #[cfg(feature = "test-support")]
-    pub fn assert_child_queue_plan(path: &std::path::Path) {
-        let db = sqlite::open(path).expect("queue query-plan database");
-        super::subsessions::assert_queue_child_presence_plan(&db);
-    }
-
     pub(crate) fn empty() -> Self {
         let sequence = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -189,21 +182,6 @@ impl Fixture {
             .expect("committed row");
         assert_eq!(value, 42);
         (result, status, retained)
-    }
-
-    /// Hold the existing writer lane at a deterministic boundary for read-pool probes.
-    pub async fn hold_writer(
-        storage: BtccStorage,
-        entered: tokio::sync::oneshot::Sender<()>,
-        release: std::sync::mpsc::Receiver<()>,
-    ) -> Result<(), StorageError> {
-        storage
-            .execute(move |_| {
-                entered.send(()).expect("writer barrier receiver");
-                release.recv().expect("writer barrier release");
-                Ok(())
-            })
-            .await
     }
 
     pub fn config(&self, owner_id: &str) -> BtccStorageConfig {

@@ -231,8 +231,6 @@ pub(super) fn project_suspended(
         }))?,
         now,
     )?;
-    // A child result may already be queued under this claim. Wake after its
-    // release even for waiting_for_worker; the dispatcher holds user rows.
     Ok((true, true))
 }
 
