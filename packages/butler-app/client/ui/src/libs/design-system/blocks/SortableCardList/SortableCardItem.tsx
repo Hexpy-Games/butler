@@ -69,7 +69,12 @@ export function SortableCardItem({
         />
       )}
       <Card className={dsClass(styles.card)} padding="sm">
-        {!overlay && (
+        {overlay ? (
+          // The lifted copy keeps the grip's column (static, hidden from assistive tech) so its columns match the row.
+          <span className={cn(styles.handle, styles.handleStatic)} aria-hidden="true">
+            <GripVertical size="md" />
+          </span>
+        ) : (
           <IconButton
             className={dsClass(styles.handle)}
             label={`Reorder ${label}`}
