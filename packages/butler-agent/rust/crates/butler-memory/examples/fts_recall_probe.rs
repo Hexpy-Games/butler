@@ -101,6 +101,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .ok_or("missing turn")?
                 .into(),
             project_id: query["binding"]["project_id"].as_str().map(str::to_owned),
+            usage_root: None,
+            usage_role: None,
         };
         metrics.0.lock().clear();
         let start = Instant::now();

@@ -26,6 +26,8 @@ fn request() -> RecallRequest {
             current_user_message: "message".into(),
             native_operation_id: "operation".into(),
             project_id: None,
+            usage_root: None,
+            usage_role: None,
         },
     }
 }
