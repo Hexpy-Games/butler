@@ -400,7 +400,7 @@ fn assert_direction(
     );
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap();
     let applied: i64 = db.query_row(
-        "SELECT count(*) FROM wm_instructions WHERE json_extract(sender,'$.parent.relation_id')=?1 AND mode='steer' AND status='applied'",
+        "SELECT count(*) FROM wm_instructions WHERE json_extract(sender,'$.parent.relation_id')=?1 AND mode='queue' AND status='applied'",
         [relation],
         |row| row.get(0),
     ).unwrap();
