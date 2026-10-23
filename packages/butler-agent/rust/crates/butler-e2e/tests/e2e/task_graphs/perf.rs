@@ -9,13 +9,8 @@ async fn perf_task_graph_endpoints_complete_and_current() -> Result<(), HarnessE
     let s = Setup::new("PERF-TASK-GRAPH")?.start().await?;
     let created = s.gw.post("/sessions", json!({"kind":"chat"})).await?;
     let chat = created.data()["session"]["id"].as_str().unwrap().to_owned();
-    let hint = created.data()["session"]["session_hint"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let ids = Box::pin(fixture::seed(&s.sandbox.data, &hint, 6)).await?;
+    let (ids, bytes) = super::legacy_fixture::seed(&s, &chat).await?;
     let graph_id = &ids[0];
-    let bytes = Box::pin(super::history::seed(&s.sandbox.data)).await?;
     tokio::time::sleep(Duration::from_secs(10)).await;
     super::history::assert_indexes(&s.sandbox.data)?;
     let pins = [

@@ -3,17 +3,6 @@ use super::*;
 use rusqlite::Connection;
 use std::path::Path;
 
-pub(super) async fn seed(data: &Path) -> Result<u64, HarnessError> {
-    let mut builder = butler_e2e::e2e::task_graph::GraphBuilder::open(data)
-        .await
-        .map_err(fixture::error)?;
-    builder.history(40, 8).await.map_err(fixture::error)?;
-    builder.close().await.map_err(fixture::error)?;
-    let path = data.join("agent-runtime/btcc.sqlite");
-    Connection::open(&path)?.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")?;
-    let bytes = std::fs::metadata(path)?.len();
-    Ok(bytes)
-}
 pub(super) fn assert_indexes(data: &Path) -> Result<(), HarnessError> {
     let db = Connection::open(data.join("agent-runtime/btcc.sqlite"))?;
     for (query, index) in [

@@ -9,6 +9,7 @@ mod events;
 mod fidelity;
 mod fixture;
 mod history;
+mod legacy_fixture;
 mod perf;
 mod progress;
 mod reads;
