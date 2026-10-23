@@ -66,9 +66,9 @@ export async function createFromSidebar(page: Page, projectId: string, planId: s
   const row = page.locator(`[data-canon-group="${planId}"] [data-canon-epic="${result.work.id}"]`);
   await row.waitFor(); assert.equal(await row.getByRole("img", { name: "나", exact: true }).count(), 1);
   assert.equal(await page.locator(`[data-tree-item="s:${result.session_id}"]`).count(), 0, "Linked Epic is absent from the plain tree");
-  await page.getByRole("tab", { name: "최신", exact: true }).click();
+  await page.getByRole("radio", { name: "최신", exact: true }).click();
   await page.locator(`[data-tree-item="s:${result.session_id}"]`).waitFor();
-  await page.getByRole("tab", { name: "전체보기", exact: true }).click();
+  await page.getByRole("radio", { name: "전체보기", exact: true }).click();
   return result;
 }
 export async function verifySidebarOrder(page: Page, server: NativeAppServerHandle, projectId: string, planId: string) {
