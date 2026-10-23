@@ -244,6 +244,8 @@ fn inventory(
             current_user_message: String::new(),
             native_operation_id: "memory-health".into(),
             project_id: None,
+            usage_root: None,
+            usage_role: None,
         },
     };
     let result = read_canonical_inventory(

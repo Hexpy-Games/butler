@@ -35,6 +35,7 @@ import { ElementDragPreview } from "@/components/browser/ElementDragPreview";
 import { TabDragPreview } from "@/components/browser/TabDragPreview";
 import { BrowserArea } from "@/components/browser/BrowserArea";
 import { Inspector } from "@/components/inspector/Inspector.tsx";
+import { PlanOverview } from "@/components/canon/PlanOverview.tsx";
 import { ProjectDashboardView } from "@/components/management/ProjectDashboardView.tsx";
 import { AutomationsView } from "@/components/management/AutomationsView.tsx";
 import { SettingsView } from "@/components/settings/SettingsView.tsx";
@@ -235,6 +236,8 @@ function AppWorkspaceContent({ leftOpen, paneOpen, chatWidth }: { leftOpen: bool
         <AdaptiveShellCard><LiveConnectionNotice /><LibraryPage /></AdaptiveShellCard>
       ) : view.kind === "automations" || view.kind === "automation-detail" ? (
         <AdaptiveShellCard><LiveConnectionNotice /><ErrorBoundary key={view.kind} scope="schedules"><AutomationsView /></ErrorBoundary></AdaptiveShellCard>
+      ) : view.kind === "plan-overview" ? (
+        <AdaptiveShellCard><LiveConnectionNotice /><ErrorBoundary key={`${view.projectId}:${view.planId}`} scope="plan-overview"><PlanOverview projectId={view.projectId} planId={view.planId} /></ErrorBoundary></AdaptiveShellCard>
       ) : view.kind === "project-dashboard" ? (
         <AdaptiveShellCard><LiveConnectionNotice /><ErrorBoundary key={view.projectId} scope="project-dashboard"><ProjectDashboardView /></ErrorBoundary></AdaptiveShellCard>
       ) : (
@@ -246,6 +249,7 @@ function AppWorkspaceContent({ leftOpen, paneOpen, chatWidth }: { leftOpen: bool
 }
 
 function AppWorkspaceControls({ panels }: { panels: WorkspacePanels }) {
+  const dashboardActive = useButlerStore((state) => state.view.kind === "project-dashboard");
   const { resize, browser, peek, drawer, effectiveLeftOpen, effectiveRightOpen,
     rightAvailable, isSettingsView, setLeftOpen, setRightOpen } = panels;
   if (isSettingsView) return null;
@@ -258,7 +262,7 @@ function AppWorkspaceControls({ panels }: { panels: WorkspacePanels }) {
       data-test-class="panel-resize-handle left-panel-resize-handle" side="left"
       onKeyDown={(event) => resize.handlePanelResizeKeyDown("left", event)}
       onPointerDown={(event) => resize.beginPanelResize("left", event)} />}
-    {rightAvailable && <AdaptiveShellInspector data-test-class="right-panel-slot" open={effectiveRightOpen}>
+    {(rightAvailable || dashboardActive) && <AdaptiveShellInspector data-test-class="right-panel-slot" open={effectiveRightOpen}>
       <ErrorBoundary scope="inspector"><Inspector id="butler-right-inspector" /></ErrorBoundary>
     </AdaptiveShellInspector>}
     {effectiveRightOpen && <AdaptivePanelResizeHandle

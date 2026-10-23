@@ -147,6 +147,8 @@ pub trait AppBranchConversationReader: Send + Sync + 'static {
 pub struct AppBranchSummaryInput {
     pub text: String,
     pub model_ref: String,
+    /// Runtime session of the source chat the summary is made for.
+    pub usage_session_id: String,
 }
 
 #[derive(Clone, Debug)]

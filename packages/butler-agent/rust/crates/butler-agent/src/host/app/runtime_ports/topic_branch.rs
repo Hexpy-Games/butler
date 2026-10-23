@@ -292,9 +292,13 @@ impl AppBranchSummarizer for AppBranchSummarizerAdapter {
                     image_manifests: &[],
                     verified_image_payload: None,
                     butler_data: None,
-                    usage_attribution: Some(&butler_turn::btcc::UsageAttribution::background(
-                        "topic_branch",
-                    )),
+                    usage_attribution: Some(
+                        &butler_turn::btcc::UsageAttribution::attributed_background(
+                            "topic_branch",
+                            Some(input.usage_session_id.clone()),
+                            Some("main".into()),
+                        ),
+                    ),
                     cache_scope: None,
                     stable_provider_cache_prefix: None,
                     route_context: None,
@@ -316,23 +320,30 @@ impl AppBranchSummarizer for AppBranchSummarizerAdapter {
                     source: None,
                 });
             }
-            let text = result
-                .text
-                .or_else(|| {
-                    result
-                        .assistant_message
-                        .map(|message| message.content.to_string())
-                })
-                .unwrap_or_default();
-            if text.trim().is_empty() {
-                return Err(summary_error());
-            }
             Ok(AppBranchSummary {
-                text,
+                text: summary_text(result)?,
                 excerpt_truncated: bound.truncated,
             })
         })
     }
+}
+
+/// The reply's text; an empty summary is a failure.
+fn summary_text(
+    result: butler_turn::btcc::ModelRoundResult,
+) -> Result<String, GatewayApplicationError> {
+    let text = result
+        .text
+        .or_else(|| {
+            result
+                .assistant_message
+                .map(|message| message.content.to_string())
+        })
+        .unwrap_or_default();
+    if text.trim().is_empty() {
+        return Err(summary_error());
+    }
+    Ok(text)
 }
 
 struct BoundedContext {
