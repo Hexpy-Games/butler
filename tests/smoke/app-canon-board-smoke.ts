@@ -1,4 +1,5 @@
 // Native stub-backed UI smoke: all planning content is seeded through canon HTTP.
+import { captureBoardEdges } from "../support/canon-board-visuals.ts";
 import { verifyBoardSelector } from "../support/canon-board-selector.ts";
 import { strict as assert } from "node:assert";
 import { mkdirSync } from "node:fs";
@@ -55,6 +56,7 @@ try {
       assert.equal(await board.getByText(/GitHub|가져오기|동기화됨|마일스톤/).count(), 0);
       assert.equal(await board.getByRole("radio").count(), 0);
       await verifyBoardSelector(page, server, projectId, planId, name, shots, () => openCanonBoard(page!));
+      await captureBoardEdges(page, shots, name);
       await capture(page, `${name}-rest.png`); count++;
       const card = board.locator("[data-kanban-item]").filter({ hasText: "캐논" }).getByRole("button").first();
       assert.equal(await card.getByRole("img", { name: "나", exact: true }).count(), 1, "Assigned card has an Avatar after its title");

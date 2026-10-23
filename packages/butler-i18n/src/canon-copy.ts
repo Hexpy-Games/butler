@@ -7,7 +7,7 @@ export interface CanonCopy {
   epicCaption: (group: string) => string;
   newEpic: string; newPlan: string; backlog: string; backlogDescription: string;
   epic: string; title: string; description: string; optional: string; plan: string; assignee: string;
-  none: string; me: string; cancel: string; create: string; save: string; edit: string; close: string; dueOn: string;
+  none: string; me: string; cancel: string; create: string; save: string; edit: string; editPlan: string; close: string; dueOn: string;
   titlePlaceholder: string; descriptionPlaceholder: string; titleRequired: string;
   created: string; conflict: string; statusChanged: string; reordered: string; running: string;
   openConversation: string; noConversation: string; status: string; specs: string; noSpecs: string; progress: string; noTasks: string;

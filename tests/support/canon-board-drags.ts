@@ -5,6 +5,9 @@ import type { NativeAppServerHandle } from "./native-app-server.ts";
 import type { CanonOverview } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 import { waitToast } from "./canon-board-scenarios.ts";
 
+// dnd-kit AbstractPointerSensor.detach removes its capture click guard after 50 ms.
+// No DOM signal exposes that timer; keep this one named guard after pointer drops.
+const DND_KIT_CLICK_GUARD_MS = 50;
 const item = (page: Page, title: string) => page.locator('[data-test-class="canon-board"] [data-kanban-item]').filter({ hasText: title }).first();
 async function liftTo(page: Page, source: Locator, target: Locator, position = "before"): Promise<void> {
   await target.scrollIntoViewIfNeeded();
@@ -52,6 +55,8 @@ export async function verifyCanonDrags(page: Page, server: NativeAppServerHandle
   canon = await read();
   assert.equal(canon.plans.find(plan => plan.id === planId)!.works.find(card => card.id === moving.id)!.canon_status, "in_progress");
   const backlog = canon.backlog[0]!;
+  await page.locator('[data-slot="kanban-drag-scope"][data-dragging]').waitFor({ state: "hidden" });
+  await page.waitForTimeout(DND_KIT_CLICK_GUARD_MS);
   await moveFromBacklog(page, backlog.title, planId);
   canon = await read();
   assert.equal(canon.plans.find(plan => plan.id === planId)!.works.find(card => card.id === backlog.id)!.plan_id, planId);

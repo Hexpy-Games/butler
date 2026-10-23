@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import type { Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
-import { seedCanonSidebar, showCanonSidebar, openPlan, createFromSidebar, showEpicInspector, verifySidebarOrder, verifyInspectorConflict, verifyOverviewLayout, verifySidebarLongPress, verifyEmptyEpicConversation } from "../support/canon-sidebar-scenarios.ts";
+import { seedCanonSidebar, showCanonSidebar, openPlan, createFromSidebar, showEpicInspector, verifySidebarOrder, verifyInspectorConflict, verifyOverviewLayout, verifySidebarLongPress, verifyEmptyEpicConversation, verifyEpicLabel } from "../support/canon-sidebar-scenarios.ts";
 
 const shots = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? ".tmp/canon-sidebar-smoke");
 mkdirSync(shots, { recursive: true });
@@ -39,9 +39,17 @@ try {
     })));
     await page.goto(server.url, { waitUntil: "load" });
     await page.waitForFunction(() => document.documentElement.lang.startsWith("ko"));
+    await openPlan(page, planId);
+    await page.waitForFunction(expected => Boolean(document.querySelector('[data-test-class~="project-dashboard-wallpaper"][data-module="butler.silk"]')) === expected, wallpaper);
     await showCanonSidebar(page);
+    const group = page.locator(`[data-canon-group="${planId}"]`);
+    await group.locator('[data-test-class="canon-sidebar-group"]').scrollIntoViewIfNeeded();
     const prefix = `${process.env.BUTLER_SMOKE_BASELINE === "1" ? "before" : "after"}-${selected}`;
     await capture(page, `${prefix}-sidebar`);
+    const longRow = group.locator('[data-canon-epic]').filter({ hasText: "아주 긴 과제 제목" });
+    await longRow.scrollIntoViewIfNeeded();
+    await verifyEpicLabel(longRow);
+    await capture(page, `${prefix}-long-title`);
     if (process.env.BUTLER_SMOKE_BASELINE !== "1") {
       const overviewPage = await context.newPage();
       try {
@@ -57,9 +65,11 @@ try {
       await showCanonSidebar(page);
       await verifySidebarLongPress(page, planId);
       await openPlan(page, planId); await verifyOverviewLayout(page, width); await capture(page, `${prefix}-overview`);
-      await showCanonSidebar(page);
-      await page.locator(`[data-canon-group="${planId}"]`).getByRole("button", { name: "프리뷰 14에 새 과제", exact: true }).click();
-      await page.getByRole("dialog").waitFor(); await capture(page, `${prefix}-dialog`);
+      await openPlan(page, planId);
+      await page.getByRole("button", { name: "새 과제", exact: true }).click();
+      await page.getByRole("dialog").waitFor();
+      await page.waitForFunction(expected => Boolean(document.querySelector('[data-test-class~="project-dashboard-wallpaper"][data-module="butler.silk"]')) === expected, wallpaper);
+      await capture(page, `${prefix}-dialog`);
       await page.getByRole("dialog").getByRole("button", { name: "취소", exact: true }).click();
       const created = await createFromSidebar(page, projectId, planId);
       // Close the phone's sidebar before opening its inspector drawer.

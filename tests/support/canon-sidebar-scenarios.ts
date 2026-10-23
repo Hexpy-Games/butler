@@ -136,9 +136,12 @@ export async function verifyOverviewLayout(page: Page, width: number) {
     const box = await row.boundingBox(); assert(box);
     assert(box.x >= 0 && box.x + box.width <= width + 1, "Overview row stays in viewport");
     assert(await row.getByRole("img", { name: "나", exact: true }).count() <= 1);
-    const title = await row.locator('[data-sortable-handle]').boundingBox();
-    assert(title && title.x < selectBox.x, "Grip and title precede right actions");
-    assert(box.height < 120, "Rows remain compact");
+    const title = row.locator('[data-test-class="canon-epic-title"]');
+    const titleBox = await title.boundingBox(); assert(titleBox);
+    assert(width === 390 ? titleBox.y + titleBox.height <= selectBox.y : titleBox.x < selectBox.x,
+      "Phone actions sit below title; desktop actions follow it");
+    await verifyEpicLabel(row);
+    assert(box.height < 145, "Rows remain compact");
   }
 }
 export async function verifySidebarLongPress(page: Page, planId: string) {
@@ -171,4 +174,22 @@ export async function verifyEmptyEpicConversation(page: Page, server: NativeAppS
   assert(Math.abs(title.x + title.width / 2 - bounds.x - bounds.width / 2) < 2, "Epic title is horizontally centered");
   assert(Math.abs((title.y + caption.y + caption.height) / 2 - bounds.y - bounds.height / 2) < 2, "Epic heading and caption are vertically centered");
   await page.getByRole("button", { name: "메시지 입력", exact: true }).getByText("이 과제에 대해 말해 보세요", { exact: true }).waitFor();
+}
+
+/** Verify the actual text and assigned Avatar, rather than the drag handle. */
+export async function verifyEpicLabel(row: import("playwright").Locator) {
+  const title = row.locator('[data-test-class="canon-epic-title"]');
+  const text = await title.evaluate(element => {
+    const style = getComputedStyle(element), box = element.getBoundingClientRect();
+    return { ellipsis: style.textOverflow, overflow: style.overflow, width: box.width, contentWidth: element.scrollWidth };
+  });
+  assert.equal(text.ellipsis, "ellipsis"); assert.equal(text.overflow, "hidden");
+  assert(text.width >= Math.min(40, text.contentWidth) - 1, "Title retains readable space");
+  const avatar = row.getByRole("img", { name: "나", exact: true });
+  if (await avatar.count()) {
+    const box = await avatar.boundingBox(), bounds = await row.boundingBox();
+    assert(box && bounds && box.width >= 16 && box.x >= bounds.x && box.x + box.width <= bounds.x + bounds.width,
+      "Avatar stays full-size inside the row");
+    const titleBox = await title.boundingBox(); assert(titleBox && titleBox.x + titleBox.width <= box.x + 1);
+  }
 }

@@ -51,8 +51,8 @@ export function CanonEpicRow({ projectId, groupKey, epic, busy, onDrop }: {
     <NavRow dataTestClass="canon-epic-row" iconInteractive active={active} ariaLabel={epic.title}
       ariaDescription={unread ? appCopy.space.unread : undefined}
       icon={row ? <SpaceIdentity row={row} /> : <IconSlot size="sidebar"><Notebook /></IconSlot>}
-      label={<Stack as="span" inline align="row" cross="center" gap="xs" minWidth="0">
-        <Typo.Text as="span" truncate shrink>{epic.title}</Typo.Text><CanonAvatar person={epic.assignee} />
+      label={<Stack as="span" align="row" cross="center" gap="xs" minWidth="0">
+        <Typo.Text data-test-class="canon-epic-title" as="span" truncate shrink minWidth="0">{epic.title}</Typo.Text><Stack as="span" shrink={false}><CanonAvatar person={epic.assignee} /></Stack>
       </Stack>}
       actions={row ? <SpaceRowMenu row={row} running={running} open={menuOpen} onOpenChange={setMenuOpen} /> : <SpaceActivity running={running} />}
       onContextMenu={row ? event => { event.preventDefault(); event.stopPropagation(); setMenuOpen(true); } : undefined}

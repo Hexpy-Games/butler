@@ -2,8 +2,8 @@ import { useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import type { CanonPlan } from "@/app/canonApi.ts";
 import { FilteredSelectPopover, Popover, PopoverContent, PopoverTrigger, SelectButton } from "@/butler-ds";
-export function CanonBoardPlanSelect({ plans, value, onChange }: {
-  plans: CanonPlan[]; value: string | null; onChange: (id: string | null) => void;
+export function CanonBoardPlanSelect({ plans, value, onChange, bottomInset = 0 }: {
+  bottomInset?: number; plans: CanonPlan[]; value: string | null; onChange: (id: string | null) => void;
 }) {
   const [open, setOpen] = useState(false), [search, setSearch] = useState("");
   const copy = appCopy.canon;
@@ -13,11 +13,11 @@ export function CanonBoardPlanSelect({ plans, value, onChange }: {
     <PopoverTrigger asChild><SelectButton size="sm" aria-label={copy.plan}>
       {options.find(plan => plan.id === value)?.title ?? copy.backlog}
     </SelectButton></PopoverTrigger>
-    <PopoverContent align="start" density="list">
-      <FilteredSelectPopover title={copy.plan} searchLabel={copy.searchPlan} searchPlaceholder={copy.searchPlan}
+    <PopoverContent align="start" density="list" collisionPadding={{ top: 56, right: 8, left: 8, bottom: bottomInset + 8 }}>
+      <FilteredSelectPopover resultsMaxRows={Math.max(2, filtered.length + 2)} title={copy.plan} searchLabel={copy.searchPlan} searchPlaceholder={copy.searchPlan}
         searchClearLabel={copy.clearSearch} searchValue={search} onSearchChange={setSearch}
         filters={[]} activeFilterId="" onFilterChange={() => {}} emptyLabel={copy.noResults}
-        groups={[{ id: "plans", title: copy.plan, items: filtered.map(plan => ({
+        groups={[{ id: "plans", title: null, items: filtered.map(plan => ({
           id: plan.id ?? "backlog", label: plan.title, selected: plan.id === value,
           onSelect: () => { onChange(plan.id); setOpen(false); setSearch(""); },
         })) }]} />

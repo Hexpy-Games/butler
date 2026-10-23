@@ -12,9 +12,9 @@ export function EpicCard({ epic, ordinal, selected, onSelect }: {
   return <KanbanCard itemId={epic.id} label={epic.title} selected={selected} onOpen={() => onSelect(epic.id)}>
     <Stack gap="sm">
       <Stack align="row" cross="center" gap="sm">
-        <CanonEpicStatus epic={epic} />
-        <Typo.Body truncate shrink>{epic.title}</Typo.Body>
-        <CanonAvatar person={epic.assignee} />
+        <Stack shrink={false}><CanonEpicStatus epic={epic} /></Stack>
+        <Typo.Body data-test-class="canon-epic-title" truncate shrink minWidth="0">{epic.title}</Typo.Body>
+        <Stack shrink={false}><CanonAvatar person={epic.assignee} /></Stack>
       </Stack>
       {caption && <Typo.Caption numeric="tabular" tone="secondary">{caption}</Typo.Caption>}
       {epic.canon_status === "cancelled" && <Tag>{copy.statuses.cancelled}</Tag>}

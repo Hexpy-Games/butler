@@ -11,11 +11,18 @@ export async function captureOverviewQA(page: Page, width: number, cell: string,
     const rows = page.locator('[data-test-class="canon-plan-epics"] [data-sortable-id]');
     await assertCount(rows, count);
     await verifyOverviewLayout(page, width);
+    assert.equal(await page.getByRole("button", { name: "새 과제", exact: true }).count(), 1);
     await page.screenshot({ path: join(shots, `${cell}-${count}-rows.png`), animations: "disabled" });
   }
   const rows = page.locator('[data-test-class="canon-plan-epics"] [data-sortable-id]');
   assert((await rows.last().innerText()).includes("아주 긴 과제 제목"));
   await rows.last().scrollIntoViewIfNeeded();
+  await rows.last().evaluate(element => {
+    const scroller = element.closest<HTMLElement>('[data-scroll-fade="y"]');
+    if (scroller) scroller.scrollTop += element.getBoundingClientRect().bottom - 650;
+  });
+  await rows.last().getByRole("button", { name: /^Reorder /u }).focus();
+  await page.keyboard.press("Tab"); await page.keyboard.press("Shift+Tab");
   await page.screenshot({ path: join(shots, `${cell}-long-title.png`), animations: "disabled" });
   await rows.first().getByRole("combobox").click();
   await page.getByRole("listbox").waitFor();

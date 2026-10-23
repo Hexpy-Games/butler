@@ -25,6 +25,12 @@ export async function verifyBoardSelector(page: Page, server: NativeAppServerHan
   await page.screenshot({ path: join(shots, `${name}-open.png`), animations: "disabled" });
   await chooser.getByRole("textbox", { name: "계획 검색", exact: true }).fill("단일");
   assert.deepEqual(await chooser.locator('[data-slot="filtered-select-item"]').allTextContents(), ["단일 과제 계획"]);
+  const result = await chooser.locator('[data-slot="filtered-select-item"]').boundingBox();
+  const results = await chooser.locator('[data-slot="filtered-select-results"]').boundingBox();
+  assert(result && results && result.y >= results.y && result.y + result.height <= results.y + results.height,
+    "Filtered result is fully visible without scrolling");
+  const popover = await chooser.boundingBox(), composer = await page.locator('[data-test-class~="composer-wrap"]').boundingBox();
+  assert(popover && (!composer || popover.y + popover.height <= composer.y), "Selector stays above composer");
   await page.screenshot({ path: join(shots, `${name}-search.png`), animations: "disabled" });
   await page.keyboard.press("Escape");
   for (const option of [...canon.plans, { id: null, title: "백로그" }]) {
@@ -44,4 +50,6 @@ export async function verifyBoardSelector(page: Page, server: NativeAppServerHan
   await page.reload(); await reopen();
   await board.locator(`[data-plan-id="${planId}"]`).waitFor();
   assert.equal(await board.locator('[data-canon-backlog]').count(), 0, "Missing saved plan falls back to default");
+  assert.equal(await page.evaluate(id => localStorage.getItem(`butler:canon-plan:${id}`), projectId),
+    JSON.stringify("missing-plan"), "Fallback never persists an implicit selection");
 }

@@ -5,7 +5,7 @@ import { ADAPTIVE_MEDIA, ButtonContainer, Grid, IconButton, InspectorPanel, Pres
 import { EpicDetail } from "./EpicDetail.tsx";
 export function EpicDetailPanel({ epic, plans, tasks, busy, onWrite, onClose, bottomInset = 0 }: {
   bottomInset?: number; epic: Epic | null; plans: PlanCards[]; tasks: WorkTasks | null; busy: boolean;
-  onWrite: (input: EpicInput, message?: string) => Promise<boolean>; onClose: () => void; onOpenSession: (id: string) => void;
+  onWrite: (input: EpicInput, message?: string) => Promise<boolean>; onClose: () => void;
 }) {
   const panel = useRef<HTMLElement>(null);
   const title = useRef<HTMLElement>(null);

@@ -13,7 +13,7 @@ import { EpicCreateDialog } from "./EpicCreateDialog.tsx";
 import { PlanFormDialog } from "./PlanFormDialog.tsx";
 import { EpicDetailPanel } from "./EpicDetailPanel.tsx";
 
-export function CanonBoard({ projectId, onOpenSession, bottomInset }: { projectId: string; bottomInset?: number; onOpenSession: (id: string) => void }) {
+export function CanonBoard({ projectId, bottomInset }: { projectId: string; bottomInset?: number; onOpenSession: (id: string) => void }) {
   const locale = useAppLocale();
   const disconnected = useButlerStore(state => state.liveConnectionLost);
   const board = useCanonBoard(projectId);
@@ -27,7 +27,7 @@ export function CanonBoard({ projectId, onOpenSession, bottomInset }: { projectI
   return <Stack gap="lg" data-test-class="canon-board">
     {disconnected && <Typo.Caption role="status">{appCopy.projectSignpost.disconnected}</Typo.Caption>}
     <Stack align="row" cross="center" justify="between" gap="sm" wrap>
-    <Stack minWidth="0" shrink><CanonBoardPlanSelect plans={canon?.plans ?? []} value={selection.id} onChange={id => { selection.select(id); board.select(null); }} /></Stack>
+    <Stack minWidth="0" shrink><CanonBoardPlanSelect plans={canon?.plans ?? []} value={selection.id} bottomInset={bottomInset} onChange={id => { selection.select(id); board.select(null); }} /></Stack>
     <ButtonContainer size="sm" justify="end">
       <Button size="sm" variant="outline" onClick={() => setCreate({ planId: selection.id })}><Plus size="sm" />{copy.newEpic}</Button>
       <Button size="sm" onClick={() => setPlanForm({})}><Plus size="sm" />{copy.newPlan}</Button>
@@ -55,7 +55,7 @@ export function CanonBoard({ projectId, onOpenSession, bottomInset }: { projectI
       </Stack>
       </KanbanDragScope>
       <EpicDetailPanel bottomInset={bottomInset} epic={board.detail} plans={canon.plans} tasks={board.tasks} busy={board.busy} onWrite={board.write}
-        onOpenSession={onOpenSession} onClose={() => board.select(null)} />
+        onClose={() => board.select(null)} />
     </Grid>}
     {create && <EpicCreateDialog projectId={projectId} plans={canon?.plans ?? []} defaultPlanId={create.planId} onClose={() => setCreate(null)}
       onRefresh={board.refresh} onCreated={epic => { board.select(epic.id); }} />}

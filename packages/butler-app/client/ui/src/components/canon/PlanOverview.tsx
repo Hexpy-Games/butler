@@ -2,7 +2,7 @@ import { useProjectDashboardBackground } from "@/hooks/useProjectDashboardBackgr
 import { useButlerStore } from "@/app/store.ts";
 import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { Button, ButtonContainer, DashboardHeader, ManagementPage, ManagementPagePanel, Notice, Plus, ProgressMeter, Stack, Typo } from "@/butler-ds";
+import { Button, ButtonContainer, DashboardHeader, ManagementPage, ManagementPagePanel, Notice, IconButton, Pencil, Plus, ProgressMeter, Stack, Typo } from "@/butler-ds";
 import { EpicCreateDialog } from "./EpicCreateDialog.tsx";
 import { PlanFormDialog } from "./PlanFormDialog.tsx";
 import { PlanEpicList } from "./PlanEpicList.tsx";
@@ -23,11 +23,11 @@ export function PlanOverview({ projectId, planId }: { projectId: string; planId:
     <ManagementPagePanel ref={headerRef}><Stack gap="md">
       <Typo.Caption tone="secondary">{planId ? copy.plan : copy.noPlan}</Typo.Caption>
       <DashboardHeader title={title} meta={meta} action={<ButtonContainer size="default">
+        {state.plan && <IconButton label={copy.editPlan} onClick={() => setDialog("edit")}><Pencil size="sm" /></IconButton>}
         <Button onClick={() => setDialog("create")} disabled={!state.canon || state.busy}><Plus size="sm" />{copy.newEpic}</Button>
       </ButtonContainer>} />
       {state.plan && <Stack gap="sm">
         {state.plan.description && <Typo.Body wrap="pre">{state.plan.description}</Typo.Body>}
-        <ButtonContainer size="sm"><Button size="sm" variant="ghost" onClick={() => setDialog("edit")}>{copy.edit}</Button></ButtonContainer>
         <ProgressMeter value={state.rows.length ? done / state.rows.length * 100 : 0} label={copy.progress} meta={copy.done(done, state.rows.length)} ariaLabel={copy.progress} />
       </Stack>}
     </Stack></ManagementPagePanel>
@@ -36,7 +36,7 @@ export function PlanOverview({ projectId, planId }: { projectId: string; planId:
         !state.canon ? <ProgressMeter indeterminate label={appCopy.feedback.dashboardLoading} /> :
           planId && !state.plan ? <Notice tone="info" message={copy.planMissing} /> :
             <PlanEpicList projectId={projectId} rows={state.rows} plans={state.canon.plans} backlog={!planId} busy={state.busy}
-              onWrite={(epic, input, message) => void state.write(epic, input, message)} onReorder={ids => void state.reorder(ids)} onCreate={() => setDialog("create")} />}
+              onWrite={(epic, input, message) => void state.write(epic, input, message)} onReorder={ids => void state.reorder(ids)} />}
     </ManagementPagePanel>
   </Stack>
     {dialog === "create" && state.canon && <EpicCreateDialog projectId={projectId} plans={state.canon.plans} defaultPlanId={planId}

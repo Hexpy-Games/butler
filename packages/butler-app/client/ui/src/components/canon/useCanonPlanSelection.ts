@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { CanonOverview } from "@/app/canonApi.ts";
 import { defaultCanonPlan } from "./canonPlanSelection.ts";
 const key = (projectId: string) => `butler:canon-plan:${projectId}`;
@@ -18,8 +18,5 @@ export function useCanonPlanSelection(projectId: string, canon: CanonOverview | 
     setChoice({ projectId, id });
     try { localStorage.setItem(key(projectId), JSON.stringify(id)); } catch { /* Selection still works without storage. */ }
   };
-  useEffect(() => {
-    if (canon && stored !== undefined && stored !== id) select(id ?? null);
-  }, [canon, projectId, stored, id]);
   return { id: id ?? null, select };
 }

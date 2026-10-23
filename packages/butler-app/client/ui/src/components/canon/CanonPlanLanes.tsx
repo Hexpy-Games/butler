@@ -39,7 +39,7 @@ export function CanonPlanLanes({ plan, caption, selected, onSelect, onCreate, on
     </>}
     <IconButton label={appCopy.canon.edit} onClick={onEdit}><Pencil size="sm" /></IconButton>
   </ButtonContainer>}>
-    <Box paddingX="md" paddingStart="none"><Grid columns="1" ref={element => {
+    <Grid columns="1" ref={element => {
       // This wrapper owns the board as its direct child; keep DS internals untouched.
       boardRef.current = element?.firstElementChild as HTMLElement | null;
     }}><KanbanBoard scroll data-plan-id={plan.id} data-test-class="canon-plan-lanes">
@@ -54,6 +54,6 @@ export function CanonPlanLanes({ plan, caption, selected, onSelect, onCreate, on
         </KanbanLane>
       </Box>;
     })}
-  </KanbanBoard></Grid></Box>
+  </KanbanBoard></Grid>
   </Section>;
 }
