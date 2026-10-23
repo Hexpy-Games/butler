@@ -237,10 +237,8 @@ fn expand_tilde(path: PathBuf) -> Result<PathBuf, crate::host::HostError> {
 }
 
 async fn service_health(data_root: &Path) -> Value {
-    let ownership = service_instance::observe_async(data_root)
-        .await
-        .map(|ownership| (ownership.record, ownership.locked));
-    let (status, evidence, pid, started_at, app) = match ownership {
+    let observed = service_instance::observe_async(data_root).await;
+    let (status, evidence, pid, started_at, app) = match observed.map(|o| (o.record, o.locked)) {
         Err(_) => (
             "stale",
             "instance_identity_unavailable",
