@@ -308,7 +308,7 @@ impl super::AppApplication {
         origin: WallpaperOrigin,
     ) -> Result<(Value, Value), crate::gateway::GatewayApplicationError> {
         let timing = crate::gateway::command_timing::CommandTiming::new("settings_patch");
-        let _update = self.settings_update_lock.lock().await;
+        let update_guard = self.settings_update_lock.lock().await;
         timing.mark("lock_acquired");
         self.dependencies.settings_facts.refresh().await?;
         timing.mark("facts_refreshed");
@@ -371,7 +371,7 @@ impl super::AppApplication {
         )
         .await?;
         self.project_creation.set_workspace_root(workspace_root);
-        drop(_update);
+        drop(update_guard);
         if let Err(error) = self
             .dependencies
             .subsessions
