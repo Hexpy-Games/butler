@@ -15,10 +15,23 @@ const COMPOSITION_INPUT = new Set(["insertCompositionText", "deleteCompositionTe
 
 type CompositionState = { active: boolean; owned: BrowserOwnedElement | null; idle: number | null; waiting: Array<() => void> };
 const states = new WeakMap<LexicalEditor, CompositionState>();
+const listeners = new WeakMap<LexicalEditor, Set<() => void>>();
 
 export function isComposerComposing(editor: LexicalEditor): boolean {
   const state = states.get(editor);
   return editor.isComposing() || state?.active === true || state?.owned != null;
+}
+
+/** Calls `listener` when the IME starts composing or goes idle. A composition in an owned
+ * element changes no editor state, so editor update listeners miss both. */
+export function subscribeComposing(editor: LexicalEditor, listener: () => void): () => void {
+  const set = listeners.get(editor) ?? new Set();
+  listeners.set(editor, set.add(listener));
+  return () => { set.delete(listener); };
+}
+
+function notify(editor: LexicalEditor): void {
+  listeners.get(editor)?.forEach(listener => listener());
 }
 
 /** Runs `write` now, or once the IME is idle. */
@@ -40,6 +53,7 @@ function settle(editor: LexicalEditor, state: CompositionState): void {
   state.owned = null;
   if (owned) releaseElement(editor, owned);
   state.waiting.splice(0).forEach(write => write());
+  notify(editor);
 }
 
 /** The editor is going away: keep committed text, unless a held write replaces it anyway. */
@@ -55,7 +69,7 @@ function trackComposition(editor: LexicalEditor, state: CompositionState): () =>
   let root: HTMLElement | null = null;
   const inEditor = (event: Event) => event.target instanceof Node && root?.contains(event.target) === true;
   const handlers: Record<string, (event: Event) => void> = {
-    compositionstart: event => { if (inEditor(event)) state.active = true; },
+    compositionstart: event => { if (inEditor(event)) { state.active = true; notify(editor); } },
     // A commit is usually followed by the IME's next syllable, which can arrive as a
     // separate task; settle only once the IME has stayed idle.
     compositionend: event => {

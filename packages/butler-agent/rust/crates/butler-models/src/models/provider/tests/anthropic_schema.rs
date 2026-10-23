@@ -236,7 +236,12 @@ fn variants_and_integer_fields() {
             );
             assert_eq!(
                 body["max_tokens"].as_u64(),
-                Some(if max == Some(321.0) { 321 } else { 4096 })
+                Some(match max {
+                    Some(321.0) => 321,
+                    Some(4096.0) => 4096,
+                    // Without a usable request limit, the catalog's (64K for this model).
+                    _ => 64_000,
+                })
             );
             if let Some(budget) = body.pointer("/thinking/budget_tokens") {
                 assert_eq!(budget.as_u64(), Some(1024));
