@@ -1,6 +1,7 @@
 import type { CanonCopy } from "../canon-copy.ts";
 export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
   "ko-KR": {
+    searchPlan: "계획 검색", clearSearch: "검색 지우기", noResults: "검색 결과 없음",
     overview: "계획 개요", noPlan: "계획 없음",
     personalOrder: "내 사이드바 순서만 바뀝니다", sharedOrder: "기준 순서 · 끌어서 바꾸기",
     backlogOrderHelp: "계획으로 옮기려면 ⋯ 메뉴", sharedGrip: "모두에게 같은 순서", planMissing: "계획을 찾을 수 없습니다", changePlan: "계획 바꾸기",
@@ -34,6 +35,7 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
     },
   },
   "en-US": {
+    searchPlan: "Search plans", clearSearch: "Clear search", noResults: "No results",
     overview: "Plan overview", noPlan: "No Plan",
     personalOrder: "Only your sidebar order changed", sharedOrder: "Shared order · Drag to reorder",
     backlogOrderHelp: "Use the ⋯ menu to move to a Plan", sharedGrip: "Same order for everyone", planMissing: "Plan not found", changePlan: "Change Plan",

@@ -1,4 +1,5 @@
 // Native stub-backed public-path smoke. No direct DB writes and no live model calls.
+import { captureOverviewQA } from "../support/canon-overview-qa.ts";
 import { strict as assert } from "node:assert";
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -19,7 +20,8 @@ let browser: Awaited<ReturnType<typeof launchSmokeBrowser>> | undefined;
 let failure: unknown;
 let cleanupErrors: unknown[] = [];
 try {
-  const { projectId, planId } = await seedCanonSidebar(server);
+  const seeded = await seedCanonSidebar(server);
+  const { projectId, planId } = seeded;
   await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: theme,
     main_screen_theme: wallpaper ? "silk" : "none", wallpaper: {
       source: wallpaper ? { kind: "live", module: "butler.silk" } : { kind: "none" }, motion: "paused", pauseOnBattery: false,
@@ -41,6 +43,18 @@ try {
     const prefix = `${process.env.BUTLER_SMOKE_BASELINE === "1" ? "before" : "after"}-${selected}`;
     await capture(page, `${prefix}-sidebar`);
     if (process.env.BUTLER_SMOKE_BASELINE !== "1") {
+      const overviewPage = await context.newPage();
+      try {
+        overviewPage.on("pageerror", error => errors.push(error.message));
+        await overviewPage.addInitScript(() => localStorage.setItem("butler:app-ui-state:v1", JSON.stringify({
+          schema: "butler.app-ui-state.v1", cached_at: new Date().toISOString(), left_open: true, right_open: false,
+        })));
+        await overviewPage.goto(server.url, { waitUntil: "load" });
+        await overviewPage.waitForFunction(() => document.documentElement.lang.startsWith("ko"));
+        await overviewPage.locator('[data-test-class~="mac-window"]').waitFor();
+        await captureOverviewQA(overviewPage, width, selected, process.env.BUTLER_OVERVIEW_SCREENSHOTS ?? join(shots, "plan-overview-qa"), seeded);
+      } finally { await overviewPage.close(); }
+      await showCanonSidebar(page);
       await verifySidebarLongPress(page, planId);
       await openPlan(page, planId); await verifyOverviewLayout(page, width); await capture(page, `${prefix}-overview`);
       await showCanonSidebar(page);
@@ -60,11 +74,15 @@ try {
       await verifyInspectorConflict(page, server, created.work.id);
       if (width === 1440) await verifySidebarOrder(page, server, projectId, planId);
       assert.equal(await page.locator('[data-test-class="app-sidebar"]').getByText(/GitHub|동기화됨|가져오기|마일스톤/u).count(), 0);
+
     }
     assert.deepEqual(errors, []);
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "No viewport overflow");
     assert.equal(server.stubModelCalls.length, 0);
     console.log(JSON.stringify({ result: "PASS", case: selected, flows: "CN-01,CN-03,tree,recent", order: width === 1440 ? "CN-02" : "desktop coverage", screenshots: shots }));
+  } catch (error) {
+    console.log("CASE_FAILURE", await page.locator("body").innerText());
+    await capture(page, `${selected}-failure`); throw error;
   } finally { await page.close(); await context.close(); }
 } catch (error) { failure = error; }
 finally {

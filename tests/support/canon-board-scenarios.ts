@@ -1,12 +1,13 @@
+import { selectBoardPlan } from "./canon-board-selector.ts";
 import { strict as assert } from "node:assert";
 import type { Page } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
 import type { CanonOverview, EpicDetail, PlanDetail, CanonStatus } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 const post = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
-export async function seedCanonBoard(server: NativeAppServerHandle): Promise<{ projectId: string; planId: string }> {
+export async function seedCanonBoard(server: NativeAppServerHandle): Promise<{ projectId: string; planId: string; emptyPlanId: string; singlePlanId: string }> {
   const { project } = await server.api<{ project: { id: string } }>("/projects", post({ source: "scratch", display_name: "캐논 보드" }));
   const prefix = `/projects/${project.id}/canon`;
-  const plan = await server.api<PlanDetail>(`${prefix}/plans`, post({ title: "프리뷰 14", due_on: "2026-10-31" }));
+  const plan = await server.api<PlanDetail>(`${prefix}/plans`, post({ title: "프리뷰 14", due_on: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10) }));
   const titles = ["캐논", "작업 큐", "시각화 블록", "문서", "이미지 도구", "ChatGPT 공식 로그인", "크레이트 분리"];
   const statuses: CanonStatus[] = ["in_progress", "done", "in_review", "planned", "blocked", "planned", "done"];
   for (const [index, title] of titles.entries()) {
@@ -14,11 +15,17 @@ export async function seedCanonBoard(server: NativeAppServerHandle): Promise<{ p
     await server.api(`/canon/epics/${epic.id}`, { method: "PATCH", body: JSON.stringify({
       expected_revision: epic.revision, status: statuses[index], expected_task_graph_revision: epic.task_graph_revision,
     }) });
+    if (index === 0) await server.api(`/canon/epics/${epic.id}/conversation`, post({}));
   }
   for (const title of ["단축키가 입력창과 충돌", "검색 결과 정렬"]) await server.api(`${prefix}/epics`, post({ title }));
   const canon = await server.api<CanonOverview>(prefix);
   assert.equal(canon.plans[0]!.works.length, 7); assert.equal(canon.backlog.length, 2);
-  return { projectId: project.id, planId: plan.id };
+  const longTitle = "아주 긴 과제 제목에서도 번호와 상태 표시와 담당자 아바타와 오른쪽 작업 메뉴가 서로 겹치지 않고 한 줄에 올바르게 정렬되는지 확인합니다";
+  await server.api(`${prefix}/epics`, post({ title: longTitle, plan_id: plan.id, assignee: "app-user", description: "긴 제목 정렬 확인" }));
+  const empty = await server.api<PlanDetail>(`${prefix}/plans`, post({ title: "빈 계획" }));
+  const single = await server.api<PlanDetail>(`${prefix}/plans`, post({ title: "단일 과제 계획" }));
+  await server.api(`${prefix}/epics`, post({ title: "단일 과제", plan_id: single.id, assignee: "app-user", description: "과제 하나" }));
+  return { projectId: project.id, planId: plan.id, emptyPlanId: empty.id, singlePlanId: single.id };
 }
 export async function openCanonBoard(page: Page): Promise<void> {
   const dashboard = page.getByRole("button", { name: "캐논 보드 프로젝트 대시보드", exact: true });
@@ -27,13 +34,14 @@ export async function openCanonBoard(page: Page): Promise<void> {
   const showSidebar = page.getByRole("button", { name: "사이드바 보기", exact: true });
   if (await showSidebar.isVisible()) await showSidebar.click();
   await dashboard.click();
-  await page.getByRole("tab", { name: "작업", exact: true }).click();
+  await page.getByRole("tab", { name: "보드", exact: true }).click();
 }
 export async function waitToast(page: Page, text: string): Promise<void> {
   await page.locator('[data-sonner-toast]').filter({ hasText: text }).first().waitFor({ state: "visible" });
 }
 export async function verifyCanonFlows(page: Page, server: NativeAppServerHandle, projectId: string, planId: string): Promise<void> {
   const board = page.locator('[data-test-class="canon-board"]');
+  await selectBoardPlan(page, "백로그");
   await board.locator('[data-canon-backlog]').getByRole("button", { name: "새 과제", exact: true }).click();
   const dialog = page.getByRole("dialog");
   const create = dialog.getByRole("button", { name: "만들기", exact: true });
@@ -47,6 +55,7 @@ export async function verifyCanonFlows(page: Page, server: NativeAppServerHandle
   await createdCard.waitFor(); assert.equal(await createdCard.locator('[role="button"]').getAttribute("data-selected"), "true");
   const detail = page.locator('[data-test-class="canon-epic-detail"]');
   await detail.getByText("생성한 과제", { exact: true }).waitFor();
+  assert.equal(await detail.getByRole("button", { name: "대화 열기", exact: true }).count(), 0, "No conversation action without a home session");
   let canon = await server.api<CanonOverview>(`/projects/${projectId}/canon`);
   const created = canon.backlog.find(epic => epic.title === "생성한 과제")!; assert(created);
   const moved = page.waitForResponse(response => response.request().method() === "PATCH"
@@ -54,7 +63,9 @@ export async function verifyCanonFlows(page: Page, server: NativeAppServerHandle
   await detail.getByRole("combobox", { name: "계획", exact: true }).selectOption(planId);
   assert((await moved).ok(), "Detail plan move request succeeded");
   await waitToast(page, "프리뷰 14에 넣었습니다");
-  await board.locator(`[data-plan-id="${planId}"] [data-canon-lane="planned"] [data-kanban-item="${created.id}"]`).waitFor();
+  await selectBoardPlan(page, "프리뷰 14");
+  await board.locator(`[data-kanban-item="${created.id}"]`).getByRole("button").click();
+  await detail.getByText("생성한 과제", { exact: true }).waitFor();
   await detail.getByRole("combobox", { name: "상태", exact: true }).selectOption("in_review");
   await waitToast(page, "상태를 바꿨습니다");
   await board.locator(`[data-canon-lane="in_review"] [data-kanban-item="${created.id}"]`).waitFor();
@@ -65,14 +76,14 @@ export async function verifyCanonFlows(page: Page, server: NativeAppServerHandle
   await board.getByRole("button", { name: "새 계획", exact: true }).click();
   await dialog.getByLabel("제목", { exact: true }).fill("다음 계획");
   await dialog.getByRole("button", { name: "만들기", exact: true }).click();
-  await board.getByText("다음 계획", { exact: true }).waitFor();
+  await board.locator("section").getByText("다음 계획", { exact: true }).waitFor();
   canon = await server.api<CanonOverview>(`/projects/${projectId}/canon`);
   assert(canon.plans.some(plan => plan.title === "다음 계획"));
   const section = board.locator("section").filter({ has: page.getByText("다음 계획", { exact: true }) }).first();
   await section.getByRole("button", { name: "고치기", exact: true }).click();
   await dialog.getByLabel("제목", { exact: true }).fill("고친 계획");
   await dialog.getByRole("button", { name: "저장", exact: true }).click();
-  await board.getByText("고친 계획", { exact: true }).waitFor();
+  await board.locator("section").getByText("고친 계획", { exact: true }).waitFor();
   canon = await server.api<CanonOverview>(`/projects/${projectId}/canon`);
   assert(canon.plans.some(plan => plan.title === "고친 계획"));
 }

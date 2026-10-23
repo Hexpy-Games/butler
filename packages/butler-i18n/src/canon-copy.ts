@@ -1,4 +1,5 @@
 export interface CanonCopy {
+  searchPlan: string; clearSearch: string; noResults: string;
   overview: string; noPlan: string; personalOrder: string;
   sharedOrder: string; backlogOrderHelp: string; sharedGrip: string; planMissing: string; changePlan: string;
   noEpics: string; noDescription: string; conversationFailed: string; epicPlaceholder: string;

@@ -1,3 +1,4 @@
+import { selectBoardPlan } from "./canon-board-selector.ts";
 import { strict as assert } from "node:assert";
 import type { Locator, Page } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
@@ -51,11 +52,13 @@ export async function verifyCanonDrags(page: Page, server: NativeAppServerHandle
   canon = await read();
   assert.equal(canon.plans.find(plan => plan.id === planId)!.works.find(card => card.id === moving.id)!.canon_status, "in_progress");
   const backlog = canon.backlog[0]!;
-  const planned = page.locator(`[data-plan-id="${planId}"] [data-canon-lane="planned"] [data-slot="kanban-lane"]`);
-  await liftTo(page, item(page, backlog.title), planned, "end");
-  await page.mouse.up(); await waitToast(page, "프리뷰 14에 넣었습니다");
+  await moveFromBacklog(page, backlog.title, planId);
   canon = await read();
   assert.equal(canon.plans.find(plan => plan.id === planId)!.works.find(card => card.id === backlog.id)!.plan_id, planId);
+  const expectedPlanned = canon.plans.find(plan => plan.id === planId)!.works.filter(card => card.canon_status === "planned").map(card => card.id);
+  const position = expectedPlanned.indexOf(backlog.id);
+  assert(position > 0, "Keyboard move has a preceding planned card");
+  expectedPlanned.splice(position - 1, 0, expectedPlanned.splice(position, 1)[0]!);
   const keyboard = item(page, backlog.title).getByRole("button");
   await keyboard.focus(); await keyboard.press("Space");
   await page.locator('[aria-live="polite"]').filter({ hasText: `‘${backlog.title}’ 카드를 들었습니다. 프리뷰 14 · 예정` }).waitFor();
@@ -69,7 +72,7 @@ export async function verifyCanonDrags(page: Page, server: NativeAppServerHandle
   await page.locator('[aria-live="polite"]').filter({ hasText: `‘${backlog.title}’ 카드를 놓았습니다.` }).waitFor();
   canon = await read();
   const plannedOrder = canon.plans.find(plan => plan.id === planId)!.works.filter(card => card.canon_status === "planned");
-  assert.equal(plannedOrder[0]!.id, backlog.id, "Keyboard reorder persisted");
+  assert.deepEqual(plannedOrder.map(card => card.id), expectedPlanned, "Keyboard reorder persisted the complete lane order");
   await verifyCancelledMove(page, server, projectId, planId);
   console.log("SKIP running refusal: requires a running work; no model started");
 }
@@ -80,14 +83,18 @@ async function verifyCancelledMove(page: Page, server: NativeAppServerHandle, pr
   await server.api(`/canon/epics/${card.id}`, { method: "PATCH", body: JSON.stringify({
     expected_revision: card.revision, expected_task_graph_revision: card.task_graph_revision, status: "cancelled",
   }) });
-  await item(page, card.title).getByText("취소됨", { exact: true }).waitFor();
-  const target = page.locator(`[data-plan-id="${planId}"] [data-canon-lane="done"] [data-slot="kanban-lane"]`);
-  await liftTo(page, item(page, card.title), target, "end");
-  const moved = page.waitForResponse(response => response.request().method() === "PATCH"
-    && new URL(response.url()).pathname.endsWith(`/canon/epics/${encodeURIComponent(card.id)}`));
-  await page.mouse.up();
-  assert((await moved).ok(), "Cancelled card move request succeeded");
+  await moveFromBacklog(page, card.title, planId);
   const saved = await server.api<CanonOverview>(`/projects/${projectId}/canon`);
   assert.equal(saved.plans.find(plan => plan.id === planId)!.works.find(epic => epic.id === card.id)!.canon_status,
     "cancelled", "Moving to another group's completed lane preserves cancellation");
+}
+
+async function moveFromBacklog(page: Page, title: string, planId: string) {
+  await selectBoardPlan(page, "백로그");
+  await item(page, title).getByRole("button").click();
+  const detail = page.locator('[data-test-class="canon-epic-detail"]');
+  await detail.getByRole("combobox", { name: "계획", exact: true }).selectOption(planId);
+  await waitToast(page, "프리뷰 14에 넣었습니다");
+  await selectBoardPlan(page, "프리뷰 14");
+  await item(page, title).waitFor();
 }

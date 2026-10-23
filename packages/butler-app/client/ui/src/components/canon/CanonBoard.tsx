@@ -1,3 +1,5 @@
+import { CanonBoardPlanSelect } from "./CanonBoardPlanSelect.tsx";
+import { useCanonPlanSelection } from "./useCanonPlanSelection.ts";
 import { useMemo, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { CanonPlan } from "@/app/canonApi.ts";
@@ -18,14 +20,19 @@ export function CanonBoard({ projectId, onOpenSession, bottomInset }: { projectI
   const [create, setCreate] = useState<{ planId: string | null } | null>(null);
   const [planForm, setPlanForm] = useState<{ plan?: CanonPlan } | null>(null);
   const copy = appCopy.canon;
-  const canon = board.canon;
+  const canon = board.canon?.project_id === projectId ? board.canon : null;
+  const selection = useCanonPlanSelection(projectId, canon);
+  const selectedPlan = canon?.plans.find(plan => plan.id === selection.id);
   const cards = useMemo(() => new Map(canon ? canonCards(canon).map(card => [card.id, card]) : []), [canon]);
   return <Stack gap="lg" data-test-class="canon-board">
     {disconnected && <Typo.Caption role="status">{appCopy.projectSignpost.disconnected}</Typo.Caption>}
+    <Stack align="row" cross="center" justify="between" gap="sm" wrap>
+    <Stack minWidth="0" shrink><CanonBoardPlanSelect plans={canon?.plans ?? []} value={selection.id} onChange={id => { selection.select(id); board.select(null); }} /></Stack>
     <ButtonContainer size="sm" justify="end">
-      <Button size="sm" variant="outline" onClick={() => setCreate({ planId: null })}><Plus size="sm" />{copy.newEpic}</Button>
+      <Button size="sm" variant="outline" onClick={() => setCreate({ planId: selection.id })}><Plus size="sm" />{copy.newEpic}</Button>
       <Button size="sm" onClick={() => setPlanForm({})}><Plus size="sm" />{copy.newPlan}</Button>
     </ButtonContainer>
+    </Stack>
     {Boolean(board.error) && <Stack align="row" cross="center"><Typo.Caption role="status">{appCopy.feedback.dashboardRetry}</Typo.Caption>
       <Button size="sm" variant="ghost" onClick={() => void board.refresh()}>{appCopy.feedback.retry}</Button></Stack>}
     {!canon && !board.error && <Typo.Caption role="status">{appCopy.feedback.dashboardLoading}</Typo.Caption>}
@@ -33,7 +40,7 @@ export function CanonBoard({ projectId, onOpenSession, bottomInset }: { projectI
       <KanbanDragScope onMove={move => void board.move(move)} disabled={board.busy || board.moving}
         canDrop={(id, lane) => canComplete(cards.get(id), lane)} labels={copy.drag}>
       <Stack gap="xl">
-        <Box data-canon-backlog>
+        {!selectedPlan && <Box data-canon-backlog>
           <KanbanLane laneId="backlog" label={copy.backlog} height="content" layout="grid" title={<Stack align="row" cross="baseline" gap="sm" wrap>
             <Typo.PanelTitle>{copy.backlog}</Typo.PanelTitle><Typo.Caption tone="secondary">{copy.backlogCount(canon.backlog.length)}</Typo.Caption>
           </Stack>}>
@@ -41,8 +48,8 @@ export function CanonBoard({ projectId, onOpenSession, bottomInset }: { projectI
               {!canon.backlog.length && !canon.plans.length && <Typo.Caption tone="secondary">{copy.backlogDescription}</Typo.Caption>}
               <Button variant="borderless" size="xs" onClick={() => setCreate({ planId: null })}><Plus size="xs" />{copy.newEpic}</Button>
           </KanbanLane>
-        </Box>
-        {canon.plans.map(plan => <CanonPlanLanes key={plan.id} plan={plan} caption={planCaption(plan, locale)}
+        </Box>}
+        {(selectedPlan ? [selectedPlan] : []).map(plan => <CanonPlanLanes key={plan.id} plan={plan} caption={planCaption(plan, locale)}
           selected={board.selected} onSelect={board.select} onCreate={planId => setCreate({ planId })}
           onEdit={() => setPlanForm({ plan })} />)}
       </Stack>
@@ -52,7 +59,7 @@ export function CanonBoard({ projectId, onOpenSession, bottomInset }: { projectI
     </Grid>}
     {create && <EpicCreateDialog projectId={projectId} plans={canon?.plans ?? []} defaultPlanId={create.planId} onClose={() => setCreate(null)}
       onRefresh={board.refresh} onCreated={epic => { board.select(epic.id); }} />}
-    {planForm && <PlanFormDialog projectId={projectId} plan={planForm.plan} onClose={() => setPlanForm(null)} onRefresh={board.refresh} />}
+    {planForm && <PlanFormDialog projectId={projectId} plan={planForm.plan} onCreated={id => { selection.select(id); board.select(null); }} onClose={() => setPlanForm(null)} onRefresh={board.refresh} />}
   </Stack>;
 }
 function planCaption(plan: { works: Array<{ canon_status: string }>; due_on: string | null }, locale: string): string {

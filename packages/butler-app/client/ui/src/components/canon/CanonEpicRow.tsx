@@ -52,7 +52,7 @@ export function CanonEpicRow({ projectId, groupKey, epic, busy, onDrop }: {
       ariaDescription={unread ? appCopy.space.unread : undefined}
       icon={row ? <SpaceIdentity row={row} /> : <IconSlot size="sidebar"><Notebook /></IconSlot>}
       label={<Stack as="span" inline align="row" cross="center" gap="xs" minWidth="0">
-        <Typo.Text as="span" truncate>{epic.title}</Typo.Text><CanonAvatar person={epic.assignee} />
+        <Typo.Text as="span" truncate shrink>{epic.title}</Typo.Text><CanonAvatar person={epic.assignee} />
       </Stack>}
       actions={row ? <SpaceRowMenu row={row} running={running} open={menuOpen} onOpenChange={setMenuOpen} /> : <SpaceActivity running={running} />}
       onContextMenu={row ? event => { event.preventDefault(); event.stopPropagation(); setMenuOpen(true); } : undefined}

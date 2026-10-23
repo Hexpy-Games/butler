@@ -24,6 +24,7 @@ export interface CanonWork {
 }
 export interface EpicCard extends CanonWork { task_counts: TaskCounts }
 export interface CanonPlan {
+  updated_at?: number;
   id: string;
   project_id: string;
   title: string;

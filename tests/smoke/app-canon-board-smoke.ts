@@ -1,4 +1,5 @@
 // Native stub-backed UI smoke: all planning content is seeded through canon HTTP.
+import { verifyBoardSelector } from "../support/canon-board-selector.ts";
 import { strict as assert } from "node:assert";
 import { mkdirSync } from "node:fs";
 import { resolve, join } from "node:path";
@@ -53,6 +54,7 @@ try {
       await board.locator("[data-kanban-item]").filter({ hasText: "캐논" }).getByRole("button").first().waitFor();
       assert.equal(await board.getByText(/GitHub|가져오기|동기화됨|마일스톤/).count(), 0);
       assert.equal(await board.getByRole("radio").count(), 0);
+      await verifyBoardSelector(page, server, projectId, planId, name, shots, () => openCanonBoard(page!));
       await capture(page, `${name}-rest.png`); count++;
       const card = board.locator("[data-kanban-item]").filter({ hasText: "캐논" }).getByRole("button").first();
       assert.equal(await card.getByRole("img", { name: "나", exact: true }).count(), 1, "Assigned card has an Avatar after its title");
@@ -77,9 +79,17 @@ try {
       assert(planControl && ordinal && panelBox && ordinal.x + ordinal.width <= panelBox.x + panelBox.width,
         "Plan ordinal stays inside the panel");
       assert(Math.abs(ordinal.y + ordinal.height / 2 - planControl.y - planControl.height / 2) < 4, "Plan ordinal stays inline");
+      assert.equal(await detailPanel.getByRole("button", { name: "대화 열기", exact: true }).count(), 1);
+      assert.equal(await card.locator('[data-slot="spinner"]').count(), 0, "Idle in-progress conversation shows no Spinner");
       await capture(page, `${name}-detail.png`); count++;
+      await detailPanel.getByRole("button", { name: "대화 열기", exact: true }).click();
+      await page.locator('[data-test-class="titlebar-title"]').filter({ hasText: "캐논" }).waitFor();
+      await openCanonBoard(page);
+      await card.click();
+      await page.locator('[data-test-class="canon-epic-detail"]').waitFor();
       await page.locator('[data-test-class="canon-detail-panel"]').getByRole("button", { name: "닫기", exact: true }).click();
-      await board.locator('[data-canon-backlog]').getByRole("button", { name: "새 과제", exact: true }).click();
+      await board.getByRole("button", { name: "새 과제", exact: true }).first().click();
+      assert.equal(await page.locator("#canon-create-plan").inputValue(), planId, "New Epic defaults to selected plan");
       await page.getByRole("dialog").waitFor();
       for (const id of ["canon-create-plan", "canon-create-assignee"]) {
         assert(await page.locator(`#${id}`).evaluate(select => {
@@ -98,7 +108,7 @@ try {
       assert.deepEqual(errors, [], "No renderer errors");
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "No viewport overflow");
       console.log(JSON.stringify({ result: "ASSERTIONS_PASS", case: cell, screenshots: count,
-        flows: width === 390 && theme === "dark" && wallpaper ? "create,move,status,live-update,conflict,plan-create,plan-edit,pointer-reorder,pointer-status,pointer-plan,keyboard" : "visual",
+        flows: width === 390 && theme === "dark" && wallpaper ? "create,move,status,live-update,conflict,plan-create,plan-edit,pointer-reorder,pointer-status,detail-plan,keyboard" : "visual",
         stubModelCalls: server.stubModelCalls.length }));
     } catch (error) {
       if (page) { console.log("CASE_FAILURE", await page.locator("body").innerText()); await page.screenshot({ path: join(shots, `${cell}-failure.png`) }); }

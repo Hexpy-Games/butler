@@ -15,6 +15,11 @@ export async function seedCanonSidebar(server: NativeAppServerHandle) {
   return seed;
 }
 export async function showCanonSidebar(page: Page) {
+  const hideInspector = page.getByRole("button", { name: "오른쪽 패널 숨기기", exact: true });
+  if (page.viewportSize()!.width === 390 && await hideInspector.isVisible()) {
+    await hideInspector.click();
+    await page.locator('[data-slot="adaptive-shell-inspector"][data-open="true"]').waitFor({ state: "hidden" });
+  }
   const show = page.getByRole("button", { name: "사이드바 보기", exact: true });
   if (await show.isVisible()) await show.click();
   const project = page.locator('[data-tree-item^="p:"] [data-test-class="tree-row"]').filter({ hasText: "캐논 보드" });
@@ -39,6 +44,7 @@ export async function showEpicInspector(page: Page) {
   assert.equal(await inspector.getByRole("button").first().innerText(), "과제");
   await tab.click();
   await page.locator('[data-test-class="canon-epic-detail"]').waitFor();
+  assert.equal(await inspector.getByRole("button", { name: "대화 열기", exact: true }).count(), 1);
 }
 export async function createFromSidebar(page: Page, projectId: string, planId: string): Promise<CanonConversation> {
   await showCanonSidebar(page);
@@ -99,7 +105,7 @@ export async function verifySidebarOrder(page: Page, server: NativeAppServerHand
   await openPlan(page, null);
   const backlog = page.locator('[data-sortable-id]').first();
   const id = await backlog.getAttribute("data-sortable-id"); assert(id);
-  await backlog.getByRole("button", { name: /메뉴/u }).click();
+  await backlog.getByRole("button", { name: /메뉴$/u }).click();
   await page.getByRole("menuitem", { name: "계획 바꾸기", exact: true }).hover();
   const moved = page.waitForResponse(response => response.request().method() === "PATCH" && new URL(response.url()).pathname === `/canon/epics/${id}`);
   await page.getByRole("menuitem", { name: "프리뷰 14", exact: true }).click();
@@ -123,13 +129,16 @@ export async function verifyInspectorConflict(page: Page, server: NativeAppServe
 export async function verifyOverviewLayout(page: Page, width: number) {
   const rows = page.locator('[data-test-class="canon-plan-epics"] [data-sortable-id]');
   for (const row of await rows.all()) {
-    const select = row.getByRole("combobox"), menu = row.getByRole("button", { name: /메뉴/u });
+    const select = row.getByRole("combobox"), menu = row.getByRole("button", { name: /메뉴$/u });
     const selectBox = await select.boundingBox(), menuBox = await menu.boundingBox();
     assert(selectBox && menuBox);
     assert(Math.abs(selectBox.y - menuBox.y) < 2, "Status and menu share one line");
     const box = await row.boundingBox(); assert(box);
     assert(box.x >= 0 && box.x + box.width <= width + 1, "Overview row stays in viewport");
     assert(await row.getByRole("img", { name: "나", exact: true }).count() <= 1);
+    const title = await row.locator('[data-sortable-handle]').boundingBox();
+    assert(title && title.x < selectBox.x, "Grip and title precede right actions");
+    assert(box.height < 120, "Rows remain compact");
   }
 }
 export async function verifySidebarLongPress(page: Page, planId: string) {
@@ -141,7 +150,7 @@ export async function verifySidebarLongPress(page: Page, planId: string) {
   await header.dispatchEvent("pointerup", { pointerType: "touch", isPrimary: true });
   await page.keyboard.press("Escape");
   await page.getByRole("menu").waitFor({ state: "hidden" });
-  const row = group.locator('[data-canon-epic]').filter({ has: page.getByRole("button", { name: /메뉴/u }) }).first();
+  const row = group.locator('[data-canon-epic]').filter({ has: page.getByRole("button", { name: /메뉴$/u }) }).first();
   await row.dispatchEvent("pointerdown", { pointerType: "touch", isPrimary: true });
   await page.getByRole("menu").waitFor();
   assert.equal(await page.getByRole("menuitem", { name: "계획 개요", exact: true }).count(), 0, "Child long press opens only its own menu");
