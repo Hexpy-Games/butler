@@ -49,7 +49,10 @@ export async function verifyCanonFlows(page: Page, server: NativeAppServerHandle
   await detail.getByText("생성한 과제", { exact: true }).waitFor();
   let canon = await server.api<CanonOverview>(`/projects/${projectId}/canon`);
   const created = canon.backlog.find(epic => epic.title === "생성한 과제")!; assert(created);
+  const moved = page.waitForResponse(response => response.request().method() === "PATCH"
+    && new URL(response.url()).pathname.endsWith(`/canon/epics/${encodeURIComponent(created.id)}`));
   await detail.getByRole("combobox", { name: "계획", exact: true }).selectOption(planId);
+  assert((await moved).ok(), "Detail plan move request succeeded");
   await waitToast(page, "프리뷰 14에 넣었습니다");
   await board.locator(`[data-plan-id="${planId}"] [data-canon-lane="planned"] [data-kanban-item="${created.id}"]`).waitFor();
   await detail.getByRole("combobox", { name: "상태", exact: true }).selectOption("in_review");

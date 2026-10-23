@@ -1,7 +1,7 @@
 import { editCanonEpic, orderCanonBacklog, orderCanonPlan, type CanonOverview } from "@/app/canonApi.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { KanbanMove } from "@/butler-ds";
-import { canonCards, movedCanonOrder, parseCanonLane } from "./canonLanes.ts";
+import { canonCards, laneStatus, movedCanonOrder, parseCanonLane } from "./canonLanes.ts";
 
 export async function persistCanonMove(canon: CanonOverview, move: KanbanMove): Promise<string> {
   const from = parseCanonLane(move.fromLaneId), to = parseCanonLane(move.toLaneId);
@@ -13,10 +13,11 @@ export async function persistCanonMove(canon: CanonOverview, move: KanbanMove): 
     else await orderCanonBacklog(canon.project_id, { work_ids, expected_revision: canon.backlog_revision });
     return appCopy.canon.reordered;
   }
-  const status = to.status && to.status !== epic.canon_status ? to.status : undefined;
+  const status = to.status && to.status !== laneStatus(epic.canon_status) ? to.status : undefined;
   await editCanonEpic(epic.id, { expected_revision: epic.revision,
     ...(from.planId !== to.planId ? { plan_id: to.planId, ...(move.beforeItemId ? { before_id: move.beforeItemId } : {}) } : {}),
-    ...(status ? { status, ...(status === "done" || status === "cancelled" ? { expected_task_graph_revision: epic.task_graph_revision } : {}) } : {}),
+    ...(status ? { status, ...(status === "done" || status === "cancelled"
+      ? { expected_task_graph_revision: epic.task_graph_revision } : {}) } : {}),
   });
   return from.planId !== to.planId ? appCopy.canon.moved(plan?.title ?? appCopy.canon.backlog)
     : appCopy.canon.cardStatusChanged(epic.title, to.status === "blocked" ? appCopy.canon.blockedLane : appCopy.canon.statuses[to.status!]);

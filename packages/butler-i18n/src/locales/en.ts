@@ -401,7 +401,6 @@ export const enUsCopy: AppCopy = {
     reported: "Published reply", historyLedgerUnavailable: "Project record history is unavailable. Showing delivered conversation replies only.", linkedResults: (count) => `${count} published artifacts`,
     disconnected: "Disconnected. Showing the last observed state.",
     reportQuestion: "Ask about this report and its unverified points",
-
     periodDays: (days) => `Last ${days} days`, statisticsZone: (zone) => `Calendar days in ${zone}`,
     period: "Period", statisticsKind: "Count by", materialsView: "Materials view",
     briefing: "From the project records", suggestions: "Worth exploring next", briefingPending: "Summarizing the selected records. You can keep browsing or start a conversation.",

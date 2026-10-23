@@ -37,9 +37,9 @@ export function EpicCreateDialog({ projectId, plans, defaultPlanId = null, onClo
         <CanonFormFields prefix="canon-create" title={title} description={description} onTitle={setTitle} onDescription={setDescription} />
         <Grid columns="2" gap="md">
           <Field><FieldLabel htmlFor="canon-create-plan">{appCopy.canon.plan}</FieldLabel>
-            <CanonPlanSelect id="canon-create-plan" plans={plans} value={plan} onChange={setPlan} disabled={busy} /></Field>
+            <CanonPlanSelect stretch id="canon-create-plan" plans={plans} value={plan} onChange={setPlan} disabled={busy} /></Field>
           <Field><FieldLabel htmlFor="canon-create-assignee">{appCopy.canon.assignee} · {appCopy.canon.optional}</FieldLabel>
-            <CanonPersonSelect id="canon-create-assignee" value={assignee} onChange={setAssignee} disabled={busy} /></Field>
+            <CanonPersonSelect stretch id="canon-create-assignee" value={assignee} onChange={setAssignee} disabled={busy} /></Field>
         </Grid>
       </DialogForm>
     </DialogContent>

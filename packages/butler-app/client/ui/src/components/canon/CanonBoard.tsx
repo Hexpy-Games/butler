@@ -43,7 +43,7 @@ export function CanonBoard({ projectId, onOpenSession, bottomInset }: { projectI
           </KanbanLane>
         </Box>
         {canon.plans.map(plan => <Section key={plan.id} title={<Stack align="row" cross="baseline" gap="sm" wrap>
-          <Typo.PanelTitle>{plan.title}</Typo.PanelTitle>
+          <Typo.H3 as="span">{plan.title}</Typo.H3>
           <Typo.Caption tone="secondary">{planCaption(plan, locale)}</Typo.Caption>
         </Stack>} actions={<IconButton label={copy.edit} onClick={() => setPlanForm({ plan })}><Pencil size="sm" /></IconButton>}>
           <CanonPlanLanes plan={plan} selected={board.selected} onSelect={board.select} onCreate={planId => setCreate({ planId })} />

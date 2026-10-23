@@ -35,7 +35,9 @@ export function optimisticCanonMove(canon: CanonOverview, move: KanbanMove): Can
     lanes[canonLaneId(plan.id, status)] = plan.works.filter(card => laneStatus(card.canon_status) === status).map(card => card.id);
   }
   const moved = applyKanbanMove(lanes, move);
-  const updated = { ...epic, plan_id: target.planId, canon_status: move.fromLaneId === move.toLaneId ? epic.canon_status : target.status ?? epic.canon_status };
+  const updated = { ...epic, plan_id: target.planId,
+    canon_status: !target.status || target.status === laneStatus(epic.canon_status)
+      ? epic.canon_status : target.status };
   const byId = new Map(cards.map(card => [card.id, card.id === epic.id ? updated : card]));
   return { ...canon, backlog: moved.backlog!.map(id => byId.get(id)!), plans: canon.plans.map(plan => {
     const works = plan.works.filter(card => card.id !== epic.id);

@@ -399,7 +399,6 @@ export const koKrCopy: AppCopy = {
     reported: "공개 답변", historyLedgerUnavailable: "프로젝트 기록 이력은 확인하지 못했습니다. 대화에서 전달된 공개 답변만 표시합니다.", linkedResults: (count) => `결과 자료 ${count}개`,
     disconnected: "연결이 끊겨 마지막으로 확인한 상태를 표시합니다.",
     reportQuestion: "이 보고의 내용과 미검증 사항에 관해 확인하기",
-
     periodDays: (days) => `최근 ${days}일`, statisticsZone: (zone) => `${zone} 날짜 기준`,
     period: "기간", statisticsKind: "집계 기준", materialsView: "자료 보기",
     briefing: "프로젝트 기록에서", suggestions: "다음으로 살펴볼 만한 일", briefingPending: "선정된 기록을 요약하고 있습니다. 자료를 살펴보거나 대화를 시작하실 수 있습니다.",

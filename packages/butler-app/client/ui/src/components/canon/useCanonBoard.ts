@@ -17,9 +17,9 @@ export function useCanonBoard(projectId: string) {
   const selectedRef = useRef(selected);
   const mounted = useRef(true);
   selectedRef.current = selected;
-  const movingRef = useRef<{ current: boolean }>({ current: false });
+  const movingRef = useRef(false);
   const refresh = useCallback(async () => {
-    if (movingRef.current.current) return;
+    if (movingRef.current) return;
     const epoch = ++generation.current;
     const id = selectedRef.current;
     try {
@@ -28,8 +28,7 @@ export function useCanonBoard(projectId: string) {
       setCanon(board); setDetail(epic); setTasks(queue); setError(null);
     } catch (error) { if (mounted.current && epoch === generation.current) setError(error); }
   }, [projectId]);
-  const drag = useCanonMove(canon, setCanon, refresh, () => { generation.current++; });
-  movingRef.current = drag.moving;
+  const drag = useCanonMove(canon, setCanon, refresh, () => { generation.current++; }, movingRef);
   useEffect(() => {
     mounted.current = true;
     let queued = false;
@@ -59,5 +58,5 @@ export function useCanonBoard(projectId: string) {
     } catch (error) { await canonWriteFailure(error, refresh); return false; }
     finally { if (mounted.current) setBusy(false); }
   };
-  return { canon, selected, detail, tasks, error, busy, refresh, select, write, move: drag.move, moving: drag.moving.current };
+  return { canon, selected, detail, tasks, error, busy, refresh, select, write, move: drag.move, moving: drag.moving };
 }

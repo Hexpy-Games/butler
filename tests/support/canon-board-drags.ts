@@ -58,13 +58,36 @@ export async function verifyCanonDrags(page: Page, server: NativeAppServerHandle
   assert.equal(canon.plans.find(plan => plan.id === planId)!.works.find(card => card.id === backlog.id)!.plan_id, planId);
   const keyboard = item(page, backlog.title).getByRole("button");
   await keyboard.focus(); await keyboard.press("Space");
-  await page.locator('[aria-live="polite"]').filter({ hasText: `${backlog.title}을 들었습니다. 프리뷰 14 · 예정` }).waitFor();
+  await page.locator('[aria-live="polite"]').filter({ hasText: `‘${backlog.title}’ 카드를 들었습니다. 프리뷰 14 · 예정` }).waitFor();
   await keyboard.press("ArrowUp");
+  // The pointer reorder above may still show the same toast; wait for this drop's own order write.
+  const ordered = page.waitForResponse(response => response.request().method() === "POST"
+    && new URL(response.url()).pathname.endsWith(`/canon/plans/${encodeURIComponent(planId)}/order`));
   await keyboard.press("Space");
+  assert((await ordered).ok(), "Keyboard reorder request succeeded");
   await waitToast(page, "과제 순서를 바꿨습니다");
-  await page.locator('[aria-live="polite"]').filter({ hasText: `${backlog.title}을 놓았습니다.` }).waitFor();
+  await page.locator('[aria-live="polite"]').filter({ hasText: `‘${backlog.title}’ 카드를 놓았습니다.` }).waitFor();
   canon = await read();
   const plannedOrder = canon.plans.find(plan => plan.id === planId)!.works.filter(card => card.canon_status === "planned");
   assert.equal(plannedOrder[0]!.id, backlog.id, "Keyboard reorder persisted");
+  await verifyCancelledMove(page, server, projectId, planId);
   console.log("SKIP running refusal: requires a running work; no model started");
+}
+
+async function verifyCancelledMove(page: Page, server: NativeAppServerHandle, projectId: string, planId: string): Promise<void> {
+  const canon = await server.api<CanonOverview>(`/projects/${projectId}/canon`);
+  const card = canon.backlog[0]!;
+  await server.api(`/canon/epics/${card.id}`, { method: "PATCH", body: JSON.stringify({
+    expected_revision: card.revision, expected_task_graph_revision: card.task_graph_revision, status: "cancelled",
+  }) });
+  await item(page, card.title).getByText("취소됨", { exact: true }).waitFor();
+  const target = page.locator(`[data-plan-id="${planId}"] [data-canon-lane="done"] [data-slot="kanban-lane"]`);
+  await liftTo(page, item(page, card.title), target, "end");
+  const moved = page.waitForResponse(response => response.request().method() === "PATCH"
+    && new URL(response.url()).pathname.endsWith(`/canon/epics/${encodeURIComponent(card.id)}`));
+  await page.mouse.up();
+  assert((await moved).ok(), "Cancelled card move request succeeded");
+  const saved = await server.api<CanonOverview>(`/projects/${projectId}/canon`);
+  assert.equal(saved.plans.find(plan => plan.id === planId)!.works.find(epic => epic.id === card.id)!.canon_status,
+    "cancelled", "Moving to another group's completed lane preserves cancellation");
 }

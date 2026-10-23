@@ -1,4 +1,4 @@
-import { useRef, type Dispatch, type SetStateAction } from "react";
+import { useState, type RefObject, type Dispatch, type SetStateAction } from "react";
 import { appCopy } from "@/app/copy.ts";
 import type { CanonOverview } from "@/app/canonApi.ts";
 import { notifyStatus } from "@/app/notifications.ts";
@@ -8,15 +8,16 @@ import { canComplete, canonCards, optimisticCanonMove } from "./canonLanes.ts";
 import { persistCanonMove } from "./canonMove.ts";
 
 export function useCanonMove(canon: CanonOverview | null, setCanon: Dispatch<SetStateAction<CanonOverview | null>>,
-  refresh: () => Promise<void>, invalidate: () => void) {
-  const moving = useRef(false);
+  refresh: () => Promise<void>, invalidate: () => void, active: RefObject<boolean>) {
+  const [moving, setMoving] = useState(false);
   const move = async (move: KanbanMove) => {
-    if (!canon || moving.current) return;
+    if (!canon || active.current) return;
     if (!canComplete(canonCards(canon).find(card => card.id === move.itemId), move.toLaneId)) {
       notifyStatus(appCopy.canon.running, { tone: "error" }); return;
     }
     const previous = canon;
-    moving.current = true;
+    active.current = true;
+    setMoving(true);
     invalidate();
     setCanon(optimisticCanonMove(previous, move));
     try {
@@ -25,7 +26,7 @@ export function useCanonMove(canon: CanonOverview | null, setCanon: Dispatch<Set
     } catch (error) {
       setCanon(previous);
       await canonWriteFailure(error, async () => {});
-    } finally { moving.current = false; }
+    } finally { active.current = false; setMoving(false); }
     await refresh();
   };
   return { move, moving };
