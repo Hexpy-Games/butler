@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { CanonPlan } from "@/app/canonApi.ts";
-import { Box, Button, ButtonContainer, Grid, IconButton, KanbanDragScope, KanbanLane, Pencil, Plus, Section, Stack, Typo } from "@/butler-ds";
+import { Box, Button, ButtonContainer, Grid, KanbanDragScope, KanbanLane, Plus, Stack, Typo } from "@/butler-ds";
 import { useButlerStore } from "@/app/store.ts";
 import { canComplete, canonCards } from "./canonLanes.ts";
 import { useCanonBoard } from "./useCanonBoard.ts";
@@ -42,12 +42,9 @@ export function CanonBoard({ projectId, onOpenSession, bottomInset }: { projectI
               <Button variant="borderless" size="xs" onClick={() => setCreate({ planId: null })}><Plus size="xs" />{copy.newEpic}</Button>
           </KanbanLane>
         </Box>
-        {canon.plans.map(plan => <Section key={plan.id} title={<Stack align="row" cross="baseline" gap="sm" wrap>
-          <Typo.H3 as="span">{plan.title}</Typo.H3>
-          <Typo.Caption tone="secondary">{planCaption(plan, locale)}</Typo.Caption>
-        </Stack>} actions={<IconButton label={copy.edit} onClick={() => setPlanForm({ plan })}><Pencil size="sm" /></IconButton>}>
-          <CanonPlanLanes plan={plan} selected={board.selected} onSelect={board.select} onCreate={planId => setCreate({ planId })} />
-        </Section>)}
+        {canon.plans.map(plan => <CanonPlanLanes key={plan.id} plan={plan} caption={planCaption(plan, locale)}
+          selected={board.selected} onSelect={board.select} onCreate={planId => setCreate({ planId })}
+          onEdit={() => setPlanForm({ plan })} />)}
       </Stack>
       </KanbanDragScope>
       <EpicDetailPanel bottomInset={bottomInset} epic={board.detail} plans={canon.plans} tasks={board.tasks} busy={board.busy} onWrite={board.write}

@@ -8,6 +8,7 @@ export function EpicDetailPanel({ epic, plans, tasks, busy, onWrite, onClose, on
   onWrite: (input: EpicInput, message?: string) => Promise<boolean>; onClose: () => void; onOpenSession: (id: string) => void;
 }) {
   const panel = useRef<HTMLElement>(null);
+  const title = useRef<HTMLElement>(null);
   const compact = useMediaMatch(ADAPTIVE_MEDIA.compact);
   const [retained, setRetained] = useState(epic);
   useEffect(() => { if (epic) setRetained(epic); }, [epic]);
@@ -16,8 +17,7 @@ export function EpicDetailPanel({ epic, plans, tasks, busy, onWrite, onClose, on
     if (!epic) return;
     panel.current?.scrollIntoView({ block: "nearest", behavior: "instant" });
     const previous = document.activeElement as HTMLElement | null;
-    const heading = panel.current?.querySelector("h3");
-    if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
+    title.current?.focus({ preventScroll: true });
     if (panel.current) revealAboveFooter(panel.current, bottomInset);
     return () => { if (previous?.isConnected) previous.focus({ preventScroll: true }); };
   }, [epic?.id, compact, bottomInset]);
@@ -29,7 +29,7 @@ export function EpicDetailPanel({ epic, plans, tasks, busy, onWrite, onClose, on
             onClick={() => { if (shown?.home_session_id) onOpenSession(shown.home_session_id); }}><MessageSquare size="sm" /></IconButton>
           <IconButton label={appCopy.canon.close} onClick={onClose}><X size="sm" /></IconButton>
         </ButtonContainer>}>
-          {shown && <EpicDetail key={shown.id} epic={shown} plans={plans} tasks={tasks} busy={busy} onWrite={onWrite} />}
+          {shown && <EpicDetail titleRef={title} key={shown.id} epic={shown} plans={plans} tasks={tasks} busy={busy} onWrite={onWrite} />}
         </InspectorPanel>
     </Grid>
   </Presence>;
@@ -41,8 +41,11 @@ function revealAboveFooter(panel: HTMLElement, reserve: number) {
   let scroller = panel.parentElement;
   while (scroller) {
     if (/auto|scroll/.test(getComputedStyle(scroller).overflowY)) {
+      // ManagementPage's content padding includes the measured composer, gap and safe area.
+      const content = scroller.firstElementChild;
+      const inset = Math.max(reserve, content ? parseFloat(getComputedStyle(content).paddingBottom) || 0 : 0);
       const top = panel.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-      const hidden = panel.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom + reserve;
+      const hidden = panel.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom + inset;
       scroller.scrollTop += Math.max(0, Math.min(top, hidden));
       return;
     }
