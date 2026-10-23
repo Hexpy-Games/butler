@@ -205,8 +205,7 @@ const firstRun = {
       noaccess: "이 키로는 모델을 쓸 수 없습니다. 결제나 사용 권한을 확인하세요.",
       network: "서비스에 연결할 수 없습니다. 인터넷 연결을 확인하세요.",
       ratelimited: "요청이 너무 많습니다. 잠시 후 다시 시도하세요.",
-      unbound: "이 프로젝트에 연결된 기록이 없습니다.",
-    unavailable: "서비스가 응답하지 않습니다. 잠시 후 다시 시도하세요.",
+      unavailable: "서비스가 응답하지 않습니다. 잠시 후 다시 시도하세요.",
       unsupported: "이 서비스의 키는 아직 확인할 수 없습니다.",
       badrequest: "키를 확인하지 못했습니다. 다시 붙여 넣으세요.",
       savefailed: "키를 저장하지 못했습니다. 다시 시도하세요.",
@@ -418,7 +417,7 @@ export const koKrCopy: AppCopy = {
     overview: "개요", work: "작업", materials: "자료", history: "기록", statistics: "통계",
     position: "진행 상황", remaining: "남아 있는 일", completed: "실행 완료", open: "남은 작업",
     blocked: "막힌 작업", abandoned: "종료한 작업", unknown: "확인하지 못한 작업", registered: "등록된 작업",
-
+    unbound: "이 프로젝트에 연결된 기록이 없습니다.",
     unavailable: "프로젝트 기록을 확인하지 못했습니다. 완료 여부를 추정하지 않습니다.",
     noRemaining: "기록상 남아 있는 작업이 없습니다.", tasks: "하위 작업", recorded: "등록된 작업 기준", loadMore: "더 보기",
   },

@@ -8,7 +8,7 @@ export function CanonPlanLanes({ plan, selected, onSelect, onCreate }: {
 }) {
   useAppLocale();
   const ordinals = new Map(plan.works.map((epic, index) => [epic.id, index + 1]));
-  return <Box paddingEnd="md"><KanbanBoard scroll data-plan-id={plan.id} data-test-class="canon-plan-lanes">
+  return <Box paddingX="md" paddingStart="none"><KanbanBoard scroll data-plan-id={plan.id} data-test-class="canon-plan-lanes">
     {CANON_LANES.map(status => {
       const cards = plan.works.filter(epic => (epic.canon_status === "cancelled" ? "done" : epic.canon_status) === status);
       const label = status === "blocked" ? appCopy.canon.blockedLane : appCopy.canon.statuses[status];

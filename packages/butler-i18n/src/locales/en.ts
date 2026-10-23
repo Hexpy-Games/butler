@@ -199,8 +199,7 @@ const firstRun = {
       noaccess: "This key can't use models. Check billing or access.",
       network: "Can't reach the service. Check your connection.",
       ratelimited: "Too many tries. Wait a moment, then try again.",
-      unbound: "No project records are linked to this project.",
-    unavailable: "The service isn't responding. Try again later.",
+      unavailable: "The service isn't responding. Try again later.",
       unsupported: "Butler can't check keys for this service yet.",
       badrequest: "Couldn't check this key. Paste it again.",
       savefailed: "Couldn't save the key. Try again.",
@@ -420,7 +419,7 @@ export const enUsCopy: AppCopy = {
     overview: "Overview", work: "Work", materials: "Materials", history: "History", statistics: "Statistics",
     position: "Project status", remaining: "Remaining work", completed: "Execution completed", open: "Open work",
     blocked: "Blocked work", abandoned: "Abandoned work", unknown: "Unverified work", registered: "Registered work",
-
+    unbound: "No project records are linked to this project.",
     unavailable: "Project records are unavailable. Completion has not been inferred.",
     noRemaining: "No remaining work is recorded.", tasks: "Child Tasks", recorded: "Based on registered work", loadMore: "Show more",
   },

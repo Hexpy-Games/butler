@@ -59,6 +59,9 @@ try {
       await card.focus(); await card.press("Enter");
       await page.locator('[data-test-class="canon-epic-detail"]').waitFor();
       if (width === 1440) {
+        // Exercise pointer opening from a closed panel, as well as Enter above.
+        await page.locator('[data-test-class="canon-detail-panel"]').getByRole("button", { name: "닫기", exact: true }).click();
+        await page.locator('[data-test-class="canon-detail-panel"]').waitFor({ state: "hidden" });
         await card.click();
         await page.locator('[data-test-class="canon-epic-detail"]').waitFor();
       } else {
