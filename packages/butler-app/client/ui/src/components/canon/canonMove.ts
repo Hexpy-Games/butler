@@ -1,3 +1,4 @@
+import { canonStatusInput } from "./canonProgressSource.ts";
 import { editCanonEpic, orderCanonBacklog, orderCanonPlan, type CanonOverview } from "@/app/canonApi.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { KanbanMove } from "@/butler-ds";
@@ -16,8 +17,7 @@ export async function persistCanonMove(canon: CanonOverview, move: KanbanMove): 
   const status = to.status && to.status !== laneStatus(epic.canon_status) ? to.status : undefined;
   await editCanonEpic(epic.id, { expected_revision: epic.revision,
     ...(from.planId !== to.planId ? { plan_id: to.planId, ...(move.beforeItemId ? { before_id: move.beforeItemId } : {}) } : {}),
-    ...(status ? { status, ...(status === "done" || status === "cancelled"
-      ? { expected_task_graph_revision: epic.task_graph_revision } : {}) } : {}),
+    ...(status ? canonStatusInput(epic, status) : {}),
   });
   return from.planId !== to.planId ? appCopy.canon.moved(plan?.title ?? appCopy.canon.backlog)
     : appCopy.canon.cardStatusChanged(epic.title, to.status === "blocked" ? appCopy.canon.blockedLane : appCopy.canon.statuses[to.status!]);

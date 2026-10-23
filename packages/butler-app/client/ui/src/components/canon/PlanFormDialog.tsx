@@ -6,8 +6,8 @@ import { Dialog, DialogContent, DialogForm, Field, FieldLabel, Input } from "@/b
 import { CanonFormFields } from "./CanonFormFields.tsx";
 import { CanonFormFooter } from "./CanonFormFooter.tsx";
 import { canonWriteFailure } from "./canonFeedback.ts";
-export function PlanFormDialog({ projectId, plan, onClose, onRefresh }: {
-  projectId: string; plan?: CanonPlan; onClose: () => void; onRefresh: () => Promise<void>;
+export function PlanFormDialog({ projectId, plan, onClose, onRefresh, onCreated }: {
+  projectId: string; plan?: CanonPlan; onCreated?: (id: string) => void; onClose: () => void; onRefresh: () => Promise<void>;
 }) {
   useAppLocale();
   const [title, setTitle] = useState(plan?.title ?? "");
@@ -18,10 +18,11 @@ export function PlanFormDialog({ projectId, plan, onClose, onRefresh }: {
     if (!title.trim() || busy) return;
     setBusy(true);
     const input = { title: title.trim(), description, due_on: due || null };
+    let createdId: string | undefined;
     try {
       if (plan) await editCanonPlan(plan.id, { ...input, expected_revision: plan.revision });
-      else await createCanonPlan(projectId, input);
-      await onRefresh(); onClose();
+      else { const created = await createCanonPlan(projectId, input); createdId = created.id; }
+      await onRefresh(); if (createdId) onCreated?.(createdId); onClose();
     } catch (error) {
       await canonWriteFailure(error, onRefresh);
       if (apiErrorCode(error) === "conflict") onClose();
