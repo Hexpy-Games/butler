@@ -22,7 +22,10 @@ async fn bad_handoff_does_not_abort_other_handoffs_or_slot_recovery()
         .work_model_read(move |db| {
             assert_eq!(read_task(db, &good)?["assignee_session_id"], "next");
             assert!(read_task(db, &good)?["handoff_to_session_id"].is_null());
-            assert!(active_session_holds(db, "parent")?.is_empty());
+            assert_eq!(
+                active_session_holds(db, "parent")?,
+                Vec::<serde_json::Value>::new()
+            );
             assert_eq!(
                 read_task(db, "000-unsettled")?["handoff_to_session_id"],
                 "next"

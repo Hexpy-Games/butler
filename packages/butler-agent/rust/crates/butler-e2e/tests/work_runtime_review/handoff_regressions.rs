@@ -90,7 +90,10 @@ async fn terminal_transition_releases_handoff_without_moving_owner()
                     Some("Cannot finish"),
                 )?;
                 assert!(read_task(tx, &task)?["handoff_to_session_id"].is_null());
-                assert!(active_session_holds(tx, "parent")?.is_empty());
+                assert_eq!(
+                    active_session_holds(tx, "parent")?,
+                    Vec::<serde_json::Value>::new()
+                );
                 let checkpoint = put_body(tx, "Retained progress")?;
                 complete_handoff(tx, &context(), &task, &checkpoint)?;
                 assert_eq!(read_task(tx, &task)?["assignee_session_id"], "parent");
@@ -197,17 +200,20 @@ async fn cancellation_and_part_failure_race_a_handoff() -> std::result::Result<(
         storage
             .work_model_write(move |tx| {
                 let row = read_task(tx, &task)?;
-                if !row["handoff_to_session_id"].is_null() {
+                if row["handoff_to_session_id"].is_null() {
+                    assert!(settled.is_ok());
+                    assert!(row["status"] == "cancelled" || row["status"] == "failed");
+                    assert_eq!(row["assignee_session_id"], "parent");
+                } else {
                     assert!(!cancel);
                     assert!(moved.is_ok() && settled.is_err());
                     let checkpoint = put_body(tx, "Retained output")?;
                     complete_handoff(tx, &context(), &task, &checkpoint)?;
-                } else {
-                    assert!(settled.is_ok());
-                    assert!(row["status"] == "cancelled" || row["status"] == "failed");
-                    assert_eq!(row["assignee_session_id"], "parent");
                 }
-                assert!(active_session_holds(tx, "parent")?.is_empty());
+                assert_eq!(
+                    active_session_holds(tx, "parent")?,
+                    Vec::<serde_json::Value>::new()
+                );
                 Ok(())
             })
             .await?;
@@ -235,7 +241,7 @@ async fn old_terminal_handoffs_release_the_hold_without_resurrecting_the_task()
             assert_eq!(row["owner_epoch"],epoch);
             assert_eq!(row["assignee_session_id"],"parent");
             assert!(row["handoff_to_session_id"].is_null());
-            assert!(active_session_holds(tx,"parent")?.is_empty());
+            assert_eq!(active_session_holds(tx,"parent")?, Vec::<serde_json::Value>::new());
             Ok(())
         }).await?;
         storage.close().await?;
