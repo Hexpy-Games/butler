@@ -1,3 +1,4 @@
+import type { CanonCopy } from "./canon-copy.ts";
 import type { TaskGraphCopy } from "./task-graph-copy.ts";
 
 import type { LifecycleCopy } from "./lifecycle.ts";
@@ -417,6 +418,7 @@ export interface LogTraceCopy {
 
 /** Browser copy (`browser.*`): chrome, page band, pointer, picking, library, page dialogs and sign-in settings. */
 export interface AppCopy {
+  canon: CanonCopy;
   shell: { footerNav: string; update: { downloading: string; working: string; ready: string; failed: string; restart: string } };
   taskGraph: TaskGraphCopy;
   lifecycle: LifecycleCopy;

@@ -1,0 +1,18 @@
+export interface CanonCopy {
+  newEpic: string; newPlan: string; backlog: string; backlogDescription: string;
+  epic: string; title: string; description: string; optional: string; plan: string; assignee: string;
+  none: string; me: string; cancel: string; create: string; save: string; edit: string; close: string; dueOn: string;
+  titlePlaceholder: string; descriptionPlaceholder: string; titleRequired: string;
+  created: string; conflict: string; statusChanged: string; reordered: string; running: string;
+  openConversation: string; noConversation: string; status: string; specs: string; noSpecs: string; progress: string; noTasks: string;
+  statuses: Record<"planned" | "in_progress" | "in_review" | "blocked" | "done" | "cancelled", string>;
+  blockedLane: string;
+  taskStatuses: Record<"draft" | "waiting" | "pending" | "running" | "in_review" | "held" | "failed" | "completed" | "blocked" | "paused" | "stopped" | "cancelled", string>;
+  done: (done: number, total: number) => string;
+  tasks: (done: number, total: number) => string;
+  confirmed: (done: number, total: number) => string;
+  due: (date: string) => string;
+  ordinal: (n: number) => string;
+  backlogCount: (n: number) => string;
+  moved: (plan: string) => string;
+}

@@ -1,3 +1,4 @@
+import { CANON_COPY } from "./canon.ts";
 import { TASK_GRAPH_COPY } from "./task-graph.ts";
 import { lifecycleCopy } from "../lifecycle.ts";
 import { additionalToolLabels } from "./tool-labels-en.ts";
@@ -304,6 +305,7 @@ function englishProjectFallbackSuggestions(
 
 export const enUsCopy: AppCopy = {
   shell: { footerNav: "Updates and settings", update: { downloading: "Downloading update", working: "Preparing update", ready: "Update ready", failed: "Update failed", restart: "Restart" } },
+  canon: CANON_COPY["en-US"],
   taskGraph: TASK_GRAPH_COPY["en-US"],
   lifecycle: lifecycleCopy.en,
   browser: {
