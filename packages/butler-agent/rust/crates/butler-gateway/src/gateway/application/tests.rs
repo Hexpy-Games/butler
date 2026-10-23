@@ -1,3 +1,4 @@
+mod child_results;
 mod controls;
 
 mod projection_burst;
@@ -126,6 +127,7 @@ async fn message_and_turn_cursors_preserve_distinct_public_rules() {
     let _ = std::fs::remove_file(path);
 }
 
+// test-category: race
 #[tokio::test]
 async fn delivered_transcript_final_projects_and_settles_exact_queue_claim() {
     let native = Arc::new(Native(Mutex::new(Vec::new())));
@@ -136,22 +138,64 @@ async fn delivered_transcript_final_projects_and_settles_exact_queue_claim() {
     ));
     std::fs::create_dir_all(root.join("transcripts")).unwrap();
     let path = root.join("app.sqlite");
+    let enqueued = Arc::new(tokio::sync::Notify::new());
+    let (release, ready) = tokio::sync::watch::channel(false);
+    let mut deps = dependencies(native.clone(), 100);
+    deps.native_ingress = Arc::new(child_results::ObservedNative {
+        native: native.clone(),
+        enqueued: enqueued.clone(),
+    });
+    deps.executor_readiness = Arc::new(child_results::ReadinessGate(ready));
     let app = AppApplication::open(
         AppApplicationConfig {
             database_path: path,
             butler_data: root.clone(),
             folder_selection_secret: None,
         },
-        dependencies(native.clone(), 100),
+        deps,
     )
     .await
     .unwrap();
     app.start_dispatch().await.unwrap();
+    // Publishing repeated changes must not wait behind a dispatcher held at readiness.
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        for _ in 0..128 {
+            app.queue_wake.chat("general".into()).await.unwrap();
+        }
+    })
+    .await
+    .expect("coalesced queue wakes must not block event publication");
+    release.send(true).unwrap();
     let mut plan_request = command("projection-id", "question");
     plan_request.request.plan_mode = Some(json!(true));
     let accepted = app.send_message(plan_request).await.unwrap();
+    assert!(accepted.accepted.is_some());
+    assert!(accepted.turn.is_some());
+    assert_eq!(native.0.lock().unwrap().len(), 1);
+    tokio::time::timeout(std::time::Duration::from_secs(3), enqueued.notified())
+        .await
+        .unwrap();
     let rebuilt_turn = native.0.lock().unwrap()[0].clone();
-    let turn_id = accepted.turn.unwrap().id;
+    let turn_id = rebuilt_turn.turn_id.clone();
+    assert!(
+        app.send_message(command("followup", "A queued follow-up"))
+            .await
+            .unwrap()
+            .queued
+            .is_some()
+    );
+    for number in 1..=2 {
+        let mut result = command(
+            &format!("result-{number}"),
+            &format!("Child output {number}"),
+        );
+        result.request.subsession_result = Some(butler_turn::btcc::SubsessionResultContext {
+            relation_id: format!("relation-{number}"),
+            result_id: format!("result-{number}"),
+            safe_title: "Child".into(),
+        });
+        assert!(app.send_message(result).await.unwrap().queued.is_some());
+    }
     let outbound = json!({
         "eventId":"outbound-1","sessionId":"butler/app-general","kind":"outbound",
         "timestamp":"2026-09-14T00:00:01.000Z","transport":"app",
@@ -260,6 +304,56 @@ async fn delivered_transcript_final_projects_and_settles_exact_queue_claim() {
         })
         .await
         .unwrap();
+    // Final delivery starts the first child result before the user follow-up
+    // or plan continuation. Another result arrives under that active claim.
+    tokio::time::timeout(std::time::Duration::from_secs(3), enqueued.notified())
+        .await
+        .unwrap();
+    assert_eq!(native.0.lock().unwrap()[1].text, "Child output 1");
+    let mut result = command("result-3", "Child output 3");
+    result.request.subsession_result = Some(butler_turn::btcc::SubsessionResultContext {
+        relation_id: "relation-3".into(),
+        result_id: "result-3".into(),
+        safe_title: "Child".into(),
+    });
+    assert!(app.send_message(result).await.unwrap().queued.is_some());
+    for number in 2..=3 {
+        let parent = native.0.lock().unwrap().last().unwrap().clone();
+        // Consume all prior wakes while the current parent claim is active.
+        app.queue_wake.drain_chat("general".into()).await.unwrap();
+        assert_eq!(native.0.lock().unwrap().len(), number);
+        let suspended = json!({
+            "eventId":format!("suspended-{number}"), "sessionId":"butler/app-general", "kind":"outbound",
+            "timestamp":"2026-09-14T00:00:03.000Z", "transport":"app",
+            "payload":{"actionId":format!("suspend-{number}"), "message":{}, "metadata":{
+                "kind":"turn_suspended", "turnId":parent.turn_id,
+                "appQueueClaimId":parent.app_queue_claim_id, "suspension":"waiting_for_worker"
+            }}
+        });
+        let delivered = json!({
+            "eventId":format!("suspended-delivery-{number}"), "sessionId":"butler/app-general", "kind":"delivery",
+            "timestamp":"2026-09-14T00:00:04.000Z", "transport":"app",
+            "payload":{"actionId":format!("suspend-{number}"), "ok":true}
+        });
+        {
+            use std::io::Write;
+            let mut transcript = std::fs::OpenOptions::new()
+                .append(true)
+                .open(root.join("transcripts/butler_app-general.jsonl"))
+                .unwrap();
+            writeln!(transcript, "{suspended}\n{delivered}").unwrap();
+        }
+        app.refresh_message_projection("general".into())
+            .await
+            .unwrap();
+        // No sleep, drain or unrelated wake after projection releases the claim.
+        tokio::time::timeout(std::time::Duration::from_secs(3), enqueued.notified())
+            .await
+            .unwrap();
+        let turns = native.0.lock().unwrap().clone();
+        assert_eq!(turns.len(), number + 1);
+        assert_eq!(turns[number].text, format!("Child output {number}"));
+    }
     app.close().await.unwrap();
     let _ = std::fs::remove_dir_all(root);
 }
