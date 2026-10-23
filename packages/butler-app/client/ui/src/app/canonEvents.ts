@@ -9,7 +9,7 @@ export function subscribeCanonChanges(listener: Listener): () => void {
 }
 export function publishCanonEvent(event: TimelineEvent): void {
   const payload = event.payload as Record<string, unknown> | undefined;
-  if (event.type === "stream.reconcile_required" || (event.type === "work_model.changed" && payload?.scope === "tasks")) {
+  if (event.type === "stream.reconcile_required" || event.type === "space.changed" || (event.type === "work_model.changed" && payload?.scope === "tasks")) {
     for (const listener of listeners) listener(null);
   } else if (event.type === "canon.changed" && typeof payload?.project_id === "string") {
     for (const listener of listeners) listener(payload as unknown as CanonChanged);

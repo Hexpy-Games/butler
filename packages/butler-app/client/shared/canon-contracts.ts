@@ -126,3 +126,14 @@ export type WorkTaskEdit =
   | { op: "split_stack"; chain_id: string; index: number }
   | { op: "decide_hold"; chain_id: string; id: string; decision: "run_anyway" | "delete" };
 export interface WorkTasksEditInput { ops: WorkTaskEdit[]; expected_task_graph_revision: number }
+
+export interface CanonSidebarGroup {
+  key: string;
+  kind: "backlog" | "plan";
+  title: string;
+  plan_revision?: number;
+  rows: EpicCard[];
+}
+export interface CanonSidebar { project_id: string; groups: CanonSidebarGroup[] }
+export interface CanonSidebarOrderInput { group_key: string; work_ids: string[] }
+export interface CanonConversation { session_id: string; work: EpicDetail }

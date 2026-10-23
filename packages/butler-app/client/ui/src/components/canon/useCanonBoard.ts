@@ -1,3 +1,4 @@
+import { useCanonSidebarState } from "@/app/canonSidebarState.ts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getCanon, getCanonEpic, getWorkTasks, editCanonEpic, type CanonOverview, type EpicDetail, type EpicInput, type WorkTasks } from "@/app/canonApi.ts";
 import { subscribeCanonChanges } from "@/app/canonEvents.ts";
@@ -25,6 +26,7 @@ export function useCanonBoard(projectId: string) {
     try {
       const [board, epic, queue] = await Promise.all([getCanon(projectId), id ? getCanonEpic(id) : null, id ? getWorkTasks(id) : null]);
       if (!mounted.current || epoch !== generation.current) return;
+      useCanonSidebarState.getState().rememberCanon(board);
       setCanon(board); setDetail(epic); setTasks(queue); setError(null);
     } catch (error) { if (mounted.current && epoch === generation.current) setError(error); }
   }, [projectId]);

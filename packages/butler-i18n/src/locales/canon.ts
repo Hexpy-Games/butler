@@ -1,6 +1,12 @@
 import type { CanonCopy } from "../canon-copy.ts";
 export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
   "ko-KR": {
+    overview: "계획 개요", openOverview: "계획 개요 열기", noPlan: "계획 없음",
+    personalOrder: "내 사이드바 순서만 바뀝니다", sharedOrder: "기준 순서 · 끌어서 바꾸기",
+    backlogOrderHelp: "계획으로 옮기려면 ⋯ 메뉴", sharedGrip: "모두에게 같은 순서", changePlan: "계획 바꾸기",
+    noEpics: "아직 과제가 없습니다", noDescription: "설명 없음", conversationFailed: "대화를 열지 못했습니다",
+    epicPlaceholder: "이 과제에 대해 말해 보세요", newInGroup: group => `${group}에 새 과제`,
+    epicCount: n => `과제 · ${n}`, epicCaption: group => `${group} · 과제`,
     newEpic: "새 과제", newPlan: "새 계획", backlog: "백로그", backlogDescription: "계획이 정해지지 않은 과제입니다.",
     epic: "과제", title: "제목", description: "설명", optional: "선택", plan: "계획", assignee: "담당",
     none: "없음", me: "나", cancel: "취소", create: "만들기", save: "저장", edit: "고치기", close: "닫기", dueOn: "마감일",
@@ -28,6 +34,12 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
     },
   },
   "en-US": {
+    overview: "Plan overview", openOverview: "Open Plan overview", noPlan: "No Plan",
+    personalOrder: "Only your sidebar order changed", sharedOrder: "Shared order · Drag to reorder",
+    backlogOrderHelp: "Use the ⋯ menu to move to a Plan", sharedGrip: "Same order for everyone", changePlan: "Change Plan",
+    noEpics: "No Epics yet", noDescription: "No description", conversationFailed: "Could not open conversation",
+    epicPlaceholder: "Talk about this Epic", newInGroup: group => `New Epic in ${group}`,
+    epicCount: n => `Epics · ${n}`, epicCaption: group => `${group} · Epic`,
     newEpic: "New Epic", newPlan: "New Plan", backlog: "Backlog", backlogDescription: "Epics without a Plan.",
     epic: "Epic", title: "Title", description: "Description", optional: "Optional", plan: "Plan", assignee: "Assignee",
     none: "None", me: "Me", cancel: "Cancel", create: "Create", save: "Save", edit: "Edit", close: "Close", dueOn: "Due date",
