@@ -216,7 +216,6 @@ const UNPAIRED_FONT_SIZE_RATCHET: Record<string, string[]> = {
   "components/DropdownMenu/DropdownMenu.module.css": [".shortcut"],
   "components/Field/Field.module.css": [".title", ".separator"],
   "components/Popover/Popover.module.css": [".header"],
-  "components/SegmentedControl/SegmentedControl.module.css": [".group[data-size=\"default\"] .item"],
   "components/Select/Select.module.css": [".label"],
   "components/Breadcrumb/Breadcrumb.module.css": [".list"],
   "viewer/DesignSystemViewer.module.css": [".heroTitle"],
