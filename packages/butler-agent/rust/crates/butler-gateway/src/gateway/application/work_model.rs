@@ -10,6 +10,14 @@ pub(super) fn execute(
     app: &AppApplication,
     request: AppWorkModelRequest,
 ) -> ApplicationFuture<Value> {
+    if matches!(
+        request.resource,
+        AppWorkModelResource::Sidebar
+            | AppWorkModelResource::SidebarOrder
+            | AppWorkModelResource::Conversation
+    ) {
+        return super::canon_sidebar::execute(app, request);
+    }
     let app = app.clone_handle();
     Box::pin(async move {
         validate_scope(&app, &request).await?;
@@ -42,6 +50,15 @@ async fn validate_scope(
                     .await?
             }
             Canon | CreatePlan | CreateEpic | BacklogOrder => request.id.clone(),
+            AppWorkModelResource::Sidebar
+            | AppWorkModelResource::SidebarOrder
+            | AppWorkModelResource::Conversation => {
+                return Err(public(
+                    400,
+                    "work_model_invalid",
+                    "App-only canon resource.",
+                ));
+            }
             Queue => return Err(GatewayApplicationError::internal()),
         };
         AppWorkModelScope::Project(project)
@@ -69,7 +86,10 @@ async fn validate_scope(
 }
 
 /// Runtime owners stay internal; clients use the App chat ids in their routes.
-fn public_sessions(db: &rusqlite::Connection, value: &mut Value) -> Result<(), AppStorageError> {
+pub(super) fn public_sessions(
+    db: &rusqlite::Connection,
+    value: &mut Value,
+) -> Result<(), AppStorageError> {
     match value {
         Value::Array(items) => {
             for item in items {

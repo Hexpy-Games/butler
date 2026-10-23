@@ -1,4 +1,4 @@
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use super::super::contracts::{AppSpaceNode, AppSpaceOrigin, AppSpaceView};
 use super::super::{reader, tree};
@@ -156,16 +156,30 @@ pub(super) fn group_sessions(
     Ok(id)
 }
 
-pub(super) fn pin(
-    db: &Connection,
-    view: &AppSpaceView,
-    key: &str,
-    pinned: bool,
-) -> Result<(), GatewayApplicationError> {
-    let node = tree::require_node(view, key)?;
-    let table = match node.kind.as_str() {
-        "session" => "chats",
-        "project" => "projects",
+/// Favorites operate on persisted identity, including rows hidden from the tree.
+pub(super) fn pin(db: &Connection, key: &str, pinned: bool) -> Result<(), GatewayApplicationError> {
+    let (session, project) = db
+        .query_row(
+            "SELECT session_id,project_id FROM app_space_nodes WHERE node_key=?1",
+            [key],
+            |row| {
+                Ok((
+                    row.get::<_, Option<String>>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(storage_error)?
+        .ok_or_else(|| {
+            tree::error(
+                "space_item_missing",
+                "항목을 찾을 수 없습니다. 목록을 새로 확인해 주세요.",
+            )
+        })?;
+    let (table, id) = match (session, project) {
+        (Some(id), _) => ("chats", id),
+        (_, Some(id)) => ("projects", id),
         _ => {
             return Err(tree::error(
                 "space_invalid_pin",
@@ -175,7 +189,7 @@ pub(super) fn pin(
     };
     db.execute(
         &format!("UPDATE {table} SET pinned=? WHERE id=?"),
-        params![i64::from(pinned), node.entity_id],
+        params![i64::from(pinned), id],
     )
     .map_err(storage_error)?;
     Ok(())
