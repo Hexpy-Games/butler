@@ -28,7 +28,7 @@ async fn main() {
     reader(&path, &repository, storage.clone()).await;
     storage.close().await.unwrap();
     println!(
-        "legacy queue presence: held descendants excluded; closeout and continued children retained; blocked writer does not delay reads"
+        "legacy queue presence: held descendants and ended closeout excluded; worker resume and continued children retained; blocked writer does not delay reads"
     );
 }
 
@@ -56,7 +56,7 @@ async fn presence(path: &Path, repository: &SqliteSubsessionRepository) {
     update(path, "UPDATE btcc_turns SET suspension_reason=NULL").await;
     expect(repository, true).await;
     update(path, "UPDATE btcc_turns SET semantic_state='delivered'").await;
-    expect(repository, true).await; // Closeout has not saved the result yet.
+    expect(repository, false).await; // Ended closeout cannot hold input forever.
     update(path, "INSERT INTO btcc_steward_results(result_id,relation_id,task_id,child_session_id,child_turn_id,status,summary,acceptance_evidence_json,changed_artifacts_json,created_at)
         VALUES('result','r','task','child','turn','success','Complete','[]','[]','now');
         INSERT INTO btcc_subsession_outbox(outbox_id,relation_id,result_id,parent_session_id,parent_turn_id,message_id,input_json,status,created_at)
@@ -91,7 +91,14 @@ async fn descendants(path: &Path, repository: &SqliteSubsessionRepository) {
     .await;
     expect(repository, true).await;
     update(path, "UPDATE btcc_turns SET suspension_reason='waiting_for_worker' WHERE session_id='grandchild'").await;
-    expect(repository, false).await; // A waiting child with no runnable descendant is idle.
+    expect(repository, true).await; // Waiting is active until an explicit hold is visible.
+    update(path, "UPDATE btcc_turns SET semantic_state='delivered',suspension_reason=NULL WHERE session_id='grandchild';
+        INSERT INTO btcc_steward_results(result_id,relation_id,task_id,child_session_id,child_turn_id,status,summary,acceptance_evidence_json,changed_artifacts_json,created_at)
+        VALUES('grand-result','grand-r','grand-task','grandchild','grand-turn','success','Complete','[]','[]','now');").await;
+    expect(repository, true).await; // Delivered worker, steward resume not yet created.
+    update(path, "DELETE FROM btcc_steward_results WHERE result_id='grand-result';
+        UPDATE btcc_turns SET semantic_state='admitted',suspension_reason='authority_pending' WHERE session_id='grandchild'").await;
+    expect(repository, false).await;
 }
 
 async fn reader(path: &Path, repository: &SqliteSubsessionRepository, storage: BtccStorage) {

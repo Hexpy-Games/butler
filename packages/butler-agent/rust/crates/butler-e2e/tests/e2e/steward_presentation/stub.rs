@@ -36,7 +36,6 @@ pub(crate) struct Script {
     pub hold_seen: AtomicUsize,
     pub release: Notify,
     pub hold_direction: AtomicBool,
-    pub finish_parent: AtomicBool,
     pub direction_held: Notify,
 }
 
@@ -72,13 +71,6 @@ async fn reply(
     if !child && key.user_request == HOLD_PARENT {
         script.hold_seen.fetch_add(1, Ordering::SeqCst);
         script.parent_held.notify_one();
-        if script.finish_parent.load(Ordering::SeqCst) {
-            return (
-                [("content-type", "text/event-stream")],
-                wire(message("Parent note saved.")),
-            )
-                .into_response();
-        }
         return std::future::pending::<axum::response::Response>().await;
     }
     if !child && key.user_request == QUEUED {

@@ -296,13 +296,7 @@ async fn drain_chat(
         }
         // Results can resume the parent while other children still run. The
         // first user row is the barrier; later rows must not pass it.
-        if !row.is_result
-            && app
-                .dependencies
-                .subsessions
-                .queue_waits_for_child(app.runtime_hint(chat_id).await?)
-                .await?
-        {
+        if !row.is_result && app.wait_for_child(chat_id).await? {
             #[cfg(feature = "e2e-fixtures")]
             super::queue_wait_fixture::observed(app, chat_id).await?;
             return Ok(());

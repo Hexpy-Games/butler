@@ -268,6 +268,19 @@ impl AppApplication {
         Ok(())
     }
 
+    pub(super) async fn wait_for_child(
+        &self,
+        chat_id: &str,
+    ) -> Result<bool, GatewayApplicationError> {
+        let parent = self.runtime_hint(chat_id).await?;
+        Ok(self.dependencies.subsessions.queue_waits_for_child(parent).await
+            .unwrap_or_else(|error| {
+                static LOGGED: std::sync::Once = std::sync::Once::new();
+                LOGGED.call_once(|| tracing::warn!(%error, "Child presence unavailable; retaining normal queue admission"));
+                false
+            }))
+    }
+
     #[tracing::instrument(name = "turn.claim", skip_all, fields(trace_root = true, chat_id, message_id = client_id), err)]
     async fn dispatch(
         &self,
@@ -285,10 +298,7 @@ impl AppApplication {
                 .readiness()?
                 .btcc_executor_ready
         } else {
-            self.dependencies
-                .subsessions
-                .queue_waits_for_child(self.runtime_hint(chat_id).await?)
-                .await?
+            self.wait_for_child(chat_id).await?
         };
         if wait {
             self.queue_wake.chat(chat_id.to_owned()).await?;

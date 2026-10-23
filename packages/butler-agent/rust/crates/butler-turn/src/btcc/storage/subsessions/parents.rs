@@ -78,9 +78,10 @@ impl SqliteSubsessionRepository {
 }
 
 /// Queue admission reads only legacy execution state. An approval-held child is
-/// idle. A terminal child keeps its place until closeout has saved its result;
-/// a pending result keeps it until admission to the parent. CROSS JOIN keeps
-/// the small waiting tree outside the indexed relation lookup.
+/// idle. Ended turns do not block input without a result. A waiting child stays
+/// active through worker closeout and resume, unless all its leaves are held.
+/// Pending results retain priority until admission to the parent. CROSS JOIN
+/// keeps the small waiting tree outside the indexed relation lookup.
 const QUEUE_WAITS_FOR_CHILD: &str = "WITH RECURSIVE waiting(parent) AS (
     VALUES(?1)
     UNION
@@ -99,9 +100,16 @@ const QUEUE_WAITS_FOR_CHILD: &str = "WITH RECURSIVE waiting(parent) AS (
     WHERE EXISTS(SELECT 1 FROM btcc_turns t WHERE t.turn_id=(
         SELECT latest.turn_id FROM btcc_turns latest
         WHERE latest.session_id=r.child_session_id ORDER BY latest.rowid DESC LIMIT 1)
-        AND t.suspension_reason IS NULL
-        AND NOT EXISTS(SELECT 1 FROM btcc_steward_results x
-            WHERE x.relation_id=r.relation_id AND x.child_turn_id=t.turn_id))
+        AND ((t.semantic_state IN ('admitted','delivery_committed')
+            AND NOT EXISTS(SELECT 1 FROM btcc_steward_results x
+                WHERE x.relation_id=r.relation_id AND x.child_turn_id=t.turn_id)
+            AND (t.suspension_reason IS NULL
+                OR (t.suspension_reason='waiting_for_worker'
+                    AND NOT EXISTS(SELECT 1 FROM btcc_session_relations child
+                        WHERE child.parent_session_id=r.child_session_id))))
+        OR (w.parent<>?1 AND (t.semantic_state NOT IN ('admitted','delivery_committed')
+            OR EXISTS(SELECT 1 FROM btcc_steward_results x
+                WHERE x.relation_id=r.relation_id AND x.child_turn_id=t.turn_id)))))
     OR (d.dispatch_state IN ('pending','enqueued') AND d.dispatch_intent_json IS NOT NULL
         AND NOT EXISTS(SELECT 1 FROM btcc_turns t WHERE t.session_id=r.child_session_id))
     OR EXISTS(SELECT 1 FROM btcc_subsession_outbox o
@@ -139,7 +147,7 @@ pub(in crate::btcc::storage) fn assert_queue_child_presence_plan(db: &rusqlite::
         assert!(plan.contains(index), "{plan}");
     }
     assert!(plan.matches("parent_session_id=?").count() >= 2, "{plan}");
-    for alias in ["r", "d", "t", "latest", "x", "o"] {
+    for alias in ["r", "d", "t", "latest", "x", "o", "child"] {
         assert!(
             !plan.lines().any(|line| line == format!("SCAN {alias}")),
             "{plan}"

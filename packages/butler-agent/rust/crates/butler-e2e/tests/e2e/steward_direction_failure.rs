@@ -7,11 +7,12 @@
     clippy::panic,
     reason = "test assertions"
 )]
-use super::steward_interrupted_queue::{
-    count, db, queued_user, read_record, records, request_text,
-};
+use super::steward_interrupted_queue::{count, db, read_record, records, request_text};
 use super::steward_presentation::{self, stub};
-use butler_e2e::e2e::{HarnessError, scenario::Scenario};
+use butler_e2e::e2e::{
+    HarnessError,
+    scenario::{Scenario, accepted_turn_id},
+};
 use serde_json::{Value, json};
 use std::{
     sync::atomic::Ordering,
@@ -104,7 +105,6 @@ async fn failed_direction_continuation_settles_and_the_next_direction_runs()
     let (url, script, server) = stub::start().await?;
     // A blocked first result keeps the Work open, so the idle relation takes
     // the direction as a continuation turn.
-    script.finish_parent.store(true, Ordering::SeqCst);
     script.blocked_disposition.store(true, Ordering::SeqCst);
     script.release.notify_one();
     let setup = steward_presentation::setup("STEWARD-DIRECTION-FAILED", &url)?;
@@ -135,9 +135,11 @@ async fn failed_direction_continuation_settles_and_the_next_direction_runs()
         [(_, status, Some(turn))] if status == "applied" => turn.clone(),
         other => panic!("continuation did not take its direction: {other:?}"),
     };
-    // Parent input waits behind the active continuation and its result.
-    let held = queued_user(&s, stub::HOLD_PARENT).await?;
-    assert_eq!(script.hold_seen.load(Ordering::SeqCst), 0);
+    // The whole parent queue sits behind the crash: a held turn and a follow-up.
+    let held = accepted_turn_id(&s.gw.say("general", stub::HOLD_PARENT).await?)?;
+    tokio::time::timeout(Duration::from_secs(20), script.parent_held.notified())
+        .await
+        .unwrap();
     let queued =
         s.gw.post(
             "/session-queue",
@@ -197,24 +199,9 @@ async fn first_failure_returned(
         "failed result delivered more than once"
     );
     assert_eq!(script.hold_seen.load(Ordering::SeqCst), 1);
-    let messages = s.gw.messages("general").await?;
-    let message = messages.iter().find(|m| m["id"] == held).unwrap();
-    let held_turn = message["turn_id"].as_str().unwrap();
-    let turn = s.gw.turn("general", held_turn).await?.unwrap();
-    assert_eq!(turn["state"], "delivered", "{turn}");
-    assert_eq!(turn["retryable"], false, "{turn}");
-    let result = messages
-        .iter()
-        .enumerate()
-        .filter(|(_, m)| m["role"] == "assistant" && m["text"] == "Approach B verified.")
-        .nth(1)
-        .map(|(index, _)| index)
-        .unwrap();
-    let followup = messages.iter().position(|m| m["id"] == held).unwrap();
-    assert!(
-        result < followup,
-        "failure must precede follow-up: {messages:?}"
-    );
+    let turn = s.gw.turn("general", held).await?.unwrap();
+    assert_eq!(turn["state"], "failed", "{turn}");
+    assert_eq!(turn["retryable"], true, "{turn}");
     let root = s.sandbox.data.join("runtime/inbound-events");
     for path in records(&root, "failed") {
         let record = read_record(&path);
@@ -222,7 +209,10 @@ async fn first_failure_returned(
             .pointer("/envelope/routingHints/turnId")
             .and_then(Value::as_str)
             .unwrap();
-        assert!(turn == continuation, "unexpected failed record: {record}");
+        assert!(
+            turn == continuation || turn == held,
+            "unexpected failed record: {record}"
+        );
     }
     Ok(())
 }
