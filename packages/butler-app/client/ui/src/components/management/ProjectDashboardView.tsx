@@ -2,9 +2,9 @@ import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useRef, useState } from "react";
 import { useButlerStore } from "@/app/store.ts";
 import { useProjectDashboard } from "@/hooks/useProjectDashboard.ts";
-import { Stack, Notice, Button, Tabs, TabsList, TabsTrigger, TabsContent, Section, LayoutDashboard, ListChecks, Folder, History, Activity } from "@/butler-ds";
+import { Grid, Stack, Notice, Button, Tabs, TabsList, TabsTrigger, TabsContent, Section, LayoutDashboard, ListChecks, Folder, History, Activity } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
-import { ManagementPage, ManagementPagePanel } from "@/butler-ds";
+import { ManagementPage } from "@/butler-ds";
 import type {
   ProjectDashboardDocument,
   ProjectDashboardView as ProjectDashboardData,
@@ -59,7 +59,7 @@ export function ProjectDashboardView({
   const setTab = (tab: string) => { if (project) updateDashboardState(project.id, { tab }); };
   const selectionEpoch = useRef(0);
   const attachArtifact = useProjectArtifactAttachment(project?.id);
-  const { background, headerRef } = useProjectDashboardBackground(project);
+  const { background, columnRef, onComposerRect } = useProjectDashboardBackground(project);
   const ledgerRevision = dashboard?.overview?.status === "ready" ? dashboard.overview.sourceRevision : "unavailable";
   const publicRevision = `${ledgerRevision}:${sessions.map((session) => `${session.id}:${session.last_activity_at}:${session.active_turn_state ?? ""}`).join("|")}`;
   useEffect(() => { selectionEpoch.current++; setSelectedDocument(null); }, [project?.id]);
@@ -74,7 +74,7 @@ export function ProjectDashboardView({
   if (status !== "ready") {
     const copy = appCopy.feedback;
     return (
-      <ManagementPage dataTestClass="project-dashboard-view" background={background}>
+      <ManagementPage dataTestClass="project-dashboard-view" background={background} backgroundTreatment="none">
         <div role="status" aria-live="polite" data-test-class="project-dashboard-status">
           <Notice tone={status === "error" ? "error" : "info"}
             title={status === "error" ? copy.dashboardFailed : status === "missing" ? copy.projectMissing : undefined}
@@ -90,13 +90,13 @@ export function ProjectDashboardView({
   }
 
   return (
-    <ManagementPage dataTestClass="project-dashboard-view" scrollRef={scrollRef} background={background}
+    <ManagementPage dataTestClass="project-dashboard-view" scrollRef={scrollRef} background={background} backgroundTreatment="none"
       footerPlacement="overlay" footerReserve={composerHeight}
-      footer={project && <ProjectDashboardComposer key={project.id} projectId={project.id} onReserveChange={setComposerHeight} />}>
-      <Stack as="main" gap="xl">
+      footer={project && <ProjectDashboardComposer key={project.id} projectId={project.id} onReserveChange={setComposerHeight} onWallpaperRect={onComposerRect} />}>
+      <Grid columns="1" ref={columnRef}><Stack as="main" gap="xl">
         {refreshFailed && <Notice tone="error" title={appCopy.feedback.dashboardFailed} message={appCopy.feedback.dashboardRetry}
           action={<Button variant="outline" onClick={retry}>{appCopy.feedback.retry}</Button>} />}
-        <ManagementPagePanel ref={headerRef}>
+        <Stack gap="xl">
         <ProjectDashboardHeader
           dashboard={dashboard}
           project={project}
@@ -105,11 +105,11 @@ export function ProjectDashboardView({
         />
         {project && <ProjectDescription key={project.id} projectId={project.id} description={dashboard?.description ?? null}
           revision={dashboard?.preferences?.revision ?? 0} onUpdated={retry} />}
-        </ManagementPagePanel>
-        <ManagementPagePanel><Tabs value={tab} onValueChange={setTab} gap="2xl">
+        </Stack>
+        <Stack gap="xl"><Tabs value={tab} onValueChange={setTab} gap="2xl">
           <TabsList variant="line">
             <TabsTrigger value="overview"><LayoutDashboard />{appCopy.projectSignpost.overview}</TabsTrigger>
-            <TabsTrigger value="work"><ListChecks />{appCopy.projectSignpost.work}</TabsTrigger>
+            <TabsTrigger value="work"><ListChecks />{appCopy.projectSignpost.board}</TabsTrigger>
             <TabsTrigger value="materials"><Folder />{appCopy.projectSignpost.materials}</TabsTrigger>
             <TabsTrigger value="history"><History />{appCopy.projectSignpost.history}</TabsTrigger>
             <TabsTrigger value="statistics"><Activity />{appCopy.projectSignpost.statistics}</TabsTrigger>
@@ -132,8 +132,8 @@ export function ProjectDashboardView({
           projectId={project.id} onSelect={selectDocument} preferences={dashboard?.preferences} onUpdated={retry} />
           <ProjectResultsPanel key={`${project.id}:${publicRevision}`} projectId={project.id} preferences={dashboard?.preferences} onUpdated={retry} onSelect={selectDocument} /></Stack>}</TabsContent>
         <TabsContent value="history">{project && <ProjectHistoryPanel key={`${project.id}:${publicRevision}`} projectId={project.id} onSelect={selectDocument} onOpenSession={onOpenSession ?? openSession} />}</TabsContent>
-        </Tabs></ManagementPagePanel>
-      </Stack>
+        </Tabs></Stack>
+      </Stack></Grid>
       <ProjectDocumentDialog
         document={selectedDocument}
         onClose={() => { selectionEpoch.current++; setSelectedDocument(null); }}

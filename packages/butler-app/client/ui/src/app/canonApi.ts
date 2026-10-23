@@ -1,5 +1,5 @@
 import { api } from "./api.ts";
-import type { CanonOverview, CanonOrderInput, EpicDetail, EpicInput, PlanDetail, PlanInput, WorkTasks } from "../../../shared/canon-contracts.ts";
+import type { CanonSidebar, CanonSidebarOrderInput, CanonConversation, CanonOverview, CanonOrderInput, EpicDetail, EpicInput, PlanDetail, PlanInput, WorkTasks } from "../../../shared/canon-contracts.ts";
 export type * from "../../../shared/canon-contracts.ts";
 const projectPath = (id: string) => `/projects/${encodeURIComponent(id)}/canon`;
 const planPath = (id: string) => `/canon/plans/${encodeURIComponent(id)}`;
@@ -15,3 +15,7 @@ export const orderCanonPlan = (id: string, input: CanonOrderInput): Promise<Plan
 export const orderCanonBacklog = (projectId: string, input: CanonOrderInput): Promise<CanonOverview> => write(`${projectPath(projectId)}/backlog/order`, "POST", input);
 export const createCanonEpic = (projectId: string, input: EpicInput): Promise<EpicDetail> => write(`${projectPath(projectId)}/epics`, "POST", input);
 export const editCanonEpic = (id: string, input: EpicInput): Promise<EpicDetail> => write(epicPath(id), "PATCH", input);
+
+export const getCanonSidebar = (id: string): Promise<CanonSidebar> => api(`${projectPath(id)}/sidebar`);
+export const orderCanonSidebar = (id: string, input: CanonSidebarOrderInput): Promise<CanonSidebar> => write(`${projectPath(id)}/sidebar-order`, "POST", input);
+export const linkCanonConversation = (id: string): Promise<CanonConversation> => write(`${epicPath(id)}/conversation`, "POST", {});
