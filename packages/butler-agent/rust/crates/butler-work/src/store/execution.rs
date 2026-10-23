@@ -24,13 +24,6 @@ pub fn start_task(
 ) -> Result<Value> {
     let row = read_task(tx, id)?;
     cas(&row, "revision", expected)?;
-    if let Some(owner) = row["assignee_session_id"].as_str()
-        && owner != scope.session_id
-    {
-        return Err(Error::OwnedElsewhere {
-            detail: ownership::owned_elsewhere(tx, id, scope.session_id)?.ok_or(Error::NotFound)?,
-        });
-    }
     if row["status"] == "draft" {
         return Err(Error::Invalid("draft_unresolved"));
     }

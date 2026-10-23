@@ -363,6 +363,7 @@ impl SubsessionService {
             Child::Assigned(assigned) => assigned.part_id.clone(),
             Child::Legacy(_) => None,
         };
+        let whole_task = matches!(relation, Child::Assigned(assigned) if assigned.part_id.is_none());
         let task_id = relation.task_id.clone();
         self.repository
             .storage()
@@ -371,7 +372,7 @@ impl SubsessionService {
                 if !store::active_session_holds(db, &target)?.is_empty() {
                     return Ok(true);
                 }
-                if assigned_part.is_none() {
+                if whole_task {
                     let task = store::read_task(db, &task_id)?;
                     if task["assignee_session_id"] != target {
                         return Ok(true);
