@@ -363,6 +363,14 @@ jobs:
       BUTLER_E2E_TIER: stub
       BUTLER_DEBUG_COMMAND_TIMINGS: "1"
     steps:
+      - name: Enable short names on the hosted temp volume
+        # Fresh hosted VM only (never self-hosted): command folders need 8.3 names,
+        # which this volume ships without. Runs before the job creates its directories.
+        working-directory: ${{ runner.temp }}
+        run: |
+          $volume = Split-Path -Qualifier $env:RUNNER_TEMP
+          fsutil 8dot3name set $volume 0
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
@@ -458,6 +466,14 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.changes.outputs.parts).hosted }}
     steps:
+      - name: Enable short names on the hosted temp volume
+        # Fresh hosted VM only (never self-hosted): command folders need 8.3 names,
+        # which this volume ships without. Runs before the job creates its directories.
+        working-directory: ${{ runner.temp }}
+        run: |
+          $volume = Split-Path -Qualifier $env:RUNNER_TEMP
+          fsutil 8dot3name set $volume 0
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:

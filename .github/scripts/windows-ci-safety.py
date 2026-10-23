@@ -43,7 +43,7 @@ RULES = {
                                  r'(?!\.cargo\b|\.rustup\b)|'
                                  r'(?:\$env:LOCALAPPDATA|%LOCALAPPDATA%)[\\/]butler-app'),
     'runner installer or host configuration write': (
-        r'\b(?:choco|winget|msiexec|setx)(?:\.exe)?\b|'
+        r'\b(?:choco|winget|msiexec|setx|fsutil)(?:\.exe)?\b|'
         r'\bSet-ItemProperty\b[^\n]*(?:HKLM|HKCU|HKEY_LOCAL_MACHINE|HKEY_CURRENT_USER)\b|'
         r'\b(?:rustup(?:\.exe)?\s+(?:toolchain\s+install|default|update)|rustup-init)\b|'
         r'\b(?:pip|pip3)(?:\.exe)?\s+install\b|\bpython\s+-m\s+pip\s+install\b|'
