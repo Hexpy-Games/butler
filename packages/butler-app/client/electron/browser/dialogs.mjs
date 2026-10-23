@@ -81,6 +81,14 @@ export async function answerDialog(browser, tab, args, deliverStill) {
   tab.pendingBatch = null; tab.pendingStill = null;
   return { status: "ok", tab: tab.id, epoch: tab.epoch, url: tab.url, steps: steps.map(step => step.reason === "dialog_pending" ? { ...step, status: "completed", reason: undefined } : step), ...marker };
 }
+/**
+ * The page's own answer before a user closes or navigates its tab: `false` only when a beforeunload
+ * handler asked and the user chose to stay. A document that cannot run script (a `sandbox` CSP file, a
+ * bare image) has no handler to ask and refuses the preflight; that, or an empty answer, is no objection.
+ */
+export function unloadPreflight(contents) {
+  return contents.executeJavaScript("window.__butlerBeforeUnload?.() ?? true").then(answer => answer !== false, () => true);
+}
 export async function requestClose(browser, tab) {
   if (tab) await drainStills(tab);
   if (!tab) return Promise.resolve({ status: "ok" });
@@ -106,10 +114,10 @@ export async function requestClose(browser, tab) {
     tab.closeRequested = true;
     tab.closeDialog = () => finish(pendingDialog(tab));
     if (!tab.agent && !tab.driven) {
-      void contents.executeJavaScript("window.__butlerBeforeUnload?.() ?? true").then(accept => {
+      void unloadPreflight(contents).then(accept => {
         if (accept && browser.tabs.get(tab.id) === tab) browser.close(tab.id);
         else finish({ status: "not_dispatched", reason: "owner_cancelled" });
-      }).catch(() => finish({ status: "unknown", reason: "close_interrupted" }));
+      });
     } else contents.close({ waitForBeforeUnload: true });
   });
 }

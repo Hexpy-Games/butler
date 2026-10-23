@@ -1,5 +1,5 @@
 import { ipcMain } from "electron";
-import { beginDialog, resolveDialog, publicDialog } from "./dialogs.mjs";
+import { beginDialog, resolveDialog, publicDialog, unloadPreflight } from "./dialogs.mjs";
 import { webUrl } from "./policy.mjs";
 import { browserEvent } from "./events.mjs";
 import { approvedUpload } from "./navigate.mjs";
@@ -114,8 +114,8 @@ export function prepareUserNavigation(browser, tab, op, value) {
   // Empty or crashed views have no live document to run an unload preflight.
   if (tab.status === "crashed" || !tab.view.webContents.getURL()) { browser.commandTab(op, tab.id, value, true); return; }
   const epoch = tab.epoch;
-  void tab.view.webContents.executeJavaScript("window.__butlerBeforeUnload?.() ?? true").then(accept => {
+  void unloadPreflight(tab.view.webContents).then(accept => {
     if (accept && browser.tabs.get(tab.id) === tab && tab.epoch === epoch) browser.commandTab(op, tab.id, value, true);
-  }).catch(() => {});
+  });
 }
 export { publicDialog };
