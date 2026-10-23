@@ -185,7 +185,7 @@ pub(super) fn dispatch_candidates(
                 if stored.packet.child_role != crate::btcc::ChildRole::Worker
                     || dispatchable(db, &stored)? =>
             {
-                pending.push(stored)
+                pending.push(stored);
             }
             _ => {
                 let tx = db.transaction().map_err(StorageError::sqlite)?;
