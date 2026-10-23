@@ -161,6 +161,7 @@ impl AppApplication {
             && result.as_ref().is_ok_and(|sent| sent.accepted.is_some())
             && request.subsession_result.is_none()
         {
+            self.organize_session(chat_id.clone(), title_model.clone());
             self.generate_session_title(chat_id, title_model);
         }
         result

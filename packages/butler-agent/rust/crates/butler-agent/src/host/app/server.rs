@@ -26,6 +26,7 @@ use crate::host::app::dashboard_briefing::AppDashboardBriefing;
 use crate::host::app::plan_decision::AppPlanDecisionLedger;
 use crate::host::app::runtime_ports::{
     AppMemoryManagement, AppRuntimeInfo, AppSessionTitleGeneratorAdapter,
+    AppSessionTopicClassifierAdapter,
 };
 use crate::host::app::runtime_ports::{AppSetup, AppSetupParts};
 use crate::host::service::configuration::AppServiceConfiguration;

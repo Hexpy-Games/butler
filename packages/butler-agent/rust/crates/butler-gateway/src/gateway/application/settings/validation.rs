@@ -31,6 +31,7 @@ const UPDATE_KEYS: &[&str] = &[
     "composer_decoration",
     "conversation_background",
     "translucent_sidebar",
+    "smart_grouping_enabled",
     "diagnostics_enabled",
     "log_level",
     "log_category_levels",
