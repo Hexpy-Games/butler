@@ -1,0 +1,263 @@
+/* Square attachment tiles (AttachmentList variant="tiles"). Tokens only. */
+.row,
+.wrap {
+  --tile-size: 64px;
+  --tile-radius: var(--radius-panel);
+
+  min-width: 0;
+}
+
+/* A sent message: 96px faces, end-aligned in the user message, wrapping. */
+.wrap {
+  --tile-size: 96px;
+
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  padding-block: var(--space-xs) 2px;
+}
+
+/* The composer: one row inside the card's inset that scrolls sideways with the
+   shared edge fade; the track pads the focus-ring room the fades never clip. */
+.row {
+  width: 100%;
+  overflow: auto hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.row::-webkit-scrollbar {
+  display: none;
+}
+
+.track {
+  display: flex;
+  width: max-content;
+  gap: var(--space-sm);
+  padding: var(--focus-ring-room) var(--space-lg) var(--space-md);
+}
+
+.tile {
+  position: relative;
+  flex: none;
+  width: var(--tile-size);
+  height: var(--tile-size);
+}
+
+/* An added tile grows in (composer); reduced motion keeps only the fade. */
+.row .tile {
+  animation: attachment-tile-enter var(--motion-base)
+    var(--motion-ease-standard);
+}
+
+.tile[data-leaving="true"] {
+  animation: attachment-tile-exit var(--motion-exit-fast)
+    var(--motion-ease-accelerate) forwards;
+  pointer-events: none;
+}
+
+.face {
+  position: relative;
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: var(--border-hairline) solid var(--line);
+  border-radius: var(--tile-radius);
+  background: var(--composer-glass-control-bg, var(--surface-raised));
+  color: var(--text-primary);
+  text-align: start;
+  text-decoration: none;
+  transition: transform var(--motion-fast) var(--motion-ease-standard);
+}
+
+.wrap .face {
+  background: var(--surface-raised);
+}
+
+button.face,
+a.face {
+  cursor: pointer;
+}
+
+button.face:active,
+a.face:active {
+  transform: scale(var(--motion-scale-press));
+}
+
+.face:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.picture {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--muted);
+  object-fit: cover;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--motion-slow) var(--motion-ease-standard);
+}
+
+.picture[data-loaded="true"] {
+  opacity: 1;
+}
+
+.badge[data-slot="tinted-glass"] {
+  position: absolute;
+  inset-block-end: var(--space-xs);
+  inset-inline-start: var(--space-xs);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px var(--space-xs);
+}
+
+.file {
+  display: grid;
+  box-sizing: border-box;
+  height: 100%;
+  align-content: start;
+  gap: var(--space-xs);
+  padding: 6px;
+}
+
+.wrap .file {
+  grid-template-rows: auto auto 1fr;
+  padding: var(--space-sm);
+}
+
+.fileHead {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--text-tertiary);
+}
+
+.fileHead > svg {
+  flex: none;
+}
+
+/* The 64px face: a tighter icon gap so a four-letter type (DOCX) fits beside it. */
+.row .fileHead {
+  gap: 2px;
+}
+
+.fileName[data-slot] {
+  color: var(--text-primary);
+}
+
+/* The message face's size sits on its last line, at the bottom. */
+.fileMeta[data-tone] {
+  align-self: end;
+}
+
+/* Kept but not sendable: the existing greyed treatment. */
+.tile[data-blocked="true"] .picture {
+  filter: grayscale(1);
+  opacity: 0.55;
+}
+
+.tile[data-blocked="true"] .fileHead,
+.tile[data-blocked="true"] .fileName[data-slot] {
+  color: var(--interactive-disabled-fg);
+}
+
+/* Remove: a 20px glass dot (24px on touch) with a hit area past it. */
+.remove[data-slot="tinted-glass"] {
+  --remove-size: 20px;
+
+  position: absolute;
+  inset-block-start: var(--space-xs);
+  inset-inline-end: var(--space-xs);
+  display: flex;
+  width: var(--remove-size);
+  height: var(--remove-size);
+  border-radius: var(--radius-pill);
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--motion-ease-standard);
+}
+
+.tile:where(:hover, :focus-within) > .remove[data-slot="tinted-glass"] {
+  opacity: 1;
+}
+
+.removeButton {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.removeButton::after {
+  position: absolute;
+  inset: calc(-1 * var(--space-xs));
+  content: "";
+}
+
+.removeButton:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+@keyframes attachment-tile-enter {
+  from {
+    opacity: 0;
+    transform: scale(var(--motion-scale-dialog));
+  }
+}
+
+@keyframes attachment-tile-exit {
+  to {
+    opacity: 0;
+    transform: scale(var(--motion-scale-dialog));
+  }
+}
+
+/* Phone and touch type is larger: each face keeps one name line. */
+@media (width <= 640px), (pointer: coarse) {
+  .fileName[data-line-clamp] {
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+  }
+}
+
+/* Where the ✕ always shows (touch) it sits over the 64px face's corner. */
+@media (hover: none) {
+  .remove[data-slot="tinted-glass"] {
+    --remove-size: 24px;
+
+    opacity: 1;
+  }
+}
+
+/* With touch's ✕ or phone type the 64px face's type label moves under the
+   icon, so neither the ✕ nor the width cuts it (DOCX). */
+@media (hover: none), (width <= 640px) {
+  .row .file {
+    gap: 0;
+    padding-block: var(--space-xs) 0;
+  }
+
+  .row .fileHead {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+
+  .row .fileType[data-tone] {
+    flex-basis: 100%;
+  }
+}

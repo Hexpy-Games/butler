@@ -320,7 +320,7 @@ export const enUsCopy: AppCopy = {
     pick: "Pick elements", scrap: "Scrap", bookmarks: "Bookmarks", bookmarkAdd: "Add bookmark", bookmarked: "Bookmarked",
     manageBookmarks: "Manage bookmarks", downloads: "Downloads", downloading: "Downloading", showInFolder: "Show in folder", more: "More",
     findInPage: "Find in page", zoom: "Zoom", print: "Print", openExternal: "Open in default browser", settings: "Browser settings",
-    secure: "Secure connection", notSecure: "Not secure", butlerOutput: "Butler output", preview: "Preview", signedIn: "Signed in", signinRequired: "Sign-in needs you", captcha: "CAPTCHA", signinForm: "Sign-in page", saveSignIn: "Save sign-in", signinSaved: "Sign-in saved", later: "Not now",
+    secure: "Secure connection", notSecure: "Not secure", butlerOutput: "Butler output", preview: "Preview", signedIn: "Signed in", signinRequired: "Sign-in needs you", captcha: "CAPTCHA", signinForm: "Sign-in page", saveSignIn: "Save sign-in", signinSaved: "Sign-in saved", signinSaveFailed: "Couldn't save sign-in", later: "Not now",
     agentUsing: "Butler is browsing", takeOver: "Take over", userControl: "You're in control", butlerWaits: "Butler is waiting",
     giveBack: "Give back to Butler", autoGiveBack: "Returns to Butler when you leave", stopTask: "Stop task", stopped: "Task stopped",
     waiting: "Waiting for approval", review: "Review", needYou: "Your input needed", keypad: "Security keypad", mfa: "Two-step verification",
@@ -945,6 +945,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     },
     stoppedStatus: "Stopped",
     attachmentUnavailable: "Attachment unavailable",
+    attachmentFileType: "File",
     fileChanges: {
       regionLabel: "Changed files",
       title: "File changes",

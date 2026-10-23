@@ -322,7 +322,7 @@ export const koKrCopy: AppCopy = {
     openConversation: "대화 열기", moveToConversation: "대화로 가져가기", newConversation: "새 대화", bringTab: "내 탭 가져오기", resizeChat: "대화 너비 조절", pick: "요소 선택",
     scrap: "스크랩", bookmarks: "북마크", bookmarkAdd: "북마크 추가", bookmarked: "북마크됨", manageBookmarks: "북마크 관리", downloads: "다운로드", downloading: "받는 중",
     showInFolder: "폴더에서 보기", more: "더 보기", findInPage: "페이지에서 찾기", zoom: "확대/축소", print: "인쇄", openExternal: "기본 브라우저에서 열기", settings: "브라우저 설정",
-    secure: "안전한 연결", notSecure: "주의 요함", butlerOutput: "버틀러 출력물", preview: "미리보기", signedIn: "로그인 사용", signinRequired: "로그인 확인 필요", captcha: "자동입력 방지", signinForm: "로그인 화면", saveSignIn: "로그인 저장", signinSaved: "로그인을 저장했어요", later: "나중에", agentUsing: "버틀러가 조작 중", takeOver: "직접 조작",
+    secure: "안전한 연결", notSecure: "주의 요함", butlerOutput: "버틀러 출력물", preview: "미리보기", signedIn: "로그인 사용", signinRequired: "로그인 확인 필요", captcha: "자동입력 방지", signinForm: "로그인 화면", saveSignIn: "로그인 저장", signinSaved: "로그인을 저장했어요", signinSaveFailed: "로그인을 저장하지 못했어요", later: "나중에", agentUsing: "버틀러가 조작 중", takeOver: "직접 조작",
     userControl: "직접 조작 중", butlerWaits: "버틀러가 기다리는 중", giveBack: "버틀러에게 돌려주기", autoGiveBack: "탭을 떠나면 버틀러에게 돌아감", stopTask: "작업 중지",
     stopped: "작업 중지함", waiting: "승인 대기", review: "승인 보기", needYou: "직접 입력 필요", keypad: "보안 키패드", mfa: "2단계 인증", passkey: "패스키", paymentRequired: "결제 확인 필요",
     typeYourself: "직접 입력해 주세요", chooseFile: "파일 선택", printer: "프린터", noPrinters: "프린터 없음", popupBlocked: "팝업 차단됨", allow: "허용", popupOpened: "팝업 열림", showPopup: "팝업 보기", newTabOpened: "새 탭 열림",
@@ -942,6 +942,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     },
     stoppedStatus: "중지됨",
     attachmentUnavailable: "첨부 파일을 찾을 수 없음",
+    attachmentFileType: "파일",
     fileChanges: {
       regionLabel: "변경된 파일",
       title: "파일 변경",

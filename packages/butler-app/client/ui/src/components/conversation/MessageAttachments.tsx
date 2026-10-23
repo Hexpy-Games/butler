@@ -2,33 +2,36 @@ import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { MessageFileRef } from "@/app/types.ts";
 import { AttachmentList } from "@/butler-ds";
-import { messageFileUrl } from "./messageMedia";
+import { attachmentTile, openAttachmentInInspector } from "./attachmentTiles";
+import { attachmentViewerKind, useOpenMessageImage } from "./messageImages";
 
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
+/** A sent message's files as tiles: pictures and videos open the viewer over the session, other files its inspector. */
 export function MessageAttachments({
   attachments,
+  sessionId,
 }: {
   attachments: MessageFileRef[];
+  sessionId: string;
 }) {
   useAppLocale();
+  const openImage = useOpenMessageImage();
   if (attachments.length === 0) return null;
+  const files = new Map(attachments.map((file) => [file.file_id, file]));
   return (
     <div
       data-test-class="message-attachment-list"
       aria-label={appCopy.interfacePanels.attachments}
     >
       <AttachmentList
-        items={attachments.map((attachment) => ({
-          id: attachment.file_id,
-          name: attachment.safe_name,
-          meta: formatFileSize(attachment.size_bytes),
-          href: messageFileUrl(attachment),
-        }))}
+        variant="tiles"
+        tileLayout="wrap"
+        items={attachments.map((file) => ({ id: file.file_id, ...attachmentTile(file) }))}
+        onOpen={(item) => {
+          const file = files.get(item.id);
+          if (!file) return;
+          if (attachmentViewerKind(file) && openImage) openImage(file.url);
+          else openAttachmentInInspector(file, sessionId);
+        }}
       />
     </div>
   );

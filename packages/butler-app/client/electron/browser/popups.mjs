@@ -24,10 +24,11 @@ export function publishPopup(tab) {
 export function syncPopup(browser, tab) {
   const win = tab.popupWindow;
   if (!win || win.isDestroyed() || !tab.view || tab.view.webContents.isDestroyed()) return;
-  if (tab.covered || tab.dialog || !tab.bounds?.visible) {
+  if (tab.covered || tab.dialog || !tab.slot?.visible) {
     if (tab.attached === win) { win.contentView.removeChildView(tab.view); tab.attached = null; }
   } else {
     if (tab.attached !== win) { win.contentView.addChildView(tab.view); tab.attached = win; }
+    tab.bounds = tab.slot;
     const { x, y, width, height } = tab.bounds;
     tab.view.setBounds({ x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
     tab.view.setBorderRadius(Math.max(0, Math.round(tab.bounds.radius ?? 0)));

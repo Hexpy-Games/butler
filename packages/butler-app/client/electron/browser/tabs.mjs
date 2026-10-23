@@ -104,13 +104,14 @@ class UserBrowser {
     if (tab?.popupWindow) { syncPopup(this, tab); return; }
     const win = this.getWindow();
     const visible = win && !win.isDestroyed() && win.isVisible() && this.areaVisible && tab.id === this.activeId &&
-      tab.bounds?.visible && !tab.covered && !tab.dialog && this.nativeCovers === 0 && tab.status !== "crashed";
+      tab.slot?.visible && !tab.covered && !tab.dialog && this.nativeCovers === 0 && tab.status !== "crashed";
     if (!visible || !tab.view) { this.detach(tab); backgroundTab(this, tab); return; }
     viewedTab(this, tab, true);
     // Occlusion can clear while the floating preview moves. Reattaching the page
     // above the overlay also cancels its native capture; wait for the real release.
     if (this.pointer.captures(tab.id) && this.pointer.attached === win && tab.attached !== win) return;
     if (tab.attached !== win) { this.detach(tab); win.contentView.addChildView(tab.view); tab.attached = win; }
+    tab.bounds = tab.slot;
     const { x, y, width, height } = tab.bounds;
     tab.view.setBounds({ x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
     tab.view.setBorderRadius(Math.max(0, Math.round(tab.bounds.radius ?? 0)));
@@ -201,7 +202,7 @@ class UserBrowser {
     const tab = { id: shortId("t", id => this.tabs.has(id)), owner, profile, popup: Boolean(popupSource), opener: popupSource?.id, popupParentUrl: popupSource?.url, stills: this.stillPreferences.get(owner) !== false, partition: input.partition ?? (profile === "signed_in" ? "persist:butler-web" : this.conversationPartitions.get(partitionOwner)),
       preview: input.preview_id ?? (url && new URL(url).pathname.startsWith("/__p/") ? new URL(url).pathname.slice(5) : undefined),
       agent: input.agent === true, policy: input.policy ?? {}, epoch: 1, holder: owner === "mine" ? "user" : "agent", sticky: false, waiting: false, busy: false, observation: null, url, title: "", favicon: "", status: "idle", canBack: false, canForward: false,
-      still: "", view: null, attached: null, bounds: null, covered: false, capture: null };
+      still: "", view: null, attached: null, slot: null, bounds: null, covered: false, capture: null };
     tab.onStillChanged = () => this.publish();
     this.tabs.set(tab.id, tab);
     if (owner === "mine") this.restore.changed();
@@ -290,7 +291,9 @@ class UserBrowser {
     }
     if (op === "bounds") {
       if (!value || ![value.x, value.y, value.width, value.height].every(Number.isFinite) || value.width < 0 || value.height < 0) throw new Error("invalid_bounds");
-      tab.bounds = value; this.sync(tab); return;
+      // The slot alone decides where the page shows; a hidden agent page is placed in its own viewport.
+      tab.slot = value; if (!tab.agent) tab.bounds = value;
+      this.sync(tab); return;
     }
     if (op === "covered") { tab.covered = value === true; this.sync(tab); return; }
     if (op === "still") return this.capture(tab);
