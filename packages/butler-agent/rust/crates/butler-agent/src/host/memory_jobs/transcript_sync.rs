@@ -121,10 +121,6 @@ impl LegacySessionSync {
                     session.session_id.clone()
                 }
             });
-            let topic = session
-                .transport_bindings
-                .iter()
-                .find_map(|binding| binding.thread_id.as_deref());
             let key = format!("{project}:{}", session.session_id);
             let prior = offsets.get(&key).cloned();
             let (lines, next) = tokio::task::spawn_blocking({
@@ -191,7 +187,7 @@ impl LegacySessionSync {
                         storage_id: &chunk.storage_id,
                         original_id: &chunk.original_id,
                     };
-                    self.sync_chunk(chunk, &project, topic, vectors, cancellation)
+                    self.sync_chunk(chunk, &project, &session, vectors, cancellation)
                         .await?;
                 }
             }
@@ -216,10 +212,14 @@ impl LegacySessionSync {
         &self,
         chunk: ChunkTexts<'_>,
         project: &str,
-        topic: Option<&str>,
+        session: &StoredSessionBinding,
         vectors: bool,
         cancellation: &CancellationToken,
     ) -> Result<(), crate::host::HostError> {
+        let topic = session
+            .transport_bindings
+            .iter()
+            .find_map(|binding| binding.thread_id.as_deref());
         match self
             .hot
             .save(
@@ -227,6 +227,7 @@ impl LegacySessionSync {
                 project,
                 chunk.storage_id,
                 topic,
+                summary_usage(session),
                 cancellation,
             )
             .await
@@ -279,6 +280,28 @@ struct ChunkTexts<'a> {
     index: &'a str,
     storage_id: &'a str,
     original_id: &'a str,
+}
+
+/// A root session owns its summary's usage; a delegated child bills its
+/// recorded root under its own role, or stays in the named non-chat scope.
+fn summary_usage(session: &StoredSessionBinding) -> hot::SummaryUsage<'_> {
+    let subsession = session
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata.get("subsession"));
+    let root = match subsession {
+        None => Some(session.session_id.as_str()),
+        Some(subsession) => subsession
+            .get("root_session_id")
+            .and_then(serde_json::Value::as_str),
+    };
+    let role = match &session.role {
+        SessionRole::Butler => "main",
+        SessionRole::Steward => "steward",
+        SessionRole::Worker => "worker",
+        SessionRole::Unknown(role) => role,
+    };
+    hot::SummaryUsage { root, role }
 }
 
 fn compare_sessions(

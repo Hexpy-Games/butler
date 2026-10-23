@@ -91,7 +91,8 @@ export async function browserAgentApp(evidence: string, stubToolCall: (request: 
       await waitBrowser(()=>page!.expression(`(() => {
         const node=[...document.querySelectorAll('button,[role="button"]')].find(e=>(e.getAttribute('aria-label')||e.textContent)?.trim()===${JSON.stringify(name)});
         if(!node || node.disabled || node.getAttribute('aria-disabled')==='true') return false;
-        for(let parent=node;parent;parent=parent.parentElement) if(parent.getAnimations().some(a=>a.playState==='running' && a.effect?.getComputedTiming().iterations!==Infinity)) return false;
+        // Scroll-driven animations follow the scroll position and never finish; only timed motion moves the target.
+        for(let parent=node;parent;parent=parent.parentElement) if(parent.getAnimations().some(a=>a.playState==='running' && a.timeline instanceof DocumentTimeline && a.effect?.getComputedTiming().iterations!==Infinity)) return false;
         return node.getBoundingClientRect().width>0;
       })()`), `button ${name}`);
       await page!.clickText(name, 'button,[role="button"]');

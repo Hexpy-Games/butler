@@ -16,6 +16,7 @@
 // Light and dark, wallpaper and plain, desktop and phone width.
 //
 // BUTLER_FOCUS_RING_SHOTS=<dir> saves a capture of each clipped stop.
+import { canonFocusResponse } from "../support/canon-sidebar-fixture.ts";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, normalize, sep } from "node:path";
@@ -219,8 +220,16 @@ async function auditScrolledFades(page: Page, cell: Cell, screen: string, scope:
 async function auditCell(page: Page, cell: Cell) {
   await open(page, cell);
   await openSidebar(page);
+  await page.locator('[data-test-class="canon-sidebar-group"]').first().waitFor();
   // Sidebar: top items, favorites, the spaces tree, nested rows and groups.
   await auditScope(page, cell, "sidebar", '[data-test-class="app-sidebar"]', 200);
+  await capture(page, `sidebar-${cell.width}-${cell.theme}-${cell.background}`);
+  await page.locator('[data-canon-group="focus-plan"] [data-test-class="canon-sidebar-group"]').click({ button: "right" });
+  await page.getByRole("menuitem", { name: copy.canon.overview, exact: true }).click();
+  await page.locator('[data-test-class="canon-plan-epics"]').waitFor();
+  await auditScope(page, cell, "plan-overview", '[data-test-class="canon-plan-overview"]', 80);
+  await capture(page, `plan-overview-${cell.width}-${cell.theme}-${cell.background}`);
+  await open(page, cell);
   // Conversation: answer cards' buttons, the agent tab rail and the composer.
   if (cell.width < 768) await page.keyboard.press("Escape");
   await auditScope(page, cell, "conversation", '[data-test-class~="conversation"]', 160);
@@ -299,6 +308,8 @@ try {
     }
     const file = distFile(url.pathname);
     if (file) return route.fulfill({ contentType: types[extname(file)] ?? "application/octet-stream", body: readFileSync(file) });
+    const canon = canonFocusResponse(url.pathname);
+    if (canon !== undefined) return route.fulfill({ json: { ok: true, data: canon } });
     // The gateway: just what the harness reads, offline.
     if (/^\/sessions\/[^/]+\/controls$/u.test(url.pathname)) return route.fulfill({ json: { ok: true, data: { session_id: "butler-client",
       revision: 0, catalog_generation: "harness-model-catalog-v1", controls: { model: "openai/gpt-6-luna", reasoning_effort: "none", access_mode: "full_access", plan_mode: false } } } });

@@ -115,6 +115,8 @@ async fn canonical_write_lists_and_reads_legacy_context() {
         runtime_session_id: "runtime-a".into(),
         turn_id: "ct_a".into(),
         project_id: Some("project-a".into()),
+        usage_root: None,
+        usage_role: None,
     };
     let list = tools
         .list(binding, json!({"scope":"current_project"}))

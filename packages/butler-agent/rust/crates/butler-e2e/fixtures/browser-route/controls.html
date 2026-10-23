@@ -18,6 +18,7 @@ board.addEventListener('contextmenu', e => { e.preventDefault(); log.menus++; })
 let stroke;
 const pos = e => { const r = board.getBoundingClientRect(); return { x: e.clientX - r.x, y: e.clientY - r.y, buttons: e.buttons, shift: e.shiftKey }; };
 board.addEventListener('pointerdown', e => { if (e.button !== 0 || e.detail > 1) return; board.setPointerCapture(e.pointerId); stroke = { points: [pos(e)] }; log.strokes.push(stroke); });
-board.addEventListener('pointermove', e => { if (stroke) stroke.points.push(pos(e)); });
+// A slow frame merges several moves into one pointermove; its coalesced events keep every point.
+board.addEventListener('pointermove', e => { if (stroke) stroke.points.push(...e.getCoalescedEvents().map(pos)); });
 board.addEventListener('pointerup', e => { if (stroke) { stroke.points.push(pos(e)); stroke = null; } });
 </script></html>
