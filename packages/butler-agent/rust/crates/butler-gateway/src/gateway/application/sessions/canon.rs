@@ -8,12 +8,13 @@ pub(in crate::gateway::application) fn project(
     clock: &dyn super::super::AppIdentityClock,
     payload: &serde_json::Value,
     op_id: &str,
-) -> Result<(), AppStorageError> {
+) -> Result<Option<String>, AppStorageError> {
     let owner = payload["session_id"].as_str().unwrap_or_default();
+    let mut created = None;
     let chat = if let Some(chat) = identity::resolve_owner(db, owner)? {
         chat
     } else {
-        write::create(
+        let chat = write::create(
             db,
             subscribers,
             &AppCreateSessionInput {
@@ -31,7 +32,9 @@ pub(in crate::gateway::application) fn project(
             clock,
             true,
         )?
-        .id
+        .id;
+        created = Some(chat.clone());
+        chat
     };
     db.execute(
         "INSERT INTO app_canon_conversations(session_id,work_id,project_id,op_id)
@@ -65,5 +68,5 @@ pub(in crate::gateway::application) fn project(
         butler_core::json::json_object!({"revision":revision}),
         &clock.now_iso(),
     )?;
-    Ok(())
+    Ok(created)
 }

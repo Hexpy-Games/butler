@@ -32,6 +32,7 @@ impl AppWorkModelPort for AppWorkModel {
                 id,
                 input,
             } = request;
+            let resource = store_resource(resource)?;
             if let Some(input) = input {
                 // Same trusted local viewer as gateway/application/snapshot_input.rs.
                 // Display-profile names are mutable presentation, not identities.
@@ -40,14 +41,12 @@ impl AppWorkModelPort for AppWorkModel {
                     actor: json!({"person":butler_gateway::gateway::APP_PERSON_ID,"via":"app"}),
                 };
                 storage
-                    .work_model_write(move |tx| {
-                        store::write_api(tx, &ctx, store_resource(resource), &id, input)
-                    })
+                    .work_model_write(move |tx| store::write_api(tx, &ctx, resource, &id, input))
                     .await
                     .map_err(error)
             } else {
                 storage
-                    .work_model_read(move |db| store::read_api(db, store_resource(resource), &id))
+                    .work_model_read(move |db| store::read_api(db, resource, &id))
                     .await
                     .map_err(error)
             }
@@ -60,10 +59,9 @@ impl AppWorkModelPort for AppWorkModel {
     ) -> ApplicationFuture<String> {
         let storage = self.storage.clone();
         Box::pin(async move {
+            let resource = store_resource(resource)?;
             storage
-                .work_model_read(move |db| {
-                    store::api::project_scope(db, store_resource(resource), &id)
-                })
+                .work_model_read(move |db| store::api::project_scope(db, resource, &id))
                 .await
                 .map_err(error)
         })
@@ -169,15 +167,17 @@ fn error(error: StorageError) -> GatewayApplicationError {
     }
 }
 
-fn store_resource(resource: AppWorkModelResource) -> store::api::Resource {
+fn store_resource(
+    resource: AppWorkModelResource,
+) -> Result<store::api::Resource, GatewayApplicationError> {
     use AppWorkModelResource::{
         BacklogOrder, Canon, CreateEpic, CreatePlan, EditEpic, EditPlan, Epic, Plan, PlanOrder,
         Queue,
     };
-    match resource {
-        AppWorkModelResource::Sidebar => store::api::Resource::Sidebar,
-        AppWorkModelResource::SidebarOrder => store::api::Resource::SidebarOrder,
-        AppWorkModelResource::Conversation => store::api::Resource::Conversation,
+    Ok(match resource {
+        AppWorkModelResource::Sidebar
+        | AppWorkModelResource::SidebarOrder
+        | AppWorkModelResource::Conversation => return Err(GatewayApplicationError::internal()),
         Queue => store::api::Resource::Queue,
         Canon => store::api::Resource::Canon,
         Plan => store::api::Resource::Plan,
@@ -188,5 +188,5 @@ fn store_resource(resource: AppWorkModelResource) -> store::api::Resource {
         EditEpic => store::api::Resource::EditEpic,
         PlanOrder => store::api::Resource::PlanOrder,
         BacklogOrder => store::api::Resource::BacklogOrder,
-    }
+    })
 }

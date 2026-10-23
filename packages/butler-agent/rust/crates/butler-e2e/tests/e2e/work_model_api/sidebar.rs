@@ -20,7 +20,35 @@ async fn sidebar(s: &Scenario, project: &str) -> Result<Value, HarnessError> {
 #[tokio::test]
 async fn wma_sidebar_conversation_navigation_and_replay() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let mut s = Setup::new("WMA-SIDEBAR-LINK")?.start().await?;
+    let setup = Setup::new("WMA-SIDEBAR-LINK")?;
+    let hook_output = setup.sandbox.home.join("session-start.jsonl");
+    let extension = if butler_platform::command_sandbox::POSIX_SHELL {
+        "sh"
+    } else {
+        "cmd"
+    };
+    let observer =
+        butler_e2e::e2e::binary::crate_root().join(format!("tests/e2e/hooks/observe.{extension}"));
+    let args = if extension == "sh" {
+        vec!["sh".to_owned(), observer.to_string_lossy().into_owned()]
+    } else {
+        vec![
+            "cmd.exe".into(),
+            "/d".into(),
+            "/s".into(),
+            "/c".into(),
+            observer.to_string_lossy().into_owned(),
+        ]
+    };
+    std::fs::write(
+        setup.sandbox.data.join("hooks.json"),
+        json!({"version":1,"hooks":[{
+            "id":"observe-session", "event":"SessionStart", "type":"command", "args":args,
+            "env":{"HOOK_OUTPUT":hook_output}, "timeout_ms":3000
+        }]})
+        .to_string(),
+    )?;
+    let mut s = setup.start().await?;
     let project = project(&s).await?;
     let work = create_epic(&s, &project, "Conversation navigation").await?;
     let stream = LiveEvents::subscribe(&s.gw, 0).await?;
@@ -58,6 +86,12 @@ async fn wma_sidebar_conversation_navigation_and_replay() -> Result<(), HarnessE
         s.gw.post("/canon/epics/missing/conversation", json!({}))
             .await?;
     assert_eq!(missing.status, 404);
+    let hooks = std::fs::read_to_string(&hook_output)?;
+    let hooks: Vec<Value> = hooks
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(hooks.iter().filter(|h| h["source"] == "created").count(), 1);
     let other = create_epic(&s, &project, "Another work").await?;
     s.agent.terminate().await?;
     let output = tokio::process::Command::new(butler_e2e::e2e::binary::fixture_binary(
@@ -89,6 +123,26 @@ async fn wma_sidebar_conversation_navigation_and_replay() -> Result<(), HarnessE
         "UPDATE wm_cross_db_intents SET state='pending' WHERE kind='canon_conversation'",
         [],
     )?;
+    // The first receipt is terminally invalid; the following one still creates a chat.
+    let owner = "butler/app-replay-conversation";
+    let pending = json!({"session_id":owner,"work_id":other["id"],"project_id":project,"title":"Replayed chat"});
+    for (op, payload) in [
+        (
+            "000-deleted",
+            json!({"session_id":"butler/app-deleted","work_id":"deleted-work","project_id":project}),
+        ),
+        (
+            "000-project-deleted",
+            json!({"session_id":"butler/app-deleted-project","work_id":other["id"],"project_id":"deleted-project"}),
+        ),
+        ("001-replay", pending),
+    ] {
+        btcc.execute("INSERT INTO wm_cross_db_intents(op_id,kind,payload_json,state,revision,created_at) VALUES(?1,'canon_conversation',?2,'pending',0,0)", rusqlite::params![op,payload.to_string()])?;
+    }
+    btcc.execute(
+        "UPDATE wm_works SET home_session_id=?1 WHERE id=?2",
+        rusqlite::params![owner, other["id"].as_str()],
+    )?;
     drop(btcc);
     s.restart().await?;
     let recovered = LiveEvents::subscribe(&s.gw, 0).await?;
@@ -101,6 +155,40 @@ async fn wma_sidebar_conversation_navigation_and_replay() -> Result<(), HarnessE
         })
         .await?;
     assert_eq!(link(&s, &work["id"]).await?["session_id"], a["session_id"]);
+    let replayed = data(
+        s.gw.get(&format!("/sessions?project_id={project}")).await?,
+        200,
+    );
+    assert!(replayed.to_string().contains("Replayed chat"));
+    // Replay commits the chat before dispatching its lifecycle hook.
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let hooks = std::fs::read_to_string(&hook_output).unwrap_or_default();
+            if hooks
+                .lines()
+                .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+                .filter(|h| h["source"] == "created")
+                .count()
+                >= 2
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .map_err(|_| std::io::Error::other("replay session hook missing"))?;
+    let hooks = std::fs::read_to_string(&hook_output)?;
+    let hooks: Vec<Value> = hooks
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(hooks.iter().filter(|h| h["source"] == "created").count(), 2);
+    s.agent.terminate().await?;
+    let btcc = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    let pending: i64 = btcc.query_row("SELECT count(*) FROM wm_cross_db_intents WHERE kind='canon_conversation' AND state='pending'", [], |r| r.get(0))?;
+    assert_eq!(pending, 0);
+    drop(btcc);
     s.finish().await
 }
 #[tokio::test]
@@ -124,6 +212,7 @@ async fn wma_sidebar_personal_order_preserves_canon() -> Result<(), HarnessError
     let initial = overview(&s, &project).await?;
     let view = sidebar(&s, &project).await?;
     assert_eq!(view["groups"][0]["kind"], "backlog");
+    assert!(view["groups"][0]["title"].is_null());
     assert_eq!(view["groups"][1]["key"], plan["id"]);
     assert_eq!(
         ids(&view["groups"][0]["rows"]),
@@ -135,6 +224,14 @@ async fn wma_sidebar_personal_order_preserves_canon() -> Result<(), HarnessError
     for _ in 0..2 {
         data(s.gw.post(&path, input.clone()).await?, 200);
     }
+    let forward =
+        json!({"group_key":"backlog","work_ids":[a["id"],b["id"]],"op_id":"personal-order"});
+    let changed = data(s.gw.post(&path, forward).await?, 200);
+    assert_eq!(
+        ids(&changed["groups"][0]["rows"]),
+        vec![a["id"].as_str().unwrap(), b["id"].as_str().unwrap()]
+    );
+    data(s.gw.post(&path, input.clone()).await?, 200);
     assert_eq!(overview(&s, &project).await?, initial);
     assert_eq!(
         sidebar(&s, &project).await?["groups"][0]["rows"][0]["id"],
@@ -155,14 +252,23 @@ async fn wma_sidebar_personal_order_preserves_canon() -> Result<(), HarnessError
             c["id"].as_str().unwrap()
         ]
     );
-    assert_eq!(
+    let stale = s.gw.post(&path, input).await?;
+    assert_eq!(stale.status, 409);
+    assert_eq!(stale.error_code(), Some("conflict"));
+    assert!(stale.body["error"]["current"]["revision"].is_i64());
+    let stale =
         s.gw.post(
             &path,
-            json!({"group_key":"backlog","work_ids":[hidden["id"]]})
+            json!({"group_key":"backlog","work_ids":[hidden["id"]]}),
         )
-        .await?
-        .status,
-        400
-    );
+        .await?;
+    assert_eq!(stale.status, 409);
+    let malformed =
+        s.gw.post(
+            &path,
+            json!({"group_key":"backlog","work_ids":[a["id"],a["id"]]}),
+        )
+        .await?;
+    assert_eq!(malformed.status, 400);
     s.finish().await
 }

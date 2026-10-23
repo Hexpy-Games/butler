@@ -150,27 +150,10 @@ async fn apply(app: &AppApplication, intent: Value) -> Result<(), GatewayApplica
             .ok_or_else(GatewayApplicationError::internal)?,
     )
     .map_err(GatewayApplicationError::internal_from)?;
-    let op_copy = op.clone();
-    let clock = app.dependencies.identity_clock.clone();
-    let subscribers = app.subscribers.clone();
-    app.storage
-        .execute(move |db| {
-            let exists = db
-                .query_row(
-                    "SELECT 1 FROM app_canon_conversations WHERE op_id=?1",
-                    [&op_copy],
-                    |r| r.get::<_, i64>(0),
-                )
-                .optional()
-                .map_err(AppStorageError::sqlite)?
-                .is_some();
-            if !exists {
-                sessions::canon::project(db, &subscribers, clock.as_ref(), &payload, &op_copy)?;
-            }
-            Ok(())
-        })
-        .await
-        .map_err(app_error)?;
+    validate_intent(app, &payload).await?;
+    if let Some(chat) = project(app, payload, op.clone()).await? {
+        app.session_start_hook(chat, "created").await?;
+    }
     if intent["state"] != "applied" {
         app.dependencies
             .work_model
@@ -181,6 +164,73 @@ async fn apply(app: &AppApplication, intent: Value) -> Result<(), GatewayApplica
             .await?;
     }
     Ok(())
+}
+
+async fn validate_intent(
+    app: &AppApplication,
+    payload: &Value,
+) -> Result<(), GatewayApplicationError> {
+    for field in ["work_id", "project_id", "session_id"] {
+        if payload[field].as_str().is_none_or(str::is_empty) {
+            return Err(public(
+                400,
+                "work_model_invalid",
+                "Invalid conversation intent.",
+            ));
+        }
+    }
+    let project_id = payload["project_id"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    let active = app
+        .storage
+        .read(move |db| projects::rows::active_by_id(db, &project_id).map(|p| p.is_some()))
+        .await
+        .map_err(app_error)?;
+    if !active {
+        return Err(public(404, "project_not_found", "Project not found."));
+    }
+    let work_id = payload["work_id"]
+        .as_str()
+        .ok_or_else(|| public(400, "work_model_invalid", "Invalid conversation intent."))?;
+    work_model::execute(
+        app,
+        AppWorkModelRequest {
+            resource: AppWorkModelResource::Epic,
+            id: work_id.to_owned(),
+            input: None,
+        },
+    )
+    .await?;
+    Ok(())
+}
+
+async fn project(
+    app: &AppApplication,
+    payload: Value,
+    op: String,
+) -> Result<Option<String>, GatewayApplicationError> {
+    let clock = app.dependencies.identity_clock.clone();
+    let subscribers = app.subscribers.clone();
+    app.storage
+        .execute(move |db| {
+            let exists = db
+                .query_row(
+                    "SELECT 1 FROM app_canon_conversations WHERE op_id=?1",
+                    [&op],
+                    |r| r.get::<_, i64>(0),
+                )
+                .optional()
+                .map_err(AppStorageError::sqlite)?
+                .is_some();
+            if exists {
+                return Ok(None);
+            }
+            sessions::canon::project(db, &subscribers, clock.as_ref(), &payload, &op)
+        })
+        .await
+        .map_err(app_error)
 }
 
 pub(super) fn start(app: &AppApplication) {
@@ -222,8 +272,33 @@ async fn replay(app: &AppApplication) -> Result<(), GatewayApplicationError> {
                 .as_str()
                 .ok_or_else(GatewayApplicationError::internal)?
                 .to_owned();
-            if row["kind"] == "canon_conversation" {
-                apply(app, row.clone()).await?;
+            if row["kind"] == "canon_conversation"
+                && let Err(error) = apply(app, row.clone()).await
+            {
+                tracing::error!(op_id = %after, %error, "Canon conversation intent failed");
+                if matches!(
+                    error,
+                    GatewayApplicationError::Public {
+                        status: 400 | 404,
+                        ..
+                    }
+                ) {
+                    // Deleted work/projects cannot be projected. Resolve the receipt so
+                    // subsequent changes do not retry an impossible projection.
+                    let result = app
+                        .dependencies
+                        .work_model
+                        .canon_operation(AppCanonOperation::Applied {
+                            op_id: after.clone(),
+                            revision: row["revision"]
+                                .as_i64()
+                                .ok_or_else(GatewayApplicationError::internal)?,
+                        })
+                        .await;
+                    if let Err(error) = result {
+                        tracing::error!(op_id = %after, %error, "Canon intent resolution failed");
+                    }
+                }
             }
         }
     }
