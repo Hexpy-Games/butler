@@ -162,6 +162,17 @@ runs:
           echo 'CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1' >> "$GITHUB_ENV"
         fi
 
+    # The Windows release recipe also shrinks the macOS Agent (258 -> 189 MB).
+    # Every macOS release-profile build (release, packaging, perf and update
+    # fixtures) uses it; ci-fast keeps its own settings. Snapshot and
+    # provenance identities include both variables.
+    - name: Configure macOS release link-time optimization
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        echo 'CARGO_PROFILE_RELEASE_LTO=thin' >> "$GITHUB_ENV"
+        echo 'CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1' >> "$GITHUB_ENV"
+
     # The quota-limited cache holds downloaded dependencies only. Persistent
     # target outputs have one verified restore path, from verified GHCR OCI artifacts.
     - name: Cache Cargo downloads
