@@ -32,6 +32,7 @@ pub(super) fn decode(
     {
         text_tool_call_names = local::rejected_text_calls(text, request);
     }
+    let output_truncated = cutoff::mark(&response, carrier, &mut calls);
     let identity = reported
         .filter(|value| !butler_core::public_text::trim_js_whitespace(value).is_empty())
         .map(|reported_model| ProviderIdentity {
@@ -61,6 +62,7 @@ pub(super) fn decode(
     retain_rejected_text(&mut continuation, text.as_deref(), &text_tool_call_names);
     ModelRoundResult {
         nonfinal: nonfinal(&response, carrier),
+        output_truncated,
         reasoning_summary: None,
         text,
         tool_calls: calls,
@@ -486,6 +488,7 @@ fn openai_usage(value: &Value, model: &str, round: u32) -> Option<Value> {
 }
 use call::call;
 mod call;
+mod cutoff;
 
 mod local;
 

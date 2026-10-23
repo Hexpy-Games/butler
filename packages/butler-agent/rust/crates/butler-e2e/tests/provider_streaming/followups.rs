@@ -52,7 +52,7 @@ async fn anthropic_truncated_tool_arguments_feed_back_to_model() -> Result<(), H
             .as_array()
             .is_some_and(|blocks| blocks.iter().any(|b| b["type"] == "tool_result"
                 && b["tool_use_id"] == "call-cut"
-                && b["content"].to_string().contains("invalid_arguments"))))
+                && b["content"].to_string().contains("output_truncated"))))
     );
     Ok(())
 }

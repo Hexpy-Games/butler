@@ -149,7 +149,7 @@ async fn anthropic_prompt_serializes_registered_default_output() {
         .unwrap()
         + 4;
     let wire: serde_json::Value = serde_json::from_slice(&request[offset..]).unwrap();
-    assert_eq!(wire["max_tokens"].as_u64(), Some(4096));
+    assert_eq!(wire["max_tokens"].as_u64(), Some(128_000));
 }
 
 #[tokio::test]

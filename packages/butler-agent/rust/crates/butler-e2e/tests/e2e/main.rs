@@ -13,6 +13,7 @@ mod agent_import;
 mod alias_index_drop;
 mod answer_blocks;
 mod anthropic_cache;
+mod anthropic_output_limit;
 mod anthropic_requests;
 mod anthropic_thinking_history;
 mod app_admission_history;
