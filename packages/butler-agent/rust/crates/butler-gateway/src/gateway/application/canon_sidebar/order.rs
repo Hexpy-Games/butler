@@ -7,12 +7,15 @@ use std::collections::{HashMap, HashSet};
 pub(super) struct Order {
     pub group_key: String,
     work_ids: Vec<String>,
-    op_id: Option<String>,
 }
 pub(super) fn parse(value: Value) -> Result<Order, GatewayApplicationError> {
     serde_json::from_value(value).map_err(|_| public(400, "work_model_invalid", "Invalid order."))
 }
 pub(super) fn validate(canon: &Value, input: &Order) -> Result<(), GatewayApplicationError> {
+    let wanted: HashSet<_> = input.work_ids.iter().map(String::as_str).collect();
+    if wanted.len() != input.work_ids.len() {
+        return Err(public(400, "work_model_invalid", "Invalid order."));
+    }
     let rows = if input.group_key == "backlog" {
         Some(&canon["backlog"])
     } else {
@@ -22,16 +25,12 @@ pub(super) fn validate(canon: &Value, input: &Order) -> Result<(), GatewayApplic
             .map(|p| &p["works"])
     }
     .and_then(Value::as_array)
-    .ok_or_else(|| public(400, "work_model_invalid", "Unknown group."))?;
+    .ok_or_else(|| public(409, "conflict", "Group no longer exists."))?;
     let actual: HashSet<_> = rows
         .iter()
         .filter(|w| visible(w))
         .filter_map(|w| w["id"].as_str())
         .collect();
-    let wanted: HashSet<_> = input.work_ids.iter().map(String::as_str).collect();
-    if wanted.len() != input.work_ids.len() || input.op_id.as_ref().is_some_and(String::is_empty) {
-        return Err(public(400, "work_model_invalid", "Invalid order."));
-    }
     if actual != wanted {
         let revision = if input.group_key == "backlog" {
             canon["backlog_revision"].as_i64()

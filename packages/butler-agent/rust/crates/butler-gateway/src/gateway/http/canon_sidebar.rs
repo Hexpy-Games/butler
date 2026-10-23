@@ -11,17 +11,22 @@ pub(super) async fn route(
     request: Request<Body>,
     uri: &Uri,
 ) -> Result<Response, HttpError> {
-    use crate::gateway::{AppWorkModelRequest, AppWorkModelResource};
     let parts: Vec<_> = uri.path().trim_start_matches('/').split('/').collect();
-    let (resource, id) = match (request.method(), parts.as_slice()) {
+    let app = &state.application;
+    let data = match (request.method(), parts.as_slice()) {
         (&Method::POST, ["canon", "epics", id, "conversation"]) => {
-            (AppWorkModelResource::Conversation, *id)
+            app.canon_conversation(subsessions::decode_component(id)?)
+                .await?
         }
         (&Method::GET, ["projects", id, "canon", "sidebar"]) => {
-            (AppWorkModelResource::Sidebar, *id)
+            app.canon_sidebar(subsessions::decode_component(id)?)
+                .await?
         }
         (&Method::POST, ["projects", id, "canon", "sidebar-order"]) => {
-            (AppWorkModelResource::SidebarOrder, *id)
+            let id = subsessions::decode_component(id)?;
+            let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
+            let input = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
+            app.canon_sidebar_order(id, input).await?
         }
         _ => {
             return Err(HttpError::public(
@@ -31,21 +36,6 @@ pub(super) async fn route(
             ));
         }
     };
-    let id = subsessions::decode_component(id)?;
-    let input = if resource == AppWorkModelResource::SidebarOrder {
-        let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
-        Some(serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?)
-    } else {
-        None
-    };
-    let data = state
-        .application
-        .work_model(AppWorkModelRequest {
-            resource,
-            id,
-            input,
-        })
-        .await?;
     json(
         StatusCode::OK,
         ApiEnvelope {

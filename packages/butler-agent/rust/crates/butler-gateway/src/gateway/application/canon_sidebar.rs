@@ -4,30 +4,6 @@ use super::*;
 use rusqlite::OptionalExtension;
 use serde_json::json;
 
-pub(super) fn execute(
-    app: &AppApplication,
-    request: AppWorkModelRequest,
-) -> ApplicationFuture<Value> {
-    let app = app.clone_handle();
-    Box::pin(async move {
-        match request.resource {
-            AppWorkModelResource::Sidebar => sidebar(&app, request.id).await,
-            AppWorkModelResource::SidebarOrder => {
-                reorder(
-                    &app,
-                    request.id,
-                    request
-                        .input
-                        .ok_or_else(GatewayApplicationError::internal)?,
-                )
-                .await
-            }
-            AppWorkModelResource::Conversation => conversation(&app, request.id).await,
-            _ => Err(GatewayApplicationError::internal()),
-        }
-    })
-}
-
 async fn canon(app: &AppApplication, id: String) -> Result<Value, GatewayApplicationError> {
     work_model::execute(
         app,

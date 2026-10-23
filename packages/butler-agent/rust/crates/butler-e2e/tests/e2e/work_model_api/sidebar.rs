@@ -222,13 +222,11 @@ async fn wma_sidebar_personal_order_preserves_canon() -> Result<(), HarnessError
         vec![a["id"].as_str().unwrap(), b["id"].as_str().unwrap()]
     );
     let path = format!("/projects/{project}/canon/sidebar-order");
-    let input =
-        json!({"group_key":"backlog","work_ids":[b["id"],a["id"]],"op_id":"personal-order"});
+    let input = json!({"group_key":"backlog","work_ids":[b["id"],a["id"]]});
     for _ in 0..2 {
         data(s.gw.post(&path, input.clone()).await?, 200);
     }
-    let forward =
-        json!({"group_key":"backlog","work_ids":[a["id"],b["id"]],"op_id":"personal-order"});
+    let forward = json!({"group_key":"backlog","work_ids":[a["id"],b["id"]]});
     let changed = data(s.gw.post(&path, forward).await?, 200);
     assert_eq!(
         ids(&changed["groups"][0]["rows"]),
@@ -272,6 +270,33 @@ async fn wma_sidebar_personal_order_preserves_canon() -> Result<(), HarnessError
             json!({"group_key":"backlog","work_ids":[a["id"],a["id"]]}),
         )
         .await?;
+    assert_eq!(malformed.status, 400);
+    s.agent.terminate().await?;
+    let btcc = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    assert_eq!(
+        btcc.execute(
+            "DELETE FROM wm_plans WHERE id=?1",
+            [plan["id"].as_str().unwrap()]
+        )?,
+        1
+    );
+    drop(btcc);
+    s.restart().await?;
+    assert!(
+        sidebar(&s, &project).await?["groups"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|g| g["key"] != plan["id"])
+    );
+    let deleted =
+        s.gw.post(&path, json!({"group_key":plan["id"],"work_ids":[]}))
+            .await?;
+    assert_eq!(deleted.status, 409);
+    assert_eq!(deleted.error_code(), Some("conflict"));
+    let malformed =
+        s.gw.post(&path, json!({"group_key":plan["id"],"work_ids":"invalid"}))
+            .await?;
     assert_eq!(malformed.status, 400);
     s.finish().await
 }
