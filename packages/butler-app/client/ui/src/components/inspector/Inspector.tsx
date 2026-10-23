@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useActiveCanonEpic } from "../canon/useActiveCanonEpic.ts";
 import { EpicInspector } from "../canon/EpicInspector.tsx";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
@@ -51,7 +51,12 @@ export function Inspector({ id }: InspectorProps = {}) {
   const controlWorker = useButlerStore((state) => state.controlWorker);
   const isOpen = useButlerStore(selectEffectiveRightOpen);
   const view = useButlerStore(state => state.view);
-  const dashboardEpic = view.kind === "project-dashboard" && view.epicId ? view : null;
+  const selectedEpic = view.kind === "project-dashboard" && view.epicId ? view : null;
+  // Retain the closing content while the mounted DS shell slides out, like chat.
+  const [lastDashboardEpic, setLastDashboardEpic] = useState(selectedEpic);
+  useEffect(() => { if (selectedEpic) setLastDashboardEpic(selectedEpic); }, [selectedEpic]);
+  const dashboardEpic = selectedEpic ?? (view.kind === "project-dashboard" && lastDashboardEpic?.projectId === view.projectId
+    ? lastDashboardEpic : null);
 
   useEffect(() => { if (epic) setRightTab("epic"); }, [sessionId, epic?.epic.id, setRightTab]);
 
@@ -68,11 +73,11 @@ export function Inspector({ id }: InspectorProps = {}) {
     tabs.splice(tabs.findIndex(([id]) => id === "automations"), 1);
   }
 
-  if (dashboardEpic) return <InspectorShell activeTab="epic" id={id} open={isOpen} onTabChange={setRightTab}
+  if (view.kind === "project-dashboard") return <InspectorShell activeTab="epic" id={id} open={isOpen} onTabChange={setRightTab}
     tabs={[{ id: "epic", label: appCopy.canon.epic, icon: <FileText size="md" /> }]}>
-    <ErrorBoundary key={dashboardEpic.epicId} scope="inspector-epic">
-      <EpicInspector focusTitle key={dashboardEpic.epicId} projectId={dashboardEpic.projectId} epicId={dashboardEpic.epicId!} />
-    </ErrorBoundary>
+    {dashboardEpic && <ErrorBoundary key={dashboardEpic.epicId} scope="inspector-epic">
+      <EpicInspector focusTitle={isOpen} key={dashboardEpic.epicId} projectId={dashboardEpic.projectId} epicId={dashboardEpic.epicId!} />
+    </ErrorBoundary>}
   </InspectorShell>;
 
   return <InspectorShell activeTab={activeTab} id={id} open={isOpen} onTabChange={setRightTab}

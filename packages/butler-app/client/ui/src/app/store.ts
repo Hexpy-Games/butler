@@ -2,6 +2,7 @@ import { reconcileAnswerDrafts } from "./answerDrafts";
 import { retainAnswerBlocks } from "./stableAnswerBlocks";
 import { generalChatCleared } from "./generalChatEvents";
 import { create } from "zustand";
+import { useProjectDashboardState } from "./projectDashboardState.ts";
 import { mergeSessionViewWindow } from "./sessionViewWindow.ts";
 import { chromeEnvironment } from "./chromeEnvironment.ts";
 import {
@@ -1339,13 +1340,16 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   },
   clearPendingProjectDocumentAttachment: () =>
     set({ pendingProjectDocumentAttachment: null }),
-  openProjectDashboard: (projectId) =>
+  openProjectDashboard: (projectId) => {
+    const dashboards = useProjectDashboardState.getState();
+    dashboards.update(projectId, { activationRevision: (dashboards.projects[projectId]?.activationRevision ?? 0) + 1 });
     set((state) => ({
       view: { kind: "project-dashboard", projectId },
       leftOpen: currentAdaptiveMode(chromeEnvironment()) === "expanded" ? state.leftOpen : false,
       selectedArtifactId: null,
       selectedArtifact: null,
-    })),
+    }));
+  },
 
   refreshNavigation: async (options) => {
     const requestGeneration = get().navigationGeneration;

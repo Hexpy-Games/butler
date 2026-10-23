@@ -1,3 +1,4 @@
+import { verifyDashboardSelection } from "../support/canon-dashboard-selection.ts";
 import { canonInspectorClose, closeCanonInspector, verifyCanonInspector } from "../support/canon-board-inspector.ts";
 // Native stub-backed UI smoke: all planning content is seeded through canon HTTP.
 import { captureBoardEdges } from "../support/canon-board-visuals.ts";
@@ -61,6 +62,7 @@ try {
       await capture(page, `${name}-rest.png`); count++;
       const card = board.locator("[data-kanban-item]").filter({ hasText: "캐논" }).getByRole("button").first();
       assert.equal(await card.getByRole("img", { name: "나", exact: true }).count(), 1, "Assigned card has an Avatar after its title");
+      if (width === 1440 && !wallpaper) await verifyDashboardSelection(page, projectId, shots, name);
       await card.focus(); await card.press("Enter");
       await page.locator('[data-test-class="canon-epic-detail"]').waitFor();
       if (width !== 390) {

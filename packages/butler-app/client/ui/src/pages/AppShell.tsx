@@ -249,6 +249,7 @@ function AppWorkspaceContent({ leftOpen, paneOpen, chatWidth }: { leftOpen: bool
 }
 
 function AppWorkspaceControls({ panels }: { panels: WorkspacePanels }) {
+  const dashboardActive = useButlerStore((state) => state.view.kind === "project-dashboard");
   const { resize, browser, peek, drawer, effectiveLeftOpen, effectiveRightOpen,
     rightAvailable, isSettingsView, setLeftOpen, setRightOpen } = panels;
   if (isSettingsView) return null;
@@ -261,7 +262,7 @@ function AppWorkspaceControls({ panels }: { panels: WorkspacePanels }) {
       data-test-class="panel-resize-handle left-panel-resize-handle" side="left"
       onKeyDown={(event) => resize.handlePanelResizeKeyDown("left", event)}
       onPointerDown={(event) => resize.beginPanelResize("left", event)} />}
-    {rightAvailable && <AdaptiveShellInspector data-test-class="right-panel-slot" open={effectiveRightOpen}>
+    {(rightAvailable || dashboardActive) && <AdaptiveShellInspector data-test-class="right-panel-slot" open={effectiveRightOpen}>
       <ErrorBoundary scope="inspector"><Inspector id="butler-right-inspector" /></ErrorBoundary>
     </AdaptiveShellInspector>}
     {effectiveRightOpen && <AdaptivePanelResizeHandle
