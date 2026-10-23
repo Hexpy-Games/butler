@@ -5,7 +5,7 @@ use serde_json::{Map, Value};
 use crate::btcc::BtccError;
 use butler_core::json::JsonDocument;
 
-use super::contracts::{ModelRoundTool, ModelRoundToolCall, ToolError, ToolResult};
+use super::contracts::{ModelRoundTool, ModelRoundToolCall, ToolCallOrigin, ToolError, ToolResult};
 use super::guided_ports::GuidedInvocation;
 use super::ports::{GuidedPolicyPort, ToolExecutionError};
 use super::progress::{Status, operation};
@@ -52,6 +52,17 @@ pub(super) fn prepare<'a>(
     call: &ModelRoundToolCall,
 ) -> PreparedCall<'a> {
     let tool = tools.iter().find(|tool| tool.name == call.name);
+    if call.origin == Some(ToolCallOrigin::Truncated) {
+        return PreparedCall {
+            call: call.clone(),
+            tool,
+            validation: Some(tool_error(
+                "output_truncated",
+                "Your output reached the output token limit while writing this call's arguments, so the call was cut off and not run. Retry in smaller steps, for example by splitting large content across several calls.".into(),
+                None,
+            )),
+        };
+    }
     let (arguments, validation) = match tool {
         None => (
             call.arguments.clone(),

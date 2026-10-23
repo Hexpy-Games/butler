@@ -7,6 +7,8 @@ pub(super) struct State {
     blocks: Vec<Value>,
     arguments: Vec<String>,
     closed: Vec<bool>,
+    /// A `message_delta` reported why the provider stopped generating.
+    stopped: bool,
     projection: StreamProjection,
 }
 
@@ -17,6 +19,7 @@ impl State {
             blocks: Vec::new(),
             arguments: Vec::new(),
             closed: Vec::new(),
+            stopped: false,
             projection: StreamProjection::new(),
         }
     }
@@ -35,17 +38,17 @@ impl State {
             }
             "content_block_start" => self.start(event, observer)?,
             "content_block_delta" => self.delta(event, observer)?,
-            "content_block_stop" => self.stop(event)?,
+            "content_block_stop" => self.close(index(event)?, false)?,
             "message_delta" => {
+                self.stopped |= event["delta"]["stop_reason"].is_string();
                 super::extend(&mut self.message, &event["delta"]);
                 super::extend(&mut self.message["usage"], &event["usage"]);
             }
             "message_stop" => {
-                if !self.message.is_object() || self.closed.contains(&false) {
-                    return Err("provider_stream_interrupted");
-                }
-                self.message["content"] = Value::Array(std::mem::take(&mut self.blocks));
-                return Ok(Some(self.message.take()));
+                return self
+                    .finish(true)
+                    .map(Some)
+                    .ok_or("provider_stream_interrupted");
             }
             _ => {}
         }
@@ -132,20 +135,41 @@ impl State {
         Ok(())
     }
 
-    fn stop(&mut self, event: &Value) -> Result<(), &'static str> {
-        let index = index(event)?;
+    /// The assembled message once the stream ended with `message_stop` and
+    /// every block closed, or once the provider reported its stop reason. A
+    /// response stopped at its output limit can leave its last block open and
+    /// omit the terminator; it is complete, not interrupted.
+    pub(super) fn finish(&mut self, terminated: bool) -> Option<Value> {
+        let open = self.closed.contains(&false);
+        if !self.message.is_object() || ((open || !terminated) && !self.stopped) {
+            return None;
+        }
+        for index in 0..self.blocks.len() {
+            if !self.closed[index] {
+                self.close(index, true).ok()?;
+            }
+        }
+        self.message["content"] = Value::Array(std::mem::take(&mut self.blocks));
+        Some(self.message.take())
+    }
+
+    fn close(&mut self, index: usize, cut: bool) -> Result<(), &'static str> {
         let block = self
             .blocks
             .get_mut(index)
             .ok_or("provider_stream_malformed_event")?;
         if !self.arguments[index].is_empty() {
-            block["input"] = match serde_json::from_str(&self.arguments[index]) {
-                Ok(input) => input,
+            match serde_json::from_str(&self.arguments[index]) {
+                Ok(input) => block["input"] = input,
                 // Keep malformed Butler arguments for the normal tool validation
                 // path. A completed max_tokens response can cut off a tool call.
-                Err(_) if block["type"] == "tool_use" => self.arguments[index].clone().into(),
+                Err(_) if block["type"] == "tool_use" => {
+                    block["input"] = self.arguments[index].clone().into();
+                }
+                // Another block cut at the limit keeps the input it started with.
+                Err(_) if cut => {}
                 Err(_) => return Err("provider_stream_malformed_event"),
-            };
+            }
         }
         self.closed[index] = true;
         Ok(())

@@ -30,6 +30,8 @@ pub(super) struct State {
     pub iteration: u32,
     pub empty_recovery_used: bool,
     pub automatic_continuations: u32,
+    /// Answer text cut off at the output token limit, awaiting its continuation.
+    pub cut_answer: String,
     pub stop_hook_active: bool,
     // Independent of projected messages, so compaction never resets repetition facts.
     pub feedback_counts: BTreeMap<String, u64>,
@@ -57,6 +59,7 @@ impl State {
             iteration: 0,
             empty_recovery_used: false,
             automatic_continuations: 0,
+            cut_answer: String::new(),
             stop_hook_active: false,
             feedback_counts: BTreeMap::new(),
             phase: LoopPhase::Working,
@@ -116,6 +119,7 @@ impl State {
             iteration: restored.iteration,
             empty_recovery_used: restored.empty_response_recovery_used,
             automatic_continuations: restored.automatic_continuations,
+            cut_answer: String::new(),
             stop_hook_active: restored.stop_hook_active,
             feedback_counts: restored.feedback_counts,
             phase: LoopPhase::Working,

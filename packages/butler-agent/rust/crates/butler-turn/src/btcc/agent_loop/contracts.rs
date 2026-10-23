@@ -163,12 +163,15 @@ pub struct ModelRoundToolCall {
     pub origin: Option<ToolCallOrigin>,
 }
 
-/// Whether a tool call came from the provider's native tool channel or was parsed from text.
+/// Whether a tool call came from the provider's native tool channel or was parsed from text,
+/// or was cut off when the provider stopped at its output token limit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolCallOrigin {
     Native,
     Text,
+    /// Its arguments are incomplete; it is never run.
+    Truncated,
 }
 
 /// One transcript message of the loop, persisted inside authority continuations.
@@ -320,6 +323,10 @@ pub struct ModelRoundResult {
     /// Providers without such a distinction leave this false; Work review still applies.
     #[serde(default)]
     pub nonfinal: bool,
+    /// The provider stopped at its output token limit: the text, or the tool
+    /// call marked [`ToolCallOrigin::Truncated`], is incomplete.
+    #[serde(default)]
+    pub output_truncated: bool,
     /// Display summary, consumed once at acceptance, excluded from replay/context storage.
     #[serde(skip)]
     pub reasoning_summary: Option<String>,

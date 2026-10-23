@@ -263,10 +263,12 @@ fn anthropic(request: &ModelRoundRequest<'_>, config: &ProviderRequestConfig) ->
             body.insert(key, value);
         }
     }
-    let max = request
-        .max_output_tokens
-        .and_then(|value| value.to_string().parse::<u64>().ok())
-        .filter(|value| *value > 0)
+    // Messages requires a limit: the catalog's, which context sizing also reserves.
+    let max = [request.max_output_tokens, config.metadata.max_output_tokens]
+        .into_iter()
+        .flatten()
+        .filter_map(|value| value.to_string().parse::<u64>().ok())
+        .find(|value| *value > 0)
         .unwrap_or(4096);
     body.insert("max_tokens".into(), max.into());
     body.insert(
