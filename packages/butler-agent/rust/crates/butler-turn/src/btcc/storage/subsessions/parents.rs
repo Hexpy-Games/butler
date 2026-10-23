@@ -79,7 +79,8 @@ impl SqliteSubsessionRepository {
 
 /// Queue admission reads only legacy execution state. An approval-held child is
 /// idle. A terminal child keeps its place until closeout has saved its result;
-/// a pending result keeps it until admission to the parent.
+/// a pending result keeps it until admission to the parent. CROSS JOIN keeps
+/// the small waiting tree outside the indexed relation lookup.
 const QUEUE_WAITS_FOR_CHILD: &str = "WITH RECURSIVE waiting(parent) AS (
     VALUES(?1)
     UNION
@@ -93,7 +94,7 @@ const QUEUE_WAITS_FOR_CHILD: &str = "WITH RECURSIVE waiting(parent) AS (
             WHERE x.relation_id=r.relation_id AND x.child_turn_id=t.turn_id)
 ) SELECT EXISTS(
     SELECT 1 FROM waiting w
-    JOIN btcc_session_relations r ON r.parent_session_id=w.parent
+    CROSS JOIN btcc_session_relations r ON r.parent_session_id=w.parent
     JOIN btcc_subsession_delegations d ON d.relation_id=r.relation_id
     WHERE EXISTS(SELECT 1 FROM btcc_turns t WHERE t.turn_id=(
         SELECT latest.turn_id FROM btcc_turns latest

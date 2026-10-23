@@ -161,18 +161,21 @@ async fn delivered_transcript_final_projects_and_settles_exact_queue_claim() {
     app.start_dispatch().await.unwrap();
     let mut plan_request = command("projection-id", "question");
     plan_request.request.plan_mode = Some(json!(true));
-    plan_request.request.subsession_result = Some(butler_turn::btcc::SubsessionResultContext {
-        relation_id: "startup-relation".into(),
-        result_id: "startup-result".into(),
-        safe_title: "Child result".into(),
-    });
     let accepted = app.send_message(plan_request).await.unwrap();
     assert!(
-        accepted.queued.is_some(),
-        "result admission must wait for executor readiness"
+        accepted.accepted.is_some(),
+        "ordinary admission retains main's startup behavior"
     );
-    assert!(accepted.turn.is_none());
-    assert!(native.0.lock().unwrap().is_empty());
+    assert!(accepted.turn.is_some());
+    assert_eq!(native.0.lock().unwrap().len(), 1);
+    // Publishing repeated changes must not wait behind a dispatcher held at readiness.
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        for _ in 0..128 {
+            app.queue_wake.chat("general".into()).await.unwrap();
+        }
+    })
+    .await
+    .expect("coalesced queue wakes must not block event publication");
     release.send(true).unwrap();
     tokio::time::timeout(std::time::Duration::from_secs(3), enqueued.notified())
         .await

@@ -6,11 +6,8 @@
     reason = "test assertions"
 )]
 use super::steward_presentation::{self, stub};
-use butler_e2e::e2e::{
-    HarnessError,
-    scenario::{Scenario, accepted_turn_id},
-};
-use rusqlite::Connection;
+use butler_e2e::e2e::{HarnessError, scenario::Scenario};
+use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Value, json};
 use std::{
     path::{Path, PathBuf},
@@ -63,6 +60,16 @@ async fn started(id: &str, url: &str, script: &stub::Script) -> Result<Scenario,
     Ok(s)
 }
 
+pub(super) async fn queued_user(s: &Scenario, text: &str) -> Result<String, HarnessError> {
+    let queued = s.gw.say("general", text).await?;
+    assert!(queued["accepted"].is_null(), "{queued}");
+    assert!(queued["queued"]["id"].is_string(), "{queued}");
+    Ok(queued["queued"]["client_message_id"]
+        .as_str()
+        .unwrap()
+        .into())
+}
+
 pub(super) fn db(s: &Scenario) -> Connection {
     Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap()
 }
@@ -86,6 +93,7 @@ pub(super) fn read_record(path: &Path) -> Value {
 async fn interrupted_queue(crash: bool) -> Result<(), HarnessError> {
     let (url, script, server) = stub::start().await?;
     let kind = if crash { "CRASH" } else { "SHUTDOWN" };
+    script.finish_parent.store(true, Ordering::SeqCst);
     let mut s = started(&format!("STEWARD-QUEUE-{kind}"), &url, &script).await?;
     let view = s.gw.get("/session-view?session_id=general").await?;
     let child = &view.data()["steward_children"][0];
@@ -101,19 +109,9 @@ async fn interrupted_queue(crash: bool) -> Result<(), HarnessError> {
         )
         .unwrap();
     *script.relation.lock().unwrap() = relation.clone();
-    s.turn("general", stub::DIRECTION).await?;
-    assert_eq!(
-        count(
-            &db(&s),
-            "SELECT count(*) FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending'",
-            &relation
-        ),
-        1
-    );
-    let held = accepted_turn_id(&s.gw.say("general", stub::HOLD_PARENT).await?)?;
-    tokio::time::timeout(Duration::from_secs(20), script.parent_held.notified())
-        .await
-        .unwrap();
+    queued_user(&s, stub::DIRECTION).await?;
+    let held = queued_user(&s, stub::HOLD_PARENT).await?;
+    assert_eq!(script.hold_seen.load(Ordering::SeqCst), 0);
     let queued =
         s.gw.post(
             "/session-queue",
@@ -166,12 +164,13 @@ async fn assert_drained(
             "SELECT count(*) FROM btcc_steward_results WHERE relation_id=?1 AND status='success'",
             relation,
         );
-        let direction: String = db
+        let direction: Option<String> = db
             .query_row(
                 "SELECT status FROM btcc_subsession_directions WHERE relation_id=?1",
                 [relation],
                 |row| row.get(0),
             )
+            .optional()
             .unwrap();
         let messages = s.gw.messages("general").await?;
         let delivered = |text: &str| {
@@ -183,7 +182,7 @@ async fn assert_drained(
         let processing = records(&root, "processing").len();
         if failed == 1
             && success == 1
-            && direction == "applied"
+            && direction.as_deref() == Some("applied")
             && delivered(stub::QUEUED_REPLY)
             && messages
                 .iter()
@@ -213,31 +212,42 @@ async fn assert_drained(
             );
             assert_requests(script);
             assert_eq!(script.hold_seen.load(Ordering::SeqCst), 1);
-            let turn = s.gw.turn("general", held).await?.unwrap();
-            assert_eq!(turn["state"], "failed", "{turn}");
-            assert_eq!(turn["retryable"], true, "{turn}");
+            let message = messages.iter().find(|m| m["id"] == held).unwrap();
+            let held_turn = message["turn_id"].as_str().unwrap();
+            let turn = s.gw.turn("general", held_turn).await?.unwrap();
+            assert_eq!(turn["state"], "delivered", "{turn}");
+            assert_eq!(turn["retryable"], false, "{turn}");
+            let failed_result = messages
+                .iter()
+                .position(|m| m["role"] == "assistant" && m["text"] == "Approach B verified.")
+                .unwrap();
+            let direction_message = messages
+                .iter()
+                .position(|m| m["role"] == "user" && m["text"] == stub::DIRECTION)
+                .unwrap();
+            assert!(
+                failed_result < direction_message,
+                "result must precede steering: {messages:?}"
+            );
             let view = s.gw.get("/session-view?session_id=general").await?;
-            assert!(view.data().to_string().contains(held), "{view:?}");
+            assert!(view.data().to_string().contains(held_turn), "{view:?}");
             for path in records(&root, "failed") {
                 let record = read_record(&path);
                 let turn = record
                     .pointer("/envelope/routingHints/turnId")
                     .and_then(Value::as_str)
                     .unwrap();
-                assert!(
-                    turn == child_turn || turn == held,
-                    "unexpected failed follow-up: {record}"
-                );
+                assert!(turn == child_turn, "unexpected failed follow-up: {record}");
             }
             println!(
-                "full queue recovered ({:.3}s): failed=1 success=1 direction={direction} pending={pending} processing={processing}",
+                "full queue recovered ({:.3}s): failed=1 success=1 direction={direction:?} pending={pending} processing={processing}",
                 started.elapsed().as_secs_f64()
             );
             return Ok(());
         }
         assert!(
             Instant::now() < deadline,
-            "queue not drained: failed={failed} success={success} direction={direction} pending={pending} processing={processing} messages={messages:?}\n{}",
+            "queue not drained: failed={failed} success={success} direction={direction:?} pending={pending} processing={processing} messages={messages:?}\n{}",
             s.agent.logs()
         );
         tokio::time::sleep(Duration::from_millis(50)).await;

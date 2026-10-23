@@ -5,6 +5,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
+mod approval_pause;
 mod files;
 pub(super) mod intent;
 #[path = "steward_presentation/stub.rs"]
@@ -18,16 +19,16 @@ use std::time::{Duration, Instant};
 async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (url, script, server) = stub::start().await?;
-    let setup = setup("STEWARD-PRESENTATION", &url)?.env("BUTLER_E2E_HOLD_TOOL", "read_file");
+    let setup = setup("STEWARD-PRESENTATION", &url)?
+        .access(butler_e2e::e2e::scenario::Access::AskAlways)
+        .env("BUTLER_E2E_HOLD_TOOL", "read_file");
     std::fs::write(setup.sandbox.data.join("a.txt"), "Approach A")?;
     std::fs::write(setup.sandbox.data.join("b.txt"), "Approach B")?;
     *script.workspace.lock().unwrap() = setup.sandbox.data.display().to_string();
     let s = setup.start().await?;
     let (_, parent) = s.turn("general", stub::OWNER).await?;
     assert_eq!(parent["state"], "delivered", "{parent}");
-    tokio::time::timeout(Duration::from_secs(20), script.held.notified())
-        .await
-        .unwrap_or_else(|_| panic!("{}\n{}", diagnostic(&script), s.agent.logs()));
+    approval_pause::held(&s, &script).await?;
     let view = s.gw.get("/session-view?session_id=general").await?;
     let child = &view.data()["steward_children"][0];
     assert_sidebar_work(&s, true).await?;
@@ -58,12 +59,14 @@ async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), 
                 .is_some_and(|text| !text.is_empty())),
         "{messages:?}"
     );
-    std::fs::write(s.sandbox.data.join("e2e-hold-tool"), b"once")?;
     script.release.notify_one();
-    wait_held_tool(&s).await?;
+    let (session, request) = approval_pause::pending(&s).await?;
     s.turn("general", stub::DIRECTION).await?;
+    std::fs::write(s.sandbox.data.join("e2e-hold-tool"), b"once")?;
+    approval_pause::allow(&s, &session, &request).await?;
+    wait_held_tool(&s).await?;
     std::fs::remove_file(s.sandbox.data.join("e2e-hold-tool"))?;
-    let complete = wait_result(&s).await?;
+    let complete = approval_pause::drive(&s, wait_result(&s)).await?;
     visible::assert_delivered_messages(&s, &child_id).await?;
     assert_eq!(complete["relation"]["relation_id"], relation);
     assert_eq!(complete["session_id"], child_id);
