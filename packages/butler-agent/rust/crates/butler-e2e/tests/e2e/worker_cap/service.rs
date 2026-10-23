@@ -419,6 +419,8 @@ async fn cb_11_old_reservation_columns_are_ignored_across_reopens() -> Result<()
     f.service
         .complete_failed_child("first", "turn-first", "execution_failed")
         .await?;
+    // Main's historical completed rows can retain their original enqueue state.
+    rusqlite::Connection::open(&f.db)?.execute("UPDATE btcc_subsession_delegations SET dispatch_state='enqueued' WHERE relation_id='rel-first'", [])?;
     assert_eq!(f.count("parent").await?, 1);
     assert_eq!(f.state("waiting").as_deref(), Some("enqueued"));
     f.close().await
