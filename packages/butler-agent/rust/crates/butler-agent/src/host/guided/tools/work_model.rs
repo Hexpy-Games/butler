@@ -1,4 +1,5 @@
 //! Native Work tools. Storage owns transactions, snapshots and replay receipts.
+mod ownership;
 use super::GuidedTools;
 use butler_core::{json::JsonDocument, tool_protocol::ToolName};
 use butler_turn::btcc::{
@@ -132,7 +133,7 @@ async fn apply(
         actor: json!({"session_id":scope.session_id,"turn_id":scope.turn_id,"origin":"chat","access_mode":owner.binding.access_mode.as_str()}),
     };
     let call_id = call_id.to_owned();
-    let value = storage
+    let mut value = storage
         .work_model_write(move |tx| {
             let response = store::apply::apply_tool(tx, &ctx, &scope, &call_id, &raw)?;
             if response["ok"] == true {
@@ -142,6 +143,7 @@ async fn apply(
         })
         .await
         .map_err(integrity)?;
+    ownership::label(owner, &mut value).await;
     encoded(&value)
 }
 

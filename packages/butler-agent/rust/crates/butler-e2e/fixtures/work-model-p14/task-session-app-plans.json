@@ -1,4 +1,5 @@
 {
+  "SESSION_TITLE": "SCAN CONSTANT ROW\nSCALAR SUBQUERY 1\nSEARCH chats USING INDEX chats_runtime_hint_idx (runtime_session_hint=?)\nSCALAR SUBQUERY 2\nSEARCH chats USING INDEX sqlite_autoindex_chats_1 (id=?)",
   "PROJECTED": "SCAN CONSTANT ROW\nSCALAR SUBQUERY 1\nSEARCH app_task_sessions USING COVERING INDEX sqlite_autoindex_app_task_sessions_2 (op_id=?)",
   "CHAT_EXISTS": "SCAN CONSTANT ROW\nSCALAR SUBQUERY 1\nSEARCH chats USING COVERING INDEX sqlite_autoindex_chats_1 (id=?)",
   "COORDINATOR_PROJECT": "SEARCH chats USING INDEX sqlite_autoindex_chats_1 (id=?)",

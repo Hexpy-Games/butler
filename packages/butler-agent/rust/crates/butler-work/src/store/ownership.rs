@@ -57,7 +57,9 @@ pub fn open_task_session(tx: &Transaction<'_>, ctx: &Context, task: &str) -> Res
     let coordinator = work["home_session_id"]
         .as_str()
         .unwrap_or(text(&work, "scope_ref")?);
-    if session == coordinator {
+    // Only the Task's allocated session needs projection. A conversation that
+    // took ownership already exists and keeps its ordinary navigation identity.
+    if session != crate::work_ids::task_session_id(task) {
         return Ok(json!({"session_id":session}));
     }
     record_intent(
@@ -97,7 +99,6 @@ pub fn ownership_prompt(
     detail: &Value,
 ) -> Result<Value> {
     let task = text(detail, "task_id")?;
-    open_task_session(tx, ctx, task)?;
     let mut payload = detail.clone();
     payload["target_session_id"] = json!(session);
     record_intent(
@@ -107,9 +108,18 @@ pub fn ownership_prompt(
         "ownership_prompt",
         &payload,
     )?;
-    let title = text(detail, "title")?;
+    let message = ownership_message(detail, text(detail, "title")?)?;
+    let mut error = detail.clone();
+    error["code"] = json!("owned_elsewhere");
+    error["message"] = json!(message);
+    Ok(json!({"ok":false,"error":error}))
+}
+
+/// App presentation can resolve a conversation title without changing the receipt.
+pub fn ownership_message(detail: &Value, title: &str) -> Result<String> {
+    let task = text(detail, "task_id")?;
     let state = text(detail, "state")?;
-    let message = if state == "running" {
+    Ok(if state == "running" {
         format!(
             "Task {task} is running in another conversation, ‘{title}’. The user now sees a card to open that conversation or move the Task here. Tell them in one line and wait for their choice. Do not retry task.start or work around it."
         )
@@ -117,11 +127,7 @@ pub fn ownership_prompt(
         format!(
             "Task {task} is planned to run in another conversation, ‘{title}’. The user now sees a card to open that conversation or do it here. Tell them in one line and wait for their choice. Do not retry task.start or work around it."
         )
-    };
-    let mut error = detail.clone();
-    error["code"] = json!("owned_elsewhere");
-    error["message"] = json!(message);
-    Ok(json!({"ok":false,"error":error}))
+    })
 }
 
 /// Projection acknowledgements may race another drain; the writer lane reads

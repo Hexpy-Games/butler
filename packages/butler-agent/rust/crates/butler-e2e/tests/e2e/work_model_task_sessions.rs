@@ -1,6 +1,8 @@
 //! WMU-19/20/21 through scripted model turns, public routes and App projection.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
 mod stub;
+#[path = "../../../butler-agent/src/host/guided/tools/work_model/ownership/sql.rs"]
+mod title_sql;
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
@@ -80,6 +82,24 @@ async fn wmu_19_reservations_open_on_demand_and_nest_in_task_order() -> Result<(
         assert!(task["reserved_session_id"].is_string());
         assert!(task["assignee_session_id"].is_null());
     }
+    let requester =
+        s.gw.post("/sessions", json!({"kind":"chat","title":"Review here"}))
+            .await?;
+    let requester = requester.data()["session"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    *script.task.lock().unwrap() = rows[1]["id"].as_str().unwrap().to_owned();
+    s.turn(&requester, TAKE).await?;
+    let card = s.gw.get(&format!("/sessions/{requester}/works")).await?;
+    let decision = &card.data()["decisions"][0];
+    assert_eq!(decision["state"], "reserved", "{card:?}");
+    assert!(decision["message"].as_str().unwrap().contains("‘검토’는"));
+    assert_eq!(
+        app_rows(&s).await?.len(),
+        1,
+        "A card alone must not project a reserved chat"
+    );
     let opened =
         s.gw.post(
             &format!("/tasks/{}/session", rows[1]["id"].as_str().unwrap()),
@@ -127,7 +147,7 @@ async fn wmu_19_reservations_open_on_demand_and_nest_in_task_order() -> Result<(
 #[tokio::test]
 async fn wmu_21_run_here_uses_the_current_conversation_only() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (s, _, server) = start("WMU-21").await?;
+    let (s, script, server) = start("WMU-21").await?;
     s.turn("general", HERE).await?;
     let rows = tasks(&s).await?;
     assert_eq!(rows.len(), 3);
@@ -146,6 +166,28 @@ async fn wmu_21_run_here_uses_the_current_conversation_only() -> Result<(), Harn
     })
     .await?;
     assert_eq!(attempts, 1);
+    let task = rows[0]["id"].as_str().unwrap();
+    *script.task.lock().unwrap() = task.to_owned();
+    let target =
+        s.gw.post("/sessions", json!({"kind":"chat","title":"Continue here"}))
+            .await?;
+    let target = target.data()["session"]["id"].as_str().unwrap().to_owned();
+    let taken =
+        s.gw.post(
+            &format!("/sessions/{target}/task-ownership"),
+            json!({"task_id":task,"decision":"take_here","expected_revision":rows[0]["revision"]}),
+        )
+        .await?;
+    assert_eq!(taken.status, 200, "{taken:?}");
+    let opened =
+        s.gw.post(&format!("/tasks/{task}/session"), json!({}))
+            .await?;
+    assert_eq!(opened.status, 200, "{opened:?}");
+    assert_eq!(opened.data()["session_id"], target);
+    assert!(
+        app_rows(&s).await?.is_empty(),
+        "An existing conversation remains a conversation after taking a Task"
+    );
     s.finish().await?;
     server.abort();
     Ok(())
@@ -218,6 +260,29 @@ async fn wmu_20_open_or_take_running_task_continues_checkpoint_without_holding_f
                 .any(|context| context["checkpoint_ref"].is_string()
                     && context["checkpoint"].is_string())))
     );
+    let requester =
+        s.gw.post(
+            "/sessions",
+            json!({"kind":"chat","title":"Another conversation"}),
+        )
+        .await?;
+    let requester = requester.data()["session"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    s.turn(&requester, TAKE).await?;
+    assert!(
+        script
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .flat_map(super::work_model_script::outputs)
+            .any(|r| r["error"]["code"] == "owned_elsewhere"
+                && r["error"]["message"]
+                    .as_str()
+                    .is_some_and(|m| m.contains("‘Continue here’")))
+    );
     s.finish().await?;
     server.abort();
     Ok(())
@@ -229,6 +294,11 @@ async fn app_query_plans(s: &Scenario) -> Result<(), HarnessError> {
         let db = rusqlite::Connection::open(path)?;
         let mut plans = serde_json::Map::new();
         for (name, sql) in butler_gateway::gateway::storage_testing::task_session_query_statements()
+            .into_iter()
+            .chain(std::iter::once((
+                "SESSION_TITLE",
+                title_sql::SESSION_TITLE.to_owned(),
+            )))
         {
             let mut stmt = db.prepare(&format!("EXPLAIN QUERY PLAN {sql}"))?;
             let args = rusqlite::params_from_iter(std::iter::repeat_n(
