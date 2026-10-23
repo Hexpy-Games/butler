@@ -71,9 +71,7 @@ of agent stdout/stderr. The readiness deadline remains 90 seconds.
 | `BUTLER_E2E_TIER` | unset: scenarios skipped; `stub`, `live` (missing credentials fail), `all` (missing credentials: `SKIPPED (no credentials: …)`) |
 | `BUTLER_E2E_PROVIDER` | `openai-subscription` (default), `openai`, `opencode-go`, … |
 | `BUTLER_E2E_MODEL` / `BUTLER_E2E_MODEL_MATRIX` | `provider/model@effort`; both default to `openai/gpt-6-luna@max` (owner decision: automated real calls never use gpt-6-sol or -astra) |
-| `BUTLER_E2E_CODEX_PROFILE` | Butler OAuth test profile, the default live credential (default `~/.butler-e2e-auth/auth/openai-codex.json`); refreshable, so LIVE-10 runs against it |
-| `BUTLER_E2E_CODEX_AUTH_JSON` | Dedicated Codex-format `auth.json`, passed by path and refreshed atomically in place; never copied by the harness |
-| `CODEX_AUTH_JSON` | Read-only Codex CLI fallback (default `~/.codex/auth.json`); never read by the harness |
+| `BUTLER_E2E_CHATGPT_AUTH_DIR` | Dedicated ChatGPT auth directory containing `chatgpt.json` (default `~/.butler-e2e-auth/auth`); refreshed atomically in place, never copied by the harness |
 | `BUTLER_E2E_API_KEY_ENV` | name of the variable holding an API key (API-key providers) |
 | `BUTLER_E2E_BASE_URL` | upstream override |
 | `BUTLER_E2E_RECORD=1` | record mode |
@@ -82,16 +80,13 @@ of agent stdout/stderr. The readiness deadline remains 90 seconds.
 | Failure retention | successful sandboxes are deleted; last five failures are kept under `$TMPDIR/butler-e2e/failures`, with paths printed |
 | `BUTLER_E2E_REPORT` | file that collects live `PASSED`/`SKIPPED` lines |
 
-The live tier passes the test profile to the agent as an absolute
-`BUTLER_CODEX_AUTH_PROFILE` (refreshes are written back to it; the harness
-never reads the token values) and runs without `OPENAI_API_KEY`, so the
-subscription is used. CI uses the dedicated Codex login described in
-[CONTRIBUTING.md](../../../../../CONTRIBUTING.md#live-e2e-oauth-setup-self-hosted-windows-runner),
-selected with `BUTLER_E2E_CODEX_AUTH_JSON`. A Butler test login
-(`butler auth login --data ~/.butler-e2e-auth`) also works. Without either,
-the harness falls back to the read-only Codex CLI file and LIVE-10 is
-SKIPPED. Run the live tier with `--test-threads=1`; CI also serializes live
-jobs across release branches so refreshes of the one profile cannot race.
+The live tier passes the auth directory to the agent as an absolute
+`BUTLER_CHATGPT_AUTH_DIR` and runs without `OPENAI_API_KEY`, so the ChatGPT
+plan is used. Create the dedicated registration with
+`butler auth login --data ~/.butler-e2e-auth`. CI uses the runner's saved
+registration in place; it never copies a CI secret or falls back to Codex CLI
+credentials. Run the live tier with `--test-threads=1`; CI also serializes live
+jobs across release branches so refreshes of the one registration cannot race.
 
 ## On-demand hedge evaluations
 
@@ -119,9 +114,6 @@ recording holds only the requests its scenario makes. The quota scenarios
 (`tests/quota.rs`) turn polling on with `Setup::quota_polling()`:
 
 ```sh
-# USE-02: Codex wham/usage through the test profile (~/.butler-e2e-auth)
-BUTLER_E2E_TIER=live BUTLER_E2E_RECORD=1 cargo test -p butler-e2e --test quota use_02
-
 # USE-04: Z.AI Coding Plan quota/limit (quota endpoint only, no model calls);
 # the key is read from ZAI_API_KEY and never written to the cassette
 BUTLER_E2E_TIER=live BUTLER_E2E_RECORD=1 BUTLER_E2E_PROVIDER=zai \
@@ -132,11 +124,9 @@ For `zai` the recorder's upstream is the origin `https://api.z.ai` and the
 agent's `BUTLER_ZAI_BASE_URL` carries the Coding Plan path
 (`config::base_path`), from which the product derives its quota URL.
 
-USE-05 (`Setup::codex_login_refresh`) sends the Codex login refresh through
-the recorder (`/oauth/*` is forwarded to `https://auth.openai.com`). Recording
-it makes the test login expire, as LIVE-10 does, and the agent writes the
-refreshed login back to the same profile; replay runs with a refreshable
-placeholder login.
+ChatGPT plan estimates come from model response headers when present.
+Sign-in and refresh flows use the fake ChatGPT authority in the stub tier;
+OAuth traffic is never forwarded by the cassette recorder.
 
 ## history usage and updates
 
@@ -188,13 +178,13 @@ through the product's own address variables.
 |----------|-----------------|
 | Local model server (`/api/tags`, `/v1/models`, `/v1/chat/completions`: streamed, cut, without `[DONE]`, or refusing to stream) | `BUTLER_OLLAMA_BASE_URL`, `BUTLER_LM_STUDIO_BASE_URL`, a registered local model's server URL |
 | Provider model list that checks keys (OpenAI bearer, Anthropic `x-api-key`) | `OPENAI_BASE_URL`, `BUTLER_ANTHROPIC_BASE_URL` |
-| OAuth token endpoint (`id_token`, JWT access token with the ChatGPT claims) | `BUTLER_CODEX_OAUTH_TOKEN_URL` |
+| ChatGPT discovery, JWKS, authorization and token endpoints | `BUTLER_CHATGPT_AUTH_ISSUER` |
 
 The module doc cites the documented source (URL, pinned commit where the
 docs live in a repository) of every shape. Values no document shows are
 marked `synthetic` where they are defined. Nothing is recorded: no Ollama or
 LM Studio server was available on the build hosts. The browser of the
-sign-in flow is the test itself (`BUTLER_CODEX_OAUTH_PORT` picks a free port).
+sign-in flow is the test itself (`BUTLER_CHATGPT_OAUTH_PORT=0` picks a free port).
 
 ## Scenario decisions
 

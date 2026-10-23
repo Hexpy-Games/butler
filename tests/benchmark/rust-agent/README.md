@@ -106,9 +106,13 @@ The contract also requires `architecture=macos-arm64`, one `model`,
 explicit `commands` arrays. Provider input must use exactly one mode: the
 existing `provider_env_file` field with the same private JSON environment map in
 both arms, a top-level `provider_credential_file` selecting one Z.ai API-key
-record, or a top-level `provider_codex_oauth_file` selecting one OpenAI Codex
-OAuth profile. The selected record or profile is copied into each arm's isolated
-DATA; the provider input modes are mutually exclusive and never fall back to
+record, or a top-level `provider_chatgpt_auth_dir` containing `chatgpt.json`.
+ChatGPT status is checked through the candidate's `butler-agent auth status --json`;
+the runner never reads or copies tokens. `BUTLER_CHATGPT_AUTH_DIR` points both
+arms at the supplied registration so rotating tokens refresh in place. Both
+artifacts must support official ChatGPT sign-in; an older frozen artifact cannot
+use this mode. `installed_provider_readiness.py` takes `--chatgpt-auth-dir`.
+The selected API-key record is copied into each arm's isolated DATA; the provider input modes are mutually exclusive and never fall back to
 one another. No full production auth/config directory is copied. Legacy
 requires two commands (gateway and executor); candidate
 requires at least one. Executables must be absolute, and command arguments may contain

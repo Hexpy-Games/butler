@@ -4,6 +4,9 @@ from pathlib import Path
 import sqlite3
 import tempfile
 import unittest
+from types import SimpleNamespace
+
+from chatgpt_auth import chatgpt_auth_input
 from contextlib import redirect_stdout
 from unittest.mock import patch
 
@@ -27,6 +30,36 @@ from workload import load_workload
 
 
 class PreparationTests(unittest.TestCase):
+    # test-category: security
+    def test_chatgpt_status_uses_cli_without_reading_registration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            auth = Path(directory)
+            registration = auth / "chatgpt.json"
+            registration.write_text("not JSON: the runner must never parse this")
+            registration.chmod(0o600)
+            result = SimpleNamespace(returncode=0, stdout=json.dumps({
+                "data": {"configured": True, "mode": "chatgpt_plan"},
+            }))
+            with patch("chatgpt_auth.subprocess.run", return_value=result) as run, \
+                 patch.object(Path, "read_text", side_effect=AssertionError("credential read")):
+                self.assertEqual(chatgpt_auth_input(auth, Path("/isolated/butler-agent")),
+                                 {"mode": "chatgpt_oauth", "auth_dir": str(auth)})
+                self.assertEqual(run.call_args.args[0][1:4], ["auth", "status", "--json"])
+                self.assertEqual(run.call_args.kwargs["env"]["BUTLER_CHATGPT_AUTH_DIR"], str(auth))
+
+    # test-category: security
+    def test_chatgpt_plan_off_status_is_rejected_without_private_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            auth = Path(directory)
+            registration = auth / "chatgpt.json"
+            registration.touch(mode=0o600)
+            result = SimpleNamespace(returncode=0, stdout=json.dumps({
+                "data": {"configured": True, "mode": "chatgpt_plan_off"},
+            }))
+            with patch("chatgpt_auth.subprocess.run", return_value=result):
+                with self.assertRaisesRegex(ValueError, "plan use enabled is required"):
+                    chatgpt_auth_input(auth, Path("/isolated/butler-agent"))
+
     def test_transport_timeout_evidence_omits_endpoint_and_token(self):
         class TimeoutOpener:
             def open(self, *_args, **_kwargs):
