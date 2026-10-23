@@ -25,11 +25,12 @@ fn directions(s: &Scenario, relation: &str) -> Vec<Direction> {
     let db = db(s);
     let mut statement = db
         .prepare(
-            "SELECT json_extract(b.body,'$.body.text'),i.status,t.turn_id \
-             FROM wm_instructions i JOIN wm_spec_bodies b ON b.hash=i.body_ref \
+            "SELECT i.body_ref,i.status,t.turn_id \
+             FROM wm_instructions i \
              JOIN btcc_session_relations r ON r.child_session_id=i.target_session_id \
              LEFT JOIN btcc_turns t ON t.original_message_id='subsession-direction-message:'||i.id \
-             WHERE r.relation_id=?1 ORDER BY i.received_seq",
+             WHERE r.relation_id=?1 AND i.idempotency_key LIKE 'parent-direction:%' \
+             ORDER BY i.received_seq",
         )
         .unwrap();
     statement
@@ -37,7 +38,17 @@ fn directions(s: &Scenario, relation: &str) -> Vec<Direction> {
             Ok((row.get(0)?, row.get(1)?, row.get(2)?))
         })
         .unwrap()
-        .map(Result::unwrap)
+        .map(|row| {
+            let (body, status, turn): Direction = row.unwrap();
+            let content: Value =
+                serde_json::from_str(&butler_work::store::tool_read::body(&db, &body).unwrap())
+                    .unwrap();
+            (
+                content["body"]["text"].as_str().unwrap().to_owned(),
+                status,
+                turn,
+            )
+        })
         .collect()
 }
 
@@ -60,11 +71,12 @@ fn result_status(s: &Scenario, relation: &str, turn: &str) -> Option<String> {
 fn reopen_first_direction(s: &Scenario, relation: &str) {
     let changed = db(s)
         .execute(
-            "UPDATE wm_instructions SET status='pending_safe_point' WHERE id IN (\
-             SELECT i.id FROM wm_instructions i JOIN wm_spec_bodies b ON b.hash=i.body_ref \
+            "UPDATE wm_instructions SET status='pending_safe_point' WHERE id=(\
+             SELECT i.id FROM wm_instructions i \
              JOIN btcc_session_relations r ON r.child_session_id=i.target_session_id \
-             WHERE r.relation_id=?1 AND json_extract(b.body,'$.body.text')=?2)",
-            [relation, stub::DIRECTION],
+             WHERE r.relation_id=?1 AND i.idempotency_key LIKE 'parent-direction:%' \
+             ORDER BY i.received_seq LIMIT 1)",
+            [relation],
         )
         .unwrap();
     assert_eq!(changed, 1, "first direction missing");

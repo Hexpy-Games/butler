@@ -170,6 +170,23 @@ impl SubsessionService {
         if stopped {
             return Ok(true);
         }
+        // Finishing an assigned part does not close its parent Task. An
+        // addressed direction may continue that relation with a new part.
+        if let Child::Assigned(assigned) = candidate {
+            let task = assigned.task_id.clone();
+            return self
+                .repository
+                .storage()
+                .work_model_read(move |db| {
+                    let task = butler_work::store::read_task(db, &task)?;
+                    Ok(!matches!(
+                        task["status"].as_str(),
+                        Some("completed" | "cancelled")
+                    ))
+                })
+                .await
+                .map_err(BtccError::from);
+        }
         Ok(self
             .repository
             .open_relation(candidate.clone())
