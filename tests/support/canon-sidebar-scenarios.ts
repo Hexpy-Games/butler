@@ -88,8 +88,12 @@ export async function verifySidebarOrder(page: Page, server: NativeAppServerHand
   assert.deepEqual(await rows.evaluateAll(rows => rows.map(row => row.getAttribute("data-canon-epic")!)), personal);
   await openPlan(page, planId);
   const handle = page.locator('[data-test-class="canon-plan-epics"] [data-sortable-handle]').first();
+  await handle.focus(); await page.keyboard.press("Space");
+  await page.getByText(/^Dragging .+ Use arrow keys to move it\.$/u).waitFor();
+  await page.keyboard.press("ArrowDown");
+  await page.locator('[data-test-class="canon-plan-epics"] [data-drop-target="true"]').waitFor();
   const ordered = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === `/canon/plans/${planId}/order`);
-  await handle.focus(); await handle.press("Space"); await handle.press("ArrowDown"); await handle.press("Space");
+  await page.keyboard.press("Space");
   assert((await ordered).ok()); await waitToast(page, "과제 순서를 바꿨습니다");
   assert.notDeepEqual((await server.api<CanonOverview>(path)).plans[0]!.works.map(row => row.id), before.plans[0]!.works.map(row => row.id));
   await openPlan(page, null);
@@ -136,12 +140,14 @@ export async function verifySidebarLongPress(page: Page, planId: string) {
   assert.equal(await page.getByRole("menuitem").first().innerText(), "계획 개요");
   await header.dispatchEvent("pointerup", { pointerType: "touch", isPrimary: true });
   await page.keyboard.press("Escape");
+  await page.getByRole("menu").waitFor({ state: "hidden" });
   const row = group.locator('[data-canon-epic]').filter({ has: page.getByRole("button", { name: /메뉴/u }) }).first();
   await row.dispatchEvent("pointerdown", { pointerType: "touch", isPrimary: true });
   await page.getByRole("menu").waitFor();
   assert.equal(await page.getByRole("menuitem", { name: "계획 개요", exact: true }).count(), 0, "Child long press opens only its own menu");
   await row.dispatchEvent("pointerup", { pointerType: "touch", isPrimary: true });
   await page.keyboard.press("Escape");
+  await page.getByRole("menu").waitFor({ state: "hidden" });
 }
 export async function verifyEmptyEpicConversation(page: Page, server: NativeAppServerHandle, sessionId: string) {
   const view = await server.api<{ messages: unknown[] }>(`/session-view?session_id=${encodeURIComponent(sessionId)}`);
@@ -149,5 +155,11 @@ export async function verifyEmptyEpicConversation(page: Page, server: NativeAppS
   const empty = page.locator('[data-test-class="new-chat-empty-state"]');
   await empty.getByRole("heading", { name: "사이드바에서 만든 과제", exact: true }).waitFor();
   await empty.getByText("프리뷰 14 · 과제", { exact: true }).waitFor();
+  const bounds = await empty.boundingBox();
+  const title = await empty.getByRole("heading").boundingBox();
+  const caption = await empty.getByText("프리뷰 14 · 과제", { exact: true }).boundingBox();
+  assert(bounds && title && caption);
+  assert(Math.abs(title.x + title.width / 2 - bounds.x - bounds.width / 2) < 2, "Epic title is horizontally centered");
+  assert(Math.abs((title.y + caption.y + caption.height) / 2 - bounds.y - bounds.height / 2) < 2, "Epic heading and caption are vertically centered");
   await page.getByRole("button", { name: "메시지 입력", exact: true }).getByText("이 과제에 대해 말해 보세요", { exact: true }).waitFor();
 }

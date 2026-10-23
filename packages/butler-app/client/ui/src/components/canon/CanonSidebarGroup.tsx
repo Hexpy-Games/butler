@@ -18,7 +18,7 @@ export function CanonSidebarGroup({ projectId, group, depth, busy, onCreate, onE
   const toggle = () => useOrganization.getState().toggle(key);
   const [menuOpen, setMenuOpen] = useState(false), [over, setOver] = useState(false);
   const labelRef = useRef<HTMLElement>(null);
-  const isHeader = (target: EventTarget) => Boolean(labelRef.current && (target as Element).closest('[role="button"]')?.contains(labelRef.current));
+  const isHeader = (target: EventTarget) => Boolean(labelRef.current && (target as Element).closest('button, [role="button"]')?.contains(labelRef.current));
   const longPress = useLongPressAction(() => setMenuOpen(true));
   const source = useCanonSidebarDrag(state => state.source);
   const valid = source?.projectId === projectId && source.groupKey !== group.key;

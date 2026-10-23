@@ -1,4 +1,5 @@
 import { useActiveCanonEpic } from "../canon/useActiveCanonEpic.ts";
+import { EpicEmptyState } from "./EpicEmptyState.tsx";
 import { type WallpaperContentRect, PromptSuggestionList } from "@/butler-ds";
 import { appCopy, getAppLocale } from "@/app/copy.ts";
 import { useEffect, useState } from "react";
@@ -77,18 +78,20 @@ export function EmptyState({
     markTheme === "dark" ? butlerMarkDarkSrc : butlerMarkLightSrc;
   const momentLabel = briefing?.moment ?? newChatMomentLabel();
 
+  if (epic) return <EpicEmptyState title={epic.epic.title}
+    caption={appCopy.canon.epicCaption(epic.group || appCopy.canon.backlog)} onContentRect={onContentRect} />;
   return (
     <PromptSuggestionList
       title={
-        epic ? epic.epic.title : isGeneralNewChat || isProjectNewChat
+        isGeneralNewChat || isProjectNewChat
           ? (briefing?.title ?? activeChat.title)
           : activeChat.title
       }
-      description={epic ? appCopy.canon.epicCaption(epic.group || appCopy.canon.backlog) : description}
+      description={description}
       onContentRect={onContentRect}
-      moment={epic ? undefined : momentLabel}
-      titleIcon={epic ? undefined : <img alt="" draggable={false} src={titleIconSrc} />}
-      suggestions={(epic ? [] : suggestions).map(({ template, ...suggestion }) => ({
+      moment={momentLabel}
+      titleIcon={<img alt="" draggable={false} src={titleIconSrc} />}
+      suggestions={suggestions.map(({ template, ...suggestion }) => ({
         ...suggestion,
         disabled: isSending,
         onSelect: () =>
