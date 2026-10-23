@@ -122,8 +122,9 @@ try {
   await page.locator('[data-card-id="chatgpt"]').click();
   assert.equal(stub.state.started, 0, "tile does not start sign-in");
   const footer = page.locator('[data-slot="setup-step-footer"]');
-  assert.deepEqual(await footer.getByRole("button").allTextContents(), [copy.firstRun.back, copy.firstRun.cancel, copy.firstRun.next]);
-  assert(await footer.getByRole("button", { name: copy.firstRun.cancel, exact: true }).isDisabled());
+  assert.deepEqual(await footer.getByRole("button").allTextContents(), [copy.firstRun.next]);
+  assert.equal(await footer.getByRole("button", { name: copy.firstRun.cancel, exact: true }).count(), 0);
+  assert.equal(await page.locator('[data-slot="setup-step-header"]').getByRole("button", { name: copy.firstRun.back, exact: true }).count(), 1);
   assert(await footer.getByRole("button", { name: copy.firstRun.next, exact: true }).isDisabled());
   assert.equal(await footer.locator('[data-slot="button-container"]').evaluate(node => getComputedStyle(node).justifyContent), "flex-end");
   await page.getByRole("button", { name: copy.chatgptPlan.continue, exact: true }).click();

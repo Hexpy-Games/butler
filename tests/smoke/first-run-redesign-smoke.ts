@@ -174,8 +174,10 @@ async function signInStates(page: Page, language: "ko" | "en", prefix: string) {
   assert.equal(stub.state.started, starts, "tile selection starts no flow");
   assert.equal(await externalOpens(), before, "tile selection opens no browser");
   assert(await page.getByRole("button", { name: copy.next, exact: true }).isDisabled());
-  assert(await page.getByRole("button", { name: copy.cancel, exact: true }).isDisabled());
+  assert.equal(await page.getByRole("button", { name: copy.cancel, exact: true }).count(), 0);
   assert.equal(await page.getByRole("button", { name: copy.retry, exact: true }).count(), 0);
+  assert.equal(await page.locator('[data-slot="setup-step-header"]').getByRole("button", { name: copy.back, exact: true }).count(), 1);
+  assert.deepEqual(await page.locator('[data-slot="setup-step-footer"]').getByRole("button").allTextContents(), [copy.next]);
   await capture(page, `${prefix}-signin-start`);
   await page.getByRole("button", { name: shared.chatgptPlan.continue, exact: true }).click();
   await page.getByRole("button", { name: shared.chatgptSignIn.copy, exact: true }).waitFor();
@@ -185,6 +187,7 @@ async function signInStates(page: Page, language: "ko" | "en", prefix: string) {
   assert.equal(await page.getByRole("button", { name: shared.chatgptSignIn.copy, exact: true }).count(), 1);
   const group = page.getByRole("button", { name: shared.chatgptSignIn.open, exact: true }).locator('..');
   assert.equal(await group.locator('button').last().innerText(), shared.chatgptSignIn.open);
+  assert.deepEqual(await page.locator('[data-slot="setup-step-footer"]').getByRole("button").allTextContents(), [copy.cancel, copy.next]);
   await capture(page, `${prefix}-signin-waiting`);
   await page.getByRole("button", { name: shared.chatgptSignIn.copy, exact: true }).click();
   await page.getByRole("button", { name: shared.chatgptSignIn.copied, exact: true }).waitFor();
@@ -202,7 +205,7 @@ async function signInStates(page: Page, language: "ko" | "en", prefix: string) {
   stub.state.oauthError = ""; stub.state.oauthStatus = "completed";
   await page.getByRole("button", { name: shared.chatgptSignIn.restart, exact: true }).click();
   await page.getByRole("heading", { name: copy.readyTitle("ChatGPT"), exact: true }).waitFor();
-  assert(await page.getByRole("button", { name: copy.cancel, exact: true }).isDisabled());
+  assert.equal(await page.getByRole("button", { name: copy.cancel, exact: true }).count(), 0);
   await capture(page, `${prefix}-signin-connected`);
   await nextFromAuth(page, language);
   await page.locator("#first-run-reply-language:not(:disabled)").waitFor();

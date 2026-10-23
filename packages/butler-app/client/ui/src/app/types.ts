@@ -977,6 +977,8 @@ export interface ProgressDetailRow {
 }
 
 export interface ProgressRow {
+  failure_code?: string;
+  auth_type?: ProviderAuthMethod | null;
   id: string;
   turn_id?: string;
   kind?: string;
@@ -1667,9 +1669,6 @@ export interface TimelineEvent {
   type: string;
   created_at?: string;
   payload?: {
-    semanticBlockId?: string;
-    failureCode?: string;
-    authType?: ProviderAuthMethod | null;
     progress?: UpdateProgressView;
     message?: MessageRecord;
     segment_completed?: boolean;

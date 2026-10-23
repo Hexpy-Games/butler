@@ -15,13 +15,13 @@ export function ChatGptPlanUsage({ quota, usage, popover = false }: {
   const windows = limit ? [] : quota.windows;
   const labels = { hours_5: copy.usageWindow5h, days_7: copy.usageWindow7d, days_30: copy.usageWindow30d };
   return <Stack gap="sm" data-test-class="chatgpt-plan-usage">
-    {limit || !popover ? <Stack align="row" cross="center" justify="between" gap="sm" wrap>
-      <Stack align="row" cross="center" gap="xs">
+    {limit || !popover ? <Stack align="row" cross="center" justify="between" gap="sm">
+      <Stack align="row" cross="center" gap="xs" grow minWidth="0">
         <ProviderLogo name="openai" size="sm" />
         <Typo.Caption tone={limit ? "danger" : "secondary"}>{limit ? copy.limitReached : copy.usingPlan}
           {limit && quota.planUsage?.resetsAt ? ` · ${copy.resetsAt(formatQuotaTimestamp(quota.planUsage.resetsAt))}` : ""}</Typo.Caption>
       </Stack>
-      {limit ? <ManageChatGptUsage /> : null}
+      {limit ? <Stack.Item shrink={false}><ManageChatGptUsage /></Stack.Item> : null}
     </Stack> : null}
     {windows.length ? <Stack gap="sm">
       {popover ? <Typo.Caption>{appCopy.composer.usage.accountLimits}</Typo.Caption> : null}

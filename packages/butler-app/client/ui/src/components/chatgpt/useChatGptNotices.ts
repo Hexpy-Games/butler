@@ -19,8 +19,12 @@ export function useChatGptNotices() {
     void acknowledgeChatGptNotice("legacy").then(setAccount).catch(() => {});
   }, [account?.legacy_prompt_pending]);
   useEffect(() => onChatGptEvent(event => {
-    if (event.type !== "assistant.public_note" || event.payload?.failureCode !== "provider_quota_exhausted" || event.payload?.authType !== "chatgpt_oauth") return;
-    const key = String(event.payload?.semanticBlockId ?? event.id);
+    const note = event.type === "agent.turn_event" ? event.payload?.event : null;
+    const row = event.type === "agent.turn_event.progress" ? event.payload?.row : null;
+    if (note ? note.kind !== "assistant.public_note" || note.payload?.failureCode !== "provider_quota_exhausted" || note.payload?.authType !== "chatgpt_oauth"
+      : !row || row.failure_code !== "provider_quota_exhausted" || row.auth_type !== "chatgpt_oauth") return;
+    // Both gateway projections carry the original runtime event identity.
+    const key = String(note?.id ?? event.payload?.event_id ?? row?.id);
     if (fallbackShown.current.has(key)) return;
     fallbackShown.current.add(key);
     notifyStatus(appCopy.chatgptPlan.limitFallback, {

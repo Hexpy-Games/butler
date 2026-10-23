@@ -1,5 +1,5 @@
 import { appCopy, useAppLocale } from "@/app/copy";
-import { AlertCircle, Button, ButtonContainer, CheckCircle2, CopyButton, Globe2, Notice, ProviderLogo, RollingSwap, Spinner, Stack } from "@/butler-ds";
+import { AlertCircle, Button, ButtonContainer, CheckCircle2, CopyButton, Globe2, Notice, ProviderLogo, RollingSwap, Skeleton, Spinner, Stack } from "@/butler-ds";
 import type { ChatGptAccountView } from "@/app/setupSignIn";
 import type { useSignIn } from "../first-run/useSignIn";
 interface Props {
@@ -17,6 +17,7 @@ export function ChatGptSignInCard({ signIn, account, firstRun = false, editing =
   const failed = signIn.phase === "failed", timedout = signIn.phase === "timedout";
   const off = !waiting && !failed && !timedout && (account?.status === "plan_off" || signIn.view?.plan_enabled === false);
   const signed = !off && !waiting && !failed && !timedout && (account ? account.status === "signed_in" : signIn.view?.status === "completed" || signIn.view?.status === "profile_exists");
+  const loading = editing && account === null && signIn.phase === "idle";
   const again = !signed && (off || editing || account?.status === "sign_in_required" || account?.status === "legacy_sign_in_required");
   const code = signIn.view?.error;
   const reason = code === "oauth_account_mismatch" ? appCopy.firstRun.signInAccountMismatch
@@ -25,7 +26,7 @@ export function ChatGptSignInCard({ signIn, account, firstRun = false, editing =
     : off ? plan.planOff : signed ? [copy.complete, account?.label ?? signIn.account].filter(Boolean).join(" · ")
     : again ? plan.signInAgainHint : firstRun ? "" : copy.idle;
   const start = (kind: "default" | "new_account" = "default") => { void signIn.start({ kind }); };
-  const icon = waiting ? <Spinner size={16} /> : signed ? <CheckCircle2 size="md" />
+  const icon = loading ? undefined : waiting ? <Spinner size={16} /> : signed ? <CheckCircle2 size="md" />
     : failed || timedout || again ? <AlertCircle size="md" /> : <ProviderLogo name="openai" />;
   const actions = <ButtonContainer size="sm" justify="end">
       {waiting ? <>
@@ -38,6 +39,6 @@ export function ChatGptSignInCard({ signIn, account, firstRun = false, editing =
       </>}
     </ButtonContainer>;
   return <Notice tone={failed ? "error" : "neutral"} icon={icon}
-    message={line ? <Stack as="span" gap="sm"><RollingSwap itemKey={line}>{line}</RollingSwap>{actions}</Stack> : ""}
-    action={!line ? actions : undefined} />;
+    message={loading || line ? <Stack as="span" gap="sm" aria-busy={loading || undefined}><RollingSwap itemKey={loading ? "loading" : line}>{loading ? <Skeleton height="line" width="full" label={appCopy.interfaceDetails.loading} /> : line}</RollingSwap>{!loading ? actions : null}</Stack> : ""}
+    action={!loading && !line ? actions : undefined} />;
 }
