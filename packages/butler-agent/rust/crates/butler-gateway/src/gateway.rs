@@ -5,10 +5,10 @@
 //! the required [`GatewayApplication`] implementation supplied at composition.
 
 mod application;
-pub use application::AppAssetCommand;
 pub use application::storage::history::{AppHistoryCommand, AppHistoryQuery};
 #[cfg(feature = "test-support")]
 pub use application::storage::testing as storage_testing;
+pub use application::{AppAssetCommand, AppSessionTopicClassifier, AppSessionTopicInput};
 mod file_watch;
 pub use file_watch::FileChangeWatch;
 mod auth;
@@ -112,9 +112,9 @@ pub(crate) use application::{
     AutomationDetailView, AutomationListView, AutomationMutationResult, AutomationRunListView,
     AutomationRunResult, AutomationRunSummary, CreateAutomationRequest, UpdateAutomationRequest,
 };
+pub use application::{SMART_GROUP_INSTRUCTIONS, app_session_hint, normalize_committed_turn_event};
 #[cfg(test)]
 pub(crate) use application::{TestProjectDashboardBriefing, TestProjectDashboardLedger};
-pub use application::{app_session_hint, normalize_committed_turn_event};
 pub(crate) use application::{app_work_status, app_worker_activity};
 pub use application::{read_new_chat_briefing_projects, read_new_chat_briefing_settings};
 pub use auth::LocalAuthConfig;

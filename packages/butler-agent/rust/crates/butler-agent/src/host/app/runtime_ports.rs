@@ -15,12 +15,14 @@ mod readiness;
 mod runtime_info;
 mod session_progress;
 mod session_title;
+mod session_topic;
 mod session_workspaces;
 mod settings;
 mod settings_mutation;
 mod setup;
 mod topic_branch;
 pub(crate) use session_title::AppSessionTitleGeneratorAdapter;
+pub(crate) use session_topic::AppSessionTopicClassifierAdapter;
 
 use std::sync::Arc;
 

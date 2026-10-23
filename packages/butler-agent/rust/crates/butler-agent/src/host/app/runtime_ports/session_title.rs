@@ -29,25 +29,7 @@ impl AppSessionTitleGenerator for AppSessionTitleGeneratorAdapter {
         let provider = self.provider.clone();
         let configuration = self.configuration.clone();
         Box::pin(async move {
-            let snapshot = configuration
-                .read_metadata()
-                .await
-                .map_err(GatewayApplicationError::internal_from)?;
-            let metadata = snapshot
-                .catalog
-                .resolve_model_metadata(Some(&input.model_ref));
-            let effort = [
-                CatalogEffort::None,
-                CatalogEffort::Low,
-                CatalogEffort::Medium,
-                CatalogEffort::High,
-                CatalogEffort::Xhigh,
-                CatalogEffort::Max,
-            ]
-            .into_iter()
-            .find(|effort| metadata.reasoning_efforts.contains(effort))
-            .unwrap_or(metadata.default_reasoning_effort);
-            let effort = super::settings::reasoning_effort(effort);
+            let effort = lowest_effort(&configuration, &input.model_ref).await?;
             let text: String = input
                 .text
                 .split(butler_core::public_text::is_js_whitespace)
@@ -63,13 +45,17 @@ impl AppSessionTitleGenerator for AppSessionTitleGeneratorAdapter {
                 format!("User message:\n{text}"),
                 None,
             )];
-            let result = title_round(
+            let result = background_round(
                 &provider,
-                &input.model_ref,
+                BackgroundRound {
+                    model: &input.model_ref,
+                    instructions: INSTRUCTIONS,
+                    purpose: "title",
+                    effort: &effort,
+                    usage_session_id: input.usage_session_id,
+                },
                 &messages,
-                &effort,
                 cancellation,
-                input.usage_session_id,
             )
             .await?;
             Ok(result
@@ -80,25 +66,57 @@ impl AppSessionTitleGenerator for AppSessionTitleGeneratorAdapter {
     }
 }
 
-async fn title_round(
+/// The cheapest reasoning effort the model supports.
+pub(super) async fn lowest_effort(
+    configuration: &ModelConfiguration,
+    model_ref: &str,
+) -> Result<ReasoningEffort, GatewayApplicationError> {
+    let snapshot = configuration
+        .read_metadata()
+        .await
+        .map_err(GatewayApplicationError::internal_from)?;
+    let metadata = snapshot.catalog.resolve_model_metadata(Some(model_ref));
+    let effort = [
+        CatalogEffort::None,
+        CatalogEffort::Low,
+        CatalogEffort::Medium,
+        CatalogEffort::High,
+        CatalogEffort::Xhigh,
+        CatalogEffort::Max,
+    ]
+    .into_iter()
+    .find(|effort| metadata.reasoning_efforts.contains(effort))
+    .unwrap_or(metadata.default_reasoning_effort);
+    Ok(super::settings::reasoning_effort(effort))
+}
+
+pub(super) struct BackgroundRound<'a> {
+    pub model: &'a str,
+    pub instructions: &'a str,
+    /// Usage attribution label of this background work.
+    pub purpose: &'static str,
+    pub effort: &'a ReasoningEffort,
+    pub usage_session_id: Option<String>,
+}
+
+/// One short tool-free round attributed as background work.
+pub(super) async fn background_round(
     provider: &ModelProvider,
-    model: &str,
+    round: BackgroundRound<'_>,
     messages: &[ModelRoundMessage],
-    effort: &ReasoningEffort,
     cancellation: CancellationToken,
-    usage_session_id: Option<String>,
 ) -> Result<butler_turn::btcc::ModelRoundResult, GatewayApplicationError> {
     provider
         .run_round(ModelRoundRequest {
             max_output_tokens: Some(128.0),
             round_id: None,
-            model,
+            model: round.model,
             messages,
-            instructions: Some(INSTRUCTIONS),
+            instructions: Some(round.instructions),
             tools: &[],
             tool_surface_digest: None,
             tool_choice: None,
-            reasoning_effort: effort,
+            reasoning_effort: round.effort,
             cancellation,
             attachments: &[],
             image_carrier: None,
@@ -107,8 +125,8 @@ async fn title_round(
             verified_image_payload: None,
             butler_data: None,
             usage_attribution: Some(&butler_turn::btcc::UsageAttribution::attributed_background(
-                "title",
-                usage_session_id,
+                round.purpose,
+                round.usage_session_id,
                 Some("main".into()),
             )),
             cache_scope: None,
