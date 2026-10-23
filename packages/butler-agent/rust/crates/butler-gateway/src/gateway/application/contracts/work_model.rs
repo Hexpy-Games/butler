@@ -26,9 +26,6 @@ pub enum AppWorkModelResource {
     EditEpic,
     PlanOrder,
     BacklogOrder,
-    Sidebar,
-    SidebarOrder,
-    Conversation,
 }
 
 #[derive(Clone, Debug)]

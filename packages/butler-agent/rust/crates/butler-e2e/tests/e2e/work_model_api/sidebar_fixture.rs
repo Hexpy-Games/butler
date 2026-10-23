@@ -75,18 +75,15 @@ async fn wma_sidebar_seeded_visibility_and_plan_order() -> Result<(), HarnessErr
     let backlog = data(
         s.gw.post(
             &path,
-            json!({"group_key":"backlog","work_ids":["wk_passkey"],"op_id":"shared-operation"}),
+            json!({"group_key":"backlog","work_ids":["wk_passkey"]}),
         )
         .await?,
         200,
     );
     assert_eq!(ids(&backlog["groups"][0]["rows"]), vec!["wk_passkey"]);
     let changed = data(
-        s.gw.post(
-            &path,
-            json!({"group_key":"pl_p14","work_ids":order,"op_id":"shared-operation"}),
-        )
-        .await?,
+        s.gw.post(&path, json!({"group_key":"pl_p14","work_ids":order}))
+            .await?,
         200,
     );
     assert_eq!(ids(&changed["groups"][1]["rows"]), order);
@@ -95,10 +92,7 @@ async fn wma_sidebar_seeded_visibility_and_plan_order() -> Result<(), HarnessErr
     let forward = ids(&before["plans"][0]["works"]);
     let (a, b) = tokio::join!(
         s.gw.post(&path, json!({"group_key":"pl_p14","work_ids":forward})),
-        s.gw.post(
-            &path,
-            json!({"group_key":"pl_p14","work_ids":order,"op_id":"shared-operation"})
-        )
+        s.gw.post(&path, json!({"group_key":"pl_p14","work_ids":order}))
     );
     assert_eq!(ids(&data(a?, 200)["groups"][1]["rows"]), forward);
     assert_eq!(ids(&data(b?, 200)["groups"][1]["rows"]), order);
@@ -119,11 +113,11 @@ async fn wma_sidebar_seeded_visibility_and_plan_order() -> Result<(), HarnessErr
     assert_eq!(
         s.gw.post(
             &format!("/projects/{another}/canon/sidebar-order"),
-            json!({"group_key":"pl_p14","work_ids":order,"op_id":"shared-operation"})
+            json!({"group_key":"pl_p14","work_ids":order})
         )
         .await?
         .status,
-        400
+        409
     );
     s.finish().await
 }
