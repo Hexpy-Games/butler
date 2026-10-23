@@ -18,8 +18,8 @@ import { LEVELS, RADII, SPECIMEN, specimenRadius, type RadiusCopy } from "./radi
  *                       value revealed above on one shared line
  *   41.6–52.1 Nest      inner 8 inside outer 10, concentric; a wrong 22 flashes
  *                       and morphs back
- *   52.1–80.5 Shadows   one scene each, one at a time: a pressed segment rises
- *                       (--shadow-control), a dragged card lifts
+ *   52.1–80.5 Shadows   one scene each, one at a time: a pressed switch turns on
+ *                       (its thumb on --shadow-control), a dragged card lifts
  *                       (--shadow-drag-lift), a window opens over the cards
  *                       (--shadow-window); each with when it is used
  */
@@ -102,7 +102,7 @@ export function radiusTracks(copy: RadiusCopy) {
       shown("na-o", AT.nest + TRANSITION + 0.4), shown("nn-o", AT.nest + TRANSITION + 0.8), shown("na-i", AT.nest + TRANSITION + 1.2),
       shown("nn-i", AT.nest + TRANSITION + 1.6), shown("np", AT.nest + TRANSITION + 2),
       { select: select("nw"), keys: looped([{ at: 0, o: 0, rad: 8 }, { at: AT.wrong, o: 0, rad: 8 }, { at: AT.wrong + 0.3, o: 1 }, { at: AT.wrong + 1.2, rad: 22, ease: "emphasized" }, { at: AT.wrong + 2.8, rad: 22 }, { at: AT.wrong + 3.8, rad: 8, ease: "standard" }, { at: AT.press - 0.6, o: 1 }, { at: AT.press - 0.1, o: 0 }], close) },
-      // Low: the pressed segment takes the raised state (the control's own before and after).
+      // Low: the pressed switch turns on (the control's own before and after).
       { select: select("px-0"), keys: looped([{ at: 0, o: 1 }, { at: press, o: 1 }, { at: press + PRESS, o: 0 }], close) },
       { select: select("px-1"), keys: looped([{ at: 0, o: 0 }, { at: press, o: 0 }, { at: press + PRESS, o: 1 }], close) },
       // The drag: lift (scale and shadow), move a slot down as the next card moves up, settle.

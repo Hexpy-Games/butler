@@ -14,10 +14,8 @@ import {
   FolderPlus,
   IconSlot,
   PencilLine,
+  SegmentedControl,
   Stack,
-  Tabs,
-  TabsList,
-  TabsTrigger,
 } from "@/butler-ds";
 import { useButlerStore } from "@/app/store";
 import { useOrganization } from "@/app/space/organization";
@@ -36,22 +34,17 @@ export function SpaceBrowseHeader() {
   return (
     <Stack gap={tab === "all" ? "sm" : "lg"} compactGap="lg">
       <Stack gap="md">
-        <Tabs
+        <SegmentedControl
+          stretch
+          ariaLabel={appCopy.space.views}
           value={tab}
           onValueChange={(value) => setTab(value as typeof tab)}
-        >
-          <TabsList stretch aria-label={appCopy.space.views}>
-            <TabsTrigger value="all">
-              <ListFilter />
-              {appCopy.space.all}</TabsTrigger>
-            <TabsTrigger value="recent">
-              <Clock3 />
-              {appCopy.space.recent}</TabsTrigger>
-            <TabsTrigger value="running">
-              <Activity />
-              {appCopy.space.running}</TabsTrigger>
-          </TabsList>
-        </Tabs>
+          options={[
+            { value: "all", label: appCopy.space.all, icon: <ListFilter /> },
+            { value: "recent", label: appCopy.space.recent, icon: <Clock3 /> },
+            { value: "running", label: appCopy.space.running, icon: <Activity /> },
+          ]}
+        />
         {tab === "all" && hasGeneral && (
           <SpaceRow rowKey="s:general" shortcut />
         )}
