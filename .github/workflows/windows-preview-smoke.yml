@@ -301,8 +301,8 @@ jobs:
     if: always() && !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.tier != 'integration' && fromJSON(needs.changes.outputs.jobs)['hosted-build'] && !inputs.native-loop && !inputs.diagnose-powershell
     runs-on: windows-latest
     timeout-minutes: 90
-    env:
-      RUSTFLAGS: -C target-feature=+crt-static
+    # Downloaded prebuilt ORT objects import the dynamic CRT (/MD); the static
+    # CRT flag belongs to the owner PC's static-ort build and fails to link here.
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/rust-agent-setup

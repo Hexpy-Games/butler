@@ -56,3 +56,10 @@ class WindowsCascade(unittest.TestCase):
             result = subprocess.run([sys.executable, ROOT / 'ci-check-selected.py'], env=env, capture_output=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn(producer, result.stderr.decode())
+
+    # test-category: format-pin
+    def test_hosted_harness_build_links_prebuilt_ort_with_its_dynamic_crt(self):
+        source = (ROOT.parent / 'workflows/windows-preview-smoke.yml').read_text()
+        job = source.split('\n  hosted-build:\n')[1].split('\n  release:\n')[0]
+        self.assertIn('native-deps: prebuilt-ort', job)
+        self.assertNotIn('crt-static', job)  # Prebuilt ORT objects import the /MD CRT.
