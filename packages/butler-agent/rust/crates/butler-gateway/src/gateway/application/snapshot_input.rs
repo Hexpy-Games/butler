@@ -243,7 +243,7 @@ fn rebuilt_turn(
         session_id: snapshot.session_id,
         account_id: "local".into(),
         peer_kind: "dm".into(),
-        sender_id: "app-user".into(),
+        sender_id: APP_PERSON_ID.into(),
         sender_display_name: "Butler App".into(),
         project_id: snapshot.project.map(|project| project.id),
         execution_controls: snapshot.execution_controls,

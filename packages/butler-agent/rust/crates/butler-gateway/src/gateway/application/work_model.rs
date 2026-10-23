@@ -98,7 +98,10 @@ async fn validate_scope(
 }
 
 /// Runtime owners stay internal; clients use the App chat ids in their routes.
-fn public_sessions(db: &rusqlite::Connection, value: &mut Value) -> Result<(), AppStorageError> {
+pub(super) fn public_sessions(
+    db: &rusqlite::Connection,
+    value: &mut Value,
+) -> Result<(), AppStorageError> {
     match value {
         Value::Array(items) => {
             for item in items {

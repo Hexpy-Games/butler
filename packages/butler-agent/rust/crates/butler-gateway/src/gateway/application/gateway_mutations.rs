@@ -11,6 +11,18 @@ impl GatewayMutationCommands for AppApplication {
         let this = self.clone_handle();
         Box::pin(async move { this.replay_kept_request_owned(chat, source, receipt).await })
     }
+    fn canon_sidebar(&self, project: String) -> ApplicationFuture<Value> {
+        let app = self.clone_handle();
+        Box::pin(async move { canon_sidebar::sidebar(&app, project).await })
+    }
+    fn canon_sidebar_order(&self, project: String, input: Value) -> ApplicationFuture<Value> {
+        let app = self.clone_handle();
+        Box::pin(async move { canon_sidebar::reorder(&app, project, input).await })
+    }
+    fn canon_conversation(&self, id: String) -> ApplicationFuture<Value> {
+        let app = self.clone_handle();
+        Box::pin(async move { canon_sidebar::conversation(&app, id).await })
+    }
     fn automation_run_attention(
         &self,
         id: String,

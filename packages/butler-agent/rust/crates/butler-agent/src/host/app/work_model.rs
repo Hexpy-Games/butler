@@ -1,4 +1,5 @@
 //! Host-owned BTCC adapter; every SQL operation stays on its owning lane.
+mod canon_sidebar;
 use butler_gateway::gateway::{
     AppWorkModelConflict, AppWorkModelEvent, AppWorkModelPort, AppWorkModelRequest,
     AppWorkModelResource, AppWorkModelScope, ApplicationFuture, GatewayApplicationError,
@@ -32,6 +33,12 @@ impl AppWorkModel {
     }
 }
 impl AppWorkModelPort for AppWorkModel {
+    fn canon_operation(
+        &self,
+        operation: butler_gateway::gateway::AppCanonOperation,
+    ) -> ApplicationFuture<Value> {
+        canon_sidebar::execute(self.storage.clone(), operation)
+    }
     fn execute(&self, request: AppWorkModelRequest) -> ApplicationFuture<Value> {
         let storage = self.storage.clone();
         let subsessions = self.subsessions.clone();
@@ -56,7 +63,7 @@ impl AppWorkModelPort for AppWorkModel {
                 // Display-profile names are mutable presentation, not identities.
                 let ctx = store::Context {
                     now: chrono::Utc::now().timestamp_millis(),
-                    actor: json!({"person":"app-user","via":"app"}),
+                    actor: json!({"person":butler_gateway::gateway::APP_PERSON_ID,"via":"app"}),
                 };
                 storage
                     .work_model_write(move |tx| {
