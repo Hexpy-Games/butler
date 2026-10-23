@@ -117,13 +117,16 @@ afterEach(() => {
   }
 });
 
-test("message attachment links open the signed URL", async () => {
+test("message attachment tiles show the signed URL and open in the app, not as links", async () => {
   const dom = installDom();
   const container = dom.window.document.querySelector("#root")!;
   const root = createRoot(container);
-  await act(async () => root.render(<MessageAttachments attachments={[attachment()]} />));
+  const image = { ...attachment(), file_id: "file-image", kind: "image" as const, mime_type: "image/png", safe_name: "shot.png" };
+  await act(async () => root.render(<MessageAttachments attachments={[image, attachment()]} sessionId="general" />));
 
-  expect(container.querySelector("a")?.getAttribute("href")).toBe(SIGNED);
+  expect(container.querySelector("img")?.getAttribute("src")).toBe(SIGNED);
+  expect(container.querySelector("a")).toBeNull();
+  expect(container.querySelectorAll('[data-slot="attachment-tile"] button')).toHaveLength(2);
   await act(async () => root.unmount());
 });
 

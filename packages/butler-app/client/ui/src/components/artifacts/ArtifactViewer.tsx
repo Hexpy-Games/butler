@@ -33,7 +33,8 @@ import {
 import { HtmlFileFrame } from "./HtmlFileFrame";
 import { OutputFrame } from "./OutputFrame";
 import { useArtifactText, type ArtifactTextState } from "./useArtifactText";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { ArtifactSaveButton } from "./artifactActions";
 
 const MARKDOWN_COMPONENTS: Components = { a: MarkdownLink };
 
@@ -91,7 +92,7 @@ export function ArtifactViewer({
         </NativeSelect>
       </Stack>}
       <ArtifactPreview data-test-class="artifact-viewer">
-        {mode === "web" ? <OutputFrame key={artifact.id} outputId={artifact.id} title={artifact.title} preview={artifact.url?.startsWith("/previews/")} /> : mode === "html" ? <HtmlFileFrame key={file.path} path={file.path} title={artifact.title} /> : renderPreview({ mode, state, text, title: artifact.title, file })}
+        {mode === "web" ? <OutputFrame key={artifact.id} outputId={artifact.id} title={artifact.title} preview={artifact.url?.startsWith("/previews/")} /> : mode === "html" ? <HtmlFileFrame key={file.path} path={file.path} title={artifact.title} /> : renderPreview({ mode, state, text, title: artifact.title, file, save: <ArtifactSaveButton artifact={artifact} /> })}
       </ArtifactPreview>
     </Stack>
   );
@@ -112,10 +113,11 @@ function renderPreview(input: {
   text: string;
   title: string;
   file: MessageFileSourceState;
+  save: ReactNode;
 }) {
   const { file } = input;
   if (!file.src || input.mode === "unsupported") {
-    return <Typo.Caption>{appCopy.artifacts.unsupported}</Typo.Caption>;
+    return <Stack gap="md"><Typo.Caption>{appCopy.artifacts.unsupported}</Typo.Caption>{input.save}</Stack>;
   }
   if (input.mode === "image") {
     return (

@@ -18,10 +18,10 @@ export interface ImageViewerProps {
 }
 
 /**
- * A modal image viewer (lightbox): the picture fitted to the window on a dimmed scrim, previous/next
+ * A modal image viewer (lightbox): the picture fitted to the window on a blurred surface-tone scrim, previous/next
  * through its set (buttons and the arrow keys), the caption and source line, the container's actions and
  * Close (also Esc and a click on the scrim). Focus is trapped and returns to the opener; reduced motion
- * keeps only the fade. Pictures fit the screen; there is no zoom.
+ * keeps only the fade. Pictures fit the screen; there is no zoom. A `video` item plays with native controls.
  */
 export function ImageViewer({ images, index, onIndexChange, onClose, labels, actions }: ImageViewerProps) {
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -31,6 +31,8 @@ export function ImageViewer({ images, index, onIndexChange, onClose, labels, act
   const previous = index !== null && index > 0 ? () => onIndexChange(index - 1) : undefined;
   const next = index !== null && index < images.length - 1 ? () => onIndexChange(index + 1) : undefined;
   const keys = (event: KeyboardEvent) => {
+    // A focused video's controls own the arrow keys (seek).
+    if (event.target instanceof HTMLMediaElement) return;
     const step = event.key === "ArrowLeft" ? previous : event.key === "ArrowRight" ? next : undefined;
     if (!step) return;
     event.preventDefault();
