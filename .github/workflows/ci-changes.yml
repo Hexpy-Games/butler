@@ -52,6 +52,9 @@ on:
       electron:
         description: Selected electron inputs
         value: ${{ jobs.paths.outputs.electron }}
+      tool-e2e:
+        description: PR changes the tool-call path
+        value: ${{ jobs.paths.outputs.tool-e2e }}
       licenses:
         description: Selected licenses inputs
         value: ${{ jobs.paths.outputs.licenses }}
@@ -80,6 +83,7 @@ jobs:
       workflows: ${{ steps.paths.outputs.workflows }}
       docs-only: ${{ steps.paths.outputs.docs-only }}
       electron: ${{ steps.paths.outputs.electron }}
+      tool-e2e: ${{ steps.paths.outputs.tool-e2e }}
       licenses: ${{ steps.paths.outputs.licenses }}
       selection: ${{ steps.paths.outputs.selection }}
     steps:
