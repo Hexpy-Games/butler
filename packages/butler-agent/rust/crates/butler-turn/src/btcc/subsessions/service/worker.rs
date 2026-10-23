@@ -42,7 +42,7 @@ impl SubsessionService {
             }
             return Ok(
                 if existing.dispatch_state == SubsessionDispatchState::Pending {
-                    worker_output(&existing, self.cached_worker_cap())
+                    self.worker_output(&existing).await?
                 } else {
                     super::helpers::existing_delegation_output(&existing)
                 },
@@ -83,7 +83,7 @@ impl SubsessionService {
                 now,
             ))
             .await?;
-        Ok(worker_output(&stored, self.cached_worker_cap()))
+        self.worker_output(&stored).await
     }
 }
 
@@ -133,9 +133,7 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?
         {
-            if !self.publish_worker(&stored).await? {
-                break;
-            }
+            self.publish_worker(&stored).await?;
             self.notify_execution_changed(&stored.child_session_id)
                 .await?;
         }
@@ -145,7 +143,7 @@ impl SubsessionService {
     pub(super) async fn prepare_child_binding(
         &self,
         stored: &crate::btcc::StoredSubsessionDelegation,
-    ) -> Result<bool, BtccError> {
+    ) -> Result<(), BtccError> {
         let marker = if stored.packet.child_role == ChildRole::Worker {
             self.repository
                 .worker_result_marker(stored.relation_id.clone())
@@ -166,15 +164,15 @@ impl SubsessionService {
                 "[native-btcc] Worker binding deferred code={}",
                 error.code()
             );
-            return Ok(false);
+            return Err(worker_start_failed());
         }
-        Ok(true)
+        Ok(())
     }
 
     pub(super) async fn publish_worker(
         &self,
         stored: &crate::btcc::StoredSubsessionDelegation,
-    ) -> Result<bool, BtccError> {
+    ) -> Result<(), BtccError> {
         let marker = self
             .repository
             .worker_result_marker(stored.relation_id.clone())
@@ -194,9 +192,9 @@ impl SubsessionService {
                 "[native-btcc] Worker publish deferred code={}",
                 error.code()
             );
-            return Ok(false);
+            return Err(worker_start_failed());
         }
-        Ok(true)
+        Ok(())
     }
 
     /// Settings changes retry durable waiting work without polling.
@@ -300,13 +298,36 @@ impl SubsessionService {
     }
 }
 
-pub(super) fn worker_output(stored: &crate::btcc::StoredSubsessionDelegation, cap: u64) -> Value {
-    let waiting = stored.dispatch_state == SubsessionDispatchState::Pending;
-    let mut output = json!({"ok":true,"status":if waiting {"waiting"} else {"queued"},"delegation_id":stored.delegation_id,"relation_id":stored.relation_id,"child_session_id":stored.child_session_id,"task_id":stored.task_id});
-    if waiting && let Some(object) = output.as_object_mut() {
-        object.insert("message".into(), json!(
-            format!("Worker {} is waiting because this session already has {cap} Workers running. It starts automatically when one of them finishes, and its result arrives like any other. Continue your own work and do not dispatch it again.", stored.delegation_id)
-        ));
+fn worker_start_failed() -> BtccError {
+    BtccError::detected(
+        BtccCode::WorkerStartFailed,
+        "Couldn't start the Worker; call it again.",
+    )
+}
+
+impl SubsessionService {
+    async fn worker_output(
+        &self,
+        stored: &crate::btcc::StoredSubsessionDelegation,
+    ) -> Result<Value, BtccError> {
+        let cap = self.cached_worker_cap();
+        let waiting = stored.dispatch_state == SubsessionDispatchState::Pending;
+        if waiting
+            && self
+                .repository
+                .running_worker_count(stored.parent_session_id.clone())
+                .await
+                .map_err(BtccError::from)?
+                < cap
+        {
+            return Err(worker_start_failed());
+        }
+        let mut output = json!({"ok":true,"status":if waiting {"waiting"} else {"queued"},"delegation_id":stored.delegation_id,"relation_id":stored.relation_id,"child_session_id":stored.child_session_id,"task_id":stored.task_id});
+        if waiting && let Some(object) = output.as_object_mut() {
+            object.insert("message".into(), json!(
+                format!("Worker {} is waiting because this session already has {cap} Workers running. It starts automatically when one of them finishes, and its result arrives like any other. Continue your own work and do not dispatch it again.", stored.delegation_id)
+            ));
+        }
+        Ok(output)
     }
-    output
 }

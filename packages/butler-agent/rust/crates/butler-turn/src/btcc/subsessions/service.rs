@@ -298,7 +298,7 @@ impl SubsessionService {
         &self,
         delegation_id: &str,
     ) -> Result<Option<crate::btcc::StoredSubsessionDelegation>, BtccError> {
-        let Some(mut existing) = self
+        let Some(existing) = self
             .repository
             .by_delegation(delegation_id.to_owned())
             .await
@@ -306,10 +306,7 @@ impl SubsessionService {
         else {
             return Ok(None);
         };
-        if !self.prepare_child_binding(&existing).await? {
-            existing.dispatch_state = crate::btcc::storage::SubsessionDispatchState::Pending;
-            return Ok(Some(existing));
-        }
+        self.prepare_child_binding(&existing).await?;
         self.replay(&existing).await?;
         if existing.packet.child_role == ChildRole::Worker {
             return self
@@ -337,9 +334,7 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?
             .ok_or_else(|| error(BtccCode::SubsessionPersistFailed))?;
-        if !self.prepare_child_binding(&stored).await? {
-            return Ok(stored);
-        }
+        self.prepare_child_binding(&stored).await?;
         self.replay(&stored).await?;
         if stored.packet.child_role == ChildRole::Worker {
             self.notify_execution_changed(&stored.child_session_id)

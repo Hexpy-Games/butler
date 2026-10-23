@@ -6,7 +6,10 @@ pub(super) const FIRST_ENDED: &str =
 
 pub const WORKER_RESULT_MARKER_SQL: &str =
     "SELECT result_id FROM btcc_steward_results WHERE relation_id=?1 ORDER BY rowid DESC LIMIT 1";
-pub const RETRY_WORKER_SQL: &str = "UPDATE btcc_subsession_delegations SET dispatch_state='pending' WHERE relation_id=?1 AND dispatch_state='enqueued' AND (SELECT result_id FROM btcc_steward_results WHERE relation_id=?1 ORDER BY rowid DESC LIMIT 1) IS ?2";
+pub const RETRY_WORKER_SQL: &str = "UPDATE btcc_subsession_delegations SET dispatch_state='pending'
+ WHERE relation_id=?1 AND dispatch_state='enqueued'
+   AND (SELECT result_id FROM btcc_steward_results
+        WHERE relation_id=?1 ORDER BY rowid DESC LIMIT 1) IS ?2";
 
 pub const RUNNING_WORKERS_SQL: &str = "SELECT count(*) FROM btcc_subsession_delegations d
  JOIN btcc_session_relations r ON r.relation_id=d.relation_id
@@ -30,6 +33,48 @@ pub const WAITING_WORKERS_SQL: &str = "SELECT d.relation_id FROM btcc_session_re
  ORDER BY CASE WHEN EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=d.relation_id) THEN i.created_at ELSE d.created_at END,
  CASE WHEN EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=d.relation_id) THEN i.rowid ELSE d.rowid END,d.rowid LIMIT 1";
 
+pub const RESET_DIRECTION_DISPATCH_SQL: &str =
+    "UPDATE btcc_subsession_delegations SET dispatch_state='pending'
+ WHERE relation_id=?1 AND NOT (COALESCE(dispatch_state,'')='enqueued' AND ?2)
+   AND EXISTS (SELECT 1 FROM btcc_session_relations WHERE relation_id=?1 AND activity_role='worker')
+   AND NOT EXISTS (
+     SELECT 1 FROM btcc_session_relations r JOIN btcc_turns t ON t.session_id=r.child_session_id
+     WHERE r.relation_id=?1 AND t.semantic_state IN ('admitted','delivery_committed')
+       AND NOT EXISTS (SELECT 1 FROM btcc_steward_results x
+                       WHERE x.relation_id=r.relation_id AND x.child_turn_id=t.turn_id))
+   AND EXISTS (SELECT 1 FROM btcc_steward_results WHERE relation_id=?1)
+   AND EXISTS (SELECT 1 FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending')";
+
+pub const WORKER_TURN_UNSETTLED_SQL: &str = "SELECT EXISTS (
+ SELECT 1 FROM btcc_session_relations r JOIN btcc_turns t ON t.session_id=r.child_session_id
+ WHERE r.relation_id=?1
+   AND NOT EXISTS (SELECT 1 FROM btcc_steward_results x
+                   WHERE x.relation_id=r.relation_id AND x.child_turn_id=t.turn_id))";
+
+pub const RESTORE_WAITING_DIRECTION_SQL: &str =
+    "UPDATE btcc_subsession_delegations SET dispatch_state='pending'
+ WHERE relation_id=?1
+   AND (dispatch_state IS NULL OR (dispatch_state='enqueued'
+        AND EXISTS (SELECT 1 FROM btcc_steward_results WHERE relation_id=?1)))
+   AND NOT EXISTS (
+     SELECT 1 FROM btcc_session_relations r JOIN btcc_turns t ON t.session_id=r.child_session_id
+     WHERE r.relation_id=?1
+       AND NOT EXISTS (SELECT 1 FROM btcc_steward_results x
+                       WHERE x.relation_id=r.relation_id AND x.child_turn_id=t.turn_id))
+   AND EXISTS (SELECT 1 FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending')";
+
+const ENQUEUED_WORKERS_FILTER: &str = "WHERE d.dispatch_state='enqueued' AND r.activity_role='worker' AND NOT EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=d.relation_id) ORDER BY d.created_at,d.rowid";
+
+pub fn enqueued_workers_sql() -> String {
+    format!("{SELECT} {ENQUEUED_WORKERS_FILTER}")
+}
+
+pub const COMPLETE_WORKER_SQL: &str = "UPDATE btcc_subsession_delegations
+ SET dispatch_state=CASE WHEN EXISTS (
+   SELECT 1 FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending')
+   THEN 'pending' ELSE NULL END
+ WHERE relation_id=?1";
+
 impl SqliteSubsessionRepository {
     /// Read-pool counterpart of the admission transaction's derived count.
     pub async fn running_worker_count(&self, parent: String) -> Result<u64, StorageError> {
@@ -51,14 +96,20 @@ impl SqliteSubsessionRepository {
             let running: u64 = tx.query_row(RUNNING_WORKERS_SQL, [&parent], |r| r.get(0))
                 .map_err(StorageError::sqlite)?;
             if running >= cap { return Ok(None); }
-            let next: Option<String> = tx.query_row(WAITING_WORKERS_SQL, [&parent], |r| r.get(0))
-                .optional().map_err(StorageError::sqlite)?;
-            let Some(id) = next else { return Ok(None); };
-            tx.execute("UPDATE btcc_subsession_delegations SET dispatch_state='enqueued' WHERE relation_id=?1", [&id])
-                .map_err(StorageError::sqlite)?;
-            let stored = read(&tx, "r.relation_id=?1", &id)?;
-            tx.commit().map_err(StorageError::sqlite)?;
-            Ok(stored)
+            loop {
+                let next: Option<String> = tx.query_row(WAITING_WORKERS_SQL, [&parent], |r| r.get(0))
+                    .optional().map_err(StorageError::sqlite)?;
+                let Some(id) = next else {
+                    tx.commit().map_err(StorageError::sqlite)?;
+                    return Ok(None);
+                };
+                let Some(mut stored) = decode::admission_candidate(&tx, &id)? else { continue; };
+                tx.execute("UPDATE btcc_subsession_delegations SET dispatch_state='enqueued' WHERE relation_id=?1", [&id])
+                    .map_err(StorageError::sqlite)?;
+                stored.dispatch_state = SubsessionDispatchState::Enqueued;
+                tx.commit().map_err(StorageError::sqlite)?;
+                return Ok(Some(stored));
+            }
         }).await
     }
 
@@ -68,9 +119,12 @@ impl SqliteSubsessionRepository {
         &self,
         relation: String,
     ) -> Result<bool, StorageError> {
-        self.storage.read(move |db| {
-            db.query_row("SELECT EXISTS (SELECT 1 FROM btcc_session_relations r JOIN btcc_turns t ON t.session_id=r.child_session_id WHERE r.relation_id=?1 AND NOT EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=r.relation_id AND x.child_turn_id=t.turn_id))", [relation], |r| r.get(0)).map_err(StorageError::sqlite)
-        }).await
+        self.storage
+            .read(move |db| {
+                db.query_row(WORKER_TURN_UNSETTLED_SQL, [relation], |r| r.get(0))
+                    .map_err(StorageError::sqlite)
+            })
+            .await
     }
 
     /// A transient publication guard derived from immutable results, never stored.
@@ -109,18 +163,21 @@ impl SqliteSubsessionRepository {
         &self,
         relation: String,
     ) -> Result<(), StorageError> {
-        self.storage.execute(move |db| {
-            db.execute("UPDATE btcc_subsession_delegations SET dispatch_state='pending' WHERE relation_id=?1 AND dispatch_state IS NULL AND EXISTS (SELECT 1 FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending')", [relation]).map_err(StorageError::sqlite)?;
-            Ok(())
-        }).await
+        self.storage
+            .execute(move |db| {
+                db.execute(RESTORE_WAITING_DIRECTION_SQL, [relation])
+                    .map_err(StorageError::sqlite)?;
+                Ok(())
+            })
+            .await
     }
 
     pub(crate) async fn enqueued_workers(
         &self,
     ) -> Result<Vec<StoredSubsessionDelegation>, StorageError> {
-        self.storage.read(|db| {
-            decode::list(db, "WHERE d.dispatch_state='enqueued' AND r.activity_role='worker' AND (NOT EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=d.relation_id) OR EXISTS (SELECT 1 FROM btcc_subsession_directions i WHERE i.relation_id=d.relation_id AND i.status='pending')) ORDER BY d.created_at,d.rowid", [])
-        }).await
+        self.storage
+            .execute(|db| decode::dispatch_candidates(db, ENQUEUED_WORKERS_FILTER))
+            .await
     }
 
     pub(crate) async fn worker_first_turn_ended(

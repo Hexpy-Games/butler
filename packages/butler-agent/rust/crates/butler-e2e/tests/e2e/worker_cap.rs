@@ -5,12 +5,16 @@
     clippy::panic,
     reason = "test assertions"
 )]
+#[path = "worker_cap/historical.rs"]
+mod historical;
 #[path = "worker_cap/plans.rs"]
 mod plans;
 #[path = "worker_cap/recovery.rs"]
 pub(crate) mod recovery;
-#[path = "worker_cap/service.rs"]
-mod service;
+#[path = "worker_cap/regressions.rs"]
+mod regressions;
+#[path = "worker_cap/requires_e2e_fixtures.rs"]
+mod requires_e2e_fixtures;
 #[path = "worker_cap/stub.rs"]
 pub(crate) mod stub;
 use butler_e2e::e2e::{
@@ -133,6 +137,12 @@ async fn cb_11_fifo_waiting_and_lowering_cap() -> Result<(), HarnessError> {
             })
     );
     plans::assert_indexed(&s)?;
+    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    for row in &rows[..2] {
+        let bound: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM btcc_subsession_delegations d JOIN btcc_guided_works w ON w.work_id=d.root_work_id JOIN btcc_session_relations r USING(relation_id) JOIN btcc_guided_turn_work_bindings b ON b.work_id=w.work_id AND b.turn_id=d.child_turn_id AND b.is_current=1 WHERE r.child_session_id=?1 AND w.scope_kind='session' AND w.session_id=r.child_session_id)", [row["session_id"].as_str().unwrap()], |r| r.get(0))?;
+        assert!(bound, "Worker must own its correctly scoped root Work");
+    }
+    drop(db);
     script.release("red-0");
     started(&script, 3).await;
     s.patch_settings(json!({"max_simultaneous_workers":1}), "lower cap")
@@ -235,7 +245,7 @@ async fn cb_11_release_races_dispatch_and_waiting_steer() -> Result<(), HarnessE
     let (_, rows) = workers(&s, "general", 4).await?;
     started(&script, 3).await;
     assert_eq!(*script.started.lock().unwrap(), ["red-0", "red-1", "red-2"]);
-    assert_pending_direction(&s, &rows[2])?;
+    assert_direction_applied(&s, &rows[2]).await?;
     assert_eq!(rows[3]["status"], "waiting");
     script.release("red-1");
     started(&script, 4).await;
@@ -248,11 +258,29 @@ async fn cb_11_release_races_dispatch_and_waiting_steer() -> Result<(), HarnessE
 }
 fn assert_pending_direction(s: &Scenario, row: &Value) -> Result<(), HarnessError> {
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-    let state: (String, bool) = db.query_row(
-        "SELECT status,defer_until_first_result FROM btcc_subsession_directions WHERE relation_id=?1",
-        [row["relation"]["relation_id"].as_str().unwrap()], |r| Ok((r.get(0)?,r.get(1)?)))?;
-    assert_eq!(state, ("pending".into(), true));
-    let count: u64 = db.query_row("SELECT count(*) FROM btcc_subsession_delegations d JOIN btcc_session_relations r USING(relation_id) WHERE r.activity_role='worker' AND d.dispatch_state='enqueued' AND NOT EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=d.relation_id)", [], |r| r.get(0))?;
-    assert_eq!(count, 2);
+    let state: String = db.query_row(
+        "SELECT status FROM btcc_subsession_directions WHERE relation_id=?1",
+        [row["relation"]["relation_id"].as_str().unwrap()],
+        |r| r.get(0),
+    )?;
+    assert_eq!(state, "pending");
     Ok(())
+}
+async fn assert_direction_applied(s: &Scenario, row: &Value) -> Result<(), HarnessError> {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+        let applied: bool = db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM btcc_subsession_directions i JOIN btcc_subsession_delegations d USING(relation_id) WHERE i.relation_id=?1 AND i.status='applied' AND i.applied_child_turn_id=d.child_turn_id)",
+            [row["relation"]["relation_id"].as_str().unwrap()], |r| r.get(0))?;
+        if applied {
+            return Ok(());
+        }
+        assert!(
+            Instant::now() < deadline,
+            "direction missing from first turn: {}",
+            s.agent.logs()
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
 }

@@ -2,7 +2,14 @@
 use super::*;
 pub(super) fn assert_indexed(s: &Scenario) -> Result<(), HarnessError> {
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    use butler_turn::btcc::storage::*;
+    let enqueued = enqueued_workers_sql();
     for sql in [
+        enqueued.as_str(),
+        RESET_DIRECTION_DISPATCH_SQL,
+        COMPLETE_WORKER_SQL,
+        RESTORE_WAITING_DIRECTION_SQL,
+        WORKER_TURN_UNSETTLED_SQL,
         butler_turn::btcc::storage::RUNNING_WORKERS_SQL,
         butler_turn::btcc::storage::WAITING_WORKERS_SQL,
         butler_turn::btcc::storage::WORKER_RESULT_MARKER_SQL,
@@ -16,8 +23,10 @@ pub(super) fn assert_indexed(s: &Scenario) -> Result<(), HarnessError> {
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         eprintln!("WORKER-CAP-PLAN {plan:?}");
+        // EXISTS evaluates one constant row; only reads of tables can scan.
         assert!(
-            plan.iter().all(|line| !line.contains("SCAN ")),
+            plan.iter()
+                .all(|line| !line.starts_with("SCAN ") || line == "SCAN CONSTANT ROW"),
             "{sql}: {plan:?}"
         );
     }

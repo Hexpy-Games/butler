@@ -6,6 +6,19 @@ impl SubsessionService {
     /// Makes sure a child turn is bound to its relation's root Work.
     pub async fn ensure_child_work(&self, session: &str, turn: &str) -> Result<(), BtccError> {
         self.bind_child_work(session, turn).await?;
+        if self
+            .repository
+            .by_child(session.into())
+            .await
+            .map_err(BtccError::from)?
+            .is_some_and(|r| r.packet.child_role == ChildRole::Steward)
+            && let Err(error) = self.admit_waiting(session).await
+        {
+            butler_core::diagnostic!(
+                "[native-btcc] Worker turn-start admission deferred code={}",
+                error.code()
+            );
+        }
         self.notify_execution_changed(session).await
     }
 
@@ -117,22 +130,9 @@ impl SubsessionService {
         summary: String,
         failure_code: Option<String>,
     ) -> Result<(), BtccError> {
-        // Cancellation can precede the child's first execution. Validate an
-        // existing binding, but never create execution authority for a stop.
-        if status != "cancelled" || self.work.bound_work_for_turn(turn.into()).await?.is_some() {
-            self.bind_result_work(session, turn, failure_code.as_deref())
-                .await?;
-        }
-        if status == "cancelled" {
-            self.work
-                .abandon_bound_work_for_turn(turn.to_owned())
-                .await?;
-        }
         let disposition = self
-            .work
-            .bound_work_for_turn(turn.to_owned())
-            .await?
-            .and_then(|work| work.latest_disposition);
+            .result_disposition(session, turn, status, failure_code.as_deref())
+            .await?;
         let blocked = disposition
             .as_ref()
             .filter(|value| value.disposition == crate::btcc::DispositionStatus::Blocked);
@@ -186,6 +186,37 @@ impl SubsessionService {
         self.deliver_child_result(session, status).await
     }
 
+    async fn result_disposition(
+        &self,
+        session: &str,
+        turn: &str,
+        status: &str,
+        failure_code: Option<&str>,
+    ) -> Result<Option<crate::btcc::WorkDisposition>, BtccError> {
+        // A queued cancellation can precede turn admission. It saves a result
+        // without creating either a Turn or execution authority for a stop.
+        if status == "cancelled"
+            && !self
+                .repository
+                .child_turn_exists(session.into(), turn.into())
+                .await
+                .map_err(BtccError::from)?
+        {
+            return Ok(None);
+        }
+        if status != "cancelled" || self.work.bound_work_for_turn(turn.into()).await?.is_some() {
+            self.bind_result_work(session, turn, failure_code).await?;
+        }
+        if status == "cancelled" {
+            self.work.abandon_bound_work_for_turn(turn.into()).await?;
+        }
+        Ok(self
+            .work
+            .bound_work_for_turn(turn.into())
+            .await?
+            .and_then(|work| work.latest_disposition))
+    }
+
     async fn bind_result_work(
         &self,
         session: &str,
@@ -208,26 +239,31 @@ impl SubsessionService {
 
     async fn deliver_child_result(&self, session: &str, status: &str) -> Result<(), BtccError> {
         self.notify_execution_changed(session).await?;
-        let delivery = self.deliver_worker_results().await;
-        if let Some(relation) = self
+        let relation = self
             .repository
             .by_child(session.into())
             .await
-            .map_err(BtccError::from)?
+            .map_err(BtccError::from)?;
+        if relation
+            .as_ref()
+            .is_some_and(|r| r.packet.child_role == ChildRole::Steward)
+            && status != "cancelled"
+            && let Err(error) = self.release_pending_direction(session).await
         {
-            let admission = if relation.packet.child_role == ChildRole::Worker {
-                self.admit_waiting(&relation.parent_session_id).await
-            } else if status != "cancelled" {
-                self.release_pending_direction(session).await
-            } else {
-                Ok(())
-            };
-            if let Err(error) = admission {
-                butler_core::diagnostic!(
-                    "[native-btcc] pending child deferred code={}",
-                    error.code()
-                );
-            }
+            butler_core::diagnostic!(
+                "[native-btcc] pending direction not released code={}",
+                error.code()
+            );
+        }
+        let delivery = self.deliver_worker_results().await;
+        if let Some(relation) = relation
+            && relation.packet.child_role == ChildRole::Worker
+            && let Err(error) = self.admit_waiting(&relation.parent_session_id).await
+        {
+            butler_core::diagnostic!(
+                "[native-btcc] Worker admission deferred code={}",
+                error.code()
+            );
         }
         delivery
     }
@@ -251,17 +287,8 @@ impl SubsessionService {
                     );
                 }
             } else {
-                let replay = async {
-                    self.ensure_child_binding(&stored).await?;
-                    self.replay(&stored).await
-                }
-                .await;
-                if let Err(error) = replay {
-                    butler_core::diagnostic!(
-                        "[native-btcc] dispatch recovery deferred code={}",
-                        error.code()
-                    );
-                }
+                self.ensure_child_binding(&stored).await?;
+                self.replay(&stored).await?;
             }
         }
         self.recover_directions().await?;
@@ -277,7 +304,7 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?
         {
-            if !self.publish_worker(&stored).await? {
+            if self.publish_worker(&stored).await.is_err() {
                 failed_parents.insert(stored.parent_session_id);
             }
         }

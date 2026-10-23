@@ -163,15 +163,6 @@ impl SubsessionService {
         }
         object.insert("steward_children".into(), json!(stewards));
         object.insert("workers".into(), json!(workers));
-        object.insert(
-            "running_worker_count".into(),
-            json!(
-                self.repository
-                    .running_worker_count(session_id.into())
-                    .await
-                    .map_err(BtccError::from)?
-            ),
-        );
         Ok(projection)
     }
 

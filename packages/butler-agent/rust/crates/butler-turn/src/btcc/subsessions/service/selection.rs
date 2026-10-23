@@ -149,6 +149,15 @@ impl SubsessionService {
         if !terminal {
             return Ok(true);
         }
+        if query.purpose == RelationPurpose::Cancel
+            && candidate.packet.child_role == crate::btcc::ChildRole::Worker
+        {
+            return self
+                .repository
+                .worker_cancellable(candidate.relation_id.clone())
+                .await
+                .map_err(BtccError::from);
+        }
         if query.purpose != RelationPurpose::Direct
             || (query.work_id.is_none() && query.relation_id.is_none())
         {

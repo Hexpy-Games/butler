@@ -39,7 +39,6 @@ CREATE TABLE IF NOT EXISTS btcc_subsession_directions (
   created_at TEXT NOT NULL,
   applied_at TEXT,
   applied_child_turn_id TEXT,
-  defer_until_first_result INTEGER NOT NULL DEFAULT 0,
   UNIQUE(relation_id, revision),
   UNIQUE(relation_id, source_message_id),
   FOREIGN KEY(relation_id) REFERENCES btcc_session_relations(relation_id)

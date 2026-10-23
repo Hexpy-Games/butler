@@ -54,7 +54,7 @@ impl SqliteSubsessionRepository {
         parent: Option<String>,
         limit: usize,
     ) -> Result<(Vec<serde_json::Value>, Option<(String, String, String)>), StorageError> {
-        self.storage.read(move |db| {
+        self.storage.execute(move |db| {
             let mut sql = String::from("SELECT relation_id,created_at,activity_worker_id FROM btcc_session_relations WHERE activity_role IN ('worker','steward')");
             let mut args: Vec<String> = Vec::new();
             if !history { sql.push_str(" AND activity_terminal=0"); }
@@ -121,7 +121,7 @@ impl SqliteSubsessionRepository {
         history: bool,
         parent: Option<String>,
     ) -> Result<Vec<String>, StorageError> {
-        self.storage.read(move |db| {
+        self.storage.execute(move |db| {
             let ids=db.prepare_cached("SELECT relation_id FROM btcc_session_relations \
                 WHERE activity_worker_id=?1 AND (?2 OR activity_terminal=0) AND (?3 IS NULL OR parent_session_id=?3)")
                 .map_err(StorageError::sqlite)?.query_map(rusqlite::params![worker,history,parent],|row|row.get::<_,String>(0))

@@ -158,13 +158,6 @@ fn table_columns(db: &Connection, table: &str) -> rusqlite::Result<Vec<String>> 
 
 // Old reservation columns are ignored idempotently, without rewriting rows.
 pub(super) fn ensure_worker_admission(db: &Connection) -> rusqlite::Result<()> {
-    // Direction delivery metadata, not admission or a held capacity marker.
-    ensure_column(
-        db,
-        "btcc_subsession_directions",
-        "defer_until_first_result",
-        "INTEGER NOT NULL DEFAULT 0",
-    )?;
     db.execute_batch(
         "DROP INDEX IF EXISTS idx_btcc_worker_slots;
          CREATE INDEX IF NOT EXISTS idx_btcc_worker_parent

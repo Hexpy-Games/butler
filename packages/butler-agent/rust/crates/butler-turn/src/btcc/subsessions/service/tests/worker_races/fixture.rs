@@ -1,39 +1,15 @@
 //! Controlled settings and queue boundaries for durable Worker scenarios.
 use super::*;
-struct Clock;
-impl WorkspaceClock for Clock {
-    fn now_epoch_millis(&self) -> i64 {
-        chrono::Utc::now().timestamp_millis()
-    }
-    fn parse_iso_millis(&self, value: &str) -> Option<i64> {
-        butler_core::js_date::parse_iso_millis(value)
-    }
-    fn iso_from_epoch_millis(&self, value: i64) -> WorkspaceResult<String> {
-        Ok(butler_core::js_date::format_iso_millis(value).unwrap())
-    }
-}
 #[derive(Default)]
 pub(super) struct Queue {
     pub(super) inputs: Mutex<Vec<SubsessionEnqueue>>,
-    pub(super) hold: AtomicBool,
-    pub(super) fail_dispatch: AtomicBool,
     pub(super) hold_dispatch: AtomicBool,
-    pub(super) fail_delivery: AtomicBool,
     pub(super) reached: tokio::sync::Notify,
     pub(super) release: (Mutex<bool>, std::sync::Condvar),
 }
 impl SubsessionChildQueue for Queue {
     fn enqueue(&self, input: SubsessionEnqueue) -> Result<(), BtccError> {
-        let result = input.envelope["eventId"]
-            .as_str()
-            .unwrap_or("")
-            .starts_with("worker-result:");
-        if (result && self.fail_delivery.load(Ordering::SeqCst))
-            || (!result && self.fail_dispatch.swap(false, Ordering::SeqCst))
-        {
-            return Err(BtccError::relayed("queue_unavailable", "Queue unavailable"));
-        }
-        if !result && self.hold_dispatch.swap(false, Ordering::SeqCst) {
+        if self.hold_dispatch.swap(false, Ordering::SeqCst) {
             self.reached.notify_one();
             let (lock, cv) = &self.release;
             let mut released = lock.lock().unwrap();
@@ -43,14 +19,6 @@ impl SubsessionChildQueue for Queue {
             return Err(BtccError::relayed("queue_unavailable", "Queue unavailable"));
         }
         self.inputs.lock().unwrap().push(input);
-        if result && self.hold.swap(false, Ordering::SeqCst) {
-            self.reached.notify_one();
-            let (lock, cv) = &self.release;
-            let mut released = lock.lock().unwrap();
-            while !*released {
-                released = cv.wait(released).unwrap();
-            }
-        }
         Ok(())
     }
     fn interrupted_event(
@@ -64,20 +32,10 @@ impl SubsessionChildQueue for Queue {
 }
 pub(super) struct Profiles {
     pub(super) cap: AtomicU64,
-    pub(super) fail: AtomicBool,
 }
 impl WorkerProfileReader for Profiles {
     fn max_simultaneous_workers(&self) -> PortFuture<'_, u64> {
-        Box::pin(async {
-            if self.fail.load(Ordering::SeqCst) {
-                Err(BtccError::relayed(
-                    "settings_unavailable",
-                    "Settings unavailable",
-                ))
-            } else {
-                Ok(self.cap.load(Ordering::SeqCst))
-            }
-        })
+        Box::pin(async { Ok(self.cap.load(Ordering::SeqCst)) })
     }
     fn list(&self) -> PortFuture<'_, Vec<WorkerProfile>> {
         Box::pin(async { Ok(vec![]) })
@@ -87,12 +45,12 @@ impl WorkerProfileReader for Profiles {
     }
 }
 pub(super) struct Fixture {
-    fixture: TestStorageFixture,
+    _fixture: TestStorageFixture,
     pub(super) storage: BtccStorage,
     pub(super) bindings: SessionBindingStore,
     pub(super) service: SubsessionService,
     pub(super) queue: Arc<Queue>,
-    pub(super) profiles: Arc<Profiles>,
+
     pub(super) db: std::path::PathBuf,
 }
 impl Fixture {
@@ -104,13 +62,12 @@ impl Fixture {
         let bindings = SessionBindingStore::open(SessionBindingStoreConfig {
             path: db.with_file_name("sessions.sqlite"),
             storage_profile: WorkspaceStorageProfile::Durable,
-            clock: Arc::new(Clock),
+            clock: Arc::new(crate::test_clock::SystemClock),
         })
         .await?;
         let queue = Arc::new(Queue::default());
         let profiles = Arc::new(Profiles {
             cap: AtomicU64::new(1),
-            fail: AtomicBool::new(false),
         });
         let now: Arc<dyn Fn() -> String + Send + Sync> =
             Arc::new(|| "2026-10-24T00:00:00.000Z".into());
@@ -125,15 +82,15 @@ impl Fixture {
             now,
         );
         let f = Self {
-            fixture,
+            _fixture: fixture,
             storage,
             bindings,
             service,
             queue,
-            profiles,
+
             db,
         };
-        f.binding("parent", butler_turn::workspace::SessionRole::Steward)
+        f.binding("parent", crate::workspace::SessionRole::Steward)
             .await?;
         f.create("parent", "chat", ChildRole::Steward)?;
         // Its original dispatch is already admitted, so recovery must only replay Workers.
@@ -143,7 +100,7 @@ impl Fixture {
     pub(super) async fn binding(
         &self,
         session: &str,
-        role: butler_turn::workspace::SessionRole,
+        role: crate::workspace::SessionRole,
     ) -> Result<(), ServiceError> {
         self.bindings
             .upsert(UpsertSessionBinding {
@@ -185,10 +142,15 @@ impl Fixture {
         intent.envelope.event_id = format!("dispatch-{child}");
         intent.envelope.routing_hints.session_id = child.into();
         intent.envelope.routing_hints.turn_id = format!("turn-{child}");
+        let mutation = format!("subsession-root-work:del-{child}:task-{child}:{child}");
+        let root = format!(
+            "guided-work-{}",
+            digest_identity(&format!("btcc-guided-work.v1\0work\0{mutation}"))
+        );
         let mut db = rusqlite::Connection::open(&self.db)?;
         let tx = db.transaction()?;
         tx.execute("INSERT INTO btcc_session_relations (relation_id,parent_session_id,parent_turn_id,child_session_id,anchor_message_id,ordinal,safe_title,created_at) VALUES (?1,?2,'parent-turn',?3,'anchor',(SELECT COALESCE(MAX(ordinal),0)+1 FROM btcc_session_relations WHERE parent_session_id=?2),'Verify evidence','2026-10-24T00:00:00.000Z')", rusqlite::params![format!("rel-{child}"), parent, child])?;
-        tx.execute("INSERT INTO btcc_subsession_delegations (delegation_id,relation_id,task_id,root_work_id,child_turn_id,packet_json,dispatch_intent_json,dispatch_state,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'pending','2026-10-24T00:00:00.000Z')", rusqlite::params![format!("del-{child}"),format!("rel-{child}"),format!("task-{child}"),format!("root-{child}"),format!("turn-{child}"),serde_json::to_string(&packet)?,serde_json::to_string(&intent)?])?;
+        tx.execute("INSERT INTO btcc_subsession_delegations (delegation_id,relation_id,task_id,root_work_id,child_turn_id,packet_json,dispatch_intent_json,dispatch_state,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'pending','2026-10-24T00:00:00.000Z')", rusqlite::params![format!("del-{child}"),format!("rel-{child}"),format!("task-{child}"),root,format!("turn-{child}"),serde_json::to_string(&packet)?,serde_json::to_string(&intent)?])?;
         tx.commit()?;
         Ok(())
     }
@@ -236,23 +198,6 @@ impl Fixture {
                 |r| r.get(0),
             )
             .unwrap()
-    }
-    pub(super) async fn restart(&mut self) -> Result<(), ServiceError> {
-        self.storage.close().await?;
-        self.storage = BtccStorage::open(self.fixture.config("cap-service")).await?;
-        let now: Arc<dyn Fn() -> String + Send + Sync> =
-            Arc::new(|| "2026-10-24T00:00:00.000Z".into());
-        self.service = SubsessionService::new(
-            SqliteSubsessionRepository::new(self.storage.clone()),
-            self.bindings.clone(),
-            self.queue.clone(),
-            self.profiles.clone(),
-            Arc::new(DurableWorkService::new(Arc::new(
-                SessionWorkRepository::new(self.storage.clone(), now.clone()),
-            ))),
-            now,
-        );
-        Ok(())
     }
     pub(super) async fn close(self) -> Result<(), ServiceError> {
         self.bindings.close().await?;

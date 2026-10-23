@@ -192,6 +192,8 @@ impl InboundQueue {
         let timing = super::command_timing::CommandTiming::new("inbound_enqueue");
         let _guard = self.lane.lock();
         timing.mark("lock_acquired");
+        #[cfg(feature = "e2e-fixtures")]
+        fixture::before_publish(&self.root, &envelope)?;
         let result = storage::enqueue_idempotent(&self.root, envelope, metadata, durable);
         timing.mark("record_published");
         if result.is_ok() {

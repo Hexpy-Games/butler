@@ -44,6 +44,9 @@ async fn followup(historical: bool, cancelled: bool) -> Result<(), HarnessError>
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     if cancelled {
+        let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+        let status: String = db.query_row("SELECT w.status FROM btcc_guided_works w JOIN btcc_subsession_delegations d ON d.root_work_id=w.work_id WHERE d.relation_id=?1", [rows[0]["relation"]["relation_id"].as_str().unwrap()], |r| r.get(0))?;
+        assert_eq!(status, "abandoned");
         script.release("red-0");
     }
     started(&script, 3).await;
