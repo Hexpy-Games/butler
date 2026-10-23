@@ -107,7 +107,7 @@ fn activity_child(
         _ => "waiting",
     };
     Ok(
-        serde_json::json!({"activity_parent_session_id":activity_parent(db,r)?,"waiting_for_slot":r.packet.child_role==crate::btcc::ChildRole::Worker && r.dispatch_state.as_deref()==Some("pending"),"role":r.packet.child_role.as_str(),"title":r.safe_title,"status":status,"updated_at":r.created_at,
+        serde_json::json!({"activity_parent_session_id":activity_parent(db,r)?,"waiting_for_slot":r.packet.child_role==crate::btcc::ChildRole::Worker && r.dispatch_state==super::SubsessionDispatchState::Pending,"role":r.packet.child_role.as_str(),"title":r.safe_title,"status":status,"updated_at":r.created_at,
         "relation":{"relation_id":r.relation_id,"parent_session_id":r.parent_session_id,"parent_turn_id":r.parent_turn_id,"ordinal":r.ordinal,"safe_title":r.safe_title,"created_at":r.created_at},
         "result":result.map(|_|serde_json::json!({"task_id":r.task_id}))}),
     )

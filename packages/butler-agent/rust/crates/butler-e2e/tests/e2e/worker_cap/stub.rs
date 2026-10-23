@@ -159,7 +159,7 @@ async fn reply(
     };
     (
         [("content-type", "text/event-stream")],
-        wire(item, &response_id),
+        wire(&item, &response_id),
     )
 }
 fn parent(step: usize, group: &str) -> Value {
@@ -231,12 +231,14 @@ fn work_id(body: &Value) -> String {
         .unwrap_or_default()
 }
 fn call(name: &str, args: Value) -> Value {
-    json!({"type":"function_call","name":name,"arguments":args})
+    let mut output = json!({"type":"function_call","name":name});
+    output["arguments"] = args;
+    output
 }
 fn message(text: &str) -> Value {
     json!({"type":"message","text":text})
 }
-fn wire(item: Value, id: &str) -> String {
+fn wire(item: &Value, id: &str) -> String {
     let item = if item["type"] == "function_call" {
         json!({"type":"function_call","id":id,"call_id":id,"name":item["name"],"arguments":item["arguments"].to_string(),"status":"completed"})
     } else {

@@ -1,6 +1,7 @@
 //! Reviewed Steward Plan action to durable Worker dispatch.
 
 use super::*;
+use crate::btcc::storage::SubsessionDispatchState;
 use crate::btcc::{BtccCode, BtccError};
 
 impl SubsessionService {
@@ -39,11 +40,13 @@ impl SubsessionService {
                     "error":{"code":"delegation_already_finished","message":"This child has already returned its outcome. Resolve the reported blocker or revise the Plan/action and implementation approach before starting a new attempt. Do not wait for a terminal child."}}),
                 );
             }
-            return Ok(if existing.dispatch_state.as_deref() == Some("pending") {
-                worker_output(&existing)
-            } else {
-                super::helpers::existing_delegation_output(&existing)
-            });
+            return Ok(
+                if existing.dispatch_state == SubsessionDispatchState::Pending {
+                    worker_output(&existing)
+                } else {
+                    super::helpers::existing_delegation_output(&existing)
+                },
+            );
         }
         let ids = delegation::DelegationIds::derive(&delegation::WORKER, delegation_id);
         let now = (self.now)();
@@ -146,7 +149,7 @@ impl SubsessionService {
 }
 
 pub(super) fn worker_output(stored: &crate::btcc::StoredSubsessionDelegation) -> Value {
-    let waiting = stored.dispatch_state.as_deref() == Some("pending");
+    let waiting = stored.dispatch_state == SubsessionDispatchState::Pending;
     let mut output = json!({"ok":true,"status":if waiting {"waiting"} else {"queued"},"delegation_id":stored.delegation_id,"relation_id":stored.relation_id,"child_session_id":stored.child_session_id,"task_id":stored.task_id});
     if waiting && let Some(object) = output.as_object_mut() {
         object.insert("message".into(), json!(

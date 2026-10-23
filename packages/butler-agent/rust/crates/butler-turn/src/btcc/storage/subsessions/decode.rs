@@ -65,7 +65,11 @@ fn decode(raw: &RawDelegation) -> Result<StoredSubsessionDelegation, serde_json:
         root_work_id: raw.root_work_id.clone(),
         packet: serde_json::from_value::<SubsessionPacket>(packet)?,
         dispatch_intent,
-        dispatch_state: raw.dispatch_state.clone(),
+        dispatch_state: match raw.dispatch_state.as_deref() {
+            Some("pending") => super::SubsessionDispatchState::Pending,
+            Some("enqueued") => super::SubsessionDispatchState::Enqueued,
+            _ => super::SubsessionDispatchState::Inactive,
+        },
         anchor_message_id: raw.anchor_message_id.clone(),
         ordinal: raw.ordinal,
         safe_title: raw.safe_title.clone(),

@@ -39,6 +39,14 @@ pub struct SubsessionCreate {
     pub created_at: String,
 }
 
+/// Durable dispatch state, including terminal or pre-intent legacy rows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SubsessionDispatchState {
+    Inactive,
+    Pending,
+    Enqueued,
+}
+
 /// A persisted subsession delegation.
 #[derive(Clone, Debug)]
 pub struct StoredSubsessionDelegation {
@@ -53,7 +61,7 @@ pub struct StoredSubsessionDelegation {
     pub packet: SubsessionPacket,
     /// Absent on delegations created before dispatch intents were stored.
     pub dispatch_intent: Option<DispatchIntent>,
-    pub dispatch_state: Option<String>,
+    pub dispatch_state: SubsessionDispatchState,
     pub anchor_message_id: String,
     pub ordinal: i64,
     pub safe_title: String,

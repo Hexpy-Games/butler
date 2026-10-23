@@ -70,8 +70,8 @@ pub use subsessions::{
     EnvelopeRaw, EnvelopeRouting, EnvelopeSender, NativeStewardContext, PacketExecutionMode,
     PacketPlanAction, PacketWorkerProfile, ParentResultInput, ParentResultRoute, ParentWorkRef,
     SqliteSubsessionRepository, StewardResultInput, StoredSubsessionDelegation,
-    StoredSubsessionDirection, SubsessionCreate, SubsessionPacket, WorkerResultInput,
-    subsession_result_id,
+    StoredSubsessionDirection, SubsessionCreate, SubsessionDispatchState, SubsessionPacket,
+    WorkerResultInput, subsession_result_id,
 };
 pub use tool_journal::{
     ToolJournalCloseoutRow, ToolJournalFinish, ToolJournalFinishStatus, ToolJournalRecord,

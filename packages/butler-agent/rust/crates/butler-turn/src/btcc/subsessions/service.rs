@@ -428,7 +428,7 @@ impl SubsessionService {
         stored: &crate::btcc::StoredSubsessionDelegation,
     ) -> Result<(), BtccError> {
         if stored.packet.child_role == ChildRole::Worker {
-            return self.release_worker_slots(&stored.parent_session_id).await;
+            return Box::pin(self.release_worker_slots(&stored.parent_session_id)).await;
         }
         let intent = stored
             .dispatch_intent

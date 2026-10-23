@@ -1,5 +1,7 @@
 //! Durable direction revisions and cancellation over the shared native queue.
 
+use crate::btcc::storage::SubsessionDispatchState;
+
 use serde_json::{Value, json};
 
 use super::selection::{RelationPurpose, RelationQuery};
@@ -354,7 +356,7 @@ impl SubsessionService {
             .map_err(BtccError::from)?
             .unwrap_or_else(|| requested.clone());
         if relation.packet.child_role == crate::btcc::ChildRole::Worker
-            && relation.dispatch_state.as_deref() != Some("enqueued")
+            && relation.dispatch_state != SubsessionDispatchState::Enqueued
         {
             return Ok(());
         }
