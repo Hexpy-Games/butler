@@ -15,7 +15,7 @@ The lane geometry, drag feedback, motion, auto-scroll and keyboard dragging live
 ## How to use this component
 `<KanbanBoard><KanbanLane title="Draft">{tiles}</KanbanLane></KanbanBoard>`
 
-`scroll` keeps every lane in one row at least `--kanban-lane-min-width` (15rem) wide; the board scrolls sideways with the x scroll-edge fade and pads its bottom for the scrollbar (the project work board's six status lanes). Lanes can be `KanbanLane`s or any lane surface (`Box` + `Section`).
+`scroll` keeps every lane in one row at least `--kanban-lane-min-width` (15rem) wide; the board scrolls sideways with the x scroll-edge fade (the project work board's six status lanes). With a mouse or trackpad (`(hover: hover) and (pointer: fine)`), a thin scrollbar fades in under the lanes (`--motion-fast`; instant with reduced motion) while the pointer is over the board or focus is inside it, and only when the lanes overflow; it hides again when both leave. Its 8px lane is always reserved below the lanes (bottom padding plus lane = `--space-md`), so it never covers a card or a focus ring and revealing it shifts nothing. Touch devices keep the native scrollbar. Products can keep their own prev/next controls beside it. Lanes can be `KanbanLane`s or any lane surface (`Box` + `Section`).
 
 Dragging:
 
