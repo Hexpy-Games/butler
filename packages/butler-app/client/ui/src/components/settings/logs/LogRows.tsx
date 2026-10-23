@@ -1,28 +1,30 @@
 import { useEffect, useRef } from "react";
 import { appCopy } from "@/app/copy.ts";
-import { Button } from "@/butler-ds";
+import { Button, Stack } from "@/butler-ds";
 import { useLogListView } from "@/stores/logListStore.ts";
 import { LogRow } from "./LogRow";
 import { recordKey } from "./logRecords";
 import type { LogViewerState } from "./useLogViewer";
 
-/** 로그's rows, newest first, with 더 보기 for the next page. */
+/** 로그's rows, newest first, as one block (the list card's hairlines are for its sections), then 더 보기. */
 export function LogRows({ viewer }: { viewer: LogViewerState }) {
   const openKey = useLogListView((state) => state.openKey);
   const toggleRow = useLogListView((state) => state.toggleRow);
   useOpenRowAnchor(openKey, viewer.rows.length);
   return (
-    <>
-      {viewer.rows.map((record) => {
-        const key = recordKey(record);
-        return <LogRow key={key} record={record} open={openKey === key} onToggle={() => toggleRow(key)} />;
-      })}
+    <Stack gap="sm">
+      <Stack gap="none">
+        {viewer.rows.map((record) => {
+          const key = recordKey(record);
+          return <LogRow key={key} record={record} open={openKey === key} onToggle={() => toggleRow(key)} />;
+        })}
+      </Stack>
       {viewer.hasMore ? (
         <Button type="button" size="sm" variant="outline" disabled={viewer.loading} onClick={viewer.loadMore}>
           {appCopy.common.more}
         </Button>
       ) : null}
-    </>
+    </Stack>
   );
 }
 

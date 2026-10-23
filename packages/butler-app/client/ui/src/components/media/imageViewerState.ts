@@ -4,6 +4,8 @@ import { create } from "zustand";
 export interface ViewerImage {
   src: string;
   alt: string;
+  /** `video` plays in the viewer (an attached video file). */
+  kind?: "image" | "video";
   caption?: string;
   /** The page the picture shows or came from; opens in the conversation's browser. */
   source?: string;
