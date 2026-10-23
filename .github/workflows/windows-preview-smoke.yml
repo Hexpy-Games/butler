@@ -1,9 +1,12 @@
 name: Unsigned Windows preview smoke
 on:
-  # Native coverage runs on main/release or explicit branch dispatch.
+  # Native coverage runs on main/release, on PRs that change Windows agent
+  # crates or Windows inputs (ci-changes.py selects), or by branch dispatch.
   # gh workflow run windows-preview-smoke.yml --ref <head-branch>
   push:
     branches: [main, 'release/**']
+  pull_request:
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
     inputs:
       native-cache:

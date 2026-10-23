@@ -62,7 +62,10 @@ class ApprovedTiers(unittest.TestCase):
         for paths, workflow in itertools.product(shapes, workflows):
             outputs = selection(paths, workflow=workflow)
             selected = {name for name, enabled in json.loads(outputs['jobs']).items() if enabled}
-            allowed = PR_FAST_JOBS if workflow == 'rust-quality.yml' else set()
+            # Only Windows agent crate changes add the separate Windows smoke.
+            agent = any(changes.windows_runtime(path, 'pull_request') for path in paths)
+            allowed = (PR_FAST_JOBS if workflow == 'rust-quality.yml' else
+                       {'stub', 'hosted'} if workflow == 'windows-preview-smoke.yml' and agent else set())
             self.assertLessEqual(selected, allowed, (paths, workflow, selected))
             if workflow == 'rust-quality.yml':
                 self.assertFalse(json.loads(outputs['parts'])['ui']['macos'])
@@ -97,10 +100,11 @@ class ApprovedTiers(unittest.TestCase):
         rust = 'packages/butler-agent/rust/crates/butler-core/src/lib.rs'
         windows = 'packages/butler-agent/rust/crates/butler-platform/src/process.rs'
         for event, paths, labels, native in [
-            ('pull_request', [rust], (), False),
-            ('pull_request', [windows], (), False),
-            ('pull_request', ['packages/butler-agent/rust/crates/butler-core/src/windows/native.rs'], (), False),
-            ('pull_request', [rust], ('ci:windows-native',), False),
+            ('pull_request', [rust], (), True),
+            ('pull_request', [windows], (), True),
+            ('pull_request', ['packages/butler-agent/rust/crates/butler-core/src/windows/native.rs'], (), True),
+            ('pull_request', ['packages/butler-agent/rust/crates/butler-e2e/tests/e2e/new.rs'], (), False),
+            ('pull_request', ['packages/butler-agent/rust/crates/butler-e2e/tests/e2e/new.rs'], ('ci:windows-native',), True),
             ('push', [rust], (), True), ('push', ['README.md'], (), False),
             ('workflow_dispatch', [], (), True),
         ]:
@@ -227,7 +231,7 @@ class ApprovedTiers(unittest.TestCase):
     # test-category: pure-logic
     def test_windows_trigger_and_selector_match_concrete_paths(self):
         source = (ROOT.parent / 'workflows/windows-preview-smoke.yml').read_text()
-        self.assertNotIn('  pull_request:', source)
+        self.assertIn('  pull_request:\n    types: [opened, synchronize, reopened]\n', source)
         patterns = changes.WINDOWS
         cases = {
             'windows.rs': True, 'windows/nested/input.rs': True,
@@ -254,14 +258,14 @@ class ApprovedTiers(unittest.TestCase):
                 self.assertEqual(changes.windows_native(path), github)
 
     # test-category: pure-logic
-    def test_main_api_baseline_skips_cancelled_runs_and_keeps_failures(self):
+    def test_main_api_baseline_skips_cancelled_and_failed_runs(self):
         def run(number, conclusion, **extra):
             return dict(id=number, status='completed', conclusion=conclusion, event='push',
                         head_branch='main', path='.github/workflows/rust-quality.yml',
                         head_repository={'full_name': 'owner/repo'},
                         head_sha=str(number) * 40) | extra
         # Fixture response includes a superseded merge, an unfinished run and
-        # unrelated runs; success and failure both qualify as completed coverage.
+        # unrelated runs; only a success proves coverage, so a failure is never a baseline.
         fixture = dict(workflow_runs=[run(9, 'cancelled'), run(8, None, status='in_progress'),
                                       run(7, 'success', head_branch='other'),
                                       run(6, 'success', head_repository={'full_name': 'fork/repo'}),
@@ -271,10 +275,10 @@ class ApprovedTiers(unittest.TestCase):
         env = dict(GITHUB_REPOSITORY='owner/repo', GITHUB_EVENT_NAME='push',
                    GITHUB_REF='refs/heads/main', GITHUB_SHA='a' * 40)
         with patch.dict(os.environ, env), patch.object(changes, 'command', side_effect=command) as calls:
-            self.assertEqual(changes.selection_base({'before': '9' * 40}, 'rust-quality.yml'), '5' * 40)
+            self.assertEqual(changes.selection_base({'before': '9' * 40}, 'rust-quality.yml'), '4' * 40)
             self.assertIn('branch=main&event=push&status=completed', calls.call_args_list[0].args[2])
             self.assertEqual(calls.call_args_list[-1].args,
-                             ('git', 'merge-base', '--is-ancestor', '5' * 40, 'HEAD'))
+                             ('git', 'merge-base', '--is-ancestor', '4' * 40, 'HEAD'))
             with tempfile.TemporaryDirectory() as directory:
                 outputs = dict(GITHUB_OUTPUT=directory + '/output',
                                GITHUB_STEP_SUMMARY=directory + '/summary', GITHUB_RUN_ID='10')
@@ -283,7 +287,7 @@ class ApprovedTiers(unittest.TestCase):
                      patch.object(changes, 'changed', return_value=paths) as diff, \
                      patch.object(changes, 'hashes', return_value=dict.fromkeys(changes.GROUPS, 'hash')):
                     changes.select({'before': '9' * 40}, 'rust-quality.yml')
-                diff.assert_called_once_with('5' * 40)
+                diff.assert_called_once_with('4' * 40)
                 output = dict(line.split('=', 1) for line in Path(outputs['GITHUB_OUTPUT']).read_text().splitlines())
                 jobs = json.loads(output['jobs'])
                 for job in ('linux-native', 'macos-archive', 'macos-tests', 'windows-check'):

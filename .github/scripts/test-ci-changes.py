@@ -271,6 +271,7 @@ class Trust(unittest.TestCase):
 
     # test-category: pure-logic
     def test_windows_preview_installers_never_run_on_pull_requests(self):
+        # PRs run the native smoke only for Windows agent crates or Windows inputs.
         rust, workflow = 'packages/butler-agent/rust/crates/butler-core/src/lib.rs', '.github/workflows/e2e.yml'
         pr = {'pull_request': {'number': 12, 'base': {'sha': 'base'}}}
         none = dict.fromkeys(['build', 'stub', 'release', 'hosted'], False)
@@ -278,14 +279,14 @@ class Trust(unittest.TestCase):
         for event_name, ref, event, paths, expected in [
             ('pull_request', 'refs/pull/12/merge', pr, ['docs/notes.md', workflow], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['deploy/install.sh', 'packages/butler-npm/index.js'], none),
-            ('pull_request', 'refs/pull/12/merge', pr, [rust], none),
+            ('pull_request', 'refs/pull/12/merge', pr, [rust], native),
             ('pull_request', 'refs/pull/12/merge', pr, ['packages/butler-agent/rust/crates/butler-e2e/tests/e2e/new.rs'], none),
-            ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-preview-smoke.yml'], none),
-            ('pull_request', 'refs/pull/12/merge', pr, ['.github/actions/build-windows-agent/action.yml'], none),
-            ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-installer.yml'], none),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-preview-smoke.yml'], native),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/actions/build-windows-agent/action.yml'], native),
+            ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-installer.yml'], native),
             ('pull_request', 'refs/pull/12/merge', pr, ['.github/scripts/ci-changes.py'], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['.github/releases/v1.2.3.md'], none),
-            ('pull_request', 'refs/pull/12/merge', pr, ['deploy/windows-preview-smoke.ps1'], none),
+            ('pull_request', 'refs/pull/12/merge', pr, ['deploy/windows-preview-smoke.ps1'], native),
             ('workflow_dispatch', 'refs/heads/main', {}, [], native),
         ]:
             with self.subTest(event=event_name, paths=paths), tempfile.TemporaryDirectory() as temporary:
@@ -491,6 +492,7 @@ from ci_windows_cascade_tests import WindowsCascade
 from ci_input_tests import DerivedInputs
 from ci_tier_tests import Precision, ApprovedTiers
 from ci_ds_approval_tests import DSApproval, DSApprovalWiring
+from ci_runtime_tests import WindowsRuntimeSelection, SkippedIsNotPass
 
 
 if __name__ == '__main__':
