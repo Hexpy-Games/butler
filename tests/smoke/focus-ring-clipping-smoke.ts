@@ -1,7 +1,8 @@
 // test-category: race
 // Focus rings are never clipped. The built app's real shell (VisualHarness:
 // product Sidebar, Conversation with answer cards and the agent tab rail, new
-// chat, browser, command palette, menus, Settings) over an offline gateway
+// chat, browser, command palette, menus, Settings, plus the drag-enabled
+// KanbanBoard story of the DS viewer) over an offline gateway
 // stub; no model calls, no native agent. Run `npm --prefix
 // packages/butler-app/client/ui run build` first (`bun run app:focus-ring:smoke`).
 //
@@ -254,6 +255,10 @@ async function auditCell(page: Page, cell: Cell) {
   await page.locator('[data-test-class~="settings-view"]').waitFor();
   await auditScope(page, cell, "settings", '[data-test-class~="settings-view"]', 160);
   await auditUsage(page, cell);
+  // A drag-enabled KanbanBoard (DS viewer story): a wide lane and two sideways-scrolling boards of cards.
+  await page.goto(`${base}?visual=design-system&page=blocks/KanbanBoard&theme=${cell.theme}&locale=ko`);
+  await page.locator('[data-slot="kanban-drag-scope"] [data-kanban-item]').first().waitFor();
+  await auditScope(page, cell, "kanban-drag-board", '[data-slot="kanban-drag-scope"]', 40);
 }
 
 /** Settings › Usage with a delegating chat selected (linked split rows, the chart), then the context popover. */
