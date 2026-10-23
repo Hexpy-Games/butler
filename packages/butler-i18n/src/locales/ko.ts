@@ -1,3 +1,4 @@
+import { CANON_COPY } from "./canon.ts";
 import { TASK_GRAPH_COPY } from "./task-graph.ts";
 import { lifecycleCopy } from "../lifecycle.ts";
 import { additionalToolLabels } from "./tool-labels-ko.ts";
@@ -308,6 +309,7 @@ function koreanProjectFallbackSuggestions(
 
 export const koKrCopy: AppCopy = {
   shell: { footerNav: "업데이트와 설정", update: { downloading: "업데이트 받는 중", working: "업데이트 준비 중", ready: "업데이트 준비됨", failed: "업데이트 실패", restart: "다시 시작" } },
+  canon: CANON_COPY["ko-KR"],
   taskGraph: TASK_GRAPH_COPY["ko-KR"],
   lifecycle: lifecycleCopy.ko,
   browser: {
@@ -395,11 +397,10 @@ export const koKrCopy: AppCopy = {
     sessionUnconfirmed: "대화 연결 미확인",
     reviewed: "검토 기록", disposition: "상태 판정 기록", result: "도구 결과 등록",
     reported: "공개 답변", historyLedgerUnavailable: "프로젝트 기록 이력은 확인하지 못했습니다. 대화에서 전달된 공개 답변만 표시합니다.", linkedResults: (count) => `결과 자료 ${count}개`,
-    currentPlan: "유효한 계획", disconnected: "연결이 끊겨 마지막으로 확인한 상태를 표시합니다.",
+    disconnected: "연결이 끊겨 마지막으로 확인한 상태를 표시합니다.",
     reportQuestion: "이 보고의 내용과 미검증 사항에 관해 확인하기",
-    parentWork: "상위 작업", allWork: "모든 작업",
     periodDays: (days) => `최근 ${days}일`, statisticsZone: (zone) => `${zone} 날짜 기준`,
-    boardKind: "보드 종류", period: "기간", statisticsKind: "집계 기준", materialsView: "자료 보기",
+    period: "기간", statisticsKind: "집계 기준", materialsView: "자료 보기",
     briefing: "프로젝트 기록에서", suggestions: "다음으로 살펴볼 만한 일", briefingPending: "선정된 기록을 요약하고 있습니다. 자료를 살펴보거나 대화를 시작하실 수 있습니다.",
     briefingUnavailable: "요약을 불러올 수 없습니다. 프로젝트 기록과 대화 입력은 계속 사용할 수 있습니다.",
     summarized: "선정된 기록의 요약이며 새로 검증한 결과가 아닙니다", addToComposer: "이 내용으로 질문하기",
@@ -415,7 +416,7 @@ export const koKrCopy: AppCopy = {
     overview: "개요", work: "작업", materials: "자료", history: "기록", statistics: "통계",
     position: "진행 상황", remaining: "남아 있는 일", completed: "실행 완료", open: "남은 작업",
     blocked: "막힌 작업", abandoned: "종료한 작업", unknown: "확인하지 못한 작업", registered: "등록된 작업",
-    noWork: "아직 등록된 작업이 없습니다.", unbound: "이 프로젝트에 연결된 기록이 없습니다.",
+    unbound: "이 프로젝트에 연결된 기록이 없습니다.",
     unavailable: "프로젝트 기록을 확인하지 못했습니다. 완료 여부를 추정하지 않습니다.",
     noRemaining: "기록상 남아 있는 작업이 없습니다.", tasks: "하위 작업", recorded: "등록된 작업 기준", loadMore: "더 보기",
   },
