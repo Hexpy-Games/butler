@@ -311,6 +311,13 @@ async fn wmu_20_open_or_take_running_task_continues_checkpoint_without_holding_f
                 .any(|context| context["checkpoint_ref"].is_string()
                     && context["checkpoint"].is_string())))
     );
+    for request in script.requests.lock().unwrap().iter() {
+        let instructions = request["instructions"].as_str().unwrap_or_default();
+        assert!(
+            instructions.matches("Continue Task ").count() <= 1,
+            "Runtime instruction repeated in a model request"
+        );
+    }
     let requester =
         s.gw.post(
             "/sessions",

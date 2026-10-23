@@ -56,10 +56,7 @@ pub(super) async fn ownership(
             status: 409,
             code: "conflict".into(),
             message: "이미 다른 대화로 옮겨졌습니다".into(),
-            source: result["error"]["revision"].as_i64().map(|revision| {
-                Arc::new(AppWorkModelConflict { revision })
-                    as Arc<dyn std::error::Error + Send + Sync>
-            }),
+            source: None,
         });
     }
     Ok(result)

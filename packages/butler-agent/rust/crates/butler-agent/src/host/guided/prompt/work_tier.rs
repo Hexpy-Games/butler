@@ -84,8 +84,10 @@ async fn inject_runtime_instruction(
         .await
         .map_err(BtccError::from)?;
     if let Some((id, text, status)) = row {
-        instructions.push('\n');
-        instructions.push_str(&text);
+        if !instructions.ends_with(text.as_str()) {
+            instructions.push('\n');
+            instructions.push_str(&text);
+        }
         if status == "waiting_for_task" {
             state
                 .journal
