@@ -11,21 +11,22 @@ pub(super) async fn route(
     request: Request<Body>,
     uri: &Uri,
 ) -> Result<Response, HttpError> {
-    use crate::gateway::application::canon_sidebar;
     let parts: Vec<_> = uri.path().trim_start_matches('/').split('/').collect();
     let app = &state.application;
     let data = match (request.method(), parts.as_slice()) {
         (&Method::POST, ["canon", "epics", id, "conversation"]) => {
-            canon_sidebar::conversation(app, subsessions::decode_component(id)?).await?
+            app.canon_conversation(subsessions::decode_component(id)?)
+                .await?
         }
         (&Method::GET, ["projects", id, "canon", "sidebar"]) => {
-            canon_sidebar::sidebar(app, subsessions::decode_component(id)?).await?
+            app.canon_sidebar(subsessions::decode_component(id)?)
+                .await?
         }
         (&Method::POST, ["projects", id, "canon", "sidebar-order"]) => {
             let id = subsessions::decode_component(id)?;
             let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
             let input = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
-            canon_sidebar::reorder(app, id, input).await?
+            app.canon_sidebar_order(id, input).await?
         }
         _ => {
             return Err(HttpError::public(
