@@ -62,7 +62,7 @@ try {
       await page.getByText("Complete stub answer.", { exact: true }).waitFor();
       await page.locator('[data-test-class="context-donut-button"]').waitFor({ state: "attached" });
       await page.locator('[data-slot="composer-compact-preview"]').click();
-      const running = page.getByRole("tab", { name: appCopy.space.running, exact: true });
+      const running = page.getByRole("radio", { name: appCopy.space.running, exact: true });
       if (!(await running.isVisible())) {
         await page.getByRole("button", { name: appCopy.titlebar.showLeftPanel, exact: true }).click();
       }
