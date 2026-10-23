@@ -1,18 +1,31 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
-import { memo, useCallback, type KeyboardEvent } from "react";
+import { memo, useCallback, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
 import { PlainTextPlugin } from "@lexical/react/LexicalPlainTextPlugin";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import { mergeRegister } from "lexical";
 import { appCopy } from "@/app/copy";
 import { ComposerCardEditor, ComposerCardEditable, ComposerCardPlaceholder } from "@/butler-ds";
 import { useComposerStore } from "./composerStore";
 import { SessionReferenceNode } from "./editor/SessionReferenceNode";
 import { ProjectSourceNode } from "./editor/ProjectSourceNode";
 import { ComposerEditorPlugin } from "./editor/ComposerEditorPlugin";
+import { isComposerComposing, subscribeComposing } from "./editor/composition";
 
 export const COMPOSER_MAX_AUTO_ROWS = 8;
+
+// Lexical shows its placeholder while its own text is empty, but an IME composing on an
+// empty line writes only the DOM until it is idle. Composing text is text.
+function ComposerPlaceholder({ children }: { children: ReactNode }) {
+  const [editor] = useLexicalComposerContext();
+  const composing = useSyncExternalStore(
+    useCallback((listener: () => void) => mergeRegister(editor.registerUpdateListener(listener), subscribeComposing(editor, listener)), [editor]),
+    () => isComposerComposing(editor));
+  return composing ? null : <ComposerCardPlaceholder>{children}</ComposerCardPlaceholder>;
+}
 
 export const ComposerTextArea = memo(function ComposerTextArea({ placeholder }: { placeholder?: string }) {
   useAppLocale();
@@ -41,7 +54,7 @@ export const ComposerTextArea = memo(function ComposerTextArea({ placeholder }: 
             onCompositionEnd={() => setIsComposing(false)}
             onKeyDown={handleKeyDown}
           /></ComposerCardEditable>}
-          placeholder={<ComposerCardPlaceholder>{placeholder ?? (large || sessionId.startsWith("dashboard:") ? appCopy.composer.placeholder : appCopy.composer.placeholderFollowUp)}</ComposerCardPlaceholder>}
+          placeholder={<ComposerPlaceholder>{placeholder ?? (large || sessionId.startsWith("dashboard:") ? appCopy.composer.placeholder : appCopy.composer.placeholderFollowUp)}</ComposerPlaceholder>}
           ErrorBoundary={LexicalErrorBoundary}
         />
       </ComposerCardEditor>
