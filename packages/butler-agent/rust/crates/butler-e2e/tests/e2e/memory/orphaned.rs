@@ -68,19 +68,24 @@ async fn orphaned(standalone: bool, ineligible: bool) -> Result<(), HarnessError
     // Do not reset jobs while their original hot-cache or FTS work is in flight.
     crate::memory_fixture::settle(&data).await?;
     // Recreate an upgraded graph's durable unprocessed queue under the lease.
+    // Each external writer below closes its connection once it has committed,
+    // as a finished writer process does: macOS reports an open SQLite
+    // connection's writes only when that connection closes.
     let gate = hold_gate(&data);
-    let db = graph(&data);
-    for key in [
-        &source,
-        &format!("conversation_turn:{kept_turn}"),
-        &format!("conversation_message:{KEPT}-recovered-10"),
-    ] {
-        reset_pending(&db, key);
+    {
+        let db = graph(&data);
+        for key in [
+            &source,
+            &format!("conversation_turn:{kept_turn}"),
+            &format!("conversation_message:{KEPT}-recovered-10"),
+        ] {
+            reset_pending(&db, key);
+        }
+        db.execute("UPDATE memory_projection_jobs SET created_at='2000-01-01T00:00:00Z' WHERE episode_id IN (SELECT memory_chunk_id FROM memory_chunks WHERE source_key=?1)", [&source]).unwrap();
     }
-    db.execute("UPDATE memory_projection_jobs SET created_at='2000-01-01T00:00:00Z' WHERE episode_id IN (SELECT memory_chunk_id FROM memory_chunks WHERE source_key=?1)", [&source]).unwrap();
     // External canonical writers also delete sources (e.g. restored history).
     // Park this revision without publishing new source content.
-    let canonical = canonical(&data);
+    let store = canonical(&data);
     if ineligible {
         let table = if standalone {
             "conversation_messages"
@@ -88,17 +93,19 @@ async fn orphaned(standalone: bool, ineligible: bool) -> Result<(), HarnessError
             "conversation_turns"
         };
         let status = if standalone { "pending" } else { "running" };
-        canonical
+        store
             .execute(
                 &format!("UPDATE {table} SET status=?1 WHERE session_id=?2"),
                 [status, GONE],
             )
             .unwrap();
     } else {
-        canonical
+        store
             .execute("DELETE FROM conversation_sessions WHERE id=?1", [GONE])
             .unwrap();
     }
+    drop(store);
+    let db = graph(&data);
     let parked = idle_signals(&s).await;
     release_gate(&gate);
     drop(gate);
@@ -138,13 +145,15 @@ async fn orphaned(standalone: bool, ineligible: bool) -> Result<(), HarnessError
         } else {
             "conversation_turns"
         };
-        canonical
+        let store = canonical(&data);
+        store
             .execute(
                 &format!("UPDATE {table} SET status='complete' WHERE session_id=?1"),
                 [GONE],
             )
             .unwrap();
-        published(&canonical);
+        published(&store);
+        drop(store);
         drain(&data, &[]).await;
         let completed: i64 = db.query_row("SELECT COUNT(*) FROM memory_projection_windows w JOIN memory_projection_jobs j ON j.job_id=w.job_id JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id WHERE c.source_key=?1 AND w.state='complete'", [&source], |r| r.get(0)).unwrap();
         assert_eq!(
