@@ -20,7 +20,7 @@ test("scheme-less private and local addresses open over http, public ones over h
     "10.0.0.1/admin", // privacy-hygiene: allow-private-ip
     "172.20.0.5:8080", // privacy-hygiene: allow-private-ip
     "169.254.1.1", "100.64.0.1", "127.0.0.1:3000", "[::1]:3000", "[fd00::1]", "[fe80::1]",
-    "router.local", "printer.home.arpa", "app.localhost:5173", "svc.internal", "nas:5000", "router/admin",
+    "router.local", "printer.home.arpa", "app.localhost:5173", "svc.internal", "nas:5000", "nas:5000/setup", "router/",
   ];
   for (const input of http) expect([input, addressUrl(input)]).toEqual([input, new URL(`http://${input}`).href]);
   for (const input of ["example.com", "8.8.8.8", "172.32.0.1", "100.128.0.1", "[2606:4700::1111]", "local.example.com"]) {
@@ -28,7 +28,10 @@ test("scheme-less private and local addresses open over http, public ones over h
   }
   expect(addressUrl("http://192.168.1.1")).toBe("http://192.168.1.1/"); // privacy-hygiene: allow-private-ip
   expect(addressUrl("https://192.168.1.1")).toBe("https://192.168.1.1/"); // privacy-hygiene: allow-private-ip
-  expect(addressUrl("intranet")).toBe("https://www.google.com/search?q=intranet");
+  // A single label navigates only with a numeric port or a lone trailing slash, and never when it is all digits.
+  for (const input of ["intranet", "24/7", "3:30", "50/50", "km/h", "and/or", "TCP/IP", "router/admin"]) {
+    expect(addressUrl(input)).toBe(`https://www.google.com/search?q=${encodeURIComponent(input)}`);
+  }
 });
 
 test("build support expires at EOL and fails closed for an unqualified major", () => {

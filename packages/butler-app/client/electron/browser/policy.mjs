@@ -22,8 +22,9 @@ export function addressUrl(input) {
   }
   return `https://www.google.com/search?q=${encodeURIComponent(value)}`;
 }
-// A bracketed IPv6 literal, a dotted host, a single label before a port or path, or localhost.
-const NAVIGABLE = /^(\[[\da-f:.]+\]|[\w.-]+\.[a-z\d-]+|[\w-]+(?=:\d|\/)|localhost)(:\d+)?(\/|$)/iu;
+// A bracketed IPv6 literal, a dotted host, localhost, or a single label with a letter before a numeric port or a lone
+// trailing slash (so "24/7", "3:30" and "and/or" stay searches).
+const NAVIGABLE = /^(\[[\da-f:.]+\]|[\w.-]+\.[a-z\d-]+|(?=[\d_-]*[a-z])[\w-]+(?=:\d|\/$)|localhost)(:\d+)?(\/|$)/iu;
 const LOCAL_SUFFIXES = [".localhost", ".local", ".home.arpa", ".internal"];
 /** Hosts that cannot hold a public certificate (Chromium's non-unique/private destinations); typed bare, they open over http. */
 function localHost(hostname) {
