@@ -88,6 +88,7 @@ interface ButlerAppBridge {
     target: SessionFolderLaunchTarget;
   }) => Promise<SessionFolderLaunchResult>;
   saveMessageFile?: (input?: unknown) => Promise<unknown>;
+  openMessageFile?: (input?: unknown) => Promise<unknown>;
   showDesktopNotification?: (input?: unknown) => Promise<unknown>;
   getNativeNotificationStatus?: () => Promise<unknown>;
   testDesktopNotification?: () => Promise<unknown>;

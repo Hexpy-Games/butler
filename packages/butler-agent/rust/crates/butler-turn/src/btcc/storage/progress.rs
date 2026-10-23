@@ -2,7 +2,7 @@ use butler_core::json;
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde_json::json;
 
-use super::common::{canonical_json, error, json as parse_json};
+use super::common::{canonical_json, document_json, error, json as parse_json};
 use super::{StorageError, StorageResult};
 use crate::btcc::identity::digest;
 use crate::btcc::turn::ProgressWrite;
@@ -31,7 +31,7 @@ pub(super) fn append(connection: &mut Connection, write: ProgressWrite) -> Stora
     )?);
     let destination = serde_json::to_value(&write.destination)
         .map_err(|e| error(StorageCode::ProgressDestination, e.to_string()).with_source(e))?;
-    let destination_json = canonical_json(&destination)?;
+    let destination_json = document_json(&destination)?;
     let event_id = format!(
         "btcc-progress-event:{}",
         digest(&format!(
@@ -61,7 +61,7 @@ pub(super) fn append(connection: &mut Connection, write: ProgressWrite) -> Stora
             session_sequence,turn_sequence,event_fingerprint,event_json,destination_json,status,created_at)
             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,'pending',strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
             params![event_id,action_id,write.session_id,write.turn_id,session_sequence,turn_sequence,
-                fingerprint,canonical_json(&event)?,destination_json]).map_err(StorageError::sqlite)?;
+                fingerprint,document_json(&event)?,destination_json]).map_err(StorageError::sqlite)?;
     }
     tx.commit().map_err(StorageError::sqlite)
 }
