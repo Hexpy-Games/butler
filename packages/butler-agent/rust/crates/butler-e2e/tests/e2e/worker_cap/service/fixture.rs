@@ -125,7 +125,7 @@ impl Fixture {
         };
         f.binding("parent", butler_turn::workspace::SessionRole::Steward)
             .await?;
-        f.create("parent", "chat", ChildRole::Steward).await?;
+        f.create("parent", "chat", ChildRole::Steward)?;
         // Its original dispatch is already admitted, so recovery must only replay Workers.
         rusqlite::Connection::open(&f.db)?.execute("UPDATE btcc_subsession_delegations SET dispatch_state='enqueued' WHERE relation_id='rel-parent'", [])?;
         Ok(f)
@@ -163,7 +163,7 @@ impl Fixture {
             .await?;
         Ok(())
     }
-    pub(super) async fn create(
+    pub(super) fn create(
         &self,
         child: &str,
         parent: &str,
@@ -182,7 +182,7 @@ impl Fixture {
         tx.commit()?;
         Ok(())
     }
-    pub(super) async fn direction(&self, child: &str) -> Result<(), ServiceError> {
+    pub(super) fn direction(&self, child: &str) -> Result<(), ServiceError> {
         // Place the durable direction at the delivery boundary, after result commit.
         rusqlite::Connection::open(&self.db)?.execute("INSERT INTO btcc_subsession_directions (instruction_id,relation_id,revision,source_parent_turn_id,source_message_id,instruction,status,created_at) VALUES ('direction',?1,1,'parent-turn','source','Verify updated evidence','pending','2026-10-24T00:00:01.000Z')", [format!("rel-{child}")])?;
         Ok(())

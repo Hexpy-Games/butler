@@ -16,7 +16,7 @@ async fn cb_11_cancel_waiting_writes_result_and_never_starts() -> Result<(), Ser
     butler_e2e::gate!();
     let f = Fixture::open().await?;
     for child in ["first", "waiting"] {
-        f.create(child, "parent", ChildRole::Worker).await?;
+        f.create(child, "parent", ChildRole::Worker)?;
     }
     f.service.recover_dispatches().await?;
     assert_eq!(f.state("waiting").as_deref(), Some("pending"));
@@ -63,7 +63,7 @@ async fn cb_11_failed_settings_read_uses_last_cap_and_delivers() -> Result<(), S
     butler_e2e::gate!();
     let f = Fixture::open().await?;
     for child in ["first", "second", "third"] {
-        f.create(child, "parent", ChildRole::Worker).await?;
+        f.create(child, "parent", ChildRole::Worker)?;
     }
     f.service.recover_dispatches().await?;
     f.profiles.fail.store(true, Ordering::SeqCst);
@@ -99,7 +99,7 @@ async fn cb_11_applied_continuation_retains_slot_until_completion() -> Result<()
 async fn direction_delivery_race(applied: bool) -> Result<(), ServiceError> {
     let f = Fixture::open().await?;
     for child in ["first", "waiting"] {
-        f.create(child, "parent", ChildRole::Worker).await?;
+        f.create(child, "parent", ChildRole::Worker)?;
     }
     f.service.recover_dispatches().await?;
     f.queue.hold.store(true, Ordering::SeqCst);
@@ -113,7 +113,7 @@ async fn direction_delivery_race(applied: bool) -> Result<(), ServiceError> {
         .await
         .unwrap();
     // The result transaction committed, but delivery has not yet cleared the slot.
-    f.direction("first").await?;
+    f.direction("first")?;
     f.service.recover_dispatches().await?;
     let turn = f
         .queue
@@ -170,8 +170,7 @@ async fn cb_11_failed_first_settings_read_uses_default_ten() -> Result<(), Servi
     butler_e2e::gate!();
     let f = Fixture::open().await?;
     for index in 0..11 {
-        f.create(&format!("worker-{index}"), "parent", ChildRole::Worker)
-            .await?;
+        f.create(&format!("worker-{index}"), "parent", ChildRole::Worker)?;
     }
     f.profiles.fail.store(true, Ordering::SeqCst);
     f.service.recover_dispatches().await?;
@@ -188,7 +187,7 @@ async fn cb_11_admission_replays_after_queue_write_failure() -> Result<(), Servi
     butler_e2e::gate!();
     let f = Fixture::open().await?;
     for child in ["first", "waiting"] {
-        f.create(child, "parent", ChildRole::Worker).await?;
+        f.create(child, "parent", ChildRole::Worker)?;
     }
     f.queue.fail_dispatch.store(true, Ordering::SeqCst);
     assert!(f.service.recover_dispatches().await.is_err());
@@ -216,10 +215,10 @@ async fn cb_11_cancel_running_worker_releases_slot_despite_pending_direction()
     butler_e2e::gate!();
     let f = Fixture::open().await?;
     for child in ["first", "waiting"] {
-        f.create(child, "parent", ChildRole::Worker).await?;
+        f.create(child, "parent", ChildRole::Worker)?;
     }
     f.service.recover_dispatches().await?;
-    f.direction("first").await?;
+    f.direction("first")?;
     f.service
         .complete_child("first", "turn-first", "cancelled", "Cancelled".into())
         .await?;
@@ -232,7 +231,7 @@ async fn cb_11_cancel_running_worker_releases_slot_despite_pending_direction()
 async fn cb_11_recovery_continues_after_one_failed_delivery() -> Result<(), ServiceError> {
     butler_e2e::gate!();
     let f = Fixture::open().await?;
-    f.create("first", "parent", ChildRole::Worker).await?;
+    f.create("first", "parent", ChildRole::Worker)?;
     f.service.recover_dispatches().await?;
     f.queue.fail_delivery.store(true, Ordering::SeqCst);
     assert!(
@@ -241,14 +240,12 @@ async fn cb_11_recovery_continues_after_one_failed_delivery() -> Result<(), Serv
             .await
             .is_err()
     );
-    f.create("steward-replay", "parent", ChildRole::Steward)
-        .await?;
+    f.create("steward-replay", "parent", ChildRole::Steward)?;
     f.binding("other-parent", butler_turn::workspace::SessionRole::Steward)
         .await?;
-    f.create("other-parent", "chat", ChildRole::Steward).await?;
-    f.create("other-worker", "other-parent", ChildRole::Worker)
-        .await?;
-    f.direction("first").await?;
+    f.create("other-parent", "chat", ChildRole::Steward)?;
+    f.create("other-worker", "other-parent", ChildRole::Worker)?;
+    f.direction("first")?;
     f.service.recover_dispatches().await?;
     {
         let inputs = f.queue.inputs.lock().unwrap();
