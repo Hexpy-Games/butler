@@ -12,7 +12,23 @@ pub(super) fn response(
     op: Option<&Operation>,
 ) -> Result<Value> {
     let target = target(op).unwrap_or("unknown");
-    let (code, message) = match error {
+    let (code, message) = message(error, target);
+    let work = scope
+        .work_id
+        .as_deref()
+        .map(|id| read_work(db, id))
+        .transpose()?;
+    Ok(json!({"ok":false,"error":{"code":code,"message":message},"work":work}))
+}
+fn message(error: &Error, target: &str) -> (&'static str, String) {
+    match error {
+        Error::ImpactIncomplete(ids) => (
+            "impact_map_incomplete",
+            format!(
+                "impact_map is missing Tasks bound to changed criteria: {}. Add an entry for each and resend.",
+                ids.join(", ")
+            ),
+        ),
         Error::Conflict { current } => conflict_rejection(current, target),
         Error::Invalid("stale_owner") => (
             "stale_owner",
@@ -48,7 +64,13 @@ pub(super) fn response(
         Error::Chain(detail) => (
             "planner_constraint_violation",
             format!(
-                "Tasks must form chains of steps, each step one Task or a flat stack; {detail} breaks that. Write this breakdown as parts of one Task with part.add, ordered with after_part_ids, and keep integrate and review as parts."
+                "Tasks must form chains of steps, each step one Task or a flat stack; {detail} breaks that. No nested stacks, parallel sub-chains or links between chains. Write this breakdown as parts of one Task with part.add, ordered with after_part_ids, and keep integrate and review as parts."
+            ),
+        ),
+        Error::Invalid("completed Task cannot be deleted") => (
+            "task_completed_kept",
+            format!(
+                "Completed Tasks stay in the Work. Leave Task {target} as it is and add a new Task for any change."
             ),
         ),
         Error::Invalid("draft_unresolved") => (
@@ -71,14 +93,9 @@ pub(super) fn response(
             "work_apply_rejected",
             model_text::rejected(&error.to_string()),
         ),
-    };
-    let work = scope
-        .work_id
-        .as_deref()
-        .map(|id| read_work(db, id))
-        .transpose()?;
-    Ok(json!({"ok":false,"error":{"code":code,"message":message},"work":work}))
+    }
 }
+
 fn target(op: Option<&Operation>) -> Option<&str> {
     match op? {
         Operation::Edit { task_id, .. }

@@ -133,12 +133,14 @@ impl Batch<'_, '_> {
                 ..impact.clone()
             });
         }
+        let mut missing = Vec::new();
         for id in consumers.keys() {
             if self.task(id)?["status"] != "cancelled" && !seen.contains(id) {
-                return Err(Error::Invalid(
-                    "Spec activation requires an impact for every bound Task",
-                ));
+                missing.push(id.clone());
             }
+        }
+        if !missing.is_empty() {
+            return Err(Error::ImpactIncomplete(missing));
         }
         Ok(result)
     }

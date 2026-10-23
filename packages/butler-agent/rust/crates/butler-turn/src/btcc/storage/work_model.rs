@@ -46,9 +46,10 @@ pub(super) fn work_error(error: store::Error) -> StorageError {
         store::Error::InvalidRank => "invalid_rank",
         store::Error::ConversationOccupied => "conversation_occupied",
         store::Error::CrossChat => "cross_chat",
-        store::Error::Invalid(_) | store::Error::Chain(_) | store::Error::PartCycle { .. } => {
-            "work_model_invalid"
-        }
+        store::Error::Invalid(_)
+        | store::Error::ImpactIncomplete(_)
+        | store::Error::Chain(_)
+        | store::Error::PartCycle { .. } => "work_model_invalid",
         store::Error::Json(_)
         | store::Error::BodyCodec(_)
         | store::Error::Id(_)

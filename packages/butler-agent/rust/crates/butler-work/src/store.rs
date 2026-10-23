@@ -75,6 +75,8 @@ pub enum Error {
     NotFound,
     #[error("owned_elsewhere")]
     OwnedElsewhere { detail: Value },
+    #[error("impact_map incomplete: {0:?}")]
+    ImpactIncomplete(Vec<String>),
     #[error("running")]
     Running,
     #[error("part cycle in Task {task}: {path:?}")]

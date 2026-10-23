@@ -6194,7 +6194,7 @@
       "definition": {
         "type": "function",
         "name": "work_read",
-        "description": "Read the bound Work: its brief, Spec nodes and criterion coverage. Read before changing structure, and again after any rejection that reports a newer revision. Results are complete and revision-bound; page with `cursor` when `remaining` is non-zero. Reading never changes anything.",
+        "description": "Read the bound Work: brief, Tasks as chains of steps (each step one Task or a flat stack), one Task's parts and attempts, Spec, coverage, or the operations allowed now. Read before structure edits and after a rejection that reports a newer revision. Results are complete; page with `cursor` while `remaining` > 0. Never changes anything.",
         "parameters": {
           "type": "object",
           "properties": {
@@ -6208,26 +6208,27 @@
                 "coverage",
                 "operations"
               ],
-              "description": "tasks: chains, steps, stacks, statuses, holds, task_graph_revision\ntask: one Task with parts (DAG), attempts, criteria, results\noperations: variants allowed now and why others are not"
+              "description": "summary | tasks (layout, task_graph_revision) | task (parts, attempts, criteria) | spec | coverage | operations (allowed now, and why not)"
             },
             "work_id": {
               "type": "string",
-              "description": "default: the Work bound to this conversation"
+              "description": "default: bound Work"
             },
             "task_id": {
               "type": "string",
-              "description": "required for view=task"
+              "description": "for view=task"
             },
             "node_id": {
               "type": "string",
-              "description": "Spec node for view=spec|coverage; default: the responsible node"
+              "description": "default: responsible Spec node"
             },
             "revision": {
               "type": "string",
-              "description": "read an exact past Spec revision"
+              "description": "exact past Spec revision"
             },
             "cursor": {
-              "type": "string"
+              "type": "string",
+              "description": "next page of a paged result"
             }
           },
           "required": [
@@ -6245,13 +6246,13 @@
       "definition": {
         "type": "function",
         "name": "work_apply",
-        "description": "Change the bound Work in one all-or-nothing batch. Later operations may refer to earlier ones by `@key`.",
+        "description": "Change the bound Work in one batch. Visible Tasks form chains of steps, each step one Task or a flat stack. Put anything finer, or any dependency that shape cannot express, into parts of one Task; integrate and review are always parts. Send `expected_task_graph_revision` with any structure op. Only `task.complete` after an accepted review completes a Task; a turn ending completes nothing. Refer to earlier ops by `@key`.",
         "parameters": {
           "type": "object",
           "properties": {
             "reason": {
               "type": "string",
-              "description": "one line: why this change, in terms of the request"
+              "description": "why, in terms of the request"
             },
             "spec_ref": {
               "type": "object",
@@ -6272,18 +6273,18 @@
                 "body_hash"
               ],
               "additionalProperties": false,
-              "description": "binding for edits to existing managed work; omit for bootstrap"
+              "description": "binding for edits to existing managed work"
             },
             "expected_task_graph_revision": {
               "type": "integer",
-              "description": "required when any structure op is present"
+              "description": "from your last read; required with structure ops"
             },
             "expected_revisions": {
               "type": "object",
               "additionalProperties": {
                 "type": "integer"
               },
-              "description": "per edited Task/part/Spec field set"
+              "description": "{id: revision} of edited items"
             },
             "operations": {
               "type": "array",
@@ -6297,23 +6298,23 @@
                       },
                       "run_here": {
                         "type": "boolean",
-                        "description": "true: this conversation runs the Task itself, with no separate session. Set only when the user asks to do it here. Default: the Task gets its own session. On work.create_light it applies to every Task in the brief."
+                        "description": "this conversation runs it, not its own session; only when the user asks; on create_light, every Task"
                       },
                       "key": {
                         "type": "string"
                       },
                       "goal": {
                         "type": "string",
-                        "description": "the user-visible outcome"
+                        "description": "user-visible outcome"
                       },
                       "done_criteria": {
                         "type": "array",
                         "items": {
                           "type": "string"
                         },
-                        "description": "observable checks the final result must pass",
                         "minItems": 2,
-                        "maxItems": 3
+                        "maxItems": 3,
+                        "description": "2–3 observable checks"
                       },
                       "tasks": {
                         "type": "array",
@@ -6323,16 +6324,10 @@
                             "type": "object",
                             "properties": {
                               "key": {
-                                "type": "string",
-                                "description": "batch-local name for @key"
+                                "type": "string"
                               },
                               "title": {
-                                "type": "string",
-                                "description": "short user-visible name"
-                              },
-                              "description": {
-                                "type": "string",
-                                "description": "what done looks like"
+                                "type": "string"
                               },
                               "criteria": {
                                 "type": "array",
@@ -6349,7 +6344,7 @@
                             "additionalProperties": false
                           }
                         },
-                        "description": "ordered steps of one chain; an inner array of 2+ is a stack"
+                        "description": "ordered steps; an inner array of 2+ is a stack"
                       }
                     },
                     "required": [
@@ -6368,33 +6363,28 @@
                       },
                       "run_here": {
                         "type": "boolean",
-                        "description": "true: this conversation runs the Task itself, with no separate session. Set only when the user asks to do it here. Default: the Task gets its own session. On work.create_light it applies to every Task in the brief."
+                        "description": "this conversation runs it, not its own session; only when the user asks; on create_light, every Task"
                       },
                       "key": {
                         "type": "string"
                       },
                       "title": {
-                        "type": "string",
-                        "description": "short user-visible name"
-                      },
-                      "description": {
-                        "type": "string",
-                        "description": "what done looks like"
+                        "type": "string"
                       },
                       "after_task_id": {
                         "type": "string",
-                        "description": "join the step right after that Task's step, alongside what is there; if that Task is in the last step, become the new last step."
+                        "description": "the step after that Task's step; a new last step if it is last"
                       },
                       "join_step_of_task_id": {
                         "type": "string",
-                        "description": "join that Task's step, running alongside it."
+                        "description": "that Task's step, alongside it"
                       },
                       "step": {
                         "type": "string",
                         "enum": [
                           "new"
                         ],
-                        "description": "start a new independent chain that waits for nothing."
+                        "description": "a new chain that waits for nothing"
                       },
                       "acceptance_refs": {
                         "type": "array",
@@ -6443,9 +6433,6 @@
                           "title": {
                             "type": "string"
                           },
-                          "description": {
-                            "type": "string"
-                          },
                           "acceptance_refs": {
                             "type": "array",
                             "items": {
@@ -6473,11 +6460,11 @@
                         },
                         "required": [],
                         "additionalProperties": false,
-                        "description": "only the named fields change"
+                        "description": "only named fields change"
                       },
                       "confirm_draft": {
                         "const": true,
-                        "description": "turns a queued draft into a real Task; needs acceptance_refs"
+                        "description": "makes a queued draft real; needs acceptance_refs"
                       }
                     },
                     "required": [
@@ -6498,18 +6485,18 @@
                       },
                       "after_task_id": {
                         "type": "string",
-                        "description": "join the step right after that Task's step, alongside what is there; if that Task is in the last step, become the new last step."
+                        "description": "the step after that Task's step; a new last step if it is last"
                       },
                       "join_step_of_task_id": {
                         "type": "string",
-                        "description": "join that Task's step, running alongside it."
+                        "description": "that Task's step, alongside it"
                       },
                       "step": {
                         "type": "string",
                         "enum": [
                           "new"
                         ],
-                        "description": "start a new independent chain that waits for nothing."
+                        "description": "a new chain that waits for nothing"
                       }
                     },
                     "required": [
@@ -6537,7 +6524,7 @@
                       "into_step_of_task_id"
                     ],
                     "additionalProperties": false,
-                    "description": "merge into that Task's step"
+                    "description": "into that Task's step"
                   },
                   {
                     "type": "object",
@@ -6552,15 +6539,15 @@
                         "type": "array",
                         "items": {
                           "type": "string"
-                        }
+                        },
+                        "description": "resulting step order"
                       }
                     },
                     "required": [
                       "op",
                       "task_id"
                     ],
-                    "additionalProperties": false,
-                    "description": "split the stack containing task_id into consecutive steps"
+                    "additionalProperties": false
                   },
                   {
                     "type": "object",
@@ -6572,8 +6559,7 @@
                         "type": "string"
                       },
                       "reason": {
-                        "type": "string",
-                        "description": "one line, shown in history"
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -6611,7 +6597,8 @@
                         "type": "array",
                         "items": {
                           "type": "string"
-                        }
+                        },
+                        "description": "predecessors within the Task"
                       }
                     },
                     "required": [
@@ -6620,8 +6607,7 @@
                       "kind",
                       "title"
                     ],
-                    "additionalProperties": false,
-                    "description": "any DAG inside the Task; no cycles"
+                    "additionalProperties": false
                   },
                   {
                     "type": "object",
@@ -6647,7 +6633,7 @@
                         "items": {
                           "type": "string"
                         },
-                        "description": "replaces this part's predecessors within its Task"
+                        "description": "replaces predecessors"
                       }
                     },
                     "required": [
@@ -6667,8 +6653,7 @@
                         "type": "string"
                       },
                       "reason": {
-                        "type": "string",
-                        "description": "one line, shown in history"
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -6693,7 +6678,7 @@
                       "task_id"
                     ],
                     "additionalProperties": false,
-                    "description": "claim the Task before its effects"
+                    "description": "before its effects"
                   },
                   {
                     "type": "object",
@@ -6709,8 +6694,7 @@
                       "op",
                       "part_id"
                     ],
-                    "additionalProperties": false,
-                    "description": "claim one part of a started Task"
+                    "additionalProperties": false
                   },
                   {
                     "type": "object",
@@ -6758,8 +6742,7 @@
                         "type": "string"
                       },
                       "result_revision": {
-                        "type": "integer",
-                        "description": "the submitted result being judged"
+                        "type": "integer"
                       },
                       "verdict": {
                         "type": "string",
@@ -6791,8 +6774,7 @@
                                 "node_revision",
                                 "criterion_id"
                               ],
-                              "additionalProperties": false,
-                              "description": "criterion judged"
+                              "additionalProperties": false
                             },
                             "met": {
                               "type": "boolean"
@@ -6801,12 +6783,10 @@
                               "type": "array",
                               "items": {
                                 "type": "string"
-                              },
-                              "description": "tool evidence"
+                              }
                             },
                             "note": {
-                              "type": "string",
-                              "description": "one line"
+                              "type": "string"
                             }
                           },
                           "required": [
@@ -6817,7 +6797,7 @@
                           ],
                           "additionalProperties": false
                         },
-                        "description": "criterion_ref (criterion judged), met, evidence_refs (tool evidence), note (one line)"
+                        "description": "every bound criterion; one unmet means revise"
                       }
                     },
                     "required": [
@@ -6827,8 +6807,7 @@
                       "verdict",
                       "criterion_results"
                     ],
-                    "additionalProperties": false,
-                    "description": "judge every bound criterion; one unmet criterion means revise"
+                    "additionalProperties": false
                   },
                   {
                     "type": "object",
@@ -6840,7 +6819,8 @@
                         "type": "string"
                       },
                       "review_ref": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "accepted review at current revisions"
                       }
                     },
                     "required": [
@@ -6848,8 +6828,7 @@
                       "task_id",
                       "review_ref"
                     ],
-                    "additionalProperties": false,
-                    "description": "needs an accepted review at current revisions"
+                    "additionalProperties": false
                   },
                   {
                     "type": "object",
@@ -6868,7 +6847,7 @@
                       },
                       "checkpoint_ref": {
                         "type": "string",
-                        "description": "saved progress to resume from"
+                        "description": "progress to resume from"
                       }
                     },
                     "required": [
@@ -6889,8 +6868,7 @@
                         "type": "string"
                       },
                       "reason": {
-                        "type": "string",
-                        "description": "one line, shown in history"
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -6899,7 +6877,7 @@
                       "reason"
                     ],
                     "additionalProperties": false,
-                    "description": "cannot be done; holds later steps of its chain"
+                    "description": "cannot be done; holds later steps"
                   },
                   {
                     "type": "object",
@@ -6912,11 +6890,10 @@
                       },
                       "node_id": {
                         "type": "string",
-                        "description": "the node and revision you revise; omit both for a new node"
+                        "description": "omit (with base_revision) for a new node"
                       },
                       "base_revision": {
-                        "type": "integer",
-                        "description": "the node and revision you revise; omit both for a new node"
+                        "type": "integer"
                       },
                       "node": {
                         "type": "object",
@@ -6931,7 +6908,8 @@
                             "type": "array",
                             "items": {
                               "type": "string"
-                            }
+                            },
+                            "description": "observable checks"
                           },
                           "constraints": {
                             "type": "array",
@@ -6946,16 +6924,14 @@
                           "criteria",
                           "constraints"
                         ],
-                        "additionalProperties": false,
-                        "description": "title; goal (the outcome); criteria (observable checks); constraints (limits the request states)"
+                        "additionalProperties": false
                       }
                     },
                     "required": [
                       "op",
                       "node"
                     ],
-                    "additionalProperties": false,
-                    "description": "publishes immutable content; returns a SpecRef"
+                    "additionalProperties": false
                   },
                   {
                     "type": "object",
@@ -6985,11 +6961,11 @@
                           ],
                           "additionalProperties": false
                         },
-                        "description": "refs returned by spec.propose in this or an earlier batch"
+                        "description": "from spec.propose"
                       },
                       "expected_tree_version": {
                         "type": "integer",
-                        "description": "Spec tree version from your last read"
+                        "description": "from your last read"
                       },
                       "impact_map": {
                         "type": "object",
@@ -7016,7 +6992,7 @@
                           ],
                           "additionalProperties": false
                         },
-                        "description": "what each affected Task needs under the new Spec; every Task bound to a changed criterion must appear"
+                        "description": "{task_id: {action: retain|edit|cancel|add|reverify, reason}}"
                       }
                     },
                     "required": [
@@ -7041,11 +7017,11 @@
                       "reason"
                     ],
                     "additionalProperties": false,
-                    "description": "raise this Tier 1 Work to Tier 2; brief, Work and Task ids are kept"
+                    "description": "to Tier 2; ids kept"
                   }
                 ]
               },
-              "description": "applied in order"
+              "description": "in order; any rejection rejects the batch"
             }
           },
           "required": [
@@ -7064,20 +7040,21 @@
       "definition": {
         "type": "function",
         "name": "session_control",
-        "description": "Send an instruction or control to a session you started for delegated work. `queue` delivers after that session finishes its current Task; `steer` reaches it at its next safe point, before its next model request or tool call. Use steer for corrections that must change work already under way, and stop only to end that work. Acknowledgement means the instruction was received, not that it was followed; check the reported result. You cannot control sessions you did not start. Available at Tier 2 only.",
+        "description": "Instruct or control a session you delegated to. `queue` delivers after its current Task; `steer` reaches it at its next safe point. Steer only to change work under way; stop only to end it. A receipt means delivered, not followed: check its result.",
         "parameters": {
           "type": "object",
           "properties": {
             "target_session_id": {
               "type": "string",
-              "description": "a session this session delegated to"
+              "description": "a session you delegated to"
             },
             "mode": {
               "type": "string",
               "enum": [
                 "queue",
                 "steer"
-              ]
+              ],
+              "description": "queue | steer"
             },
             "instruction": {
               "oneOf": [
@@ -7108,11 +7085,12 @@
                         "pause",
                         "stop",
                         "resume"
-                      ]
+                      ],
+                      "description": "stop leaves its Task resumable: report it as stopped"
                     },
                     "hold_id": {
                       "type": "string",
-                      "description": "hold_id required for resume"
+                      "description": "required for resume"
                     }
                   },
                   "required": [
@@ -7120,15 +7098,16 @@
                   ],
                   "additionalProperties": false
                 }
-              ]
+              ],
+              "description": "{text, attachment_refs?} | {control: pause|stop|resume, hold_id?}"
             },
             "expected_control_epoch": {
               "type": "integer",
-              "description": "from the last result for this session"
+              "description": "from its last result"
             },
             "idempotency_key": {
               "type": "string",
-              "description": "reuse only when resending the identical instruction"
+              "description": "reuse only for an identical resend"
             }
           },
           "required": [

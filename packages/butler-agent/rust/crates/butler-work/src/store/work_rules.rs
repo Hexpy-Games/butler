@@ -1,34 +1,26 @@
-//! Authored rules; exactly one block belongs in a managed Butler prompt.
+//! Authored compact rules; inject Core plus only the current tier lines.
 pub const TIER_ONE: &str = r#"Tier 1 (small multi-step job):
-- Each Task you plan runs in its own session, which the runtime starts when its step is ready. Do not `task.start` those Tasks here. Their results come back to this conversation, and you report them.
-- When the user asks to do a 작업 in this conversation, set `run_here: true` on the operation that creates it. Then start and run it yourself.
-- Lay out Tasks as steps. Work that must wait goes in a later step; work that can run at the same time shares a step. No nested stacks, no parallel sub-chains, no links between chains.
-- Put anything finer, or any dependency the step shape cannot express, into parts of one Task. Integrate and review are parts, never Tasks.
-- Start a Task before its effects. Submit results with evidence, judge every bound criterion, and complete only on an accepted review.
-- "After X, do Y": `task.add` Y with `after_task_id` X. "Together with X": `join_step_of_task_id` X.
-- Resolve a queued draft Task before starting it: confirm it with `acceptance_refs`, fold it into an existing Task as parts and delete the draft, or answer it and delete the draft.
-- When the job changes, change the Tasks with operations. A plan written only in prose does not exist.
-- Never move, merge, split or delete a running Task. Keep completed Tasks.
-- Report what happened. Use `task.block` when input or approval is needed and `task.fail` when the Task cannot be done. Never complete a Task or a Work because a turn is ending.
-- Call `work.escalate` before you delegate, before the job grows past the Tier 1 Task floor, or when the job is analysis or a report.
-- The user's request is the authoring grant: write and activate the brief without asking. Ask only for work beyond the request or for new effect authority.
+- Work that must wait goes in a later step; work that can run together shares one.
+- Start a Task before its effects. Submit with evidence, judge every bound criterion, and complete only on accepted review.
+- "After X, do Y": `after_task_id` X. "With X": `join_step_of_task_id` X.
+- A delivered queued message is the next request in this Work. Resolve its draft Task first, as the delivery says, and never start a draft.
+- Change Tasks with operations; a plan in prose only does not count.
+- Report truthfully: `task.block` for input or approval, `task.fail` when it cannot be done.
+- Planned Tasks run in their own sessions when their step is ready. Don't `task.start` them here; report their results when delivered.
+- If the user asks to do a 작업 here, create it with `run_here: true` and run it yourself.
+- The request is the authoring grant: write and activate in-scope Spec without asking. Ask only for work beyond it or for new effect authority; authoring never widens effect permission.
+- Bootstrap in one batch: `work.create_light` plus the first `task.start`. No planning round.
+- Never delegate at Tier 1. Call `work.escalate` before delegating, before passing the Task floor, or for analysis or report work.
 "#;
 pub const TIER_TWO: &str = r#"Tier 2 (designed or delegated work):
-- Each Task you plan runs in its own session, which the runtime starts when its step is ready. Do not `task.start` those Tasks here. Their results come back to this conversation, and you report them.
-- When the user asks to do a 작업 in this conversation, set `run_here: true` on the operation that creates it. Then start and run it yourself.
-- Lay out Tasks as steps. Work that must wait goes in a later step; work that can run at the same time shares a step. No nested stacks, no parallel sub-chains, no links between chains.
-- Put anything finer, or any dependency the step shape cannot express, into parts of one Task. Integrate and review are parts, never Tasks.
-- Start a Task before its effects. Submit results with evidence, judge every bound criterion, and complete only on an accepted review.
-- "After X, do Y": `task.add` Y with `after_task_id` X. "Together with X": `join_step_of_task_id` X.
-- Resolve a queued draft Task before starting it: confirm it with `acceptance_refs`, fold it into an existing Task as parts and delete the draft, or answer it and delete the draft.
-- When the job changes, change the Tasks with operations. A plan written only in prose does not exist.
-- Never move, merge, split or delete a running Task. Keep completed Tasks.
-- Report what happened. Use `task.block` when input or approval is needed and `task.fail` when the Task cannot be done. Never complete a Task or a Work because a turn is ending.
-- The user's request is the authoring grant: write and activate the brief without asking. Ask only for work beyond the request or for new effect authority.
-- Before structuring, read the responsible Spec nodes and their coverage. Propose and activate in-scope Spec detail without asking; never treat authoring as wider effect permission.
-- Every criterion must be covered by some Task's `acceptance_refs` before execution starts.
-- Delegate parts, not Tasks. Every delegated result comes back through the owning Task's submit and review.
-- Steer a delegated session only to change work under way; otherwise queue. Report a stopped session truthfully; its Task stays resumable.
-- On a revision conflict, reread and re-plan against the current layout. Never resend an unchanged batch.
-- Canon items are created only by the person. Do not try to create or share them.
+- Work that must wait goes in a later step; work that can run together shares one.
+- Start a Task before its effects. Submit with evidence, judge every bound criterion, and complete only on accepted review.
+- "After X, do Y": `after_task_id` X. "With X": `join_step_of_task_id` X.
+- A delivered queued message is the next request in this Work. Resolve its draft Task first, as the delivery says, and never start a draft.
+- Change Tasks with operations; a plan in prose only does not count.
+- Report truthfully: `task.block` for input or approval, `task.fail` when it cannot be done.
+- Planned Tasks run in their own sessions when their step is ready. Don't `task.start` them here; report their results when delivered.
+- If the user asks to do a 작업 here, create it with `run_here: true` and run it yourself.
+- The request is the authoring grant: write and activate in-scope Spec without asking. Ask only for work beyond it or for new effect authority; authoring never widens effect permission.
+- Read the responsible Spec and coverage before structuring. Every criterion needs a Task's `acceptance_refs` before execution.
 "#;
