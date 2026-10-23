@@ -55,6 +55,25 @@ fn js_compatible_json_encoding_is_stable() {
         r#"{"2":"two","10":"ten","é":"é","é":"é","nested":{"z":1,"a":2}}"#
     );
 
+    // Canonical identity bytes (under stored digests) stay NFC; stored
+    // documents keep decomposed text in the same key order. Identity survives
+    // a stored round trip, and NFC-stored documents re-encode unchanged.
+    let decomposed =
+        json!({"b": "\u{1112}\u{1161}\u{11ab} cafe\u{301}", "10": 1, "a": ["e\u{301}"]});
+    let nfc = "{\"10\":1,\"a\":[\"\u{e9}\"],\"b\":\"\u{d55c} caf\u{e9}\"}";
+    let exact = "{\"10\":1,\"a\":[\"e\u{301}\"],\"b\":\"\u{1112}\u{1161}\u{11ab} cafe\u{301}\"}";
+    for order in [
+        CanonicalKeyOrder::Utf16Lexical,
+        CanonicalKeyOrder::JsPropertyEnumeration,
+    ] {
+        assert_eq!(canonical_json(&decomposed, order).unwrap(), nfc);
+        assert_eq!(canonical_json_exact(&decomposed, order).unwrap(), exact);
+        let stored: Value = serde_json::from_str(exact).unwrap();
+        assert_eq!(canonical_json(&stored, order).unwrap(), nfc);
+        let old: Value = serde_json::from_str(nfc).unwrap();
+        assert_eq!(canonical_json_exact(&old, order).unwrap(), nfc);
+    }
+
     // Source-encoded documents (lone surrogates) survive nested wire envelopes.
     let cases: Vec<Value> = serde_json::from_str(include_str!("document/source-bun.json")).unwrap();
     assert_eq!(cases.len(), 6);

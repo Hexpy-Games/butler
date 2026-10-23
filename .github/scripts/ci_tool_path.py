@@ -20,6 +20,7 @@ ROOTS = (
     'butler-agent::host::guided::work_tools',
     'butler-agent::host::guided::registered_edit',
 )
+SUMMARY = 'tool-call path stub E2E'
 # Stub-tier E2E modules that drive model tool calls through dispatch and handlers.
 E2E = ('tools', 'tools_effects', 'tools_direct_args', 'browser_tool_args',
        'memory_wiring_more', 'ask_user')
@@ -34,6 +35,11 @@ def selected(path):
     # A change to this definition also runs the set it defines.
     return path == '.github/scripts/ci_tool_path.py' or any(
         path == base + '.rs' or path.startswith(base + '/') for base in map(module_base, ROOTS))
+
+
+def runs(event, paths):
+    """PR smoke builds in place; tool-call path changes add their stub E2E set there."""
+    return str(event == 'pull_request' and any(map(selected, paths))).lower()
 
 
 def filterset():

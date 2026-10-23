@@ -81,11 +81,12 @@ pub(super) fn enum_text<T: Serialize>(value: T) -> StorageResult<String> {
         })
 }
 
+/// A stored work document in canonical key order, its text kept exactly.
 pub(super) fn stable<T: Serialize>(value: &T) -> StorageResult<String> {
     let value = serde_json::to_value(value).map_err(|err| {
         error(StorageCode::DurableWorkSerializationFailed, err.to_string()).with_source(err)
     })?;
-    crate::btcc::identity::sqlite_stable_json(&value).map_err(|err| {
+    crate::btcc::identity::sqlite_document_json(&value).map_err(|err| {
         error(StorageCode::DurableWorkSerializationFailed, err.message()).with_source(err)
     })
 }

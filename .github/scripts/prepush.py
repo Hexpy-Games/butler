@@ -222,6 +222,8 @@ def rust_checks():
     success = run('fmt', ['cargo', 'fmt', '--all', '--', '--check'], RUST)
     success = run('source-check', ['cargo', 'run', '--locked', '-p',
                                  'butler-source-check', '--', '.'], RUST) and success
+    success = run('runtime-crates', ['python3', '.github/scripts/ci_runtime_crates.py',
+                                     '--check']) and success
     host = output('rustc', '-vV').split('host: ', 1)[1].splitlines()[0]
     has_rustup = tool_available('rustup')
     installed = set(output('rustup', 'target', 'list', '--installed').splitlines()) if has_rustup else set()

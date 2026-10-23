@@ -302,7 +302,7 @@ class NativeDeps(unittest.TestCase):
                     patch.object(recipe, 'host_target', return_value=target), \
                     patch.object(recipe.host, 'rust_identity'), \
                     patch.object(recipe, 'root_for_target', return_value=self.root), \
-                    patch.dict(os.environ, GITHUB_ACTIONS='true'), \
+                    patch.dict(os.environ, {'GITHUB_ACTIONS': 'true'}, clear=True), \
                     patch.object(recipe, 'prepare_cache', return_value=self.root) as prepare:
                 recipe.main()
                 self.assertEqual(prepare.call_args.args[-1], required)
