@@ -29,8 +29,12 @@ mod hold;
 pub use hold::ReplyGate;
 mod memory;
 mod request;
+mod smart_group;
 mod title;
 use request::handle;
+pub use smart_group::{
+    NO_SMART_GROUP, is_smart_group_request, smart_group_input, smart_group_response,
+};
 pub use title::{is_title_request, title_response};
 mod record;
 mod replay;
@@ -92,6 +96,8 @@ struct State {
     memory_requests: Mutex<Vec<Value>>,
     memory_responder: Mutex<Option<MemoryResponder>>,
     chat_responder: Mutex<Option<ChatResponder>>,
+    smart_group_requests: Mutex<Vec<Value>>,
+    smart_group_responder: Mutex<Option<ChatResponder>>,
     holds: Mutex<hold::Holds>,
 }
 
@@ -186,6 +192,8 @@ impl Provider {
             memory_requests: Mutex::new(Vec::new()),
             memory_responder: Mutex::new(None),
             chat_responder: Mutex::new(None),
+            smart_group_requests: Mutex::new(Vec::new()),
+            smart_group_responder: Mutex::new(None),
             holds: Mutex::new(hold::Holds::default()),
         });
         let shared = state.clone();
@@ -261,6 +269,16 @@ impl Provider {
     /// Deterministic stub model that can choose a response from the actual prompt.
     pub fn set_chat_responder(&self, responder: ChatResponder) {
         *lock(&self.state.chat_responder) = Some(responder);
+    }
+
+    /// Answers smart-group classification; unanswered requests file nothing.
+    pub fn set_smart_group_responder(&self, responder: ChatResponder) {
+        *lock(&self.state.smart_group_responder) = Some(responder);
+    }
+
+    /// Smart-group classification requests, kept apart from `requests`.
+    pub fn smart_group_requests(&self) -> Vec<Value> {
+        lock(&self.state.smart_group_requests).clone()
     }
 
     pub fn set_memory_responder(&self, responder: MemoryResponder) {

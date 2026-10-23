@@ -86,12 +86,14 @@ pub(super) fn ordered_children(view: &AppSpaceView, parent_key: Option<&str>) ->
     nodes
 }
 
+/// `smart` moves prepend inside the target and leave the item automatic;
+/// every other move marks it as placed by hand.
 pub(super) fn move_nodes(
     view: &AppSpaceView,
     source_key: &str,
     target_key: Option<&str>,
     position: AppSpacePosition,
-    prepend: bool,
+    smart: bool,
 ) -> Result<Vec<AppSpaceNode>, GatewayApplicationError> {
     let source = require_node(view, source_key)?.clone();
     if target_key == Some(source_key) {
@@ -123,7 +125,7 @@ pub(super) fn move_nodes(
     };
     let index = match position {
         AppSpacePosition::Inside => {
-            if prepend {
+            if smart {
                 0
             } else {
                 to.len()
@@ -136,7 +138,7 @@ pub(super) fn move_nodes(
     };
     let mut moved = source;
     moved.parent_key = parent_key;
-    moved.manual_placement = true;
+    moved.manual_placement = !smart;
     to.insert(index, moved);
     let normalize = |nodes: Vec<AppSpaceNode>| {
         nodes
