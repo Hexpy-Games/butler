@@ -27,7 +27,7 @@ export function CanonSidebarGroup({ projectId, group, depth, busy, onCreate, onE
     <NavRowSwap open={menuOpen} rest={<IconButton tabIndex={-1} label={`${title} ${expanded ? appCopy.space.collapse : appCopy.space.expand}`} onClick={toggle}>
       {expanded ? <ChevronDown /> : <ChevronRight />}</IconButton>}>
       <OverflowActionMenu label={appCopy.space.rowMenu(title)} open={menuOpen} onOpenChange={setMenuOpen}
-        items={[...(group.kind === "plan" ? [{ label: appCopy.canon.edit, onSelect: onEdit }] : []), { label: appCopy.canon.overview, onSelect: overview }]} />
+        items={[{ label: appCopy.canon.overview, onSelect: overview }, ...(group.kind === "plan" ? [{ label: appCopy.canon.edit, onSelect: onEdit }] : [])]} />
     </NavRowSwap>
   </ButtonContainer>;
   const reorder = (source: string, target: string, after: boolean) => {
