@@ -1,4 +1,5 @@
 //! Deterministic turns; semaphores hold running Workers until the test releases them.
+use axum::response::IntoResponse;
 use axum::{Json, Router, extract::State, routing::post};
 use butler_e2e::e2e::{HarnessError, matching, sanitize::Placeholders};
 use serde_json::{Value, json};
@@ -12,15 +13,15 @@ use std::{
 };
 use tokio::sync::watch;
 
-pub(super) struct Gate(watch::Sender<bool>);
+pub(crate) struct Gate(watch::Sender<bool>);
 impl Gate {
     fn new() -> Self {
         Self(watch::channel(false).0)
     }
-    pub(super) fn add_permits(&self, _: usize) {
+    pub(crate) fn add_permits(&self, _: usize) {
         self.0.send_replace(true);
     }
-    async fn wait(&self) {
+    pub(crate) async fn wait(&self) {
         let mut state = self.0.subscribe();
         while !*state.borrow_and_update() {
             state.changed().await.unwrap();
@@ -28,21 +29,24 @@ impl Gate {
     }
 }
 
-pub(super) struct Script {
+pub(crate) struct Script {
     count: usize,
-    pub(super) steer: AtomicBool,
-    pub(super) steered: AtomicBool,
+    pub(crate) steer: AtomicBool,
+    pub(crate) followup: AtomicBool,
+    pub(crate) direction: Gate,
+    pub(crate) continued: Gate,
+    pub(crate) steered: AtomicBool,
     releases: HashMap<String, Gate>,
-    pub(super) started: Mutex<Vec<String>>,
-    pub(super) fourth: Gate,
-    pub(super) waiting_wording: AtomicBool,
+    pub(crate) started: Mutex<Vec<String>>,
+    pub(crate) fourth: Gate,
+    pub(crate) waiting_wording: AtomicBool,
 }
 impl Script {
-    pub(super) fn release(&self, key: &str) {
+    pub(crate) fn release(&self, key: &str) {
         self.releases[key].add_permits(1);
     }
 }
-pub(super) async fn start(
+pub(crate) async fn start(
     count: usize,
 ) -> Result<(String, Arc<Script>, tokio::task::JoinHandle<()>), HarnessError> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
@@ -50,6 +54,9 @@ pub(super) async fn start(
     let script = Arc::new(Script {
         count,
         steer: AtomicBool::new(false),
+        followup: AtomicBool::new(false),
+        direction: Gate::new(),
+        continued: Gate::new(),
         steered: AtomicBool::new(false),
         releases: ["red", "blue"]
             .into_iter()
@@ -77,7 +84,8 @@ async fn reply(
     } else {
         "red"
     };
-    let role = if key.user_request.starts_with("role: worker") {
+    let continuation = key.user_request.starts_with("Verify the updated source");
+    let role = if key.user_request.starts_with("role: worker") || continuation {
         "worker"
     } else if key.user_request.starts_with("role: steward")
         || body["instructions"]
@@ -103,11 +111,23 @@ async fn reply(
         .filter(|kind| kind.as_str() == "function_call_output")
         .count();
     eprintln!("CB-11 provider actor={actor} step={step}");
-    if body
-        .to_string()
-        .contains("continue your own work — no retry needed.")
-    {
+    if body["input"].as_array().is_some_and(|items| items.iter().any(|item| {
+        item["output"].as_str().and_then(|text| serde_json::from_str::<Value>(text).ok()).is_some_and(|value| {
+            let output = &value["output"];
+            output["status"] == "waiting" && output["message"] == format!("Worker {} is waiting because this session already has 2 Workers running. It starts automatically when one of them finishes, and its result arrives like any other. Continue your own work and do not dispatch it again.", output["delegation_id"].as_str().unwrap())
+        })
+    })) {
         script.waiting_wording.store(true, Ordering::SeqCst);
+    }
+    if continuation {
+        if step == 0 {
+            script.continued.add_permits(1);
+        }
+        return (
+            [("content-type", "text/event-stream")],
+            wire(&message("Updated evidence verified."), "continuation"),
+        )
+            .into_response();
     }
     if role == "worker" && step == 0 {
         {
@@ -117,6 +137,9 @@ async fn reply(
             }
         }
         script.releases[&actor].wait().await;
+    }
+    if actor == "red-0" && script.followup.load(Ordering::SeqCst) && step == 2 {
+        return (axum::http::StatusCode::BAD_REQUEST, Json(json!({"error":{"type":"invalid_request_error","code":"invalid_request_error","message":"Source verification failed"}}))).into_response();
     }
     let response_id = format!("{actor}-{step}");
     let steering = script.steer.load(Ordering::SeqCst);
@@ -136,19 +159,27 @@ async fn reply(
     let item = match role {
         "parent" => parent(step, group),
         "steward" if steering && step == 5 && !script.steered.load(Ordering::SeqCst) => {
-            let relation = body["input"]
+            if script.followup.load(Ordering::SeqCst) {
+                script.direction.wait().await;
+            }
+            let outputs: Vec<_> = body["input"]
                 .as_array()
                 .unwrap()
                 .iter()
-                .rev()
                 .filter_map(|v| v["output"].as_str())
                 .filter_map(|v| serde_json::from_str::<Value>(v).ok())
-                .find_map(|v| {
+                .filter_map(|v| {
                     v.pointer("/output/relation_id")
                         .and_then(Value::as_str)
                         .map(str::to_owned)
                 })
-                .unwrap();
+                .collect();
+            let relation = if script.followup.load(Ordering::SeqCst) {
+                outputs.first()
+            } else {
+                outputs.last()
+            }
+            .unwrap();
             call(
                 "steer_worker",
                 json!({"relation_id":relation,"instruction":"Verify the updated source"}),
@@ -161,6 +192,7 @@ async fn reply(
         [("content-type", "text/event-stream")],
         wire(&item, &response_id),
     )
+        .into_response()
 }
 fn parent(step: usize, group: &str) -> Value {
     let objective = format!("Verify batch {group}");

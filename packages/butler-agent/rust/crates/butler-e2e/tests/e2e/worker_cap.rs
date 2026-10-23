@@ -7,8 +7,12 @@
 )]
 #[path = "worker_cap/plans.rs"]
 mod plans;
+#[path = "worker_cap/recovery.rs"]
+mod recovery;
+#[path = "worker_cap/service.rs"]
+mod service;
 #[path = "worker_cap/stub.rs"]
-mod stub;
+pub(crate) mod stub;
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
@@ -17,7 +21,7 @@ use butler_e2e::e2e::{
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 
-async fn setup(
+pub(crate) async fn setup(
     name: &str,
     count: usize,
 ) -> Result<
@@ -39,7 +43,7 @@ async fn setup(
     Ok((s, script, server))
 }
 
-async fn workers(
+pub(crate) async fn workers(
     s: &Scenario,
     chat: &str,
     count: usize,
@@ -71,7 +75,7 @@ async fn workers(
     }
 }
 
-async fn started(script: &stub::Script, expected: usize) {
+pub(crate) async fn started(script: &stub::Script, expected: usize) {
     let deadline = Instant::now() + Duration::from_secs(30);
     while script.started.lock().unwrap().len() < expected {
         assert!(
@@ -84,7 +88,7 @@ async fn started(script: &stub::Script, expected: usize) {
     assert_eq!(script.started.lock().unwrap().len(), expected);
 }
 
-async fn closed(s: &Scenario, child: &str) -> Result<(), HarnessError> {
+pub(crate) async fn closed(s: &Scenario, child: &str) -> Result<(), HarnessError> {
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         let view =
@@ -113,22 +117,20 @@ async fn cb_11_fifo_waiting_and_lowering_cap() -> Result<(), HarnessError> {
     let (_, rows) = workers(&s, "general", 3).await?;
     started(&script, 2).await;
     assert_eq!(rows[2]["status"], "waiting");
+    assert_eq!(rows[2]["waiting_for_slot"], true);
+    // Main's global activity surface still contains only visible App parents.
     let activity = s.gw.get("/worker-activity?include_history=true").await?;
-    let waiting = activity.data()["workers"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|w| {
-            w["worker_id"]
-                .as_str()
-                .unwrap()
-                .ends_with(rows[2]["relation"]["relation_id"].as_str().unwrap())
-        })
-        .unwrap();
-    assert_eq!(waiting["status_line"], "Waiting");
-    assert_eq!(
-        waiting["status_reference"],
-        json!({"key":"workerStatus","parameters":{"phase":"waiting"}})
+    assert!(
+        activity.data()["workers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| {
+                !row["worker_id"]
+                    .as_str()
+                    .unwrap()
+                    .ends_with(rows[2]["relation"]["relation_id"].as_str().unwrap())
+            })
     );
     plans::assert_indexed(&s)?;
     script.release("red-0");
@@ -210,8 +212,26 @@ async fn cb_11_release_races_dispatch_and_waiting_steer() -> Result<(), HarnessE
     assert_pending_direction(&s, &rows[2])?;
     assert_eq!(script.started.lock().unwrap().len(), 2);
     // Release and dispatch become ready together on independent runtime lanes.
-    script.fourth.add_permits(1);
-    script.release("red-0");
+    let barrier = std::sync::Arc::new(tokio::sync::Barrier::new(3));
+    let dispatch = {
+        let barrier = barrier.clone();
+        let script = script.clone();
+        tokio::spawn(async move {
+            barrier.wait().await;
+            script.fourth.add_permits(1);
+        })
+    };
+    let release = {
+        let barrier = barrier.clone();
+        let script = script.clone();
+        tokio::spawn(async move {
+            barrier.wait().await;
+            script.release("red-0");
+        })
+    };
+    barrier.wait().await;
+    dispatch.await.unwrap();
+    release.await.unwrap();
     let (_, rows) = workers(&s, "general", 4).await?;
     started(&script, 3).await;
     assert_eq!(*script.started.lock().unwrap(), ["red-0", "red-1", "red-2"]);
