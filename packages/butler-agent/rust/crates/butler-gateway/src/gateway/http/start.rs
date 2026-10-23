@@ -26,6 +26,7 @@ pub(in crate::gateway) fn serve(
         let remote =
             listeners::RemoteAccess::new(local_addr, content_addr, config.allowed_hosts.clone());
         let app_host = app_host(config.headless_browser.as_ref(), &shutdown);
+        clear_opened_files(config.output_data.clone()).await;
         let headless = headless(config.headless_browser, &remote, &shutdown);
         let state = Arc::new(HttpState {
             browser: Arc::new(super::browser_host::Hub::default()),
@@ -75,8 +76,18 @@ pub(in crate::gateway) fn serve(
         if let Some(host) = &state.app_host {
             host.shutdown().await;
         }
+        clear_opened_files(state.output_data.clone()).await;
         result
     })
+}
+
+/// Copies opened in another app last until the gateway starts or stops.
+async fn clear_opened_files(root: Option<std::path::PathBuf>) {
+    let Some(root) = root else { return };
+    let cleared = tokio::task::spawn_blocking(move || super::opened_files::clear(&root)).await;
+    if let Ok(Err(error)) = cleared {
+        tracing::warn!(%error, "opened-file copies were not removed");
+    }
 }
 
 /// Reader renders and headless downloads go through this gateway.
