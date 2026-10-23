@@ -270,7 +270,11 @@ async fn batch_result(
             pending_authority: result.pending_authority.clone(),
         });
     }
-    let position = if index == start { RefusedCall::Pending } else { RefusedCall::Following };
+    let position = if index == start {
+        RefusedCall::Pending
+    } else {
+        RefusedCall::Following
+    };
     // Concurrent siblings are independent; denial applies only to this call.
     let refusal = refusal.filter(|_| concurrent.is_empty() || Some(index) == resumed_start);
     match refusal {
