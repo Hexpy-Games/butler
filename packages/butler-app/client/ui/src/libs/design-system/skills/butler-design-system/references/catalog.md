@@ -397,7 +397,7 @@
 | Files and images from disk | `AttachmentList` | `ElementChip` |
 | Files Butler produced | `ArtifactList` | `AttachmentList` |
 | Files the user attached | `AttachmentList` | `ArtifactList` |
-| Files the user attached (composer chips) or sent (message list) | `AttachmentList` |  |
+| Files the user attached (composer tiles) or sent (message tiles) | `AttachmentList` |  |
 | Filtering a list by tags | `FilteredSelectPopover` | `TagField` |
 | Filtering a single list in place | `Input` | `CommandPanel` |
 | Filtering or changing what one panel shows | `SegmentedControl` | `Tabs` |
@@ -491,6 +491,7 @@
 | Pick mode in the browser overlay renderer (hover and picks) | `PickOutline` |  |
 | Pick mode is on, from before the first pick (count 0: hint, unavailable actions) | `SelectionBar` |  |
 | Pick one value in a dense form or a secret row | `NativeSelect` |  |
+| Picked page elements in the composer (chips) | `AttachmentList` |  |
 | Picking a value for a form | `Select` | `DropdownMenu` |
 | Picking exactly one option | `ChoiceCard` | `CheckCard` |
 | Picking one service, model or option where logos and names help recognition | `ChoiceCard` |  |
@@ -1934,12 +1935,13 @@ The Browser area's tab row: closable, reorderable tabs grouped as my tabs plus o
 
 `import { AttachmentList } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/AttachmentList`
 
-Files attached to a message: a list with sizes and links, or removable chips in the composer.
+Files attached to a message: square tiles (composer row, sent message), a list with sizes, or removable chips.
 
-- Use for: Files the user attached (composer chips) or sent (message list)
+- Use for: Files the user attached (composer tiles) or sent (message tiles)
+- Use for: Picked page elements in the composer (chips)
 - Not for: Files Butler produced → `ArtifactList`
 - Not for: Project documents → `DocumentTile`
-- Tokens: `--radius-pill`, `--line`, `--icon-size-sm`
+- Tokens: `--radius-pill`, `--line`, `--icon-size-sm`, `--radius-panel`, `--focus-ring-room`, `--motion-scale-press`, `--motion-scale-dialog`
 
 ### ComposerAdjunctPanel
 

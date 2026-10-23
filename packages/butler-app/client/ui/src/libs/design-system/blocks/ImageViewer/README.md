@@ -11,12 +11,16 @@ set large on a dimmed scrim (`--image-viewer-overlay-bg`, dark in both themes).
 - the caption: the visible line and the source line (favicon, “site · read
   time”)
 
+An item with `kind: "video"` plays on the stage instead: a native `<video>`
+with controls, `preload="metadata"`, never autoplaying; its focused controls
+keep the arrow keys.
+
 `ImageViewerSurface` is the same layout without the modal; previews render it
 `contained` (its own scrim, a fixed height).
 
 ## When to use this block
 Any picture the user wants to see large: answer card pictures, gallery items,
-message images and activity screenshots. Pass the pictures of the same message
+message images and attachments (pictures and videos), and activity screenshots. Pass the pictures of the same message
 or block as `images`, so previous/next walks that set.
 
 ## Container vs Presenter

@@ -941,6 +941,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     },
     stoppedStatus: "중지됨",
     attachmentUnavailable: "첨부 파일을 찾을 수 없음",
+    attachmentFileType: "파일",
     fileChanges: {
       regionLabel: "변경된 파일",
       title: "파일 변경",

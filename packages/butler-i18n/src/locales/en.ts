@@ -944,6 +944,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     },
     stoppedStatus: "Stopped",
     attachmentUnavailable: "Attachment unavailable",
+    attachmentFileType: "File",
     fileChanges: {
       regionLabel: "Changed files",
       title: "File changes",

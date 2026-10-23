@@ -51,6 +51,7 @@ export const guidance: ShowcaseGuidance = {
     "alt names the picture for assistive tech; caption is the visible line (a title or the alt text). Keep both plain.",
     "source is where the picture was read: the site and the read time (“shop.example.com · 오후 5:41 확인”).",
     "Actions are IconButtons the container builds for the shown picture: open its page, save (a DoneIconButton that confirms), copy. Close is built in.",
+    "kind: \"video\" plays an attached video on the stage with native controls; it never autoplays and preloads metadata only.",
   ],
   accessibility: [
     "A modal dialog: focus moves to Close, stays inside and returns to the opener. Esc and a click on the scrim close.",
