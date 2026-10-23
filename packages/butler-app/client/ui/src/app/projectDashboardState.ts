@@ -4,8 +4,6 @@ import { browserRandomId } from "./id.ts";
 interface DashboardViewState {
   tab?: string;
   refreshRevision?: number;
-  boardKind?: "work" | "plan" | "task";
-  boardParent?: string;
   scrollPositions?: Record<string, number>;
   loadedCounts?: Record<string, number>;
   pendingSend?: { fingerprint: string; clientMessageId: string; sessionId?: string };

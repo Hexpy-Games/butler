@@ -126,9 +126,8 @@ export function ProjectDashboardView({
               onSelect={selectDocument} onUpdated={retry} />}
           </Stack></TabsContent>
           <TabsContent value="statistics">{project && <ProjectStatisticsPanel projectId={project.id} revision={publicRevision} onSelect={selectDocument} />}</TabsContent>
-        <TabsContent value="work">{project && <ProjectWorkBoard projectId={project.id}
-          revision={publicRevision}
-          onSelect={selectDocument} onOpenSession={onOpenSession ?? openSession} />}</TabsContent>
+        <TabsContent value="work">{project && <ProjectWorkBoard projectId={project.id} bottomInset={composerHeight}
+          onOpenSession={onOpenSession ?? openSession} />}</TabsContent>
         <TabsContent value="materials">{project && <Stack gap="xl"><ProjectMaterialsPanel key={`${project.id}:${ledgerRevision}:${dashboard?.preferences?.revision}`}
           projectId={project.id} onSelect={selectDocument} preferences={dashboard?.preferences} onUpdated={retry} />
           <ProjectResultsPanel key={`${project.id}:${publicRevision}`} projectId={project.id} preferences={dashboard?.preferences} onUpdated={retry} onSelect={selectDocument} /></Stack>}</TabsContent>

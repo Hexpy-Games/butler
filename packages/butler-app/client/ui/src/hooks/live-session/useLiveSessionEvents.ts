@@ -1,3 +1,4 @@
+import { publishCanonEvent } from "@/app/canonEvents.ts";
 import { receiveModelThinking, reconcileModelThinking, abandonModelThinking } from "@/app/modelThinking";
 import { subscribeNativeUpdateProgress, refreshUpdateProgress } from "@/stores/updateProgressStore";
 import { receiveUpdateProgress } from "@/stores/updateProgressStore";
@@ -86,6 +87,7 @@ export function useLiveSessionEvents(): void {
       receiveUpdateProgress(event);
       publishMemoryEvent(event);
       publishLibraryEvent(event);
+      publishCanonEvent(event);
       if (event.type.startsWith("authority.")) authorityPermissionsChanged();
       receiveTaskGraphEvent(event);
       if (event.type === "security.device_paired") pairedDevicesChanged();
