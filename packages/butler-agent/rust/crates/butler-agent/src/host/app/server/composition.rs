@@ -82,6 +82,7 @@ pub(super) async fn dependencies(
         work_model: runtime.work_model.clone(),
         branch_conversations: Arc::new(AppBranchConversations::new(runtime.conversations.clone())),
         session_title_generator: Arc::new(AppSessionTitleGeneratorAdapter::new(&runtime.models)),
+        session_topic_classifier: Arc::new(AppSessionTopicClassifierAdapter::new(&runtime.models)),
         branch_summarizer: Arc::new(AppBranchSummarizerAdapter::new(&runtime.models)),
     })
 }

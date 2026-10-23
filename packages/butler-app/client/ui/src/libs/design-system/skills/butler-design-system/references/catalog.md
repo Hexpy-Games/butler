@@ -2753,7 +2753,7 @@ Lanes of cards side by side; inside a KanbanDragScope cards move within a lane, 
 - Not for: One list of documents → `CardList`
 - Not for: One ordered list people reorder → `SortableCardList`
 - Not for: Categories with a detail list → `SplitBrowser`
-- Tokens: `--kanban-lane-height`, `--kanban-lane-min-width`, `--kanban-lane-min-height`, `--kanban-card-min-width`, `--kanban-drop-line`, `--shadow-drag-lift`, `--motion-scale-lift`, `--motion-base`, `--motion-ease-emphasized`, `--space-md`, `--line`, `--accent`
+- Tokens: `--kanban-lane-height`, `--kanban-lane-min-width`, `--kanban-lane-min-height`, `--kanban-card-min-width`, `--kanban-drop-line`, `--shadow-drag-lift`, `--motion-scale-lift`, `--motion-base`, `--motion-fast`, `--motion-ease-emphasized`, `--motion-ease-standard`, `--space-md`, `--line`, `--text-tertiary`, `--accent`
 
 ### LibraryCard
 
