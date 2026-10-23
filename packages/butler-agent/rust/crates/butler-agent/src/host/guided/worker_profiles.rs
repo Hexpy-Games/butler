@@ -25,11 +25,12 @@ impl WorkerProfileReader for AppWorkerProfileReader {
     fn max_simultaneous(&self) -> PortFuture<'_, u32> {
         Box::pin(async move {
             let settings = self.fetch().await?;
-            Ok(settings
+            let cap = settings
                 .pointer("/data/max_simultaneous_workers")
                 .and_then(Value::as_i64)
                 .unwrap_or(10)
-                .clamp(1, 10) as u32)
+                .clamp(1, 10);
+            Ok(u32::try_from(cap).unwrap_or(10))
         })
     }
 

@@ -32,7 +32,7 @@ pub(super) async fn configure(
     };
     for name in names {
         if let Some(tool) = catalog.capability_tools().find(|tool| tool.name == *name) {
-            if !phase.authorized_names.iter().any(|name| name == &tool.name) {
+            if !phase.authorized_names.iter().any(|name| name == tool.name) {
                 phase.authorized_names.push(tool.name.to_owned());
             }
             if !phase

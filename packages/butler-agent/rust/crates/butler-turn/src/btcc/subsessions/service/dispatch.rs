@@ -58,11 +58,12 @@ impl SubsessionService {
         let mut output = delegation_output(child);
         if self.dispatch_pending(child).await? {
             let cap = self.profiles.max_simultaneous().await?.clamp(1, 10);
-            output["status"] = json!("waiting");
-            output["message"] = json!(format!(
+            let fields = butler_core::json::object_mut(&mut output);
+            fields.insert("status".into(), json!("waiting"));
+            fields.insert("message".into(), json!(format!(
                 "Worker {} is waiting because this session already has {cap} Workers running. It starts automatically when one of them finishes, and its result arrives like any other. Continue your own work and do not dispatch it again.",
                 child.delegation_id
-            ));
+            )));
         }
         Ok(output)
     }
