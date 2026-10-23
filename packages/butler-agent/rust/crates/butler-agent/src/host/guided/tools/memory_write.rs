@@ -282,6 +282,8 @@ async fn canonical_authored_source(
         runtime_session_id: runtime_session_id.to_owned(),
         turn_id: turn_id.to_owned(),
         project_id: owner.binding.memory.project_id.clone(),
+        usage_root: None,
+        usage_role: None,
     };
     let path = conversation_store_path(&owner.binding.butler_data);
     tokio::task::spawn_blocking(move || authored_source(&path, &binding))

@@ -216,18 +216,13 @@ impl AppApplication {
                 .map_err(super::super::app_error)?,
         };
         let facts = self.dependencies.settings_facts.snapshot()?;
-        let model_ref = facts
-            .config_default_model
-            .clone()
-            .filter(|model| !model.trim().is_empty())
-            .unwrap_or_else(|| {
-                facts.native_settings["routine_default"]["model"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .to_owned()
-            });
+        let model_ref = summary_model(&facts);
         let cancellation = CancellationToken::new();
-        let summary_input = crate::gateway::AppBranchSummaryInput { text, model_ref };
+        let summary_input = crate::gateway::AppBranchSummaryInput {
+            text,
+            model_ref,
+            usage_session_id: self.runtime_hint(&request.source_session_id).await?,
+        };
         let result = tokio::select! {
             result = self.dependencies.branch_summarizer.summarize(summary_input, cancellation.clone()) => result?,
             () = server_shutdown.cancelled() => { cancellation.cancel(); return Err(cancelled()); }
@@ -251,6 +246,19 @@ impl AppApplication {
             excerpt_truncated: result.excerpt_truncated,
         })
     }
+}
+
+fn summary_model(facts: &crate::gateway::AppSettingsFacts) -> String {
+    facts
+        .config_default_model
+        .clone()
+        .filter(|model| !model.trim().is_empty())
+        .unwrap_or_else(|| {
+            facts.native_settings["routine_default"]["model"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned()
+        })
 }
 
 fn resolve_destination(
