@@ -8,6 +8,8 @@
 // focus. Focus must leave it at once, for the control that opened it (else the
 // workspace). Tab or Shift+Tab is pressed 0, 60 and 150 ms into the slide;
 // focus must stay outside the inspector and the shell must not scroll.
+// Closing from the drawer's overlay close button (outside the panel) with Enter
+// or Space returns focus to the control that opened the inspector.
 // scrollIntoView({ inline: "start" }) on rows inside the closed inspector and
 // the workspace must not scroll the shell either. Light and dark, desktop and
 // phone width, with the panel motion on.
@@ -33,6 +35,7 @@ const agentTab = { id: "t1", owner: "conversation:butler-client", url: "https://
 const INSPECTOR = '[data-slot="adaptive-shell-inspector"]';
 const SHELL = "[data-panel-layout]";
 const TOGGLE = '[data-test-class~="titlebar-right-panel-toggle"]';
+const OVERLAY_CLOSE = '[data-test-class~="right-panel-overlay-close"]';
 // Long enough for the slide and its delayed visibility to settle.
 const SETTLE_MS = 700;
 
@@ -150,6 +153,27 @@ async function probeFocusReturn(page: Page, cell: Cell) {
   }
 }
 
+/** The overlay close button, pressed from the keyboard, hands focus back to the toggle that opened the inspector. */
+async function probeOverlayClose(page: Page, cell: Cell) {
+  for (const key of ["Enter", "Space"] as const) {
+    await openInspector(page, cell, true);
+    const close = page.locator(OVERLAY_CLOSE);
+    if (!await close.isVisible()) {
+      assert(cell.width > 640, `${cell.width}px ${cell.theme}: the drawer shows no overlay close button`);
+      return;
+    }
+    await close.focus();
+    await page.keyboard.press(key);
+    await page.locator(`${INSPECTOR}[data-open="false"]`).waitFor();
+    const target = await page.evaluate((toggle) => {
+      const active = document.activeElement;
+      return active?.matches(toggle) ? "toggle" : active?.tagName.toLowerCase() ?? "none";
+    }, TOGGLE);
+    probes += 1;
+    if (target !== "toggle") failures.push(`${cell.width}px ${cell.theme} overlay close with ${key}: focus went to ${target}, not the toggle`);
+  }
+}
+
 /** scrollIntoView on rows of the closed inspector and of the workspace leaves the shell where it is. */
 async function probeScrollIntoView(page: Page, cell: Cell) {
   await openInspector(page, cell);
@@ -205,6 +229,7 @@ try {
       const cell = { width, height, theme };
       await probeScrollIntoView(page, cell);
       await probeFocusReturn(page, cell);
+      await probeOverlayClose(page, cell);
       for (const key of ["Tab", "Shift+Tab"] as const) {
         for (const delay of [0, 60, 150]) await probeKey(page, cell, key, delay);
       }
