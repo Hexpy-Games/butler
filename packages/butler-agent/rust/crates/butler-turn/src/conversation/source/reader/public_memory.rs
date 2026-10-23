@@ -20,6 +20,10 @@ pub struct CanonicalMemoryReadBinding {
     pub runtime_session_id: String,
     pub turn_id: String,
     pub project_id: Option<String>,
+    /// Root chat runtime session that model calls made for the read are billed to.
+    pub usage_root: Option<String>,
+    /// Role of the reading session within that chat.
+    pub usage_role: Option<String>,
 }
 
 /// Which sessions a public memory read may see.

@@ -2,6 +2,7 @@ import { reconcileAnswerDrafts } from "./answerDrafts";
 import { retainAnswerBlocks } from "./stableAnswerBlocks";
 import { generalChatCleared } from "./generalChatEvents";
 import { create } from "zustand";
+import { useProjectDashboardState } from "./projectDashboardState.ts";
 import { mergeSessionViewWindow } from "./sessionViewWindow.ts";
 import { chromeEnvironment } from "./chromeEnvironment.ts";
 import {
@@ -997,14 +998,16 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   setLeftOpen: (value) =>
     set((state) => {
       const leftOpen = resolveUpdate(value, state.leftOpen);
-      return leftOpen
+      const panels = leftOpen
         ? normalizeAdaptivePanelState({
             mode: currentAdaptiveMode(chromeEnvironment()),
             requested: "left",
             leftOpen,
             rightOpen: state.rightOpen,
           })
-        : { leftOpen: false };
+        : { leftOpen: false, rightOpen: state.rightOpen };
+      return { ...panels, ...(panels.rightOpen === false && state.view.kind === "project-dashboard"
+        ? { view: { kind: "project-dashboard" as const, projectId: state.view.projectId } } : {}) };
     }),
   setRightOpen: (value) =>
     set((state) => {
@@ -1016,7 +1019,8 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
             leftOpen: state.leftOpen,
             rightOpen,
           })
-        : { rightOpen: false };
+        : { rightOpen: false, ...(state.view.kind === "project-dashboard"
+          ? { view: { kind: "project-dashboard" as const, projectId: state.view.projectId } } : {}) };
     }),
   setRightTab: (rightTab) => set({ rightTab }),
   setSelectedArtifactId: (artifactId) =>
@@ -1336,13 +1340,16 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   },
   clearPendingProjectDocumentAttachment: () =>
     set({ pendingProjectDocumentAttachment: null }),
-  openProjectDashboard: (projectId) =>
+  openProjectDashboard: (projectId) => {
+    const dashboards = useProjectDashboardState.getState();
+    dashboards.update(projectId, { activationRevision: (dashboards.projects[projectId]?.activationRevision ?? 0) + 1 });
     set((state) => ({
       view: { kind: "project-dashboard", projectId },
       leftOpen: currentAdaptiveMode(chromeEnvironment()) === "expanded" ? state.leftOpen : false,
       selectedArtifactId: null,
       selectedArtifact: null,
-    })),
+    }));
+  },
 
   refreshNavigation: async (options) => {
     const requestGeneration = get().navigationGeneration;
@@ -2524,7 +2531,8 @@ export const selectActiveChat = (state: ButlerStore) =>
 export const selectActiveSessionView = (state: ButlerStore) =>
   state.view.kind === "session";
 export const selectRightAvailable = (state: ButlerStore) =>
-  selectActiveSessionView(state) && isServerBackedSessionId(state.activeChatId);
+  (selectActiveSessionView(state) && isServerBackedSessionId(state.activeChatId)) ||
+  (state.view.kind === "project-dashboard" && Boolean(state.view.epicId));
 export const selectEffectiveRightOpen = (state: ButlerStore) =>
   state.rightOpen && selectRightAvailable(state);
 export const selectViewTitle = (state: ButlerStore) =>

@@ -1,5 +1,7 @@
+import { useActiveCanonEpic } from "../canon/useActiveCanonEpic.ts";
+import { EpicEmptyState } from "./EpicEmptyState.tsx";
 import { type WallpaperContentRect, PromptSuggestionList } from "@/butler-ds";
-import { getAppLocale } from "@/app/copy.ts";
+import { appCopy, getAppLocale } from "@/app/copy.ts";
 import { useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
 import type { ActiveChatView, NewChatBriefingView } from "@/app/types.ts";
@@ -36,6 +38,7 @@ export function EmptyState({
   markTheme,
   onSend,
 }: EmptyStateProps) {
+  const epic = useActiveCanonEpic();
   const settings = useButlerStore((state) => state.settings);
   const navigation = useButlerStore((state) => state.navigation);
   const activeChatId = useButlerStore((state) => state.activeChatId);
@@ -45,7 +48,7 @@ export function EmptyState({
   const [briefing, setBriefing] = useState<NewChatBriefingView | null>(null);
 
   useEffect(() => {
-    if (!isGeneralNewChat && !isProjectNewChat) {
+    if (epic || (!isGeneralNewChat && !isProjectNewChat)) {
       setBriefing(null);
       return;
     }
@@ -65,7 +68,7 @@ export function EmptyState({
     return () => {
       cancelled = true;
     };
-  }, [isGeneralNewChat, isProjectNewChat, projectId, settings.language]);
+  }, [isGeneralNewChat, isProjectNewChat, projectId, settings.language, epic?.epic.id]);
 
   const suggestions = isProjectNewChat
     ? (briefing?.suggestions ?? projectFallbackSuggestions(activeChat.project))
@@ -75,6 +78,8 @@ export function EmptyState({
     markTheme === "dark" ? butlerMarkDarkSrc : butlerMarkLightSrc;
   const momentLabel = briefing?.moment ?? newChatMomentLabel();
 
+  if (epic) return <EpicEmptyState title={epic.epic.title}
+    caption={appCopy.canon.epicCaption(epic.group || appCopy.canon.backlog)} onContentRect={onContentRect} />;
   return (
     <PromptSuggestionList
       title={

@@ -443,7 +443,7 @@ export interface AppCopy {
     missingSource: string;
     loaded: (loaded: number, total: number) => string;
     results: string; noResults: string;
-    overview: string; work: string; materials: string; history: string; statistics: string;
+    overview: string; work: string; board: string; materials: string; history: string; statistics: string;
     position: string; remaining: string; completed: string; open: string; blocked: string;
     abandoned: string; unknown: string; registered: string;
     unbound: string;

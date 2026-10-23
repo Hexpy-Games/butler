@@ -7,8 +7,10 @@ import { usageTime } from "../conversation/conversationUsage";
 
 export type UsageSession = UsageMonitorView["topSessions"][number];
 
+/** Untitled conversations read as new chats; other work is named by its kind. */
 export function usageSessionTitle(session?: UsageSession): string {
-  return session?.title ?? appCopy.sidebar.newChat;
+  if (session?.title != null) return session.title;
+  return session && session.kind !== "chat" ? usageKind(session.kind) : appCopy.sidebar.newChat;
 }
 
 export function usageKind(kind: UsageSession["kind"]): string {

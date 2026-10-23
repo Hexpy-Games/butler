@@ -117,6 +117,8 @@ pub(super) fn prepare(
         current_user_message: caller.current_user_message,
         native_operation_id: caller.operation_id,
         project_id: binding.project_id,
+        usage_root: binding.usage_root,
+        usage_role: binding.usage_role,
     };
     Ok(PreparedRecall::Request(Box::new(RecallRequest {
         cue: cue.to_owned(),

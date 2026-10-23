@@ -415,7 +415,7 @@ export const enUsCopy: AppCopy = {
     created: "Created", updated: "Updated", recordedCompletion: "Completion recorded", noHistory: "No records yet.",
     description: "Project description", editDescription: "Edit description", pin: "Pin material", unpin: "Unpin material",
     wallpaper: "Wallpaper",
-    overview: "Overview", work: "Work", materials: "Materials", history: "History", statistics: "Statistics",
+    overview: "Overview", work: "Work", board: "Board", materials: "Materials", history: "History", statistics: "Statistics",
     position: "Project status", remaining: "Remaining work", completed: "Execution completed", open: "Open work",
     blocked: "Blocked work", abandoned: "Abandoned work", unknown: "Unverified work", registered: "Registered work",
     unbound: "No project records are linked to this project.",

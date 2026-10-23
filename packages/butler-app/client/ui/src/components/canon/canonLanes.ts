@@ -1,3 +1,4 @@
+import { canFinishCanonEpic } from "./canonProgressSource.ts";
 import { applyKanbanMove, type KanbanMove } from "@/butler-ds";
 import type { CanonOverview, CanonStatus, EpicCard } from "@/app/canonApi.ts";
 
@@ -47,5 +48,6 @@ export function optimisticCanonMove(canon: CanonOverview, move: KanbanMove): Can
   }) };
 }
 export function canComplete(card: EpicCard | undefined, toLaneId: string): boolean {
-  return Boolean(card) && !(parseCanonLane(toLaneId).status === "done" && ["running", "in_review"].includes(card!.run_state));
+  if (!card) return false;
+  return parseCanonLane(toLaneId).status !== "done" || canFinishCanonEpic(card);
 }

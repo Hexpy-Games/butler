@@ -227,7 +227,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                         .map(|cursor| cursor.call_id.clone()),
                     turn_guard: TurnGuard::new(&start.turn.context, semantic.authority.as_ref()),
                     current_user_message: start.turn.original_message.clone(),
-                    memory: memory_binding(start.turn, policy.project_id.as_deref()),
+                    memory: memory_binding(start.turn, &phase),
                     project_id: policy.project_id.clone(),
                     project_folder: project_folder(&workspace, &phase),
                     project_sources: project_sources(&start.turn.context),
@@ -419,11 +419,14 @@ fn web_session(
 
 fn memory_binding(
     turn: &butler_turn::btcc::TurnRecord,
-    project_id: Option<&str>,
+    phase: &butler_turn::btcc::GuidedPhaseSelection,
 ) -> CanonicalMemoryReadBinding {
+    let policy = &phase.execution_policy;
     CanonicalMemoryReadBinding {
         runtime_session_id: turn.session_id.clone(),
         turn_id: turn.turn_id.clone(),
-        project_id: bound_project_id(project_id, &turn.context),
+        project_id: bound_project_id(policy.project_id.as_deref(), &turn.context),
+        usage_root: policy.usage_root(&turn.session_id).map(str::to_owned),
+        usage_role: Some(policy.usage_role().into()),
     }
 }

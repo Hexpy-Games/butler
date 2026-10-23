@@ -70,6 +70,12 @@ pub struct RecallRuntime {
     pub current_user_message: String,
     pub native_operation_id: String,
     pub project_id: Option<String>,
+    /// Root chat runtime session that recall model calls are billed to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage_root: Option<String>,
+    /// Role of the calling session within that chat.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage_role: Option<String>,
 }
 
 #[expect(

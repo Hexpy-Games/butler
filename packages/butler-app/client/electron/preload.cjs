@@ -1420,6 +1420,9 @@ const butlerApp = Object.freeze({
     const params = new URLSearchParams({ query });
     return requestJson(`/command-palette?${params.toString()}`);
   },
+  getCanonSidebar: ({ id }) => requestBridgeResult(`/projects/${encodeURIComponent(id)}/canon/sidebar`),
+  orderCanonSidebar: ({ id, body }) => requestCanonWrite(`/projects/${encodeURIComponent(id)}/canon/sidebar-order`, "POST", body),
+  linkCanonConversation: ({ id }) => requestCanonWrite(`/canon/epics/${encodeURIComponent(id)}/conversation`, "POST", {}),
   getCanon: ({ id }) => requestBridgeResult(`/projects/${encodeURIComponent(id)}/canon`),
   getCanonPlan: ({ id }) => requestBridgeResult(`/canon/plans/${encodeURIComponent(id)}`),
   getCanonEpic: ({ id }) => requestBridgeResult(`/canon/epics/${encodeURIComponent(id)}`),
