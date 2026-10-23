@@ -79,6 +79,10 @@ jobs:
           python3 .github/scripts/isolated.py bun tests/smoke/browser-busy-electron.ts
           export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/handoff-visible"
           python3 .github/scripts/isolated.py bun tests/smoke/browser-handoff-visible-electron.ts
+          export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/site-data"
+          python3 .github/scripts/isolated.py bun tests/smoke/browser-site-data-electron.ts
+          export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/agent-mute"
+          python3 .github/scripts/isolated.py bun tests/smoke/browser-agent-mute-electron.ts
           export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/paint"
           python3 .github/scripts/isolated.py bun tests/smoke/browser-paint-electron.ts
           export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/efficiency"

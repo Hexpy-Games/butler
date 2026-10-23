@@ -6,6 +6,7 @@ import { ipcMain, session } from "electron";
 import { createUserBrowser } from "./tabs.mjs";
 import { installQuitClose } from "./quit.mjs";
 import { clearOffer, installSignInOffers, saveOffer } from "./signin-offer.mjs";
+import { clearSiteData } from "./site-data.mjs";
 
 /** "이 사이트 로그아웃": the site's cookies and storage leave the signed-in profile. */
 async function signOutSite(site) {
@@ -55,6 +56,7 @@ export function installUserBrowser(app, getWindow, getLanguage) {
       case "save-signin": return saveOffer(browser, input.id);
       case "dismiss-signin": { clearOffer(browser.tabs.get(input.id)); browser.publish(); return; }
       case "signout": return signOutSite(input.site);
+      case "clear-site-data": return clearSiteData(browser);
       default:
         if (!["navigate", "back", "forward", "reload", "stop", "bounds", "covered", "still", "focus"].includes(op)) throw new Error("invalid_browser_call");
         return browser.commandTab(op, input.id, input.value);
