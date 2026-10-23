@@ -5,13 +5,17 @@ import { join, extname, normalize, sep } from "node:path";
 import { probeFocusRing } from "../support/focus-ring-clipping";
 import { launchSmokeBrowser } from "../support/smoke-browser";
 import type { Locator, Page } from "playwright";
-import { usageView, quota, delegatedUsageView } from "../../packages/butler-app/client/ui/src/components/conversation/contextUsage.fixtures";
+import { usageView, quota, delegatedUsageView, chatGptUsageFixtures } from "../../packages/butler-app/client/ui/src/components/conversation/contextUsage.fixtures";
 import type { UsageMonitorView } from "../../packages/butler-app/client/ui/src/app/types";
 
 const dist = join(process.cwd(), "packages/butler-app/client/ui/dist");
 const shots = process.env.BUTLER_USAGE_SHOTS;
 if (shots) mkdirSync(shots, { recursive: true });
 const auth = process.env.BUTLER_USAGE_AUTH ?? "api_key";
+const planState = process.env.BUTLER_USAGE_PLAN_STATE ?? "headers";
+function planQuota() {
+  return planState === "limit" ? chatGptUsageFixtures.limit : planState === "no-headers" ? chatGptUsageFixtures.noHeaders : quota();
+}
 const before = process.env.BUTLER_USAGE_BEFORE === "1";
 const base = "http://usage.localhost";
 const browser = await launchSmokeBrowser();
@@ -35,7 +39,7 @@ const alignmentDeltas: number[] = [];
 let releaseLoading: (() => void)[] = [];
 function monitor(url: URL) {
   const delegated = state === "delegated" && !before;
-  const view = delegated ? delegatedUsageView({ quota: quota(), usd: 0.1563 }) : usageView({ quota: quota(), usd: 0.0842 });
+  const view = delegated ? delegatedUsageView({ quota: planQuota(), usd: 0.1563 }) : usageView({ quota: planQuota(), usd: 0.0842 });
   const now = Date.parse(view.generated_at);
   const hours = Number(url.searchParams.get("since_hours")) || 0;
   const session = url.searchParams.get("session_id");
@@ -177,7 +181,7 @@ try {
       if (state === "loading") await new Promise<void>(resolve => releaseLoading.push(resolve));
       return route.fulfill({ json: { ok: true, data: monitor(url) } });
     }
-    if (url.pathname === "/provider-quota") return route.fulfill({ json: { ok: true, data: quota() } });
+    if (url.pathname === "/provider-quota") return route.fulfill({ json: { ok: true, data: planQuota() } });
     if (url.pathname === "/session-queue") return route.fulfill({ json: { ok: true, data: { queued_messages: [] } } });
     if (/^\/sessions\/[^/]+\/controls$/u.test(url.pathname)) return route.fulfill({ json: { ok: true, data: { session_id: "butler-client", revision: 0,
       catalog_generation: "harness-model-catalog-v1", controls: { model: "openai/gpt-6-luna", reasoning_effort: "none", access_mode: "full_access", plan_mode: false } } } });
@@ -267,7 +271,15 @@ try {
       continue;
     }
     if (!before && scenario === "empty") assert.equal(await popover.locator('[data-test-class="usage-readout"]').count(), 0);
-    if (auth === "subscription") await popover.getByText("계정 한도", { exact: true }).waitFor();
+    if (auth === "subscription") {
+      const plan = popover.locator('[data-test-class="chatgpt-plan-usage"]');
+      await plan.getByText("버틀러 사용량", { exact: true }).waitFor();
+      assert.equal(await plan.getByText("계정 한도", { exact: true }).count(), planState === "headers" ? 1 : 0);
+      assert.equal(await plan.getByText("추정", { exact: true }).count(), planState === "headers" ? 2 : 0);
+      assert.equal(await plan.getByRole("button", { name: "사용량 관리", exact: true }).count(), 1);
+      assert.equal(await plan.getByText(/사용 한도 도달/u).count(), planState === "limit" ? 1 : 0);
+      assert.equal(await plan.locator('[data-test-class="key-value-row"]').count(), 3);
+    }
     if (!before && scenario === "ready") {
       const chart = popover.locator('[data-slot="usage-bars"]');
       assert.match(await popover.innerText(), /요청 3회/u);

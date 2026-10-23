@@ -54,7 +54,7 @@ import { useSystemThemePreference } from "@/hooks/useSystemThemePreference.ts";
 
 /** `?auth=subscription|api_key|local` bills the harness model that way (context usage popover). */
 function harnessModelCatalog(auth: string | null): ModelCatalogView {
-  const billing = auth === "subscription" ? { auth_type: "codex_oauth" as const }
+  const billing = auth === "subscription" ? { auth_type: "chatgpt_oauth" as const }
     : auth === "api_key" ? { auth_type: "api_key" as const }
       : auth === "local" ? { platform: "llama_cpp" as const }
         : null;

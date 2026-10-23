@@ -415,3 +415,15 @@ test("space requests through the actual preload keep the refusal code and locali
   expect(calls[1]!.body).toEqual({ sessionId: "branch" });
 });
 });
+
+// The account routes are a separate bridge contract from the OAuth flow routes.
+test("renderer routes ChatGPT account operations to the agent bridge", async () => {
+  const calls: Array<[string, unknown]> = [];
+  const capture = (name: string) => async (input?: unknown) => { calls.push([name, input]); return { ok: true, data: { status: "signed_out" } }; };
+  await withBridge({ getChatGptAccount: capture("account"), acknowledgeChatGptNotice: capture("notice"), signOutChatGpt: capture("sign-out") }, async () => {
+    await api("/setup/chatgpt-account");
+    await api("/setup/chatgpt-account/notice", { method: "POST", body: JSON.stringify({ kind: "plan" }) });
+    await api("/setup/chatgpt-account/sign-out", { method: "POST", body: "{}" });
+  });
+  expect(calls).toEqual([["account", undefined], ["notice", { kind: "plan" }], ["sign-out", undefined]]);
+});

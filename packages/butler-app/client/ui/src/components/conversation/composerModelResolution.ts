@@ -49,6 +49,10 @@ export function resolveComposerModelTruth(input: {
       controls && controls.catalog_generation !== input.catalog.generation,
     ),
   };
+  const selected = controls?.controls.model || input.settings.model;
+  const unavailable = input.catalog.registered_models?.find(model => model.model_ref === selected
+    && model.availability !== undefined && model.availability !== "ready");
+  if (unavailable) return { ...base, state: "unavailable", model: selected, metadata: unavailable };
   const models = runtimeModels(input.catalog);
   if (models.length === 0) {
     const settled = input.catalogState === "ready" || input.catalogState === "unavailable";

@@ -1801,14 +1801,14 @@ export function allSessionsFromNavigation(
 export function runtimeModels(
   modelCatalog: ModelCatalogView,
 ): AppModelSummary[] {
-  if (Array.isArray(modelCatalog?.registered_models)) {
+  if (modelCatalog?.registered_models?.length) {
     const registered = modelCatalog.registered_models.filter(
-      (model) => model.runtime_supported === true,
+      (model) => model.runtime_supported === true && model.availability === "ready",
     );
-    if (registered.length > 0) return registered;
+    return registered;
   }
   const models = modelCatalog?.models ?? [];
-  const supported = models.filter((model) => model.runtime_supported === true);
+  const supported = models.filter((model) => model.runtime_supported === true && model.availability === "ready");
   return supported;
 }
 

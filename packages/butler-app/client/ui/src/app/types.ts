@@ -99,6 +99,7 @@ export interface AppModelSummary {
   token_estimator: string;
   source_url?: string;
   runtime_supported: boolean;
+  availability?: "ready" | "sign_in_required" | "plan_off" | "not_in_plan";
   hosted_api_shape?:
     | "openai_chat_completions"
     | "openai_responses"
@@ -124,7 +125,9 @@ export interface AppModelSummary {
   image_max_inline_bytes?: number;
 }
 
-export type ProviderAuthMethod = "api_key" | "chatgpt_oauth" | "codex_oauth";
+export type ChatGptSignInKind = "default" | "new_account" | "enable_plan";
+
+export type ProviderAuthMethod = "api_key" | "chatgpt_oauth";
 
 /** Where a saved API key is kept (#217). */
 export type CredentialStorage =
@@ -187,6 +190,7 @@ export interface ModelCatalogView {
     provider_id: string;
     provider_label: string;
     latest_model_ref: string;
+    chatgpt_plan_models?: string[] | null;
     auth_methods?: ProviderAuthMethod[];
     default_api_base_url?: string;
     models: AppModelSummary[];
@@ -1663,6 +1667,9 @@ export interface TimelineEvent {
   type: string;
   created_at?: string;
   payload?: {
+    semanticBlockId?: string;
+    failureCode?: string;
+    authType?: ProviderAuthMethod | null;
     progress?: UpdateProgressView;
     message?: MessageRecord;
     segment_completed?: boolean;

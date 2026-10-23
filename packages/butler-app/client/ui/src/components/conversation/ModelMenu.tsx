@@ -1,3 +1,4 @@
+import { useChatGptNotices } from "../chatgpt/useChatGptNotices";
 import { useAppLocale } from "@/app/copy.ts";
 import { memo } from "react";
 import {
@@ -21,6 +22,7 @@ import { ModelOptions, useModelOptionsFilter } from "./ModelOptions.tsx";
 
 export const ModelMenu = memo(function ModelMenu() {
   useAppLocale();
+  useChatGptNotices();
   const modelMenuOpen = useComposerStore((store) => store.modelMenuOpen);
   const setModelMenuOpen = useComposerStore((store) => store.setModelMenuOpen);
   const activeModel = useComposerStore((store) => store.activeModel);
@@ -38,11 +40,12 @@ export const ModelMenu = memo(function ModelMenu() {
     (store) => store.handleReasoningChange,
   );
   const settings = useButlerStore((store) => store.settings);
+  const unavailable = useButlerStore(store => store.modelCatalog.registered_models?.find(item => item.model_ref === model && item.availability !== undefined && item.availability !== "ready"));
   // Owned here, outside the popover, so a reopened menu keeps its search and filter.
   const filter = useModelOptionsFilter();
 
-  if (modelState !== "ready" || !activeModel) {
-    return <ComposerModelStatusButton state={modelState} />;
+  if (unavailable || modelState !== "ready" || !activeModel) {
+    return <ComposerModelStatusButton state={modelState} model={unavailable} />;
   }
 
   return (

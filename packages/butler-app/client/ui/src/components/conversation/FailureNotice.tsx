@@ -1,3 +1,4 @@
+import { useChatGptFailureAction } from "../chatgpt/useChatGptFailureAction";
 import { useAppLocale } from "@/app/copy.ts";
 import { AlertCircle, Button, ButtonContainer, Notice } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
@@ -22,6 +23,7 @@ export function FailureNotice({
   retryingTurnId: string | null;
 }) {
   useAppLocale();
+  const planAction = useChatGptFailureAction(message.safe_error_code);
   const developerMode = useDeveloperMode();
   const reason =
     message.text.trim() || appCopy.conversation.failure.fallbackReason;
@@ -43,8 +45,9 @@ export function FailureNotice({
         title={appCopy.conversation.failure.title}
         message={reason}
         action={
-          retryable || trace ? (
+          planAction || retryable || trace ? (
             <ButtonContainer size="sm" justify="end">
+              {planAction ? <Button size="sm" variant="outline" onClick={planAction.run}>{planAction.label}</Button> : null}
               {retryable ? (
                 <Button
                   type="button"
