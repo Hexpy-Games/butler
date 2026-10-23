@@ -50,6 +50,7 @@ pub use recovery::*;
 use rusqlite::{Connection, OptionalExtension, Params, Row};
 use serde_json::{Value, json};
 pub use specs::*;
+pub use tiers::effects_allowed;
 pub use tool_read::bound_work;
 pub use transaction::Transaction;
 pub use transitions::*;

@@ -17,7 +17,7 @@ pub(super) async fn configure(
         .work_model_read(move |db| {
             let tier2 = butler_work::store::bound_work(db, &session, None)?
                 .is_some_and(|work| work["tier"] == 2);
-            let owns_task = tier2 && butler_work::store::tiers::effects_allowed(db, &session)?;
+            let owns_task = tier2 && butler_work::store::effects_allowed(db, &session)?;
             Ok((tier2, owns_task))
         })
         .await

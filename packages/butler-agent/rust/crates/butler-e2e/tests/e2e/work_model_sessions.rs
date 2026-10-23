@@ -101,7 +101,9 @@ async fn wmu_22_workers_wait_release_fifo_and_lowering_never_stops_them() -> Res
             .unwrap()
             .iter()
             .any(|worker| worker["objective"] == "Report piece 2"
-                && worker["status_line"] == "Waiting"),
+                && worker["status_line"] == "Waiting"
+                && worker["phase"] == "waiting"
+                && worker["status_reference"]["parameters"]["phase"] == "waiting"),
         "{activity:?}"
     );
     let deadline = Instant::now() + Duration::from_secs(30);

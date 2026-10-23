@@ -1972,6 +1972,7 @@ function formatReasoningTokens(tokens: number): string {
 }
 
 export function phaseLabel(value: string): string {
+  if (value === "waiting") return appCopy.guided.workerStatus.waiting ?? "Waiting";
   if (value === "orienting") return appCopy.interfaceFeedback.thinking;
   if (value === "planning") return appCopy.interfaceFeedback.planning;
   if (value === "inspecting") return appCopy.interfaceFeedback.inspecting;
