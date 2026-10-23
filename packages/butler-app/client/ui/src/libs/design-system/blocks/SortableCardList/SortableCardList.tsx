@@ -16,7 +16,8 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { useMemo, useState, type HTMLAttributes, type ReactNode } from "react";
+import { useMemo, useRef, useState, type HTMLAttributes, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { EmptyLine } from "../EmptyLine";
@@ -67,6 +68,7 @@ export function SortableCardList<TItem extends SortableCardListItem>({
 }: SortableCardListProps<TItem>) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
+  const root = useRef<HTMLElement | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -103,8 +105,19 @@ export function SortableCardList<TItem extends SortableCardListItem>({
     setAnnouncement("Reorder cancelled.");
   }
 
+  // Fixed overlays break under contained, filtered or glass ancestors (a page panel over a wallpaper),
+  // so the overlay is portaled to <body> and keeps the list's theme class (a light panel in dark chrome).
+  const theme = root.current?.closest(".theme-dark, .theme-light");
+  const overlay = (
+    <div className={theme?.classList.contains("theme-dark") ? "theme-dark" : theme ? "theme-light" : undefined}>
+      <DragOverlay dropAnimation={null}>
+        {activeItem ? <SortableCardItem item={activeItem} overlay /> : null}
+      </DragOverlay>
+    </div>
+  );
+
   return (
-    <section className={cn(styles.list, className)} {...props}>
+    <section ref={root} className={cn(styles.list, className)} {...props}>
       {(title || description || actions) && (
         <Stack align="row" cross="start" justify="between" gap="md" className={dsClass(styles.header)}>
           <Stack gap="xs" className={dsClass(styles.heading)}>
@@ -133,9 +146,7 @@ export function SortableCardList<TItem extends SortableCardListItem>({
                 />
               ))}
             </div>
-            <DragOverlay dropAnimation={null}>
-              {activeItem ? <SortableCardItem item={activeItem} overlay /> : null}
-            </DragOverlay>
+            {typeof document === "undefined" ? null : createPortal(overlay, document.body)}
           </SortableContext>
         ) : (
           empty ?? <EmptyLine message={emptyMessage} />
