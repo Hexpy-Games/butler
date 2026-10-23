@@ -150,11 +150,7 @@ async fn serve_initialized(
     ),
     instance: &mut crate::host::service::instance::InstanceGuard,
 ) -> Result<String, BtccError> {
-    stop.attach(
-        config.data_root.clone(),
-        instance.nonce(),
-        config.installation.clone(),
-    );
+    stop.attach(instance.deadline_release());
     stop.check_startup()?;
     repair_cli_launcher(config, logs);
     let app_endpoint = Arc::new(ActiveAppEndpoint::new());

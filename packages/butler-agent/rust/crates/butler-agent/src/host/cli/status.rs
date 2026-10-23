@@ -237,31 +237,32 @@ fn expand_tilde(path: PathBuf) -> Result<PathBuf, crate::host::HostError> {
 }
 
 async fn service_health(data_root: &Path) -> Value {
-    let record = service_instance::read_record_async(data_root).await;
-    let locked = service_instance::instance_lock_is_held_read_only(data_root);
-    let (status, evidence, pid, started_at, app) = match (record, locked) {
-        (Err(_), _) | (_, Err(_)) => (
+    let ownership = service_instance::observe_async(data_root)
+        .await
+        .map(|ownership| (ownership.record, ownership.locked));
+    let (status, evidence, pid, started_at, app) = match ownership {
+        Err(_) => (
             "stale",
             "instance_identity_unavailable",
             Value::Null,
             Value::Null,
             json!({ "status": "unknown", "evidence": "instance_identity_unavailable" }),
         ),
-        (Ok(None), Ok(false)) => (
+        Ok((None, false)) => (
             "offline",
             "no_instance_record",
             Value::Null,
             Value::Null,
             json!({ "status": "unknown", "evidence": "instance_not_observed" }),
         ),
-        (Ok(None), Ok(true)) => (
+        Ok((None, true)) => (
             "stale",
             "lock_without_instance_record",
             Value::Null,
             Value::Null,
             json!({ "status": "unknown", "evidence": "instance_record_missing" }),
         ),
-        (Ok(Some(record)), Ok(locked)) => {
+        Ok((Some(record), locked)) => {
             let matches = service_instance::process_matches(&record).unwrap_or(false);
             let current_executable = butler_platform::process_names::current_exe()
                 .ok()

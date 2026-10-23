@@ -19,7 +19,7 @@ const INSTANCE_SCHEMA: &str = "butler.native-agent-service-instance.v1";
 mod delivery;
 mod gateway_state;
 mod legacy;
-mod probe;
+mod observe;
 mod publication;
 mod record;
 #[cfg(feature = "e2e-fixtures")]
@@ -32,7 +32,9 @@ mod record_fault {
     pub(super) fn hold_rename() {}
     pub(super) fn cancel_rename() {}
     pub(super) fn write_finished() {}
+    pub(super) fn hold(_: &str) {}
 }
+mod release;
 mod restart;
 mod stop_intent;
 mod stopping;
@@ -41,12 +43,15 @@ pub(crate) use delivery::{
 };
 pub(crate) use gateway_state::mark_gateway_state;
 pub(crate) use legacy::refuse_live_legacy_process;
-pub(crate) use probe::instance_lock_is_held_read_only;
+pub(crate) use observe::{
+    DATA_BUSY, Ownership, instance_is_locked, instance_is_locked_async, observe, observe_async,
+};
 pub(crate) use record::read_record_async;
 use record::{
     acquire_record_update_lock, instance_record_path, read_record_at, record_update_lock_path,
     write_record,
 };
+pub(crate) use release::InstanceRelease;
 pub(crate) use restart::RestartIdentity;
 pub(crate) use stop_intent::{
     StopIntent, StopReason, StopRequest, StopRequester, clear_stop_intent, stop_announced_for,
@@ -83,10 +88,11 @@ pub(crate) struct InstanceRecord {
 }
 
 /// This process's ownership of DATA: the exclusive instance lock, held until
-/// the guard is dropped (the lock is unlocked explicitly then, and released
-/// by the host if the process dies first), and the record it published.
+/// the guard is released or dropped (the lock is unlocked explicitly then,
+/// and released by the host if the process dies first), and the record it
+/// published.
 pub(crate) struct InstanceGuard {
-    lock: Option<InstanceLock>,
+    ownership: InstanceRelease,
     record_path: PathBuf,
     record_update_lock_path: PathBuf,
     installation: ResolvedInstallation,
@@ -137,8 +143,9 @@ fn protect_data_root(data_root: &Path) -> Result<(), crate::host::HostError> {
 }
 
 impl InstanceGuard {
-    /// Takes the DATA lock and publishes a `starting` record for this process;
-    /// `app_supervised` says whether the App holds its foreground lease.
+    /// Takes the DATA lock and publishes a `starting` record for this process,
+    /// in one hold of the record lock; `app_supervised` says whether the App
+    /// holds its foreground lease.
     pub(crate) fn acquire(
         data_root: &Path,
         executable: &Path,
@@ -147,8 +154,9 @@ impl InstanceGuard {
     ) -> Result<Self, crate::host::HostError> {
         validate_write_destinations(data_root, installation)?;
         protect_data_root(data_root)?;
-        let lock_path = instance_lock_path(data_root);
-        let file = open_lock(&lock_path, true)?;
+        let record_update_lock_path = record_update_lock_path(data_root);
+        let record_update_lock = acquire_record_update_lock(&record_update_lock_path)?;
+        let file = open_lock(&instance_lock_path(data_root), true)?;
         let lock = InstanceLock::try_exclusive(file).map_err(|error| match error {
             LockError::Busy => {
                 "native_service_duplicate_writer: a service instance already owns this DATA".into()
@@ -167,48 +175,28 @@ impl InstanceGuard {
             );
         }
         let unclean_previous_exit = report_previous_exit(data_root, previous.as_ref());
-
-        let executable = executable.canonical().map_err(|source| {
-            crate::host::HostError::new("native_service_executable_unavailable").with_source(source)
-        })?;
-        let pid = std::process::id();
-        let process_start = process_start_identity(pid)?
-            .ok_or_else(|| "native_service_process_identity_unavailable".to_owned())?;
-        let observed_executable = process_executable(pid)?
-            .ok_or_else(|| "native_service_process_identity_unavailable".to_owned())?;
-        if !executable_matches(&executable.to_string_lossy(), &observed_executable) {
-            return Err("native_service_executable_identity_mismatch".into());
-        }
-        let record = InstanceRecord {
-            schema: INSTANCE_SCHEMA.into(),
-            nonce: super::instance_identity::instance_nonce(),
-            pid,
-            cli_supervisor_pid: std::env::var("BUTLER_CLI_SUPERVISOR_PID")
-                .ok()
-                .and_then(|pid| pid.parse().ok()),
-            version: Some(super::diagnostics::version(installation)),
-            process_start,
-            executable: executable.to_string_lossy().into_owned(),
-            state: "starting".into(),
-            app_enabled: false,
-            app_endpoint: None,
-            app_auth_required: false,
-            ready_at: None,
-            control_endpoint: None,
-            control_token: None,
-            app_supervised,
-        };
-        let record_update_lock_path = record_update_lock_path(data_root);
-        let _record_update_lock = acquire_record_update_lock(&record_update_lock_path)?;
+        let record = starting_record(executable, installation, app_supervised)?;
+        record_fault::hold("startup");
         write_record(&record_path, &record)?;
+        drop(record_update_lock);
         Ok(Self {
-            lock: Some(lock),
+            ownership: InstanceRelease::new(
+                record_path.clone(),
+                installation.clone(),
+                record.nonce.clone(),
+                lock,
+            ),
             record_path,
             record_update_lock_path,
             installation: installation.clone(),
             record,
             unclean_previous_exit,
         })
+    }
+
+    /// The release the shutdown deadline runs before a forced exit.
+    pub(crate) fn deadline_release(&self) -> InstanceRelease {
+        self.ownership.clone()
     }
 
     pub(crate) fn nonce(&self) -> &str {
@@ -236,29 +224,20 @@ impl InstanceGuard {
 
 impl InstanceGuard {
     /// Explicit shutdown already runs on a blocking thread and waits for release.
-    pub(crate) fn release(mut self) {
-        if let Some(lock) = self.lock.take() {
-            release_record_at(
-                &self.record_path,
-                &self.installation,
-                &self.record.nonce,
-                true,
-            );
-            drop(lock);
+    pub(crate) fn release(self) {
+        if self.ownership.holds_data() {
+            self.ownership.release();
         }
     }
 }
 
 impl Drop for InstanceGuard {
     fn drop(&mut self) {
-        let Some(lock) = self.lock.take() else { return };
-        let path = self.record_path.clone();
-        let installation = self.installation.clone();
-        let nonce = self.record.nonce.clone();
-        let release = move || {
-            release_record_at(&path, &installation, &nonce, true);
-            drop(lock);
-        };
+        if !self.ownership.holds_data() {
+            return;
+        }
+        let ownership = self.ownership.clone();
+        let release = move || ownership.release();
         // Finish before cancellation returns or the runtime shuts down. A
         // multi-thread worker hands its other tasks off while release blocks.
         // block_in_place is unsupported on current-thread runtimes.
@@ -272,90 +251,10 @@ impl Drop for InstanceGuard {
     }
 }
 
-/// Release only this instance's record; the OS releases its process lock at exit.
-pub(crate) fn release_record(data_root: &Path, installation: &ResolvedInstallation, nonce: &str) {
-    release_record_at(&instance_record_path(data_root), installation, nonce, false);
-}
-
-fn release_record_at(
-    record_path: &Path,
-    installation: &ResolvedInstallation,
-    nonce: &str,
-    wait: bool,
-) {
-    super::shutdown_trace::event(if wait {
-        "instance_release:begin"
-    } else {
-        "deadline_instance_release:begin"
-    });
-    let Some(data_root) = record_path.parent().and_then(Path::parent) else {
-        super::shutdown_trace::event("instance_release:invalid_path");
-        return;
-    };
-    if validate_write_destinations(data_root, installation).is_err() {
-        super::shutdown_trace::event("instance_release:invalid_destination");
-        return;
-    }
-    if !wait {
-        record::fence_deadline_writes();
-    }
-    let lock_path = record_update_lock_path(data_root);
-    let lock = if wait {
-        acquire_record_update_lock(&lock_path).ok()
-    } else {
-        match record::acquire_record_update_lock_until(
-            &lock_path,
-            std::time::Duration::from_secs(1),
-        ) {
-            Ok(lock) => lock,
-            Err(_) => {
-                super::shutdown_trace::event("instance_release:record_lock_failed");
-                return;
-            }
-        }
-    };
-    if lock.is_none() {
-        super::shutdown_trace::event("instance_release:record_lock_unavailable");
-        if wait || record::cancel_staged_write(record_path, nonce).is_err() {
-            super::shutdown_trace::event("instance_release:staged_write_cancel_failed");
-            return;
-        }
-    }
-    if read_record_at(record_path)
-        .ok()
-        .flatten()
-        .is_some_and(|current| current.nonce == nonce)
-    {
-        match fs::remove_file(record_path) {
-            Ok(()) => super::shutdown_trace::event("instance_release:removed"),
-            Err(error) => super::shutdown_trace::event(&format!(
-                "instance_release:remove_failed:{:?}",
-                error.kind()
-            )),
-        }
-    } else {
-        super::shutdown_trace::event("instance_release:record_missing_changed_or_unreadable");
-    }
-}
-
 pub(crate) fn read_record(
     data_root: &Path,
 ) -> Result<Option<InstanceRecord>, crate::host::HostError> {
     read_record_at(&instance_record_path(data_root))
-}
-
-pub(crate) fn instance_is_locked(data_root: &Path) -> Result<bool, crate::host::HostError> {
-    let path = instance_lock_path(data_root);
-    let file = match open_lock(&path, false) {
-        Ok(file) => file,
-        Err(error) if error.message() == "service_lock_missing" => return Ok(false),
-        Err(error) => return Err(error),
-    };
-    match InstanceLock::try_exclusive(file) {
-        Ok(_) => Ok(false),
-        Err(LockError::Busy) => Ok(true),
-        Err(LockError::Failed(error)) => Err(format!("service_lock_probe_failed: {error}").into()),
-    }
 }
 
 /// Whether the process `record` names has ended: no process has its PID, or
@@ -392,8 +291,10 @@ pub(crate) fn validate_write_destinations(
     Ok(())
 }
 
-/// Holds DATA ownership for a stopped-service settings write without a record.
+/// Holds DATA ownership for a stopped-service write without a record; takes
+/// it inside a hold of the record lock, as every DATA owner does.
 pub(crate) fn lock_stopped_data(data_root: &Path) -> Result<InstanceLock, crate::host::HostError> {
+    let _record_update_lock = acquire_record_update_lock(&record_update_lock_path(data_root))?;
     let file = open_lock(&instance_lock_path(data_root), true)?;
     InstanceLock::try_exclusive(file).map_err(|_| crate::host::HostError::new("service_data_busy"))
 }
@@ -446,6 +347,43 @@ fn admission_lock_path(data_root: &Path) -> PathBuf {
 
 #[cfg(test)]
 pub(crate) mod tests;
+
+fn starting_record(
+    executable: &Path,
+    installation: &ResolvedInstallation,
+    app_supervised: bool,
+) -> Result<InstanceRecord, crate::host::HostError> {
+    let executable = executable.canonical().map_err(|source| {
+        crate::host::HostError::new("native_service_executable_unavailable").with_source(source)
+    })?;
+    let pid = std::process::id();
+    let process_start = process_start_identity(pid)?
+        .ok_or_else(|| "native_service_process_identity_unavailable".to_owned())?;
+    let observed_executable = process_executable(pid)?
+        .ok_or_else(|| "native_service_process_identity_unavailable".to_owned())?;
+    if !executable_matches(&executable.to_string_lossy(), &observed_executable) {
+        return Err("native_service_executable_identity_mismatch".into());
+    }
+    Ok(InstanceRecord {
+        schema: INSTANCE_SCHEMA.into(),
+        nonce: super::instance_identity::instance_nonce(),
+        pid,
+        cli_supervisor_pid: std::env::var("BUTLER_CLI_SUPERVISOR_PID")
+            .ok()
+            .and_then(|pid| pid.parse().ok()),
+        version: Some(super::diagnostics::version(installation)),
+        process_start,
+        executable: executable.to_string_lossy().into_owned(),
+        state: "starting".into(),
+        app_enabled: false,
+        app_endpoint: None,
+        app_auth_required: false,
+        ready_at: None,
+        control_endpoint: None,
+        control_token: None,
+        app_supervised,
+    })
+}
 
 fn report_previous_exit(data_root: &Path, previous: Option<&InstanceRecord>) -> bool {
     let unclean_previous_exit = previous

@@ -11,8 +11,8 @@ use serde_json::{Value, json};
 
 use super::Action;
 use crate::host::service::instance::{
-    AdmissionLock, InstanceRecord, StopReason, StopRequest, StopRequester, instance_is_locked,
-    process_matches, read_record, record_process_gone, refuse_live_legacy_process,
+    AdmissionLock, DATA_BUSY, InstanceRecord, Ownership, StopReason, StopRequest, StopRequester,
+    instance_is_locked, observe, process_matches, record_process_gone, refuse_live_legacy_process,
     validate_write_destinations,
 };
 use crate::host::{ResolvedInstallation, ServiceConfiguration};
@@ -36,9 +36,6 @@ const APP_RESPAWN_TIMEOUT: Duration = Duration::from_secs(30);
 const STOP_TIMEOUT: Duration = Duration::from_secs(8);
 const FORCE_STOP_TIMEOUT: Duration = Duration::from_secs(3);
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
-/// [`active_service`] while an instance holds the DATA lock but has not
-/// published its record yet: a starting instance, so waiters keep waiting.
-const LOCK_WITHOUT_RECORD: &str = "native_service_instance_ambiguous: DATA lock has no record";
 /// The line `butler stop` adds after a stop, worded like the App's quit dialog:
 /// schedules run inside the service.
 const SCHEDULES_STOPPED_NOTICE: &str =
@@ -333,8 +330,7 @@ pub(super) async fn active_service_async(
 pub(super) fn active_service(
     data_root: &Path,
 ) -> Result<Option<InstanceRecord>, crate::host::HostError> {
-    let locked = instance_is_locked(data_root)?;
-    let record = read_record(data_root)?;
+    let Ownership { locked, record } = observe(data_root)?;
     match (locked, record) {
         (false, None) => Ok(None),
         (false, Some(record)) => {
@@ -351,19 +347,19 @@ pub(super) fn active_service(
                 return Ok(Some(record));
             }
             if record_process_gone(&record)? {
-                // The lock observation preceded the identity query. Shutdown
-                // may have released it while that query was in flight.
+                // The observation preceded the identity query. The instance
+                // may have ended while that query was in flight.
                 if !instance_is_locked(data_root)? {
                     return Ok(None);
                 }
                 // Left by an instance that did not remove it (a crash, a
-                // forced stop): the lock owner is a new instance that has
-                // taken the lock and not yet replaced the record.
-                return Err(LOCK_WITHOUT_RECORD.into());
+                // forced stop): an instance replaces it in the hold that
+                // takes the lock, so the lock owner is not an instance.
+                return Err(DATA_BUSY.into());
             }
             Err("native_service_instance_ambiguous: lock owner does not match its record".into())
         }
-        (true, None) => Err(LOCK_WITHOUT_RECORD.into()),
+        (true, None) => Err(DATA_BUSY.into()),
     }
 }
 

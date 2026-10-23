@@ -9,12 +9,12 @@ use serde::Deserialize;
 
 use super::probe_auth::{is_loopback_endpoint, probe_tokens};
 use super::{
-    APP_RESPAWN_TIMEOUT, INSTANCE_PUBLISH_TIMEOUT, LOCK_WITHOUT_RECORD, POLL_INTERVAL,
-    START_TIMEOUT, active_service_async,
+    APP_RESPAWN_TIMEOUT, INSTANCE_PUBLISH_TIMEOUT, POLL_INTERVAL, START_TIMEOUT,
+    active_service_async,
 };
 use crate::host::ServiceConfiguration;
 use crate::host::service::instance::{
-    InstanceRecord, instance_is_locked, read_record_async, record_process_gone,
+    DATA_BUSY, InstanceRecord, Ownership, observe_async, record_process_gone,
 };
 
 pub(super) async fn wait_until_ready(
@@ -48,7 +48,8 @@ pub(super) async fn wait_until_ready(
         }
         let active = match active_service_async(&config.data_root).await {
             Ok(active) => active,
-            Err(error) if child.is_some() && error.message() == LOCK_WITHOUT_RECORD => None,
+            // A started child may still be recovering an interrupted reset.
+            Err(error) if child.is_some() && error.message() == DATA_BUSY => None,
             Err(error) => return Err(error),
         };
         if let Some(record) = active {
@@ -105,7 +106,8 @@ pub(super) async fn wait_until_registered(
             Ok(Some(record)) if record.cli_supervisor_pid == Some(child.id()) => return Ok(record),
             Ok(Some(_)) => return Err("native_service_start_identity_changed".into()),
             Ok(None) => {}
-            Err(error) if error.message() == LOCK_WITHOUT_RECORD => {}
+            // The child may still be recovering an interrupted reset.
+            Err(error) if error.message() == DATA_BUSY => {}
             Err(error) => return Err(error),
         }
         if Instant::now() >= deadline {
@@ -127,7 +129,8 @@ pub(super) async fn wait_for_app_respawn(
         match active_service_async(data_root).await {
             Ok(Some(record)) if record.nonce != previous_nonce => return Ok(record),
             Ok(_) => {}
-            Err(error) if error.message() == LOCK_WITHOUT_RECORD => {}
+            // The replacement may still be recovering an interrupted reset.
+            Err(error) if error.message() == DATA_BUSY => {}
             Err(error) => return Err(error),
         }
         if Instant::now() >= deadline {
@@ -224,8 +227,10 @@ pub(super) async fn wait_for_stop(
 ) -> Result<bool, crate::host::HostError> {
     let deadline = Instant::now() + timeout;
     loop {
-        let locked = instance_is_locked(data_root)?;
-        let current = read_record_async(data_root).await?;
+        let Ownership {
+            locked,
+            record: current,
+        } = observe_async(data_root).await?;
         let replaced = current
             .as_ref()
             .is_some_and(|record| record.nonce != stopped.nonce);
