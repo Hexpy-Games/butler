@@ -1,6 +1,7 @@
 //! Durable application service behind the native App HTTP facade.
 
 mod assets;
+pub(crate) mod canon_sidebar;
 mod data_reset;
 mod work_model;
 pub use assets::AppAssetCommand;
@@ -79,6 +80,7 @@ pub(super) mod settings;
 mod setup;
 mod setup_events;
 mod skill_settings;
+mod smart_groups;
 mod subsession_events;
 mod task_graphs;
 pub use task_graphs::{
@@ -214,6 +216,7 @@ pub struct AppApplication {
     project_creation: projects::ProjectCreationOwner,
     session_branches: session_branches::SessionBranchOwner,
     session_titles: session_titles::SessionTitleOwner,
+    smart_groups: smart_groups::SmartGroupOwner,
     space_mutations: Arc<space::SpaceMutationOwner>,
     transcript_exports: TranscriptExportOwner,
     project_dashboard_briefing: projects::ProjectDashboardBriefingOwner,
@@ -312,6 +315,7 @@ impl AppApplication {
             ),
             session_branches: session_branches::SessionBranchOwner::new(),
             session_titles: session_titles::SessionTitleOwner::default(),
+            smart_groups: smart_groups::SmartGroupOwner::default(),
             space_mutations: Arc::new(space::SpaceMutationOwner::new()),
             transcript_exports: TranscriptExportOwner::new(),
             project_dashboard_briefing: projects::ProjectDashboardBriefingOwner::new(),
@@ -393,6 +397,7 @@ impl AppApplication {
     pub async fn close(&self) -> Result<(), GatewayApplicationError> {
         self.cancel_updates();
         self.session_titles.close().await;
+        self.smart_groups.close().await;
         measure_shutdown(
             "app_project_dashboard_briefing_join",
             self.project_dashboard_briefing.close(),

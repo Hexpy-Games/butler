@@ -19,6 +19,7 @@ impl AppApplication {
             project_creation: self.project_creation.clone(),
             session_branches: self.session_branches.clone(),
             session_titles: self.session_titles.clone(),
+            smart_groups: self.smart_groups.clone(),
             space_mutations: self.space_mutations.clone(),
             transcript_exports: self.transcript_exports.clone(),
             project_dashboard_briefing: self.project_dashboard_briefing.clone(),

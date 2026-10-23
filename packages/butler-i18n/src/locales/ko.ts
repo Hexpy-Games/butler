@@ -1,3 +1,4 @@
+import { CANON_COPY } from "./canon.ts";
 import { TASK_GRAPH_COPY } from "./task-graph.ts";
 import { lifecycleCopy } from "../lifecycle.ts";
 import { additionalToolLabels } from "./tool-labels-ko.ts";
@@ -339,6 +340,7 @@ export const koKrCopy: AppCopy = {
     addHint: "먼저 ChatGPT에 로그인하세요",
   },
   shell: { footerNav: "업데이트와 설정", update: { downloading: "업데이트 받는 중", working: "업데이트 준비 중", ready: "업데이트 준비됨", failed: "업데이트 실패", restart: "다시 시작" } },
+  canon: CANON_COPY["ko-KR"],
   taskGraph: TASK_GRAPH_COPY["ko-KR"],
   lifecycle: lifecycleCopy.ko,
   browser: {
@@ -351,7 +353,7 @@ export const koKrCopy: AppCopy = {
     openConversation: "대화 열기", moveToConversation: "대화로 가져가기", newConversation: "새 대화", bringTab: "내 탭 가져오기", resizeChat: "대화 너비 조절", pick: "요소 선택",
     scrap: "스크랩", bookmarks: "북마크", bookmarkAdd: "북마크 추가", bookmarked: "북마크됨", manageBookmarks: "북마크 관리", downloads: "다운로드", downloading: "받는 중",
     showInFolder: "폴더에서 보기", more: "더 보기", findInPage: "페이지에서 찾기", zoom: "확대/축소", print: "인쇄", openExternal: "기본 브라우저에서 열기", settings: "브라우저 설정",
-    secure: "안전한 연결", notSecure: "주의 요함", butlerOutput: "버틀러 출력물", preview: "미리보기", signedIn: "로그인 사용", signinRequired: "로그인 확인 필요", captcha: "자동입력 방지", signinForm: "로그인 화면", saveSignIn: "로그인 저장", signinSaved: "로그인을 저장했어요", later: "나중에", agentUsing: "버틀러가 조작 중", takeOver: "직접 조작",
+    secure: "안전한 연결", notSecure: "주의 요함", butlerOutput: "버틀러 출력물", preview: "미리보기", signedIn: "로그인 사용", signinRequired: "로그인 확인 필요", captcha: "자동입력 방지", signinForm: "로그인 화면", saveSignIn: "로그인 저장", signinSaved: "로그인을 저장했어요", signinSaveFailed: "로그인을 저장하지 못했어요", later: "나중에", agentUsing: "버틀러가 조작 중", takeOver: "직접 조작",
     userControl: "직접 조작 중", butlerWaits: "버틀러가 기다리는 중", giveBack: "버틀러에게 돌려주기", autoGiveBack: "탭을 떠나면 버틀러에게 돌아감", stopTask: "작업 중지",
     stopped: "작업 중지함", waiting: "승인 대기", review: "승인 보기", needYou: "직접 입력 필요", keypad: "보안 키패드", mfa: "2단계 인증", passkey: "패스키", paymentRequired: "결제 확인 필요",
     typeYourself: "직접 입력해 주세요", chooseFile: "파일 선택", printer: "프린터", noPrinters: "프린터 없음", popupBlocked: "팝업 차단됨", allow: "허용", popupOpened: "팝업 열림", showPopup: "팝업 보기", newTabOpened: "새 탭 열림",
@@ -426,11 +428,10 @@ export const koKrCopy: AppCopy = {
     sessionUnconfirmed: "대화 연결 미확인",
     reviewed: "검토 기록", disposition: "상태 판정 기록", result: "도구 결과 등록",
     reported: "공개 답변", historyLedgerUnavailable: "프로젝트 기록 이력은 확인하지 못했습니다. 대화에서 전달된 공개 답변만 표시합니다.", linkedResults: (count) => `결과 자료 ${count}개`,
-    currentPlan: "유효한 계획", disconnected: "연결이 끊겨 마지막으로 확인한 상태를 표시합니다.",
+    disconnected: "연결이 끊겨 마지막으로 확인한 상태를 표시합니다.",
     reportQuestion: "이 보고의 내용과 미검증 사항에 관해 확인하기",
-    parentWork: "상위 작업", allWork: "모든 작업",
     periodDays: (days) => `최근 ${days}일`, statisticsZone: (zone) => `${zone} 날짜 기준`,
-    boardKind: "보드 종류", period: "기간", statisticsKind: "집계 기준", materialsView: "자료 보기",
+    period: "기간", statisticsKind: "집계 기준", materialsView: "자료 보기",
     briefing: "프로젝트 기록에서", suggestions: "다음으로 살펴볼 만한 일", briefingPending: "선정된 기록을 요약하고 있습니다. 자료를 살펴보거나 대화를 시작하실 수 있습니다.",
     briefingUnavailable: "요약을 불러올 수 없습니다. 프로젝트 기록과 대화 입력은 계속 사용할 수 있습니다.",
     summarized: "선정된 기록의 요약이며 새로 검증한 결과가 아닙니다", addToComposer: "이 내용으로 질문하기",
@@ -446,7 +447,7 @@ export const koKrCopy: AppCopy = {
     overview: "개요", work: "작업", materials: "자료", history: "기록", statistics: "통계",
     position: "진행 상황", remaining: "남아 있는 일", completed: "실행 완료", open: "남은 작업",
     blocked: "막힌 작업", abandoned: "종료한 작업", unknown: "확인하지 못한 작업", registered: "등록된 작업",
-    noWork: "아직 등록된 작업이 없습니다.", unbound: "이 프로젝트에 연결된 기록이 없습니다.",
+    unbound: "이 프로젝트에 연결된 기록이 없습니다.",
     unavailable: "프로젝트 기록을 확인하지 못했습니다. 완료 여부를 추정하지 않습니다.",
     noRemaining: "기록상 남아 있는 작업이 없습니다.", tasks: "하위 작업", recorded: "등록된 작업 기준", loadMore: "더 보기",
   },
@@ -968,6 +969,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     },
     stoppedStatus: "중지됨",
     attachmentUnavailable: "첨부 파일을 찾을 수 없음",
+    attachmentFileType: "파일",
     fileChanges: {
       regionLabel: "변경된 파일",
       title: "파일 변경",

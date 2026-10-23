@@ -221,6 +221,17 @@ Wrong turns:
 
 Tags: icon, status, action, navigation
 
+## People
+
+Use `Avatar` for a person's initial right after an item's title (the assignee) in sidebar rows, board cards and list rows, and beside an author's name in activity rows. `tone="self"` for the signed-in person, `"other"` for anyone else. Its `badge` slot holds the agent glyph while an agent works for that person; say the agent in `label`, which is also the tooltip.
+
+Wrong turns:
+
+- Do not show an agent or provider as an avatar; put it in the badge, or use `ProviderLogo`.
+- Do not use `Avatar` for conversation message authors; use `MessageAvatarBlock`.
+
+Tags: avatar, assignee, person, agent, badge
+
 ## Blocks
 
 Blocks are compositional presentational components built from design-system primitives. They own layout, states, and accessibility but must not import Butler domain data, stores, app copy, or `window.butlerApp`.

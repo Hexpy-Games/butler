@@ -1,3 +1,4 @@
+import { canonBridgeInput } from "./canonBridge.ts";
 import { taskGraphBridgeInput } from "./taskGraphBridge.ts";
 import { appCopy } from "./copy.ts";
 import { artifactBridgeInput } from "./artifactBridge.ts";
@@ -288,6 +289,7 @@ function browserRequest<T>(path: string, options: ApiOptions = {}): Promise<T> {
       Object.assign(error, {
         ...(typeof body.error?.code === "string" ? { code: body.error.code } : {}),
         status: response.status,
+        ...(Number.isSafeInteger(body.error?.current?.revision) ? { current: { revision: body.error.current.revision } } : {}),
       });
       throw error;
     }
@@ -306,6 +308,8 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (url.pathname.startsWith("/library/") && url.pathname.endsWith("/snapshot") && method === "GET") return callBridge<T>(bridge,"librarySnapshot",decodeURIComponent(url.pathname.slice(9, -9)));
   if (/^\/library\/(groups|tags|facets|items)(\/|$)/.test(url.pathname)) return callBridge<T>(bridge, "organizeLibrary", { path: url.pathname + url.search, method, ...(options.body == null ? {} : { body: parseBody(options.body) }) });
   if (url.pathname.startsWith("/library/") && method === "DELETE") return callBridge<T>(bridge,"deleteLibrary",decodeURIComponent(url.pathname.slice(9)));
+  const canon = canonBridgeInput(url, method, () => parseBody(options.body));
+  if (canon) return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, canon.method, canon.input));
   const graph = method === "GET" ? taskGraphBridgeInput(url) : null;
   if (graph) return await callBridge<T>(bridge, graph.method, graph.input);
   if (method === "GET" && url.pathname === "/health") return await callBridge<T>(bridge, "health");
@@ -1039,6 +1043,7 @@ function unwrapBridgeResult<T>(value: BridgeResult<T> | T): T {
   const error = new Error(hookReason ?? appCopy.serverErrors[code] ?? appCopy.interfaceFeedback.requestFailed);
   Object.assign(error, {
     code,
+    ...(Number.isSafeInteger(result.error?.current?.revision) ? { current: result.error.current } : {}),
     ...(typeof result.error?.status === "number" ? { status: result.error.status } : {}),
   });
   throw error;

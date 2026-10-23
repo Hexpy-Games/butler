@@ -5,7 +5,6 @@
 //! the required [`GatewayApplication`] implementation supplied at composition.
 
 mod application;
-pub use application::AppAssetCommand;
 pub use application::storage::history::{AppHistoryCommand, AppHistoryQuery};
 #[cfg(feature = "test-support")]
 pub use application::storage::testing as storage_testing;
@@ -45,6 +44,11 @@ pub use crate::gateway::message_file_store::AppMessageFiles;
 pub use application::settings::{
     command_sandbox_enabled, diagnostics_enabled_readonly, producer_log_config, startup_log_config,
     stored_ui_language_readonly,
+};
+pub use application::{
+    APP_PERSON_ID, AppAssetCommand, AppCanonOperation, AppCardInput, AppProfileInput,
+    AppSessionTopicClassifier, AppSessionTopicInput, AppSignInCommand, AppSignInUpsert,
+    AppVaultCommand, GatewaySignIns,
 };
 pub use application::{
     AppAdmissionAuthority, AppApplication, AppApplicationConfig, AppApplicationDependencies,
@@ -98,10 +102,6 @@ pub use application::{
     task_graph_model_label, task_graph_response,
 };
 pub use application::{
-    AppCardInput, AppProfileInput, AppSignInCommand, AppSignInUpsert, AppVaultCommand,
-    GatewaySignIns,
-};
-pub use application::{
     AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
     ChatGptNoticeInput, ChatGptNoticeKind, ChatGptSignOutView, LocalModelServersView,
     MemoryModelProgress, OauthFlowStatus, OauthFlowView, ProviderKeyVerificationView,
@@ -112,9 +112,9 @@ pub(crate) use application::{
     AutomationDetailView, AutomationListView, AutomationMutationResult, AutomationRunListView,
     AutomationRunResult, AutomationRunSummary, CreateAutomationRequest, UpdateAutomationRequest,
 };
+pub use application::{SMART_GROUP_INSTRUCTIONS, app_session_hint, normalize_committed_turn_event};
 #[cfg(test)]
 pub(crate) use application::{TestProjectDashboardBriefing, TestProjectDashboardLedger};
-pub use application::{app_session_hint, normalize_committed_turn_event};
 pub(crate) use application::{app_work_status, app_worker_activity};
 pub use application::{read_new_chat_briefing_projects, read_new_chat_briefing_settings};
 pub use auth::LocalAuthConfig;

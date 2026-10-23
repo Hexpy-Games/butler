@@ -1214,6 +1214,7 @@ export interface SessionViewBridgeInput {
 }
 
 export interface SessionViewBridgeError {
+  current?: { revision: number };
   hook_reason?: string;
   schema: "butler.app.bridge-error.v1";
   code: string;
