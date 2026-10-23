@@ -67,38 +67,47 @@ async fn orphaned(standalone: bool, ineligible: bool) -> Result<(), HarnessError
     drain(&data, &[]).await;
     // Do not reset jobs while their original hot-cache or FTS work is in flight.
     crate::memory_fixture::settle(&data).await?;
+    // The external writes below must wake a consumer parked without a deadline.
+    wait_parked(&s, 0).await;
     // Recreate an upgraded graph's durable unprocessed queue under the lease.
+    // Each external writer finishes (closes its connection) like a writer
+    // process: macOS reports file writes only when the writer closes them.
     let gate = hold_gate(&data);
-    let db = graph(&data);
-    for key in [
-        &source,
-        &format!("conversation_turn:{kept_turn}"),
-        &format!("conversation_message:{KEPT}-recovered-10"),
-    ] {
-        reset_pending(&db, key);
+    {
+        let writer = graph(&data);
+        for key in [
+            &source,
+            &format!("conversation_turn:{kept_turn}"),
+            &format!("conversation_message:{KEPT}-recovered-10"),
+        ] {
+            reset_pending(&writer, key);
+        }
+        writer.execute("UPDATE memory_projection_jobs SET created_at='2000-01-01T00:00:00Z' WHERE episode_id IN (SELECT memory_chunk_id FROM memory_chunks WHERE source_key=?1)", [&source]).unwrap();
     }
-    db.execute("UPDATE memory_projection_jobs SET created_at='2000-01-01T00:00:00Z' WHERE episode_id IN (SELECT memory_chunk_id FROM memory_chunks WHERE source_key=?1)", [&source]).unwrap();
     // External canonical writers also delete sources (e.g. restored history).
     // Park this revision without publishing new source content.
-    let canonical = canonical(&data);
-    if ineligible {
-        let table = if standalone {
-            "conversation_messages"
+    {
+        let writer = canonical(&data);
+        if ineligible {
+            let table = if standalone {
+                "conversation_messages"
+            } else {
+                "conversation_turns"
+            };
+            let status = if standalone { "pending" } else { "running" };
+            writer
+                .execute(
+                    &format!("UPDATE {table} SET status=?1 WHERE session_id=?2"),
+                    [status, GONE],
+                )
+                .unwrap();
         } else {
-            "conversation_turns"
-        };
-        let status = if standalone { "pending" } else { "running" };
-        canonical
-            .execute(
-                &format!("UPDATE {table} SET status=?1 WHERE session_id=?2"),
-                [status, GONE],
-            )
-            .unwrap();
-    } else {
-        canonical
-            .execute("DELETE FROM conversation_sessions WHERE id=?1", [GONE])
-            .unwrap();
+            writer
+                .execute("DELETE FROM conversation_sessions WHERE id=?1", [GONE])
+                .unwrap();
+        }
     }
+    let db = graph(&data);
     let parked = idle_signals(&s).await;
     release_gate(&gate);
     drop(gate);
@@ -138,13 +147,16 @@ async fn orphaned(standalone: bool, ineligible: bool) -> Result<(), HarnessError
         } else {
             "conversation_turns"
         };
-        canonical
-            .execute(
-                &format!("UPDATE {table} SET status='complete' WHERE session_id=?1"),
-                [GONE],
-            )
-            .unwrap();
-        published(&canonical);
+        {
+            let writer = canonical(&data);
+            writer
+                .execute(
+                    &format!("UPDATE {table} SET status='complete' WHERE session_id=?1"),
+                    [GONE],
+                )
+                .unwrap();
+            published(&writer);
+        }
         drain(&data, &[]).await;
         let completed: i64 = db.query_row("SELECT COUNT(*) FROM memory_projection_windows w JOIN memory_projection_jobs j ON j.job_id=w.job_id JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id WHERE c.source_key=?1 AND w.state='complete'", [&source], |r| r.get(0)).unwrap();
         assert_eq!(
@@ -165,12 +177,9 @@ async fn idle_signals(s: &butler_e2e::e2e::scenario::Scenario) -> usize {
         .count()
 }
 
-async fn assert_idle(s: &butler_e2e::e2e::scenario::Scenario, parked: usize) {
-    // Semantic completion commits before finish() registers vector units, which
-    // updates last_served_at even when the vector states are unchanged. Wait for
-    // a fresh completed idle poll, after all writes for the seeded work, without
-    // holding the writer gate during the full five-second observation below.
-    let started = Instant::now();
+/// Waits until the consumer parked idle, without a deadline, more than
+/// `parked` times and has not polled since.
+async fn wait_parked(s: &butler_e2e::e2e::scenario::Scenario, parked: usize) {
     tokio::time::timeout(Duration::from_secs(30), async {
         loop {
             let logs = s.agent.current_logs().await.unwrap();
@@ -188,6 +197,15 @@ async fn assert_idle(s: &butler_e2e::e2e::scenario::Scenario, parked: usize) {
     })
     .await
     .expect("memory consumer did not finish the requested writes and park idle");
+}
+
+async fn assert_idle(s: &butler_e2e::e2e::scenario::Scenario, parked: usize) {
+    // Semantic completion commits before finish() registers vector units, which
+    // updates last_served_at even when the vector states are unchanged. Wait for
+    // a fresh completed idle poll, after all writes for the seeded work, without
+    // holding the writer gate during the full five-second observation below.
+    let started = Instant::now();
+    wait_parked(s, parked).await;
     eprintln!(
         "MEM-ORPHANED writer_idle_barrier_ms={}",
         started.elapsed().as_millis()
