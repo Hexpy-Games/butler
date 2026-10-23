@@ -347,36 +347,42 @@ impl SubsessionService {
         Ok(())
     }
 
-    async fn enqueue_direction(
-        &self,
-        relation: &Child,
-        requested: &StoredSubsessionDirection,
-    ) -> Result<(), BtccError> {
+    async fn direction_held(&self, relation: &Child) -> Result<bool, BtccError> {
         let target = relation.child_session_id.clone();
         let assigned_part = match relation {
             Child::Assigned(assigned) => assigned.part_id.clone(),
             Child::Legacy(_) => None,
         };
         let task_id = relation.task_id.clone();
-        let held =
-            self.repository
-                .storage()
-                .work_model_read(move |db| {
-                    use butler_work::store;
-                    if !store::active_session_holds(db, &target)?.is_empty() {
-                        return Ok(true);
-                    }
-                    if let Some(part) = assigned_part {
-                        let part = store::read_part(db, &part)?;
-                        let task = store::read_task(db, &task_id)?;
-                        return Ok(at(&part, "/status") == "completed"
-                            || at(&task, "/status") == "in_review");
-                    }
-                    Ok(false)
-                })
-                .await
-                .map_err(BtccError::from)?;
-        if held {
+        self.repository
+            .storage()
+            .work_model_read(move |db| {
+                use butler_work::store;
+                if !store::active_session_holds(db, &target)?.is_empty() {
+                    return Ok(true);
+                }
+                if let Some(part) = assigned_part {
+                    let part = store::read_part(db, &part)?;
+                    let task = store::read_task(db, &task_id)?;
+                    let completed = at(&part, "/status") == "completed";
+                    let steering = store::pending_instructions(db, &target, false)?
+                        .first()
+                        .is_some_and(|row| at(row, "/mode") == "steer");
+                    return Ok((completed || at(&task, "/status") == "in_review")
+                        && !(completed && steering));
+                }
+                Ok(false)
+            })
+            .await
+            .map_err(BtccError::from)
+    }
+
+    async fn enqueue_direction(
+        &self,
+        relation: &Child,
+        requested: &StoredSubsessionDirection,
+    ) -> Result<(), BtccError> {
+        if self.direction_held(relation).await? {
             return Ok(());
         }
         let direction = self

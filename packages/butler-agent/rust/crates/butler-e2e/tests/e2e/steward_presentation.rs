@@ -5,6 +5,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
+mod direction;
 mod files;
 pub(super) mod intent;
 mod script_work;
@@ -400,7 +401,7 @@ fn assert_direction(
     );
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap();
     let applied: i64 = db.query_row(
-        "SELECT count(*) FROM btcc_subsession_directions WHERE relation_id=?1 AND status='applied'",
+        "SELECT count(*) FROM wm_instructions i JOIN btcc_session_relations r ON r.child_session_id=i.target_session_id WHERE r.relation_id=?1 AND i.mode='steer' AND i.status='applied'",
         [relation],
         |row| row.get(0),
     ).unwrap();
