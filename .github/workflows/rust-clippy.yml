@@ -42,3 +42,5 @@ jobs:
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox --features butler-platform/test-support,butler-agent/e2e-fixtures --locked --keep-going -- -D warnings
       - name: Clippy all targets
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
+      - name: Check Windows agent crate selection against the Cargo graph
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" python3 "$GITHUB_WORKSPACE/.github/scripts/ci_runtime_crates.py" --check
