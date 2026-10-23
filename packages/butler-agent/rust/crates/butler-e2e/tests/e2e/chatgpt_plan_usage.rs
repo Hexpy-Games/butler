@@ -6,10 +6,7 @@
     reason = "test assertions"
 )]
 use super::chatgpt_sign_in::{account, settle, start};
-use butler_e2e::e2e::{
-    HarnessError,
-    fake_chatgpt::FakeChatGptAuthority,
-};
+use butler_e2e::e2e::{HarnessError, fake_chatgpt::FakeChatGptAuthority};
 use serde_json::json;
 
 #[tokio::test]
@@ -20,10 +17,11 @@ async fn siwc_14_legacy_migration_preserves_credentials_until_success() -> Resul
     let setup = butler_e2e::e2e::scenario::Setup::new("SIWC-14")?
         .without_credential()
         .synthetic(butler_e2e::e2e::provider::Script {
-            rounds: 0, path_for: Box::new(|_| String::new()), final_text: "migration-ok".into(),
+            rounds: 0,
+            path_for: Box::new(|_| String::new()),
+            final_text: "migration-ok".into(),
         })
-        .env("BUTLER_CHATGPT_AUTH_ISSUER", &authority.issuer)
-        ;
+        .env("BUTLER_CHATGPT_AUTH_ISSUER", &authority.issuer);
     let path = setup.sandbox.data.join("auth/openai-codex.json");
     std::fs::create_dir_all(path.parent().unwrap())?;
     let original = b"{\"accessToken\":\"legacy-secret\"}";
@@ -41,7 +39,7 @@ async fn siwc_14_legacy_migration_preserves_credentials_until_success() -> Resul
     let (_, turn) = s.turn("general", "continue after migration notice").await?;
     assert_eq!(butler_e2e::e2e::gateway::turn_state(&turn), "failed");
     assert!(turn.to_string().contains("chatgpt_sign_in_required"));
-    assert!(s.provider()?.requests().is_empty());
+    assert_eq!(s.provider()?.requests(), [] as [serde_json::Value; 0]);
     assert!(authority.seen().is_empty());
     assert_eq!(std::fs::read(&path)?, original);
     let flow = start(&s, json!({})).await?;

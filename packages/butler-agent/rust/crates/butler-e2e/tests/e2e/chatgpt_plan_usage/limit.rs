@@ -12,11 +12,15 @@ use serde_json::Value;
 use std::sync::{Arc, Mutex};
 
 #[derive(Default)]
-struct Script { calls: usize }
+struct Script {
+    calls: usize,
+}
 async fn reply(State(state): State<Arc<Mutex<Script>>>) -> Response {
     state.lock().unwrap().calls += 1;
-    (StatusCode::TOO_MANY_REQUESTS,
-        Json(json!({"error":{"code":"subscription_sharing_usage_limit_exceeded"}})))
+    (
+        StatusCode::TOO_MANY_REQUESTS,
+        Json(json!({"error":{"code":"subscription_sharing_usage_limit_exceeded"}})),
+    )
         .into_response()
 }
 

@@ -26,7 +26,7 @@ async fn install(force_l: bool) -> Result<(), HarnessError> {
     let mut setup = test_support_agent(Setup::new("LINUX-NPM-TARBALL")?)?
         .access(Access::Auto)
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{}/v1", url));
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     if force_l {
         setup = setup.env("BUTLER_TEST_SANDBOX_FORCE_L", "1");
     }

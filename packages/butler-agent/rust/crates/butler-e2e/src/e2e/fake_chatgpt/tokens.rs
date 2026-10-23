@@ -120,8 +120,8 @@ fn refresh(state: &Authority, params: &BTreeMap<String, String>) -> Response {
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     if refresh
-            .get(get("refresh_token"))
-            .is_none_or(|client| client != get("client_id"))
+        .get(get("refresh_token"))
+        .is_none_or(|client| client != get("client_id"))
     {
         return (
             StatusCode::BAD_REQUEST,

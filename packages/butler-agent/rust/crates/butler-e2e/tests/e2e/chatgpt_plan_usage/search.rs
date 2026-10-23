@@ -30,9 +30,7 @@ impl Server {
     async fn start() -> Result<Self, HarnessError> {
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await?;
         let base = format!("http://{}", listener.local_addr()?);
-        let state = Arc::new(Mutex::new(SearchState {
-            primary: 0,
-        }));
+        let state = Arc::new(Mutex::new(SearchState { primary: 0 }));
         let app = Router::new().route("/v1/responses",post(primary))
             .route_layer(axum::middleware::from_fn(butler_e2e::e2e::chatgpt_wire::validate))
             .route("/v1/models",get(|| async { Json(json!({"models":[{"slug":"gpt-6-luna","display_name":"Luna","visibility":"list"}]})) }))
@@ -54,8 +52,8 @@ async fn primary(
     let events = [
         json!({"type":"response.metadata","metadata":{}}),
         json!({"type":"response.web_search_call.searching"}),
-        json!({"type":"response.output_text.annotation.added","annotation":{"type":"url_citation","url":"https://example.org/source","title":"Hosted source"}}),
-        json!({"type":"response.completed","response":{"output":[{"type":"web_search_call","action":{"sources":[{"type":"url","url":"https://example.org/source","title":"Hosted source"}]}},{"type":"message","content":[{"type":"output_text","text":"A sourced overview.","annotations":[{"type":"url_citation","url":"https://example.org/source","title":"Hosted source"}]}]}]}}),
+        json!({"type":"response.output_text.annotation.added","annotation":{"type":"url_citation","url":"https://example.org/citation","title":"Cited source"}}),
+        json!({"type":"response.completed","response":{"output":[{"type":"web_search_call","action":{"sources":[{"type":"url","url":"https://example.org/source","title":"Hosted source"}]}},{"type":"message","content":[{"type":"output_text","text":"A sourced overview.","annotations":[{"type":"url_citation","url":"https://example.org/citation","title":"Cited source"}]}]}]}}),
     ];
     (
         [("content-type", "text/event-stream")],
@@ -115,7 +113,9 @@ impl Companion {
 async fn siwc_16_hosted_search_alias_memo_fallback_and_refresh() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let server = Server::start().await?;
-    let s = butler_e2e::e2e::scenario::Setup::new("SIWC-16")?.start().await?;
+    let s = butler_e2e::e2e::scenario::Setup::new("SIWC-16")?
+        .start()
+        .await?;
     let path = s.sandbox.data.join("butler.config.json");
     let mut config: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
     config["webSearch"] = json!({"provider":"chatgpt-plan-web-search",
@@ -124,9 +124,15 @@ async fn siwc_16_hosted_search_alias_memo_fallback_and_refresh() -> Result<(), H
     let mut companion = Companion::start(&s, &server)?;
     let result = companion.search().await?;
     assert_eq!(result["provider"], "chatgpt-plan-web-search", "{result}");
-    assert!(result["results"].as_array().is_some_and(|r| !r.is_empty()), "{result}");
+    assert!(
+        result["results"].as_array().is_some_and(|r| !r.is_empty()),
+        "{result}"
+    );
     assert_eq!(result["results"][0]["url"], "https://example.org/source");
     assert_eq!(result["results"][0]["title"], "Hosted source");
+    assert_eq!(result["results"].as_array().unwrap().len(), 2);
+    assert_eq!(result["results"][1]["url"], "https://example.org/citation");
+    assert_eq!(result["results"][1]["title"], "Cited source");
     assert_eq!(server.state.lock().unwrap().primary, 1);
     companion.child.kill().await?;
     companion.child.wait().await?;

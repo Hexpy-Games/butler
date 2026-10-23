@@ -75,10 +75,11 @@ pub(crate) fn roots(environment: &HashMap<String, String>) -> Vec<PathBuf> {
         );
         // These general product settings also cover externally stored logins.
         // Relative Butler profile paths resolve under the configured data root.
-        for key in ["BUTLER_CHATGPT_AUTH_DIR"] {
-            if let Some(path) = environment.get(key).filter(|path| !path.is_empty()) {
-                roots.push(data.join(path));
-            }
+        if let Some(path) = environment
+            .get("BUTLER_CHATGPT_AUTH_DIR")
+            .filter(|path| !path.is_empty())
+        {
+            roots.push(data.join(path));
         }
     }
     if let Some(path) = environment

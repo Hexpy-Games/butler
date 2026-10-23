@@ -113,7 +113,10 @@ impl Attempt {
         if self.capture && full() {
             self.response.observe(bytes);
         }
-        if self.sse && crate::global().is_some_and(|log| log.enabled(&self.row.category, "DEBUG")) {
+        if self.sse
+            && !self.phase.sensitive
+            && crate::global().is_some_and(|log| log.enabled(&self.row.category, "DEBUG"))
+        {
             self.events(bytes);
         }
     }

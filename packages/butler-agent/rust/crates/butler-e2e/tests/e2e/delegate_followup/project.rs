@@ -11,7 +11,7 @@ async fn blocked_project_followup_rejected_plan_reaches_terminal() -> Result<(),
     script.hold_revision.store(true, Ordering::SeqCst);
     let s = Setup::new("PROJECT-FOLLOWUP-PLAN-REJECTION")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{}/v1", url))
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()
         .await?;
     let project =

@@ -104,7 +104,7 @@ async fn run_case() -> Result<(), HarnessError> {
     let s = setup
         .stub_cassette(super::observation_stub::cassette()?)
         .access(Access::FullAccess)
-        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{}/v1", url))
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .env("BUTLER_DEBUG_COMMAND_TIMINGS", "1")
         .start()
         .await?;

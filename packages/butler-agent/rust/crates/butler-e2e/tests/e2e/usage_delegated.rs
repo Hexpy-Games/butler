@@ -26,7 +26,7 @@ async fn deleg_use_01_real_chat_steward_two_workers() -> Result<(), HarnessError
     let (url, script, server) = stub::start().await?;
     let s = Setup::new("DELEG-USE-01")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{}/v1", &url))
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()
         .await?;
     s.turn("general", super::delegate_followup::stub::OWNER)

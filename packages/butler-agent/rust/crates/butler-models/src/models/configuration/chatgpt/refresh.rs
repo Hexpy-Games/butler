@@ -85,7 +85,7 @@ async fn exchange(client: &butler_log::http::Client, raw: &Value) -> Option<Valu
     let issuer = raw["issuer"].as_str()?.trim_end_matches('/');
     let mut response = client
         .post(format!("{issuer}/api/accounts/oauth/token"))
-            .phase(butler_log::http::Phase::current().sensitive())
+        .phase(butler_log::http::Phase::current().sensitive())
         .timeout(std::time::Duration::from_secs(10))
         .header("accept", "application/json")
         .form(&[

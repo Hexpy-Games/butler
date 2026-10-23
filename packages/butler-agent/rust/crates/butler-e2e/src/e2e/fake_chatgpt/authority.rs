@@ -76,15 +76,25 @@ async fn authorize(
         return StatusCode::BAD_REQUEST.into_response();
     };
     let code = uuid::Uuid::new_v4().to_string();
-    redirect.query_pairs_mut()
-        .append_pair("state", params.get("state").map(String::as_str).unwrap_or(""))
+    redirect
+        .query_pairs_mut()
+        .append_pair(
+            "state",
+            params.get("state").map(String::as_str).unwrap_or(""),
+        )
         .append_pair("code", &code)
         .append_pair("scope", butler_models::models::chatgpt::SCOPES);
     if dynamic {
         redirect.query_pairs_mut().append_pair(
-            "client_id", params.get("client_id").map(String::as_str).unwrap_or(""));
+            "client_id",
+            params.get("client_id").map(String::as_str).unwrap_or(""),
+        );
     }
-    state.grants.lock().unwrap_or_else(std::sync::PoisonError::into_inner).insert(code, params);
+    state
+        .grants
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(code, params);
     (
         StatusCode::FOUND,
         [(axum::http::header::LOCATION, redirect.as_str())],

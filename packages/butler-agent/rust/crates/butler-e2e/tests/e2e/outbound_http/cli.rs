@@ -42,9 +42,14 @@ async fn oauth_cli(close_delay: Option<&str>) -> Result<(), HarnessError> {
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0]["attrs"]["purpose"], "oauth");
     assert_eq!(rows[0]["attrs"]["status"], 200);
-    assert!(rows[0].get("content").is_none_or(|body| body.is_null()
-        || body.as_object().is_some_and(serde_json::Map::is_empty)));
-    assert!(rows[0].get("body_ref").is_none_or(serde_json::Value::is_null));
+    assert!(rows[0].get("content").is_none_or(
+        |body| body.is_null() || body.as_object().is_some_and(serde_json::Map::is_empty)
+    ));
+    assert!(
+        rows[0]
+            .get("body_ref")
+            .is_none_or(serde_json::Value::is_null)
+    );
     assert!(!serde_json::to_string(&rows)?.contains("private-native-cli-authorization-code"));
     assert!(
         token

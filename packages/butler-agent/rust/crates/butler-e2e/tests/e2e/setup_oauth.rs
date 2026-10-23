@@ -133,14 +133,24 @@ async fn setup_09_sign_in_completes_with_the_flows_pkce() -> Result<(), HarnessE
         .fixture(Fixture::Empty)
         .without_credential()
         .env("BUTLER_CHATGPT_AUTH_ISSUER", &token.issuer)
-        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{}/v1", token.issuer))
+        .env(
+            "BUTLER_CHATGPT_API_BASE_URL",
+            format!("{}/v1", token.issuer),
+        )
         .env("BUTLER_CHATGPT_OAUTH_PORT", callback_port.to_string())
-        .start().await?;
-    assert_eq!(super::chatgpt_sign_in::account(&s).await?["status"], "signed_out");
+        .start()
+        .await?;
+    assert_eq!(
+        super::chatgpt_sign_in::account(&s).await?["status"],
+        "signed_out"
+    );
     for path in ["/model-catalog", "/settings"] {
         assert_eq!(s.gw.get(path).await?.status, 200);
     }
-    assert!(!listening(callback_port), "reads started a callback listener");
+    assert!(
+        !listening(callback_port),
+        "reads started a callback listener"
+    );
     assert!(token.seen().is_empty(), "reads contacted the authority");
     assert!(!s.sandbox.data.join("auth/chatgpt-host.json").exists());
     super::outbound_http::logging(&s, "full").await?;
@@ -172,10 +182,15 @@ async fn setup_09_sign_in_completes_with_the_flows_pkce() -> Result<(), HarnessE
     assert_eq!(authorize["client_id"], "dynamic_agent_client");
     assert_eq!(authorize["agent_name_hint"], "Butler");
     assert_eq!(authorize["scope"], butler_models::models::chatgpt::SCOPES);
-    assert_eq!(authorize["resource"], butler_models::models::chatgpt::RESOURCE);
+    assert_eq!(
+        authorize["resource"],
+        butler_models::models::chatgpt::RESOURCE
+    );
     assert_eq!(authorize["code_challenge_method"], "S256");
-    assert!(!authorize["nonce"].is_empty());
-    let host = authorize["ext_agent_host_id"].strip_prefix("urn:uuid:").unwrap();
+    assert_ne!(authorize["nonce"], "");
+    let host = authorize["ext_agent_host_id"]
+        .strip_prefix("urn:uuid:")
+        .unwrap();
     let host_id = uuid::Uuid::parse_str(host).unwrap();
     assert_eq!(host_id.get_version_num(), 4);
     assert_eq!(host_id.hyphenated().to_string(), host);
@@ -193,10 +208,15 @@ async fn setup_09_sign_in_completes_with_the_flows_pkce() -> Result<(), HarnessE
     assert_eq!(form["client_id"], profile["client_id"]);
     assert_ne!(profile["client_id"], "dynamic_agent_client");
     assert!(profile.get("id_token").is_none());
-    assert_eq!(super::chatgpt_sign_in::account(&s).await?["status"], "signed_in");
+    assert_eq!(
+        super::chatgpt_sign_in::account(&s).await?["status"],
+        "signed_in"
+    );
     let metadata = std::fs::metadata(s.sandbox.data.join("auth/chatgpt.json"))?;
-    assert_eq!(butler_platform::secure_fs::is_owner_only(&metadata),
-        butler_platform::secure_fs::OWNER_ONLY.then_some(true));
+    assert_eq!(
+        butler_platform::secure_fs::is_owner_only(&metadata),
+        butler_platform::secure_fs::OWNER_ONLY.then_some(true)
+    );
     let http_logs = s.gw.get("/logs?category=http.client&limit=1000").await?;
     for key in ["access_token", "refresh_token"] {
         let secret = profile[key].as_str().unwrap();
@@ -204,19 +224,26 @@ async fn setup_09_sign_in_completes_with_the_flows_pkce() -> Result<(), HarnessE
         assert!(!http_logs.text.contains(secret));
     }
 
-    let rows = super::outbound_http::http_calls(
-        &s, &format!("{}/api/accounts/oauth/token", token.issuer),
-    ).await?;
+    let rows =
+        super::outbound_http::http_calls(&s, &format!("{}/api/accounts/oauth/token", token.issuer))
+            .await?;
     assert_eq!(rows.len(), 1);
     for row in &rows {
         assert_eq!(row["attrs"]["purpose"], "oauth");
         assert_eq!(row["attrs"]["status"], 200);
-        assert!(row.get("content").is_none_or(|body| body.is_null()
-            || body.as_object().is_some_and(serde_json::Map::is_empty)));
+        assert!(row.get("content").is_none_or(
+            |body| body.is_null() || body.as_object().is_some_and(serde_json::Map::is_empty)
+        ));
         assert!(row.get("body_ref").is_none_or(Value::is_null));
     }
     let text = serde_json::to_string(&rows)?;
-    for secret in ["code", "access_token", "refresh_token", "id_token", "oai_is"] {
+    for secret in [
+        "code",
+        "access_token",
+        "refresh_token",
+        "id_token",
+        "oai_is",
+    ] {
         assert!(!text.contains(secret), "token body reached HTTP logs");
     }
 
