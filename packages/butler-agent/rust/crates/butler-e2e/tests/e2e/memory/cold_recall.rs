@@ -191,39 +191,18 @@ async fn assert_loaded_idle(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(
     };
     let commits = version();
     let started = Instant::now();
-    // One-second samples; the CPU check keeps its two five-second windows.
     let samples = idle_activity::sample_window(pid, Duration::from_secs(10), 10)
         .await?
         .unwrap();
     let (before, after) = (samples[0], samples[10]);
-    let mut cpu_windows = Vec::new();
-    for window in 1..=2 {
-        let (previous, current) = (samples[(window - 1) * 5], samples[window * 5]);
-        let cpu_user = current
-            .cpu_user_time
-            .zip(previous.cpu_user_time)
-            .map(|(a, b)| a - b);
-        let cpu_system = current
-            .cpu_system_time
-            .zip(previous.cpu_system_time)
-            .map(|(a, b)| a - b);
-        eprintln!(
-            "COLD-RECALL loaded_idle_window={window} cpu_user={cpu_user:?} cpu_system={cpu_system:?}"
+    // CPU and disk work may settle once (one event), but must not recur.
+    if before.cpu_user_time.is_some() && before.cpu_system_time.is_some() {
+        idle_activity::assert_no_recurring_activity(
+            "loaded idle worker CPU time",
+            &idle_activity::deltas(&samples, |sample| {
+                sample.cpu_user_time.unwrap() + sample.cpu_system_time.unwrap()
+            }),
         );
-        cpu_windows.push((cpu_user, cpu_system));
-    }
-    // Each consecutive sub-window must be quiet, not just free of disk work.
-    // Exact-zero CPU is a perf-tier check: recorded in every tier, enforced
-    // only in the isolated perf job, like `assert_wall_clock_budget!`.
-    let enforce = std::env::var("BUTLER_E2E_PERF").as_deref() == Ok("1");
-    eprintln!("COLD-RECALL loaded_idle_cpu enforced={enforce}");
-    for (cpu_user, cpu_system) in cpu_windows.into_iter().filter(|_| enforce) {
-        if let Some(delta) = cpu_user {
-            assert_eq!(delta, 0, "loaded idle worker consumed user CPU time");
-        }
-        if let Some(delta) = cpu_system {
-            assert_eq!(delta, 0, "loaded idle worker consumed system CPU time");
-        }
     }
     assert_eq!(version(), commits, "memory graph committed while idle");
     assert_eq!(before.read_chars, after.read_chars);
