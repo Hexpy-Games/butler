@@ -38,14 +38,14 @@ try {
         await toggle.click();
       }
       const row = sidebar.locator('[data-test-class="tree-row"][aria-label="Canon conversation"]');
-      await sidebar.getByRole("tab").nth(0).click();
+      await sidebar.getByRole("radio").nth(0).click();
       await page.evaluate(() => document.fonts.ready);
       assert.equal(await row.count(), 0, "project tree excludes the conversation");
       await page.screenshot({ path: join(output, `${theme}-${width}-tree.png`) });
-      await sidebar.getByRole("tab").nth(1).click();
+      await sidebar.getByRole("radio").nth(1).click();
       await row.first().waitFor();
       await page.screenshot({ path: join(output, `${theme}-${width}-recent.png`) });
-      await sidebar.getByRole("tab").nth(2).click();
+      await sidebar.getByRole("radio").nth(2).click();
       await row.first().waitFor();
       await page.screenshot({ path: join(output, `${theme}-${width}-running.png`) });
       await page.close();

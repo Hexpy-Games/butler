@@ -1,9 +1,12 @@
 import { useRef, type KeyboardEvent, type ReactNode } from "react";
+import { cn } from "../../lib/utils";
 import styles from "./SegmentedControl.module.css";
 
 export interface SegmentedControlOption {
   value: string;
   label: ReactNode;
+  /** A leading glyph; it supports the label, never replaces it. */
+  icon?: ReactNode;
   disabled?: boolean;
 }
 
@@ -14,13 +17,16 @@ export interface SegmentedControlProps {
   /** Accessible name of the group, e.g. "Period". */
   ariaLabel: string;
   size?: "sm" | "default";
+  /** Fill the container's width, the options sharing it equally. */
+  stretch?: boolean;
 }
 
 /**
  * A compact single-choice radiogroup for a secondary choice inside a page
- * (period, dataset, mode). Tabs switch panels; this switches what a panel shows.
+ * (period, dataset, mode, a list filter). Tabs switch panels; this switches
+ * what a panel shows.
  */
-export function SegmentedControl({ options, value, onValueChange, ariaLabel, size = "default" }: SegmentedControlProps) {
+export function SegmentedControl({ options, value, onValueChange, ariaLabel, size = "default", stretch = false }: SegmentedControlProps) {
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
   const enabled = options.map((option, index) => ({ option, index })).filter(({ option }) => !option.disabled);
   const selectedIndex = options.findIndex((option) => option.value === value);
@@ -40,7 +46,7 @@ export function SegmentedControl({ options, value, onValueChange, ariaLabel, siz
   };
 
   return (
-    <div className={styles.group} role="radiogroup" aria-label={ariaLabel} data-size={size} data-slot="segmented-control">
+    <div className={cn(styles.group, stretch && styles.stretch)} role="radiogroup" aria-label={ariaLabel} data-size={size} data-slot="segmented-control">
       {options.map((option, index) => {
         const checked = option.value === value;
         return (
@@ -57,6 +63,7 @@ export function SegmentedControl({ options, value, onValueChange, ariaLabel, siz
             onClick={() => { if (!checked) onValueChange(option.value); }}
             onKeyDown={(event) => move(event, index)}
           >
+            {option.icon}
             {option.label}
           </button>
         );
