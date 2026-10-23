@@ -120,6 +120,34 @@ fn a_handoff_fences_late_effects_and_keeps_followers_ready()
         execution::ensure_task_effect(&tx, "a", "session"),
         Err(Error::Invalid("stale_owner"))
     ));
+    let refs = vec!["late evidence".to_owned()];
+    assert!(matches!(
+        execution::submit_task(
+            &tx,
+            &context(),
+            "a",
+            &ExecutionScope {
+                session_id: "session",
+                turn_id: "old-turn",
+            },
+            &execution::Submission {
+                part_id: None,
+                result_id: "late-result",
+                result_refs: &refs,
+                evidence_refs: &refs,
+            }
+        ),
+        Err(Error::Invalid("stale_owner"))
+    ));
+    assert_eq!(
+        tx.query_row(
+            "SELECT count(*) FROM wm_results WHERE id='late-result'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        0
+    );
     assert_eq!(read_task(&tx, "a").unwrap(), moved);
     assert_ne!(read_task(&tx, "b").unwrap()["status"], "held");
     assert_eq!(
