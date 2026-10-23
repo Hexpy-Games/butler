@@ -217,9 +217,10 @@ def python_install_roots():
 
 
 def check_cmake_cache(text, stage, target, roots=None, python_prefix=None):
-    roots = cache_allowed_roots(stage, target) if roots is None else roots
-    python_roots = python_install_roots() if python_prefix is None else (
-        list(python_prefix) if isinstance(python_prefix, (list, tuple)) else [python_prefix])
+    # Cache values are compared resolved, so caller-supplied roots must be too.
+    roots = cache_allowed_roots(stage, target) if roots is None else [root.resolve() for root in roots]
+    python_roots = python_install_roots() if python_prefix is None else [root.resolve() for root in (
+        python_prefix if isinstance(python_prefix, (list, tuple)) else [python_prefix])]
     violations = []
     package_keys = {"protobuf_DIR", "Protobuf_DIR", "absl_DIR", "re2_DIR"}
     suffix = re.compile(r"(?:_DIR|_INCLUDE_DIRS?|_LIBRARY|_LIBRARIES|_LIBRARY_RELEASE|_EXECUTABLE)$")
