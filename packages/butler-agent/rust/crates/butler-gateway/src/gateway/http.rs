@@ -28,6 +28,7 @@ mod message_files;
 mod model_catalog;
 mod monitors;
 mod new_chat_briefing;
+mod opened_files;
 mod operation_output;
 mod params;
 mod personalization;
