@@ -83,7 +83,7 @@ class HostLinks(unittest.TestCase):
             binary.write_bytes(b'\xcf\xfa\xed\xfe')
             def inspect(args, **kwargs):
                 self.assertNotIn('(', args[-1])
-                self.assertEqual(Path(args[-1]).resolve(), binary)
+                self.assertEqual(Path(args[-1]).resolve(), binary.resolve())
                 return type('Result', (), {'stdout': 'binary:\n'})()
             with patch.object(guard.subprocess, 'run', side_effect=inspect) as run:
                 self.assertEqual(guard.check_path(Path(directory), 'darwin'), 1)
@@ -99,13 +99,17 @@ class HostLinks(unittest.TestCase):
                      'GIT_EXECUTABLE:FILEPATH=GIT_EXECUTABLE-NOTFOUND\n'
                      f'Python_EXECUTABLE:FILEPATH={sys.executable}\n'
                      f'CMAKE_MAKE_PROGRAM_EXECUTABLE:FILEPATH={stage}/tools/ninja\n')
-            recipe.check_cmake_cache(clean, stage, 'linux-x64')
+            # Linux roots come from the host filesystem; pin them so any build host can run this.
+            with patch.object(recipe.glob, 'glob', side_effect=lambda pattern: [pattern.rstrip('*')]), \
+                    patch.object(recipe.pathlib.Path, 'is_dir', return_value=True):
+                roots = recipe.cache_allowed_roots(stage, 'linux-x64')
+            recipe.check_cmake_cache(clean, stage, 'linux-x64', roots)
             for entry in ('Protobuf_DIR:PATH=/opt/homebrew/lib/cmake/protobuf',
                           'absl_DIR:PATH=/usr/local/lib/cmake/absl',
                           'X_LIBRARIES:STRING=/usr/lib/libc.so;/tmp/libbad.a',
                           're2_DIR:PATH=relative/package'):
                 with self.subTest(entry=entry), self.assertRaisesRegex(RuntimeError, 'outside allowed'):
-                    recipe.check_cmake_cache(entry, stage, 'linux-x64')
+                    recipe.check_cmake_cache(entry, stage, 'linux-x64', roots)
 
         with patch.object(recipe, 'command', side_effect=['/SDK', '/Xcode']):
             roots = recipe.cache_allowed_roots(stage, 'macos-arm64')
@@ -188,7 +192,7 @@ class HostLinks(unittest.TestCase):
             link = root / 'python'
             link.symlink_to(executable)
             with patch.object(recipe.sys, 'executable', str(link)):
-                self.assertIn(root / 'install', recipe.python_install_roots())
+                self.assertIn((root / 'install').resolve(), recipe.python_install_roots())
 
     # test-category: security
     def test_cache_reports_every_violation(self):
