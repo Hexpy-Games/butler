@@ -184,6 +184,21 @@ impl Fixture {
         (result, status, retained)
     }
 
+    /// Hold the existing writer lane at a deterministic boundary for read-pool probes.
+    pub async fn hold_writer(
+        storage: BtccStorage,
+        entered: tokio::sync::oneshot::Sender<()>,
+        release: std::sync::mpsc::Receiver<()>,
+    ) -> Result<(), StorageError> {
+        storage
+            .execute(move |_| {
+                entered.send(()).expect("writer barrier receiver");
+                release.recv().expect("writer barrier release");
+                Ok(())
+            })
+            .await
+    }
+
     pub fn config(&self, owner_id: &str) -> BtccStorageConfig {
         BtccStorageConfig {
             path: self.path.clone(),

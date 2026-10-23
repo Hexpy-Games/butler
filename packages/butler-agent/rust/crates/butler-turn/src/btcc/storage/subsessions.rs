@@ -7,8 +7,6 @@ mod decode;
 mod directions;
 mod files;
 mod parents;
-#[cfg(test)]
-pub(super) use parents::tests::queue_presence_excludes_held_children_and_does_not_wait_for_writer;
 mod records;
 
 pub use completion::turn_result_id as subsession_result_id;

@@ -2,9 +2,6 @@
 use super::{SqliteSubsessionRepository, StorageError};
 use rusqlite::params_from_iter;
 
-#[cfg(test)]
-pub(super) mod tests;
-
 /// A child's parent and optional policy role from the relation index.
 type ParentLink = (String, String, Option<String>);
 
