@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ci_policy import rust_jobs, windows_preview_jobs
 import ci_parts
 import ci_rust_inputs
+import ci_tool_path
 import ci_receipts
 from ci_main_baseline import latest_main_run
 from urllib.parse import urlencode
@@ -90,6 +91,7 @@ CI_CONSUMERS = (
         '.github/scripts/runner_cache.py', '.github/scripts/ci-changes.py',
         '.github/scripts/ci_policy.py', '.github/scripts/ci_parts.py',
         '.github/scripts/ci_consumer_test_support.py', '.github/scripts/ci_rust_inputs.py',
+        '.github/scripts/ci_tool_path.py',
         '.github/scripts/ci_input_tests.py', '.github/scripts/ci_tier_tests.py',
         '.github/scripts/ci_ds_approval_tests.py',
         '.github/scripts/ci_receipts.py', '.github/scripts/ci_main_failure.py',
@@ -110,7 +112,7 @@ CI_CONSUMERS = (
         '.github/scripts/agent-provenance.py', '.github/scripts/cargo-artifact-cache.py',
         '.github/scripts/cargo-target-release.py', '.github/scripts/runner_cache.py',
         '.github/scripts/check-gate.py', '.github/scripts/ci_policy.py',
-        '.github/actions/release-python/**',
+        '.github/scripts/ci_tool_path.py', '.github/actions/release-python/**',
         '.github/actions/rust-agent-setup/*', '.github/actions/build-agent-archive/*',
         '.github/workflows/linux-packages.yml', '.github/workflows/macos-app-package.yml',
         '.github/scripts/*windows*safety.py', '.github/scripts/prepare-windows-zstd.py')),
@@ -427,7 +429,10 @@ def select(event, workflow):
         jobs = windows_preview_jobs(dict(outputs, windows=str(native).lower()), os.environ['GITHUB_EVENT_NAME'])
     if os.environ['GITHUB_EVENT_NAME'] == 'pull_request' and workflow != 'rust-quality.yml':
         jobs = dict.fromkeys(jobs, False)
+    # PR smoke builds in place; tool-call path changes add their stub E2E set there.
+    tool_e2e = os.environ['GITHUB_EVENT_NAME'] == 'pull_request' and any(map(ci_tool_path.selected, paths))
     outputs.update({'parts': json.dumps(parts), 'docs-only': str(not required).lower(), 'electron': outputs['package'],
+                    'tool-e2e': str(tool_e2e).lower(),
                     'tier': level, 'candidate': candidate, 'jobs': json.dumps(jobs),
                     'artifacts': json.dumps(artifacts)})
     state = dict(schema=1, repository=repository, workflow=workflow, pr=pr.get('number'),
@@ -444,7 +449,8 @@ def select(event, workflow):
                f'Base: `{base}`; paths: {len(paths)}',
                f'Run groups: {", ".join(k for k, v in outputs.items() if v == "true")}',
                'Reused: ' + json.dumps(job_reuse or reuse),
-               'E2E / perf: ' + ('integration only' if candidate else 'NONE (smoke)'),
+               'E2E / perf: ' + ('integration only' if candidate else
+                                 'tool-call path stub E2E' if tool_e2e else 'NONE (smoke)'),
                'Jobs: ' + json.dumps(jobs)]
     with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as output:
         output.write('\n\n'.join(summary) + '\n')
