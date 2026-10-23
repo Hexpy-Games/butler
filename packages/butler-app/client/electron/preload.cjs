@@ -79,6 +79,7 @@ function bridgeErrorEnvelope(error) {
   const status = safeBridgeStatus(error && error.status);
   return {
     schema: bridgeErrorSchema,
+    ...(Number.isSafeInteger(error?.current?.revision) ? { current: { revision: error.current.revision } } : {}),
     code,
     ...(code === "hook_blocked" && typeof error?.message === "string" ? { hook_reason: error.message.slice(0, 16384) } : {}),
     ...(status === undefined ? {} : { status }),
@@ -287,6 +288,7 @@ async function requestJson(path, options = {}) {
     const error = new Error(body?.error?.message ?? `Request failed with status ${response.status}.`);
     error.code = body?.error?.code ?? "request_failed";
     error.status = response.status;
+    if (Number.isSafeInteger(body?.error?.current?.revision)) error.current = { revision: body.error.current.revision };
     throw error;
   }
   if (!body || body.protocol_version !== "butler.app.v1") {
@@ -1418,6 +1420,16 @@ const butlerApp = Object.freeze({
     const params = new URLSearchParams({ query });
     return requestJson(`/command-palette?${params.toString()}`);
   },
+  getCanon: ({ id }) => requestBridgeResult(`/projects/${encodeURIComponent(id)}/canon`),
+  getCanonPlan: ({ id }) => requestBridgeResult(`/canon/plans/${encodeURIComponent(id)}`),
+  getCanonEpic: ({ id }) => requestBridgeResult(`/canon/epics/${encodeURIComponent(id)}`),
+  getWorkTasks: ({ id }) => requestBridgeResult(`/works/${encodeURIComponent(id)}/tasks`),
+  createCanonPlan: ({ id, body }) => requestCanonWrite(`/projects/${encodeURIComponent(id)}/canon/plans`, "POST", body),
+  editCanonPlan: ({ id, body }) => requestCanonWrite(`/canon/plans/${encodeURIComponent(id)}`, "PATCH", body),
+  orderCanonPlan: ({ id, body }) => requestCanonWrite(`/canon/plans/${encodeURIComponent(id)}/order`, "POST", body),
+  orderCanonBacklog: ({ id, body }) => requestCanonWrite(`/projects/${encodeURIComponent(id)}/canon/backlog/order`, "POST", body),
+  createCanonEpic: ({ id, body }) => requestCanonWrite(`/projects/${encodeURIComponent(id)}/canon/epics`, "POST", body),
+  editCanonEpic: ({ id, body }) => requestCanonWrite(`/canon/epics/${encodeURIComponent(id)}`, "PATCH", body),
   getSessionTaskGraphs: (input) => requestTaskGraph("sessions", "task-graphs", input),
   getPlanTaskGraph: (input) => requestTaskGraph("plans", "task-graph", input),
   getTaskDocument: (input) => requestTaskGraph("tasks", "document", input),
@@ -1566,6 +1578,10 @@ const butlerApp = Object.freeze({
 });
 
 contextBridge.exposeInMainWorld("butlerApp", butlerApp);
+
+function requestCanonWrite(path, method, body) {
+  return requestBridgeResult(path, { method, body: JSON.stringify(body) });
+}
 
 // Keep the sandboxed preload self-contained, on its existing authenticated channel.
 function requestTaskGraph(scope, tail, { id, revision, cursor, limit } = {}) {

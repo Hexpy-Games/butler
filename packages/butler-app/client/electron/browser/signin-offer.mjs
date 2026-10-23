@@ -6,7 +6,7 @@ import { ipcMain } from "electron";
 const OFFER_MS = 120_000;
 
 export function installSignInOffers(browser) {
-  ipcMain.on("butler-browser:signin-candidate", (event, input) => {
+  ipcMain.on("butler-browser:signin-candidate", async (event, input) => {
     const tab = [...browser.tabs.values()].find(item => item.view?.webContents === event.sender);
     const frame = event.senderFrame;
     if (!tab || !frame || tab.owner === "mine" || tab.profile !== "signed_in" || tab.holder !== "user") return;
@@ -17,6 +17,8 @@ export function installSignInOffers(browser) {
     const username = typeof input?.username === "string" ? input.username.slice(0, 256) : "";
     const password = typeof input?.password === "string" && input.password.length <= 1024 ? input.password : "";
     if (!username || !password) return;
+    // Without a password store there is nothing to save to, so nothing is offered.
+    if (!await browser.signInStoreAvailable?.().catch(() => false) || tab.closing || browser.tabs.get(tab.id) !== tab) return;
     clearOffer(tab);
     tab.saveOffer = { origin, username, password, timer: setTimeout(() => { clearOffer(tab); browser.publish(); }, OFFER_MS) };
     browser.publish();
@@ -30,13 +32,21 @@ export function clearOffer(tab) {
   tab.saveOffer = null;
 }
 
-/** Saves the offered sign-in; the password is dropped from main either way. */
-export async function saveOffer(browser, id) {
-  const tab = browser.tabs.get(id);
-  const offer = tab?.saveOffer;
-  if (!offer) return { ok: false, error: { code: "signin_offer_expired" } };
+/** Saves the offered sign-in. The offer, and its password, leave main once saved;
+ * a failed save keeps it for another try until it expires. */
+export function saveOffer(browser, id) {
+  const offer = browser.tabs.get(id)?.saveOffer;
+  if (!offer) return Promise.resolve({ ok: false, error: { code: "signin_offer_expired" } });
+  offer.saving ??= save(browser, id, offer).finally(() => { offer.saving = null; });
+  return offer.saving;
+}
+
+async function save(browser, id, offer) {
   const input = { origin: offer.origin, username: offer.username, password: offer.password };
-  clearOffer(tab); browser.publish();
-  try { return await browser.saveSignIn?.(input) ?? { ok: false, error: { code: "signin_unavailable" } }; }
-  finally { input.password = null; }
+  try {
+    const result = await browser.saveSignIn?.(input) ?? { ok: false, error: { code: "signin_unavailable" } };
+    const tab = browser.tabs.get(id);
+    if (result?.ok && tab?.saveOffer === offer) { clearOffer(tab); browser.publish(); }
+    return result;
+  } finally { input.password = null; }
 }

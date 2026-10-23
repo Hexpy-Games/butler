@@ -71,6 +71,7 @@ export * from "./components/IconButton";
 export * from "./components/Kbd";
 export * from "./components/IconSlot";
 export * from "./components/UnreadDot";
+export * from "./components/Avatar";
 export * from "./components/IconTile";
 export * from "./components/ProviderLogo";
 export * from "./components/AspectFrame";
