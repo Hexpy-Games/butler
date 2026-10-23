@@ -61,6 +61,8 @@ mod question_followup;
 mod queue;
 mod queue_dispatcher;
 mod queue_view;
+#[cfg(feature = "e2e-fixtures")]
+mod queue_wait_fixture;
 mod quota_events;
 mod read_model;
 mod recovery;

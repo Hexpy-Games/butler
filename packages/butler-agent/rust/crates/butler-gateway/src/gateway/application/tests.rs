@@ -161,10 +161,15 @@ async fn delivered_transcript_final_projects_and_settles_exact_queue_claim() {
     app.start_dispatch().await.unwrap();
     let mut plan_request = command("projection-id", "question");
     plan_request.request.plan_mode = Some(json!(true));
+    plan_request.request.subsession_result = Some(butler_turn::btcc::SubsessionResultContext {
+        relation_id: "startup-relation".into(),
+        result_id: "startup-result".into(),
+        safe_title: "Child result".into(),
+    });
     let accepted = app.send_message(plan_request).await.unwrap();
     assert!(
         accepted.queued.is_some(),
-        "admission must wait for executor readiness"
+        "result admission must wait for executor readiness"
     );
     assert!(accepted.turn.is_none());
     assert!(native.0.lock().unwrap().is_empty());

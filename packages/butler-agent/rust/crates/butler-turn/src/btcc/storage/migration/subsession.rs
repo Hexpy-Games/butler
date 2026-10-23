@@ -133,7 +133,9 @@ fn migrate_followup_results(db: &Connection) -> rusqlite::Result<()> {
     db.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_steward_results_relation \
          ON btcc_steward_results(relation_id); \
-         CREATE INDEX IF NOT EXISTS idx_steward_results_failure ON btcc_steward_results(failure_key)",
+         CREATE INDEX IF NOT EXISTS idx_steward_results_failure ON btcc_steward_results(failure_key); \
+         CREATE INDEX IF NOT EXISTS idx_steward_results_turn ON btcc_steward_results(relation_id,child_turn_id); \
+         CREATE INDEX IF NOT EXISTS idx_subsession_outbox_relation_status ON btcc_subsession_outbox(relation_id,status)",
     )
 }
 

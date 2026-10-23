@@ -10,7 +10,7 @@ use crate::gateway::application::{
     monitoring::usage::SCHEDULE_TURN_SQL,
     progress_view::LIVE_ROWS_SQL,
     projection::HAS_KIND_SQL,
-    queue::RESTORE_CLAIM_SQL,
+    queue::{CLAIM_SQL, RESTORE_CLAIM_SQL},
     queue_dispatcher::{LEASE_DEADLINE_SQL, QUEUED_CHATS_SQL, QUEUED_ROWS_SQL},
     recovery::DISPATCHING_SQL,
     retry::RUNTIME_FAULT_SQL,
@@ -151,6 +151,12 @@ fn assert_schedule_matches(db: &Connection) {
 
 /// Retained user rows cannot fill the dispatch window ahead of newer results.
 fn result_order_uses_index(db: &Connection) {
+    let claimed = plan(db, CLAIM_SQL);
+    assert!(
+        claimed.contains("session_queued_messages_result_order_idx"),
+        "{claimed}"
+    );
+    assert!(!claimed.contains("TEMP B-TREE"), "{claimed}");
     let ordered = plan(db, QUEUED_ROWS_SQL);
     assert!(
         ordered.contains("session_queued_messages_result_order_idx"),

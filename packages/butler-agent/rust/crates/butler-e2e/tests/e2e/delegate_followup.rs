@@ -5,6 +5,8 @@
     clippy::panic,
     reason = "test assertions"
 )]
+#[path = "delegate_followup/delivery_wake.rs"]
+mod delivery_wake;
 #[path = "delegate_followup/failure.rs"]
 mod failure;
 #[path = "delegate_followup/ordering.rs"]

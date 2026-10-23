@@ -1,7 +1,7 @@
 //! Long-lived FIFO session queue dispatch and lease recovery ownership.
 
 use parking_lot::Mutex;
-use std::{sync::Arc, time::Duration};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use chrono::DateTime;
 use rusqlite::{Connection, OptionalExtension, params};
@@ -23,6 +23,8 @@ const FIFO_WINDOW: usize = 20;
 pub(super) struct QueueWake {
     sender: mpsc::Sender<Command>,
     cancellation: CancellationToken,
+    pending: Arc<Mutex<HashSet<Option<String>>>>,
+    changed: Arc<Notify>,
 }
 
 impl QueueWake {
@@ -48,11 +50,18 @@ impl QueueWake {
         if self.cancellation.is_cancelled() {
             return Ok(());
         }
-        match self.sender.send(Command::Wake(chat)).await {
-            Ok(()) => Ok(()),
-            Err(_) if self.cancellation.is_cancelled() => Ok(()),
-            Err(error) => Err(GatewayApplicationError::internal_from(error)),
+        if self.sender.is_closed() {
+            return Err(GatewayApplicationError::internal());
         }
+        let mut pending = self.pending.lock();
+        if chat.is_none() {
+            pending.clear();
+        }
+        if !pending.contains(&None) {
+            pending.insert(chat);
+        }
+        self.changed.notify_one();
+        Ok(())
     }
 
     pub(super) async fn drain_chat(&self, chat_id: String) -> Result<(), GatewayApplicationError> {
@@ -77,6 +86,7 @@ struct Inner {
     close: Mutex<CloseState>,
     closed: Notify,
     cancellation: CancellationToken,
+    wake: QueueWake,
 }
 struct CloseState {
     started: bool,
@@ -84,7 +94,6 @@ struct CloseState {
 }
 enum Command {
     Initialize(Box<AppApplication>),
-    Wake(Option<String>),
     Drain {
         chat_id: String,
         reply: oneshot::Sender<Result<(), GatewayApplicationError>>,
@@ -95,7 +104,13 @@ enum Command {
 impl QueueDispatcher {
     pub(super) fn start(cancellation: CancellationToken) -> (Self, QueueWake) {
         let (sender, receiver) = mpsc::channel(COMMAND_CAPACITY);
-        let task = tokio::spawn(run(receiver, cancellation.clone()));
+        let wake = QueueWake {
+            sender: sender.clone(),
+            cancellation: cancellation.clone(),
+            pending: Arc::new(Mutex::new(HashSet::new())),
+            changed: Arc::new(Notify::new()),
+        };
+        let task = tokio::spawn(run(receiver, cancellation.clone(), wake.clone()));
         let owner = Self {
             inner: Arc::new(Inner {
                 sender: sender.clone(),
@@ -106,15 +121,10 @@ impl QueueDispatcher {
                 }),
                 closed: Notify::new(),
                 cancellation: cancellation.clone(),
+                wake: wake.clone(),
             }),
         };
-        (
-            owner,
-            QueueWake {
-                sender,
-                cancellation,
-            },
-        )
+        (owner, wake)
     }
 
     pub(super) async fn initialize(
@@ -129,11 +139,7 @@ impl QueueDispatcher {
     }
 
     pub(super) async fn wake_chat(&self, chat_id: String) -> Result<(), GatewayApplicationError> {
-        self.inner
-            .sender
-            .send(Command::Wake(Some(chat_id)))
-            .await
-            .map_err(GatewayApplicationError::internal_from)
+        self.inner.wake.chat(chat_id).await
     }
 
     pub(super) async fn close(&self) -> Result<(), GatewayApplicationError> {
@@ -187,6 +193,7 @@ impl Drop for Inner {
 async fn run(
     mut receiver: mpsc::Receiver<Command>,
     cancellation: CancellationToken,
+    wake: QueueWake,
 ) -> Result<(), GatewayApplicationError> {
     let mut application: Option<AppApplication> = None;
     let mut deadline: Option<Duration> = None;
@@ -194,17 +201,20 @@ async fn run(
         let delay = deadline.map(tokio::time::sleep);
         tokio::select! {
             () = cancellation.cancelled() => return Ok(()),
+            () = wake.changed.notified() => {
+                let chats: Vec<_> = wake.pending.lock().drain().collect();
+                if let Some(app) = application.as_ref() {
+                    for chat in chats {
+                        if !cycle(&cancellation, app, chat.as_deref()).await { return Ok(()); }
+                    }
+                    deadline = next_deadline(app).await.ok().flatten();
+                }
+            }
             command = receiver.recv() => match command {
                 Some(Command::Initialize(app)) => {
                     let app = application.insert(*app);
                     if !cycle(&cancellation, app, None).await { return Ok(()); }
                     deadline = next_deadline(app).await.ok().flatten();
-                }
-                Some(Command::Wake(chat)) => {
-                    if let Some(app) = application.as_ref() {
-                        if !cycle(&cancellation, app, chat.as_deref()).await { return Ok(()); }
-                        deadline = next_deadline(app).await.ok().flatten();
-                    }
                 }
                 Some(Command::Drain { chat_id, reply }) => {
                     let result = match application.as_ref() {
@@ -290,6 +300,8 @@ async fn drain_chat(
                 .queue_waits_for_child(app.runtime_hint(chat_id).await?)
                 .await?
         {
+            #[cfg(feature = "e2e-fixtures")]
+            super::queue_wait_fixture::observed(app, chat_id).await?;
             return Ok(());
         }
         let claim = claim_row(app, chat_id, row.id.clone()).await?;

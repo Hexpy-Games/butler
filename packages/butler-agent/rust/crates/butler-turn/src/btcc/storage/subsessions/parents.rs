@@ -78,23 +78,33 @@ impl SqliteSubsessionRepository {
 }
 
 /// Queue admission reads only legacy execution state. An approval-held child is
-/// idle; a pending result still owns its place until admission to the parent.
-const QUEUE_WAITS_FOR_CHILD: &str = "SELECT EXISTS(
-    SELECT 1 FROM btcc_session_relations r
+/// idle. A terminal child keeps its place until closeout has saved its result;
+/// a pending result keeps it until admission to the parent.
+const QUEUE_WAITS_FOR_CHILD: &str = "WITH RECURSIVE waiting(parent) AS (
+    VALUES(?1)
+    UNION
+    SELECT r.child_session_id FROM waiting w
+    JOIN btcc_session_relations r ON r.parent_session_id=w.parent
+    JOIN btcc_turns t ON t.turn_id=(SELECT latest.turn_id FROM btcc_turns latest
+        WHERE latest.session_id=r.child_session_id ORDER BY latest.rowid DESC LIMIT 1)
+    WHERE t.semantic_state IN ('admitted','delivery_committed')
+        AND t.suspension_reason='waiting_for_worker'
+        AND NOT EXISTS(SELECT 1 FROM btcc_steward_results x
+            WHERE x.relation_id=r.relation_id AND x.child_turn_id=t.turn_id)
+) SELECT EXISTS(
+    SELECT 1 FROM waiting w
+    JOIN btcc_session_relations r ON r.parent_session_id=w.parent
     JOIN btcc_subsession_delegations d ON d.relation_id=r.relation_id
-    WHERE r.parent_session_id=?1 AND (
-        (r.activity_terminal=0 AND (
-            EXISTS(SELECT 1 FROM btcc_turns t WHERE t.turn_id=(
-                SELECT latest.turn_id FROM btcc_turns latest
-                WHERE latest.session_id=r.child_session_id ORDER BY latest.rowid DESC LIMIT 1)
-                AND ((t.semantic_state IN ('admitted','delivery_committed')
-                      AND t.suspension_reason IS NULL)
-                     OR t.suspension_reason='waiting_for_worker'))
-            OR (d.dispatch_state IN ('pending','enqueued') AND d.dispatch_intent_json IS NOT NULL
-                AND NOT EXISTS(SELECT 1 FROM btcc_turns t WHERE t.session_id=r.child_session_id))))
-        OR EXISTS(SELECT 1 FROM btcc_steward_results x
-            JOIN btcc_subsession_outbox o ON o.result_id=x.result_id
-            WHERE x.relation_id=r.relation_id AND o.status='pending')))
+    WHERE EXISTS(SELECT 1 FROM btcc_turns t WHERE t.turn_id=(
+        SELECT latest.turn_id FROM btcc_turns latest
+        WHERE latest.session_id=r.child_session_id ORDER BY latest.rowid DESC LIMIT 1)
+        AND t.suspension_reason IS NULL
+        AND NOT EXISTS(SELECT 1 FROM btcc_steward_results x
+            WHERE x.relation_id=r.relation_id AND x.child_turn_id=t.turn_id))
+    OR (d.dispatch_state IN ('pending','enqueued') AND d.dispatch_intent_json IS NOT NULL
+        AND NOT EXISTS(SELECT 1 FROM btcc_turns t WHERE t.session_id=r.child_session_id))
+    OR EXISTS(SELECT 1 FROM btcc_subsession_outbox o
+        WHERE o.relation_id=r.relation_id AND o.status='pending'))
 ";
 
 impl SqliteSubsessionRepository {
@@ -106,5 +116,42 @@ impl SqliteSubsessionRepository {
                     .map_err(StorageError::sqlite)
             })
             .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // test-category: format-pin
+    #[test]
+    fn queue_child_presence_uses_indexed_legacy_links() {
+        let mut db = rusqlite::Connection::open_in_memory().unwrap();
+        crate::btcc::storage::schema::create_current(&db).unwrap();
+        crate::btcc::storage::migration::apply_transaction(&mut db).unwrap();
+        let plan = db
+            .prepare(&format!("EXPLAIN QUERY PLAN {QUEUE_WAITS_FOR_CHILD}"))
+            .unwrap()
+            .query_map(["parent"], |r| r.get::<_, String>(3))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+            .join("\n");
+        eprintln!("{plan}");
+        for index in [
+            "idx_btcc_turns_session",
+            "idx_steward_results_turn",
+            "idx_subsession_outbox_relation_status",
+        ] {
+            assert!(plan.contains(index), "{plan}");
+        }
+        assert!(plan.matches("parent_session_id=?").count() >= 2, "{plan}");
+        for alias in ["r", "d", "t", "latest", "x", "o"] {
+            assert!(
+                !plan.lines().any(|line| line == format!("SCAN {alias}")),
+                "{plan}"
+            );
+        }
+        assert!(!plan.contains("TEMP B-TREE"), "{plan}");
     }
 }

@@ -23,6 +23,7 @@ pub(super) fn start(application: &AppApplication) {
                 () = shutdown.cancelled() => return,
                 change = changes.recv() => change,
             };
+            let lagged = matches!(&change, Err(RecvError::Lagged(_)));
             let parent = change.as_ref().ok().map(|(parent, _)| parent.clone());
             let (kind, payload) = match change {
                 Ok((parent, child)) => (
@@ -41,7 +42,9 @@ pub(super) fn start(application: &AppApplication) {
                     .unwrap_or(None),
                 None => None,
             };
-            if let Err(error) = queue_wake.wake(chat).await {
+            if (chat.is_some() || lagged)
+                && let Err(error) = queue_wake.wake(chat).await
+            {
                 butler_core::diagnostic!("[gateway] subsession queue wake failed: {error}");
             }
             let subscribers = subscribers.clone();

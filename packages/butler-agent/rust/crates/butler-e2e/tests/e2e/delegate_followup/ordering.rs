@@ -4,8 +4,19 @@ use super::*;
 #[tokio::test]
 async fn child_result_precedes_followups_queued_while_parent_waits() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    ordered(false).await
+}
+
+#[tokio::test]
+async fn quit_while_followup_waits_on_delegated_work() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    ordered(true).await
+}
+
+async fn ordered(restart: bool) -> Result<(), HarnessError> {
     let (url, script, server) = stub::start(true).await?;
-    let s = Setup::new("CHILD-RESULT-BEFORE-FOLLOWUPS")?
+    let mut s = Setup::new("CHILD-RESULT-BEFORE-FOLLOWUPS")?
+        .app_supervisor()
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", &url)
         .start()
@@ -18,7 +29,7 @@ async fn child_result_precedes_followups_queued_while_parent_waits() -> Result<(
     for text in followups {
         let accepted =
             s.gw.post(
-                "/session-queue",
+                "/messages",
                 json!({
                     "chat_id":"general", "text":text,
                     "client_message_id":uuid::Uuid::new_v4().to_string()
@@ -26,6 +37,8 @@ async fn child_result_precedes_followups_queued_while_parent_waits() -> Result<(
             )
             .await?;
         assert_eq!(accepted.status, 202, "{accepted:?}");
+        assert!(accepted.data()["queued"]["id"].is_string(), "{accepted:?}");
+        assert!(accepted.data()["accepted"].is_null(), "{accepted:?}");
     }
     assert!(
         !script
@@ -35,6 +48,19 @@ async fn child_result_precedes_followups_queued_while_parent_waits() -> Result<(
             .iter()
             .any(|body| { followups.contains(&request_text(body).as_str()) })
     );
+    if restart {
+        assert!(s.agent.release_foreground_lease());
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while s.agent.is_running() {
+            assert!(
+                Instant::now() < deadline,
+                "graceful App quit did not finish"
+            );
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(s.agent.reap().unwrap().success());
+        s.gw = s.agent.start_again().await?;
+    }
     script.release.notify_one();
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
@@ -55,6 +81,14 @@ async fn child_result_precedes_followups_queued_while_parent_waits() -> Result<(
                 .collect();
             assert_eq!(ordered.len(), 3, "{ordered:?}");
             assert!(ordered[0].contains("Delegated result"), "{ordered:?}");
+            assert!(
+                ordered[0].contains(if restart {
+                    "status: failed"
+                } else {
+                    "status: success"
+                }),
+                "{ordered:?}"
+            );
             assert_eq!(&ordered[1..], &followups, "{ordered:?}");
             let result = messages
                 .iter()
@@ -83,6 +117,6 @@ async fn child_result_precedes_followups_queued_while_parent_waits() -> Result<(
     Ok(())
 }
 
-fn request_text(body: &Value) -> String {
+pub(super) fn request_text(body: &Value) -> String {
     butler_e2e::e2e::matching::key("/codex/responses", body, &Default::default()).user_request
 }
