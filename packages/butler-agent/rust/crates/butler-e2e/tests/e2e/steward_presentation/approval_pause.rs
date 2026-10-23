@@ -77,30 +77,3 @@ pub(crate) async fn held(s: &Scenario, script: &stub::Script) -> Result<(), Harn
     })
     .await
 }
-
-/// A dispatcher may win the claim before the synchronous send returns.
-pub(crate) async fn turn_id(s: &Scenario, text: &str) -> Result<String, HarnessError> {
-    let sent = s.gw.say("general", text).await?;
-    if let Ok(id) = butler_e2e::e2e::scenario::accepted_turn_id(&sent) {
-        return Ok(id);
-    }
-    assert!(sent["queued"]["id"].is_string(), "{sent}");
-    let deadline = Instant::now() + Duration::from_secs(20);
-    loop {
-        if let Some(message) =
-            s.gw.messages("general")
-                .await?
-                .iter()
-                .find(|m| m["role"] == "user" && m["text"] == text)
-        {
-            return Ok(message["turn_id"].as_str().unwrap().into());
-        }
-        assert!(
-            Instant::now() < deadline,
-            "parent message did not start
-{}",
-            s.agent.logs()
-        );
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-}

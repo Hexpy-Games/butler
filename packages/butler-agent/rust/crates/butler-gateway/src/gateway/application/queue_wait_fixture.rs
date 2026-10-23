@@ -2,6 +2,10 @@
 use super::{AppApplication, AppStorageError, GatewayApplicationError, app_error};
 use tokio::io::AsyncWriteExt;
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "stub-only non-HTTP loopback control"
+)]
 pub(super) async fn observed(
     app: &AppApplication,
     chat: &str,
@@ -12,6 +16,12 @@ pub(super) async fn observed(
     let Ok(address) = std::env::var("BUTLER_E2E_QUEUE_WAIT_OBSERVER") else {
         return Ok(());
     };
+    let address: std::net::SocketAddr = address
+        .parse()
+        .map_err(GatewayApplicationError::internal_from)?;
+    if !address.ip().is_loopback() {
+        return Err(GatewayApplicationError::internal());
+    }
     let chat = chat.to_owned();
     let turn: String = app
         .storage

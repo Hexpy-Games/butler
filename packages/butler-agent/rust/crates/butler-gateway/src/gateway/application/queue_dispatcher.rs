@@ -44,14 +44,17 @@ impl QueueWake {
         self.wake(Some(chat_id)).await
     }
 
-    pub(super) async fn wake(&self, chat: Option<String>) -> Result<(), GatewayApplicationError> {
+    pub(super) fn wake(
+        &self,
+        chat: Option<String>,
+    ) -> std::future::Ready<Result<(), GatewayApplicationError>> {
         // Terminal projection still settles claims after queue admission stops.
         // Persisted waiting input will be dispatched by the next process.
         if self.cancellation.is_cancelled() {
-            return Ok(());
+            return std::future::ready(Ok(()));
         }
         if self.sender.is_closed() {
-            return Err(GatewayApplicationError::internal());
+            return std::future::ready(Err(GatewayApplicationError::internal()));
         }
         let mut pending = self.pending.lock();
         if chat.is_none() {
@@ -61,7 +64,7 @@ impl QueueWake {
             pending.insert(chat);
         }
         self.changed.notify_one();
-        Ok(())
+        std::future::ready(Ok(()))
     }
 
     pub(super) async fn drain_chat(&self, chat_id: String) -> Result<(), GatewayApplicationError> {
@@ -120,7 +123,7 @@ impl QueueDispatcher {
                     result: None,
                 }),
                 closed: Notify::new(),
-                cancellation: cancellation.clone(),
+                cancellation,
                 wake: wake.clone(),
             }),
         };
