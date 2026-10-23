@@ -125,9 +125,10 @@ impl CodexState {
             if let Some(item) = event.get("item").filter(|value| value.is_object()) {
                 self.output.push(item.clone());
             }
-        } else if kind == "response.completed"
+        } else if matches!(kind, "response.completed" | "response.incomplete")
             && let Some(response) = event.get("response").filter(|value| value.is_object())
         {
+            // An incomplete Response (its output limit) is terminal, not a dropped stream.
             self.emit(observer, &serde_json::json!({"type":"completed","streamId":self.stream_id(event),"status":"completed","raw":event}));
             return Ok(Some(response.clone()));
         }
@@ -172,8 +173,10 @@ impl CodexState {
                 .filter(Value::is_string)
                 .unwrap_or_else(|| Value::String(format!("codex-{}", clock.now_epoch_millis()))),
         );
-        if let Some(model) = completed.get("model") {
-            response.insert("model".into(), model.clone());
+        for key in ["model", "status", "incomplete_details"] {
+            if let Some(value) = completed.get(key) {
+                response.insert(key.into(), value.clone());
+            }
         }
         response.insert("output".into(), Value::Array(self.output));
         if !self.fallback_text.is_empty() {
