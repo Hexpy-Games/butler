@@ -43,6 +43,16 @@ impl AppSubsessions {
 }
 
 impl AppSubsessionPort for AppSubsessions {
+    fn worker_settings_changed(&self) -> ApplicationFuture<()> {
+        let service = self.service.clone();
+        Box::pin(async move {
+            service
+                .admit_waiting_workers()
+                .await
+                .map_err(GatewayApplicationError::internal_from)
+        })
+    }
+
     fn changes(&self) -> Option<tokio::sync::broadcast::Receiver<(String, String)>> {
         Some(self.service.subscribe_changes())
     }

@@ -8,7 +8,7 @@
 #[path = "worker_cap/plans.rs"]
 mod plans;
 #[path = "worker_cap/recovery.rs"]
-mod recovery;
+pub(crate) mod recovery;
 #[path = "worker_cap/service.rs"]
 mod service;
 #[path = "worker_cap/stub.rs"]
@@ -252,7 +252,7 @@ fn assert_pending_direction(s: &Scenario, row: &Value) -> Result<(), HarnessErro
         "SELECT status,defer_until_first_result FROM btcc_subsession_directions WHERE relation_id=?1",
         [row["relation"]["relation_id"].as_str().unwrap()], |r| Ok((r.get(0)?,r.get(1)?)))?;
     assert_eq!(state, ("pending".into(), true));
-    let count: u64 = db.query_row("SELECT count(*) FROM btcc_subsession_delegations WHERE child_role='worker' AND dispatch_state='enqueued'", [], |r| r.get(0))?;
+    let count: u64 = db.query_row("SELECT count(*) FROM btcc_subsession_delegations d JOIN btcc_session_relations r USING(relation_id) WHERE r.activity_role='worker' AND d.dispatch_state='enqueued' AND NOT EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=d.relation_id)", [], |r| r.get(0))?;
     assert_eq!(count, 2);
     Ok(())
 }

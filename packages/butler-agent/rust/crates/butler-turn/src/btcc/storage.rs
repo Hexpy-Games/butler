@@ -69,8 +69,9 @@ pub use subsessions::{
     ChildEnvelope, ChildRole, DispatchIntent, DispatchMetadata, EnvelopeMessage, EnvelopePeer,
     EnvelopeRaw, EnvelopeRouting, EnvelopeSender, NativeStewardContext, PacketExecutionMode,
     PacketPlanAction, PacketWorkerProfile, ParentResultInput, ParentResultRoute, ParentWorkRef,
-    SqliteSubsessionRepository, StewardResultInput, StoredSubsessionDelegation,
-    StoredSubsessionDirection, SubsessionCreate, SubsessionDispatchState, SubsessionPacket,
+    RETRY_WORKER_SQL, RUNNING_WORKERS_SQL, SqliteSubsessionRepository, StewardResultInput,
+    StoredSubsessionDelegation, StoredSubsessionDirection, SubsessionCreate,
+    SubsessionDispatchState, SubsessionPacket, WAITING_WORKERS_SQL, WORKER_RESULT_MARKER_SQL,
     WorkerResultInput, subsession_result_id,
 };
 pub use tool_journal::{

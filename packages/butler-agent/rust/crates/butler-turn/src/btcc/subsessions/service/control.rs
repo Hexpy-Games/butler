@@ -337,14 +337,26 @@ impl SubsessionService {
                 continue;
             }
             relations.insert(direction.relation_id.clone());
-            if !self.child_turn_running(&relation.child_session_id).await? {
-                self.enqueue_direction(&relation, &direction).await?;
+            if relation.packet.child_role == crate::btcc::ChildRole::Worker {
+                self.repository
+                    .restore_waiting_direction(relation.relation_id.clone())
+                    .await
+                    .map_err(BtccError::from)?;
+            }
+            if relation.packet.child_role != crate::btcc::ChildRole::Worker
+                && !self.child_turn_running(&relation.child_session_id).await?
+                && let Err(error) = self.enqueue_direction(&relation, &direction).await
+            {
+                butler_core::diagnostic!(
+                    "[native-btcc] direction recovery deferred code={}",
+                    error.code()
+                );
             }
         }
         Ok(())
     }
 
-    async fn enqueue_direction(
+    pub(super) async fn enqueue_direction(
         &self,
         relation: &StoredSubsessionDelegation,
         requested: &StoredSubsessionDirection,
@@ -356,6 +368,14 @@ impl SubsessionService {
             .map_err(BtccError::from)?
             .unwrap_or_else(|| requested.clone());
         if relation.packet.child_role == crate::btcc::ChildRole::Worker {
+            if self
+                .repository
+                .worker_turn_unsettled(relation.relation_id.clone())
+                .await
+                .map_err(BtccError::from)?
+            {
+                return Ok(());
+            }
             let current = self
                 .repository
                 .relation_by_id(relation.relation_id.clone())
@@ -363,7 +383,7 @@ impl SubsessionService {
                 .map_err(BtccError::from)?
                 .ok_or_else(|| error(BtccCode::SubsessionRelationMissing))?;
             if current.dispatch_state != SubsessionDispatchState::Enqueued {
-                return Box::pin(self.release_worker_slots(&relation.parent_session_id)).await;
+                return Box::pin(self.admit_waiting(&relation.parent_session_id)).await;
             }
         }
         if direction.defer_until_first_result

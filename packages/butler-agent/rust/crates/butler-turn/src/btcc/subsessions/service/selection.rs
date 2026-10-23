@@ -154,6 +154,9 @@ impl SubsessionService {
         {
             return Ok(false);
         }
+        if candidate.packet.child_role == crate::btcc::ChildRole::Worker {
+            return Ok(true);
+        }
         Ok(self
             .repository
             .open_relation_by_work(candidate.root_work_id.clone())

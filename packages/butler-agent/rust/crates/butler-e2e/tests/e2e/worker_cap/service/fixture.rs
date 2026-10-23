@@ -17,6 +17,7 @@ pub(super) struct Queue {
     pub(super) inputs: Mutex<Vec<SubsessionEnqueue>>,
     pub(super) hold: AtomicBool,
     pub(super) fail_dispatch: AtomicBool,
+    pub(super) hold_dispatch: AtomicBool,
     pub(super) fail_delivery: AtomicBool,
     pub(super) reached: tokio::sync::Notify,
     pub(super) release: (Mutex<bool>, std::sync::Condvar),
@@ -30,6 +31,15 @@ impl SubsessionChildQueue for Queue {
         if (result && self.fail_delivery.load(Ordering::SeqCst))
             || (!result && self.fail_dispatch.swap(false, Ordering::SeqCst))
         {
+            return Err(BtccError::relayed("queue_unavailable", "Queue unavailable"));
+        }
+        if !result && self.hold_dispatch.swap(false, Ordering::SeqCst) {
+            self.reached.notify_one();
+            let (lock, cv) = &self.release;
+            let mut released = lock.lock().unwrap();
+            while !*released {
+                released = cv.wait(released).unwrap();
+            }
             return Err(BtccError::relayed("queue_unavailable", "Queue unavailable"));
         }
         self.inputs.lock().unwrap().push(input);
@@ -178,14 +188,44 @@ impl Fixture {
         let mut db = rusqlite::Connection::open(&self.db)?;
         let tx = db.transaction()?;
         tx.execute("INSERT INTO btcc_session_relations (relation_id,parent_session_id,parent_turn_id,child_session_id,anchor_message_id,ordinal,safe_title,created_at) VALUES (?1,?2,'parent-turn',?3,'anchor',(SELECT COALESCE(MAX(ordinal),0)+1 FROM btcc_session_relations WHERE parent_session_id=?2),'Verify evidence','2026-10-24T00:00:00.000Z')", rusqlite::params![format!("rel-{child}"), parent, child])?;
-        tx.execute("INSERT INTO btcc_subsession_delegations (delegation_id,relation_id,task_id,root_work_id,child_turn_id,packet_json,dispatch_intent_json,dispatch_state,created_at,parent_session_id,child_role) VALUES (?1,?2,?3,?4,?5,?6,?7,'pending','2026-10-24T00:00:00.000Z',?8,?9)", rusqlite::params![format!("del-{child}"),format!("rel-{child}"),format!("task-{child}"),format!("root-{child}"),format!("turn-{child}"),serde_json::to_string(&packet)?,serde_json::to_string(&intent)?,parent,role.as_str()])?;
+        tx.execute("INSERT INTO btcc_subsession_delegations (delegation_id,relation_id,task_id,root_work_id,child_turn_id,packet_json,dispatch_intent_json,dispatch_state,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'pending','2026-10-24T00:00:00.000Z')", rusqlite::params![format!("del-{child}"),format!("rel-{child}"),format!("task-{child}"),format!("root-{child}"),format!("turn-{child}"),serde_json::to_string(&packet)?,serde_json::to_string(&intent)?])?;
         tx.commit()?;
         Ok(())
     }
     pub(super) fn direction(&self, child: &str) -> Result<(), ServiceError> {
         // Place the durable direction at the delivery boundary, after result commit.
         rusqlite::Connection::open(&self.db)?.execute("INSERT INTO btcc_subsession_directions (instruction_id,relation_id,revision,source_parent_turn_id,source_message_id,instruction,status,created_at) VALUES ('direction',?1,1,'parent-turn','source','Verify updated evidence','pending','2026-10-24T00:00:01.000Z')", [format!("rel-{child}")])?;
+        rusqlite::Connection::open(&self.db)?.execute("UPDATE btcc_subsession_delegations SET dispatch_state='pending' WHERE relation_id=?1 AND dispatch_state IS NULL", [format!("rel-{child}")])?;
         Ok(())
+    }
+    pub(super) async fn admit_turn(&self, child: &str, turn: &str) -> Result<(), ServiceError> {
+        let mut prepared = test_prepared_turn();
+        prepared.request.turn_id = turn.into();
+        prepared.request.session_id = child.into();
+        prepared.request.event_id = turn.into();
+        prepared.request.message.id = turn.into();
+        prepared.command = TurnCommand::fixture_run(
+            turn,
+            child,
+            turn,
+            CommandMessage {
+                message_id: turn.into(),
+                content: "Verify updated evidence".into(),
+            },
+            json!({}),
+        );
+        prepared.preparation_id = turn.into();
+        BtccRepositories::new(self.storage.clone(), None)
+            .load_or_admit(&prepared)
+            .await?;
+        Ok(())
+    }
+    pub(super) async fn count(&self, parent: &str) -> Result<u64, ServiceError> {
+        Ok(self
+            .service
+            .repository()
+            .running_worker_count(parent.into())
+            .await?)
     }
     pub(super) fn state(&self, child: &str) -> Option<String> {
         rusqlite::Connection::open(&self.db)
@@ -196,6 +236,23 @@ impl Fixture {
                 |r| r.get(0),
             )
             .unwrap()
+    }
+    pub(super) async fn restart(&mut self) -> Result<(), ServiceError> {
+        self.storage.close().await?;
+        self.storage = BtccStorage::open(self._fixture.config("cap-service")).await?;
+        let now: Arc<dyn Fn() -> String + Send + Sync> =
+            Arc::new(|| "2026-10-24T00:00:00.000Z".into());
+        self.service = SubsessionService::new(
+            SqliteSubsessionRepository::new(self.storage.clone()),
+            self.bindings.clone(),
+            self.queue.clone(),
+            self.profiles.clone(),
+            Arc::new(DurableWorkService::new(Arc::new(
+                SessionWorkRepository::new(self.storage.clone(), now.clone()),
+            ))),
+            now,
+        );
+        Ok(())
     }
     pub(super) async fn close(self) -> Result<(), ServiceError> {
         self.bindings.close().await?;

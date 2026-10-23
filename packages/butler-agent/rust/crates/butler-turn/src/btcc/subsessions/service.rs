@@ -10,6 +10,7 @@ mod selection;
 #[cfg(test)]
 pub(crate) mod tests;
 mod worker;
+mod worker_continuation;
 
 pub use control::{SubsessionCancelRequest, SubsessionDirectionRequest, SubsessionResumeRequest};
 
@@ -297,7 +298,7 @@ impl SubsessionService {
         &self,
         delegation_id: &str,
     ) -> Result<Option<crate::btcc::StoredSubsessionDelegation>, BtccError> {
-        let Some(existing) = self
+        let Some(mut existing) = self
             .repository
             .by_delegation(delegation_id.to_owned())
             .await
@@ -305,7 +306,10 @@ impl SubsessionService {
         else {
             return Ok(None);
         };
-        self.ensure_child_binding(&existing).await?;
+        if !self.prepare_child_binding(&existing).await? {
+            existing.dispatch_state = crate::btcc::storage::SubsessionDispatchState::Pending;
+            return Ok(Some(existing));
+        }
         self.replay(&existing).await?;
         if existing.packet.child_role == ChildRole::Worker {
             return self
@@ -333,7 +337,9 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?
             .ok_or_else(|| error(BtccCode::SubsessionPersistFailed))?;
-        self.ensure_child_binding(&stored).await?;
+        if !self.prepare_child_binding(&stored).await? {
+            return Ok(stored);
+        }
         self.replay(&stored).await?;
         if stored.packet.child_role == ChildRole::Worker {
             self.notify_execution_changed(&stored.child_session_id)
@@ -428,7 +434,7 @@ impl SubsessionService {
         stored: &crate::btcc::StoredSubsessionDelegation,
     ) -> Result<(), BtccError> {
         if stored.packet.child_role == ChildRole::Worker {
-            return Box::pin(self.release_worker_slots(&stored.parent_session_id)).await;
+            return Box::pin(self.admit_waiting(&stored.parent_session_id)).await;
         }
         let intent = stored
             .dispatch_intent

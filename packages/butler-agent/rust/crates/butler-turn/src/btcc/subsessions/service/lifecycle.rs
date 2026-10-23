@@ -25,13 +25,17 @@ impl SubsessionService {
         let scope = child_work_scope(&stored, &binding, turn)?;
         let existing = self.work.bound_work_for_turn(turn.into()).await?;
         if let Some(existing) = existing {
-            if existing.work_id != stored.root_work_id
+            if (existing.work_id != stored.root_work_id
+                && !(stored.packet.child_role == ChildRole::Worker && turn != stored.child_turn_id))
                 || existing.session_id != session
                 || !work_matches_scope(&existing, &scope)
             {
                 return Err(error(BtccCode::SubsessionRootWorkIdentityMismatch));
             }
             return Ok(());
+        }
+        if turn != stored.child_turn_id && stored.packet.child_role == ChildRole::Worker {
+            return self.bind_worker_continuation(&stored, scope).await;
         }
         if turn != stored.child_turn_id {
             let bound = self
@@ -204,69 +208,61 @@ impl SubsessionService {
 
     async fn deliver_child_result(&self, session: &str, status: &str) -> Result<(), BtccError> {
         self.notify_execution_changed(session).await?;
-        // A direction that arrived during this turn and was not applied in it
-        // continues the child now that the turn has its result.
-        if status != "cancelled"
-            && let Err(error) = self.release_pending_direction(session).await
-        {
-            butler_core::diagnostic!(
-                "[native-btcc] pending direction not released code={}",
-                error.code()
-            );
-        }
         let delivery = self.deliver_worker_results().await;
-        self.release_child_slot(session).await;
+        if let Some(relation) = self
+            .repository
+            .by_child(session.into())
+            .await
+            .map_err(BtccError::from)?
+        {
+            let admission = if relation.packet.child_role == ChildRole::Worker {
+                self.admit_waiting(&relation.parent_session_id).await
+            } else if status != "cancelled" {
+                self.release_pending_direction(session).await
+            } else {
+                Ok(())
+            };
+            if let Err(error) = admission {
+                butler_core::diagnostic!(
+                    "[native-btcc] pending child deferred code={}",
+                    error.code()
+                );
+            }
+        }
         delivery
     }
 
-    async fn release_child_slot(&self, session: &str) {
-        let released = async {
-            if let Some(relation) = self
-                .repository
-                .by_child(session.into())
-                .await
-                .map_err(BtccError::from)?
-                && relation.packet.child_role == ChildRole::Worker
-            {
-                self.release_worker_slots(&relation.parent_session_id)
-                    .await?;
-            }
-            Ok::<_, BtccError>(())
-        }
-        .await;
-        if let Err(error) = released {
-            butler_core::diagnostic!(
-                "[native-btcc] Worker slot release failed code={}",
-                error.code()
-            );
-        }
-    }
-    /// Re-dispatches pending children, directions and worker results after a restart.
+    /// Main's recovery order: dispatches, directions, then parent results.
+    /// Worker admission follows result delivery; one failure never hides peers.
     pub async fn recover_dispatches(&self) -> Result<(), BtccError> {
-        let mut parents = std::collections::HashMap::new();
+        let mut failed_parents = std::collections::HashSet::new();
         for stored in self
             .repository
             .pending_dispatches()
             .await
             .map_err(BtccError::from)?
         {
-            self.ensure_child_binding(&stored).await?;
-            self.replay(&stored).await?;
             if stored.packet.child_role == ChildRole::Worker {
-                parents.insert(stored.parent_session_id, stored.child_session_id);
+                if let Err(error) = self.ensure_child_binding(&stored).await {
+                    failed_parents.insert(stored.parent_session_id);
+                    butler_core::diagnostic!(
+                        "[native-btcc] Worker binding deferred code={}",
+                        error.code()
+                    );
+                }
+            } else {
+                let replay = async {
+                    self.ensure_child_binding(&stored).await?;
+                    self.replay(&stored).await
+                }
+                .await;
+                if let Err(error) = replay {
+                    butler_core::diagnostic!(
+                        "[native-btcc] dispatch recovery deferred code={}",
+                        error.code()
+                    );
+                }
             }
-        }
-        // Admission committed before the foreign queue write. Replay those
-        // reservations too; queue event identities make this idempotent.
-        for stored in self
-            .repository
-            .enqueued_workers()
-            .await
-            .map_err(BtccError::from)?
-        {
-            self.ensure_child_binding(&stored).await?;
-            self.enqueue_worker(&stored).await?;
-            parents.insert(stored.parent_session_id, stored.child_session_id);
         }
         self.recover_directions().await?;
         if let Err(error) = self.deliver_worker_results().await {
@@ -275,12 +271,17 @@ impl SubsessionService {
                 error.code()
             );
         }
-        // Delivery stays last in main's recovery order. Failed delivery must
-        // not prevent other parents from admitting work into their free slots.
-        for child in parents.values() {
-            self.release_child_slot(child).await;
+        for stored in self
+            .repository
+            .enqueued_workers()
+            .await
+            .map_err(BtccError::from)?
+        {
+            if !self.publish_worker(&stored).await? {
+                failed_parents.insert(stored.parent_session_id);
+            }
         }
-        Ok(())
+        self.admit_waiting_except(failed_parents).await
     }
     /// Whether the parent session has an active child to wait for.
     pub async fn should_wait_for_child(&self, parent: &str) -> Result<bool, BtccError> {

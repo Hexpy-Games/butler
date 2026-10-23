@@ -371,6 +371,15 @@ impl super::AppApplication {
         )
         .await?;
         self.project_creation.set_workspace_root(workspace_root);
+        drop(_update);
+        if let Err(error) = self
+            .dependencies
+            .subsessions
+            .worker_settings_changed()
+            .await
+        {
+            butler_core::diagnostic!("[gateway] Worker settings admission deferred: {error}");
+        }
         Ok((previous, projection))
     }
 

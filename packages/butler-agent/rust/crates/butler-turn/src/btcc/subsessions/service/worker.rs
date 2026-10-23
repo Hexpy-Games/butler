@@ -125,7 +125,7 @@ fn executable_action<'a>(
 
 impl SubsessionService {
     /// Settings are read before admission, with no global lock across I/O.
-    pub(super) async fn release_worker_slots(&self, parent: &str) -> Result<(), BtccError> {
+    pub(super) async fn admit_waiting(&self, parent: &str) -> Result<(), BtccError> {
         let cap = self.read_worker_cap().await;
         while let Some(stored) = self
             .repository
@@ -133,10 +133,102 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?
         {
-            self.ensure_child_binding(&stored).await?;
-            self.enqueue_worker(&stored).await?;
+            if !self.publish_worker(&stored).await? {
+                break;
+            }
             self.notify_execution_changed(&stored.child_session_id)
                 .await?;
+        }
+        Ok(())
+    }
+
+    pub(super) async fn prepare_child_binding(
+        &self,
+        stored: &crate::btcc::StoredSubsessionDelegation,
+    ) -> Result<bool, BtccError> {
+        let marker = if stored.packet.child_role == ChildRole::Worker {
+            self.repository
+                .worker_result_marker(stored.relation_id.clone())
+                .await
+                .map_err(BtccError::from)?
+        } else {
+            None
+        };
+        if let Err(error) = self.ensure_child_binding(stored).await {
+            if stored.packet.child_role != ChildRole::Worker {
+                return Err(error);
+            }
+            self.repository
+                .worker_publish_failed(stored.relation_id.clone(), marker)
+                .await
+                .map_err(BtccError::from)?;
+            butler_core::diagnostic!(
+                "[native-btcc] Worker binding deferred code={}",
+                error.code()
+            );
+            return Ok(false);
+        }
+        Ok(true)
+    }
+
+    pub(super) async fn publish_worker(
+        &self,
+        stored: &crate::btcc::StoredSubsessionDelegation,
+    ) -> Result<bool, BtccError> {
+        let marker = self
+            .repository
+            .worker_result_marker(stored.relation_id.clone())
+            .await
+            .map_err(BtccError::from)?;
+        let published = async {
+            self.ensure_child_binding(stored).await?;
+            self.enqueue_worker(stored).await
+        }
+        .await;
+        if let Err(error) = published {
+            self.repository
+                .worker_publish_failed(stored.relation_id.clone(), marker)
+                .await
+                .map_err(BtccError::from)?;
+            butler_core::diagnostic!(
+                "[native-btcc] Worker publish deferred code={}",
+                error.code()
+            );
+            return Ok(false);
+        }
+        Ok(true)
+    }
+
+    /// Settings changes retry durable waiting work without polling.
+    pub async fn admit_waiting_workers(&self) -> Result<(), BtccError> {
+        self.admit_waiting_except(std::collections::HashSet::new())
+            .await
+    }
+
+    pub(super) async fn admit_waiting_except(
+        &self,
+        excluded: std::collections::HashSet<String>,
+    ) -> Result<(), BtccError> {
+        let mut parents = std::collections::HashSet::new();
+        for stored in self
+            .repository
+            .pending_dispatches()
+            .await
+            .map_err(BtccError::from)?
+        {
+            if stored.packet.child_role == ChildRole::Worker
+                && !excluded.contains(&stored.parent_session_id)
+            {
+                parents.insert(stored.parent_session_id);
+            }
+        }
+        for parent in parents {
+            if let Err(error) = self.admit_waiting(&parent).await {
+                butler_core::diagnostic!(
+                    "[native-btcc] Worker admission deferred code={}",
+                    error.code()
+                );
+            }
         }
         Ok(())
     }
@@ -151,9 +243,15 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?
         {
-            return self
-                .release_pending_direction(&stored.child_session_id)
-                .await;
+            if let Some(direction) = self
+                .repository
+                .pending_direction(stored.relation_id.clone())
+                .await
+                .map_err(BtccError::from)?
+            {
+                return self.enqueue_direction(stored, &direction).await;
+            }
+            return Ok(());
         }
         let intent = stored
             .dispatch_intent
@@ -186,6 +284,7 @@ impl SubsessionService {
             Ok(cap) => {
                 let cap = cap.clamp(1, 10);
                 self.worker_cap.store(cap, Relaxed);
+                self.worker_cap_error_logged.store(false, Relaxed);
                 cap
             }
             Err(error) => {

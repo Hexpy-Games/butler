@@ -21,6 +21,9 @@ impl Gate {
     pub(crate) fn add_permits(&self, _: usize) {
         self.0.send_replace(true);
     }
+    pub(crate) fn is_open(&self) -> bool {
+        *self.0.borrow()
+    }
     pub(crate) async fn wait(&self) {
         let mut state = self.0.subscribe();
         while !*state.borrow_and_update() {
@@ -125,7 +128,7 @@ async fn reply(
         }
         return (
             [("content-type", "text/event-stream")],
-            wire(&message("Updated evidence verified."), "continuation"),
+            wire(&worker(step, &body), &format!("continuation-{step}")),
         )
             .into_response();
     }
@@ -137,9 +140,6 @@ async fn reply(
             }
         }
         script.releases[&actor].wait().await;
-    }
-    if actor == "red-0" && script.followup.load(Ordering::SeqCst) && step == 2 {
-        return (axum::http::StatusCode::BAD_REQUEST, Json(json!({"error":{"type":"invalid_request_error","code":"invalid_request_error","message":"Source verification failed"}}))).into_response();
     }
     let response_id = format!("{actor}-{step}");
     let steering = script.steer.load(Ordering::SeqCst);
@@ -185,7 +185,16 @@ async fn reply(
                 json!({"relation_id":relation,"instruction":"Verify the updated source"}),
             )
         }
-        "steward" => steward(step, group, script.count, &body),
+        "steward" => steward(
+            if key.user_request.starts_with("Delegated result") {
+                step + script.count + 2
+            } else {
+                step
+            },
+            group,
+            script.count,
+            &body,
+        ),
         _ => worker(step, &body),
     };
     (
