@@ -2229,10 +2229,12 @@ async function createWindow() {
     userBrowser.onState = () => browserHost.changed();
     userBrowser.pullCredential = (token, origin) => browserHost.credential(token, origin);
     userBrowser.pullVault = (token, origin, frameOrigins) => browserHost.vault(token, origin, frameOrigins);
-    userBrowser.saveSignIn = (payload) => requestSecurityRoute({ route: "saveSignIn", body: { payload } }, {
+    const signInRoute = (input) => requestSecurityRoute(input, {
       ensureReady: ensureServer, fetch, serverUrl, authHeaders: appLocalAuthHeaders,
       adminCredential: readAppLocalAdmin({ butlerData: butlerDataRoot }),
     });
+    userBrowser.saveSignIn = (payload) => signInRoute({ route: "saveSignIn", body: { payload } });
+    userBrowser.signInStoreAvailable = async () => (await signInRoute({ route: "listSignIns" }))?.data?.available === true;
     userBrowser.downloadRequest = async input => {
       const response = await appServerFetch("/internal/browser-host/downloads", { method: "POST",
         headers: { "content-type": "application/json", "x-butler-admin": await readAppLocalAdmin({ butlerData: butlerDataRoot }) }, body: JSON.stringify(input) });

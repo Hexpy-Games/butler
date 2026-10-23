@@ -16,6 +16,9 @@
 
 .lane {
   min-width: 0;
+  transition:
+    border-color var(--motion-fast) var(--motion-ease-standard),
+    background-color var(--motion-fast) var(--motion-ease-standard);
 }
 
 .laneInner {
@@ -27,4 +30,202 @@
   height: 100%;
   min-height: 0;
   flex: 1 1 auto;
+}
+
+/* content: the lane grows with its cards (board status lanes). */
+.lane[data-height="content"] {
+  min-height: var(--kanban-lane-min-height);
+  background: var(--surface);
+}
+
+.lane[data-height="content"] > .laneInner {
+  height: auto;
+}
+
+/* The lane a drop would go to: accent border and a faint accent fill. */
+.lane[data-drop-target="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+
+.list {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.list[data-layout="grid"] {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(min(100%, var(--kanban-card-min-width)), 1fr)
+  );
+}
+
+/* Drag scope: layout-neutral; carries the slot size for the drop line. */
+.scope {
+  display: contents;
+}
+
+.item {
+  position: relative;
+  min-width: 0;
+  transition: opacity var(--motion-fast) var(--motion-ease-standard);
+}
+
+/* A pointer-dragged card stays home as a faint placeholder under the
+   overlay; a keyboard-lifted card is the one moving, so it lifts in place
+   and keeps its full focus ring. */
+.item[data-lifted="pointer"] {
+  opacity: 0.42;
+}
+
+/* Focus scrolls the whole ring into view, not just the card's box. */
+.item > .card {
+  scroll-margin: calc(var(--focus-ring-room) + var(--focus-ring-width));
+  transition: scale var(--motion-base) var(--motion-ease-spring);
+}
+
+.item[data-lifted="keyboard"] > .card {
+  box-shadow: var(--shadow-drag-lift);
+  scale: var(--motion-scale-lift);
+}
+
+.item[data-lifted="keyboard"] > .card:focus-visible {
+  box-shadow: var(--focus-ring), var(--shadow-drag-lift);
+}
+
+.item[data-draggable="true"] > .card {
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+/* The drop line (M5): centered in the slot opened above the target card,
+   after the lane's last card, or at an empty lane's start. */
+.item[data-drop]::before,
+.item[data-drop="after"]::after,
+.list[data-drop]::before {
+  position: absolute;
+  z-index: var(--z-drop-indicator);
+  inset-inline: 0;
+  height: var(--kanban-drop-line);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  content: "";
+  pointer-events: none;
+  animation: indicator-in var(--motion-base) var(--motion-ease-decelerate);
+}
+
+.item[data-drop="after"]::before {
+  content: none;
+}
+
+.item[data-drop="before"]::before {
+  top: calc(
+    (var(--kanban-slot) + var(--space-sm) + var(--kanban-drop-line)) / -2
+  );
+}
+
+.item[data-drop="after"]::after {
+  top: calc(
+    100% + (var(--kanban-slot) + var(--space-sm) - var(--kanban-drop-line)) / 2
+  );
+}
+
+.list[data-drop]::before {
+  top: calc((var(--kanban-slot) + var(--kanban-drop-line)) / -2);
+}
+
+/* Grid lanes open no slot: a vertical line in the column gap. */
+.list[data-layout="grid"] > .item[data-drop]::before,
+.list[data-layout="grid"] > .item[data-drop="after"]::after {
+  top: 0;
+  bottom: 0;
+  width: var(--kanban-drop-line);
+  height: auto;
+}
+
+.list[data-layout="grid"] > .item[data-drop="before"]::before {
+  inset-inline: calc((var(--space-sm) + var(--kanban-drop-line)) / -2) auto;
+}
+
+.list[data-layout="grid"] > .item[data-drop="after"]::after {
+  inset-inline: calc(100% + (var(--space-sm) - var(--kanban-drop-line)) / 2)
+    auto;
+}
+
+/* The lifted card follows the pointer: lift (scale + shadow, spring) on
+   pick-up, settle back to rest while it lands. */
+.overlayLayer {
+  pointer-events: none;
+}
+
+.overlay {
+  box-shadow: var(--shadow-drag-lift);
+  scale: var(--motion-scale-lift);
+  animation: lift var(--motion-base) var(--motion-ease-spring) both;
+}
+
+.dropping .overlay {
+  box-shadow: none;
+  scale: 1;
+  animation: none;
+  transition:
+    scale var(--motion-base) var(--motion-ease-emphasized),
+    box-shadow var(--motion-base) var(--motion-ease-emphasized);
+}
+
+@keyframes lift {
+  from {
+    box-shadow: none;
+    scale: 1;
+  }
+
+  to {
+    box-shadow: var(--shadow-drag-lift);
+    scale: var(--motion-scale-lift);
+  }
+}
+
+@keyframes indicator-in {
+  from {
+    opacity: 0;
+    scale: var(--motion-scale-menu) 1;
+  }
+}
+
+@keyframes indicator-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Reduced motion: no slot (the scope sets it to 0) and no travel; the line
+   fades in and the lane highlight switches at once. */
+@media (prefers-reduced-motion: reduce) {
+  .lane,
+  .item,
+  .item > .card {
+    transition: none;
+  }
+
+  .item[data-drop]::before,
+  .item[data-drop="after"]::after,
+  .list[data-drop]::before {
+    animation-name: indicator-fade;
+  }
 }

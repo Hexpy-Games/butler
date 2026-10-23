@@ -17,14 +17,13 @@ export function LogRow({ record, open, onToggle }: { record: LogRecord; open: bo
   return (
     <DisclosureRow
       affordance="trailing"
-      surface="plain"
       title={logTitle(record)}
       description={description}
       attention={severity === "error" ? "error" : severity === "warn" ? "warning" : undefined}
       meta={
         <Inline gap="xs" cross="center" wrap={false}>
           <Tag size="sm" tone={severityTone(record.level)}>{severityLabel(record.level)}</Tag>
-          <Typo.Caption as="span" numeric="tabular">{formatLogTime(record.ts)}</Typo.Caption>
+          <Typo.Caption as="span" tone="tertiary" numeric="tabular">{formatLogTime(record.ts)}</Typo.Caption>
         </Inline>
       }
       controlsId={panelId}
