@@ -109,7 +109,7 @@ export function ProjectDashboardView({
         <ManagementPagePanel><Tabs value={tab} onValueChange={setTab} gap="2xl">
           <TabsList variant="line">
             <TabsTrigger value="overview"><LayoutDashboard />{appCopy.projectSignpost.overview}</TabsTrigger>
-            <TabsTrigger value="work"><ListChecks />{appCopy.projectSignpost.work}</TabsTrigger>
+            <TabsTrigger value="work"><ListChecks />{appCopy.projectSignpost.board}</TabsTrigger>
             <TabsTrigger value="materials"><Folder />{appCopy.projectSignpost.materials}</TabsTrigger>
             <TabsTrigger value="history"><History />{appCopy.projectSignpost.history}</TabsTrigger>
             <TabsTrigger value="statistics"><Activity />{appCopy.projectSignpost.statistics}</TabsTrigger>

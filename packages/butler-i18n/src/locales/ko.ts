@@ -413,7 +413,7 @@ export const koKrCopy: AppCopy = {
     created: "생성", updated: "갱신", recordedCompletion: "완료 기록", noHistory: "아직 기록이 없습니다.",
     description: "프로젝트 소개", editDescription: "소개 편집", pin: "주요 자료로 고정", unpin: "고정 해제",
     wallpaper: "월페이퍼",
-    overview: "개요", work: "보드", materials: "자료", history: "기록", statistics: "통계",
+    overview: "개요", work: "작업", board: "보드", materials: "자료", history: "기록", statistics: "통계",
     position: "진행 상황", remaining: "남아 있는 일", completed: "실행 완료", open: "남은 작업",
     blocked: "막힌 작업", abandoned: "종료한 작업", unknown: "확인하지 못한 작업", registered: "등록된 작업",
     unbound: "이 프로젝트에 연결된 기록이 없습니다.",
