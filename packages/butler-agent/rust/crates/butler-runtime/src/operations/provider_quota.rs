@@ -363,6 +363,13 @@ impl ProviderQuotaSink for ProviderQuotaStore {
             self.announce_change(provider, &before);
         }
     }
+    fn active_plan_limit(&self, provider: &str, now_ms: i64) -> Option<PlanLimitReading> {
+        self.plan_limits
+            .lock()
+            .get(provider)
+            .filter(|limit| limit.resets_at_ms.is_none_or(|reset| now_ms < reset))
+            .cloned()
+    }
     fn observe(&self, reading: ProviderQuotaReading) {
         let before = self.view(&reading.provider_id);
         self.store(reading, &before);

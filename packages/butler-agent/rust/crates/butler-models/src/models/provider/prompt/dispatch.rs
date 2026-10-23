@@ -15,6 +15,12 @@ pub(super) async fn run(
     route: (Carrier, ResponseMode, &'static str),
 ) -> Result<Dispatched, ModelRoundError> {
     let (carrier, mode, api) = route;
+    if let Some(paused) = plan_limit_paused(provider, config, mode, api) {
+        return Ok(Dispatched {
+            response: Err(ModelRoundError::Provider(Box::new(paused))),
+            prefix: Value::Null,
+        });
+    }
     let prefix = provider.prefix_history.prepare(body, config)?;
     let physical = super::admission(provider, request, config, body, serialized.clone(), carrier)?;
     let http = build_http(provider, config, carrier, mode, serialized.clone());
@@ -54,6 +60,28 @@ pub(super) async fn run(
         response,
         prefix: trace.latest().unwrap_or(Value::Null),
     })
+}
+/// Background prompts pause on the ChatGPT plan while its limit applies; user
+/// turns still reach it, so a lifted limit is noticed and cleared.
+fn plan_limit_paused(
+    provider: &ModelProvider,
+    config: &ProviderRequestConfig,
+    mode: ResponseMode,
+    api: &str,
+) -> Option<butler_turn::btcc::ProviderRequestError> {
+    if !matches!(mode, ResponseMode::ChatGptPlanSse) {
+        return None;
+    }
+    let provider_id = &config.metadata.provider_id;
+    let limit = provider
+        .quota
+        .as_deref()?
+        .active_plan_limit(provider_id, provider.clock.now_epoch_millis())?;
+    Some(crate::models::diagnostics::plan_limit_paused(
+        provider_id,
+        api,
+        limit.resets_at_ms,
+    ))
 }
 fn build_http(
     provider: &ModelProvider,

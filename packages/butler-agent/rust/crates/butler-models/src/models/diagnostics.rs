@@ -71,6 +71,21 @@ pub(super) fn empty(provider: &str, api: &str) -> ProviderRequestError {
     )
 }
 
+/// A ChatGPT-plan request held back because the plan limit still applies; it
+/// fails the way the provider's limit response does, without being sent.
+pub(super) fn plan_limit_paused(
+    provider: &str,
+    api: &str,
+    resets_at_ms: Option<i64>,
+) -> ProviderRequestError {
+    let code = "provider_quota_exhausted";
+    let mut failure = error(code, http_message(code), provider, api, false);
+    failure.retry_at = resets_at_ms
+        .and_then(chrono::DateTime::from_timestamp_millis)
+        .map(|at| at.to_rfc3339());
+    failure
+}
+
 pub(super) fn http(
     provider: &str,
     api: &str,
