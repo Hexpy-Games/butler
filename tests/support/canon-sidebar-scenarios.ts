@@ -190,6 +190,9 @@ export async function verifyEpicLabel(row: import("playwright").Locator) {
     const box = await avatar.boundingBox(), bounds = await row.boundingBox();
     assert(box && bounds && box.width >= 16 && box.x >= bounds.x && box.x + box.width <= bounds.x + bounds.width,
       "Avatar stays full-size inside the row");
-    const titleBox = await title.boundingBox(); assert(titleBox && titleBox.x + titleBox.width <= box.x + 1);
+    const titleBox = await title.boundingBox();
+    const gap = await title.evaluate(element => parseFloat(getComputedStyle(element).getPropertyValue("--space-sm")));
+    assert(titleBox && Math.abs(box.x - titleBox.x - titleBox.width - gap) < 1,
+      "Title and Avatar use the shared small spacing token");
   }
 }

@@ -14,7 +14,7 @@ export function PlanEpicList({ projectId, rows, plans, backlog, busy, onWrite, o
   const compact = useMediaMatch(ADAPTIVE_MEDIA.compact);
   const items = rows.map((epic, index) => ({
     id: epic.id, label: epic.title,
-    title: <Stack as="span" align="row" cross="center" gap="xs" minWidth="0">
+    title: <Stack as="span" align="row" cross="center" gap="sm" minWidth="0">
       <Typo.Caption shrink={false} tone="secondary" numeric="tabular">{index + 1} ·</Typo.Caption>
       <Stack as="span" shrink={false}><CanonEpicStatus epic={epic} /></Stack>
       <Typo.Text data-test-class="canon-epic-title" truncate shrink minWidth="0">{epic.title}</Typo.Text>
