@@ -2,7 +2,7 @@ import { appCopy } from "@/app/copy.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import type { SessionArtifactSummary } from "@/app/types.ts";
 import type { ReactNode } from "react";
-import { Save } from "@/butler-ds";
+import { Button, ButtonContainer, Save } from "@/butler-ds";
 import { artifactUrl } from "./artifactDisplay";
 
 export interface ArtifactCardAction {
@@ -55,6 +55,21 @@ export function artifactCardActions(
         ]
       : []),
   ];
+}
+
+/** Save for an artifact the app cannot preview: the desktop save dialog, or a download link on the web. */
+export function ArtifactSaveButton({ artifact }: { artifact: SessionArtifactSummary }) {
+  const action = artifactCardActions(artifact).find((item) => item.id === "save");
+  if (!action) return null;
+  return (
+    <ButtonContainer size="sm">
+      {action.href ? (
+        <Button asChild size="sm" variant="outline">
+          <a aria-label={action.ariaLabel} download={action.download} href={action.href}>{action.label}</a>
+        </Button>
+      ) : <Button size="sm" variant="outline" iconStart={action.icon} text={action.label} aria-label={action.ariaLabel} onClick={action.onClick} />}
+    </ButtonContainer>
+  );
 }
 
 async function saveDesktopArtifact(
