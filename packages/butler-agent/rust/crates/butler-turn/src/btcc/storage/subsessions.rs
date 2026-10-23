@@ -11,6 +11,8 @@ mod records;
 
 pub use completion::turn_result_id as subsession_result_id;
 pub(crate) use directions::direction_turn_id;
+#[cfg(feature = "test-support")]
+pub(in crate::btcc::storage) use parents::assert_queue_child_presence_plan;
 pub use records::*;
 
 use rusqlite::{OptionalExtension, params};

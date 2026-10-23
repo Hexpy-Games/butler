@@ -120,39 +120,30 @@ impl SqliteSubsessionRepository {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // test-category: format-pin
-    #[test]
-    fn queue_child_presence_uses_indexed_legacy_links() {
-        let mut db = rusqlite::Connection::open_in_memory().unwrap();
-        crate::btcc::storage::schema::create_current(&db).unwrap();
-        crate::btcc::storage::migration::apply_transaction(&mut db).unwrap();
-        let plan = db
-            .prepare(&format!("EXPLAIN QUERY PLAN {QUEUE_WAITS_FOR_CHILD}"))
-            .unwrap()
-            .query_map(["parent"], |r| r.get::<_, String>(3))
-            .unwrap()
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap()
-            .join("\n");
-        eprintln!("{plan}");
-        for index in [
-            "idx_btcc_turns_session",
-            "idx_steward_results_turn",
-            "idx_subsession_outbox_relation_status",
-        ] {
-            assert!(plan.contains(index), "{plan}");
-        }
-        assert!(plan.matches("parent_session_id=?").count() >= 2, "{plan}");
-        for alias in ["r", "d", "t", "latest", "x", "o"] {
-            assert!(
-                !plan.lines().any(|line| line == format!("SCAN {alias}")),
-                "{plan}"
-            );
-        }
-        assert!(!plan.contains("TEMP B-TREE"), "{plan}");
+#[cfg(feature = "test-support")]
+pub(in crate::btcc::storage) fn assert_queue_child_presence_plan(db: &rusqlite::Connection) {
+    let plan = db
+        .prepare(&format!("EXPLAIN QUERY PLAN {QUEUE_WAITS_FOR_CHILD}"))
+        .unwrap()
+        .query_map(["parent"], |r| r.get::<_, String>(3))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
+        .join("\n");
+    eprintln!("{plan}");
+    for index in [
+        "idx_btcc_turns_session",
+        "idx_steward_results_turn",
+        "idx_subsession_outbox_relation_status",
+    ] {
+        assert!(plan.contains(index), "{plan}");
     }
+    assert!(plan.matches("parent_session_id=?").count() >= 2, "{plan}");
+    for alias in ["r", "d", "t", "latest", "x", "o"] {
+        assert!(
+            !plan.lines().any(|line| line == format!("SCAN {alias}")),
+            "{plan}"
+        );
+    }
+    assert!(!plan.contains("TEMP B-TREE"), "{plan}");
 }

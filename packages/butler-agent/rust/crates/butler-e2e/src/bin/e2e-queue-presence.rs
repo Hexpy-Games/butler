@@ -17,6 +17,10 @@ async fn main() {
     let config = fixture.config("queue-presence");
     let path = config.path.clone();
     let storage = BtccStorage::open(config).await.unwrap();
+    let plan_path = path.clone();
+    tokio::task::spawn_blocking(move || TestStorageFixture::assert_child_queue_plan(&plan_path))
+        .await
+        .unwrap();
     seed(&path).await;
     let repository = SqliteSubsessionRepository::new(storage.clone());
     presence(&path, &repository).await;

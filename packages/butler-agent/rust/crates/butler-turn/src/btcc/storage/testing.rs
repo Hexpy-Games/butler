@@ -85,6 +85,13 @@ pub struct Fixture {
 }
 
 impl Fixture {
+    /// Pin the real queue lookup against an opened E2E database.
+    #[cfg(feature = "test-support")]
+    pub fn assert_child_queue_plan(path: &std::path::Path) {
+        let db = sqlite::open(path).expect("queue query-plan database");
+        super::subsessions::assert_queue_child_presence_plan(&db);
+    }
+
     pub(crate) fn empty() -> Self {
         let sequence = SystemTime::now()
             .duration_since(UNIX_EPOCH)
