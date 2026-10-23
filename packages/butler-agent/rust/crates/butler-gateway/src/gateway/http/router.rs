@@ -63,6 +63,7 @@ pub(super) enum Handler {
     Subsessions,
     TaskGraphs,
     WorkModel,
+    CanonSidebar,
     Updates,
     Wallpapers,
     #[cfg(feature = "e2e-fixtures")]
@@ -340,7 +341,10 @@ const ROUTES: &[(&str, Handler)] = &[
 ];
 
 fn table() -> impl Iterator<Item = (&'static str, Handler)> {
-    let routes = ROUTES.iter().copied();
+    let routes = ROUTES
+        .iter()
+        .copied()
+        .chain(super::canon_sidebar::ROUTES.iter().copied());
     #[cfg(feature = "e2e-fixtures")]
     let routes = routes.chain(FIXTURE_ROUTES.iter().copied());
     routes

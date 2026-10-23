@@ -1,5 +1,6 @@
 //! App-owned session rows and source-shaped navigation reads.
 
+pub(super) mod canon;
 mod clear;
 mod contracts;
 pub(super) mod identity;

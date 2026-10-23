@@ -8,7 +8,6 @@ mod application;
 pub use application::storage::history::{AppHistoryCommand, AppHistoryQuery};
 #[cfg(feature = "test-support")]
 pub use application::storage::testing as storage_testing;
-pub use application::{AppAssetCommand, AppSessionTopicClassifier, AppSessionTopicInput};
 mod file_watch;
 pub use file_watch::FileChangeWatch;
 mod auth;
@@ -45,6 +44,11 @@ pub use crate::gateway::message_file_store::AppMessageFiles;
 pub use application::settings::{
     command_sandbox_enabled, diagnostics_enabled_readonly, producer_log_config, startup_log_config,
     stored_ui_language_readonly,
+};
+pub use application::{
+    APP_PERSON_ID, AppAssetCommand, AppCanonOperation, AppCardInput, AppProfileInput,
+    AppSessionTopicClassifier, AppSessionTopicInput, AppSignInCommand, AppSignInUpsert,
+    AppVaultCommand, GatewaySignIns,
 };
 pub use application::{
     AppAdmissionAuthority, AppApplication, AppApplicationConfig, AppApplicationDependencies,
@@ -96,10 +100,6 @@ pub use application::{
     OperationOutputView, ProjectSnapshot, ResolvedNativeAssets, TranscriptExport,
     UnavailableWorkModel, VisualAdmissionRequest, project_task_graphs, task_graph_label,
     task_graph_model_label, task_graph_response,
-};
-pub use application::{
-    AppCardInput, AppProfileInput, AppSignInCommand, AppSignInUpsert, AppVaultCommand,
-    GatewaySignIns,
 };
 pub use application::{
     AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
