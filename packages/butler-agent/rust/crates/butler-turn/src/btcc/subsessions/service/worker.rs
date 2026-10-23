@@ -148,10 +148,10 @@ impl SubsessionService {
 pub(super) fn worker_output(stored: &crate::btcc::StoredSubsessionDelegation) -> Value {
     let waiting = stored.dispatch_state.as_deref() == Some("pending");
     let mut output = json!({"ok":true,"status":if waiting {"waiting"} else {"queued"},"delegation_id":stored.delegation_id,"relation_id":stored.relation_id,"child_session_id":stored.child_session_id,"task_id":stored.task_id});
-    if waiting {
-        output["message"] = json!(
+    if waiting && let Some(object) = output.as_object_mut() {
+        object.insert("message".into(), json!(
             "Worker queued: this session already has its maximum number of workers running. It starts automatically when one of them finishes; continue your own work — no retry needed."
-        );
+        ));
     }
     output
 }

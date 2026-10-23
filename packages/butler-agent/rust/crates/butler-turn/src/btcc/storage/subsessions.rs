@@ -450,7 +450,13 @@ impl SqliteSubsessionRepository {
 
     /// Marks a child result delivered.
     pub async fn mark_delivered(&self, result: String, now: String) -> Result<(), StorageError> {
-        self.storage.execute(move|db| { db.execute("UPDATE btcc_subsession_outbox SET status='delivered',delivered_at=?2 WHERE result_id=?1 AND status='pending'",params![result,now]).map_err(StorageError::sqlite)?; Ok(()) }).await
+        self.storage.execute(move |db| {
+            let tx = db.transaction().map_err(StorageError::sqlite)?;
+            tx.execute("UPDATE btcc_subsession_outbox SET status='delivered',delivered_at=?2 WHERE result_id=?1 AND status='pending'",params![result,now]).map_err(StorageError::sqlite)?;
+            // Delivery has reached the parent before its Worker slot is freed.
+            tx.execute("UPDATE btcc_subsession_delegations SET dispatch_state=NULL,slot_release_result_id=NULL WHERE relation_id=(SELECT relation_id FROM btcc_steward_results WHERE result_id=?1) AND slot_release_result_id=?1", [&result]).map_err(StorageError::sqlite)?;
+            tx.commit().map_err(StorageError::sqlite)
+        }).await
     }
 }
 

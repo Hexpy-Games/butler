@@ -102,7 +102,7 @@ impl SqliteSubsessionRepository {
             tx.execute("INSERT OR IGNORE INTO btcc_subsession_outbox (outbox_id,relation_id,result_id,parent_session_id,parent_turn_id,message_id,input_json,status,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'pending',?8)",params![format!("outbox-{result_id}"),delegation.relation_id,result_id,delegation.parent_session_id,delegation.parent_turn_id,format!("subsession-result-message:{result_id}"),input,now]).map_err(StorageError::sqlite)?;
             super::directions::settle_continued_direction(&tx, &delegation.relation_id, &child_turn, &now)?;
             if packet.child_role == ChildRole::Worker {
-                tx.execute("UPDATE btcc_subsession_delegations SET dispatch_state=NULL WHERE relation_id=?1 AND (?2='cancelled' OR NOT EXISTS (SELECT 1 FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending'))", params![delegation.relation_id,status]).map_err(StorageError::sqlite)?;
+                tx.execute("UPDATE btcc_subsession_delegations SET slot_release_result_id=?3,dispatch_state=CASE WHEN dispatch_state='pending' THEN NULL ELSE dispatch_state END WHERE relation_id=?1 AND (?2='cancelled' OR NOT EXISTS (SELECT 1 FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending'))", params![delegation.relation_id,status,result_id]).map_err(StorageError::sqlite)?;
             }
             tx.commit().map_err(StorageError::sqlite)?;
             Ok(())

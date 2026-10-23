@@ -161,6 +161,12 @@ fn table_columns(db: &Connection, table: &str) -> rusqlite::Result<Vec<String>> 
 fn ensure_worker_slots(db: &Connection) -> rusqlite::Result<()> {
     ensure_column(
         db,
+        "btcc_subsession_delegations",
+        "slot_release_result_id",
+        "TEXT",
+    )?;
+    ensure_column(
+        db,
         "btcc_subsession_directions",
         "defer_until_first_result",
         "INTEGER NOT NULL DEFAULT 0",
@@ -185,13 +191,17 @@ fn ensure_worker_slots(db: &Connection) -> rusqlite::Result<()> {
                parent_session_id=(SELECT parent_session_id FROM btcc_session_relations r WHERE r.relation_id=d.relation_id),
                child_role=COALESCE(CASE WHEN json_valid(packet_json) THEN json_extract(packet_json,'$.child_role') END,
                  CASE WHEN (SELECT child_session_id FROM btcc_session_relations r WHERE r.relation_id=d.relation_id) LIKE 'worker-%' THEN 'worker' ELSE 'steward' END);
-             UPDATE btcc_subsession_delegations AS d SET dispatch_state=NULL
+             UPDATE btcc_subsession_delegations AS d SET slot_release_result_id=(
+               SELECT result_id FROM btcc_steward_results x WHERE x.relation_id=d.relation_id ORDER BY x.created_at DESC,x.result_id DESC LIMIT 1)
              WHERE child_role='worker' AND dispatch_state='enqueued'
                AND EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=d.relation_id)
                AND NOT EXISTS (SELECT 1 FROM btcc_subsession_directions i WHERE i.relation_id=d.relation_id AND i.status='pending')
                AND NOT EXISTS (SELECT 1 FROM btcc_session_relations r JOIN btcc_turns t ON t.session_id=r.child_session_id
                  WHERE r.relation_id=d.relation_id AND t.semantic_state='admitted'
-                   AND NOT EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=d.relation_id AND x.child_turn_id=t.turn_id));",
+                   AND NOT EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=d.relation_id AND x.child_turn_id=t.turn_id));
+             UPDATE btcc_subsession_delegations AS d SET dispatch_state=NULL,slot_release_result_id=NULL
+             WHERE slot_release_result_id IS NOT NULL AND NOT EXISTS (
+               SELECT 1 FROM btcc_subsession_outbox o WHERE o.result_id=d.slot_release_result_id AND o.status='pending');",
         )?;
     }
     Ok(())

@@ -12,7 +12,8 @@ pub(super) fn assert_indexed(s: &Scenario) -> Result<(), HarnessError> {
         "SELECT count(*) FROM btcc_subsession_delegations WHERE parent_session_id=?1 AND child_role='worker' AND dispatch_state='enqueued'",
         "SELECT EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.child_turn_id=d.child_turn_id AND x.relation_id=d.relation_id AND x.status<>'cancelled') FROM btcc_subsession_delegations d WHERE d.relation_id=?1 AND d.dispatch_state='enqueued'",
         "UPDATE btcc_subsession_delegations SET dispatch_state='enqueued' WHERE relation_id=?1",
-        "UPDATE btcc_subsession_delegations SET dispatch_state=NULL WHERE relation_id=?1 AND ('success'='cancelled' OR NOT EXISTS (SELECT 1 FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending'))",
+        "UPDATE btcc_subsession_delegations SET dispatch_state=NULL,slot_release_result_id=NULL WHERE relation_id=(SELECT relation_id FROM btcc_steward_results WHERE result_id=?1) AND slot_release_result_id=?1",
+        "UPDATE btcc_subsession_delegations SET slot_release_result_id='result',dispatch_state=CASE WHEN dispatch_state='pending' THEN NULL ELSE dispatch_state END WHERE relation_id=?1 AND ('success'='cancelled' OR NOT EXISTS (SELECT 1 FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending'))",
     ] {
         let plan = db
             .prepare(&format!("EXPLAIN QUERY PLAN {sql}"))?
