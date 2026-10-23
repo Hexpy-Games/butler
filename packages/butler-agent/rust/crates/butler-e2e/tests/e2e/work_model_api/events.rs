@@ -48,7 +48,9 @@ pub(super) async fn review_task_and_observe(
 ) -> Result<(), HarnessError> {
     s.agent.terminate().await?;
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-    db.execute("UPDATE wm_attempts SET status='succeeded',finished_at=202 WHERE task_id='tk_schema' AND status='interrupted'", [])?;
+    // The offline review fixture finishes the lease even if deadline shutdown
+    // left it running rather than checkpointing it as interrupted.
+    assert_eq!(db.execute("UPDATE wm_attempts SET status='succeeded',finished_at=202 WHERE task_id='tk_schema' AND status IN ('running','interrupted')", [])?, 1);
     drop(db);
     let output =
         tokio::process::Command::new(butler_e2e::e2e::binary::fixture_binary("e2e-work-store")?)
