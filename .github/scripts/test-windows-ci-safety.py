@@ -37,6 +37,7 @@ class WindowsSafety(command_coverage.WindowsCommandCoverage):
         logged_steps = {
             'Platform and portable crate tests',
             'Compile existing Windows E2E harness', 'Existing stub chat E2E',
+            'Compile existing Windows E2E harness on a hosted runner',
             'Stub chat and durable config under a long data path',
             'Read-only real-profile Downloads command',
             'Native service recovery, full shutdown queue and memory reset',
@@ -62,7 +63,7 @@ class WindowsSafety(command_coverage.WindowsCommandCoverage):
             logged_sources.append(source)
             self.assertNotIn('Tee-Object', source)
             self.assert_raw_log_command(source, 'throw ')
-        self.assertEqual(sum(source.count('cmd /d ') for source in logged_sources), 9)
+        self.assertEqual(sum(source.count('cmd /d ') for source in logged_sources), 10)
         release = (repository / '.github/workflows/release.yml').read_text()
         self.assertIn('path: ${{ runner.temp }}/windows-basic-capabilities.log', release)
         wrapper = (repository / 'deploy/windows-test-log.ps1').read_text()

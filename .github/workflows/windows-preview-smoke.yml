@@ -1,9 +1,13 @@
 name: Unsigned Windows preview smoke
 on:
-  # Native coverage runs on main/release or explicit branch dispatch.
+  # Native owner-PC coverage runs on main/release, ci:windows-native PRs or
+  # branch dispatch. Other PRs that change Windows agent crates or Windows
+  # inputs (ci-changes.py selects) run the hosted shards on a hosted build.
   # gh workflow run windows-preview-smoke.yml --ref <head-branch>
   push:
     branches: [main, 'release/**']
+  pull_request:
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
     inputs:
       native-cache:
@@ -288,6 +292,67 @@ jobs:
         if: always()
         working-directory: .
         run: ./deploy/windows-self-hosted-cleanup.ps1
+  hosted-build:
+    permissions:
+      contents: read
+      actions: read
+    needs: changes
+    name: Build Windows E2E harness (hosted)
+    if: always() && !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.tier != 'integration' && fromJSON(needs.changes.outputs.jobs)['hosted-build'] && !inputs.native-loop && !inputs.diagnose-powershell
+    runs-on: windows-latest
+    timeout-minutes: 90
+    # Downloaded prebuilt ORT objects import the dynamic CRT (/MD); the static
+    # CRT flag belongs to the owner PC's static-ort build and fails to link here.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust-agent-setup
+        with:
+          native-deps: prebuilt-ort
+          cache-key: windows-e2e-hosted
+          save-cargo-cache: 'false'
+      - name: Isolate the harness build
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'windows-build'
+          New-Item -ItemType Directory -Force "$root/logs" | Out-Null
+          "PREVIEW_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CARGO_TARGET_DIR=$env:GITHUB_WORKSPACE/packages/butler-agent/rust/target" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Compile existing Windows E2E harness on a hosted runner
+        run: |
+          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          $ErrorActionPreference = 'Continue'
+          cmd /d /c "cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e --no-run --message-format=json > `"$env:PREVIEW_ROOT/logs/harness-compile.log`" 2>&1"
+          $testCode = $LASTEXITCODE
+          $ErrorActionPreference = 'Stop'
+          if ($testCode -ne 0) {
+            & "$env:GITHUB_WORKSPACE/deploy/windows-test-log.ps1" -Log "$env:PREVIEW_ROOT/logs/harness-compile.log"
+            exit $testCode
+          }
+      - name: Build debug agent for the harness
+        run: |
+          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          $ErrorActionPreference = 'Continue'
+          cargo build --locked --features butler-agent/e2e-fixtures,butler-platform/test-support --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox
+          $ErrorActionPreference = 'Stop'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Export compiled verification harnesses
+        run: ../../../deploy/windows-e2e-artifacts.ps1 -Mode Export
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-e2e
+          path: ${{ env.PREVIEW_ROOT }}/artifacts
+          if-no-files-found: error
+      - name: Keep harness build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-hosted-build-logs
+          path: ${{ env.PREVIEW_ROOT }}/logs
+          if-no-files-found: warn
+          retention-days: 1
   release:
     name: Installed unsigned Windows preview
     if: always() && !cancelled() && needs.changes.result == 'success' && (needs.build.result == 'success' || (needs.build.result == 'skipped' && contains(fromJSON(needs.changes.outputs.artifacts).*.name, 'agent-windows-x64'))) && (needs.stub.result == 'success' || (needs.stub.result == 'skipped' && contains(fromJSON(needs.changes.outputs.artifacts).*.name, 'windows-e2e'))) && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['release']) || (needs.changes.outputs.tier != 'integration' && fromJSON(needs.changes.outputs.jobs)['release'] && !inputs.native-loop && github.event_name != 'pull_request'))
@@ -387,8 +452,8 @@ jobs:
           Remove-Item $env:PREVIEW_ROOT -Recurse -Force
   hosted:
     name: Hosted Windows E2E (${{ matrix.shard }})
-    if: always() && !cancelled() && needs.changes.result == 'success' && (needs.stub.result == 'success' || (needs.stub.result == 'skipped' && contains(fromJSON(needs.changes.outputs.artifacts).*.name, 'windows-e2e'))) && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['hosted']) || (needs.changes.outputs.tier != 'integration' && fromJSON(needs.changes.outputs.jobs)['hosted'] && !inputs.native-loop))
-    needs: [changes, stub]
+    if: always() && !cancelled() && needs.changes.result == 'success' && (needs.stub.result == 'success' || needs.hosted-build.result == 'success' || (needs.stub.result == 'skipped' && contains(fromJSON(needs.changes.outputs.artifacts).*.name, 'windows-e2e'))) && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['hosted']) || (needs.changes.outputs.tier != 'integration' && fromJSON(needs.changes.outputs.jobs)['hosted'] && !inputs.native-loop))
+    needs: [changes, stub, hosted-build]
     runs-on: windows-latest
     timeout-minutes: 30
     env:
@@ -454,7 +519,7 @@ jobs:
   gate:
     name: Complete Windows preview verification
     if: ${{ always() && !inputs.native-loop && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    needs: [changes, build, stub, release, hosted]
+    needs: [changes, build, stub, hosted-build, release, hosted]
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -465,7 +530,7 @@ jobs:
       - name: Require selected preview checks
         env:
           RESULTS: ${{ toJSON(needs) }}
-          CHECK_GROUPS: '{"build":"jobs","stub":"jobs","release":"jobs","hosted":"jobs"}'
+          CHECK_GROUPS: '{"build":"jobs","stub":"jobs","hosted-build":"jobs","release":"jobs","hosted":"jobs"}'
         run: python3 .github/scripts/isolated.py python3 .github/scripts/ci-check-selected.py
       - uses: ./.github/actions/windows-preview-gate
         if: ${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}

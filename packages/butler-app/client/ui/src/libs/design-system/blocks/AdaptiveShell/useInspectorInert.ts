@@ -3,9 +3,10 @@ import { useLayoutEffect, useRef, type RefObject } from "react";
 /**
  * A closing inspector leaves keyboard focus and the accessibility tree the
  * moment it starts closing, not when its slide ends: it turns inert in the
- * same commit. Focus inside it first returns to the control that held focus
- * when it opened (when that can still take focus), else to the workspace, so
- * a later Tab starts from there and never reaches the sliding panel.
+ * same commit. Focus inside it, or focus the close dropped (a close control
+ * outside the panel that unmounts with it), first returns to the control that
+ * held focus when it opened (when that can still take focus), else to the
+ * workspace, so a later Tab starts from there and never reaches the sliding panel.
  */
 export function useInspectorInert(panelRef: RefObject<HTMLElement | null>, open: boolean) {
   const opener = useRef<HTMLElement | null>(null);
@@ -18,7 +19,8 @@ export function useInspectorInert(panelRef: RefObject<HTMLElement | null>, open:
       panel.inert = false;
       return;
     }
-    if (panel.contains(document.activeElement)) returnFocus(panel, opener.current);
+    const active = document.activeElement;
+    if (!active || active === document.body || panel.contains(active)) returnFocus(panel, opener.current);
     opener.current = null;
     panel.inert = true;
   }, [open, panelRef]);
