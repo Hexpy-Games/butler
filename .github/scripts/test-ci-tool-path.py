@@ -192,6 +192,9 @@ class Wiring(unittest.TestCase):
                      'agent-binary: ${{ runner.temp }}/rust-archive/butler-agent',
                      'filterset: ${{ steps.tool-e2e.outputs.filterset }}', 'workspace: "true"'):
             self.assertIn(text, run)
+        failures = steps['Upload tool-call path E2E failures']
+        self.assertIn('if: failure() && inputs.tool-e2e', failures)
+        self.assertIn('${{ runner.temp }}/butler-e2e/failures', failures)
         build = steps['Build the complete workspace once']
         version = re.search(r"BUILD_VERSION_REF: \$\{\{ github.event_name == 'pull_request' && '([^']+)'", build)[1]
         self.assertIn(f'build-version-ref: {version}', run)

@@ -165,6 +165,17 @@ jobs:
           workspace: "true"
           build-version-ref: v0.1.0-preview.99
           run-systemd: "false"
+      # The harness keeps the last failed sandboxes, including full Agent logs.
+      - name: Upload tool-call path E2E failures
+        if: failure() && inputs.tool-e2e
+        uses: actions/upload-artifact@v4
+        with:
+          name: tool-e2e-failures-${{ inputs.platform }}
+          path: |
+            ${{ runner.temp }}/butler-e2e/failures
+            !${{ runner.temp }}/butler-e2e/failures/**/cache/models
+          if-no-files-found: ignore
+          retention-days: 7
       - if: always() && inputs.tool-e2e
         uses: ./.github/actions/assert-home-untouched
       - name: Run doctests when present
