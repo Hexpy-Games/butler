@@ -997,14 +997,16 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   setLeftOpen: (value) =>
     set((state) => {
       const leftOpen = resolveUpdate(value, state.leftOpen);
-      return leftOpen
+      const panels = leftOpen
         ? normalizeAdaptivePanelState({
             mode: currentAdaptiveMode(chromeEnvironment()),
             requested: "left",
             leftOpen,
             rightOpen: state.rightOpen,
           })
-        : { leftOpen: false };
+        : { leftOpen: false, rightOpen: state.rightOpen };
+      return { ...panels, ...(panels.rightOpen === false && state.view.kind === "project-dashboard"
+        ? { view: { kind: "project-dashboard" as const, projectId: state.view.projectId } } : {}) };
     }),
   setRightOpen: (value) =>
     set((state) => {
@@ -1016,7 +1018,8 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
             leftOpen: state.leftOpen,
             rightOpen,
           })
-        : { rightOpen: false };
+        : { rightOpen: false, ...(state.view.kind === "project-dashboard"
+          ? { view: { kind: "project-dashboard" as const, projectId: state.view.projectId } } : {}) };
     }),
   setRightTab: (rightTab) => set({ rightTab }),
   setSelectedArtifactId: (artifactId) =>
@@ -2524,7 +2527,8 @@ export const selectActiveChat = (state: ButlerStore) =>
 export const selectActiveSessionView = (state: ButlerStore) =>
   state.view.kind === "session";
 export const selectRightAvailable = (state: ButlerStore) =>
-  selectActiveSessionView(state) && isServerBackedSessionId(state.activeChatId);
+  (selectActiveSessionView(state) && isServerBackedSessionId(state.activeChatId)) ||
+  (state.view.kind === "project-dashboard" && Boolean(state.view.epicId));
 export const selectEffectiveRightOpen = (state: ButlerStore) =>
   state.rightOpen && selectRightAvailable(state);
 export const selectViewTitle = (state: ButlerStore) =>

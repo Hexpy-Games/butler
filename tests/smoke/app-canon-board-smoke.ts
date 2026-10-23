@@ -1,3 +1,4 @@
+import { canonInspectorClose, closeCanonInspector, verifyCanonInspector } from "../support/canon-board-inspector.ts";
 // Native stub-backed UI smoke: all planning content is seeded through canon HTTP.
 import { captureBoardEdges } from "../support/canon-board-visuals.ts";
 import { verifyBoardSelector } from "../support/canon-board-selector.ts";
@@ -12,7 +13,7 @@ import { openCanonBoard, seedCanonBoard, verifyCanonFlows } from "../support/can
 
 const shots = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? ".tmp/canon-board-smoke");
 mkdirSync(shots, { recursive: true });
-const cases = [1440, 390].flatMap(width => ["light", "dark"].flatMap(theme => ["plain", "wallpaper"].map(surface => `${width}-${theme}-${surface}`)));
+const cases = [1440, 1280, 390].flatMap(width => ["light", "dark"].flatMap(theme => ["plain", "wallpaper"].map(surface => `${width}-${theme}-${surface}`)));
 if (await runSmokeCases(cases, "BUTLER_CANON_SMOKE_CASE", import.meta.path, { isolate: true })) process.exit(0);
 const selectedCase = process.env.BUTLER_CANON_SMOKE_CASE;
 const before = process.env.BUTLER_SMOKE_BASELINE === "1";
@@ -62,19 +63,21 @@ try {
       assert.equal(await card.getByRole("img", { name: "나", exact: true }).count(), 1, "Assigned card has an Avatar after its title");
       await card.focus(); await card.press("Enter");
       await page.locator('[data-test-class="canon-epic-detail"]').waitFor();
-      if (width === 1440) {
+      if (width !== 390) {
         // Exercise pointer opening from a closed panel, as well as Enter above.
-        await page.locator('[data-test-class="canon-detail-panel"]').getByRole("button", { name: "닫기", exact: true }).click();
-        await page.locator('[data-test-class="canon-detail-panel"]').waitFor({ state: "hidden" });
+        await closeCanonInspector(page);
+        await page.locator('[data-test-class~="right-inspector-open"]').waitFor({ state: "hidden" });
         await card.click();
         await page.locator('[data-test-class="canon-epic-detail"]').waitFor();
       } else {
-        const close = await page.locator('[data-test-class="canon-detail-panel"]').getByRole("button", { name: "닫기", exact: true }).boundingBox();
+        const close = await canonInspectorClose(page).boundingBox();
         assert(close && close.y >= 0 && close.y + close.height < 844, "Selected detail opens in the phone viewport");
       }
-      assert(await page.evaluate(() => document.activeElement?.matches('[data-test-class="canon-detail-panel"] h3')),
-        "Opening detail focuses its heading");
-      const detailPanel = page.locator('[data-test-class="canon-detail-panel"]');
+      await page.waitForFunction(() => document.activeElement?.matches('[data-test-class~="right-inspector"] h3'));
+      await verifyCanonInspector(page);
+      assert.equal(await board.locator('[data-test-class="canon-epic-detail"]').count(), 0, "Detail uses the app inspector");
+      assert.equal(await page.locator('[data-test-class~="right-inspector"]').getByRole("button", { name: "과제", exact: true }).count(), 1);
+      const detailPanel = page.locator('[data-test-class~="right-inspector"]');
       const planControl = await detailPanel.getByRole("combobox", { name: "계획", exact: true }).boundingBox();
       const ordinal = await detailPanel.getByText("· 1번째", { exact: true }).boundingBox();
       const panelBox = await detailPanel.boundingBox();
@@ -89,7 +92,7 @@ try {
       await openCanonBoard(page);
       await card.click();
       await page.locator('[data-test-class="canon-epic-detail"]').waitFor();
-      await page.locator('[data-test-class="canon-detail-panel"]').getByRole("button", { name: "닫기", exact: true }).click();
+      await closeCanonInspector(page);
       await board.getByRole("button", { name: "새 과제", exact: true }).first().click();
       assert.equal(await page.locator("#canon-create-plan").inputValue(), planId, "New Epic defaults to selected plan");
       await page.getByRole("dialog").waitFor();
@@ -133,8 +136,5 @@ async function closeCase(page: Page | undefined, context: import("playwright").B
   if (errors.length) throw new AggregateError(errors, "Canon case failed");
 }
 async function capture(page: Page, filename: string): Promise<void> {
-  // Scroll the real selected surface into view on phones; desktop keeps the whole board.
-  const panel = page.locator('[data-test-class="canon-detail-panel"]');
-  if (filename.endsWith("-detail.png")) await panel.scrollIntoViewIfNeeded();
   await page.screenshot({ path: join(shots, filename), animations: "disabled" });
 }

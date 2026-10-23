@@ -50,6 +50,8 @@ export function Inspector({ id }: InspectorProps = {}) {
   const setView = useButlerStore((state) => state.setView);
   const controlWorker = useButlerStore((state) => state.controlWorker);
   const isOpen = useButlerStore(selectEffectiveRightOpen);
+  const view = useButlerStore(state => state.view);
+  const dashboardEpic = view.kind === "project-dashboard" && view.epicId ? view : null;
 
   useEffect(() => { if (epic) setRightTab("epic"); }, [sessionId, epic?.epic.id, setRightTab]);
 
@@ -65,6 +67,13 @@ export function Inspector({ id }: InspectorProps = {}) {
     tabs.unshift(["epic", appCopy.canon.epic, <FileText size="md" />]);
     tabs.splice(tabs.findIndex(([id]) => id === "automations"), 1);
   }
+
+  if (dashboardEpic) return <InspectorShell activeTab="epic" id={id} open={isOpen} onTabChange={setRightTab}
+    tabs={[{ id: "epic", label: appCopy.canon.epic, icon: <FileText size="md" /> }]}>
+    <ErrorBoundary key={dashboardEpic.epicId} scope="inspector-epic">
+      <EpicInspector focusTitle key={dashboardEpic.epicId} projectId={dashboardEpic.projectId} epicId={dashboardEpic.epicId!} />
+    </ErrorBoundary>
+  </InspectorShell>;
 
   return <InspectorShell activeTab={activeTab} id={id} open={isOpen} onTabChange={setRightTab}
     tabs={tabs.filter(([id]) => visibleInspectorTab(id, developerMode) === id).map(([id, label, icon]) => ({ id, label, icon }))}>

@@ -1,3 +1,4 @@
+import { canonStatusInput } from "./canonProgressSource.ts";
 import { appCopy } from "@/app/copy.ts";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Stack, ButtonContainer, DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, IconButton, MoreHorizontal } from "@/butler-ds";
 import type { EpicCard, EpicInput, CanonPlan, CanonStatus } from "@/app/canonApi.ts";
@@ -11,7 +12,7 @@ export function PlanEpicActions({ epic, plans, busy, onWrite, onOpen }: {
     <Stack shrink={false}><Select value={epic.canon_status} disabled={busy}
       onValueChange={value => {
         const status = value as CanonStatus;
-        onWrite(epic, { status, ...(["done", "cancelled"].includes(status) ? { expected_task_graph_revision: epic.task_graph_revision } : {}) }, copy.statusChanged);
+        onWrite(epic, canonStatusInput(epic, status), copy.statusChanged);
       }}>
       <SelectTrigger size="sm" aria-label={`${epic.title} · ${copy.status}`}><SelectValue /></SelectTrigger>
       <SelectContent>{Object.entries(copy.statuses).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>

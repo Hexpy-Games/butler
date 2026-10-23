@@ -1732,7 +1732,7 @@ export type AppView =
   | { kind: "settings"; section: SettingsSectionId }
   | { kind: "automations" }
   | { kind: "automation-detail"; automationId: string }
-  | { kind: "project-dashboard"; projectId: string }
+  | { kind: "project-dashboard"; projectId: string; epicId?: string }
   | { kind: "plan-overview"; projectId: string; planId: string | null };
 
 export interface CommandPaletteResult {

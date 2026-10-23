@@ -1,3 +1,4 @@
+import { canonTaskCounts } from "./canonProgressSource.ts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { EpicCard as CardData } from "@/app/canonApi.ts";
 import { KanbanCard, Stack, Tag, Typo } from "@/butler-ds";
@@ -8,7 +9,8 @@ export function EpicCard({ epic, ordinal, selected, onSelect }: {
 }) {
   useAppLocale();
   const copy = appCopy.canon;
-  const caption = [ordinal ? copy.ordinal(ordinal) : "", epic.task_counts.total ? copy.tasks(epic.task_counts.completed ?? 0, epic.task_counts.total) : ""].filter(Boolean).join(" · ");
+  const counts = canonTaskCounts(epic);
+  const caption = [ordinal ? copy.ordinal(ordinal) : "", counts.total ? copy.tasks(counts.completed ?? 0, counts.total) : ""].filter(Boolean).join(" · ");
   return <KanbanCard itemId={epic.id} label={epic.title} selected={selected} onOpen={() => onSelect(epic.id)}>
     <Stack gap="sm">
       <Stack align="row" cross="center" gap="sm">
