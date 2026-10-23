@@ -83,7 +83,7 @@ class HostLinks(unittest.TestCase):
             binary.write_bytes(b'\xcf\xfa\xed\xfe')
             def inspect(args, **kwargs):
                 self.assertNotIn('(', args[-1])
-                self.assertEqual(Path(args[-1]).resolve(), binary)
+                self.assertEqual(Path(args[-1]).resolve(), binary.resolve())
                 return type('Result', (), {'stdout': 'binary:\n'})()
             with patch.object(guard.subprocess, 'run', side_effect=inspect) as run:
                 self.assertEqual(guard.check_path(Path(directory), 'darwin'), 1)
@@ -99,13 +99,17 @@ class HostLinks(unittest.TestCase):
                      'GIT_EXECUTABLE:FILEPATH=GIT_EXECUTABLE-NOTFOUND\n'
                      f'Python_EXECUTABLE:FILEPATH={sys.executable}\n'
                      f'CMAKE_MAKE_PROGRAM_EXECUTABLE:FILEPATH={stage}/tools/ninja\n')
-            recipe.check_cmake_cache(clean, stage, 'linux-x64')
+            # Linux ORT builds run on Linux hosts; give any host the Linux system layout.
+            with patch.object(recipe.glob, 'glob', side_effect=lambda pattern: [pattern.rstrip('*')]), \
+                    patch.object(recipe.pathlib.Path, 'is_dir', return_value=True):
+                linux = recipe.cache_allowed_roots(stage, 'linux-x64')
+            recipe.check_cmake_cache(clean, stage, 'linux-x64', linux)
             for entry in ('Protobuf_DIR:PATH=/opt/homebrew/lib/cmake/protobuf',
                           'absl_DIR:PATH=/usr/local/lib/cmake/absl',
                           'X_LIBRARIES:STRING=/usr/lib/libc.so;/tmp/libbad.a',
                           're2_DIR:PATH=relative/package'):
                 with self.subTest(entry=entry), self.assertRaisesRegex(RuntimeError, 'outside allowed'):
-                    recipe.check_cmake_cache(entry, stage, 'linux-x64')
+                    recipe.check_cmake_cache(entry, stage, 'linux-x64', linux)
 
         with patch.object(recipe, 'command', side_effect=['/SDK', '/Xcode']):
             roots = recipe.cache_allowed_roots(stage, 'macos-arm64')
@@ -181,7 +185,7 @@ class HostLinks(unittest.TestCase):
     # test-category: security
     def test_python_executable_symlink_uses_resolved_install(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             executable = root / 'install/bin/python'
             executable.parent.mkdir(parents=True)
             executable.touch()
@@ -273,7 +277,9 @@ class HostLinks(unittest.TestCase):
         import json
         import static_ort_prebuilt as prebuilt
         with tempfile.TemporaryDirectory() as directory:
-            stage = Path(directory) / 'producer'
+            # Producers record realpath'd roots (macOS temp dirs sit behind /var -> /private/var).
+            directory = Path(directory).resolve()
+            stage = directory / 'producer'
             release = stage / 'build/Release'
             release.mkdir(parents=True)
             spec = recipe.TARGETS['linux-x64']
