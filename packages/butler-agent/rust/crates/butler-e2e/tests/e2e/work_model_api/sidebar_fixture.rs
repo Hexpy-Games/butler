@@ -72,9 +72,21 @@ async fn wma_sidebar_seeded_visibility_and_plan_order() -> Result<(), HarnessErr
     let mut order = ids(&view["groups"][1]["rows"]);
     order.reverse();
     let stream = LiveEvents::subscribe(&s.gw, 0).await?;
+    let backlog = data(
+        s.gw.post(
+            &path,
+            json!({"group_key":"backlog","work_ids":["wk_passkey"],"op_id":"shared-operation"}),
+        )
+        .await?,
+        200,
+    );
+    assert_eq!(ids(&backlog["groups"][0]["rows"]), vec!["wk_passkey"]);
     let changed = data(
-        s.gw.post(&path, json!({"group_key":"pl_p14","work_ids":order}))
-            .await?,
+        s.gw.post(
+            &path,
+            json!({"group_key":"pl_p14","work_ids":order,"op_id":"shared-operation"}),
+        )
+        .await?,
         200,
     );
     assert_eq!(ids(&changed["groups"][1]["rows"]), order);
@@ -83,25 +95,31 @@ async fn wma_sidebar_seeded_visibility_and_plan_order() -> Result<(), HarnessErr
     let forward = ids(&before["plans"][0]["works"]);
     let (a, b) = tokio::join!(
         s.gw.post(&path, json!({"group_key":"pl_p14","work_ids":forward})),
-        s.gw.post(&path, json!({"group_key":"pl_p14","work_ids":order}))
+        s.gw.post(
+            &path,
+            json!({"group_key":"pl_p14","work_ids":order,"op_id":"shared-operation"})
+        )
     );
     assert_eq!(ids(&data(a?, 200)["groups"][1]["rows"]), forward);
     assert_eq!(ids(&data(b?, 200)["groups"][1]["rows"]), order);
     assert_eq!(overview(&s, &project_id).await?, before);
-    assert_eq!(
+    let stale =
         s.gw.post(
             &path,
-            json!({"group_key":"pl_p14","work_ids":["wk_passkey"]})
+            json!({"group_key":"pl_p14","work_ids":["wk_passkey"]}),
         )
-        .await?
-        .status,
-        400
+        .await?;
+    assert_eq!(stale.status, 409);
+    assert_eq!(stale.error_code(), Some("conflict"));
+    assert_eq!(
+        stale.body["error"]["current"]["revision"],
+        before["plans"][0]["revision"]
     );
     let another = project(&s).await?;
     assert_eq!(
         s.gw.post(
             &format!("/projects/{another}/canon/sidebar-order"),
-            json!({"group_key":"pl_p14","work_ids":order})
+            json!({"group_key":"pl_p14","work_ids":order,"op_id":"shared-operation"})
         )
         .await?
         .status,

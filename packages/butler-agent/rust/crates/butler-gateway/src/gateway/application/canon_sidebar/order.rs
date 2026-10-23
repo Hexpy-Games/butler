@@ -29,15 +29,25 @@ pub(super) fn validate(canon: &Value, input: &Order) -> Result<(), GatewayApplic
         .filter_map(|w| w["id"].as_str())
         .collect();
     let wanted: HashSet<_> = input.work_ids.iter().map(String::as_str).collect();
-    if actual != wanted
-        || wanted.len() != input.work_ids.len()
-        || input.op_id.as_ref().is_some_and(String::is_empty)
-    {
-        return Err(public(
-            400,
-            "work_model_invalid",
-            "Order must contain every sidebar row exactly once.",
-        ));
+    if wanted.len() != input.work_ids.len() || input.op_id.as_ref().is_some_and(String::is_empty) {
+        return Err(public(400, "work_model_invalid", "Invalid order."));
+    }
+    if actual != wanted {
+        let revision = if input.group_key == "backlog" {
+            canon["backlog_revision"].as_i64()
+        } else {
+            canon["plans"]
+                .as_array()
+                .and_then(|plans| plans.iter().find(|p| p["id"] == input.group_key))
+                .and_then(|p| p["revision"].as_i64())
+        }
+        .ok_or_else(GatewayApplicationError::internal)?;
+        return Err(GatewayApplicationError::Public {
+            status: 409,
+            code: "conflict".into(),
+            message: "Group membership changed.".into(),
+            source: Some(std::sync::Arc::new(AppWorkModelConflict { revision })),
+        });
     }
     Ok(())
 }
@@ -49,27 +59,14 @@ pub(super) fn replace(
     project: &str,
     order: &Order,
 ) -> Result<(), AppStorageError> {
-    if let Some(op) = &order.op_id {
-        let existing = db
-            .query_row(
-                "SELECT project_id,group_key FROM app_canon_sidebar_order WHERE op_id=?1",
-                [op],
-                |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
-            )
-            .optional()
-            .map_err(AppStorageError::sqlite)?;
-        if existing.is_some() {
-            return Ok(());
-        }
-    }
     db.execute(
         "DELETE FROM app_canon_sidebar_order WHERE project_id=?1 AND group_key=?2",
         params![project, order.group_key],
     )
     .map_err(AppStorageError::sqlite)?;
     for (position, work) in order.work_ids.iter().enumerate() {
-        db.execute("INSERT INTO app_canon_sidebar_order(project_id,group_key,work_id,position,op_id) VALUES(?1,?2,?3,?4,?5)",
-            params![project,order.group_key,work,format!("{position:020}"),if position==0 {order.op_id.as_deref()} else {None}]).map_err(AppStorageError::sqlite)?;
+        db.execute("INSERT INTO app_canon_sidebar_order(project_id,group_key,work_id,position) VALUES(?1,?2,?3,?4)",
+            params![project,order.group_key,work,format!("{position:020}")]).map_err(AppStorageError::sqlite)?;
     }
     Ok(())
 }
@@ -78,9 +75,7 @@ pub(super) fn view(
     project: &str,
     mut canon: Value,
 ) -> Result<Value, AppStorageError> {
-    let mut groups = vec![
-        json!({"key":"backlog","kind":"backlog","title":"백로그","rows":canon["backlog"].take()}),
-    ];
+    let mut groups = vec![json!({"key":"backlog","kind":"backlog","rows":canon["backlog"].take()})];
     if let Some(plans) = canon["plans"].as_array_mut() {
         for plan in plans {
             groups.push(json!({"key":plan["id"],"kind":"plan","title":plan["title"],
