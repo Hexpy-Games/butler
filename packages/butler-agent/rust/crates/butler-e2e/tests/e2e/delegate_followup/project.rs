@@ -61,13 +61,15 @@ async fn blocked_project_followup_rejected_plan_reaches_terminal() -> Result<(),
         .expect("revised plan must remain readable before its new review");
     let queued =
         s.gw.post(
-            "/session-queue",
+            "/messages",
             json!({"chat_id":parent,
         "text":"Keep the continued-work note.",
         "client_message_id":uuid::Uuid::new_v4().to_string()}),
         )
         .await?;
     assert_eq!(queued.status, 202, "{queued:?}");
+    assert!(queued.data()["queued"]["id"].is_string(), "{queued:?}");
+    assert!(queued.data()["accepted"].is_null(), "{queued:?}");
     tokio::time::timeout(Duration::from_secs(10), async {
         use tokio::io::AsyncReadExt;
         loop {
