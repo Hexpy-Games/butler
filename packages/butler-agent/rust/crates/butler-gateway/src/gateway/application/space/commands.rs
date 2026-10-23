@@ -110,7 +110,7 @@ pub(super) fn execute(
         AppSpaceCommand::Pin {
             node_key, pinned, ..
         } => {
-            tree_mutations::pin(&tx, &before, node_key, *pinned)?;
+            tree_mutations::pin(&tx, node_key, *pinned)?;
             None
         }
     };

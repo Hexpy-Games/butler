@@ -177,6 +177,73 @@
   --scroll-fade-gutter: var(--sidebar-scrollbar-offset);
 }
 
+/* How far the scroll sits from each end, up to the fade size. The scroll
+   position drives it (a scroll timeline), so it is current on the frame focus
+   scrolls a row back to an end, before the edge flags catch up. */
+@property --sidebar-scroll-start-room {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --sidebar-scroll-end-room {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@keyframes sidebarScrollStartRoom {
+  from {
+    --sidebar-scroll-start-room: 0px;
+  }
+
+  to {
+    --sidebar-scroll-start-room: var(--scroll-fade-size);
+  }
+}
+
+@keyframes sidebarScrollEndRoom {
+  from {
+    --sidebar-scroll-end-room: var(--scroll-fade-size);
+  }
+
+  to {
+    --sidebar-scroll-end-room: 0px;
+  }
+}
+
+.scroll[data-scroll-fade] {
+  scroll-timeline: --sidebar-scroll block;
+  animation-name: sidebarScrollStartRoom, sidebarScrollEndRoom;
+  animation-timing-function: var(--motion-ease-linear);
+  animation-fill-mode: both;
+  animation-timeline: --sidebar-scroll;
+  animation-range:
+    0 var(--scroll-fade-size),
+    calc(100% - var(--scroll-fade-size)) 100%;
+}
+
+/* Rows sit only --focus-ring-room from each scroll end, so with a ring inside
+   each fade turns solid no further in than the scroll is from that end: a row
+   focused back to an end keeps its whole ring. At rest, and anywhere past the
+   fade size from an end, the fades are unchanged. */
+.scroll[data-scroll-fade]:has(:focus-visible) {
+  --scroll-fade-start-solid: max(
+    0px,
+    min(
+      var(--scroll-fade-start) - var(--scroll-fade-ring-room),
+      var(--sidebar-scroll-start-room)
+    )
+  );
+  --scroll-fade-end-solid: max(
+    0px,
+    min(
+      var(--scroll-fade-end) - var(--scroll-fade-ring-room),
+      var(--sidebar-scroll-end-room)
+    )
+  );
+}
+
 .scrollContent {
   box-sizing: border-box;
   display: flex;

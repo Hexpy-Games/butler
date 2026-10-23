@@ -220,6 +220,12 @@
   --kanban-lane-height: 22rem;
   /* Minimum lane width of a sideways-scrolling board (KanbanBoard scroll). */
   --kanban-lane-min-width: 15rem;
+  /* Floor of a lane that grows with its cards (KanbanLane height="content"). */
+  --kanban-lane-min-height: 7.5rem;
+  /* Narrowest card column of a wrapping lane (KanbanLane layout="grid"). */
+  --kanban-card-min-width: 14rem;
+  /* Thickness of a KanbanBoard drop line. */
+  --kanban-drop-line: 3px;
   --split-browser-height: 14.5rem;
   /* Browser (BrowserPane, PageCard): the pane is a sheet whose top corners
      match the page card; the card stands --browser-card-inset off the pane
