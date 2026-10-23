@@ -119,6 +119,7 @@ mod metric_retention;
 mod migration;
 mod model_thinking;
 mod monitoring_history;
+mod nfd_paths;
 mod onboarding;
 mod onboarding_form;
 mod outbox_identity;
