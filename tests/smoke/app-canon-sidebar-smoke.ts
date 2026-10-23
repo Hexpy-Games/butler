@@ -48,7 +48,11 @@ try {
       await page.getByRole("dialog").getByRole("button", { name: "취소", exact: true }).click();
       const created = await createFromSidebar(page, projectId, planId);
       // Close the phone's sidebar before opening its inspector drawer.
-      if (width === 390) await page.keyboard.press("Escape");
+      if (width === 390) {
+        await page.getByRole("button", { name: "사이드바 숨기기", exact: true })
+          .and(page.locator('button:not([data-slot="adaptive-shell-scrim"])')).click();
+        await page.locator('[data-slot="adaptive-shell-sidebar"][data-open="true"]').waitFor({ state: "hidden" });
+      }
       await showEpicInspector(page); await capture(page, `${prefix}-conversation`);
       await verifyInspectorConflict(page, server, created.work.id);
       if (width === 1440) await verifySidebarOrder(page, server, projectId, planId);
