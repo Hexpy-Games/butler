@@ -3,8 +3,11 @@
 use butler_e2e::e2e::HarnessError;
 use butler_platform::sqlite;
 use std::path::PathBuf;
+#[path = "memory_fixture/parked.rs"]
+mod parked;
 #[path = "memory_fixture/settlement.rs"]
 mod settlement;
+pub(super) use parked::wait_parked;
 pub(super) use settlement::settle;
 
 pub(super) fn initialize_empty(data: &std::path::Path) -> Result<PathBuf, HarnessError> {

@@ -207,18 +207,17 @@ async fn restart_keeps_worker_and_deferred_vectors_idle_until_demand() -> Result
     let before = memory_stubs::unit_states(&s.sandbox.data)?;
     assert_eq!(before.0, 1);
     s.gw = s.agent.start_again().await?;
-    for _ in 0..2 {
-        if let Some(workers) = usage::embedding_children(s.agent.pid().unwrap())? {
-            assert!(workers.is_empty(), "startup spawned an embedding worker");
-        }
-        assert!(
-            !s.agent
-                .current_logs()
-                .await?
-                .contains("[embedding-worker] ready")
-        );
-        tokio::time::sleep(Duration::from_secs(5)).await;
+    // A consumer parked without a deadline has admitted no deferred work.
+    crate::memory_fixture::wait_parked(&s).await;
+    if let Some(workers) = usage::embedding_children(s.agent.pid().unwrap())? {
+        assert!(workers.is_empty(), "startup spawned an embedding worker");
     }
+    assert!(
+        !s.agent
+            .current_logs()
+            .await?
+            .contains("[embedding-worker] ready")
+    );
     assert_eq!(memory_stubs::unit_states(&s.sandbox.data)?, before);
     let first = batch::recall(&s, "general", ASK).await?;
     assert_complete(&first, &code, 3);

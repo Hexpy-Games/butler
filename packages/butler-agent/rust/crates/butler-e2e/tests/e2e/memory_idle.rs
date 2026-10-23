@@ -8,7 +8,7 @@
 
 use super::memory_fixture;
 use butler_platform::sqlite;
-use memory_fixture::initialize_empty;
+use memory_fixture::{initialize_empty, wait_parked};
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
@@ -148,7 +148,8 @@ async fn mem_idle_daily_cycle_and_crash_recovery() -> Result<(), HarnessError> {
         .env("BUTLER_MEMORY_SYNC_TRACE", "1");
     let graph = initialize_empty(&setup.sandbox.data)?;
     let mut s = setup.start().await?;
-    tokio::time::sleep(Duration::from_secs(3)).await;
+    // The daily window starts once the startup sweep has parked the consumer.
+    wait_parked(&s).await;
     let graph_db = readonly(&graph);
     let before = data_version(&graph_db);
     tokio::time::sleep(Duration::from_secs(3)).await;
@@ -194,7 +195,8 @@ async fn mem_idle_daily_cycle_and_crash_recovery() -> Result<(), HarnessError> {
         1,
         "unclean startup missed the source"
     );
-    tokio::time::sleep(Duration::from_secs(15)).await;
+    // Recovery has settled once the consumer parks with nothing left to do.
+    wait_parked(&s).await;
     let settled = data_version(&graph_db);
     tokio::time::sleep(Duration::from_secs(5)).await;
     let further_writes = data_version(&graph_db) - settled;
@@ -208,14 +210,16 @@ async fn mem_idle_daily_cycle_and_crash_recovery() -> Result<(), HarnessError> {
 #[tokio::test]
 async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let setup = Setup::new("MEM-IDLE")?.fixture(Fixture::Empty);
+    let setup = Setup::new("MEM-IDLE")?
+        .fixture(Fixture::Empty)
+        .env("BUTLER_MEMORY_SYNC_TRACE", "1");
     let graph = initialize_empty(&setup.sandbox.data)?;
     // Upgrade a legacy schema with an aged deferred backlog already present.
     seed_graph(&graph);
     let s = setup.start().await?;
 
-    // Give the service time to discover the generation and finish its first sweep.
-    tokio::time::sleep(Duration::from_secs(10)).await;
+    // The service discovered the generation and finished its first sweep.
+    wait_parked(&s).await;
     let lock = s
         .sandbox
         .data
@@ -341,9 +345,9 @@ async fn mem_idle_catches_changed_source_without_restart() -> Result<(), Harness
         .env("BUTLER_MEMORY_SYNC_TRACE", "1");
     let graph = initialize_empty(&setup.sandbox.data)?;
     let s = setup.start().await?;
-    // Let the service's initial empty-source poll settle before changing it.
+    // Change the source only after the initial empty-source poll has parked.
     // Memory maintenance is service-owned; the CLI no longer exposes it.
-    tokio::time::sleep(Duration::from_secs(3)).await;
+    wait_parked(&s).await;
     assert_eq!(recovery_observations(&graph), 0);
     seed_imported_message(&s.sandbox.data);
     // The source revision changes without restarting or notifying the consumer.
