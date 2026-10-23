@@ -3,7 +3,6 @@ import { appCopy } from "@/app/copy";
 import { confirmAction } from "@/app/confirmation";
 import { notifyStatus } from "@/app/notifications";
 import { Button, ListRow, SettingsSection, Stack, Tooltip } from "@/butler-ds";
-import { browserCall } from "../browser/browserBridge";
 import { canOpenHandoffTab } from "../browser/browserHandoff";
 
 /** Clears the in-app browser's cookies, site data and cache. Saved sign-ins live in the keychain and stay. */
@@ -15,7 +14,7 @@ export function BrowserSiteDataSection() {
     if (!await confirmAction(copy.confirmMessage, { title: copy.confirmTitle, confirmLabel: copy.clear, destructive: true,
       details: [{ label: copy.items, text: copy.itemList }], note: copy.kept })) return;
     setBusy(true);
-    try { await browserCall("clear-site-data"); notifyStatus(copy.cleared, { tone: "ok" }); }
+    try { await window.butlerBrowser?.call("clear-site-data"); notifyStatus(copy.cleared, { tone: "ok" }); }
     catch { notifyStatus(copy.failed, { tone: "error" }); }
     finally { setBusy(false); }
   }

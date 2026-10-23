@@ -20,11 +20,17 @@ export function controlTab(browser, tab, holder, sticky = false) {
   if (!tab || tab.owner === "mine") return;
   // A pop-up the user took somewhere Butler may not go closes instead of returning.
   if (holder === "agent" && tab.opener && tab.holder === "user" && tab.url && !agentPopupAllowed(tab.policy ?? {}, tab.popupParentUrl, tab.url)) { browser.close(tab.id); return; }
-  if (holder === "user") { if (tab.holder === "agent") pauseHold(browser, tab); releaseHold(browser, tab); } else tab.pausedTurns = null;
+  if (holder === "user") { if (tab.holder === "agent") pauseHold(browser, tab); releaseHold(browser, tab); hearTab(tab); } else tab.pausedTurns = null;
   if (tab.dialog) void resolveDialog(browser, tab, { accept: false }, "control_changed");
   tab.holder = holder; tab.sticky = sticky; tab.epoch++; tab.observation = null; tab.waiting = Boolean(tab.dialog);
   if (holder === "agent") { tab.signinStep = null; tab.payStep = null; }
   browser.publish();
+}
+/** A tab Butler opened plays sound from the user's first takeover until it closes. */
+export function hearTab(tab) {
+  if (!tab.muted) return;
+  tab.muted = false;
+  if (tab.view && !tab.view.webContents.isDestroyed()) tab.view.webContents.setAudioMuted(false);
 }
 export function wireAgentTab(browser, tab) {
   const contents = tab.view.webContents;
