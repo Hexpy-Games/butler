@@ -28,7 +28,7 @@ impl SubsessionService {
                     return Err(store::Error::Invalid("ownership decision"));
                 }
                 let row = store::read_task(tx, &task)?;
-                if row["owner_epoch"] != expected_epoch {
+                if at(&row, "/owner_epoch") != expected_epoch {
                     return Err(store::Error::Conflict { current: row });
                 }
                 store::take_here(tx, &ctx, &task, &to, expected)
