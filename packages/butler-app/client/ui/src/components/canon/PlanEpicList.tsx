@@ -2,7 +2,7 @@ import { appCopy } from "@/app/copy.ts";
 import { Button, ButtonContainer, EmptyLine, SortableCardList, Stack, Tooltip, Typo } from "@/butler-ds";
 import type { EpicCard, EpicInput, CanonPlan } from "@/app/canonApi.ts";
 import { CanonAvatar } from "./CanonAvatar.tsx";
-import { CanonStatusGlyph } from "./CanonStatusGlyph.tsx";
+import { CanonEpicStatus } from "./CanonEpicStatus.tsx";
 import { PlanEpicActions } from "./PlanEpicActions.tsx";
 import { openEpicConversation } from "./canonNavigation.ts";
 export function PlanEpicList({ projectId, rows, plans, backlog, busy, onWrite, onReorder, onCreate }: {
@@ -15,8 +15,8 @@ export function PlanEpicList({ projectId, rows, plans, backlog, busy, onWrite, o
     id: epic.id, label: epic.title,
     title: <Stack as="span" inline align="row" cross="center" gap="xs" minWidth="0">
       <Typo.Caption tone="secondary" numeric="tabular">{index + 1} ·</Typo.Caption>
-      <CanonStatusGlyph status={epic.canon_status} />
-      <Typo.Text truncate>{epic.title}</Typo.Text>
+      <CanonEpicStatus epic={epic} />
+      <Typo.Text truncate shrink>{epic.title}</Typo.Text>
       <CanonAvatar person={epic.assignee} />
     </Stack>,
     description: epic.description.split(/\r?\n/u)[0] || copy.noDescription,

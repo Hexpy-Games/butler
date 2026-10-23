@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import type { EpicDetail as Epic, EpicInput, PlanCards, WorkTasks } from "@/app/canonApi.ts";
-import { ADAPTIVE_MEDIA, ButtonContainer, Grid, IconButton, InspectorPanel, MessageSquare, Presence, X, useMediaMatch } from "@/butler-ds";
+import { ADAPTIVE_MEDIA, ButtonContainer, Grid, IconButton, InspectorPanel, Presence, X, useMediaMatch } from "@/butler-ds";
 import { EpicDetail } from "./EpicDetail.tsx";
-export function EpicDetailPanel({ epic, plans, tasks, busy, onWrite, onClose, onOpenSession, bottomInset = 0 }: {
+export function EpicDetailPanel({ epic, plans, tasks, busy, onWrite, onClose, bottomInset = 0 }: {
   bottomInset?: number; epic: Epic | null; plans: PlanCards[]; tasks: WorkTasks | null; busy: boolean;
   onWrite: (input: EpicInput, message?: string) => Promise<boolean>; onClose: () => void; onOpenSession: (id: string) => void;
 }) {
@@ -24,9 +24,6 @@ export function EpicDetailPanel({ epic, plans, tasks, busy, onWrite, onClose, on
   return <Presence present={Boolean(epic)} motion="fade">
     <Grid ref={panel} columns="1" role="complementary" gap="md" aria-label={appCopy.canon.epic} data-test-class="canon-detail-panel">
         <InspectorPanel title={appCopy.canon.epic} action={<ButtonContainer size="sm">
-          <IconButton label={shown?.home_session_id ? appCopy.canon.openConversation : appCopy.canon.noConversation} disabled={!shown?.home_session_id}
-            aria-label={appCopy.canon.openConversation}
-            onClick={() => { if (shown?.home_session_id) onOpenSession(shown.home_session_id); }}><MessageSquare size="sm" /></IconButton>
           <IconButton label={appCopy.canon.close} onClick={onClose}><X size="sm" /></IconButton>
         </ButtonContainer>}>
           {shown && <EpicDetail titleRef={title} key={shown.id} epic={shown} plans={plans} tasks={tasks} busy={busy} onWrite={onWrite} />}

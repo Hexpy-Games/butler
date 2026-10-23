@@ -1,3 +1,4 @@
+import { spaceActivity } from "@/app/space/activity.ts";
 import { useState } from "react";
 import { NavDropTarget, NavRow, Notebook, IconSlot, Stack, Typo } from "@/butler-ds";
 import { useButlerStore } from "@/app/store.ts";
@@ -20,6 +21,7 @@ export function CanonEpicRow({ projectId, groupKey, epic, busy, onDrop }: {
   const row = useButlerStore(state => epic.home_session_id ? projectSpace(state.navigation).get(`s:${epic.home_session_id}`) : undefined);
   const active = useButlerStore(state => state.activeChatId === epic.home_session_id && state.view.kind === "session");
   const unread = useSessionUnread(row?.session);
+  const running = spaceActivity(row?.session) === "working";
   const [menuOpen, setMenuOpen] = useState(false);
   const longPress = useLongPressAction(() => { if (row) setMenuOpen(true); });
   const [drop, setDrop] = useState<"before" | "after">();
@@ -52,7 +54,7 @@ export function CanonEpicRow({ projectId, groupKey, epic, busy, onDrop }: {
       label={<Stack as="span" inline align="row" cross="center" gap="xs" minWidth="0">
         <Typo.Text as="span" truncate>{epic.title}</Typo.Text><CanonAvatar person={epic.assignee} />
       </Stack>}
-      actions={row ? <SpaceRowMenu row={row} running={epic.run_state === "running"} open={menuOpen} onOpenChange={setMenuOpen} /> : <SpaceActivity running={epic.run_state === "running"} />}
+      actions={row ? <SpaceRowMenu row={row} running={running} open={menuOpen} onOpenChange={setMenuOpen} /> : <SpaceActivity running={running} />}
       onContextMenu={row ? event => { event.preventDefault(); event.stopPropagation(); setMenuOpen(true); } : undefined}
       onClick={() => void openEpicConversation(projectId, epic)} />
   </NavDropTarget>;

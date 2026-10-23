@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import type { CanonSidebarGroup as Group, EpicCard } from "@/app/canonApi.ts";
 import { useOrganization } from "@/app/space/organization.ts";
-import { ButtonContainer, ChevronDown, ChevronRight, CollapsibleNavGroup, Folder, IconButton, ListChecks, NavDropTarget, NavRowSwap, OverflowActionMenu, Plus, Typo } from "@/butler-ds";
+import { ButtonContainer, ChevronDown, ChevronRight, CollapsibleNavGroup, Folder, IconButton, Pin, NavDropTarget, NavRowSwap, OverflowActionMenu, Plus, Typo } from "@/butler-ds";
 import { useLongPressAction } from "../layout/useLongPressAction.ts";
 import { CanonEpicRow } from "./CanonEpicRow.tsx";
 import { openPlanOverview } from "./canonNavigation.ts";
@@ -57,7 +57,7 @@ export function CanonSidebarGroup({ projectId, group, depth, busy, onCreate, onE
         setOver(false); useCanonSidebarDrag.getState().end();
       }}>
       <CollapsibleNavGroup indented stickyDepth={depth} dataTestClass="canon-sidebar-group" expanded={expanded} onToggle={toggle}
-        icon={group.kind === "backlog" ? <Folder /> : <ListChecks />} actions={actions}
+        icon={group.kind === "backlog" ? <Folder /> : <Pin />} actions={actions}
         label={<Typo.Text as="span" ref={labelRef}>{title}</Typo.Text>}>
         {group.rows.map(epic => <CanonEpicRow key={epic.id} projectId={projectId} groupKey={group.key} epic={epic} busy={busy} onDrop={reorder} />)}
       </CollapsibleNavGroup>

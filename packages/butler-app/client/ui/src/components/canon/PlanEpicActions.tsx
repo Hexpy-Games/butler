@@ -1,5 +1,5 @@
 import { appCopy } from "@/app/copy.ts";
-import { NativeSelect, NativeSelectOption, Stack, ButtonContainer, DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, IconButton, MoreHorizontal } from "@/butler-ds";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Stack, ButtonContainer, DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, IconButton, MoreHorizontal } from "@/butler-ds";
 import type { EpicCard, EpicInput, CanonPlan, CanonStatus } from "@/app/canonApi.ts";
 export function PlanEpicActions({ epic, plans, busy, onWrite, onOpen }: {
   onOpen: () => void; epic: EpicCard; plans: CanonPlan[]; busy: boolean;
@@ -8,13 +8,14 @@ export function PlanEpicActions({ epic, plans, busy, onWrite, onOpen }: {
   const copy = appCopy.canon;
   const options = [{ id: null, title: copy.backlog }, ...plans];
   return <ButtonContainer size="sm" wrap={false}>
-    <Stack shrink={false}><NativeSelect size="sm" aria-label={`${epic.title} · ${copy.status}`} value={epic.canon_status} disabled={busy}
-      onChange={event => {
-        const status = event.target.value as CanonStatus;
+    <Stack shrink={false}><Select value={epic.canon_status} disabled={busy}
+      onValueChange={value => {
+        const status = value as CanonStatus;
         onWrite(epic, { status, ...(["done", "cancelled"].includes(status) ? { expected_task_graph_revision: epic.task_graph_revision } : {}) }, copy.statusChanged);
       }}>
-      {Object.entries(copy.statuses).map(([value, label]) => <NativeSelectOption key={value} value={value}>{label}</NativeSelectOption>)}
-    </NativeSelect></Stack>
+      <SelectTrigger size="sm" aria-label={`${epic.title} · ${copy.status}`}><SelectValue /></SelectTrigger>
+      <SelectContent>{Object.entries(copy.statuses).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
+    </Select></Stack>
     <DropdownMenu><DropdownMenuTrigger asChild>
       <IconButton label={appCopy.space.rowMenu(epic.title)} disabled={busy}><MoreHorizontal /></IconButton>
     </DropdownMenuTrigger><DropdownMenuContent align="end">
