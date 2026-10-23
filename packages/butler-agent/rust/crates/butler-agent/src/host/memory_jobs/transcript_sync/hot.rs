@@ -23,6 +23,12 @@ use butler_models::models::{
     ModelProvider, ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest,
 };
 
+/// Whose usage a transcript summary is.
+pub(super) struct SummaryUsage<'a> {
+    pub(super) root: Option<&'a str>,
+    pub(super) role: &'a str,
+}
+
 pub(super) struct LegacyHot {
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
@@ -51,6 +57,7 @@ impl LegacyHot {
         project: &str,
         session_id: &str,
         topic: Option<&str>,
+        usage: SummaryUsage<'_>,
         cancellation: &CancellationToken,
     ) -> Result<String, crate::host::HostError> {
         let text = butler_memory::cognition::legacy_hot_prefix(conversation);
@@ -58,14 +65,7 @@ impl LegacyHot {
         if text.is_empty() {
             return Ok(String::new());
         }
-        let body = if text.starts_with("**") {
-            text.to_owned()
-        } else {
-            self.summarize(text, cancellation).await?
-        };
-        if trim_js_whitespace(&body).is_empty() {
-            return Err("hot_cache_entry_empty".into());
-        }
+        let body = self.body(text, usage, cancellation).await?;
         if contains_secret(&body) {
             return Err("hot_cache_secret_rejected".into());
         }
@@ -311,17 +311,39 @@ fn contains_secret(value: &str) -> bool {
 }
 
 impl LegacyHot {
+    /// Already-summarized text is kept; any other chunk is summarized.
+    async fn body(
+        &self,
+        text: &str,
+        usage: SummaryUsage<'_>,
+        cancellation: &CancellationToken,
+    ) -> Result<String, crate::host::HostError> {
+        let body = if text.starts_with("**") {
+            text.to_owned()
+        } else {
+            self.summarize(text, usage, cancellation).await?
+        };
+        if trim_js_whitespace(&body).is_empty() {
+            return Err("hot_cache_entry_empty".into());
+        }
+        Ok(body)
+    }
+
     async fn summarize(
         &self,
         text: &str,
+        usage: SummaryUsage<'_>,
         cancellation: &CancellationToken,
     ) -> Result<String, crate::host::HostError> {
         let prompt = format!(
             "Analyze the following conversation and summarize it in the format below. Omit any sections that don't apply.\n\n**Task**: Work performed, decisions made, completed/incomplete items (dev/file/search etc.)\n**Learning**: New concepts learned, important insights\n**Chat**: Core of casual conversation, exchange of opinions\n**Preference**: User preferences/tastes/tendencies newly revealed in this conversation (exclude recurring ones)\n\nEach section in 1-2 lines max. Omit the section entirely if empty.\n\nConversation:\n{text}"
         );
         let root = self.data_root.to_string_lossy().into_owned();
-        let attribution =
-            butler_models::models::PromptUsageAttribution::for_phase("memory_extraction");
+        let attribution = butler_models::models::PromptUsageAttribution {
+            root_session_id: usage.root,
+            role: Some(usage.role),
+            ..butler_models::models::PromptUsageAttribution::for_phase("memory_extraction")
+        };
         let summary = self.provider.run_prompt(
             ProviderPromptRequest {
                 prompt: &prompt,
@@ -329,7 +351,7 @@ impl LegacyHot {
                 reasoning_effort: None,
                 instructions: None,
                 response_format: None,
-                cache_scope: None,
+                cache_scope: Some("memory-hot-summary"),
                 cache_boundary: None,
                 cancellation: cancellation.clone(),
                 attachments: &[],
