@@ -16,28 +16,29 @@
     "JSON account identifiers (account_id, user_id, email, ...) -> {{ACCOUNT}}/{{EMAIL}}",
     "JSON tokens (access_token, refresh_token, id_token, authorization) -> {{TOKEN}}",
     "absolute reset times -> {{EPOCH_MS|S+delta}} relative to recording, rounded to the hour",
-    "siwc-path-migration"
+    "siwc-path-migration",
+    "siwc-function-call-namespace"
   ],
   "files": [
     {
       "file": "000.json",
-      "sha256": "fa9f2e201041219e6b12d5d06ff4ca7170b7c21aa979bd7ebf85e5181381bd97"
+      "sha256": "d2e18d6d08699cfc1db5b02503a0d51b72221edd5900cbeb261f6553b2992177"
     },
     {
       "file": "001.json",
-      "sha256": "5c4614aa6af2101f4cf4dd1eabd0b0af65273d3cfd5ba41e898c1b51c70c4333"
+      "sha256": "cfcfebcbf729ad7d2ff083375043b6dae95ba88f576322a06e7d660ef06fc2d5"
     },
     {
       "file": "002.json",
-      "sha256": "0e24dd71d169a913e2bff06d1da0e51e9f68a1fc29ddfa99d7fc2ad872b351a3"
+      "sha256": "cd372eb0ec389889c50098d8f360c654c04edef476fbb0450f104aadd8e75bde"
     },
     {
       "file": "003.json",
-      "sha256": "a2fdbdfa516876139ef0858fcbd766bc6f87ebff4f5263922849af4a3b032a69"
+      "sha256": "52966993e31a9a7790f266c6a77a386e685c68783d6f44b80823c84900d029ce"
     },
     {
       "file": "004.json",
-      "sha256": "cee73c0f5ced2a6fcb79e0dca1b6fa7fe35fd238b37565d3dd6321ab325666e5"
+      "sha256": "71eddaf8d25838498eb373f84ad2018acfee66f9489aed7f80a89f344b2b5fa0"
     },
     {
       "file": "005.json",

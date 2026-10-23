@@ -76,7 +76,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0aff0f5ae767c586016abb0652b3d887d0b1904dbb91a21874\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_2xSP4kHxJmqKrpYaJPfcEvOY\",\"name\":\"replace_work_plan\"},\"output_index\":1,\"sequence_number\":4}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0aff0f5ae767c586016abb0652b3d887d0b1904dbb91a21874\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_2xSP4kHxJmqKrpYaJPfcEvOY\",\"name\":\"replace_work_plan\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":4}\n\n"
       },
       {
         "delay_ms": 0,
@@ -392,7 +392,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0aff0f5ae767c586016abb0652b3d887d0b1904dbb91a21874\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Change the app-wide wallpaper to Silk live wallpaper.\\\",\\\"execution_mode\\\":\\\"direct\\\",\\\"actions\\\":[{\\\"action_key\\\":\\\"Set app-wide wallpaper to Silk live wallpaper\\\",\\\"effect\\\":{\\\"capability\\\":\\\"Change the app wallpaper\\\",\\\"target\\\":\\\"App-wide wallpaper set to Silk live wallpaper\\\"}}],\\\"checks\\\":[\\\"Confirm the installed live wallpaper module is Silk.\\\",\\\"Verify the app-wide wallpaper setting uses Silk.\\\"]}\",\"call_id\":\"call_2xSP4kHxJmqKrpYaJPfcEvOY\",\"name\":\"replace_work_plan\"},\"output_index\":1,\"sequence_number\":83}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0aff0f5ae767c586016abb0652b3d887d0b1904dbb91a21874\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Change the app-wide wallpaper to Silk live wallpaper.\\\",\\\"execution_mode\\\":\\\"direct\\\",\\\"actions\\\":[{\\\"action_key\\\":\\\"Set app-wide wallpaper to Silk live wallpaper\\\",\\\"effect\\\":{\\\"capability\\\":\\\"Change the app wallpaper\\\",\\\"target\\\":\\\"App-wide wallpaper set to Silk live wallpaper\\\"}}],\\\"checks\\\":[\\\"Confirm the installed live wallpaper module is Silk.\\\",\\\"Verify the app-wide wallpaper setting uses Silk.\\\"]}\",\"call_id\":\"call_2xSP4kHxJmqKrpYaJPfcEvOY\",\"name\":\"replace_work_plan\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":83}\n\n"
       },
       {
         "delay_ms": 26,

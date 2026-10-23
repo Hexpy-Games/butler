@@ -36,7 +36,7 @@
       },
       {
         "delay_ms": 3,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_06e2e9b88e143d34016ab9043cc8e087d093b96ddcb322ff6b\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_tHB0xMykniUScEtNHsimLfHb\",\"name\":\"replace_work_plan\"},\"output_index\":1,\"sequence_number\":4}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_06e2e9b88e143d34016ab9043cc8e087d093b96ddcb322ff6b\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_tHB0xMykniUScEtNHsimLfHb\",\"name\":\"replace_work_plan\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":4}\n\n"
       },
       {
         "delay_ms": 0,
@@ -312,7 +312,7 @@
       },
       {
         "delay_ms": 27,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_06e2e9b88e143d34016ab9043cc8e087d093b96ddcb322ff6b\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Append the requested line to log.txt in the workspace\\\",\\\"execution_mode\\\":\\\"direct\\\",\\\"actions\\\":[{\\\"action_key\\\":\\\"Append the requested line to log.txt\\\",\\\"effect\\\":{\\\"capability\\\":\\\"Modify a workspace file\\\",\\\"target\\\":\\\"Append the requested line to log.txt\\\"}}],\\\"checks\\\":[\\\"Run the exact requested command in the workspace.\\\"]}\",\"call_id\":\"call_tHB0xMykniUScEtNHsimLfHb\",\"name\":\"replace_work_plan\"},\"output_index\":1,\"sequence_number\":73}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_06e2e9b88e143d34016ab9043cc8e087d093b96ddcb322ff6b\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Append the requested line to log.txt in the workspace\\\",\\\"execution_mode\\\":\\\"direct\\\",\\\"actions\\\":[{\\\"action_key\\\":\\\"Append the requested line to log.txt\\\",\\\"effect\\\":{\\\"capability\\\":\\\"Modify a workspace file\\\",\\\"target\\\":\\\"Append the requested line to log.txt\\\"}}],\\\"checks\\\":[\\\"Run the exact requested command in the workspace.\\\"]}\",\"call_id\":\"call_tHB0xMykniUScEtNHsimLfHb\",\"name\":\"replace_work_plan\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":73}\n\n"
       },
       {
         "delay_ms": 53,

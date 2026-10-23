@@ -13,48 +13,49 @@
     "response.instructions -> {{REDACTED_ECHO}}, response.tools -> []",
     "response headers reduced to content-type, retry-after",
     "chunks re-cut at SSE event boundaries (event bytes unchanged)",
-    "siwc-path-migration"
+    "siwc-path-migration",
+    "siwc-function-call-namespace"
   ],
   "files": [
     {
       "file": "000.json",
-      "sha256": "ea27c214b6bdc2da13667d4eb210bc1bd6a43898dcd12a9b9173c9c8fe2a3712"
+      "sha256": "26d5e387d56ba91cdeaca8f6489b65c5815047389f04ba2e09620de5f4215942"
     },
     {
       "file": "001.json",
-      "sha256": "d4fef33915543371af8037bafb0f94a75797125111a77d4306c9477cc3a6a24c"
+      "sha256": "73366c04bbb1b7a096fbe9523207ce020a8ad4af63f858dd469ea2c8da0bdef8"
     },
     {
       "file": "002.json",
-      "sha256": "655fd964708abd4a015a2f02a7297a996eea8fb36dd252ec16d4b93642aa0450"
+      "sha256": "0d7194616b7f1164691994fcdcacbd614233a710afdb39678f833fcbedb35abf"
     },
     {
       "file": "003.json",
-      "sha256": "3567247f396b582e035d46e02f4b0bc9f80ebf407663ff88b4fde4d81669c236"
+      "sha256": "ccba0576317a1431d9d1e5948c603c653c9f80ac5132a5fc150a0f93312f82d5"
     },
     {
       "file": "004.json",
-      "sha256": "33bc2d3c310b736001f19b5149ed6f29f539f6808fdf0343077190eaa6df9423"
+      "sha256": "e9f26a416aa4aa20c3dbfc3e9a3fd8e1efc7679177fd8aeb7aeaf5750aec53bc"
     },
     {
       "file": "005.json",
-      "sha256": "9a1d941aaf43b62dd4ba8c357b6558adfcd826b0de7f201afc502cc3795542e5"
+      "sha256": "dd4dc652b29c35f839962ade6265747277bf6f287b7741535ce5f80362ca887e"
     },
     {
       "file": "006.json",
-      "sha256": "0e145831a9f69235aee5435b823844e6412ec625ba2b72b316020459a2c34fe9"
+      "sha256": "f258e9bbe265a199a2942ae8b24a13190c8017bc1ce6b1ca52615c1b93771bfc"
     },
     {
       "file": "007.json",
-      "sha256": "66274830d558c2aa5a4b7171a29d4ec6e1ef2572c7069f8366629012552bdcac"
+      "sha256": "8ed1aa0296fddfdbd59a575081b7f6e1f6c60a0b2e6f5206237f7344c4967a16"
     },
     {
       "file": "008.json",
-      "sha256": "d4776ec05e6f650fd792645b8154b1138ea3b44ebbae033b3a20c682346f2436"
+      "sha256": "c8ca43315081455a83efaa529970286183273e727daba6340dd738d1c68f6c38"
     },
     {
       "file": "009.json",
-      "sha256": "7fb0600d7e95ca8463f703e239a44ce764aedd661aad723d18bff54ed1e1c8fb"
+      "sha256": "5ccc9f18a8cdeb5b2495eea234582d1d05eef895755a81a8fdc6cc8e4af6db25"
     },
     {
       "file": "010.json",

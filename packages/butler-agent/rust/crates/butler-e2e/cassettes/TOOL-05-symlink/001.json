@@ -28,7 +28,7 @@
       },
       {
         "delay_ms": 1396,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0ab5ae2c074d13be016ab8d392e34087d090d85d878a6751cd\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_59s58lz0iAGCFCNXUGmonhme\",\"name\":\"replace_work_plan\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0ab5ae2c074d13be016ab8d392e34087d090d85d878a6751cd\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_59s58lz0iAGCFCNXUGmonhme\",\"name\":\"replace_work_plan\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -320,7 +320,7 @@
       },
       {
         "delay_ms": 10,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0ab5ae2c074d13be016ab8d392e34087d090d85d878a6751cd\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Create inside.txt in the workspace containing exactly hello-e2e\\\",\\\"execution_mode\\\":\\\"direct\\\",\\\"actions\\\":[{\\\"action_key\\\":\\\"Create inside.txt with the exact requested text\\\",\\\"effect\\\":{\\\"capability\\\":\\\"Create a workspace file\\\",\\\"target\\\":\\\"inside.txt containing exactly hello-e2e\\\"}}],\\\"checks\\\":[\\\"Confirm the file contains exactly the requested bytes.\\\"]}\",\"call_id\":\"call_59s58lz0iAGCFCNXUGmonhme\",\"name\":\"replace_work_plan\"},\"output_index\":0,\"sequence_number\":75}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0ab5ae2c074d13be016ab8d392e34087d090d85d878a6751cd\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Create inside.txt in the workspace containing exactly hello-e2e\\\",\\\"execution_mode\\\":\\\"direct\\\",\\\"actions\\\":[{\\\"action_key\\\":\\\"Create inside.txt with the exact requested text\\\",\\\"effect\\\":{\\\"capability\\\":\\\"Create a workspace file\\\",\\\"target\\\":\\\"inside.txt containing exactly hello-e2e\\\"}}],\\\"checks\\\":[\\\"Confirm the file contains exactly the requested bytes.\\\"]}\",\"call_id\":\"call_59s58lz0iAGCFCNXUGmonhme\",\"name\":\"replace_work_plan\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":75}\n\n"
       },
       {
         "delay_ms": 19,

@@ -36,7 +36,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0f010f59d9bedabb016ab9a0d7a32087d0bbc006f99f0e0295\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_CCT4H0zr36Evp0fJFUeMaen7\",\"name\":\"replace_work_plan\"},\"output_index\":1,\"sequence_number\":4}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0f010f59d9bedabb016ab9a0d7a32087d0bbc006f99f0e0295\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_CCT4H0zr36Evp0fJFUeMaen7\",\"name\":\"replace_work_plan\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":4}\n\n"
       },
       {
         "delay_ms": 0,
@@ -480,7 +480,7 @@
       },
       {
         "delay_ms": 10,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0f010f59d9bedabb016ab9a0d7a32087d0bbc006f99f0e0295\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Create full-{{NONCE}}.txt in the workspace containing exactly “scheduled”.\\\",\\\"execution_mode\\\":\\\"direct\\\",\\\"actions\\\":[{\\\"action_key\\\":\\\"Create the requested text file\\\",\\\"description\\\":\\\"Write the exact text scheduled to full-{{NONCE}}.txt.\\\",\\\"effect\\\":{\\\"capability\\\":\\\"Create a workspace file\\\",\\\"target\\\":\\\"A text file named full-{{NONCE}}.txt containing exactly scheduled\\\"}}],\\\"checks\\\":[\\\"Confirm the file contains exactly scheduled, with no extra text.\\\"]}\",\"call_id\":\"call_CCT4H0zr36Evp0fJFUeMaen7\",\"name\":\"replace_work_plan\"},\"output_index\":1,\"sequence_number\":115}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0f010f59d9bedabb016ab9a0d7a32087d0bbc006f99f0e0295\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Create full-{{NONCE}}.txt in the workspace containing exactly “scheduled”.\\\",\\\"execution_mode\\\":\\\"direct\\\",\\\"actions\\\":[{\\\"action_key\\\":\\\"Create the requested text file\\\",\\\"description\\\":\\\"Write the exact text scheduled to full-{{NONCE}}.txt.\\\",\\\"effect\\\":{\\\"capability\\\":\\\"Create a workspace file\\\",\\\"target\\\":\\\"A text file named full-{{NONCE}}.txt containing exactly scheduled\\\"}}],\\\"checks\\\":[\\\"Confirm the file contains exactly scheduled, with no extra text.\\\"]}\",\"call_id\":\"call_CCT4H0zr36Evp0fJFUeMaen7\",\"name\":\"replace_work_plan\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":115}\n\n"
       },
       {
         "delay_ms": 17,

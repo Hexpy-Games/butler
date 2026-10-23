@@ -14,9 +14,9 @@ export function ChatGptSignInCard({ signIn, account, firstRun = false, editing =
   useAppLocale();
   const copy = appCopy.chatgptSignIn, plan = appCopy.chatgptPlan;
   const waiting = signIn.phase === "waiting" || signIn.phase === "starting";
-  const off = !waiting && (account?.status === "plan_off" || signIn.view?.plan_enabled === false);
-  const signed = !off && !waiting && (account ? account.status === "signed_in" : signIn.view?.status === "completed" || signIn.view?.status === "profile_exists");
   const failed = signIn.phase === "failed", timedout = signIn.phase === "timedout";
+  const off = !waiting && !failed && !timedout && (account?.status === "plan_off" || signIn.view?.plan_enabled === false);
+  const signed = !off && !waiting && !failed && !timedout && (account ? account.status === "signed_in" : signIn.view?.status === "completed" || signIn.view?.status === "profile_exists");
   const again = !signed && (off || editing || account?.status === "sign_in_required" || account?.status === "legacy_sign_in_required");
   const code = signIn.view?.error;
   const reason = code === "oauth_account_mismatch" ? appCopy.firstRun.signInAccountMismatch

@@ -40,7 +40,7 @@
       },
       {
         "delay_ms": 812,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0f69bb76c92054f0016ab8e3bd21c487d09bdf7c995fb6f7ec\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_jxeqEMyM1kZBcyDuI2Nzn3lo\",\"name\":\"record_work_disposition\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0f69bb76c92054f0016ab8e3bd21c487d09bdf7c995fb6f7ec\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_jxeqEMyM1kZBcyDuI2Nzn3lo\",\"name\":\"record_work_disposition\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -580,7 +580,7 @@
       },
       {
         "delay_ms": 22,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0f69bb76c92054f0016ab8e3bd21c487d09bdf7c995fb6f7ec\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"work_id\\\":\\\"{{ECHO_1}}\\\",\\\"disposition\\\":\\\"blocked\\\",\\\"summary\\\":\\\"The e2e_echo call failed with an uncertain remote outcome; no token was returned, and repeating it blindly would be unsafe.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Call e2e_echo and report its token\\\",\\\"status\\\":\\\"blocked\\\"}],\\\"remaining_actions\\\":[\\\"Retrieve the token after the uncertain call is reconciled.\\\"],\\\"next_condition\\\":\\\"The MCP call outcome is reconciled or a safe retry is authorized.\\\"}\",\"call_id\":\"call_jxeqEMyM1kZBcyDuI2Nzn3lo\",\"name\":\"record_work_disposition\"},\"output_index\":0,\"sequence_number\":137}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0f69bb76c92054f0016ab8e3bd21c487d09bdf7c995fb6f7ec\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"work_id\\\":\\\"{{ECHO_1}}\\\",\\\"disposition\\\":\\\"blocked\\\",\\\"summary\\\":\\\"The e2e_echo call failed with an uncertain remote outcome; no token was returned, and repeating it blindly would be unsafe.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Call e2e_echo and report its token\\\",\\\"status\\\":\\\"blocked\\\"}],\\\"remaining_actions\\\":[\\\"Retrieve the token after the uncertain call is reconciled.\\\"],\\\"next_condition\\\":\\\"The MCP call outcome is reconciled or a safe retry is authorized.\\\"}\",\"call_id\":\"call_jxeqEMyM1kZBcyDuI2Nzn3lo\",\"name\":\"record_work_disposition\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":137}\n\n"
       },
       {
         "delay_ms": 68,

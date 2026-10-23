@@ -1,6 +1,6 @@
 import { signOutChatGpt } from "../chatgpt/chatGptActions";
 import { useAppLocale } from "@/app/copy.ts";
-import { ButtonContainer, Stack, Tooltip } from "@/butler-ds";
+import { ButtonContainer, Stack } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { SettingsSection } from "./SettingsFormComponents";
 import { HostedCredentialSection } from "./HostedCredentialSection";
@@ -64,15 +64,14 @@ export function HostedModelForm({
 
         />
         <ButtonContainer size="default" justify="end">
-        <Tooltip label={form.authMethod === "chatgpt_oauth" && !form.oauthReady ? appCopy.chatgptSignIn.addHint : ""}>
         <HostedModelSaveButton
+          disabledHint={form.authMethod === "chatgpt_oauth" && !form.oauthReady ? appCopy.chatgptSignIn.addHint : undefined}
           busy={form.busy}
           disabled={!form.canSave}
           label={editingModel ? copy.saveEdit : copy.saveAdd}
           savingLabel={copy.saving}
           onClick={() => void form.save()}
         />
-        </Tooltip>
         </ButtonContainer>
       </Stack>
     </SettingsSection>

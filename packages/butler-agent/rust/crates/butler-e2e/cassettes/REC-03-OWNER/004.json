@@ -32,7 +32,7 @@
       },
       {
         "delay_ms": 1,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0929c23cd167192f016ab9044a75e887d0b6fef21eb1ae8ea8\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_nveTXYzFadqqGsJ551mKSqP0\",\"name\":\"record_work_disposition\"},\"output_index\":1,\"sequence_number\":4}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0929c23cd167192f016ab9044a75e887d0b6fef21eb1ae8ea8\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_nveTXYzFadqqGsJ551mKSqP0\",\"name\":\"record_work_disposition\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":4}\n\n"
       },
       {
         "delay_ms": 8,
@@ -396,7 +396,7 @@
       },
       {
         "delay_ms": 30,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0929c23cd167192f016ab9044a75e887d0b6fef21eb1ae8ea8\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"work_id\\\":\\\"{{ECHO_1}}\\\",\\\"disposition\\\":\\\"completed\\\",\\\"summary\\\":\\\"Ran the exact requested command successfully in the workspace.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Append the requested line to log.txt\\\",\\\"status\\\":\\\"done\\\",\\\"note\\\":\\\"The command exited successfully.\\\"}]}\",\"call_id\":\"call_nveTXYzFadqqGsJ551mKSqP0\",\"name\":\"record_work_disposition\"},\"output_index\":1,\"sequence_number\":95}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0929c23cd167192f016ab9044a75e887d0b6fef21eb1ae8ea8\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"work_id\\\":\\\"{{ECHO_1}}\\\",\\\"disposition\\\":\\\"completed\\\",\\\"summary\\\":\\\"Ran the exact requested command successfully in the workspace.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Append the requested line to log.txt\\\",\\\"status\\\":\\\"done\\\",\\\"note\\\":\\\"The command exited successfully.\\\"}]}\",\"call_id\":\"call_nveTXYzFadqqGsJ551mKSqP0\",\"name\":\"record_work_disposition\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":95}\n\n"
       },
       {
         "delay_ms": 49,

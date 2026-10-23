@@ -34,7 +34,7 @@
       },
       {
         "delay_ms": 751,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0fed292921d90642016ab8d5a257b887d09f44fa5a01eafa99\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_m5wrkq8L5yEs4fkMjPJApLRt\",\"name\":\"run_command\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0fed292921d90642016ab8d5a257b887d09f44fa5a01eafa99\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_m5wrkq8L5yEs4fkMjPJApLRt\",\"name\":\"run_command\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -154,7 +154,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0fed292921d90642016ab8d5a257b887d09f44fa5a01eafa99\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"command\\\":\\\"echo {{NONCE}} >> log.txt\\\",\\\"summary\\\":\\\"Append requested token\\\",\\\"state_effect\\\":\\\"mutation\\\"}\",\"call_id\":\"call_m5wrkq8L5yEs4fkMjPJApLRt\",\"name\":\"run_command\"},\"output_index\":0,\"sequence_number\":32}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0fed292921d90642016ab8d5a257b887d09f44fa5a01eafa99\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"command\\\":\\\"echo {{NONCE}} >> log.txt\\\",\\\"summary\\\":\\\"Append requested token\\\",\\\"state_effect\\\":\\\"mutation\\\"}\",\"call_id\":\"call_m5wrkq8L5yEs4fkMjPJApLRt\",\"name\":\"run_command\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":32}\n\n"
       },
       {
         "delay_ms": 13,

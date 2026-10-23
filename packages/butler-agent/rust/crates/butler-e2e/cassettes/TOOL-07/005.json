@@ -71,7 +71,7 @@
       },
       {
         "delay_ms": 1109,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_061be9beda5497c4016abb0dfe5b8887d0bdaffa9bdcf88290\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_5BTddOTgyFNtJgFvPdfjbCCp\",\"name\":\"record_work_review\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_061be9beda5497c4016abb0dfe5b8887d0bdaffa9bdcf88290\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_5BTddOTgyFNtJgFvPdfjbCCp\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -359,7 +359,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_061be9beda5497c4016abb0dfe5b8887d0bdaffa9bdcf88290\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"result\\\",\\\"verdict\\\":\\\"accept\\\",\\\"summary\\\":\\\"Created approved.txt and read it back; it contains exactly approved-by-user, with no added characters.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create approved.txt with the exact requested contents\\\",\\\"status\\\":\\\"done\\\",\\\"note\\\":\\\"File created and verified by reading back the exact 16-byte contents.\\\"}]}\",\"call_id\":\"call_5BTddOTgyFNtJgFvPdfjbCCp\",\"name\":\"record_work_review\"},\"output_index\":0,\"sequence_number\":74}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_061be9beda5497c4016abb0dfe5b8887d0bdaffa9bdcf88290\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"result\\\",\\\"verdict\\\":\\\"accept\\\",\\\"summary\\\":\\\"Created approved.txt and read it back; it contains exactly approved-by-user, with no added characters.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create approved.txt with the exact requested contents\\\",\\\"status\\\":\\\"done\\\",\\\"note\\\":\\\"File created and verified by reading back the exact 16-byte contents.\\\"}]}\",\"call_id\":\"call_5BTddOTgyFNtJgFvPdfjbCCp\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":74}\n\n"
       },
       {
         "delay_ms": 10,

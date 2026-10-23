@@ -32,7 +32,7 @@
       },
       {
         "delay_ms": 17,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0373b6bde5c9d246016ab904359b9c87d0b3a49461c5317b1d\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_V3MEsgHuumdPSReUklnqXU3N\",\"name\":\"start_work\"},\"output_index\":1,\"sequence_number\":4}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0373b6bde5c9d246016ab904359b9c87d0b3a49461c5317b1d\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_V3MEsgHuumdPSReUklnqXU3N\",\"name\":\"start_work\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":4}\n\n"
       },
       {
         "delay_ms": 9,
@@ -96,7 +96,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0373b6bde5c9d246016ab904359b9c87d0b3a49461c5317b1d\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Append the requested line to log.txt in the workspace\\\"}\",\"call_id\":\"call_V3MEsgHuumdPSReUklnqXU3N\",\"name\":\"start_work\"},\"output_index\":1,\"sequence_number\":20}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0373b6bde5c9d246016ab904359b9c87d0b3a49461c5317b1d\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Append the requested line to log.txt in the workspace\\\"}\",\"call_id\":\"call_V3MEsgHuumdPSReUklnqXU3N\",\"name\":\"start_work\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":20}\n\n"
       },
       {
         "delay_ms": 11,

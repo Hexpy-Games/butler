@@ -16,40 +16,41 @@
     "JSON account identifiers (account_id, user_id, email, ...) -> {{ACCOUNT}}/{{EMAIL}}",
     "JSON tokens (access_token, refresh_token, id_token, authorization) -> {{TOKEN}}",
     "absolute reset times -> {{EPOCH_MS|S+delta}} relative to recording, rounded to the hour",
-    "siwc-path-migration"
+    "siwc-path-migration",
+    "siwc-function-call-namespace"
   ],
   "files": [
     {
       "file": "000.json",
-      "sha256": "207c37b029323f1bae9fc95c634e86f9cf2fda1cb13b94bde0257f7157a48255"
+      "sha256": "3b98aeed17e5814d7d845feeb909a3d314c3c6f58b83a0d544fbb3c15f2dd028"
     },
     {
       "file": "001.json",
-      "sha256": "30fe2bbaa148d11b4564395cf7101b788b0018c020bacab89e4e570808f4398e"
+      "sha256": "b6e37fd841e6b3709085b65657f91451443bf159ea2631e9dbc1733e96343db1"
     },
     {
       "file": "002.json",
-      "sha256": "be96f39999dc7c6cc251ddef9f1358bec5c7c3b86ef2ff005908114e52ccaa8a"
+      "sha256": "3f76954a7c030c6fed69a0bf6f8d543ac49782edaabcdf0ac708e35f7ffbf50c"
     },
     {
       "file": "003.json",
-      "sha256": "688787a91c3e62e6ff92b08ab4bcf68e9b34d7aeee6137b003db84b9406d96e3"
+      "sha256": "e5fef1cb9d7e3a7792f926447c28b43c73e167920ccc4836c176ca441a9bf2d7"
     },
     {
       "file": "004.json",
-      "sha256": "b568916a26600c316b77901860dc4d6fcad3ac209b56cded764cabe3300ece94"
+      "sha256": "c87fe7fb4571057b1b6c0d20dee742878f90c2f0b4e6b121378947a7ecd91fce"
     },
     {
       "file": "005.json",
-      "sha256": "40c6ac22783b1159275c9f68d16e14b233623786cc1a6b60d3270971a909e057"
+      "sha256": "463a83bf2f57b5ef8ec47df2156b79ec6e1ed7a7d08043638bdce83b53eeb935"
     },
     {
       "file": "006.json",
-      "sha256": "ce23dd5d843432cc0368e2ff770f4bd25bee2b0eb15083798161f12fab447b1f"
+      "sha256": "bf97f20e0d08354e66a0f728966f979eddf75f8e6e1988659b5dacbb12e3d867"
     },
     {
       "file": "007.json",
-      "sha256": "3b809979d72c04560b6d432e27c5f429a72547c98e1181c7c268e673ef90f79c"
+      "sha256": "6295761274196bd1f266e9a3f0792b3e16736c5a6096d44c966d39eb0ae89247"
     }
   ],
   "fingerprint": [

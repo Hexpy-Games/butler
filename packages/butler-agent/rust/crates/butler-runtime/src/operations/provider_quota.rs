@@ -317,13 +317,35 @@ impl ProviderQuotaStore {
 }
 
 impl ProviderQuotaSink for ProviderQuotaStore {
+    fn account_changed(&self, provider: &str) {
+        let before = self.view(provider);
+        {
+            let mut readings = self.readings.lock();
+            let had_reading = readings.remove(provider).is_some();
+            let had_limit = self.plan_limits.lock().remove(provider).is_some();
+            if had_reading || had_limit {
+                self.persist(&readings);
+            }
+        }
+        self.statuses.lock().remove(provider);
+        self.announce_change(provider, &before);
+    }
+
     fn plan_limit(&self, provider: &str, reading: Option<PlanLimitReading>) {
         let before = self.view(provider);
         self.set_chatgpt_active(true);
         let changed = {
             let mut limits = self.plan_limits.lock();
             match (limits.get(provider), reading) {
-                (None, None) | (Some(_), Some(_)) => false,
+                (None, None) => false,
+                (Some(previous), Some(reading)) => {
+                    if previous.resets_at_ms == reading.resets_at_ms {
+                        false
+                    } else {
+                        limits.insert(provider.into(), reading);
+                        true
+                    }
+                }
                 (None, Some(reading)) => {
                     limits.insert(provider.into(), reading);
                     true

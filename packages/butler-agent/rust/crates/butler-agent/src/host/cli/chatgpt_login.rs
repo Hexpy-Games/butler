@@ -14,9 +14,7 @@ pub(crate) async fn run(
         .await
         .map_err(HostError::from_error)??;
     super::http_logs::prepare(&data);
-    let owner = models::open_status_models(data)
-        .await
-        .map_err(HostError::from_error)?;
+    let owner = open_auth_models(data).await?;
     let configuration = owner.configuration.clone();
     let kind = if new_account {
         SignInKind::NewAccount
@@ -46,6 +44,25 @@ pub(crate) async fn run(
         if outcome.plan_enabled { "on" } else { "off" }
     );
     Ok(())
+}
+
+/// Auth commands share persisted quota ownership with the running App.
+pub(super) async fn open_auth_models(data: PathBuf) -> Result<models::StatusModels, HostError> {
+    let owner = models::open_status_models(data.clone())
+        .await
+        .map_err(HostError::from_error)?;
+    let quota = tokio::task::spawn_blocking(move || {
+        butler_runtime::operations::ProviderQuotaStore::open(
+            &data,
+            std::sync::Arc::new(crate::host::SystemIdentity),
+        )
+    })
+    .await
+    .map_err(HostError::from_error)?;
+    owner
+        .configuration
+        .set_provider_quota_sink(std::sync::Arc::new(quota));
+    Ok(owner)
 }
 
 async fn open_browser(url: &str) -> Result<bool, crate::host::HostError> {

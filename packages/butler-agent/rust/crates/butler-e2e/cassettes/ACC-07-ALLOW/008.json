@@ -87,7 +87,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0d1fc8f2ae03b172016abb29d5456087d08bff9167d3f0b800\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_mbXnsy9cJuVFvWjvJ7K1CeeZ\",\"name\":\"tool_call\"},\"output_index\":1,\"sequence_number\":4}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0d1fc8f2ae03b172016abb29d5456087d08bff9167d3f0b800\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_mbXnsy9cJuVFvWjvJ7K1CeeZ\",\"name\":\"tool_call\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":4}\n\n"
       },
       {
         "delay_ms": 0,
@@ -207,7 +207,7 @@
       },
       {
         "delay_ms": 9,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0d1fc8f2ae03b172016abb29d5456087d08bff9167d3f0b800\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"id\\\":\\\"native:set_wallpaper\\\",\\\"arguments\\\":{\\\"scope\\\":\\\"global\\\",\\\"source\\\":{\\\"kind\\\":\\\"live\\\",\\\"module\\\":\\\"butler.silk\\\"}}}\",\"call_id\":\"call_mbXnsy9cJuVFvWjvJ7K1CeeZ\",\"name\":\"tool_call\"},\"output_index\":1,\"sequence_number\":34}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0d1fc8f2ae03b172016abb29d5456087d08bff9167d3f0b800\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"id\\\":\\\"native:set_wallpaper\\\",\\\"arguments\\\":{\\\"scope\\\":\\\"global\\\",\\\"source\\\":{\\\"kind\\\":\\\"live\\\",\\\"module\\\":\\\"butler.silk\\\"}}}\",\"call_id\":\"call_mbXnsy9cJuVFvWjvJ7K1CeeZ\",\"name\":\"tool_call\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":34}\n\n"
       },
       {
         "delay_ms": 30,

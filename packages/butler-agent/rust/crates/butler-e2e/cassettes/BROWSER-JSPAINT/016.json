@@ -62,7 +62,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "data: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_044d500a703b7a0d016ac9820d974887d0a5b35fa382e7502e\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_l3bIu7dm7lCxTR3hsBdG9erx\",\"name\":\"tool_call\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "data: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_044d500a703b7a0d016ac9820d974887d0a5b35fa382e7502e\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_l3bIu7dm7lCxTR3hsBdG9erx\",\"name\":\"tool_call\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -902,7 +902,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_044d500a703b7a0d016ac9820d974887d0a5b35fa382e7502e\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"id\\\":\\\"native:browser_act\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"{{BROWSER_OPAQUE_0}}\\\",\\\"observation\\\":\\\"{{BROWSER_OPAQUE_5}}\\\",\\\"steps\\\":[{\\\"action\\\":\\\"click\\\",\\\"ref\\\":\\\"f0-e19\\\"},{\\\"action\\\":\\\"click\\\",\\\"ref\\\":\\\"f0-e52\\\"},{\\\"action\\\":\\\"drag\\\",\\\"point\\\":[210,220],\\\"target_point\\\":[330,320],\\\"expect\\\":\\\"canvas\\\"},{\\\"action\\\":\\\"click\\\",\\\"ref\\\":\\\"f0-e17\\\"},{\\\"action\\\":\\\"drag\\\",\\\"point\\\":[210,220],\\\"target_point\\\":[270,165],\\\"expect\\\":\\\"canvas\\\"},{\\\"action\\\":\\\"drag\\\",\\\"point\\\":[270,165],\\\"target_point\\\":[330,220],\\\"expect\\\":\\\"canvas\\\"},{\\\"action\\\":\\\"click\\\",\\\"ref\\\":\\\"f0-e21\\\"},{\\\"action\\\":\\\"click\\\",\\\"ref\\\":\\\"f0-e56\\\"},{\\\"action\\\":\\\"drag\\\",\\\"point\\\":[400,65],\\\"target_point\\\":[465,130],\\\"expect\\\":\\\"canvas\\\"}]}}\",\"call_id\":\"call_l3bIu7dm7lCxTR3hsBdG9erx\",\"name\":\"tool_call\"},\"output_index\":0,\"sequence_number\":212}\n\n"
+        "text": "data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_044d500a703b7a0d016ac9820d974887d0a5b35fa382e7502e\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"id\\\":\\\"native:browser_act\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"{{BROWSER_OPAQUE_0}}\\\",\\\"observation\\\":\\\"{{BROWSER_OPAQUE_5}}\\\",\\\"steps\\\":[{\\\"action\\\":\\\"click\\\",\\\"ref\\\":\\\"f0-e19\\\"},{\\\"action\\\":\\\"click\\\",\\\"ref\\\":\\\"f0-e52\\\"},{\\\"action\\\":\\\"drag\\\",\\\"point\\\":[210,220],\\\"target_point\\\":[330,320],\\\"expect\\\":\\\"canvas\\\"},{\\\"action\\\":\\\"click\\\",\\\"ref\\\":\\\"f0-e17\\\"},{\\\"action\\\":\\\"drag\\\",\\\"point\\\":[210,220],\\\"target_point\\\":[270,165],\\\"expect\\\":\\\"canvas\\\"},{\\\"action\\\":\\\"drag\\\",\\\"point\\\":[270,165],\\\"target_point\\\":[330,220],\\\"expect\\\":\\\"canvas\\\"},{\\\"action\\\":\\\"click\\\",\\\"ref\\\":\\\"f0-e21\\\"},{\\\"action\\\":\\\"click\\\",\\\"ref\\\":\\\"f0-e56\\\"},{\\\"action\\\":\\\"drag\\\",\\\"point\\\":[400,65],\\\"target_point\\\":[465,130],\\\"expect\\\":\\\"canvas\\\"}]}}\",\"call_id\":\"call_l3bIu7dm7lCxTR3hsBdG9erx\",\"name\":\"tool_call\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":212}\n\n"
       },
       {
         "delay_ms": 0,

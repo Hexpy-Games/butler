@@ -28,7 +28,7 @@
       },
       {
         "delay_ms": 852,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_096ce52cbea0a35f016ab8cbdbeb8087d0a9b407dde75af664\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_2Le8thN6gMIGPin9eRTueghu\",\"name\":\"read_skill_file\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_096ce52cbea0a35f016ab8cbdbeb8087d0a9b407dde75af664\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_2Le8thN6gMIGPin9eRTueghu\",\"name\":\"read_skill_file\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -40,7 +40,7 @@
       },
       {
         "delay_ms": 94,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_096ce52cbea0a35f016ab8cbdbeb8087d0a9b407dde75af664\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"name\\\":\\\"project-guide\\\",\\\"relative_path\\\":\\\"guide.txt\\\"}\",\"call_id\":\"call_2Le8thN6gMIGPin9eRTueghu\",\"name\":\"read_skill_file\"},\"output_index\":0,\"sequence_number\":14}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_096ce52cbea0a35f016ab8cbdbeb8087d0a9b407dde75af664\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"name\\\":\\\"project-guide\\\",\\\"relative_path\\\":\\\"guide.txt\\\"}\",\"call_id\":\"call_2Le8thN6gMIGPin9eRTueghu\",\"name\":\"read_skill_file\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":14}\n\n"
       },
       {
         "delay_ms": 16,

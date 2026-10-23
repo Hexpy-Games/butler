@@ -38,7 +38,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_082b404cb9ecf3d1016ab9a0c298a087d09e5668782e27b7e1\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_G8WErjOdmYnmZUUxclcKdx3E\",\"name\":\"replace_work_plan\"},\"output_index\":1,\"sequence_number\":4}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_082b404cb9ecf3d1016ab9a0c298a087d09e5668782e27b7e1\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_G8WErjOdmYnmZUUxclcKdx3E\",\"name\":\"replace_work_plan\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":4}\n\n"
       },
       {
         "delay_ms": 0,
@@ -542,7 +542,7 @@
       },
       {
         "delay_ms": 42,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_082b404cb9ecf3d1016ab9a0c298a087d09e5668782e27b7e1\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Create ask-{{NONCE}}.txt in the workspace containing exactly “scheduled”\\\",\\\"execution_mode\\\":\\\"direct\\\",\\\"actions\\\":[{\\\"action_key\\\":\\\"Create the requested text file\\\",\\\"description\\\":\\\"Create ask-{{NONCE}}.txt with exactly the text scheduled and no added newline.\\\",\\\"effect\\\":{\\\"capability\\\":\\\"Create a workspace file\\\",\\\"target\\\":\\\"ask-{{NONCE}}.txt containing scheduled\\\"}}],\\\"checks\\\":[\\\"The file is named ask-{{NONCE}}.txt.\\\",\\\"Its complete contents are exactly scheduled, with no added newline.\\\"]}\",\"call_id\":\"call_G8WErjOdmYnmZUUxclcKdx3E\",\"name\":\"replace_work_plan\"},\"output_index\":1,\"sequence_number\":130}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_082b404cb9ecf3d1016ab9a0c298a087d09e5668782e27b7e1\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Create ask-{{NONCE}}.txt in the workspace containing exactly “scheduled”\\\",\\\"execution_mode\\\":\\\"direct\\\",\\\"actions\\\":[{\\\"action_key\\\":\\\"Create the requested text file\\\",\\\"description\\\":\\\"Create ask-{{NONCE}}.txt with exactly the text scheduled and no added newline.\\\",\\\"effect\\\":{\\\"capability\\\":\\\"Create a workspace file\\\",\\\"target\\\":\\\"ask-{{NONCE}}.txt containing scheduled\\\"}}],\\\"checks\\\":[\\\"The file is named ask-{{NONCE}}.txt.\\\",\\\"Its complete contents are exactly scheduled, with no added newline.\\\"]}\",\"call_id\":\"call_G8WErjOdmYnmZUUxclcKdx3E\",\"name\":\"replace_work_plan\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":130}\n\n"
       },
       {
         "delay_ms": 13,

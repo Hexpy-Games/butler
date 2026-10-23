@@ -31,7 +31,7 @@
       },
       {
         "delay_ms": 848,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0018fecbad3317b4016ab8e3d5db5c87d08904a1ada440c2e1\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_SsHKCeEvpkCeZ4qvX3wrpKNv\",\"name\":\"record_work_review\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0018fecbad3317b4016ab8e3d5db5c87d08904a1ada440c2e1\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_SsHKCeEvpkCeZ4qvX3wrpKNv\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -227,7 +227,7 @@
       },
       {
         "delay_ms": 98,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0018fecbad3317b4016ab8e3d5db5c87d08904a1ada440c2e1\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"plan\\\",\\\"verdict\\\":\\\"accept\\\",\\\"summary\\\":\\\"Call the named tool once and report only the returned token.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Call e2e_echo and capture its returned token\\\",\\\"status\\\":\\\"active\\\"}]}\",\"call_id\":\"call_SsHKCeEvpkCeZ4qvX3wrpKNv\",\"name\":\"record_work_review\"},\"output_index\":0,\"sequence_number\":51}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0018fecbad3317b4016ab8e3d5db5c87d08904a1ada440c2e1\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"plan\\\",\\\"verdict\\\":\\\"accept\\\",\\\"summary\\\":\\\"Call the named tool once and report only the returned token.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Call e2e_echo and capture its returned token\\\",\\\"status\\\":\\\"active\\\"}]}\",\"call_id\":\"call_SsHKCeEvpkCeZ4qvX3wrpKNv\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":51}\n\n"
       },
       {
         "delay_ms": 15,

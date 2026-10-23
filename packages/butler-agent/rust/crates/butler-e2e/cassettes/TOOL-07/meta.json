@@ -16,40 +16,41 @@
     "JSON account identifiers (account_id, user_id, email, ...) -> {{ACCOUNT}}/{{EMAIL}}",
     "JSON tokens (access_token, refresh_token, id_token, authorization) -> {{TOKEN}}",
     "absolute reset times -> {{EPOCH_MS|S+delta}} relative to recording, rounded to the hour",
-    "siwc-path-migration"
+    "siwc-path-migration",
+    "siwc-function-call-namespace"
   ],
   "files": [
     {
       "file": "000.json",
-      "sha256": "52ddd31f805d64d06f7baeb5c62a7d128214d0cae69775d4c9dfdbb5840733d6"
+      "sha256": "2b56cbe8c1f9cd74efe67ab3ac8696a178f4b2dc0fc1e0179a41f6768631a730"
     },
     {
       "file": "001.json",
-      "sha256": "8a60cf63a4a78fdb69bbe386eac828000afd198567f34a9bde563da707b49da3"
+      "sha256": "1e67f94b3501604ff80b005444d333951f8df744a61c248169c8f607f01e82e4"
     },
     {
       "file": "002.json",
-      "sha256": "6e37efc345b6b8c63bb0915c75646f5890e098b6d84be529e42a1c3dd2075684"
+      "sha256": "8c5343c3eed6d3fbe8e9f86d829e11c08cd8511e050d2ca49ec1c4633ea83f8f"
     },
     {
       "file": "003.json",
-      "sha256": "be758849ac3177282192d524a111cb627053d31d2d776cdbf6b78365d1fe3fd4"
+      "sha256": "b7a566e0ea4825fc0d4161515087c5d627f76d0b4bc3819c399a095a49f27696"
     },
     {
       "file": "004.json",
-      "sha256": "9d5f058476451838d1c4f2c482468c497fd8371fe9f28a1577b82efa8a74ba92"
+      "sha256": "6a8df5f6620566c25a55be32f63ad65b049aeff3a8a165cc0d623928a299dc49"
     },
     {
       "file": "005.json",
-      "sha256": "974f8b103dd103fb027260fa39cca4c5eeef585e6d10528675084d9ede38c63f"
+      "sha256": "9bbd622f7b56039bea0e2e79d78f6720dbac6d804057ebc70cba270bc0ea2219"
     },
     {
       "file": "006.json",
-      "sha256": "732f5c2835841f7d7aa6b93b2bf153e66d9e07623fe84f852f33c583e761d533"
+      "sha256": "51c64338686883293083cb9989c768ce3dcbce92c2f48b8422482795d58f75e3"
     },
     {
       "file": "007.json",
-      "sha256": "97c7c8ee4433b3c2fb5c0d1caab4d578f26ad7b5fe804d9dc2c116367612f02e"
+      "sha256": "5b337daa61f8cd512b4da2eb9d4e5593d3b05f21cbe1c9488eeab2525cd82f70"
     },
     {
       "file": "008.json",

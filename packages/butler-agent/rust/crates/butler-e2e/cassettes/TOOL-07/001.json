@@ -69,7 +69,7 @@
       },
       {
         "delay_ms": 5,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_04b2b86a2e0317fe016abb0ddd238487d0a85f243cbade4399\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_93qA1IHVV6p3QzVqvQHemgsB\",\"name\":\"replace_work_plan\"},\"output_index\":1,\"sequence_number\":4}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_04b2b86a2e0317fe016abb0ddd238487d0a85f243cbade4399\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_93qA1IHVV6p3QzVqvQHemgsB\",\"name\":\"replace_work_plan\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":4}\n\n"
       },
       {
         "delay_ms": 0,
@@ -373,7 +373,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_04b2b86a2e0317fe016abb0ddd238487d0a85f243cbade4399\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Create approved.txt in the workspace with the exact contents approved-by-user\\\",\\\"execution_mode\\\":\\\"direct\\\",\\\"actions\\\":[{\\\"action_key\\\":\\\"Create approved.txt with the exact requested contents\\\",\\\"effect\\\":{\\\"capability\\\":\\\"Create a workspace file\\\",\\\"target\\\":\\\"approved.txt containing exactly approved-by-user\\\"}}],\\\"checks\\\":[\\\"Confirm the file contains exactly approved-by-user with no added characters\\\"]}\",\"call_id\":\"call_93qA1IHVV6p3QzVqvQHemgsB\",\"name\":\"replace_work_plan\"},\"output_index\":1,\"sequence_number\":80}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_04b2b86a2e0317fe016abb0ddd238487d0a85f243cbade4399\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Create approved.txt in the workspace with the exact contents approved-by-user\\\",\\\"execution_mode\\\":\\\"direct\\\",\\\"actions\\\":[{\\\"action_key\\\":\\\"Create approved.txt with the exact requested contents\\\",\\\"effect\\\":{\\\"capability\\\":\\\"Create a workspace file\\\",\\\"target\\\":\\\"approved.txt containing exactly approved-by-user\\\"}}],\\\"checks\\\":[\\\"Confirm the file contains exactly approved-by-user with no added characters\\\"]}\",\"call_id\":\"call_93qA1IHVV6p3QzVqvQHemgsB\",\"name\":\"replace_work_plan\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":80}\n\n"
       },
       {
         "delay_ms": 7,

@@ -96,6 +96,8 @@ pub trait ProviderQuotaSink: Send + Sync {
     fn observe(&self, reading: ProviderQuotaReading);
     /// Records a confirmed plan-limit transition, independent of header estimates.
     fn plan_limit(&self, _provider: &str, _reading: Option<PlanLimitReading>) {}
+    /// Forgets quota belonging to the provider's previous account.
+    fn account_changed(&self, _provider: &str) {}
 }
 
 const FIVE_HOURS: u64 = 300;

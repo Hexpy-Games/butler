@@ -32,7 +32,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_07e8e01f17fce1ee016ab9a062dc7887d09acf0d33ef25b343\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_UYO5no5geW3FN50CbKIQECyN\",\"name\":\"start_work\"},\"output_index\":1,\"sequence_number\":4}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_07e8e01f17fce1ee016ab9a062dc7887d09acf0d33ef25b343\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_UYO5no5geW3FN50CbKIQECyN\",\"name\":\"start_work\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":4}\n\n"
       },
       {
         "delay_ms": 0,
@@ -128,7 +128,7 @@
       },
       {
         "delay_ms": 11,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_07e8e01f17fce1ee016ab9a062dc7887d09acf0d33ef25b343\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Call e2e_echo on the e2e MCP server and report the returned token.\\\"}\",\"call_id\":\"call_UYO5no5geW3FN50CbKIQECyN\",\"name\":\"start_work\"},\"output_index\":1,\"sequence_number\":28}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_07e8e01f17fce1ee016ab9a062dc7887d09acf0d33ef25b343\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Call e2e_echo on the e2e MCP server and report the returned token.\\\"}\",\"call_id\":\"call_UYO5no5geW3FN50CbKIQECyN\",\"name\":\"start_work\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":28}\n\n"
       },
       {
         "delay_ms": 20,

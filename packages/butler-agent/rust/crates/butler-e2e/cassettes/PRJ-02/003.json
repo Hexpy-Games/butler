@@ -42,7 +42,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_024b05ea9f733f26016ab90582681087d0999284353ba79bb2\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_TFcqwovHw0TKy1FNofShMgYT\",\"name\":\"project_ledger_list\"},\"output_index\":1,\"sequence_number\":4}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_024b05ea9f733f26016ab90582681087d0999284353ba79bb2\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_TFcqwovHw0TKy1FNofShMgYT\",\"name\":\"project_ledger_list\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":4}\n\n"
       },
       {
         "delay_ms": 0,
@@ -118,7 +118,7 @@
       },
       {
         "delay_ms": 14,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_024b05ea9f733f26016ab90582681087d0999284353ba79bb2\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"kind\\\":\\\"work\\\",\\\"query\\\":\\\"Build three raised garden beds\\\",\\\"limit\\\":20}\",\"call_id\":\"call_TFcqwovHw0TKy1FNofShMgYT\",\"name\":\"project_ledger_list\"},\"output_index\":1,\"sequence_number\":23}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_024b05ea9f733f26016ab90582681087d0999284353ba79bb2\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"kind\\\":\\\"work\\\",\\\"query\\\":\\\"Build three raised garden beds\\\",\\\"limit\\\":20}\",\"call_id\":\"call_TFcqwovHw0TKy1FNofShMgYT\",\"name\":\"project_ledger_list\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":23}\n\n"
       },
       {
         "delay_ms": 62,

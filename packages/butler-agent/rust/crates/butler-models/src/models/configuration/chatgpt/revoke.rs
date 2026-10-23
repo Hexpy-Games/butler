@@ -31,6 +31,7 @@ impl ModelConfiguration {
             .await?;
         }
         self.chatgpt_invalidate_models().await;
+        self.provider_account_changed("openai");
         self.chatgpt_changed();
         Ok(revoked)
     }

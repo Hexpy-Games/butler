@@ -48,7 +48,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "data: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_028ce75d514adac9016ac96a279e5887d087ebf9b08622cfa0\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_EmJdasrU6yBmnwgT69owrzoa\",\"name\":\"tool_call\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "data: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_028ce75d514adac9016ac96a279e5887d087ebf9b08622cfa0\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_EmJdasrU6yBmnwgT69owrzoa\",\"name\":\"tool_call\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -360,7 +360,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_028ce75d514adac9016ac96a279e5887d087ebf9b08622cfa0\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"id\\\":\\\"native:browser_act\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"opaque-f7ebd0ccc28f455a955334e9102f0\\\",\\\"observation\\\":\\\"opaque-240ad5a2c759a85067e3fda12c6bd\\\",\\\"steps\\\":[{\\\"ref\\\":\\\"f0-e54\\\",\\\"action\\\":\\\"click\\\"}]}}\",\"call_id\":\"call_EmJdasrU6yBmnwgT69owrzoa\",\"name\":\"tool_call\"},\"output_index\":0,\"sequence_number\":80}\n\n"
+        "text": "data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_028ce75d514adac9016ac96a279e5887d087ebf9b08622cfa0\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"id\\\":\\\"native:browser_act\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"opaque-f7ebd0ccc28f455a955334e9102f0\\\",\\\"observation\\\":\\\"opaque-240ad5a2c759a85067e3fda12c6bd\\\",\\\"steps\\\":[{\\\"ref\\\":\\\"f0-e54\\\",\\\"action\\\":\\\"click\\\"}]}}\",\"call_id\":\"call_EmJdasrU6yBmnwgT69owrzoa\",\"name\":\"tool_call\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":80}\n\n"
       },
       {
         "delay_ms": 0,

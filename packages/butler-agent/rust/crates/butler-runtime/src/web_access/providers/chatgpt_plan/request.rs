@@ -18,6 +18,7 @@ pub(super) async fn request(
         let request = access
             .client()
             .post(endpoint.clone())
+            .purpose(butler_log::http::Purpose::provider("openai", "web_search"))
             .header(reqwest::header::CONTENT_TYPE, "application/json")
             .header(reqwest::header::ACCEPT, "text/event-stream")
             .header(reqwest::header::AUTHORIZATION, authorization.as_str())

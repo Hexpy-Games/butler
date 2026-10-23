@@ -31,7 +31,7 @@
       },
       {
         "delay_ms": 1541,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_00a744f505d7e47c016ab8e4fa3c0c87d09ce3f26729f76ca0\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_WymZJngq12rSBRe9mH0Xf7O4\",\"name\":\"record_work_review\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_00a744f505d7e47c016ab8e4fa3c0c87d09ce3f26729f76ca0\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_WymZJngq12rSBRe9mH0Xf7O4\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 3,
@@ -219,7 +219,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_00a744f505d7e47c016ab8e4fa3c0c87d09ce3f26729f76ca0\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"plan\\\",\\\"verdict\\\":\\\"accept\\\",\\\"summary\\\":\\\"The command, timeout, and observable outcome are specified.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Run the exact command and report its timeout outcome\\\",\\\"status\\\":\\\"active\\\"}]}\",\"call_id\":\"call_WymZJngq12rSBRe9mH0Xf7O4\",\"name\":\"record_work_review\"},\"output_index\":0,\"sequence_number\":49}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_00a744f505d7e47c016ab8e4fa3c0c87d09ce3f26729f76ca0\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"plan\\\",\\\"verdict\\\":\\\"accept\\\",\\\"summary\\\":\\\"The command, timeout, and observable outcome are specified.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Run the exact command and report its timeout outcome\\\",\\\"status\\\":\\\"active\\\"}]}\",\"call_id\":\"call_WymZJngq12rSBRe9mH0Xf7O4\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":49}\n\n"
       },
       {
         "delay_ms": 5,

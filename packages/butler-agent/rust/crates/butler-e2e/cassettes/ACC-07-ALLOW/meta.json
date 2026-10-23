@@ -16,60 +16,61 @@
     "JSON account identifiers (account_id, user_id, email, ...) -> {{ACCOUNT}}/{{EMAIL}}",
     "JSON tokens (access_token, refresh_token, id_token, authorization) -> {{TOKEN}}",
     "absolute reset times -> {{EPOCH_MS|S+delta}} relative to recording, rounded to the hour",
-    "siwc-path-migration"
+    "siwc-path-migration",
+    "siwc-function-call-namespace"
   ],
   "files": [
     {
       "file": "000.json",
-      "sha256": "87e7d2f22219dd90a30e2a191d62f4e00a38809991ff6a7f44c13b3a55f72689"
+      "sha256": "72042fbfa92ac291c6e9121752f69596dd5993e5cc5365ab5d5707a372be2ec9"
     },
     {
       "file": "001.json",
-      "sha256": "49abc84e6c3848d0bae454191fd2552a1786b6af725bdd8ab875566b2c81209e"
+      "sha256": "166cc258f9776f8bdc4d3752d32a4c517f8224631ee01041c20d3d0684b250d6"
     },
     {
       "file": "002.json",
-      "sha256": "13cf802acae4c2264b8ced16aff47b0c271a49d89cf48768da3f033241369e1a"
+      "sha256": "b98b34076ad28f979d12d21a0c8fafbd70c70bfffe665d4d438251ce6d3b80c5"
     },
     {
       "file": "003.json",
-      "sha256": "2ed7dbafb22aae41b4a05689e12ef035bdda7e5fbf23bd72b8a8ea4ab925a7f8"
+      "sha256": "1c10947c0a7b29f3371fe1b904c7334c13694c9267b792dd5243a69d8a6768e6"
     },
     {
       "file": "004.json",
-      "sha256": "57119035c644caf6bf45e8e4671528afbdfc97b414315234fd5c9410474f2840"
+      "sha256": "aea2652b631e4b00fb9d66e50b4ffdf5e5d65cf40623dae322ae4345f5619e14"
     },
     {
       "file": "005.json",
-      "sha256": "eb8105fb22688042035a653512440172c3001eac161bb7d4d18029de6b15b006"
+      "sha256": "6def1fc072ea9eb54fd2a10094bba5e7af9f78b034e7b6fb58baabf4458a2d4e"
     },
     {
       "file": "006.json",
-      "sha256": "931af1153e08bc18831bb5119a2c9cda0cf8e5299272bcf3d164a52e6c24b748"
+      "sha256": "876e89d45eb356fe04fd426ccc9e03bc8e00d3be397f6fc8f5d8c83a46adea6e"
     },
     {
       "file": "007.json",
-      "sha256": "cc40328118dad081ba048d6faba6a2f4ef639b82076e3452a98a89ec99143fbc"
+      "sha256": "21006f154f581ac3ca3e5738d702395a6ffcde00c66c6cfae01247c186209820"
     },
     {
       "file": "008.json",
-      "sha256": "d5320c6268a5ec88edc80a481667a8b09941aa3ddb0f4e19641df58db7b6388c"
+      "sha256": "62b3775c4aeda27a83d4e8f7691af68f82e2512d564539a2d6579ef12ce0ef63"
     },
     {
       "file": "009.json",
-      "sha256": "2845c0e1e79cbc877700d505dabe2bd8c436c0cf7dcdd90a6b7929b64a8cad42"
+      "sha256": "4ef44c4240d6bd0b94e2f06fffe1b6f771c750ba1302bdde60734507728f70df"
     },
     {
       "file": "010.json",
-      "sha256": "40e2f43097e5530bd90db0282145b999f91d4c2dec5289db8415d7c6a0a00f76"
+      "sha256": "7f61fcf8cbf6377afd326260f42f6f2e8416d81691ae2acf259bad7b3d19d87a"
     },
     {
       "file": "011.json",
-      "sha256": "a84a47abe95f0a173cc32eefad2086b5503f93493781b8ef93b102dc661e2ccb"
+      "sha256": "9bdc0ae66e4c2ed1085940aec01dbc3d2b25e6ba9b2c007534b2d8b641ac7dcf"
     },
     {
       "file": "012.json",
-      "sha256": "1dc6a28de7325ea9f3df8d16438ab68faab719f4d7477fa49c866afaed619368"
+      "sha256": "904c3cc1e9ab73ba72e275f963a71b42d50431eb54227fa05b59fdede85afd45"
     },
     {
       "file": "013.json",

@@ -78,7 +78,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_06a3982cc1ede07e016abb0e75e45087d0aadedcacfdf4759f\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_NiR0pBcsRUM8bPhdJwOZhJnk\",\"name\":\"record_work_disposition\"},\"output_index\":1,\"sequence_number\":4}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_06a3982cc1ede07e016abb0e75e45087d0aadedcacfdf4759f\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_NiR0pBcsRUM8bPhdJwOZhJnk\",\"name\":\"record_work_disposition\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":4}\n\n"
       },
       {
         "delay_ms": 0,
@@ -582,7 +582,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_06a3982cc1ede07e016abb0e75e45087d0aadedcacfdf4759f\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"work_id\\\":\\\"{{ECHO_1}}\\\",\\\"disposition\\\":\\\"blocked\\\",\\\"summary\\\":\\\"The file creation was denied and was not executed.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create denied.txt with the exact requested text\\\",\\\"status\\\":\\\"blocked\\\",\\\"note\\\":\\\"The write was denied, so no file was created.\\\"}],\\\"remaining_actions\\\":[\\\"Create denied.txt with the exact requested text\\\"],\\\"next_condition\\\":\\\"Do not retry unless the user makes a new request.\\\"}\",\"call_id\":\"call_NiR0pBcsRUM8bPhdJwOZhJnk\",\"name\":\"record_work_disposition\"},\"output_index\":1,\"sequence_number\":130}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_06a3982cc1ede07e016abb0e75e45087d0aadedcacfdf4759f\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"work_id\\\":\\\"{{ECHO_1}}\\\",\\\"disposition\\\":\\\"blocked\\\",\\\"summary\\\":\\\"The file creation was denied and was not executed.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create denied.txt with the exact requested text\\\",\\\"status\\\":\\\"blocked\\\",\\\"note\\\":\\\"The write was denied, so no file was created.\\\"}],\\\"remaining_actions\\\":[\\\"Create denied.txt with the exact requested text\\\"],\\\"next_condition\\\":\\\"Do not retry unless the user makes a new request.\\\"}\",\"call_id\":\"call_NiR0pBcsRUM8bPhdJwOZhJnk\",\"name\":\"record_work_disposition\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":130}\n\n"
       },
       {
         "delay_ms": 23,

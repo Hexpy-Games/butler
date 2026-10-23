@@ -24,7 +24,7 @@
       },
       {
         "delay_ms": 1476,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0048f809c355b359016ab8cc09fec087d0b8c1800c36857506\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_NJYO1gAr12d6YabP4hBZLT12\",\"name\":\"run_command\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0048f809c355b359016ab8cc09fec087d0b8c1800c36857506\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_NJYO1gAr12d6YabP4hBZLT12\",\"name\":\"run_command\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 254,
@@ -140,7 +140,7 @@
       },
       {
         "delay_ms": 23,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0048f809c355b359016ab8cc09fec087d0b8c1800c36857506\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"command\\\":\\\"pwd; env | sort\\\",\\\"summary\\\":\\\"Check workspace environment\\\",\\\"state_effect\\\":\\\"read_only\\\",\\\"max_output_tokens\\\":200}\",\"call_id\":\"call_NJYO1gAr12d6YabP4hBZLT12\",\"name\":\"run_command\"},\"output_index\":0,\"sequence_number\":31}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0048f809c355b359016ab8cc09fec087d0b8c1800c36857506\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"command\\\":\\\"pwd; env | sort\\\",\\\"summary\\\":\\\"Check workspace environment\\\",\\\"state_effect\\\":\\\"read_only\\\",\\\"max_output_tokens\\\":200}\",\"call_id\":\"call_NJYO1gAr12d6YabP4hBZLT12\",\"name\":\"run_command\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":31}\n\n"
       },
       {
         "delay_ms": 40,

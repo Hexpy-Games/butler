@@ -34,7 +34,7 @@
       },
       {
         "delay_ms": 770,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_06e1d946a4239c75016ab8e4fd227c87d080d04ff3e0c88197\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_arTcNLTUh3x0UXNQMIen6apz\",\"name\":\"run_command\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_06e1d946a4239c75016ab8e4fd227c87d080d04ff3e0c88197\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_arTcNLTUh3x0UXNQMIen6apz\",\"name\":\"run_command\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 11,
@@ -238,7 +238,7 @@
       },
       {
         "delay_ms": 88,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_06e1d946a4239c75016ab8e4fd227c87d080d04ff3e0c88197\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"command\\\":\\\"sh -c 'sleep 300 & echo $! > pids.txt; echo $$ >> pids.txt; sleep 300'\\\",\\\"timeout_ms\\\":3000,\\\"summary\\\":\\\"Run requested shell command\\\",\\\"state_effect\\\":\\\"mutation\\\"}\",\"call_id\":\"call_arTcNLTUh3x0UXNQMIen6apz\",\"name\":\"run_command\"},\"output_index\":0,\"sequence_number\":53}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_06e1d946a4239c75016ab8e4fd227c87d080d04ff3e0c88197\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"command\\\":\\\"sh -c 'sleep 300 & echo $! > pids.txt; echo $$ >> pids.txt; sleep 300'\\\",\\\"timeout_ms\\\":3000,\\\"summary\\\":\\\"Run requested shell command\\\",\\\"state_effect\\\":\\\"mutation\\\"}\",\"call_id\":\"call_arTcNLTUh3x0UXNQMIen6apz\",\"name\":\"run_command\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":53}\n\n"
       },
       {
         "delay_ms": 8,

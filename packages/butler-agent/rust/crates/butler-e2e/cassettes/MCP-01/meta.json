@@ -13,36 +13,37 @@
     "response.instructions -> {{REDACTED_ECHO}}, response.tools -> []",
     "response headers reduced to content-type, retry-after",
     "chunks re-cut at SSE event boundaries (event bytes unchanged)",
-    "siwc-path-migration"
+    "siwc-path-migration",
+    "siwc-function-call-namespace"
   ],
   "files": [
     {
       "file": "000.json",
-      "sha256": "1d102bb8919c068acd16566d50dcb8e4fbd8c32169b5446f2e9261d4073e6888"
+      "sha256": "e28e4c3025964661d2b627bcdf7903522f40be7abd632fb6f3d13110b714c8e0"
     },
     {
       "file": "001.json",
-      "sha256": "1043d575103db859caa625025b37519b11c87d42cbebcf0e205a74b49d7889f2"
+      "sha256": "7c50641a0bab383c7736d500671ad0a76a8a555878a8694b7169787183f6d521"
     },
     {
       "file": "002.json",
-      "sha256": "815bbd358516f7ee3ec8c4cbeb69c41b20c2eaf5bd1ee758f0a5122dadd18023"
+      "sha256": "6b1c9424b2b0abab5ded634e8de30e323acd2ab5a4bca65870a8934be5736230"
     },
     {
       "file": "003.json",
-      "sha256": "e2c17b1ea9b1a55bc3a111fb3a5a3d825ab269969dfbf9bc58a4012df8b3d9e3"
+      "sha256": "58675d5381081e31c70ded5bb989feaa323d778fd2482e2a12bde09b96fd7ccb"
     },
     {
       "file": "004.json",
-      "sha256": "3e9007d8d29adebe1134c9c68d4255424c9936c7e565bc48735f296b9914b59a"
+      "sha256": "088337a32af9a1546141e6a7c5c34ba2d2e7dfac5e35ffda6d7eb3badfcd1f27"
     },
     {
       "file": "005.json",
-      "sha256": "b1d676bb0cdc5973c94b93c3883571b9ccb2ce17212054ad274b638b74457015"
+      "sha256": "3dc5759eb863f7fcd44d38918c15e81d4a6a6062293ee0c991100daa60725936"
     },
     {
       "file": "006.json",
-      "sha256": "d7022e213fa50cf1e6c01b5fd2e76385eb619b85727f671e977f0c5dab7cc7ed"
+      "sha256": "ab7eda9ef944229017baa194ec1b6ab96c50b317c3e2edb03d3f2e26fe0fefd7"
     },
     {
       "file": "007.json",

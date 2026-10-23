@@ -83,7 +83,7 @@
       },
       {
         "delay_ms": 674,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0523597ff91013c6016abb29db5a1487d087401d01f52fd4f4\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_x5VqXJVLt0mESytyi3NkPjpR\",\"name\":\"record_work_review\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0523597ff91013c6016abb29db5a1487d087401d01f52fd4f4\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_x5VqXJVLt0mESytyi3NkPjpR\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -447,7 +447,7 @@
       },
       {
         "delay_ms": 10,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0523597ff91013c6016abb29db5a1487d087401d01f52fd4f4\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"result\\\",\\\"verdict\\\":\\\"accept\\\",\\\"summary\\\":\\\"The app-wide wallpaper was changed to the installed Silk live wallpaper. A follow-up check confirms Silk is now the global wallpaper.\\\" ,\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Identify the Silk wallpaper option and current app-wide settings\\\",\\\"status\\\":\\\"done\\\"},{\\\"action_key\\\":\\\"Set Silk as the app-wide live wallpaper\\\",\\\"status\\\":\\\"done\\\",\\\"note\\\":\\\"Applied globally and confirmed in the wallpaper settings.\\\"}]}\",\"call_id\":\"call_x5VqXJVLt0mESytyi3NkPjpR\",\"name\":\"record_work_review\"},\"output_index\":0,\"sequence_number\":93}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0523597ff91013c6016abb29db5a1487d087401d01f52fd4f4\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"result\\\",\\\"verdict\\\":\\\"accept\\\",\\\"summary\\\":\\\"The app-wide wallpaper was changed to the installed Silk live wallpaper. A follow-up check confirms Silk is now the global wallpaper.\\\" ,\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Identify the Silk wallpaper option and current app-wide settings\\\",\\\"status\\\":\\\"done\\\"},{\\\"action_key\\\":\\\"Set Silk as the app-wide live wallpaper\\\",\\\"status\\\":\\\"done\\\",\\\"note\\\":\\\"Applied globally and confirmed in the wallpaper settings.\\\"}]}\",\"call_id\":\"call_x5VqXJVLt0mESytyi3NkPjpR\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":93}\n\n"
       },
       {
         "delay_ms": 45,

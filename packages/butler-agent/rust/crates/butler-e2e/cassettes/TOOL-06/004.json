@@ -36,7 +36,7 @@
       },
       {
         "delay_ms": 885,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_013652d43d2be5e8016ab8e503aad487d0b6fe4ca3c6d75931\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_AIBMmGOW7lhRMOiCOCSrrxc4\",\"name\":\"record_work_disposition\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_013652d43d2be5e8016ab8e503aad487d0b6fe4ca3c6d75931\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_AIBMmGOW7lhRMOiCOCSrrxc4\",\"name\":\"record_work_disposition\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -444,7 +444,7 @@
       },
       {
         "delay_ms": 2,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_013652d43d2be5e8016ab8e503aad487d0b6fe4ca3c6d75931\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"work_id\\\":\\\"{{ECHO_1}}\\\",\\\"disposition\\\":\\\"completed\\\",\\\"summary\\\":\\\"Ran the exact command with a 3000 ms timeout; it timed out with no captured output or exit code.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Run the exact command and report its timeout outcome\\\",\\\"status\\\":\\\"done\\\"}]}\",\"call_id\":\"call_AIBMmGOW7lhRMOiCOCSrrxc4\",\"name\":\"record_work_disposition\"},\"output_index\":0,\"sequence_number\":104}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_013652d43d2be5e8016ab8e503aad487d0b6fe4ca3c6d75931\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"work_id\\\":\\\"{{ECHO_1}}\\\",\\\"disposition\\\":\\\"completed\\\",\\\"summary\\\":\\\"Ran the exact command with a 3000 ms timeout; it timed out with no captured output or exit code.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Run the exact command and report its timeout outcome\\\",\\\"status\\\":\\\"done\\\"}]}\",\"call_id\":\"call_AIBMmGOW7lhRMOiCOCSrrxc4\",\"name\":\"record_work_disposition\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":104}\n\n"
       },
       {
         "delay_ms": 35,

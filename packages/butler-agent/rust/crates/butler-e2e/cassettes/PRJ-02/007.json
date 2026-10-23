@@ -58,7 +58,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0840abded0ef257a016ab905e4157487d091157530c835c5ea\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_0VZtSLJ7ze7gMrLSV1DlSB1o\",\"name\":\"project_ledger_create\"},\"output_index\":2,\"sequence_number\":6}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0840abded0ef257a016ab905e4157487d091157530c835c5ea\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_0VZtSLJ7ze7gMrLSV1DlSB1o\",\"name\":\"project_ledger_create\",\"namespace\":\"butler\"},\"output_index\":2,\"sequence_number\":6}\n\n"
       },
       {
         "delay_ms": 0,
@@ -622,7 +622,7 @@
       },
       {
         "delay_ms": 4,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0840abded0ef257a016ab905e4157487d091157530c835c5ea\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"kind\\\":\\\"work\\\",\\\"id\\\":\\\"build-three-raised-garden-beds\\\",\\\"title\\\":\\\"Build three raised garden beds\\\",\\\"status\\\":\\\"done\\\",\\\"spec\\\":\\\"Track one project work item with this exact title. This records project tracking only, not a claim that the beds were physically built.\\\",\\\"acceptance\\\":\\\"The work item is created with the requested title, includes a short review that the plan is sound, and is marked completed.\\\",\\\"implementation\\\":\\\"Created as a completed project work item at the user's request.\\\",\\\"review\\\":\\\"Plan is sound.\\\",\\\"validation\\\":\\\"Verified the project record includes the exact requested title, short plan-sound review, and completed status. This is project tracking, not a claim of physical construction.\\\"}\",\"call_id\":\"call_0VZtSLJ7ze7gMrLSV1DlSB1o\",\"name\":\"project_ledger_create\"},\"output_index\":2,\"sequence_number\":147}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0840abded0ef257a016ab905e4157487d091157530c835c5ea\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"kind\\\":\\\"work\\\",\\\"id\\\":\\\"build-three-raised-garden-beds\\\",\\\"title\\\":\\\"Build three raised garden beds\\\",\\\"status\\\":\\\"done\\\",\\\"spec\\\":\\\"Track one project work item with this exact title. This records project tracking only, not a claim that the beds were physically built.\\\",\\\"acceptance\\\":\\\"The work item is created with the requested title, includes a short review that the plan is sound, and is marked completed.\\\",\\\"implementation\\\":\\\"Created as a completed project work item at the user's request.\\\",\\\"review\\\":\\\"Plan is sound.\\\",\\\"validation\\\":\\\"Verified the project record includes the exact requested title, short plan-sound review, and completed status. This is project tracking, not a claim of physical construction.\\\"}\",\"call_id\":\"call_0VZtSLJ7ze7gMrLSV1DlSB1o\",\"name\":\"project_ledger_create\",\"namespace\":\"butler\"},\"output_index\":2,\"sequence_number\":147}\n\n"
       },
       {
         "delay_ms": 25,

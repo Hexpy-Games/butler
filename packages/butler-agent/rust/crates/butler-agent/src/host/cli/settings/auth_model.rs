@@ -72,7 +72,7 @@ pub(super) async fn auth_logout(
             &CliError::invalid("auth logout requires --yes"),
         );
     }
-    let Ok(owner) = models::open_status_models(data_root.to_path_buf()).await else {
+    let Ok(owner) = chatgpt_login::open_auth_models(data_root.to_path_buf()).await else {
         return report_error(
             command.name(),
             options.json,
@@ -146,7 +146,7 @@ pub(super) async fn model_set(
     ) {
         return report_error(command.name(), options.json, &error);
     }
-    let owner = match models::open_status_models(data_root.to_path_buf()).await {
+    let owner = match chatgpt_login::open_auth_models(data_root.to_path_buf()).await {
         Ok(owner) => owner,
         Err(error) => {
             return report_error(

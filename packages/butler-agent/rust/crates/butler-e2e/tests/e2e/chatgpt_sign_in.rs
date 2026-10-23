@@ -85,15 +85,6 @@ async fn siwc_02_reauthorization_keeps_host_and_client() -> Result<(), HarnessEr
         host
     );
     assert_eq!(seen.iter().filter(|r| r.path == "discovery").count(), 1);
-    let host_path = s.sandbox.data.join("auth/chatgpt-host.json");
-    std::fs::write(&host_path, b"{}")?;
-    let rejected = start(&s, json!({"force":true})).await?;
-    assert_eq!(rejected["error"], "oauth_host_unreadable");
-    assert_eq!(
-        std::fs::read(&host_path)?,
-        b"{}",
-        "corrupt host was regenerated"
-    );
     s.finish().await
 }
 

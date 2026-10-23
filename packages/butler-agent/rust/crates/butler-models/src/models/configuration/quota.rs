@@ -26,6 +26,20 @@ const ZAI_QUOTA_PATH: &str = "/api/monitor/usage/quota/limit";
 const ZAI_OFFICIAL_HOSTS: [&str; 2] = ["api.z.ai", "open.bigmodel.cn"];
 
 impl ModelConfiguration {
+    /// Connects account changes to the same quota owner used by model responses.
+    pub fn set_provider_quota_sink(
+        &self,
+        sink: std::sync::Arc<dyn crate::models::ProviderQuotaSink>,
+    ) {
+        *self.quota_sink.write() = Some(sink);
+    }
+
+    pub(super) fn provider_account_changed(&self, provider: &str) {
+        if let Some(sink) = self.quota_sink.read().as_ref() {
+            sink.account_changed(provider);
+        }
+    }
+
     /// Butler's own User-Agent for quota polls, `butler (<os> <release>;
     /// <arch>)` like its model requests; never another client's.
     pub fn quota_user_agent(&self) -> String {

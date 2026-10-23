@@ -9,84 +9,85 @@
   "recorder": "isolated Electron live proxy; butler-e2e browser_import",
   "sanitization": [
     "Existing butler-e2e sanitizer; request echoes and credentials removed; work echo IDs normalized; request keys only",
-    "siwc-path-migration"
+    "siwc-path-migration",
+    "siwc-function-call-namespace"
   ],
   "files": [
     {
       "file": "000.json",
-      "sha256": "3ca4182b4144f3c4232d4929d7804d78ee0b968a3cbfe34ea054b1022bf5f52f"
+      "sha256": "1eeaa6efbb1a2139a958e2e72c1cb375911f721a36174cc5ee4d7987a35bbeea"
     },
     {
       "file": "001.json",
-      "sha256": "41881125ff71684b99c7d981e02ae10b47fb1184c7a42332b0b929ee2a6edaf3"
+      "sha256": "41c9fadbec7945c722f095a4129700e49e793b7b0b4fb60f20aa265923fe33d6"
     },
     {
       "file": "002.json",
-      "sha256": "e95cafe2fce2fd097795552e3a7b57ae051d65eb12d3af8cffa4e0ab3c65d41a"
+      "sha256": "117e7a1e75cff1f3020b5b6a7eceba17cfd1be88ff7eb029746e2b9138d0c301"
     },
     {
       "file": "003.json",
-      "sha256": "0743c78e03ab812e25b0460a096c9c1c2ab79ba00c399a8a5d8f9a1e5b476e82"
+      "sha256": "c360d0b9d43e184b8d7b3be89ad2ab30b245ed497ecfdc1a2703d82453ad33a8"
     },
     {
       "file": "004.json",
-      "sha256": "dd5fb99de4d45f59e2ccd5fb3cc4ed937f30058b55c42358977df3edf5e225b3"
+      "sha256": "0a0a7cc9ab7db2bd8bbb93ff7054af7a776a5b90cf9ca5cf42a7deb0de8652d4"
     },
     {
       "file": "005.json",
-      "sha256": "28f49d10f66984daccd19fefa927bda07174c8117ab8ddb420d04e9fd384038e"
+      "sha256": "f31579f9ca32e6bf74f4e21eb57a8ca82fc7ab597916651c21199dae345e8fc8"
     },
     {
       "file": "006.json",
-      "sha256": "b8d729269b2e2daaab8eb94920de394176a7610b128531685d2443448ab5263f"
+      "sha256": "8954b90d3f41fe4bb5cff89e5abd2c5728f87b5756038de01cb74a9505cc1c9b"
     },
     {
       "file": "007.json",
-      "sha256": "92752b7077dd72723c3e9900f826e61c24191e1275ed5f9285e62a2fa9a8784d"
+      "sha256": "6e9cc022017428bdb6de62f735f6ae0993b91df90c8facb1fac4159ef5fdb803"
     },
     {
       "file": "008.json",
-      "sha256": "7fe54ef8c9d854fbf3382c9715e5d0041dff97ffbc2f9bf3ff8831d7d655b021"
+      "sha256": "c7e16083b14c4ee0ba22ca745e5107caba894de2bd3e4a0e3f692ffa3b494683"
     },
     {
       "file": "009.json",
-      "sha256": "05c86f1bc6be3ed0d8c3fcd9a3fd8b865236463ab564600904abaae7614d892e"
+      "sha256": "57d5d96a7f2d1c4b425b482ae898b0421c9c9bb6cd74c89fa4697e0d975b3cf5"
     },
     {
       "file": "010.json",
-      "sha256": "71568e50de033519943312a911331cf33c6d5dad01851834d717adc3c512764d"
+      "sha256": "b10d0a2e7bf0b75b7425e455286ebddf6e47ff22b50993159538d48f8b33cd4c"
     },
     {
       "file": "011.json",
-      "sha256": "439db495e23e52250cbe273175ba68c87bfaf227ef3954dfecc824478cb46e8e"
+      "sha256": "6f968b55c88f7c21a4a2cad4c0dcdb17265279c640f5b6620aea0b00d9a0c3c2"
     },
     {
       "file": "012.json",
-      "sha256": "23f933ae6038c78dabb4a87ebb06be0ce8194e1d85f0b2a34825218c78a239fa"
+      "sha256": "9539babb9c1692a089bb1cee9cd10ac6c067ad7a41d4b03d268260e235c6d27b"
     },
     {
       "file": "013.json",
-      "sha256": "87c267c809fdb80a2eb30bb03dfb3d17e11c3a0974c846f807aa546779566ba5"
+      "sha256": "3cbe87c07c051d5789c86823b23ef6ee40ddee1c17f8de0780236b3c9c4d6c32"
     },
     {
       "file": "014.json",
-      "sha256": "bf6e3f626127cfcb1b227be5a04f5baed4482a2669ffbdec294861fee3381b87"
+      "sha256": "5ce0064df8e50ec0dda39b0209c3ff68b00f1c2fdd4b7a91033a9f2f5c8106b8"
     },
     {
       "file": "015.json",
-      "sha256": "0a4aeabbec6493679be0cbeb80833d604312550007e947030ac03bd6684bde6a"
+      "sha256": "ec2eabfd8b9fe2f7fad8a9375811cbada71cd73b555f59c9d78c80337832f38d"
     },
     {
       "file": "016.json",
-      "sha256": "e8ce3b7b7b70c2ce4de24471143a2c8f01562d238eb9af602fbb5f61dd3ac0c4"
+      "sha256": "4435a57ecc37700f7c2befd5cabf454360d6e1e28fba6486fc2bb136e367d162"
     },
     {
       "file": "017.json",
-      "sha256": "07d7ebfe54bb90ad2733c4f6e130c9b41c48f3cf8c72f2843e5607a022d8bf24"
+      "sha256": "542652b5056ff27363fc24ca7aaa51cf9de6fb2d49aa89c6dfbe3f5a68ad0dc3"
     },
     {
       "file": "018.json",
-      "sha256": "86d2e32ed4750dca3015a093d05ced1c742f9ce9a9981e34c4e61e36f816ea5b"
+      "sha256": "23800c221b91e2221d554a0ae0e949a9e3e6613fc25a1cb4aaf7f87ea961f5de"
     },
     {
       "file": "019.json",

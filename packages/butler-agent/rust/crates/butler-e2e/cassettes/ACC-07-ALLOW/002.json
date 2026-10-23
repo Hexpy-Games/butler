@@ -72,7 +72,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_09e87e1734259c5c016abb29ad37f887d0819bc5e8e8d8409f\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_IUV03Ozo2jpRzbqyOx4zuBhv\",\"name\":\"tool_search\"},\"output_index\":1,\"sequence_number\":4}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_09e87e1734259c5c016abb29ad37f887d0819bc5e8e8d8409f\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_IUV03Ozo2jpRzbqyOx4zuBhv\",\"name\":\"tool_search\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":4}\n\n"
       },
       {
         "delay_ms": 0,
@@ -168,7 +168,7 @@
       },
       {
         "delay_ms": 11,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_09e87e1734259c5c016abb29ad37f887d0819bc5e8e8d8409f\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"query\\\":\\\"App wallpaper live wallpaper Silk app-wide change appearance settings\\\",\\\"category\\\":\\\"all\\\",\\\"limit\\\":20}\",\"call_id\":\"call_IUV03Ozo2jpRzbqyOx4zuBhv\",\"name\":\"tool_search\"},\"output_index\":1,\"sequence_number\":28}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_09e87e1734259c5c016abb29ad37f887d0819bc5e8e8d8409f\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"query\\\":\\\"App wallpaper live wallpaper Silk app-wide change appearance settings\\\",\\\"category\\\":\\\"all\\\",\\\"limit\\\":20}\",\"call_id\":\"call_IUV03Ozo2jpRzbqyOx4zuBhv\",\"name\":\"tool_search\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":28}\n\n"
       },
       {
         "delay_ms": 40,

@@ -46,7 +46,7 @@
       },
       {
         "delay_ms": 932,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0d2248e0c8547e1f016ab8d3b1263487d0872388a20d7e2037\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_CQqVPfHw8U11sztD58iZ3BsT\",\"name\":\"record_work_disposition\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0d2248e0c8547e1f016ab8d3b1263487d0872388a20d7e2037\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_CQqVPfHw8U11sztD58iZ3BsT\",\"name\":\"record_work_disposition\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -542,7 +542,7 @@
       },
       {
         "delay_ms": 4,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0d2248e0c8547e1f016ab8d3b1263487d0872388a20d7e2037\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"work_id\\\":\\\"{{ECHO_1}}\\\",\\\"disposition\\\":\\\"open\\\",\\\"summary\\\":\\\"inside.txt was created and its exact contents verified, but a pending effect prevents completion from being recorded.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create inside.txt with the exact requested text\\\",\\\"status\\\":\\\"done\\\"}],\\\"remaining_actions\\\":[\\\"Resolve the pending effect from the rejected write attempt before closing the work.\\\"],\\\"next_condition\\\":\\\"Pending effect is reconciled.\\\"}\",\"call_id\":\"call_CQqVPfHw8U11sztD58iZ3BsT\",\"name\":\"record_work_disposition\"},\"output_index\":0,\"sequence_number\":126}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0d2248e0c8547e1f016ab8d3b1263487d0872388a20d7e2037\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"work_id\\\":\\\"{{ECHO_1}}\\\",\\\"disposition\\\":\\\"open\\\",\\\"summary\\\":\\\"inside.txt was created and its exact contents verified, but a pending effect prevents completion from being recorded.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create inside.txt with the exact requested text\\\",\\\"status\\\":\\\"done\\\"}],\\\"remaining_actions\\\":[\\\"Resolve the pending effect from the rejected write attempt before closing the work.\\\"],\\\"next_condition\\\":\\\"Pending effect is reconciled.\\\"}\",\"call_id\":\"call_CQqVPfHw8U11sztD58iZ3BsT\",\"name\":\"record_work_disposition\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":126}\n\n"
       },
       {
         "delay_ms": 28,

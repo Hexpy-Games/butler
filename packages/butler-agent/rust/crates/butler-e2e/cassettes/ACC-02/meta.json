@@ -13,12 +13,13 @@
     "response.instructions -> {{REDACTED_ECHO}}, response.tools -> []",
     "response headers reduced to content-type, retry-after",
     "chunks re-cut at SSE event boundaries (event bytes unchanged)",
-    "siwc-path-migration"
+    "siwc-path-migration",
+    "siwc-function-call-namespace"
   ],
   "files": [
     {
       "file": "000.json",
-      "sha256": "d691a3028af56b9cc0e068bed165af5d63dd1f39765e375d2ae41d6eb0c51f7b"
+      "sha256": "8f75fe2145065c6aa8b850d4c33716899ab64dd02e16a7b339ac966cbdf22aad"
     },
     {
       "file": "001.json",

@@ -39,7 +39,7 @@
       },
       {
         "delay_ms": 6,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_001df1ab79404905016ab902d057e487d084f489b60e7b6973\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_eTdeaz4j4nilzYl7jZBJyUyi\",\"name\":\"run_command\"},\"output_index\":1,\"sequence_number\":4}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_001df1ab79404905016ab902d057e487d084f489b60e7b6973\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_eTdeaz4j4nilzYl7jZBJyUyi\",\"name\":\"run_command\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":4}\n\n"
       },
       {
         "delay_ms": 0,
@@ -231,7 +231,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_001df1ab79404905016ab902d057e487d084f489b60e7b6973\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"command\\\":\\\"file ws/binary.bin; od -An -tx1 -N64 ws/binary.bin\\\",\\\"summary\\\":\\\"Identify binary file format\\\",\\\"cwd\\\":\\\".\\\",\\\"state_effect\\\":\\\"read_only\\\",\\\"max_output_tokens\\\":250}\",\"call_id\":\"call_eTdeaz4j4nilzYl7jZBJyUyi\",\"name\":\"run_command\"},\"output_index\":1,\"sequence_number\":52}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_001df1ab79404905016ab902d057e487d084f489b60e7b6973\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"command\\\":\\\"file ws/binary.bin; od -An -tx1 -N64 ws/binary.bin\\\",\\\"summary\\\":\\\"Identify binary file format\\\",\\\"cwd\\\":\\\".\\\",\\\"state_effect\\\":\\\"read_only\\\",\\\"max_output_tokens\\\":250}\",\"call_id\":\"call_eTdeaz4j4nilzYl7jZBJyUyi\",\"name\":\"run_command\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":52}\n\n"
       },
       {
         "delay_ms": 16,

@@ -31,7 +31,7 @@
       },
       {
         "delay_ms": 960,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_03cbdd85b39968cb016ab8d396c9d087d0842f305dc1f549b0\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_E1y0fPFuyJktrmxYyjmrIakH\",\"name\":\"record_work_review\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_03cbdd85b39968cb016ab8d396c9d087d0842f305dc1f549b0\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_E1y0fPFuyJktrmxYyjmrIakH\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 43,
@@ -211,7 +211,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_03cbdd85b39968cb016ab8d396c9d087d0842f305dc1f549b0\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"plan\\\",\\\"verdict\\\":\\\"accept\\\",\\\"summary\\\":\\\"Create the requested file and verify its exact contents.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create inside.txt with the exact requested text\\\",\\\"status\\\":\\\"active\\\"}]}\",\"call_id\":\"call_E1y0fPFuyJktrmxYyjmrIakH\",\"name\":\"record_work_review\"},\"output_index\":0,\"sequence_number\":47}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_03cbdd85b39968cb016ab8d396c9d087d0842f305dc1f549b0\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"plan\\\",\\\"verdict\\\":\\\"accept\\\",\\\"summary\\\":\\\"Create the requested file and verify its exact contents.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create inside.txt with the exact requested text\\\",\\\"status\\\":\\\"active\\\"}]}\",\"call_id\":\"call_E1y0fPFuyJktrmxYyjmrIakH\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":47}\n\n"
       },
       {
         "delay_ms": 17,

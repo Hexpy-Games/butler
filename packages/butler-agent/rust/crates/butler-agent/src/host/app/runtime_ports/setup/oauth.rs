@@ -60,11 +60,11 @@ impl OauthFlows {
         }
     }
 
-    /// Starts a sign-in. Without `force`, a saved sign-in answers
-    /// `profile_exists` and a pending flow is returned as it is.
+    /// A default sign-in without `force` reuses a saved account or pending flow.
+    /// Explicit account/plan changes always start a new authorization.
     pub(super) async fn start(&self, force: bool, kind: SignInKind) -> OauthFlowView {
         let _serial = self.starting.lock().await;
-        if force {
+        if force || kind != SignInKind::Default {
             self.cancel_open().await;
         } else {
             if let Some(view) = self.open_view() {

@@ -31,7 +31,7 @@
       },
       {
         "delay_ms": 1032,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_080e02329471e935016ab8e4f7578887d099dfad8b20ef9896\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_ycmkZwZtZY0TGxJFUALZXUpv\",\"name\":\"record_work_review\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_080e02329471e935016ab8e4f7578887d099dfad8b20ef9896\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_ycmkZwZtZY0TGxJFUALZXUpv\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -243,7 +243,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_080e02329471e935016ab8e4f7578887d099dfad8b20ef9896\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"plan\\\",\\\"verdict\\\":\\\"accept\\\",\\\"summary\\\":\\\"The two requested file operations and exact content check are specified.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create out.txt with the exact initial content, then change alpha to beta\\\",\\\"status\\\":\\\"active\\\"}]}\",\"call_id\":\"call_ycmkZwZtZY0TGxJFUALZXUpv\",\"name\":\"record_work_review\"},\"output_index\":0,\"sequence_number\":55}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_080e02329471e935016ab8e4f7578887d099dfad8b20ef9896\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"plan\\\",\\\"verdict\\\":\\\"accept\\\",\\\"summary\\\":\\\"The two requested file operations and exact content check are specified.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create out.txt with the exact initial content, then change alpha to beta\\\",\\\"status\\\":\\\"active\\\"}]}\",\"call_id\":\"call_ycmkZwZtZY0TGxJFUALZXUpv\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":55}\n\n"
       },
       {
         "delay_ms": 33,

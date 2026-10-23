@@ -110,12 +110,15 @@ impl Companion {
     }
 }
 #[tokio::test]
-async fn siwc_16_hosted_search_alias_memo_fallback_and_refresh() -> Result<(), HarnessError> {
+async fn siwc_16_chatgpt_plan_web_search_returns_sources() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let server = Server::start().await?;
-    let s = butler_e2e::e2e::scenario::Setup::new("SIWC-16")?
-        .start()
-        .await?;
+    let authority = FakeChatGptAuthority::start().await?;
+    let setup = butler_e2e::e2e::scenario::Setup::new("SIWC-16")?
+        .without_credential()
+        .env("BUTLER_CHATGPT_AUTH_ISSUER", &authority.issuer);
+    butler_e2e::e2e::fixtures::stub_chatgpt_auth(&setup.sandbox.data, &authority)?;
+    let s = setup.start().await?;
     let path = s.sandbox.data.join("butler.config.json");
     let mut config: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
     config["webSearch"] = json!({"provider":"chatgpt-plan-web-search",
@@ -136,5 +139,14 @@ async fn siwc_16_hosted_search_alias_memo_fallback_and_refresh() -> Result<(), H
     assert_eq!(server.state.lock().unwrap().primary, 1);
     companion.child.kill().await?;
     companion.child.wait().await?;
+    config["webSearch"]["provider"] = "codex-subscription-web-search".into();
+    std::fs::write(&path, serde_json::to_vec(&config)?)?;
+    let mut upgraded = Companion::start(&s, &server)?;
+    let result = upgraded.search().await?;
+    assert_eq!(result["provider"], "chatgpt-plan-web-search");
+    assert_eq!(result["results"][0]["url"], "https://example.org/source");
+    assert_eq!(server.state.lock().unwrap().primary, 2);
+    upgraded.child.kill().await?;
+    upgraded.child.wait().await?;
     s.finish().await
 }

@@ -72,7 +72,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0770443fe7842144016abb0de5e54887d0a7516906dc4e5616\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_kashVo5L0RUV4xaOyvsb6QOg\",\"name\":\"record_work_review\"},\"output_index\":1,\"sequence_number\":4}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0770443fe7842144016abb0de5e54887d0a7516906dc4e5616\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_kashVo5L0RUV4xaOyvsb6QOg\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":4}\n\n"
       },
       {
         "delay_ms": 1,
@@ -292,7 +292,7 @@
       },
       {
         "delay_ms": 2,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0770443fe7842144016abb0de5e54887d0a7516906dc4e5616\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"plan\\\",\\\"verdict\\\":\\\"accept\\\",\\\"summary\\\":\\\"The request is specific and bounded: create one workspace file with exact text, then verify its contents.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create approved.txt with the exact requested contents\\\",\\\"status\\\":\\\"active\\\"}]}\",\"call_id\":\"call_kashVo5L0RUV4xaOyvsb6QOg\",\"name\":\"record_work_review\"},\"output_index\":1,\"sequence_number\":59}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0770443fe7842144016abb0de5e54887d0a7516906dc4e5616\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"plan\\\",\\\"verdict\\\":\\\"accept\\\",\\\"summary\\\":\\\"The request is specific and bounded: create one workspace file with exact text, then verify its contents.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create approved.txt with the exact requested contents\\\",\\\"status\\\":\\\"active\\\"}]}\",\"call_id\":\"call_kashVo5L0RUV4xaOyvsb6QOg\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":59}\n\n"
       },
       {
         "delay_ms": 154,

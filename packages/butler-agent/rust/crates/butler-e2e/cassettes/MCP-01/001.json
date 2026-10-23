@@ -28,7 +28,7 @@
       },
       {
         "delay_ms": 860,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_02b27cfcbb3c8328016ab8e297c41487d0bd4754bdc8a1cb84\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_oKmaDkDaRB0IjMlFNfC9XFRE\",\"name\":\"replace_work_plan\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_02b27cfcbb3c8328016ab8e297c41487d0bd4754bdc8a1cb84\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_oKmaDkDaRB0IjMlFNfC9XFRE\",\"name\":\"replace_work_plan\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -344,7 +344,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_02b27cfcbb3c8328016ab8e297c41487d0bd4754bdc8a1cb84\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Call e2e server's e2e_echo and report its returned token.\\\",\\\"execution_mode\\\":\\\"direct\\\",\\\"actions\\\":[{\\\"action_key\\\":\\\"Call e2e_echo and report its returned token\\\",\\\"effect\\\":{\\\"capability\\\":\\\"e2e_echo MCP tool\\\",\\\"target\\\":\\\"Obtain echo token from e2e server\\\"}}],\\\"checks\\\":[\\\"Report the token exactly as returned.\\\"]}\",\"call_id\":\"call_oKmaDkDaRB0IjMlFNfC9XFRE\",\"name\":\"replace_work_plan\"},\"output_index\":0,\"sequence_number\":81}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_02b27cfcbb3c8328016ab8e297c41487d0bd4754bdc8a1cb84\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Call e2e server's e2e_echo and report its returned token.\\\",\\\"execution_mode\\\":\\\"direct\\\",\\\"actions\\\":[{\\\"action_key\\\":\\\"Call e2e_echo and report its returned token\\\",\\\"effect\\\":{\\\"capability\\\":\\\"e2e_echo MCP tool\\\",\\\"target\\\":\\\"Obtain echo token from e2e server\\\"}}],\\\"checks\\\":[\\\"Report the token exactly as returned.\\\"]}\",\"call_id\":\"call_oKmaDkDaRB0IjMlFNfC9XFRE\",\"name\":\"replace_work_plan\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":81}\n\n"
       },
       {
         "delay_ms": 11,

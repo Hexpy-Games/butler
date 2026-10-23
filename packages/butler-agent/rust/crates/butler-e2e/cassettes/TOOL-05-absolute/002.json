@@ -31,7 +31,7 @@
       },
       {
         "delay_ms": 758,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_07e7f5b4a384ed2e016ab8d363d7f887d09fd620fb93f911ad\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_2ChzwdwPRwcDhEo7YAKoe3X6\",\"name\":\"record_work_review\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_07e7f5b4a384ed2e016ab8d363d7f887d09fd620fb93f911ad\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_2ChzwdwPRwcDhEo7YAKoe3X6\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -219,7 +219,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_07e7f5b4a384ed2e016ab8d363d7f887d09fd620fb93f911ad\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"plan\\\",\\\"verdict\\\":\\\"accept\\\",\\\"summary\\\":\\\"Create the requested file with exact bytes and verify its content.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create inside.txt with the exact requested text\\\",\\\"status\\\":\\\"active\\\"}]}\",\"call_id\":\"call_2ChzwdwPRwcDhEo7YAKoe3X6\",\"name\":\"record_work_review\"},\"output_index\":0,\"sequence_number\":49}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_07e7f5b4a384ed2e016ab8d363d7f887d09fd620fb93f911ad\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"plan\\\",\\\"verdict\\\":\\\"accept\\\",\\\"summary\\\":\\\"Create the requested file with exact bytes and verify its content.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create inside.txt with the exact requested text\\\",\\\"status\\\":\\\"active\\\"}]}\",\"call_id\":\"call_2ChzwdwPRwcDhEo7YAKoe3X6\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":49}\n\n"
       },
       {
         "delay_ms": 24,

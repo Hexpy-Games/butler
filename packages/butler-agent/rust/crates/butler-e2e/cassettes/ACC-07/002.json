@@ -155,7 +155,7 @@
       },
       {
         "delay_ms": 7,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0ec1a1c198762d40016abb06425a2887d090f058c982f8877a\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_2IG02gZWpyDbZPyx5g52QN7G\",\"name\":\"tool_search\"},\"output_index\":2,\"sequence_number\":25}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0ec1a1c198762d40016abb06425a2887d090f058c982f8877a\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_2IG02gZWpyDbZPyx5g52QN7G\",\"name\":\"tool_search\",\"namespace\":\"butler\"},\"output_index\":2,\"sequence_number\":25}\n\n"
       },
       {
         "delay_ms": 6,
@@ -255,7 +255,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0ec1a1c198762d40016abb06425a2887d090f058c982f8877a\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"query\\\":\\\"change app-wide wallpaper background appearance theme select live wallpaper Silk\\\",\\\"category\\\":\\\"all\\\",\\\"limit\\\":10}\",\"call_id\":\"call_2IG02gZWpyDbZPyx5g52QN7G\",\"name\":\"tool_search\"},\"output_index\":2,\"sequence_number\":50}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0ec1a1c198762d40016abb06425a2887d090f058c982f8877a\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"query\\\":\\\"change app-wide wallpaper background appearance theme select live wallpaper Silk\\\",\\\"category\\\":\\\"all\\\",\\\"limit\\\":10}\",\"call_id\":\"call_2IG02gZWpyDbZPyx5g52QN7G\",\"name\":\"tool_search\",\"namespace\":\"butler\"},\"output_index\":2,\"sequence_number\":50}\n\n"
       },
       {
         "delay_ms": 5,

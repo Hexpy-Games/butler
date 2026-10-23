@@ -80,7 +80,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "data: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_05a4e1ee01c417e2016ac96a5d3ad487d082868713d1147bab\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_6Wsah7dGire3h3uxDIYbXBUz\",\"name\":\"tool_call\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "data: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_05a4e1ee01c417e2016ac96a5d3ad487d082868713d1147bab\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_6Wsah7dGire3h3uxDIYbXBUz\",\"name\":\"tool_call\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -420,7 +420,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_05a4e1ee01c417e2016ac96a5d3ad487d082868713d1147bab\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"id\\\":\\\"native:browser_act\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"opaque-f7ebd0ccc28f455a955334e9102f0\\\",\\\"observation\\\":\\\"opaque-0358145624d0bebf9a539298f300c\\\",\\\"steps\\\":[{\\\"ref\\\":\\\"f0-e57\\\",\\\"action\\\":\\\"fill\\\",\\\"value\\\":\\\"수주팔봉\\\"}]}}\",\"call_id\":\"call_6Wsah7dGire3h3uxDIYbXBUz\",\"name\":\"tool_call\"},\"output_index\":0,\"sequence_number\":87}\n\n"
+        "text": "data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_05a4e1ee01c417e2016ac96a5d3ad487d082868713d1147bab\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"id\\\":\\\"native:browser_act\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"opaque-f7ebd0ccc28f455a955334e9102f0\\\",\\\"observation\\\":\\\"opaque-0358145624d0bebf9a539298f300c\\\",\\\"steps\\\":[{\\\"ref\\\":\\\"f0-e57\\\",\\\"action\\\":\\\"fill\\\",\\\"value\\\":\\\"수주팔봉\\\"}]}}\",\"call_id\":\"call_6Wsah7dGire3h3uxDIYbXBUz\",\"name\":\"tool_call\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":87}\n\n"
       },
       {
         "delay_ms": 0,

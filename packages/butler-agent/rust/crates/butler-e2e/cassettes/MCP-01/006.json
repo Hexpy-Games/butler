@@ -40,7 +40,7 @@
       },
       {
         "delay_ms": 912,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0667a3b930252329016ab8e2a6cdec87d0af932921e8a5c523\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_OcgDKzy4jMmYKeijfUWdRhxF\",\"name\":\"record_work_disposition\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0667a3b930252329016ab8e2a6cdec87d0af932921e8a5c523\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_OcgDKzy4jMmYKeijfUWdRhxF\",\"name\":\"record_work_disposition\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -416,7 +416,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0667a3b930252329016ab8e2a6cdec87d0af932921e8a5c523\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"work_id\\\":\\\"{{ECHO_1}}\\\",\\\"disposition\\\":\\\"completed\\\",\\\"summary\\\":\\\"Called e2e_echo; it returned token {{NONCE}}.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Call e2e_echo and report its returned token\\\",\\\"status\\\":\\\"done\\\"}]}\",\"call_id\":\"call_OcgDKzy4jMmYKeijfUWdRhxF\",\"name\":\"record_work_disposition\"},\"output_index\":0,\"sequence_number\":96}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0667a3b930252329016ab8e2a6cdec87d0af932921e8a5c523\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"work_id\\\":\\\"{{ECHO_1}}\\\",\\\"disposition\\\":\\\"completed\\\",\\\"summary\\\":\\\"Called e2e_echo; it returned token {{NONCE}}.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Call e2e_echo and report its returned token\\\",\\\"status\\\":\\\"done\\\"}]}\",\"call_id\":\"call_OcgDKzy4jMmYKeijfUWdRhxF\",\"name\":\"record_work_disposition\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":96}\n\n"
       },
       {
         "delay_ms": 27,

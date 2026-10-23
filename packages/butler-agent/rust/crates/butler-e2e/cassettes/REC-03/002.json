@@ -31,7 +31,7 @@
       },
       {
         "delay_ms": 7707,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_054a73f5fa280ba2016ab8d59f2a0887d0b6242e7947118417\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_yNFi6jfjqj5ugcTcXEUrhYwN\",\"name\":\"record_work_review\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_054a73f5fa280ba2016ab8d59f2a0887d0b6242e7947118417\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_yNFi6jfjqj5ugcTcXEUrhYwN\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -195,7 +195,7 @@
       },
       {
         "delay_ms": 1,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_054a73f5fa280ba2016ab8d59f2a0887d0b6242e7947118417\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"plan\\\",\\\"verdict\\\":\\\"accept\\\",\\\"summary\\\":\\\"Run the exact requested command once.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Append the specified token to log.txt\\\",\\\"status\\\":\\\"active\\\"}]}\",\"call_id\":\"call_yNFi6jfjqj5ugcTcXEUrhYwN\",\"name\":\"record_work_review\"},\"output_index\":0,\"sequence_number\":43}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_054a73f5fa280ba2016ab8d59f2a0887d0b6242e7947118417\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"plan\\\",\\\"verdict\\\":\\\"accept\\\",\\\"summary\\\":\\\"Run the exact requested command once.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Append the specified token to log.txt\\\",\\\"status\\\":\\\"active\\\"}]}\",\"call_id\":\"call_yNFi6jfjqj5ugcTcXEUrhYwN\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":43}\n\n"
       },
       {
         "delay_ms": 28,
