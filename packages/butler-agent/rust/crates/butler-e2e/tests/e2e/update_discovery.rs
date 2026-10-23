@@ -61,7 +61,7 @@ impl Feed {
                     "component":"app", "version":version,
                     "channel":if version.contains("preview") {"preview"} else {"stable"},
                     "platform":butler_platform::launcher::release_platform(),
-                    "package_format":butler_platform::app_update::package_format(),
+                    "package_format":butler_platform::app_update::package_formats()[0],
                     "staging_policy":"butler-data-updates",
                     "activation_policy":"user-installs-app-package",
                     "rollback_policy":"not-managed-by-butler"

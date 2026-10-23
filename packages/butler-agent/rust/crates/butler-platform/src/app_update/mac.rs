@@ -2,6 +2,7 @@
 use super::{await_activation, run, wait_for_parent};
 use std::{ffi::OsString, path::Path, process::Command};
 pub(super) mod archive;
+pub(super) mod disk_image;
 mod journal;
 
 pub(super) fn install(
@@ -38,29 +39,20 @@ fn activate_mac(
     parent: u32,
     arguments: &[OsString],
 ) -> Result<(), String> {
-    archive::extract(artifact, staging)?;
+    let team = signing_team(bundle)?;
+    if artifact
+        .extension()
+        .is_some_and(|extension| extension == "dmg")
+    {
+        disk_image::extract(artifact, staging, team.as_deref())?;
+    } else {
+        archive::extract(artifact, staging)?;
+    }
     let candidate = staging.join("Butler.app");
     run(Command::new("codesign")
         .args(["--verify", "--deep", "--strict", "--verbose=4"])
         .arg(&candidate))?;
-    let team = |path: &Path| -> Result<Option<String>, String> {
-        let result = Command::new("codesign")
-            .args(["-dv", "--verbose=4"])
-            .arg(path)
-            .output()
-            .map_err(|e| e.to_string())?;
-        if !result.status.success() {
-            return Err("App signature is unavailable.".into());
-        }
-        Ok(String::from_utf8_lossy(&result.stderr)
-            .lines()
-            .find_map(|line| {
-                line.strip_prefix("TeamIdentifier=")
-                    .filter(|team| *team != "not set")
-                    .map(str::to_owned)
-            }))
-    };
-    if team(bundle)? != team(&candidate)? {
+    if team != signing_team(&candidate)? {
         return Err("App signing team changed.".into());
     }
     crate::process_names::restore_archive_links(
@@ -91,6 +83,24 @@ fn activate_mac(
             Err(error.to_string())
         }
     }
+}
+
+fn signing_team(path: &Path) -> Result<Option<String>, String> {
+    let result = Command::new("codesign")
+        .args(["-dv", "--verbose=4"])
+        .arg(path)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !result.status.success() {
+        return Err("App signature is unavailable.".into());
+    }
+    Ok(String::from_utf8_lossy(&result.stderr)
+        .lines()
+        .find_map(|line| {
+            line.strip_prefix("TeamIdentifier=")
+                .filter(|team| *team != "not set")
+                .map(str::to_owned)
+        }))
 }
 
 fn remove_quarantine(candidate: &Path) -> Result<(), String> {

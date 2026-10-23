@@ -84,6 +84,18 @@ export function signMacBundle(root: string, appBundle: string): void {
   }
 }
 
+/** The updater verifies a DMG before mounting it: an ad-hoc App gets an ad-hoc DMG. */
+export function signMacDmg(root: string, dmg: string): void {
+  if (process.env.BUTLER_SIGN_IDENTITY?.trim()) {
+    runMacSigning(root, "sign-dmg", dmg);
+    return;
+  }
+  const result = spawnSync("codesign", ["--sign", "-", dmg], { encoding: "utf8" });
+  if (result.status !== 0) {
+    throw new Error(`mac DMG ad-hoc signing failed: ${result.stderr.trim() || result.stdout.trim() || "unknown error"}`);
+  }
+}
+
 /** Developer ID signing, notarization and stapling; a logged no-op without BUTLER_SIGN_IDENTITY. */
 export function runMacSigning(root: string, command: "sign-app" | "sign-dmg" | "notarize", path: string): void {
   const result = spawnSync(join(root, MAC_SIGNING_SCRIPT), [command, path], {

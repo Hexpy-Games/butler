@@ -69,11 +69,16 @@ if (nativeMac) {
       item?.stagingPolicy !== "butler-data-updates" ||
       item?.activationPolicy !== "user-installs-app-package" ||
       item?.rollbackPolicy !== "not-managed-by-butler" ||
-      updateManifest.artifacts.length !== 1 ||
-      updateManifest.artifacts[0]?.sha256 !== item.updaterSha256 ||
-      updateManifest.artifacts[0]?.staging_policy !== item.stagingPolicy ||
-      updateManifest.artifacts[0]?.activation_policy !== item.activationPolicy ||
-      updateManifest.artifacts[0]?.rollback_policy !== item.rollbackPolicy) {
+      updateManifest.artifacts.length !== 2 ||
+      updateManifest.artifacts[0]?.package_format !== "dmg" ||
+      updateManifest.artifacts[0]?.sha256 !== item.sha256 ||
+      updateManifest.artifacts[1]?.package_format !== "zip" ||
+      updateManifest.artifacts[1]?.sha256 !== item.updaterSha256 ||
+      updateManifest.artifacts.some((artifact: any) => artifact.platform !== "darwin-arm64" ||
+        artifact.version !== releaseManifest.version ||
+        artifact.staging_policy !== item.stagingPolicy ||
+        artifact.activation_policy !== item.activationPolicy ||
+        artifact.rollback_policy !== item.rollbackPolicy)) {
     throw new Error("native mac release manifest does not match its App artifacts");
   }
   closure = item.dependencyClosure as NativeMacDependencyClosure;
