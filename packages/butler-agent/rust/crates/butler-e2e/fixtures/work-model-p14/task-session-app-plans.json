@@ -1,0 +1,13 @@
+{
+  "PROJECTED": "SCAN CONSTANT ROW\nSCALAR SUBQUERY 1\nSEARCH app_task_sessions USING COVERING INDEX sqlite_autoindex_app_task_sessions_2 (op_id=?)",
+  "CHAT_EXISTS": "SCAN CONSTANT ROW\nSCALAR SUBQUERY 1\nSEARCH chats USING COVERING INDEX sqlite_autoindex_chats_1 (id=?)",
+  "COORDINATOR_PROJECT": "SEARCH chats USING INDEX sqlite_autoindex_chats_1 (id=?)",
+  "BIND_CHAT": "SEARCH chats USING INDEX sqlite_autoindex_chats_1 (id=?)",
+  "REMOVE_NODE": "SEARCH app_space_nodes USING INDEX sqlite_autoindex_app_space_nodes_1 (node_key=?)",
+  "INSERT_SESSION": "",
+  "CHAT_TITLE": "SEARCH chats USING INDEX sqlite_autoindex_chats_1 (id=?)",
+  "INSERT_PROMPT": "",
+  "PENDING_PROMPTS": "SEARCH app_session_decisions USING INDEX app_session_decisions_pending (session_id=?)",
+  "RESOLVE_PROMPT": "SEARCH app_session_decisions USING INDEX app_session_decisions_pending (session_id=?)",
+  "LOOKUP_SESSION": "SEARCH app_task_sessions USING COVERING INDEX sqlite_autoindex_app_task_sessions_1 (session_id=?)"
+}

@@ -1,6 +1,8 @@
 #![allow(clippy::unwrap_used, reason = "test assertions")]
 #[path = "support/enum_columns.rs"]
 mod enum_columns;
+#[path = "support/ownership_schema.rs"]
+mod ownership_schema;
 #[path = "support/vocabulary.rs"]
 mod vocabulary;
 use butler_work::{work_queries, work_schema};
@@ -41,6 +43,7 @@ fn every_request_query_uses_its_index() {
 // test-category: format-pin
 #[test]
 fn schema_constraints_and_idempotency() {
+    ownership_schema::ownership_columns_and_statement_order_are_enforced();
     vocabulary::roundtrips_match_sql();
     let db = Connection::open_in_memory().unwrap();
     db.execute_batch("PRAGMA foreign_keys=ON").unwrap();
@@ -211,6 +214,7 @@ fn rejects_unknown_enum(table: &str, column: &str) {
 // test-category: format-pin
 #[test]
 fn p1_upgrade_preserves_works_and_unrelated_tables_and_is_idempotent() {
+    ownership_schema::run1_upgrade_preserves_cutover_tasks_attempts_results_and_legacy_ids();
     let db = Connection::open_in_memory().unwrap();
     db.execute_batch("PRAGMA foreign_keys=ON").unwrap();
     db.execute_batch(include_str!(
