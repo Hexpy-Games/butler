@@ -256,24 +256,20 @@ impl AgentRuntime {
             work_model,
             work_service,
             work_cutover,
+            subsessions,
+            usage_lineage,
+            inbound_queue,
         } = work_ports::create(
             &stores,
             &project_ledger,
             now.clone(),
             &paths.data_root,
             stop,
+            (worker_profiles, app_endpoint.clone()),
         )
         .await?;
         let (session_worktrees, workspace_recovery) =
             owners::workspace_services(&stores, &commands, &files, &host_environment, &paths);
-        let (subsessions, usage_lineage, inbound_queue) = monitoring::session_usage_services(
-            &stores,
-            &paths.data_root,
-            (worker_profiles, app_endpoint.clone()),
-            work_service.clone(),
-            &work_cutover,
-        )
-        .await?;
         let restart_tool_journal =
             Arc::new(ToolJournalRepository::new(stores.btcc.clone(), now.clone()));
         let restart_effect_journal = Arc::new(StorageEffectJournal::new(stores.btcc.clone(), now));
