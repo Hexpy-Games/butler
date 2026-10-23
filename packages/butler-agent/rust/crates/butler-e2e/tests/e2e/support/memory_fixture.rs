@@ -3,6 +3,8 @@
 use butler_e2e::e2e::HarnessError;
 use butler_platform::sqlite;
 use std::path::PathBuf;
+#[path = "memory_fixture/idle_activity.rs"]
+pub(super) mod idle_activity;
 #[path = "memory_fixture/parked.rs"]
 mod parked;
 #[path = "memory_fixture/settlement.rs"]

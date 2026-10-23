@@ -1,5 +1,5 @@
 //! Immediate post-restart recall with the shared retained-history fixtures.
-use super::{ASK, batch, memory_stubs, recall_tool_ms};
+use super::{ASK, batch, idle_activity, memory_stubs, recall_tool_ms};
 use butler_e2e::e2e::HarnessError;
 use butler_platform::process_control::usage;
 use serde_json::Value;
@@ -163,11 +163,13 @@ async fn park(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), HarnessErro
 
 async fn idle(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), HarnessError> {
     let pid = s.agent.pid().unwrap();
-    let Some(before) = usage::sample(pid)? else {
+    if usage::sample(pid)?.is_none() {
         return Ok(());
-    };
-    tokio::time::sleep(Duration::from_secs(60)).await;
-    let after = usage::sample(pid)?.unwrap();
+    }
+    let samples = idle_activity::sample_window(pid, Duration::from_secs(60), 12)
+        .await?
+        .unwrap();
+    let (before, after) = (samples[0], samples[12]);
     assert!(usage::embedding_children(pid)?.is_none_or(|workers| workers.is_empty()));
     let reads = after.read_chars.zip(before.read_chars).map(|(a, b)| a - b);
     let writes = after
@@ -181,7 +183,10 @@ async fn idle(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), HarnessErro
     );
     assert!(reads.is_none_or(|bytes| bytes <= 1_000_000));
     assert!(writes.is_none_or(|bytes| bytes <= 1_000_000));
-    assert!(after.read_bytes - before.read_bytes <= 1_000_000);
+    idle_activity::assert_no_recurring_activity(
+        "idle agent physical reads",
+        &idle_activity::deltas(&samples, |sample| sample.read_bytes),
+    );
     assert!(after.write_bytes - before.write_bytes <= 1_000_000);
     Ok(())
 }

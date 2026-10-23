@@ -8,7 +8,7 @@
 
 use super::memory_fixture;
 use butler_platform::sqlite;
-use memory_fixture::{initialize_empty, wait_parked};
+use memory_fixture::{idle_activity, initialize_empty, wait_parked};
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
@@ -251,7 +251,6 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
         butler_platform::process_names::Role::Memory,
     )?;
     assert_eq!(memory_workers_before, 0);
-    let usage_before = butler_platform::process_control::usage::sample(s.agent.pid().unwrap())?;
     if let Some(workers) =
         butler_platform::process_control::usage::embedding_children(s.agent.pid().unwrap())?
     {
@@ -261,7 +260,7 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
         );
     }
     let idle_started = Instant::now();
-    tokio::time::sleep(IDLE).await;
+    let usage_samples = idle_activity::sample_window(s.agent.pid().unwrap(), IDLE, 12).await?;
     let idle_window = idle_started.elapsed();
     let graph_commits = data_version(&graph_db) - before_graph_version;
     let leases = data_version(&lock_db) - before_lock_version;
@@ -305,10 +304,8 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
         )
         .unwrap();
     assert_eq!(completed, COMPLETED_WINDOWS as u64);
-    if let (Some(before), Some(after)) = (
-        usage_before,
-        butler_platform::process_control::usage::sample(s.agent.pid().unwrap())?,
-    ) {
+    if let Some(samples) = usage_samples {
+        let (before, after) = (samples[0], samples[12]);
         let logical_reads = after
             .read_chars
             .zip(before.read_chars)
@@ -326,9 +323,9 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
             logical_reads.is_none_or(|reads| reads < IDLE_READ_BUDGET),
             "idle logical reads: {logical_reads:?}"
         );
-        assert!(
-            physical_reads < IDLE_READ_BUDGET,
-            "idle physical reads: {physical_reads}"
+        idle_activity::assert_no_recurring_activity(
+            "idle physical reads",
+            &idle_activity::deltas(&samples, |sample| sample.read_bytes),
         );
         // wchar includes Tokio eventfd wakeups, not just filesystem writes.
         // Disk counters and the graph/WAL/lock signatures must stay unchanged.

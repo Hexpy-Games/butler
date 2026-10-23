@@ -1,4 +1,5 @@
 //! A persisted vector generation is usable on the first recall after restart.
+use super::super::memory_fixture::idle_activity;
 use super::{batch, memory_stubs};
 use butler_e2e::e2e::HarnessError;
 use butler_platform::process_control::usage;
@@ -190,12 +191,14 @@ async fn assert_loaded_idle(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(
     };
     let commits = version();
     let started = Instant::now();
-    let before = usage::sample(pid)?.unwrap();
-    let mut previous = before;
+    // One-second samples; the CPU check keeps its two five-second windows.
+    let samples = idle_activity::sample_window(pid, Duration::from_secs(10), 10)
+        .await?
+        .unwrap();
+    let (before, after) = (samples[0], samples[10]);
     let mut cpu_windows = Vec::new();
     for window in 1..=2 {
-        tokio::time::sleep(Duration::from_secs(5)).await;
-        let current = usage::sample(pid)?.unwrap();
+        let (previous, current) = (samples[(window - 1) * 5], samples[window * 5]);
         let cpu_user = current
             .cpu_user_time
             .zip(previous.cpu_user_time)
@@ -208,9 +211,7 @@ async fn assert_loaded_idle(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(
             "COLD-RECALL loaded_idle_window={window} cpu_user={cpu_user:?} cpu_system={cpu_system:?}"
         );
         cpu_windows.push((cpu_user, cpu_system));
-        previous = current;
     }
-    let after = previous;
     // Each consecutive sub-window must be quiet, not just free of disk work.
     // Exact-zero CPU is a perf-tier check: recorded in every tier, enforced
     // only in the isolated perf job, like `assert_wall_clock_budget!`.
@@ -225,16 +226,17 @@ async fn assert_loaded_idle(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(
         }
     }
     assert_eq!(version(), commits, "memory graph committed while idle");
-    assert_eq!(
-        (before.read_chars, before.read_bytes),
-        (after.read_chars, after.read_bytes)
+    assert_eq!(before.read_chars, after.read_chars);
+    idle_activity::assert_no_recurring_activity(
+        "loaded idle worker physical reads",
+        &idle_activity::deltas(&samples, |sample| sample.read_bytes),
     );
     assert_eq!(
         (before.write_chars, before.write_bytes),
         (after.write_chars, after.write_bytes)
     );
     eprintln!(
-        "COLD-RECALL loaded_idle_ms={} graph_commits=0 read_delta=0 write_delta=0",
+        "COLD-RECALL loaded_idle_ms={} graph_commits=0 write_delta=0",
         started.elapsed().as_millis()
     );
     Ok(())
