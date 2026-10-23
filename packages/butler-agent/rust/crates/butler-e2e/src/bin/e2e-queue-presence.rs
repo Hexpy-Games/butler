@@ -123,7 +123,7 @@ async fn main() {
 async fn update(path: &std::path::Path, sql: &'static str) {
     let path = path.to_owned();
     tokio::task::spawn_blocking(move || {
-        Connection::open(path).unwrap().execute_batch(sql).unwrap()
+        Connection::open(path).unwrap().execute_batch(sql).unwrap();
     })
     .await
     .unwrap();
