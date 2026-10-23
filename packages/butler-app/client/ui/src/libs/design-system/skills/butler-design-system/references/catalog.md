@@ -400,6 +400,7 @@
 | Files Butler produced | `ArtifactList` | `AttachmentList` |
 | Files the user attached | `AttachmentList` | `ArtifactList` |
 | Files the user attached (composer tiles) or sent (message tiles) | `AttachmentList` |  |
+| Filter a list in place (All, Recent, Running) | `SegmentedControl` |  |
 | Filtering a list by tags | `FilteredSelectPopover` | `TagField` |
 | Filtering a single list in place | `Input` | `CommandPanel` |
 | Filtering or changing what one panel shows | `SegmentedControl` | `Tabs` |
@@ -879,10 +880,11 @@ A compact single-choice radiogroup that changes what one panel shows.
 
 - Use for: Switch a chart period or dataset
 - Use for: Pick a mode among two to five short options
+- Use for: Filter a list in place (All, Recent, Running)
 - Not for: Switching between panels of content → `Tabs`
 - Not for: More than five options or long labels → `Select`
 - Not for: An on/off setting → `Switch`
-- Tokens: `--selection`, `--radius-control`, `--motion-fast`, `--control-height-md`, `--control-height-xs`, `--control-hit-target`
+- Tokens: `--selection`, `--surface`, `--line`, `--radius-control`, `--motion-fast`, `--control-height-md`, `--control-height-xs`, `--control-hit-target`, `--focus-ring`
 
 ### Select
 

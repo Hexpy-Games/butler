@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
+import { Activity, Clock3, ListFilter } from "../Icons";
 import { Stack } from "../Stack";
 import { Typo } from "../Typo";
 import { SegmentedControl } from "./SegmentedControl";
@@ -12,8 +13,10 @@ export const meta: ShowcaseMeta = {
 };
 
 const labels = {
-  "en-US": { period: "Period", days: (days: number) => `Last ${days} days`, kind: "Board kind", work: "Work", plan: "Plan", task: "Task" },
-  "ko-KR": { period: "기간", days: (days: number) => `최근 ${days}일`, kind: "보드 종류", work: "작업", plan: "계획", task: "할 일" },
+  "en-US": { period: "Period", days: (days: number) => `Last ${days} days`, kind: "Board kind", work: "Work", plan: "Plan", task: "Task",
+    views: "Conversation view", all: "All", recent: "Recent", running: "Running" },
+  "ko-KR": { period: "기간", days: (days: number) => `최근 ${days}일`, kind: "보드 종류", work: "작업", plan: "계획", task: "할 일",
+    views: "대화 보기", all: "전체보기", recent: "최신", running: "진행중" },
 } as const;
 
 function text({ locale }: ShowcaseRenderContext) {
@@ -37,8 +40,20 @@ function KindStory({ context }: { context: ShowcaseRenderContext }) {
     options={[{ value: "work", label: text(context).work }, { value: "plan", label: text(context).plan }, { value: "task", label: text(context).task, disabled: true }]} />;
 }
 
+function FilterStory({ context }: { context: ShowcaseRenderContext }) {
+  const copy = text(context);
+  const [value, setValue] = useState("all");
+  return <SegmentedControl stretch ariaLabel={copy.views} value={value} onValueChange={setValue}
+    options={[
+      { value: "all", label: copy.all, icon: <ListFilter /> },
+      { value: "recent", label: copy.recent, icon: <Clock3 /> },
+      { value: "running", label: copy.running, icon: <Activity /> },
+    ]} />;
+}
+
 export const stories: ShowcaseStory[] = [
   { name: "Period", states: ["selected", "focus"], render: (context) => <PeriodStory context={context} size="default" /> },
+  { name: "List filter (stretch, icons)", widths: ["375", "app"], render: (context) => <FilterStory context={context} /> },
   { name: "Small", render: (context) => <PeriodStory context={context} size="sm" /> },
   { name: "Disabled option", states: ["disabled"], render: (context) => <KindStory context={context} /> },
 ];
