@@ -44,6 +44,23 @@ function Demo({ context, kind = "single", initial = "open", step = 0 }: {
     </>}
   </Stack>;
 }
+/** placement="conversation": the question where Butler asked it, in a flat Card radius="lg" with control-radius buttons. */
+function ConversationDemo({ context, kind = "single" }: { context: ShowcaseRenderContext; kind?: keyof ReturnType<typeof questionFixtures> }) {
+  const ko = context.locale === "ko-KR";
+  const questions: ComposerQuestion[] = questionFixtures(ko)[kind];
+  const [state, setState] = useState<QuestionPanelState>("open");
+  const [answers, setAnswers] = useState<readonly QuestionAnswer[] | null>(null);
+  const [revision, setRevision] = useState(0);
+  return <Stack gap="md">
+    <Typo.Body>{ko ? "검색 결과를 최근 수정순으로 바꿨습니다." : "Search results now sort by last modified."}</Typo.Body>
+    {answers ? <>
+      <QuestionAnswerCard questions={questions} answers={answers} variant="answered" labels={ko ? { answered: "답변 완료", skipped: "건너뜀", message: "메시지로 답함" } : undefined} />
+      <Button size="sm" variant="borderless" onClick={() => { setAnswers(null); setState("open"); setRevision(revision + 1); }}>{ko ? "다시" : "Reset"}</Button>
+    </> : <ComposerQuestionPanel key={revision} placement="conversation" questions={questions} state={state} labels={ko ? koLabels : undefined}
+      onSubmit={setAnswers} onSkip={() => setAnswers(questions.map((q) => ({ id: q.id, selected: [], text: "", other: "", skipped: true })))}
+      onCollapse={() => setState("collapsed")} onExpand={() => setState("open")} />}
+  </Stack>;
+}
 export const stories: ShowcaseStory[] = [
   { name: "Single choice · recommended focus · Other", render: (context) => <Demo context={context} /> },
   { name: "Multiple choice · scroll fades", render: (context) => <Demo context={context} kind="multi" /> },
@@ -57,6 +74,8 @@ export const stories: ShowcaseStory[] = [
   { name: "Error · retry", render: (context) => <Demo context={context} kind="text" initial="error" /> },
   { name: "Collapsed · answer by message", render: (context) => <Demo context={context} initial="collapsed" /> },
   { name: "Working · disabled", render: (context) => <Demo context={context} initial="working" /> },
+  { name: "In conversation · single choice", widths: ["375", "app"], render: (context) => <ConversationDemo context={context} /> },
+  { name: "In conversation · three questions", widths: ["375", "app"], render: (context) => <ConversationDemo context={context} kind="schedule" /> },
 ];
 export const stateMatrix: ShowcaseStateMatrix = {
   states: ["default", "hover", "focus-visible", "disabled", "loading", "invalid"],
