@@ -6,11 +6,11 @@
  */
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { resolve, join, dirname } from "node:path";
+import { resolve, join } from "node:path";
 import { getAppCopy } from "../../packages/butler-i18n/src";
 import { onboardingCompletedPatch } from "../../packages/butler-app/client/ui/src/app/onboarding";
 import { PROVIDER_CARDS } from "../../packages/butler-app/client/ui/src/app/setupProviders";
-import { AGENT_EXECUTABLE_NAME, createNativeAppServer } from "../support/native-app-server";
+import { createNativeAppServer } from "../support/native-app-server";
 import { firstRunElectron } from "../support/first-run-electron";
 import { firstRunStub } from "../support/first-run-stub";
 import { nativeSmokeRuntime } from "../support/native-smoke-runtime";
@@ -27,7 +27,7 @@ let app: Awaited<ReturnType<typeof firstRunElectron>> | undefined;
 const facts: unknown[] = [];
 const firstRunUrl = "https://signin.invalid/first-run";
 const keyUrl = "https://aistudio.google.com/apikey";
-const helperUrl = "https://signin.invalid/device-auth";
+
 
 async function assertExternal(label: string, expected: string[]) {
   await waitBrowser(async () => await app!.main<number>("globalThis.externalLinks.length") === expected.length, label);
@@ -120,10 +120,24 @@ try {
   await assertExternal("first-run provider key page", [keyUrl]);
   await page.getByRole("button", { name: copy.firstRun.back, exact: true }).click();
   await page.locator('[data-card-id="chatgpt"]').click();
-  await page.getByRole("button", { name: copy.firstRun.signInReopen, exact: true }).waitFor();
-  await assertExternal("first-run automatic sign-in", [keyUrl, firstRunUrl]);
+  assert.equal(stub.state.started, 0, "tile does not start sign-in");
+  const footer = page.locator('[data-slot="setup-step-footer"]');
+  assert.deepEqual(await footer.getByRole("button").allTextContents(), [copy.firstRun.next]);
+  assert.equal(await footer.getByRole("button", { name: copy.firstRun.cancel, exact: true }).count(), 0);
+  assert.equal(await page.locator('[data-slot="setup-step-header"]').getByRole("button", { name: copy.firstRun.back, exact: true }).count(), 1);
+  assert(await footer.getByRole("button", { name: copy.firstRun.next, exact: true }).isDisabled());
+  assert.equal(await footer.locator('[data-slot="button-container"]').evaluate(node => getComputedStyle(node).justifyContent), "flex-end");
+  await page.getByRole("button", { name: copy.chatgptPlan.continue, exact: true }).click();
+  await page.getByRole("button", { name: copy.chatgptSignIn.open, exact: true, disabled: false }).waitFor();
+  assert.equal(stub.state.started, 1, "one explicit first-run start");
+  assert(await footer.getByRole("button", { name: copy.firstRun.cancel, exact: true }).isEnabled());
+  assert.equal(await page.getByRole("button", { name: copy.chatgptSignIn.copy, exact: true }).count(), 1);
+  const waitingActions = page.getByRole("button", { name: copy.chatgptSignIn.open, exact: true }).locator('..');
+  assert.equal(await waitingActions.evaluate(node => getComputedStyle(node).justifyContent), "flex-end");
+  assert.equal(await waitingActions.getByRole("button").last().innerText(), copy.chatgptSignIn.open);
+  await assertExternal("first-run explicit sign-in", [keyUrl, firstRunUrl]);
   await page.screenshot({ path: join(evidence, "first-run-external.png") });
-  await page.getByRole("button", { name: copy.firstRun.signInReopen, exact: true }).click();
+  await page.getByRole("button", { name: copy.chatgptSignIn.open, exact: true }).click();
   await assertExternal("first-run reopen", [keyUrl, firstRunUrl, firstRunUrl]);
   await page.getByRole("button", { name: copy.firstRun.cancel, exact: true }).click();
   // The steps after a connection: reply language, import and ready.
@@ -147,12 +161,6 @@ try {
   await page.reload();
   await page.locator('[data-test-class="workspace"]').waitFor();
 
-  // Preserve the real helper stdout/exit path while replacing its provider/network work.
-  await main(`(()=>{process.env.BUTLER_NATIVE_AGENT_EXECUTABLE=${JSON.stringify(join(dirname(server.butlerData), "install/bin", AGENT_EXECUTABLE_NAME))};const cp=process.getBuiltinModule('child_process');const spawn=cp.spawn;
-    cp.spawn=function(command,args,options){if(args?.includes('oauth-login')){const child=spawn(process.execPath,
-      ['-e',${JSON.stringify(`console.log(${JSON.stringify(helperUrl)});setInterval(()=>{},1000)`)}],
-      {...options,env:{...options.env,ELECTRON_RUN_AS_NODE:'1'}});globalThis.providerAuthChild=child;process.once('exit',()=>child.kill('SIGTERM'));return child}return spawn(command,args,options)};
-    process.getBuiltinModule('module').syncBuiltinESMExports()})()`);
   await page.getByRole("button", { name: "설정", exact: true }).click();
   await page.getByRole("button", { name: "모델", exact: true }).click();
   await page.getByText(copy.settings.modelManagement.manageButton, { exact: true }).click();
@@ -160,18 +168,22 @@ try {
   await page.locator('[data-test-class="model-add-provider-select"]').click();
   await page.getByRole("option", { name: "OpenAI", exact: true }).click();
   await page.locator('[data-test-class="hosted-auth-method-select"]').click();
-  await page.getByRole("option", { name: copy.settings.modelManagement.codexOauth, exact: true }).click();
-  await page.locator("#model-oauth-link").waitFor();
-  await assertExternal("Settings helper automatic sign-in", [keyUrl, firstRunUrl, firstRunUrl, helperUrl]);
+  await page.getByRole("option", { name: copy.settings.modelManagement.chatgptOauth, exact: true }).click();
+  assert.equal(stub.state.started, 1, "auth method selection does not start a flow");
+  const add = page.getByRole("button", { name: copy.settings.modelManagement.saveAdd, exact: true });
+  assert(await add.isDisabled(), "Add requires sign-in");
+  await add.hover();
+  await page.getByRole("tooltip", { name: copy.chatgptSignIn.addHint, exact: true }).waitFor();
+  await page.getByRole("button", { name: copy.chatgptPlan.continue, exact: true }).click();
+  await page.getByRole("button", { name: copy.chatgptSignIn.open, exact: true }).waitFor();
+  await assertExternal("Settings explicit sign-in", [keyUrl, firstRunUrl, firstRunUrl, firstRunUrl]);
+  assert.equal(stub.state.started, 2, "one explicit Settings start");
   await page.screenshot({ path: join(evidence, "settings-external.png") });
-  await page.getByRole("button", { name: copy.settings.modelManagement.oauthOpen, exact: true }).click();
-  await assertExternal("Settings reopen", [keyUrl, firstRunUrl, firstRunUrl, helperUrl, helperUrl]);
-  await page.getByRole("button", { name: copy.settings.modelManagement.oauthRetry, exact: true }).click();
-  await assertExternal("Settings re-authenticate", [keyUrl, firstRunUrl, firstRunUrl, helperUrl, helperUrl, helperUrl]);
-  await page.evaluate(async () => {
-    const bridge = (window as unknown as { butlerApp: { cancelOpenAIOAuthLogin(): Promise<unknown> } }).butlerApp;
-    await bridge.cancelOpenAIOAuthLogin();
-  });
+  await page.getByRole("button", { name: copy.chatgptSignIn.open, exact: true }).click();
+  await assertExternal("Settings reopen", [keyUrl, firstRunUrl, firstRunUrl, firstRunUrl, firstRunUrl]);
+  stub.state.oauthStatus = "completed";
+  await waitBrowser(async () => await add.isEnabled(), "Add after sign-in");
+  await add.click();
   assert.equal(server.stubModelCalls.length, 0);
   writeFileSync(join(evidence, "acceptance.json"), JSON.stringify({ facts, modelCalls: 0 }, null, 2));
   console.log(JSON.stringify({ ok: true, facts, modelCalls: 0 }));
@@ -182,6 +194,5 @@ try {
   }
   throw error;
 } finally {
-  await app?.main("globalThis.providerAuthChild?.kill('SIGTERM')").catch(() => {});
   stub.stop(); await app?.stop(); await server.stop();
 }

@@ -28,6 +28,7 @@ mod message_files;
 mod model_catalog;
 mod monitors;
 mod new_chat_briefing;
+mod opened_files;
 mod operation_output;
 mod params;
 mod personalization;
@@ -40,6 +41,8 @@ mod router;
 pub(crate) use router::templates as route_templates;
 mod security;
 pub(super) use security::RequestPolicy;
+mod canon;
+mod canon_sidebar;
 mod security_settings;
 mod session_branches;
 mod session_controls;
@@ -60,7 +63,6 @@ mod transcript_export;
 mod updates;
 mod wallpaper_modules;
 mod wallpapers;
-mod work_model;
 
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 

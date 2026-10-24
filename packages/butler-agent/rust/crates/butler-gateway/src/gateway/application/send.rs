@@ -161,6 +161,7 @@ impl AppApplication {
             && result.as_ref().is_ok_and(|sent| sent.accepted.is_some())
             && request.subsession_result.is_none()
         {
+            self.organize_session(chat_id.clone(), title_model.clone());
             self.generate_session_title(chat_id, title_model);
         }
         result
@@ -274,6 +275,18 @@ impl AppApplication {
         client_id: &str,
         prepared: ResolvedAppAdmission,
     ) -> Result<MessageSendResult, GatewayApplicationError> {
+        // Recovery can publish results before native ingress is ready. Ordinary
+        // sends retain normal first-message title and organization admission.
+        let wait = prepared.controls.subsession_result.is_some()
+            && !self
+                .dependencies
+                .executor_readiness
+                .readiness()?
+                .btcc_executor_ready;
+        if wait {
+            self.queue_wake.chat(chat_id.to_owned()).await?;
+            return self.queued_result(chat_id, client_id).await;
+        }
         let claim_id = self.dependencies.identity_clock.new_uuid();
         let now = self.dependencies.identity_clock.now_iso();
         let lease = self

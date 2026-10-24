@@ -73,12 +73,9 @@ fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
     );
     let previous_auth = std::mem::replace(
         &mut config.auth,
-        ProviderAuth::Codex {
-            mode: ProviderAuthMode::CodexSubscription,
-            authorization: "Bearer offline".into(),
-            account_id: "offline".into(),
-            user_agent: "offline".into(),
-            originator: "butler".into(),
+        ProviderAuth::ChatGptPlan {
+            authorization: "Bearer offline".to_owned().into(),
+            registration: "fixture-registration".into(),
         },
     );
     let codex = serialize::body(&request, &config, serialize::Carrier::Responses).unwrap();
@@ -360,7 +357,7 @@ fn non_openai_carriers_preserve_source_defaults_and_stateless_items() {
     );
     let anthropic_body =
         serialize::body(&input, &anthropic, serialize::Carrier::Anthropic).unwrap();
-    assert_eq!(anthropic_body["max_tokens"].as_u64(), Some(4096));
+    assert_eq!(anthropic_body["max_tokens"].as_u64(), Some(128_000));
     assert_eq!(anthropic_body["thinking"]["type"], "adaptive");
     assert_eq!(anthropic_body["thinking"]["display"], "summarized");
     assert_eq!(anthropic_body["tool_choice"]["type"], "any");

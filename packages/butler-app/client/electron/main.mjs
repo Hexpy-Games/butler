@@ -4,6 +4,7 @@ import { shellRegistrationAllowed as profileAllowsShellRegistration } from "./sh
 import * as desktopShell from "./desktop-shell.mjs";
 import { watchStorageCorrection } from "./app-storage-correction.mjs";
 import { isLifecycleWindow } from "./lifecycle-window.mjs";
+import { defaultWindowBounds } from "./window-bounds.mjs";
 import { prepareStartupRetry, restoreLaunchServerEnvironment } from "./app-relaunch-context.mjs";
 import { isStartupWindow, startupPending, configureStartupActions, startupStage, startupTiming, startupTimings, failStartup, waitForStartupRenderer, completeStartup } from "./startup-window.mjs";
 import { createUiCrashStore } from "./ui-crash-store.mjs";
@@ -21,6 +22,7 @@ import {
   nativeImage,
   nativeTheme,
   protocol,
+  screen,
   session,
   shell,
 } from "electron";
@@ -86,7 +88,6 @@ import {
   confirmAppForegroundQuit,
 } from "./app-foreground-quit.mjs";
 import { migrateLegacyAppService } from "./app-legacy-service-migration.mjs";
-import { resolveOpenAIAuthProfilePath, resolveOpenAIOAuthLoginHelper } from "./openai-oauth-login-helper.mjs";
 import { createAgentServiceControl } from "./service-control.mjs";
 import { createFirstRunSetupBridge } from "./setup-bridge.mjs";
 import {
@@ -128,6 +129,7 @@ import {
 } from "./cache-budget-runtime.mjs";
 import { createSessionFolderLauncher } from "./session-folder-launch.mjs";
 import { registerLogsExport } from "./logs-export.mjs";
+import { registerOpenMessageFile } from "./open-message-file.mjs";
 import { createBrowserHost } from "./browser/host-channel.mjs";
 import { isSecuritySenderOrigin, readAppLocalAdmin, requestSecurityRoute } from "./app-security-admin.mjs";
 import { clearAppOwnedData, relaunchAfterFullReset, requestFullReset } from "./app-full-reset.mjs";
@@ -355,7 +357,6 @@ autoUpdater.on("before-quit-for-update", () => {
 });
 app.commandLine.appendSwitch("disable-gpu-process-crash-limit");
 const explicitElectronUserDataDir = process.env.BUTLER_APP_ELECTRON_USER_DATA_DIR?.trim();
-let openAIOAuthLoginSession = null;
 const bundledAgentSupervisor = createBundledAgentSupervisor({
   butlerData: butlerDataRoot,
   readOnly: legacyDataBlocked,
@@ -858,260 +859,6 @@ function currentNativeAgentInstallation() {
     isPackaged: app.isPackaged,
     env: process.env,
   });
-}
-
-function codexOAuthClientId() {
-  return (
-    process.env.BUTLER_CODEX_OAUTH_CLIENT_ID ||
-    process.env.BUTLER_OPENAI_OAUTH_CLIENT_ID ||
-    "app_EMoamEEZ73f0CkXaXp7hrann"
-  );
-}
-
-function codexAuthProfilePath() {
-  return resolveOpenAIAuthProfilePath({ butlerData: butlerDataRoot });
-}
-
-async function readCodexAuthProfileLabel() {
-  const profilePath = codexAuthProfilePath();
-  try {
-    const parsed = JSON.parse(await readFile(profilePath, "utf8"));
-    return safeString(parsed.email) ||
-      safeString(parsed.accountId) ||
-      "OpenAI account";
-  } catch {
-    return null;
-  }
-}
-
-async function startOpenAIOAuthLogin(input = {}) {
-  if (input?.force === true) {
-    cancelOpenAIOAuthLogin();
-  }
-  const existingLabel = input?.force === true ? null : await readCodexAuthProfileLabel();
-  if (existingLabel) {
-    return { status: "profile_exists", label: existingLabel };
-  }
-  if (["pending", "starting"].includes(openAIOAuthLoginSession?.status)) {
-    return oauthLoginSessionView(openAIOAuthLoginSession);
-  }
-  const helper = resolveOpenAIOAuthLoginHelper({
-    butlerData: butlerDataRoot,
-    resourcesPath: process.resourcesPath,
-    execPath: process.execPath,
-    isPackaged: app.isPackaged,
-    env: process.env,
-  });
-  if (!helper) throw new Error("OpenAI OAuth login helper is missing.");
-  const env = {
-    ...process.env,
-    ...helper.env,
-    BUTLER_CODEX_OAUTH_CLIENT_ID: codexOAuthClientId(),
-    BUTLER_CODEX_OAUTH_NO_BROWSER: "1",
-  };
-  delete env.BUTLER_HOME;
-  return await beginOAuthLoginProcess(helper.command, helper.args, env);
-}
-
-async function openAIOAuthLoginStatus() {
-  if (
-    openAIOAuthLoginSession?.status === "pending" ||
-    openAIOAuthLoginSession?.status === "starting"
-  ) {
-    const label = await readCodexAuthProfileLabel();
-    if (label) {
-      openAIOAuthLoginSession.status = "completed";
-      openAIOAuthLoginSession.label = label;
-      return oauthLoginSessionView(openAIOAuthLoginSession);
-    }
-  }
-  if (openAIOAuthLoginSession) {
-    return oauthLoginSessionView(openAIOAuthLoginSession);
-  }
-  const existingLabel = await readCodexAuthProfileLabel();
-  return existingLabel
-    ? { status: "profile_exists", label: existingLabel }
-    : { status: "idle" };
-}
-
-async function submitOpenAIOAuthCallback(input = {}) {
-  const session = openAIOAuthLoginSession;
-  if (!session || session.status !== "pending") {
-    throw new Error("OAuth login is not pending.");
-  }
-  const callbackUrl = safeString(input?.callbackUrl);
-  if (!callbackUrl) throw new Error("OAuth callback URL is required.");
-  const url = new URL(callbackUrl);
-  const hostname = url.hostname.toLocaleLowerCase("en-US");
-  const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
-  if (url.protocol !== "http:" || !isLocalhost || url.pathname !== "/auth/callback") {
-    throw new Error("OAuth callback URL must be a local callback URL.");
-  }
-  assertOAuthCallbackMatchesSession(url, session);
-  const response = await fetch(url.toString());
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-  return await waitForOAuthCompletion();
-}
-
-// Cancel for the desktop sign-in helper. First run uses the agent's flow
-// (`POST /setup/oauth/start`, `GET /setup/oauth/{flow_id}`,
-// `POST /setup/oauth/{flow_id}/cancel`, #279) and falls back to this helper
-// only when the agent lacks those routes. Killing the helper closes its
-// localhost callback listener and drops the PKCE state.
-function cancelOpenAIOAuthLoginFlow(input = {}) {
-  const flowId = safeString(input?.flowId);
-  if (flowId && openAIOAuthLoginSession?.id !== flowId) {
-    return { flow_id: flowId, status: "cancelled" };
-  }
-  return cancelOpenAIOAuthLogin();
-}
-
-function cancelOpenAIOAuthLogin() {
-  if (
-    openAIOAuthLoginSession?.child &&
-    ["pending", "starting"].includes(openAIOAuthLoginSession.status)
-  ) {
-    openAIOAuthLoginSession.child.kill("SIGTERM");
-    openAIOAuthLoginSession.status = "cancelled";
-  }
-  return oauthLoginSessionView(openAIOAuthLoginSession);
-}
-
-function assertOAuthCallbackMatchesSession(url, session) {
-  if (!session.redirectUri) {
-    throw new Error("OAuth login redirect URI is missing.");
-  }
-  const expectedRedirect = new URL(session.redirectUri);
-  if (
-    url.origin !== expectedRedirect.origin ||
-    url.pathname !== expectedRedirect.pathname
-  ) {
-    throw new Error("OAuth callback URL does not match the active login.");
-  }
-  const expectedState = session.state ||
-    (session.authUrl ? new URL(session.authUrl).searchParams.get("state") : null);
-  if (expectedState && url.searchParams.get("state") !== expectedState) {
-    throw new Error("OAuth callback state mismatch.");
-  }
-}
-
-async function waitForOAuthCompletion(timeoutMs = 10_000) {
-  const expiresAt = Date.now() + timeoutMs;
-  while (Date.now() < expiresAt) {
-    const status = await openAIOAuthLoginStatus();
-    if (["completed", "profile_exists", "failed", "cancelled"].includes(status.status)) {
-      return status;
-    }
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
-  }
-  return await openAIOAuthLoginStatus();
-}
-
-function beginOAuthLoginProcess(command, args, env) {
-  return new Promise((resolveProcess, rejectProcess) => {
-    const session = {
-      id: randomUUID(),
-      status: "starting",
-      authUrl: null,
-      redirectUri: null,
-      error: null,
-      child: null,
-    };
-    openAIOAuthLoginSession = session;
-    const child = spawn(command, args, {
-      cwd: env.BUTLER_DATA,
-      env,
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
-    });
-    session.child = child;
-    let stderr = "";
-    let stdout = "";
-    let resolved = false;
-    const urlTimeout = setTimeout(() => {
-      session.status = "failed";
-      session.error = "OAuth login URL was not produced.";
-      child.kill("SIGTERM");
-      rejectOnce(new Error(session.error));
-    }, 10_000);
-    const resolveOnce = () => {
-      if (resolved) return;
-      resolved = true;
-      clearTimeout(urlTimeout);
-      resolveProcess(oauthLoginSessionView(session));
-    };
-    const rejectOnce = (error) => {
-      if (resolved) return;
-      resolved = true;
-      clearTimeout(urlTimeout);
-      rejectProcess(error);
-    };
-    child.stdout?.on("data", (chunk) => {
-      stdout = `${stdout}${String(chunk)}`.slice(-4000);
-      const authUrl = stdout.split(/\r?\n/u).find((line) =>
-        /^https?:\/\//u.test(line.trim()),
-      );
-      if (!authUrl || session.authUrl) return;
-      session.status = "pending";
-      session.authUrl = authUrl.trim();
-      session.redirectUri = redirectUriFromAuthUrl(session.authUrl);
-      session.state = stateFromAuthUrl(session.authUrl);
-      void openExternalSignIn(session.authUrl)?.catch(() => {});
-      resolveOnce();
-    });
-    child.stderr?.on("data", (chunk) => {
-      stderr = `${stderr}${String(chunk)}`.slice(-4000);
-    });
-    child.on("error", (error) => {
-      session.status = "failed";
-      session.error = error instanceof Error ? error.message : String(error);
-      rejectOnce(error);
-    });
-    child.on("exit", (code, signal) => {
-      if (code === 0) {
-        void readCodexAuthProfileLabel().then((label) => {
-          session.status = "completed";
-          session.label = label ?? "OpenAI account";
-          resolveOnce();
-        });
-        return;
-      }
-      session.status = session.status === "cancelled" ? "cancelled" : "failed";
-      session.error = stderr.trim() || `OAuth login exited with ${signal ?? code}.`;
-      if (resolved) return;
-      rejectOnce(new Error(session.error));
-    });
-  });
-}
-
-function redirectUriFromAuthUrl(value) {
-  try {
-    return new URL(value).searchParams.get("redirect_uri") ?? undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function stateFromAuthUrl(value) {
-  try {
-    return new URL(value).searchParams.get("state") ?? undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function oauthLoginSessionView(session) {
-  if (!session) return { status: "idle" };
-  return {
-    flow_id: session.id,
-    status: session.status,
-    ...(session.authUrl ? { auth_url: session.authUrl } : {}),
-    ...(session.redirectUri ? { redirect_uri: session.redirectUri } : {}),
-    ...(session.label ? { label: session.label } : {}),
-    ...(session.error ? { error: session.error } : {}),
-  };
 }
 
 function readLatestAppManagedRuntimeFailure() {
@@ -2229,10 +1976,12 @@ async function createWindow() {
     userBrowser.onState = () => browserHost.changed();
     userBrowser.pullCredential = (token, origin) => browserHost.credential(token, origin);
     userBrowser.pullVault = (token, origin, frameOrigins) => browserHost.vault(token, origin, frameOrigins);
-    userBrowser.saveSignIn = (payload) => requestSecurityRoute({ route: "saveSignIn", body: { payload } }, {
+    const signInRoute = (input) => requestSecurityRoute(input, {
       ensureReady: ensureServer, fetch, serverUrl, authHeaders: appLocalAuthHeaders,
       adminCredential: readAppLocalAdmin({ butlerData: butlerDataRoot }),
     });
+    userBrowser.saveSignIn = (payload) => signInRoute({ route: "saveSignIn", body: { payload } });
+    userBrowser.signInStoreAvailable = async () => (await signInRoute({ route: "listSignIns" }))?.data?.available === true;
     userBrowser.downloadRequest = async input => {
       const response = await appServerFetch("/internal/browser-host/downloads", { method: "POST",
         headers: { "content-type": "application/json", "x-butler-admin": await readAppLocalAdmin({ butlerData: butlerDataRoot }) }, body: JSON.stringify(input) });
@@ -2254,14 +2003,14 @@ async function createWindow() {
     rendererUrl = await testRendererConnection(serverUrl, appServerFetch);
     rendererOrigin = rendererOriginForUrl(rendererUrl);
   }
+  const bounds = defaultWindowBounds(screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea);
   const win = new BrowserWindow({
     show: false,
-    width: 960,
-    height: 710,
+    ...bounds,
     // Width: the compact Browser toolbar's minimum (nav, narrow address, More, insets).
     // Height: the new-chat hero and first suggestion row need 480 or more above the composer.
-    minWidth: 344,
-    minHeight: 480,
+    minWidth: Math.min(344, bounds.width),
+    minHeight: Math.min(480, bounds.height),
     title: appDisplayName,
     icon: appIconForWindow(),
     frame: isLinux ? false : undefined,
@@ -2760,26 +2509,6 @@ ipcMain.handle("butler:pick-import-file", async (event, kind) => {
   return path ? { path, name: basename(path) } : null;
 });
 
-ipcMain.handle("butler:start-openai-oauth-login", async () =>
-  await startOpenAIOAuthLogin(),
-);
-
-ipcMain.handle("butler:restart-openai-oauth-login", async () =>
-  await startOpenAIOAuthLogin({ force: true }),
-);
-
-ipcMain.handle("butler:get-openai-oauth-login-status", async () =>
-  await openAIOAuthLoginStatus(),
-);
-
-ipcMain.handle("butler:cancel-openai-oauth-login", (_event, input) =>
-  cancelOpenAIOAuthLoginFlow(input ?? {}),
-);
-
-ipcMain.handle("butler:submit-openai-oauth-callback", async (_event, input) =>
-  await submitOpenAIOAuthCallback(input),
-);
-
 ipcMain.handle("butler:set-native-appearance-theme", (_event, input) => {
   const themeSource = normalizeAppearanceThemeSource(input?.theme);
   nativeTheme.themeSource = themeSource;
@@ -2867,6 +2596,13 @@ registerLogsExport({
   readUiCrashes: () => uiCrashStore.read(),
   isTrustedSender: (event) => event.sender === mainWindow?.webContents,
   saveLabel: async () => getDesktopCopy(await readDesktopLanguage()).save,
+});
+
+registerOpenMessageFile({
+  ipcMain,
+  serverFetch: appServerFetch,
+  openPath: desktopShell.openPath,
+  isTrustedSender: (event) => event.sender === mainWindow?.webContents,
 });
 
 ipcMain.handle("butler:save-message-file", async (_event, input = {}) => {

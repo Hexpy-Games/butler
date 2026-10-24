@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-luna",
       "effort": "max",
       "user_request": "Create approved.txt in your workspace containing exactly: approved-by-user",
@@ -75,7 +75,7 @@
       },
       {
         "delay_ms": 293,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0eb2594c3074d3c9016abb0df2adf087d08d8f84b38d483002\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_vCxDBmAy7SWhI0dAO8wtV396\",\"name\":\"write_file\"},\"output_index\":1,\"sequence_number\":4}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0eb2594c3074d3c9016abb0df2adf087d08d8f84b38d483002\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_vCxDBmAy7SWhI0dAO8wtV396\",\"name\":\"write_file\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":4}\n\n"
       },
       {
         "delay_ms": 1207,
@@ -131,7 +131,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0eb2594c3074d3c9016abb0df2adf087d08d8f84b38d483002\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"path\\\":\\\"approved.txt\\\",\\\"content\\\":\\\"approved-by-user\\\"}\",\"call_id\":\"call_vCxDBmAy7SWhI0dAO8wtV396\",\"name\":\"write_file\"},\"output_index\":1,\"sequence_number\":18}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0eb2594c3074d3c9016abb0df2adf087d08d8f84b38d483002\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"path\\\":\\\"approved.txt\\\",\\\"content\\\":\\\"approved-by-user\\\"}\",\"call_id\":\"call_vCxDBmAy7SWhI0dAO8wtV396\",\"name\":\"write_file\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":18}\n\n"
       },
       {
         "delay_ms": 15,

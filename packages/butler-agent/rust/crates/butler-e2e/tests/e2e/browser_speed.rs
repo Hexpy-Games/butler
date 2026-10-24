@@ -53,10 +53,7 @@ async fn browser_speed_offers_tools_runs_tabs_concurrently_and_keeps_prefix()
         .unwrap()
         .unwrap()?;
     let requests = s.provider()?.requests();
-    let offered: Vec<&str> = requests[0]["tools"]
-        .as_array()
-        .unwrap()
-        .iter()
+    let offered: Vec<&str> = butler_e2e::e2e::chatgpt_wire::functions(&requests[0])
         .filter_map(|tool| tool["name"].as_str())
         .collect();
     let reuse = prefix_reuse(&requests);

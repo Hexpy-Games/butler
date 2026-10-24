@@ -53,6 +53,9 @@ pub(crate) struct CommandScope<'a> {
     pub abort: CancellationToken,
     pub allowed_tools_and_effects: Option<&'a [String]>,
     pub installation_root: Option<&'a Path>,
+    /// Outside Full Access, the kernel keeps secrets unreadable to commands
+    /// that run with the user's access, on hosts that can.
+    pub deny_secret_reads: bool,
 }
 
 pub(crate) struct PreparedCommandEffect {
@@ -176,11 +179,7 @@ impl GuidedCommand {
                     stdin: String::new(),
                     timeout_ms,
                     abort: scope.abort.clone(),
-                    legacy: Some(LegacyShell {
-                        command: command.into(),
-                        pipefail: true,
-                        read_only_installation_root: scope.installation_root.map(Path::to_path_buf),
-                    }),
+                    legacy: Some(scope.legacy_shell(command)),
                 })
                 .map_err(BtccError::from)?
                 .await

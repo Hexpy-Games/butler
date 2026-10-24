@@ -20,7 +20,7 @@ const app=await browserAgentApp(evidence, stub.handler, undefined, { stubReply:r
 const observe=(r:StubModelRequest)=>bridgeBrowser("browser_observe", { tab:latestBrowser(r, "tab").tab });
 const pick=(name:string)=>(r:StubModelRequest)=>{
   const o=latestBrowser(r, "obs"), text=(o.untrusted_content as { text:string }).text;
-  if(name === "Close colors")assert.ok((text.match(/^image /gmu) ?? []).length>=100, "text scope retains every graphical dialog tile");
+  if(name === "Close colors")assert.ok((text.match(/^image /gmu) ?? []).length>=100, "the default observation retains every graphical dialog tile");
   const ref=new RegExp(`(?:element|button) "${name}" \\[([^\\]]+)\\]`, "u").exec(text)?.[1];assert.ok(ref, text);
   return bridgeBrowser("browser_act", { tab:o.tab, observation:o.obs, steps:[{ action:"click", ref }] });
 };
@@ -63,9 +63,7 @@ try {
   await app.main(`${app.win}.setContentSize(1100,900)`);
   stub.set([
     ()=>({ name:"tool_describe", arguments:{ ids:["browser_open", "browser_observe", "browser_act", "browser_screenshot"].map(n=>`native:${n}`) } }),
-    ()=>bridgeBrowser("browser_open", { url:view.url }), observe, pick("Colors"), observe,
-    r=>{const o=latestBrowser(r, "tab");return bridgeBrowser("browser_observe", {tab:o.tab,scope:"text"});},
-    pick("Close colors"), observe, pick("Line"), observe, pickColor(96, "canvas"), observe, pickColor(96), observe,
+    ()=>bridgeBrowser("browser_open", { url:view.url }), observe, pick("Colors"), observe, pick("Close colors"), observe, pick("Line"), observe, pickColor(96, "canvas"), observe, pickColor(96), observe,
     r=>{const o=latestBrowser(r, "obs");return bridgeBrowser("browser_act", {tab:o.tab,observation:o.obs,steps:[{action:"drag",ref:"f0-e0",point:[200,200],target_point:[250,250],expect:"canvas"}]});},
     r=>{const o=latestBrowser(r, "obs");return bridgeBrowser("browser_act", {tab:o.tab,observation:o.obs,steps:[{action:"click",point:[200,200],expect:"element icon"}]});},
     r=>{const o=latestBrowser(r, "obs");return bridgeBrowser("browser_act", {tab:o.tab,observation:o.obs,steps:[{action:"drag",point:[200,200],target_point:[200,600],expect:"canvas"}]});},
@@ -84,7 +82,7 @@ try {
   assert.ok(JSON.stringify(stub.results).includes("including earlier steps"));
   assert.ok(JSON.stringify(stub.results).includes("rejected_point"));
   assert.ok(JSON.stringify(stub.results).includes("step_index"));
-  assert.ok(JSON.stringify(stub.results).includes("existing text budget"), "budget refusal explains how to obtain complete fresh controls");
+  assert.ok(!JSON.stringify(stub.results).includes("observation_budget_exceeded"), "the open dialog is observed completely in one default read");
   const state=await app.call<{ tabs:Array<{ id:string;agent:boolean;inUse:boolean;busy:boolean }> }>("state");
   const tab=state.tabs.find(t=>t.agent);assert.ok(tab);assert.equal(tab.inUse, false);assert.equal(tab.busy, false);
   const paint=await app.main<{ strokes:Array<{ tool:string;color:string;released:boolean;points:Array<{ x:number;y:number;buttons:number;trusted:boolean }> }>;picks:Array<{ trusted:boolean }>;webgl:boolean }>(

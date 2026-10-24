@@ -1,3 +1,4 @@
+import { ChatGptPlanUsage } from "../chatgpt/ChatGptPlanUsage";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { useButlerStore } from "@/app/store";
 import type { UsageMonitorView } from "@/app/types";
@@ -15,7 +16,8 @@ export function UsageProviderRow({ provider }: { provider: UsageProvider }) {
     ?? catalog.models.find(item => item.provider_id === provider.providerId)?.provider_label
     ?? usageProviderName(provider.providerId);
   const quota = provider.remaining;
-  const displayName = quota.sourceKind === "codex_app_server" ? appCopy.composer.usage.codexProvider : name;
+  if (provider.providerId === "openai" && quota.planUsage) return <ChatGptPlanUsage quota={quota} usage={provider.butlerUsage} />;
+  const displayName = quota.sourceKind === "chatgpt_plan" ? appCopy.composer.usage.chatgptProvider : name;
   const description = [displayName, quota.planKind !== "unknown" || quota.planName ? planLabel(quota.planKind, quota.planName) : null,
     quota.fetchedAt ? appCopy.composer.usage.checked(usageClock(Date.parse(quota.fetchedAt))) : null].filter(Boolean).join(" · ");
   if (!quota.available && quota.planKind === "api" && quota.reason?.code === "provider_quota_not_offered") {

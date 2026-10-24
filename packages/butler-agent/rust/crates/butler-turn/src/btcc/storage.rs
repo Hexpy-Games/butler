@@ -36,8 +36,8 @@ mod schema;
 mod stop;
 mod subsession_result;
 mod subsessions;
-pub(crate) use subsessions::ChildCompletion;
 pub(crate) use subsessions::direction_turn_id;
+pub(crate) use subsessions::{ChildCompletion, PendingParentInput};
 mod task_graphs;
 mod timing;
 pub use task_graphs::{
@@ -45,11 +45,11 @@ pub use task_graphs::{
     GraphScope as TaskGraphScope, ReviewRecord as TaskGraphReviewRecord,
     WorkRecord as TaskGraphWorkRecord,
 };
+mod canon;
 mod tool_journal;
 mod transitions;
 mod wake;
 mod work;
-mod work_model;
 
 pub(crate) use authority::{SqliteAuthorityReader, SqliteAuthorityRepository};
 pub use bootstrap::{
@@ -66,12 +66,15 @@ pub use project_work_runtime::SqliteProjectWorkRuntime;
 pub(in crate::btcc) use project_work_runtime::material::snapshot as project_work_material_snapshot;
 pub use repository::BtccRepositories;
 pub use subsessions::{
-    ChildEnvelope, ChildRole, DispatchIntent, DispatchMetadata, EnvelopeMessage, EnvelopePeer,
-    EnvelopeRaw, EnvelopeRouting, EnvelopeSender, NativeStewardContext, PacketExecutionMode,
-    PacketPlanAction, PacketWorkerProfile, ParentResultInput, ParentResultRoute, ParentWorkRef,
+    COMPLETE_WORKER_SQL, ChildEnvelope, ChildRole, DispatchIntent, DispatchMetadata,
+    EnvelopeMessage, EnvelopePeer, EnvelopeRaw, EnvelopeRouting, EnvelopeSender,
+    NativeStewardContext, PacketExecutionMode, PacketPlanAction, PacketWorkerProfile,
+    ParentResultInput, ParentResultRoute, ParentWorkRef, RESET_DIRECTION_DISPATCH_SQL,
+    RESTORE_WAITING_DIRECTION_SQL, RETRY_WORKER_SQL, RUNNING_WORKERS_SQL,
     SqliteSubsessionRepository, StewardResultInput, StoredSubsessionDelegation,
-    StoredSubsessionDirection, SubsessionCreate, SubsessionPacket, WorkerResultInput,
-    subsession_result_id,
+    StoredSubsessionDirection, SubsessionCreate, SubsessionDispatchState, SubsessionPacket,
+    WAITING_WORKERS_SQL, WORKER_RESULT_MARKER_SQL, WORKER_TURN_UNSETTLED_SQL, WorkerResultInput,
+    enqueued_workers_sql, subsession_result_id,
 };
 pub use tool_journal::{
     ToolJournalCloseoutRow, ToolJournalFinish, ToolJournalFinishStatus, ToolJournalRecord,

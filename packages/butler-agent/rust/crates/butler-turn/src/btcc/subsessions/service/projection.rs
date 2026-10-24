@@ -1,5 +1,7 @@
 //! Read-only App projection from the BTCC subsession authority.
 
+use crate::btcc::storage::SubsessionDispatchState;
+
 use serde_json::{Value, json};
 
 use super::SubsessionService;
@@ -179,7 +181,13 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?;
         let role = relation.packet.child_role.as_str();
-        let status = projected_status(result.as_ref(), latest.as_ref());
+        let waiting = relation.packet.child_role == crate::btcc::ChildRole::Worker
+            && relation.dispatch_state == SubsessionDispatchState::Pending;
+        let status = if waiting {
+            "waiting"
+        } else {
+            projected_status(result.as_ref(), latest.as_ref())
+        };
         let retryable = if result.is_none() {
             self.child_recoverable(relation).await?
         } else {
@@ -203,7 +211,10 @@ impl SubsessionService {
             && self
                 .waiting_for_children(&relation.child_session_id)
                 .await?;
-        let mut projection = json!({"role":role,"relation":relation_view,"session_id":relation.child_session_id,"title":title,"status":status,"active_turn":if status=="active" && !retryable{turn.clone()}else{None},"latest_turn":turn,"waiting_for_children":waiting_for_children,"result":result_view,"updated_at":relation.created_at,"model_ref":relation.packet.model_ref,"terminal":result_view.is_some()});
+        let mut projection = json!({"role":role,"relation":relation_view,"session_id":relation.child_session_id,"title":title,"status":status,"active_turn":if status=="active" && !retryable{turn.clone()}else{None},"latest_turn":turn,"waiting_for_children":waiting_for_children,"result":result_view,"updated_at":relation.created_at,"model_ref":relation.packet.model_ref,"terminal":result_view.is_some() && !waiting});
+        if waiting && let Some(object) = projection.as_object_mut() {
+            object.insert("waiting_for_slot".into(), json!(true));
+        }
         if let Some((id, _)) = &latest {
             self.plan_counters(id, &mut projection).await?;
         }

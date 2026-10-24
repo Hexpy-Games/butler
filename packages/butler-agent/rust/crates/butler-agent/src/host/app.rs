@@ -1,3 +1,4 @@
+pub(crate) mod canon;
 pub(super) mod dashboard;
 pub(super) mod dashboard_briefing;
 pub(super) mod gateway_lifecycle;
@@ -7,4 +8,3 @@ pub(super) mod runtime_ports;
 pub(in crate::host) mod schedule_clock;
 pub(super) mod server;
 pub(super) mod subsessions;
-pub(crate) mod work_model;

@@ -56,3 +56,25 @@ pub(crate) fn configured(
     )
     .expect("test web access")
 }
+
+/// Offline provider composition with the real credential owner and local fallback server.
+pub fn access_with_configuration(
+    data_root: PathBuf,
+    search_endpoint: &str,
+    configuration: Arc<butler_models::models::ModelConfiguration>,
+) -> WebAccess {
+    let metrics = Arc::new(crate::operations::WebSearchMetrics::new(data_root.clone()));
+    WebAccess::configured(
+        data_root,
+        search_endpoint,
+        Some(configuration),
+        None,
+        metrics,
+        true,
+        (
+            Arc::new(DirectPageRoute),
+            crate::browser::LoopbackFixtures::serving(&[search_endpoint]),
+        ),
+    )
+    .expect("test web access")
+}

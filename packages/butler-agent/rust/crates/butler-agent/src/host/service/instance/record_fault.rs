@@ -1,4 +1,5 @@
-//! E2E fixture ordering for a record write that overlaps forced shutdown.
+//! E2E fixture ordering for a record write that overlaps forced shutdown,
+//! and stop points inside DATA ownership transitions.
 use std::sync::{Condvar, Mutex, PoisonError};
 
 use super::InstanceRecord;
@@ -86,4 +87,22 @@ pub(super) fn write_finished() {
         order.finished = true;
         ORDER.1.notify_all();
     }
+}
+
+/// Stops at `point` (`startup`: DATA taken, record not yet written;
+/// `release` and `deadline`: record removed, DATA not yet unlocked; both
+/// while the record lock is held; `initialize`: the instance is published
+/// and its owners are not yet open) until the test creates the release file.
+pub(crate) fn hold(point: &str) {
+    if std::env::var("BUTLER_E2E_RECORD_HOLD").as_deref() != Ok(point) {
+        return;
+    }
+    let Some(release) = std::env::var_os("BUTLER_E2E_RECORD_HOLD_RELEASE") else {
+        return;
+    };
+    super::super::shutdown_trace::event(&format!("record_hold:{point}"));
+    while !std::path::Path::new(&release).exists() {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    super::super::shutdown_trace::event(&format!("record_hold:{point}:released"));
 }

@@ -20,7 +20,7 @@ async fn delegated_browser_tools_use_public_parent_ownership() -> Result<(), Har
     script.browser.store(true, Ordering::SeqCst);
     let s = Setup::new("BROWSER-DELEGATION")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()
         .await?;
     let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());

@@ -134,15 +134,32 @@ async fn child_creation_binds_work(
             updated_at: None,
             last_active_at: None,
             metadata: Some(
-                json!({"runtimePolicy":{"trackingMode":"ledger"}})
-                    .as_object()
-                    .unwrap()
-                    .clone(),
+                json!({"runtimePolicy":{
+                    "accessMode":"ask_first","tracking_mode":"ledger",
+                    "requiredNativeTools":null,
+                    "required_tools":[" query_memory ","query_memory","read_file"],
+                    "requiredNativeToolProfiles":["memory-read"],
+                    "customPolicy":"preserved"
+                }})
+                .as_object()
+                .unwrap()
+                .clone(),
             ),
         })
         .await
         .unwrap();
     let expected_work_id = format!("root-work-{child_role_name}");
+    let mut packet = crate::btcc::SubsessionPacket::fixture(
+        if child_role == SessionRole::Worker {
+            crate::btcc::ChildRole::Worker
+        } else {
+            crate::btcc::ChildRole::Steward
+        },
+        "Complete task.",
+    );
+    if child_role == SessionRole::Steward {
+        packet.access_mode = "read_only".into();
+    }
     assert!(
         repository
             .create(SubsessionCreate {
@@ -156,14 +173,7 @@ async fn child_creation_binds_work(
                 anchor_message_id: "anchor".into(),
                 safe_title: "Delegated task".into(),
                 root_work_id: expected_work_id.clone(),
-                packet: crate::btcc::SubsessionPacket::fixture(
-                    if child_role_name == "worker" {
-                        crate::btcc::ChildRole::Worker
-                    } else {
-                        crate::btcc::ChildRole::Steward
-                    },
-                    "Complete task.",
-                ),
+                packet,
                 dispatch_intent: crate::btcc::DispatchIntent::fixture(),
                 created_at: "now".into(),
             })
@@ -211,6 +221,32 @@ async fn child_creation_binds_work(
         Some("ledger-project")
     );
 
+    let policy = &child_binding.metadata.as_ref().unwrap()["runtimePolicy"];
+    assert_eq!(policy["accessMode"], stored.packet.access_mode);
+    if child_role == SessionRole::Steward {
+        assert_eq!(policy["trackingMode"], "ledger");
+        assert_eq!(policy["tracking_mode"], "ledger");
+        assert_eq!(
+            policy["requiredNativeTools"],
+            json!(["query_memory", "read_file"])
+        );
+        assert_eq!(
+            policy["required_tools"],
+            json!(["query_memory", "read_file"])
+        );
+        assert_eq!(policy["requiredNativeToolProfiles"], json!(["memory-read"]));
+        assert_eq!(policy["authoritySource"], "parent_session");
+        assert_eq!(policy["authority_source"], "parent_session");
+        assert_eq!(policy["customPolicy"], "preserved");
+    } else {
+        assert_eq!(policy["trackingMode"], "local");
+        assert_eq!(policy["tracking_mode"], "local");
+        assert_eq!(policy["requiredNativeTools"], json!([]));
+        assert_eq!(policy["required_tools"], json!([]));
+        assert_eq!(policy["requiredNativeToolProfiles"], json!(["workspace"]));
+        assert!(policy.get("customPolicy").is_none());
+    }
+
     drop(service);
     drop(repository);
     drop(work_repository);
@@ -218,6 +254,7 @@ async fn child_creation_binds_work(
     storage.close().await.unwrap();
 }
 
+// test-category: security
 #[tokio::test]
 async fn child_creation_binds_steward_project_work_and_worker_session_work() {
     child_creation_binds_work(

@@ -2,7 +2,10 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test assertions")]
 mod canon;
 mod events;
-mod queue;
+mod separation;
+mod sidebar;
+mod sidebar_fixture;
+mod tags;
 use butler_e2e::e2e::{
     HarnessError,
     events::LiveEvents,
@@ -85,6 +88,9 @@ async fn seeded(id: &str, extra: &str) -> Result<Seed, HarnessError> {
         .replace("'chat_canon'", &format!("'{}'", hints[0]))
         .replace("'chat_queue'", &format!("'{}'", hints[1]));
     db.execute_batch("PRAGMA foreign_keys=ON")?;
+    db.execute_batch(include_str!(
+        "../../fixtures/work-model-p14/merged-schema.sql"
+    ))?;
     db.execute_batch(&seed)?;
     db.execute_batch(extra)?;
     drop(db);
@@ -94,30 +100,6 @@ async fn seeded(id: &str, extra: &str) -> Result<Seed, HarnessError> {
         project,
         chat: chats[0].clone(),
     })
-}
-async fn queue(s: &Scenario, chat: &str) -> Result<Value, HarnessError> {
-    Ok(data(s.gw.get(&format!("/works/{chat}/tasks")).await?, 200))
-}
-async fn edit_queue(
-    s: &Scenario,
-    chat: &str,
-    _chain: &str,
-    revision: &Value,
-    ops: Value,
-) -> Result<Reply, HarnessError> {
-    s.gw.post(
-        &format!("/works/{chat}/tasks/edits"),
-        json!({"ops":ops,"expected_task_graph_revision":revision}),
-    )
-    .await
-}
-fn step_ids(queue: &Value) -> Vec<Vec<String>> {
-    queue["chains"][0]["steps"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|s| ids(&s["tasks"]))
-        .collect()
 }
 async fn event(stream: &LiveEvents, topic: &str, id: &str) -> Result<Value, HarnessError> {
     stream

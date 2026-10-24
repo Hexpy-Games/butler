@@ -253,8 +253,14 @@ impl RoutedRound<'_> {
                 Err(self.surface_recovered(latest).await)
             }
             FailureDisposition::Advance | FailureDisposition::Retry => {
-                self.fallback(route, &cursor.round_id, key, request.image_carrier)
-                    .await?;
+                self.fallback(
+                    route,
+                    &cursor.round_id,
+                    key,
+                    request.image_carrier,
+                    (&latest.error_code, None),
+                )
+                .await?;
                 cursor.switch_candidate();
                 Ok(Flow::Restart)
             }

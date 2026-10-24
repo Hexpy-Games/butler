@@ -62,6 +62,14 @@ export function formatArtifactSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/**
+ * The artifact kind of a stored file, from the kind the agent decided by its content: text previews as text,
+ * a picture as a picture, and any other file (an Office document, an archive) by its type or not at all.
+ */
+export function storedFileArtifactKind(file: { kind: string }): "image" | "document" | "file" {
+  return file.kind === "image" ? "image" : file.kind === "text" ? "document" : "file";
+}
+
 export function artifactPreviewMode(
   artifact: SessionArtifactSummary,
 ): ArtifactPreviewMode {
@@ -74,7 +82,8 @@ export function artifactPreviewMode(
   if (artifact.kind === "image" || IMAGE_EXTENSIONS.includes(extension)) {
     return "image";
   }
-  if ([".html", ".htm"].includes(extension)) return "html";
+  // A page Butler made runs on the content host; the user's own uploaded page is untrusted and shows as source.
+  if ([".html", ".htm"].includes(extension)) return artifact.kind === "attachment" ? "text" : "html";
   if (extension === ".pdf" || artifact.kind === "report") return "pdf";
   if (extension === ".md") return "markdown";
   if (

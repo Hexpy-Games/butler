@@ -47,7 +47,7 @@ export function placeWallpaper(
   activeChatId: string,
 ): WallpaperSetting {
   if (view.kind === "session") return activeChatWallpaper(settings, navigation, activeChatId);
-  if (view.kind !== "project-dashboard") return mainScreenWallpaper(settings);
+  if (view.kind !== "project-dashboard" && view.kind !== "plan-overview") return mainScreenWallpaper(settings);
   const project = navigation.projects?.find((item) => item.id === view.projectId);
   return resolveWallpaper(mainScreenWallpaper(settings), project);
 }

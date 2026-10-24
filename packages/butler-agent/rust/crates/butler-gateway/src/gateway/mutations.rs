@@ -3,6 +3,23 @@
 use super::*;
 
 pub trait GatewayMutationCommands: Send + Sync + 'static {
+    fn canon_sidebar(&self, _project: String) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    fn canon_sidebar_order(
+        &self,
+        _project: String,
+        _input: serde_json::Value,
+    ) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    fn canon_conversation(
+        &self,
+        _id: String,
+        _session_id: Option<String>,
+    ) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     /// An unattended schedule run skipped a step that needs permission (D8).
     fn automation_run_attention(
         &self,

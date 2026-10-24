@@ -1,3 +1,4 @@
+import type { CanonCopy } from "./canon-copy.ts";
 import type { TaskGraphCopy } from "./task-graph-copy.ts";
 
 import type { LifecycleCopy } from "./lifecycle.ts";
@@ -82,16 +83,12 @@ interface FirstRunCopy {
   noUsable: string;
   back: string;
   signInTitle: (name: string) => string;
+  planNotice: string;
+  signInPlanOff: string;
+  signInPlanOffBody: string;
+  signInAccountMismatch: string;
+  signInDiscoveryOffline: string;
   signInBody: string;
-  signInWaiting: string;
-  signInReopen: string;
-  signInCopyLink: string;
-  linkCopied: string;
-  signInCancelled: string;
-  signInCancelledBody: string;
-  signInFailed: string;
-  signInTimedOut: string;
-  signInTimedOutBody: string;
   keyTitle: (name: string) => string;
   keyLabel: string;
   keyHint: string;
@@ -192,6 +189,7 @@ export interface ApprovalRequestCopy {
   webRequest: string;
   webRequestDesc: string;
   taintReason: string;
+  unsandboxedReason: string;
   scheduleMode: (mode: string) => string;
   scheduleUnavailable: string;
   runCommand: (workspace: string | null) => string;
@@ -290,6 +288,8 @@ interface ConversationCopy {
   work: ConversationWorkCopy;
   stoppedStatus: string;
   attachmentUnavailable: string;
+  /** File-type label on an attachment tile whose extension is unknown. */
+  attachmentFileType: string;
   fileChanges: {
     regionLabel: string;
     title: string;
@@ -324,6 +324,7 @@ export interface BrowserCopy {
     openInNewTab: string; openInButler: string; openInBrowser: (name: string) => string; copyLink: string;
     copy: string; selectAll: string; paste: string;
   };
+  siteData: { title: string; label: string; description: string; clear: string; confirmTitle: string; confirmMessage: string; items: string; itemList: string; kept: string; cleared: string; failed: string; desktopOnly: string };
   history: { erase: string; title: string; search: string; clear: string; butlerOnly: string; empty: string; hour: string; today: string; week: string; all: string; suggestions: string; };
   tabCount: string; tabMoved: string; agentControl: string; handBack: string; stills: string; still: string; stillPending: string; stillUnavailable: string; stillFailure: Record<string, string>;
   title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string;
@@ -332,7 +333,7 @@ export interface BrowserCopy {
   newConversation: string; bringTab: string; resizeChat: string; pick: string; scrap: string; bookmarks: string; bookmarkAdd: string;
   bookmarked: string; manageBookmarks: string; downloads: string; downloading: string; showInFolder: string; more: string; findInPage: string;
   zoom: string; print: string; openExternal: string; settings: string; secure: string; notSecure: string; butlerOutput: string; preview: string;
-  signedIn: string; signinRequired: string; captcha: string; signinForm: string; saveSignIn: string; signinSaved: string; later: string;
+  signedIn: string; signinRequired: string; captcha: string; signinForm: string; saveSignIn: string; signinSaved: string; signinSaveFailed: string; later: string;
   agentUsing: string; takeOver: string; userControl: string; butlerWaits: string; giveBack: string; autoGiveBack: string;
   stopTask: string; stopped: string; waiting: string; review: string; needYou: string; keypad: string; mfa: string; passkey: string; paymentRequired: string;
   typeYourself: string; chooseFile: string; printer: string; noPrinters: string; popupBlocked: string; allow: string; popupOpened: string; showPopup: string; newTabOpened: string; downloaded: string;
@@ -417,6 +418,42 @@ export interface LogTraceCopy {
 
 /** Browser copy (`browser.*`): chrome, page band, pointer, picking, library, page dialogs and sign-in settings. */
 export interface AppCopy {
+  canon: CanonCopy;
+  chatgptSignIn: {
+    idle: string;
+    pending: string;
+    open: string;
+    copy: string;
+    copied: string;
+    timedOut: string;
+    failed: string;
+    restart: string;
+    complete: string;
+    addHint: string;
+  };
+  chatgptPlan: {
+    continue: string;
+    otherAccount: string;
+    usingPlan: string;
+    manageUsage: string;
+    limitReached: string;
+    limitFallback: string;
+    butlerUsage: string;
+    usageWindow5h: string;
+    usageWindow7d: string;
+    usageWindow30d: string;
+    estimate: string;
+    estimateHint: string;
+    resetsAt: (time: string) => string;
+    planOff: string;
+    turnOn: string;
+    signInAgainHint: string;
+    notInPlanHint: string;
+    legacyToast: string;
+    signOut: string;
+    signedOut: string;
+    revokeUnconfirmed: string;
+  };
   shell: { footerNav: string; update: { downloading: string; working: string; ready: string; failed: string; restart: string } };
   taskGraph: TaskGraphCopy;
   lifecycle: LifecycleCopy;
@@ -429,20 +466,20 @@ export interface AppCopy {
     sessionUnconfirmed: string;
     reviewed: string; disposition: string; result: string;
     reported: string; historyLedgerUnavailable: string; linkedResults: (count: number) => string;
-    currentPlan: string; disconnected: string;
+    disconnected: string;
     reportQuestion: string;
-    parentWork: string; allWork: string;
     periodDays: (days: number) => string; statisticsZone: (zone: string) => string;
-    boardKind: string; period: string; statisticsKind: string; materialsView: string;
+    period: string; statisticsKind: string; materialsView: string;
     briefing: string; suggestions: string; briefingPending: string; briefingUnavailable: string; summarized: string; addToComposer: string;
     briefingCoverage: (works: number, total: number, documents: number, reports: number, excluded: number) => string;
     conversationTarget: string; newProjectConversation: string; pendingConversation: string; sourceQuestion: string;
     missingSource: string;
     loaded: (loaded: number, total: number) => string;
     results: string; noResults: string;
-    overview: string; work: string; materials: string; history: string; statistics: string;
+    overview: string; work: string; board: string; materials: string; history: string; statistics: string;
     position: string; remaining: string; completed: string; open: string; blocked: string;
-    abandoned: string; unknown: string; registered: string; noWork: string; unbound: string;
+    abandoned: string; unknown: string; registered: string;
+    unbound: string;
     unavailable: string; noRemaining: string; tasks: string; recorded: string; loadMore: string;
     description: string; editDescription: string; pin: string; unpin: string;
     /** Header menu item and dialog title for the project's wallpaper. */
@@ -845,11 +882,6 @@ export interface AppCopy {
     apiUsage: string;
     unconfirmed: string;
     unknown: string;
-    authNotApplicable: string;
-    authRequired: string;
-    authMismatch: string;
-    authFailure: string;
-    executableUnavailable: string;
     quotaTimeout: string;
     quotaMalformed: string;
     quotaFailure: string;
@@ -1007,7 +1039,7 @@ export interface AppCopy {
     queuedPosition: (position: number, total: number) => string;
     contextDetails: string;
     usage: {
-      codexProvider: string;
+      chatgptProvider: string;
       thisChat: string;
       conversationPart: string;
       delegatedPart: string;
@@ -1179,6 +1211,9 @@ export interface AppCopy {
     save: string;
     saved: string;
     saveFailed: string;
+    openInApp: string;
+    openInAppBlocked: string;
+    openInAppFailed: string;
     loading: string;
     unsupported: string;
     loadFailed: string;
@@ -1548,7 +1583,7 @@ export interface AppCopy {
       searchProviderBrave: string;
       searchProviderTavily: string;
       searchProviderOpenAi: string;
-      searchProviderCodex: string;
+      searchProviderChatGpt: string;
       searchProviderDisabled: string;
       searchReaderBrowser: string;
       searchReaderLightweight: string;
@@ -1901,17 +1936,8 @@ export interface AppCopy {
       credential: string;
       credentialLabel: string;
       newCredential: string;
-      codexOauth: string;
+      chatgptOauth: string;
       apiKeyAuth: string;
-      oauthCheck: string;
-      oauthComplete: string;
-      oauthCopy: string;
-      oauthFailed: string;
-      oauthLink: string;
-      oauthOpen: string;
-      oauthPending: string;
-      oauthReady: string;
-      oauthRetry: string;
       save: string;
       saveAdd: string;
       saveEdit: string;

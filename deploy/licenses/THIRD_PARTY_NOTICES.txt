@@ -3167,6 +3167,12 @@ License: https://github.com/tokio-rs/bytes/blob/76c0fbb54ed4336caf9d2311658a2f4a
 Copyright (c) 2018 Carl Lerche
 
 =====
+caseless 0.2.2
+MIT
+License: https://github.com/unicode-rs/rust-caseless/blob/f77d542c5439252f75d8da2f0cb4a13d3a13c5ea/LICENSE
+Copyright (c) 2017 Simon Sapin
+
+=====
 castaway 0.2.4
 MIT
 License: https://github.com/sagebind/castaway/blob/c6cb7e3086001a01d976d27c76fb52da93214511/LICENSE
@@ -4073,12 +4079,6 @@ fs4 0.8.4
 MIT OR Apache-2.0
 License: https://crates.io/crates/fs4/0.8.4
 Copyright (c) 2015 The Rust Project Developers
-
-=====
-fsevent-sys 4.1.0
-MIT
-License: https://github.com/octplane/fsevent-rust/blob/b3f6d1ae0eb331dd15d28a9984eb3157878ea100/LICENSE
-Copyright (c) 2015 Pierre Baillet
 
 =====
 fsst 4.0.0
@@ -5281,9 +5281,9 @@ Copyright 2023 Notify Contributors
 Copyright (c) 2023 Notify Contributors
 
 =====
-notify 8.2.0
+notify 9.0.0-rc.6
 CC0-1.0
-License: https://github.com/notify-rs/notify/blob/a1d7c2d8f80786679d58ec6d5986a1d4278bc8cf/notify/LICENSE-CC0
+License: https://github.com/notify-rs/notify/blob/a27bfdbb2c453268a3f2fd55680cd247c57cda3a/notify/LICENSE-CC0
 
 =====
 ntapi 0.4.3
@@ -5358,6 +5358,11 @@ Copyright (c) 2015-2025 Sean McArthur
 objc2-core-foundation 0.3.2
 Zlib OR Apache-2.0 OR MIT
 License: https://crates.io/crates/objc2-core-foundation/0.3.2
+
+=====
+objc2-core-services 0.3.2
+Zlib OR Apache-2.0 OR MIT
+License: https://crates.io/crates/objc2-core-services/0.3.2
 
 =====
 objc2-encode 4.1.0
@@ -7306,13 +7311,6 @@ License: https://github.com/microsoft/windows-rs/blob/308e08ec259027ebbef11b8ef8
 Copyright (c) Microsoft Corporation.
 
 =====
-windows-sys 0.60.2
-MIT OR Apache-2.0
-License: https://github.com/microsoft/windows-rs/blob/4b8893b307719ec23cce698269ca572ef301dc5c/crates/libs/sys/license-apache-2.0
-License: https://github.com/microsoft/windows-rs/blob/4b8893b307719ec23cce698269ca572ef301dc5c/crates/libs/sys/license-mit
-Copyright (c) Microsoft Corporation.
-
-=====
 windows-sys 0.61.2
 MIT OR Apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/sys/license-apache-2.0
@@ -7324,13 +7322,6 @@ windows-targets 0.52.6
 MIT OR Apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/db06b51c2ebb743efb544d40e3064efa49f28d38/crates/libs/targets/license-apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/db06b51c2ebb743efb544d40e3064efa49f28d38/crates/libs/targets/license-mit
-Copyright (c) Microsoft Corporation.
-
-=====
-windows-targets 0.53.5
-MIT OR Apache-2.0
-License: https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/targets/license-apache-2.0
-License: https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/targets/license-mit
 Copyright (c) Microsoft Corporation.
 
 =====
@@ -7373,13 +7364,6 @@ windows_x86_64_msvc 0.52.6
 MIT OR Apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/db06b51c2ebb743efb544d40e3064efa49f28d38/crates/targets/x86_64_msvc/license-apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/db06b51c2ebb743efb544d40e3064efa49f28d38/crates/targets/x86_64_msvc/license-mit
-Copyright (c) Microsoft Corporation.
-
-=====
-windows_x86_64_msvc 0.53.1
-MIT OR Apache-2.0
-License: https://github.com/microsoft/windows-rs/blob/d468916ac27a36fb8a12bafc1bf5c0ec2fe92238/crates/targets/x86_64_msvc/license-apache-2.0
-License: https://github.com/microsoft/windows-rs/blob/d468916ac27a36fb8a12bafc1bf5c0ec2fe92238/crates/targets/x86_64_msvc/license-mit
 Copyright (c) Microsoft Corporation.
 
 =====

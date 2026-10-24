@@ -75,10 +75,11 @@ pub(crate) fn roots(environment: &HashMap<String, String>) -> Vec<PathBuf> {
         );
         // These general product settings also cover externally stored logins.
         // Relative Butler profile paths resolve under the configured data root.
-        for key in ["BUTLER_CODEX_AUTH_PROFILE", "BUTLER_OPENAI_AUTH_PROFILE"] {
-            if let Some(path) = environment.get(key).filter(|path| !path.is_empty()) {
-                roots.push(data.join(path));
-            }
+        if let Some(path) = environment
+            .get("BUTLER_CHATGPT_AUTH_DIR")
+            .filter(|path| !path.is_empty())
+        {
+            roots.push(data.join(path));
         }
     }
     if let Some(path) = environment
@@ -92,6 +93,23 @@ pub(crate) fn roots(environment: &HashMap<String, String>) -> Vec<PathBuf> {
         roots.push(PathBuf::from(home).join("auth.json"));
     }
     roots
+}
+
+/// OpenSSH's host-verification and connection settings, which are not keys.
+/// They stay readable to a credential-denied command only while a live SSH
+/// agent (`SSH_AUTH_SOCK`) can authenticate for it; key files never do.
+#[cfg(target_os = "macos")]
+pub(crate) fn ssh_agent_readable(environment: &HashMap<String, String>) -> Vec<PathBuf> {
+    let agent = environment
+        .get("SSH_AUTH_SOCK")
+        .is_some_and(|socket| !socket.is_empty() && std::path::Path::new(socket).exists());
+    match environment.get("HOME") {
+        Some(home) if agent => ["known_hosts", "known_hosts2", "config"]
+            .iter()
+            .map(|name| PathBuf::from(home).join(".ssh").join(name))
+            .collect(),
+        _ => Vec::new(),
+    }
 }
 
 #[cfg(target_os = "macos")]

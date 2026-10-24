@@ -269,6 +269,7 @@ pub(super) fn request<'a>(
 pub(super) fn result(text: &str) -> ModelRoundResult {
     ModelRoundResult {
         nonfinal: false,
+        output_truncated: false,
         reasoning_summary: None,
         text: Some(text.into()),
         tool_calls: vec![],
@@ -298,6 +299,7 @@ pub(super) fn message(content: &str) -> ModelRoundMessage {
 }
 pub(super) fn provider(code: &str, status: Option<u16>) -> ModelRoundError {
     ModelRoundError::Provider(Box::new(ProviderRequestError {
+        auth_type: None,
         code: code.into(),
         message: code.into(),
         provider: "test".into(),

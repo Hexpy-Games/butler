@@ -30,7 +30,7 @@ async fn storage_correction_corr_01() -> Result<(), HarnessError> {
     let mut s = setup
         .access(Access::FullAccess)
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .env("BUTLER_STARTUP_TRACE", "1")
         .start()
         .await?;

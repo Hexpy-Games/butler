@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-sol",
       "effort": "low",
       "user_request": "Create a file named made.txt in your workspace containing exactly the text: made-by-tool",
@@ -38,7 +38,7 @@
       },
       {
         "delay_ms": 1626,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0b700847fe3d9331016ab8d370939487d0a792f619564424eb\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_7HUKeKarwTkHdAFkbX6P8wgl\",\"name\":\"record_work_disposition\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0b700847fe3d9331016ab8d370939487d0a792f619564424eb\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_7HUKeKarwTkHdAFkbX6P8wgl\",\"name\":\"record_work_disposition\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 13,
@@ -406,7 +406,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0b700847fe3d9331016ab8d370939487d0a792f619564424eb\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"work_id\\\":\\\"{{ECHO_1}}\\\",\\\"disposition\\\":\\\"completed\\\",\\\"summary\\\":\\\"Created made.txt with exactly the requested text; write receipt confirms 12 bytes.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create made.txt with the exact requested text\\\",\\\"status\\\":\\\"done\\\"}]}\",\"call_id\":\"call_7HUKeKarwTkHdAFkbX6P8wgl\",\"name\":\"record_work_disposition\"},\"output_index\":0,\"sequence_number\":94}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0b700847fe3d9331016ab8d370939487d0a792f619564424eb\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"work_id\\\":\\\"{{ECHO_1}}\\\",\\\"disposition\\\":\\\"completed\\\",\\\"summary\\\":\\\"Created made.txt with exactly the requested text; write receipt confirms 12 bytes.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create made.txt with the exact requested text\\\",\\\"status\\\":\\\"done\\\"}]}\",\"call_id\":\"call_7HUKeKarwTkHdAFkbX6P8wgl\",\"name\":\"record_work_disposition\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":94}\n\n"
       },
       {
         "delay_ms": 32,

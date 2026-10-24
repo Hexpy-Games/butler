@@ -1,0 +1,135 @@
+/** Canon gateway wire contracts. Entity revisions are numeric CAS tokens. */
+export type CanonStatus = "planned" | "in_progress" | "in_review" | "blocked" | "done" | "cancelled";
+export type WorkTaskStatus = "draft" | "waiting" | "pending" | "running" | "in_review" | "held" | "failed" | "completed" | "blocked" | "paused" | "stopped" | "cancelled";
+export type TaskCounts = { total: number } & Partial<Record<WorkTaskStatus, number>>;
+export type CanonTagColor = "gray" | "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple";
+export interface EpicTag { id: string; name: string; color: CanonTagColor }
+export interface CanonTag extends EpicTag {
+  project_id: string;
+  name_key: string;
+  revision: number;
+  created_at: number;
+  updated_at: number;
+  created_by: string;
+}
+export interface CanonTagCreateInput { name: string; color: CanonTagColor }
+export interface CanonTagEditInput { expected_revision: number; name?: string; color?: CanonTagColor }
+export interface CanonTagExists extends Error { code: "tag_exists"; status: 409; existing: CanonTag }
+export interface CanonWork {
+  tags: EpicTag[];
+  id: string;
+  project_id: string;
+  plan_id: string | null;
+  home_session_id: string | null;
+  session_ids: string[];
+  sessions: Array<{ session_id: string; bound_at: number; origin: "user" | "butler" }>;
+  title: string;
+  description: string;
+  kind: string | null;
+  canon_status: CanonStatus;
+  canon_status_source: "runtime" | "person" | null;
+  assignee: string | null;
+  plan_rank: string | null;
+  origin: "chat" | "dialog" | "board" | "mcp";
+  revision: number;
+}
+export interface EpicCard extends CanonWork { task_counts: TaskCounts }
+export interface CanonPlan {
+  updated_at?: number;
+  id: string;
+  project_id: string;
+  title: string;
+  description: string;
+  due_on: string | null;
+  status: "open" | "closed";
+  revision: number;
+}
+export interface PlanCards extends CanonPlan { works: EpicCard[] }
+export interface CanonOverview {
+  project_id: string;
+  backlog_revision: number;
+  backlog: EpicCard[];
+  plans: PlanCards[];
+}
+export interface PlanDetail extends PlanCards { progress: { total: number; done: number } }
+export interface SpecCriterion {
+  node_id: string;
+  revision: number;
+  criterion_id: string;
+  part_id: string;
+  text: string;
+}
+export interface SpecNode {
+  node_id: string;
+  parent_node_id: string | null;
+  concern_id: string;
+  active_revision: number | null;
+  lifecycle: "draft" | "active" | "retired";
+  active: { node_id: string; revision: number; body_hash: string; parser_version: string; state: string } | null;
+  criteria: SpecCriterion[];
+  children: SpecNode[];
+}
+export interface WorkTask {
+  id: string;
+  work_id: string;
+  title: string;
+  description: string;
+  status: WorkTaskStatus;
+  assignee_session_id: string | null;
+  blocked_reason: string | null;
+  chain_id: string | null;
+  step_index: number | null;
+  stack_position: number | null;
+  hold_reason: "predecessor_failed" | "predecessor_stopped" | null;
+  failure_reason: string | null;
+  revision: number;
+}
+export interface EpicDetail extends EpicCard { specs: SpecNode[]; tasks: WorkTask[] }
+export interface EpicProgressSnapshot {
+  epic_id: string;
+  running: boolean;
+  counts: { completed: number; total: number };
+}
+export interface PlanInput {
+  expected_revision?: number;
+  title?: string;
+  description?: string;
+  due_on?: string | null;
+  status?: "open" | "closed";
+}
+export interface EpicInput {
+  expected_revision?: number;
+  title?: string;
+  description?: string;
+  status?: CanonStatus;
+  assignee?: string | null;
+  plan_id?: string | null;
+  before_id?: string;
+  tags?: string[];
+}
+export interface CanonOrderInput { work_ids: string[]; expected_revision: number }
+export interface CanonChanged {
+  project_id: string;
+  kind: "plan" | "backlog" | "work" | "spec_node" | "tag";
+  id: string;
+  revision: number;
+  origin: "local" | "remote" | "mcp" | "butler";
+  event_seq: number;
+}
+export interface CanonConflict extends Error {
+  code: "conflict";
+  status: 409;
+  current: { revision: number };
+}
+export interface CanonSidebarGroup {
+  key: string;
+  kind: "backlog" | "plan";
+  title: string;
+  plan_revision?: number;
+  rows: EpicCard[];
+}
+export interface CanonSidebar { project_id: string; groups: CanonSidebarGroup[] }
+export interface CanonSidebarOrderInput { group_key: string; work_ids: string[] }
+export interface CanonConversation { session_id: string; work: EpicDetail }
+
+export interface CanonConversationInput { sessionId?: string }

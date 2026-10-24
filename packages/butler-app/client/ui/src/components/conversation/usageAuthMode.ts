@@ -7,7 +7,7 @@ type Context = Pick<ContextDetailsView, "model_ref" | "provider_id"> | null | un
 
 export function usageAuthMode(model: AppModelSummary | null | undefined, context: Context): UsageAuthMode {
   if (model?.provider_id === "local" || model?.platform || context?.provider_id === "local") return "local";
-  if (model?.auth_type === "codex_oauth") return "subscription";
+  if (model?.auth_type === "chatgpt_oauth") return "subscription";
   if (model?.auth_type === "api_key") return "api_key";
   return "unknown";
 }

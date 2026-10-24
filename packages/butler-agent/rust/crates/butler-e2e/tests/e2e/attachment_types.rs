@@ -83,7 +83,7 @@ async fn any_file_attaches_by_content() -> Result<(), HarnessError> {
     let s = Setup::new("ATT-TYPES-01")?
         .access(Access::AskExceptReads)
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()
         .await?;
     let mut utf16 = vec![0xff, 0xfe];

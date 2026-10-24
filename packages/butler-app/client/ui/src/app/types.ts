@@ -99,6 +99,7 @@ export interface AppModelSummary {
   token_estimator: string;
   source_url?: string;
   runtime_supported: boolean;
+  availability?: "ready" | "sign_in_required" | "plan_off" | "not_in_plan";
   hosted_api_shape?:
     | "openai_chat_completions"
     | "openai_responses"
@@ -124,7 +125,9 @@ export interface AppModelSummary {
   image_max_inline_bytes?: number;
 }
 
-export type ProviderAuthMethod = "api_key" | "codex_oauth";
+export type ChatGptSignInKind = "default" | "new_account" | "enable_plan";
+
+export type ProviderAuthMethod = "api_key" | "chatgpt_oauth";
 
 /** Where a saved API key is kept (#217). */
 export type CredentialStorage =
@@ -187,6 +190,7 @@ export interface ModelCatalogView {
     provider_id: string;
     provider_label: string;
     latest_model_ref: string;
+    chatgpt_plan_models?: string[] | null;
     auth_methods?: ProviderAuthMethod[];
     default_api_base_url?: string;
     models: AppModelSummary[];
@@ -374,7 +378,7 @@ export type WebSearchProviderSetting =
   | "brave"
   | "tavily"
   | "openai-web-search"
-  | "codex-subscription-web-search"
+  | "chatgpt-plan-web-search"
   | "disabled";
 
 export type WebSearchReaderBackendSetting =
@@ -744,6 +748,7 @@ export type ComposerModelState = Exclude<ModelCatalogState, "error">;
 export type ControlsLoadState = "loading" | "ready" | "error";
 
 export interface SessionSummary {
+  epic_ids?: string[];
   session_hint?: string;
   work_progress?: { completed: number; total: number };
   id: string;
@@ -973,6 +978,8 @@ export interface ProgressDetailRow {
 }
 
 export interface ProgressRow {
+  failure_code?: string;
+  auth_type?: ProviderAuthMethod | null;
   id: string;
   turn_id?: string;
   kind?: string;
@@ -1161,6 +1168,7 @@ export interface StewardSessionSummaryView {
 }
 
 export interface SessionView {
+  epic_ids?: string[];
   approved_plan_revision?: number;
   approved_plan_total?: number;
   approved_plan_completed?: number;
@@ -1208,6 +1216,8 @@ export interface SessionViewBridgeInput {
 }
 
 export interface SessionViewBridgeError {
+  existing?: import("../../../shared/canon-contracts.ts").CanonTag;
+  current?: { revision: number };
   hook_reason?: string;
   schema: "butler.app.bridge-error.v1";
   code: string;
@@ -1384,6 +1394,7 @@ export interface UsageMonitorView {
       providerId: string;
       source: "local_telemetry" | "provider_adapter";
       remaining: ProviderQuotaResultView;
+      butlerUsage?: ButlerUsageView | null;
       billing: {
         available: boolean;
         reason: string;
@@ -1409,24 +1420,34 @@ export interface UsageMonitorView {
 
 export type ProviderQuotaPlanKind = "subscription" | "api" | "unknown";
 export type ProviderQuotaSourceKind =
-  | "codex_app_server"
+  | "chatgpt_plan"
   | "zai_usage_query"
   | "provider_quota";
 export type ProviderQuotaReasonCode =
   | "provider_quota_pending"
   | "provider_quota_not_offered"
   | "provider_quota_fetch_failed"
-  | "provider_auth_not_applicable"
-  | "provider_auth_required"
-  | "provider_auth_surface_mismatch"
-  | "provider_executable_unavailable"
   | "provider_timeout"
   | "provider_response_malformed"
-  | "provider_auth_failure"
   | "provider_rpc_failure"
   | "provider_temporary_failure";
 
+export interface ButlerUsageWindow {
+  id: "hours_5" | "days_7" | "days_30";
+  requests: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+export interface ButlerUsageView {
+  account: "chatgpt_plan";
+  windows: ButlerUsageWindow[];
+  asOf: string;
+}
 export interface ProviderQuotaResultView {
+  estimated?: boolean;
+  planUsage?: { state: "in_use" | "limit_reached"; resetsAt: string | null } | null;
+  credits?: { hasCredits: boolean | null; unlimited: boolean | null; balance: string | null } | null;
   available: boolean;
   stale: boolean;
   sourceKind: ProviderQuotaSourceKind;
@@ -1615,6 +1636,7 @@ export interface WorkStreamSummary {
 }
 
 export interface SessionSummaryView {
+  epic_ids?: string[];
   branch_seed?: import("../../../shared/app-contracts.ts").SessionBranchSeed;
   session_id?: string;
   turn_state?: string;
@@ -1731,7 +1753,8 @@ export type AppView =
   | { kind: "settings"; section: SettingsSectionId }
   | { kind: "automations" }
   | { kind: "automation-detail"; automationId: string }
-  | { kind: "project-dashboard"; projectId: string };
+  | { kind: "project-dashboard"; projectId: string; epicId?: string }
+  | { kind: "plan-overview"; projectId: string; planId: string | null };
 
 export interface CommandPaletteResult {
   schedule?: CalendarSchedule | null;

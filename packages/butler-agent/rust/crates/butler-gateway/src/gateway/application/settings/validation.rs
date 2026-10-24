@@ -31,6 +31,7 @@ const UPDATE_KEYS: &[&str] = &[
     "composer_decoration",
     "conversation_background",
     "translucent_sidebar",
+    "smart_grouping_enabled",
     "diagnostics_enabled",
     "log_level",
     "log_category_levels",
@@ -182,6 +183,7 @@ fn is_web_search(value: &Value) -> bool {
                     | "brave"
                     | "tavily"
                     | "openai-web-search"
+                    | "chatgpt-plan-web-search"
                     | "codex-subscription-web-search"
                     | "disabled"
             )

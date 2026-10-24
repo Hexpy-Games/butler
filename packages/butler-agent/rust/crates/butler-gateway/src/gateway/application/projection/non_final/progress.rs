@@ -106,6 +106,8 @@ fn progress_row(
 }
 
 fn basic_fields(row: &mut Map<String, Value>, source: &Map<String, Value>) {
+    copy_string(source, row, "failureCode", "failure_code", 96);
+    copy_string(source, row, "authType", "auth_type", 64);
     copy_string(source, row, "toolName", "safe_tool_name", 180);
     copy_string(source, row, "inputLabel", "safe_input_label", 180);
     copy_string(source, row, "toolCallId", "tool_call_id", 96);

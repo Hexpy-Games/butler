@@ -69,7 +69,7 @@ async fn general_chat_home_paths_and_rejections() -> Result<(), HarnessError> {
     let s = setup
         .stub_cassette(observation_stub::cassette()?)
         .access(Access::FullAccess)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()
         .await?;
     for (index, case) in cases.into_iter().enumerate() {
@@ -163,7 +163,7 @@ async fn home_command_directory_keeps_exact_approval() -> Result<(), HarnessErro
     let s = setup
         .stub_cassette(observation_stub::cassette()?)
         .access(Access::AskAlways)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()
         .await?;
     let accepted = s.gw.say("general", provider::PROMPT).await?;

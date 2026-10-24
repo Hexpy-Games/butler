@@ -97,6 +97,14 @@ impl InstanceLock {
         Ok(Self { file })
     }
 
+    /// Takes a shared lock of `file`, waiting while another owner holds the
+    /// exclusive one. For readers of state that exclusive holders change in
+    /// short critical sections.
+    pub fn shared(file: File) -> io::Result<Self> {
+        file.lock_shared()?;
+        Ok(Self { file })
+    }
+
     /// The locked file.
     pub fn file(&self) -> &File {
         &self.file

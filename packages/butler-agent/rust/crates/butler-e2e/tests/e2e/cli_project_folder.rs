@@ -20,7 +20,7 @@ async fn cli_project_folder_next_turn_and_validation() -> Result<(), HarnessErro
         .access(Access::AskAlways)
         .stub_cassette(butler_e2e::e2e::cassette::Cassette::load("TOOL-01")?);
     let (url, server, _) = super::project_workspace::stub::default_folder_model().await?;
-    let setup = setup.env("BUTLER_CODEX_BASE_URL", url);
+    let setup = setup.env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let first = setup.sandbox.workspace.join("first");
     let second = setup.sandbox.workspace.join("second");
     fs::create_dir_all(&first)?;

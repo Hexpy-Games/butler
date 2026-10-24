@@ -14,12 +14,15 @@ use tokio::sync::Notify;
 
 pub(crate) const OWNER: &str = "AI 연구를 조사해 주세요.";
 pub(crate) const MESSAGE: &str = "Check an additional source.";
+pub(crate) const BUSY: &str = "Hold this turn while I prepare more notes.";
 pub(crate) const FOLLOWUP: &str = "다시 조사해줄래?";
 #[derive(Default)]
 pub(crate) struct Script {
     steps: Mutex<HashMap<String, usize>>,
     pub relation: Mutex<String>,
     pub requests: Mutex<Vec<Value>>,
+    pub busy: Notify,
+    pub release_busy: Notify,
     pub held: Notify,
     pub release: Notify,
     pub failing: AtomicBool,
@@ -37,13 +40,16 @@ pub(crate) async fn start(
     stopped: bool,
 ) -> Result<(String, Arc<Script>, tokio::task::JoinHandle<()>), HarnessError> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let url = format!("http://{}/codex", listener.local_addr()?);
+    let url = format!("http://{}", listener.local_addr()?);
     let script = Arc::new(Script {
         stopped,
         ..Default::default()
     });
     let router = Router::new()
-        .route("/codex/responses", post(reply))
+        .route("/v1/responses", post(reply))
+        .route_layer(axum::middleware::from_fn(
+            butler_e2e::e2e::chatgpt_wire::validate,
+        ))
         .with_state(script.clone());
     let handle = tokio::spawn(async move {
         let _ = axum::serve(listener, router).await;
@@ -55,7 +61,7 @@ async fn reply(
     Json(body): Json<Value>,
 ) -> axum::response::Response {
     use axum::response::IntoResponse;
-    let key = matching::key("/codex/responses", &body, &Placeholders::default());
+    let key = matching::key("/v1/responses", &body, &Placeholders::default());
     script.requests.lock().unwrap().push(body.clone());
     let is_message = key.user_request.starts_with(MESSAGE);
     let child = key.user_request.starts_with("role: steward");
@@ -79,6 +85,10 @@ async fn reply(
         *index += 1;
         step
     };
+    if key.user_request == BUSY && step == 0 {
+        script.busy.notify_one();
+        script.release_busy.notified().await;
+    }
     if child && step == 3 && script.terminal_fault.load(Ordering::SeqCst) {
         return (axum::http::StatusCode::BAD_REQUEST,
             Json(json!({"error":{"code":"invalid_request","message":"Stub terminal provider failure"}})))

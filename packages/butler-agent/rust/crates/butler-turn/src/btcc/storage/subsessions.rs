@@ -8,6 +8,14 @@ mod directions;
 mod files;
 mod parents;
 mod records;
+mod worker_admission;
+mod worker_cancel;
+mod worker_failure;
+pub use worker_admission::{
+    COMPLETE_WORKER_SQL, RESET_DIRECTION_DISPATCH_SQL, RESTORE_WAITING_DIRECTION_SQL,
+    RETRY_WORKER_SQL, RUNNING_WORKERS_SQL, WAITING_WORKERS_SQL, WORKER_RESULT_MARKER_SQL,
+    WORKER_TURN_UNSETTLED_SQL, enqueued_workers_sql,
+};
 
 pub use completion::turn_result_id as subsession_result_id;
 pub(crate) use directions::direction_turn_id;
@@ -38,6 +46,14 @@ pub struct SubsessionCreate {
     pub created_at: String,
 }
 
+/// Durable dispatch state, including terminal or pre-intent legacy rows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SubsessionDispatchState {
+    Inactive,
+    Pending,
+    Enqueued,
+}
+
 /// A persisted subsession delegation.
 #[derive(Clone, Debug)]
 pub struct StoredSubsessionDelegation {
@@ -52,6 +68,7 @@ pub struct StoredSubsessionDelegation {
     pub packet: SubsessionPacket,
     /// Absent on delegations created before dispatch intents were stored.
     pub dispatch_intent: Option<DispatchIntent>,
+    pub dispatch_state: SubsessionDispatchState,
     pub anchor_message_id: String,
     pub ordinal: i64,
     pub safe_title: String,
@@ -168,7 +185,8 @@ impl SqliteSubsessionRepository {
             .await
     }
 
-    pub(crate) async fn relation_by_id(
+    /// The delegation addressed by its exact relation id.
+    pub async fn relation_by_id(
         &self,
         id: String,
     ) -> Result<Option<StoredSubsessionDelegation>, StorageError> {
@@ -239,7 +257,12 @@ impl SqliteSubsessionRepository {
         self.storage.execute(move |db| {
             let tx=db.transaction().map_err(StorageError::sqlite)?;
             let revision:i64=tx.query_row("SELECT COALESCE(MAX(revision),0)+1 FROM btcc_subsession_directions WHERE relation_id=?1",[&relation],|r|r.get(0)).map_err(StorageError::sqlite)?;
-            tx.execute("INSERT OR IGNORE INTO btcc_subsession_directions (instruction_id,relation_id,revision,source_parent_turn_id,source_message_id,instruction,status,created_at) VALUES (?1,?2,?3,?4,?5,?6,'pending',?7)",params![instruction_id,relation,revision,source_turn,source_message,instruction,now]).map_err(StorageError::sqlite)?;
+            let already_pending: bool = tx.query_row("SELECT EXISTS (SELECT 1 FROM btcc_subsession_directions WHERE relation_id=?1 AND status='pending')", [&relation], |r| r.get(0)).map_err(StorageError::sqlite)?;
+            let inserted = tx.execute("INSERT OR IGNORE INTO btcc_subsession_directions (instruction_id,relation_id,revision,source_parent_turn_id,source_message_id,instruction,status,created_at) VALUES (?1,?2,?3,?4,?5,?6,'pending',?7)",params![instruction_id,relation,revision,source_turn,source_message,instruction,now]).map_err(StorageError::sqlite)?;
+            // Preserve an already published continuation between enqueue and turn admission.
+            if inserted == 1 {
+            tx.execute(worker_admission::RESET_DIRECTION_DISPATCH_SQL, params![relation,already_pending]).map_err(StorageError::sqlite)?;
+            }
             let stored=tx.query_row("SELECT instruction_id,relation_id,revision,instruction,created_at FROM btcc_subsession_directions WHERE relation_id=?1 AND source_message_id=?2",params![relation,source_message],direction_row).map_err(StorageError::sqlite)?;
             tx.commit().map_err(StorageError::sqlite)?;
             Ok(stored)
@@ -442,10 +465,32 @@ impl SqliteSubsessionRepository {
         }).await
     }
 
-    /// Marks a child result delivered.
-    pub async fn mark_delivered(&self, result: String, now: String) -> Result<(), StorageError> {
-        self.storage.execute(move|db| { db.execute("UPDATE btcc_subsession_outbox SET status='delivered',delivered_at=?2 WHERE result_id=?1 AND status='pending'",params![result,now]).map_err(StorageError::sqlite)?; Ok(()) }).await
+    /// Marks a child result delivered and returns its changed execution link.
+    pub async fn mark_delivered(
+        &self,
+        result: String,
+        now: String,
+    ) -> Result<Option<(String, String)>, StorageError> {
+        self.storage
+            .execute(move |db| {
+                let tx = db.transaction().map_err(StorageError::sqlite)?;
+                let link = tx.query_row(
+                "SELECT r.parent_session_id,r.child_session_id FROM btcc_subsession_outbox o \
+                 JOIN btcc_session_relations r ON r.relation_id=o.relation_id \
+                 WHERE o.result_id=?1 AND o.status='pending'",
+                [&result], |row| Ok((row.get(0)?, row.get(1)?)),
+            ).optional().map_err(StorageError::sqlite)?;
+                tx.execute(
+                    "UPDATE btcc_subsession_outbox SET status='delivered',delivered_at=?2 \
+                WHERE result_id=?1 AND status='pending'",
+                    params![result, now],
+                )
+                .map_err(StorageError::sqlite)?;
+                tx.commit().map_err(StorageError::sqlite)?;
+                Ok(link)
+            })
+            .await
     }
 }
 
-const SELECT: &str = "SELECT r.relation_id,d.delegation_id,d.task_id,r.parent_session_id,r.parent_turn_id,r.child_session_id,d.child_turn_id,d.root_work_id,d.packet_json,d.dispatch_intent_json,r.anchor_message_id,r.ordinal,r.safe_title,r.created_at FROM btcc_session_relations r JOIN btcc_subsession_delegations d ON d.relation_id=r.relation_id";
+const SELECT: &str = "SELECT r.relation_id,d.delegation_id,d.task_id,r.parent_session_id,r.parent_turn_id,r.child_session_id,d.child_turn_id,d.root_work_id,d.packet_json,d.dispatch_intent_json,r.anchor_message_id,r.ordinal,r.safe_title,r.created_at,d.dispatch_state FROM btcc_session_relations r JOIN btcc_subsession_delegations d ON d.relation_id=r.relation_id";

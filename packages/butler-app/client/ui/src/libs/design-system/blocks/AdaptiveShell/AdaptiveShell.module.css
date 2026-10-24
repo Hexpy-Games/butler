@@ -77,8 +77,15 @@
   --adaptive-left-track: 0px;
 }
 
-/* Like the left track, the right track follows the committed state (see
-   useInspectorTrackMotion) and never interpolates. */
+/* The right track follows the committed state; useInspectorTrackMotion
+   animates its width in lockstep with the inspector's slide. Registered and
+   not inherited, so the animation restyles only the shell root. */
+@property --adaptive-right-track {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0;
+}
+
 .root[data-right-track="true"] {
   --adaptive-right-track: var(--right-panel-width);
 }

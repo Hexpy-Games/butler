@@ -193,7 +193,7 @@ async fn admission(abi_cap: Option<u32>) -> Result<(), HarnessError> {
         .access(Access::AskExceptReads)
         .data_folder_token()
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     if let Some(cap) = abi_cap {
         setup = setup.env("BUTLER_TEST_LANDLOCK_ABI", cap.to_string());
     }

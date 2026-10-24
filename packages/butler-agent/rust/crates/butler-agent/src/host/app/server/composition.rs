@@ -79,9 +79,10 @@ pub(super) async fn dependencies(
         plan_decision_ledger: Arc::new(AppPlanDecisionLedger::new(runtime.project_ledger.clone())),
         work_streams: runtime.work_streams.clone(),
         subsessions: Arc::new(AppSubsessions::new(runtime, settings)),
-        work_model: runtime.work_model.clone(),
+        canon: runtime.canon.clone(),
         branch_conversations: Arc::new(AppBranchConversations::new(runtime.conversations.clone())),
         session_title_generator: Arc::new(AppSessionTitleGeneratorAdapter::new(&runtime.models)),
+        session_topic_classifier: Arc::new(AppSessionTopicClassifierAdapter::new(&runtime.models)),
         branch_summarizer: Arc::new(AppBranchSummarizerAdapter::new(&runtime.models)),
     })
 }

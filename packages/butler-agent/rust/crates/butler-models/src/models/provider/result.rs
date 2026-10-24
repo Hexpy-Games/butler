@@ -18,7 +18,7 @@ pub(super) fn decode(
     legacy_projection: Option<LegacyProjection>,
 ) -> ModelRoundResult {
     let (mut text, mut calls, provider_data, usage, reported) = match carrier {
-        Carrier::Responses => responses(&response, configured_model, provider, round_index),
+        Carrier::Responses => responses::decode(&response, configured_model, provider, round_index),
         Carrier::Anthropic => anthropic(&response, configured_model),
         Carrier::Gemini => gemini(&response, configured_model, round_index),
         Carrier::Chat { .. } => chat(&response, configured_model),
@@ -32,6 +32,7 @@ pub(super) fn decode(
     {
         text_tool_call_names = local::rejected_text_calls(text, request);
     }
+    let output_truncated = cutoff::mark(&response, carrier, &mut calls);
     let identity = reported
         .filter(|value| !butler_core::public_text::trim_js_whitespace(value).is_empty())
         .map(|reported_model| ProviderIdentity {
@@ -60,8 +61,9 @@ pub(super) fn decode(
         (provider == "openai").then(|| openai_continuation(&response, request, legacy_projection));
     retain_rejected_text(&mut continuation, text.as_deref(), &text_tool_call_names);
     ModelRoundResult {
-        nonfinal: nonfinal(&response, carrier),
+        output_truncated,
         reasoning_summary: None,
+        nonfinal: nonfinal(&response, carrier),
         text,
         tool_calls: calls,
         text_tool_call_names,
@@ -151,7 +153,8 @@ fn openai_continuation(
                         .filter(|item| {
                             item.get("type").and_then(Value::as_str) == Some("function_call")
                         })
-                        .cloned(),
+                        .cloned()
+                        .map(super::chatgpt_plan::history),
                 );
             }
             let tools = request
@@ -184,54 +187,6 @@ fn turn_item_ordinal(value: &str) -> Option<u64> {
         .parse::<u64>()
         .ok()
         .filter(|value| *value <= 1_000_000)
-}
-
-fn responses(value: &Value, model: &str, provider: &str, round: u32) -> Fields {
-    let output = value
-        .get("output")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let text = value
-        .get("output_text")
-        .and_then(Value::as_str)
-        .filter(|value| !butler_core::public_text::trim_js_whitespace(value).is_empty())
-        .map(str::to_owned)
-        .unwrap_or_else(|| {
-            output
-                .iter()
-                .filter_map(|item| item.get("content").and_then(Value::as_array))
-                .flatten()
-                .filter(|item| item.get("type").and_then(Value::as_str) == Some("output_text"))
-                .filter_map(|item| item.get("text").and_then(Value::as_str))
-                .collect::<Vec<_>>()
-                .join("\n")
-        });
-    let calls = output
-        .iter()
-        .filter(|item| item.get("type").and_then(Value::as_str) == Some("function_call"))
-        .enumerate()
-        .filter_map(|(index, item)| {
-            call(
-                item.get("call_id"),
-                item.get("name"),
-                item.get("arguments"),
-                index,
-            )
-        })
-        .collect();
-    (
-        nonempty(text),
-        calls,
-        Some(Value::Array(output)),
-        (provider == "openai")
-            .then(|| openai_usage(value, model, round))
-            .flatten(),
-        value
-            .get("model")
-            .and_then(Value::as_str)
-            .map(str::to_owned),
-    )
 }
 
 fn anthropic(value: &Value, model: &str) -> Fields {
@@ -484,9 +439,11 @@ fn openai_usage(value: &Value, model: &str, round: u32) -> Option<Value> {
         serde_json::json!({"model":model,"promptTokens":prompt,"cachedTokens":cached.unwrap_or(0.0),"totalTokens":total,"outputTokens":output,"roundIndex":round}),
     )
 }
-use call::call;
-mod call;
-
 mod local;
 
 mod anthropic_history;
+
+mod call;
+mod cutoff;
+mod responses;
+use call::call;

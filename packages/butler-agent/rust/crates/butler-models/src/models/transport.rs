@@ -1,3 +1,4 @@
+mod plan_limit;
 mod sse;
 mod timing;
 
@@ -20,7 +21,7 @@ pub(super) enum ResponseMode {
         tolerate_invalid: bool,
     },
     HostedChatSse,
-    CodexSse,
+    ChatGptPlanSse,
     ResponsesSse,
     AnthropicSse,
     /// `call_round` names streamed calls as the decoded result does.
@@ -221,16 +222,19 @@ async fn send_attempt(
         .map_err(|error| Box::new(diagnostics::network(provider, api, &error.to_string())))?;
     timing.mark("headers_received");
     progress.record_progress();
-    let response = checked(response, provider, api, quota).await?;
-    timing.mark("headers_checked");
-    Reading {
-        provider,
-        api,
-        progress: progress.clone(),
-        stream_observer,
-        clock: quota.1,
-    }
-    .read(response, mode)
+    plan_limit::read(
+        response,
+        mode,
+        quota,
+        Reading {
+            provider,
+            api,
+            progress: progress.clone(),
+            stream_observer,
+            clock: quota.1,
+        },
+        &timing,
+    )
     .await
 }
 
@@ -309,8 +313,8 @@ impl Reading<'_> {
                 }
                 sse::native::read(response, mode, provider, api, progress, stream_observer).await
             }
-            ResponseMode::CodexSse => {
-                sse::codex(response, provider, api, progress, stream_observer, clock).await
+            ResponseMode::ChatGptPlanSse => {
+                sse::chatgpt_plan(response, provider, api, progress, stream_observer, clock).await
             }
         }
     }

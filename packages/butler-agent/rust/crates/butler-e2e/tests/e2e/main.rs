@@ -13,6 +13,7 @@ mod agent_import;
 mod alias_index_drop;
 mod answer_blocks;
 mod anthropic_cache;
+mod anthropic_output_limit;
 mod anthropic_requests;
 mod anthropic_thinking_history;
 mod app_admission_history;
@@ -54,6 +55,10 @@ mod browser_tool_args;
 mod browser_usage;
 mod cassette_lint;
 mod catalog_provider_truth;
+mod chatgpt_plan_usage;
+mod chatgpt_session;
+mod chatgpt_sign_in;
+mod chatgpt_wire;
 mod cli_launcher;
 mod cli_remote;
 mod cli_reply_language;
@@ -118,6 +123,7 @@ mod metric_retention;
 mod migration;
 mod model_thinking;
 mod monitoring_history;
+mod nfd_paths;
 mod onboarding;
 mod onboarding_form;
 mod outbox_identity;
@@ -141,6 +147,7 @@ mod queue_notifications;
 mod queue_pause;
 mod queue_shutdown;
 mod quota;
+mod reader_tab;
 mod recovery;
 mod reduce_motion;
 mod schedule_calendar;
@@ -171,6 +178,7 @@ mod steward_direction_failure;
 mod steward_interrupted_queue;
 mod steward_presentation;
 mod steward_results;
+mod stop_record_order;
 mod storage_resilience;
 mod stream_orders;
 mod streaming;
@@ -249,6 +257,7 @@ mod acceptance_payload_perf;
 mod storage_correction;
 
 mod session_titles;
+mod smart_groups;
 #[path = "storage_correction/seed.rs"]
 mod storage_correction_seed;
 
@@ -267,3 +276,5 @@ mod usage_delegated;
 
 mod work_model_api;
 mod work_model_schema;
+
+mod worker_cap;

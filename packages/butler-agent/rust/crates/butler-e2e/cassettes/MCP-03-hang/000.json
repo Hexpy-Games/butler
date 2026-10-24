@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-sol",
       "effort": "low",
       "user_request": "Call the e2e_echo tool of the MCP server named e2e and tell me the token it returns.",
@@ -24,7 +24,7 @@
       },
       {
         "delay_ms": 973,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_035211f0eda2b38e016ab8e3cfa4a087d0841b67422f34df35\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_jEWZ4rqNt3OSSl27cbGVDIps\",\"name\":\"start_work\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_035211f0eda2b38e016ab8e3cfa4a087d0841b67422f34df35\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_jEWZ4rqNt3OSSl27cbGVDIps\",\"name\":\"start_work\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -124,7 +124,7 @@
       },
       {
         "delay_ms": 8,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_035211f0eda2b38e016ab8e3cfa4a087d0841b67422f34df35\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Call the e2e MCP server's e2e_echo tool and report its returned token.\\\"}\",\"call_id\":\"call_jEWZ4rqNt3OSSl27cbGVDIps\",\"name\":\"start_work\"},\"output_index\":0,\"sequence_number\":27}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_035211f0eda2b38e016ab8e3cfa4a087d0841b67422f34df35\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Call the e2e MCP server's e2e_echo tool and report its returned token.\\\"}\",\"call_id\":\"call_jEWZ4rqNt3OSSl27cbGVDIps\",\"name\":\"start_work\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":27}\n\n"
       },
       {
         "delay_ms": 42,

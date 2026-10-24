@@ -9,6 +9,7 @@ pub(super) mod delegation;
 mod handoff;
 mod handoff_lifetime;
 mod migration;
+mod opened_files;
 mod paths;
 mod security;
 mod stub;
@@ -61,7 +62,7 @@ async fn research_to_deck_preserves_working_files_and_pairs_changes() -> Result<
     let (url, script, server) = stub::start().await?;
     let setup = Setup::new("DELIVERABLE-DECK")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", &url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     *script.steps.lock().unwrap() = [
         write("notes/research.md", "Research"),
         write("tools/build.sh", "printf '<h1>Deck</h1>' > deck.html\nprintf '{}' > \"$BUTLER_ARTIFACTS_DIR/data.json\"\n"),
@@ -116,7 +117,7 @@ async fn report_versions_preserve_title_and_unchanged_delivery_is_noop() -> Resu
     let (url, script, server) = stub::start().await?;
     let setup = Setup::new("DELIVERABLE-VERSIONS")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", &url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     for n in 0..3 {
         std::fs::write(setup.sandbox.data.join(format!("fixture-{n}")), "Input")?;
     }
@@ -196,7 +197,7 @@ async fn working_files_promote_without_losing_bytes_on_card_delete() -> Result<(
     .into();
     let setup = Setup::new("DELIVERABLE-PROMOTE")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", &url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     std::fs::create_dir_all(setup.sandbox.data.join("src"))?;
     std::fs::write(setup.sandbox.data.join("src/b.rs"), "first")?;
     let s = setup.start().await?;
@@ -255,7 +256,7 @@ async fn command_declaration_and_missing_file_use_explicit_intent_only() -> Resu
     *script.steps.lock().unwrap() = [deliver("missing", "Missing"), done()].into();
     let s = Setup::new("DELIVERABLE-COMMAND")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", &url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()
         .await?;
     let (turn, _) = run_turn(&s, &script, "Try missing file.").await?;

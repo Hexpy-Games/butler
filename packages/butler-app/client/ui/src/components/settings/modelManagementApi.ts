@@ -12,7 +12,8 @@ import type {
 export interface OpenAIOAuthLoginResult {
   auth_url?: string;
   error?: string;
-  /** Id of the sign-in flow (#279 agent flow, or the desktop helper's session). */
+  plan_enabled?: boolean;
+  /** Id of the agent sign-in flow. */
   flow_id?: string;
   label?: string;
   redirect_uri?: string;
@@ -36,51 +37,6 @@ export async function registerHostedModel(
       body: JSON.stringify(request),
     },
   );
-}
-
-export async function startOpenAIOAuthLogin(): Promise<OpenAIOAuthLoginResult> {
-  return await callOpenAIOAuthBridge("startOpenAIOAuthLogin");
-}
-
-export async function restartOpenAIOAuthLogin(): Promise<OpenAIOAuthLoginResult> {
-  return await callOpenAIOAuthBridge("restartOpenAIOAuthLogin");
-}
-
-export async function getOpenAIOAuthLoginStatus(): Promise<OpenAIOAuthLoginResult> {
-  return await callOpenAIOAuthBridge("getOpenAIOAuthLoginStatus");
-}
-
-/** Desktop helper fallback for agents without the #279 sign-in routes. */
-export async function cancelOpenAIOAuthLogin(flowId?: string): Promise<OpenAIOAuthLoginResult> {
-  return await callOpenAIOAuthBridge("cancelOpenAIOAuthLogin", { flowId });
-}
-
-export async function submitOpenAIOAuthCallback(
-  callbackUrl: string,
-): Promise<OpenAIOAuthLoginResult> {
-  return await callOpenAIOAuthBridge("submitOpenAIOAuthCallback", {
-    callbackUrl,
-  });
-}
-
-async function callOpenAIOAuthBridge(
-  method:
-    | "cancelOpenAIOAuthLogin"
-    | "getOpenAIOAuthLoginStatus"
-    | "restartOpenAIOAuthLogin"
-    | "startOpenAIOAuthLogin"
-    | "submitOpenAIOAuthCallback",
-  input?: unknown,
-): Promise<OpenAIOAuthLoginResult> {
-  const bridge = typeof window !== "undefined"
-    ? (window.butlerApp as Record<string, unknown> | undefined)
-    : undefined;
-  if (!bridge) return { status: "profile_exists" };
-  const call = bridge[method];
-  if (typeof call !== "function") {
-    throw new Error(appCopy.settings.modelManagement.errors.oauthLogin);
-  }
-  return await call(input) as OpenAIOAuthLoginResult;
 }
 
 export async function deleteRegisteredModel(

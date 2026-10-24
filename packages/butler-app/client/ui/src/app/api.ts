@@ -1,3 +1,4 @@
+import { canonBridgeInput } from "./canonBridge.ts";
 import { taskGraphBridgeInput } from "./taskGraphBridge.ts";
 import { appCopy } from "./copy.ts";
 import { artifactBridgeInput } from "./artifactBridge.ts";
@@ -87,6 +88,7 @@ interface ButlerAppBridge {
     target: SessionFolderLaunchTarget;
   }) => Promise<SessionFolderLaunchResult>;
   saveMessageFile?: (input?: unknown) => Promise<unknown>;
+  openMessageFile?: (input?: unknown) => Promise<unknown>;
   showDesktopNotification?: (input?: unknown) => Promise<unknown>;
   getNativeNotificationStatus?: () => Promise<unknown>;
   testDesktopNotification?: () => Promise<unknown>;
@@ -288,6 +290,8 @@ function browserRequest<T>(path: string, options: ApiOptions = {}): Promise<T> {
       Object.assign(error, {
         ...(typeof body.error?.code === "string" ? { code: body.error.code } : {}),
         status: response.status,
+        ...(body.error?.code === "tag_exists" && body.error?.existing ? { existing: body.error.existing } : {}),
+        ...(Number.isSafeInteger(body.error?.current?.revision) ? { current: { revision: body.error.current.revision } } : {}),
       });
       throw error;
     }
@@ -306,6 +310,8 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (url.pathname.startsWith("/library/") && url.pathname.endsWith("/snapshot") && method === "GET") return callBridge<T>(bridge,"librarySnapshot",decodeURIComponent(url.pathname.slice(9, -9)));
   if (/^\/library\/(groups|tags|facets|items)(\/|$)/.test(url.pathname)) return callBridge<T>(bridge, "organizeLibrary", { path: url.pathname + url.search, method, ...(options.body == null ? {} : { body: parseBody(options.body) }) });
   if (url.pathname.startsWith("/library/") && method === "DELETE") return callBridge<T>(bridge,"deleteLibrary",decodeURIComponent(url.pathname.slice(9)));
+  const canon = canonBridgeInput(url, method, () => parseBody(options.body));
+  if (canon) return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, canon.method, canon.input));
   const graph = method === "GET" ? taskGraphBridgeInput(url) : null;
   if (graph) return await callBridge<T>(bridge, graph.method, graph.input);
   if (method === "GET" && url.pathname === "/health") return await callBridge<T>(bridge, "health");
@@ -322,6 +328,15 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   }
   if (method === "POST" && url.pathname === "/setup/memory-model") {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "chooseMemoryModel", parseBody(options.body)));
+  }
+  if (method === "GET" && url.pathname === "/setup/chatgpt-account") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getChatGptAccount"));
+  }
+  if (method === "POST" && url.pathname === "/setup/chatgpt-account/notice") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "acknowledgeChatGptNotice", parseBody(options.body)));
+  }
+  if (method === "POST" && url.pathname === "/setup/chatgpt-account/sign-out") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "signOutChatGpt"));
   }
   if (method === "POST" && url.pathname === "/setup/oauth/start") {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "startSetupOAuth", parseBody(options.body)));
@@ -1030,6 +1045,8 @@ function unwrapBridgeResult<T>(value: BridgeResult<T> | T): T {
   const error = new Error(hookReason ?? appCopy.serverErrors[code] ?? appCopy.interfaceFeedback.requestFailed);
   Object.assign(error, {
     code,
+    ...(code === "tag_exists" && result.error?.existing ? { existing: result.error.existing } : {}),
+    ...(Number.isSafeInteger(result.error?.current?.revision) ? { current: result.error.current } : {}),
     ...(typeof result.error?.status === "number" ? { status: result.error.status } : {}),
   });
   throw error;

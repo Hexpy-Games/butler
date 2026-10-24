@@ -2,12 +2,12 @@
 //! and dispatches to them.
 
 pub(crate) mod app_update;
+pub(super) mod chatgpt_login;
 pub(crate) mod command;
 pub(super) mod doctor;
 pub(crate) mod error;
 pub(super) mod gateway;
 mod http_logs;
-pub(super) mod oauth_login;
 pub(super) mod observability;
 pub(super) mod open;
 pub(super) mod public;

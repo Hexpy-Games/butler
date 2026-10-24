@@ -3,12 +3,52 @@ use super::*;
 pub(super) async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
     let (parts, body) = request.into_parts();
     let path = parts.uri.path().to_owned();
+    if parts.method == axum::http::Method::GET && path == "/v1/models" {
+        let authority = lock(&state.authority).clone();
+        if let Some(authority) = authority {
+            let mut http = reqwest::Client::new().get(format!("{authority}/v1/models"));
+            if let Some(auth) = parts.headers.get("authorization") {
+                http = http.header("authorization", auth);
+            }
+            if let Ok(response) = http.send().await {
+                let status = response.status().as_u16();
+                let bytes = response.bytes().await.unwrap_or_default();
+                return Response::builder()
+                    .status(status)
+                    .header("content-type", "application/json")
+                    .body(Body::from(bytes))
+                    .unwrap_or_default();
+            }
+        }
+        if let Mode::Record {
+            upstream, client, ..
+        } = &state.mode
+        {
+            return budget::forward_models(&state, upstream, client, &parts.headers).await;
+        }
+        return plain(503, "HARNESS_ERROR: model authority unavailable");
+    }
     let bytes = axum::body::to_bytes(body, 64 * 1024 * 1024)
         .await
         .unwrap_or_default();
     let arrived = Instant::now();
     let json: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    let chatgpt = match &state.mode {
+        Mode::Replay(c) => c.meta.provider == "openai-subscription",
+        Mode::Synthetic(_) => true,
+        Mode::Record { meta, .. } => meta.provider == "openai-subscription",
+    };
+    if chatgpt
+        && let Err(violation) =
+            super::super::chatgpt_wire::assert_http(&parts.method, &path, &parts.headers, &json)
+    {
+        lock(&state.misses).push(format!("wire:{violation}"));
+        return plain(501, &format!("HARNESS_ERROR: wire:{violation}"));
+    }
     let memory = memory::matches(&json);
+    if is_smart_group_request(&json) && !matches!(&state.mode, Mode::Record { .. }) {
+        return smart_group(&state, json);
+    }
     if let Mode::Synthetic(synthetic) = &state.mode
         && !is_title_request(&json)
     {
@@ -57,6 +97,10 @@ pub(super) async fn handle(state: Arc<State>, request: Request<Body>) -> Respons
         Mode::Record {
             upstream, client, ..
         } => {
+            if !budget::admit_response(&state, &key) {
+                return plain(501, "HARNESS_ERROR: record budget refused this request");
+            }
+            lock(&state.requests).push(json);
             record(
                 &state,
                 upstream,
@@ -110,4 +154,14 @@ fn replay_request(
     }
     lock(&state.misses).push(serde_json::to_string(key).unwrap_or_default());
     plain(501, "HARNESS_ERROR: no recording matches this request")
+}
+
+/// Replay and synthetic modes answer classification from the scenario's
+/// responder, or file nothing.
+fn smart_group(state: &State, json: Value) -> Response<Body> {
+    let response = lock(&state.smart_group_responder)
+        .and_then(|respond| respond(&json))
+        .unwrap_or_else(|| smart_group_response(NO_SMART_GROUP));
+    lock(&state.smart_group_requests).push(json);
+    replay(state, &response, None)
 }

@@ -1,6 +1,7 @@
 //! Existing App schema migration in its source-defined order.
 
 mod assets;
+pub(in crate::gateway::application) mod canon;
 mod canon_sidebar;
 mod core;
 mod library;
@@ -18,7 +19,6 @@ mod still_delivery;
 mod supporting;
 mod vault;
 mod wallpapers;
-pub(in crate::gateway::application) mod work_model;
 
 use std::path::Path;
 
@@ -45,7 +45,7 @@ pub(super) fn migrate(
     )?;
     library::create(connection)?;
     canon_sidebar::create(connection)?;
-    work_model::create(connection)?;
+    canon::create(connection)?;
     still_delivery::recover(connection)?;
     super::history::schema::create(connection)?;
     security::create(connection)?;
@@ -90,6 +90,7 @@ pub(super) fn migrate(
         )
         .map_err(AppStorageError::sqlite)?;
     migration::backfill_queue_identity(connection)?;
+    create_queue_order_index(connection)?;
     schedule_access::backfill(connection)?;
     migration::create_post_backfill_indexes(connection)?;
     run_backfills_once(connection)?;
@@ -104,6 +105,16 @@ pub(super) fn migrate(
     monitoring::migrate(connection)?;
     library::recover(connection, butler_data)?;
     Ok(())
+}
+
+/// Added after legacy queue columns have been backfilled.
+fn create_queue_order_index(connection: &Connection) -> Result<(), AppStorageError> {
+    connection.execute_batch(
+        "CREATE INDEX IF NOT EXISTS session_queued_messages_result_order_idx
+         ON session_queued_messages(chat_id,state,
+           (CASE WHEN json_valid(control_resolution_json)
+                 THEN json_type(control_resolution_json,'$.subsession_result') IS 'object' ELSE 0 END) DESC)"
+    ).map_err(AppStorageError::sqlite)
 }
 
 /// `PRAGMA user_version` once the full-table backfills of an older database

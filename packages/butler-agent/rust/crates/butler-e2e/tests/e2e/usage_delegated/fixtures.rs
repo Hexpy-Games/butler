@@ -97,6 +97,7 @@ pub(super) fn auxiliary(
     attribution.root_session_id = Some(root);
     attribution.role = Some(role);
     sink.append(PromptUsageMetricInput {
+        billing_account: None,
         model: "openai/gpt-6-luna",
         scope: "smart-search-planning",
         prompt_tokens: Some(input),

@@ -220,6 +220,12 @@
   --kanban-lane-height: 22rem;
   /* Minimum lane width of a sideways-scrolling board (KanbanBoard scroll). */
   --kanban-lane-min-width: 15rem;
+  /* Floor of a lane that grows with its cards (KanbanLane height="content"). */
+  --kanban-lane-min-height: 7.5rem;
+  /* Narrowest card column of a wrapping lane (KanbanLane layout="grid"). */
+  --kanban-card-min-width: 14rem;
+  /* Thickness of a KanbanBoard drop line. */
+  --kanban-drop-line: 3px;
   --split-browser-height: 14.5rem;
   /* Browser (BrowserPane, PageCard): the pane is a sheet whose top corners
      match the page card; the card stands --browser-card-inset off the pane
@@ -283,6 +289,8 @@
   --adaptive-inspector-width: min(100vw, 430px);
   --adaptive-panel-bg: var(--neutral-white);
   --windows-sidebar-overlay-filter: saturate(1.3) blur(24px);
+  /* The image viewer scrim blurs the app behind it with the same overlay filter. */
+  --image-viewer-overlay-filter: saturate(1.3) blur(24px);
   --adaptive-scrim-bg: rgba(0, 0, 0, 0.12);
   /* Sidebar header row: the floating sidebar toggle is a standard IconButton
      centered in the titlebar row. It starts at the sidebar content inset,
@@ -401,8 +409,6 @@
   --neutral-dark-placeholder: #969a9f;
   --neutral-dark-send-stop: #e8e9eb;
 
-  --orange-06: #c85f1b;
-
   --green-worker-active: #20c052;
   --amber-worker-warning: #d19a19;
   /* Warning text on light surfaces (amber-08 read 3.2:1 on its tint). */
@@ -432,6 +438,7 @@
   --blue-08: #0052b3;
   --blue-09: #003d8c;
   --blue-10: #002966;
+  --blue-11: #16283f;
 
   --green-01: #e6f7e9;
   --green-02: #b3e6bf;
@@ -443,6 +450,7 @@
   --green-08: #1b7733;
   --green-09: #146328;
   --green-10: #0d4f1e;
+  --green-11: #16301e;
 
   --red-01: #fff5f4;
   --red-02: #ffe0de;
@@ -454,6 +462,7 @@
   --red-08: #a42e2c;
   --red-09: #8a2523;
   --red-10: #701c1a;
+  --red-11: #3d1d1c;
 
   --amber-01: #fff9e6;
   --amber-02: #ffedb3;
@@ -465,6 +474,45 @@
   --amber-08: #b38300;
   --amber-09: #996c00;
   --amber-10: #805600;
+  --amber-11: #352a0c;
+
+  /* Categorical hues for Tag label tones (with the ramps above). Step 11 on
+     every hue ramp is the deep tint a dark-theme label fill uses. */
+  --orange-01: #fff4eb;
+  --orange-02: #ffe5d1;
+  --orange-03: #ffcba6;
+  --orange-04: #ffad75;
+  --orange-05: #f2853f;
+  --orange-06: #c85f1b;
+  --orange-07: #ad5016;
+  --orange-08: #9c4813;
+  --orange-09: #7d390e;
+  --orange-10: #5e2a0a;
+  --orange-11: #3b2414;
+
+  --teal-01: #dff5f2;
+  --teal-02: #a8e3db;
+  --teal-03: #7fd4c8;
+  --teal-04: #4dc4b4;
+  --teal-05: #1fb5a3;
+  --teal-06: #0fa898;
+  --teal-07: #0a8f82;
+  --teal-08: #0a7d71;
+  --teal-09: #0a5f56;
+  --teal-10: #07463f;
+  --teal-11: #122f2c;
+
+  --purple-01: #f6f2fe;
+  --purple-02: #ebe2fd;
+  --purple-03: #d6c6fa;
+  --purple-04: #c9a8ff;
+  --purple-05: #b48cf8;
+  --purple-06: #9a72f0;
+  --purple-07: #8456e8;
+  --purple-08: #6b40cf;
+  --purple-09: #5b34b0;
+  --purple-10: #3f2480;
+  --purple-11: #2a2142;
 
   /* Trace palette: span bar fills tuned per theme. Each hue has an -alt
      partner (a clearly lighter or deeper shade of the same hue) for the
@@ -524,6 +572,32 @@
   --color-info-bg: var(--blue-01);
   --color-info-border: var(--blue-02);
   --color-info-text: var(--blue-07);
+  /* Tag label tones: categorical colors (a user's tag), never status.
+     Opaque fills, so a wallpaper or glass behind never changes contrast. */
+  --tag-label-gray-bg: var(--grayscale-03);
+  --tag-label-gray-fg: var(--grayscale-09);
+  --tag-label-gray-border: var(--grayscale-04);
+  --tag-label-red-bg: var(--red-02);
+  --tag-label-red-fg: var(--red-09);
+  --tag-label-red-border: var(--red-03);
+  --tag-label-orange-bg: var(--orange-02);
+  --tag-label-orange-fg: var(--orange-09);
+  --tag-label-orange-border: var(--orange-03);
+  --tag-label-yellow-bg: var(--amber-02);
+  --tag-label-yellow-fg: var(--amber-10);
+  --tag-label-yellow-border: var(--amber-03);
+  --tag-label-green-bg: var(--green-01);
+  --tag-label-green-fg: var(--green-09);
+  --tag-label-green-border: var(--green-02);
+  --tag-label-teal-bg: var(--teal-01);
+  --tag-label-teal-fg: var(--teal-09);
+  --tag-label-teal-border: var(--teal-02);
+  --tag-label-blue-bg: var(--blue-01);
+  --tag-label-blue-fg: var(--blue-08);
+  --tag-label-blue-border: var(--blue-02);
+  --tag-label-purple-bg: var(--purple-02);
+  --tag-label-purple-fg: var(--purple-09);
+  --tag-label-purple-border: var(--purple-03);
 
   --color-border-default: var(--grayscale-03);
   --color-border-strong: var(--grayscale-04);
@@ -799,7 +873,7 @@
   --switch-inline-track-bg: rgba(0, 0, 0, 0.14);
   --dialog-overlay-bg: rgba(0, 0, 0, 0.12);
   --command-overlay-bg: rgba(0, 0, 0, 0.06);
-  --image-viewer-overlay-bg: rgba(0, 0, 0, 0.78);
+  --image-viewer-overlay-bg: rgba(248, 249, 250, 0.88);
   --chrome-button-bg: rgba(0, 0, 0, 0.18);
   --chrome-divider-bg: rgba(0, 0, 0, 0.12);
   --danger-line: rgba(190, 56, 54, 0.24);
@@ -1113,6 +1187,31 @@
   --color-info-bg: rgba(0, 122, 255, 0.14);
   --color-info-border: rgba(0, 122, 255, 0.32);
   --color-info-text: var(--blue-04);
+  /* Tag label tones: deep opaque fills, light text. */
+  --tag-label-gray-bg: var(--grayscale-10);
+  --tag-label-gray-fg: var(--grayscale-04);
+  --tag-label-gray-border: var(--grayscale-09);
+  --tag-label-red-bg: var(--red-11);
+  --tag-label-red-fg: var(--red-04);
+  --tag-label-red-border: var(--red-09);
+  --tag-label-orange-bg: var(--orange-11);
+  --tag-label-orange-fg: var(--orange-03);
+  --tag-label-orange-border: var(--orange-10);
+  --tag-label-yellow-bg: var(--amber-11);
+  --tag-label-yellow-fg: var(--amber-03);
+  --tag-label-yellow-border: var(--amber-10);
+  --tag-label-green-bg: var(--green-11);
+  --tag-label-green-fg: var(--green-03);
+  --tag-label-green-border: var(--green-10);
+  --tag-label-teal-bg: var(--teal-11);
+  --tag-label-teal-fg: var(--teal-03);
+  --tag-label-teal-border: var(--teal-10);
+  --tag-label-blue-bg: var(--blue-11);
+  --tag-label-blue-fg: var(--blue-03);
+  --tag-label-blue-border: var(--blue-09);
+  --tag-label-purple-bg: var(--purple-11);
+  --tag-label-purple-fg: var(--purple-04);
+  --tag-label-purple-border: var(--purple-10);
 
   --color-border-default: rgba(255, 255, 255, 0.1);
   --color-border-strong: rgba(255, 255, 255, 0.16);
@@ -1221,7 +1320,7 @@
   --switch-inline-track-bg: rgba(255, 255, 255, 0.14);
   --dialog-overlay-bg: rgba(0, 0, 0, 0.34);
   --command-overlay-bg: rgba(0, 0, 0, 0.26);
-  --image-viewer-overlay-bg: rgba(0, 0, 0, 0.86);
+  --image-viewer-overlay-bg: rgba(31, 32, 35, 0.88);
   --chrome-button-bg: rgba(255, 255, 255, 0.11);
   --chrome-divider-bg: rgba(255, 255, 255, 0.1);
   --danger-line: rgba(190, 56, 54, 0.28);
@@ -1304,6 +1403,30 @@
   --color-info-bg: var(--blue-01);
   --color-info-border: var(--blue-02);
   --color-info-text: var(--blue-07);
+  --tag-label-gray-bg: var(--grayscale-03);
+  --tag-label-gray-fg: var(--grayscale-09);
+  --tag-label-gray-border: var(--grayscale-04);
+  --tag-label-red-bg: var(--red-02);
+  --tag-label-red-fg: var(--red-09);
+  --tag-label-red-border: var(--red-03);
+  --tag-label-orange-bg: var(--orange-02);
+  --tag-label-orange-fg: var(--orange-09);
+  --tag-label-orange-border: var(--orange-03);
+  --tag-label-yellow-bg: var(--amber-02);
+  --tag-label-yellow-fg: var(--amber-10);
+  --tag-label-yellow-border: var(--amber-03);
+  --tag-label-green-bg: var(--green-01);
+  --tag-label-green-fg: var(--green-09);
+  --tag-label-green-border: var(--green-02);
+  --tag-label-teal-bg: var(--teal-01);
+  --tag-label-teal-fg: var(--teal-09);
+  --tag-label-teal-border: var(--teal-02);
+  --tag-label-blue-bg: var(--blue-01);
+  --tag-label-blue-fg: var(--blue-08);
+  --tag-label-blue-border: var(--blue-02);
+  --tag-label-purple-bg: var(--purple-02);
+  --tag-label-purple-fg: var(--purple-09);
+  --tag-label-purple-border: var(--purple-03);
   --color-surface-raised: rgba(255, 255, 255, 0.96);
   --color-surface-raised-opaque: rgb(
     from var(--color-surface-raised) r g b / 1
@@ -1420,7 +1543,7 @@
   --switch-inline-track-bg: rgba(0, 0, 0, 0.14);
   --dialog-overlay-bg: rgba(0, 0, 0, 0.12);
   --command-overlay-bg: rgba(0, 0, 0, 0.06);
-  --image-viewer-overlay-bg: rgba(0, 0, 0, 0.78);
+  --image-viewer-overlay-bg: rgba(248, 249, 250, 0.88);
   --chrome-button-bg: rgba(0, 0, 0, 0.18);
   --chrome-divider-bg: rgba(0, 0, 0, 0.12);
   --danger-line: rgba(190, 56, 54, 0.24);

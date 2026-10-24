@@ -18,6 +18,7 @@ import { Sidebar } from "@/components/layout/Sidebar.tsx";
 import { Titlebar } from "@/components/layout/Titlebar.tsx";
 import { Conversation } from "@/components/conversation/Conversation.tsx";
 import { Inspector } from "@/components/inspector/Inspector.tsx";
+import { PlanOverview } from "@/components/canon/PlanOverview.tsx";
 import { ProjectDashboardView } from "@/components/management/ProjectDashboardView.tsx";
 import { AppToaster } from "@/components/common/AppToaster.tsx";
 import { ImageViewerHost } from "@/components/media/ImageViewerHost";
@@ -54,7 +55,7 @@ import { useSystemThemePreference } from "@/hooks/useSystemThemePreference.ts";
 
 /** `?auth=subscription|api_key|local` bills the harness model that way (context usage popover). */
 function harnessModelCatalog(auth: string | null): ModelCatalogView {
-  const billing = auth === "subscription" ? { auth_type: "codex_oauth" as const }
+  const billing = auth === "subscription" ? { auth_type: "chatgpt_oauth" as const }
     : auth === "api_key" ? { auth_type: "api_key" as const }
       : auth === "local" ? { platform: "llama_cpp" as const }
         : null;
@@ -293,6 +294,8 @@ export function VisualHarness() {
             <Titlebar />
             {view.kind === "browser" ? (
               <Stack fill gap="none"><BrowserArea /></Stack>
+            ) : view.kind === "plan-overview" ? (
+              <PlanOverview key={`${view.projectId}:${view.planId}`} projectId={view.projectId} planId={view.planId} />
             ) : view.kind === "project-dashboard" ? (
               <ProjectDashboardView
                 initialDashboard={HARNESS_PROJECT_DASHBOARD}

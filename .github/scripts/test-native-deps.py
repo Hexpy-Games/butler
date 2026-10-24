@@ -25,18 +25,6 @@ spec.loader.exec_module(recipe)
 sdk = recipe.prebuilt
 
 
-def accepted_release_env(**extra):
-    """The inherited environment without the search-path overrides the release preflight rejects
-    (Apple's git exports LIBRARY_PATH to hooks)."""
-    def accepted(name, value):
-        try:
-            recipe.release_env_preflight({name: value})
-        except RuntimeError:
-            return False
-        return True
-    return {**{name: value for name, value in os.environ.items() if accepted(name, value)}, **extra}
-
-
 class NativeDeps(unittest.TestCase):
     def setUp(self):
         self.msvc = {"vc_tools_version": "14.44.35207", "ucrt_version": "10.0.26100.0",
@@ -314,7 +302,7 @@ class NativeDeps(unittest.TestCase):
                     patch.object(recipe, 'host_target', return_value=target), \
                     patch.object(recipe.host, 'rust_identity'), \
                     patch.object(recipe, 'root_for_target', return_value=self.root), \
-                    patch.dict(os.environ, accepted_release_env(GITHUB_ACTIONS='true'), clear=True), \
+                    patch.dict(os.environ, {'GITHUB_ACTIONS': 'true'}, clear=True), \
                     patch.object(recipe, 'prepare_cache', return_value=self.root) as prepare:
                 recipe.main()
                 self.assertEqual(prepare.call_args.args[-1], required)

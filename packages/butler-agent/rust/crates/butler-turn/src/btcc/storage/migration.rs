@@ -53,6 +53,7 @@ pub(super) fn apply_transaction(connection: &mut Connection) -> rusqlite::Result
     migrate_guided_work_review_constraints(&transaction)?;
     restore_stable_work_objectives(&transaction)?;
     monitoring::indexes(&transaction)?;
+    subsession::ensure_worker_admission(&transaction)?;
     // Add after the legacy column/table migrations; idle polls must never walk
     // terminal history, including databases opened before suspension_reason existed.
     transaction.execute_batch(
@@ -72,7 +73,7 @@ pub(super) fn apply_transaction(connection: &mut Connection) -> rusqlite::Result
     transaction.execute_batch(super::schema::task_graphs::SCHEMA)?;
     // Keep the Work rebuild last: it validates all FKs before restoring deferral,
     // so no later migration can accidentally rely on deferred constraints.
-    butler_work::work_schema::ensure(&transaction)?;
+    butler_canon::work_schema::ensure(&transaction)?;
     transaction.commit()
 }
 

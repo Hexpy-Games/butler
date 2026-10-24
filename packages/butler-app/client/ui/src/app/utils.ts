@@ -1740,6 +1740,7 @@ export function activeTitleForView(
   if (view.kind === "settings") return { title: appCopy.settings.title };
   if (view.kind === "automations" || view.kind === "automation-detail")
     return { title: appCopy.automations.title };
+  if (view.kind === "plan-overview") return { title: appCopy.canon.overview };
   if (view.kind === "project-dashboard")
     return { title: appCopy.sidebar.projectDashboard };
   return { title: activeChat.shortTitle, subtitle: activeChat.location ?? activeChat.project };
@@ -1801,14 +1802,14 @@ export function allSessionsFromNavigation(
 export function runtimeModels(
   modelCatalog: ModelCatalogView,
 ): AppModelSummary[] {
-  if (Array.isArray(modelCatalog?.registered_models)) {
+  if (modelCatalog?.registered_models?.length) {
     const registered = modelCatalog.registered_models.filter(
-      (model) => model.runtime_supported === true,
+      (model) => model.runtime_supported === true && model.availability === "ready",
     );
-    if (registered.length > 0) return registered;
+    return registered;
   }
   const models = modelCatalog?.models ?? [];
-  const supported = models.filter((model) => model.runtime_supported === true);
+  const supported = models.filter((model) => model.runtime_supported === true && model.availability === "ready");
   return supported;
 }
 

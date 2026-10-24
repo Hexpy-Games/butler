@@ -14,8 +14,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::host::ResolvedInstallation;
 use crate::host::service::instance::{
-    instance_is_locked, process_matches, read_record, stop_announced_for,
-    validate_write_destinations,
+    Ownership, observe, process_matches, stop_announced_for, validate_write_destinations,
 };
 use butler_turn::btcc::StorageEffectJournal;
 
@@ -203,18 +202,17 @@ fn request_is_valid(request: &ControlRequest, context: &ControlContext) -> bool 
         && request.nonce == context.nonce
         && constant_time_equal(request.token.as_bytes(), context.token.as_bytes())
         && validate_write_destinations(&context.data_root, &context.installation).is_ok()
-        && instance_is_locked(&context.data_root).unwrap_or(false)
-        && read_record(&context.data_root)
-            .ok()
-            .flatten()
-            .is_some_and(|record| {
-                state_admits(request.command, &record.state)
-                    && record.nonce == context.nonce
-                    && record.control_token.as_deref().is_some_and(|stored| {
-                        constant_time_equal(stored.as_bytes(), context.token.as_bytes())
-                    })
-                    && process_matches(&record).unwrap_or(false)
-            })
+        && observe(&context.data_root).is_ok_and(|Ownership { locked, record }| {
+            locked
+                && record.is_some_and(|record| {
+                    state_admits(request.command, &record.state)
+                        && record.nonce == context.nonce
+                        && record.control_token.as_deref().is_some_and(|stored| {
+                            constant_time_equal(stored.as_bytes(), context.token.as_bytes())
+                        })
+                        && process_matches(&record).unwrap_or(false)
+                })
+        })
 }
 
 /// Commands run while the instance is ready; a stopping instance (its

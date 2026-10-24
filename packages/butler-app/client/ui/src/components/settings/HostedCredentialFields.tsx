@@ -2,8 +2,8 @@ import { useAppLocale } from "@/app/copy.ts";
 import { Input, SettingsField, Stack } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { ModelCatalogView, ProviderAuthMethod } from "@/app/types.ts";
-import type { OpenAIOAuthLoginResult } from "./modelManagementApi";
-import { HostedOAuthFields } from "./HostedOAuthFields";
+import type { ComponentProps } from "react";
+import { ChatGptSignInCard } from "../chatgpt/ChatGptSignInCard";
 import { SettingsSelect } from "./SettingsFormComponents";
 import {
   NEW_CREDENTIAL_ID,
@@ -18,16 +18,11 @@ interface HostedCredentialFieldsProps {
   apiBaseUrl: string;
   apiKey: string;
   credentialLabel: string;
-  oauthBusy?: boolean;
-  oauthLogin?: OpenAIOAuthLoginResult | null;
+  chatgpt: ComponentProps<typeof ChatGptSignInCard>;
   showApiBaseUrl?: boolean;
   onApiBaseUrlChange: (value: string) => void;
   onAuthMethodChange: (value: ProviderAuthMethod) => void;
   onCredentialIdChange: (value: string) => void;
-  onOAuthCheck?: () => void;
-  onOAuthCopyUrl?: () => void;
-  onOAuthOpenUrl?: () => void;
-  onOAuthRestart?: () => void;
   onApiKeyChange: (value: string) => void;
   onCredentialLabelChange: (value: string) => void;
   authMethods: ProviderAuthMethod[];
@@ -41,16 +36,11 @@ export function HostedCredentialFields({
   apiBaseUrl,
   apiKey,
   credentialLabel,
-  oauthBusy = false,
-  oauthLogin = null,
+  chatgpt,
   showApiBaseUrl = false,
   onApiBaseUrlChange,
   onAuthMethodChange,
   onCredentialIdChange,
-  onOAuthCheck,
-  onOAuthCopyUrl,
-  onOAuthOpenUrl,
-  onOAuthRestart,
   onApiKeyChange,
   onCredentialLabelChange,
   authMethods,
@@ -73,7 +63,7 @@ export function HostedCredentialFields({
           onChange={(value) => onAuthMethodChange(value as ProviderAuthMethod)}
           options={authMethods.map((method) => ({
             value: method,
-            label: method === "codex_oauth" ? copy.codexOauth : copy.apiKeyAuth,
+            label: method === "chatgpt_oauth" ? copy.chatgptOauth : copy.apiKeyAuth,
           }))}
         />
       ) : null}
@@ -122,15 +112,8 @@ export function HostedCredentialFields({
           ) : null}
         </>
       ) : null}
-      {authMethod === "codex_oauth" ? (
-        <HostedOAuthFields
-          login={oauthLogin}
-          busy={oauthBusy}
-          onCheck={onOAuthCheck ?? (() => {})}
-          onCopyUrl={onOAuthCopyUrl ?? (() => {})}
-          onOpenUrl={onOAuthOpenUrl ?? (() => {})}
-          onRestart={onOAuthRestart ?? (() => {})}
-        />
+      {authMethod === "chatgpt_oauth" ? (
+        <ChatGptSignInCard {...chatgpt} />
       ) : null}
     </Stack>
   );

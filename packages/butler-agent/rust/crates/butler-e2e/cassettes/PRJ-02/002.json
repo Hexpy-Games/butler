@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-luna",
       "effort": "max",
       "user_request": "Track this in the project as one work item: \"Build three raised garden beds\". Create it, record a short review that the plan is sound, then mark it completed. Use only your work and ledger tools; do not create or edit files.",
@@ -39,7 +39,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0732f1885d1b5b11016ab9057c81e087d0b9ff73f90870d992\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_xEpGkCwbwvPR96y2QlWPL2Yu\",\"name\":\"record_work_review\"},\"output_index\":1,\"sequence_number\":4}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0732f1885d1b5b11016ab9057c81e087d0b9ff73f90870d992\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_xEpGkCwbwvPR96y2QlWPL2Yu\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":4}\n\n"
       },
       {
         "delay_ms": 4,
@@ -275,7 +275,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0732f1885d1b5b11016ab9057c81e087d0b9ff73f90870d992\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"plan\\\",\\\"verdict\\\":\\\"accept\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create and complete the garden-bed work item\\\",\\\"status\\\":\\\"active\\\"}],\\\"summary\\\":\\\"The one-item plan is sound: create the requested project work item, add the brief review, then complete it.\\\"}\",\"call_id\":\"call_xEpGkCwbwvPR96y2QlWPL2Yu\",\"name\":\"record_work_review\"},\"output_index\":1,\"sequence_number\":63}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0732f1885d1b5b11016ab9057c81e087d0b9ff73f90870d992\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"plan\\\",\\\"verdict\\\":\\\"accept\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create and complete the garden-bed work item\\\",\\\"status\\\":\\\"active\\\"}],\\\"summary\\\":\\\"The one-item plan is sound: create the requested project work item, add the brief review, then complete it.\\\"}\",\"call_id\":\"call_xEpGkCwbwvPR96y2QlWPL2Yu\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":63}\n\n"
       },
       {
         "delay_ms": 21,

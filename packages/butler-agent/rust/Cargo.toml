@@ -10,6 +10,7 @@ license = "MIT"
 publish = false
 
 [workspace.dependencies]
+ring = "=0.17.14"
 tracing = "0.1.44"
 semver = "1.0.27"
 arrow-array = "=57.3.1"
@@ -46,7 +47,7 @@ webp = { version = "=0.3.1", default-features = false }
 icu_collator = "=1.4.0"
 icu_locid = "~1.4.0"
 icu_provider = { version = "~1.4.0", features = ["sync"], default-features = false }
-notify = "8.2.0"
+notify = "=9.0.0-rc.6"
 parking_lot = "0.12.5"
 lopdf = { version = "=0.45.0", default-features = false }
 serde = { version = "1.0.219", features = ["derive", "rc"] }

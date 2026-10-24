@@ -319,7 +319,7 @@ async fn normal_chat_default_project_folder_refreshes_next_turn() -> Result<(), 
         .stub_cassette(butler_e2e::e2e::cassette::Cassette::load("TOOL-01")?);
     let default_folder = setup.sandbox.home.join("butler-workspace");
     let (url, server, requests) = stub::default_folder_model().await?;
-    let setup = setup.env("BUTLER_CODEX_BASE_URL", url);
+    let setup = setup.env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let folders = [
         setup.sandbox.workspace.join("first"),
         setup.sandbox.workspace.join("second"),

@@ -92,15 +92,21 @@ If the same model often does not respond, open **Settings → Models** and click
 
 ### OAuth sign-in does not finish
 
-If sign-in does not finish when you [add a model with OAuth](/en/help/models/cloud/#register-a-model) in **Settings → Models → Model management**, check these in order.
+When you [add a model with a ChatGPT plan](/en/help/models/cloud/#register-a-model) in **Settings → Models → Model management**, click **Continue with ChatGPT** to start sign-in.
 
 <Steps>
-  1. If the browser does not open, click **Copy link** and paste the link into your browser.
-  2. Finish authentication in the browser, return to Butler and click **Check completion**.
-  3. If **OAuth did not complete.** appears, click **Authenticate again**.
+  1. If the sign-in page does not load, click **Open in browser**, or use **Copy link** to copy the address and open it yourself.
+  2. Finish signing in in the browser and return to Butler. The state updates automatically.
+  3. If **Couldn't sign in** or **Sign-in timed out** appears, click **Start sign-in again**.
 </Steps>
 
-OAuth sign-in receives its result at `http://localhost:1455/auth/callback`. The ChatGPT sign-in during first run does the same. If another program is using port 1455, sign-in cannot finish. Quit that program and authenticate again.
+Sign-in receives its callback at `http://127.0.0.1:<random port>/auth/callback`. If the sign-in page cannot reach the callback port, check your container's port forwarding. Set `BUTLER_CHATGPT_OAUTH_PORT` when a container needs a fixed port.
+
+| State | Action |
+| --- | --- |
+| **Usage limit reached** | Open **Manage usage** to check your ChatGPT plan limit. |
+| **Plan use is off** | Click **Turn on** to allow plan use. |
+| **ChatGPT sign-in changed. Sign in again.** after an update | Click **Continue with ChatGPT** in the notification to sign in again. |
 
 ## The connection is shown as lost
 

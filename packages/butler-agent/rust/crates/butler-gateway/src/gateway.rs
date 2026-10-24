@@ -5,7 +5,6 @@
 //! the required [`GatewayApplication`] implementation supplied at composition.
 
 mod application;
-pub use application::AppAssetCommand;
 pub use application::storage::history::{AppHistoryCommand, AppHistoryQuery};
 #[cfg(feature = "test-support")]
 pub use application::storage::testing as storage_testing;
@@ -47,15 +46,21 @@ pub use application::settings::{
     stored_ui_language_readonly,
 };
 pub use application::{
+    APP_PERSON_ID, AppAssetCommand, AppCanonOperation, AppCardInput, AppProfileInput,
+    AppSessionTopicClassifier, AppSessionTopicInput, AppSignInCommand, AppSignInUpsert,
+    AppVaultCommand, GatewaySignIns,
+};
+pub use application::{
     AppAdmissionAuthority, AppApplication, AppApplicationConfig, AppApplicationDependencies,
     AppApprovalClaims, AppArtifactMaterializer, AppAuthorityDecision, AppAuthorityDecisionInput,
     AppAuthorityHandoff, AppAuthorityPage, AppBoundWorkStatusFact, AppBranchCanonicalAnswer,
     AppBranchConversationReader, AppBranchSourceLocation, AppBranchSummarizer, AppBranchSummary,
-    AppBranchSummaryInput, AppCancellation, AppChatKind, AppChatSummary, AppContextBudgetFacts,
-    AppContextConfigurationFacts, AppContextReadFacts, AppContextReadPort, AppContextReadQuery,
-    AppContextUsage, AppCreateProjectRequest, AppCreateProjectResult, AppCreateSessionInput,
-    AppCreateSessionRequest, AppCreateSessionResult, AppExecutorReadiness, AppFileDownload,
-    AppFileUpload, AppFileWrite, AppGrantRef, AppGrantView, AppIdentityClock,
+    AppBranchSummaryInput, AppCancellation, AppCanonConflict, AppCanonEvent, AppCanonPort,
+    AppCanonRequest, AppCanonResource, AppCanonTagExists, AppChatKind, AppChatSummary,
+    AppContextBudgetFacts, AppContextConfigurationFacts, AppContextReadFacts, AppContextReadPort,
+    AppContextReadQuery, AppContextUsage, AppCreateProjectRequest, AppCreateProjectResult,
+    AppCreateSessionInput, AppCreateSessionRequest, AppCreateSessionResult, AppExecutorReadiness,
+    AppFileDownload, AppFileUpload, AppFileWrite, AppGrantRef, AppGrantView, AppIdentityClock,
     AppLedgerSourceRequest, AppLibraryChange, AppLibraryCommand, AppLibraryQuery, AppMemoryCommand,
     AppMemoryPort, AppMessageFileSnapshot, AppMessageFileStorage, AppModelCatalogCommand,
     AppModelCatalogPort, AppModelFallbackFacts, AppModelMetadata, AppMonitorPage,
@@ -86,35 +91,30 @@ pub use application::{
     AppSettingsFacts, AppSettingsFactsProvider, AppSettingsMutationPort, AppSourceDocument,
     AppSourceSnapshotRequest, AppSpaceCommand, AppSpaceMutationResult, AppSpaceOrigin,
     AppStartTopicConversationRequest, AppSubsessionPort, AppTaskGraphQuery, AppTurn,
-    AppUsageMonitorQuery, AppUsageMonitorView, AppWorkModelConflict, AppWorkModelEvent,
-    AppWorkModelPort, AppWorkModelRequest, AppWorkModelResource, AppWorkModelScope,
-    AppWorkOperationalNoticeFact, AppWorkProgress, AppWorkStatusConversationFact,
-    AppWorkStreamQuery, AppWorkStreamReader, AppWorkStreamTurnOutcome, AppWorkerActivityQuery,
-    AppWorkerActivitySourcePage, AppWorkspaceMode, ArtifactFileCandidate,
-    ArtifactMaterializationRequest, ArtifactMaterializationResult, ClaimedNativeSnapshot,
-    EnqueueReceipt, MaterializedResponderFile, MemoryEventSink, OperationOutputChunk,
-    OperationOutputView, ProjectSnapshot, ResolvedNativeAssets, TranscriptExport,
-    UnavailableWorkModel, VisualAdmissionRequest, project_task_graphs, task_graph_label,
-    task_graph_model_label, task_graph_response,
-};
-pub use application::{
-    AppCardInput, AppProfileInput, AppSignInCommand, AppSignInUpsert, AppVaultCommand,
-    GatewaySignIns,
+    AppUsageMonitorQuery, AppUsageMonitorView, AppWorkOperationalNoticeFact, AppWorkProgress,
+    AppWorkStatusConversationFact, AppWorkStreamQuery, AppWorkStreamReader,
+    AppWorkStreamTurnOutcome, AppWorkerActivityQuery, AppWorkerActivitySourcePage,
+    AppWorkspaceMode, ArtifactFileCandidate, ArtifactMaterializationRequest,
+    ArtifactMaterializationResult, ClaimedNativeSnapshot, EnqueueReceipt,
+    MaterializedResponderFile, MemoryEventSink, OperationOutputChunk, OperationOutputView,
+    ProjectSnapshot, ResolvedNativeAssets, TranscriptExport, UnavailableCanon,
+    VisualAdmissionRequest, project_task_graphs, task_graph_label, task_graph_model_label,
+    task_graph_response,
 };
 pub use application::{
     AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
-    LocalModelServersView, MemoryModelProgress, OauthFlowStatus, OauthFlowView,
-    ProviderKeyVerificationView, ReplacedCredentialView, SETUP_READINESS_EVENT,
-    SavedCredentialView, SetupReadinessStatus, SetupReadinessStep, SetupReadinessView,
-    SetupStepError, SetupStepStatus,
+    ChatGptNoticeInput, ChatGptNoticeKind, ChatGptSignOutView, LocalModelServersView,
+    MemoryModelProgress, OauthFlowStatus, OauthFlowView, ProviderKeyVerificationView,
+    ReplacedCredentialView, SETUP_READINESS_EVENT, SavedCredentialView, SetupReadinessStatus,
+    SetupReadinessStep, SetupReadinessView, SetupStepError, SetupStepStatus,
 };
 pub(crate) use application::{
     AutomationDetailView, AutomationListView, AutomationMutationResult, AutomationRunListView,
     AutomationRunResult, AutomationRunSummary, CreateAutomationRequest, UpdateAutomationRequest,
 };
+pub use application::{SMART_GROUP_INSTRUCTIONS, app_session_hint, normalize_committed_turn_event};
 #[cfg(test)]
 pub(crate) use application::{TestProjectDashboardBriefing, TestProjectDashboardLedger};
-pub use application::{app_session_hint, normalize_committed_turn_event};
 pub(crate) use application::{app_work_status, app_worker_activity};
 pub use application::{read_new_chat_briefing_projects, read_new_chat_briefing_settings};
 pub use auth::LocalAuthConfig;
@@ -425,7 +425,7 @@ pub trait GatewayApplication:
         &self,
         turn_id: String,
     ) -> ApplicationFuture<MessageSendResult>;
-    fn work_model(&self, _request: AppWorkModelRequest) -> ApplicationFuture<serde_json::Value> {
+    fn canon(&self, _request: AppCanonRequest) -> ApplicationFuture<serde_json::Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn task_graph_read(&self, _query: AppTaskGraphQuery) -> ApplicationFuture<serde_json::Value> {

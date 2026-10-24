@@ -141,6 +141,50 @@ pub(super) fn protect_writes(
     Ok(Protection::Enforced(sandboxed(profile, invocation)))
 }
 
+/// The user's own access, except that credential roots stay unreadable and
+/// unmovable: no reads or writes below them, and no rename of a root or of
+/// any directory above it (that would move a secret out from under its rule).
+/// The kernel resolves links, aliases and case, so no shell is interpreted.
+/// `write_protected` keeps the legacy installation-root write denial.
+pub(super) fn deny_secret_reads(
+    invocation: Invocation,
+    environment: &std::collections::HashMap<String, String>,
+    write_protected: Option<&Path>,
+) -> Result<Invocation, SandboxError> {
+    let mut profile = ["(version 1)", "(allow default)"].join("\n");
+    let both = |path: &Path| {
+        let real = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        [path.to_path_buf(), real]
+    };
+    let mut ancestors = std::collections::BTreeSet::new();
+    for root in super::credentials::roots(environment) {
+        for path in both(&root) {
+            let quoted = serde_json::to_string(&path.to_string_lossy())?;
+            profile.push_str(&format!(
+                "\n(deny file-read* file-write* (subpath {quoted}))"
+            ));
+            ancestors.extend(path.ancestors().skip(1).map(Path::to_path_buf));
+        }
+    }
+    for ancestor in ancestors {
+        let quoted = serde_json::to_string(&ancestor.to_string_lossy())?;
+        profile.push_str(&format!("\n(deny file-write* (literal {quoted}))"));
+    }
+    for path in write_protected.map(both).into_iter().flatten() {
+        let quoted = serde_json::to_string(&path.to_string_lossy())?;
+        profile.push_str(&format!("\n(deny file-write* (subpath {quoted}))"));
+    }
+    // Seatbelt rules are ordered: this exception follows the denial.
+    for path in super::credentials::ssh_agent_readable(environment)
+        .iter()
+        .flat_map(|path| both(path))
+    {
+        let quoted = serde_json::to_string(&path.to_string_lossy())?;
+        profile.push_str(&format!("\n(allow file-read* (literal {quoted}))"));
+    }
+    Ok(sandboxed(profile, invocation))
+}
+
 /// `invocation` run by `sandbox-exec` under `profile`.
 fn sandboxed(profile: String, invocation: Invocation) -> Invocation {
     let mut arguments = vec!["-p".into(), profile, invocation.program];

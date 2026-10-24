@@ -40,7 +40,10 @@ impl Fixture {
         let base = format!("http://{}", socket.local_addr()?);
         let state = Arc::new(StateData::default());
         let app = Router::new()
-            .route("/codex/responses", post(model))
+            .route("/v1/responses", post(model))
+            .route_layer(axum::middleware::from_fn(
+                butler_e2e::e2e::chatgpt_wire::validate,
+            ))
             .route("/search", get(search))
             .with_state(state.clone());
         let server = tokio::spawn(async move {
@@ -69,9 +72,13 @@ async fn search() -> Json<Value> {
 }
 
 async fn model(State(state): State<Arc<StateData>>, Json(body): Json<Value>) -> Response {
-    let item = match body["tools"].as_array() {
-        Some(tools) if !tools.is_empty() => next(&state, &body, tools),
-        _ => message("Tide tables"),
+    let tools = butler_e2e::e2e::chatgpt_wire::functions(&body)
+        .cloned()
+        .collect::<Vec<_>>();
+    let item = if tools.is_empty() {
+        message("Tide tables")
+    } else {
+        next(&state, &body, &tools)
     };
     let record = crate::browser_usage::stub::response(&item);
     let model = body["model"].as_str().unwrap_or("gpt-6-luna").to_owned();

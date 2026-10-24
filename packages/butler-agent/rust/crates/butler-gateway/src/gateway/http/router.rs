@@ -48,6 +48,7 @@ pub(super) enum Handler {
     MessageUpload,
     Models,
     Monitors,
+    OpenedFiles,
     Operation,
     Output,
     Personalization,
@@ -62,7 +63,8 @@ pub(super) enum Handler {
     Space,
     Subsessions,
     TaskGraphs,
-    WorkModel,
+    Canon,
+    CanonSidebar,
     Updates,
     Wallpapers,
     #[cfg(feature = "e2e-fixtures")]
@@ -149,6 +151,7 @@ const ROUTES: &[(&str, Handler)] = &[
         "/internal/subsession-result",
         Handler::InternalSubsessionResult,
     ),
+    ("/internal/opened-files", Handler::OpenedFiles),
     ("/internal/wallpaper", Handler::Wallpapers),
     ("/internal/wallpaper-modules", Handler::Wallpapers),
     (
@@ -211,15 +214,13 @@ const ROUTES: &[(&str, Handler)] = &[
         Handler::Personalization,
     ),
     ("/plans/{id}/task-graph", Handler::TaskGraphs),
-    ("/works/{id}/tasks", Handler::WorkModel),
-    ("/works/{id}/tasks/edits", Handler::WorkModel),
-    ("/projects/{id}/canon", Handler::WorkModel),
-    ("/canon/plans/{id}", Handler::WorkModel),
-    ("/canon/epics/{id}", Handler::WorkModel),
-    ("/projects/{id}/canon/plans", Handler::WorkModel),
-    ("/canon/plans/{id}/order", Handler::WorkModel),
-    ("/projects/{id}/canon/backlog/order", Handler::WorkModel),
-    ("/projects/{id}/canon/epics", Handler::WorkModel),
+    ("/projects/{id}/canon", Handler::Canon),
+    ("/canon/plans/{id}", Handler::Canon),
+    ("/canon/epics/{id}", Handler::Canon),
+    ("/projects/{id}/canon/plans", Handler::Canon),
+    ("/canon/plans/{id}/order", Handler::Canon),
+    ("/projects/{id}/canon/backlog/order", Handler::Canon),
+    ("/projects/{id}/canon/epics", Handler::Canon),
     ("/previews/{*path}", Handler::Preview),
     ("/project-sessions", Handler::ProjectSessions),
     ("/projects", Handler::Projects),
@@ -282,6 +283,9 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/setup/credentials/verify", Handler::Setup),
     ("/setup/local-model-servers", Handler::Setup),
     ("/setup/memory-model", Handler::Setup),
+    ("/setup/chatgpt-account", Handler::Setup),
+    ("/setup/chatgpt-account/notice", Handler::Setup),
+    ("/setup/chatgpt-account/sign-out", Handler::Setup),
     ("/setup/oauth/start", Handler::Setup),
     ("/setup/oauth/{id}", Handler::Setup),
     ("/setup/oauth/{id}/cancel", Handler::Setup),
@@ -340,7 +344,10 @@ const ROUTES: &[(&str, Handler)] = &[
 ];
 
 fn table() -> impl Iterator<Item = (&'static str, Handler)> {
-    let routes = ROUTES.iter().copied();
+    let routes = ROUTES
+        .iter()
+        .copied()
+        .chain(super::canon_sidebar::ROUTES.iter().copied());
     #[cfg(feature = "e2e-fixtures")]
     let routes = routes.chain(FIXTURE_ROUTES.iter().copied());
     routes

@@ -85,6 +85,7 @@ impl ProcessModels {
             &data_root,
             Arc::new(SystemIdentity),
         ));
+        configuration.set_provider_quota_sink(quota.clone());
         let provider = ModelProvider::new(
             client,
             configuration.clone(),

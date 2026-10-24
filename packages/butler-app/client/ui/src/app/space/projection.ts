@@ -118,6 +118,20 @@ export function projectSpace(
     const old = previousChildren.get(key);
     if (old?.length === siblings.length && old.every((row, i) => row === siblings[i])) children.set(key, old);
   }
+  // Canon conversations stay available to recent/running and favorite rows.
+  // Only the space child index controls membership in the project tree.
+  for (const session of sessions.values()) {
+    const key = `s:${session.id}`;
+    const project = session.project_id ? projects.get(session.project_id) : undefined;
+    if (rows.has(key) || session.archived || project?.archived) continue;
+    rows.set(key, {
+      node: { key, kind: "session", entityId: session.id, parentKey: null,
+        position: 0, revision: 0, manualPlacement: false, scopeProjectId: session.project_id ?? null },
+      title: sessionDisplayTitle(session), session, pinned: session.pinned,
+      smart: false, location: project?.display_name ?? appCopy.space.space,
+      updatedAt: session.last_activity_at, ancestors: [],
+    });
+  }
   projections.set(navigation, rows);
   childrenIndexes.set(rows, children);
   previousRows = rows;

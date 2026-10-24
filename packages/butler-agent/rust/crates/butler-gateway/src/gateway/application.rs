@@ -1,8 +1,9 @@
 //! Durable application service behind the native App HTTP facade.
 
 mod assets;
+mod canon;
+pub(crate) mod canon_sidebar;
 mod data_reset;
-mod work_model;
 pub use assets::AppAssetCommand;
 mod admission;
 mod admission_identity;
@@ -77,7 +78,9 @@ mod session_views;
 mod sessions;
 pub(super) mod settings;
 mod setup;
+mod setup_events;
 mod skill_settings;
+mod smart_groups;
 mod subsession_events;
 mod task_graphs;
 pub use task_graphs::{
@@ -170,10 +173,10 @@ pub use sessions::{
 pub(crate) use setup::test_setup_port;
 pub use setup::{
     AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
-    LocalModelServersView, MemoryModelProgress, OauthFlowStatus, OauthFlowView,
-    ProviderKeyVerificationView, ReplacedCredentialView, SETUP_READINESS_EVENT,
-    SavedCredentialView, SetupReadinessStatus, SetupReadinessStep, SetupReadinessView,
-    SetupStepError, SetupStepStatus,
+    ChatGptNoticeInput, ChatGptNoticeKind, ChatGptSignOutView, LocalModelServersView,
+    MemoryModelProgress, OauthFlowStatus, OauthFlowView, ProviderKeyVerificationView,
+    ReplacedCredentialView, SETUP_READINESS_EVENT, SavedCredentialView, SetupReadinessStatus,
+    SetupReadinessStep, SetupReadinessView, SetupStepError, SetupStepStatus,
 };
 pub use space::{AppSpaceCommand, AppSpaceMutationResult, AppSpaceOrigin};
 use storage::{AppStorage, AppStorageError, CachedSql};
@@ -213,6 +216,7 @@ pub struct AppApplication {
     project_creation: projects::ProjectCreationOwner,
     session_branches: session_branches::SessionBranchOwner,
     session_titles: session_titles::SessionTitleOwner,
+    smart_groups: smart_groups::SmartGroupOwner,
     space_mutations: Arc<space::SpaceMutationOwner>,
     transcript_exports: TranscriptExportOwner,
     project_dashboard_briefing: projects::ProjectDashboardBriefingOwner,
@@ -223,6 +227,7 @@ pub struct AppApplication {
     settings_update_lock: Arc<tokio::sync::Mutex<()>>,
     plan_decision_locks: PlanDecisionLocks,
     setup_readiness: setup::ReadinessRelay,
+    chatgpt_events: setup_events::AccountRelay,
     quota_events: Arc<quota_events::QuotaEventForwarder>,
 }
 
@@ -310,6 +315,7 @@ impl AppApplication {
             ),
             session_branches: session_branches::SessionBranchOwner::new(),
             session_titles: session_titles::SessionTitleOwner::default(),
+            smart_groups: smart_groups::SmartGroupOwner::default(),
             space_mutations: Arc::new(space::SpaceMutationOwner::new()),
             transcript_exports: TranscriptExportOwner::new(),
             project_dashboard_briefing: projects::ProjectDashboardBriefingOwner::new(),
@@ -320,6 +326,7 @@ impl AppApplication {
             settings_update_lock: Arc::new(tokio::sync::Mutex::new(())),
             plan_decision_locks: PlanDecisionLocks::default(),
             setup_readiness: setup::ReadinessRelay::default(),
+            chatgpt_events: setup_events::AccountRelay::default(),
             quota_events: Arc::default(),
         };
         application.initialize_thinking_preference().await?;
@@ -356,12 +363,7 @@ impl AppApplication {
         automation_scheduler.initialize(self.clone_handle())?;
         self.watch_wallpaper_modules().await;
         authority_recovery::retry(self).await;
-        self.setup_readiness.start(
-            self.dependencies.setup.readiness(),
-            self.storage.clone(),
-            self.subscribers.clone(),
-            self.dependencies.identity_clock.clone(),
-        );
+        setup_events::start(self);
         self.quota_events.start(self.clone_handle());
         subsession_events::start(self);
         Ok(())
@@ -381,6 +383,7 @@ impl AppApplication {
 
     pub async fn stop_dispatch(&self) -> Result<(), GatewayApplicationError> {
         self.setup_readiness.close().await;
+        self.chatgpt_events.close().await;
         let automations = match &self.automation_scheduler {
             Some(scheduler) => scheduler.close().await,
             None => Ok(()),
@@ -394,6 +397,7 @@ impl AppApplication {
     pub async fn close(&self) -> Result<(), GatewayApplicationError> {
         self.cancel_updates();
         self.session_titles.close().await;
+        self.smart_groups.close().await;
         measure_shutdown(
             "app_project_dashboard_briefing_join",
             self.project_dashboard_briefing.close(),

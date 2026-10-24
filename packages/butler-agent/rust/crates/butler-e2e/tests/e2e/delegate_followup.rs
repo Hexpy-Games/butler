@@ -9,8 +9,12 @@
 mod failure;
 #[path = "delegate_followup/project.rs"]
 mod project;
+#[path = "delegate_followup/ordering.rs"]
+mod requires_e2e_fixtures;
 #[path = "delegate_followup/stub.rs"]
 pub(crate) mod stub;
+#[path = "delegate_followup/worker.rs"]
+mod worker;
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
@@ -37,7 +41,7 @@ async fn followup(stopped: bool) -> Result<(), HarnessError> {
         "FOLLOWUP-COMPLETE"
     })?
     .stub_cassette(Cassette::load("TOOL-01")?)
-    .env("BUTLER_CODEX_BASE_URL", &url)
+    .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
     .start()
     .await?;
     s.turn("general", stub::OWNER).await?;
@@ -200,8 +204,7 @@ fn assert_followup(
     let followups: Vec<_> = requests[before..]
         .iter()
         .filter(|body| {
-            butler_e2e::e2e::matching::key("/codex/responses", body, &Default::default())
-                .user_request
+            butler_e2e::e2e::matching::key("/v1/responses", body, &Default::default()).user_request
                 == stub::FOLLOWUP
         })
         .collect();
@@ -231,7 +234,7 @@ fn assert_followup(
     let child = requests[before..]
         .iter()
         .find(|body| {
-            butler_e2e::e2e::matching::key("/codex/responses", body, &Default::default())
+            butler_e2e::e2e::matching::key("/v1/responses", body, &Default::default())
                 .user_request
                 .starts_with("role: steward request: 다시 조사해줄래?")
         })

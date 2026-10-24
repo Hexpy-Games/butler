@@ -150,6 +150,7 @@ wire_codes! {
         WorkerPlanActionDependencyIncomplete = "worker_plan_action_dependency_incomplete",
         WorkerPlanActionMissing = "worker_plan_action_missing",
         WorkerPlanActionNotExecutable = "worker_plan_action_not_executable",
+        WorkerStartFailed = "worker_start_failed",
     }
 }
 

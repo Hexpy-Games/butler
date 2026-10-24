@@ -99,17 +99,17 @@ class HostLinks(unittest.TestCase):
                      'GIT_EXECUTABLE:FILEPATH=GIT_EXECUTABLE-NOTFOUND\n'
                      f'Python_EXECUTABLE:FILEPATH={sys.executable}\n'
                      f'CMAKE_MAKE_PROGRAM_EXECUTABLE:FILEPATH={stage}/tools/ninja\n')
-            # Linux ORT builds run on Linux hosts; give any host the Linux system layout.
+            # Linux roots come from the host filesystem; pin them so any build host can run this.
             with patch.object(recipe.glob, 'glob', side_effect=lambda pattern: [pattern.rstrip('*')]), \
                     patch.object(recipe.pathlib.Path, 'is_dir', return_value=True):
-                linux = recipe.cache_allowed_roots(stage, 'linux-x64')
-            recipe.check_cmake_cache(clean, stage, 'linux-x64', linux)
+                roots = recipe.cache_allowed_roots(stage, 'linux-x64')
+            recipe.check_cmake_cache(clean, stage, 'linux-x64', roots)
             for entry in ('Protobuf_DIR:PATH=/opt/homebrew/lib/cmake/protobuf',
                           'absl_DIR:PATH=/usr/local/lib/cmake/absl',
                           'X_LIBRARIES:STRING=/usr/lib/libc.so;/tmp/libbad.a',
                           're2_DIR:PATH=relative/package'):
                 with self.subTest(entry=entry), self.assertRaisesRegex(RuntimeError, 'outside allowed'):
-                    recipe.check_cmake_cache(entry, stage, 'linux-x64', linux)
+                    recipe.check_cmake_cache(entry, stage, 'linux-x64', roots)
 
         with patch.object(recipe, 'command', side_effect=['/SDK', '/Xcode']):
             roots = recipe.cache_allowed_roots(stage, 'macos-arm64')
@@ -185,14 +185,14 @@ class HostLinks(unittest.TestCase):
     # test-category: security
     def test_python_executable_symlink_uses_resolved_install(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory).resolve()
+            root = Path(directory)
             executable = root / 'install/bin/python'
             executable.parent.mkdir(parents=True)
             executable.touch()
             link = root / 'python'
             link.symlink_to(executable)
             with patch.object(recipe.sys, 'executable', str(link)):
-                self.assertIn(root / 'install', recipe.python_install_roots())
+                self.assertIn((root / 'install').resolve(), recipe.python_install_roots())
 
     # test-category: security
     def test_cache_reports_every_violation(self):
@@ -266,7 +266,6 @@ class HostLinks(unittest.TestCase):
     # test-category: security
     def test_preflight_runs_before_full_and_prebuilt_preparation(self):
         for flags in ([], ['--require-prebuilt']):
-            # Only the variable under test: Apple's git exports LIBRARY_PATH to hooks.
             with self.subTest(flags=flags), patch.dict(os.environ, {'PKG_CONFIG_PATH': '/tmp/pkg'}, clear=True), \
                     patch.object(sys, 'argv', ['prepare-static-ort.py', *flags]), \
                     patch.object(recipe.host, 'rust_identity', side_effect=AssertionError('too late')):
@@ -278,9 +277,7 @@ class HostLinks(unittest.TestCase):
         import json
         import static_ort_prebuilt as prebuilt
         with tempfile.TemporaryDirectory() as directory:
-            # Producers record realpath'd roots (macOS temp dirs sit behind /var -> /private/var).
-            directory = Path(directory).resolve()
-            stage = directory / 'producer'
+            stage = Path(directory) / 'producer'
             release = stage / 'build/Release'
             release.mkdir(parents=True)
             spec = recipe.TARGETS['linux-x64']

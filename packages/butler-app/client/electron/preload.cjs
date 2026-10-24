@@ -79,6 +79,8 @@ function bridgeErrorEnvelope(error) {
   const status = safeBridgeStatus(error && error.status);
   return {
     schema: bridgeErrorSchema,
+    ...(code === "tag_exists" && error?.existing ? { existing: error.existing } : {}),
+    ...(Number.isSafeInteger(error?.current?.revision) ? { current: { revision: error.current.revision } } : {}),
     code,
     ...(code === "hook_blocked" && typeof error?.message === "string" ? { hook_reason: error.message.slice(0, 16384) } : {}),
     ...(status === undefined ? {} : { status }),
@@ -287,6 +289,8 @@ async function requestJson(path, options = {}) {
     const error = new Error(body?.error?.message ?? `Request failed with status ${response.status}.`);
     error.code = body?.error?.code ?? "request_failed";
     error.status = response.status;
+    if (error.code === "tag_exists" && body?.error?.existing) error.existing = body.error.existing;
+    if (Number.isSafeInteger(body?.error?.current?.revision)) error.current = { revision: body.error.current.revision };
     throw error;
   }
   if (!body || body.protocol_version !== "butler.app.v1") {
@@ -740,6 +744,13 @@ const butlerApp = Object.freeze({
   chooseMemoryModel: (input) => requestBridgeResult("/setup/memory-model", {
     method: "POST",
     body: JSON.stringify(input ?? {}),
+  }),
+  getChatGptAccount: () => requestBridgeResult("/setup/chatgpt-account"),
+  acknowledgeChatGptNotice: (request) => requestBridgeResult("/setup/chatgpt-account/notice", {
+    method: "POST", body: JSON.stringify(request ?? {}),
+  }),
+  signOutChatGpt: () => requestBridgeResult("/setup/chatgpt-account/sign-out", {
+    method: "POST", body: "{}",
   }),
   startSetupOAuth: (request) => requestBridgeResult("/setup/oauth/start", {
     method: "POST",
@@ -1277,17 +1288,6 @@ const butlerApp = Object.freeze({
     method: "POST",
     body: JSON.stringify(request ?? {}),
   }),
-  startOpenAIOAuthLogin: () =>
-    ipcRenderer.invoke("butler:start-openai-oauth-login"),
-  restartOpenAIOAuthLogin: () =>
-    ipcRenderer.invoke("butler:restart-openai-oauth-login"),
-  getOpenAIOAuthLoginStatus: () =>
-    ipcRenderer.invoke("butler:get-openai-oauth-login-status"),
-  // Fallback for agents without the #279 sign-in routes.
-  cancelOpenAIOAuthLogin: ({ flowId } = {}) =>
-    ipcRenderer.invoke("butler:cancel-openai-oauth-login", { flowId }),
-  submitOpenAIOAuthCallback: (request = {}) =>
-    ipcRenderer.invoke("butler:submit-openai-oauth-callback", request ?? {}),
   deleteHostedModel: ({ modelRef } = {}) => requestJson(`/model-catalog/registered-models/${encodeURIComponent(modelRef ?? "")}`, {
     method: "DELETE",
   }),
@@ -1418,6 +1418,22 @@ const butlerApp = Object.freeze({
     const params = new URLSearchParams({ query });
     return requestJson(`/command-palette?${params.toString()}`);
   },
+  getCanonSidebar: ({ id }) => requestBridgeResult(`/projects/${encodeURIComponent(id)}/canon/sidebar`),
+  orderCanonSidebar: ({ id, body }) => requestCanonWrite(`/projects/${encodeURIComponent(id)}/canon/sidebar-order`, "POST", body),
+  linkCanonConversation: ({ id, sessionId }) => requestCanonWrite(`/canon/epics/${encodeURIComponent(id)}/conversation`, "POST", { session_id: sessionId }),
+  getCanonTags: ({ id }) => requestBridgeResult(`/projects/${encodeURIComponent(id)}/canon/tags`),
+  createCanonTag: ({ id, body }) => requestCanonWrite(`/projects/${encodeURIComponent(id)}/canon/tags`, "POST", body),
+  editCanonTag: ({ id, body }) => requestCanonWrite(`/canon/tags/${encodeURIComponent(id)}`, "PATCH", body),
+  deleteCanonTag: ({ id }) => requestBridgeResult(`/canon/tags/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  getCanon: ({ id }) => requestBridgeResult(`/projects/${encodeURIComponent(id)}/canon`),
+  getCanonPlan: ({ id }) => requestBridgeResult(`/canon/plans/${encodeURIComponent(id)}`),
+  getCanonEpic: ({ id }) => requestBridgeResult(`/canon/epics/${encodeURIComponent(id)}`),
+  createCanonPlan: ({ id, body }) => requestCanonWrite(`/projects/${encodeURIComponent(id)}/canon/plans`, "POST", body),
+  editCanonPlan: ({ id, body }) => requestCanonWrite(`/canon/plans/${encodeURIComponent(id)}`, "PATCH", body),
+  orderCanonPlan: ({ id, body }) => requestCanonWrite(`/canon/plans/${encodeURIComponent(id)}/order`, "POST", body),
+  orderCanonBacklog: ({ id, body }) => requestCanonWrite(`/projects/${encodeURIComponent(id)}/canon/backlog/order`, "POST", body),
+  createCanonEpic: ({ id, body }) => requestCanonWrite(`/projects/${encodeURIComponent(id)}/canon/epics`, "POST", body),
+  editCanonEpic: ({ id, body }) => requestCanonWrite(`/canon/epics/${encodeURIComponent(id)}`, "PATCH", body),
   getSessionTaskGraphs: (input) => requestTaskGraph("sessions", "task-graphs", input),
   getPlanTaskGraph: (input) => requestTaskGraph("plans", "task-graph", input),
   getTaskDocument: (input) => requestTaskGraph("tasks", "document", input),
@@ -1440,6 +1456,8 @@ const butlerApp = Object.freeze({
   },
   saveMessageFile: ({ fileId, suggestedName } = {}) =>
     ipcRenderer.invoke("butler:save-message-file", { fileId, suggestedName }),
+  openMessageFile: ({ fileId } = {}) =>
+    ipcRenderer.invoke("butler:open-message-file", { fileId }),
   getContextDetails: ({ sessionId }) => {
     const params = new URLSearchParams({ session_id: sessionId });
     return requestJson(`/context-details?${params.toString()}`);
@@ -1566,6 +1584,10 @@ const butlerApp = Object.freeze({
 });
 
 contextBridge.exposeInMainWorld("butlerApp", butlerApp);
+
+function requestCanonWrite(path, method, body) {
+  return requestBridgeResult(path, { method, body: JSON.stringify(body) });
+}
 
 // Keep the sandboxed preload self-contained, on its existing authenticated channel.
 function requestTaskGraph(scope, tail, { id, revision, cursor, limit } = {}) {

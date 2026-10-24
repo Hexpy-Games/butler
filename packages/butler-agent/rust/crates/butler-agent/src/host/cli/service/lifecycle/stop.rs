@@ -10,7 +10,7 @@ use super::{FORCE_STOP_TIMEOUT, STOP_TIMEOUT, active_service_async};
 use crate::host::ResolvedInstallation;
 use crate::host::service::instance::{
     AdmissionLock, InstanceRecord, RestartIdentity, StopDelivery, StopIntent, StopRequest,
-    StoppingFrom, force_stop, instance_is_locked, mark_stopping, process_matches,
+    StoppingFrom, force_stop, instance_is_locked_async, mark_stopping, process_matches,
     record_process_gone, refuse_live_legacy_process, remove_shutdown_flag, request_stop,
     revert_stopping, withdraw_stop_intent, write_stop_intent,
 };
@@ -161,7 +161,7 @@ async fn deliver_stop(
     // can exit before, or while, it is checked (it frees the lock, then ends):
     // nothing is left to signal. The announcement is still written, for a
     // supervisor that reads it after the exit.
-    let locked = instance_is_locked(data_root)?;
+    let locked = instance_is_locked_async(data_root).await?;
     if !(locked && process_matches(&current)?) {
         if !exits_soon(&current).await? {
             return Err(if locked {
@@ -259,7 +259,7 @@ async fn wait_or_force_stop(
     }
     // Re-read the lock, nonce, PID, OS start identity, and executable directly
     // before force-killing the recorded service process.
-    let locked = instance_is_locked(data_root)?;
+    let locked = instance_is_locked_async(data_root).await?;
     if !(locked && process_matches(&current)?) {
         if record_process_gone(&current)? {
             return finish_stop(data_root, record, false).await;

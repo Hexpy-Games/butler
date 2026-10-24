@@ -1,0 +1,57 @@
+{
+  "scenario": "LIVE-SIWC",
+  "provider": "openai-subscription",
+  "model": "openai/gpt-6-luna",
+  "effort": "low",
+  "wire_shape": "openai_responses",
+  "butler_git_sha": "6d818867002d",
+  "recorded_at": "2026-10-19T03:54:28Z",
+  "recorder": "butler-e2e record proxy",
+  "sanitization": [
+    "per-run values -> {{W}}, {{D}}, {{SANDBOX}}, scenario nonces",
+    "JWT/sk-key/bearer/email/home path/host name -> fixed placeholders",
+    "response.instructions -> {{REDACTED_ECHO}}, response.tools -> []",
+    "response headers reduced to content-type, retry-after and numeric quota headers",
+    "chunks re-cut at SSE event boundaries (event bytes unchanged)",
+    "JSON account identifiers (account_id, user_id, email, ...) -> {{ACCOUNT}}/{{EMAIL}}",
+    "JSON tokens (access_token, refresh_token, id_token, authorization) -> {{TOKEN}}",
+    "absolute reset times -> {{EPOCH_MS|S+delta}} relative to recording, rounded to the hour",
+    "opaque UUIDs -> stable same-width aliases"
+  ],
+  "files": [
+    {
+      "file": "000.json",
+      "sha256": "5455f648a64bd2fc9e32b986c09f262378e1c03873652bd366daa7f9c0439de6"
+    },
+    {
+      "file": "001.json",
+      "sha256": "fc718ae6a3e1c177759b70748fd7407e2882f2adc9fb22af5e1d68331f7a2044"
+    }
+  ],
+  "fingerprint": [
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.metadata{metadata,response_id,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.content_part.added{content_index,item_id,output_index,part,sequence_number,type}",
+      "response.output_text.delta{content_index,delta,item_id,logprobs,obfuscation,output_index,sequence_number,type}",
+      "response.metadata{metadata,response_id,sequence_number,type}",
+      "response.output_text.done{content_index,item_id,logprobs,output_index,sequence_number,text,type}",
+      "response.content_part.done{content_index,item_id,output_index,part,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ]
+  ]
+}
