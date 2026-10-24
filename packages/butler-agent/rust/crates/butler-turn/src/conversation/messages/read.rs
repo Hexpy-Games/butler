@@ -4,21 +4,7 @@ use crate::conversation::codec::*;
 use crate::conversation::types::*;
 use crate::conversation::{AgentConversationStore, ConversationError, ConversationResult};
 
-pub(in crate::conversation) const TURN_TRANSCRIPT_ANCHOR: &str = "SELECT COALESCE((SELECT id FROM conversation_messages INDEXED BY conversation_messages_turn_role_seq_idx WHERE turn_id=?1 AND role='assistant' ORDER BY seq DESC LIMIT 1),(SELECT id FROM conversation_messages INDEXED BY conversation_messages_turn_role_seq_idx WHERE turn_id=?1 AND role='user' ORDER BY seq DESC LIMIT 1))";
-
 impl AgentConversationStore {
-    /// The transcript anchor for a card in a delegated turn, without reading its history.
-    pub async fn read_turn_transcript_anchor(
-        &self,
-        turn_id: String,
-    ) -> ConversationResult<Option<String>> {
-        self.execute(move |db| {
-            db.query_row(TURN_TRANSCRIPT_ANCHOR, [turn_id], |r| r.get(0))
-                .map_err(ConversationError::sqlite)
-        })
-        .await
-    }
-
     /// A message by id.
     pub async fn read_message_by_id(
         &self,

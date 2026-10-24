@@ -14,7 +14,6 @@ use butler_turn::btcc::{AuthorityDecisionInput, AuthorityError, PrincipalAuthori
 #[derive(Clone)]
 pub(crate) struct AuthorityHandoff {
     authority: Arc<PrincipalAuthority>,
-    conversations: Arc<butler_turn::conversation::AgentConversationStore>,
     queue: Arc<InboundQueue>,
     now_iso: Arc<dyn Fn() -> String + Send + Sync>,
 }
@@ -23,12 +22,10 @@ impl AuthorityHandoff {
     pub(crate) fn new(
         authority: Arc<PrincipalAuthority>,
         queue: Arc<InboundQueue>,
-        conversations: Arc<butler_turn::conversation::AgentConversationStore>,
         now_iso: Arc<dyn Fn() -> String + Send + Sync>,
     ) -> Self {
         Self {
             authority,
-            conversations,
             queue,
             now_iso,
         }
@@ -103,19 +100,11 @@ impl AppAuthorityHandoff for AuthorityHandoff {
         before: Option<String>,
     ) -> ApplicationFuture<Vec<butler_turn::btcc::PendingAsk>> {
         let authority = self.authority.clone();
-        let conversations = self.conversations.clone();
         Box::pin(async move {
-            let mut asks = authority
+            authority
                 .pending_asks(owner, limit, before)
                 .await
-                .map_err(authority_error)?;
-            for ask in &mut asks {
-                ask.source_message_id = conversations
-                    .read_turn_transcript_anchor(ask.source_turn_id.clone())
-                    .await
-                    .map_err(GatewayApplicationError::internal_from)?;
-            }
-            Ok(asks)
+                .map_err(authority_error)
         })
     }
     fn pending_ask_signal(&self) -> Option<tokio::sync::watch::Receiver<()>> {

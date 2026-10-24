@@ -21,7 +21,6 @@ type Listener = Arc<dyn Fn(Arc<PublishedEvent>) + Send + Sync>;
 #[derive(Clone, Default)]
 pub(super) struct EventSubscribers {
     inner: Arc<Mutex<SubscriberState>>,
-    pub(super) pending_asks_wake: Arc<tokio::sync::Notify>,
 }
 
 #[derive(Default)]
@@ -89,12 +88,6 @@ impl EventSubscribers {
 
     /// Delivers a committed event to every listener; they share its frame.
     pub(super) fn publish(&self, event: &Arc<PublishedEvent>) {
-        if matches!(
-            event.envelope().event_type.as_str(),
-            "session.updated" | "session.permanently_deleted" | "session.cleared"
-        ) {
-            self.pending_asks_wake.notify_one();
-        }
         let (listeners, cursor_observer) = {
             let mut state = self.inner.lock();
             state.thinking.finish(event.envelope());

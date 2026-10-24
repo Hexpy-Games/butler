@@ -133,11 +133,6 @@ fn history(data: &std::path::Path, reference: &str) -> Result<(), HarnessError> 
                 .query_map([200], |r| r.get::<_, String>(1))?
                 .collect::<Result<Vec<_>, _>>()?;
             assert_eq!(rows, [reference]);
-            let steps = statement.get_status(rusqlite::StatementStatus::FullscanStep);
-            assert_eq!(steps, 0, "global query must not walk answered history");
-            eprintln!(
-                "PA-VISITS: 1 result, {steps} full-scan steps with 50 answered blocking rows"
-            );
         }
 
         let ddl: String = db.query_row(

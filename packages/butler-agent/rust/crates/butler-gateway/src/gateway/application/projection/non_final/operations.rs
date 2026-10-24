@@ -52,15 +52,6 @@ pub(in crate::gateway::application) fn project_failed(
             .unwrap_or_else(|| "Butler could not complete this turn.".into())
     };
     let existing: Option<String> = db.query_row("SELECT id FROM app_owned_messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' AND status<>'delivered' ORDER BY rowid DESC LIMIT 1", params![chat,turn], |row|row.get(0)).optional().map_err(AppStorageError::sqlite)?;
-    if existing.is_none() {
-        crate::gateway::application::pending_asks::plans::close(
-            db,
-            subscribers,
-            chat,
-            "superseded",
-            now,
-        )?;
-    }
     let message_id = existing.as_deref().unwrap_or(&ids.message_id);
     if existing.is_some() { db.execute("UPDATE messages SET text=?1,status='failed',safe_error_code=?2,retryable=?3,updated_at=?4 WHERE id=?5",params![label,code,retryable,now,message_id]) }
     else { db.execute("INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at,safe_error_code,retryable) VALUES(?1,?2,?3,'assistant',?4,'failed',?5,?5,?6,?7)",params![message_id,chat,turn,label,now,code,retryable]) }
@@ -351,13 +342,6 @@ pub(super) fn project_worker_result(
             terminal_turn: None,
         });
     }
-    crate::gateway::application::pending_asks::plans::close(
-        &tx,
-        subscribers,
-        chat,
-        "superseded",
-        now,
-    )?;
     tx.execute("INSERT INTO messages(id,chat_id,role,text,status,created_at,updated_at,retryable) VALUES(?1,?2,'assistant',?3,'delivered',?4,?4,0)",params![ids.message_id,chat,text,now]).map_err(AppStorageError::sqlite)?;
     for (position, file) in files.into_iter().take(12).enumerate() {
         tx.execute("INSERT INTO message_files(id,owner_session_id,message_id,kind,mime_type,safe_name,size_bytes,sha256,storage_name,created_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",params![file.id,chat,ids.message_id,file.kind,file.mime_type,file.safe_name,file.size_bytes,file.sha256,file.storage_name,file.created_at]).map_err(AppStorageError::sqlite)?;

@@ -2,7 +2,7 @@ use rusqlite::Connection;
 
 use super::{ConversationError, ConversationIdentityClock, ConversationResult};
 
-pub(super) const VERSION: u64 = 8;
+pub(super) const VERSION: u64 = 7;
 
 const SQL: &str = r"
 CREATE TABLE IF NOT EXISTS conversation_sessions (
@@ -75,7 +75,6 @@ CREATE INDEX IF NOT EXISTS conversation_messages_session_seq_idx ON conversation
 CREATE INDEX IF NOT EXISTS conversation_messages_role_created_idx ON conversation_messages(role, created_at, id);
 CREATE INDEX IF NOT EXISTS conversation_messages_session_role_created_idx ON conversation_messages(session_id, role, created_at, id);
 CREATE INDEX IF NOT EXISTS conversation_messages_created_idx ON conversation_messages(created_at, id);
-CREATE INDEX IF NOT EXISTS conversation_messages_turn_role_seq_idx ON conversation_messages(turn_id,role,seq);
 CREATE INDEX IF NOT EXISTS conversation_parts_message_part_idx ON conversation_parts(message_id, part_index);
 CREATE INDEX IF NOT EXISTS conversation_parts_tool_call_idx ON conversation_parts(tool_call_id) WHERE tool_call_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS conversation_bindings_gateway_external_idx ON conversation_bindings(gateway, external_session_id);

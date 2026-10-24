@@ -128,13 +128,6 @@ fn append(target: &StreamTarget<'_>, stream: &str, delta: &str) -> Result<(), Ap
         }
         Some(_) => return Ok(()),
         None => {
-            crate::gateway::application::pending_asks::plans::close(
-                db,
-                target.subscribers,
-                chat,
-                "superseded",
-                now,
-            )?;
             let id = format!("message-{}", uuid::Uuid::new_v4());
             db.execute_cached(
                 "INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at,retryable) \
@@ -254,13 +247,6 @@ pub(super) fn settle_suspended(
     let (id, status) = match latest(db, chat, turn)? {
         Some(message) => message,
         None => {
-            crate::gateway::application::pending_asks::plans::close(
-                db,
-                subscribers,
-                chat,
-                "superseded",
-                now,
-            )?;
             // Tool-only questions and delegation still own an assistant segment
             // for their activity and the public question/delegation card.
             let id = format!("message-{}", uuid::Uuid::new_v4());

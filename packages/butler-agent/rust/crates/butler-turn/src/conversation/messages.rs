@@ -308,8 +308,3 @@ fn canonical_scalar(part: &MessagePartInput) -> bool {
         _ => false,
     }
 }
-
-#[cfg(feature = "test-support")]
-pub(super) fn latest_assistant_message_statement() -> &'static str {
-    read::TURN_TRANSCRIPT_ANCHOR
-}

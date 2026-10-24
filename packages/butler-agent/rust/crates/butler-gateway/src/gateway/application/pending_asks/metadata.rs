@@ -59,6 +59,7 @@ fn decorate(
         if let Some((chat, title)) = metadata {
             let source =
                 super::super::sessions::identity::resolve_owner(db, &ask.source_session_id)?;
+            ask.source_message_id = None;
             if let Some(source) = source {
                 ask.source_session_id = source.clone();
                 ask.source_message_id = db

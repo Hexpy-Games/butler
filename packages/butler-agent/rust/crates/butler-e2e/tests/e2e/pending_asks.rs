@@ -5,9 +5,7 @@
     clippy::panic,
     reason = "E2E assertions"
 )]
-mod backfill;
 mod delegated;
-mod plan;
 mod queries;
 mod regressions;
 mod stub;
@@ -249,6 +247,10 @@ async fn assert_fields(
     }
     assert_eq!(ask["deferred"], deferred);
     chrono::DateTime::parse_from_rfc3339(ask["waiting_since"].as_str().unwrap()).unwrap();
+    if chat != ask["session_id"].as_str().unwrap() {
+        assert_eq!(ask["source_message_id"], Value::Null);
+        return Ok(());
+    }
     let view =
         s.gw.get(&format!("/session-view?session_id={chat}"))
             .await?;

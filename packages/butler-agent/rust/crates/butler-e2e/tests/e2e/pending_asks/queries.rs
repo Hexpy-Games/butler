@@ -44,13 +44,6 @@ fn check(data: &std::path::Path) -> Result<(), HarnessError> {
     for (sql, index) in butler_gateway::gateway::storage_testing::pending_ask_plan_statements() {
         assert_index(&app, &sql, index)?;
     }
-    let conversation =
-        butler_platform::sqlite::open(data.join("runtime/conversation-store.sqlite"))?;
-    assert_index(
-        &conversation,
-        butler_turn::conversation::latest_assistant_message_statement(),
-        "conversation_messages_turn_role_seq_idx",
-    )?;
     Ok(())
 }
 fn plan(db: &Connection, sql: &str) -> Result<String, HarnessError> {

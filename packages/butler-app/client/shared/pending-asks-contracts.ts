@@ -1,5 +1,5 @@
 /** Read projection over authority, questions, and App plan decisions. */
-export type PendingAskKind = "approval" | "question" | "plan_decision" | "canon_proposal";
+export type PendingAskKind = "approval" | "question" | "canon_proposal";
 export type PendingAskState = "open" | "answered" | "resolved_in_chat" | "dismissed" | "superseded" | "closed";
 export interface PendingAsk {
   ask_id: string;

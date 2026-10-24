@@ -1,7 +1,6 @@
 //! Read projection across independent ask owners. Canon kinds can join later.
 pub(super) mod events;
 pub(super) mod metadata;
-pub(super) mod plans;
 use super::{AppApplication, GatewayApplicationError, app_error, storage::AppStorageError};
 use butler_turn::btcc::PendingAsk;
 pub(super) use events::start;
@@ -27,15 +26,6 @@ impl AppApplication {
         let mut asks = self
             .authority_ask_page(owner, limit + 1, before.clone())
             .await?;
-        let session_read = session.clone();
-        asks.extend(
-            self.storage
-                .read(move |db| {
-                    plans::read(db, session_read.as_deref(), limit + 1, before.as_deref())
-                })
-                .await
-                .map_err(app_error)?,
-        );
         asks.sort_by(|a, b| (&b.created_at, &b.ask_id).cmp(&(&a.created_at, &a.ask_id)));
         if let Some(session) = session {
             for ask in &mut asks {

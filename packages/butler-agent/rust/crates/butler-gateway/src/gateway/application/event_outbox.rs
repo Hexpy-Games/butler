@@ -23,12 +23,9 @@ struct Outbox {
     committed: Vec<Queued>,
 }
 
-enum Queued {
-    Event {
-        subscribers: EventSubscribers,
-        event: Arc<PublishedEvent>,
-    },
-    Notify(Arc<tokio::sync::Notify>),
+struct Queued {
+    subscribers: EventSubscribers,
+    event: Arc<PublishedEvent>,
 }
 
 /// Makes this thread's connection defer event delivery until commit.
@@ -57,7 +54,7 @@ pub(super) fn defer(
     subscribers: &EventSubscribers,
     event: Arc<PublishedEvent>,
 ) -> Option<Arc<PublishedEvent>> {
-    let queued = Queued::Event {
+    let queued = Queued {
         subscribers: subscribers.clone(),
         event,
     };
@@ -74,10 +71,7 @@ pub(super) fn defer(
         }
         None
     });
-    rejected.and_then(|queued| match queued {
-        Queued::Event { event, .. } => Some(event),
-        Queued::Notify(_) => None,
-    })
+    rejected.map(|queued| queued.event)
 }
 
 /// Queues an event whose transaction already committed (see `events::publish`).
@@ -87,7 +81,7 @@ pub(super) fn defer_committed(
 ) -> Option<Arc<PublishedEvent>> {
     OUTBOX.with(|outbox| match outbox.borrow_mut().as_mut() {
         Some(outbox) => {
-            let queued = Queued::Event {
+            let queued = Queued {
                 subscribers: subscribers.clone(),
                 event,
             };
@@ -106,10 +100,7 @@ pub(super) fn defer_committed(
 pub(super) fn flush() {
     let committed = with_outbox(|outbox| std::mem::take(&mut outbox.committed));
     for queued in committed.unwrap_or_default() {
-        match queued {
-            Queued::Event { subscribers, event } => subscribers.publish(&event),
-            Queued::Notify(wake) => wake.notify_one(),
-        }
+        queued.subscribers.publish(&queued.event);
     }
 }
 
@@ -127,18 +118,4 @@ pub(super) fn restore((open, committed): (usize, usize)) {
         outbox.open_transaction.truncate(open);
         outbox.committed.truncate(committed);
     });
-}
-
-/// A projection invalidation must observe the commit that enqueued its durable row.
-pub(super) fn notify_after_commit(db: &Connection, wake: &Arc<tokio::sync::Notify>) {
-    let queued = with_outbox(|outbox| {
-        if db.is_autocommit() {
-            outbox.committed.push(Queued::Notify(wake.clone()));
-        } else {
-            outbox.open_transaction.push(Queued::Notify(wake.clone()));
-        }
-    });
-    if queued.is_none() {
-        wake.notify_one();
-    }
 }
