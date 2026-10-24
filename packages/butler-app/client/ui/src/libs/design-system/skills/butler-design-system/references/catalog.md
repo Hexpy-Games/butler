@@ -386,7 +386,7 @@
 | Commit or cancel a form or dialog | `Button` |  |
 | Compact row or toolbar actions | `IconButton` |  |
 | Compact widths; TaskGraphCanvas renders it for you with orientation="auto" | `TaskGraphLanes` |  |
-| Composer formatting | `ComposerCard controls` | `DocumentFormatBar` |
+| Composer formatting | `ComposerCard` | `DocumentFormatBar` |
 | Composer-side status | `ComposerAdjunctPanel` | `QueuedMessage` |
 | Confirm an action that has no visible result on screen | `Toast` |  |
 | Confirm that an action just finished, in the icon slot where it ran | `SuccessCheck` |  |
@@ -422,7 +422,7 @@
 | Explain why a control is unavailable | `Tooltip` |  |
 | Facts in the inspector, developer logs and document readers | `KeyValueRow` |  |
 | Facts that need their own rows | `KeyValueRow` | `MetaList` |
-| File revisions of a read-only deliverable | `the artifact viewer's version select` | `VersionHistory` |
+| File revisions of a read-only deliverable | `NativeSelect` | `VersionHistory` |
 | Files and images from disk | `AttachmentList` | `ElementChip` |
 | Files Butler produced | `ArtifactList` | `AttachmentList` |
 | Files the user attached | `AttachmentList` | `ArtifactList` |
@@ -560,7 +560,7 @@
 | Read a project document or spec in a dialog | `DocumentReader` |  |
 | Read-only app information (kind info with KeyValueRow) | `SettingsSection` |  |
 | Read-only facts | `KeyValueRow` | `SettingsSecretRows` |
-| Reading a file or artifact | `DocumentReader or ArtifactPreview` | `DocumentEditor` |
+| Reading a file or artifact | `DocumentReader` | `DocumentEditor` |
 | Reading a spec with facts | `DocumentReader` | `ArtifactPreview` |
 | Reading the document itself | `DocumentReader` | `TaskGraphDetail` |
 | Regular spacing between siblings | `Stack` | `Space` |
@@ -2829,7 +2829,7 @@ The artifact viewer body: exactly one of text, image or frame (PDF/HTML), or a l
 An editable document page: title row, one status line, header actions and the editable body in MarkdownContent's document typography, with block embeds and Butler's editing highlight.
 
 - Use for: A 버틀러 document the user edits (서랍 문서, the side panel next to the chat)
-- Not for: Reading a file or artifact → `DocumentReader or ArtifactPreview`
+- Not for: Reading a file or artifact → `DocumentReader`
 - Not for: Writing a message → `ComposerCard`
 - Tokens: `--butler-ink-blue`, `--butler-ink-purple`, `--accent`, `--radius-control`, `--motion-slow`
 
@@ -2841,7 +2841,7 @@ The floating format bar over a document selection: 굵게, 제목, 목록, 블�
 
 - Use for: Formatting a selection in a DocumentEditor
 - Not for: Actions on a whole block → `BlockActionFrame`
-- Not for: Composer formatting → `ComposerCard controls`
+- Not for: Composer formatting → `ComposerCard`
 - Tokens: `--z-popover`, `--radius-pill`, `--space-xs`, `--motion-fast`, `--motion-distance-sm`
 
 ### DocumentReader
@@ -2945,7 +2945,7 @@ Categories on the start side and the selected category's items on the end side, 
 A document's versions, newest first: who made each (나 or 버틀러) and when; pick one to preview, restore it from the footer.
 
 - Use for: The 버전 기록 of an editable document, inside a Popover (a screen-wide sheet on phones)
-- Not for: File revisions of a read-only deliverable → `the artifact viewer's version select`
+- Not for: File revisions of a read-only deliverable → `NativeSelect`
 - Not for: Browsing history → `HistoryRow`
 - Tokens: `--selection`, `--butler-ink-blue`, `--butler-ink-purple`, `--butler-ink-pink`, `--radius-control`
 
