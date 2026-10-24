@@ -27,6 +27,7 @@ pub mod browser;
 pub mod browser_import;
 pub mod capabilities;
 pub mod context;
+pub mod documents;
 pub mod operations;
 pub mod outputs;
 pub mod skills;

@@ -6358,6 +6358,11 @@ License: https://github.com/rusticstuff/simdutf8/blob/87ee8d9d20b849eae1974a82b2
 License: https://github.com/rusticstuff/simdutf8/blob/87ee8d9d20b849eae1974a82b248ee6fe7491bcc/LICENSE-MIT
 
 =====
+similar 2.7.0
+Apache-2.0
+License: https://github.com/mitsuhiko/similar/blob/28c146b628119065e9a4dae569eaa570a4632c17/LICENSE
+
+=====
 simplecss 0.2.2
 Apache-2.0 OR MIT
 License: https://github.com/linebender/simplecss/blob/6eacb39ca5c4c2390bfde374ed0651f0e35c9d8d/LICENSE-APACHE
