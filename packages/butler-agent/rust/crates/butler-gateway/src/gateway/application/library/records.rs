@@ -40,6 +40,7 @@ pub(in crate::gateway::application) fn save(
     item: &Value,
 ) -> Result<Value, AppStorageError> {
     let mut item = item.clone();
+    picture_asset(db, &mut item)?;
     if let Some(time) = item["capturedAt"]
         .as_str()
         .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
@@ -80,6 +81,30 @@ pub(in crate::gateway::application) fn save(
         item::replace_tags(db, &id, &tags)?;
     }
     item::refresh(db, &id)
+}
+/// Validate the original picture in the save transaction and expose its signing key.
+fn picture_asset(db: &Connection, item: &mut Value) -> Result<(), AppStorageError> {
+    if item["kind"] != "scrap" || item.get("asset").is_none() {
+        return Ok(());
+    }
+    let asset = item["asset"].as_str().unwrap_or_default();
+    let picture = db
+        .query_row(
+            "SELECT 1 FROM app_assets WHERE id=?1 AND kind IN ('generated','original','collected')",
+            [asset],
+            |_| Ok(()),
+        )
+        .optional()
+        .map_err(sql)?
+        .is_some();
+    if !picture {
+        return Err(item::failure(
+            super::super::storage::AppStorageCode::InvalidLibraryItem,
+            "Invalid saved item.",
+        ));
+    }
+    item["img"] = json!(asset);
+    Ok(())
 }
 /// After a rename the user's title stays and the saved title is the new `autoTitle`.
 fn keep_user_title(item: &mut Value, prior: Option<&Value>) {

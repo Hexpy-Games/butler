@@ -40,6 +40,8 @@
   --menu-group-label-padding: var(--space-sm) var(--space-2) var(--space-xs);
   --scroll-fade-size: 14px;
   --textarea-max-lines: 6;
+  /* A bordered Textarea with autoGrow: it grows from its min height to this many lines, then scrolls. */
+  --textarea-grow-max-lines: 12;
   --focus-ring-width: 2px;
   /* Room a focus ring needs outside its control: the 2px ring plus the 1px
      outline offset. Clipping containers (scrollers, folds, clip-paths) keep

@@ -50,6 +50,7 @@ wire_codes! {
         EmptyQueuedMessage = "empty_queued_message",
         GeneralChannelProtected = "general_channel_protected",
         InvalidJson = "invalid_json",
+        InvalidLibraryItem = "invalid_library_item",
         InvalidLibraryRequest = "invalid_library_request",
         InvalidSessionControls = "invalid_session_controls",
         InvalidUtf8 = "invalid_utf8",

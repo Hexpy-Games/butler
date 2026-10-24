@@ -1,3 +1,4 @@
+import { CanonInlineDraftProvider } from "../canon/CanonInlineDraft.tsx";
 import { ConversationRequestProvider } from "./ConversationRequestContext.tsx";
 import { SessionSections } from "../session-info/SessionSections.tsx";
 import { ComposerCrashFallback } from "./ComposerCrashFallback.tsx";
@@ -103,7 +104,7 @@ export function Conversation() {
     : undefined;
   const markTheme = resolveButlerMarkTheme(appearanceTheme);
   return (
-    <ConversationRequestProvider key={activeChatId}><ConversationShell
+    <ConversationRequestProvider key={activeChatId}><CanonInlineDraftProvider><ConversationShell
       asideLabel={appCopy.sessionInfo.title}
       asideFloatOpen={infoOpen}
       aside={infoOpen ? layout => <SessionSections key={activeChatId} layout={layout} /> : undefined}
@@ -148,6 +149,6 @@ export function Conversation() {
           large={composerLarge}
         />
       </ErrorBoundary>
-    </ConversationShell></ConversationRequestProvider>
+    </ConversationShell></CanonInlineDraftProvider></ConversationRequestProvider>
   );
 }
