@@ -1,6 +1,6 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
-import { Field, FieldDescription, FieldError, FieldLabel, Input } from "@/butler-ds";
+import { Input, SettingsField } from "@/butler-ds";
 import type { McpServerFormState } from "./mcpSettingsUtils";
 import { McpSecretRows } from "./McpSecretRows";
 
@@ -17,29 +17,29 @@ export function HttpFields({
   const copy = appCopy.settings;
   return (
     <>
-      <Field data-invalid={Boolean(error)}>
-        <FieldLabel htmlFor="mcp-http-url">{copy.fields.mcpUrl}</FieldLabel>
-        <Input
+      <SettingsField
+        id="mcp-http-url"
+        label={copy.fields.mcpUrl}
+        error={error}
+        control={<Input
           id="mcp-http-url"
-          aria-invalid={Boolean(error)}
-          aria-describedby={error ? "mcp-http-url-error" : undefined}
           value={form.url}
           onChange={(event) => onChange({ url: event.target.value })}
-        />
-        {error ? <FieldError id="mcp-http-url-error">{error}</FieldError> : null}
-      </Field>
-      <Field>
-        <FieldLabel>{copy.fields.mcpHeaders}</FieldLabel>
-        <FieldDescription>{copy.descriptions.mcpSecrets}</FieldDescription>
-        <McpSecretRows
+        />}
+      />
+      <SettingsField
+        label={copy.fields.mcpHeaders}
+        description={copy.descriptions.mcpSecrets}
+        controlWidth="full"
+        control={<McpSecretRows
           title={copy.fields.mcpHeaders}
           addLabel={appCopy.interfaceDetails.addHeader}
           rows={form.headerRows}
           onRowsChange={(headerRows) =>
             onChange({ headerRows, headersDirty: true })
           }
-        />
-      </Field>
+        />}
+      />
     </>
   );
 }

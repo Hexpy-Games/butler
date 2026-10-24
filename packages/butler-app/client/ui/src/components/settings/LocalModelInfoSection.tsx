@@ -1,5 +1,5 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { Button, Save, Stack, Typo } from "@/butler-ds";
+import { Button, Save, Typo } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { LocalModelDiscoveryResult } from "@/app/types.ts";
 import { LocalModelDiscoveryForm } from "./LocalModelDiscoveryForm";
@@ -48,7 +48,6 @@ export function LocalModelInfoSection({
 
   return (
     <SettingsSection id="local-model-info" kind="form" title={copy.modelInfoTitle}>
-      <Stack gap="md">
         {status ? <Typo.Caption role="status">{status}</Typo.Caption> : null}
         {hasUnsavedChanges ? (
           <Typo.Caption role="alert">{copy.unsavedChanges}</Typo.Caption>
@@ -77,7 +76,6 @@ export function LocalModelInfoSection({
               ? copy.saveModel
               : copy.registerModel}
         </Button>
-      </Stack>
     </SettingsSection>
   );
 }

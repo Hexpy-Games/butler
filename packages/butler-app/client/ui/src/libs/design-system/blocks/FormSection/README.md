@@ -94,7 +94,7 @@ Header spacing (proximity: a header belongs to the card below it):
 
 | Token | Value | Between |
 | --- | --- | --- |
-| `--settings-field-copy-gap` | 6px | section title and description |
+| `--settings-field-copy-gap` | 4px | section title and description |
 | `--settings-section-header-gap` | 12px | header (title or description) and card |
 | `--settings-section-gap` | 40px | card and the next section header (owned by `SettingsShell`) |
 
@@ -104,14 +104,45 @@ Field ramp inside the card (tightest to widest):
 
 | Token | Value | Between |
 | --- | --- | --- |
-| `--settings-field-copy-gap` | 6px | label and description |
-| `--settings-field-control-gap` | 12px | description and control, control and meta |
-| `--settings-field-gap` | 20px | fields |
+| `--settings-field-copy-gap` | 4px | label and description |
+| `--settings-field-control-gap` | 8px | description and control; control, afterControl, error and meta |
+| `--settings-field-gap` | 24px | fields |
 
-The card inset is `--settings-section-padding` (24px; 16px at 760px and
-below). There are no separators between fields: stacked fields at a 20px gap
+Tight inside a setting, loose between settings: the field gap is 3x the
+control gap, so a field reads as one unit and the next field as a separate
+one. The card inset is `--settings-section-padding` (24px; 16px at 760px and
+below). There are no separators between fields: stacked fields at a 24px gap
 are grouped by proximity alone. Do not add margins or gaps between sections or
-fields in product code.
+fields in product code: render fields directly in the card (component
+wrappers return fragments), and use `SettingsFieldGroup` for fields that show
+or hide together in their own element. `bun run lint:ds` rejects a `Stack`,
+`Inline`, `Grid` or `gap` wrapper around settings fields or sections
+(`butler-ds/settings-field-grouping`).
+
+### Card gap by kind
+
+One rule: **fields are always 24px apart, whatever the card's kind.**
+
+| Kind | Holds | Gap between children |
+| --- | --- | --- |
+| `form` | fields | `--settings-field-gap` (24px) |
+| `list` | repeated rows | 12px plus a hairline and 12px padding (25px between rows, fields included) |
+| `status` | live status rows (meters, diagnostics) | 12px; 24px when the card holds a field |
+| `info` | read-only `KeyValueRow`s | 12px; 24px when the card holds a field |
+
+A `status` or `info` card that holds a `SettingsField` or
+`SettingsActionField` as a direct child (`:has(> [data-settings-field])`)
+switches its whole card to the field gap, so rows and fields there are spaced
+like a form. A card whose content is all fields uses `kind="form"`.
+
+### Header actions
+
+`actions` holds a list toolbar only: controls that act on the list as a
+whole (add an item, refresh or check, filter, a bulk action on every row),
+on a `kind="list"` section. Any other action, especially one that removes or
+resets something, is a `SettingsActionField` row in the card with a
+description of its effect. `bun run lint:ds` rejects `actions` on a section
+whose `kind` is not `"list"`.
 
 ## Accessibility
 

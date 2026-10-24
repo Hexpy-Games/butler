@@ -5,6 +5,7 @@ import { Switch } from "../../components/Switch";
 import { Typo } from "../../components/Typo";
 import { EmptyLine } from "../EmptyLine";
 import { KeyValueRow } from "../KeyValueRow";
+import { SettingsActionField } from "../SettingsActionField";
 import { SettingsField } from "../SettingsField";
 import { SettingsPage } from "./SettingsPage";
 import { SettingsSection } from "./SettingsSection";
@@ -19,6 +20,19 @@ function GeneralPage() {
       </SettingsSection>
       <SettingsSection id="notifications" kind="form" title="Notifications">
         <SettingsField id="g-replies" settingId="replies" label="New replies" control={<Switch id="g-replies" defaultChecked />} />
+      </SettingsSection>
+    </SettingsPage>
+  );
+}
+// #endregion
+
+// #region recipe: Section action rows
+function ProfileMemory() {
+  return (
+    <SettingsPage>
+      <SettingsSection id="profile-memory" kind="form" title="Profile">
+        <SettingsActionField id="p-reset" label="Reset profile" description="Erases what Butler learned about you. This can't be undone."
+          action={<Button id="p-reset" size="sm" variant="outline">Reset</Button>} />
       </SettingsSection>
     </SettingsPage>
   );
@@ -54,6 +68,7 @@ export const guidance: ShowcaseGuidance = {
   ],
   recipes: [
     { name: "Settings page of sections", description: "Pick kind by content; SettingsField only ever renders inside a section.", render: () => <GeneralPage /> },
+    { name: "Section action rows", description: "Reset, clear and free-up-space are SettingsActionField rows in the card, not header buttons.", render: () => <ProfileMemory /> },
     { name: "Section fetch states", description: "Map the fetch result to state; the section draws skeleton rows, a Notice with Retry or an EmptyLine.", render: () => <FetchedSections /> },
   ],
   doDont: [
@@ -62,6 +77,13 @@ export const guidance: ShowcaseGuidance = {
       dont: {
         caption: "An empty message while the list is still loading reads as \"you have none\".",
         render: () => <SettingsPage><SettingsSection id="d-servers-2" kind="list" title="MCP servers"><EmptyLine message="No MCP servers yet." /></SettingsSection></SettingsPage>,
+      },
+    },
+    {
+      do: { caption: "An action is a row in the card that says what it removes.", render: () => <ProfileMemory /> },
+      dont: {
+        caption: "A reset button beside the title: header actions are list toolbars only.",
+        render: () => <SettingsPage><SettingsSection id="d-profile" kind="status" title="Profile" actions={<Button size="sm" variant="outline">Reset</Button>}><KeyValueRow label="Entries" value="12" /></SettingsSection></SettingsPage>,
       },
     },
     {
