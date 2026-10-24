@@ -3,7 +3,7 @@ use super::*;
 mod guards;
 mod projection;
 
-fn call(name: &str, args: Value) -> Value {
+fn call(name: &str, args: &Value) -> Value {
     json!({"type":"function_call","id":format!("fc_{name}"),"call_id":format!("call_{name}"),
         "name":name,"arguments":args.to_string(),"status":"completed"})
 }
@@ -20,7 +20,7 @@ fn script(script: &stub::Script, message: &str, rounds: Vec<Value>) {
 fn resolve(id: &Value, outcome: &str, answer: &str, quote: &str) -> Value {
     call(
         "resolve_ask",
-        json!({"ask_id":id,"outcome":outcome,"answer":answer,"quote":quote}),
+        &json!({"ask_id":id,"outcome":outcome,"answer":answer,"quote":quote}),
     )
 }
 fn source(request: &Value) -> &str {
@@ -61,7 +61,7 @@ async fn named_ask(
     script(
         script_,
         &message,
-        vec![call("ask_user", args), reply("Saved.")],
+        vec![call("ask_user", &args), reply("Saved.")],
     );
     let (_, turn) = s.turn("general", &message).await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");

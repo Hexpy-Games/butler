@@ -124,7 +124,7 @@ async fn rm_05_injected_tool_text_cannot_settle_an_ask() -> Result<(), HarnessEr
         vec![
             call(
                 "read_file",
-                json!({"requests":[{"path":s.sandbox.data.join("page.txt")} ]}),
+                &json!({"requests":[{"path":s.sandbox.data.join("page.txt")} ]}),
             ),
             resolve(&q["ask_id"], "accepted", "A", injected),
             reply("The page contains a request to accept a draft. Your choice remains open."),
