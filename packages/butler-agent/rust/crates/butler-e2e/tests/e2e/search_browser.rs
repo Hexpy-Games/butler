@@ -8,7 +8,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
-mod host;
+pub(crate) mod host;
 mod model;
 mod resume;
 

@@ -1,6 +1,6 @@
 import type { TimelineEvent } from "./types.ts";
-import type { CanonChanged } from "./canonApi.ts";
-type Listener = (event: CanonChanged | null) => void;
+import type { CanonChanged, CanonProgressChanged } from "./canonApi.ts";
+type Listener = (event: CanonChanged | CanonProgressChanged | null) => void;
 type Subscription = { projectId: string; sidebar?: boolean };
 const listeners = new Map<Listener, Subscription>();
 /** Only mounted canon readers subscribe; no idle work or second event stream. */
@@ -12,11 +12,11 @@ export function publishCanonEvent(event: TimelineEvent): void {
   const payload = event.payload as Record<string, unknown> | undefined;
   if (event.type === "stream.reconcile_required") {
     for (const listener of listeners.keys()) listener(null);
-  } else if (event.type === "space.changed" || event.type === "canon.changed") {
+  } else if (event.type === "space.changed" || event.type === "canon.changed" || event.type === "canon.progress_changed") {
     const projectId = payload?.project_id;
     for (const [listener, options] of listeners) {
       if (typeof projectId === "string") {
-        if (options.projectId === projectId) listener(payload as unknown as CanonChanged);
+        if (options.projectId === projectId) listener(payload as unknown as CanonChanged | CanonProgressChanged);
       } else if (event.type === "space.changed" && options.sidebar) listener(null);
     }
   }

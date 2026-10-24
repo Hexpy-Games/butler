@@ -3,7 +3,7 @@ mod events;
 use super::*;
 use AppCanonResource::{
     BacklogOrder, Canon, CreateEpic, CreatePlan, CreateTag, DeleteTag, EditEpic, EditPlan, EditTag,
-    Epic, Plan, PlanOrder, Tags,
+    Epic, EpicProgress, Plan, PlanOrder, Tags,
 };
 pub(super) use events::start;
 
@@ -27,7 +27,7 @@ async fn validate_scope(
     request: &AppCanonRequest,
 ) -> Result<(), GatewayApplicationError> {
     let project = match request.resource {
-        Plan | EditPlan | PlanOrder | Epic | EditEpic | EditTag | DeleteTag => {
+        Plan | EditPlan | PlanOrder | Epic | EpicProgress | EditEpic | EditTag | DeleteTag => {
             app.dependencies
                 .canon
                 .project_scope(request.resource, request.id.clone())

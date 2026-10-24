@@ -33,7 +33,7 @@ export interface CanonWork {
   origin: "chat" | "dialog" | "board" | "mcp";
   revision: number;
 }
-export interface EpicCard extends CanonWork { task_counts: TaskCounts }
+export interface EpicCard extends CanonWork { task_counts: TaskCounts; running?: boolean }
 export interface CanonPlan {
   updated_at?: number;
   id: string;
@@ -88,6 +88,10 @@ export interface EpicDetail extends EpicCard { specs: SpecNode[]; tasks: WorkTas
 export interface EpicProgressSnapshot {
   epic_id: string;
   running: boolean;
+  stage: "conception" | "planning" | "execution" | "review" | "validation" | "reporting" | null;
+  stage_history: Array<{ work_id: string; revision: number; stage: NonNullable<EpicProgressSnapshot["stage"]>; summary: string; created_at: string }>;
+  actions: Array<{ work_id: string; actionKey: string; description: string; dependencyKeys: string[]; status: "pending" | "active" | "done" | "blocked" | "skipped"; note?: string }>;
+  disposition: "open" | "blocked" | "completed" | null;
   counts: { completed: number; total: number };
 }
 export interface PlanInput {
@@ -108,6 +112,7 @@ export interface EpicInput {
   tags?: string[];
 }
 export interface CanonOrderInput { work_ids: string[]; expected_revision: number }
+export interface CanonProgressChanged { project_id: string; epic_id: string }
 export interface CanonChanged {
   project_id: string;
   kind: "plan" | "backlog" | "work" | "spec_node" | "tag";
