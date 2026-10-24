@@ -246,7 +246,7 @@
 | A status word that needs color | `Tag` | `Icons` |
 | A sub-step (sign-in, API key, model pick) that keeps the flow's header and footer | `SetupWizardStepCard` |  |
 | A suggestion list as wide as its field (width="anchor" with SuggestionList) | `Popover` |  |
-| A suggestion list under its field | `Popover width="anchor"` | `BottomSheet` |
+| A suggestion list under its field (width="anchor") | `Popover` | `BottomSheet` |
 | A suggestion or briefing entry with its own action | `Card` |  |
 | A summary stat strip at the top of a section (variant="joined") | `MetricGrid` |  |
 | A system message that needs a visual marker | `MessageAvatarBlock` |  |
@@ -969,8 +969,8 @@ A modal glass sheet along the bottom edge for choices and short tasks on phones;
 - Use for: A DropdownMenu, Popover or Select that should be thumb-reachable below 768px (presentation="auto")
 - Not for: A desktop chooser anchored to its control → `Popover`
 - Not for: A form or a decision that needs the whole screen's attention → `Dialog`
-- Not for: A suggestion list under its field → `Popover width="anchor"`
-- Tokens: `--tinted-glass-bg`, `--radius-popover`, `--dialog-overlay-bg`, `--z-popover`, `--motion-sheet-travel`, `--motion-deliberate`, `--motion-ease-settle`, `--motion-exit-slow`, `--motion-ease-accelerate`, `--safe-area-bottom`, `--focus-ring-room`, `--radius-pill`
+- Not for: A suggestion list under its field (width="anchor") → `Popover`
+- Tokens: `--tinted-glass-bg`, `--radius-popover`, `--dialog-overlay-bg`, `--z-popover`, `--motion-deliberate`, `--motion-ease-settle`, `--motion-exit-slow`, `--motion-ease-accelerate`, `--safe-area-bottom`, `--focus-ring-room`, `--radius-pill`
 
 ### ContextMenu
 
