@@ -1,7 +1,7 @@
 import { spawnElectron, stopElectronChild } from "./electron-child";
 import { chromium, firefox } from "playwright";
 import { mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { freePort, type NativeAppServerHandle } from "./native-app-server.ts";
 import { smokeBrowserArgs, smokeElectronArgs } from "./smoke-browser.ts";
 
@@ -17,7 +17,9 @@ export async function liveDelegationBrowser(server: NativeAppServerHandle) {
   mkdirSync(home, { recursive: true });
   const port = await freePort();
   let diagnostics = "";
-  const child = spawnElectron(executablePath, [`--remote-debugging-port=${port}`, ...smokeElectronArgs()], { onOutput: chunk => { diagnostics += String(chunk); }, env: {
+  // The executable is the Electron runtime; it runs the App from its package folder.
+  const app = resolve(process.env.BUTLER_SMOKE_ELECTRON_APP ?? "packages/butler-app/client/electron");
+  const child = spawnElectron(executablePath, [`--remote-debugging-port=${port}`, ...smokeElectronArgs(), app], { onOutput: chunk => { diagnostics += String(chunk); }, env: {
     ...process.env,
     HOME: home, BUTLER_DATA: server.butlerData, CODEX_HOME: join(home, "codex"),
     BUTLER_APP_ELECTRON_USER_DATA_DIR: join(home, "electron"),

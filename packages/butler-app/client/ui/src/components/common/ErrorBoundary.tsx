@@ -3,7 +3,6 @@ import React from "react";
 import type { ReactNode, ErrorInfo } from "react";
 import { Button, Notice } from "@/butler-ds";
 import { reportUiCrash } from "@/app/uiCrashReporting.ts";
-import { clearCrashSmoke, CrashSmokeProbe } from "./CrashSmokeProbe.tsx";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -30,7 +29,6 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 
   private retry = () => {
-    clearCrashSmoke(this.props.scope ?? "app");
     this.setState({ error: null });
   };
 
@@ -44,9 +42,6 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
           {scoped ? appCopy.interfacePanels.retry : appCopy.interfacePanels.reload}
         </Button>} />;
     }
-    return <>
-      {import.meta.env.MODE === "crash-smoke" && <CrashSmokeProbe scope={this.props.scope ?? "app"} />}
-      {this.props.children}
-    </>;
+    return this.props.children;
   }
 }

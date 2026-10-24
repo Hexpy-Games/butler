@@ -66,10 +66,12 @@ function refusalKey(tab, args) {
   return state && state.obs === args.observation ? `${state.fingerprint}\n${JSON.stringify(args.steps)}` : null;
 }
 
-/** Records a refusal so an unchanged resend from the same state is answered at once. */
+/** Records a refusal so an unchanged resend from the same state is answered at once.
+ * A stale_ref refusal belongs to its observation, not the page: re-observing makes
+ * the same steps valid again, so it is not remembered. */
 export function rememberRefusal(tab, args, refusal) {
   const key = refusalKey(tab, args);
-  if (!key || refusal.status !== "refused") return refusal;
+  if (!key || refusal.status !== "refused" || refusal.reason === "stale_ref") return refusal;
   const seen = tab.refusedBatches ??= new Map();
   seen.set(key, { reason: refusal.reason, step_index: refusal.step_index, hit: refusal.hit, rejected_point: refusal.rejected_point });
   if (seen.size > 50) seen.delete(seen.keys().next().value);

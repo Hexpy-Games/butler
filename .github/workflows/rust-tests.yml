@@ -98,6 +98,136 @@ jobs:
           retention-days: 7
       - if: always()
         uses: ./.github/actions/assert-home-untouched
+  app-flows:
+    if: ${{ !inputs.performance-only && inputs.e2e && inputs.platform == 'darwin-arm64' }}
+    name: App user flows (${{ inputs.platform }} ${{ matrix.part }})
+    runs-on: ${{ inputs.runner }}
+    env:
+      BUTLER_EXPECT_SANDBOX: macos
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [ui-core, ui-settings, ui-work, browser-tabs, browser-shell]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/bun-setup
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.3
+      - uses: actions/download-artifact@v4
+        with:
+          name: rust-${{ inputs.platform }}
+          path: ${{ runner.temp }}/rust-archive
+      - name: Prepare the existing Agent and Electron UI
+        run: |
+          chmod +x "$RUNNER_TEMP/rust-archive/butler-agent" "$RUNNER_TEMP/rust-archive/window-capture" "$RUNNER_TEMP/rust-archive/e2e-task-graph"
+          python3 .github/scripts/isolated.py bun install --frozen-lockfile
+          python3 .github/scripts/isolated.py node packages/butler-app/client/electron/node_modules/electron/install.js
+          python3 .github/scripts/isolated.py bun run app:ui:build
+          export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/butler-smoke-browsers"
+          python3 .github/scripts/isolated.py bunx playwright install chromium
+      - name: Run App user flows with stub model responses
+        env:
+          PART: ${{ matrix.part }}
+          BUTLER_NATIVE_AGENT_EXECUTABLE: ${{ runner.temp }}/rust-archive/butler-agent
+          BUTLER_FIRST_RUN_NATIVE_AGENT_EXECUTABLE: ${{ runner.temp }}/rust-archive/butler-agent
+          BUTLER_WINDOW_CAPTURE_EXECUTABLE: ${{ runner.temp }}/rust-archive/window-capture
+          BUTLER_TASK_GRAPH_BUILDER_EXECUTABLE: ${{ runner.temp }}/rust-archive/e2e-task-graph
+          BUTLER_E2E_TIER: stub
+        run: |
+          export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/butler-smoke-browsers"
+          BUTLER_SMOKE_ELECTRON_EXECUTABLE="$(node -p "require('./packages/butler-app/client/electron/node_modules/electron')")"
+          export BUTLER_SMOKE_ELECTRON_EXECUTABLE
+          smoke() {
+            local name="$1" variable
+            local evidence="$RUNNER_TEMP/app-flows/$name"
+            mkdir -p "$evidence"
+            for variable in BUTLER_BROWSER_EVIDENCE BUTLER_SMOKE_EVIDENCE BUTLER_SMOKE_SCREENSHOTS \
+              BUTLER_SIGNIN_HANDOFF_EVIDENCE BUTLER_WAIT_HANDOFF_EVIDENCE BUTLER_COMPOSER_FOLD_OUT \
+              HOOK_SCREENSHOTS BUTLER_TRACE_SHOTS HOOK_PROMPT_SCREENSHOTS \
+              BUTLER_CLEAR_CHAT_SHOTS BUTLER_SETTINGS_BUGS_OUT BUTLER_ANSWER_EVIDENCE \
+              BUTLER_SECURITY_BIND_SHOTS BUTLER_APPROVAL_ACTIVITY_SHOTS BUTLER_IMPORT_EVIDENCE \
+              BUTLER_COMPOSER_MODEL_SHOTS BUTLER_LOGS_SHOTS BUTLER_OVERVIEW_SCREENSHOTS; do
+              export "$variable=$evidence"
+            done
+            python3 .github/scripts/isolated.py bun "tests/smoke/$name.ts"
+          }
+          case "$PART" in
+            ui-core)
+              smoke open-source-licenses-smoke
+              smoke hooks-settings-smoke
+              smoke sidebar-group-drop
+              smoke app-canon-board-smoke
+              smoke composer-model-fallback-smoke
+              smoke sidebar-new-chat-smoke
+              smoke settings-trace-smoke
+              smoke browser-wait-handoff-smoke
+              smoke app-question-continuation-smoke
+              smoke approval-activity-smoke
+              smoke app-output-viewer-smoke
+              smoke app-canon-progress-smoke
+              ;;
+            ui-settings)
+              smoke app-security-pairing-smoke
+              smoke app-full-reset-smoke
+              smoke schedule-ux-smoke
+              smoke settings-security-approvals-smoke
+              smoke sidebar-drag-scroll
+              smoke sidebar-add-menu-smoke
+              smoke settings-bugs-smoke
+              smoke app-delegated-work-smoke
+              smoke answer-blocks-ui
+              smoke composer-fold-smoke
+              ;;
+            ui-work)
+              smoke app-ask-user-smoke
+              smoke app-branch-actions-smoke
+              smoke app-consent-smoke
+              smoke general-clear-chat-smoke
+              smoke app-security-bind-error-smoke
+              smoke settings-logs-smoke
+              smoke app-sidebar-unread-smoke
+              smoke signin-handoff-smoke
+              smoke app-canon-sidebar-smoke
+              smoke hook-prompt-smoke
+              smoke app-live-delegation-smoke
+              smoke app-canon-tags-smoke
+              ;;
+            browser-tabs)
+              smoke browser-tab-move-electron
+              smoke app-open-in-app-smoke
+              smoke app-attachment-viewer-smoke
+              smoke first-run-redesign-smoke
+              smoke browser-agent-electron
+              smoke browser-file-picker-electron
+              smoke browser-ownership-electron
+              smoke browser-library-electron
+              smoke browser-journey-electron
+              smoke app-task-graph-smoke
+              ;;
+            browser-shell)
+              smoke browser-wait-durable-electron
+              smoke provider-signin-external-electron
+              smoke browser-import-oneclick
+              smoke app-first-run-setup-smoke
+              smoke browser-popups-dialogs-electron
+              smoke browser-control-electron
+              smoke browser-downloads-electron
+              smoke browser-shell-electron
+              smoke browser-history-electron
+              smoke browser-preview-app
+              ;;
+          esac
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-flows-${{ inputs.platform }}-${{ matrix.part }}
+          path: ${{ runner.temp }}/app-flows
+          if-no-files-found: error
+          retention-days: 7
+      - if: always()
+        uses: ./.github/actions/assert-home-untouched
   workspace:
     if: ${{ !inputs.performance-only && inputs.workspace }}
     runs-on: ${{ inputs.runner }}
