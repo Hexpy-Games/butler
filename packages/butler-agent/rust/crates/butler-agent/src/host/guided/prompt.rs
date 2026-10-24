@@ -1,6 +1,7 @@
 //! Turn-bound Guided request text assembled from the admitted source records.
 
 mod attachments;
+mod canon;
 mod diagnostics;
 mod material;
 use diagnostics::request_usage;
@@ -101,6 +102,9 @@ fn source_prompt(
     entries.push("scope", scope(state));
     if let Some(tools) = delegated_tools(state) {
         entries.push("delegated-tools", tools);
+    }
+    if !material.canon.is_empty() {
+        entries.push("canon", material.canon.clone());
     }
     if let Some(work) = current_work(state) {
         entries.push("work", work);

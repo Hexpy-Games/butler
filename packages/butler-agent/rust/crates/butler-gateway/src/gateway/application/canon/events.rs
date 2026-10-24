@@ -24,6 +24,13 @@ pub(in crate::gateway::application) fn start(app: &AppApplication) {
         let mut cursor = Cursor::default();
         loop {
             changes.borrow_and_update();
+            let reconciliation = tokio::select! {
+                () = shutdown.cancelled() => return,
+                result = port.reconcile() => result,
+            };
+            if let Err(error) = reconciliation {
+                tracing::warn!(%error, "Canon reconciliation failed; outbox drain continues");
+            }
             // Catch up on startup, and retry one failed drain immediately, even
             // when idle. After that, only a change signal wakes us (no timer).
             for _ in 0..2 {

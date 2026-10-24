@@ -7,9 +7,9 @@ use std::{
 use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 
 #[derive(Clone, Default)]
-pub(crate) struct PlanDecisionLocks(Arc<Mutex<HashMap<String, Weak<AsyncMutex<()>>>>>);
+pub(crate) struct KeyedLocks(Arc<Mutex<HashMap<String, Weak<AsyncMutex<()>>>>>);
 
-impl PlanDecisionLocks {
+impl KeyedLocks {
     pub(crate) async fn acquire(&self, key: String) -> OwnedMutexGuard<()> {
         let lock = {
             let mut locks = self.0.lock();

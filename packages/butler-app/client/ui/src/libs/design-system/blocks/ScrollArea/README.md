@@ -36,6 +36,13 @@ nothing more is reserved. The first ScrollArea in a document measures the thin
 scrollbar once and publishes it as `--scrollbar-width` on the root (`0px` for
 overlay scrollbars); nothing runs while idle or on scroll.
 
+Inset rule: the content's inline end sits on the column edge whether the
+content fits or overflows, with overlay or classic scrollbars. The vertical
+scroller sets `scrollbar-gutter: stable`, so a classic scrollbar's lane stays
+reserved while the content fits (an overlay one reserves nothing), and the
+content never widens into the lane. Horizontal scrollers have no inline lane.
+`bleed="inline-end"` follows the same rule inside the inspector gutter.
+
 ## Focus Rings
 
 The frame keeps `--focus-ring-room` of paint room on every edge (it bleeds past
