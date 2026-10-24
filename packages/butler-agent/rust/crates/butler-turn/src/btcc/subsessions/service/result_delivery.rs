@@ -4,6 +4,19 @@ use super::*;
 use crate::btcc::{BtccCode, BtccError};
 
 impl SubsessionService {
+    /// Publish the execution change only after the durable outbox update.
+    pub async fn mark_result_delivered(&self, result: String) -> Result<(), BtccError> {
+        if let Some(link) = self
+            .repository
+            .mark_delivered(result, (self.now)())
+            .await
+            .map_err(BtccError::from)?
+        {
+            let _ = self.changes.send(link);
+        }
+        Ok(())
+    }
+
     pub(crate) async fn deliver_worker_results(&self) -> Result<(), BtccError> {
         for pending in self
             .repository
@@ -58,10 +71,7 @@ impl SubsessionService {
                 envelope,
                 metadata: serde_json::Map::new(),
             })?;
-            self.repository
-                .mark_delivered(pending.result_id, (self.now)())
-                .await
-                .map_err(BtccError::from)?;
+            self.mark_result_delivered(pending.result_id).await?;
         }
         Ok(())
     }

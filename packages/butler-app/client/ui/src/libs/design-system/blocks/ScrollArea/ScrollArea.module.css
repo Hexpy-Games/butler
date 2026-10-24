@@ -1,10 +1,18 @@
 .frame {
-  --scroll-area-scrollbar-offset: 10px;
+  /* The frame bleeds a scrollbar lane past the inline end. An overlay
+     scrollbar takes no layout width, so the content gives the lane back; a
+     classic one (--scrollbar-width, measured once per document) is its own
+     lane, and reserving both would push the content in twice. */
+  --scroll-area-scrollbar-width: var(--scrollbar-width, 0px);
+  --scroll-area-scrollbar-offset: max(10px, var(--scroll-area-scrollbar-width));
   --scroll-area-fade-size: var(--scroll-fade-size);
   --scroll-area-fade-guard: var(--space-xs);
   --scroll-area-edge-padding: var(--scroll-area-fade-size);
   --scroll-area-frame-width: calc(100% + var(--scroll-area-scrollbar-offset));
-  --scroll-area-content-width: calc(100% - var(--scroll-area-scrollbar-offset));
+  --scroll-area-content-width: calc(
+    100% - var(--scroll-area-scrollbar-offset) +
+      var(--scroll-area-scrollbar-width)
+  );
   /* The frame bleeds this past the content's inline start (the block edges
      already have the edge padding) and the content pads it back: content
      keeps its place and focus rings paint inside the clip and the fades. */
@@ -44,7 +52,10 @@
 }
 
 .frame[data-bleed="inline-end"] .content {
-  padding-inline-end: var(--scroll-area-bleed);
+  padding-inline-end: max(
+    0px,
+    var(--scroll-area-bleed) - var(--scroll-area-scrollbar-width)
+  );
 }
 
 .fill {

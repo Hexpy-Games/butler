@@ -1,5 +1,5 @@
 use crate::btcc::identity::digest;
-use crate::btcc::storage::common::{canonical_record, error};
+use crate::btcc::storage::common::{document_record, error};
 use crate::btcc::storage::{StorageError, StorageResult};
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -38,7 +38,7 @@ pub(super) fn record_inbound(
     }
     let inbox_id = digest(&format!("btcc-inbox.v1\0{session_id}\0{trigger_key}"));
     insert_canonical_trigger(&transaction, &fresh)?;
-    let command_json = canonical_record(command)?;
+    let command_json = document_record(command)?;
     let turn_id = text(fresh.turn_id, "turnId")?;
     transaction
         .execute(

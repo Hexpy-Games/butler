@@ -48,6 +48,7 @@ pub(super) enum Handler {
     MessageUpload,
     Models,
     Monitors,
+    OpenedFiles,
     Operation,
     Output,
     Personalization,
@@ -63,6 +64,7 @@ pub(super) enum Handler {
     Subsessions,
     TaskGraphs,
     WorkModel,
+    CanonSidebar,
     Updates,
     Wallpapers,
     #[cfg(feature = "e2e-fixtures")]
@@ -149,6 +151,7 @@ const ROUTES: &[(&str, Handler)] = &[
         "/internal/subsession-result",
         Handler::InternalSubsessionResult,
     ),
+    ("/internal/opened-files", Handler::OpenedFiles),
     ("/internal/wallpaper", Handler::Wallpapers),
     ("/internal/wallpaper-modules", Handler::Wallpapers),
     (
@@ -340,7 +343,10 @@ const ROUTES: &[(&str, Handler)] = &[
 ];
 
 fn table() -> impl Iterator<Item = (&'static str, Handler)> {
-    let routes = ROUTES.iter().copied();
+    let routes = ROUTES
+        .iter()
+        .copied()
+        .chain(super::canon_sidebar::ROUTES.iter().copied());
     #[cfg(feature = "e2e-fixtures")]
     let routes = routes.chain(FIXTURE_ROUTES.iter().copied());
     routes

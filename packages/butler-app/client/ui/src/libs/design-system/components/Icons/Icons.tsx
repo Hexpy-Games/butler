@@ -15,7 +15,7 @@ import {
   BookOpen01Icon, BotIcon, Briefcase01Icon, BubbleChatIcon, Cancel01Icon, CancelCircleIcon,
   CheckListIcon, CheckmarkCircle02Icon, CircleIcon, Clock03Icon, CollapseIcon, CommandIcon, ComputerIcon,
   Copy01Icon, CubeIcon, DatabaseIcon, Delete02Icon, DragDropVerticalIcon, ExpandIcon, File02Icon,
-  FilterIcon, FloppyDiskIcon, Folder01Icon, Folder02Icon, FolderAddIcon, GitBranchIcon,
+  FilterIcon, Flag02Icon, FloppyDiskIcon, Folder01Icon, Folder02Icon, FolderAddIcon, GitBranchIcon,
   Globe02Icon, Image01Icon, LayoutGridIcon, LockIcon, MagicWand01Icon, McpServerIcon, Message01Icon,
   MessageAdd01Icon, MinusSignIcon, Moon02Icon, MoreHorizontalIcon as MoreHorizontalGlyph,
   Note01Icon, PaintBrush02Icon, PanelLeftIcon, PanelLeftOpenIcon, PanelRightCloseIcon,
@@ -65,6 +65,8 @@ export const DragHandle = GripVertical;
 export const Eye = createIcon(ViewIcon);
 export const Expand = createIcon(ExpandIcon);
 export const FileText = createIcon(File02Icon);
+/** A flag on a pole: a milestone or goal in a plan. */
+export const Flag = createIcon(Flag02Icon);
 export const Folder = createIcon(Folder01Icon);
 export const FolderOpen = createIcon(Folder02Icon);
 export const FolderPlus = createIcon(FolderAddIcon);

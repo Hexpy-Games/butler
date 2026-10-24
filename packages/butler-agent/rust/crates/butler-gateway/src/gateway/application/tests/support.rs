@@ -431,6 +431,7 @@ pub(super) fn dependencies(native: Arc<Native>, clock: u64) -> AppApplicationDep
         subsessions: Arc::new(UnprovidedSessions),
         branch_conversations: Arc::new(UnprovidedBranchConversations),
         session_title_generator: Arc::new(TestBranchSummarizer),
+        session_topic_classifier: Arc::new(super::super::smart_groups::NoTopicClassifier),
         branch_summarizer: Arc::new(TestBranchSummarizer),
         setup: crate::gateway::application::test_setup_port(),
     }

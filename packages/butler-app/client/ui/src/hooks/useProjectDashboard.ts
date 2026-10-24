@@ -26,8 +26,9 @@ export function useProjectDashboard({
   const projectId = project?.id;
   const dashboardActivation =
     view.kind === "project-dashboard" && view.projectId === projectId
-      ? view
+      ? view.projectId
       : null;
+  const activationRevision = useProjectDashboardState((state) => projectId ? state.projects[projectId]?.activationRevision ?? 0 : 0);
   const [retry, setRetry] = useState(0);
   const invalidation = useProjectDashboardState((state) => projectId ? state.projects[projectId]?.refreshRevision ?? 0 : 0);
   const firstDirtyAt = useRef<number | null>(null);
@@ -77,8 +78,8 @@ export function useProjectDashboard({
     if (!projectId) return;
     // Treat initialDashboard as a first-render seed only. When this hook is
     // backing the active project dashboard, refetch on every dashboard
-    // activation; openProjectDashboard creates a new view object even when
-    // re-opening the currently selected project.
+    // activation. Explicit dashboard navigation has its own revision;
+    // inspector selection changes only UI state.
     if (initialDashboard && !dashboardActivation) return;
     let cancelled = false;
     // A refresh must not unmount the persistent composer or discard its files.
@@ -100,7 +101,7 @@ export function useProjectDashboard({
     return () => {
       cancelled = true;
     };
-  }, [dashboardActivation, initialDashboard, projectId, retry]);
+  }, [dashboardActivation, activationRevision, initialDashboard, projectId, retry]);
 
   return {
     dashboard,

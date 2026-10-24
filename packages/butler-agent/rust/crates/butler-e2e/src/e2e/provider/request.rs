@@ -9,6 +9,9 @@ pub(super) async fn handle(state: Arc<State>, request: Request<Body>) -> Respons
     let arrived = Instant::now();
     let json: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
     let memory = memory::matches(&json);
+    if is_smart_group_request(&json) && !matches!(&state.mode, Mode::Record { .. }) {
+        return smart_group(&state, json);
+    }
     if let Mode::Synthetic(synthetic) = &state.mode
         && !is_title_request(&json)
     {
@@ -110,4 +113,14 @@ fn replay_request(
     }
     lock(&state.misses).push(serde_json::to_string(key).unwrap_or_default());
     plain(501, "HARNESS_ERROR: no recording matches this request")
+}
+
+/// Replay and synthetic modes answer classification from the scenario's
+/// responder, or file nothing.
+fn smart_group(state: &State, json: Value) -> Response<Body> {
+    let response = lock(&state.smart_group_responder)
+        .and_then(|respond| respond(&json))
+        .unwrap_or_else(|| smart_group_response(NO_SMART_GROUP));
+    lock(&state.smart_group_requests).push(json);
+    replay(state, &response, None)
 }

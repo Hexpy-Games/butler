@@ -15,6 +15,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ci_policy import rust_jobs, windows_preview_jobs
 import ci_parts
 import ci_rust_inputs
+import ci_runtime_crates
+import ci_tool_path
 import ci_receipts
 from ci_main_baseline import latest_main_run
 from urllib.parse import urlencode
@@ -70,6 +72,8 @@ CI_LINT_ONLY = (
     '.github/scripts/ci_consumer_test_support.py',
     '.github/scripts/ci_rust_inputs.py', '.github/scripts/ci_input_tests.py',
     '.github/scripts/ci_tier_tests.py', '.github/scripts/ci_receipts.py',
+    '.github/scripts/ci_runtime_crates.py', '.github/scripts/runtime-crates.json',
+    '.github/scripts/ci_runtime_tests.py',
     '.github/scripts/ci_ds_approval_tests.py',
     '.github/scripts/ci_main_failure.py', '.github/scripts/ci_main_baseline.py',
     '.github/scripts/ci-main-gate.py', '.github/scripts/ci_windows_cascade_tests.py',
@@ -85,19 +89,21 @@ CI_CONSUMERS = (
         '.github/scripts/test-*.py', '.github/scripts/ds-approval.py',
         '.github/scripts/cargo-artifact-cache.py', '.github/scripts/agent-provenance.py',
         '.github/scripts/integration-proof.py', '.github/scripts/recover-release.py',
-        '.github/scripts/check-gate.py',
+        '.github/scripts/check-gate.py', '.github/scripts/ci_tool_path.py',
         '.github/scripts/ci-check-selected.py', '.github/scripts/cargo-target-release.py',
         '.github/scripts/runner_cache.py', '.github/scripts/ci-changes.py',
         '.github/scripts/ci_policy.py', '.github/scripts/ci_parts.py',
         '.github/scripts/ci_consumer_test_support.py', '.github/scripts/ci_rust_inputs.py',
         '.github/scripts/ci_input_tests.py', '.github/scripts/ci_tier_tests.py',
-        '.github/scripts/ci_ds_approval_tests.py',
+        '.github/scripts/ci_ds_approval_tests.py', '.github/scripts/ci_runtime_crates.py',
+        '.github/scripts/runtime-crates.json', '.github/scripts/ci_runtime_tests.py',
         '.github/scripts/ci_receipts.py', '.github/scripts/ci_main_failure.py',
         '.github/scripts/ci_main_baseline.py', '.github/scripts/ci-main-gate.py',
-        '.github/scripts/ci_windows_cascade_tests.py',
+        '.github/scripts/issue_links.py', '.github/scripts/ci_windows_cascade_tests.py',
         '.github/scripts/prepare-windows-zstd.py',
         '.github/scripts/*windows*safety.py')),
-    (('rust',), ('.github/workflows/rust-*.yml',)),
+    (('rust',), ('.github/workflows/rust-*.yml', '.github/scripts/ci_runtime_crates.py',
+                  '.github/scripts/runtime-crates.json')),
     (NATIVE_CI, (
         '.github/workflows/rust-archive.yml', '.github/workflows/rust-tests.yml',
         '.github/actions/e2e-stub/*', '.github/workflows/native-agent.yml',
@@ -110,7 +116,7 @@ CI_CONSUMERS = (
         '.github/scripts/agent-provenance.py', '.github/scripts/cargo-artifact-cache.py',
         '.github/scripts/cargo-target-release.py', '.github/scripts/runner_cache.py',
         '.github/scripts/check-gate.py', '.github/scripts/ci_policy.py',
-        '.github/actions/release-python/**',
+        '.github/scripts/ci_tool_path.py', '.github/actions/release-python/**',
         '.github/actions/rust-agent-setup/*', '.github/actions/build-agent-archive/*',
         '.github/workflows/linux-packages.yml', '.github/workflows/macos-app-package.yml',
         '.github/scripts/*windows*safety.py', '.github/scripts/prepare-windows-zstd.py')),
@@ -196,6 +202,11 @@ def categories(path, event=None):
 
 def windows_native(path):
     return matches(path, WINDOWS)
+
+
+def windows_runtime(path, event=None):
+    # Crates the Windows agent links, from the checked-in Cargo graph closure.
+    return 'rust' in categories(path, event) and ci_runtime_crates.selects(path, ci_rust_inputs.consumes)
 
 
 def command(*args):
@@ -344,8 +355,10 @@ def couple_perf_native(job_reuse):
 def main_base(workflow):
     """Include merges whose selecting workflow was superseded before completion."""
     try:
+        # Only a green run proves its commit; a failed one never becomes the
+        # baseline, so later pushes reselect (and keep failing) its checks.
         run = latest_main_run(workflow, os.environ['GITHUB_REPOSITORY'], command,
-                              exclude_sha=os.environ.get('GITHUB_SHA'))
+                              exclude_sha=os.environ.get('GITHUB_SHA'), conclusions=('success',))
         if run is None:
             return None
         base = run['head_sha']
@@ -376,8 +389,8 @@ def select(event, workflow):
     paths = [] if full else changed(base)
     required = set(GROUPS) if full else set().union(*(categories(p, os.environ['GITHUB_EVENT_NAME']) for p in paths))
     current = hashes(base or 'full')
-    native_required = (full or any(windows_native(path) for path in paths) or
-                       any(label['name'] == 'ci:windows-native' for label in pr.get('labels', [])) or
+    label = any(label['name'] == 'ci:windows-native' for label in pr.get('labels', []))
+    native_required = (full or label or any(windows_native(p) or windows_runtime(p, os.environ['GITHUB_EVENT_NAME']) for p in paths) or
                        (os.environ['GITHUB_EVENT_NAME'] != 'pull_request' and 'rust' in required))
     # Windows stub receipts use the package group, including all Rust harness inputs.
     if workflow == 'windows-preview-smoke.yml':
@@ -424,12 +437,14 @@ def select(event, workflow):
     if level == 'smoke' and workflow == 'windows-preview-smoke.yml':
         parts = {'hosted': ci_parts.HOSTED}
         native = outputs['package'] == 'true' and native_required
-        jobs = windows_preview_jobs(dict(outputs, windows=str(native).lower()), os.environ['GITHUB_EVENT_NAME'])
-    if os.environ['GITHUB_EVENT_NAME'] == 'pull_request' and workflow != 'rust-quality.yml':
+        jobs = windows_preview_jobs(dict(outputs, windows=str(native).lower(), label=str(label).lower()), os.environ['GITHUB_EVENT_NAME'])
+    elif workflow == 'windows-preview-smoke.yml':
+        jobs['hosted-build'] = False  # Integration builds on the owner PC.
+    if os.environ['GITHUB_EVENT_NAME'] == 'pull_request' and workflow not in ('rust-quality.yml', 'windows-preview-smoke.yml'):
         jobs = dict.fromkeys(jobs, False)
     outputs.update({'parts': json.dumps(parts), 'docs-only': str(not required).lower(), 'electron': outputs['package'],
-                    'tier': level, 'candidate': candidate, 'jobs': json.dumps(jobs),
-                    'artifacts': json.dumps(artifacts)})
+                    'tool-e2e': ci_tool_path.runs(os.environ['GITHUB_EVENT_NAME'], paths), 'tier': level,
+                    'candidate': candidate, 'jobs': json.dumps(jobs), 'artifacts': json.dumps(artifacts)})
     state = dict(schema=1, repository=repository, workflow=workflow, pr=pr.get('number'),
                  run=int(os.environ['GITHUB_RUN_ID']), base=base, checkout=command('git', 'rev-parse', 'HEAD'), hashes=current,
                  outputs=outputs, reuse=reuse, paths=paths, previous_paths=None,
@@ -444,7 +459,7 @@ def select(event, workflow):
                f'Base: `{base}`; paths: {len(paths)}',
                f'Run groups: {", ".join(k for k, v in outputs.items() if v == "true")}',
                'Reused: ' + json.dumps(job_reuse or reuse),
-               'E2E / perf: ' + ('integration only' if candidate else 'NONE (smoke)'),
+               'E2E / perf: ' + ('integration only' if candidate else ci_tool_path.SUMMARY if outputs['tool-e2e'] == 'true' else 'NONE (smoke)'),
                'Jobs: ' + json.dumps(jobs)]
     with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as output:
         output.write('\n\n'.join(summary) + '\n')

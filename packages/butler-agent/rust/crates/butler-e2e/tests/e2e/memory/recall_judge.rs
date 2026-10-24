@@ -11,6 +11,8 @@ use serde_json::{Value, json};
 mod empty_evidence;
 #[path = "recall_judge/fixture.rs"]
 mod fixture;
+#[path = "recall_judge/usage.rs"]
+mod usage;
 
 const EXACT: &str = "Recall my bike lock code with the exact saved source.";
 const ASK: &str = "Recall that activity from September.";

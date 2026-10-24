@@ -39,7 +39,10 @@ const split = () => {
   post.selectNodeContents(el); post.setStart(r.endContainer, r.endOffset);
   return [pre.toString(), post.toString()];
 };
-const probe = window.__imeProbe = { composing: false, around: null, violations: [], selectionWrites: [] };
+const probe = window.__imeProbe = { composing: false, around: null, violations: [], selectionWrites: [], placeholderOverText: [] };
+const placeholder = () => editor()?.parentElement?.querySelector(':scope > [aria-hidden="true"]');
+const watch = () => { const text = editor()?.textContent; if (text && placeholder()?.getClientRects().length) probe.placeholderOverText.push(text); requestAnimationFrame(watch); };
+watch();
 addEventListener("compositionstart", e => { if (e.target === editor()) { probe.composing = true; probe.around = split(); } }, true);
 addEventListener("compositionend", () => { probe.composing = false; }, true);
 addEventListener("input", e => {
@@ -60,10 +63,13 @@ if (el && s.rangeCount && el.contains(s.focusNode)) { const r = document.createR
 const probe = window.__imeProbe;
 const out = { text: el?.innerText ?? null, caret, focused: document.activeElement === el,
   folded: !!document.querySelector('[data-slot="composer-compact-preview"]')?.getClientRects().length,
-  violations: probe.violations.splice(0), selectionWrites: probe.selectionWrites.splice(0) };
+  violations: probe.violations.splice(0), selectionWrites: probe.selectionWrites.splice(0),
+  placeholderOverText: probe.placeholderOverText.splice(0),
+  placeholder: !!el?.parentElement?.querySelector(':scope > [aria-hidden="true"]')?.getClientRects().length };
 return out;`;
 
-type State = { text: string | null; caret: number | null; focused: boolean; folded: boolean; violations: unknown[]; selectionWrites: string[] };
+type State = { text: string | null; caret: number | null; focused: boolean; folded: boolean; violations: unknown[]; selectionWrites: string[];
+  placeholderOverText: string[]; placeholder: boolean };
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const TARGET = "한글 테스트";
 
@@ -98,7 +104,7 @@ async function clearDraft(driver: Driver): Promise<void> {
   await waitFor(driver, "return document.querySelector('[contenteditable=true]').textContent === '';", "empty draft");
   // Let the browser report the deletion to the IME before composing starts.
   await sleep(200);
-  await driver.run<State>(STATE);
+  assert((await driver.run<State>(STATE)).placeholder, `${driver.name}: an empty draft shows the placeholder`);
 }
 
 async function typeKorean(driver: Driver, delayMs: number, text = TARGET, settleMs = 300): Promise<State> {
@@ -229,6 +235,7 @@ async function composition(driver: Driver, label: string, delayMs: number): Prom
   assert.deepEqual(external, [], `${driver.name} ${label}: the IME saw outside changes during composition ${seen}`);
   assert.deepEqual(state.violations, [], `${driver.name} ${label}: text outside the composition changed while composing ${seen}`);
   assert.deepEqual(state.selectionWrites, [], `${driver.name} ${label}: the composer moved the DOM selection while composing ${seen}`);
+  assert.deepEqual(state.placeholderOverText, [], `${driver.name} ${label}: the placeholder showed over composed text ${seen}`);
   assert.equal(state.text, TARGET, `${driver.name} ${label}: composed syllables ${seen}`);
   assert.equal(state.caret, TARGET.length, `${driver.name} ${label}: caret after the composed text`);
 }

@@ -1,5 +1,6 @@
 //! Local API operations, called inside the BTCC read or writer lane.
 mod canon;
+pub mod canon_conversation;
 mod outbox;
 pub(super) use outbox::append as outbox;
 mod queue;

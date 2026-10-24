@@ -4,6 +4,7 @@ import { shellRegistrationAllowed as profileAllowsShellRegistration } from "./sh
 import * as desktopShell from "./desktop-shell.mjs";
 import { watchStorageCorrection } from "./app-storage-correction.mjs";
 import { isLifecycleWindow } from "./lifecycle-window.mjs";
+import { defaultWindowBounds } from "./window-bounds.mjs";
 import { prepareStartupRetry, restoreLaunchServerEnvironment } from "./app-relaunch-context.mjs";
 import { isStartupWindow, startupPending, configureStartupActions, startupStage, startupTiming, startupTimings, failStartup, waitForStartupRenderer, completeStartup } from "./startup-window.mjs";
 import { createUiCrashStore } from "./ui-crash-store.mjs";
@@ -21,6 +22,7 @@ import {
   nativeImage,
   nativeTheme,
   protocol,
+  screen,
   session,
   shell,
 } from "electron";
@@ -128,6 +130,7 @@ import {
 } from "./cache-budget-runtime.mjs";
 import { createSessionFolderLauncher } from "./session-folder-launch.mjs";
 import { registerLogsExport } from "./logs-export.mjs";
+import { registerOpenMessageFile } from "./open-message-file.mjs";
 import { createBrowserHost } from "./browser/host-channel.mjs";
 import { isSecuritySenderOrigin, readAppLocalAdmin, requestSecurityRoute } from "./app-security-admin.mjs";
 import { clearAppOwnedData, relaunchAfterFullReset, requestFullReset } from "./app-full-reset.mjs";
@@ -2229,10 +2232,12 @@ async function createWindow() {
     userBrowser.onState = () => browserHost.changed();
     userBrowser.pullCredential = (token, origin) => browserHost.credential(token, origin);
     userBrowser.pullVault = (token, origin, frameOrigins) => browserHost.vault(token, origin, frameOrigins);
-    userBrowser.saveSignIn = (payload) => requestSecurityRoute({ route: "saveSignIn", body: { payload } }, {
+    const signInRoute = (input) => requestSecurityRoute(input, {
       ensureReady: ensureServer, fetch, serverUrl, authHeaders: appLocalAuthHeaders,
       adminCredential: readAppLocalAdmin({ butlerData: butlerDataRoot }),
     });
+    userBrowser.saveSignIn = (payload) => signInRoute({ route: "saveSignIn", body: { payload } });
+    userBrowser.signInStoreAvailable = async () => (await signInRoute({ route: "listSignIns" }))?.data?.available === true;
     userBrowser.downloadRequest = async input => {
       const response = await appServerFetch("/internal/browser-host/downloads", { method: "POST",
         headers: { "content-type": "application/json", "x-butler-admin": await readAppLocalAdmin({ butlerData: butlerDataRoot }) }, body: JSON.stringify(input) });
@@ -2254,14 +2259,14 @@ async function createWindow() {
     rendererUrl = await testRendererConnection(serverUrl, appServerFetch);
     rendererOrigin = rendererOriginForUrl(rendererUrl);
   }
+  const bounds = defaultWindowBounds(screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea);
   const win = new BrowserWindow({
     show: false,
-    width: 960,
-    height: 710,
+    ...bounds,
     // Width: the compact Browser toolbar's minimum (nav, narrow address, More, insets).
     // Height: the new-chat hero and first suggestion row need 480 or more above the composer.
-    minWidth: 344,
-    minHeight: 480,
+    minWidth: Math.min(344, bounds.width),
+    minHeight: Math.min(480, bounds.height),
     title: appDisplayName,
     icon: appIconForWindow(),
     frame: isLinux ? false : undefined,
@@ -2867,6 +2872,13 @@ registerLogsExport({
   readUiCrashes: () => uiCrashStore.read(),
   isTrustedSender: (event) => event.sender === mainWindow?.webContents,
   saveLabel: async () => getDesktopCopy(await readDesktopLanguage()).save,
+});
+
+registerOpenMessageFile({
+  ipcMain,
+  serverFetch: appServerFetch,
+  openPath: desktopShell.openPath,
+  isTrustedSender: (event) => event.sender === mainWindow?.webContents,
 });
 
 ipcMain.handle("butler:save-message-file", async (_event, input = {}) => {

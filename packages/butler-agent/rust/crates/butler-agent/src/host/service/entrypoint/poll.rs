@@ -27,7 +27,7 @@ pub(super) struct PollOwners<'a> {
     pub(super) queue: Arc<butler_gateway::gateway::InboundQueue>,
     pub(super) progress: Arc<ProgressPublisher>,
     pub(super) config: &'a ServiceConfiguration,
-    pub(super) subsessions: &'a butler_turn::btcc::SqliteSubsessionRepository,
+    pub(super) subsessions: &'a Arc<butler_turn::btcc::SubsessionService>,
     pub(super) parent_client: &'a butler_log::http::Client,
     pub(super) app_endpoint: &'a ActiveAppEndpoint,
     pub(super) readiness: &'a ServiceReadiness,

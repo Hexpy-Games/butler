@@ -47,6 +47,7 @@ pub(in crate::gateway::http) async fn route(
         Handler::Output => content::view(state, request).await,
         Handler::Security => security_settings::route(state, request).await,
         Handler::Hooks => hooks::route(state, request).await,
+        Handler::OpenedFiles => opened_files::route(state, request).await,
         Handler::Settings if request.method() == Method::GET => {
             settings::get(state, Some(client)).await
         }
@@ -68,6 +69,7 @@ async fn commands(
     uri: &Uri,
 ) -> Result<Response, HttpError> {
     match handler {
+        Handler::CanonSidebar => canon_sidebar::route(state, request, uri).await,
         Handler::WorkModel => work_model::route(state, request, uri).await,
         Handler::TaskGraphs => task_graphs::route(state, request, uri).await,
         Handler::Subsessions => required(subsessions::route(state, request, uri).await?),

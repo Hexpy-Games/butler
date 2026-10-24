@@ -22,6 +22,14 @@ inputs:
     description: Optional nextest test thread count.
     required: false
     default: ""
+  workspace:
+    description: Without an archive, select test binaries from the workspace build.
+    required: false
+    default: "false"
+  build-version-ref:
+    description: GITHUB_REF_NAME the workspace build used, so its build scripts stay fresh.
+    required: false
+    default: ""
   release-profile:
     description: Build and run the E2E tests with Cargo's release profile.
     required: false
@@ -123,6 +131,8 @@ runs:
         FILTER_FILE: ${{ inputs.filter-file }}
         TEST_THREADS: ${{ inputs.test-threads }}
         RELEASE_PROFILE: ${{ inputs.release-profile }}
+        WORKSPACE: ${{ inputs.workspace }}
+        BUILD_VERSION_REF: ${{ inputs.build-version-ref }}
         EXCLUDE_PERF: ${{ inputs.exclude-perf }}
         ENFORCE_BUDGETS: ${{ inputs.enforce-budgets }}
         TEST_SUCCESS_OUTPUT: ${{ inputs.success-output }}
@@ -172,6 +182,15 @@ runs:
           echo "::error::release-profile must be true or false"
           exit 2
         fi
+        if [ -n "$BUILD_VERSION_REF" ]; then export GITHUB_REF_NAME="$BUILD_VERSION_REF"; fi
+        # Building one package can unify features differently from the workspace build.
+        nextest_package_args=(-p butler-e2e)
+        if [ "$WORKSPACE" = 'true' ]; then
+          nextest_package_args=(--workspace --all-targets)
+        elif [ "$WORKSPACE" != 'false' ]; then
+          echo "::error::workspace must be true or false"
+          exit 2
+        fi
         nextest_partition_args=()
         if [ -n "$PARTITION" ]; then
           nextest_partition_args=(--partition "hash:$PARTITION")
@@ -200,7 +219,7 @@ runs:
         else
           set +e
           python3 "$isolate" cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
-            run ${nextest_profile_args[@]+"${nextest_profile_args[@]}"} --locked --no-fail-fast --retries 0 -p butler-e2e \
+            run ${nextest_profile_args[@]+"${nextest_profile_args[@]}"} --locked --no-fail-fast --retries 0 "${nextest_package_args[@]}" \
             ${nextest_partition_args[@]+"${nextest_partition_args[@]}"} \
             ${nextest_threads_args[@]+"${nextest_threads_args[@]}"} \
             ${nextest_success_output_args[@]+"${nextest_success_output_args[@]}"} \

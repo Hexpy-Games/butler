@@ -50,6 +50,9 @@ outputs:
   electron:
     description: Selected electron inputs
     value: ${{ steps.paths.outputs.electron }}
+  tool-e2e:
+    description: PR changes the tool-call path
+    value: ${{ steps.paths.outputs.tool-e2e }}
   licenses:
     description: Selected licenses inputs
     value: ${{ steps.paths.outputs.licenses }}

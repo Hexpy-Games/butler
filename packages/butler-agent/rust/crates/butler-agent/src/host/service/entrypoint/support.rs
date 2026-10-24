@@ -11,10 +11,11 @@ use crate::host::{AgentRuntime, ServiceConfiguration, SystemIdentity};
 
 pub(super) async fn deliver_parent_results(
     client: &butler_log::http::Client,
-    repository: &butler_turn::btcc::SqliteSubsessionRepository,
+    subsessions: &butler_turn::btcc::SubsessionService,
     base: &str,
     auth: &butler_gateway::gateway::LocalAuthConfig,
 ) -> Result<bool, BtccError> {
+    let repository = subsessions.repository();
     let mut retry_pending = false;
     for pending in repository
         .pending_parent_inputs()
@@ -48,13 +49,9 @@ pub(super) async fn deliver_parent_results(
             retry_pending = true;
             continue;
         }
-        repository
-            .mark_delivered(
-                pending.result_id,
-                ModelConfigurationClock::now_iso(&SystemIdentity),
-            )
-            .await
-            .map_err(|error| failure(error.code(), error.message()))?;
+        #[cfg(feature = "e2e-fixtures")]
+        super::result_hold::before_delivered().await?;
+        subsessions.mark_result_delivered(pending.result_id).await?;
     }
     Ok(retry_pending)
 }

@@ -19,7 +19,7 @@ PR = dict(number=7, head=dict(ref='feat/change', sha='a' * 40, repo=dict(full_na
 RUN = dict(id=9, workflow_id=4, status='completed', conclusion='failure', head_sha='b' * 40,
            event='push', head_branch='main', path='.github/workflows/rust-quality.yml',
            head_repository=dict(full_name=REPO), html_url='https://github.com/owner/repo/actions/runs/9')
-ISSUE = dict(state='open', user=dict(login='github-actions[bot]'), body=f'<!-- main-ci-range:green:{RUN["head_sha"]} -->\n'
+ISSUE = dict(number=1037, state='open', user=dict(login='github-actions[bot]'), body=f'<!-- main-ci-range:green:{RUN["head_sha"]} -->\n'
                   '<!-- workflow:4 -->evidence<!-- /workflow:4 -->')
 
 
@@ -35,19 +35,21 @@ class MainGate(unittest.TestCase):
 
     # test-category: pure-logic
     def test_passing_and_failing_main(self):
-        self.assertEqual(self.evaluate([dict(RUN, conclusion='success')])[0], 0)
-        result, output, command = self.evaluate([RUN])
+        for pr in [PR, dict(PR, body='Related #1037')]:
+            self.assertEqual(self.evaluate([dict(RUN, conclusion='success')], pr)[0], 0)
+        with patch.object(gate, 'api', return_value=[ISSUE]):
+            result, output, command = self.evaluate([RUN])
         self.assertEqual(result, 1)
-        self.assertEqual(len(output.splitlines()), 1)
-        for text in [RUN['html_url'], 'fix/revert-pr-*', 'ci:main-fix', 'open main-failure issue']:
-            self.assertIn(text, output)
+        self.assertEqual(output, f'Main is failing ({RUN["html_url"]}), so only fixes for #1037 '
+                         'or `ci:main-fix` PRs can merge.\n')
         command.assert_called_once()
         self.assertIn('per_page=100', command.call_args.args[2])
         self.assertNotIn('--paginate', command.call_args.args)
 
     # test-category: pure-logic
     def test_cancelled_latest_falls_back_and_new_success_clears_failure(self):
-        self.assertEqual(self.evaluate([dict(RUN, id=10, conclusion='cancelled'), RUN])[0], 1)
+        with patch.object(gate, 'api', return_value=[]):
+            self.assertEqual(self.evaluate([dict(RUN, id=10, conclusion='cancelled'), RUN])[0], 1)
         self.assertEqual(self.evaluate([dict(RUN, id=10, conclusion='success'), RUN])[0], 0)
 
     # test-category: pure-logic
@@ -64,56 +66,79 @@ class MainGate(unittest.TestCase):
             command.assert_not_called()
 
     # test-category: security
-    def test_reporter_issue_bypass_checks_open_marker_and_author(self):
-        pr = dict(PR, body='Fixes https://github.com/owner/repo/issues/1037')
-        for issue, expected in [(ISSUE, 0), (dict(ISSUE, state='closed'), 1),
-                                (dict(ISSUE, body='Main CI failure'), 1),
+    def test_fix_must_close_current_reporter_issue(self):
+        fix = dict(PR, head=dict(PR['head'], ref='fix/main-red'), body='Fixes #1037')
+        for issue, expected in [(ISSUE, 0), (dict(ISSUE, body='Main CI failure'), 1),
                                 (dict(ISSUE, body=ISSUE['body'].replace(RUN['head_sha'], 'stale')), 1),
                                 (dict(ISSUE, body=ISSUE['body'].replace('workflow:4', 'workflow:5')), 1),
                                 (dict(ISSUE, user=dict(login='someone')), 1),
                                 (dict(ISSUE, pull_request={"url": "pr"}), 1)]:
-            with patch.object(gate, 'api', return_value=issue) as api:
-                self.assertEqual(self.evaluate([RUN], pr)[0], expected)
-                api.assert_called_once_with('repos/owner/repo/issues/1037')
-        with patch.object(gate, 'api', return_value=ISSUE):
-            self.assertEqual(self.evaluate([RUN], dict(PR, body='Fixes #1037'))[0], 0)
-        with patch.object(gate, 'api') as api:
-            self.assertEqual(self.evaluate([RUN], dict(PR, body='https://github.com/other/repo/issues/1'))[0], 1)
-            api.assert_not_called()
+            with self.subTest(issue=issue), patch.object(gate, 'api', return_value=[issue]) as api:
+                self.assertEqual(self.evaluate([RUN], fix)[0], expected)
+                api.assert_called_once_with('repos/owner/repo/issues?state=open'
+                                            '&creator=github-actions%5Bbot%5D&per_page=100')
+        with patch.object(gate, 'api', return_value=[ISSUE]):
+            for body in ['Closes https://github.com/owner/repo/issues/1037', 'Resolves owner/repo#1037']:
+                self.assertEqual(self.evaluate([RUN], dict(fix, body=body))[0], 0)
+            self.assertEqual(self.evaluate([RUN], dict(fix, body='Fixes #1036'))[0], 1)
+
+    # test-category: security
+    def test_related_or_mention_never_passes(self):
+        fix = dict(PR, head=dict(PR['head'], ref='fix/main-red'))
+        cases = [dict(PR, body='Related #1037'), dict(PR, body='Fixes #1037'),
+                 dict(fix, body='Related #1037'), dict(fix, body='Part of #1037'),
+                 dict(fix, body='see #1037'), dict(fix, body='`Fixes #1037`'),
+                 dict(fix, body='Fixes #1037\nRelated #1037')]
+        with patch.object(gate, 'api', return_value=[ISSUE]):
+            for pr in cases:
+                with self.subTest(pr=pr):
+                    result, output, _ = self.evaluate([RUN], pr)
+                    self.assertEqual(result, 1)
+                    self.assertEqual(output.strip(), f'Main is failing ({RUN["html_url"]}), so only fixes '
+                                     'for #1037 or `ci:main-fix` PRs can merge.')
+
+    # test-category: security
+    def test_revert_title_closing_current_issue_passes(self):
+        revert = dict(PR, head=dict(PR['head'], ref='chore/undo'), title='Revert "feat: change"')
+        with patch.object(gate, 'api', return_value=[ISSUE]):
+            self.assertEqual(self.evaluate([RUN], dict(revert, body='Fixes #1037'))[0], 0)
+            self.assertEqual(self.evaluate([RUN], dict(revert, body='Related #1037'))[0], 1)
 
     # test-category: security
     def test_fork_revert_branch_does_not_bypass(self):
         pr = dict(PR, head=dict(PR['head'], ref='fix/revert-pr-7-abc',
                                repo=dict(full_name='fork/repo')))
-        self.assertEqual(self.evaluate([RUN], pr)[0], 1)
+        with patch.object(gate, 'api', return_value=[ISSUE]):
+            self.assertEqual(self.evaluate([RUN], pr)[0], 1)
 
     # test-category: security
     def test_failed_issue_lookup_is_not_a_bypass(self):
-        errors = [subprocess.CalledProcessError(1, ['gh', 'api'], stderr='HTTP 404'),
+        fix = dict(PR, head=dict(PR['head'], ref='fix/main-red'), body='Fixes #1037')
+        errors = [subprocess.CalledProcessError(1, ['gh', 'api'], stderr='HTTP 503'),
                   OSError('unavailable'), ValueError('invalid JSON')]
         for error in errors:
             with self.subTest(error=error), patch.object(gate, 'api', side_effect=error):
-                result, output, _ = self.evaluate([RUN], dict(PR, body='see #999999'))
+                result, output, _ = self.evaluate([RUN], fix)
                 self.assertEqual(result, 1)
                 self.assertNotIn('::warning::', output)
-        with patch.object(gate, 'api', side_effect=[errors[0], ISSUE]):
-            self.assertEqual(self.evaluate([RUN], dict(PR, body='see #999999 and #1037'))[0], 0)
+                self.assertIn('only fixes for the main-failure issue or `ci:main-fix`', output)
 
     # test-category: security
     def test_issue_must_match_each_failing_workflow(self):
+        fix = dict(PR, head=dict(PR['head'], ref='fix/main-red'), body='Fixes #1037')
         with patch.object(gate, 'main_workflows', return_value=['site.yml', 'rust-quality.yml']), \
              patch.object(gate, 'latest_main_run', side_effect=[RUN, dict(RUN, workflow_id=5)]), \
-             patch.object(gate, 'api', return_value=ISSUE):
-            self.assertEqual(gate.main_gate(dict(pull_request=dict(PR, body='see #1037')),
-                                            REPO, 'pull_request'), 1)
+             patch.object(gate, 'api', return_value=[ISSUE]):
+            self.assertEqual(gate.main_gate(dict(pull_request=fix), REPO, 'pull_request'), 1)
 
     # test-category: security
     def test_current_workflow_failing_sha_evidence(self):
         issue = dict(ISSUE, body='<!-- main-ci-range:green:older -->\n<!-- workflow:4 -->'
                      f'Workflow green baseline: `green` → `{RUN["head_sha"]}`'
                      '<!-- /workflow:4 -->')
-        with patch.object(gate, 'api', return_value=issue):
-            self.assertEqual(self.evaluate([RUN], dict(PR, body='see #1037'))[0], 0)
+        fix = dict(PR, head=dict(PR['head'], ref='fix/main-red'), body='Fixes #1037')
+        with patch.object(gate, 'api', return_value=[issue]):
+            self.assertEqual(self.evaluate([RUN], fix)[0], 0)
 
     # test-category: pure-logic
     def test_api_error_warns_and_passes(self):
@@ -139,7 +164,8 @@ class MainGate(unittest.TestCase):
     # test-category: pure-logic
     def test_every_workflow_is_checked_independently(self):
         with patch.object(gate, 'main_workflows', return_value=['site.yml', 'rust-quality.yml']), \
-             patch.object(gate, 'latest_main_run', side_effect=[dict(RUN, conclusion='success'), RUN]) as baseline:
+             patch.object(gate, 'latest_main_run', side_effect=[dict(RUN, conclusion='success'), RUN]) as baseline, \
+             patch.object(gate, 'api', return_value=[]):
             self.assertEqual(gate.main_gate(dict(pull_request=PR), REPO, 'pull_request'), 1)
             self.assertEqual(baseline.call_count, 2)
 

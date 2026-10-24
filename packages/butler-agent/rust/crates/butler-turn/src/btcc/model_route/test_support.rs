@@ -269,6 +269,7 @@ pub(super) fn request<'a>(
 pub(super) fn result(text: &str) -> ModelRoundResult {
     ModelRoundResult {
         nonfinal: false,
+        output_truncated: false,
         reasoning_summary: None,
         text: Some(text.into()),
         tool_calls: vec![],

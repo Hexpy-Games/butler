@@ -19,6 +19,12 @@ if ($Mode -eq 'Export') {
     if ($env:BUTLER_E2E_TIER -ne 'stub') { throw 'Compiled Windows verification requires BUTLER_E2E_TIER=stub' }
     # Requirement modules describe the target binary, independently of the harness build profile.
     $selection = if ($WithoutE2eFixtures) { @('--skip', '::requires_e2e_fixtures::') } else { @() }
+    # Hosted %TEMP% is on the C: OS disk, whose sync stalls (20 s seen) exceed hang waits.
+    # Keep sandboxes on the RUNNER_TEMP disk with HOME and BUTLER_DATA.
+    $env:TMP = Join-Path $env:PREVIEW_ROOT 'tmp'
+    $env:TEMP = $env:TMP
+    New-Item -ItemType Directory -Force $env:TMP | Out-Null
+    $fixtures = Join-Path $env:TMP 'butler-e2e'
     foreach ($test in $Tests) {
         $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
         $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
@@ -37,6 +43,9 @@ if ($Mode -eq 'Export') {
         $testCode = $LASTEXITCODE
         $ErrorActionPreference = 'Stop'
         if ($null -eq $savedPerf) { Remove-Item Env:BUTLER_E2E_PERF -ErrorAction SilentlyContinue } else { $env:BUTLER_E2E_PERF = $savedPerf }
+        if ($testCode -ne 0 -and (Test-Path $fixtures)) {
+            . "$PSScriptRoot/windows-job-tree.ps1"; Copy-JobTree $fixtures "$env:PREVIEW_ROOT/logs/failures"
+        }
         if ($testCode -ne 0) {
             & "$PSScriptRoot/windows-test-log.ps1" -Log $log
             throw "E2E failed: $test ($testCode)"

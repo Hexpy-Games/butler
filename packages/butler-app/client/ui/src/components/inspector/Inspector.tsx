@@ -1,3 +1,6 @@
+import { useEffect, useState } from "react";
+import { useActiveCanonEpic } from "../canon/useActiveCanonEpic.ts";
+import { EpicInspector } from "../canon/EpicInspector.tsx";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
 import { useAppLocale } from "@/app/copy.ts";
 import type { ReactElement } from "react";
@@ -36,14 +39,26 @@ export function Inspector({ id }: InspectorProps = {}) {
   const status = useButlerStore((state) => state.status);
   const summary = useButlerStore((state) => state.summary);
   const developerMode = useDeveloperMode();
-  const activeTab = visibleInspectorTab(
+  const epic = useActiveCanonEpic();
+  const sessionId = useButlerStore(state => state.activeChatId);
+  const savedTab = visibleInspectorTab(
     useButlerStore((state) => state.rightTab),
     developerMode,
   );
+  const activeTab = savedTab === "epic" && !epic ? "summary" : epic && savedTab === "automations" ? "epic" : savedTab;
   const setRightTab = useButlerStore((state) => state.setRightTab);
   const setView = useButlerStore((state) => state.setView);
   const controlWorker = useButlerStore((state) => state.controlWorker);
   const isOpen = useButlerStore(selectEffectiveRightOpen);
+  const view = useButlerStore(state => state.view);
+  const selectedEpic = view.kind === "project-dashboard" && view.epicId ? view : null;
+  // Retain the closing content while the mounted DS shell slides out, like chat.
+  const [lastDashboardEpic, setLastDashboardEpic] = useState(selectedEpic);
+  useEffect(() => { if (selectedEpic) setLastDashboardEpic(selectedEpic); }, [selectedEpic]);
+  const dashboardEpic = selectedEpic ?? (view.kind === "project-dashboard" && lastDashboardEpic?.projectId === view.projectId
+    ? lastDashboardEpic : null);
+
+  useEffect(() => { if (epic) setRightTab("epic"); }, [sessionId, epic?.epic.id, setRightTab]);
 
   const tabs: Array<[string, string, ReactElement]> = [
     ["summary", appCopy.inspector.tabs.summary, <ListFilter size="md" />],
@@ -53,47 +68,29 @@ export function Inspector({ id }: InspectorProps = {}) {
     ["automations", appCopy.inspector.tabs.automations, <Clock3 size="md" />],
     ["workers", appCopy.inspector.tabs.workers, <Blocks size="md" />],
   ];
+  if (epic) {
+    tabs.unshift(["epic", appCopy.canon.epic, <FileText size="md" />]);
+    tabs.splice(tabs.findIndex(([id]) => id === "automations"), 1);
+  }
 
-  return (
-    <InspectorShell
-      activeTab={activeTab}
-      id={id}
-      open={isOpen}
-      tabs={tabs
-        .filter(([id]) => visibleInspectorTab(id, developerMode) === id)
-        .map(([id, label, icon]) => ({ id, label, icon }))}
-      onTabChange={setRightTab}
-    >
-      <ErrorBoundary key={activeTab} scope={`inspector-${activeTab}`}>
-        {activeTab === "summary" && (
-          <SummaryPanel
-            developerMode={developerMode}
-            status={status}
-            summary={summary}
-          />
-        )}
-        {activeTab === "tasks" && <TasksPanel />}
-        {activeTab === "context" && (
-          <ContextPanel context={summary?.context_details} />
-        )}
-        {activeTab === "artifacts" && (
-          <ArtifactsPanel artifacts={summary?.artifacts ?? []} />
-        )}
-        {activeTab === "automations" && (
-          <AutomationTargetsPanel
-            automations={summary?.automation_targets ?? []}
-            onOpenAutomation={(automationId) =>
-              setView({ kind: "automation-detail", automationId })
-            }
-          />
-        )}
-        {activeTab === "workers" && (
-          <WorkersPanel
-            workers={summary?.worker_activity ?? []}
-            onWorkerControl={controlWorker}
-          />
-        )}
-      </ErrorBoundary>
-    </InspectorShell>
-  );
+  if (view.kind === "project-dashboard") return <InspectorShell activeTab="epic" id={id} open={isOpen} onTabChange={setRightTab}
+    tabs={[{ id: "epic", label: appCopy.canon.epic, icon: <FileText size="md" /> }]}>
+    {dashboardEpic && <ErrorBoundary key={dashboardEpic.epicId} scope="inspector-epic">
+      <EpicInspector focusTitle={isOpen} key={dashboardEpic.epicId} projectId={dashboardEpic.projectId} epicId={dashboardEpic.epicId!} />
+    </ErrorBoundary>}
+  </InspectorShell>;
+
+  return <InspectorShell activeTab={activeTab} id={id} open={isOpen} onTabChange={setRightTab}
+    tabs={tabs.filter(([id]) => visibleInspectorTab(id, developerMode) === id).map(([id, label, icon]) => ({ id, label, icon }))}>
+    <ErrorBoundary key={activeTab} scope={`inspector-${activeTab}`}>
+      {activeTab === "epic" && epic && <EpicInspector key={epic.epic.id} projectId={epic.projectId} epicId={epic.epic.id} />}
+      {activeTab === "summary" && <SummaryPanel developerMode={developerMode} status={status} summary={summary} />}
+      {activeTab === "tasks" && <TasksPanel />}
+      {activeTab === "context" && <ContextPanel context={summary?.context_details} />}
+      {activeTab === "artifacts" && <ArtifactsPanel artifacts={summary?.artifacts ?? []} />}
+      {activeTab === "automations" && <AutomationTargetsPanel automations={summary?.automation_targets ?? []}
+        onOpenAutomation={automationId => setView({ kind: "automation-detail", automationId })} />}
+      {activeTab === "workers" && <WorkersPanel workers={summary?.worker_activity ?? []} onWorkerControl={controlWorker} />}
+    </ErrorBoundary>
+  </InspectorShell>;
 }

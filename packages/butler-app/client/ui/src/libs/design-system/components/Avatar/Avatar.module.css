@@ -1,0 +1,131 @@
+/* A circle the size of an icon column (16 / 20 / 24px) holding one initial.
+   The root box is exactly the size token; the badge hangs off its corner.
+   Fills are opaque (tinted raised surface), so the initial keeps its
+   contrast over glass and wallpaper as well as on plain surfaces. */
+.avatar {
+  --avatar-size: var(--icon-size-md);
+  --avatar-badge-size: var(--icon-size-xs);
+
+  position: relative;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  box-sizing: border-box;
+  width: var(--avatar-size);
+  height: var(--avatar-size);
+  border-radius: var(--radius-pill);
+  background: color-mix(
+    in srgb,
+    var(--text-primary) 6%,
+    var(--color-surface-raised-opaque)
+  );
+  box-shadow: inset 0 0 0 var(--border-hairline) var(--line);
+  color: var(--text-secondary);
+  vertical-align: middle;
+}
+
+.avatar[data-size="sm"] {
+  --avatar-size: var(--icon-size-lg);
+  --avatar-badge-size: var(--icon-size-sm);
+}
+
+.avatar[data-size="md"] {
+  --avatar-size: var(--icon-size-xl);
+  --avatar-badge-size: var(--icon-size-sm);
+}
+
+/* Someone else: a light accent tint, so "mine" and "theirs" read apart. */
+.avatar[data-tone="other"] {
+  background: color-mix(
+    in srgb,
+    var(--accent) 12%,
+    var(--color-surface-raised-opaque)
+  );
+  box-shadow: inset 0 0 0 var(--border-hairline)
+    color-mix(in srgb, var(--accent) 24%, transparent);
+  color: var(--accent-text);
+}
+
+/* The badge overhangs the end edge; this margin keeps that overhang (and
+   its ring) inside a clipping parent, such as a truncating row label,
+   without growing the circle. */
+.avatar:has(> .badge) {
+  margin-inline-end: calc(
+    var(--avatar-badge-size) / 2 + var(--border-hairline)
+  );
+}
+
+.initials {
+  font-size: calc(var(--avatar-size) * 9 / 16);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--avatar-size);
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* Center the letter itself (cap height), not the font's ascent box. */
+@supports (text-box: trim-both cap alphabetic) {
+  .initials {
+    text-box: trim-both cap alphabetic;
+  }
+}
+
+/* Corner mark: an opaque disc with a hairline ring, so the glyph reads on
+   any row fill, card or wallpaper. It hangs below the circle only as far as
+   the surrounding text line allows (at most a quarter of its size), so a row
+   label that clips its overflow never cuts it; 1lh is the line height the
+   avatar inherits from its row or title. */
+.badge {
+  position: absolute;
+  inset-inline-end: calc(var(--avatar-badge-size) / -2);
+  bottom: clamp(
+    calc(var(--avatar-badge-size) / -4),
+    calc((var(--avatar-size) - 1lh) / 2 + var(--border-hairline)),
+    0px
+  );
+  display: grid;
+  place-items: center;
+  width: var(--avatar-badge-size);
+  height: var(--avatar-badge-size);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-raised-opaque);
+  box-shadow: 0 0 0 var(--border-hairline) var(--line);
+  color: var(--text-primary);
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: none;
+  /* Transitions, so a badge that returns mid-exit reverses in place. */
+  transition:
+    opacity var(--motion-base) var(--motion-ease-decelerate),
+    transform var(--motion-base) var(--motion-ease-decelerate);
+}
+
+.badge > svg,
+.badge > img {
+  display: block;
+  width: calc(var(--avatar-badge-size) * 3 / 4);
+  height: calc(var(--avatar-badge-size) * 3 / 4);
+}
+
+/* Enter: a small pop. Reduced motion sets the scale token to 1 (a fade). */
+@starting-style {
+  .badge[data-state="open"] {
+    opacity: 0;
+    transform: scale(var(--motion-scale-check));
+  }
+}
+
+.badge[data-state="closed"] {
+  opacity: 0;
+  transform: scale(var(--motion-scale-check));
+  transition:
+    opacity var(--motion-exit-base) var(--motion-ease-accelerate),
+    transform var(--motion-exit-base) var(--motion-ease-accelerate);
+}
+
+@media (forced-colors: active) {
+  .avatar,
+  .badge {
+    border: var(--border-hairline) solid CanvasText;
+  }
+}

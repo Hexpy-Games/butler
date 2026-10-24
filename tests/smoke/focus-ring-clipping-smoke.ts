@@ -1,7 +1,8 @@
 // test-category: race
 // Focus rings are never clipped. The built app's real shell (VisualHarness:
 // product Sidebar, Conversation with answer cards and the agent tab rail, new
-// chat, browser, command palette, menus, Settings) over an offline gateway
+// chat, browser, command palette, menus, Settings, plus the drag-enabled
+// KanbanBoard story of the DS viewer) over an offline gateway
 // stub; no model calls, no native agent. Run `npm --prefix
 // packages/butler-app/client/ui run build` first (`bun run app:focus-ring:smoke`).
 //
@@ -15,6 +16,7 @@
 // Light and dark, wallpaper and plain, desktop and phone width.
 //
 // BUTLER_FOCUS_RING_SHOTS=<dir> saves a capture of each clipped stop.
+import { canonFocusResponse } from "../support/canon-sidebar-fixture.ts";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, normalize, sep } from "node:path";
@@ -218,8 +220,16 @@ async function auditScrolledFades(page: Page, cell: Cell, screen: string, scope:
 async function auditCell(page: Page, cell: Cell) {
   await open(page, cell);
   await openSidebar(page);
+  await page.locator('[data-test-class="canon-sidebar-group"]').first().waitFor();
   // Sidebar: top items, favorites, the spaces tree, nested rows and groups.
   await auditScope(page, cell, "sidebar", '[data-test-class="app-sidebar"]', 200);
+  await capture(page, `sidebar-${cell.width}-${cell.theme}-${cell.background}`);
+  await page.locator('[data-canon-group="focus-plan"] [data-test-class="canon-sidebar-group"]').click({ button: "right" });
+  await page.getByRole("menuitem", { name: copy.canon.overview, exact: true }).click();
+  await page.locator('[data-test-class="canon-plan-epics"]').waitFor();
+  await auditScope(page, cell, "plan-overview", '[data-test-class="canon-plan-overview"]', 80);
+  await capture(page, `plan-overview-${cell.width}-${cell.theme}-${cell.background}`);
+  await open(page, cell);
   // Conversation: answer cards' buttons, the agent tab rail and the composer.
   if (cell.width < 768) await page.keyboard.press("Escape");
   await auditScope(page, cell, "conversation", '[data-test-class~="conversation"]', 160);
@@ -254,6 +264,10 @@ async function auditCell(page: Page, cell: Cell) {
   await page.locator('[data-test-class~="settings-view"]').waitFor();
   await auditScope(page, cell, "settings", '[data-test-class~="settings-view"]', 160);
   await auditUsage(page, cell);
+  // A drag-enabled KanbanBoard (DS viewer story): a wide lane and two sideways-scrolling boards of cards.
+  await page.goto(`${base}?visual=design-system&page=blocks/KanbanBoard&theme=${cell.theme}&locale=ko`);
+  await page.locator('[data-slot="kanban-drag-scope"] [data-kanban-item]').first().waitFor();
+  await auditScope(page, cell, "kanban-drag-board", '[data-slot="kanban-drag-scope"]', 40);
 }
 
 /** Settings › Usage with a delegating chat selected (linked split rows, the chart), then the context popover. */
@@ -294,6 +308,8 @@ try {
     }
     const file = distFile(url.pathname);
     if (file) return route.fulfill({ contentType: types[extname(file)] ?? "application/octet-stream", body: readFileSync(file) });
+    const canon = canonFocusResponse(url.pathname);
+    if (canon !== undefined) return route.fulfill({ json: { ok: true, data: canon } });
     // The gateway: just what the harness reads, offline.
     if (/^\/sessions\/[^/]+\/controls$/u.test(url.pathname)) return route.fulfill({ json: { ok: true, data: { session_id: "butler-client",
       revision: 0, catalog_generation: "harness-model-catalog-v1", controls: { model: "openai/gpt-6-luna", reasoning_effort: "none", access_mode: "full_access", plan_mode: false } } } });

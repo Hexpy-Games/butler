@@ -1,3 +1,4 @@
+import { CANON_COPY } from "./canon.ts";
 import { TASK_GRAPH_COPY } from "./task-graph.ts";
 import { lifecycleCopy } from "../lifecycle.ts";
 import { additionalToolLabels } from "./tool-labels-en.ts";
@@ -304,10 +305,12 @@ function englishProjectFallbackSuggestions(
 
 export const enUsCopy: AppCopy = {
   shell: { footerNav: "Updates and settings", update: { downloading: "Downloading update", working: "Preparing update", ready: "Update ready", failed: "Update failed", restart: "Restart" } },
+  canon: CANON_COPY["en-US"],
   taskGraph: TASK_GRAPH_COPY["en-US"],
   lifecycle: lifecycleCopy.en,
   browser: {
     contextMenu: nativeContextMenuCopy("en-US"),
+    siteData: { title: "Site data", label: "Cookies and cache", description: "Signs you out of every site. Saved sign-ins stay.", clear: "Clear", confirmTitle: "Clear cookies and cache?", confirmMessage: "You'll be signed out of every site in Butler's browser.", items: "To clear", itemList: "Cookies and site data\nCached images and files", kept: "Saved sign-ins, payment methods, history and bookmarks stay.", cleared: "Cookies and cache cleared", failed: "Couldn't clear", desktopOnly: "Only available in the desktop app" },
     history: { erase: "Clear", title: "History", search: "Search history", clear: "Clear browsing history", butlerOnly: "Visited by Butler", empty: "No visits", hour: "Last hour", today: "Today", week: "Last 7 days", all: "All time", suggestions: "Address suggestions" },
     tabCount: "Tabs: {count}", tabMoved: "{title}: {group}, position {position}", agentControl: "Butler is browsing", handBack: "Give back to Butler", stills: "Step images", still: "Browser step", stillFailure: {"dialog_pending": "Dialog open", "dispatch_interrupted": "Input interrupted", "timeout": "Input timed out", "stills_disabled": "Step images off", "document_changed": "Page changed", "capture_unavailable": "Capture unavailable", "capture_failed": "Capture failed", "pixels_not_captured": "Image not captured", "file_deleted": "Image removed", "control_changed": "Control changed", "browser_host_lost": "Browser disconnected", "gateway_restarted": "Butler restarted"}, stillPending: "Saving image", stillUnavailable: "Image unavailable",
     title: "Browser", myTabs: "My tabs", newTab: "New tab", closeTab: "Close tab", address: "Address", addressPlaceholder: "Search or enter URL",
@@ -318,7 +321,7 @@ export const enUsCopy: AppCopy = {
     pick: "Pick elements", scrap: "Scrap", bookmarks: "Bookmarks", bookmarkAdd: "Add bookmark", bookmarked: "Bookmarked",
     manageBookmarks: "Manage bookmarks", downloads: "Downloads", downloading: "Downloading", showInFolder: "Show in folder", more: "More",
     findInPage: "Find in page", zoom: "Zoom", print: "Print", openExternal: "Open in default browser", settings: "Browser settings",
-    secure: "Secure connection", notSecure: "Not secure", butlerOutput: "Butler output", preview: "Preview", signedIn: "Signed in", signinRequired: "Sign-in needs you", captcha: "CAPTCHA", signinForm: "Sign-in page", saveSignIn: "Save sign-in", signinSaved: "Sign-in saved", later: "Not now",
+    secure: "Secure connection", notSecure: "Not secure", butlerOutput: "Butler output", preview: "Preview", signedIn: "Signed in", signinRequired: "Sign-in needs you", captcha: "CAPTCHA", signinForm: "Sign-in page", saveSignIn: "Save sign-in", signinSaved: "Sign-in saved", signinSaveFailed: "Couldn't save sign-in", later: "Not now",
     agentUsing: "Butler is browsing", takeOver: "Take over", userControl: "You're in control", butlerWaits: "Butler is waiting",
     giveBack: "Give back to Butler", autoGiveBack: "Returns to Butler when you leave", stopTask: "Stop task", stopped: "Task stopped",
     waiting: "Waiting for approval", review: "Review", needYou: "Your input needed", keypad: "Security keypad", mfa: "Two-step verification",
@@ -397,11 +400,10 @@ export const enUsCopy: AppCopy = {
     sessionUnconfirmed: "Conversation link unconfirmed",
     reviewed: "Review recorded", disposition: "Disposition recorded", result: "Tool result registered",
     reported: "Published reply", historyLedgerUnavailable: "Project record history is unavailable. Showing delivered conversation replies only.", linkedResults: (count) => `${count} published artifacts`,
-    currentPlan: "Active plan", disconnected: "Disconnected. Showing the last observed state.",
+    disconnected: "Disconnected. Showing the last observed state.",
     reportQuestion: "Ask about this report and its unverified points",
-    parentWork: "Parent Work", allWork: "All Work",
     periodDays: (days) => `Last ${days} days`, statisticsZone: (zone) => `Calendar days in ${zone}`,
-    boardKind: "Board type", period: "Period", statisticsKind: "Count by", materialsView: "Materials view",
+    period: "Period", statisticsKind: "Count by", materialsView: "Materials view",
     briefing: "From the project records", suggestions: "Worth exploring next", briefingPending: "Summarizing the selected records. You can keep browsing or start a conversation.",
     briefingUnavailable: "A summary is unavailable. The project records and conversation composer are still available.",
     summarized: "Summary of selected records, not a new verification", addToComposer: "Ask about this",
@@ -414,10 +416,10 @@ export const enUsCopy: AppCopy = {
     created: "Created", updated: "Updated", recordedCompletion: "Completion recorded", noHistory: "No records yet.",
     description: "Project description", editDescription: "Edit description", pin: "Pin material", unpin: "Unpin material",
     wallpaper: "Wallpaper",
-    overview: "Overview", work: "Work", materials: "Materials", history: "History", statistics: "Statistics",
+    overview: "Overview", work: "Work", board: "Board", materials: "Materials", history: "History", statistics: "Statistics",
     position: "Project status", remaining: "Remaining work", completed: "Execution completed", open: "Open work",
     blocked: "Blocked work", abandoned: "Abandoned work", unknown: "Unverified work", registered: "Registered work",
-    noWork: "No work has been registered yet.", unbound: "No project records are linked to this project.",
+    unbound: "No project records are linked to this project.",
     unavailable: "Project records are unavailable. Completion has not been inferred.",
     noRemaining: "No remaining work is recorded.", tasks: "Child Tasks", recorded: "Based on registered work", loadMore: "Show more",
   },
@@ -944,6 +946,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     },
     stoppedStatus: "Stopped",
     attachmentUnavailable: "Attachment unavailable",
+    attachmentFileType: "File",
     fileChanges: {
       regionLabel: "Changed files",
       title: "File changes",
@@ -1277,6 +1280,9 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     save: "Save",
     saved: "Artifact saved",
     saveFailed: "Could not save artifact",
+    openInApp: "Open in app",
+    openInAppBlocked: "This type can't open",
+    openInAppFailed: "Could not open file",
     loading: "Loading artifact",
     unsupported: "This artifact cannot be previewed in the app",
     loadFailed: "Could not load artifact",

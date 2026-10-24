@@ -10,6 +10,8 @@ use butler_e2e::e2e::{
 };
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
+mod startup;
+
 const TITLE: &str = "Planning a Simple Reply";
 
 pub(super) async fn start(name: &str) -> Result<(Scenario, String), HarnessError> {

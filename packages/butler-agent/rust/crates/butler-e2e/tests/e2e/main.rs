@@ -13,6 +13,7 @@ mod agent_import;
 mod alias_index_drop;
 mod answer_blocks;
 mod anthropic_cache;
+mod anthropic_output_limit;
 mod anthropic_requests;
 mod anthropic_thinking_history;
 mod app_admission_history;
@@ -118,6 +119,7 @@ mod metric_retention;
 mod migration;
 mod model_thinking;
 mod monitoring_history;
+mod nfd_paths;
 mod onboarding;
 mod onboarding_form;
 mod outbox_identity;
@@ -250,6 +252,7 @@ mod acceptance_payload_perf;
 mod storage_correction;
 
 mod session_titles;
+mod smart_groups;
 #[path = "storage_correction/seed.rs"]
 mod storage_correction_seed;
 

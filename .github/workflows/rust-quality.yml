@@ -92,6 +92,7 @@ jobs:
       fixtures: ${{ needs.changes.outputs.tier == 'integration' || github.event_name != 'pull_request' }}
       ort-mode: prebuilt-ort
       smoke-in-place: ${{ github.event_name == 'pull_request' }}
+      tool-e2e: ${{ needs.changes.outputs.tool-e2e == 'true' }}
 
   linux-perf-archive:
     permissions:
@@ -394,7 +395,9 @@ jobs:
         run: python3 .github/scripts/isolated.py python3 .github/scripts/work-docs-lint.py
       - name: Validate workflow selection invariants
         working-directory: ${{ github.workspace }}
-        run: python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-changes.py
+        run: |
+          python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-changes.py
+          python3 .github/scripts/isolated.py python3 .github/scripts/test-ci-tool-path.py
       - name: Validate main failure follow-up
         working-directory: ${{ github.workspace }}
         run: |

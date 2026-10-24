@@ -1208,6 +1208,7 @@ export interface SessionViewBridgeInput {
 }
 
 export interface SessionViewBridgeError {
+  current?: { revision: number };
   hook_reason?: string;
   schema: "butler.app.bridge-error.v1";
   code: string;
@@ -1731,7 +1732,8 @@ export type AppView =
   | { kind: "settings"; section: SettingsSectionId }
   | { kind: "automations" }
   | { kind: "automation-detail"; automationId: string }
-  | { kind: "project-dashboard"; projectId: string };
+  | { kind: "project-dashboard"; projectId: string; epicId?: string }
+  | { kind: "plan-overview"; projectId: string; planId: string | null };
 
 export interface CommandPaletteResult {
   schedule?: CalendarSchedule | null;
