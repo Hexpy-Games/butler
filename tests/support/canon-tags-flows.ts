@@ -102,7 +102,9 @@ async function duplicateFlow(page: Page, server: NativeAppServerHandle, projectI
   const response = await tagRequest(page, "POST", `/projects/${projectId}/canon/tags`,
     () => popover.getByRole("button", { name: "‘Bug’ 만들기", exact: true }).click(), 409);
   assert.equal((await response.json()).error.code, "tag_exists");
-  await page.getByRole("dialog", { name: "색 바꾸기", exact: true }).getByRole("button", { name: "취소", exact: true }).click();
+  // The existing tag is selected as it is; no color edit opens for it.
+  await dialog.locator(fieldSelector).getByRole("button", { name: "bug 태그 메뉴", exact: true }).waitFor();
+  assert.equal(await page.getByRole("dialog", { name: "색 바꾸기", exact: true }).count(), 0);
   const created = await tagRequest(page, "POST", `/projects/${projectId}/canon/epics`,
     () => dialog.getByRole("button", { name: "만들기", exact: true }).click(), 201);
   assert.deepEqual((await created.json()).data.tags.map((tag: CanonTag) => tag.id), [bug.id]);

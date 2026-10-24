@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { deleteCanonTag, editCanonTag, getCanon, type CanonTag, type CanonTagColor } from "@/app/canonApi.ts";
 import { apiErrorCode } from "@/app/api.ts";
+import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { Button, ButtonContainer, Dialog, DialogContent, DialogForm, Field, FieldLabel, Input, Stack, TagColorSwatches } from "@/butler-ds";
 import { canonWriteFailure } from "./canonFeedback.ts";
-export const canonTagColorLabels = { gray: "회색", red: "빨강", orange: "주황", yellow: "노랑", green: "초록", teal: "청록", blue: "파랑", purple: "보라" };
 export type TagAction = "rename" | "color" | "delete";
 export function CanonTagManageDialog({ tag, action, onClose, onRefresh, onDeleted }: {
   tag: CanonTag; action: TagAction; onDeleted: () => void; onClose: () => void; onRefresh: () => Promise<void>;
 }) {
+  useAppLocale();
+  const copy = appCopy.canon.tags;
   const [name, setName] = useState(tag.name), [color, setColor] = useState<CanonTagColor>(tag.color);
   const [count, setCount] = useState<number | null>(null), [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -33,18 +35,18 @@ export function CanonTagManageDialog({ tag, action, onClose, onRefresh, onDelete
   };
   const deleting = action === "delete";
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose(); }}>
-    <DialogContent size="sm" closeLabel="닫기" aria-describedby={undefined}>
+    <DialogContent size="sm" closeLabel={appCopy.canon.close} aria-describedby={undefined}>
       <Stack onSubmit={event => event.stopPropagation()}>
-      <DialogForm dialog title={deleting ? `‘${tag.name}’ 태그를 지울까요?` : action === "rename" ? "이름 바꾸기" : "색 바꾸기"}
-        description={deleting ? count === null ? "불러오는 중" : `과제 ${count}개에서 빠집니다` : undefined}
+      <DialogForm dialog title={deleting ? copy.deleteTitle(tag.name) : action === "rename" ? copy.rename : copy.recolor}
+        description={deleting ? count === null ? copy.loading : copy.deleteDetail(count) : undefined}
         busy={busy} onSubmit={() => void submit()} footer={<ButtonContainer size="sm" justify="end">
-          <Button size="sm" type="button" variant="ghost" disabled={busy} onClick={onClose}>취소</Button>
+          <Button size="sm" type="button" variant="ghost" disabled={busy} onClick={onClose}>{appCopy.canon.cancel}</Button>
           <Button size="sm" type="submit" variant={deleting ? "destructive" : "default"}
-            disabled={busy || (deleting ? count === null : !name.trim())}>{deleting ? "삭제" : "저장"}</Button>
+            disabled={busy || (deleting ? count === null : !name.trim())}>{deleting ? copy.remove : appCopy.canon.save}</Button>
         </ButtonContainer>}>
-        {action === "rename" && <Field><FieldLabel htmlFor="canon-tag-name">태그 이름</FieldLabel>
+        {action === "rename" && <Field><FieldLabel htmlFor="canon-tag-name">{copy.name}</FieldLabel>
           <Input id="canon-tag-name" value={name} maxLength={32} onChange={event => setName(event.target.value)} /></Field>}
-        {action === "color" && <TagColorSwatches value={color} onValueChange={setColor} labels={canonTagColorLabels} ariaLabel="태그 색" />}
+        {action === "color" && <TagColorSwatches value={color} onValueChange={setColor} labels={copy.colors} ariaLabel={copy.color} />}
       </DialogForm>
       </Stack>
     </DialogContent>
