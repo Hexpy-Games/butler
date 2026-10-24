@@ -1355,7 +1355,7 @@ export interface AppCopy {
     };
     updateErrors: Record<"download" | "damaged" | "incompatible" | "storage" | "apply" | "generic", string>;
     pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "fullReset" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "agentImport" | "paymentMethods" | "profiles" | "purchaseSites", string>;
-    pageSectionDescriptions: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "learning" | "grants", string>;
+    pageSectionDescriptions: Record<"instructions" | "chatMemory" | "memoryCleanup" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "learning" | "grants", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     grants: {
       kind: Record<"command" | "fileWrite" | "network" | "tool" | "other", string>;
@@ -1387,6 +1387,10 @@ export interface AppCopy {
       storageLabel: string; freeSpaceDescription: string;
       resetChatLabel: string; resetChatDescription: string; resetProfileLabel: string; resetProfileDescription: string;
       resetProjectLabel: string; resetProjectDescription: string;
+      pickTime: string; runNowLabel: string; runNowDescription: string; runNow: string; running: string;
+      consolidationDone: string; consolidationFailed: string;
+      lastRun: (when: string) => string; lastRunFailed: (when: string) => string; neverRun: string;
+      today: string; yesterday: string;
       ago: (age: string) => string;
       freeing: (bytes: string) => string; freed: (bytes: string) => string;
       freeStopped: (bytes: string) => string; freeCancelled: (bytes: string) => string;
@@ -1499,6 +1503,7 @@ export interface AppCopy {
       butlerModel: string;
       butlerReasoning: string;
       consolidationModel: string;
+      consolidationTime: string;
       localReasoningBudget: string;
       contextLimit: string;
       /** Settings → General → Default permission: the new-chat field. */
@@ -1611,6 +1616,7 @@ export interface AppCopy {
       language: string;
       timezone: string;
       consolidationModel: string;
+      consolidationTime: string;
       consolidationModelDefault: string;
       localReasoningBudget: string;
       wallpaper: string;

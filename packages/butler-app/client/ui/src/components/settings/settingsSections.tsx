@@ -23,6 +23,7 @@ import type {
   SettingsSectionGroupId,
 } from "./settingsTypes";
 import { visibleSettingsSectionIds } from "./settingsSectionIds";
+import { settingsSearchAliases } from "./settingsSearch";
 
 function createSettingsSectionMap(
   settingsCopy: SettingsCopy,
@@ -35,7 +36,7 @@ function createSettingsSectionMap(
     id,
     label,
     description: settingsCopy.sectionDescriptions[id],
-    aliases: settingsCopy.sectionAliases[id],
+    aliases: settingsSearchAliases(settingsCopy, id),
     icon,
   });
 
@@ -118,43 +119,6 @@ export function createSettingsSectionGroups(
   }));
 }
 
-function normalizeSettingsSearchValue(value: string): string {
-  return value.trim().toLocaleLowerCase("en-US");
-}
-
-function matchesSettingsSearchValue(value: string, query: string): boolean {
-  return normalizeSettingsSearchValue(value).includes(query);
-}
-
-export function matchesSettingsSection(
-  section: SettingsSectionDescriptor,
-  query: string,
-  fallback: string[] = [],
-): boolean {
-  const normalizedQuery = normalizeSettingsSearchValue(query);
-  return [section.label, section.description, ...section.aliases, ...fallback]
-    .some((value) => matchesSettingsSearchValue(value, normalizedQuery));
-}
-
-export function filterSettingsSectionGroups(
-  groups: SettingsSectionGroupDescriptor[],
-  query: string,
-): SettingsSectionGroupDescriptor[] {
-  const normalizedQuery = normalizeSettingsSearchValue(query);
-  if (!normalizedQuery) return groups;
-
-  return groups
-    .map((group) => {
-      if (matchesSettingsSearchValue(group.label, normalizedQuery)) return group;
-
-      return {
-        ...group,
-        sections: group.sections.filter((section) =>
-          matchesSettingsSection(section, normalizedQuery),
-        ),
-      };
-    })
-    .filter((group) => group.sections.length > 0);
-}
+export { matchesSettingsSection, filterSettingsSectionGroups } from "./settingsSearch";
 
 export { settingsPageSchema, type SettingsSectionSchema } from "./settingsPageSchema";
