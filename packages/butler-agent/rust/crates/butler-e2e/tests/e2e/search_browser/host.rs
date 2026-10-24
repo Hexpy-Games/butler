@@ -4,16 +4,15 @@ use butler_e2e::e2e::{HarnessError, security::AdminClient};
 use reqwest::Method;
 use serde_json::{Value, json};
 use std::{
-    sync::{LazyLock, Mutex, atomic::AtomicUsize},
+    sync::{Arc, Mutex, atomic::AtomicUsize},
     time::Duration,
 };
 
-/// Every browser call frame the host received, in order.
-pub(super) static LOG: LazyLock<Mutex<Vec<Value>>> = LazyLock::new(Mutex::default);
-/// The most `tab.open` frames that were pending at once.
-pub(super) static PARALLEL_OPENS: AtomicUsize = AtomicUsize::new(0);
-
 pub(crate) struct Host {
+    /// Every browser call frame this host received, in order.
+    pub(super) log: Arc<Mutex<Vec<Value>>>,
+    /// The most `tab.open` frames pending at once on this host.
+    pub(super) parallel_opens: Arc<AtomicUsize>,
     stream: reqwest::Response,
     buffer: String,
     admin: AdminClient,
@@ -35,6 +34,8 @@ impl Host {
             .await?;
         assert_eq!(stream.status(), 200);
         Ok(Self {
+            log: Arc::default(),
+            parallel_opens: Arc::default(),
             stream,
             buffer: String::new(),
             admin,
@@ -95,7 +96,7 @@ impl Host {
             if op.starts_with("use.") || frame["id"].is_null() {
                 continue;
             }
-            LOG.lock().unwrap().push(frame.clone());
+            self.log.lock().unwrap().push(frame.clone());
             if op == "tab.open" {
                 opens.push(frame);
                 if opens.len() == 3 {
@@ -109,7 +110,8 @@ impl Host {
     }
 
     async fn open_all(&mut self, opens: Vec<Value>) -> Result<(), HarnessError> {
-        PARALLEL_OPENS.fetch_max(opens.len(), std::sync::atomic::Ordering::SeqCst);
+        self.parallel_opens
+            .fetch_max(opens.len(), std::sync::atomic::Ordering::SeqCst);
         for frame in &opens {
             let id = format!("t{}", self.tabs.len() + 1);
             self.tabs.push(json!({"id":id,"owner":format!("conversation:{}",frame["session"].as_str().unwrap()),

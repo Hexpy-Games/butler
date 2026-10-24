@@ -84,8 +84,12 @@ pub(super) const ASK_FIRST_WRITES: &[&str] = &[
 ];
 pub(super) const STEWARD_PARENT: &[&str] =
     &["delegate_to_steward", "steer_steward", "cancel_steward"];
-pub(super) const WORKER_DELEGATION: &[&str] =
-    &["delegate_to_worker", "steer_worker", "wait_for_worker"];
+pub(super) const WORKER_DELEGATION: &[&str] = &[
+    "delegate_to_worker",
+    "steer_worker",
+    "wait_for_worker",
+    "read_prior_delegation",
+];
 /// Tools every legacy surface shows.
 pub(super) const LEGACY_BASE: [&str; 21] = [
     "deliver_files",
