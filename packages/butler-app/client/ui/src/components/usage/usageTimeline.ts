@@ -1,6 +1,7 @@
+import { compactTokens } from "./compactTokens";
 import { appCopy, getAppLocale } from "@/app/copy";
 import type { UsageMonitorView } from "@/app/types";
-import { bucketUsageSlots, formatUsageTokens, type UsageBarsEmphasis, type UsageBarsSegment, type UsageBarsSeries } from "@/butler-ds";
+import { bucketUsageSlots, type UsageBarsEmphasis, type UsageBarsSegment, type UsageBarsSeries } from "@/butler-ds";
 
 export function usageSeries(): UsageBarsSeries[] {
   const copy = appCopy.composer.usage;
@@ -12,7 +13,7 @@ export function usageSeries(): UsageBarsSeries[] {
 }
 
 export function usageTokens(value: number): string {
-  return formatUsageTokens(value, getAppLocale());
+  return compactTokens(value, getAppLocale());
 }
 
 export function usageClock(value: number): string {

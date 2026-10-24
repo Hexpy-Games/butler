@@ -129,6 +129,17 @@ async fn use_01_subscription_turn_reports_quota_usage_and_cost() -> Result<(), H
     let setup = Setup::new("USE-01")?.cassette("USE-01");
     super::memory_fixture::initialize_empty(&setup.sandbox.data)?;
     let mut s = setup.start().await?;
+    let registered =
+        s.gw.post(
+            "/model-catalog/registered-models",
+            json!({
+                "provider_id":s.model.provider(), "model_id":s.model.model,
+                "auth_type":"chatgpt_oauth"
+            }),
+        )
+        .await?;
+    assert!(registered.status < 300, "{}", registered.text);
+
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
     let (turn_id, turn) = s.turn("general", PROMPT).await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
