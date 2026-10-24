@@ -96,7 +96,7 @@ async fn image_model_settings_are_durable_and_separate_from_chat() -> Result<(),
     assert_eq!(view.data()["selected"]["credential_id"], credential);
     assert_eq!(view.data()["selected"]["default_quality"], "high");
     let chat = s.gw.get("/model-catalog").await?;
-    assert_eq!(chat.status, 201, "{}", chat.text);
+    assert_eq!(chat.status, 200, "{}", chat.text);
     for image in models {
         let id = image["model_ref"].as_str().unwrap();
         assert!(
