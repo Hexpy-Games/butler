@@ -46,6 +46,10 @@ pub struct ProcessUsage {
     pub proportional_bytes: Option<u64>,
     /// macOS physical footprint, excluding clean file-backed mappings.
     pub footprint_bytes: Option<u64>,
+    /// Memory this process alone holds, excluding clean file-backed pages such
+    /// as the executable's code: macOS physical footprint, Linux anonymous plus
+    /// swapped pages. Absent elsewhere.
+    pub private_bytes: Option<u64>,
     /// Bytes returned by reads, including reads satisfied by the OS cache.
     pub read_chars: Option<u64>,
     /// Bytes fetched from storage, excluding OS cache hits. Windows supplies
@@ -73,6 +77,9 @@ pub fn sample(pid: u32) -> io::Result<Option<ProcessUsage>> {
             resident_bytes: counter(&memory, "Rss")? * 1024,
             proportional_bytes: Some(counter(&memory, "Pss")? * 1024),
             footprint_bytes: None,
+            private_bytes: Some(
+                (counter(&memory, "Anonymous")? + counter(&memory, "Swap")?) * 1024,
+            ),
             read_chars: Some(counter(&io, "rchar")?),
             read_bytes: counter(&io, "read_bytes")?,
             write_chars: Some(counter(&io, "wchar")?),
@@ -91,6 +98,7 @@ pub fn sample(pid: u32) -> io::Result<Option<ProcessUsage>> {
             resident_bytes: usage.ri_resident_size,
             proportional_bytes: None,
             footprint_bytes: Some(usage.ri_phys_footprint),
+            private_bytes: Some(usage.ri_phys_footprint),
             read_chars: None,
             read_bytes: usage.ri_diskio_bytesread,
             write_chars: None,
@@ -121,6 +129,7 @@ pub fn sample(pid: u32) -> io::Result<Option<ProcessUsage>> {
             resident_bytes: process.memory(),
             proportional_bytes: None,
             footprint_bytes: None,
+            private_bytes: None,
             read_chars: Some(disk.total_read_bytes),
             read_bytes: disk.total_read_bytes,
             write_chars: Some(disk.total_written_bytes),

@@ -42,9 +42,11 @@ jobs:
         working-directory: packages/butler-agent/rust
         shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
     env:
-      BUTLER_E2E_PROVIDER: openai-subscription
-      BUTLER_E2E_MODEL: openai/gpt-6-luna@max
-      BUTLER_E2E_MODEL_MATRIX: openai/gpt-6-luna@max
+      # The live provider and model are `live-e2e` environment variables, so
+      # switching providers is a settings change; an API-key provider's key
+      # is the `BUTLER_E2E_API_KEY` secret.
+      BUTLER_E2E_PROVIDER: ${{ vars.BUTLER_E2E_LIVE_PROVIDER }}
+      BUTLER_E2E_MODEL: ${{ vars.BUTLER_E2E_LIVE_MODEL }}
       BUTLER_E2E_LIVE_MAX_TURNS: "40"
     steps:
       - uses: actions/checkout@v4
@@ -59,19 +61,26 @@ jobs:
         env:
           API_KEY_SECRET: ${{ secrets.BUTLER_E2E_API_KEY }}
         run: |
+          if (-not $env:BUTLER_E2E_PROVIDER) { Write-Output '::error::Set the live-e2e variable BUTLER_E2E_LIVE_PROVIDER'; exit 1 }
+          if (-not $env:BUTLER_E2E_MODEL) { Write-Output '::error::Set the live-e2e variable BUTLER_E2E_LIVE_MODEL'; exit 1 }
+          Write-Output "Live provider: $env:BUTLER_E2E_PROVIDER, model: $env:BUTLER_E2E_MODEL"
           $authDir = Join-Path $HOME '.butler-e2e-auth/auth'
           $profile = Join-Path $authDir 'chatgpt.json'
-          if (Test-Path -LiteralPath $profile -PathType Leaf) {
+          if ($env:BUTLER_E2E_PROVIDER -ne 'openai-subscription') {
+            if (-not $env:API_KEY_SECRET) {
+              Write-Output '::error::Set the live-e2e secret BUTLER_E2E_API_KEY'
+              exit 1
+            }
+            Write-Output "::add-mask::$env:API_KEY_SECRET"
+            @('BUTLER_E2E_API_KEY_ENV=BUTLER_E2E_API_KEY_VALUE',
+              "BUTLER_E2E_API_KEY_VALUE=$env:API_KEY_SECRET") | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          } elseif (Test-Path -LiteralPath $profile -PathType Leaf) {
             # Use the runner's registration in place; never copy rotating tokens.
             Write-Output "::add-mask::$authDir"
             Write-Output 'Persistent ChatGPT sign-in exists'
             "BUTLER_E2E_CHATGPT_AUTH_DIR=$authDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          } elseif ($env:API_KEY_SECRET) {
-            Write-Output "::add-mask::$env:API_KEY_SECRET"
-            @('BUTLER_E2E_PROVIDER=openai', 'BUTLER_E2E_API_KEY_ENV=BUTLER_E2E_API_KEY_VALUE',
-              "BUTLER_E2E_API_KEY_VALUE=$env:API_KEY_SECRET") | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           } else {
-            Write-Output '::error::Live E2E requires credentials. One-time setup: butler auth login --data "$HOME\.butler-e2e-auth"'
+            Write-Output '::error::openai-subscription requires a one-time setup: butler auth login --data "$HOME\.butler-e2e-auth"'
             exit 1
           }
           'available=true' | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
