@@ -37,7 +37,10 @@ try {
   const scroll = page.locator('[data-test-class="sidebar-scroll"]');
   const source = page.locator('[data-tree-item^="g:"]:visible').first();
   await source.waitFor();
-  await page.waitForTimeout(250);
+  // Scroll-driven animations follow scroll position, not time, and never finish.
+  await page.waitForFunction(() => document.getAnimations().every(animation =>
+    animation.timeline !== document.timeline || animation.effect?.getTiming().iterations === Infinity ||
+      animation.playState !== "running"));
   const sourceKey = await source.getAttribute("data-tree-item");
   assert(sourceKey);
   const from = await source.boundingBox();
@@ -48,36 +51,50 @@ try {
   await page.mouse.move(from.x + 45, from.y + 38, { steps: 8 });
   await page.mouse.move(area.x + 90, area.y + area.height - 12, { steps: 15 });
   const downBefore = await scroll.evaluate((element) => element.scrollTop);
-  await page.waitForTimeout(800);
+  // Resting at the bottom edge scrolls down and pages in more groups.
+  await page.waitForFunction((before) => {
+    const element = document.querySelector<HTMLElement>('[data-test-class="sidebar-scroll"]');
+    return element && element.scrollTop > before && document.querySelectorAll('[data-tree-item^="g:"]').length > 30;
+  }, downBefore);
   const downAfter = await scroll.evaluate((element) => element.scrollTop);
   const loaded = await page.locator('[data-tree-item^="g:"]').count();
-  assert(downAfter > downBefore, `downward auto scroll: ${downBefore} -> ${downAfter}`);
-  assert(loaded > 30, `drag paging: ${loaded} groups`);
   const sticky = await page.locator('[data-test-class="sidebar-sticky-header"]').boundingBox();
   assert(sticky);
   await page.mouse.move(area.x + 90, sticky.y + sticky.height + 8, { steps: 30 });
-  await page.waitForTimeout(200);
   await page.mouse.move(area.x + 91, sticky.y + sticky.height + 8);
   const upBefore = await scroll.evaluate((element) => element.scrollTop);
-  await page.waitForTimeout(650);
+  // Resting below the sticky header scrolls back up.
+  await page.waitForFunction((before) =>
+    document.querySelector<HTMLElement>('[data-test-class="sidebar-scroll"]')!.scrollTop < before, upBefore);
   const upAfter = await scroll.evaluate((element) => element.scrollTop);
-  assert(upAfter < upBefore, `upward auto scroll: ${upBefore} -> ${upAfter}`);
   await page.mouse.move(area.x + 90, area.y + area.height - 12, { steps: 30 });
   await page.waitForFunction(() => {
     const element = document.querySelector<HTMLElement>('[data-test-class="sidebar-scroll"]');
-    return element && element.scrollHeight - element.clientHeight - element.scrollTop < 2;
+    return element && element.scrollHeight - element.clientHeight - element.scrollTop < 2
+      && document.querySelectorAll('[data-tree-item^="g:"]').length === 45;
   });
   const target = page.locator('[data-tree-item^="g:"]').last();
   const targetKey = await target.getAttribute("data-tree-item");
-  const targetRow = await target.locator('[data-test-class="tree-row"]').boundingBox();
+  const header = target.locator('[data-test-class="tree-row"]');
+  const targetRow = await header.boundingBox();
   assert(targetKey && targetRow);
   await page.mouse.move(targetRow.x + 25, targetRow.y + 2, { steps: 12 });
-  await page.waitForTimeout(100);
+  // A resting OS drag keeps sending dragover; Playwright sends one per move, so nudge the
+  // pointer, following the row while the list finishes scrolling.
+  for (let step = 0, deadline = Date.now() + 30_000; await target.getAttribute("data-drop") !== "before"; step++) {
+    assert(Date.now() < deadline, "drop slot before the last folder never appeared");
+    const row = await header.boundingBox();
+    assert(row);
+    await page.mouse.move(row.x + 25, row.y + 2 + step % 2);
+  }
   await page.mouse.up();
-  await page.waitForTimeout(500);
-  const order = (await navigation()).space.nodes.filter(node => node.parentKey === null)
+  const rootOrder = async () => (await navigation()).space.nodes.filter(node => node.parentKey === null)
     .sort((a, b) => a.position - b.position).map(node => node.key);
-  assert.equal(order.indexOf(sourceKey), order.indexOf(targetKey) - 1);
+  // The drop lands the folder right before the last one.
+  for (let order = await rootOrder(), deadline = Date.now() + 30_000;
+    order.indexOf(sourceKey) !== order.indexOf(targetKey) - 1; order = await rootOrder()) {
+    assert(Date.now() < deadline, `dropped folder order: ${JSON.stringify(order)}`);
+  }
   console.log(JSON.stringify({ downBefore, downAfter, upBefore, upAfter, loaded }));
   await page.close();
 } finally {

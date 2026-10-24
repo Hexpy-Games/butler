@@ -52,8 +52,8 @@ async function openSession(page: Page, name = title) {
 async function settleMedia(page: Page) {
   await page.waitForFunction(() => [...document.querySelectorAll("img")].every((image) => image.complete)
     && [...document.querySelectorAll("video")].every((video) => video.readyState >= 1 || video.error));
-  await page.evaluate(() => document.fonts.ready);
-  await page.waitForTimeout(400);
+  await page.evaluate(() => document.fonts.ready.then(() => new Promise<void>((done) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => done())))));
 }
 
 async function capture(page: Page, name: string) {
@@ -222,7 +222,6 @@ async function assertOwnerKeepsUnsavedPage(app: App, id: string, elsewhere: stri
   assert.ok((await tabs(app)).some((tab) => tab.id === id), "stay on ✕ keeps the tab");
   await app.call("navigate", { id, value: elsewhere });
   await answer(false);
-  await new Promise((done) => setTimeout(done, 500));
   assert.equal(await app.main(`${contents}.getURL()`), page, "stay on a navigation keeps the page");
   const leaving = app.call("close", { id });
   await answer(true);
@@ -279,14 +278,23 @@ async function assertVideoDeferred(browser: Browser, server: NativeAppServerHand
     await page.waitForFunction((selector) => document.querySelectorAll(`${selector} [data-slot="attachment-tile"]`).length === 11, row);
     const compact = page.locator('[data-slot="composer-compact-preview"]');
     if (await compact.isVisible()) await compact.click();
-    // Tiles in view load; give them time, so a stray video request would land too.
-    await page.waitForTimeout(1500);
+    // Once the tiles in view have loaded, a stray video request would have been made too.
+    await page.waitForFunction((selector) => {
+      const view = document.querySelector(selector)!.getBoundingClientRect();
+      return [...document.querySelectorAll<HTMLImageElement>(`${selector} img`)].every((image) => {
+        const box = image.getBoundingClientRect();
+        return image.complete || box.right <= view.left || box.left >= view.right;
+      });
+    }, row);
     assert.equal(videoResponses.length, 0, "a video tile out of view fetches nothing");
     assert.equal(await page.locator(`${row} [data-kind="video"] video`).count(), 0, "the out-of-view video tile shows its badge face only");
     await page.locator(row).evaluate((node) => { node.scrollLeft = node.scrollWidth; });
     await page.locator(`${row} [data-kind="video"] video`).waitFor({ state: "attached" });
     await waitBrowser(async () => videoResponses.length > 0, "the scrolled-in video tile loads");
-    await page.waitForTimeout(500);
+    await page.waitForFunction((selector) => {
+      const video = document.querySelector<HTMLVideoElement>(`${selector} [data-kind="video"] video`);
+      return Boolean(video && (video.readyState >= 2 || video.error));
+    }, row);
     assert.equal(videoResponses.length, 1, "scrolled near, the video tile loads its first frame once");
     console.log("Video tile out of view: no request; scrolled into view: one request: passed");
   } finally { await page.close(); }

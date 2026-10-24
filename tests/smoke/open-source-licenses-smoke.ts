@@ -36,12 +36,13 @@ try {
     const settings = page.getByRole("button", { name: copy.sidebar.settings, exact: true });
     await settings.click();
     await page.getByRole("button", { name: copy.settings.sections.about, exact: true }).click();
-    await page.waitForTimeout(1000);
+    const open = page.getByRole("button", { name: locale === "ko" ? "오픈소스 라이선스" : "Open source licenses", exact: true });
+    await open.waitFor();
     if (reads !== 0) throw new Error("Notices read before opening");
     await cdp.send("HeapProfiler.collectGarbage");
     const before = (await cdp.send("Runtime.getHeapUsage")).usedSize;
     const started = performance.now();
-    await page.getByRole("button", { name: locale === "ko" ? "오픈소스 라이선스" : "Open source licenses", exact: true }).click();
+    await open.click();
     const dialog = page.getByRole("dialog");
     const rows = dialog.locator("[data-test-class~=open-source-licenses] [data-slot=disclosure-row-title]");
     await page.waitForFunction((count) => document.querySelectorAll("[data-test-class~=open-source-licenses] [data-slot=disclosure-row-title]").length === count, catalog.components.length);
