@@ -128,8 +128,8 @@ pub(in crate::gateway::application) fn document(
     db: &Connection,
     id: &str,
 ) -> Result<(), AppStorageError> {
-    let row=db.query_row("SELECT id,owner_session_id,message_id,kind,mime_type,safe_name,size_bytes,sha256,storage_name,created_at,source_label,deliverable,title,width,height FROM message_files WHERE id=?1",[id],|r|Ok(super::super::AppMessageFileSnapshot {
-        id:r.get(0)?,owner_session_id:r.get(1)?,message_id:r.get(2)?,kind:r.get(3)?,mime_type:r.get(4)?,safe_name:r.get(5)?,size_bytes:r.get(6)?,sha256:r.get(7)?,storage_name:r.get(8)?,created_at:r.get(9)?,source_label:r.get(10)?,deliverable:r.get(11)?,title:r.get(12)?,width:r.get(13)?,height:r.get(14)?
+    let row=db.query_row("SELECT id,owner_session_id,message_id,kind,mime_type,safe_name,size_bytes,sha256,storage_name,created_at,source_label,deliverable,title FROM message_files WHERE id=?1",[id],|r|Ok(super::super::AppMessageFileSnapshot {
+        id:r.get(0)?,owner_session_id:r.get(1)?,message_id:r.get(2)?,kind:r.get(3)?,mime_type:r.get(4)?,safe_name:r.get(5)?,size_bytes:r.get(6)?,sha256:r.get(7)?,storage_name:r.get(8)?,created_at:r.get(9)?,source_label:r.get(10)?,deliverable:r.get(11)?,title:r.get(12)?
     })).map_err(AppStorageError::sqlite)?;
     let file = read_model::message_file_ref(&row)?;
     save(

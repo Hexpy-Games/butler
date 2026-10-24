@@ -170,18 +170,3 @@ pub(super) fn replace_still(
         created_at: file.created_at,
     })
 }
-
-/// Metadata has already been conditionally deleted by the App writer lane.
-pub(super) fn remove(root: &Path, id: &str) -> Result<(), GatewayApplicationError> {
-    if !valid_id(id) {
-        return Err(GatewayApplicationError::internal());
-    }
-    for suffix in ["", ".txt"] {
-        match fs::remove_file(root.join(format!("{id}{suffix}"))) {
-            Ok(()) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(internal(error)),
-        }
-    }
-    Ok(())
-}

@@ -133,9 +133,6 @@ impl AppArtifactMaterializer for AppMessageFiles {
 }
 
 impl AppMessageFileStorage for AppMessageFiles {
-    fn remove_original(&self, id: String) -> ApplicationFuture<()> {
-        self.run_file_job(move |root, _| upload::remove(root, &id))
-    }
     fn replace_browser_still(
         &self,
         file: AppMessageFileSnapshot,

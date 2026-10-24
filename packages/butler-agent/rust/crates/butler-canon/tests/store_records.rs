@@ -255,9 +255,8 @@ fn epic_creation_records_fields_without_a_synthetic_edit() {
                 json!({"title":"Plan"}),
             )
             .unwrap();
-            let description =
-                "Description ![](attachment:file-00000000-0000-0000-0000-000000000001)";
-            let mut input = json!({"title":"Title","description":description,"assignee":"person"});
+            let mut input =
+                json!({"title":"Title","description":"Description","assignee":"person"});
             if tagged {
                 input["tags"] = json!([tag["id"]]);
             }
@@ -266,7 +265,7 @@ fn epic_creation_records_fields_without_a_synthetic_edit() {
             }
             let epic =
                 write_api(&tx, &context(), api::Resource::CreateEpic, "project", input).unwrap();
-            assert_eq!(epic["description"], description);
+            assert_eq!(epic["description"], "Description");
             assert_eq!(epic["assignee"], "person");
             assert_eq!(epic["revision"], 1);
             assert_eq!(epic["tags"].as_array().unwrap().len(), usize::from(tagged));
@@ -311,12 +310,6 @@ fn epic_creation_records_fields_without_a_synthetic_edit() {
                     .map(|e| json!([e[0], e[1], e[2]]))
                     .collect::<Vec<_>>()
             );
-            for payload in events.iter().filter(|event| event["kind"] == "work") {
-                assert_eq!(
-                    payload["attachments"],
-                    json!(["file-00000000-0000-0000-0000-000000000001"])
-                );
-            }
             for payload in [&audits[0], &events[0]] {
                 if tagged {
                     assert_eq!(payload["tags"], epic["tags"]);

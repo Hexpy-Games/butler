@@ -2,15 +2,6 @@ use super::*;
 use crate::gateway::GatewayMutationCommands;
 
 impl GatewayMutationCommands for AppApplication {
-    fn upload_canon_file(
-        &self,
-        project: String,
-        input: AppFileUpload,
-    ) -> ApplicationFuture<crate::gateway::MessageFileRef> {
-        let this = self.clone_handle();
-        Box::pin(async move { super::canon::files::upload(&this, project, input).await })
-    }
-
     fn canon_sidebar(&self, project: String) -> ApplicationFuture<Value> {
         let app = self.clone_handle();
         Box::pin(async move { canon_sidebar::sidebar(&app, project).await })

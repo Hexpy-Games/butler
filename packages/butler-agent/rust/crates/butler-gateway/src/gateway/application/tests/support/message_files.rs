@@ -1,9 +1,6 @@
 use super::*;
 
 impl AppMessageFileStorage for Materializer {
-    fn remove_original(&self, _: String) -> ApplicationFuture<()> {
-        Box::pin(async { Ok(()) })
-    }
     fn replace_browser_still(
         &self,
         _: crate::gateway::AppMessageFileSnapshot,

@@ -9,7 +9,6 @@ use serde_json::json;
 struct Cursor {
     after: i64,
     prune: Option<i64>,
-    started: bool,
 }
 
 pub(in crate::gateway::application) fn start(app: &AppApplication) {
@@ -21,13 +20,7 @@ pub(in crate::gateway::application) fn start(app: &AppApplication) {
     let subscribers = app.subscribers.clone();
     let clock = app.dependencies.identity_clock.clone();
     let shutdown = app.dependencies.service_shutdown.clone();
-    let app = app.clone_handle();
     tokio::spawn(async move {
-        #[cfg(feature = "e2e-fixtures")]
-        if let Err(error) = super::hold(&app, "canon_relay_start").await {
-            tracing::error!(%error, "Canon relay startup barrier failed");
-            return;
-        }
         let mut cursor = Cursor::default();
         loop {
             changes.borrow_and_update();
@@ -44,7 +37,7 @@ pub(in crate::gateway::application) fn start(app: &AppApplication) {
                 let result = tokio::select! {
                     biased;
                     () = shutdown.cancelled() => return,
-                    result = drain(&app, &port, &storage, &subscribers, clock.as_ref(), &mut cursor) => result,
+                    result = drain(&port, &storage, &subscribers, clock.as_ref(), &mut cursor) => result,
                 };
                 let Err(error) = result else {
                     break;
@@ -70,14 +63,12 @@ pub(in crate::gateway::application) fn start(app: &AppApplication) {
     });
 }
 async fn drain(
-    app: &AppApplication,
     port: &Arc<dyn AppCanonPort>,
     storage: &super::super::storage::AppStorage,
     subscribers: &EventSubscribers,
     clock: &dyn AppIdentityClock,
     cursor: &mut Cursor,
 ) -> Result<(), GatewayApplicationError> {
-    let mut files_ready = app.canon_file_lifetimes.lock().await;
     loop {
         // Keep a failed cleanup pending across the bounded drain retry too.
         if let Some(last) = cursor.prune {
@@ -86,10 +77,6 @@ async fn drain(
         }
         let rows = port.unpublished(cursor.after).await?;
         if rows.is_empty() {
-            // Apply the durable outbox before expiring unsaved uploads after a crash.
-            super::files::sweep(app, !cursor.started).await?;
-            cursor.started = true;
-            *files_ready = true;
             return Ok(());
         }
         let last = rows.last().map(|r| r.seq).unwrap_or(cursor.after);
@@ -141,7 +128,6 @@ fn append_rows(
         }
         let mut payload = row.payload;
         super::public_sessions(db, &mut payload)?;
-        super::files::replace(db, &payload)?;
         if row.topic == "canon.changed" {
             let seq: i64 = db
                 .query_row(

@@ -2,7 +2,6 @@
 
 mod assets;
 pub(in crate::gateway::application) mod canon;
-pub(in crate::gateway::application) mod canon_files;
 mod canon_sidebar;
 mod core;
 mod library;
@@ -45,12 +44,9 @@ pub(super) fn migrate(
         "deliverable",
         "INTEGER NOT NULL DEFAULT 0",
     )?;
-    migration::ensure_column(connection, "message_files", "width", "INTEGER")?;
-    migration::ensure_column(connection, "message_files", "height", "INTEGER")?;
     library::create(connection)?;
     canon_sidebar::create(connection)?;
     canon::create(connection)?;
-    canon_files::create(connection)?;
     still_delivery::recover(connection)?;
     super::history::schema::create(connection)?;
     security::create(connection)?;

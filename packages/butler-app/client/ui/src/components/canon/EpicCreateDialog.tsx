@@ -1,4 +1,3 @@
-import { useEpicAttachments } from "./useEpicAttachments.tsx";
 import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { createCanonEpic, type CanonPlan, type EpicDetail, type EpicTag } from "@/app/canonApi.ts";
@@ -24,9 +23,8 @@ export function EpicCreateDialog({ projectId, plans, defaultPlanId = null, onClo
   const [plan, setPlan] = useState(defaultPlanId);
   const [assignee, setAssignee] = useState<string | null>(LOCAL_PERSON_ID);
   const [busy, setBusy] = useState(false);
-  const attachments = useEpicAttachments(projectId, description, setDescription, busy);
   const submit = async () => {
-    if (!title.trim() || busy || attachments.uploading) return;
+    if (!title.trim() || busy) return;
     setBusy(true);
     try {
       const epic = await createCanonEpic(projectId, { title: title.trim(), description, plan_id: plan, assignee, tags: tags.map(tag => tag.id) });
@@ -37,8 +35,8 @@ export function EpicCreateDialog({ projectId, plans, defaultPlanId = null, onClo
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose(); }}>
     <DialogContent size="md" closeLabel={appCopy.canon.close} aria-describedby={undefined}>
       <DialogForm dialog title={appCopy.canon.newEpic} busy={busy} onSubmit={() => void submit()}
-        footer={<CanonFormFooter title={title} busy={busy || attachments.uploading} submitLabel={appCopy.canon.create} onCancel={onClose} />}>
-        <CanonFormFields prefix="canon-create" title={title} description={description} onTitle={setTitle} onDescription={setDescription} attachmentControl={attachments.control} onDescriptionSelect={attachments.onSelect} />
+        footer={<CanonFormFooter title={title} busy={busy} submitLabel={appCopy.canon.create} onCancel={onClose} />}>
+        <CanonFormFields prefix="canon-create" title={title} description={description} onTitle={setTitle} onDescription={setDescription} />
         <CanonTagsField projectId={projectId} value={tags} onChange={setTags} disabled={busy} />
         <Grid columns="2" gap="md">
           <Field><FieldLabel htmlFor="canon-create-plan">{appCopy.canon.plan}</FieldLabel>

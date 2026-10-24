@@ -161,10 +161,6 @@ impl AppApplication {
             .await
             .map_err(app_error)?;
         self.collect_session_outputs(session).await?;
-        if permanent {
-            let _files = self.canon_file_lifetimes.lock().await;
-            super::super::canon::files::sweep(self, false).await?;
-        }
         Ok(result)
     }
 

@@ -16,7 +16,6 @@ static-ort = ["butler-memory/static-ort"]
 
 [dependencies]
 butler-log = { path = "../butler-log" }
-butler-canon = { path = "../butler-canon" }
 butler-core = { path = "../butler-core" }
 butler-platform = { path = "../butler-platform" }
 butler-turn = { path = "../butler-turn" }

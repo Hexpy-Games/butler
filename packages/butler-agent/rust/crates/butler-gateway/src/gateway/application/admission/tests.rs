@@ -18,7 +18,7 @@ fn retry_attachment_reuse_requires_the_exact_user_message_in_the_same_chat() {
                  id TEXT PRIMARY KEY,owner_session_id TEXT,message_id TEXT,kind TEXT,
                  mime_type TEXT,safe_name TEXT,size_bytes INTEGER,sha256 TEXT,
                  storage_name TEXT,created_at TEXT,title TEXT,source_label TEXT,
-                 width INTEGER,height INTEGER,deliverable INTEGER NOT NULL DEFAULT 0
+                 deliverable INTEGER NOT NULL DEFAULT 0
              );
              CREATE TABLE message_attachments(message_id TEXT,file_id TEXT,position INTEGER);
              INSERT INTO chats VALUES('general',NULL,0),('other',NULL,0);
@@ -27,8 +27,8 @@ fn retry_attachment_reuse_requires_the_exact_user_message_in_the_same_chat() {
                  ('other-user','general','user'),
                  ('foreign-user','other','user');
              INSERT INTO message_files VALUES
-                 ('source-file','general','source-user','generic','text/plain','source.txt',4,'hash-a','source','now',NULL,NULL,NULL,NULL,0),
-                 ('foreign-file','general','foreign-user','generic','text/plain','foreign.txt',4,'hash-b','foreign','now',NULL,NULL,NULL,NULL,0);
+                 ('source-file','general','source-user','generic','text/plain','source.txt',4,'hash-a','source','now',NULL,NULL,0),
+                 ('foreign-file','general','foreign-user','generic','text/plain','foreign.txt',4,'hash-b','foreign','now',NULL,NULL,0);
              INSERT INTO message_attachments VALUES
                  ('source-user','source-file',0),
                  ('foreign-user','foreign-file',0);",

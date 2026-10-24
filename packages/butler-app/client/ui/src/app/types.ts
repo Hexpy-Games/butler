@@ -853,8 +853,6 @@ export interface MessageFileRef {
   /** Short-lived `url` with `?expires=..&signature=..` for token-less loads. */
   signed_url?: string;
   created_at: string;
-  width?: number | null;
-  height?: number | null;
 }
 
 export interface ChangedFileLine {

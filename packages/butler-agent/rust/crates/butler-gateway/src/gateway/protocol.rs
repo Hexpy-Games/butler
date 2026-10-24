@@ -166,10 +166,6 @@ pub struct MessageFileRef {
     pub mime_type: String,
     pub safe_name: String,
     pub size_bytes: u64,
-    #[serde(default)]
-    pub width: Option<u32>,
-    #[serde(default)]
-    pub height: Option<u32>,
     pub sha256: String,
     pub url: String,
     pub created_at: String,
