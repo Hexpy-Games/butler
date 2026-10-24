@@ -32,8 +32,9 @@ def module_base(root):
 
 
 def selected(path):
-    # A change to this definition also runs the set it defines.
-    return path == '.github/scripts/ci_tool_path.py' or any(
+    # A change to this definition, or to the nextest config that schedules the
+    # set, also runs it.
+    return path in ('.github/scripts/ci_tool_path.py', '.config/nextest.toml') or any(
         path == base + '.rs' or path.startswith(base + '/') for base in map(module_base, ROOTS))
 
 
