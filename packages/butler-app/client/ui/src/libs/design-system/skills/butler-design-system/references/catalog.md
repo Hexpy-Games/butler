@@ -1985,7 +1985,7 @@ Files attached to a message: square tiles (composer row, sent message), a list w
 - Use for: Picked page elements in the composer (chips)
 - Not for: Files Butler produced → `ArtifactList`
 - Not for: Project documents → `DocumentTile`
-- Tokens: `--radius-pill`, `--line`, `--icon-size-sm`, `--radius-panel`, `--focus-ring-room`, `--motion-scale-press`, `--motion-scale-dialog`
+- Tokens: `--radius-pill`, `--line`, `--icon-size-sm`, `--radius-panel`, `--focus-ring-room`, `--motion-scale-press`, `--motion-scale-dialog`, `--danger`
 
 ### ComposerAdjunctPanel
 
@@ -2826,7 +2826,7 @@ Document typography for rendered markdown: headings, lists, code frames, tables,
 - Use for: Assistant answers, READMEs and project documents rendered from markdown
 - Not for: UI text → `Typo`
 - Not for: Raw file contents → `ArtifactPreviewPre`
-- Tokens: `--typo-body-line-height-document`, `--typo-code-size`, `--syntax-keyword`, `--radius-panel`, `--accent-text`, `--favicon-plate`
+- Tokens: `--typo-body-line-height-document`, `--typo-body-line-height`, `--typo-code-size`, `--syntax-keyword`, `--radius-panel`, `--accent-text`, `--favicon-plate`
 
 ### SplitBrowser
 

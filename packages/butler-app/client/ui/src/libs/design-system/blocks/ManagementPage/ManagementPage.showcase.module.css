@@ -6,3 +6,9 @@
   border-radius: var(--radius-panel);
   isolation: isolate;
 }
+
+/* A page under 1000px: the aside floats over the board. */
+.stage[data-width="narrow"] {
+  max-width: 720px;
+  height: 560px;
+}

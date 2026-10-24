@@ -1,11 +1,16 @@
 import type { DsBaseProps } from "../../lib/dsProps";
-import { createContext, useContext, type CSSProperties, type FormHTMLAttributes, type ReactNode, type Ref } from "react";
+import { createContext, useContext, useState, type CSSProperties, type FormHTMLAttributes, type ReactNode, type Ref } from "react";
 import { PageContainer, type PageContainerWidth } from "../../components/PageContainer";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import { ScrollArea } from "../ScrollArea";
 import styles from "./ManagementPage.module.css";
 import { dsClass } from "../../lib/internal";
 import { cn } from "../../lib/utils";
+import { useAsideLayout } from "../../lib/asideLayout";
+import { AsideSlot, hasAsideContent, type AsideContent } from "../../lib/AsideSlot";
+
+/** The page width from which the aside docks beside the content (a floating one docks again 32px later). */
+export const MANAGEMENT_ASIDE_DOCK_MIN = 1000;
 
 type ManagementPageElement = "section" | "main" | "form";
 
@@ -33,6 +38,16 @@ export interface ManagementPageProps extends DsBaseProps<FormHTMLAttributes<HTML
   background?: ReactNode;
   /** Default `calm`. */
   backgroundTreatment?: ManagementPageBackgroundTreatment;
+  /**
+   * A detail beside the content (a selected item). From a 1000px page it docks flat in the right margin
+   * and the content and an overlay footer narrow to its left; narrower, it floats on TintedGlass over the
+   * page while `asideFloatOpen`. A function gets the layout.
+   */
+  aside?: AsideContent;
+  /** Floating only: whether the aside shows. Docked, it shows whenever `aside` is set. */
+  asideFloatOpen?: boolean;
+  /** The aside landmark's accessible name. */
+  asideLabel?: string;
 }
 
 const PageBackgroundContext = createContext(false);
@@ -50,14 +65,22 @@ export function ManagementPage({
   width = "default",
   background,
   backgroundTreatment = "calm",
+  aside,
+  asideFloatOpen = false,
+  asideLabel,
   ...props
 }: ManagementPageProps) {
   const hasBackground = background !== undefined && background !== null;
+  const [element, setElement] = useState<HTMLElement | null>(null);
+  const asideLayout = useAsideLayout(element, hasAsideContent(aside), MANAGEMENT_ASIDE_DOCK_MIN);
+  const asideState = hasAsideContent(aside) && (asideLayout === "docked" || asideFloatOpen) ? asideLayout ?? undefined : undefined;
   return (
     <Component
       className={cn(styles.page, footer && (footerPlacement === "overlay" ? styles.withOverlay : styles.withFooter), className)}
       style={{ ...style, "--footer-reserve": `${footerReserve}px` } as CSSProperties}
       data-test-class={dataTestClass}
+      data-aside={asideState}
+      ref={setElement}
       {...props}
     >
       {hasBackground && (
@@ -75,6 +98,8 @@ export function ManagementPage({
         </PageContainer>
       </ScrollArea>
       {footer && (footerPlacement === "overlay" ? footer : <div className={styles.footer}>{footer}</div>)}
+      <AsideSlot aside={aside} layout={asideLayout} floatOpen={asideFloatOpen} slot="management-page-aside" label={asideLabel}
+        className={styles.aside} glassClassName={styles.asideGlass} />
     </Component>
   );
 }

@@ -1,0 +1,50 @@
+/* The aside's own scroller (ConversationShell, ManagementPage). It reserves
+   the scrollbar gutter on both inline edges (scrollbar-gutter: stable
+   both-edges), so the content keeps one inset on its start and its end
+   whatever the scrollbar is: overlay (no gutter), classic, or hidden in a
+   headless capture (which still reserves a stable gutter). --aside-gutter is
+   that gutter, measured once on mount. Docked, the scroller bleeds it and the
+   focus-ring room past both edges of the aside's box, so the content lines up
+   with the box. Floating, it fills the glass and pads each side up to
+   --space-md, the gutter included, so the scrollbar stays inside the glass. A
+   ring at either edge always stays inside the scroller. */
+.scroll {
+  --aside-gutter: 0px;
+  --scroll-fade-gutter: var(--aside-gutter);
+
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  margin-inline: calc(-1 * (var(--aside-gutter) + var(--focus-ring-room)));
+  padding: var(--scroll-fade-size) var(--focus-ring-room);
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  scrollbar-color: color-mix(in srgb, var(--line-strong) 70%, transparent)
+    transparent;
+  scrollbar-gutter: stable both-edges;
+  scrollbar-width: thin;
+}
+
+.scroll[data-layout="floating"] {
+  margin-inline: 0;
+  padding-inline: max(
+    var(--focus-ring-room),
+    var(--space-md) - var(--aside-gutter)
+  );
+}
+
+.scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--line-strong) 70%, transparent);
+  background-clip: content-box;
+}

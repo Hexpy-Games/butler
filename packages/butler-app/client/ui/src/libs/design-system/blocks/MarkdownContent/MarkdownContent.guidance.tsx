@@ -52,7 +52,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Typo stacks for a document lose list and code styling.", render: () => <Stack gap="xs"><Typo.H2>Verification</Typo.H2><Typo.Body>- Run the checks</Typo.Body></Stack> },
     },
   ],
-  content: ["Headings in sentence case; code blocks name their language.", "Images show at natural size up to the column width and a bounded height; they never upscale."],
+  content: ["Headings in sentence case; code blocks name their language.", "density=\"compact\" in a dense pane (a task description in a detail aside, a card): body line height and tighter blocks; replies and documents keep the default.", "Images show at natural size up to the column width and a bounded height; they never upscale."],
   accessibility: ["Images need alt text; a clickable capture also gets a visible Open button, since the image itself is not focusable.", "Real headings, lists and tables; streaming spans never move text (no layout shift).", "Links are real anchors; external ones open in the system browser with noopener and no referrer."],
-  tokens: ["--typo-body-line-height-document", "--typo-code-size", "--syntax-keyword", "--radius-panel", "--accent-text", "--favicon-plate"],
+  tokens: ["--typo-body-line-height-document", "--typo-body-line-height", "--typo-code-size", "--syntax-keyword", "--radius-panel", "--accent-text", "--favicon-plate"],
 };
