@@ -27,7 +27,7 @@ test("canon and space changes target one project; unscoped space changes target 
     publish("stream.reconcile_required");
     expect(received.splice(0)).toEqual(["sidebar-a", "board-a", "active-b", "sidebar-b"]);
     publish("work_model.changed", { scope: "tasks" });
-    expect(received.splice(0)).toEqual(["sidebar-a", "board-a", "active-b", "sidebar-b"]);
+    expect(received).toEqual([]);
   } finally { subscriptions.forEach(unsubscribe => unsubscribe()); }
   publish("space.changed");
   expect(received).toEqual([]);

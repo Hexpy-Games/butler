@@ -64,6 +64,19 @@ pub(super) fn public_sessions(
                     {
                         *value = Value::String(chat);
                     }
+                } else if key == "session_ids" {
+                    if let Some(owners) = value.as_array_mut() {
+                        for owner in owners {
+                            if let Some(chat) = owner
+                                .as_str()
+                                .map(|s| sessions::identity::resolve_owner(db, s))
+                                .transpose()?
+                                .flatten()
+                            {
+                                *owner = Value::String(chat);
+                            }
+                        }
+                    }
                 } else {
                     public_sessions(db, value)?;
                 }

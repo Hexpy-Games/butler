@@ -108,6 +108,18 @@ fn session_bindings_and_rank_have_typed_rules() {
     let tx = Transaction::new(db.transaction().unwrap()).unwrap();
     bind_session(&tx, &context(), "a", "home").unwrap();
     bind_session(&tx, &context(), "b", "home").unwrap();
+    bind_session(&tx, &context(), "a", "aaa").unwrap();
+    bind_session(&tx, &context(), "a", "home").unwrap();
+    let epic = api::epic(&tx, "a").unwrap();
+    assert_eq!(epic["home_session_id"], "home");
+    assert_eq!(epic["session_ids"], json!(["home", "aaa"]));
+    assert!(
+        epic["sessions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|s| s.get("bound_by").is_none())
+    );
     assert!(matches!(
         set_plan_rank(&tx, &context(), "a", 0, None, Some("A"), Some("A")),
         Err(Error::InvalidRank)

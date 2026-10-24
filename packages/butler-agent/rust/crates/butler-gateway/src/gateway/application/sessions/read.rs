@@ -172,6 +172,7 @@ ORDER BY updated_at DESC,created_at DESC
         let (id, title, kind, project_id, created_at, updated_at) =
             row.map_err(AppStorageError::sqlite)?;
         Ok(AppChatSummary {
+            epic_ids: Vec::new(),
             id,
             title,
             kind: chat_kind(&kind)?,
@@ -267,6 +268,7 @@ fn project(row: SessionRow) -> Result<AppSessionSummary, AppStorageError> {
         .zip(row.project_display_name)
         .map(|(id, display_name)| super::contracts::AppSessionProject { id, display_name });
     Ok(AppSessionSummary {
+        epic_ids: Vec::new(),
         latest_turn_id: row.latest_turn_id,
         skills_used: Vec::new(),
         work_progress: None,

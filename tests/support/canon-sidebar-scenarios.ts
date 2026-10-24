@@ -60,7 +60,7 @@ export async function createFromSidebar(page: Page, projectId: string, planId: s
   const response = await linked; assert(response.ok());
   const envelope = await response.json();
   const result: CanonConversation = envelope.data;
-  assert.equal(result.work.scope_ref, projectId);
+  assert.equal(result.work.project_id, projectId);
   await page.locator('[data-test-class="titlebar-title"]').filter({ hasText: "사이드바에서 만든 과제" }).waitFor();
   await showCanonSidebar(page);
   const row = page.locator(`[data-canon-group="${planId}"] [data-canon-epic="${result.work.id}"]`);

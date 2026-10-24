@@ -38,11 +38,7 @@ async fn cb_13_quick_answer_in_epic_conversation_creates_no_work_or_link()
     );
     s.agent.terminate().await?;
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-    for table in [
-        "btcc_guided_works",
-        "canon_epic_work_links",
-        "canon_session_queue",
-    ] {
+    for table in ["btcc_guided_works", "canon_epic_work_links"] {
         assert_eq!(
             db.query_row::<i64, _, _>(&format!("SELECT count(*) FROM {table}"), [], |r| r.get(0))?,
             0,
@@ -65,6 +61,8 @@ async fn conversations_bind_several_epics_and_each_epic_binds_several_sessions()
     let project = project(&s).await?;
     let a = create_epic(&s, &project, "First").await?;
     let b = create_epic(&s, &project, "Second").await?;
+    assert!(a["home_session_id"].is_null());
+    assert_eq!(a["session_ids"], json!([]));
     let path = |id: &Value| format!("/canon/epics/{}/conversation", id.as_str().unwrap());
     let first = data(s.gw.post(&path(&a["id"]), json!({})).await?, 200);
     let second = data(
@@ -87,6 +85,60 @@ async fn conversations_bind_several_epics_and_each_epic_binds_several_sessions()
         200,
     );
     assert_eq!(third["work"]["sessions"].as_array().unwrap().len(), 2);
+    assert_eq!(third["work"]["home_session_id"], first["session_id"]);
+    assert_eq!(
+        third["work"]["session_ids"],
+        json!([first["session_id"], new_chat["session"]["id"]])
+    );
+    assert!(
+        third["work"]["sessions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|s| s.get("bound_by").is_none())
+    );
+    let session_path = format!(
+        "/session-summary?session_id={}",
+        first["session_id"].as_str().unwrap()
+    );
+    let session = data(s.gw.get(&session_path).await?, 200);
+    assert_eq!(session["epic_ids"], json!([a["id"], b["id"]]));
+    let view = data(
+        s.gw.get(&format!(
+            "/session-view?session_id={}",
+            first["session_id"].as_str().unwrap()
+        ))
+        .await?,
+        200,
+    );
+    assert_eq!(view["epic_ids"], session["epic_ids"]);
+    let listed = data(
+        s.gw.get(&format!("/sessions?project_id={project}")).await?,
+        200,
+    );
+    let entry = listed["sessions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["id"] == first["session_id"])
+        .unwrap();
+    assert_eq!(entry["epic_ids"], session["epic_ids"]);
+    let chats = data(s.gw.get("/chats").await?, 200);
+    let entry = chats
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["id"] == first["session_id"])
+        .unwrap();
+    assert_eq!(entry["epic_ids"], session["epic_ids"]);
+    let space = data(s.gw.get("/navigation").await?, 200);
+    let nodes = space["space"]["nodes"].as_array().unwrap();
+    assert!(
+        nodes
+            .iter()
+            .any(|n| n["entityId"] == new_chat["session"]["id"])
+    );
+    assert!(!nodes.iter().any(|n| n["entityId"] == first["session_id"]));
     let sidebar = data(
         s.gw.get(&format!("/projects/{project}/canon/sidebar"))
             .await?,
@@ -119,5 +171,50 @@ async fn conversations_bind_several_epics_and_each_epic_binds_several_sessions()
     assert_eq!(done["canon_status"], "done");
     let obsolete = s.gw.patch(&format!("/canon/epics/{}",a["id"].as_str().unwrap()),json!({"expected_revision":done["revision"],"expected_task_graph_revision":0,"status":"planned"})).await?;
     assert_eq!(obsolete.status, 400);
+    s.finish().await
+}
+
+#[tokio::test]
+async fn canon_conversation_rejects_missing_unscoped_and_other_project_sessions()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("CANON-BIND-SCOPE")?.start().await?;
+    let project_id = project(&s).await?;
+    let epic = create_epic(&s, &project_id, "Scope").await?;
+    let other = data(
+        s.gw.post(
+            "/projects",
+            json!({"source":"scratch","display_name":"Other"}),
+        )
+        .await?,
+        201,
+    );
+    let chat = data(s.gw.post("/sessions", json!({"kind":"chat"})).await?, 201);
+    let foreign = data(
+        s.gw.post(
+            "/sessions",
+            json!({"kind":"project","project_id":other["project"]["id"]}),
+        )
+        .await?,
+        201,
+    );
+    for session in [
+        json!("missing"),
+        json!("subsession/child"),
+        chat["session"]["id"].clone(),
+        foreign["session"]["id"].clone(),
+    ] {
+        let reply =
+            s.gw.post(
+                &format!("/canon/epics/{}/conversation", epic["id"].as_str().unwrap()),
+                json!({"session_id":session}),
+            )
+            .await?;
+        assert_eq!(reply.status, 400, "{}", reply.text);
+        assert_eq!(
+            serde_json::from_str::<Value>(&reply.text)?["error"]["code"],
+            "work_model_invalid"
+        );
+    }
     s.finish().await
 }

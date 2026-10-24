@@ -24,7 +24,8 @@ pub fn link(
     bind_session(tx, ctx, id, session)?;
     let op_id = format!("canon-conversation:{id}:{session}");
     let payload = json!({"session_id":session,"work_id":id,
-        "project_id":work["project_id"],"title":work["title"]});
+        "project_id":work["project_id"],"title":work["title"],
+        "home_session_id":epic(tx,id)?["home_session_id"]});
     let intent = record_intent(tx, ctx, &op_id, "canon_conversation", &payload)?;
     Ok(json!({"session_id":session,"work":epic(tx,id)?,"intent":intent}))
 }

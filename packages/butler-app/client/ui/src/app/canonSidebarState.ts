@@ -13,7 +13,7 @@ function sessionIndex(projectId: string, groups: Array<{ title: string; rows: Ep
     .map(([id, matches]): [string, SessionEpic[]] => [id, matches.filter(match => match.projectId !== projectId)])
     .filter(([, matches]) => matches.length > 0));
   for (const group of groups) for (const epic of group.rows) {
-    for (const binding of epic.sessions ?? []) (sessions[binding.session_id] ??= []).push({ projectId, group: group.title, epic });
+    if (epic.home_session_id) (sessions[epic.home_session_id] ??= []).push({ projectId, group: group.title, epic });
   }
   return sessions;
 }

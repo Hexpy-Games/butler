@@ -12,7 +12,7 @@ export function openPlanOverview(projectId: string, planId: string | null) {
 /** Link failure leaves the already-created Epic in place and keeps this screen. */
 export async function openEpicConversation(_projectId: string, epic: EpicCard): Promise<void> {
   try {
-    const id = epic.sessions?.[0]?.session_id ?? (await linkCanonConversation(epic.id)).session_id;
+    const id = epic.home_session_id ?? (await linkCanonConversation(epic.id)).session_id;
     const app = useButlerStore.getState();
     if (!sessionFromNavigation(app.navigation, id)) await app.refreshNavigation();
     app.openSession(id);

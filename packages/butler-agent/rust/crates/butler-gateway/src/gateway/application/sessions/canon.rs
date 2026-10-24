@@ -37,14 +37,17 @@ pub(in crate::gateway::application) fn project(
         chat
     };
     db.execute(
-        "INSERT INTO app_canon_conversations(session_id,epic_id,project_id,op_id)
-        VALUES(?1,?2,?3,?4) ON CONFLICT(session_id,epic_id) DO UPDATE SET
-        project_id=excluded.project_id,op_id=excluded.op_id",
+        "INSERT INTO app_canon_conversations(session_id,epic_id,project_id,op_id,is_home)
+        VALUES(?1,?2,?3,?4,?5) ON CONFLICT(session_id,epic_id) DO UPDATE SET
+        project_id=excluded.project_id,op_id=excluded.op_id,is_home=excluded.is_home",
         params![
             chat,
             payload["work_id"].as_str(),
             payload["project_id"].as_str(),
-            op_id
+            op_id,
+            payload["home_session_id"]
+                .as_str()
+                .is_none_or(|home| home == owner)
         ],
     )
     .map_err(AppStorageError::sqlite)?;
@@ -69,4 +72,21 @@ pub(in crate::gateway::application) fn project(
         &clock.now_iso(),
     )?;
     Ok(created)
+}
+
+impl AppApplication {
+    pub(super) async fn load_session_epics(
+        &self,
+        sessions: &mut [AppSessionSummary],
+    ) -> Result<(), GatewayApplicationError> {
+        let owners = sessions.iter().map(|s| s.session_hint.clone()).collect();
+        let ids = self.dependencies.canon.session_epics(owners).await?;
+        if ids.len() != sessions.len() {
+            return Err(GatewayApplicationError::internal());
+        }
+        for (session, epic_ids) in sessions.iter_mut().zip(ids) {
+            session.epic_ids = epic_ids;
+        }
+        Ok(())
+    }
 }

@@ -6,8 +6,8 @@ macro_rules! statements {
     }
 }
 statements! {
-BIND_SESSION = "INSERT OR IGNORE INTO canon_session_epics(session_id,epic_id,bound_at,bound_by,origin) VALUES(?1,?2,?3,?4,?5)";
-EPIC_SESSIONS = "SELECT session_id,bound_at,bound_by,origin FROM canon_session_epics WHERE epic_id=?1 ORDER BY bound_at,session_id";
+BIND_SESSION = "INSERT INTO canon_session_epics(session_id,epic_id,bound_at,bound_by,origin) VALUES(?1,?2,MAX(?3,COALESCE((SELECT MAX(bound_at)+1 FROM canon_session_epics WHERE epic_id=?2),?3),COALESCE((SELECT MAX(bound_at)+1 FROM canon_session_epics WHERE session_id=?1),?3)),?4,?5) ON CONFLICT(session_id,epic_id) DO NOTHING";
+EPIC_SESSIONS = "SELECT session_id,bound_at,origin FROM canon_session_epics WHERE epic_id=?1 ORDER BY bound_at,rowid";
 LABEL = "UPDATE canon_epics SET canon_status=?2,canon_status_source='person',revision=revision+1,updated_at=?3 WHERE id=?1 AND revision=?4";
 WORK = "SELECT * FROM canon_epics WHERE id=?1";
 PLAN = "SELECT * FROM canon_plans WHERE id=?1";

@@ -6,7 +6,9 @@ export interface CanonWork {
   id: string;
   project_id: string;
   plan_id: string | null;
-  sessions: Array<{ session_id: string; bound_at: number; bound_by: string; origin: "user" | "butler" }>;
+  home_session_id: string | null;
+  session_ids: string[];
+  sessions: Array<{ session_id: string; bound_at: number; origin: "user" | "butler" }>;
   title: string;
   description: string;
   kind: string | null;
@@ -73,15 +75,6 @@ export interface EpicProgressSnapshot {
   epic_id: string;
   running: boolean;
   counts: { completed: number; total: number };
-  chains: Array<{
-    id: string;
-    work_id: string;
-    created_at: number;
-    state: "active" | "held" | "done";
-    steps: Array<{ index: number; tasks: WorkTask[] }>;
-    hold_questions: Array<{ id: string; chain_id: string; question_message_id: string; revision: number }>;
-    ready_task_ids: string[];
-  }>;
 }
 export interface PlanInput {
   expected_revision?: number;
@@ -123,3 +116,5 @@ export interface CanonSidebarGroup {
 export interface CanonSidebar { project_id: string; groups: CanonSidebarGroup[] }
 export interface CanonSidebarOrderInput { group_key: string; work_ids: string[] }
 export interface CanonConversation { session_id: string; work: EpicDetail }
+
+export interface CanonConversationInput { sessionId?: string }

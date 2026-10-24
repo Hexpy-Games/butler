@@ -17,7 +17,7 @@ macro_rules! indexed_reads {
 }
 
 indexed_reads! {
-    ConversationWork => ("SELECT e.* FROM canon_session_epics s JOIN canon_epics e ON e.id=s.epic_id WHERE s.session_id=?1", "sqlite_autoindex_canon_session_epics_1"),
+    ConversationWork => ("SELECT e.* FROM canon_session_epics s JOIN canon_epics e ON e.id=s.epic_id WHERE s.session_id=?1 ORDER BY s.bound_at,s.rowid", "canon_session_epics_session"),
     PlanOverview => ("SELECT * FROM canon_epics WHERE plan_id=?1 ORDER BY plan_rank", "canon_epics_plan"),
     Backlog => ("SELECT * FROM canon_epics WHERE project_id=?1 AND plan_id IS NULL ORDER BY plan_rank", "canon_epics_backlog"),
     PlanList => ("SELECT * FROM canon_plans WHERE project_id=?1 AND status=?2 ORDER BY due_on", "canon_plans_project"),

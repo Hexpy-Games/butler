@@ -40,8 +40,8 @@ export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef }: {
         {ordinal > 0 && <Typo.Caption wrap="nowrap" shrink={false}>· {copy.ordinal(ordinal)}</Typo.Caption>}
       </Stack>} />
     </Stack>
-    {epic.sessions?.[0]?.session_id && <ButtonContainer size="sm"><Button size="sm" variant="link"
-      onClick={() => useButlerStore.getState().openSession(epic.sessions?.[0]?.session_id!)}>{copy.openConversation}</Button></ButtonContainer>}
+    {epic.home_session_id && <ButtonContainer size="sm"><Button size="sm" variant="link"
+      onClick={() => { if (epic.home_session_id) void useButlerStore.getState().openSession(epic.home_session_id); }}>{copy.openConversation}</Button></ButtonContainer>}
     <SpecTree nodes={epic.specs} />
     <EpicProgress tasks={tasks} counts={canonTaskCounts(epic)} />
   </Stack>;

@@ -744,6 +744,7 @@ export type ComposerModelState = Exclude<ModelCatalogState, "error">;
 export type ControlsLoadState = "loading" | "ready" | "error";
 
 export interface SessionSummary {
+  epic_ids?: string[];
   session_hint?: string;
   work_progress?: { completed: number; total: number };
   id: string;
@@ -1161,6 +1162,7 @@ export interface StewardSessionSummaryView {
 }
 
 export interface SessionView {
+  epic_ids?: string[];
   approved_plan_revision?: number;
   approved_plan_total?: number;
   approved_plan_completed?: number;
@@ -1616,6 +1618,7 @@ export interface WorkStreamSummary {
 }
 
 export interface SessionSummaryView {
+  epic_ids?: string[];
   branch_seed?: import("../../../shared/app-contracts.ts").SessionBranchSeed;
   session_id?: string;
   turn_state?: string;

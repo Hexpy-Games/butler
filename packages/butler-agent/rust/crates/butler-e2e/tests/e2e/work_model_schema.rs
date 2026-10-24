@@ -58,7 +58,7 @@ fn migrated_app(db: &Connection) -> rusqlite::Result<()> {
             Value::Text("old-op".into())
         ]]
     );
-    db.execute_batch("INSERT INTO app_canon_conversations VALUES('old-chat','wk_docs','butler','op-2'),('second-chat','wk_canon','butler','op-3');")
+    db.execute_batch("INSERT INTO app_canon_conversations(session_id,epic_id,project_id,op_id) VALUES('old-chat','wk_docs','butler','op-2'),('second-chat','wk_canon','butler','op-3');")
 }
 
 #[tokio::test]
@@ -71,13 +71,12 @@ async fn cb_12_dev_upgrade_preserves_canon_and_second_start_is_identical()
     let db = Connection::open(&path)?;
     no_legacy(&db)?;
     let fresh = snapshot(&db)?;
-    assert_eq!(fresh.len(), 15);
+    assert_eq!(fresh.len(), 13);
     assert!(fresh.values().all(Vec::is_empty));
     seed(&db)?;
     db.execute_batch(include_str!(
         "../../fixtures/work-model-p14/separation-values.sql"
     ))?;
-    let expected = expected::snapshot(&db, fresh)?;
     let app_path = s.sandbox.data.join("app-server/butler-client.sqlite");
     legacy_app(&Connection::open(&app_path)?)?;
     drop(db);
@@ -92,7 +91,8 @@ async fn cb_12_dev_upgrade_preserves_canon_and_second_start_is_identical()
     s.agent.terminate().await?;
     let db = Connection::open(&path)?;
     no_legacy(&db)?;
-    assert_eq!(snapshot(&db)?, expected);
+    expected::assert_rows(&db)?;
+    let expected = snapshot(&db)?;
     migrated_app(&Connection::open(&app_path)?)?;
     drop(db);
     s.restart().await?;
@@ -100,6 +100,32 @@ async fn cb_12_dev_upgrade_preserves_canon_and_second_start_is_identical()
     let db = Connection::open(&path)?;
     no_legacy(&db)?;
     assert_eq!(snapshot(&db)?, expected);
+    assert_eq!(
+        rows(
+            &Connection::open(&app_path)?,
+            "SELECT session_id,epic_id,project_id,op_id FROM app_canon_conversations ORDER BY session_id,epic_id"
+        )?,
+        vec![
+            vec![
+                Value::Text("old-chat".into()),
+                Value::Text("wk_canon".into()),
+                Value::Text("butler".into()),
+                Value::Text("old-op".into())
+            ],
+            vec![
+                Value::Text("old-chat".into()),
+                Value::Text("wk_docs".into()),
+                Value::Text("butler".into()),
+                Value::Text("op-2".into())
+            ],
+            vec![
+                Value::Text("second-chat".into()),
+                Value::Text("wk_canon".into()),
+                Value::Text("butler".into()),
+                Value::Text("op-3".into())
+            ],
+        ]
+    );
     drop(db);
     s.finish().await
 }
@@ -133,6 +159,84 @@ async fn cb_12_downgraded_dev_rows_merge_with_existing_canon_ids_winning()
         rows(&db, "SELECT count(*) FROM canon_epics")?,
         vec![vec![Value::Integer(9)]]
     );
+    drop(db);
+    s.finish().await
+}
+
+#[tokio::test]
+async fn cb_12_reupgrade_keeps_colliding_history_and_outpaces_stale_receipts()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut s = Setup::new("CB-12-REUPGRADE")?.start().await?;
+    s.agent.terminate().await?;
+    let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
+    let db = Connection::open(&path)?;
+    seed(&db)?;
+    db.execute_batch(include_str!(
+        "../../fixtures/work-model-p14/separation-values.sql"
+    ))?;
+    drop(db);
+    s.restart().await?;
+    s.agent.terminate().await?;
+    let db = Connection::open(&path)?;
+    seed(&db)?;
+    db.execute_batch(include_str!(
+        "../../fixtures/work-model-p14/separation-values.sql"
+    ))?;
+    db.execute_batch("UPDATE wm_outbox SET seq=4 WHERE seq=1;")?;
+    let app_path = s.sandbox.data.join("app-server/butler-client.sqlite");
+    Connection::open(&app_path)?
+        .execute("INSERT INTO app_work_model_events VALUES(4,999999)", [])?;
+    drop(db);
+    s.restart().await?;
+    s.agent.terminate().await?;
+    let db = Connection::open(&path)?;
+    no_legacy(&db)?;
+    let expected: Vec<_> = (0..2)
+        .flat_map(|round| {
+            [
+                ("work", "wk_canon"),
+                ("plan", "pl_p14"),
+                ("spec_node", "sp_canon"),
+                ("backlog", "butler"),
+            ]
+            .into_iter()
+            .enumerate()
+            .map(move |(index, (kind, id))| {
+                vec![
+                    Value::Integer(round * 4 + index as i64 + 1),
+                    Value::Text(kind.into()),
+                    Value::Text(id.into()),
+                ]
+            })
+        })
+        .collect();
+    assert_eq!(
+        rows(
+            &db,
+            "SELECT seq,entity_kind,entity_id FROM canon_audit ORDER BY seq"
+        )?,
+        expected
+    );
+    assert_eq!(
+        rows(&db, "SELECT seq,published FROM canon_events ORDER BY seq")?,
+        vec![
+            vec![Value::Integer(4), Value::Integer(1)],
+            vec![Value::Integer(5), Value::Integer(1)],
+        ]
+    );
+    assert_eq!(
+        rows(&db, "SELECT count(*) FROM canon_epics")?,
+        vec![vec![Value::Integer(9)]]
+    );
+    assert_eq!(
+        rows(
+            &Connection::open(&app_path)?,
+            "SELECT count(*) FROM events WHERE type='canon.changed' AND json_extract(payload_json,'$.id')='wk_canon'"
+        )?,
+        vec![vec![Value::Integer(2)]]
+    );
+
     drop(db);
     s.finish().await
 }

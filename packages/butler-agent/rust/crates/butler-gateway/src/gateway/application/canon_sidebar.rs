@@ -82,7 +82,7 @@ pub(crate) async fn conversation(
     session_id: Option<String>,
 ) -> Result<Value, GatewayApplicationError> {
     // The existing application layer enforces active project / canon visibility.
-    canon::execute(
+    let epic = canon::execute(
         app,
         AppCanonRequest {
             resource: AppCanonResource::Epic,
@@ -91,14 +91,18 @@ pub(crate) async fn conversation(
         },
     )
     .await?;
+    let project = epic["project_id"]
+        .as_str()
+        .ok_or_else(GatewayApplicationError::internal)?
+        .to_owned();
     let session_id = if let Some(chat) = session_id {
         Some(
             app.storage
                 .read(move |db| {
                     let exists: bool = db
                         .query_row(
-                            "SELECT EXISTS(SELECT 1 FROM chats WHERE id=?1)",
-                            [&chat],
+                            "SELECT EXISTS(SELECT 1 FROM chats WHERE id=?1 AND kind='project' AND project_id=?2)",
+                            [&chat, &project],
                             |r| r.get(0),
                         )
                         .map_err(AppStorageError::sqlite)?;
@@ -109,7 +113,7 @@ pub(crate) async fn conversation(
                 })
                 .await
                 .map_err(app_error)?
-                .ok_or_else(|| public(404, "session_not_found", "Session not found."))?,
+                .ok_or_else(|| public(400, "work_model_invalid", "Session must be a conversation in the epic project."))?,
         )
     } else {
         None

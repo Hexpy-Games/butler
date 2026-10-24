@@ -125,6 +125,7 @@ export function messageContentText(content: MessageContent): string {
 }
 
 export interface ChatSummary {
+  epic_ids?: string[];
   id: string;
   title: string;
   kind: ChatKind;
@@ -134,6 +135,7 @@ export interface ChatSummary {
 }
 
 export interface SessionSummary {
+  epic_ids?: string[];
   work_progress?: { completed: number; total: number };
   branch_seed?: SessionBranchSeed;
   id: string;

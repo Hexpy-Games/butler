@@ -68,11 +68,18 @@ fn spec_tree(db: &Connection, nodes: &[Value], parent: Option<&str>) -> Result<V
 }
 
 fn public_work(db: &Connection, mut work: Value) -> Result<Value> {
-    work["sessions"] = json!(rows(
-        db,
-        super::super::sql::EPIC_SESSIONS,
-        [text(&work, "id")?]
-    )?);
+    let sessions = rows(db, super::super::sql::EPIC_SESSIONS, [text(&work, "id")?])?;
+    work["home_session_id"] = sessions
+        .first()
+        .map(|s| s["session_id"].clone())
+        .unwrap_or(Value::Null);
+    work["session_ids"] = json!(
+        sessions
+            .iter()
+            .map(|s| &s["session_id"])
+            .collect::<Vec<_>>()
+    );
+    work["sessions"] = json!(sessions);
     // Empty progress until the link/progress branch supplies the derived view.
     work["tasks"] = json!([]);
     work["task_counts"] = json!({"total":0});

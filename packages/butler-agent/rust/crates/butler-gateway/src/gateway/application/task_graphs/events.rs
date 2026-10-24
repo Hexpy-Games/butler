@@ -74,7 +74,7 @@ pub(in crate::gateway::application) fn start_events(app: &AppApplication) {
                 for mut payload in payloads {
                     let seq:i64=db.query_row("SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name='events'),0)+1",[],|r|r.get(0)).map_err(super::super::storage::AppStorageError::sqlite)?;
                     payload["event_seq"]=json!(seq);
-                    events::append(db,&subscribers,"canon.changed",None,service::map(&payload)?,&now)?;
+                    events::append(db,&subscribers,"work_model.changed",None,service::map(&payload)?,&now)?;
                 }
                 Ok(())
             }).await;

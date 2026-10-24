@@ -1,4 +1,8 @@
 #![allow(clippy::unwrap_used, reason = "test assertions")]
+#[path = "support/enum_columns.rs"]
+mod enum_columns;
+#[path = "support/vocabulary.rs"]
+mod vocabulary;
 use butler_canon::{work_queries, work_schema};
 use rusqlite::{Connection, params_from_iter, types::Value};
 
@@ -66,4 +70,87 @@ fn local_canon_vocabulary_rejects_remote_status_sources_and_github_origins() {
             rusqlite::ffi::SQLITE_CONSTRAINT_CHECK
         );
     }
+}
+
+// test-category: format-pin
+#[test]
+fn schema_constraints_and_idempotency() {
+    vocabulary::roundtrips_match_sql();
+    let db = Connection::open_in_memory().unwrap();
+    db.execute_batch("PRAGMA foreign_keys=ON").unwrap();
+    work_schema::ensure(&db).unwrap();
+    for (table, column, choices) in enum_columns::COLUMNS {
+        let sql: String = db
+            .query_row(
+                "SELECT sql FROM sqlite_schema WHERE name=?1",
+                [table],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            sql.contains(&format!("{column} IN ({choices})")),
+            "{table}.{column}: {sql}"
+        );
+    }
+    let insert = "INSERT INTO canon_epics(id,project_id,title,origin,created_at,updated_at,created_by) VALUES(?1,'project','Title',?2,1,1,'{}')";
+    db.execute(insert, ["epic", "board"]).unwrap();
+    for column in ["canon_status", "canon_status_source", "origin"] {
+        let error = db
+            .execute(
+                &format!("UPDATE canon_epics SET {column}='unknown' WHERE id='epic'"),
+                [],
+            )
+            .unwrap_err();
+        assert_eq!(
+            error.sqlite_error().unwrap().extended_code,
+            rusqlite::ffi::SQLITE_CONSTRAINT_CHECK
+        );
+    }
+    assert!(db.execute(insert, ["epic", "board"]).is_err());
+    assert!(
+        db.execute("UPDATE canon_epics SET plan_id='missing'", [])
+            .is_err()
+    );
+    assert!(
+        db.execute(
+            "INSERT INTO canon_session_epics VALUES('chat','missing',1,'{}','user')",
+            []
+        )
+        .is_err()
+    );
+    assert!(
+        db.execute(
+            "INSERT INTO canon_plans VALUES('p','project','Plan','',NULL,'unknown',0,1,1,'{}')",
+            []
+        )
+        .is_err()
+    );
+    db.execute_batch(
+        "PRAGMA foreign_keys=OFF;
+        CREATE TABLE unrelated_parent(id TEXT PRIMARY KEY);
+        CREATE TABLE unrelated_child(id TEXT REFERENCES unrelated_parent(id));
+        INSERT INTO unrelated_child VALUES('missing');
+        INSERT INTO canon_session_epics VALUES('chat','missing',1,'{}','user');
+        PRAGMA foreign_keys=ON",
+    )
+    .unwrap();
+    let before: i64 = db
+        .query_row("PRAGMA schema_version", [], |r| r.get(0))
+        .unwrap();
+    work_schema::ensure(&db).unwrap();
+    assert_eq!(
+        before,
+        db.query_row::<i64, _, _>("PRAGMA schema_version", [], |r| r.get(0))
+            .unwrap()
+    );
+    assert_eq!(
+        db.query_row::<i64, _, _>("SELECT count(*) FROM canon_epics", [], |r| r.get(0))
+            .unwrap(),
+        1
+    );
+    assert!(db.prepare("SELECT * FROM canon_session_queue").is_err());
+    assert!(
+        db.prepare("SELECT * FROM canon_session_queue_heads")
+            .is_err()
+    );
 }

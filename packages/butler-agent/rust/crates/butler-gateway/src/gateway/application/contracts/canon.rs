@@ -55,6 +55,9 @@ pub trait AppCanonPort: Send + Sync + 'static {
     fn canon_operation(&self, _operation: AppCanonOperation) -> ApplicationFuture<Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
+    fn session_epics(&self, sessions: Vec<String>) -> ApplicationFuture<Vec<Vec<String>>> {
+        Box::pin(async move { Ok(sessions.into_iter().map(|_| Vec::new()).collect()) })
+    }
     fn execute(&self, _request: AppCanonRequest) -> ApplicationFuture<Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }

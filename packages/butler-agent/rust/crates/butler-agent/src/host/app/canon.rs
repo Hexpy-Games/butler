@@ -24,6 +24,25 @@ impl AppCanonPort for AppCanon {
     ) -> ApplicationFuture<Value> {
         canon_sidebar::execute(self.storage.clone(), operation)
     }
+    fn session_epics(&self, sessions: Vec<String>) -> ApplicationFuture<Vec<Vec<String>>> {
+        let storage = self.storage.clone();
+        Box::pin(async move {
+            storage
+                .canon_read(move |db| {
+                    sessions
+                        .into_iter()
+                        .map(|session| {
+                            let mut stmt = db.prepare(Query::ConversationWork.sql())?;
+                            Ok(stmt
+                                .query_map([session], |r| r.get::<_, String>("id"))?
+                                .collect::<rusqlite::Result<Vec<_>>>()?)
+                        })
+                        .collect()
+                })
+                .await
+                .map_err(error)
+        })
+    }
     fn execute(&self, request: AppCanonRequest) -> ApplicationFuture<Value> {
         let storage = self.storage.clone();
         Box::pin(async move {

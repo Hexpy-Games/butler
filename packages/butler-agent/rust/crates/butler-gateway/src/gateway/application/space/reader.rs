@@ -26,7 +26,7 @@ pub(in crate::gateway::application) fn read(
              LEFT JOIN chats c ON c.id=n.session_id
              LEFT JOIN app_space_groups g ON g.id=n.group_id
              WHERE NOT EXISTS (SELECT 1 FROM app_canon_conversations cc
-                 WHERE cc.session_id=n.session_id)
+                 WHERE cc.session_id=n.session_id AND cc.is_home=1)
              ORDER BY n.position,n.node_key",
         )
         .map_err(AppStorageError::sqlite)?;

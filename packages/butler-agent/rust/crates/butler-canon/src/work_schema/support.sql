@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS canon_session_epics (
   PRIMARY KEY (session_id,epic_id)
 );
 CREATE INDEX IF NOT EXISTS canon_session_epics_epic ON canon_session_epics(epic_id,bound_at,session_id);
+CREATE INDEX IF NOT EXISTS canon_session_epics_session ON canon_session_epics(session_id,bound_at,epic_id);
 CREATE TABLE IF NOT EXISTS canon_epic_work_links (
   epic_id TEXT NOT NULL REFERENCES canon_epics(id),
   btcc_work_id TEXT NOT NULL UNIQUE,
@@ -74,23 +75,3 @@ CREATE TABLE IF NOT EXISTS canon_epic_work_links (
 );
 CREATE INDEX IF NOT EXISTS canon_epic_work_links_epic ON canon_epic_work_links(epic_id,linked_at);
 CREATE INDEX IF NOT EXISTS canon_epic_work_links_session ON canon_epic_work_links(session_id);
-CREATE TABLE IF NOT EXISTS canon_session_queue_heads (
-  session_id TEXT PRIMARY KEY NOT NULL,
-  graph_revision INTEGER NOT NULL DEFAULT 0 CHECK (graph_revision>=0)
-);
-CREATE TABLE IF NOT EXISTS canon_session_queue (
-  session_id TEXT NOT NULL REFERENCES canon_session_queue_heads(session_id),
-  epic_id TEXT NOT NULL REFERENCES canon_epics(id),
-  step_index INTEGER NOT NULL CHECK (step_index>=0),
-  stack_position INTEGER NOT NULL CHECK (stack_position>=0),
-  state TEXT NOT NULL CHECK (state IN ('waiting','running','held','done','removed')),
-  hold_reason TEXT,
-  held_by_epic_id TEXT REFERENCES canon_epics(id),
-  decision TEXT CHECK (decision IN ('run_anyway','delete')),
-  decided_at INTEGER,
-  question_message_id TEXT,
-  origin TEXT NOT NULL CHECK (origin IN ('user_message','schedule','detach')),
-  origin_message_id TEXT,
-  result_reported_at INTEGER,
-  PRIMARY KEY (session_id,epic_id)
-);
