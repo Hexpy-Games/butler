@@ -35,7 +35,7 @@ const baseline = process.env.BUTLER_ANSWER_BASELINE;
 const baselineSources = new Map<string, string>();
 if (baseline) {
   assert.equal(stage, "before", "baseline mode is for before captures only");
-  for (const name of ["AnswerBlocks", "AnswerCards", "AnswerDataBlocks"]) {
+  for (const name of ["AnswerBlocks", "AnswerContainers", "AnswerCards", "AnswerDataBlocks"]) {
     const file = `packages/butler-app/client/ui/src/components/conversation/${name}.tsx`;
     baselineSources.set(resolve(root, file), execFileSync("git", ["show", `${baseline}:${file}`], { cwd: root, encoding: "utf8" }));
   }
@@ -110,7 +110,7 @@ async function checkMock(page: Page, width: number, theme: string, background: s
     else assert(state.cardWidth >= 168, "every desktop card is at least 168px");
     await page.waitForFunction(() => [...document.querySelectorAll('[data-slot="media-frame"]')].every(node => ["empty", "failed"].includes(node.getAttribute("data-fit") ?? "")));
     assert.equal(await page.locator('[data-answer-block="table"] tbody tr').count(), 4);
-    assert.equal(await page.locator('[data-answer-block="actions"] button').count(), 3);
+    assert.equal(await page.locator('[data-answer-block="actions"] button:not([aria-haspopup="menu"])').count(), 3);
     assert((await cards.first().innerText()).includes("76,390"));
     assert((await cards.nth(3).innerText()).includes("368,000"), "the struck-through value uses the same format");
     assert((await cards.first().innerText()).includes(labels.checkedTime));
@@ -205,6 +205,7 @@ async function checkCardTargetsAndViewer(page: Page, width: number, theme: strin
   const background = () => first.evaluate(node => new Promise<string>(resolve => requestAnimationFrame(() => requestAnimationFrame(() =>
     resolve(getComputedStyle(node.firstElementChild!).backgroundColor)))));
   await first.locator("li").first().scrollIntoViewIfNeeded();
+  await page.mouse.move(0, 0);
   const resting = await background();
   const fact = await first.locator("li").first().boundingBox();
   await page.mouse.move(fact!.x + fact!.width / 2, fact!.y + fact!.height / 2);
@@ -215,6 +216,7 @@ async function checkCardTargetsAndViewer(page: Page, width: number, theme: strin
   await first.locator('[data-item-card-media="viewer"]').hover();
   const pictureHover = await background();
   await first.screenshot({ path: join(evidence, `card-hover-picture-${locale}-${width}-${theme}.png`) });
+  geometry.push({ cardHover: { width, theme, resting, bodyHover, actionHover, pictureHover } });
   assert.notEqual(bodyHover, resting, "the card body shows the open affordance");
   assert.deepEqual([actionHover, pictureHover], [resting, resting], "actions and the picture drop the card's open hover");
   assert.equal(await first.locator('[data-item-card-media="viewer"]').evaluate(node => getComputedStyle(node).cursor), "zoom-in", "the picture reads as a viewer target");
@@ -286,7 +288,7 @@ async function checkLeniencyAndExpand(page: Page) {
 
   const longItems = dsItems.map(item => ({ ...item, text: `${item.text} ${item.text} ${item.text} ${item.text}` }));
   await open(page, { v: 1, blocks: [{ type: "cards", items: longItems }] }, 320, "light");
-  await page.getByRole("button", { name: labels.showMore, exact: true }).first().click();
+  await page.locator('[data-slot="item-card"]').getByRole("button", { name: labels.showMore, exact: true }).first().click();
   await page.getByRole("button", { name: labels.showLess, exact: true }).first().waitFor();
 
   const card = neutral.blocks[0]; assert(card.type === "cards");

@@ -70,6 +70,9 @@
   --motion-base: 160ms;
   --motion-slow: 220ms;
   --motion-deliberate: 320ms;
+  /* A saved piece of content flying into its destination (save flight):
+     long enough to follow across the window, still under half a second. */
+  --motion-flight: 420ms;
   --motion-exit-menu: 60ms;
   --motion-exit-fast: 90ms;
   --motion-exit-base: 110ms;

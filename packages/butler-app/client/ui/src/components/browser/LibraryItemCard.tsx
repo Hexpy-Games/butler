@@ -4,11 +4,17 @@ import { useButlerStore } from "@/app/store";
 import { notifyStatus } from "@/app/notifications";
 import type { LibraryItem } from "./libraryStore";
 import { openLink } from "./browserBridge";
+import { openDetail } from "../library/libraryNav";
 import { openScrap } from "./ScrapViewer";
 import { storedFileArtifactKind } from "../artifacts/artifactDisplay";
 /** Opens an item: a scrap with an HTML copy shows exactly its clipped part; `source` (or no copy) opens the page. */
 export async function openLibraryItem(item: LibraryItem, source = false) {
   try {
+    if (item.block && item.origin) {
+      if (source) useButlerStore.getState().openSession(item.origin.session);
+      else openDetail(item, { kind: "library", section: "scrap" });
+      return;
+    }
     if (!source && item.kind === "scrap" && item.snapshot) { openScrap(item); return; }
     if (item.file) {
       if (item.session) useButlerStore.getState().openSession(item.session);

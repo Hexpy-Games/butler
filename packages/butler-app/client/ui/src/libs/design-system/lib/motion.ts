@@ -12,6 +12,7 @@ export type MotionDurationName =
   | "base"
   | "slow"
   | "deliberate"
+  | "flight"
   | "exit-menu"
   | "exit-fast"
   | "exit-base"
@@ -45,6 +46,7 @@ const DURATION_FALLBACK: Record<MotionDurationName, number> = {
   base: 160,
   slow: 220,
   deliberate: 320,
+  flight: 420,
   "exit-menu": 60,
   "exit-fast": 90,
   "exit-base": 110,

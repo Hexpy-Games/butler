@@ -6,6 +6,7 @@
     reason = "test assertions"
 )]
 mod agent;
+pub(super) mod blocks;
 mod migration;
 mod organize;
 mod pages;

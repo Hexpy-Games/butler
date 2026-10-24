@@ -176,7 +176,7 @@ pub(super) fn item(value: Value) -> Result<Value, HttpError> {
             .is_some_and(|id| !id.is_empty() && id.len() <= 128))
         && (value.get("tags").is_none()
             || value["tags"].is_array() && tags(&value["tags"]).is_ok());
-    if organized && valid(&value) {
+    if organized && value.get("block").is_none() && value.get("origin").is_none() && valid(&value) {
         Ok(value)
     } else {
         Err(HttpError::public(

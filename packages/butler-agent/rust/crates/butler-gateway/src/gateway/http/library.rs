@@ -20,6 +20,13 @@ pub(super) async fn route(
             None => C::Page(input::page(&args)?),
         },
         (&Method::POST, []) => C::Save(input::item(body(request, 10 * 1024 * 1024).await?)?),
+        (&Method::POST, ["blocks"]) => {
+            let value = body(request, LIMIT).await?;
+            C::SaveBlock {
+                message_id: value["message_id"].as_str().unwrap_or_default().to_owned(),
+                path: value["path"].as_str().unwrap_or_default().to_owned(),
+            }
+        }
         (&Method::POST, ["documents"]) => {
             let value = body(request, LIMIT).await?;
             C::Promote {
@@ -63,6 +70,9 @@ pub(super) async fn route(
             group: args.get("group").cloned(),
         },
         (&Method::GET, [id, "snapshot"]) => C::Snapshot {
+            id: (*id).to_owned(),
+        },
+        (&Method::GET, [id]) => C::Item {
             id: (*id).to_owned(),
         },
         (&Method::DELETE, [id]) => C::Delete {
