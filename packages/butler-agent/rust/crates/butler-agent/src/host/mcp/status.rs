@@ -38,16 +38,14 @@ pub(super) async fn text(data_root: &Path) -> Result<String, crate::host::HostEr
 }
 
 fn uptime(data_root: &Path) -> String {
-    let Ok(Some(record)) = service_instance::read_record(data_root) else {
+    let Ok(service_instance::Ownership {
+        locked: true,
+        record: Some(record),
+    }) = service_instance::observe(data_root)
+    else {
         return "unknown".into();
     };
-    if record.state != "ready"
-        || !matches!(
-            service_instance::instance_lock_is_held_read_only(data_root),
-            Ok(true)
-        )
-        || !matches!(service_instance::process_matches(&record), Ok(true))
-    {
+    if record.state != "ready" || !matches!(service_instance::process_matches(&record), Ok(true)) {
         return "unknown".into();
     }
     let Some(ready_at) = record.ready_at else {
