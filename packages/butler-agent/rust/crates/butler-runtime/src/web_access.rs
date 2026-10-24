@@ -1,6 +1,8 @@
 //! Public-web retrieval owns its service client and Turn-scoped page cache.
 
+mod browsing;
 mod error;
+pub use browsing::BrowseModel;
 mod evidence;
 mod html;
 mod page;

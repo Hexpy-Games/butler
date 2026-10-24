@@ -6,6 +6,7 @@ pub(in crate::btcc) mod contracts;
 mod decision;
 mod execution;
 mod identity;
+pub(super) mod pending_asks;
 mod permission;
 mod permission_management;
 mod projection;

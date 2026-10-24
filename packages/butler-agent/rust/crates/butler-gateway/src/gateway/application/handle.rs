@@ -1,4 +1,7 @@
-use super::AppApplication;
+use super::{
+    AppApplication, AppApplicationConfig, AppApplicationDependencies, AppStorage,
+    GatewayApplicationError, app_error,
+};
 
 impl AppApplication {
     pub(super) fn clone_handle(&self) -> Self {
@@ -28,6 +31,7 @@ impl AppApplication {
             wallpapers: self.wallpapers.clone(),
             asset_cache: self.asset_cache.clone(),
             settings_update_lock: self.settings_update_lock.clone(),
+            canon_file_lifetimes: self.canon_file_lifetimes.clone(),
             canon_projection_locks: self.canon_projection_locks.clone(),
             plan_decision_locks: self.plan_decision_locks.clone(),
             // Only the dispatching application relays readiness events.
@@ -36,4 +40,17 @@ impl AppApplication {
             quota_events: self.quota_events.clone(),
         }
     }
+}
+
+pub(super) async fn open_storage(
+    config: &AppApplicationConfig,
+    dependencies: &AppApplicationDependencies,
+) -> Result<AppStorage, GatewayApplicationError> {
+    AppStorage::open(
+        config.database_path.clone(),
+        Some(config.butler_data.clone()),
+        dependencies.identity_clock.now_iso(),
+    )
+    .await
+    .map_err(app_error)
 }

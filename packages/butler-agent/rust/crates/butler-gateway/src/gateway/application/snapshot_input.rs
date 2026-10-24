@@ -307,7 +307,7 @@ fn populate_snapshot_assets(
     let mut attached = db
         .prepare(
             "SELECT f.id,f.owner_session_id,f.message_id,f.kind,f.mime_type,f.safe_name,\
-         f.size_bytes,f.sha256,f.storage_name,f.created_at,f.source_label,f.deliverable,f.title FROM message_attachments a \
+         f.size_bytes,f.sha256,f.storage_name,f.created_at,f.source_label,f.deliverable,f.title,f.width,f.height FROM message_attachments a \
          JOIN message_files f ON f.id=a.file_id WHERE a.message_id=?1 ORDER BY a.position",
         )
         .map_err(AppStorageError::sqlite)?;
@@ -315,6 +315,8 @@ fn populate_snapshot_assets(
         .query_map([&snapshot.message_id], |row| {
             Ok(AppMessageFileSnapshot {
                 title: row.get(12)?,
+                width: row.get(13)?,
+                height: row.get(14)?,
                 source_label: row.get(10)?,
                 deliverable: row.get(11)?,
                 id: row.get(0)?,

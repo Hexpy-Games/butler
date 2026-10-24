@@ -1,0 +1,125 @@
+[
+  {
+    "provider_id": "openai",
+    "pattern": "gpt-#-astra",
+    "tier": "flagship"
+  },
+  {
+    "provider_id": "openai",
+    "pattern": "gpt-#-sol",
+    "tier": "balanced",
+    "min_version": [
+      6
+    ]
+  },
+  {
+    "provider_id": "openai",
+    "pattern": "gpt-#-luna",
+    "tier": "efficient"
+  },
+  {
+    "provider_id": "openai",
+    "pattern": "gpt-#-terra",
+    "tier": "balanced"
+  },
+  {
+    "provider_id": "anthropic",
+    "pattern": "claude-fable-#",
+    "tier": "flagship"
+  },
+  {
+    "provider_id": "anthropic",
+    "pattern": "claude-opus-#",
+    "tier": "flagship"
+  },
+  {
+    "provider_id": "anthropic",
+    "pattern": "claude-sonnet-#",
+    "tier": "balanced"
+  },
+  {
+    "provider_id": "anthropic",
+    "pattern": "claude-haiku-#",
+    "tier": "efficient"
+  },
+  {
+    "provider_id": "google",
+    "pattern": "gemini-#-argon",
+    "tier": "flagship"
+  },
+  {
+    "provider_id": "google",
+    "pattern": "gemini-#-flash",
+    "tier": "balanced"
+  },
+  {
+    "provider_id": "google",
+    "pattern": "gemini-#-flash-lite",
+    "tier": "efficient"
+  },
+  {
+    "provider_id": "google",
+    "pattern": "gemini-#-pro",
+    "tier": "flagship"
+  },
+  {
+    "provider_id": "zai",
+    "pattern": "glm-#-flash",
+    "tier": "efficient"
+  },
+  {
+    "provider_id": "zai-api",
+    "pattern": "glm-#-flash",
+    "tier": "efficient"
+  },
+  {
+    "provider_id": "opencode-go",
+    "pattern": "grok-#",
+    "tier": "flagship"
+  },
+  {
+    "provider_id": "opencode-go",
+    "pattern": "glm-#-flash",
+    "tier": "efficient"
+  },
+  {
+    "provider_id": "opencode-go",
+    "pattern": "glm-#",
+    "tier": "flagship"
+  },
+  {
+    "provider_id": "opencode-go",
+    "pattern": "deepseek-v#-flash",
+    "tier": "efficient"
+  },
+  {
+    "provider_id": "opencode-go",
+    "pattern": "mimo-v#-pro",
+    "tier": "balanced"
+  },
+  {
+    "provider_id": "opencode-go",
+    "pattern": "muse-spark-#-contributor",
+    "tier": "efficient"
+  },
+  {
+    "provider_id": "opencode-go",
+    "pattern": "gpt-#-luna",
+    "tier": "efficient"
+  },
+  {
+    "provider_id": "opencode-go",
+    "pattern": "minimax-m#",
+    "tier": "balanced"
+  },
+  {
+    "provider_id": "opencode-go",
+    "pattern": "qwen#-max",
+    "tier": "flagship"
+  },
+  {
+    "provider_id": "opencode-go",
+    "pattern": "qwen#-plus",
+    "tier": "balanced"
+  }
+]

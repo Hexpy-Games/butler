@@ -1,3 +1,5 @@
+mod fixtures;
+use fixtures::image_context;
 use std::sync::Arc;
 
 use serde_json::{Value, json};
@@ -138,6 +140,7 @@ fn phase_selection_enforces_execution_policy_access_and_required_tools() {
         })
         .unwrap();
         let selection = select_phase(GuidedPhaseInput {
+            browsing_agent: false,
             turn: &turn,
             catalog: catalog.snapshot(),
             phase_surface_flag: if enabled { "yes" } else { "off" },
@@ -183,6 +186,7 @@ fn image_tool_requires_current_full_access_image_admission() {
     for flag in ["on", "off"] {
         let no_image = phase_turn("full_access", &json!({}));
         let selection = select_phase(GuidedPhaseInput {
+            browsing_agent: false,
             turn: &no_image,
             catalog,
             phase_surface_flag: flag,
@@ -204,6 +208,7 @@ fn image_tool_requires_current_full_access_image_admission() {
         detached_image["attachments"] = json!([]);
         let detached_turn = phase_turn("full_access", &detached_image);
         let selection = select_phase(GuidedPhaseInput {
+            browsing_agent: false,
             turn: &detached_turn,
             catalog,
             phase_surface_flag: flag,
@@ -226,6 +231,7 @@ fn image_tool_requires_current_full_access_image_admission() {
         with_image.context["executionPolicy"]["requiredNativeTools"] =
             json!(["analyze_attached_image"]);
         let selection = select_phase(GuidedPhaseInput {
+            browsing_agent: false,
             turn: &with_image,
             catalog,
             phase_surface_flag: flag,
@@ -248,6 +254,7 @@ fn image_tool_requires_current_full_access_image_admission() {
     stale["imageAdmission"]["capability"]["routeHealth"] = json!("transient_failure");
     let stale_turn = phase_turn("full_access", &stale);
     let selection = select_phase(GuidedPhaseInput {
+        browsing_agent: false,
         turn: &stale_turn,
         catalog,
         phase_surface_flag: "on",
@@ -268,6 +275,7 @@ fn image_tool_requires_current_full_access_image_admission() {
     // Host never supplies the image capability fact to a read-only Turn.
     let read_only = phase_turn("read_only", &image_context());
     let selection = select_phase(GuidedPhaseInput {
+        browsing_agent: false,
         turn: &read_only,
         catalog,
         phase_surface_flag: "on",
@@ -303,6 +311,7 @@ fn ask_first_admits_the_attached_image_tool() {
         let mut turn = phase_turn(access, &image_context());
         turn.context["executionPolicy"]["requiredNativeTools"] = json!(["analyze_attached_image"]);
         let selection = select_phase(GuidedPhaseInput {
+            browsing_agent: false,
             turn: &turn,
             catalog,
             phase_surface_flag: flag,
@@ -347,6 +356,7 @@ fn ask_first_authorizes_approval_free_actions_and_approval_gated_mcp() {
         turn.context["executionPolicy"]["requiredNativeTools"] =
             json!([approval_free.as_slice(), &["create_automation"]].concat());
         let selection = select_phase(GuidedPhaseInput {
+            browsing_agent: false,
             turn: &turn,
             catalog,
             phase_surface_flag: "off",
@@ -366,29 +376,53 @@ fn ask_first_authorizes_approval_free_actions_and_approval_gated_mcp() {
         for flag in ["off", "on"] {
             let mut ordinary = phase_turn(access, &json!({}));
             ordinary.context["executionPolicy"]["trackingMode"] = "local".into();
-            let selection = select_phase(GuidedPhaseInput {
-                turn: &ordinary,
-                catalog,
-                phase_surface_flag: flag,
-                operation_replay_flag: "off",
-                default_workspace: "/tmp",
-            })
-            .unwrap();
-            for name in [
-                "create_automation",
-                "update_automation",
-                "delete_automation",
-                "list_automations",
-            ] {
+            for browsing_agent in [false, true] {
+                let selection = select_phase(GuidedPhaseInput {
+                    browsing_agent,
+                    turn: &ordinary,
+                    catalog,
+                    phase_surface_flag: flag,
+                    operation_replay_flag: "off",
+                    default_workspace: "/tmp",
+                })
+                .unwrap();
                 assert_eq!(
-                    selection.authorized_names.iter().any(|tool| tool == name),
-                    name == "list_automations" || access != "read_only",
-                    "{access} {flag} {name}"
+                    has_provider_tool(&selection.provider_tools, "browse"),
+                    browsing_agent
                 );
-                assert!(
-                    !has_provider_tool(&selection.provider_tools, name),
-                    "{access} {flag} {name}"
-                );
+                for name in [
+                    "browser_open",
+                    "browser_observe",
+                    "browser_close",
+                    "image_collect",
+                ] {
+                    assert!(selection.authorized_names.iter().any(|tool| tool == name));
+                    if browsing_agent {
+                        assert!(!has_provider_tool(&selection.provider_tools, name));
+                    }
+                }
+                if browsing_agent {
+                    assert_eq!(
+                        has_provider_tool(&selection.provider_tools, "browser_act"),
+                        access != "read_only"
+                    );
+                }
+                for name in [
+                    "create_automation",
+                    "update_automation",
+                    "delete_automation",
+                    "list_automations",
+                ] {
+                    assert_eq!(
+                        selection.authorized_names.iter().any(|tool| tool == name),
+                        name == "list_automations" || access != "read_only",
+                        "{access} {flag} {name}"
+                    );
+                    assert!(
+                        !has_provider_tool(&selection.provider_tools, name),
+                        "{access} {flag} {name}"
+                    );
+                }
             }
         }
     }
@@ -432,69 +466,4 @@ fn phase_turn(access_mode: &str, context_bits: &Value) -> TurnRecord {
         "executionFence":0
     }))
     .unwrap()
-}
-
-fn image_context() -> Value {
-    let digest = "d".repeat(64);
-    let source_digest = "s".repeat(64);
-    let derivative_digest = "e".repeat(64);
-    let manifest_digest = "f".repeat(64);
-    json!({
-        "attachments":[{"id":"file-current","kind":"image"}],
-        "imageAdmission":{
-            "tuple":{
-                "providerId":"zai",
-                "modelId":"glm-5.3",
-                "carrierProtocol":"zai_mcp_vision",
-                "endpointProfileId":"profile",
-                "catalogCapabilityRevision":"revision",
-                "catalogCapabilityDigest":digest
-            },
-            "capability":{
-                "providerId":"zai",
-                "modelId":"glm-5.3",
-                "carrierProtocol":"zai_mcp_vision",
-                "endpointProfileId":"profile",
-                "catalogCapabilityRevision":"revision",
-                "catalogCapabilityDigest":digest,
-                "modelSupport":"supported",
-                "capabilitySource":"provider_discovery",
-                "routeHealth":"healthy",
-                "inputModalities":["image"],
-                "acceptedMimeTypes":["image/png"],
-                "maxInlineImageBytes":1024,
-                "maxWidth":100,
-                "maxHeight":100,
-                "maxPixels":10000,
-                "sourceUrl":"https://example.test",
-                "verifiedAt":"2026-09-24T00:00:00Z",
-                "evidenceRevision":"revision",
-                "evidenceDigest":digest,
-                "toolServerId":"zai-vision",
-                "toolName":"analyze_image",
-                "toolCapabilityDigest":digest
-            },
-            "manifests":[{
-                "kind":"image",
-                "fileId":"file-current",
-                "position":0,
-                "safeName":"image.png",
-                "mimeType":"image/png",
-                "sniffedMimeType":"image/png",
-                "sniffedMagic":"png",
-                "storageRevision":"message-file-row-v1",
-                "sourceSizeBytes":10,
-                "sourceDigest":source_digest,
-                "derivativeId":"file-current:visual:test",
-                "derivativeMimeType":"image/png",
-                "derivativeSizeBytes":5,
-                "derivativeDigest":derivative_digest,
-                "width":1,
-                "height":1,
-                "pixelCount":1,
-                "sanitizerRevision":"test",
-                "manifestDigest":manifest_digest
-            }]
-        }
-    })
 }

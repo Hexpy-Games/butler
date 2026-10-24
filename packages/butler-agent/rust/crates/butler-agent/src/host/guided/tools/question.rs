@@ -13,20 +13,11 @@ pub(super) async fn execute(
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    const SHAPE: &str = "ask_user requires 1–4 questions with unique ids, eyebrow, title, kind single/multi/text and allow_custom. single/multi take 2–6 options with unique ids, labels and kind; text takes no options. No icon field.";
-    let questions = serde_json::from_value::<UserQuestions>(json!(call.arguments));
-    // Validation feedback goes back to the model for a retry; skip/input options
-    // are then dropped structurally (the card has its own Skip and free input).
-    let questions = match questions.map(|q| (q.validate(), q)) {
-        Ok((Ok(()), q)) => q.normalized(),
-        Ok((Err(reason), _)) => {
+    let (questions, wait) = match parse(call) {
+        Ok(input) => input,
+        Err(message) => {
             return encode(
-                &json!({"ok":false,"error":{"code":"invalid_arguments","message":format!("{SHAPE} {reason}")}}),
-            );
-        }
-        Err(_) => {
-            return encode(
-                &json!({"ok":false,"error":{"code":"invalid_arguments","message":SHAPE}}),
+                &json!({"ok":false,"error":{"code":"invalid_arguments","message":message}}),
             );
         }
     };
@@ -35,7 +26,7 @@ pub(super) async fn execute(
     }
     let admitted = owner
         .authority
-        .ask_user(
+        .ask_user_with_wait(
             QuestionBinding {
                 owner_session_id: owner.binding.owner_session_id.clone(),
                 source_session_id: owner.binding.source_session_id.clone(),
@@ -45,6 +36,7 @@ pub(super) async fn execute(
                 reasoning_effort: owner.binding.reasoning_effort.clone(),
             },
             questions,
+            wait,
         )
         .await
         .map_err(|error| ToolExecutionError::Integrity(error.into()))?;
@@ -55,6 +47,11 @@ pub(super) async fn execute(
         AuthorityAdmissionResult::Modified { request_ref } => request_ref,
         _ => return encode(&json!({"ok":false,"status":"cancelled"})),
     };
+    if !wait {
+        return encode(
+            &json!({"ok":true,"open":true,"ask_id":format!("question:{request_ref}"),"message":"The question is now an open card the user can answer any time. Finish your reply without the answer and without repeating the question; its answer will arrive as a later message."}),
+        );
+    }
     let execution = owner
         .authority
         .execution(AuthorityExecutionInput {
@@ -71,6 +68,22 @@ pub(super) async fn execute(
         .map_err(|error| ToolExecutionError::Integrity(error.into()))?;
     encode(&json!({"ok":true,"response":response}))
 }
+fn parse(call: &ModelRoundToolCall) -> Result<(UserQuestions, bool), String> {
+    const SHAPE: &str = "ask_user requires 1–4 questions with unique ids, eyebrow, title, kind single/multi/text and allow_custom. single/multi take 2–6 options with unique ids, labels and kind; text takes no options. wait is an optional boolean. No icon field.";
+    let mut arguments = call.arguments.clone();
+    let wait = match arguments.remove("wait") {
+        None => true,
+        Some(serde_json::Value::Bool(wait)) => wait,
+        Some(_) => return Err(SHAPE.into()),
+    };
+    let questions =
+        serde_json::from_value::<UserQuestions>(json!(arguments)).map_err(|_| SHAPE.to_owned())?;
+    questions
+        .validate()
+        .map_err(|reason| format!("{SHAPE} {reason}"))?;
+    Ok((questions.normalized(), wait))
+}
+
 fn encode(value: &serde_json::Value) -> Result<JsonDocument, ToolExecutionError> {
     JsonDocument::from_value(value).map_err(|error| {
         ToolExecutionError::Integrity(butler_turn::btcc::BtccError::relayed(

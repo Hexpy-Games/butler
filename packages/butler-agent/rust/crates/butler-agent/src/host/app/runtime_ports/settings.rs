@@ -135,6 +135,7 @@ async fn load(
         display_names(catalog.models.iter().chain(&catalog.registered_models));
     let native_settings = serde_json::json!({
         "model_display_names": model_display_names,
+        "browsing_auto": read.catalog.browsing_auto(),
         "routine_default": {"model": catalog.default_model_ref, "effort": catalog.default_reasoning_effort},
         "update_previews": butler_runtime::operations::effective_update_previews(
             read.config.pointer("/update/previews").and_then(Value::as_bool), app_version),

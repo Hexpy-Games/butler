@@ -47,6 +47,22 @@ pub(crate) struct PreparedNativeGuidedTurn {
 }
 
 impl GuidedPreparation {
+    fn select_phase(
+        &self,
+        turn: &butler_turn::btcc::TurnRecord,
+        browsing_agent: bool,
+    ) -> Result<GuidedPhaseSelection, BtccError> {
+        select_phase(GuidedPhaseInput {
+            browsing_agent,
+            turn,
+            catalog: self.catalog.snapshot(),
+            phase_surface_flag: &self.phase_surface_flag,
+            operation_replay_flag: &self.operation_replay_flag,
+            default_workspace: &self.default_workspace,
+        })
+        .map_err(preparation_error)
+    }
+
     async fn accepted_plan(
         &self,
         turn: &butler_turn::btcc::TurnRecord,
@@ -81,16 +97,10 @@ impl GuidedPreparation {
     pub(crate) async fn prepare(
         &self,
         start: &GuidedTurnStart<'_>,
+        browsing_agent: bool,
     ) -> Result<PreparedNativeGuidedTurn, BtccError> {
         let turn = start.turn;
-        let phase = select_phase(GuidedPhaseInput {
-            turn,
-            catalog: self.catalog.snapshot(),
-            phase_surface_flag: &self.phase_surface_flag,
-            operation_replay_flag: &self.operation_replay_flag,
-            default_workspace: &self.default_workspace,
-        })
-        .map_err(preparation_error)?;
+        let phase = self.select_phase(start.turn, browsing_agent)?;
         let policy = &phase.execution_policy;
         if matches!(
             policy.role,
