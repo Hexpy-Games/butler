@@ -96,6 +96,18 @@ async function launch(): Promise<Page> {
     const module=process.getBuiltinModule('module').createRequire(${JSON.stringify(resolve(root, "packages/butler-app/client/electron/package.json"))})(${JSON.stringify(resolve(root, "packages/butler-app/client/electron/browser/tabs.mjs"))});
     const dummy=module.createUserBrowser({getPath:()=>${JSON.stringify(join(dir, "profile"))},on:()=>{}},()=>null);
     const prototype=Object.getPrototypeOf(dummy);const snapshot=prototype.snapshot;
+    const open=prototype.open;
+    prototype.open=function(){
+      if(globalThis.holdBrowserRestore && !this.initialization){
+        const read=this.restore.read;
+        this.restore.read=async()=>{
+          const urls=await read.call(this.restore);
+          await new Promise(done=>{globalThis.releaseBrowserRestore=done});
+          return urls;
+        };
+      }
+      return open.call(this);
+    };
     prototype.snapshot=function(){
       globalThis.browserDebug={areaVisible:this.areaVisible,nativeCovers:this.nativeCovers,tabs:[...this.tabs.values()].map(t=>({id:t.id,status:t.status,covered:t.covered,bounds:t.bounds,attached:Boolean(t.attached),destroyed:t.view?.webContents.isDestroyed()}))};
       return snapshot.call(this);
@@ -105,11 +117,30 @@ async function launch(): Promise<Page> {
     const handlers=${electronModule}.ipcMain._invokeHandlers;
     const handler=handlers.get('butler-browser:call');
     handlers.set('butler-browser:call',async (event,op,input) => {
-      const entry={op,value:input?.value,at:Date.now()};globalThis.browserTrace.push(entry);
+      const entry={op,value:input?.value,owner:input?.owner,at:Date.now()};globalThis.browserTrace.push(entry);
       try{return await handler(event,op,input)}finally{entry.finished=Date.now();entry.children=${win}.contentView.children.length}
     });
   })()`);
   return page;
+}
+
+/** Hold the real snapshot read until the mounted renderer has flushed its effects and IPC. */
+async function openDuringRestore(page: Page) {
+  await main("globalThis.holdBrowserRestore=true;globalThis.browserTrace=[]");
+  try {
+    await click(page, "Browser");
+    await waitUntil(() => main<boolean>("Boolean(globalThis.releaseBrowserRestore)"), "restore read held");
+    await waitUntil(() => main<boolean>("globalThis.browserTrace.some(e=>e.op==='scope' && e.value===false && e.owner==='mine')"), "browser mount effects");
+    // The scope and automatic-create effects run in the same passive-effect flush.
+    // A renderer task followed by a round-trip drains their already-enqueued IPC.
+    const pending = await state(page);
+    const creates = await main<number>("globalThis.browserTrace.filter(e=>e.op==='create').length");
+    assert.equal(creates, 0, "renderer must not create a tab while restore is pending");
+    assert.deepEqual(pending.tabs, [], "pending restore has no speculative tabs");
+  } finally {
+    await main("globalThis.holdBrowserRestore=false;globalThis.releaseBrowserRestore?.();globalThis.releaseBrowserRestore=null");
+  }
+  await waitUntil(() => main<boolean>("globalThis.browserTrace.some(e=>e.op==='open' && e.finished)"), "restore completed");
 }
 
 async function waitUntil(read: () => Promise<boolean>, label: string) {
@@ -238,9 +269,19 @@ try {
   await main(`${win}.setSize(1440, 900)`);
   await page.waitForFunction(() => innerWidth === 1440);
   await page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="browser-entry"]')));
+  await click(page, "Browser");
+  await waitUntil(async () => (await state(page)).tabs.length === 1, "fresh profile gets one blank tab");
+  assert.equal((await state(page)).tabs[0]!.url, "");
+  await call(page, "create");
+  assert.deepEqual((await state(page)).tabs.map(tab => tab.url), ["", ""]);
   await quitAndStop(page);
   page=await launch();await main(`${win}.setSize(1440,900)`);
   await page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="browser-entry"]')));
+  await openDuringRestore(page);
+  await waitUntil(async () => (await state(page)).tabs.length === 2, "two saved blank tabs restored");
+  assert.deepEqual((await state(page)).tabs.map(tab => tab.url), ["", ""]);
+  writeFileSync(join(evidence, "restore-race-result.json"), JSON.stringify({ pendingCreates: 0, restoredUrls: (await state(page)).tabs.map(tab => tab.url) }));
+  await call(page, "close", { id: (await state(page)).tabs[1]!.id });
   await shot(page, "before-en-light-workspace");
   await waitUntil(() => main<boolean>(`${electronModule}.webContents.getAllWebContents().length === 1`), "startup auxiliary contents closed");
   assert.equal(await main<number>(`${electronModule}.webContents.getAllWebContents().length`), 1, "no web tab process before Browser activation");
@@ -286,7 +327,7 @@ try {
   page = await launch();
   await main(`${win}.setSize(1440,900)`);
   await page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="browser-entry"]')));
-  await click(page, "Browser");
+  await openDuringRestore(page);
   await waitUntil(async () => (await state(page)).tabs.length === restoredUrls.length, "restore tab count");
   assert.deepEqual((await state(page)).tabs.map(tab=>tab.url), restoredUrls, "restart restores complete ordered URLs");
   const restoredFirst = (await state(page)).tabs.find(tab=>tab.url.endsWith("/second"))!.id;
