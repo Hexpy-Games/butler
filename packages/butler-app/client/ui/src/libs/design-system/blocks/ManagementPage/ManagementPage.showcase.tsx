@@ -7,7 +7,7 @@ import { DashboardHeader } from "../DashboardHeader";
 import { Wallpaper, type WallpaperSource } from "../Wallpaper";
 import { ManagementPage, ManagementPagePanel, type ManagementPageBackgroundTreatment } from "./ManagementPage";
 import styles from "./ManagementPage.showcase.module.css";
-import { NarrowBoard, WideBoard } from "./ManagementPage.asideDemo";
+import { NarrowBoard, WideBoard, WideBoardOverWallpaper } from "./ManagementPage.asideDemo";
 
 export const meta: ShowcaseMeta = {
   title: "ManagementPage",
@@ -88,4 +88,6 @@ export const stories: ShowcaseStory[] = [
   // aside: the selected task flat in the right margin of a 1000px+ page (the board and composer narrow to its left).
   { name: "Aside docked (wide page)", widths: ["app", "wide"], render: (context) => <WideBoard {...context} /> },
   { name: "Aside floating (narrow page)", widths: ["375", "app"], render: (context) => <NarrowBoard {...context} /> },
+  // onColumnRect: the column reaches the docked aside's far edge, so the wallpaper's dots stay out from behind it.
+  { name: "Aside docked over a wallpaper (onColumnRect)", widths: ["app", "wide"], render: (context) => <WideBoardOverWallpaper {...context} /> },
 ];

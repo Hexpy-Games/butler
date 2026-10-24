@@ -2,6 +2,7 @@ import { reconcileAnswerDrafts } from "./answerDrafts";
 import { retainAnswerBlocks } from "./stableAnswerBlocks";
 import { generalChatCleared } from "./generalChatEvents";
 import { create } from "zustand";
+import { leaveCanonEditor } from "./canonEditGuard.ts";
 import { useProjectDashboardState } from "./projectDashboardState.ts";
 import { mergeSessionViewWindow } from "./sessionViewWindow.ts";
 import { chromeEnvironment } from "./chromeEnvironment.ts";
@@ -947,7 +948,7 @@ let lastGeneralClearEvent = 0;
 const initialSettings = readCachedSettings();
 setAppCopyLanguage(initialSettings.language);
 
-export const useButlerStore = create<ButlerStore>((set, get) => ({
+export const useButlerStore = create<ButlerStore>()((set, get) => ({
   leftOpen: false,
   // New users start without the inspector; a saved UI state restores it.
   rightOpen: false,
@@ -1012,7 +1013,9 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       return { ...panels, ...(panels.rightOpen === false && state.view.kind === "project-dashboard"
         ? { view: { kind: "project-dashboard" as const, projectId: state.view.projectId } } : {}) };
     }),
-  setRightOpen: (value) =>
+  setRightOpen: async (value) => {
+    const leave = leaveCanonEditor();
+    if (leave !== true && !await leave) return;
     set((state) => {
       const rightOpen = resolveUpdate(value, state.rightOpen);
       return rightOpen
@@ -1024,7 +1027,8 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
           })
         : { rightOpen: false, ...(state.view.kind === "project-dashboard"
           ? { view: { kind: "project-dashboard" as const, projectId: state.view.projectId } } : {}) };
-    }),
+    });
+  },
   setRightTab: (rightTab) => set({ rightTab }),
   setSelectedArtifactId: (artifactId) =>
     set({ selectedArtifactId: artifactId, selectedArtifact: null }),
@@ -1087,13 +1091,20 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       sidebarCollapsedProjectIds: uiState.sidebar_collapsed_project_ids,
     });
   },
-  setView: (view) => set({ view }),
-  openSettings: (section = "general") =>
+  setView: async (view) => {
+    const leave = leaveCanonEditor();
+    if (leave !== true && !await leave) return;
+    set({ view });
+  },
+  openSettings: async (section = "general") => {
+    const leave = leaveCanonEditor();
+    if (leave !== true && !await leave) return;
     set((state) => ({
       settingsReturnView:
         state.view.kind === "settings" ? state.settingsReturnView : state.view,
       view: { kind: "settings", section: normalizeSettingsSectionId(section) },
-    })),
+    }));
+  },
   closeSettings: () =>
     set((state) => ({
       view: state.settingsReturnView ?? { kind: "session" },
@@ -1287,7 +1298,9 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   setRenameProject: (renameProject) => set({ renameProject }),
   setRenameSession: (renameSession) => set({ renameSession }),
 
-  openSession: (chatId, sessionTitle) =>
+  openSession: async (chatId, sessionTitle) => {
+    const leave = leaveCanonEditor();
+    if (leave !== true && !await leave) return;
     set((state) => {
       const sessionMessageViews = snapshotActiveSessionView(state);
       const storedSessionView = state.sessionViews[chatId] ?? null;
@@ -1334,7 +1347,8 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
           !storedSessionView,
         status: state.status,
       };
-    }),
+    });
+  },
   openNewChat: () => get().openSession("draft:chat"),
   openNewProjectChat: (projectId) =>
     get().openSession(projectDraftId(projectId)),
@@ -1345,7 +1359,9 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   },
   clearPendingProjectDocumentAttachment: () =>
     set({ pendingProjectDocumentAttachment: null }),
-  openProjectDashboard: (projectId) => {
+  openProjectDashboard: async (projectId) => {
+    const leave = leaveCanonEditor();
+    if (leave !== true && !await leave) return;
     const dashboards = useProjectDashboardState.getState();
     dashboards.update(projectId, { activationRevision: (dashboards.projects[projectId]?.activationRevision ?? 0) + 1 });
     set((state) => ({

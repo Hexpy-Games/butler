@@ -42,6 +42,7 @@ invalid_document_request
 empty_queued_message
 general_channel_protected
 invalid_json
+invalid_library_item
 invalid_library_request
 invalid_session_controls
 invalid_utf8
