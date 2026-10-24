@@ -18,6 +18,13 @@ export async function auditTagPicker(page: Page, count: number) {
   });
   assert(metrics.total > metrics.height && metrics.overflowing === "true", "Palette overflows the scroll area");
   assert(parseFloat(metrics.fade) > 0 && metrics.mask !== "none", "Overflow has the DS edge fade");
+  // The list must end mid-row: a sliver hidden inside the fade gives no cue that more tags follow.
+  const peek = await results.evaluate(element => {
+    const bottom = element.getBoundingClientRect().bottom;
+    const cut = [...element.querySelectorAll('[data-slot="filtered-select-row"]')].map(row => row.getBoundingClientRect()).find(row => row.bottom > bottom);
+    return cut ? (bottom - cut.top) / cut.height : 0;
+  });
+  assert(peek >= 0.3 && peek <= 0.7, `The first hidden tag row peeks above the edge (${peek.toFixed(2)})`);
   await results.evaluate(element => { element.scrollTop = element.scrollHeight; });
   await page.waitForFunction(() => document.querySelector('[data-slot="filtered-select-results"]')?.getAttribute("data-at-end") === "true");
   const last = await popover.locator('[data-slot="filtered-select-item"]').last().boundingBox();
