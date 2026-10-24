@@ -21,8 +21,9 @@ const APP_ORIGIN: &str = "app://butler";
 /// Loopback names the gateway always answers, with its bound port.
 const LOOPBACK_NAMES: [&str; 3] = ["127.0.0.1", "localhost", "[::1]"];
 /// Routes whose bodies are multipart uploads, not JSON.
-const MULTIPART_ROUTES: [&str; 4] = [
+const MULTIPART_ROUTES: [&str; 5] = [
     "/message-files",
+    "/message-assets/masks",
     "/skills/import",
     "/wallpapers",
     "/wallpaper-modules/import",

@@ -40,6 +40,11 @@ pub(super) fn validate_message_request(
     }
 
     Ok(MessageSendRequest {
+        image_edit: object
+            .get("image_edit")
+            .map(|v| serde_json::from_value(v.clone()))
+            .transpose()
+            .map_err(|_| MessageRequestError::Invalid)?,
         expected_project_id,
         content_parts,
         chat_id: object.get("chat_id").cloned(),

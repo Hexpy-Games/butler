@@ -1,4 +1,4 @@
-import type { UserQuestion, UserQuestionAnswer, MessageRecord, AnsweredUserQuestions, PendingUserQuestions } from "@/app/types";
+import type { UserQuestion, UserQuestionAnswer, MessageRecord, AnsweredUserQuestions } from "@/app/types";
 import type { ComposerQuestion, QuestionAnswer } from "@/butler-ds";
 
 /** Concrete answers only: the card has its own Skip and free input, so options of those kinds never show. */
@@ -30,16 +30,16 @@ export function answerWire(questions: readonly UserQuestion[], answers: readonly
 }
 
 /** Answers occupy their own user row before the continuing assistant response. */
-export function withQuestionAnswers(messages: MessageRecord[], answers: readonly AnsweredUserQuestions[], pending: readonly PendingUserQuestions[] = []): MessageRecord[] {
+export function withQuestionAnswers(messages: MessageRecord[], answers: readonly AnsweredUserQuestions[]): MessageRecord[] {
   const completed = answers.filter(a => a.response.status === "answered");
-  if (!completed.length && !pending.length) return messages;
+  if (!completed.length) return messages;
   const messageIds = new Set(messages.map(m => m.id));
   const followups = new Map(completed.map(a => [`question-followup-${a.request_ref}`, a]));
   const remaining = completed.filter(answer => !messageIds.has(`question-followup-${answer.request_ref}`))
     .sort((left, right) => Date.parse(left.updated_at) - Date.parse(right.updated_at));
   let nextAnswer = 0;
   const result: MessageRecord[] = [];
-  const summarize = (question: AnsweredUserQuestions | PendingUserQuestions, at?: string) => {
+  const summarize = (question: AnsweredUserQuestions, at?: string) => {
     const summary = question.questions.questions;
     let index = result.length - 1;
     while (index >= 0 && !(result[index].role === "assistant" && result[index].turn_id === question.source_turn_id && !result[index].question_summary)) index--;
@@ -63,8 +63,5 @@ export function withQuestionAnswers(messages: MessageRecord[], answers: readonly
     result.push(answer ? { ...message, text: "", question_answer: answer } : message);
   }
   while (nextAnswer < remaining.length) insert(remaining[nextAnswer++]);
-  for (const question of pending) {
-    if (!completed.some(answer => answer.request_ref === question.request_ref)) summarize(question);
-  }
   return result;
 }

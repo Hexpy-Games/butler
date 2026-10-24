@@ -3,9 +3,10 @@ import { appCopy } from "@/app/copy.ts";
 import { Button, ButtonContainer, ComposerDecisionPanel, ListChecks } from "@/butler-ds";
 import type { ComposerPlanDecision } from "./useComposerPlanDecision";
 
-export function ComposerPlanDecisionSurface({ decision }: { decision: ComposerPlanDecision }) {
+export function ComposerPlanDecisionSurface({ decision, placement }: { placement?: "composer" | "conversation"; decision: ComposerPlanDecision }) {
   useAppLocale();
   return <ComposerDecisionPanel
+    placement={placement}
     icon={<ListChecks aria-hidden="true" size="lg" />}
     eyebrow={appCopy.composer.plan}
     title={decision.planTitle}

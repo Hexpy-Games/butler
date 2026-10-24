@@ -6,9 +6,11 @@ impl GatewayApplication for AppApplication {
         let this = self.clone_handle();
         Box::pin(async move { this.browser_still_owned(command).await })
     }
+    fn image_usage(&self, command: AppImageUsageCommand) -> ApplicationFuture<Value> {
+        super::image_usage::execute(self.clone_handle(), command)
+    }
     fn assets(&self, command: AppAssetCommand) -> ApplicationFuture<Value> {
-        let this = self.clone_handle();
-        Box::pin(async move { this.assets_owned(command).await })
+        super::assets::execute(self.clone_handle(), command)
     }
     fn library(&self, command: AppLibraryCommand) -> ApplicationFuture<Value> {
         self.library_owned(command)

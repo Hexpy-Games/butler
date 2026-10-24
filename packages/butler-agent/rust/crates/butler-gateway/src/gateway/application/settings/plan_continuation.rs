@@ -113,6 +113,7 @@ fn create_plan_queue_message(
         return Ok(());
     }
     let request = MessageSendRequest {
+        image_edit: None,
         subsession_result: None,
         schedule_run: None,
         expected_project_id: None,

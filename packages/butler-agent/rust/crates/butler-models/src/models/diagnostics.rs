@@ -391,7 +391,7 @@ fn is_context_limit(value: &str) -> bool {
     .any(|term| value.contains(term))
 }
 
-fn safe_text(value: &str) -> Option<String> {
+pub(crate) fn safe_text(value: &str) -> Option<String> {
     let words = value.split_whitespace().collect::<Vec<_>>().join(" ");
     if words.is_empty() {
         return None;
