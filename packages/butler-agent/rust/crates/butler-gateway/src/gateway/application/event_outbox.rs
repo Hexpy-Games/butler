@@ -130,7 +130,7 @@ pub(super) fn restore((open, committed): (usize, usize)) {
 }
 
 /// A projection invalidation must observe the commit that enqueued its durable row.
-pub(super) fn notify_after_commit(db: &Connection, wake: Arc<tokio::sync::Notify>) {
+pub(super) fn notify_after_commit(db: &Connection, wake: &Arc<tokio::sync::Notify>) {
     let queued = with_outbox(|outbox| {
         if db.is_autocommit() {
             outbox.committed.push(Queued::Notify(wake.clone()));

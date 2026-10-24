@@ -22,7 +22,7 @@ pub(super) fn enqueue_plan(
 ) -> Result<(), AppStorageError> {
     db.execute(ENQUEUE, params![chat, format!("plan:{id}"), state])
         .map_err(AppStorageError::sqlite)?;
-    super::super::event_outbox::notify_after_commit(db, subscribers.pending_asks_wake.clone());
+    super::super::event_outbox::notify_after_commit(db, &subscribers.pending_asks_wake);
     Ok(())
 }
 
