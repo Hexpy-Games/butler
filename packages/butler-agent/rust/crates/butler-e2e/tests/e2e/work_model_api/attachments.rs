@@ -176,7 +176,7 @@ async fn at_05_upload_and_reference_limits() -> Result<(), HarnessError> {
     assert_eq!(overflow.body["error"]["code"], "too_many_attachments");
     s.finish().await
 }
-mod requires_e2e_fixtures {
+pub(super) mod requires_e2e_fixtures {
     use super::*;
     #[tokio::test]
     async fn at_06_cancelled_upload_expires_on_next_upload() -> Result<(), HarnessError> {
@@ -214,7 +214,7 @@ mod requires_e2e_fixtures {
         }
         s.finish().await
     }
-    async fn jump(address: String, now: &'static str) -> Result<(), HarnessError> {
+    pub(in super::super) async fn jump(address: String, now: &'static str) -> Result<(), HarnessError> {
         tokio::task::spawn_blocking(move || -> Result<(), HarnessError> {
             use std::io::{BufRead, BufReader, Write};
             let mut stream = std::net::TcpStream::connect(address)?;

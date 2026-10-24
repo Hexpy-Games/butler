@@ -9,7 +9,7 @@ function withBridge<T>(bridge: Record<string, unknown>, run: () => Promise<T>): 
   return run().finally(() => Object.assign(globalThis, { window: previous }));
 }
 
-// test-category: security
+// test-category: pure-logic
 test("canon upload preserves bounded desktop error codes and file metadata", async () => {
   const { uploadCanonFile } = await import("../../packages/butler-app/client/ui/src/app/canonApi.ts");
   const file = new File(["notes"], "notes.txt", { type: "text/plain" });

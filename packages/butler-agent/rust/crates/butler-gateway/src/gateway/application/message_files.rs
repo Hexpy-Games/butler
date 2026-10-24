@@ -106,6 +106,7 @@ pub(super) fn insert_uploaded(
     file: &super::MaterializedResponderFile,
     dimensions: Option<(u32, u32)>,
 ) -> Result<AppMessageFileSnapshot, AppStorageError> {
+    let dimensions = dimensions.filter(|_| file.kind == "image");
     db.execute(
         "INSERT INTO message_files (id,owner_session_id,message_id,kind,mime_type,safe_name,\
          size_bytes,sha256,storage_name,created_at,width,height) VALUES (?1,?2,NULL,?3,?4,?5,?6,?7,?8,?9,?10,?11)",

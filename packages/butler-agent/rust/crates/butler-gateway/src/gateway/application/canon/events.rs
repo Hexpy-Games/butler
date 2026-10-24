@@ -23,6 +23,11 @@ pub(in crate::gateway::application) fn start(app: &AppApplication) {
     let shutdown = app.dependencies.service_shutdown.clone();
     let app = app.clone_handle();
     tokio::spawn(async move {
+        #[cfg(feature = "e2e-fixtures")]
+        if let Err(error) = super::hold(&app, "canon_relay_start").await {
+            tracing::error!(%error, "Canon relay startup barrier failed");
+            return;
+        }
         let mut cursor = Cursor::default();
         loop {
             changes.borrow_and_update();

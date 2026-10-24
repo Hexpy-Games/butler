@@ -39,7 +39,7 @@ async fn at_08_image_headers_and_unknown_sizes_persist_without_other_file_change
         (
             "note.txt",
             "text/plain",
-            b"complete note".to_vec(),
+            b"GIF89a1234complete note".to_vec(),
             json!([null, null]),
         ),
         (
@@ -75,6 +75,19 @@ async fn at_08_image_headers_and_unknown_sizes_persist_without_other_file_change
         metadata.as_object_mut().unwrap().remove("signed_url");
         expected.push(metadata);
     }
+    let text = data(
+        s.gw.upload_file(
+            &format!("/projects/{project}/canon/files"),
+            "header.txt",
+            "text/plain",
+            b"GIF89a1234complete note",
+        )
+        .await?,
+        201,
+    )["file"]
+        .clone();
+    assert_eq!(text["kind"], "text");
+    assert_eq!(json!([text["width"], text["height"]]), json!([null, null]));
     // The canon upload shares the same header/storage path.
     let png = butler_e2e::e2e::media::digits_png("1", 2);
     let canon = data(

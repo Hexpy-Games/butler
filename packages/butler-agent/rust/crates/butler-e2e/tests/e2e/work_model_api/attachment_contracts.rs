@@ -92,51 +92,107 @@ fn ids_from_files(files: &Value) -> Vec<String> {
         .collect()
 }
 
-#[tokio::test]
-async fn at_12_edit_reference_survives_concurrent_upload_sweep() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let s = Setup::new("AT-12")?.start().await?;
-    let project = project(&s).await?;
-    let file = attachments::upload(&s, &project).await?;
-    let epic = create_epic(&s, &project, "Concurrent edit").await?;
-    let id = file["file_id"].as_str().unwrap();
-    // A durable stale queue entry may coexist with a pending upload or new reference.
-    let db = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
-    db.execute("INSERT INTO app_file_sweep VALUES(?1)", [id])?;
-    drop(db);
-    let path = format!("/canon/epics/{}", epic["id"].as_str().unwrap());
-    let stream = LiveEvents::subscribe(&s.gw, 0).await?;
-    let (edited, fresh) = tokio::join!(
-        s.gw.patch(&path, json!({"expected_revision":epic["revision"],"description":format!("![capture](attachment:{id})")})),
-        attachments::upload(&s, &project),
-    );
-    let edited = data(edited?, 200);
-    let fresh = fresh?;
-    assert_eq!(edited["attachments"][0]["file_id"], id);
-    stream
-        .wait_for(Duration::from_secs(10), |e| {
-            e["type"] == "canon.changed"
-                && e["payload"]["id"] == epic["id"]
-                && e["payload"]["revision"] == edited["revision"]
-        })
-        .await?;
-    let loaded = data(s.gw.get(&path).await?, 200);
-    assert_eq!(loaded["attachments"][0]["file_id"], id);
-    for file in [&file, &fresh] {
-        let (status, bytes) = s.gw.download(file["url"].as_str().unwrap()).await?;
-        assert_eq!(status, 200);
-        assert_eq!(bytes, butler_e2e::e2e::media::digits_png("57", 12));
+mod requires_e2e_fixtures {
+    use super::*;
+    #[tokio::test]
+    async fn at_12_edit_reference_survives_concurrent_upload_sweep() -> Result<(), HarnessError> {
+        butler_e2e::gate!();
+        let setup = Setup::new("AT-12")?;
+        let release = setup.sandbox.data.join("canon-write-release");
+        std::fs::write(&release, b"release")?;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+        let address = listener.local_addr()?.to_string();
+        drop(listener);
+        let s = setup
+            .env("BUTLER_E2E_APP_NOW", "2026-10-24T10:00:00.000Z")
+            .env("BUTLER_E2E_APP_CLOCK_ADDRESS", &address)
+            .env("BUTLER_E2E_HOLD_POINT", "canon_write")
+            .env("BUTLER_E2E_HOLD_RELEASE", release.to_string_lossy())
+            .start()
+            .await?;
+        let project = project(&s).await?;
+        let file = attachments::upload(&s, &project).await?;
+        let initial = LiveEvents::subscribe(&s.gw, 0).await?;
+        let epic = create_epic(&s, &project, "Concurrent edit").await?;
+        event(&initial, "canon.changed", epic["id"].as_str().unwrap()).await?;
+        let id = file["file_id"].as_str().unwrap();
+        // A durable stale queue entry may coexist with a pending upload or new reference.
+        let db =
+            rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
+        db.execute("INSERT INTO app_file_sweep VALUES(?1)", [id])?;
+        // Keep the relay from installing references, so the upload must rely on the pin.
+        db.execute_batch("CREATE TRIGGER hold_attachment_relay BEFORE INSERT ON app_work_model_events BEGIN SELECT RAISE(ABORT,'relay held'); END;")?;
+        drop(db);
+        attachments::requires_e2e_fixtures::jump(address, "2026-10-25T10:00:01.000Z").await?;
+        std::fs::remove_file(&release)?;
+        std::fs::remove_file(release.with_extension("held"))?;
+        let path = format!("/canon/epics/{}", epic["id"].as_str().unwrap());
+        let stream = LiveEvents::subscribe(&s.gw, 0).await?;
+        let (edited, fresh) = {
+            let edit = s.gw.patch(&path, json!({"expected_revision":epic["revision"],"description":format!("![capture](attachment:{id})")}));
+            tokio::pin!(edit);
+            tokio::select! {
+                result = &mut edit => panic!("edit escaped the hold: {result:?}"),
+                held = wait_held(&release) => held?,
+            }
+            let upload = attachments::upload(&s, &project);
+            tokio::pin!(upload);
+            // The edit has validated and pinned, but has not committed to canon yet.
+            // A concurrent sweep must wait for its lifetime lock.
+            assert!(
+                tokio::time::timeout(Duration::from_millis(200), &mut upload)
+                    .await
+                    .is_err(),
+                "upload sweep escaped the canon write lock"
+            );
+            std::fs::write(&release, b"release")?;
+            let (edited, fresh) = tokio::join!(edit, upload);
+            (data(edited?, 200), fresh?)
+        };
+        assert_eq!(
+            s.gw.download(file["url"].as_str().unwrap()).await?.0,
+            200,
+            "expired upload must survive on its write pin before relay installation"
+        );
+        let db =
+            rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
+        db.execute_batch("DROP TRIGGER hold_attachment_relay")?;
+        drop(db);
+        data(
+            s.gw.post(
+                &format!("/projects/{project}/canon/tags"),
+                json!({"name":"Wake relay","color":"blue"}),
+            )
+            .await?,
+            201,
+        );
+        assert_eq!(edited["attachments"][0]["file_id"], id);
+        stream
+            .wait_for(Duration::from_secs(10), |e| {
+                e["type"] == "canon.changed"
+                    && e["payload"]["id"] == epic["id"]
+                    && e["payload"]["revision"] == edited["revision"]
+            })
+            .await?;
+        let loaded = data(s.gw.get(&path).await?, 200);
+        assert_eq!(loaded["attachments"][0]["file_id"], id);
+        for file in [&file, &fresh] {
+            let (status, bytes) = s.gw.download(file["url"].as_str().unwrap()).await?;
+            assert_eq!(status, 200);
+            assert_eq!(bytes, butler_e2e::e2e::media::digits_png("57", 12));
+        }
+        let db =
+            rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
+        assert_eq!(
+            db.query_row::<i64, _, _>(
+                "SELECT count(*) FROM app_file_sweep WHERE file_id=?1",
+                [id],
+                |r| r.get(0)
+            )?,
+            0
+        );
+        s.finish().await
     }
-    let db = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
-    assert_eq!(
-        db.query_row::<i64, _, _>(
-            "SELECT count(*) FROM app_file_sweep WHERE file_id=?1",
-            [id],
-            |r| r.get(0)
-        )?,
-        0
-    );
-    s.finish().await
 }
 
 #[tokio::test]
@@ -184,4 +240,14 @@ async fn at_15_chat_file_ownership_and_escaped_duplicate_references() -> Result<
         assert_eq!(epic["attachments"][0]["safe_name"], file["safe_name"]);
     }
     s.finish().await
+}
+
+pub(super) async fn wait_held(release: &std::path::Path) -> Result<(), HarnessError> {
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while !release.with_extension("held").exists() {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .map_err(|e| HarnessError(e.to_string()))
 }

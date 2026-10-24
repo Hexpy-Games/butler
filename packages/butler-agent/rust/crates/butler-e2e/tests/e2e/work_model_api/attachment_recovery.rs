@@ -55,33 +55,19 @@ mod requires_e2e_fixtures {
         s.agent
             .launch
             .set_env("BUTLER_E2E_APP_NOW", "2026-10-25T10:00:01.000Z");
-        // Run the first upload alongside the normal harness startup barrier.
-        // Startup failure cancels the listener wait through try_join; the upload
-        // retains its own deadline once the HTTP listener can accept requests.
-        let gateway = &s.gw;
-        let pending_upload = async {
-            loop {
-                if gateway.get("/health").await.is_ok() {
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(20)).await;
-            }
-            let bytes = butler_e2e::e2e::media::digits_png("57", 12);
-            let reply = tokio::time::timeout(
-                Duration::from_secs(10),
-                gateway.upload_file(
-                    &format!("/projects/{project}/canon/files"),
-                    "capture.png",
-                    "image/png",
-                    &bytes,
-                ),
-            )
-            .await
-            .map_err(|e| HarnessError(e.to_string()))??;
-            Ok::<_, HarnessError>(data(reply, 201)["file"].clone())
-        };
-        let (gateway, fresh) = tokio::try_join!(s.agent.start_again(), pending_upload)?;
-        s.gw = gateway;
+        let release = s.sandbox.data.join("canon-relay-release");
+        s.agent
+            .launch
+            .set_env("BUTLER_E2E_HOLD_POINT", "canon_relay_start");
+        s.agent
+            .launch
+            .set_env("BUTLER_E2E_HOLD_RELEASE", release.to_string_lossy());
+        s.gw = s.agent.start_again().await?;
+        attachment_contracts::wait_held(&release).await?;
+        // No first drain can run until this upload has exercised the startup gate.
+        let fresh = attachments::upload(&s, &project).await?;
+        assert_eq!(s.gw.download(kept["url"].as_str().unwrap()).await?.0, 200);
+        std::fs::write(&release, b"release")?;
         let stream = LiveEvents::subscribe(&s.gw, 0).await?;
         event(&stream, "canon.changed", epic["id"].as_str().unwrap()).await?;
         event(&stream, "canon.changed", "missing-historical-epic").await?;

@@ -20,6 +20,10 @@ pub(super) fn execute(app: &AppApplication, request: AppCanonRequest) -> Applica
             None
         };
         let ids = files::validate_write(&app, &request).await?;
+        #[cfg(feature = "e2e-fixtures")]
+        if writing {
+            hold(&app, "canon_write").await?;
+        }
         let detail = matches!(request.resource, Epic | CreateEpic | EditEpic);
         let mut result = app.dependencies.canon.execute(request).await?;
         app.storage
@@ -108,4 +112,16 @@ pub(super) fn public_sessions(
         _ => {}
     }
     Ok(())
+}
+
+/// Reuse the platform fixture barrier without occupying a Tokio worker.
+#[cfg(feature = "e2e-fixtures")]
+async fn hold(app: &AppApplication, point: &'static str) -> Result<(), GatewayApplicationError> {
+    let shutdown = app.dependencies.service_shutdown.clone();
+    tokio::task::spawn_blocking(move || {
+        butler_platform::secure_fs::hold_point(point, || shutdown.is_cancelled())
+    })
+    .await
+    .map_err(GatewayApplicationError::internal_from)?
+    .map_err(GatewayApplicationError::internal_from)
 }
