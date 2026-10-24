@@ -18,7 +18,7 @@
 | A card that can be selected or clicked | `Card` | `Box` |
 | A card that opens something | `Card` | `Clickable` |
 | A card that shows content, not a choice | `Card` | `ChoiceCard` |
-| A card's own menu | `LibraryCard menu or OverflowActionMenu` | `BlockActionFrame` |
+| A card's own menu | `OverflowActionMenu` | `BlockActionFrame` |
 | A chart legend row with a value | `KeyValueRow` |  |
 | A chat message body | `MessageRow` | `Typo` |
 | A checklist inside an answer block, a 서랍 block scrap or a document | `StatusChecklist` |  |
@@ -107,7 +107,7 @@
 | A list of cards | `CardList` | `Separator` |
 | A list of finished steps | `ActivityFeed` | `RollingStatusLine` |
 | A list of workers above the composer | `WorkerActivityPanel` | `WorkerActivityRow` |
-| A list row's actions | `ListRow or HistoryRow actions` | `BlockActionFrame` |
+| A list row's actions | `ListRow` | `BlockActionFrame` |
 | A logo or icon that needs a quiet square behind it | `IconTile` |  |
 | A lone control that only needs a name | `Label` | `Field` |
 | A long tail of choices in an equal-size grid | `ChoiceCard` |  |
@@ -2141,8 +2141,8 @@ One content block with its title and a ⋯ menu that shows on hover or focus; a 
 
 - Use for: Answer blocks, 서랍 block scraps and blocks in a document
 - Use for: Container blocks and their children (level="child" for the children)
-- Not for: A list row's actions → `ListRow or HistoryRow actions`
-- Not for: A card's own menu → `LibraryCard menu or OverflowActionMenu`
+- Not for: A list row's actions → `ListRow`
+- Not for: A card's own menu → `OverflowActionMenu`
 - Tokens: `--space-sm`, `--space-xs`, `--surface-raised`, `--shadow-control`, `--motion-fast`, `--motion-flight`
 
 ### BlockColumns
