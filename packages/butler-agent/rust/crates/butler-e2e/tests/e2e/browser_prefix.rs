@@ -111,7 +111,7 @@ fn cassette(boundary: bool) -> Result<Cassette, HarnessError> {
     Ok(cassette)
 }
 
-fn add_turn(
+pub(super) fn add_turn(
     cassette: &mut Cassette,
     template: &Cassette,
     user: &str,
@@ -203,7 +203,7 @@ pub(super) async fn serve_host(
     Ok(())
 }
 
-async fn next_frame(
+pub(super) async fn next_frame(
     stream: &mut reqwest::Response,
     buffer: &mut String,
 ) -> Result<Option<Value>, HarnessError> {
