@@ -133,3 +133,17 @@ pub(super) fn replace(
     tx.execute(sql::BUMP_EPIC, params![id, ctx.now, rev])?;
     event(tx, ctx, "work", id, rev + 1, "tags")
 }
+
+pub(in crate::store) fn validate_creation(
+    db: &Connection,
+    project: &str,
+    tags: &[String],
+) -> Result<()> {
+    for id in tags {
+        let tag = rows(db, sql::TAG, [id])?.into_iter().next();
+        if tag.is_none_or(|tag| tag["project_id"] != project) {
+            return Err(Error::Invalid("tag must exist in the epic project"));
+        }
+    }
+    Ok(())
+}

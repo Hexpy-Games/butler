@@ -116,8 +116,10 @@ pub(super) fn event(
     revision: i64,
     op: &str,
 ) -> Result<()> {
-    let payload =
-        json!({"entity_kind":kind,"entity_id":id,"revision":revision,"op":op}).to_string();
+    let mut payload = json!({"entity_kind":kind,"entity_id":id,"revision":revision,"op":op});
+    if kind == "work" && op == "create" {
+        payload["tags"] = json!(rows(tx, api::sql::EPIC_TAGS, [id])?);
+    }
     tx.execute(
         sql::AUDIT,
         rusqlite::params![
@@ -127,7 +129,7 @@ pub(super) fn event(
             ctx.actor.to_string(),
             op,
             ctx.now,
-            payload
+            payload.to_string()
         ],
     )?;
     api::outbox(tx, ctx, kind, id, revision, op)?;

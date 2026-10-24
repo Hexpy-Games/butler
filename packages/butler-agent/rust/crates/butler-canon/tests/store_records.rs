@@ -223,7 +223,10 @@ fn every_store_statement_has_an_indexed_query_plan() {
             assert!(plan.contains(index), "{name}: {plan}");
         }
         assert!(
-            !plan.contains("SCAN canon_") && !plan.contains("SCAN a") && !plan.contains("SCAN t"),
+            !plan.contains("SCAN canon_")
+                && !plan.contains("SCAN a")
+                && !plan.contains("SCAN t")
+                && !plan.contains("SCAN e"),
             "{name}: {plan}"
         );
     }
@@ -234,22 +237,49 @@ fn every_store_statement_has_an_indexed_query_plan() {
 fn epic_creation_records_fields_without_a_synthetic_edit() {
     let mut db = store_support::db();
     let tx = Transaction::new(db.transaction().unwrap()).unwrap();
+    let tag = write_api(
+        &tx,
+        &context(),
+        butler_canon::store::api::Resource::CreateTag,
+        "project",
+        json!({"name":"Feature","color":"blue"}),
+    )
+    .unwrap();
     let epic = write_api(
         &tx,
         &context(),
         butler_canon::store::api::Resource::CreateEpic,
         "project",
-        json!({"title":"Title","description":"Description","assignee":"person"}),
+        json!({"title":"Title","description":"Description","assignee":"person","tags":[tag["id"]]}),
     )
     .unwrap();
     assert_eq!(epic["description"], "Description");
     assert_eq!(epic["assignee"], "person");
-    let edits: i64 = tx
+    assert_eq!(epic["revision"], 0);
+    let audits: i64 = tx
+        .query_row("SELECT count(*) FROM canon_audit", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(audits, 2); // Tag creation and epic creation only.
+    let payload: String = tx
         .query_row(
-            "SELECT count(*) FROM canon_audit WHERE entity_id=?1 AND op='edit'",
+            "SELECT payload_json FROM canon_audit WHERE entity_id=?1",
             [epic["id"].as_str().unwrap()],
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(edits, 0);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&payload).unwrap()["tags"],
+        epic["tags"]
+    );
+    let mut stmt = tx
+        .prepare("SELECT payload_json FROM canon_events WHERE topic='canon.changed'")
+        .unwrap();
+    let events = stmt
+        .query_map([], |r| r.get::<_, String>(0))
+        .unwrap()
+        .map(|r| serde_json::from_str::<serde_json::Value>(&r.unwrap()).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(events.len(), 2); // Tag creation and epic creation only.
+    let created = events.iter().find(|e| e["id"] == epic["id"]).unwrap();
+    assert_eq!(created["tags"], epic["tags"]);
 }

@@ -300,3 +300,80 @@ async fn tg_04_delete_cascades_without_epic_revision_changes() -> Result<(), Har
     .map_err(|e| HarnessError(e.to_string()))??;
     s.finish().await
 }
+
+#[tokio::test]
+async fn tg_05_creation_with_tags_is_one_initial_revision() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut s = Setup::new("TG-05")?.start().await?;
+    let project = project(&s).await?;
+    let tag = create_tag(&s, &project, "Feature").await?;
+    let other_project = super::project(&s).await?;
+    let other = create_tag(&s, &other_project, "Other").await?;
+    let deleted = create_tag(&s, &project, "Deleted").await?;
+    assert_eq!(
+        s.gw.delete(&format!("/canon/tags/{}", deleted["id"].as_str().unwrap()))
+            .await?
+            .status,
+        200
+    );
+    let path = format!("/projects/{project}/canon/epics");
+    for invalid in [json!("missing"), other["id"].clone(), deleted["id"].clone()] {
+        let rejected =
+            s.gw.post(
+                &path,
+                json!({"title":"Rejected","tags":[tag["id"],invalid]}),
+            )
+            .await?;
+        assert_eq!(rejected.status, 400);
+        assert_eq!(rejected.error_code(), Some("work_model_invalid"));
+        assert_eq!(overview(&s, &project).await?["backlog"], json!([]));
+    }
+    let epic = data(
+        s.gw.post(&path, json!({"title":"과제","tags":[tag["id"]]}))
+            .await?,
+        201,
+    );
+    assert_eq!(epic["revision"], 0);
+    let expected = json!([{ "id":tag["id"],"name":"Feature","color":"blue" }]);
+    assert_eq!(epic["tags"], expected);
+    assert_eq!(
+        overview(&s, &project).await?["backlog"][0]["tags"],
+        expected
+    );
+    let stream = LiveEvents::subscribe(&s.gw, 0).await?;
+    let created = event(&stream, "canon.changed", epic["id"].as_str().unwrap()).await?;
+    assert_eq!(created["payload"]["revision"], 0);
+    assert_eq!(created["payload"]["tags"], expected);
+    drop(stream);
+    s.agent.terminate().await?;
+    let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
+    tokio::task::spawn_blocking(move || -> Result<(), HarnessError> {
+        let db = rusqlite::Connection::open(path)?;
+        assert_eq!(
+            db.query_row::<i64, _, _>("SELECT count(*) FROM canon_epics", [], |r| r.get(0))?,
+            1
+        );
+        assert_eq!(
+            db.query_row::<i64, _, _>(
+                "SELECT count(*) FROM canon_audit WHERE entity_kind='work'",
+                [],
+                |r| r.get(0)
+            )?,
+            1
+        );
+        let mut stmt =
+            db.prepare("SELECT payload_json FROM canon_events WHERE topic='canon.changed'")?;
+        let events = stmt
+            .query_map([], |r| r.get::<_, String>(0))?
+            .map(|r| serde_json::from_str::<Value>(&r.unwrap()).unwrap())
+            .filter(|e| e["kind"] == "work")
+            .collect::<Vec<_>>();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["id"], epic["id"]);
+        assert_eq!(events[0]["tags"], expected);
+        Ok(())
+    })
+    .await
+    .map_err(|e| HarnessError(e.to_string()))??;
+    s.finish().await
+}

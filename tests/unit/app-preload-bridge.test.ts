@@ -416,7 +416,6 @@ test("canon conflicts preserve the same numeric revision through browser and rea
   } finally { globalThis.fetch = previousFetch; }
 });
 
-// test-category: pure-logic
 test("duplicate tags preserve the existing tag through browser and real preload", async () => {
   const existing = { id: "tag1", project_id: "p1", name: "bug", name_key: "bug", color: "blue", revision: 0, created_at: 1, updated_at: 1, created_by: "{}" };
   const failure = { error: { code: "tag_exists", message: "Tag already exists.", existing } };

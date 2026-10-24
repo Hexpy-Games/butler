@@ -134,7 +134,7 @@ pub(super) fn create_epic(
     let title_value = input.title.clone().unwrap_or_default();
     title(&title_value)?;
     let id = IdGenerator::global_next(IdKind::Work, ctx.now)?;
-    super::super::entities::create_work_assigned(
+    super::super::entities::insert_work_assigned(
         tx,
         ctx,
         &NewWork {
@@ -146,17 +146,16 @@ pub(super) fn create_epic(
         },
         &Registration::Canon(person(ctx)?),
         input.assignee.as_ref().and_then(|v| v.as_deref()),
+        input.tags.as_deref().unwrap_or_default(),
     )?;
-    position(
+    initial_position(
         tx,
         ctx,
         &id,
         input.plan_id.as_ref().and_then(|v| v.as_deref()),
         input.before_id.as_deref(),
     )?;
-    if let Some(tags) = &input.tags {
-        tags::replace(tx, ctx, &read_work(tx, &id)?, tags)?;
-    }
+    event(tx, ctx, "work", &id, 0, "create")?;
     epic(tx, &id)
 }
 pub(super) fn edit_epic(
@@ -244,6 +243,44 @@ fn bump_order(
             reads::backlog_revision(tx, project)?,
             "order",
         )?;
+    }
+    Ok(())
+}
+fn initial_position(
+    tx: &Transaction<'_>,
+    ctx: &Context,
+    id: &str,
+    plan: Option<&str>,
+    before: Option<&str>,
+) -> Result<()> {
+    let row = read_work(tx, id)?;
+    let project = text(&row, "project_id")?;
+    if let Some(plan) = plan {
+        let destination = canon_row(read_plan(tx, plan)?)?;
+        if destination["project_id"] != row["project_id"] {
+            return Err(Error::Invalid("Plan belongs to another project"));
+        }
+    }
+    let works: Vec<_> = container(tx, plan, project)?
+        .into_iter()
+        .filter(|w| w["id"] != id)
+        .collect();
+    let index = match before {
+        Some(before) => works
+            .iter()
+            .position(|w| w["id"] == before)
+            .ok_or(Error::Invalid("before_id is outside destination"))?,
+        None => works.len(),
+    };
+    let lower = index
+        .checked_sub(1)
+        .and_then(|i| works[i]["plan_rank"].as_str());
+    let upper = works.get(index).and_then(|w| w["plan_rank"].as_str());
+    let rank = crate::work_rank::between(lower, upper).ok_or(Error::InvalidRank)?;
+    tx.execute(sql::INITIAL_POSITION, params![id, plan, rank])?;
+    tx.execute(sql::BUMP_BACKLOG, [project])?;
+    if let Some(plan) = plan {
+        tx.execute(sql::BUMP_PLAN, params![plan, ctx.now])?;
     }
     Ok(())
 }
