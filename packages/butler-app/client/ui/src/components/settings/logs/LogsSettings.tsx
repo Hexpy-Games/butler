@@ -59,9 +59,9 @@ function LogList() {
           : viewerState === "empty" ? <EmptyLine message={copy.empty} /> : <LogRows viewer={viewer} />}
       </SettingsSection>
       <SettingsSection id="logs-storage" kind="status" title={copy.sections.storage}
-        state={storage.view ? "ready" : storage.failed ? "error" : "loading"} onRetry={storage.reload}
-        actions={<LogStorageActions onCleared={() => { storage.reload(); viewer.reload(); }} />}>
+        state={storage.view ? "ready" : storage.failed ? "error" : "loading"} onRetry={storage.reload}>
         <LogStoreMeters view={storage.view} />
+        <LogStorageActions onCleared={() => { storage.reload(); viewer.reload(); }} />
       </SettingsSection>
       <DeveloperUsageSections />
     </SettingsPage>

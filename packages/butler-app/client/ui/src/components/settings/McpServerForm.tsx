@@ -7,14 +7,10 @@ import type { McpTransportKind } from "@/app/types.ts";
 import {
   Button,
   ButtonContainer,
-  Field,
-  FieldLabel,
-  FieldError,
-  FieldDescription,
   Input,
   NativeSelect,
   NativeSelectOption,
-  Stack,
+  SettingsField,
   Switch,
 } from "@/butler-ds";
 import { mcpServerIdError, type McpServerFormState } from "./mcpSettingsUtils";
@@ -46,34 +42,33 @@ export function McpServerForm({
     if (first) document.getElementById(first)?.focus();
   }, [errors]);
   return (
-    <Stack gap="sm">
-      <Field data-invalid={Boolean(idError)}>
-        <FieldLabel htmlFor="mcp-server-id">{copy.fields.mcpServerId}</FieldLabel>
-        <Input
+    <>
+      <SettingsField
+        id="mcp-server-id"
+        label={copy.fields.mcpServerId}
+        description={idError ? undefined : copy.mcpIdPreview(form.id.toLowerCase().replace(/^-+|-+$/gu, ""))}
+        descriptionId="mcp-server-id-hint"
+        error={idError}
+        control={<Input
           id="mcp-server-id"
           required
-          aria-invalid={Boolean(idError)}
-          aria-describedby="mcp-server-id-hint"
           value={form.id}
           onChange={(event) => onChange({ id: event.target.value })}
-        />
-        {idError ? <FieldError id="mcp-server-id-hint">
-          {idError}
-        </FieldError> : <FieldDescription id="mcp-server-id-hint">
-          {copy.mcpIdPreview(form.id.toLowerCase().replace(/^-+|-+$/gu, ""))}
-        </FieldDescription>}
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="mcp-server-name">{copy.fields.mcpServerName}</FieldLabel>
-        <Input
+        />}
+      />
+      <SettingsField
+        id="mcp-server-name"
+        label={copy.fields.mcpServerName}
+        control={<Input
           id="mcp-server-name"
           value={form.displayName}
           onChange={(event) => onChange({ displayName: event.target.value })}
-        />
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="mcp-transport">{copy.fields.mcpTransport}</FieldLabel>
-        <NativeSelect
+        />}
+      />
+      <SettingsField
+        id="mcp-transport"
+        label={copy.fields.mcpTransport}
+        control={<NativeSelect
           id="mcp-transport"
           value={form.transport}
           onChange={(event) =>
@@ -89,16 +84,17 @@ export function McpServerForm({
           <NativeSelectOption value="sse">
             {copy.options.sse}
           </NativeSelectOption>
-        </NativeSelect>
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="mcp-enabled">{copy.fields.enabled}</FieldLabel>
-        <Switch
+        </NativeSelect>}
+      />
+      <SettingsField
+        id="mcp-enabled"
+        label={copy.fields.enabled}
+        control={<Switch
           id="mcp-enabled"
           checked={form.enabled}
           onCheckedChange={(enabled) => onChange({ enabled })}
-        />
-      </Field>
+        />}
+      />
       {form.transport === "stdio" ? (
         <StdioFields error={errors.command ? settingsErrorCopy({ code: errors.command }, copy.mcpCommandRequired) : undefined} form={form} onChange={onChange} />
       ) : (
@@ -112,6 +108,6 @@ export function McpServerForm({
           {appCopy.common.save}
         </Button>
       </ButtonContainer>
-    </Stack>
+    </>
   );
 }

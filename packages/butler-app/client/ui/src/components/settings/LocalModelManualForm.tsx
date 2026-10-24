@@ -1,5 +1,5 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { Input, SettingsField, Stack } from "@/butler-ds";
+import { Input, SettingsField } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { SettingsSwitch } from "./SettingsFormComponents";
 
@@ -31,7 +31,7 @@ export function LocalModelManualForm({
   const copy = appCopy.settings.localModels;
 
   return (
-    <Stack gap="md">
+    <>
       <SettingsField
         id="local-model-id"
         data-test-class="settings-field"
@@ -75,6 +75,6 @@ export function LocalModelManualForm({
         checked={imageInput.checked}
         onChange={imageInput.setChecked}
       />
-    </Stack>
+    </>
   );
 }

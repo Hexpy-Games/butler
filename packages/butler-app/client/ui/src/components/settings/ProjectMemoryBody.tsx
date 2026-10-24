@@ -1,14 +1,16 @@
-import { Stack } from "@/butler-ds";
+import type { ReactElement } from "react";
+import { SettingsActionField } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { SettingsSelect } from "./SettingsFormComponents";
 import { MemoryFacts } from "./MemoryFacts";
 import type { MemoryProject, ProjectMemory } from "./memoryTypes";
-export function ProjectMemoryBody({ projects, selected, select, memory, locked }: {
-  projects: MemoryProject[]; selected: string; select: (id: string) => void; memory?: ProjectMemory; locked?: boolean;
+export function ProjectMemoryBody({ projects, selected, select, memory, locked, reset }: {
+  projects: MemoryProject[]; selected: string; select: (id: string) => void; memory?: ProjectMemory; locked?: boolean; reset: ReactElement;
 }) {
-  return <Stack gap="md">
-    <SettingsSelect settingId="memory-project" label={appCopy.settings.memory.project}
+  const copy = appCopy.settings.memory;
+  return <>
+    <SettingsSelect settingId="memory-project" label={copy.project} meta={<MemoryFacts project={memory} />}
       disabled={locked} value={selected} onChange={select} options={projects.map((p) => ({ value: p.id, label: p.display_name }))} />
-    <MemoryFacts project={memory} />
-  </Stack>;
+    <SettingsActionField settingId="memory-reset-project" label={copy.resetProjectLabel} description={copy.resetProjectDescription} action={reset} />
+  </>;
 }

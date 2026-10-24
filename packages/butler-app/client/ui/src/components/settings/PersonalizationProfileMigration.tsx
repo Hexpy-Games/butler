@@ -7,7 +7,7 @@ import {
 } from "@/app/profileMigrationFeedback.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
-import { Button, ListRow, SettingsField, Sparkles, Stack, Textarea, Typo } from "@/butler-ds";
+import { Button, ListRow, SettingsField, SettingsFieldGroup, Sparkles, Stack, Textarea, Typo } from "@/butler-ds";
 import { useProfileMigrationPrompt } from "./useProfileMigrationPrompt";
 
 const FEEDBACK_TONE = { ok: "success", muted: "secondary", error: "danger" } as const;
@@ -102,7 +102,7 @@ export function PersonalizationProfileMigration() {
         </Typo.Caption>
       ) : null}
       {migrationExpanded ? (
-        <Stack id="profile-migration-fields" gap="xl">
+        <SettingsFieldGroup id="profile-migration-fields">
           <SettingsField
             id="profile-migration-prompt"
             settingId="profile-migration-prompt"
@@ -149,7 +149,7 @@ export function PersonalizationProfileMigration() {
             </Stack>
             </>}
           />
-        </Stack>
+        </SettingsFieldGroup>
       ) : null}
     </>
   );
