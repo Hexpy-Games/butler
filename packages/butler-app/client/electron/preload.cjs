@@ -1124,7 +1124,7 @@ const butlerApp = Object.freeze({
       },
     );
   },
-  queueMessage: ({ chatId, text, contentParts, model, reasoningEffort, accessMode, planMode, attachments, traceparent }) => requestBridgeResult("/session-queue", {
+  queueMessage: ({ chatId, text, contentParts, imageEdit, model, reasoningEffort, accessMode, planMode, attachments, traceparent }) => requestBridgeResult("/session-queue", {
     method: "POST",
     headers: traceHeaders(traceparent),
     body: JSON.stringify({
@@ -1139,13 +1139,13 @@ const butlerApp = Object.freeze({
       attachments,
     }),
   }),
-  updateQueuedMessage: ({ queuedMessageId, text, contentParts, model, reasoningEffort, accessMode, planMode, attachments }) =>
+  updateQueuedMessage: ({ queuedMessageId, text, contentParts, imageEdit, model, reasoningEffort, accessMode, planMode, attachments }) =>
     requestJson(`/session-queue/${encodeURIComponent(queuedMessageId ?? "")}`, {
       method: "PATCH",
       body: JSON.stringify({
         text,
         content_parts: contentParts,
-      image_edit: imageEdit,
+        image_edit: imageEdit,
         model,
         reasoning_effort: reasoningEffort,
         access_mode: accessMode,
