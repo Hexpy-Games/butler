@@ -18,7 +18,7 @@ export const guidance: ShowcaseGuidance = {
   purpose: "An editable document page: title row, one status line, header actions and the editable body in MarkdownContent's document typography, with block embeds and Butler's editing highlight.",
   whenToUse: ["A 버틀러 document the user edits (서랍 문서, the side panel next to the chat)"],
   whenNotToUse: [
-    { when: "Reading a file or artifact", use: "DocumentReader or ArtifactPreview" },
+    { when: "Reading a file or artifact", use: "DocumentReader" },
     { when: "Writing a message", use: "ComposerCard" },
   ],
   recipes: [{ name: "An editable document", description: "The caller's editor engine renders into the page; `documentEditorClasses` names its node classes.", render: () => <Editable /> }],
