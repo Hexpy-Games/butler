@@ -14,6 +14,7 @@
 | A call to action that leaves the app (Install Git in a notice) | `Button` | `InlineReference` |
 | A canvas animation or media that must stay square (the thinking mark) | `AspectFrame` |  |
 | A capsule above the composer (progress, report) | `PillButton` |  |
+| A card as wide as the conversation column (radius="lg") | `Card` |  |
 | A card that can be selected or clicked | `Card` | `Box` |
 | A card that opens something | `Card` | `Clickable` |
 | A card that shows content, not a choice | `Card` | `ChoiceCard` |
@@ -650,6 +651,8 @@
 | The responsive app layout with drawers | `AdaptiveShell` | `ChromeFrame` |
 | The root layout of the app window (AppShell) | `AdaptiveShell` |  |
 | The same chips inside the sent message | `ElementChip` |  |
+| The same decision in the transcript, where it was asked (placement="conversation") | `ComposerDecisionPanel` |  |
+| The same question in the transcript (placement="conversation") | `ComposerQuestionPanel` |  |
 | The selection stays on the tab after picking ends (compact pill) | `SelectionBar` |  |
 | The settings screen and settings-like editors | `SettingsShell` |  |
 | The settings sidebar, one SettingsNav per group | `SettingsNav` |  |
@@ -1066,10 +1069,11 @@ A raised container for one item in a grid of items, optionally interactive and s
 - Use for: An item in a dashboard grid
 - Use for: A suggestion or briefing entry with its own action
 - Use for: A running task in a task graph (activity="running")
+- Use for: A card as wide as the conversation column (radius="lg")
 - Not for: Only padding or a background → `Box`
 - Not for: A document or artifact tile with actions → `DocumentTile`
 - Not for: A row in a list → `ListRow`
-- Tokens: `--surface-raised`, `--radius-panel`, `--shadow-card`, `--selection`, `--focus-ring`, `--worker-active`, `--pulse-duration`, `--motion-loop-count`
+- Tokens: `--surface-raised`, `--radius-control`, `--radius-popover`, `--radius-panel`, `--shadow-card`, `--selection`, `--focus-ring`, `--worker-active`, `--pulse-duration`, `--motion-loop-count`
 
 ### Collapsible
 
@@ -2017,19 +2021,21 @@ The composer toolbar control: icon, label and optional detail on a pill, or a Se
 The composer's decision state: what is being decided, optional detail lines, an optional failure, and the decision buttons in the composer radius.
 
 - Use for: A plan waiting for acceptance or an authority request that replaces the composer input
+- Use for: The same decision in the transcript, where it was asked (placement="conversation")
 - Not for: A notice inside the conversation → `Notice`
 - Not for: A modal confirmation → `Dialog`
-- Tokens: `--adaptive-composer-radius`, `--space-xs`, `--space-sm`, `--space-md`, `--space-lg`, `--icon-size-sm`, `--text-secondary`, `--decision-media-narrow-height`
+- Tokens: `--adaptive-composer-radius`, `--radius-control`, `--radius-popover`, `--space-xs`, `--space-sm`, `--space-md`, `--space-lg`, `--icon-size-sm`, `--text-secondary`, `--decision-media-narrow-height`
 
 ### ComposerQuestionPanel
 
 `import { ComposerQuestionPanel } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=blocks/ComposerQuestionPanel`
 
-A bounded question form replacing the composer editor and toolbar, with local choices and a review step.
+A bounded question form replacing the composer editor and toolbar, or shown in the conversation where Butler asked, with local choices and a review step.
 
 - Use for: One to four single, multi or text questions awaiting a user answer
+- Use for: The same question in the transcript (placement="conversation")
 - Not for: A permission decision → `ComposerDecisionPanel`
-- Tokens: `--control-hit-target`, `--space-sm`, `--icon-size-lg`, `--selection`
+- Tokens: `--control-hit-target`, `--space-sm`, `--space-md`, `--icon-size-lg`, `--selection`, `--adaptive-composer-radius`, `--radius-control`, `--radius-popover`
 
 ### ContextDonutButton
 

@@ -1,5 +1,6 @@
 import type { DsBaseProps } from "../../lib/dsProps";
 import type { HTMLAttributes } from "react";
+import type { ComposerPanelPlacement } from "../../lib/composerPanel";
 
 export interface ComposerQuestion {
   id: string;
@@ -41,6 +42,11 @@ export interface ComposerQuestionPanelProps extends Omit<DsBaseProps<HTMLAttribu
   labels?: QuestionPanelLabels;
   defaultAnswers?: readonly QuestionAnswer[];
   defaultStep?: number;
+  /**
+   * `composer` (default): in place of the composer input, inside ComposerCard. `conversation`: in the transcript,
+   * inside a flat bordered `Card radius="lg"` with control-radius buttons. The collapsed pill is the same in both.
+   */
+  placement?: ComposerPanelPlacement;
 }
 export function answerText(question: ComposerQuestion, answer?: QuestionAnswer): string {
   if (!answer || answer.skipped) return "";
