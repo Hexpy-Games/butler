@@ -11,19 +11,29 @@ Status tones mean a state; label tones are categorical colors for a user's own l
 | `tone` | Status: `neutral` (default), `accent`, `success`, `warning`, `danger`. Label: `gray`, `red`, `orange`, `yellow`, `green`, `teal`, `blue`, `purple` (`tagLabelTones`) |
 | `size` | `sm` (default; 22px tall, 8px inline padding) for inline chips, `md` (24px, 10px) for page eyebrows and hero labels |
 | `icon` | Leading icon, sized to `--icon-size-xs` |
-| `iconEnd` | Trailing icon, sized to `--icon-size-xs`, tight to the label: a chevron when the Tag is the visible cue of a larger control that opens more (`+4 ›`). Ignored with `onRemove` |
+| `iconEnd` | Trailing icon, sized to `--icon-size-xs`, tight to the label: a chevron when the Tag is the visible cue of a larger control that opens more (`+4 ›`). Ignored with `onRemove` or `editMenu` |
 | `onRemove`, `removeLabel` | Trailing remove button inside the pill; `removeLabel` names it |
+| `editMenu`, `editLabel` | `DropdownMenuItem`s opened by a trailing pencil button, placed before remove; `editLabel` names it |
 
 ## How to use this component
 
 ```tsx
-import { ChevronRight, ListChecks, Tag } from "@/butler-ds";
+import { ChevronRight, DropdownMenuItem, ListChecks, Tag } from "@/butler-ds";
 
 <Tag tone="success">Done</Tag>
 <Tag icon={<ListChecks size="xs" />} onRemove={exitPlanMode} removeLabel="Exit plan mode">Plan</Tag>
 <Tag iconEnd={<ChevronRight size="xs" />}>+4</Tag>
 <Tag tone="teal">design</Tag>
+<Tag tone="teal" onRemove={detach} removeLabel="Remove design" editLabel="design tag menu" editMenu={<>
+  <DropdownMenuItem onSelect={rename}>Rename</DropdownMenuItem>
+  <DropdownMenuItem variant="destructive" onSelect={remove}>Delete</DropdownMenuItem>
+</>}>design</Tag>
 ```
+
+## Editable labels
+`editMenu` puts a small pencil before the remove button; it opens the label's
+own menu (rename, change color, delete). Pass it only where the label itself is
+editable, such as an edit form; cards and read-only views show the plain Tag.
 
 ## Label tones
 Each label tone reads `--tag-label-<tone>-bg|fg|border` (tokens.css): an

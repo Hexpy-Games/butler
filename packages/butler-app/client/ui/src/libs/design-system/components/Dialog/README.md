@@ -35,6 +35,10 @@ Product engineers, design-system maintainers, and coding agents can use it when 
   `maxHeight="3/5"`. `DialogTitle visuallyHidden` replaces an `sr-only` class.
 - Use ScrollArea for independently scrolling bodies. Do not mask the entire
   modal surface, which would also fade its border, header and shadow.
+- A dialog that scrolls itself reserves `scrollbar-gutter: stable both-edges`:
+  a classic scrollbar's lane is mirrored on both sides, so the form stays
+  centered and its width does not jump when content starts to scroll. Overlay
+  scrollbars reserve nothing.
 - Compose it with other `@/butler-ds` components before adding bespoke CSS.
 - Keep layout fluid; do not assume a fixed desktop width.
 - Check at iPhone-width mobile, tablet-ish, and desktop viewports.

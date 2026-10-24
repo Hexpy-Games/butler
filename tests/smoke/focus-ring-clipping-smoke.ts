@@ -2,7 +2,8 @@
 // Focus rings are never clipped. The built app's real shell (VisualHarness:
 // product Sidebar, Conversation with answer cards and the agent tab rail, new
 // chat, browser, command palette, menus, Settings, plus the drag-enabled
-// KanbanBoard story of the DS viewer) over an offline gateway
+// KanbanBoard, editable Tag and FilteredSelectPopover row-actions stories of
+// the DS viewer) over an offline gateway
 // stub; no model calls, no native agent. Run `npm --prefix
 // packages/butler-app/client/ui run build` first (`bun run app:focus-ring:smoke`).
 //
@@ -268,6 +269,13 @@ async function auditCell(page: Page, cell: Cell) {
   await page.goto(`${base}?visual=design-system&page=blocks/KanbanBoard&theme=${cell.theme}&locale=ko`);
   await page.locator('[data-slot="kanban-drag-scope"] [data-kanban-item]').first().waitFor();
   await auditScope(page, cell, "kanban-drag-board", '[data-slot="kanban-drag-scope"]', 40);
+  // Tag edit pencils (DS viewer stories): an editable Tag, and FilteredSelectPopover rows whose edit menu sits at the scroller's edge.
+  await page.goto(`${base}?visual=design-system&page=components/Tag&theme=${cell.theme}&locale=ko`);
+  await page.locator('[data-ds-story="Editable"] [aria-haspopup="menu"]').first().waitFor();
+  await auditScope(page, cell, "tag-edit", '[data-ds-story="Editable"]', 20);
+  await page.goto(`${base}?visual=design-system&page=blocks/FilteredSelectPopover&theme=${cell.theme}&locale=ko`);
+  await page.locator('[data-ds-story="Rows with actions"] [data-slot="filtered-select-item-actions"]').first().waitFor();
+  await auditScope(page, cell, "filtered-select-row-actions", '[data-ds-story="Rows with actions"]', 40);
 }
 
 /** Settings › Usage with a delegating chat selected (linked split rows, the chart), then the context popover. */
