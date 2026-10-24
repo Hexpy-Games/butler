@@ -28,15 +28,20 @@ mod transcripts;
 pub(super) mod writes;
 
 const WINDOW: Duration = Duration::from_secs(60);
+// Owner decision (#1116): budget the memory the agent alone holds. Clean
+// file-backed pages, such as the executable's code, are excluded.
 const MEMORY_BUDGET: u64 = 100_000_000;
+// Idle memory must not keep climbing. The measured idle profile is flat;
+// 10 MB per ten idle minutes would add more than a gigabyte per day.
+const MEMORY_GROWTH_LIMIT: u64 = 10_000_000;
 const READ_BUDGET: u64 = 1_000_000;
 
 #[tokio::test]
 async fn perf_idle_history_reads_and_footprint() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(
-        std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("perf"),
-        "PERF-IDLE requires BUTLER_E2E_TIER=perf and a release BUTLER_E2E_BIN"
+        std::env::var("BUTLER_E2E_PERF").as_deref() == Ok("1"),
+        "PERF-IDLE runs in the isolated perf lane (BUTLER_E2E_PERF=1, release BUTLER_E2E_BIN)"
     );
     butler_e2e::skip_unless!(
         process_usage::sample(std::process::id())?.is_some(),
@@ -45,7 +50,7 @@ async fn perf_idle_history_reads_and_footprint() -> Result<(), HarnessError> {
     let setup = Setup::new("PERF-IDLE")?
         .env("BUTLER_E2E_TIER", "stub")
         .env("BUTLER_E2E_IDLE_PROBE", "1")
-        .cassette("USE-02")
+        .cassette("USE-04")
         .replay_only()
         .quota_polling();
     memory_fixture::initialize_empty(&setup.sandbox.data)?;
@@ -126,13 +131,22 @@ async fn connect_and_refresh(s: &Scenario) -> Result<LiveEvents, HarnessError> {
     })?;
     drop(db);
     let live = LiveEvents::subscribe(&s.gw, cursor).await?;
+    // USE-04 replays the Z.AI Coding Plan quota; replay needs no real key.
+    let registered = s
+        .gw
+        .post(
+            "/model-catalog/registered-models",
+            serde_json::json!({"provider_id": "zai", "model_id": "glm-5.3", "auth_type": "api_key", "api_key": "zai-e2e-replay-key"}),
+        )
+        .await?;
+    assert!(registered.status < 300, "{}", registered.text);
     let reply =
-        s.gw.get("/provider-quota?provider_id=openai&refresh=1")
+        s.gw.get("/provider-quota?provider_id=zai&refresh=1")
             .await?;
     assert_eq!(reply.status, 200);
-    assert_eq!(reply.data()["available"], true);
+    assert_eq!(reply.data()["available"], true, "{}", reply.text);
     live.wait_for(Duration::from_secs(10), |event| {
-        event["type"] == "provider_quota_updated" && event["payload"]["provider_id"] == "openai"
+        event["type"] == "provider_quota_updated" && event["payload"]["provider_id"] == "zai"
     })
     .await?;
     Ok(live)
@@ -176,10 +190,11 @@ async fn measure(
             .map(|(a, b)| a - b);
         let opens = transcript_opens(s).await?;
         eprintln!(
-            "PERF-IDLE window={window} rss={} pss={:?} footprint={:?} rchar={chars:?} read_bytes={reads} write_bytes={writes} buffered_writes={buffered:?} cpu_user={cpu_user:?} cpu_system={cpu_system:?} transcript_opens={opens} quota_served={} load={:?}",
+            "PERF-IDLE window={window} rss={} pss={:?} footprint={:?} private={:?} rchar={chars:?} read_bytes={reads} write_bytes={writes} buffered_writes={buffered:?} cpu_user={cpu_user:?} cpu_system={cpu_system:?} transcript_opens={opens} quota_served={} load={:?}",
             after.resident_bytes,
             after.proportional_bytes,
             after.footprint_bytes,
+            after.private_bytes,
             s.provider()?.served(),
             process_usage::load_average()?
         );
@@ -203,7 +218,7 @@ fn assert_samples(samples: &Samples) {
         let chars = after.read_chars.zip(before.read_chars).map(|(a, b)| a - b);
         let reads = after.read_bytes - before.read_bytes;
         assert!(
-            after.footprint_bytes.unwrap_or(after.resident_bytes) < MEMORY_BUDGET,
+            private_bytes(after) < MEMORY_BUDGET,
             "idle memory: {after:?}"
         );
         assert!(
@@ -212,4 +227,14 @@ fn assert_samples(samples: &Samples) {
         );
         accounting::assert_no_writes(before, after);
     }
+    let first = private_bytes(&samples.windows[0].0);
+    let last = private_bytes(&samples.windows[samples.windows.len() - 1].1);
+    assert!(
+        last.saturating_sub(first) < MEMORY_GROWTH_LIMIT,
+        "idle memory grew from {first} to {last} bytes"
+    );
+}
+
+fn private_bytes(usage: &process_usage::ProcessUsage) -> u64 {
+    usage.private_bytes.unwrap_or(usage.resident_bytes)
 }
