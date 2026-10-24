@@ -80,7 +80,7 @@ async fn command_from_request(
             name: (*name).to_owned(),
         },
         (&Method::GET, ["facets"]) => C::Facets {
-            kind: input::kinds(&args)?,
+            kind: input::kinds(args)?,
             group: args.get("group").cloned(),
         },
         (&Method::GET, [id, "snapshot"]) => C::Snapshot {
