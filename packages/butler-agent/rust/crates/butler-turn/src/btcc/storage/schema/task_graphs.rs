@@ -1,8 +1,7 @@
 //! Derived read-model invalidations, outside the canonical BTCC receipt manifest.
 //! Source writes coalesce changes; reads and idle periods never write.
 pub(in crate::btcc::storage) const SCHEMA: &str = r"
-CREATE INDEX IF NOT EXISTS idx_btcc_turns_active ON btcc_turns(session_id)
-WHERE semantic_state IN ('admitted','delivery_committed');
+DROP INDEX IF EXISTS idx_btcc_turns_active;
 CREATE INDEX IF NOT EXISTS idx_btcc_graph_checkpoint_plan
 ON btcc_guided_work_checkpoint_revisions(work_id,plan_revision_id,revision DESC);
 CREATE INDEX IF NOT EXISTS idx_btcc_graph_bindings_session

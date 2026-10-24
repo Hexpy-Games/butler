@@ -3,8 +3,9 @@ mod feed;
 mod progress;
 pub mod queries;
 use super::*;
-pub use feed::{catch_up, pending};
-pub use progress::{enrich, progress};
+pub use feed::{catch_up, changed_works, pending};
+pub use progress::{enrich, progress, project_works};
+pub type ProjectViews = std::collections::HashMap<String, Value>;
 use queries::Query;
 use rusqlite::params;
 
@@ -87,8 +88,9 @@ pub fn context(db: &Connection, session: &str) -> Result<Vec<Value>> {
         let id = text(&epic,"id")?;
         let nodes = rows(db, crate::work_queries::Query::WorkSpecNodes.sql(), [id])?;
         let mut data = json!({"epic_ref":format!("canon:epic/{id}"),"canon_status":epic["canon_status"],"untrusted_content":{"kind":"canon_epic","title":epic["title"]}});
-        data["untrusted_content"]["tags"] = json!(rows(db, super::api::sql::EPIC_TAGS, [id])?.iter().map(|tag| &tag["name"]).collect::<Vec<_>>());
         if epic["description"].as_str().is_some_and(|s| !s.is_empty()) { data["untrusted_content"]["description"] = epic["description"].clone(); }
+        let tags = rows(db, super::api::sql::EPIC_TAGS, [id])?;
+        if !tags.is_empty() { data["untrusted_content"]["tags"] = json!(tags.iter().map(|tag| &tag["name"]).collect::<Vec<_>>()); }
         let mut specs = Vec::new();
         for node in nodes {
             let Some(revision) = node["active_revision"].as_i64() else { continue; };
@@ -100,6 +102,9 @@ pub fn context(db: &Connection, session: &str) -> Result<Vec<Value>> {
             data["spec_refs"] = json!(specs.iter().map(|s| &s["spec_ref"]).collect::<Vec<_>>());
             data["untrusted_content"]["specs"] = json!(specs);
         }
+        let object = data.as_object_mut().ok_or(Error::Invalid("canon context"))?;
+        let content = object.remove("untrusted_content").ok_or(Error::Invalid("canon content"))?;
+        object.insert("untrusted_content".into(), content);
         Ok(data)
     }).collect()
 }

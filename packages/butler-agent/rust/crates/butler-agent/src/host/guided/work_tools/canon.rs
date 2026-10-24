@@ -8,14 +8,16 @@ impl GuidedWorkTools {
         input: ReplacePlanInput,
     ) -> Result<WorkView, BtccError> {
         let storage = &self.canon;
-        let context = self.service.load_context(self.scope.clone()).await?;
         let work = if input.start_new.unwrap_or(false) {
             self.service
                 .bound_work_for_turn(self.scope.turn_id.clone())
                 .await?
                 .map(|w| w.work_id)
         } else {
-            context.map(|c| c.work.work_id)
+            self.service
+                .load_context(self.scope.clone())
+                .await?
+                .map(|c| c.work.work_id)
         };
         let session = self.scope.session_id.clone();
         let refs = input.governing_refs.clone().unwrap_or_default();
@@ -32,7 +34,7 @@ impl GuidedWorkTools {
         let work = self.service.replace_plan(input).await?;
         let id = work.work_id.clone();
         let session = self.scope.session_id.clone();
-        storage
+        if let Err(error) = storage
             .canon_write(move |tx| {
                 store::link_work(
                     tx,
@@ -42,7 +44,10 @@ impl GuidedWorkTools {
                     &refs,
                 )
             })
-            .await?;
+            .await
+        {
+            tracing::warn!(%error, work_id = %work.work_id, "Canon link deferred to reconciliation after committed plan");
+        }
         Ok(work)
     }
 }

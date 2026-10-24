@@ -79,6 +79,9 @@ pub trait AppCanonPort: Send + Sync + 'static {
     fn changes(&self) -> Option<tokio::sync::watch::Receiver<()>> {
         None
     }
+    fn reconcile(&self) -> ApplicationFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
     fn unpublished(&self, _after: i64) -> ApplicationFuture<Vec<AppCanonEvent>> {
         Box::pin(async { Ok(Vec::new()) })
     }

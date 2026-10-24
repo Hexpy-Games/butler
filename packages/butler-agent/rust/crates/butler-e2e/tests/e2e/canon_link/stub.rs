@@ -12,6 +12,10 @@ pub(super) struct Script {
     pub path: Mutex<String>,
     pub codes: Mutex<Vec<String>>,
     pub context_seen: AtomicBool,
+    pub(super) quick: AtomicBool,
+    pub(super) hold_steward: AtomicBool,
+    pub(super) steward_held: Semaphore,
+    pub(super) steward_release: Semaphore,
     pub(super) delegate: AtomicBool,
     pub(super) hold_report: AtomicBool,
     reporting: Semaphore,
@@ -57,6 +61,10 @@ pub(super) async fn start(
         path: Mutex::new(String::new()),
         codes: Mutex::new(Vec::new()),
         context_seen: AtomicBool::new(false),
+        quick: AtomicBool::new(false),
+        hold_steward: AtomicBool::new(false),
+        steward_held: Semaphore::new(0),
+        steward_release: Semaphore::new(0),
         delegate: AtomicBool::new(false),
         hold_report: AtomicBool::new(false),
         reporting: Semaphore::new(0),
@@ -103,9 +111,15 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
     {
         script.context_seen.store(true, Ordering::SeqCst);
     }
+    if delegated::returning_steward(&body) && script.hold_steward.swap(false, Ordering::SeqCst) {
+        script.steward_held.add_permits(1);
+        script.steward_release.acquire().await.unwrap().forget();
+    }
     let n = outputs.len();
     let delegated = script.delegate.load(Ordering::SeqCst);
-    let mut calls = if delegated {
+    let mut calls = if script.quick.load(Ordering::SeqCst) {
+        Vec::new()
+    } else if delegated {
         delegated::sequence(&script, &body, &outputs)
     } else {
         sequence(&script, &outputs)

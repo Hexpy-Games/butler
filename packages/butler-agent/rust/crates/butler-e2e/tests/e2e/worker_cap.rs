@@ -39,7 +39,7 @@ pub(crate) async fn setup(
     let (url, script, server) = stub::start(count).await?;
     let s = Setup::new(name)?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CHATGPT_API_BASE_URL", &url)
+        .env("BUTLER_CODEX_BASE_URL", &url)
         .start()
         .await?;
     s.patch_settings(json!({"max_simultaneous_workers":2}), "worker cap")

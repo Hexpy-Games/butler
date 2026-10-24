@@ -7,6 +7,7 @@
 )]
 mod delegation;
 mod plans;
+mod recovery;
 mod stub;
 use butler_e2e::e2e::{
     HarnessError,
@@ -203,12 +204,33 @@ async fn cb_01_03_06_10_16_linked_pipeline_feedback_and_two_epics() -> Result<()
     )
     .await?;
     wait_label(&s, &other, "in_review").await?;
+    // A later Work for the same epic replaces the card's action source.
+    script.epics.lock().unwrap().swap(0, 1);
+    let turn = s.gw.say(&chat, "Verify the release epic again").await?;
+    s.gw.wait_terminal(
+        &chat,
+        &butler_e2e::e2e::scenario::accepted_turn_id(&turn)?,
+        Duration::from_secs(60),
+    )
+    .await?;
+    assert_eq!(
+        progress(&s, &id).await?["counts"],
+        json!({"completed":1,"total":1})
+    );
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
     assert_eq!(
         db.query_row::<i64, _, _>("SELECT count(*) FROM canon_epic_work_links", [], |r| r
             .get(0))?,
-        2
+        3
     );
+    let owners: Vec<String> = db.prepare("SELECT DISTINCT scope_kind FROM btcc_guided_works WHERE work_id IN (SELECT btcc_work_id FROM canon_epic_work_links)")?.query_map([], |r| r.get(0))?.collect::<rusqlite::Result<_>>()?;
+    assert_eq!(
+        owners,
+        ["project"],
+        "Epic conversations retain Ledger ownership"
+    );
+    let revisions: i64 = db.query_row("SELECT count(*) FROM btcc_guided_work_plan_revisions WHERE work_id IN (SELECT btcc_work_id FROM canon_epic_work_links)", [], |r| r.get(0))?;
+    assert_eq!(revisions, 0, "Project plan revisions stay in Ledger");
     let before = work_records(&db)?;
     label(&s, &id, "done").await?;
     assert_eq!(
@@ -285,6 +307,24 @@ async fn auto_labels_respect_person_rank_and_reporting_finish() -> Result<(), Ha
             );
         }
         drop(db);
+        if expected == "in_review" {
+            label(&s, &id, "blocked").await?;
+            script
+                .quick
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+            let turn = s.gw.say(&chat, "What does this mean?").await?;
+            s.gw.wait_terminal(
+                &chat,
+                &butler_e2e::e2e::scenario::accepted_turn_id(&turn)?,
+                Duration::from_secs(30),
+            )
+            .await?;
+            let epic = data(s.gw.get(&format!("/canon/epics/{id}")).await?, 200);
+            assert_eq!(
+                epic["canon_status"], "blocked",
+                "Repeated completion observations must preserve a person's label"
+            );
+        }
         s.finish().await?;
         server.abort();
     }

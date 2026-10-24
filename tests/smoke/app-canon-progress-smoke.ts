@@ -48,7 +48,8 @@ try {
       for (const [value, message] of [["done", "진행 중에는 완료할 수 없습니다"], ["cancelled", "진행 중에는 취소할 수 없습니다"]]) {
         const option = status.locator(`option[value="${value}"]`);
         assert(await option.isDisabled());
-        assert.equal(await option.getAttribute("title"), message);
+        await status.hover();
+        await page.getByRole("tooltip").filter({ hasText: message }).waitFor();
       }
       await page.screenshot({ path: join(shots, `${theme}-running.png`), animations: "disabled" });
       progress.running = false;

@@ -68,3 +68,16 @@ pub(super) fn sequence(
     calls.push(("record_work_disposition",json!({"work_id":work,"disposition":"completed","summary":"Evidence verified","action_updates":done,"remaining_actions":[],"followups":[]})));
     calls
 }
+
+pub(super) fn returning_steward(body: &Value) -> bool {
+    let key = butler_e2e::e2e::matching::key(
+        "/codex/responses",
+        body,
+        &butler_e2e::e2e::sanitize::Placeholders::default(),
+    );
+    key.user_request.starts_with("Delegated result")
+        && body["instructions"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("You run one delegated Work for Butler")
+}

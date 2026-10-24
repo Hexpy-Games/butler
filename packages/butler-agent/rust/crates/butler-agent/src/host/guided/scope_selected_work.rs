@@ -275,8 +275,8 @@ fn session_owned(binding: &StoredSessionBinding) -> bool {
         .as_deref()
         .is_none_or(str::is_empty);
     match (child_role, mode) {
-        (_, Some("local")) => true,
-        (_, Some("ledger")) => false,
+        (true, Some("local")) => true,
+        (true, Some("ledger")) => false,
         (true, _) => app_id_missing && ledger_id_missing,
         (false, _) => app_id_missing,
     }

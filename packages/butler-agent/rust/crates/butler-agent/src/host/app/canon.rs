@@ -1,5 +1,6 @@
 //! Host-owned BTCC adapter; every SQL operation stays on its owning lane.
 mod canon_sidebar;
+mod progress;
 use butler_canon::{store, work_queries::Query};
 use butler_gateway::gateway::{
     AppCanonConflict, AppCanonEvent, AppCanonPort, AppCanonRequest, AppCanonResource,
@@ -11,10 +12,19 @@ use std::sync::Arc;
 
 pub(crate) struct AppCanon {
     storage: BtccStorage,
+    ledger: butler_ledger::project_ledger::ProjectLedger,
+    feed_after: Arc<std::sync::atomic::AtomicI64>,
 }
 impl AppCanon {
-    pub(crate) fn new(storage: BtccStorage) -> Self {
-        Self { storage }
+    pub(crate) fn new(
+        storage: BtccStorage,
+        ledger: butler_ledger::project_ledger::ProjectLedger,
+    ) -> Self {
+        Self {
+            storage,
+            ledger,
+            feed_after: Arc::new(std::sync::atomic::AtomicI64::new(0)),
+        }
     }
 }
 impl AppCanonPort for AppCanon {
@@ -22,7 +32,7 @@ impl AppCanonPort for AppCanon {
         &self,
         operation: butler_gateway::gateway::AppCanonOperation,
     ) -> ApplicationFuture<Value> {
-        canon_sidebar::execute(self.storage.clone(), operation)
+        canon_sidebar::execute(self.storage.clone(), self.ledger.clone(), operation)
     }
     fn session_epics(&self, sessions: Vec<String>) -> ApplicationFuture<Vec<Vec<String>>> {
         let storage = self.storage.clone();
@@ -45,13 +55,14 @@ impl AppCanonPort for AppCanon {
     }
     fn execute(&self, request: AppCanonRequest) -> ApplicationFuture<Value> {
         let storage = self.storage.clone();
+        let ledger = self.ledger.clone();
         Box::pin(async move {
             let AppCanonRequest {
                 resource,
                 id,
                 input,
             } = request;
-            if let Some(input) = input {
+            let result = if let Some(input) = input {
                 // Same trusted local viewer as gateway/application/snapshot_input.rs.
                 // Display-profile names are mutable presentation, not identities.
                 let ctx = store::Context {
@@ -60,10 +71,7 @@ impl AppCanonPort for AppCanon {
                 };
                 storage
                     .canon_write(move |tx| {
-                        let mut result =
-                            store::write_api(tx, &ctx, store_resource(resource), &id, input)?;
-                        store::runtime::enrich(tx, &mut result)?;
-                        Ok(result)
+                        store::write_api(tx, &ctx, store_resource(resource), &id, input)
                     })
                     .await
                     .map_err(error)
@@ -71,15 +79,14 @@ impl AppCanonPort for AppCanon {
                 storage
                     .canon_read(move |db| {
                         if resource == AppCanonResource::EpicProgress {
-                            return store::runtime::progress(db, &id);
+                            return Ok(json!({"epic_id":id}));
                         }
-                        let mut result = store::read_api(db, store_resource(resource), &id)?;
-                        store::runtime::enrich(db, &mut result)?;
-                        Ok(result)
+                        store::read_api(db, store_resource(resource), &id)
                     })
                     .await
                     .map_err(error)
-            }
+            }?;
+            progress::enrich(&storage, &ledger, result).await
         })
     }
     fn project_scope(&self, resource: AppCanonResource, id: String) -> ApplicationFuture<String> {
@@ -94,13 +101,16 @@ impl AppCanonPort for AppCanon {
     fn changes(&self) -> Option<tokio::sync::watch::Receiver<()>> {
         Some(self.storage.subscribe_changes())
     }
+    fn reconcile(&self) -> ApplicationFuture<()> {
+        Box::pin(progress::reconcile(
+            self.storage.clone(),
+            self.ledger.clone(),
+            self.feed_after.clone(),
+        ))
+    }
     fn unpublished(&self, after: i64) -> ApplicationFuture<Vec<AppCanonEvent>> {
         let storage = self.storage.clone();
         Box::pin(async move {
-            storage
-                .reconcile_canon(chrono::Utc::now().timestamp_millis())
-                .await
-                .map_err(error)?;
             storage
                 .canon_read(move |db| {
                     let mut stmt = db.prepare(Query::UnpublishedOutbox.sql())?;

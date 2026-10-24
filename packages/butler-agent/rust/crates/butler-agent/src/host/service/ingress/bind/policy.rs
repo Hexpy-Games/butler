@@ -57,18 +57,22 @@ pub(super) async fn upsert_app_binding(
     .unwrap_or_else(|| default_workspace.to_string_lossy().into_owned());
     let access = BindingAccess::read(envelope, context);
     let has_project = project_id.is_some();
-    // Canon owns shared project records; these conversations keep their full
-    // internal Work pipeline in BTCC's session owner, including delegated Work.
-    let canon_bound = session_has_epics(context);
-    let project_work = has_project && !canon_bound;
-    let profiles = work_profiles(&access.turn, project_work);
+    let profiles: &[&str] = if access.turn == AccessMode::FullAccess {
+        if has_project {
+            &["workspace", "project", "project-lifecycle"]
+        } else {
+            &["workspace"]
+        }
+    } else if has_project {
+        &["project"]
+    } else {
+        &[]
+    };
     let session_kind = context
         .pointer("/session/kind")
         .and_then(Value::as_str)
         .unwrap_or("chat");
-    let source = if canon_bound {
-        "canon_session"
-    } else if has_project {
+    let source = if has_project {
         "app_project_default"
     } else if session_kind == "project" {
         "project_shell_default"
@@ -138,8 +142,8 @@ pub(super) async fn upsert_app_binding(
     let mut policy = json!({
         "accessMode":access.conversation,
         "trackingModeSource":source,"tracking_mode_source":source,
-        "closeoutStrategy":if project_work{"ledger"}else{"session_ledger"},
-        "closeout_strategy":if project_work{"ledger"}else{"session_ledger"},
+        "closeoutStrategy":if has_project{"ledger"}else{"session_ledger"},
+        "closeout_strategy":if has_project{"ledger"}else{"session_ledger"},
         "thinFirstResponse":true,"thin_first_response":true,
         "requiredNativeTools":[],"required_tools":[],"requiredNativeToolProfiles":profiles,
     });
@@ -155,12 +159,10 @@ pub(super) async fn upsert_app_binding(
     if !selected.is_empty() {
         policy["requiredNativeTools"] = json!(selected);
     }
-    if project_work {
+    if has_project {
         policy["trackingMode"] = "ledger".into();
         policy["tracking_mode"] = "ledger".into();
     } else {
-        policy["trackingMode"] = "local".into();
-        policy["tracking_mode"] = "local".into();
         policy["workLedgerScope"] = "session".into();
         policy["work_ledger_scope"] = "session".into();
     }
@@ -321,21 +323,4 @@ fn required_action_tools(mode: &AccessMode, facts: &ActionToolFacts<'_>) -> Vec<
         tools.push(ToolName::ForgetExplicitMemory.as_str());
     }
     tools
-}
-
-/// Tool profiles follow the Work owner rather than the conversation's project.
-fn work_profiles(access: &AccessMode, project_work: bool) -> &'static [&'static str] {
-    match (access == &AccessMode::FullAccess, project_work) {
-        (true, true) => &["workspace", "project", "project-lifecycle"],
-        (true, false) => &["workspace"],
-        (false, true) => &["project"],
-        (false, false) => &[],
-    }
-}
-
-fn session_has_epics(context: &Value) -> bool {
-    context
-        .pointer("/session/epicIds")
-        .and_then(Value::as_array)
-        .is_some_and(|ids| !ids.is_empty())
 }
