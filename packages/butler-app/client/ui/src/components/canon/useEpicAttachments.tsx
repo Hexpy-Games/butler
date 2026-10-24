@@ -1,5 +1,6 @@
-import { useId, useLayoutEffect, useRef, useState, type SyntheticEvent } from "react";
+import { useId, useLayoutEffect, useRef, type SyntheticEvent } from "react";
 import { Button, ButtonContainer, Input, Tooltip } from "@/butler-ds";
+import { useCanonInlineUploads } from "./CanonInlineDraft.tsx";
 import { appCopy } from "@/app/copy.ts";
 import { uploadCanonFile } from "@/app/canonApi.ts";
 import { apiErrorCode } from "@/app/api.ts";
@@ -9,7 +10,8 @@ import { notifyError } from "@/app/notifications.ts";
 export function useEpicAttachments(projectId: string, description: string, onDescription: (value: string) => void, disabled: boolean) {
   const pickerId = useId();
   const selection = useRef<{ element: HTMLTextAreaElement; start: number; end: number } | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [{ pendingFile, files }, setUpload] = useCanonInlineUploads();
+  const uploading = Boolean(pendingFile);
   const caret = useRef<{ element: HTMLTextAreaElement; position: number } | null>(null);
   useLayoutEffect(() => {
     const next = caret.current;
@@ -25,9 +27,10 @@ export function useEpicAttachments(projectId: string, description: string, onDes
   const upload = async (file?: File) => {
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) { notifyError(null, appCopy.canon.fileTooLarge); return; }
-    setUploading(true);
+    setUpload(current => ({ ...current, pendingFile: file }));
     try {
       const attached = await uploadCanonFile(projectId, file);
+      setUpload(current => ({ ...current, files: [...current.files, attached] }));
       const name = attached.safe_name.replace(/[\\\[\]]/gu, "\\$&").replace(/[\r\n]/gu, " ");
       const reference = `${attached.kind === "image" ? "!" : ""}[${name}](attachment:${attached.file_id})`;
       const saved = selection.current;
@@ -44,7 +47,7 @@ export function useEpicAttachments(projectId: string, description: string, onDes
         : code === "too_many_attachments" ? appCopy.canon.tooManyAttachments : undefined;
       notifyError(copy ? null : error, copy ?? appCopy.interfaceFeedback.uploadFailed);
     }
-    finally { setUploading(false); }
+    finally { setUpload(current => ({ ...current, pendingFile: null })); }
   };
   const control = <ButtonContainer size="sm">
     <Input type="file" hidden aria-label={appCopy.canon.attachFile} id={pickerId} disabled={disabled || uploading}
@@ -54,5 +57,5 @@ export function useEpicAttachments(projectId: string, description: string, onDes
         onClick={() => { const picker = document.getElementById(pickerId); if (picker instanceof HTMLInputElement) picker.click(); }}>{appCopy.canon.attachFile}</Button>
     </Tooltip>
   </ButtonContainer>;
-  return { control, onSelect, uploading };
+  return { control, onSelect, uploading, pendingFile, files };
 }
