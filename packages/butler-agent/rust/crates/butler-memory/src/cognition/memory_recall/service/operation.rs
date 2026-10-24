@@ -156,7 +156,18 @@ impl Operation {
             result = self.search_vectors(port.as_ref(), generation, vector_deadline,
                 &mut initialization_ms) => result,
         };
+        // Fixture builds can return the lane late, as a stalled process does.
+        #[cfg(feature = "e2e-fixtures")]
+        let _ = tokio::task::spawn_blocking(|| {
+            butler_platform::secure_fs::hold_point("memory_recall_vector_lane", || false)
+        })
+        .await;
         self.initialization_ms = initialization_ms;
+        // A lane returning past its deadline (a late timer or a stalled
+        // process) must not take the text reserve: it starts from the return.
+        self.deadline_at = self
+            .deadline_at
+            .max((self.clock)() + super::super::budget::TEXT_RESERVE_MS);
         match result {
             Ok(_) if generation.embedding.is_none() => {
                 vector.code = Some("embedding_not_configured".into());

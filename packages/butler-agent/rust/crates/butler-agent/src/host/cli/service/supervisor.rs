@@ -205,7 +205,8 @@ pub(super) async fn existing(
         match super::lifecycle::active_service_async(root).await {
             Ok(Some(record)) => return Ok(Some(record)),
             Ok(None) => {}
-            Err(error) if error.message().contains("DATA lock has no record") => {}
+            // Its child may still be recovering an interrupted reset.
+            Err(error) if error.message() == crate::host::service::instance::DATA_BUSY => {}
             Err(error) => return Err(error),
         }
         if Instant::now() >= deadline {

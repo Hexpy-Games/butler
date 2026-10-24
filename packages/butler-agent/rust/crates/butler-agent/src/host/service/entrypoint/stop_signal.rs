@@ -12,7 +12,6 @@
 //! and launchd (`KeepAlive: {SuccessfulExit: false}`) and systemd
 //! (`Restart=on-failure`) restart only an Agent that exits non-zero.
 
-use std::path::PathBuf;
 use std::sync::{
     Arc, OnceLock,
     atomic::{AtomicBool, Ordering},
@@ -24,7 +23,7 @@ use tokio::sync::watch;
 
 use butler_turn::btcc::BtccError;
 
-use crate::host::ResolvedInstallation;
+use crate::host::service::instance::InstanceRelease;
 use butler_gateway::gateway::TranscriptWriter;
 
 /// Error code of a startup that a stop request ended.
@@ -44,8 +43,9 @@ pub(super) struct StopSignal {
 struct Inner {
     version: String,
     requested: watch::Sender<bool>,
-    /// DATA and the instance nonce, once the instance record is published.
-    instance: OnceLock<(PathBuf, String, ResolvedInstallation)>,
+    /// The published instance's record and DATA lock, released before a
+    /// forced exit.
+    instance: OnceLock<InstanceRelease>,
     writer: OnceLock<Arc<TranscriptWriter>>,
     completed: AtomicBool,
     cancellation: tokio_util::sync::CancellationToken,
@@ -84,16 +84,8 @@ impl StopSignal {
 
     /// Names the published instance, so a signal can be matched to the stop
     /// intent a controller wrote for it.
-    pub(super) fn attach(
-        &self,
-        data_root: PathBuf,
-        nonce: &str,
-        installation: ResolvedInstallation,
-    ) {
-        let _ = self
-            .inner
-            .instance
-            .set((data_root, nonce.to_owned(), installation));
+    pub(super) fn attach(&self, instance: InstanceRelease) {
+        let _ = self.inner.instance.set(instance);
     }
 
     /// All host and controller stops share one grace deadline.
@@ -165,11 +157,7 @@ impl StopSignal {
             return path.exists();
         };
         let named = text.trim().strip_prefix("stop ").map(str::trim);
-        let ours = self
-            .inner
-            .instance
-            .get()
-            .map(|(_, nonce, _)| nonce.as_str());
+        let ours = self.inner.instance.get().map(InstanceRelease::nonce);
         match (named, ours) {
             (Some(named), Some(ours)) if named != ours => {
                 let _ = std::fs::remove_file(path);
@@ -231,8 +219,8 @@ fn exit_after_grace(inner: Arc<Inner>) {
                 "shutdown_deadline",
                 "Service reached its shutdown deadline and completed forced cleanup.",
             );
-            if let Some((data_root, nonce, installation)) = inner.instance.get() {
-                crate::host::service::instance::release_record(data_root, installation, nonce);
+            if let Some(instance) = inner.instance.get() {
+                instance.release_on_deadline();
             }
             super::super::shutdown_trace::event("deadline_exit");
             std::process::exit(0);
