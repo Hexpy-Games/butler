@@ -14,6 +14,7 @@ mod feedback;
 mod folder;
 mod hooks;
 mod image;
+mod image_gen;
 mod library;
 mod memory_write;
 pub(crate) use memory_write::MemoryWriteServices;
@@ -359,7 +360,8 @@ impl GuidedTools {
                     | ToolName::LibrarySearch
                     | ToolName::LibraryOrganize
             )
-        ) || browser::supports(name)
+        ) || image_gen::supports(name)
+            || browser::supports(name)
             || GuidedWorkTools::is_work_tool(name)
             || crate::host::guided::project_tools::GuidedProjectTools::supports(name)
     }

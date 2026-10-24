@@ -1,5 +1,6 @@
 //! Existing App schema migration in its source-defined order.
 
+mod asset_versions;
 mod assets;
 pub(in crate::gateway::application) mod canon;
 pub(in crate::gateway::application) mod canon_files;

@@ -60,6 +60,7 @@ pub(super) async fn post(
         .send_message(SendMessageCommand {
             chat_id,
             request: crate::gateway::MessageSendRequest {
+                image_edit: None,
                 expected_project_id: None,
                 content_parts: None,
                 chat_id: None,

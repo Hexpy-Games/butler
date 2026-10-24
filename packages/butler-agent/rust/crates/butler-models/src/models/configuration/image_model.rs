@@ -166,6 +166,26 @@ impl ModelConfiguration {
                 key.id == selection.credential_id && key.provider_id == metadata.provider_id
             })
             .ok_or_else(|| invalid("image_model_credential_invalid"))?;
+        if !read
+            .catalog
+            .view()
+            .provider_credentials
+            .iter()
+            .any(|c| c.id == record.id && c.auth_type == ProviderAuthMethod::ApiKey)
+        {
+            return Err(invalid("image_model_requires_api_key"));
+        }
+        let mut metadata = metadata;
+        let override_url = if metadata.provider_id == "openai" {
+            self.environment.openai_base_url.as_ref()
+        } else {
+            self.environment
+                .hosted_provider_base_urls
+                .get(&metadata.provider_id)
+        };
+        if let Some(url) = override_url {
+            metadata.api_base_url = Some(url.clone());
+        }
         let default_quality = selection
             .default_quality
             .unwrap_or_else(|| image_output.default_quality.clone());

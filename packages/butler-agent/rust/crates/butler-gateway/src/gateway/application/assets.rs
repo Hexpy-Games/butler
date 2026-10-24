@@ -1,6 +1,9 @@
 //! App-owned content assets. No timers, disk thumbnails or duplicate file writes.
 mod cache;
+mod composite;
+pub use composite::{composite, mask_bounds};
 mod generated;
+mod inputs;
 pub use generated::GeneratedAssetKind;
 mod store;
 use super::{AppApplication, GatewayApplicationError, app_error};
@@ -37,6 +40,11 @@ pub enum AppAssetCommand {
     },
     Versions {
         id: String,
+    },
+    ResolveInput {
+        session: String,
+        id: String,
+        mask_for: Option<String>,
     },
     Sweep,
 }
@@ -97,6 +105,11 @@ impl AppApplication {
                 .read(move |db| generated::versions(db, &id))
                 .await
                 .map_err(app_error),
+            AppAssetCommand::ResolveInput {
+                session,
+                id,
+                mask_for,
+            } => self.resolve_input(session, id, mask_for).await,
             AppAssetCommand::Sweep => {
                 let root = self.butler_data.join(butler_platform::data_paths::ASSETS);
                 self.storage

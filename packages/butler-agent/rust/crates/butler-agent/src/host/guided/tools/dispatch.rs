@@ -289,6 +289,9 @@ async fn domain_tool(
         return Some(super::library::execute(owner, call).await);
     }
     match call.name.as_str() {
+        "generate_image" | "edit_image" => {
+            Some(super::image_gen::execute(owner, *invocation, call, call_id).await)
+        }
         "answer_blocks" => {
             Some(super::answer_blocks::execute(owner, call, call_id, invocation.progress).await)
         }

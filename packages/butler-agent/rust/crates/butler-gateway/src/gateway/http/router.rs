@@ -205,6 +205,7 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/message-assets/{id}", Handler::MessageFiles),
     ("/message-assets/{id}/meta", Handler::MessageFiles),
     ("/message-assets/{id}/versions", Handler::MessageFiles),
+    ("/internal/images/calls", Handler::Browser),
     ("/message-assets/masks", Handler::ImageModels),
     ("/settings/image-model", Handler::ImageModels),
     ("/usage/images", Handler::ImageModels),

@@ -1168,6 +1168,7 @@ dependencies = [
  "futures-util",
  "hmac 0.12.1",
  "http",
+ "image",
  "parking_lot",
  "pin-project-lite",
  "regex",

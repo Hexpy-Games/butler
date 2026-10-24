@@ -99,6 +99,7 @@ mod image_errors;
 mod image_foundation;
 mod image_limits;
 mod image_only;
+mod image_tools;
 mod install_app;
 mod install_hardening;
 mod install_lifecycle;
