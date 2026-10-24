@@ -7,7 +7,7 @@ use super::{self as secure_fs, FileId};
 pub(crate) use credentials::roots as credential_roots;
 pub use credentials::secret_name;
 #[cfg(target_os = "macos")]
-pub(crate) use credentials::secret_pattern;
+pub(crate) use credentials::{secret_pattern, ssh_agent_readable};
 use std::{
     collections::{HashMap, HashSet},
     fs::Metadata,

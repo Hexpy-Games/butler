@@ -5,6 +5,7 @@ mod auto;
 mod link_targets;
 pub(super) use authority::{approve, assert_counts, delivered, paused};
 mod sandbox_data_reads;
+mod secret_reads;
 pub(super) mod stub;
 mod web_found;
 mod web_guard;

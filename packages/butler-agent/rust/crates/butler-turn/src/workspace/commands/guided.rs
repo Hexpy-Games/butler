@@ -229,7 +229,10 @@ async fn prepare_command(
         let secrets = secrets.to_vec();
         move || {
             let scratch = Scratch::new(&butler_data, input.access == GuidedAccess::ProjectWrite);
-            let environment = scratch_environment(&host, &butler_data, &scratch)?;
+            let mut environment = scratch_environment(&host, &butler_data, &scratch)?;
+            if input.access == GuidedAccess::SecretReadsDenied {
+                super::environment::ssh_agent(&host, &mut environment);
+            }
             std::fs::create_dir_all(&scratch.artifacts).map_err(CommandError::io)?;
             let process_cwd = command_sandbox::working_directory(&cwd).map_err(CommandError::io)?;
             let invocation = super::guided_invocation::invocation(&input, &secrets)?;

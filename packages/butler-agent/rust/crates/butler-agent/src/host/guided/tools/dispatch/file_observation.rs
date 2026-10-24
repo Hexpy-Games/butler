@@ -29,7 +29,7 @@ pub(super) async fn execute(
     let gated = matches!(access.decision, butler_turn::btcc::AccessDecision::Ask(_))
         || super::super::access::resumes(owner, occurrence);
     let approval = if gated {
-        match gate(owner, call, occurrence, &args).await? {
+        match gate(owner, call, occurrence, &args, access.unsandboxed).await? {
             Gate::Pending(result) => return encoded(&result),
             Gate::Allowed(reference) => reference,
         }
@@ -81,6 +81,7 @@ pub(in crate::host::guided::tools) async fn gate(
     call: &ModelRoundToolCall,
     occurrence: &str,
     args: &Value,
+    unsandboxed: bool,
 ) -> Result<Gate, ToolExecutionError> {
     let resume = owner.binding.authority_request_ref.as_ref().filter(|_| {
         owner.binding.authority_source_call_id.as_deref() == Some(occurrence)
@@ -129,8 +130,9 @@ pub(in crate::host::guided::tools) async fn gate(
             model_ref: owner.binding.model_ref.clone(),
             reasoning_effort: owner.binding.reasoning_effort.clone(),
             category: Some(category(call).into()),
-            public_action_title: Some(approval_reason(call)),
-            honor_standing_permission: !matches!(call.name.as_str(), "web_read" | "web_search"),
+            public_action_title: Some(approval_reason(call, unsandboxed)),
+            honor_standing_permission: !unsandboxed
+                && !matches!(call.name.as_str(), "web_read" | "web_search"),
             unattended: owner.unattended(),
         })
         .await
@@ -231,8 +233,10 @@ fn request_target(call: &ModelRoundToolCall, args: &Value) -> String {
         format!("observation:{}", call.name)
     }
 }
-fn approval_reason(call: &ModelRoundToolCall) -> String {
-    if matches!(call.name.as_str(), "web_read" | "web_search") {
+fn approval_reason(call: &ModelRoundToolCall, unsandboxed: bool) -> String {
+    if unsandboxed {
+        super::super::access::UNSANDBOXED_REASON.into()
+    } else if matches!(call.name.as_str(), "web_read" | "web_search") {
         "authority.taintReason".into()
     } else {
         call.name.clone()

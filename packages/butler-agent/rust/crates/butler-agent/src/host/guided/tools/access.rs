@@ -2,9 +2,9 @@
 use super::GuidedTools;
 use butler_core::tool_protocol::ToolName;
 use butler_turn::btcc::{
-    AccessDecision, AccessRequest, ApprovalRisk, BtccError, CapabilityKind, ModelRoundToolCall,
-    TargetScope, ToolExecutionError, command_access_risk, command_scope_unresolved, decide,
-    needs_scope,
+    AccessDecision, AccessMode, AccessRequest, ApprovalRisk, BtccError, CapabilityKind,
+    CommandSandbox, GrantUse, ModelRoundToolCall, TargetScope, ToolExecutionError,
+    command_access_risk, command_scope_unresolved, decide, needs_scope,
 };
 use butler_turn::workspace::{FolderRelation, ScopeRoots, classify_targets};
 use serde_json::Value;
@@ -25,7 +25,7 @@ pub(super) async fn kind(
         &call.arguments,
         super::effect::is_managed_project_ledger_effect(&call.name),
     );
-    if owner.binding.access_mode == butler_turn::btcc::AccessMode::Auto
+    if owner.binding.access_mode == AccessMode::Auto
         && matches!(
             kind,
             CapabilityKind::CommandMutation { .. }
@@ -61,6 +61,9 @@ pub(super) async fn gated_kind(
 pub(super) struct ClassifiedAccess {
     pub decision: AccessDecision,
     pub scope: TargetScope,
+    /// The command would run with the user's access while its secret reads
+    /// stay open; its fresh approval says so ([`unsandboxed`]).
+    pub unsandboxed: bool,
 }
 
 pub(super) async fn decision(
@@ -81,8 +84,9 @@ pub(super) async fn decision_for_kind(
     } else {
         TargetScope::NoTarget
     };
+    let mode = &owner.binding.access_mode;
     let decision = decide(
-        &owner.binding.access_mode,
+        mode,
         AccessRequest {
             kind,
             risk: if call.name == "run_command" {
@@ -94,7 +98,51 @@ pub(super) async fn decision_for_kind(
             taint: owner.taint(),
         },
     );
-    Ok(ClassifiedAccess { decision, scope })
+    let unsandboxed = call.name == ToolName::RunCommand && unsandboxed(mode, kind, decision, args);
+    Ok(ClassifiedAccess {
+        decision: if unsandboxed {
+            AccessDecision::Ask(GrantUse::Ignore)
+        } else {
+            decision
+        },
+        scope,
+        unsandboxed,
+    })
+}
+
+/// The approval card reason of an [`unsandboxed`] command.
+pub(super) const UNSANDBOXED_REASON: &str = "authority.unsandboxedReason";
+
+/// Whether a command would run with the user's access while the kernel
+/// leaves Butler's secrets and credential stores readable: it opted out with
+/// `sandbox: "none"`, or this host cannot deny those reads and the lexical
+/// guard cannot resolve what the command names. It then always asks, with a
+/// card that says so, and a standing permission never covers it. Full
+/// Access stays best-effort by the owner's choice.
+fn unsandboxed(
+    mode: &AccessMode,
+    kind: CapabilityKind,
+    decision: AccessDecision,
+    args: &Value,
+) -> bool {
+    if *mode == AccessMode::FullAccess || matches!(decision, AccessDecision::Deny(_)) {
+        return false;
+    }
+    let uncontained = match kind {
+        CapabilityKind::CommandObservation { sandboxed: false } => mode.reviews_effects(),
+        CapabilityKind::CommandMutation { sandbox } => {
+            !(decision == AccessDecision::Allow
+                && *mode == AccessMode::Auto
+                && sandbox == CommandSandbox::ProjectWrite)
+        }
+        CapabilityKind::Network => true,
+        _ => false,
+    };
+    let opted_out = args["sandbox"].as_str() == Some("none");
+    uncontained
+        && (opted_out
+            || !butler_platform::command_sandbox::secret_reads_deniable()
+                && command_scope_unresolved(args["command"].as_str().unwrap_or("")))
 }
 async fn target_scope(
     owner: &GuidedTools,

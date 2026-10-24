@@ -28,6 +28,24 @@ pub(super) fn invocation_steps(
         ));
     }
     let shell = command_sandbox::legacy_shell(command, legacy.pipefail, &input.environment);
+    if let Some(data) = &legacy.deny_secret_reads {
+        let root = legacy
+            .read_only_installation_root
+            .as_deref()
+            .map(lexical_absolute)
+            .transpose()
+            .map_err(CommandError::io)?;
+        let mut environment = input.host_environment.clone();
+        environment.insert("BUTLER_DATA".into(), data.to_string_lossy().into_owned());
+        let denied = command_sandbox::deny_secret_reads(shell, &environment, root.as_deref())
+            .map_err(|error| {
+                CommandError::new(
+                    CommandCode::CommandObservationIsolationUnavailable,
+                    error.to_string(),
+                )
+            })?;
+        return Ok(vec![denied]);
+    }
     let shell = match legacy.read_only_installation_root.as_deref() {
         Some(root) => {
             let root = lexical_absolute(root).map_err(CommandError::io)?;

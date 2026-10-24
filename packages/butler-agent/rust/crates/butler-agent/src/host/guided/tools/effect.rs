@@ -88,6 +88,7 @@ async fn execute_effect(
         abort: invocation.cancellation.clone(),
         allowed_tools_and_effects: owner.binding.allowed_tools_and_effects.as_deref(),
         installation_root: owner.binding.installation_root.as_deref(),
+        deny_secret_reads: owner.binding.access_mode != AccessMode::FullAccess,
     };
     if let Some(result) = observation::execute(owner, call, occurrence, &scope).await? {
         return Ok(result);
@@ -95,11 +96,11 @@ async fn execute_effect(
     // One decision per call, from the exact requested targets. The adapters
     // re-check containment when the targets are touched.
     let kind = super::access::gated_kind(owner, call).await?;
-    let decision =
+    let access =
         super::access::decision_for_kind(owner, call, &Value::Object(call.arguments.clone()), kind)
             .await
-            .map_err(ToolExecutionError::Integrity)?
-            .decision;
+            .map_err(ToolExecutionError::Integrity)?;
+    let decision = access.decision;
     if let Some(refusal) = admission_refusal(owner, call, decision).await? {
         return Ok(refusal);
     }
@@ -119,7 +120,7 @@ async fn execute_effect(
         owner,
         invocation,
         call,
-        (occurrence, decision),
+        (occurrence, decision, access.unsandboxed),
         work,
         (target, input, adapter),
     ))
@@ -163,7 +164,7 @@ async fn execute_prepared(
     owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
-    (occurrence, decision): (&str, butler_turn::btcc::AccessDecision),
+    (occurrence, decision, unsandboxed): (&str, butler_turn::btcc::AccessDecision, bool),
     work: WorkView,
     prepared: (String, Value, Arc<dyn EffectAdapter>),
 ) -> Result<JsonDocument, ToolExecutionError> {
@@ -174,7 +175,7 @@ async fn execute_prepared(
             match authority::gate(
                 owner,
                 call,
-                (occurrence, decision),
+                (occurrence, decision, unsandboxed),
                 &work,
                 &target,
                 &input,
