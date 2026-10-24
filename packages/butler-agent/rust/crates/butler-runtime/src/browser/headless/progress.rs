@@ -226,8 +226,11 @@ impl Progress {
     }
 
     /// Records a refusal so an unchanged resend from the same state is answered at once.
+    /// `stale_ref` belongs to its observation, not the page: re-observing can
+    /// make the same steps valid again, so it must not be remembered.
     pub(crate) fn remember_refusal(&mut self, args: &Value, refusal: Value) -> Value {
         if refusal["status"] == "refused"
+            && refusal["reason"] != "stale_ref"
             && let Some(key) = self.refusal_key(args)
         {
             let seen = json!({"reason":refusal["reason"],"step_index":refusal["step_index"],"hit":refusal["hit"],"rejected_point":refusal["rejected_point"]});
