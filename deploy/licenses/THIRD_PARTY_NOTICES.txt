@@ -5748,6 +5748,12 @@ License: https://github.com/addr-rs/psl/blob/23897ed897cf406bbf9b746fbdd1161d6d6
 Copyright (c) 2016 Rushmore Mushambi
 
 =====
+pulldown-cmark 0.13.5
+MIT
+License: https://github.com/raphlinus/pulldown-cmark/blob/48a2767b5b8ab0a4893e80d942e510065889fc6b/pulldown-cmark/LICENSE
+Copyright 2015 Google Inc. All rights reserved.
+
+=====
 pxfm 0.1.30
 BSD-3-Clause OR Apache-2.0
 License: https://github.com/awxkee/pxfm/blob/acf7acd00cfc845307eda7b7b2de19e42303de82/LICENSE-APACHE.md

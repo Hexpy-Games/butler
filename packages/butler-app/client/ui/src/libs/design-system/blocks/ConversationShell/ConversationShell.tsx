@@ -2,14 +2,18 @@ import { useState, type CSSProperties, type ReactNode, type Ref } from "react";
 import { cn } from "../../lib/utils";
 import { useComposedRefs } from "../../lib/composeRefs";
 import { useScrollEdges } from "../../lib/useScrollEdges";
-import { ChevronDownIcon } from "../../components/Icons";
-import { PillButton } from "../../components/PillButton";
+import { AsideSlot, hasAsideContent, type AsideContent } from "../../lib/AsideSlot";
+import { useAsideLayout } from "../../lib/asideLayout";
 import styles from "./ConversationShell.module.css";
-import { dsClass } from "../../lib/internal";
 import { ConversationShellElementContext, useConversationColumnRect, type ConversationColumnRect } from "./conversationColumn";
+import { ConversationAsideDockedContext, CONVERSATION_ASIDE_DOCK_MIN, shownAside } from "./conversationAside";
 import { ConversationRailContext, useRailReserve } from "./conversationRail";
 
 export type { ConversationColumnRect } from "./conversationColumn";
+export type { AsideLayout } from "../../lib/asideLayout";
+export type { AsideContent } from "../../lib/AsideSlot";
+export { CONVERSATION_ASIDE_DOCK_MIN } from "./conversationAside";
+export { ConversationScrollToBottomButton } from "./ConversationScrollToBottomButton";
 
 export interface ConversationShellProps {
   children: ReactNode;
@@ -27,6 +31,16 @@ export interface ConversationShellProps {
   rail?: ReactNode;
   /** The rail's view (conversation id): room made for the first tab stays for the whole view. */
   railView?: string;
+  /**
+   * Content in the right margin (session details). From a 960px shell it docks flat and sticky in the
+   * margin, and the column and composer move left as far as they must; narrower, it floats on TintedGlass
+   * over the conversation while `asideFloatOpen`. A function gets the layout (content drops its cards on glass).
+   */
+  aside?: AsideContent;
+  /** Floating only: whether the aside shows. Docked, it shows whenever `aside` is set. */
+  asideFloatOpen?: boolean;
+  /** The aside landmark's accessible name. */
+  asideLabel?: string;
 }
 
 export function ConversationShell({
@@ -38,10 +52,15 @@ export function ConversationShell({
   background,
   rail,
   railView,
+  aside,
+  asideFloatOpen = false,
+  asideLabel,
 }: ConversationShellProps) {
   const [element, setElement] = useState<HTMLElement | null>(null);
   const hasRail = rail !== undefined && rail !== null && rail !== false;
   const { reserved, report } = useRailReserve(hasRail, railView);
+  const asideLayout = useAsideLayout(element, hasAsideContent(aside), CONVERSATION_ASIDE_DOCK_MIN);
+  const asideState = shownAside(hasAsideContent(aside), asideLayout, asideFloatOpen);
   const style = {
     "--composer-reserve": `${composerReserve}px`,
     ...(titleIconSize ? { "--new-chat-title-icon-size": titleIconSize } : {}),
@@ -56,21 +75,26 @@ export function ConversationShell({
 
   return (
     <ConversationShellElementContext.Provider value={element}>
-      <section
-        className={cn(styles.shell, background ? styles.withBackground : undefined, reserved ? styles.railed : undefined)}
-        data-test-class="conversation"
-        data-rail={reserved ? "reserved" : undefined}
-        ref={setElement}
-        style={style}
-      >
-        {background ? (
-          <div aria-hidden="true" className={styles.background} data-slot="conversation-background">
-            {background}
-          </div>
-        ) : null}
-        {children}
-        {hasRail ? <ConversationRailContext.Provider value={report}>{rail}</ConversationRailContext.Provider> : null}
-      </section>
+      <ConversationAsideDockedContext.Provider value={asideState === "docked"}>
+        <section
+          className={cn(styles.shell, background ? styles.withBackground : undefined, reserved ? styles.railed : undefined)}
+          data-test-class="conversation"
+          data-rail={reserved ? "reserved" : undefined}
+          data-aside={asideState}
+          ref={setElement}
+          style={style}
+        >
+          {background ? (
+            <div aria-hidden="true" className={styles.background} data-slot="conversation-background">
+              {background}
+            </div>
+          ) : null}
+          {children}
+          {hasRail ? <ConversationRailContext.Provider value={report}>{rail}</ConversationRailContext.Provider> : null}
+          <AsideSlot aside={aside} layout={asideLayout} floatOpen={asideFloatOpen} slot="conversation-aside" label={asideLabel}
+            className={styles.aside} glassClassName={styles.asideGlass} />
+        </section>
+      </ConversationAsideDockedContext.Provider>
     </ConversationShellElementContext.Provider>
   );
 }
@@ -112,7 +136,7 @@ export function MessageListSurface({
 }: {
   children: ReactNode;
   height?: number;
-  /** The column's edges and the conversation's top, on mount and on every resize (never on scroll): a background's keep-out. */
+  /** The column's edges (a docked aside included) and the conversation's top, on mount and every resize (never on scroll): a background's keep-out. */
   onColumnRect?: (rect: ConversationColumnRect) => void;
 }) {
   const [column, setColumn] = useState<HTMLDivElement | null>(null);
@@ -129,31 +153,5 @@ export function MessageListSurface({
     >
       {children}
     </div>
-  );
-}
-
-export function ConversationScrollToBottomButton({
-  ariaLabel,
-  children,
-  hasUnreadMessages,
-  onScrollToBottom,
-}: {
-  ariaLabel: string;
-  children?: ReactNode;
-  hasUnreadMessages: boolean;
-  onScrollToBottom: () => void;
-}) {
-  return (
-    <PillButton
-      aria-label={ariaLabel}
-      className={dsClass(styles.scrollToBottomButton)}
-      surface="glass"
-      data-test-class="scroll-to-bottom-button"
-      data-unread-messages={hasUnreadMessages ? "true" : "false"}
-      icon={<ChevronDownIcon size="md" />}
-      onClick={onScrollToBottom}
-    >
-      {children}
-    </PillButton>
   );
 }
