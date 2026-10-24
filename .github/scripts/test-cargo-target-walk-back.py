@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""Cargo snapshot restore walk-back past unfinished or failed producers."""
+"""Cargo snapshot restore walk-back and GitHub API transient retry."""
 import contextlib
+import http.client
 import importlib.util
 import io
 import json
 import os
+import ssl
 import subprocess
 from pathlib import Path
 import tempfile
 import unittest
 import urllib.error
-from unittest.mock import patch
+from unittest.mock import Mock, call, patch
 
 spec = importlib.util.spec_from_file_location('snapshots', Path(__file__).with_name('cargo-target-release.py'))
 snapshots = importlib.util.module_from_spec(spec)
@@ -199,6 +201,91 @@ class WalkBack(unittest.TestCase):
             for name in ['49-1.json', '48-2.json']:
                 with self.assertRaisesRegex(ValueError, 'does not match its producer run'):
                     snapshots.checked_generation({'name': name}, Path(temporary), self.lane, None)
+
+
+class ApiRetry(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(patch.dict(os.environ, GITHUB_TOKEN='test-token'))
+        self.urlopen = self.enterContext(patch.object(snapshots.urllib.request, 'urlopen'))
+        self.sleep = self.enterContext(patch.object(snapshots.time, 'sleep'))
+        self.output = self.enterContext(contextlib.redirect_stdout(io.StringIO()))
+
+    def response(self, value, link=''):
+        response = io.BytesIO(json.dumps(value).encode())
+        response.headers = {'Link': link}
+        return response
+
+    def http_error(self, code):
+        return urllib.error.HTTPError('https://api.github.com/resource', code, 'failed', {}, None)
+
+    # test-category: pure-logic
+    def test_transient_http_classification(self):
+        transient = [TimeoutError(), ConnectionResetError(), http.client.RemoteDisconnected(),
+                     http.client.IncompleteRead(b'partial'), urllib.error.URLError(TimeoutError())]
+        transient += [self.http_error(code) for code in [500, 502, 503, 429]]
+        permanent = [self.http_error(code) for code in [401, 403, 404, 422]]
+        permanent += [urllib.error.URLError(ssl.SSLCertVerificationError('certificate failed')),
+                      urllib.error.URLError('string reason'), ValueError(), KeyError(),
+                      ssl.SSLCertVerificationError('certificate failed'), ssl.SSLError('SSL failed')]
+        for expected, errors in [(True, transient), (False, permanent)]:
+            for error in errors:
+                with self.subTest(error=repr(error)):
+                    self.assertEqual(snapshots.transient_http(error), expected)
+
+    # test-category: pure-logic
+    def test_paginated_get_retries_body_timeout_without_losing_entries(self):
+        next_url = 'https://api.github.com/resource?page=2'
+        broken = self.response([])
+        broken.read = Mock(side_effect=TimeoutError('body read timed out'))
+        self.urlopen.side_effect = [self.response([{'id': 1}], f'<{next_url}>; rel="next"'),
+                                   broken, self.response([{'id': 2}, {'id': 3}])]
+        self.assertEqual(snapshots.api('resource'), [{'id': 1}, {'id': 2}, {'id': 3}])
+        self.assertEqual([entry.args[0].full_url for entry in self.urlopen.call_args_list],
+                         ['https://api.github.com/resource', next_url, next_url])
+        self.assertTrue(all(entry.kwargs == {'timeout': 60} for entry in self.urlopen.call_args_list))
+        self.assertEqual(self.sleep.call_args_list, [call(2)])
+        self.assertEqual(self.output.getvalue(), 'GitHub API request failed (TimeoutError: body read timed out); '
+                         'retrying in 2 s (attempt 2 of 3).\n')
+
+    # test-category: pure-logic
+    def test_three_timeouts_propagate_the_last_exception(self):
+        errors = [TimeoutError('first'), TimeoutError('second'), TimeoutError('last')]
+        self.urlopen.side_effect = errors
+        with self.assertRaises(TimeoutError) as raised:
+            snapshots.api('resource')
+        self.assertIs(raised.exception, errors[-1])
+        self.assertEqual(self.urlopen.call_count, 3)
+        self.assertEqual(self.sleep.call_args_list, [call(2), call(8)])
+        self.assertIn('retrying in 8 s (attempt 3 of 3).', self.output.getvalue())
+
+    # test-category: pure-logic
+    def test_http_403_fails_immediately(self):
+        error = self.http_error(403)
+        self.urlopen.side_effect = error
+        with self.assertRaises(urllib.error.HTTPError) as raised:
+            snapshots.api('resource')
+        self.assertIs(raised.exception, error)
+        self.assertEqual(self.urlopen.call_count, 1)
+        self.sleep.assert_not_called()
+        self.assertEqual(self.output.getvalue(), '')
+
+    # test-category: pure-logic
+    def test_delete_retry_accepts_404(self):
+        self.urlopen.side_effect = [TimeoutError('timed out'), self.http_error(404)]
+        self.assertIsNone(snapshots.api('resource', method='DELETE'))
+        self.assertEqual(self.urlopen.call_count, 2)
+        self.assertTrue(all(entry.args[0].method == 'DELETE' for entry in self.urlopen.call_args_list))
+        self.assertEqual(self.sleep.call_args_list, [call(2)])
+
+    # test-category: pure-logic
+    def test_delete_first_404_raises(self):
+        error = self.http_error(404)
+        self.urlopen.side_effect = error
+        with self.assertRaises(urllib.error.HTTPError) as raised:
+            snapshots.api('resource', method='DELETE')
+        self.assertIs(raised.exception, error)
+        self.assertEqual(self.urlopen.call_count, 1)
+        self.sleep.assert_not_called()
 
 
 if __name__ == '__main__':

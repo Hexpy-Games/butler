@@ -14,6 +14,13 @@ export interface CardProps extends DsBaseProps<HTMLAttributes<HTMLDivElement>> {
    * Selection still wins the border; the ring stays.
    */
   activity?: "running";
+  /**
+   * Corner radius tier. `control` (default): --radius-control (8px), for
+   * items in a grid or list. `lg`: --radius-popover (12px), for a card as
+   * wide as the conversation column. A frame placed directly inside the card
+   * follows its corners.
+   */
+  radius?: "control" | "lg";
 }
 
 export function Card({
@@ -23,6 +30,7 @@ export function Card({
   padding = "md",
   selected = false,
   activity,
+  radius = "control",
   onClick,
   onKeyDown,
   ...props
@@ -44,6 +52,7 @@ export function Card({
       data-padding={padding}
       data-selected={selected ? "true" : undefined}
       data-activity={activity}
+      data-radius={radius === "lg" ? "lg" : undefined}
       data-slot="card"
       role={actionable ? "button" : undefined}
       tabIndex={actionable ? 0 : undefined}
