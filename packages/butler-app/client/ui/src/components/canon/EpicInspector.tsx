@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { appCopy } from "@/app/copy.ts";
-import { Button, InspectorPanel, Stack, Notice, ProgressMeter } from "@/butler-ds";
+import { Button, Stack, Notice, ProgressMeter } from "@/butler-ds";
 import { useCanonBoard } from "./useCanonBoard.ts";
 import { EpicDetail } from "./EpicDetail.tsx";
 export function EpicInspector({ projectId, epicId, focusTitle = false, embedded = false }: { embedded?: boolean; projectId: string; epicId: string; focusTitle?: boolean }) {
@@ -19,5 +19,5 @@ export function EpicInspector({ projectId, epicId, focusTitle = false, embedded 
       state.detail && state.canon ? <EpicDetail compact={embedded} titleRef={title} key={epicId} epic={state.detail} plans={state.canon.plans} tasks={state.tasks} busy={state.busy} onWrite={state.write} /> :
         <ProgressMeter indeterminate label={appCopy.feedback.dashboardLoading} />}
   </>;
-  return embedded ? <Stack gap="sm">{content}</Stack> : <InspectorPanel title={null}>{content}</InspectorPanel>;
+  return <Stack gap="sm">{content}</Stack>;
 }

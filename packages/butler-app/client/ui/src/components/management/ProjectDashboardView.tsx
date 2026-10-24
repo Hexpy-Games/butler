@@ -1,10 +1,10 @@
-import { useAppLocale } from "@/app/copy.ts";
+import { CanonAside } from "../canon/CanonAside.tsx";
+import { useCanonSelection } from "../canon/useCanonSelection.ts";
+import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useEffect, useRef, useState } from "react";
 import { useButlerStore } from "@/app/store.ts";
 import { useProjectDashboard } from "@/hooks/useProjectDashboard.ts";
-import { Grid, Stack, Notice, Button, Tabs, TabsList, TabsTrigger, TabsContent, Section, LayoutDashboard, ListChecks, Folder, History, Activity } from "@/butler-ds";
-import { appCopy } from "@/app/copy.ts";
-import { ManagementPage } from "@/butler-ds";
+import { ManagementPage, Grid, Stack, Notice, Button, Tabs, TabsList, TabsTrigger, TabsContent, Section, LayoutDashboard, ListChecks, Folder, History, Activity } from "@/butler-ds";
 import type {
   ProjectDashboardDocument,
   ProjectDashboardView as ProjectDashboardData,
@@ -60,6 +60,7 @@ export function ProjectDashboardView({
   const selectionEpoch = useRef(0);
   const attachArtifact = useProjectArtifactAttachment(project?.id);
   const { background, columnRef, onComposerRect } = useProjectDashboardBackground(project);
+  const { selected } = useCanonSelection(project?.id ?? "");
   const ledgerRevision = dashboard?.overview?.status === "ready" ? dashboard.overview.sourceRevision : "unavailable";
   const publicRevision = `${ledgerRevision}:${sessions.map((session) => `${session.id}:${session.last_activity_at}:${session.active_turn_state ?? ""}`).join("|")}`;
   useEffect(() => { selectionEpoch.current++; setSelectedDocument(null); }, [project?.id]);
@@ -91,6 +92,8 @@ export function ProjectDashboardView({
 
   return (
     <ManagementPage dataTestClass="project-dashboard-view" scrollRef={scrollRef} background={background} backgroundTreatment="none"
+      aside={project && selected ? <CanonAside key={selected} projectId={project.id} epicId={selected} /> : null}
+      asideFloatOpen={Boolean(selected)} asideLabel={appCopy.canon.epic}
       footerPlacement="overlay" footerReserve={composerHeight}
       footer={project && <ProjectDashboardComposer key={project.id} projectId={project.id} onReserveChange={setComposerHeight} onWallpaperRect={onComposerRect} />}>
       <Grid columns="1" ref={columnRef}><Stack as="main" gap="xl">
