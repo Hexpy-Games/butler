@@ -96,6 +96,10 @@
 
 [data-panel-layout="docked"][data-left-peek="true"]
   > .peekable.peekable[data-open="false"] {
+  /* The card is the white panel surface: rows keep the shades. */
+  --nav-hover-bg: initial;
+  --nav-selected-bg: initial;
+
   position: absolute;
   z-index: var(--z-drawer);
   inset-block: var(--space-sm);

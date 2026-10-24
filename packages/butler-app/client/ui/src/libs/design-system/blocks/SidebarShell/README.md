@@ -88,6 +88,9 @@ Frontend agents building Butler app chrome or sidebar variants.
 
 Keep `SidebarShell` as layout only. Put row state and actions in
 `NavRow`, `ButtonContainer`, `OverflowActionMenu`, or product containers.
+Row fills are the surface's (see NavRow): inside AdaptiveShell a light tinted
+shell gives the white family; otherwise the shell's `--selection-strong` (75%
+of `--selection`) and `--selection` shades.
 
 ## Wrong use cases
 
