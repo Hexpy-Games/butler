@@ -6,8 +6,12 @@ const published = new WeakSet<Document>();
 /**
  * Measures once per document how much layout width a thin native scrollbar
  * takes and publishes it on the root, so a scroller reserves a lane for an
- * overlay scrollbar only: a classic scrollbar is its own lane. One probe at
- * the first mount; nothing runs while idle or on scroll.
+ * overlay scrollbar only: a classic scrollbar is its own lane. The probe is
+ * styled like the ScrollArea scroller (a stable gutter on a vertical auto
+ * scroller), so it reads the width that scroller actually reserves; headless
+ * Chromium with hidden scrollbars reserves the gutter yet gives a forced
+ * `overflow: scroll` bar no width. One probe at the first mount; nothing runs
+ * while idle or on scroll.
  */
 export function publishScrollbarWidth(element: HTMLElement | null): void {
   const doc = element?.ownerDocument;
@@ -15,7 +19,7 @@ export function publishScrollbarWidth(element: HTMLElement | null): void {
   published.add(doc);
   const probe = doc.createElement("div");
   probe.style.cssText =
-    "position:absolute;top:0;left:0;width:100px;height:100px;overflow:scroll;scrollbar-width:thin;visibility:hidden;pointer-events:none";
+    "position:absolute;top:0;left:0;width:100px;height:100px;overflow:hidden auto;scrollbar-gutter:stable;scrollbar-width:thin;visibility:hidden;pointer-events:none";
   doc.body.append(probe);
   const width = probe.offsetWidth - probe.clientWidth;
   probe.remove();
