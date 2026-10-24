@@ -20,11 +20,15 @@ function subscribe(onChange: () => void) {
 }
 
 function narrow(): boolean {
-  return window.matchMedia(BOTTOM_SHEET_QUERY).matches;
+  return typeof window.matchMedia === "function" && window.matchMedia(BOTTOM_SHEET_QUERY).matches;
 }
 
-/** True when an overlay with this presentation renders as a BottomSheet right now. */
+const fixed = () => () => undefined;
+const never = () => false;
+
+/** True when an overlay with this presentation renders as a BottomSheet right now; only `auto` watches the width. */
 export function useSheetPresentation(presentation: OverlayPresentation = DEFAULT_OVERLAY_PRESENTATION): boolean {
-  const isNarrow = useSyncExternalStore(subscribe, narrow, () => false);
+  const watches = presentation === "auto" && typeof window !== "undefined" && typeof window.matchMedia === "function";
+  const isNarrow = useSyncExternalStore(watches ? subscribe : fixed, watches ? narrow : never, never);
   return presentation === "sheet" || (presentation === "auto" && isNarrow);
 }
