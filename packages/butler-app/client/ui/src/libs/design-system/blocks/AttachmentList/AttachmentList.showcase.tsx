@@ -15,10 +15,10 @@ const THUMBNAIL = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' 
 const labels = {
   "en-US": { preview: "Screenshot preview", empty: "No attachments", notes: "project-notes.md", shot: "settings-375.png", noImages: "Model doesn't accept images",
     lake: "lake.jpg", bowl: "lunch.jpg", report: "q2-report.pdf", draft: "contract-draft-v3.docx", license: "LICENSE", broken: "broken-photo.jpg", file: "File",
-    remove: (name: string) => `Remove ${name}` },
+    remove: (name: string) => `Remove ${name}`, uploading: "Uploading 40%", tooLarge: "Over 10 MB" },
   "ko-KR": { preview: "스크린샷 미리보기", empty: "첨부 파일 없음", notes: "프로젝트-메모.md", shot: "설정-375.png", noImages: "이미지 미지원 모델",
     lake: "호수.jpg", bowl: "점심.jpg", report: "2분기_보고서.pdf", draft: "계약서_초안_v3.docx", license: "LICENSE", broken: "깨진_사진.jpg", file: "파일",
-    remove: (name: string) => `${name} 제거` },
+    remove: (name: string) => `${name} 제거`, uploading: "올리는 중 40%", tooLarge: "10MB 초과" },
 } as const;
 
 function text({ locale }: ShowcaseRenderContext) {
@@ -36,6 +36,14 @@ function tiles(context: ShowcaseRenderContext): AttachmentListItem[] {
     { id: "license", name: t.license, meta: "4 KB", extension: t.file },
     { id: "broken", name: t.broken, meta: "900 KB", extension: "JPG", thumbnail: { src: BROKEN_PICTURE } },
   ];
+}
+
+/** A detail's attachments while editing: done, uploading (Spinner) and failed (danger) items. */
+function uploads(context: ShowcaseRenderContext): AttachmentListItem[] {
+  const [lake, bowl, report, draft] = tiles(context);
+  const t = text(context);
+  return [lake!, { ...bowl!, meta: t.uploading, upload: "uploading" }, { ...report!, meta: t.uploading, upload: "uploading" },
+    { ...draft!, meta: t.tooLarge, upload: "failed" }, { ...lake!, id: "lake-2", meta: t.tooLarge, upload: "failed" }];
 }
 
 export const stories: ShowcaseStory[] = [
@@ -97,6 +105,15 @@ export const stories: ShowcaseStory[] = [
         items={[{ ...tiles(context)[0]!, blockedReason: text(context).noImages }, tiles(context)[2]!]} />
     ),
   },
+  {
+    // A detail pane's description while editing: start-aligned tiles with upload statuses (meta says how far or why).
+    name: "Upload statuses (tiles, start-aligned)",
+    states: ["loading", "invalid"],
+    widths: ["320", "375", "app"],
+    render: (context) => <AttachmentList variant="tiles" tileLayout="wrap" tileAlign="start" items={uploads(context)}
+      onOpen={() => undefined} onRemove={() => undefined} removeLabel={text(context).remove} />,
+  },
+  { name: "Upload statuses (list)", states: ["loading", "invalid"], render: (context) => <AttachmentList items={uploads(context).slice(1, 4)} /> },
   { name: "Empty", render: (context) => <AttachmentList emptyLabel={text(context).empty} items={[]} /> },
 ];
 

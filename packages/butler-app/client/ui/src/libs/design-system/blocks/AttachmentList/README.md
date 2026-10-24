@@ -37,9 +37,19 @@ face.
   in; a removed one shrinks out and the rest slide into the gap (reduced
   motion: fades only). The ✕ shows on hover and focus, always on touch.
 - `tileLayout="wrap"` (a sent message): 96px tiles, end-aligned and wrapping.
-  Every file shows; the list is never truncated.
+  Every file shows; the list is never truncated. `tileAlign="start"` aligns
+  them to the start instead (a document, a task description in a detail pane).
 
 `blockedReason` greys a tile and names the reason in its tooltip.
+
+## Upload status
+`upload` marks an item that is still uploading (`"uploading"`) or failed to
+(`"failed"`); the container
+puts how far or what to do in `meta` ("Uploading 40%", "Over 10 MB"), which
+joins the item's accessible name. Uploading: the DS `Spinner` (a picture dims
+under a centred glass badge; a file face and a list row show it as their
+icon) and `aria-busy`. Failed: the alert icon and a `--danger` border on the
+tile (danger tone on a list row's icon). Clear `upload` once the upload ends.
 
 ## Opening a file
 `onOpen(item)` opens a file inside the app (the image viewer over the

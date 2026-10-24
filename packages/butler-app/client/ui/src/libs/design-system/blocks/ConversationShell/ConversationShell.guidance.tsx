@@ -6,6 +6,7 @@ import { MarkdownContent } from "../MarkdownContent";
 import { MessageRow } from "../MessageRow";
 import { Wallpaper, type WallpaperSource } from "../Wallpaper";
 import { ConversationScroll, ConversationScrollToBottomButton, ConversationShell, MessageListSurface } from "./index";
+import { SessionDetails } from "./ConversationShell.asideDemo";
 
 // #region recipe: Conversation with a jump-to-latest button
 function Thread() {
@@ -42,6 +43,22 @@ function ThreadOverBackground() {
 }
 // #endregion
 
+// #region recipe: Session details in the aside
+// Docked from a 960px shell (one flat Card per section, 12px apart); narrower it floats on glass while asideFloatOpen.
+function ThreadWithDetails() {
+  return (
+    <ConversationShell composerReserve={24} asideLabel="Session details" asideFloatOpen
+      aside={(layout) => <SessionDetails locale="en-US" layout={layout} />}>
+      <ConversationScroll>
+        <MessageListSurface>
+          <MessageRow role="user"><Typo.Text as="div" wrap="pre">Draft the release notes too.</Typo.Text></MessageRow>
+        </MessageListSurface>
+      </ConversationScroll>
+    </ConversationShell>
+  );
+}
+// #endregion
+
 /** Viewer frame only: the shell fills its parent's height. */
 function Framed({ children = <Thread /> }: { children?: ReactNode }) {
   return <div style={{ height: 260 }}>{children}</div>;
@@ -63,6 +80,11 @@ export const guidance: ShowcaseGuidance = {
       description: "background mounts one layer for the new chat and its messages; onColumnRect gives the column's edges (on resize, never on scroll) for the layer's keep-out.",
       render: () => <Framed><ThreadOverBackground /></Framed>,
     },
+    {
+      name: "Session details in the aside",
+      description: "aside takes a function of the layout: docked, flat cards in the margin and the column moves left; floating, the sections bare on one glass panel.",
+      render: () => <div style={{ height: 420 }}><ThreadWithDetails /></div>,
+    },
   ],
   doDont: [
     {
@@ -73,10 +95,13 @@ export const guidance: ShowcaseGuidance = {
   content: [
     "The jump button says what is below (New messages) or where it goes (Jump to latest).",
     "rail takes a TabRail and railView the conversation id: the column moves left only as far as needed, once per view.",
+    "aside holds session details, not actions on a message: a few short sections (NavSection rows), empty ones hidden. Name it with asideLabel.",
+    "A docked aside and a TabRail share the right margin: show one at a time.",
   ],
   accessibility: [
     "Auto-scroll only when already at the bottom or while sending; the jump button is keyboard reachable.",
     "The background layer is decorative: aria-hidden and never takes pointer input.",
+    "The aside is a complementary landmark (asideLabel names it); its content scrolls on its own and focus rings keep --focus-ring-room.",
   ],
   tokens: ["--composer-reserve", "--page-max-width-reading", "--conversation-bg", "--tab-rail-clearance", "--tab-rail-shelf-height"],
 };

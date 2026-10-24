@@ -73,10 +73,12 @@ export const guidance: ShowcaseGuidance = {
   content: [
     "The header title is the page name; meta counts what is listed.",
     "A background is decoration: keep the calm treatment unless the page shows no text over it.",
+    "aside shows the selected item's detail (title, compact MarkdownContent, start-aligned tiles); it never replaces the page's own sections.",
   ],
   accessibility: [
     "as=\"form\" when the page is an editor; the footer stays reachable by keyboard.",
     "The background layer is aria-hidden and takes no pointer input; text over it sits on TintedGlass panels.",
+    "The aside is a complementary landmark named by asideLabel; it scrolls on its own and keeps --focus-ring-room.",
   ],
   tokens: ["--page-max-width-wide", "--adaptive-page-gutter", "--space-2xl", "--management-page-veil", "--tinted-glass-bg"],
 };

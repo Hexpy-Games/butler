@@ -57,6 +57,33 @@ to draw, so the page keeps its plain look.
 </ManagementPage>
 ```
 
+## Aside
+
+`aside` shows a detail beside the content (the selected task on a project
+board). The page owns where it sits and scrolls it in a scroller of its own
+(the shared edge fade, the scrollbar gutter reserved on both edges):
+
+- Docked (a 1000px page or wider; a floating aside docks again from 1032px):
+  flat in the right margin, 360px (`--management-aside-width`), `--space-lg`
+  from the top, end and bottom. The scroll area and an overlay footer narrow to
+  its left (the footer follows `--conversation-column-width` and
+  `--conversation-column-shift`, as ComposerCard reads them).
+- Floating (narrower): one TintedGlass panel over the page, ending above the
+  footer, shown only while `asideFloatOpen`.
+
+A function gets the layout (`"docked" | "floating"`). Both layouts keep one
+inset on the start and the end, whatever the scrollbar (overlay, classic or
+hidden). The page carries `data-aside`, the aside `data-layout`; opening, closing and a
+docked/floating flip cross-fade with the DS Presence fade. Name the landmark
+with `asideLabel`. Without `aside` the page renders exactly as before.
+
+```tsx
+<ManagementPage footerPlacement="overlay" footerReserve={reserve} footer={composer}
+  aside={task && <TaskDetail task={task} />} asideFloatOpen={detailOpen} asideLabel={copy.taskDetails}>
+  {board}
+</ManagementPage>
+```
+
 ## Who can use this component
 
 Domain containers can wrap their presenter content with this block.
@@ -73,7 +100,7 @@ Do not use it for modal dialogs, inspector panels, or card interiors. Use
 
 ## Tags
 
-management, page, layout, workspace, automation, background, wallpaper, glass
+management, page, layout, workspace, automation, background, wallpaper, glass, aside, detail
 
 ## Page width
 ManagementPage renders its content inside `PageContainer`; pass `width` (`narrow`, `default`, `full`) instead of adding max-width or container CSS in product code. Grid responsive columns inside the page query that container.

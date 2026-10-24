@@ -169,6 +169,41 @@ a.face:active {
   color: var(--interactive-disabled-fg);
 }
 
+/* A document or a detail pane: wrap tiles start-aligned. */
+.wrap[data-align="start"] {
+  justify-content: flex-start;
+}
+
+/* Uploads: a running one dims its picture under a centred glass Spinner; a
+   failed one takes the danger border and tone (the alert icon). */
+.tile[data-upload] .picture[data-loaded="true"] {
+  opacity: 0.45;
+}
+
+.tile[data-upload="failed"] .face {
+  border-color: var(--danger);
+}
+
+.tile[data-upload="failed"] .fileHead {
+  color: var(--danger);
+}
+
+.status[data-slot="tinted-glass"] {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  width: var(--space-3xl);
+  height: var(--space-3xl);
+  margin: auto;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  pointer-events: none;
+}
+
+.tile[data-upload="failed"] .status[data-slot="tinted-glass"] {
+  color: var(--danger);
+}
+
 /* Remove: a 20px glass dot (24px on touch) with a hit area past it. */
 .remove[data-slot="tinted-glass"] {
   --remove-size: 20px;
