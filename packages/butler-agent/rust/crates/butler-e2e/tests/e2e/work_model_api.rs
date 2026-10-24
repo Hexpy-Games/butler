@@ -5,6 +5,7 @@ mod events;
 mod separation;
 mod sidebar;
 mod sidebar_fixture;
+mod tags;
 use butler_e2e::e2e::{
     HarnessError,
     events::LiveEvents,

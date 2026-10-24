@@ -7,13 +7,14 @@ pub(in crate::store) fn append(
     kind: &str,
     id: &str,
     revision: i64,
-    _op: &str,
+    details: &Value,
 ) -> Result<()> {
     let project = match kind {
         "plan" => {
             let row = read_plan(tx, id)?;
             Some(row["project_id"].clone())
         }
+        "tag" => Some(one(tx, sql::TAG, [id])?["project_id"].clone()),
         "backlog" => Some(json!(id)),
         "work" => {
             let row = read_work(tx, id)?;
@@ -32,8 +33,11 @@ pub(in crate::store) fn append(
         } else {
             "butler"
         };
-        let payload =
+        let mut payload =
             json!({"project_id":project,"kind":kind,"id":id,"revision":revision,"origin":origin});
+        if let (Some(payload), Some(details)) = (payload.as_object_mut(), details.as_object()) {
+            payload.extend(details.clone());
+        }
         tx.execute(
             super::super::sql::OUTBOX,
             params!["canon.changed", payload.to_string(), ctx.now],

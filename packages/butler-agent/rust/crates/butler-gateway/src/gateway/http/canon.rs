@@ -3,7 +3,8 @@ use super::*;
 use crate::gateway::{
     AppCanonRequest,
     AppCanonResource::{
-        BacklogOrder, Canon, CreateEpic, CreatePlan, EditEpic, EditPlan, Epic, Plan, PlanOrder,
+        BacklogOrder, Canon, CreateEpic, CreatePlan, CreateTag, DeleteTag, EditEpic, EditPlan,
+        EditTag, Epic, Plan, PlanOrder, Tags,
     },
 };
 
@@ -14,6 +15,10 @@ pub(super) async fn route(
 ) -> Result<Response, HttpError> {
     let parts: Vec<_> = uri.path().trim_start_matches('/').split('/').collect();
     let (resource, id) = match (request.method(), parts.as_slice()) {
+        (&Method::GET, ["projects", id, "canon", "tags"]) => (Tags, *id),
+        (&Method::POST, ["projects", id, "canon", "tags"]) => (CreateTag, *id),
+        (&Method::PATCH, ["canon", "tags", id]) => (EditTag, *id),
+        (&Method::DELETE, ["canon", "tags", id]) => (DeleteTag, *id),
         (&Method::GET, ["projects", id, "canon"]) => (Canon, *id),
         (&Method::GET, ["canon", "plans", id]) => (Plan, *id),
         (&Method::GET, ["canon", "epics", id]) => (Epic, *id),
@@ -34,6 +39,8 @@ pub(super) async fn route(
     let id = subsessions::decode_component(id)?;
     let input = if request.method() == Method::GET {
         None
+    } else if request.method() == Method::DELETE {
+        Some(serde_json::json!({}))
     } else {
         let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
         Some(serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?)
@@ -46,7 +53,7 @@ pub(super) async fn route(
             input,
         })
         .await?;
-    let status = if matches!(resource, CreatePlan | CreateEpic) {
+    let status = if matches!(resource, CreatePlan | CreateEpic | CreateTag) {
         StatusCode::CREATED
     } else {
         StatusCode::OK

@@ -92,17 +92,19 @@ pub fn create_work(
     input: &NewWork,
     registration: &Registration,
 ) -> Result<Value> {
-    create_work_assigned(tx, ctx, input, registration, None)
+    insert_work_assigned(tx, ctx, input, registration, None, &[])
 }
 
-pub(super) fn create_work_assigned(
+pub(super) fn insert_work_assigned(
     tx: &Transaction<'_>,
     ctx: &Context,
     input: &NewWork,
     registration: &Registration,
     assignee: Option<&str>,
+    tags: &[String],
 ) -> Result<Value> {
     let Registration::Canon(_) = registration;
+    api::tags::validate_creation(tx, &input.project_id, tags)?;
     tx.execute(
         sql::INSERT_WORK,
         params![
@@ -116,8 +118,16 @@ pub(super) fn create_work_assigned(
             assignee
         ],
     )?;
+    for tag in tags {
+        tx.execute(api::sql::ASSIGN_TAG, params![input.id, tag])?;
+    }
     count(tx, ("project", &input.project_id), "epics", 1)?;
-    event(tx, ctx, "work", &input.id, 0, "create")?;
+    let details = if tags.is_empty() {
+        json!({})
+    } else {
+        json!({"tags": rows(tx, api::sql::EPIC_TAGS, [&input.id])?})
+    };
+    event_with_details(tx, ctx, ("work", &input.id, 0, "create"), &details)?;
     read_work(tx, &input.id)
 }
 pub fn edit_work(

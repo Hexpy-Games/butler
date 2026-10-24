@@ -20,6 +20,8 @@ pub enum Error {
     Id(#[from] crate::work_ids::IdError),
     #[error("conflict: {current}")]
     Conflict { current: Value },
+    #[error("tag already exists")]
+    TagExists { existing: Value },
     #[error("not found")]
     NotFound,
     #[error("invalid fractional rank")]
@@ -114,8 +116,18 @@ pub(super) fn event(
     revision: i64,
     op: &str,
 ) -> Result<()> {
-    let payload =
-        json!({"entity_kind":kind,"entity_id":id,"revision":revision,"op":op}).to_string();
+    event_with_details(tx, ctx, (kind, id, revision, op), &json!({}))
+}
+fn event_with_details(
+    tx: &Transaction<'_>,
+    ctx: &Context,
+    (kind, id, revision, op): (&str, &str, i64, &str),
+    details: &Value,
+) -> Result<()> {
+    let mut payload = json!({"entity_kind":kind,"entity_id":id,"revision":revision,"op":op});
+    if let (Some(payload), Some(details)) = (payload.as_object_mut(), details.as_object()) {
+        payload.extend(details.clone());
+    }
     tx.execute(
         sql::AUDIT,
         rusqlite::params![
@@ -125,10 +137,10 @@ pub(super) fn event(
             ctx.actor.to_string(),
             op,
             ctx.now,
-            payload
+            payload.to_string()
         ],
     )?;
-    api::outbox(tx, ctx, kind, id, revision, op)?;
+    api::outbox(tx, ctx, kind, id, revision, details)?;
     Ok(())
 }
 pub(super) fn count(
