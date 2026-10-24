@@ -4,12 +4,12 @@ import { strict as assert } from "node:assert";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { chmodSync, cpSync, mkdirSync, readdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { extname, join, resolve } from "node:path";
 import { electronPage, type ElectronPage } from "../support/electron-page-cdp.ts";
-import { createMacZip, prepareBundledAgentResource } from "../../packages/butler-app/scripts/release/package-app-release.ts";
+import { createMacDmg, createMacZip, prepareBundledAgentResource } from "../../packages/butler-app/scripts/release/package-app-release.ts";
 import { verifyMacFrameworkLinks, verifyMacPackageMetadata } from "../../deploy/app/native-mac-package-smoke.ts";
 import { stageElectronPackageSource } from "../../packages/butler-app/scripts/release/electron-package-source.ts";
-import { normalizeMacBundle, signMacBundle } from "../../packages/butler-app/scripts/release/native-mac-signing.ts";
+import { normalizeMacBundle, signMacBundle, signMacDmg } from "../../packages/butler-app/scripts/release/native-mac-signing.ts";
 import { updateWorkFixture } from "../support/update-work-fixture.ts";
 import { smokeElectronArgs } from "../support/smoke-browser.ts";
 import { freePort } from "../support/native-app-server.ts";
@@ -37,6 +37,7 @@ const ownedPids = new Set<number>();
 let child: ChildProcess | null = null;
 let browser: ElectronPage | null = null;
 let server: ReturnType<typeof Bun.serve> | null = null;
+const downloads: string[] = [];
 const env = { ...process.env, HOME: home, BUTLER_DATA: data, TMPDIR: dir, RUSTC_WRAPPER: "" };
 
 async function run(command: string, args: string[], extra: Record<string, string> = {}, cwd = root) {
@@ -121,15 +122,23 @@ async function proof(page: ElectronPage, version: string, sessionId?: string) {
   console.log(`PROOF ${JSON.stringify({ version: facts.info.version, bundledAgent: facts.updates.components[0].current_version, health: facts.health, dataPreserved: true, sessionPreserved: Boolean(sessionId), previews: facts.settings.update_previews })}`);
 }
 
-async function serveUpdate(zip: string) {
-  const sha256 = new Bun.CryptoHasher("sha256").update(await Bun.file(zip).arrayBuffer()).digest("hex");
+// Like a release, one version offers both packages; the older ZIP is listed first.
+async function serveUpdate(packages: string[]) {
+  const offered = await Promise.all(packages.map(async path => ({ path, format: extname(path).slice(1),
+    sha256: new Bun.CryptoHasher("sha256").update(await Bun.file(path).arrayBuffer()).digest("hex") })));
   server = Bun.serve({ hostname: "127.0.0.1", port: 0, idleTimeout: 0, async fetch(request) {
-    if (new URL(request.url).pathname === "/v1/chat/completions") return work.provider(request);
-    return new URL(request.url).pathname === "/update.zip" ? new Response(Bun.file(zip)) : Response.json({ artifacts: [{
+    const path = new URL(request.url).pathname;
+    if (path === "/v1/chat/completions") return work.provider(request);
+    const requested = offered.find(item => path === `/update.${item.format}`);
+    if (requested) {
+      downloads.push(requested.format);
+      return new Response(Bun.file(requested.path));
+    }
+    return Response.json({ artifacts: offered.map(item => ({
       component: "app", product: "butler-app", platform: "darwin-arm64", version: to, channel: "preview", bundled_agent_version: to,
-      artifact_url: `http://127.0.0.1:${server!.port}/update.zip`, sha256,
+      artifact_url: `http://127.0.0.1:${server!.port}/update.${item.format}`, sha256: item.sha256, package_format: item.format,
       staging_policy: "butler-data-updates", activation_policy: "user-installs-app-package", rollback_policy: "not-managed-by-butler",
-    }] });
+    })) });
   } });
   writeFileSync(join(data, "butler.config.json"), JSON.stringify({
     update: { previews: false }, // This smoke exercises an explicit OFF -> ON choice.
@@ -140,9 +149,9 @@ async function serveUpdate(zip: string) {
   return server.port;
 }
 
-async function archiveAdmission(zip: string, installed: string) {
+async function archiveAdmission(archive: string, installed: string) {
   const executable = join(installed, "Contents/Resources/bundled-agent/bin/butler-agent");
-  const helper = spawn(executable, ["--installation-root", installed, "--resource-root", join(installed, "Contents/Resources/bundled-agent/resources"), "app-update-install", zip, join(installed, "Contents/MacOS/Butler"), "2147483647"], {
+  const helper = spawn(executable, ["--installation-root", installed, "--resource-root", join(installed, "Contents/Resources/bundled-agent/resources"), "app-update-install", archive, join(installed, "Contents/MacOS/Butler"), "2147483647"], {
     env, stdio: ["pipe", "pipe", "pipe"],
   });
   let diagnostic = "";
@@ -171,7 +180,7 @@ async function archiveAdmission(zip: string, installed: string) {
     assert.equal(await exited, 1, "EOF cancels admission without activating");
     verifyMacPackageMetadata(installed, from, true);
     assert.equal(readdirSync(container).filter(name => name.startsWith(".butler-update.")).length, 0);
-    console.log(JSON.stringify({ ok: true, smoke: "packaged-zip-native-admission", installed: from, candidate: to,
+    console.log(JSON.stringify({ ok: true, smoke: `packaged-${extname(archive).slice(1)}-native-admission`, installed: from, candidate: to,
       stagedSignatureVerified: true, frameworkLinksPreserved: true, rolesAndPermissionsVerified: true, cancelledBeforeExchange: true }));
   } finally {
     helper.stdin.end();
@@ -189,14 +198,17 @@ async function smoke() {
   await run("xattr", ["-w", "com.apple.quarantine", "0081;66000000;ButlerSmoke;", second]);
   const zip = join(dir, "update.zip");
   createMacZip(second, zip);
-  const updatePort = await serveUpdate(zip);
+  const dmg = join(dir, "update.dmg");
+  createMacDmg({ appBundle: second, artifactPath: dmg });
+  signMacDmg(root, dmg);
+  const updatePort = await serveUpdate([zip, dmg]);
   const installed = join(dir, "installed/Butler.app");
   // Match installation from the release DMG: preserve relative framework links,
   // Agent hard links and modes. Bun/Node cpSync can rewrite links to the source.
   await run("ditto", [first, installed]);
   verifyMacPackageMetadata(installed, from, true);
   if (process.env.BUTLER_UPDATE_SMOKE_ARCHIVE_ONLY === "1") {
-    await archiveAdmission(zip, installed);
+    for (const archive of [zip, dmg]) await archiveAdmission(archive, installed);
     return;
   }
   const debugPort = await freePort(), agentPort = await freePort();
@@ -265,6 +277,8 @@ async function smoke() {
   console.log(`RELAUNCH ${to}: ${installed}`);
   connected = await connect(debugPort); browser = connected.browser;
   await proof(connected.page, to, session.id);
+  // The role hard links arrive intact only in the DMG; proof() checks them.
+  if (!discovery && !process.env.BUTLER_UPDATE_SMOKE_MANIFEST) assert.deepEqual(downloads, ["dmg"], "the App downloads the preferred DMG");
   if (mode === "now" || mode === "defer") await work.verify(connected.page);
   await connected.page.evaluate(() => (window.butlerApp!.quitApp as (v: unknown) => Promise<unknown>)({ confirmed: true }));
   console.log(`PASS packaged App ${from} -> ${to}: UI update, checksum/signature, relaunch, healthy Agent, same DATA/chat`);

@@ -30,7 +30,7 @@ async fn update_progress_bytes_unknown_length_failure_cancel_and_retry() -> Resu
         std::fs::write(&manifest, json!({"artifacts":[{
         "component":"app", "version":"99.0.0", "channel":"stable",
         "platform":butler_platform::launcher::release_platform(),
-        "artifact_url":format!("{base}/{name}.{}",butler_platform::app_update::package_format()), "sha256":hash,
+        "artifact_url":format!("{base}/{name}.{}",butler_platform::app_update::package_formats()[0]), "sha256":hash,
         "staging_policy":"butler-data-updates", "activation_policy":"user-installs-app-package",
         "rollback_policy":"not-managed-by-butler"
     }]}).to_string())
@@ -91,14 +91,20 @@ fn feed(bytes: Vec<u8>) -> axum::Router {
     let known = bytes.clone();
     axum::Router::new()
         .route(
-            &format!("/known.{}", butler_platform::app_update::package_format()),
+            &format!(
+                "/known.{}",
+                butler_platform::app_update::package_formats()[0]
+            ),
             axum::routing::get(move || {
                 let bytes = known.clone();
                 async move { bytes }
             }),
         )
         .route(
-            &format!("/failed.{}", butler_platform::app_update::package_format()),
+            &format!(
+                "/failed.{}",
+                butler_platform::app_update::package_formats()[0]
+            ),
             axum::routing::get(|| async { axum::http::StatusCode::SERVICE_UNAVAILABLE }),
         )
         .route(

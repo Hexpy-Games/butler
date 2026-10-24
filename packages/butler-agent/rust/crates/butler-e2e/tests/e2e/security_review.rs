@@ -61,7 +61,7 @@ async fn app_update_rejects_remote_plain_http_manifest_and_artifact() -> Result<
     std::fs::write(&manifest, json!({"artifacts":[{
         "component":"app", "version":"99.0.0", "channel":"stable",
         "staging_policy":"butler-data-updates", "activation_policy":"user-installs-app-package",
-        "rollback_policy":"not-managed-by-butler", "package_format":butler_platform::app_update::package_format(),
+        "rollback_policy":"not-managed-by-butler", "package_format":butler_platform::app_update::package_formats()[0],
         "artifact_url":"http://192.0.2.1/payload.deb", "sha256":"0".repeat(64)
     }]}).to_string())?;
     let s = setup

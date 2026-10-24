@@ -18,7 +18,7 @@ cleanup() {
 trap cleanup EXIT
 gh release download "$BASELINE_TAG" --dir "$profile/baseline" \
   --pattern '*-darwin-arm64.dmg' --pattern '*-darwin-arm64.dmg.sha256'
-# The released DMG is the installation artifact; ZIP is the updater payload.
+# The released DMG installs the baseline; Apps before preview.14 update from the ZIP.
 # ZIP does not retain the role hard links required by the installed App.
 baseline=("$profile/baseline/"*.dmg)
 test "${#baseline[@]}" -eq 1
