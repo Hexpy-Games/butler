@@ -7,7 +7,8 @@ export const usageContext: ContextDetailsView = {
 
 export function quota(fields: Partial<ProviderQuotaResultView> = {}): ProviderQuotaResultView {
   return {
-    available: true, stale: false, sourceKind: "codex_app_server", sourceId: "codex", planKind: "subscription",
+    available: true, stale: false, sourceKind: "chatgpt_plan", sourceId: "openai-chatgpt-plan", planKind: "subscription",
+    estimated: true, planUsage: { state: "in_use", resetsAt: null },
     planName: null, fetchedAt: "2026-09-28T05:05:00.000Z", reason: null,
     windows: [
       { id: "tokens-5-hour", usedPercent: 18, remainingPercent: 82, windowDurationMins: 300, resetsAt: "2026-09-28T09:00:00.000Z", expiresAt: null },
@@ -30,6 +31,11 @@ export function usageView(fields: { quota?: ProviderQuotaResultView; reasoning?:
     providerUsage: {
       activeProviderId: "openai",
       providers: [{ ...bucket, providerId: "openai", source: "local_telemetry", remaining: fields.quota ?? quota({ available: false, windows: [] }),
+        butlerUsage: { account: "chatgpt_plan", asOf: "2026-09-28T05:10:00Z", windows: [
+          { id: "hours_5", requests: 3, inputTokens: 48200, outputTokens: 3420, totalTokens: 51620 },
+          { id: "days_7", requests: 8, inputTokens: 80000, outputTokens: 10000, totalTokens: 90000 },
+          { id: "days_30", requests: 30, inputTokens: 300000, outputTokens: 40000, totalTokens: 340000 },
+        ] },
         billing: { available: false, reason: "n/a" } }],
     },
     cost: fields.usd === undefined || fields.usd === null
@@ -56,3 +62,9 @@ export function delegatedUsageView(fields: Parameters<typeof usageView>[0] = {})
   view.timeline.slots = [[Date.parse("2026-09-28T05:00:00Z"), 11, 89_400, 60_000, 6_920, 44_700, 8, 28_100, 3_500]];
   return view;
 }
+
+export const chatGptUsageFixtures = {
+  headers: quota(),
+  noHeaders: quota({ windows: [] }),
+  limit: quota({ planUsage: { state: "limit_reached", resetsAt: "2026-09-28T09:00:00Z" } }),
+};

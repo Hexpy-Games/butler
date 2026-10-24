@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-luna",
       "effort": "max",
       "user_request": "Create approved.txt in your workspace containing exactly: approved-by-user",
@@ -85,7 +85,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_064034f1b785e1d2016abb0e0835e087d0b22943d8c8f214a1\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_gjGZlPzeMEJa1UrXarHZQVoW\",\"name\":\"record_work_disposition\"},\"output_index\":1,\"sequence_number\":4}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_064034f1b785e1d2016abb0e0835e087d0b22943d8c8f214a1\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_gjGZlPzeMEJa1UrXarHZQVoW\",\"name\":\"record_work_disposition\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":4}\n\n"
       },
       {
         "delay_ms": 0,
@@ -441,7 +441,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_064034f1b785e1d2016abb0e0835e087d0b22943d8c8f214a1\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"work_id\\\":\\\"{{ECHO_1}}\\\",\\\"disposition\\\":\\\"completed\\\",\\\"summary\\\":\\\"Created approved.txt in the workspace and verified it contains exactly approved-by-user.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create approved.txt with the exact requested contents\\\",\\\"status\\\":\\\"done\\\"}]}\",\"call_id\":\"call_gjGZlPzeMEJa1UrXarHZQVoW\",\"name\":\"record_work_disposition\"},\"output_index\":1,\"sequence_number\":93}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_064034f1b785e1d2016abb0e0835e087d0b22943d8c8f214a1\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"work_id\\\":\\\"{{ECHO_1}}\\\",\\\"disposition\\\":\\\"completed\\\",\\\"summary\\\":\\\"Created approved.txt in the workspace and verified it contains exactly approved-by-user.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create approved.txt with the exact requested contents\\\",\\\"status\\\":\\\"done\\\"}]}\",\"call_id\":\"call_gjGZlPzeMEJa1UrXarHZQVoW\",\"name\":\"record_work_disposition\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":93}\n\n"
       },
       {
         "delay_ms": 16,

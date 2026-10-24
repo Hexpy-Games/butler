@@ -13,25 +13,26 @@ use butler_e2e::e2e::cassette::Cassette;
 use butler_e2e::e2e::config::flag;
 use butler_e2e::e2e::scenario::Setup;
 
-/// `_errors/codex-401`: the subscription endpoint's reply to a request that
+/// `_errors/chatgpt-401`: the subscription endpoint's reply to a request that
 /// carries an invalid access token (a syntactically plain, revoked-looking
 /// token written into the scenario's own Codex auth file).
 #[tokio::test]
-async fn error_library_codex_401() -> Result<(), HarnessError> {
+async fn error_library_chatgpt_401() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     if !flag("BUTLER_E2E_RECORD") {
-        let entry = Cassette::load("_errors/codex-401")?;
+        let entry = Cassette::load("_errors/chatgpt-401")?;
         assert_eq!(entry.exchanges[0].response.status, 401);
         return Ok(());
     }
-    let setup = Setup::new("ERRORS-401")?.cassette("_errors/codex-401");
-    let bogus = setup.sandbox.root.join("invalid-codex-auth.json");
-    std::fs::write(
-        &bogus,
-        r#"{"tokens":{"access_token":"e2e-invalid-access-token"}}"#,
-    )?;
+    let setup = Setup::new("ERRORS-401")?.cassette("_errors/chatgpt-401");
+    let authority = butler_e2e::e2e::fake_chatgpt::FakeChatGptAuthority::start().await?;
+    let bogus = setup.sandbox.root.join("invalid-chatgpt-auth");
+    butler_e2e::e2e::fixtures::stub_chatgpt_auth(&bogus, &authority)?;
     let s = setup
-        .env("CODEX_AUTH_JSON", bogus.display().to_string())
+        .env(
+            "BUTLER_CHATGPT_AUTH_DIR",
+            bogus.join("auth").display().to_string(),
+        )
         .start()
         .await?;
     let (_, turn) = s

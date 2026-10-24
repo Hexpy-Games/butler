@@ -1,7 +1,7 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { ProviderQuotaResultView } from "@/app/types.ts";
-import { ProgressMeter, Stack, Typo } from "@/butler-ds";
+import { ProgressMeter, Stack, Tag, Tooltip, Typo } from "@/butler-ds";
 import {
   formatQuotaTimestamp,
   formatRemaining,
@@ -32,12 +32,14 @@ function secondaryLabel(window: ProviderQuotaWindow): string | null {
   return details.length > 0 ? details.join(" · ") : null;
 }
 
-export function ProviderQuotaGauge({ window }: { window: ProviderQuotaWindow }) {
+export function ProviderQuotaGauge({ window, estimated = false, estimateTooltip = false }: { window: ProviderQuotaWindow; estimated?: boolean; estimateTooltip?: boolean }) {
   useAppLocale();
   const remaining = clampRemaining(window.remainingPercent);
-  const label = windowLabel(window);
+  const text = windowLabel(window);
+  const tag = <Tag>{appCopy.chatgptPlan.estimate}</Tag>;
+  const label = estimated ? <Stack as="span" inline align="row" cross="center" gap="xs">{text}{estimateTooltip ? <Tooltip label={appCopy.chatgptPlan.estimateHint}>{tag}</Tooltip> : tag}</Stack> : text;
   const valueLabel = remainingLabel(remaining);
-  const ariaLabel = `${label}: ${valueLabel}`;
+  const ariaLabel = `${text}: ${valueLabel}`;
   const secondary = secondaryLabel(window);
 
   return (

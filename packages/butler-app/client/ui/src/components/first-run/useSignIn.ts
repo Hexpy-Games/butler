@@ -1,6 +1,6 @@
 import { openExternalSignIn } from "@/app/openExternalSignIn";
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { cancelSignIn, signInStatus, startSignIn, type SignInSession } from "@/app/setupSignIn.ts";
+import { cancelSignIn, signInStatus, startSignIn, type SignInSession, type SignInKind } from "@/app/setupSignIn.ts";
 import type { OpenAIOAuthLoginResult } from "@/components/settings/modelManagementApi";
 
 export const SIGN_IN_POLL_MS = 1000;
@@ -14,7 +14,7 @@ const OPEN = new Set<OpenAIOAuthLoginResult["status"]>(["starting", "pending"]);
 
 /**
  * ChatGPT sign-in. Starting it opens the system browser (the app opens the
- * agent flow's `auth_url`; the desktop fallback opens it itself); the app
+ * agent flow's `auth_url`); the app
  * then waits for the browser to finish, with Cancel and "Copy link" as the
  * ways out.
  */
@@ -41,20 +41,20 @@ export function useSignIn({ onSignedIn }: { onSignedIn: () => void }) {
       setPhase("idle");
       signedIn.current();
     } else if (result.status === "cancelled" || result.status === "failed") {
-      setPhase(result.status);
+      setPhase(result.error === "oauth_timeout" ? "timedout" : result.error === "oauth_denied" ? "idle" : result.status);
     } else if (OPEN.has(result.status)) {
       setPhase("waiting");
     }
   }
 
-  async function start(): Promise<void> {
+  async function start(input: { force?: boolean; kind?: SignInKind } = {}): Promise<void> {
     const id = ++run.current;
     setPhase("starting");
     setSession(null);
     setCopied(false);
     opened.current = null;
     try {
-      const started = await startSignIn();
+      const started = await startSignIn(input);
       settle(id, started, started.view);
     } catch {
       if (id === run.current) setPhase("failed");
@@ -83,12 +83,17 @@ export function useSignIn({ onSignedIn }: { onSignedIn: () => void }) {
     setPhase("idle");
   }
 
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
   const label = session?.view.label;
   const account = label?.includes("@") ? label : undefined;
   function reopen(): void {
     if (session?.view.auth_url) openExternalSignIn(session.view.auth_url);
   }
-  return { phase, account, copied, canCopyLink: Boolean(session?.view.auth_url), start, cancel: () => cancel(), copyLink: () => copySignInLink(session?.view.auth_url, setCopied), reopen, leave };
+  return { phase, account, view: session?.view, copied, canCopyLink: Boolean(session?.view.auth_url), start, cancel: () => cancel(), copyLink: () => copySignInLink(session?.view.auth_url, setCopied), reopen, leave };
 }
 
 /** Poll only the active flow; a timeout cancels its listener and has its own screen state. */

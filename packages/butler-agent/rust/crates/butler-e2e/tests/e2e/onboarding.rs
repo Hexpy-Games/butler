@@ -169,7 +169,8 @@ async fn onb_02_first_message_without_credential_fails_clearly() -> Result<(), H
     let _ = turn_id;
 
     // Connect the provider (the Codex sign-in file appears) and send again.
-    fixtures::stub_codex_auth(&s.sandbox.codex_home())?;
+    let authority = butler_e2e::e2e::fake_chatgpt::FakeChatGptAuthority::start().await?;
+    fixtures::stub_chatgpt_auth(&s.sandbox.data, &authority)?;
     let (_, turn) = s
         .turn("general", "Reply with exactly the word: connected")
         .await?;
@@ -302,7 +303,7 @@ async fn onb_02_provider_401_fails_without_retry_storm() -> Result<(), HarnessEr
     let exchange = s.provider()?.exchange_for("connected", 0)?;
     s.provider()?.inject(Fault::always(
         exchange,
-        Transform::ErrorFromLibrary("codex-401".into()),
+        Transform::ErrorFromLibrary("chatgpt-401".into()),
     ))?;
     let started = std::time::Instant::now();
     let (_, turn) = s

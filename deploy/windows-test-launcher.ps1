@@ -2,7 +2,7 @@ param([switch]$NoBrowser, [switch]$Smoke, [switch]$StubChat, [string]$PackageRoo
 $ErrorActionPreference = 'Stop'
 $root = Join-Path $env:TEMP ('butler-protected-path-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force $root | Out-Null
-$keys = @('HOME','BUTLER_DATA','LOCALAPPDATA','APPDATA','TEMP','TMP','TMPDIR','CODEX_HOME',
+$keys = @('HOME','BUTLER_DATA','LOCALAPPDATA','APPDATA','TEMP','TMP','TMPDIR',
     'BUTLER_SECRET_STORE','BUTLER_PLATFORM_SYSTEM_SECRETS','BUTLER_SERVICE_MANAGER',
     'BUTLER_APP_DISABLE_SHELL_REGISTRATION','BUTLER_APP_SERVER_HOST','BUTLER_APP_SERVER_PORT',
     'OPENAI_API_KEY','OPENAI_BASE_URL','BUTLER_E2E_TIER','BUTLER_PROVIDER_QUOTA_POLLING')
@@ -13,13 +13,12 @@ $before = Get-Content "$root/before.json" -Raw
 $agent = $null
 $stub = $null
 try {
-    foreach ($name in @('home','data','local','roaming','tmp','codex')) {
+    foreach ($name in @('home','data','local','roaming','tmp')) {
         New-Item -ItemType Directory -Force "$root/$name" | Out-Null
     }
     $env:HOME = "$root/home"; $env:BUTLER_DATA = "$root/data"
     $env:LOCALAPPDATA = "$root/local"; $env:APPDATA = "$root/roaming"
     $env:TEMP = "$root/tmp"; $env:TMP = $env:TEMP; $env:TMPDIR = $env:TEMP
-    $env:CODEX_HOME = "$root/codex"
     $env:BUTLER_SECRET_STORE = 'file'; $env:BUTLER_PLATFORM_SYSTEM_SECRETS = '0'
     $env:BUTLER_SERVICE_MANAGER = 'off'; $env:BUTLER_APP_DISABLE_SHELL_REGISTRATION = '1'
     $env:BUTLER_APP_SERVER_HOST = '127.0.0.1'

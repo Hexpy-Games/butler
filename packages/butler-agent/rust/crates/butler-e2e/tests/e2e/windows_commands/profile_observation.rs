@@ -92,7 +92,7 @@ async fn replay(
     let setup = setup
         .stub_cassette(provider::cassette()?)
         .access(access)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .env("HOME", &home)
         .env("USERPROFILE", &home)
         .env("LOCALAPPDATA", local.display().to_string())
@@ -302,7 +302,7 @@ async fn literal_current_directory_uses_normal_approval_after_member_access()
     let (url, script, server) = provider::start(command).await?;
     let s = setup
         .stub_cassette(provider::cassette()?)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         // Match replay() and the installed App's module environment.
         .env("PSModulePath", "")
         .env("BUTLER_DEBUG_COMMAND_TIMINGS", "1")

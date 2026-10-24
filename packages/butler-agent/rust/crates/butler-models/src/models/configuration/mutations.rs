@@ -66,7 +66,7 @@ impl ModelConfiguration {
     ) -> Result<RegisteredHostedModelConfig, ModelCatalogError> {
         let _write = self.configuration_writes.acquire().await;
         let root = root.unwrap_or(&self.data_root);
-        if input.auth_type == ProviderAuthMethod::CodexOauth && input.provider_id != "openai" {
+        if input.auth_type == ProviderAuthMethod::ChatGptOauth && input.provider_id != "openai" {
             return Err(error(
                 "Browser OAuth is only supported for OpenAI Codex auth.",
             ));

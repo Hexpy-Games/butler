@@ -30,7 +30,7 @@ export async function firstRunElectron(server: NativeAppServerHandle, serverUrl 
   const child = spawnElectron(executable, [
     `--inspect=${inspectorPort}`, `--remote-debugging-port=${port}`, ...smokeElectronArgs(), app,
   ], { cwd: root, onOutput: bytes => output.push(String(bytes)), env: {
-    ...process.env, HOME: home, BUTLER_DATA: server.butlerData, CODEX_HOME: join(home, ".codex"),
+    ...process.env, HOME: home, BUTLER_DATA: server.butlerData,
     BUTLER_APP_SERVER_URL: serverUrl, BUTLER_APP_SERVER_PORT: String(server.port),
     BUTLER_APP_ELECTRON_USER_DATA_DIR: join(scratch, "profile"), BUTLER_APP_GATEWAY_PID_FILE: "off",
     BUTLER_E2E_TIER: "stub", ...options.env,

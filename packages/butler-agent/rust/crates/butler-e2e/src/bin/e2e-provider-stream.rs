@@ -84,15 +84,25 @@ async fn run(case: Value) -> Result<Value, Box<dyn std::error::Error>> {
     } else {
         "application/json"
     };
-    let app = Router::new().fallback(post(move || async move {
+    let mut app = Router::new().fallback(post(move || async move {
         ([("content-type", content_type)], body).into_response()
     }));
+    if case["codex"] == true {
+        app = app.layer(axum::middleware::from_fn(
+            butler_e2e::e2e::chatgpt_wire::validate,
+        ));
+    }
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let endpoint = url::Url::parse(&format!("http://{}/v1/responses", listener.local_addr()?))?;
     let server = tokio::spawn(async move { axum::serve(listener, app).await });
+    let wire = butler_e2e::e2e::chatgpt_wire::Scope::new(&[(
+        "BUTLER_CHATGPT_API_BASE_URL".into(),
+        endpoint.to_string(),
+    )]);
     let result = invoke(&case, endpoint).await;
     server.abort();
     let _ = server.await;
+    wire.finish()?;
     result
 }
 

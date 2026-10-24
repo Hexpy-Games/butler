@@ -22,7 +22,7 @@ impl ExpiryProbe {
             return Err(harness_error("OAuth profile must be a JSON object"));
         }
         let mut expired = before.clone();
-        expired["expiresAt"] = json!(1);
+        expired["expires_at"] = json!(1);
         let probe = Self { path, before };
         let written = write(&probe.path, &expired);
         // A post-rename sync error also needs restoration. Release the gate
@@ -36,14 +36,14 @@ impl ExpiryProbe {
         let _lock = lock(&self.path)?;
         let after: Value = serde_json::from_slice(&fs::read(&self.path)?)?;
         let now = now_epoch_millis as f64;
-        if after["expiresAt"].as_f64().unwrap_or(0.0) <= now {
+        if after["expires_at"].as_f64().unwrap_or(0.0) <= now {
             return Err(harness_error(
                 "OAuth refresh did not persist a future expiry",
             ));
         }
         let renewed = credentials(&after) != credentials(&self.before)
             || after["last_refresh"] != self.before["last_refresh"]
-            || after["updatedAt"] != self.before["updatedAt"];
+            || after["updated_at"] != self.before["updated_at"];
         if !renewed {
             return Err(harness_error(
                 "OAuth refresh did not persist renewal evidence",
@@ -55,13 +55,13 @@ impl ExpiryProbe {
     fn restore_unrenewed(&self) -> Result<(), HarnessError> {
         let _lock = lock(&self.path)?;
         let mut current: Value = serde_json::from_slice(&fs::read(&self.path)?)?;
-        if current["expiresAt"] != json!(1) || credentials(&current) != credentials(&self.before) {
+        if current["expires_at"] != json!(1) || credentials(&current) != credentials(&self.before) {
             return Ok(());
         }
-        if let Some(original) = self.before.get("expiresAt") {
-            current["expiresAt"] = original.clone();
+        if let Some(original) = self.before.get("expires_at") {
+            current["expires_at"] = original.clone();
         } else if let Some(object) = current.as_object_mut() {
-            object.remove("expiresAt");
+            object.remove("expires_at");
         }
         write(&self.path, &current)?;
         Ok(())
@@ -79,9 +79,9 @@ impl Drop for ExpiryProbe {
 
 fn credentials(profile: &Value) -> (&Value, &Value, &Value) {
     (
-        &profile["tokens"],
-        &profile["accessToken"],
-        &profile["refreshToken"],
+        &profile["client_id"],
+        &profile["access_token"],
+        &profile["refresh_token"],
     )
 }
 

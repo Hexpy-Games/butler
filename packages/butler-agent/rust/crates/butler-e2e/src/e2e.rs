@@ -3,9 +3,11 @@
 pub mod agent;
 pub mod binary;
 pub mod cassette;
+pub mod chatgpt_wire;
 pub mod config;
 pub mod events;
 pub mod executable;
+pub mod fake_chatgpt;
 pub mod fake_servers;
 pub mod faults;
 pub mod fixtures;

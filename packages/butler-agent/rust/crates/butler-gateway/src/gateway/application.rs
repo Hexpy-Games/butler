@@ -78,6 +78,7 @@ mod session_views;
 mod sessions;
 pub(super) mod settings;
 mod setup;
+mod setup_events;
 mod skill_settings;
 mod smart_groups;
 mod subsession_events;
@@ -172,10 +173,10 @@ pub use sessions::{
 pub(crate) use setup::test_setup_port;
 pub use setup::{
     AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
-    LocalModelServersView, MemoryModelProgress, OauthFlowStatus, OauthFlowView,
-    ProviderKeyVerificationView, ReplacedCredentialView, SETUP_READINESS_EVENT,
-    SavedCredentialView, SetupReadinessStatus, SetupReadinessStep, SetupReadinessView,
-    SetupStepError, SetupStepStatus,
+    ChatGptNoticeInput, ChatGptNoticeKind, ChatGptSignOutView, LocalModelServersView,
+    MemoryModelProgress, OauthFlowStatus, OauthFlowView, ProviderKeyVerificationView,
+    ReplacedCredentialView, SETUP_READINESS_EVENT, SavedCredentialView, SetupReadinessStatus,
+    SetupReadinessStep, SetupReadinessView, SetupStepError, SetupStepStatus,
 };
 pub use space::{AppSpaceCommand, AppSpaceMutationResult, AppSpaceOrigin};
 use storage::{AppStorage, AppStorageError, CachedSql};
@@ -226,6 +227,7 @@ pub struct AppApplication {
     settings_update_lock: Arc<tokio::sync::Mutex<()>>,
     plan_decision_locks: PlanDecisionLocks,
     setup_readiness: setup::ReadinessRelay,
+    chatgpt_events: setup_events::AccountRelay,
     quota_events: Arc<quota_events::QuotaEventForwarder>,
 }
 
@@ -324,6 +326,7 @@ impl AppApplication {
             settings_update_lock: Arc::new(tokio::sync::Mutex::new(())),
             plan_decision_locks: PlanDecisionLocks::default(),
             setup_readiness: setup::ReadinessRelay::default(),
+            chatgpt_events: setup_events::AccountRelay::default(),
             quota_events: Arc::default(),
         };
         application.initialize_thinking_preference().await?;
@@ -360,12 +363,7 @@ impl AppApplication {
         automation_scheduler.initialize(self.clone_handle())?;
         self.watch_wallpaper_modules().await;
         authority_recovery::retry(self).await;
-        self.setup_readiness.start(
-            self.dependencies.setup.readiness(),
-            self.storage.clone(),
-            self.subscribers.clone(),
-            self.dependencies.identity_clock.clone(),
-        );
+        setup_events::start(self);
         self.quota_events.start(self.clone_handle());
         subsession_events::start(self);
         Ok(())
@@ -385,6 +383,7 @@ impl AppApplication {
 
     pub async fn stop_dispatch(&self) -> Result<(), GatewayApplicationError> {
         self.setup_readiness.close().await;
+        self.chatgpt_events.close().await;
         let automations = match &self.automation_scheduler {
             Some(scheduler) => scheduler.close().await,
             None => Ok(()),

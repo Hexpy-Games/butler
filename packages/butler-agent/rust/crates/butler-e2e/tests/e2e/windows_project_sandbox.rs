@@ -147,7 +147,7 @@ async fn approval_fallback_with_helper(
     let mut setup = Setup::new("WINDOWS-AUTO-MUTATION-FALLBACK")?
         .access(Access::Auto)
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     if let Some(opt_in) = opt_in {
         setup = setup.env("BUTLER_WINDOWS_PROJECT_SANDBOX", opt_in);
     }

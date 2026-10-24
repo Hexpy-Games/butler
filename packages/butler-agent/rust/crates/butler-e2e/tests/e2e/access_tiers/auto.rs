@@ -36,7 +36,7 @@ async fn auto_works_in_the_project_and_asks_for_risky_steps() -> Result<(), Harn
     let setup = Setup::new("PERM-02")?
         .access(Access::Auto)
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let folder = setup.sandbox.home.join("proj");
     std::fs::create_dir_all(&folder)?;
     let outside = setup.sandbox.home.join("outside.txt");

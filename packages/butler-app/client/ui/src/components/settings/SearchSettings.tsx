@@ -58,8 +58,8 @@ export function SearchProviderFields({ draft }: { draft: Pick<SettingsView, "web
           { value: "tavily", label: options.searchProviderTavily },
           { value: "openai-web-search", label: options.searchProviderOpenAi },
           {
-            value: "codex-subscription-web-search",
-            label: options.searchProviderCodex,
+            value: "chatgpt-plan-web-search",
+            label: options.searchProviderChatGpt,
           },
           { value: "disabled", label: options.searchProviderDisabled },
         ]}

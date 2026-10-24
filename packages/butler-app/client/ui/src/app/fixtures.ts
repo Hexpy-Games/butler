@@ -23,7 +23,7 @@ export const HARNESS_PRIMARY_MODEL: AppModelSummary = {
   default_reasoning_effort: "medium",
   reasoning_efforts: ["none", "low", "medium", "high", "xhigh", "max"],
   token_estimator: "openai_tiktoken_o200k",
-  runtime_supported: true,
+  runtime_supported: true, availability: "ready",
 };
 
 export const FIRST_RUN_TEST_MODEL: AppModelSummary = {
@@ -65,7 +65,7 @@ export const HARNESS_MODEL_CATALOG: ModelCatalogView = {
           default_reasoning_effort: "medium",
           reasoning_efforts: ["low", "medium", "high"],
           token_estimator: "openai_tiktoken_o200k",
-          runtime_supported: true,
+          runtime_supported: true, availability: "ready",
           api_type: "openai_compatible",
           platform: "llama_cpp",
           server_url: "http://127.0.0.1:8080",
@@ -89,7 +89,7 @@ export const HARNESS_MODEL_CATALOG: ModelCatalogView = {
       default_reasoning_effort: "medium",
       reasoning_efforts: ["none", "low", "medium", "high", "xhigh", "max"],
       token_estimator: "openai_tiktoken_o200k",
-      runtime_supported: true,
+      runtime_supported: true, availability: "ready",
     },
     {
       provider_id: "local",
@@ -103,7 +103,7 @@ export const HARNESS_MODEL_CATALOG: ModelCatalogView = {
       default_reasoning_effort: "medium",
       reasoning_efforts: ["low", "medium", "high"],
       token_estimator: "openai_tiktoken_o200k",
-      runtime_supported: true,
+      runtime_supported: true, availability: "ready",
       api_type: "openai_compatible",
       platform: "llama_cpp",
       server_url: "http://127.0.0.1:8080",

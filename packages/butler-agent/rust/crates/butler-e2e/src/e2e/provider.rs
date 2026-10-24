@@ -25,6 +25,7 @@ use super::matching;
 use super::sanitize::Placeholders;
 use super::{HarnessError, harness_error};
 
+mod budget;
 mod hold;
 pub use hold::ReplyGate;
 mod memory;
@@ -82,6 +83,7 @@ type ChatResponder = fn(&Value) -> Option<ResponseRecord>;
 type MemoryResponder = fn(&Value) -> ResponseRecord;
 
 struct State {
+    authority: Mutex<Option<String>>,
     mode: Mode,
     placeholders: Mutex<Placeholders>,
     hits: Mutex<Vec<u32>>,
@@ -99,6 +101,8 @@ struct State {
     smart_group_requests: Mutex<Vec<Value>>,
     smart_group_responder: Mutex<Option<ChatResponder>>,
     holds: Mutex<hold::Holds>,
+    budget: Mutex<Option<budget::Budget>>,
+    observed: Mutex<budget::Observed>,
 }
 
 pub struct Provider {
@@ -178,6 +182,7 @@ impl Provider {
         let listener = TcpListener::bind("127.0.0.1:0").await?;
         let address = listener.local_addr()?;
         let state = Arc::new(State {
+            authority: Mutex::new(None),
             mode,
             placeholders: Mutex::new(placeholders),
             hits: Mutex::new(vec![0; count]),
@@ -195,6 +200,8 @@ impl Provider {
             smart_group_requests: Mutex::new(Vec::new()),
             smart_group_responder: Mutex::new(None),
             holds: Mutex::new(hold::Holds::default()),
+            budget: Mutex::new(None),
+            observed: Mutex::new(budget::Observed::default()),
         });
         let shared = state.clone();
         let app = axum::Router::new().fallback(move |request: Request<Body>| {
@@ -305,12 +312,25 @@ impl Provider {
     }
 
     /// Number of interactive provider requests answered so far.
+    pub fn is_chatgpt_plan(&self) -> bool {
+        match &self.state.mode {
+            Mode::Replay(cassette) => cassette.meta.provider == "openai-subscription",
+            Mode::Synthetic(_) => true,
+            Mode::Record { meta, .. } => meta.provider == "openai-subscription",
+        }
+    }
+
+    pub fn chatgpt_authority(&self, issuer: &str) {
+        *lock(&self.state.authority) = Some(issuer.into());
+    }
+
     pub fn served(&self) -> u32 {
         *lock(&self.state.served)
     }
 
-    /// Interactive request snapshots for public-path E2E assertions.
-    /// Background extraction is available through `memory_requests`.
+    /// Interactive request snapshots for public-path E2E assertions (record
+    /// mode: every forwarded request). Background extraction is available
+    /// through `memory_requests`.
     pub fn requests(&self) -> Vec<Value> {
         lock(&self.state.requests).clone()
     }

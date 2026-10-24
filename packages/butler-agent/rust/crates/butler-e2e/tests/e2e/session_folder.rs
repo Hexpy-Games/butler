@@ -142,7 +142,7 @@ async fn project(
     let setup = Setup::new(id)?
         .access(access)
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let parent = setup.sandbox.home.join("proj");
     std::fs::create_dir_all(&parent)?;
     let mut s = setup.start().await?;
@@ -418,7 +418,7 @@ async fn a_delegated_child_starts_in_the_parents_current_folder() -> Result<(), 
     let (url, script, server) = start().await?;
     let s = Setup::new("FOLDER-03")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()
         .await?;
     let work = s.sandbox.home.join("work");

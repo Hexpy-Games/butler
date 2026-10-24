@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-sol",
       "effort": "low",
       "user_request": "Create a file named inside.txt in your workspace containing exactly the text: hello-e2e",
@@ -36,7 +36,7 @@
       },
       {
         "delay_ms": 929,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0d82f8c704c1f351016ab8d3729a9887d09774d28e16716f32\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_7QCKn1wLOOSgP6jDv11htKnc\",\"name\":\"write_file\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0d82f8c704c1f351016ab8d3729a9887d09774d28e16716f32\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_7QCKn1wLOOSgP6jDv11htKnc\",\"name\":\"write_file\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -96,7 +96,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0d82f8c704c1f351016ab8d3729a9887d09774d28e16716f32\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"path\\\":\\\"inside.txt\\\",\\\"content\\\":\\\"hello-e2e\\\"}\",\"call_id\":\"call_7QCKn1wLOOSgP6jDv11htKnc\",\"name\":\"write_file\"},\"output_index\":0,\"sequence_number\":17}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0d82f8c704c1f351016ab8d3729a9887d09774d28e16716f32\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"path\\\":\\\"inside.txt\\\",\\\"content\\\":\\\"hello-e2e\\\"}\",\"call_id\":\"call_7QCKn1wLOOSgP6jDv11htKnc\",\"name\":\"write_file\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":17}\n\n"
       },
       {
         "delay_ms": 12,

@@ -122,6 +122,8 @@ impl StatusModels {
 /// The status model owner could not be opened. `Display` is the CLI message.
 #[derive(Debug, thiserror::Error)]
 pub enum StatusModelsError {
+    #[error("model_status_unavailable: auth status worker failed")]
+    AuthStatus(#[source] tokio::task::JoinError),
     /// The collation locale could not be built.
     #[error("model_status_unavailable: {0}")]
     Locale(#[source] butler_core::locale::LocaleError),
@@ -171,7 +173,10 @@ pub async fn open_status_models(data_root: PathBuf) -> Result<StatusModels, Stat
     } else {
         runtime_from(&metadata.config)
     };
-    let auth = auth_status(&data_root);
+    let auth_root = data_root.clone();
+    let auth = tokio::task::spawn_blocking(move || auth_status(&auth_root))
+        .await
+        .map_err(StatusModelsError::AuthStatus)?;
     let prompt_cache = prompt_cache_policy(configuration.status_prompt_cache_policy());
     Ok(StatusModels {
         configuration,
@@ -206,16 +211,18 @@ impl super::ModelConfigurationClock for StatusClock {
 
 fn status_environment(data_root: &Path) -> ModelConfigurationEnvironment {
     ModelConfigurationEnvironment {
+        chatgpt_auth_issuer: env_value("BUTLER_CHATGPT_AUTH_ISSUER"),
+        chatgpt_api_base_url: env_value("BUTLER_CHATGPT_API_BASE_URL"),
+        chatgpt_auth_dir: env_value("BUTLER_CHATGPT_AUTH_DIR").map(PathBuf::from),
+        chatgpt_oauth_port: env_value("BUTLER_CHATGPT_OAUTH_PORT"),
+        oauth_callback_bind_host: env_value("BUTLER_OAUTH_CALLBACK_BIND_HOST"),
+        oauth_no_browser: env_value("BUTLER_OAUTH_NO_BROWSER"),
         openai_model: env_value("BUTLER_OPENAI_MODEL"),
         openai_reasoning_effort: env_value("BUTLER_OPENAI_REASONING_EFFORT"),
         openai_api_key: env_value("OPENAI_API_KEY"),
         openai_base_url: env_value("OPENAI_BASE_URL"),
         openai_prompt_cache_key_prefix: env_value("BUTLER_OPENAI_PROMPT_CACHE_KEY_PREFIX"),
         openai_prompt_cache_retention: env_value("BUTLER_OPENAI_PROMPT_CACHE_RETENTION"),
-        butler_codex_auth_profile: std::env::var_os("BUTLER_CODEX_AUTH_PROFILE").map(PathBuf::from),
-        butler_openai_auth_profile: std::env::var_os("BUTLER_OPENAI_AUTH_PROFILE")
-            .map(PathBuf::from),
-        codex_auth_json: std::env::var_os("CODEX_AUTH_JSON").map(PathBuf::from),
         secret_store: super::SecretStoreFacts::for_data_root(data_root),
         ..ModelConfigurationEnvironment::default()
     }
@@ -245,31 +252,19 @@ pub fn auth_status_with_environment(
     if auth_value("OPENAI_API_KEY", private_environment).is_some() {
         return json!({ "configured": true, "mode": "api_key", "source": "OPENAI_API_KEY" });
     }
-    let profile = auth_value("BUTLER_CODEX_AUTH_PROFILE", private_environment)
-        .or_else(|| auth_value("BUTLER_OPENAI_AUTH_PROFILE", private_environment))
-        .map(|profile| data_profile_path(data_root, &profile))
-        .unwrap_or_else(|| data_root.join("auth/openai-codex.json"));
-    if std::fs::metadata(&profile).is_ok_and(|metadata| metadata.len() > 0) {
-        return json!({ "configured": true, "mode": "codex_subscription", "source": "BUTLER_CODEX_AUTH_PROFILE" });
-    }
-    let codex = auth_value("CODEX_AUTH_JSON", private_environment)
-        .map(PathBuf::from)
-        .or_else(|| {
-            butler_platform::user_dirs::home_dir().map(|home| home.join(".codex/auth.json"))
-        });
-    if codex.is_some_and(|path| std::fs::metadata(path).is_ok_and(|metadata| metadata.len() > 0)) {
-        return json!({ "configured": true, "mode": "codex_oauth", "source": "CODEX_AUTH_JSON" });
-    }
-    json!({ "configured": false, "mode": "missing", "source": null })
-}
-
-fn data_profile_path(data_root: &Path, profile: &str) -> PathBuf {
-    let profile = PathBuf::from(profile);
-    if profile.is_absolute() {
-        profile
-    } else {
-        data_root.join(profile)
-    }
+    let dir = auth_value("BUTLER_CHATGPT_AUTH_DIR", private_environment).map(PathBuf::from);
+    let paths = super::chatgpt::store::paths(data_root, dir.as_deref());
+    let registration = super::chatgpt::store::read_sync(&paths.registration).unwrap_or_default();
+    let legacy = std::fs::metadata(paths.legacy).is_ok_and(|m| m.len() > 0);
+    let view = super::chatgpt::store::account_view(&registration, &json!({}), legacy);
+    use super::chatgpt::ChatGptAccountStatus as Status;
+    let mode = match view.status {
+        Status::SignedIn => "chatgpt_plan",
+        Status::PlanOff => "chatgpt_plan_off",
+        Status::SignInRequired | Status::LegacySignInRequired => "chatgpt_sign_in_required",
+        Status::SignedOut => "missing",
+    };
+    json!({"configured":matches!(view.status, Status::SignedIn | Status::PlanOff),"mode":mode,"source":if mode == "missing" { None } else { Some("chatgpt") }})
 }
 
 fn auth_value(name: &str, private_environment: &HashMap<String, String>) -> Option<String> {

@@ -1,6 +1,6 @@
 ---
 title: "클라우드 모델"
-description: "API 키나 OAuth로 호스팅 모델을 연결합니다."
+description: "ChatGPT 플랜이나 API 키로 호스팅 모델을 연결합니다."
 section: models
 order: 1
 status: published
@@ -12,7 +12,7 @@ status: published
 
 | 제공자 | 인증 방식 |
 | --- | --- |
-| **OpenAI** | API 키 또는 OAuth(OpenAI 계정 로그인) |
+| **OpenAI** | ChatGPT 플랜 또는 API 키 |
 | **Anthropic** | API 키 |
 | **Google** | API 키 |
 | **xAI / Grok** | API 키 |
@@ -30,7 +30,7 @@ status: published
   label="인증 방식"
   items={[
     { value: "api-key", label: "API 키" },
-    { value: "oauth", label: "OAuth (OpenAI)" },
+    { value: "oauth", label: "ChatGPT 플랜" },
   ]}
 >
   <TabPanel value="api-key">
@@ -49,16 +49,18 @@ status: published
     <Steps>
       1. 사이드바에서 **설정**을 열고 **모델**을 선택합니다.
       2. **버틀러 모델** 섹션에서 **모델 관리**를 누르고 **모델 추가**를 누릅니다.
-      3. **제공자**를 **OpenAI**로 두고 **모델**을 고릅니다.
-      4. **인증 방식**을 **OAuth**로 바꿉니다. 브라우저에 OpenAI 로그인 페이지가 열립니다.
-      5. 브라우저에서 로그인을 마치고 Butler로 돌아옵니다. Butler가 인증 완료를 확인하면 모델을 자동으로 등록합니다.
+      3. **제공자**를 **OpenAI**로 두고 **인증 방식**을 **ChatGPT 플랜**으로 바꿉니다.
+      4. **ChatGPT로 계속하기**를 누릅니다. 브라우저에서 로그인하고 플랜 사용을 허용합니다.
+      5. 버틀러로 돌아와 **로그인됨**과 계정을 확인합니다. 플랜에 포함된 **모델**을 고르고 **추가**를 누릅니다.
     </Steps>
 
-    이미 로그인한 적이 있으면 **OAuth 인증 완료**가 표시되고 브라우저는 열리지 않습니다. 이때는 **추가**를 누르면 등록됩니다.
+    인증 방식을 고르는 것만으로 로그인이나 브라우저 열기를 시작하지 않습니다. 로그인 전에는 **추가**가 비활성화되며 **먼저 ChatGPT에 로그인하세요** 안내가 표시됩니다.
 
-    - 브라우저가 열리지 않으면 **OAuth 링크** 아래의 **브라우저에서 열기**를 누르거나, **링크 복사**로 주소를 복사해 직접 엽니다.
-    - 로그인을 마쳤는데 화면이 그대로면 **인증 완료 확인**을 누릅니다.
-    - 인증에 실패했거나 처음부터 다시 하려면 **다시 인증**을 누릅니다.
+    - 대기 중에는 **링크 복사**와 **브라우저에서 열기**로 로그인 페이지를 엽니다.
+    - 시간이 지났거나 로그인에 실패하면 **로그인 다시 시작**을 누릅니다.
+    - 다른 계정으로 연결하려면 **다른 계정 사용**을 누릅니다.
+
+    ChatGPT 플랜은 로그인한 계정의 플랜을 사용합니다. API 키는 OpenAI API 인증과 과금을 사용합니다. ChatGPT 모델 목록에는 플랜에서 제공하고 버틀러가 지원하는 모델만 표시됩니다. **사용량 관리**는 [ChatGPT 사용량 설정](https://chatgpt.com/settings/usage)을 엽니다.
   </TabPanel>
 </Tabs>
 
@@ -140,7 +142,7 @@ status: published
 
 - API 키 목록(제공자, 이름, 가린 키): `~/.butler/auth/model-provider-credentials.json`
 - API 키: `~/.butler/auth/credential-store.json`
-- OpenAI OAuth 로그인 정보: `~/.butler/auth/openai-codex.json`
+- ChatGPT 로그인 정보: `~/.butler/auth/chatgpt.json`
 - 등록한 모델 목록: `~/.butler/butler.config.json`
 
 현재 배포판은 API 키를 이 컴퓨터의 파일에 저장합니다. 파일 권한은 소유자만 읽고 쓸 수 있게(`0600`) 설정됩니다. 앱에는 **이 컴퓨터에만 저장**으로 표시됩니다.
@@ -149,7 +151,7 @@ Developer ID로 서명한 배포판은 API 키를 macOS 키체인에 저장하�
 
 이전 버전에서 저장한 키가 `model-provider-credentials.json`에 남아 있으면 Butler Agent가 시작할 때 키를 저장 위치로 옮깁니다.
 
-OpenAI OAuth 로그인 정보는 만료가 가까워지면 Butler가 자동으로 갱신합니다.
+ChatGPT 로그인 정보는 만료가 가까워지면 Butler가 자동으로 갱신합니다.
 
 ## 주의 사항
 
@@ -162,7 +164,7 @@ OpenAI OAuth 로그인 정보는 만료가 가까워지면 Butler가 자동으�
 </Notice>
 
 <Notice tone="info">
-  OAuth는 OpenAI에서만 쓸 수 있습니다. 다른 제공자는 API 키로 연결합니다.
+  ChatGPT 플랜은 OpenAI에서만 쓸 수 있습니다. 다른 제공자는 API 키로 연결합니다.
 </Notice>
 
 ## 관련 문서

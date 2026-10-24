@@ -53,6 +53,7 @@ pub(super) fn apply_transaction(connection: &mut Connection) -> rusqlite::Result
     migrate_guided_work_review_constraints(&transaction)?;
     restore_stable_work_objectives(&transaction)?;
     monitoring::indexes(&transaction)?;
+    subsession::ensure_worker_admission(&transaction)?;
     // Add after the legacy column/table migrations; idle polls must never walk
     // terminal history, including databases opened before suspension_reason existed.
     transaction.execute_batch(

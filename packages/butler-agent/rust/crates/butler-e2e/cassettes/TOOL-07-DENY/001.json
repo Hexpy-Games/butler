@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-luna",
       "effort": "max",
       "user_request": "Create denied.txt in your workspace containing exactly: should-not-exist",
@@ -70,7 +70,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0dbf9782b20065c3016abb0e662c3487d0a4f6bf8d365a2992\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_2tn4VhRVc2day0obLqECC8PY\",\"name\":\"replace_work_plan\"},\"output_index\":1,\"sequence_number\":4}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0dbf9782b20065c3016abb0e662c3487d0a4f6bf8d365a2992\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_2tn4VhRVc2day0obLqECC8PY\",\"name\":\"replace_work_plan\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":4}\n\n"
       },
       {
         "delay_ms": 0,
@@ -430,7 +430,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0dbf9782b20065c3016abb0e662c3487d0a4f6bf8d365a2992\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Create denied.txt in the workspace containing exactly `should-not-exist`.\\\",\\\"execution_mode\\\":\\\"direct\\\",\\\"actions\\\":[{\\\"action_key\\\":\\\"Create denied.txt with the exact requested text\\\",\\\"effect\\\":{\\\"capability\\\":\\\"create a workspace file\\\",\\\"target\\\":\\\"denied.txt containing exactly should-not-exist\\\"}}],\\\"checks\\\":[\\\"The file is named denied.txt and its complete contents are exactly `should-not-exist` with no added text.\\\"]}\",\"call_id\":\"call_2tn4VhRVc2day0obLqECC8PY\",\"name\":\"replace_work_plan\"},\"output_index\":1,\"sequence_number\":94}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0dbf9782b20065c3016abb0e662c3487d0a4f6bf8d365a2992\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Create denied.txt in the workspace containing exactly `should-not-exist`.\\\",\\\"execution_mode\\\":\\\"direct\\\",\\\"actions\\\":[{\\\"action_key\\\":\\\"Create denied.txt with the exact requested text\\\",\\\"effect\\\":{\\\"capability\\\":\\\"create a workspace file\\\",\\\"target\\\":\\\"denied.txt containing exactly should-not-exist\\\"}}],\\\"checks\\\":[\\\"The file is named denied.txt and its complete contents are exactly `should-not-exist` with no added text.\\\"]}\",\"call_id\":\"call_2tn4VhRVc2day0obLqECC8PY\",\"name\":\"replace_work_plan\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":94}\n\n"
       },
       {
         "delay_ms": 5,

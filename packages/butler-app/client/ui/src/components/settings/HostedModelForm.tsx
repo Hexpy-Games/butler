@@ -1,6 +1,6 @@
-import { openExternalSignIn } from "@/app/openExternalSignIn";
+import { signOutChatGpt } from "../chatgpt/chatGptActions";
 import { useAppLocale } from "@/app/copy.ts";
-import { Stack } from "@/butler-ds";
+import { ButtonContainer, Stack } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { SettingsSection } from "./SettingsFormComponents";
 import { HostedCredentialSection } from "./HostedCredentialSection";
@@ -53,8 +53,7 @@ export function HostedModelForm({
           apiKey={form.apiKey}
           credentialLabel={form.credentialLabel}
           authMethods={form.authMethods}
-          oauthBusy={form.oauthBusy}
-          oauthLogin={form.oauthLogin}
+          chatgpt={{ signIn: form.signIn, account: form.chatgpt.account, editing: Boolean(editingModel), onSignOut: () => void signOutChatGpt().then(account => { form.signIn.leave(); form.chatgpt.setAccount(account); }) }}
           apiBaseUrl={form.apiBaseUrl}
           showApiBaseUrl={form.showApiBaseUrl}
           onAuthMethodChange={form.setAuthMethod}
@@ -62,26 +61,18 @@ export function HostedModelForm({
           onApiKeyChange={form.setApiKey}
           onApiBaseUrlChange={form.setApiBaseUrl}
           onCredentialLabelChange={form.setCredentialLabel}
-          onOAuthCheck={() => void form.handleOAuthCheck()}
-          onOAuthCopyUrl={() => {
-            if (form.oauthLogin?.auth_url) {
-              void navigator.clipboard?.writeText(form.oauthLogin.auth_url);
-            }
-          }}
-          onOAuthOpenUrl={() => {
-            if (form.oauthLogin?.auth_url) {
-              openExternalSignIn(form.oauthLogin.auth_url);
-            }
-          }}
-          onOAuthRestart={() => void form.handleOAuthRestart()}
+
         />
+        <ButtonContainer size="default" justify="end">
         <HostedModelSaveButton
+          disabledHint={form.authMethod === "chatgpt_oauth" && !form.oauthReady ? appCopy.chatgptSignIn.addHint : undefined}
           busy={form.busy}
           disabled={!form.canSave}
           label={editingModel ? copy.saveEdit : copy.saveAdd}
           savingLabel={copy.saving}
           onClick={() => void form.save()}
         />
+        </ButtonContainer>
       </Stack>
     </SettingsSection>
   );

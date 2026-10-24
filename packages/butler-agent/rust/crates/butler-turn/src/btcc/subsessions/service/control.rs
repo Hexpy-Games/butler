@@ -1,5 +1,7 @@
 //! Durable direction revisions and cancellation over the shared native queue.
 
+use crate::btcc::storage::SubsessionDispatchState;
+
 use serde_json::{Value, json};
 
 use super::selection::{RelationPurpose, RelationQuery};
@@ -246,22 +248,7 @@ impl SubsessionService {
                 purpose: RelationPurpose::Cancel,
             })
             .await?;
-        if self
-            .repository
-            .result_for_relation(relation.relation_id.clone())
-            .await
-            .map_err(BtccError::from)?
-            .is_some()
-        {
-            return Err(error(BtccCode::ActiveStewardRelationNotFound));
-        }
-        let turn_id = self
-            .repository
-            .latest_turn(relation.child_session_id.clone())
-            .await
-            .map_err(BtccError::from)?
-            .map(|(id, _)| id)
-            .unwrap_or_else(|| relation.child_turn_id.clone());
+        let turn_id = self.cancel_turn(&relation).await?;
         let identity = json!({"relation_id":relation.relation_id,"source_message_id":request.source_message_id});
         let request_id = format!(
             "cancel-steward-{}",
@@ -286,9 +273,47 @@ impl SubsessionService {
                 ),
             ]),
         })?;
+        if relation.packet.child_role == crate::btcc::ChildRole::Worker
+            && let Err(error) = self.admit_waiting(&relation.parent_session_id).await
+        {
+            butler_core::diagnostic!(
+                "[native-btcc] Worker post-cancel admission deferred code={}",
+                error.code()
+            );
+        }
         Ok(
             json!({"relation_id":relation.relation_id,"child_turn_id":turn_id,"status":"cancelling","request_id":request_id}),
         )
+    }
+
+    async fn cancel_turn(
+        &self,
+        relation: &StoredSubsessionDelegation,
+    ) -> Result<String, BtccError> {
+        if relation.packet.child_role == crate::btcc::ChildRole::Worker {
+            return self
+                .repository
+                .cancel_worker_pending(relation.relation_id.clone(), (self.now)())
+                .await
+                .map_err(BtccError::from)?
+                .ok_or_else(|| error(BtccCode::ActiveStewardRelationNotFound));
+        }
+        if self
+            .repository
+            .result_for_relation(relation.relation_id.clone())
+            .await
+            .map_err(BtccError::from)?
+            .is_some()
+        {
+            return Err(error(BtccCode::ActiveStewardRelationNotFound));
+        }
+        Ok(self
+            .repository
+            .latest_turn(relation.child_session_id.clone())
+            .await
+            .map_err(BtccError::from)?
+            .map(|(id, _)| id)
+            .unwrap_or_else(|| relation.child_turn_id.clone()))
     }
 
     /// Takes the next unconsumed direction for a child turn.
@@ -335,14 +360,22 @@ impl SubsessionService {
                 continue;
             }
             relations.insert(direction.relation_id.clone());
-            if !self.child_turn_running(&relation.child_session_id).await? {
+            if relation.packet.child_role == crate::btcc::ChildRole::Worker {
+                self.repository
+                    .restore_waiting_direction(relation.relation_id.clone())
+                    .await
+                    .map_err(BtccError::from)?;
+            }
+            if relation.packet.child_role != crate::btcc::ChildRole::Worker
+                && !self.child_turn_running(&relation.child_session_id).await?
+            {
                 self.enqueue_direction(&relation, &direction).await?;
             }
         }
         Ok(())
     }
 
-    async fn enqueue_direction(
+    pub(super) async fn enqueue_direction(
         &self,
         relation: &StoredSubsessionDelegation,
         requested: &StoredSubsessionDirection,
@@ -353,6 +386,25 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?
             .unwrap_or_else(|| requested.clone());
+        if relation.packet.child_role == crate::btcc::ChildRole::Worker {
+            if self
+                .repository
+                .worker_turn_unsettled(relation.relation_id.clone())
+                .await
+                .map_err(BtccError::from)?
+            {
+                return Ok(());
+            }
+            let current = self
+                .repository
+                .relation_by_id(relation.relation_id.clone())
+                .await
+                .map_err(BtccError::from)?
+                .ok_or_else(|| error(BtccCode::SubsessionRelationMissing))?;
+            if current.dispatch_state != SubsessionDispatchState::Enqueued {
+                return Box::pin(self.admit_waiting(&relation.parent_session_id)).await;
+            }
+        }
         let child = self
             .bindings
             .get_by_session_id(&relation.child_session_id)
@@ -368,7 +420,7 @@ impl SubsessionService {
             "steward"
         };
         let turn_id = crate::btcc::storage::direction_turn_id(&direction.instruction_id);
-        self.queue.enqueue(super::SubsessionEnqueue {
+        self.enqueue_child(super::SubsessionEnqueue {
             envelope: json!({
             "eventId":format!("subsession-direction:{}",direction.instruction_id),"transport":"app","accountId":"local",
             "peer":{"kind":"dm","id":relation.child_session_id,"parentId":relation.parent_session_id},
@@ -379,6 +431,6 @@ impl SubsessionService {
             "raw":{"source":"btcc-subsession-direction","instruction_id":direction.instruction_id}
             }),
             metadata: serde_json::Map::new(),
-        })
+        }).await
     }
 }
