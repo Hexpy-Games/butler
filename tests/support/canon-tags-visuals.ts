@@ -53,7 +53,10 @@ export async function captureTagViews(page: Page, shots: string, name: string, t
   await capture("inspector");
   await detail.getByRole("button", { name: "고치기", exact: true }).click();
   if (!before) {
-    assert.equal(await detail.locator('[data-test-class="canon-tags-field"] [data-editable="true"]').count(), tones.length);
+    // Chip pencils appear once the project's tag list has loaded.
+    const editable = detail.locator('[data-test-class="canon-tags-field"] [data-editable="true"]');
+    await editable.nth(tones.length - 1).waitFor();
+    assert.equal(await editable.count(), tones.length);
     await assertNoLooseTagMenus(page);
   }
   await capture("inspector-edit");
