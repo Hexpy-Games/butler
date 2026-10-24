@@ -104,6 +104,9 @@
   font-size: var(--typo-caption-size);
   line-height: var(--typo-caption-line-height);
   text-align: center;
+
+  /* Intl.DisplayNames gives "hour" / "minute" in English; a caption starts with a capital. */
+  text-transform: capitalize;
 }
 
 /* A wheel: five rows tall, two rows of padding above and below, so the
