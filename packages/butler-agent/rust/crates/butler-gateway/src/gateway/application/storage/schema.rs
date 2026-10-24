@@ -37,16 +37,7 @@ pub(super) fn migrate(
 ) -> Result<(), AppStorageError> {
     let turns_new = !migration::table_exists(connection, "turns")?;
     core::create(connection)?;
-    migration::ensure_column(connection, "message_files", "title", "TEXT")?;
-    migration::ensure_column(connection, "message_files", "source_label", "TEXT")?;
-    migration::ensure_column(
-        connection,
-        "message_files",
-        "deliverable",
-        "INTEGER NOT NULL DEFAULT 0",
-    )?;
-    migration::ensure_column(connection, "message_files", "width", "INTEGER")?;
-    migration::ensure_column(connection, "message_files", "height", "INTEGER")?;
+    ensure_message_file_columns(connection)?;
     library::create(connection)?;
     canon_sidebar::create(connection)?;
     canon::create(connection)?;
@@ -110,6 +101,20 @@ pub(super) fn migrate(
     monitoring::migrate(connection)?;
     pending_asks::create(connection)?;
     library::recover(connection, butler_data)?;
+    Ok(())
+}
+
+fn ensure_message_file_columns(connection: &Connection) -> Result<(), AppStorageError> {
+    migration::ensure_column(connection, "message_files", "title", "TEXT")?;
+    migration::ensure_column(connection, "message_files", "source_label", "TEXT")?;
+    migration::ensure_column(
+        connection,
+        "message_files",
+        "deliverable",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
+    migration::ensure_column(connection, "message_files", "width", "INTEGER")?;
+    migration::ensure_column(connection, "message_files", "height", "INTEGER")?;
     Ok(())
 }
 

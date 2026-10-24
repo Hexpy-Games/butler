@@ -7,6 +7,43 @@
   border-radius: var(--radius-panel);
 }
 
+/* A chat card with an aside. Docked, it fills a scaled 1100px frame (the
+   shell docks from 960px); the narrow card always floats. */
+.asideStage {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  background: var(--conversation-bg);
+  contain: layout paint;
+}
+
+.asideStage[data-width="narrow"] {
+  max-width: 640px;
+  height: 600px;
+  border: var(--border-hairline) solid var(--line);
+  border-radius: var(--radius-popover);
+}
+
+/* The chat card beside an open browser pane (the App's split). */
+.besideBrowser {
+  display: grid;
+  height: 100%;
+  padding: var(--space-sm);
+  background: var(--shell-bg);
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: var(--space-sm);
+}
+
+.chatCard {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border: var(--border-hairline) solid var(--line);
+  border-radius: var(--radius-popover);
+  background: var(--conversation-bg);
+  contain: layout paint;
+}
+
 /* A taller frame for the new chat and its background (560px, STAGE_HEIGHT in
    ConversationShell.demo.tsx); layout containment keeps fixed layers inside. */
 .stage {
