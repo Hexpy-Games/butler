@@ -107,7 +107,9 @@ async function open(browser: Browser, server: NativeAppServerHandle, width: numb
 
 async function settle(page: Page): Promise<void> {
   await page.waitForFunction(() => document.getAnimations().every((animation) =>
-    animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
+    // Scroll-driven animations follow scroll position, not time, and never finish.
+    animation.timeline !== document.timeline || animation.effect?.getTiming().iterations === Infinity ||
+      animation.playState !== "running"));
 }
 
 /** Hovering a row swaps its trailing marks for the row menu; park the pointer off the sidebar. */
@@ -128,7 +130,9 @@ async function showSidebar(page: Page): Promise<void> {
 async function capture(page: Page, name: string): Promise<void> {
   await page.evaluate(() => document.fonts.ready);
   await page.waitForFunction(() => document.getAnimations().every((animation) =>
-    animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
+    // Scroll-driven animations follow scroll position, not time, and never finish.
+    animation.timeline !== document.timeline || animation.effect?.getTiming().iterations === Infinity ||
+      animation.playState !== "running"));
   // Stopped animations show the Spinner's static arc instead of a random frame.
   if (output) await page.screenshot({ path: join(output, `${name}.png`), animations: "disabled" });
 }

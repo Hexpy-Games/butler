@@ -2,10 +2,11 @@
 import { verifyElectronHtml, verifyBrowserHtmlRefresh } from "../support/html-artifact-client-smoke";
 import { htmlArtifactSmoke, htmlArtifactFixture } from "../support/html-artifact-smoke.ts";
 import { strict as assert } from "node:assert";
+import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { type Browser, type Page } from "playwright";
-import { createNativeAppServer, freePort, type NativeAppServerHandle } from "../support/native-app-server.ts";
+import { createNativeAppServer, freePort, type NativeAppServerHandle, type StubModelRequest } from "../support/native-app-server.ts";
 import { spawnElectron, stopElectronChild } from "../support/electron-child.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { electronPage, electronFrame } from "../support/electron-page-cdp.ts";
@@ -18,6 +19,9 @@ const remoteOnly = process.env.BUTLER_SMOKE_OUTPUT_CASE === "remote";
 const baseline = process.env.BUTLER_SMOKE_BASELINE === "1";
 if (screenshots) mkdirSync(screenshots, { recursive: true });
 const marker = "Publish browser output";
+// Background rounds (title, smart group) stream the same text but offer no tools; only the conversation turn does.
+const isConversation = (request: StubModelRequest) => request.stream && Array.isArray(request.body.tools) && request.body.tools.length > 0
+  && JSON.stringify(request.messages).includes(marker);
 const sessionTitle = "Output task";
 let sessionId = "";
 // The virtual HTTPS fixture has no public certificate. Restricted Chromium
@@ -211,16 +215,21 @@ try {
     setAppCopyLanguage(language);
     let round = 0;
     let apiOrigin = "";
+    const script = (revision: number) => `// revision ${revision}\nlocalStorage.setItem('output','ready');document.querySelector('h1').textContent='Ready';fetch('${apiOrigin}/health').then(()=>document.body.dataset.api='allowed').catch(()=>document.body.dataset.api='blocked');`;
     const server = await createNativeAppServer({ uiRoot: process.env.BUTLER_SMOKE_UI_ROOT,
       config: { user: { name: "Smoke", language } },
-      stubReply: request => request.stream && JSON.stringify(request.messages).includes(marker) ? "Published." : "{}",
+      stubReply: request => isConversation(request) ? "Published." : "{}",
       stubToolCall: request => {
-        if (!request.stream || !JSON.stringify(request.messages).includes(marker)) return null;
+        if (!isConversation(request)) return null;
         round++;
         if (round === 1) return { name: "write_file", arguments: { path: "site/index.html", content: "<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><h1>Output</h1><p>Published page</p><script src='./app.js'></script>", create_parents:true } };
-        if (round === 2) return { name: "write_file", arguments: { path: "site/app.js", content: `localStorage.setItem('output','ready');document.querySelector('h1').textContent='Ready';fetch('${apiOrigin}/health').then(()=>document.body.dataset.api='allowed').catch(()=>document.body.dataset.api='blocked');`, create_parents:true } };
+        if (round === 2) return { name: "write_file", arguments: { path: "site/app.js", content: script(1), create_parents:true } };
         if (round === 3) return { name: "write_file", arguments: { path: "standalone.HTML", content: htmlArtifactFixture(apiOrigin), create_parents: true } };
-        if (round === 4 || round === 6) return { name: "output_publish", arguments: { path: "site", title: "Output" } };
+        // Only declared deliverables become artifact cards (215505b39); written files stay file changes.
+        if (round === 4) return { name: "deliver_files", arguments: { files: [{ path: "standalone.HTML" }] } };
+        // An unchanged publication only adds a reference (215505b39), so the second turn edits the script first.
+        if (round === 7) return { name: "write_file", arguments: { path: "site/app.js", content: script(2), overwrite: true, expected_sha256: createHash("sha256").update(script(1)).digest("hex") } };
+        if (round === 5 || round === 8) return { name: "output_publish", arguments: { path: "site", title: "Output" } };
         return null;
       },
     });
