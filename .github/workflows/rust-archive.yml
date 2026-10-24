@@ -147,6 +147,7 @@ jobs:
           # window capture helpers so consumers do not rebuild them.
           cp target/debug/examples/web-access-smoke "$RUNNER_TEMP/rust-archive/web-access-smoke"
           cp target/debug/examples/window-capture "$RUNNER_TEMP/rust-archive/window-capture"
+          cp target/debug/e2e-task-graph "$RUNNER_TEMP/rust-archive/e2e-task-graph"
           if [[ "${{ inputs.platform }}" == linux-* ]]; then
             cp target/debug/butler-sandbox "$RUNNER_TEMP/rust-archive/butler-sandbox"
           fi

@@ -21,7 +21,8 @@ try {
     await app.click(locale === "ko" ? "브라우저" : "Browser"); await app.call("activate", { id });
     await app.main(`(()=>{void ${contents}.executeJavaScript("document.querySelector('#upload').click()")})()`);
     await app.page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="browser-page-dialog"] input[type=file]')));
-    assert.equal(await app.main(`${contents}.debugger.isAttached()`), true, "honest identity uses CDP");
+    // aefd7027a: CDP serves only Butler's own automation; your tab's identity and picker need none.
+    assert.equal(await app.main(`${contents}.debugger.isAttached()`), false, "your tab runs without CDP");
     assert.equal(await app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(id)}).attached===null`), true);
     const name = `${locale}-${theme}-${width}`;
     await app.shot(`${name}-file`);

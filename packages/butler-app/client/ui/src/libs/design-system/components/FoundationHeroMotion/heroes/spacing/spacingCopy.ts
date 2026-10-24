@@ -53,7 +53,7 @@ export const UNIT = 4;
 export const GAPS = {
   hg: { token: "--settings-section-header-gap", px: 12 },
   pt: { token: "--settings-section-padding", px: 24 },
-  fg: { token: "--settings-field-gap", px: 20 },
+  fg: { token: "--settings-field-gap", px: 24 },
   pb: { token: "--settings-section-padding", px: 24 },
   sg: { token: "--settings-section-gap", px: 40 },
 } as const;

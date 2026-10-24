@@ -1,10 +1,10 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useMemo, useState } from "react";
-import { SettingsSection, Stack } from "@/butler-ds";
+import { SettingsSection } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
-import { SettingsSelect } from "./SettingsFormComponents";
+import { SettingsPage, SettingsSelect } from "./SettingsFormComponents";
 import { HostedModelForm } from "./HostedModelForm";
 import { LocalModelSettings } from "./LocalModelSettings";
 import { ModelRouteFrame } from "./ModelRouteFrame";
@@ -66,7 +66,7 @@ export function ModelAddEditPage({
 
   return (
     <ModelRouteFrame title={title}>
-      <Stack gap="md">
+      <SettingsPage>
         {route.page !== "edit" && (
           <SettingsSection id="model-provider" kind="form">
           <SettingsSelect
@@ -93,7 +93,7 @@ export function ModelAddEditPage({
             showProviderSelect={false}
           />
         )}
-      </Stack>
+      </SettingsPage>
     </ModelRouteFrame>
   );
 }

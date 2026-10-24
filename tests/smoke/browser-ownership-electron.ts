@@ -49,7 +49,8 @@ try {
   await app.page.clickText("Browser fixture", '[role="menuitem"]');
   await waitBrowser(async () => (await state()).tabs.find((tab) => tab.id === mine)?.owner === "conversation:general", "bring changes ownership");
   await app.internal("tabs.list");
-  assert.equal((await app.internal("tab.observe", mine)).reason, "signed_in_unavailable");
+  // 4c60130e0: the gateway's signed-in fence refuses an ungranted signed-in page before main sees the call.
+  assert.equal((await app.internal("tab.observe", mine)).reason, "navigation_denied");
   await nativeAligned(app);
   const before = (await state()).tabs.filter((tab) => tab.owner === "conversation:general").map((tab) => tab.id);
   const from = await center('[data-slot=tab-strip] [role="tab"]'); const to = await center('[data-test-class="tab-strip-tab"]:last-child [role="tab"]');

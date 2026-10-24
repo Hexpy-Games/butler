@@ -8,8 +8,9 @@ import { smokeBrowserArgs } from "../support/smoke-browser.ts";
 
 let round = 0;
 const texts = ["Before the first question.", "Before the second question.", "Before the third question.", "New continuation after all answers."];
+// Background rounds (title, smart group) stream the same text but offer no tools; only the conversation turn does.
 const isConversation = (request: import("../support/native-app-server.ts").StubModelRequest) =>
-  request.stream && JSON.stringify(request.messages).includes("Help me choose.");
+  request.stream && Array.isArray(request.body.tools) && request.body.tools.length > 0 && JSON.stringify(request.messages).includes("Help me choose.");
 const baseline = process.env.BUTLER_SMOKE_BASELINE === "1";
 const server = await createNativeAppServer({
   uiRoot: process.env.BUTLER_SMOKE_UI_ROOT,

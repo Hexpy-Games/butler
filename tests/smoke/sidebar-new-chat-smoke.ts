@@ -29,7 +29,9 @@ const children = (view: SpaceView, parent: string) =>
 async function settle(page: Page) {
   await page.evaluate(() => document.fonts.ready);
   await page.waitForFunction(() => document.getAnimations().every(animation =>
-    animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
+    // Scroll-driven animations follow scroll position, not time, and never finish.
+    animation.timeline !== document.timeline || animation.effect?.getTiming().iterations === Infinity ||
+      animation.playState !== "running"));
 }
 async function shot(page: Page, name: string) {
   await settle(page);
