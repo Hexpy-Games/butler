@@ -38,6 +38,8 @@
 //! - [`cpu`]: how many performance cores the machine has.
 //! - [`memory`]: how much physical memory the machine has.
 //! - [`desktop`]: whether a browser can open, and opening a link in it.
+//! - [`download_mark`]: the downloaded-from-the-internet mark (quarantine,
+//!   Mark-of-the-Web) on a file another app opens.
 //! - [`sqlite`]: file database opens with the host's path-capable VFS.
 //! - [`stdio`]: this process's stdin and stdout as one async stream.
 //! - [`browser_profiles`]: other browsers' profiles and bookmark files, for import.
@@ -68,6 +70,7 @@ pub mod command_sandbox;
 pub mod cpu;
 pub mod data_paths;
 pub mod desktop;
+pub mod download_mark;
 pub mod fs_space;
 pub mod install_link;
 pub mod instance;

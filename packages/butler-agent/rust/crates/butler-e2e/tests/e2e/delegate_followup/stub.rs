@@ -14,12 +14,15 @@ use tokio::sync::Notify;
 
 pub(crate) const OWNER: &str = "AI 연구를 조사해 주세요.";
 pub(crate) const MESSAGE: &str = "Check an additional source.";
+pub(crate) const BUSY: &str = "Hold this turn while I prepare more notes.";
 pub(crate) const FOLLOWUP: &str = "다시 조사해줄래?";
 #[derive(Default)]
 pub(crate) struct Script {
     steps: Mutex<HashMap<String, usize>>,
     pub relation: Mutex<String>,
     pub requests: Mutex<Vec<Value>>,
+    pub busy: Notify,
+    pub release_busy: Notify,
     pub held: Notify,
     pub release: Notify,
     pub failing: AtomicBool,
@@ -82,6 +85,10 @@ async fn reply(
         *index += 1;
         step
     };
+    if key.user_request == BUSY && step == 0 {
+        script.busy.notify_one();
+        script.release_busy.notified().await;
+    }
     if child && step == 3 && script.terminal_fault.load(Ordering::SeqCst) {
         return (axum::http::StatusCode::BAD_REQUEST,
             Json(json!({"error":{"code":"invalid_request","message":"Stub terminal provider failure"}})))

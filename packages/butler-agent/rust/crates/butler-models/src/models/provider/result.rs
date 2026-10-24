@@ -32,6 +32,7 @@ pub(super) fn decode(
     {
         text_tool_call_names = local::rejected_text_calls(text, request);
     }
+    let output_truncated = cutoff::mark(&response, carrier, &mut calls);
     let identity = reported
         .filter(|value| !butler_core::public_text::trim_js_whitespace(value).is_empty())
         .map(|reported_model| ProviderIdentity {
@@ -60,6 +61,7 @@ pub(super) fn decode(
         (provider == "openai").then(|| openai_continuation(&response, request, legacy_projection));
     retain_rejected_text(&mut continuation, text.as_deref(), &text_tool_call_names);
     ModelRoundResult {
+        output_truncated,
         reasoning_summary: None,
         nonfinal: nonfinal(&response, carrier),
         text,
@@ -442,5 +444,6 @@ mod local;
 mod anthropic_history;
 
 mod call;
+mod cutoff;
 mod responses;
 use call::call;

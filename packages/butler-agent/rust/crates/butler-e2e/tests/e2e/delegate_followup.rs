@@ -9,6 +9,8 @@
 mod failure;
 #[path = "delegate_followup/project.rs"]
 mod project;
+#[path = "delegate_followup/ordering.rs"]
+mod requires_e2e_fixtures;
 #[path = "delegate_followup/stub.rs"]
 pub(crate) mod stub;
 use butler_e2e::e2e::{

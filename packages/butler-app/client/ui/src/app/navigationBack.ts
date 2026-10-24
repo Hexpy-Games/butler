@@ -8,6 +8,7 @@ import { libraryParent, libraryTitle } from "@/components/library/libraryNav";
 export function parentView(view: AppView): AppView | null {
   if (view.kind === "history") return view.from === "settings" ? { kind: "settings", section: "browser" } : { kind: "browser" };
   if (view.kind === "library") return libraryParent(view);
+  if (view.kind === "plan-overview") return { kind: "project-dashboard", projectId: view.projectId };
   if (view.kind === "automation-detail") return { kind: "automations" };
   return null;
 }

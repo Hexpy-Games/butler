@@ -1,3 +1,4 @@
+import { useActiveCanonEpic } from "../canon/useActiveCanonEpic.ts";
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { RefObject } from "react";
@@ -27,6 +28,7 @@ export function ComposerInputSurface({
   question?: { key: string; panel: ComposerQuestionPanelProps };
 }) {
   useAppLocale();
+  const epic = useActiveCanonEpic();
   if (authorityDecision && !authorityDecision.composingMessage) {
     return <ComposerAuthorityDecisionSurface decision={authorityDecision} />;
   }
@@ -43,7 +45,7 @@ export function ComposerInputSurface({
         ) : planDecision?.editingInstruction ? (
           <ComposerPlanInstructionContext decision={planDecision} />
         ) : null}
-        <ComposerTextArea placeholder={authorityDecision ? undefined : planDecision?.instructionPlaceholder} />
+        <ComposerTextArea placeholder={authorityDecision ? undefined : planDecision?.instructionPlaceholder ?? (epic ? appCopy.canon.epicPlaceholder : undefined)} />
         <ComposerAttachments />
       </ComposerCardExpandedBody>
       <ComposerToolbar />

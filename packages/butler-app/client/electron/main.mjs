@@ -129,6 +129,7 @@ import {
 } from "./cache-budget-runtime.mjs";
 import { createSessionFolderLauncher } from "./session-folder-launch.mjs";
 import { registerLogsExport } from "./logs-export.mjs";
+import { registerOpenMessageFile } from "./open-message-file.mjs";
 import { createBrowserHost } from "./browser/host-channel.mjs";
 import { isSecuritySenderOrigin, readAppLocalAdmin, requestSecurityRoute } from "./app-security-admin.mjs";
 import { clearAppOwnedData, relaunchAfterFullReset, requestFullReset } from "./app-full-reset.mjs";
@@ -2595,6 +2596,13 @@ registerLogsExport({
   readUiCrashes: () => uiCrashStore.read(),
   isTrustedSender: (event) => event.sender === mainWindow?.webContents,
   saveLabel: async () => getDesktopCopy(await readDesktopLanguage()).save,
+});
+
+registerOpenMessageFile({
+  ipcMain,
+  serverFetch: appServerFetch,
+  openPath: desktopShell.openPath,
+  isTrustedSender: (event) => event.sender === mainWindow?.webContents,
 });
 
 ipcMain.handle("butler:save-message-file", async (_event, input = {}) => {

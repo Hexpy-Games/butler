@@ -60,7 +60,8 @@ function monitor(url: URL) {
   // As in the gateway, only a session view splits its usage by role.
   if (!session) delete view.model.byRole;
   view.topSessions = [{ sessionId: "s1", title: backendTitle, kind: "chat", totalTokens: delegated ? 96320 : 51620, requests: delegated ? 11 : 3, lastUsedMs: now },
-    { sessionId: "s2", title: "Daily review", kind: "schedule", totalTokens: 1200, requests: 1, lastUsedMs: now - 3600000 }];
+    { sessionId: "s2", title: "Daily review", kind: "schedule", totalTokens: 1200, requests: 1, lastUsedMs: now - 3600000 },
+    { sessionId: "memory-hot-summary", title: null, kind: "butler", totalTokens: 1100, requests: 1, lastUsedMs: now - 3600000 }];
   if (state !== "empty") view.topSessions.push(...Array.from({ length: 6 }, (_, i) => ({ sessionId: `s${i + 3}`, title: `Review ${i + 3}`, kind: "chat" as const, totalTokens: 1000 - i * 100, requests: 1, lastUsedMs: now })));
   view.previousPeriod = { totalTokens: 40000 };
   view.model.byModel = { "openai/gpt-6-luna": { ...view.model } };
@@ -345,8 +346,11 @@ try {
       await page.getByRole("tab", { name: "도구", exact: true }).click();
       await page.getByText("파일 읽기", { exact: true }).waitFor();
       await page.getByRole("tab", { name: "대화", exact: true }).click();
+      // Butler's own work is not a conversation, so it never reads as a new chat.
+      await page.getByRole("tabpanel").getByRole("button", { name: /^버틀러 작업/u }).waitFor();
+      assert.equal(await page.getByRole("tabpanel").getByRole("button", { name: /새 대화/u }).count(), 0);
       assert.equal(await page.getByRole("tabpanel").getByRole("button", { name: /Review 8/u }).count(), 0);
-      await page.getByRole("button", { name: "모두 보기 8개", exact: true }).click();
+      await page.getByRole("button", { name: "모두 보기 9개", exact: true }).click();
       const fullPicker = page.locator('[data-slot="filtered-select-popover"]');
       await fullPicker.getByRole("textbox", { name: "대화 검색" }).fill("Review 8");
       await Promise.all([page.waitForResponse(r => new URL(r.url()).searchParams.get("session_id") === "s8"), fullPicker.getByRole("button", { name: /Review 8/u }).click()]);
@@ -385,6 +389,9 @@ try {
       await picker.getByRole("textbox", { name: "대화 검색" }).fill("no matching title");
       await picker.getByText("일치하는 대화가 없습니다", { exact: true }).waitFor();
       await picker.getByRole("textbox", { name: "대화 검색" }).fill("");
+      await picker.getByRole("button", { name: "버틀러 작업", exact: true }).click();
+      await picker.getByRole("button", { name: /^버틀러 작업 /u }).waitFor();
+      assert.equal(await picker.getByRole("button", { name: /새 대화/u }).count(), 0);
       await picker.getByRole("button", { name: "예약 작업", exact: true }).click();
       assert.equal(await picker.getByRole("button", { name: /Login form refactor/u }).count(), 0);
       await picker.getByRole("textbox", { name: "대화 검색" }).fill("Daily");

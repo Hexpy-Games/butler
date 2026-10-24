@@ -62,6 +62,14 @@ export function formatArtifactSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/**
+ * The artifact kind of a stored file, from the kind the agent decided by its content: text previews as text,
+ * a picture as a picture, and any other file (an Office document, an archive) by its type or not at all.
+ */
+export function storedFileArtifactKind(file: { kind: string }): "image" | "document" | "file" {
+  return file.kind === "image" ? "image" : file.kind === "text" ? "document" : "file";
+}
+
 export function artifactPreviewMode(
   artifact: SessionArtifactSummary,
 ): ArtifactPreviewMode {

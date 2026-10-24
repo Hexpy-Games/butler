@@ -48,6 +48,7 @@ pub(super) enum Handler {
     MessageUpload,
     Models,
     Monitors,
+    OpenedFiles,
     Operation,
     Output,
     Personalization,
@@ -150,6 +151,7 @@ const ROUTES: &[(&str, Handler)] = &[
         "/internal/subsession-result",
         Handler::InternalSubsessionResult,
     ),
+    ("/internal/opened-files", Handler::OpenedFiles),
     ("/internal/wallpaper", Handler::Wallpapers),
     ("/internal/wallpaper-modules", Handler::Wallpapers),
     (

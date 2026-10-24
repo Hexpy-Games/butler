@@ -11,6 +11,8 @@ pub(crate) mod fixtures;
 mod inheritance;
 #[path = "usage_delegated/recovery.rs"]
 mod recovery;
+#[path = "usage_delegated/split.rs"]
+mod split;
 #[path = "usage_delegated/stub.rs"]
 mod stub;
 use butler_e2e::e2e::{HarnessError, cassette::Cassette, scenario::Setup};

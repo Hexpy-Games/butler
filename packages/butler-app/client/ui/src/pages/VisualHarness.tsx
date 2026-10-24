@@ -18,6 +18,7 @@ import { Sidebar } from "@/components/layout/Sidebar.tsx";
 import { Titlebar } from "@/components/layout/Titlebar.tsx";
 import { Conversation } from "@/components/conversation/Conversation.tsx";
 import { Inspector } from "@/components/inspector/Inspector.tsx";
+import { PlanOverview } from "@/components/canon/PlanOverview.tsx";
 import { ProjectDashboardView } from "@/components/management/ProjectDashboardView.tsx";
 import { AppToaster } from "@/components/common/AppToaster.tsx";
 import { ImageViewerHost } from "@/components/media/ImageViewerHost";
@@ -293,6 +294,8 @@ export function VisualHarness() {
             <Titlebar />
             {view.kind === "browser" ? (
               <Stack fill gap="none"><BrowserArea /></Stack>
+            ) : view.kind === "plan-overview" ? (
+              <PlanOverview key={`${view.projectId}:${view.planId}`} projectId={view.projectId} planId={view.planId} />
             ) : view.kind === "project-dashboard" ? (
               <ProjectDashboardView
                 initialDashboard={HARNESS_PROJECT_DASHBOARD}

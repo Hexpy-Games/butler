@@ -7,6 +7,8 @@ use std::{
     fmt::Write,
     sync::{Arc, Mutex},
 };
+/// The branch summarizer's instructions (`topic_branch.rs`).
+pub(super) const SUMMARY: &str = "Summarize the quoted conversation for a new conversation.";
 #[derive(Default)]
 pub(super) struct Script {
     works: Mutex<HashMap<String, String>>,
@@ -35,7 +37,9 @@ async fn reply(
 ) -> impl axum::response::IntoResponse {
     let key = matching::key("/v1/responses", &body, &Placeholders::default());
     let instructions = body["instructions"].as_str().unwrap_or("");
-    let role = if instructions.contains("You run one delegated Work for Butler")
+    let role = if instructions.starts_with(SUMMARY) {
+        "summary"
+    } else if instructions.contains("You run one delegated Work for Butler")
         || key.user_request.starts_with("role: steward")
     {
         "steward"

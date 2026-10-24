@@ -1,11 +1,11 @@
 //! Configured provider prompt shared by the host and product-path benchmarks.
 use super::{
     RecallJudgeCandidate, RecallJudgeFuture, RecallJudgePort, RecallJudgeResult,
-    RecallJudgeUnavailable,
+    RecallJudgeUnavailable, RecallRuntime,
 };
 use butler_models::models::{
-    PromptJsonSchema, ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest,
-    ReasoningEffort,
+    PromptJsonSchema, PromptUsageAttribution, ProviderPromptLifecycle, ProviderPromptPort,
+    ProviderPromptRequest, ReasoningEffort,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -36,11 +36,18 @@ impl ConfiguredRecallJudge {
     async fn call(
         &self,
         model: &str,
-        question: &str,
+        runtime: &RecallRuntime,
         candidates: &[RecallJudgeCandidate],
         cancellation: CancellationToken,
     ) -> Result<RecallJudgeResult, RecallJudgeUnavailable> {
-        let prompt = json!({"question":question,"candidates":candidates}).to_string();
+        let prompt =
+            json!({"question":runtime.current_user_message,"candidates":candidates}).to_string();
+        let attribution = PromptUsageAttribution {
+            root_session_id: runtime.usage_root.as_deref(),
+            role: runtime.usage_role.as_deref(),
+            turn_id: Some(&runtime.turn_id),
+            ..PromptUsageAttribution::for_phase("recall_judge")
+        };
         let schema = json!({"type":"object","additionalProperties":false,"properties":{"ranked":{"type":"array","maxItems":10,"items":{"type":"integer"}}},"required":["ranked"]});
         let schema = schema.as_object().ok_or(RecallJudgeUnavailable)?;
         let response = self
@@ -61,9 +68,7 @@ impl ConfiguredRecallJudge {
                     cancellation,
                     attachments: &[],
                     butler_data: None,
-                    usage_attribution: Some(
-                        &butler_models::models::PromptUsageAttribution::for_phase("recall_judge"),
-                    ),
+                    usage_attribution: Some(&attribution),
                     stream_observer: None,
                     provider_retry_attempts: Some(0.0),
                 },
@@ -83,7 +88,7 @@ impl ConfiguredRecallJudge {
 impl RecallJudgePort for ConfiguredRecallJudge {
     fn rank<'a>(
         &'a self,
-        question: &'a str,
+        runtime: &'a RecallRuntime,
         candidates: &'a [RecallJudgeCandidate],
         cancellation: CancellationToken,
     ) -> RecallJudgeFuture<'a> {
@@ -91,9 +96,7 @@ impl RecallJudgePort for ConfiguredRecallJudge {
             let Some(model) = self.source.model().await? else {
                 return Ok(None);
             };
-            let result = self
-                .call(&model, question, candidates, cancellation)
-                .await?;
+            let result = self.call(&model, runtime, candidates, cancellation).await?;
             if self.source.model().await?.as_deref() != Some(&model) {
                 return Err(RecallJudgeUnavailable);
             }

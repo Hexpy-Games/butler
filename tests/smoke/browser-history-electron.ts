@@ -2,7 +2,7 @@
 /** Functional history acceptance in the real App with disposable data and no live model. */
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
 import { shellReady } from "../support/browser-shell-acceptance";
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE!; assert.ok(evidence); mkdirSync(evidence, { recursive: true });
@@ -121,6 +121,21 @@ try {
   const chosen = (await a.gateway.api<{ items: Array<{ url: string }> }>("/browser-history/suggestions?q=127.0.0.1")).items[0]!.url;
   await a.page.press("ArrowDown"); await a.page.press("Enter");
   await waitBrowser(() => a.main(`globalThis.browserAgentSubject.tabs.get(globalThis.browserAgentSubject.activeId)?.url===${JSON.stringify(chosen)}`), "Enter navigates to selected history suggestion");
+  // Typed without a scheme, a private (here loopback) address opens over http; an explicit http address stays http.
+  const settled = (label: string) => waitBrowser(() => a.main("globalThis.browserAgentSubject.tabs.get(globalThis.browserAgentSubject.activeId).status==='idle'"), label);
+  await settled("suggestion visit settled");
+  await a.main(`(()=>{const E=process.getBuiltinModule('module').createRequire(${JSON.stringify(resolve("packages/butler-app/client/electron/package.json"))})('electron');globalThis.mainFrameUrls=[];const hook=c=>{if(c.mainFrameTrace)return;c.mainFrameTrace=true;c.on('did-start-navigation',e=>{if(e.isMainFrame)globalThis.mainFrameUrls.push(e.url)})};E.webContents.getAllWebContents().forEach(hook);E.app.on('web-contents-created',(_e,c)=>hook(c))})()`);
+  const typed = [new URL("Bare", fixture.url).href, new URL("Explicit", fixture.url).href];
+  await a.main("globalThis.browserAgentSubject.shortcut({type:'keyDown',meta:true,key:'l'},true)");
+  await fill('[aria-label="Address"]', `127.0.0.1:${fixture.port}/Bare`); await a.page.press("Enter"); await ready("History Bare");
+  const activeUrl = () => a.main<string>("globalThis.browserAgentSubject.tabs.get(globalThis.browserAgentSubject.activeId).url");
+  assert.equal(await activeUrl(), typed[0]);
+  // The same navigate call the address field submits.
+  await settled("bare visit settled"); await a.call("navigate", { id: await a.main<string>("globalThis.browserAgentSubject.activeId"), value: typed[1] }); await ready("History Explicit");
+  assert.equal(await activeUrl(), typed[1]);
+  const mainFrames = (await a.main<string[]>("globalThis.mainFrameUrls")).filter(url => URL.canParse(url) && new URL(url).host === fixture.url.host);
+  writeFileSync(join(evidence, "typed-address-navigations.json"), JSON.stringify(mainFrames, null, 2));
+  assert.deepEqual(mainFrames, typed, "typed addresses navigate main frames only over http");
   await a.main("globalThis.browserAgentSubject.shortcut({type:'keyDown',meta:true,key:'y'})");
   await waitBrowser(() => a.page.expression("Boolean(document.querySelector('[data-row-id]'))"), "history reopened");
   const prior = (await rows()).items.length;
@@ -135,7 +150,7 @@ try {
   await a.page.expression("(()=>{const s=document.querySelector('[role=dialog] select');s.value='all';s.dispatchEvent(new Event('change',{bubbles:true}));})()");
   await a.page.clickText("Delete", "[role=dialog] button");
   await waitBrowser(async () => !(await rows()).items.length, "clear dialog removes all visits");
-  writeFileSync(join(evidence, "result.json"), JSON.stringify({ ok: true, visits: 6, excludedIframe: true, privateMode: true, selectedDelete: true, keyboardEnter: true, singleDelete: true, openInTab: true, clearDialog: true, screenshots: 16 }, null, 2));
+  writeFileSync(join(evidence, "result.json"), JSON.stringify({ ok: true, visits: 6, excludedIframe: true, privateMode: true, selectedDelete: true, keyboardEnter: true, singleDelete: true, openInTab: true, clearDialog: true, typedHttp: true, screenshots: 16 }, null, 2));
 } catch (error) {
   writeFileSync(join(evidence, "failure.json"), JSON.stringify({ error: String(error), main: app?.lastMain(), diagnostics: await app?.page.diagnostics().catch(() => null) }));
   await app?.shot("failure").catch(() => {}); throw error;

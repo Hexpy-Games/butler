@@ -3,7 +3,7 @@ use rusqlite::Connection;
 use serde_json::Value;
 
 use super::{StorageError, StorageResult};
-use crate::btcc::identity::sqlite_stable_json;
+use crate::btcc::identity::{sqlite_document_json, sqlite_stable_json};
 use crate::btcc::turn::{ExecutionRoute, TurnSemanticState};
 
 pub(super) fn error(code: StorageCode, message: impl Into<String>) -> StorageError {
@@ -15,6 +15,7 @@ pub(super) fn json(value: &str, code: StorageCode) -> StorageResult<Value> {
         .map_err(|error| StorageError::new(code, error.to_string()).with_source(error))
 }
 
+/// The NFC-normalized canonical form, for digests and identity comparisons.
 // Passthrough: generic JSON canonicalization/hashing over arbitrary documents.
 pub(super) fn canonical_json(value: &Value) -> StorageResult<String> {
     sqlite_stable_json(value).map_err(|error| {
@@ -22,12 +23,21 @@ pub(super) fn canonical_json(value: &Value) -> StorageResult<String> {
     })
 }
 
-/// [`canonical_json`] of a typed record.
-pub(super) fn canonical_record<T: serde::Serialize>(record: &T) -> StorageResult<String> {
+/// The stored form of a document that is parsed back: canonical key order,
+/// strings exact. Its [`canonical_json`] identity is unchanged.
+// Passthrough: generic JSON canonicalization over arbitrary documents.
+pub(super) fn document_json(value: &Value) -> StorageResult<String> {
+    sqlite_document_json(value).map_err(|error| {
+        StorageError::new(StorageCode::CanonicalJson, error.message()).with_source(error)
+    })
+}
+
+/// [`document_json`] of a typed record.
+pub(super) fn document_record<T: serde::Serialize>(record: &T) -> StorageResult<String> {
     let value = serde_json::to_value(record).map_err(|error| {
         StorageError::new(StorageCode::CanonicalJson, error.to_string()).with_source(error)
     })?;
-    canonical_json(&value)
+    document_json(&value)
 }
 
 /// ECMAScript JSON.stringify object enumeration over an insertion-preserving Value.

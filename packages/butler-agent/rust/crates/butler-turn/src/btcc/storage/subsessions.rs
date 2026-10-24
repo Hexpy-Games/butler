@@ -442,9 +442,31 @@ impl SqliteSubsessionRepository {
         }).await
     }
 
-    /// Marks a child result delivered.
-    pub async fn mark_delivered(&self, result: String, now: String) -> Result<(), StorageError> {
-        self.storage.execute(move|db| { db.execute("UPDATE btcc_subsession_outbox SET status='delivered',delivered_at=?2 WHERE result_id=?1 AND status='pending'",params![result,now]).map_err(StorageError::sqlite)?; Ok(()) }).await
+    /// Marks a child result delivered and returns its changed execution link.
+    pub async fn mark_delivered(
+        &self,
+        result: String,
+        now: String,
+    ) -> Result<Option<(String, String)>, StorageError> {
+        self.storage
+            .execute(move |db| {
+                let tx = db.transaction().map_err(StorageError::sqlite)?;
+                let link = tx.query_row(
+                "SELECT r.parent_session_id,r.child_session_id FROM btcc_subsession_outbox o \
+                 JOIN btcc_session_relations r ON r.relation_id=o.relation_id \
+                 WHERE o.result_id=?1 AND o.status='pending'",
+                [&result], |row| Ok((row.get(0)?, row.get(1)?)),
+            ).optional().map_err(StorageError::sqlite)?;
+                tx.execute(
+                    "UPDATE btcc_subsession_outbox SET status='delivered',delivered_at=?2 \
+                WHERE result_id=?1 AND status='pending'",
+                    params![result, now],
+                )
+                .map_err(StorageError::sqlite)?;
+                tx.commit().map_err(StorageError::sqlite)?;
+                Ok(link)
+            })
+            .await
     }
 }
 

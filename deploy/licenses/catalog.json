@@ -5,8 +5,8 @@
     "deploy/licenses/generate.mjs": "eb413c424649cc6ef3bc734cb1a9479cf8ddffb3af398601a974268c229d7c34",
     "deploy/licenses/inputs.mjs": "f9a38331fa5a8f26f9d745f0cf3bfaea028f2d5dc7c8e8aa4d7af1b923cb5124",
     "deploy/licenses/refresh.py": "bddecf7f564eb6da112439c87fca94158f22497a5094dd53d9389ff918ced71b",
-    "packages/butler-agent/rust/Cargo.lock": "b0e497d2e18fbc3039783f26839e594ef643d57d52bc1e049dfc8c7462105448",
-    "packages/butler-agent/rust/Cargo.toml": "89702b6b80895f911ba3785aec3b60181bf98dd3391d38e441b552ca14643111",
+    "packages/butler-agent/rust/Cargo.lock": "c6b4949662459655157b6a3da1bbbbae1030e5a3e375b97ebf9da9bad2c06e48",
+    "packages/butler-agent/rust/Cargo.toml": "5d2d424ec9a5a0efc862cb4193c6c0902d8336747f23b3217091286ce99a7c9d",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
     "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "bb3608c84f7dfea4387cae387fae1241709c45001fce35129f3bab3c594587f6",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
@@ -637,12 +637,12 @@
         "dd0ddf9ab9520a4f378d51d863dd7ccdad7ddd225dc8cef0c934ac07bb0d5f4b"
       ],
       "files": [
-        "https://raw.githubusercontent.com/hugeicons/hugeicons/c1b280d3964e115dfdefb58241f6d93ca68f7b6d/LICENSE.md",
-        "https://raw.githubusercontent.com/hugeicons/hugeicons/c1b280d3964e115dfdefb58241f6d93ca68f7b6d/README.md (free icons MIT declaration)"
+        "https://raw.githubusercontent.com/hugeicons/hugeicons/9c48f3723dfb243909fa83501aa7c6423ab972c0/LICENSE.md",
+        "https://raw.githubusercontent.com/hugeicons/hugeicons/9c48f3723dfb243909fa83501aa7c6423ab972c0/README.md (free icons MIT declaration)"
       ],
       "integrity": "sha512-vkMvlnW7Atqh7juhZCadYDvqABWcEeVAkavAK6HJBFbYkLCme5CN51Oc91D5j5ruDja+HQPjMfWkTxxulcwvAQ==",
       "links": [
-        "https://raw.githubusercontent.com/hugeicons/hugeicons/c1b280d3964e115dfdefb58241f6d93ca68f7b6d/LICENSE.md"
+        "https://raw.githubusercontent.com/hugeicons/hugeicons/9c48f3723dfb243909fa83501aa7c6423ab972c0/LICENSE.md"
       ],
       "copyright": [
         "Copyright (c) 2025 Hugeicons"
@@ -1302,12 +1302,10 @@
         "App/Agent browser renderer"
       ],
       "evidenceSha256": [
-        "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
         "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
       ],
       "files": [
-        "LICENSE",
-        "node_modules/@radix-ui/react-slot/LICENSE"
+        "LICENSE"
       ],
       "integrity": "sha512-Fh9rGN0MoI4ZFUNyfFVNU4y9LUz93u9/0K+yLgA2bwRojxM8JU1DyvvMBabnZPBgMWREAJvU2jjVzq+LrFUglw==",
       "links": [
@@ -1580,12 +1578,10 @@
         "App/Agent browser renderer"
       ],
       "evidenceSha256": [
-        "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
         "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
       ],
       "files": [
-        "LICENSE",
-        "node_modules/@radix-ui/react-slot/LICENSE"
+        "LICENSE"
       ],
       "integrity": "sha512-72F2T+PLlphrqLcAotYPp0uJMr5SjP5SL01wfEspJbru5Zs5vQaSHb4VB3ZMJPimgHHCHG7gMOeOB9H3Hdmtxg==",
       "links": [
@@ -1697,12 +1693,10 @@
         "App/Agent browser renderer"
       ],
       "evidenceSha256": [
-        "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
         "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138"
       ],
       "files": [
-        "LICENSE",
-        "node_modules/@radix-ui/react-slot/LICENSE"
+        "LICENSE"
       ],
       "integrity": "sha512-m9gTwRkhy2lvCPe6QJp4d3G1TYEUHn/FzJUtq9MjH46an1wJU+GdoGC5VLof8RX8Ft/DlpshApkhswDLZzHIcQ==",
       "links": [
@@ -4653,20 +4647,17 @@
         "App/Agent browser renderer"
       ],
       "evidenceSha256": [
-        "5d0698266086f217bb11ea0499d33453e401fe479fb9126ad04e625e63d3557b",
-        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+        "5d0698266086f217bb11ea0499d33453e401fe479fb9126ad04e625e63d3557b"
       ],
       "files": [
-        "license",
-        "node_modules/@types/unist/LICENSE"
+        "license"
       ],
       "integrity": "sha512-GG2AQYWoLgL877gQIKeRPGO1xF9+eG1ujIb5soS5gPvLQ1y2o8FL90w2QWNdf9I361Mpp7726c+lj3U0qK1uGw==",
       "links": [
         "https://www.npmjs.com/package/parse-entities/v/4.0.2"
       ],
       "copyright": [
-        "Copyright (c) Titus Wormer <mailto:tituswormer@gmail.com>",
-        "Copyright (c) Microsoft Corporation."
+        "Copyright (c) Titus Wormer <mailto:tituswormer@gmail.com>"
       ]
     },
     {
@@ -17220,28 +17211,6 @@
       ]
     },
     {
-      "id": "rust:fsevent-sys@4.1.0",
-      "name": "fsevent-sys",
-      "version": "4.1.0",
-      "license": "MIT",
-      "source": "https://github.com/octplane/fsevent-rust/tree/b3f6d1ae0eb331dd15d28a9984eb3157878ea100",
-      "artifacts": [
-        "macOS App/Agent"
-      ],
-      "evidenceSha256": [
-        "519496efb3118306293263e8a12a4435f1a0da3e2755985679ec6546930486e6"
-      ],
-      "files": [
-        "LICENSE"
-      ],
-      "links": [
-        "https://github.com/octplane/fsevent-rust/blob/b3f6d1ae0eb331dd15d28a9984eb3157878ea100/LICENSE"
-      ],
-      "copyright": [
-        "Copyright (c) 2015 Pierre Baillet"
-      ]
-    },
-    {
       "id": "rust:fsst@4.0.0",
       "name": "fsst",
       "version": "4.0.0",
@@ -21828,11 +21797,11 @@
       ]
     },
     {
-      "id": "rust:notify@8.2.0",
+      "id": "rust:notify@9.0.0-rc.6",
       "name": "notify",
-      "version": "8.2.0",
+      "version": "9.0.0-rc.6",
       "license": "CC0-1.0",
-      "source": "https://github.com/notify-rs/notify/tree/a1d7c2d8f80786679d58ec6d5986a1d4278bc8cf",
+      "source": "https://github.com/notify-rs/notify/tree/a27bfdbb2c453268a3f2fd55680cd247c57cda3a",
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
@@ -21846,7 +21815,7 @@
         "LICENSE-CC0"
       ],
       "links": [
-        "https://github.com/notify-rs/notify/blob/a1d7c2d8f80786679d58ec6d5986a1d4278bc8cf/notify/LICENSE-CC0"
+        "https://github.com/notify-rs/notify/blob/a27bfdbb2c453268a3f2fd55680cd247c57cda3a/notify/LICENSE-CC0"
       ],
       "copyright": []
     },
@@ -22138,6 +22107,28 @@
       ],
       "links": [
         "https://crates.io/crates/objc2-core-foundation/0.3.2"
+      ],
+      "copyright": []
+    },
+    {
+      "id": "rust:objc2-core-services@0.3.2",
+      "name": "objc2-core-services",
+      "version": "0.3.2",
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "source": "https://github.com/madsmtm/objc2/tree/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "artifacts": [
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "259b22f571b54fed25f68ec5abd8eda223e7b0547a806f13ba797a0eabecd64f",
+        "23d608079a47693a26dfc8a5cb01894ad0136a50714d46221d9380aa4a4b4423"
+      ],
+      "files": [
+        "Repository license from objc2-foundation 0.3.2/src/copying.rs",
+        "Repository license from objc2-foundation 0.3.2/src/tests/copying.rs"
+      ],
+      "links": [
+        "https://crates.io/crates/objc2-core-services/0.3.2"
       ],
       "copyright": []
     },
@@ -29763,31 +29754,6 @@
       ]
     },
     {
-      "id": "rust:windows-sys@0.60.2",
-      "name": "windows-sys",
-      "version": "0.60.2",
-      "license": "MIT OR Apache-2.0",
-      "source": "https://github.com/microsoft/windows-rs/tree/4b8893b307719ec23cce698269ca572ef301dc5c",
-      "artifacts": [
-        "Unsigned Windows x64 Agent preview"
-      ],
-      "evidenceSha256": [
-        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
-        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
-      ],
-      "files": [
-        "license-apache-2.0",
-        "license-mit"
-      ],
-      "links": [
-        "https://github.com/microsoft/windows-rs/blob/4b8893b307719ec23cce698269ca572ef301dc5c/crates/libs/sys/license-apache-2.0",
-        "https://github.com/microsoft/windows-rs/blob/4b8893b307719ec23cce698269ca572ef301dc5c/crates/libs/sys/license-mit"
-      ],
-      "copyright": [
-        "Copyright (c) Microsoft Corporation."
-      ]
-    },
-    {
       "id": "rust:windows-sys@0.61.2",
       "name": "windows-sys",
       "version": "0.61.2",
@@ -29832,31 +29798,6 @@
       "links": [
         "https://github.com/microsoft/windows-rs/blob/db06b51c2ebb743efb544d40e3064efa49f28d38/crates/libs/targets/license-apache-2.0",
         "https://github.com/microsoft/windows-rs/blob/db06b51c2ebb743efb544d40e3064efa49f28d38/crates/libs/targets/license-mit"
-      ],
-      "copyright": [
-        "Copyright (c) Microsoft Corporation."
-      ]
-    },
-    {
-      "id": "rust:windows-targets@0.53.5",
-      "name": "windows-targets",
-      "version": "0.53.5",
-      "license": "MIT OR Apache-2.0",
-      "source": "https://github.com/microsoft/windows-rs/tree/32c3144490c016fe496a0aed769bce60987a2e9d",
-      "artifacts": [
-        "Unsigned Windows x64 Agent preview"
-      ],
-      "evidenceSha256": [
-        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
-        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
-      ],
-      "files": [
-        "license-apache-2.0",
-        "license-mit"
-      ],
-      "links": [
-        "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/targets/license-apache-2.0",
-        "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/targets/license-mit"
       ],
       "copyright": [
         "Copyright (c) Microsoft Corporation."
@@ -30007,31 +29948,6 @@
       "links": [
         "https://github.com/microsoft/windows-rs/blob/db06b51c2ebb743efb544d40e3064efa49f28d38/crates/targets/x86_64_msvc/license-apache-2.0",
         "https://github.com/microsoft/windows-rs/blob/db06b51c2ebb743efb544d40e3064efa49f28d38/crates/targets/x86_64_msvc/license-mit"
-      ],
-      "copyright": [
-        "Copyright (c) Microsoft Corporation."
-      ]
-    },
-    {
-      "id": "rust:windows_x86_64_msvc@0.53.1",
-      "name": "windows_x86_64_msvc",
-      "version": "0.53.1",
-      "license": "MIT OR Apache-2.0",
-      "source": "https://github.com/microsoft/windows-rs/tree/d468916ac27a36fb8a12bafc1bf5c0ec2fe92238",
-      "artifacts": [
-        "Unsigned Windows x64 Agent preview"
-      ],
-      "evidenceSha256": [
-        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
-        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
-      ],
-      "files": [
-        "license-apache-2.0",
-        "license-mit"
-      ],
-      "links": [
-        "https://github.com/microsoft/windows-rs/blob/d468916ac27a36fb8a12bafc1bf5c0ec2fe92238/crates/targets/x86_64_msvc/license-apache-2.0",
-        "https://github.com/microsoft/windows-rs/blob/d468916ac27a36fb8a12bafc1bf5c0ec2fe92238/crates/targets/x86_64_msvc/license-mit"
       ],
       "copyright": [
         "Copyright (c) Microsoft Corporation."

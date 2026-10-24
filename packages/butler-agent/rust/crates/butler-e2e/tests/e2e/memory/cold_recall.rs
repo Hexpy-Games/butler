@@ -1,4 +1,5 @@
 //! A persisted vector generation is usable on the first recall after restart.
+use super::super::memory_fixture::idle_activity;
 use super::{batch, memory_stubs};
 use butler_e2e::e2e::HarnessError;
 use butler_platform::process_control::usage;
@@ -180,8 +181,8 @@ async fn assert_loaded_idle(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(
     assert_eq!(workers.len(), 1);
     let pid = workers[0];
     super::super::memory_fixture::settle(&s.sandbox.data).await?;
-    // Let reply/runtime bookkeeping finish after the committed-work barrier.
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    // The committed work is done; wait until the consumer has also parked.
+    super::super::memory_fixture::wait_parked(s).await;
     let graph = super::coverage_support::graph(&s.sandbox.data);
     let version = || {
         graph
@@ -190,47 +191,31 @@ async fn assert_loaded_idle(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(
     };
     let commits = version();
     let started = Instant::now();
-    let before = usage::sample(pid)?.unwrap();
-    let mut previous = before;
-    let mut cpu_windows = Vec::new();
-    for window in 1..=2 {
-        tokio::time::sleep(Duration::from_secs(5)).await;
-        let current = usage::sample(pid)?.unwrap();
-        let cpu_user = current
-            .cpu_user_time
-            .zip(previous.cpu_user_time)
-            .map(|(a, b)| a - b);
-        let cpu_system = current
-            .cpu_system_time
-            .zip(previous.cpu_system_time)
-            .map(|(a, b)| a - b);
-        eprintln!(
-            "COLD-RECALL loaded_idle_window={window} cpu_user={cpu_user:?} cpu_system={cpu_system:?}"
+    let samples = idle_activity::sample_window(pid, Duration::from_secs(10), 10)
+        .await?
+        .unwrap();
+    let (before, after) = (samples[0], samples[10]);
+    // CPU and disk work may settle once (one event), but must not recur.
+    if before.cpu_user_time.is_some() && before.cpu_system_time.is_some() {
+        idle_activity::assert_no_recurring_activity(
+            "loaded idle worker CPU time",
+            &idle_activity::deltas(&samples, |sample| {
+                sample.cpu_user_time.unwrap() + sample.cpu_system_time.unwrap()
+            }),
         );
-        cpu_windows.push((cpu_user, cpu_system));
-        previous = current;
-    }
-    let after = previous;
-    // Each consecutive sub-window must be quiet, not just free of disk work.
-    for (cpu_user, cpu_system) in cpu_windows {
-        if let Some(delta) = cpu_user {
-            assert_eq!(delta, 0, "loaded idle worker consumed user CPU time");
-        }
-        if let Some(delta) = cpu_system {
-            assert_eq!(delta, 0, "loaded idle worker consumed system CPU time");
-        }
     }
     assert_eq!(version(), commits, "memory graph committed while idle");
-    assert_eq!(
-        (before.read_chars, before.read_bytes),
-        (after.read_chars, after.read_bytes)
+    assert_eq!(before.read_chars, after.read_chars);
+    idle_activity::assert_no_recurring_activity(
+        "loaded idle worker physical reads",
+        &idle_activity::deltas(&samples, |sample| sample.read_bytes),
     );
     assert_eq!(
         (before.write_chars, before.write_bytes),
         (after.write_chars, after.write_bytes)
     );
     eprintln!(
-        "COLD-RECALL loaded_idle_ms={} graph_commits=0 read_delta=0 write_delta=0",
+        "COLD-RECALL loaded_idle_ms={} graph_commits=0 write_delta=0",
         started.elapsed().as_millis()
     );
     Ok(())

@@ -1,7 +1,9 @@
+import { canonTaskCounts, canonStatusInput } from "./canonProgressSource.ts";
+import { useButlerStore } from "@/app/store.ts";
 import { useState, type Ref } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { EpicDetail as Epic, EpicInput, PlanCards, WorkTasks, CanonStatus } from "@/app/canonApi.ts";
-import { Box, ButtonContainer, IconButton, KeyValueRow, NativeSelect, NativeSelectOption, Pencil, Stack, Typo } from "@/butler-ds";
+import { Box, Button, ButtonContainer, IconButton, KeyValueRow, NativeSelect, NativeSelectOption, Pencil, Stack, Typo } from "@/butler-ds";
 import { CanonAvatar } from "./CanonAvatar.tsx";
 import { EpicEditForm } from "./EpicEditForm.tsx";
 import { CanonPersonSelect } from "./CanonPersonSelect.tsx";
@@ -17,8 +19,7 @@ export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef }: {
   const copy = appCopy.canon;
   const plan = plans.find(plan => plan.id === epic.plan_id);
   const ordinal = plan ? plan.works.findIndex(work => work.id === epic.id) + 1 : 0;
-  const statusChanged = (status: CanonStatus) => void onWrite({ status,
-    ...(["done", "cancelled"].includes(status) ? { expected_task_graph_revision: epic.task_graph_revision } : {}) }, copy.statusChanged);
+  const statusChanged = (status: CanonStatus) => void onWrite(canonStatusInput(epic, status), copy.statusChanged);
   return <Stack gap="lg" data-test-class="canon-epic-detail" data-epic-id={epic.id}>
     {editing ? <EpicEditForm epic={epic} busy={busy} onSave={onWrite} onClose={() => setEditing(false)} /> : <Stack gap="sm">
       <Stack align="row" cross="start" justify="between" gap="sm">
@@ -39,7 +40,9 @@ export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef }: {
         {ordinal > 0 && <Typo.Caption wrap="nowrap" shrink={false}>· {copy.ordinal(ordinal)}</Typo.Caption>}
       </Stack>} />
     </Stack>
+    {epic.home_session_id && <ButtonContainer size="sm"><Button size="sm" variant="link"
+      onClick={() => useButlerStore.getState().openSession(epic.home_session_id!)}>{copy.openConversation}</Button></ButtonContainer>}
     <SpecTree nodes={epic.specs} />
-    <EpicProgress tasks={tasks} counts={epic.task_counts} />
+    <EpicProgress tasks={tasks} counts={canonTaskCounts(epic)} />
   </Stack>;
 }
