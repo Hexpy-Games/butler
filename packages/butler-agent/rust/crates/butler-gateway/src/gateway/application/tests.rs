@@ -1,5 +1,6 @@
 mod child_results;
 mod controls;
+mod documents;
 
 mod projection_burst;
 mod projection_tests;
@@ -181,6 +182,7 @@ async fn delivered_transcript_final_projects_and_settles_exact_queue_claim() {
         .unwrap();
     let rebuilt_turn = native.0.lock().unwrap()[0].clone();
     let turn_id = rebuilt_turn.turn_id.clone();
+    documents::assert_retry_snapshot(&app, &turn_id).await;
     assert!(
         app.send_message(command("followup", "A queued follow-up"))
             .await

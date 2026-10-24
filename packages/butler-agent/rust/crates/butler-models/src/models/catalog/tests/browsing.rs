@@ -163,7 +163,11 @@ pub(super) fn assert_resolution_rules() {
 }
 
 fn assert_tier_schemes(catalog: &StaticCatalog) {
-    for model in &catalog.models {
+    for model in catalog
+        .models
+        .iter()
+        .filter(|model| !model.is_image_output())
+    {
         if let Some((tier, _)) =
             super::super::presets::infer_tier_and_version(&model.provider_id, &model.model_id)
         {

@@ -41,10 +41,18 @@
   padding: 0 var(--space-1);
 }
 
+/* The search box asks for one width on every platform. An input's own
+   intrinsic width is 20 "average" characters, and Linux and Windows Chromium
+   read Pretendard's average from its CJK-wide font table (306px of text
+   against 171px on macOS), which pushed the popover to its maximum width
+   there. The box keeps the macOS width (171px plus its padding and border)
+   and still fills the popover. */
 .searchControl {
   position: relative;
   display: block;
   min-width: 0;
+  contain: inline-size;
+  contain-intrinsic-inline-size: 215px;
 }
 
 .searchInput {

@@ -1,5 +1,5 @@
 import type { DsBaseProps } from "../../lib/dsProps";
-import type { HTMLAttributes, ReactNode } from "react";
+import type { HTMLAttributes, ReactNode, RefCallback } from "react";
 import styles from "./PageContainer.module.css";
 import { cn } from "../../lib/utils";
 
@@ -16,6 +16,8 @@ export interface PageContainerProps extends DsBaseProps<HTMLAttributes<HTMLEleme
   as?: "main" | "section" | "div";
   /** center (default) or start: keep the capped page at the inline start (settings detail). */
   align?: PageContainerAlign;
+  /** The page frame element (e.g. a block measuring its content column). */
+  ref?: RefCallback<HTMLElement>;
 }
 
 /**

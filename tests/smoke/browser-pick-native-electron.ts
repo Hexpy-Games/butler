@@ -1,9 +1,10 @@
 import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 // test-category: security
-/** Pick granularity, whole modals, cross-site frames and areas through the real App overlay with native OS input. */
+/** Pick granularity, whole modals, cross-site frames and areas through the real App overlay with CDP input. */
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { electronViewInput } from "../support/electron-view-input";
 import { redesignApp } from "../support/browser-redesign-app";
 import { waitBrowser } from "../support/browser-agent-app";
 import { nativeAligned, shellReady } from "../support/browser-shell-acceptance";
@@ -11,8 +12,7 @@ import { overlayRead } from "../support/browser-pick-acceptance";
 import { pages } from "../support/browser-pick-fixtures.mjs";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE!;
-const driver = process.env.BUTLER_NATIVE_MOUSE_EXECUTABLE!;
-assert.ok(evidence && driver, "Evidence and native mouse driver required");
+assert.ok(evidence, "Evidence directory required");
 mkdirSync(evidence, { recursive: true });
 const server: ReturnType<typeof Bun.serve> = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request): Response {
   const page = pages[new URL(request.url).pathname.slice(1)];
@@ -34,15 +34,10 @@ async function point(selector: string, frame?: string, fx = 0.5, fy = 0.5): Prom
     const r=await f.executeJavaScript(rect(${JSON.stringify(`document.querySelector(${JSON.stringify(selector)})`)}));
     return {x:b.x+(o.x+r.x+r.width*${fx})*s,y:b.y+(o.y+r.y+r.height*${fy})*s};})()`);
 }
-async function input(action: string, from: Point, to?: Point | number) {
-  const facts = await app.main<{ pid: number; x: number; y: number }>(`(()=>{${app.win}.show();${app.win}.focus();${app.win}.moveTop();const r=${app.win}.getContentBounds();return {pid:process.pid,x:r.x,y:r.y}})()`);
-  // Raising the window focuses the App renderer; pick mode keeps keys in the overlay it focused on entry.
+const viewInput = electronViewInput(app);
+async function input(action: string, from: Point, to?: Point | string) {
   if (action === "key") await app.main(`${browser}.pointer.view.webContents.focus()`);
-  const args = [driver, String(facts.pid), action, String(facts.x + from.x), String(facts.y + from.y)];
-  if (typeof to === "number") args.push(String(to));
-  else if (to) args.push(String(facts.x + to.x), String(facts.y + to.y));
-  const result = Bun.spawnSync(args);
-  assert.equal(result.exitCode, 0, result.stderr.toString());
+  await viewInput(action, from, to);
 }
 const label = () => overlayRead<string | null>(app, "document.querySelector('[data-pick-outline=hover]')?.textContent ?? null");
 async function hovered(pattern: RegExp, what: string) {
@@ -78,7 +73,7 @@ try {
   const text = await point("#dlg-text");
   await input("move", text); await hovered(/^p · \d+ × \d+ · ↑$/u, "paragraph is the default level");
   steps.push({ hover: await label() }); await app.shot("1-hover-paragraph", true);
-  await input("key", text, 126); await hovered(/^dialog · \d+ × \d+ · ↑↓$/u, "↑ widens to the dialog");
+  await input("key", text, "ArrowUp"); await hovered(/^dialog · \d+ × \d+ · ↑↓$/u, "↑ widens to the dialog");
   steps.push({ up: await label() }); await app.shot("2-up-dialog", true);
   await input("click", text); await picks(1);
   const dialog = await app.main<{ title: string; text: string; rect: Point & { width: number } }>(`${subject()}.selections[0]`);
@@ -100,7 +95,7 @@ try {
   await loadPage("mix", "Pick mix"); await picks(0); await app.shot("4a-navigated-clear", true);
   const framed = await point("#fh", "cross");
   await input("move", framed); await hovered(/^h3 · /u, "framed heading hovered across sites");
-  await input("key", framed, 126); await hovered(/^div · \d+ × \d+ · ↑↓$/u, "↑ widens to the framed card");
+  await input("key", framed, "ArrowUp"); await hovered(/^div · \d+ × \d+ · ↑↓$/u, "↑ widens to the framed card");
   await app.shot("4-frame-card", true);
   await input("click", framed); await picks(1);
   const card = await app.main<{ text: string; title: string }>(`${subject()}.selections[0]`);
@@ -134,7 +129,7 @@ try {
   await input("drag", await point("#strong"), { ...await app.page.expression<Point>("(()=>{const r=document.querySelector('[data-test-class=\"composer-card\"]').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()") });
   await waitBrowser(() => app.page.expression("document.querySelectorAll('[data-slot=element-chip]').length===2"), "two chips in the composer");
   await app.shot("6-composer-chips");
-  await input("key", framed, 53);
+  await input("key", framed, "Escape");
   await waitBrowser(() => app.main(`!${subject()}.picking`), "Escape ends picking");
   writeFileSync(join(evidence, "result.json"), JSON.stringify({ ok: true, steps, dialogCrop, picks: await app.main(`${subject()}.selections.map(({crop,...p})=>p)`) }, null, 2));
 } catch (error) {
