@@ -29,22 +29,24 @@ fn snapshot(path: &Path) -> Result<Snapshot, HarnessError> {
         .collect()
 }
 
-async fn approvals(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), HarnessError> {
+/// Allows read-only observation; returns true, leaving the card open, when the
+/// turn requests a mutation, which this acceptance never approves.
+async fn approvals(s: &butler_e2e::e2e::scenario::Scenario) -> Result<bool, HarnessError> {
     for card in s.gw.approval_requests("general").await? {
         let capability = card["approval"]["action_kind"].as_str().unwrap_or("");
         if !card["questions"].is_null() {
             continue;
         }
         let effect = card["approval"]["command_access"].as_str();
-        assert!(
-            (capability == "other"
-                && matches!(
-                    card["executable"].as_str(),
-                    Some("read_file" | "list_files" | "grep_files")
-                ))
-                || (capability == "run_command" && effect == Some("read_only_unisolated")),
-            "Live observation must await move approval; refusing to approve a mutation"
-        );
+        let observation = (capability == "other"
+            && matches!(
+                card["executable"].as_str(),
+                Some("read_file" | "list_files" | "grep_files")
+            ))
+            || (capability == "run_command" && effect == Some("read_only_unisolated"));
+        if !observation {
+            return Ok(true);
+        }
         let reference = card["request_ref"].as_str().unwrap();
         let reply =
             s.gw.post(
@@ -54,7 +56,7 @@ async fn approvals(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), Harnes
             .await?;
         assert_eq!(reply.status, 202);
     }
-    Ok(())
+    Ok(false)
 }
 
 /// The acceptance verdict and the turn's visible text: assistant messages
@@ -112,9 +114,11 @@ async fn run(
     let id = accepted_turn_id(&s.gw.say("general", "다운로드 폴더 정리해줘").await?)?;
     let deadline = started + Duration::from_secs(300);
     let mut timed_out = false;
+    let mut mutation_requested = false;
     loop {
-        if access == Access::AskAlways {
-            approvals(&s).await?;
+        if access == Access::AskAlways && approvals(&s).await? {
+            mutation_requested = true;
+            break;
         }
         let answer = proposal(&s).await?;
         let terminal_proposal = reported_types(&answer, &extensions)
@@ -165,13 +169,18 @@ async fn run(
     let observed = timings(&s.sandbox.data)?
         .iter()
         .any(|t| t.starts_with("run_command:") || t.starts_with("list_files:"));
-    let complete = actual_totals && actual_types && move_confirmation && observed && !timed_out;
+    let complete = actual_totals
+        && actual_types
+        && move_confirmation
+        && observed
+        && !timed_out
+        && !mutation_requested;
     let mut transcript = answer.clone();
     for card in s.gw.approval_requests("general").await? {
         transcript.push_str(&format!("\ncard: {card}"));
     }
     eprintln!(
-        "DOWNLOADS-LIVE acceptance: totals={actual_totals}; types={actual_types}; confirmation={move_confirmation}; observed={observed}; timed_out={timed_out}"
+        "DOWNLOADS-LIVE acceptance: totals={actual_totals}; types={actual_types}; confirmation={move_confirmation}; observed={observed}; timed_out={timed_out}; mutation_requested={mutation_requested}"
     );
     eprintln!(
         "DOWNLOADS-LIVE {access:?} #{repeat}: {:.2}s; entries={}; files={files}; folders={folders}; types={extensions:?}; tools={tools:?}",
