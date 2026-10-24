@@ -2,12 +2,15 @@
 use super::{GuidedTools, ToolName, access_mode, encoded};
 use butler_core::json::JsonDocument;
 use butler_turn::btcc::{BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
-use serde_json::Value;
+use serde_json::{Value, json};
 pub(super) async fn execute(
     owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    if call.name == ToolName::ReadPriorDelegation {
+        return read_prior_delegation(owner).await;
+    }
     let request = call
         .arguments
         .get("request")
@@ -155,4 +158,18 @@ pub(super) async fn cancel(
         .await
         .map_err(ToolExecutionError::Integrity)?;
     encoded(&result)
+}
+
+/// Returns the complete prior delegation on demand.
+async fn read_prior_delegation(owner: &GuidedTools) -> Result<JsonDocument, ToolExecutionError> {
+    let prior = owner
+        .subsessions
+        .prior_delegation(&owner.binding.source_session_id)
+        .await
+        .map_err(ToolExecutionError::Integrity)?;
+    encoded(&match prior {
+        Some(prior) => json!({"ok":true,"prior_delegation":
+            serde_json::from_str::<Value>(&prior).unwrap_or(Value::String(prior))}),
+        None => json!({"ok":true,"prior_delegation":null}),
+    })
 }

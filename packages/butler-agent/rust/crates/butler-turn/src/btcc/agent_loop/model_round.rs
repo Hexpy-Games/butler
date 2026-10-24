@@ -114,14 +114,19 @@ async fn attempt_round(
 ) -> Result<ModelRoundResult, AttemptError> {
     let timing = super::command_timing::CommandTiming::new("model_projection");
     // Within a turn, already-sent messages are append-only between compactions.
-    // Stale browser results are stubbed in one batch only when over budget.
+    // Stale browser results are stubbed in one batch, only when that pays.
+    let model = &round.input.semantic.model;
     super::browser_context::prune(
         &mut state.messages,
         &mut state.browser_prune,
         state.compacted_through,
-        crate::btcc::continuation_budget::model_context_byte_limit(
-            round.input.semantic.model.context_window_tokens,
-        ),
+        &super::browser_context::PruneEconomy {
+            byte_limit: crate::btcc::continuation_budget::model_context_byte_limit(
+                model.context_window_tokens,
+            ),
+            cached_ratio: model.cached_input_price_ratio,
+            rounds_sent: state.model_round_index.saturating_sub(1),
+        },
     );
     identify_messages(&mut state.messages, &mut state.next_item_ordinal);
     let mut response_item_id = next_item_id(&mut state.next_item_ordinal);

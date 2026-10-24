@@ -279,7 +279,12 @@ fn admit_phase_tools<'a>(
     }
     let delegation: &[&str] = match policy.role {
         PolicyRole::Butler => &["delegate_to_steward", "steer_steward", "cancel_steward"],
-        PolicyRole::Steward => &["delegate_to_worker", "steer_worker", "wait_for_worker"],
+        PolicyRole::Steward => &[
+            "delegate_to_worker",
+            "steer_worker",
+            "wait_for_worker",
+            "read_prior_delegation",
+        ],
         PolicyRole::Worker | PolicyRole::Other(_) => &[],
     };
     push_missing(authorized, catalog, delegation);

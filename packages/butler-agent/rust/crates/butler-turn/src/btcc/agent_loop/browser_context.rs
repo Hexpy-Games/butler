@@ -4,18 +4,20 @@ use serde_json::{Value, json};
 use std::{collections::HashMap, sync::Arc};
 mod prune;
 use prune::Stale;
-pub(super) use prune::{BrowserPrune, prune};
+pub(super) use prune::{BrowserPrune, PruneEconomy, prune};
 mod summary;
 mod zoom;
 
-// Stale browser results stay byte-identical until their estimated size passes
-// the budget; one prune then stubs every stale result since the previous prune.
-// Gemini and Anthropic reuse a cache entry only where an earlier request ended,
-// so rewriting one stale result per round would miss the cache every round.
+// Stale browser results stay byte-identical until stubbing them pays for the
+// cache miss it causes (see `prune::worth_rewriting`); one prune then stubs
+// every stale result. Providers reuse a cache entry only where an earlier
+// request ended, so rewriting per round would miss the cache every round.
 
 struct Cycle {
     obs_index: usize,
     obs_id: String,
+    /// The observation this one lists changes against (observation text v2).
+    delta_of: Option<String>,
     act_indices: Vec<usize>,
     acted: Vec<String>,
     receipt: Option<Value>,
@@ -102,6 +104,7 @@ fn open_cycle(
         tabs.entry(tab).or_default().push(Cycle {
             obs_index: index,
             obs_id: obs_id.into(),
+            delta_of: field(output, "delta_of").as_str().map(str::to_owned),
             act_indices: Vec::new(),
             acted: Vec::new(),
             receipt: act
@@ -119,7 +122,14 @@ fn plan(messages: &[ModelRoundMessage]) -> Vec<Stale> {
     } = history(messages);
     let mut stale = Vec::new();
     for (tab, cycles) in &tabs {
+        // The newest observation stays, and so does each base its change list
+        // builds on, back to the last full listing.
+        let mut chained = true;
         for (cycle, next) in cycles.iter().zip(cycles.iter().skip(1)).rev() {
+            chained = chained && next.delta_of.as_deref() == Some(cycle.obs_id.as_str());
+            if chained {
+                continue;
+            }
             let Some(message) = messages.get(cycle.obs_index) else {
                 continue;
             };
