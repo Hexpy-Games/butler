@@ -35,14 +35,18 @@ Two opt-in row options, both off by default:
   such as a settings card; the focus ring stays inside the card padding.
 - `selected` makes the row a toggle: it sets `aria-pressed` (while the role is
   `button`), a lighter hover, and the `--selection-strong` fill when `true`.
-  The fill fades on `--motion-fast`; with reduced motion only the press scale
-  is dropped.
 
 ```tsx
 <Clickable bleed="inline" stretch selected={active} onClick={toggle}>
   <ListRow title="Release checklist" meta="412K" />
 </Clickable>
 ```
+
+Motion: every row's hover and selected fills fade in and out on
+`--motion-fast` (`--motion-ease-standard`); the pressed fill and the compact
+press scale land on `--motion-instant`. With reduced motion
+(`prefers-reduced-motion: reduce`) the fills change at once. The text variant
+keeps its own color fade.
 
 ## Who can use this component
 Product engineers and agents can use it when composing interactive rows. Design-system maintainers own its keyboard and accessibility contract.
