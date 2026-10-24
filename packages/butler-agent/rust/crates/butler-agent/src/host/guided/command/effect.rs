@@ -81,6 +81,8 @@ pub(super) async fn prepare(
         target: target.clone(),
         effect: effect.to_owned(),
         project_write: project_write && effect == "mutation",
+        deny_secret_reads: scope.deny_secret_reads
+            && args.get("sandbox").and_then(Value::as_str) != Some("none"),
     };
     Ok(PreparedCommandEffect {
         target,
@@ -108,6 +110,9 @@ struct CommandEffectAdapter {
     effect: String,
     /// Runs in the project-write sandbox instead of with full access.
     project_write: bool,
+    /// Outside Full Access and without `sandbox: "none"`: secrets stay
+    /// unreadable to the command on hosts that can deny them.
+    deny_secret_reads: bool,
 }
 
 impl EffectAdapter for CommandEffectAdapter {
@@ -237,6 +242,7 @@ impl CommandEffectAdapter {
                         abort: signal.clone(),
                         allowed_tools_and_effects: self.allowed_tools_and_effects.as_deref(),
                         installation_root: self.installation_root.as_deref(),
+                        deny_secret_reads: self.deny_secret_reads,
                     },
                 )
                 .await
@@ -258,6 +264,7 @@ impl CommandEffectAdapter {
                     abort: signal.clone(),
                     allowed_tools_and_effects: self.allowed_tools_and_effects.as_deref(),
                     installation_root: self.installation_root.as_deref(),
+                    deny_secret_reads: self.deny_secret_reads,
                 },
             )
             .await
@@ -298,11 +305,7 @@ impl CommandEffectAdapter {
                 workspace_root: self.root_identity.clone(),
                 butler_data: self.butler_data.clone(),
                 timeout_ms: args.get("timeout_ms").and_then(Value::as_f64),
-                access: if self.project_write {
-                    GuidedAccess::ProjectWrite
-                } else {
-                    GuidedAccess::FullAccessContained
-                },
+                access: self.mutation_access(),
                 host_environment: (*self.host_environment).clone(),
                 abort: signal.clone(),
             })
@@ -342,10 +345,27 @@ impl CommandEffectAdapter {
         .map_err(|error| {
             butler_turn::btcc::EffectFailure::adapter(error.message()).with_source(error)
         })?;
-        if self.project_write {
-            return project_write_result(&result).map(AdapterOutcome::Applied);
+        match self.mutation_access() {
+            GuidedAccess::ProjectWrite => {
+                project_write_result(&result).map(AdapterOutcome::Applied)
+            }
+            GuidedAccess::SecretReadsDenied => {
+                secret_reads_result(&result).map(AdapterOutcome::Applied)
+            }
+            _ => Ok(AdapterOutcome::Applied(result)),
         }
-        Ok(AdapterOutcome::Applied(result))
+    }
+
+    fn mutation_access(&self) -> GuidedAccess {
+        if self.project_write {
+            GuidedAccess::ProjectWrite
+        } else if self.deny_secret_reads
+            && butler_platform::command_sandbox::secret_reads_deniable()
+        {
+            GuidedAccess::SecretReadsDenied
+        } else {
+            GuidedAccess::FullAccessContained
+        }
     }
 }
 
@@ -354,25 +374,46 @@ impl CommandEffectAdapter {
 fn project_write_result(
     result: &butler_core::json::JsonDocument,
 ) -> Result<butler_core::json::JsonDocument, butler_turn::btcc::EffectFailure> {
-    let failure = |error: butler_core::json::JsonError| {
-        butler_turn::btcc::EffectFailure::adapter("command_result_encoding_failed")
-            .with_source(error)
-    };
+    labelled(result, |value| {
+        value["sandbox"] = if value.get("sandbox_violation").is_some() {
+            "project_write_contained_swept"
+        } else {
+            "project_write_contained"
+        }
+        .into();
+        value["containment"] = butler_platform::command_sandbox::project_write_mechanism().into();
+        if value["ok"] == false {
+            value["next_action"] = butler_platform::command_sandbox::project_write_limits().into();
+        }
+    })
+}
+
+/// Labels the credential-read denial and, when the command failed, says
+/// what it withheld and how to ask the user for it.
+fn secret_reads_result(
+    result: &butler_core::json::JsonDocument,
+) -> Result<butler_core::json::JsonDocument, butler_turn::btcc::EffectFailure> {
+    labelled(result, |value| {
+        value["sandbox"] = "credential_reads_denied".into();
+        if value["ok"] == false {
+            value["next_action"] = butler_platform::command_sandbox::SECRET_READ_LIMITS.into();
+        }
+    })
+}
+
+fn labelled(
+    result: &butler_core::json::JsonDocument,
+    label: impl FnOnce(&mut Value),
+) -> Result<butler_core::json::JsonDocument, butler_turn::btcc::EffectFailure> {
     let mut value: Value = serde_json::from_str(result.as_str()).map_err(|error| {
         butler_turn::btcc::EffectFailure::adapter("command_result_encoding_failed")
             .with_source(error)
     })?;
-    value["sandbox"] = if value.get("sandbox_violation").is_some() {
-        "project_write_contained_swept"
-    } else {
-        "project_write_contained"
-    }
-    .into();
-    value["containment"] = butler_platform::command_sandbox::project_write_mechanism().into();
-    if value["ok"] == false {
-        value["next_action"] = butler_platform::command_sandbox::project_write_limits().into();
-    }
-    butler_core::json::JsonDocument::from_value(&value).map_err(failure)
+    label(&mut value);
+    butler_core::json::JsonDocument::from_value(&value).map_err(|error| {
+        butler_turn::btcc::EffectFailure::adapter("command_result_encoding_failed")
+            .with_source(error)
+    })
 }
 
 fn canonical_root(path: &Path) -> PathBuf {

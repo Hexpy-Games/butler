@@ -60,7 +60,9 @@ pub(super) fn invocation(
             .to_string(),
     );
     let access = match input.access {
-        GuidedAccess::FullAccessContained | GuidedAccess::ProjectWrite => ShellAccess::Full,
+        GuidedAccess::FullAccessContained
+        | GuidedAccess::SecretReadsDenied
+        | GuidedAccess::ProjectWrite => ShellAccess::Full,
         GuidedAccess::ReadOnlyObservation | GuidedAccess::ContainedObservation => {
             ShellAccess::ReadOnly
         }
@@ -76,6 +78,9 @@ pub(super) fn invocation(
             &[],
             &[input.workspace_root.as_path()],
         )
+    } else if input.access == GuidedAccess::SecretReadsDenied {
+        command_sandbox::login_shell(&input.command, access, &environment)
+            .and_then(|shell| command_sandbox::deny_secret_reads(shell, &environment, None))
     } else {
         command_sandbox::login_shell(&input.command, access, &environment)
     };

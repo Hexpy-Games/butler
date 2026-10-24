@@ -26,6 +26,10 @@ use tokio_util::sync::CancellationToken;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GuidedAccess {
     FullAccessContained,
+    /// An approved command outside Full Access: the user's writes and
+    /// network, while the kernel keeps credential stores and Butler's
+    /// secrets unreadable (hosts with `secret_reads_deniable` only).
+    SecretReadsDenied,
     ReadOnlyObservation,
     ContainedObservation,
     /// A mutation contained to the project folder (Auto access): writes only
@@ -100,6 +104,9 @@ pub struct LegacyShell {
     pub command: String,
     pub pipefail: bool,
     pub read_only_installation_root: Option<PathBuf>,
+    /// The Butler data folder whose secrets, with the user's credential
+    /// stores, the kernel keeps unreadable; `None` runs with full access.
+    pub deny_secret_reads: Option<PathBuf>,
 }
 
 /// The captured output of a structured pipeline.

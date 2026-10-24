@@ -146,6 +146,7 @@ export function approvalRequestView(
     title: operation && label && !SENTENCE_KINDS.has(actionKind) ? copy.operation(label, operation.access === "read_only")
       : sentence(actionKind, approval, workspace, copy),
     details: [...(card.reason === "authority.taintReason" ? [copy.taintReason] : []),
+      ...(card.reason === "authority.unsandboxedReason" ? [copy.unsandboxedReason] : []),
       ...(actionKind === "web_request" ? [copy.webRequestDesc] : []),
       ...(schedule ? [schedule.title, scheduleTiming(schedule), ...(schedule.accessMode ? [copy.scheduleMode(accessLabel(schedule.accessMode))] : [])].filter(Boolean)
         : actionKind === "manage_schedule" ? [copy.scheduleUnavailable]

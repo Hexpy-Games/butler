@@ -157,7 +157,7 @@ async fn authorize(
     if matches!(decision, butler_turn::btcc::AccessDecision::Ask(_))
         || super::super::access::resumes(owner, call_id)
     {
-        super::file_observation::gate(owner, call, call_id, arguments).await
+        super::file_observation::gate(owner, call, call_id, arguments, false).await
     } else {
         Ok(super::file_observation::Gate::Allowed(None))
     }

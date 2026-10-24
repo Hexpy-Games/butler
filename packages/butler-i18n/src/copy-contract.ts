@@ -193,6 +193,7 @@ export interface ApprovalRequestCopy {
   webRequest: string;
   webRequestDesc: string;
   taintReason: string;
+  unsandboxedReason: string;
   scheduleMode: (mode: string) => string;
   scheduleUnavailable: string;
   runCommand: (workspace: string | null) => string;

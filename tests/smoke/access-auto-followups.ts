@@ -30,10 +30,14 @@ try {
       : kind === "web"
         ? { action_kind: "web_request", targets: [{ kind: "other", path: target }],
           operation: { tool: "web_read", access: "read_only", targets: [target] } }
+        : kind === "unsandboxed"
+          ? { action_kind: "run_command", targets: [{ kind: "folder", path: "workspace" }],
+            operation: { tool: "run_command", access: "change", targets: ["workspace"], command: 'cp "$SRC" out/' } }
         : { action_kind: "network_command", targets: [{ kind: "folder", path: "workspace" }],
           operation: { tool: "run_command_remote_observation", access: "change", targets: ["workspace"], command: "curl https://example.com/" } };
     Object.assign(window, { butlerApprovalFixture: { ...approval, count: 1, risk: "high", examples: [] },
-      butlerApprovalReason: kind === "schedule" ? "Apply one reviewed effect" : "authority.taintReason" });
+      butlerApprovalReason: kind === "schedule" ? "Apply one reviewed effect"
+        : kind === "unsandboxed" ? "authority.unsandboxedReason" : "authority.taintReason" });
   });
   for (const theme of ["light", "dark"] as const) for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 1000 });
@@ -76,7 +80,7 @@ try {
     await englishSchedule.evaluate(node => node.scrollIntoView({ block: "center" }));
     await capture(page, `settings-en-${theme}-${width}.png`);
     captures++;
-    for (const lang of ["ko", "en"] as const) for (const kind of ["schedule", "web", "taint"]) {
+    for (const lang of ["ko", "en"] as const) for (const kind of ["schedule", "web", "taint", "unsandboxed"]) {
       await page.goto(`${server.url}?visual=components&surface=activity-layout&approval=1&state=completed&theme=${theme}&lang=${lang}&kind=${kind}`);
       const card = page.locator('[data-test-class="composer-authority-decision"]');
       await card.waitFor();
@@ -89,6 +93,10 @@ try {
           assert(text.includes("Nightly report"));
           assert(text.includes(copy.automations.everyHours(24)));
           assert(text.includes(copy.interfaceTemplates.approvalRequest.scheduleMode(copy.permissions.auto)));
+        } else if (kind === "unsandboxed") {
+          assert(text.includes(copy.interfaceTemplates.approvalRequest.unsandboxedReason), text);
+          assert(text.includes('cp "$SRC" out/'), text);
+          assert(!text.includes(copy.interfaceTemplates.approvalRequest.taintReason), text);
         } else {
           assert(text.includes(copy.interfaceTemplates.approvalRequest.taintReason));
           if (kind === "taint") assert(text.includes(copy.interfaceTemplates.approvalRequest.networkCommand("workspace")));

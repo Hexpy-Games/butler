@@ -34,7 +34,7 @@ pub(super) async fn execute(
     let needs_approval = matches!(access.decision, AccessDecision::Ask(_))
         || super::super::access::resumes(owner, occurrence);
     let approval = if needs_approval {
-        match gate(owner, call, occurrence, &input).await? {
+        match gate(owner, call, occurrence, &input, access.unsandboxed).await? {
             Gate::Pending(value) => {
                 return JsonDocument::from_value(&value)
                     .map(Some)
