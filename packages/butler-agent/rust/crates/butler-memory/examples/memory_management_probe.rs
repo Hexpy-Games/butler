@@ -43,7 +43,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let paths = CognitionPathEnvironment::default();
     let coordinator = Arc::new(CognitionWriteCoordinator::new(Arc::new(Host))?);
-    let owner = MemoryManagement::new(root.clone(), paths.clone(), coordinator);
+    let owner = MemoryManagement::new(
+        root.clone(),
+        paths.clone(),
+        coordinator,
+        CancellationToken::new(),
+    );
     let started = Instant::now();
     let inventory = owner
         .refresh(Host.now_iso(), CancellationToken::new())
@@ -168,6 +173,7 @@ async fn verify_refusal(root: &std::path::Path) -> Result<(), Box<dyn std::error
         refused.clone(),
         CognitionPathEnvironment::default(),
         Arc::new(CognitionWriteCoordinator::new(Arc::new(Host))?),
+        CancellationToken::new(),
     );
     assert!(
         owner
@@ -210,7 +216,12 @@ async fn verify_cancellation(root: &std::path::Path) -> Result<(), Box<dyn std::
         butler_core::locale::LocaleCollation::implementation_version().into(),
     )
     .await?;
-    let owner = MemoryManagement::new(fixture.clone(), paths.clone(), coordinator.clone());
+    let owner = MemoryManagement::new(
+        fixture.clone(),
+        paths.clone(),
+        coordinator.clone(),
+        CancellationToken::new(),
+    );
     let id = uuid::Uuid::new_v4().to_string();
     let orphan = paths
         .memory_root(&fixture)
@@ -247,7 +258,12 @@ async fn verify_cancellation(root: &std::path::Path) -> Result<(), Box<dyn std::
     assert_eq!(std::fs::read_dir(&trash)?.count(), 1);
     drop(owner);
     // A new backend over the same durable disk state: construction must not touch trash.
-    let restarted = MemoryManagement::new(fixture.clone(), paths, coordinator);
+    let restarted = MemoryManagement::new(
+        fixture.clone(),
+        paths,
+        coordinator,
+        CancellationToken::new(),
+    );
     assert_eq!(std::fs::read_dir(&trash)?.count(), 1);
     let result = restarted
         .cleanup(
