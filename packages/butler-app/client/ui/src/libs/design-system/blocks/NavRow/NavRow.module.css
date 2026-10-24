@@ -69,13 +69,20 @@
   font-size: var(--font-size-2);
 }
 
-.interactive:where(:not(.disabled)):hover {
-  background: color-mix(in srgb, var(--selection) 60%, transparent);
+/* Fills: the shell's row family (--nav-hover-bg / --nav-selected-bg) where
+   the surface sets one, otherwise the --selection shades. The rules outrank
+   Clickable's fills; selected + hover and pressed show the selected fill. */
+.row.interactive:hover:not(.disabled) {
+  background: var(--nav-hover-bg, var(--selection));
 }
 
-.active,
-.interactive.active:where(:not(.disabled)):hover {
-  background: var(--selection-strong);
+.row.active,
+.row.interactive.active:hover,
+.row.interactive:active:not(.disabled) {
+  background: var(--nav-selected-bg, var(--selection-strong));
+}
+
+.active {
   color: var(--text-primary);
 }
 

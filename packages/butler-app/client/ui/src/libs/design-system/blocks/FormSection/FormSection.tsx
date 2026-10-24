@@ -17,9 +17,17 @@ export interface FormSectionProps extends DsPrivateStyleProps {
   title?: string;
   /** Optional description; inside a `SettingsShell` page one that repeats `pageDescription` is not rendered. */
   description?: string;
-  /** Header toolbar, at the inline end of the title and description (wraps under them when narrow). */
+  /**
+   * List toolbar (add, refresh, filter, a bulk action on every row) at the
+   * inline end of the title and description; only on `kind="list"`. Other
+   * actions are `SettingsActionField` rows in the card.
+   */
   actions?: ReactNode;
-  /** Card rhythm: `form` keeps the field ramp; `list`, `status` and `info` use the tighter row gap. */
+  /**
+   * Card rhythm: `form` keeps the field gap; `list`, `status` and `info` use
+   * the tighter row gap, except that a card holding a field always uses the
+   * field gap.
+   */
   kind?: FormSectionKind;
   /** Stable section id (`data-settings-section-id`), scoped to the fields inside. */
   sectionId?: string;

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { appCopy } from "@/app/copy";
 import { confirmAction } from "@/app/confirmation";
 import { notifyStatus } from "@/app/notifications";
-import { Button, ListRow, SettingsSection, Stack, Tooltip } from "@/butler-ds";
+import { Button, SettingsActionField, SettingsSection, Tooltip } from "@/butler-ds";
 import { canOpenHandoffTab } from "../browser/browserHandoff";
 
 /** Clears the in-app browser's cookies, site data and cache. Saved sign-ins live in the keychain and stay. */
@@ -19,12 +19,10 @@ export function BrowserSiteDataSection() {
     finally { setBusy(false); }
   }
   return <SettingsSection id="browser-site-data" kind="form" title={copy.title}>
-    <Stack align="row" cross="center" gap="sm" data-setting-id="browser-site-data">
-      <Stack grow minWidth="0"><ListRow title={copy.label} description={copy.description} /></Stack>
-      <Tooltip label={reason}>
+    <SettingsActionField settingId="browser-site-data" label={copy.label} description={copy.description}
+      action={<Tooltip label={reason}>
         <Button type="button" size="sm" variant="outline" disabled={busy || Boolean(reason)}
           aria-label={reason ? `${copy.clear}. ${reason}` : undefined} onClick={() => void clear()}>{copy.clear}</Button>
-      </Tooltip>
-    </Stack>
+      </Tooltip>} />
   </SettingsSection>;
 }

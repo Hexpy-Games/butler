@@ -50,6 +50,8 @@
   /* The native vibrancy blurs the desktop under the shell, so a thinner tint
      lets it show through (Windows uses its acrylic token below). */
   --sidebar-bg: var(--mac-sidebar-bg);
+  --sidebar-hover-bg: var(--mac-sidebar-hover-bg);
+  --sidebar-selected-bg: var(--mac-sidebar-selected-bg);
   --sidebar-text-secondary: var(--mac-sidebar-text-secondary);
   --sidebar-text-tertiary: var(--mac-sidebar-text-tertiary);
 }
@@ -62,6 +64,8 @@
 
 .root[data-chrome-environment="electron"][data-platform="win32"] {
   --sidebar-bg: var(--windows-sidebar-bg);
+  --sidebar-hover-bg: var(--windows-sidebar-hover-bg);
+  --sidebar-selected-bg: var(--windows-sidebar-selected-bg);
   --sidebar-text-secondary: var(--windows-sidebar-text-secondary);
   --sidebar-text-tertiary: var(--windows-sidebar-text-tertiary);
 }
@@ -118,6 +122,10 @@
   --text-tertiary: var(--sidebar-text-tertiary);
   --muted-foreground: var(--text-secondary);
   --menu-group-label-color: var(--text-tertiary);
+  /* Row fills follow the shell surface (tokens.css): unset keeps the
+     --selection shades. */
+  --nav-hover-bg: var(--sidebar-hover-bg);
+  --nav-selected-bg: var(--sidebar-selected-bg);
 
   z-index: 30;
 }
@@ -294,6 +302,10 @@
   }
 
   .sidebar {
+    /* The drawer sits on the panel surface: rows keep the shades. */
+    --nav-hover-bg: initial;
+    --nav-selected-bg: initial;
+
     left: 0;
     width: var(--adaptive-drawer-width);
     transform: translateX(-100%);

@@ -27,7 +27,7 @@ The detail content stacks settings sections with `--settings-section-gap`
 (40px at every width): the space from one card to the next section header.
 It is at least 3x the header -> card gap (`--settings-section-header-gap`,
 12px), so each section header visibly belongs to the card below it (see
-`FormSection`), and at least 1.5x `--settings-field-gap` (20px), the gap
+`FormSection`), and at least 1.5x `--settings-field-gap` (24px), the gap
 between fields inside a card.
 
 ### Page header and sections
@@ -48,7 +48,10 @@ its navigation on the shell surface and its detail pane in a card under the
 48px title row, inset `--shell-card-inset` from the window; the title-row drag
 lane above the card is unchanged. The card fills with
 `--shell-settings-card-bg`: the settings surface (`--settings-bg`) in light, so
-FormSection cards keep their contrast, and the card surface in dark.
+FormSection cards keep their contrast, and the card surface in dark. Its
+navigation rows take the shell's row fills (`--sidebar-hover-bg` /
+`--sidebar-selected-bg` as `--nav-hover-bg` / `--nav-selected-bg`; see
+NavRow): the white family on a light tinted shell, the shades elsewhere.
 
 ## Wrong use cases
 Do not use it for inspector panels or project dashboards. Use InspectorPanel or dashboard blocks instead.

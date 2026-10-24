@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useAppLocale } from "@/app/copy.ts";
-import { Button, Input, SettingsField, SlidersHorizontal, Stack } from "@/butler-ds";
+import { Button, Input, SettingsField, SlidersHorizontal } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { LocalModelDiscoveryRequest } from "@/app/types.ts";
 import { SettingsSelect } from "./SettingsFormComponents";
@@ -41,7 +41,7 @@ export function LocalModelConfigForm({
 
   useEffect(() => { if (error) document.getElementById("local-model-server-url")?.focus(); }, [error]);
   return (
-    <Stack gap="md">
+    <>
       <SettingsField
         error={error}
         id="local-model-server-url"
@@ -71,10 +71,12 @@ export function LocalModelConfigForm({
             onChange={(event) => setApiKey(event.target.value)}
           />
         }
+        afterControl={
+          <Button type="button" variant="ghost" size="sm" onClick={() => setApiKey("")}>
+            {copy.removeApiKey}
+          </Button>
+        }
       />
-      <Button type="button" variant="ghost" size="sm" onClick={() => setApiKey("")}>
-        {copy.removeApiKey}
-      </Button>
       <Button
         type="button"
         variant="ghost"
@@ -85,7 +87,7 @@ export function LocalModelConfigForm({
         {advancedOpen ? copy.hideAdvanced : copy.showAdvanced}
       </Button>
       {advancedOpen ? (
-        <Stack gap="md">
+        <>
           <SettingsSelect
             disabled
             label={copy.apiType}
@@ -108,8 +110,8 @@ export function LocalModelConfigForm({
                   : option.label,
             }))}
           />
-        </Stack>
+        </>
       ) : null}
-    </Stack>
+    </>
   );
 }

@@ -39,7 +39,10 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "A plain Stack sidebar scrolls the navigation away.", render: () => <Stack gap="xs"><NavRow label="New chat" /><NavRow label="Desktop client polish" /></Stack> },
     },
   ],
-  content: ["SidebarBrand shows the product or workspace name only."],
+  content: [
+    "SidebarBrand shows the product or workspace name only.",
+    "Row fills come from the surface (see NavRow): in AdaptiveShell a tinted light shell gives the white family, a white base and dark keep the shades.",
+  ],
   accessibility: ["ariaLabel names the navigation landmarks; the scrolling list keeps fades out of the scrollbar."],
-  tokens: ["--sidebar-bg", "--sidebar-width", "--sidebar-row-height", "--scroll-fade-size", "--sidebar-padding-inline"],
+  tokens: ["--sidebar-bg", "--mac-sidebar-hover-bg", "--mac-sidebar-selected-bg", "--sidebar-width", "--sidebar-row-height", "--scroll-fade-size", "--sidebar-padding-inline"],
 };

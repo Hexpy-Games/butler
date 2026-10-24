@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { SettingsSection, Stack, Typo } from "@/butler-ds";
+import { SettingsSection, Typo } from "@/butler-ds";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { chooseMemoryModel, fetchSetupReadiness, retrySetupReadiness } from "@/app/setupConnection.ts";
@@ -35,14 +35,14 @@ export function MemoryModelPreparation() {
   };
   return (
     <SettingsSection id="memory-model" kind="form" title={copy.memoryModel.label}>
-      <Stack gap="sm">
-        <SettingsSwitch settingId="memory-model" label={copy.memoryChoice.on} description={copy.memoryModel.description(sizeMB)}
-          checked={memoryModelChoice(model) === "on"} disabled={!model || saving} onChange={choose} />
-        {model?.state === "ready" ? <Typo.Caption role="status" tone="success">{copy.memoryModel.ready}</Typo.Caption> : null}
-        <MemoryModelStatus model={model} language={language} retry={() => {
-          void retrySetupReadiness(true).then(setView).catch(() => setView(null));
-        }} />
-      </Stack>
+      <SettingsSwitch settingId="memory-model" label={copy.memoryChoice.on} description={copy.memoryModel.description(sizeMB)}
+        checked={memoryModelChoice(model) === "on"} disabled={!model || saving} onChange={choose}
+        afterControl={<>
+          {model?.state === "ready" ? <Typo.Caption role="status" tone="success">{copy.memoryModel.ready}</Typo.Caption> : null}
+          <MemoryModelStatus model={model} language={language} retry={() => {
+            void retrySetupReadiness(true).then(setView).catch(() => setView(null));
+          }} />
+        </>} />
     </SettingsSection>
   );
 }
