@@ -16,6 +16,20 @@ export async function closeCanonAside(page: Page) {
 
 export async function verifyCanonAside(page: Page) {
   const aside = page.locator('[data-slot="management-page-aside"]');
+  await page.waitForFunction(() => {
+    const pane = document.querySelector('[data-slot="management-page-aside"]');
+    return pane?.getAttribute("data-state") === "open" && getComputedStyle(pane).opacity === "1";
+  });
+  assert.equal(await aside.count(), 1, "Only the settled aside is present");
+  assert.equal(await aside.getByRole("button", { name: "대화 열기", exact: true }).count(), 1);
+  if (await aside.getAttribute("data-layout") === "docked") {
+    const card = aside.locator('[data-slot="card"]').first();
+    assert.equal(await card.locator('[data-test-class="canon-aside-close"]').count(), 1);
+    assert.deepEqual(await card.evaluate(element => {
+      const css = getComputedStyle(element);
+      return { radius: css.borderRadius, shadow: css.boxShadow, glass: css.backdropFilter };
+    }), { radius: "8px", shadow: "none", glass: "none" });
+  }
   const box = await aside.boundingBox();
   assert(box && box.width > 250 && box.height > 300, "Detail stays usable in the page aside");
   const pageWidth = await page.locator('[data-test-class="project-dashboard-view"]').evaluate(element => element.getBoundingClientRect().width);

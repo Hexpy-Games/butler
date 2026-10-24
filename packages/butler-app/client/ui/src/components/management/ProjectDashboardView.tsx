@@ -92,7 +92,7 @@ export function ProjectDashboardView({
 
   return (
     <ManagementPage dataTestClass="project-dashboard-view" scrollRef={scrollRef} background={background} backgroundTreatment="none"
-      aside={project && selected ? <CanonAside key={selected} projectId={project.id} epicId={selected} /> : null}
+      aside={project && selected ? layout => <CanonAside key={selected} projectId={project.id} epicId={selected} layout={layout} /> : null}
       asideFloatOpen={Boolean(selected)} asideLabel={appCopy.canon.epic}
       footerPlacement="overlay" footerReserve={composerHeight}
       footer={project && <ProjectDashboardComposer key={project.id} projectId={project.id} onReserveChange={setComposerHeight} onWallpaperRect={onComposerRect} />}>
