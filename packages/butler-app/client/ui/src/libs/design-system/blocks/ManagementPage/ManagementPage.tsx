@@ -8,11 +8,18 @@ import { dsClass } from "../../lib/internal";
 import { cn } from "../../lib/utils";
 import { useAsideLayout } from "../../lib/asideLayout";
 import { AsideSlot, hasAsideContent, type AsideContent } from "../../lib/AsideSlot";
+import { useColumnRect, type ColumnRect } from "../../lib/columnRect";
 
 /** The page width from which the aside docks beside the content (a floating one docks again 32px later). */
 export const MANAGEMENT_ASIDE_DOCK_MIN = 1000;
 
 type ManagementPageElement = "section" | "main" | "form";
+
+/**
+ * The content column a page background keeps clear: the column's left and right edges and the page's top,
+ * in client CSS px. A docked aside extends `right` to its own far edge. Scrolling moves none of them.
+ */
+export type ManagementPageColumnRect = ColumnRect;
 
 /**
  * How the background sits behind the content. `calm`: a tokenized veil
@@ -48,6 +55,11 @@ export interface ManagementPageProps extends DsBaseProps<FormHTMLAttributes<HTML
   asideFloatOpen?: boolean;
   /** The aside landmark's accessible name. */
   asideLabel?: string;
+  /**
+   * The content column's edges (a docked aside included) and the page's top, on mount and every resize
+   * (never on scroll): the `background`'s keep-out, e.g. a Wallpaper's `columnRect`.
+   */
+  onColumnRect?: (rect: ManagementPageColumnRect) => void;
 }
 
 const PageBackgroundContext = createContext(false);
@@ -68,12 +80,15 @@ export function ManagementPage({
   aside,
   asideFloatOpen = false,
   asideLabel,
+  onColumnRect,
   ...props
 }: ManagementPageProps) {
   const hasBackground = background !== undefined && background !== null;
   const [element, setElement] = useState<HTMLElement | null>(null);
   const asideLayout = useAsideLayout(element, hasAsideContent(aside), MANAGEMENT_ASIDE_DOCK_MIN);
   const asideState = hasAsideContent(aside) && (asideLayout === "docked" || asideFloatOpen) ? asideLayout ?? undefined : undefined;
+  const [column, setColumn] = useState<HTMLElement | null>(null);
+  useColumnRect(column, element, asideState === "docked" ? "management-page-aside" : null, onColumnRect);
   return (
     <Component
       className={cn(styles.page, footer && (footerPlacement === "overlay" ? styles.withOverlay : styles.withFooter), className)}
@@ -93,7 +108,7 @@ export function ManagementPage({
         className={dsClass(styles.scrollArea)}
         contentClassName={dsClass(styles.content)}
       >
-        <PageContainer width={width} className={dsClass(styles.pageContent)}>
+        <PageContainer width={width} className={dsClass(styles.pageContent)} ref={setColumn}>
           <PageBackgroundContext.Provider value={hasBackground}>{children}</PageBackgroundContext.Provider>
         </PageContainer>
       </ScrollArea>
