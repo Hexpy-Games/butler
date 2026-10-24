@@ -6,12 +6,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone)]
 pub struct NewWork {
     pub id: String,
-    pub scope_kind: ScopeKind,
-    pub scope_ref: String,
+    pub project_id: String,
     pub title: String,
     pub description: String,
     pub origin: Origin,
-    pub draft: bool,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkFields {
@@ -19,13 +17,10 @@ pub struct WorkFields {
     pub description: String,
     pub kind: Option<String>,
     pub assignee: Option<String>,
-    pub draft: bool,
-    pub tier: i64,
 }
 impl WorkFields {
     pub fn from_snapshot(value: &Value) -> Result<Self> {
-        let mut value = value.clone();
-        value["draft"] = json!(value["draft"] == 1);
+        let value = value.clone();
         Ok(serde_json::from_value(value)?)
     }
 }
@@ -50,10 +45,7 @@ pub fn create_plan(
     fields: &PlanFields,
     registration: &Registration,
 ) -> Result<Value> {
-    let visibility = match registration {
-        Registration::Private => "private",
-        Registration::Canon(_) => "canon",
-    };
+    let Registration::Canon(_) = registration;
     tx.execute(
         sql::INSERT_PLAN,
         params![
@@ -63,7 +55,6 @@ pub fn create_plan(
             fields.description,
             fields.due_on,
             fields.status.as_str(),
-            visibility,
             ctx.now,
             ctx.actor.to_string()
         ],
@@ -111,40 +102,21 @@ pub(super) fn create_work_assigned(
     registration: &Registration,
     assignee: Option<&str>,
 ) -> Result<Value> {
-    ensure_work_counts(tx, (input.scope_kind.as_str(), &input.scope_ref))?;
-    let (visibility, status) = match registration {
-        Registration::Private => ("private", None),
-        Registration::Canon(_) => ("canon", Some("planned")),
-    };
+    let Registration::Canon(_) = registration;
     tx.execute(
         sql::INSERT_WORK,
         params![
             input.id,
-            input.scope_kind.as_str(),
-            input.scope_ref,
+            input.project_id,
             input.title,
             input.description,
             input.origin.as_str(),
-            input.draft,
-            visibility,
-            status,
             ctx.now,
             ctx.actor.to_string(),
             assignee
         ],
     )?;
-    count(
-        tx,
-        (input.scope_kind.as_str(), &input.scope_ref),
-        "works",
-        1,
-    )?;
-    count(
-        tx,
-        (input.scope_kind.as_str(), &input.scope_ref),
-        "run_state:idle",
-        1,
-    )?;
+    count(tx, ("project", &input.project_id), "epics", 1)?;
     event(tx, ctx, "work", &input.id, 0, "create")?;
     read_work(tx, &input.id)
 }
@@ -164,8 +136,6 @@ pub fn edit_work(
             fields.description,
             fields.kind,
             fields.assignee,
-            fields.draft,
-            fields.tier,
             ctx.now,
             expected_revision
         ],
@@ -173,27 +143,45 @@ pub fn edit_work(
     event(tx, ctx, "work", id, expected_revision + 1, "edit")?;
     read_work(tx, id)
 }
-pub fn assign_home(
+pub fn bind_session(tx: &Transaction<'_>, ctx: &Context, id: &str, session: &str) -> Result<()> {
+    read_work(tx, id)?;
+    let origin = if ctx.actor["via"] == "butler" {
+        "butler"
+    } else {
+        "user"
+    };
+    if tx.execute(
+        sql::BIND_SESSION,
+        params![session, id, ctx.now, ctx.actor.to_string(), origin],
+    )? > 0
+    {
+        event(
+            tx,
+            ctx,
+            "work",
+            id,
+            read_work(tx, id)?["revision"]
+                .as_i64()
+                .ok_or(Error::Invalid("revision"))?,
+            "bind_session",
+        )?;
+    }
+    Ok(())
+}
+pub fn set_label(
     tx: &Transaction<'_>,
     ctx: &Context,
     id: &str,
     expected_revision: i64,
-    home: Option<&str>,
+    label: CanonStatus,
+    _person: &UserAct,
 ) -> Result<Value> {
-    let row = read_work(tx, id)?;
-    cas(&row, "revision", expected_revision)?;
-    tx.execute(sql::HOME, params![id, home, ctx.now, expected_revision])
-        .map_err(|err| {
-            if err
-                .sqlite_error()
-                .is_some_and(|e| e.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE)
-            {
-                Error::ConversationOccupied
-            } else {
-                Error::Sqlite(err)
-            }
-        })?;
-    event(tx, ctx, "work", id, expected_revision + 1, "assign_home")?;
+    cas(&read_work(tx, id)?, "revision", expected_revision)?;
+    tx.execute(
+        sql::LABEL,
+        params![id, label.as_str(), ctx.now, expected_revision],
+    )?;
+    event(tx, ctx, "work", id, expected_revision + 1, "label")?;
     read_work(tx, id)
 }
 /// Bounds are ranks in the destination Plan/backlog. Canon ordering is separate
@@ -209,12 +197,9 @@ pub fn set_plan_rank(
 ) -> Result<Value> {
     let row = read_work(tx, id)?;
     cas(&row, "revision", expected_revision)?;
-    if row["visibility"] != "canon" {
-        return Err(Error::Invalid("private Work has no canon order"));
-    }
     if let Some(plan) = plan {
         let destination = read_plan(tx, plan)?;
-        if row["scope_kind"] != "project" || destination["project_id"] != row["scope_ref"] {
+        if destination["project_id"] != row["project_id"] {
             return Err(Error::Invalid("Plan belongs to another project"));
         }
     }

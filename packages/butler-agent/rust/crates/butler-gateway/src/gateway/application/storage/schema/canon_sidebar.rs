@@ -3,13 +3,33 @@ use super::super::AppStorageError;
 use rusqlite::Connection;
 
 pub(super) fn create(connection: &Connection) -> Result<(), AppStorageError> {
+    let tx = connection
+        .unchecked_transaction()
+        .map_err(AppStorageError::sqlite)?;
+    create_tables(&tx)?;
+    tx.commit().map_err(AppStorageError::sqlite)
+}
+fn create_tables(connection: &Connection) -> Result<(), AppStorageError> {
+    let old: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM pragma_table_info('app_canon_conversations') WHERE name='work_id')",
+        [], |r| r.get(0),
+    ).map_err(AppStorageError::sqlite)?;
+    if old {
+        connection.execute_batch("ALTER TABLE app_canon_conversations RENAME TO app_canon_conversations_old;
+            CREATE TABLE app_canon_conversations (
+                session_id TEXT NOT NULL, epic_id TEXT NOT NULL, project_id TEXT NOT NULL,
+                op_id TEXT NOT NULL UNIQUE, PRIMARY KEY(session_id,epic_id));
+            INSERT INTO app_canon_conversations SELECT session_id,work_id,project_id,op_id FROM app_canon_conversations_old;
+            DROP TABLE app_canon_conversations_old;").map_err(AppStorageError::sqlite)?;
+    }
     connection
         .execute_batch(
             "CREATE TABLE IF NOT EXISTS app_canon_conversations (
-            session_id TEXT PRIMARY KEY,
-            work_id TEXT NOT NULL UNIQUE,
+            session_id TEXT NOT NULL,
+            epic_id TEXT NOT NULL,
             project_id TEXT NOT NULL,
-            op_id TEXT NOT NULL UNIQUE
+            op_id TEXT NOT NULL UNIQUE,
+            PRIMARY KEY(session_id,epic_id)
          );
          CREATE INDEX IF NOT EXISTS app_canon_conversations_project
          ON app_canon_conversations(project_id,session_id);

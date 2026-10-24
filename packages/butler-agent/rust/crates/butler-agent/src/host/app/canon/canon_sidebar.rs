@@ -14,9 +14,16 @@ pub(super) fn execute(
             AppCanonOperation::Link {
                 work_id,
                 session_id,
+                new_session_id,
             } => storage
                 .canon_write(move |tx| {
-                    store::api::canon_conversation::link(tx, &ctx, &work_id, &session_id)
+                    store::api::canon_conversation::link(
+                        tx,
+                        &ctx,
+                        &work_id,
+                        session_id.as_deref(),
+                        &new_session_id,
+                    )
                 })
                 .await
                 .map_err(error),

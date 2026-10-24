@@ -1,0 +1,77 @@
+//! Canon port over the existing BTCC storage lanes.
+use super::{ApplicationFuture, GatewayApplicationError};
+use serde_json::Value;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AppCanonResource {
+    Canon,
+    Plan,
+    Epic,
+    CreatePlan,
+    EditPlan,
+    CreateEpic,
+    EditEpic,
+    PlanOrder,
+    BacklogOrder,
+}
+
+#[derive(Clone, Debug)]
+pub struct AppCanonRequest {
+    pub resource: AppCanonResource,
+    pub id: String,
+    pub input: Option<Value>,
+}
+#[derive(Clone, Debug)]
+pub struct AppCanonEvent {
+    pub seq: i64,
+    pub topic: String,
+    pub payload: Value,
+}
+#[derive(Debug, thiserror::Error)]
+#[error("work model revision conflict")]
+pub struct AppCanonConflict {
+    pub revision: i64,
+}
+
+pub const APP_PERSON_ID: &str = "app-user";
+
+#[derive(Clone, Debug)]
+pub enum AppCanonOperation {
+    Link {
+        work_id: String,
+        session_id: Option<String>,
+        new_session_id: String,
+    },
+    Pending {
+        after: String,
+    },
+    Applied {
+        op_id: String,
+        revision: i64,
+    },
+}
+
+pub trait AppCanonPort: Send + Sync + 'static {
+    fn canon_operation(&self, _operation: AppCanonOperation) -> ApplicationFuture<Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    fn execute(&self, _request: AppCanonRequest) -> ApplicationFuture<Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    /// Indexed identity lookup only; never constructs an inspector or its cards.
+    fn project_scope(&self, _resource: AppCanonResource, _id: String) -> ApplicationFuture<String> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    fn changes(&self) -> Option<tokio::sync::watch::Receiver<()>> {
+        None
+    }
+    fn unpublished(&self, _after: i64) -> ApplicationFuture<Vec<AppCanonEvent>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+    fn published(&self, _seqs: Vec<i64>) -> ApplicationFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
+}
+#[derive(Default)]
+pub struct UnavailableCanon;
+impl AppCanonPort for UnavailableCanon {}

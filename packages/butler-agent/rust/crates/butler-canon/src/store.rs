@@ -2,28 +2,17 @@
 //! roll it back on any error. No operation commits, opens a DB, or starts work.
 pub mod api;
 pub use api::{mark_outbox_published, read as read_api, write as write_api};
-mod counts;
-use counts::ensure_work_counts;
 mod entities;
-mod holds;
-mod queue;
-mod recovery;
+mod intents;
 mod specs;
 pub mod sql;
 mod transaction;
-mod transitions;
 pub use entities::*;
-pub use holds::*;
-use holds::{approval_covers, rederive_holds, task_result};
-pub use queue::*;
-use queue::{bump, persist, running, update_chain_state};
-pub use recovery::*;
+pub use intents::*;
 use rusqlite::{Connection, OptionalExtension, Params, Row};
 use serde_json::{Value, json};
 pub use specs::*;
 pub use transaction::Transaction;
-pub use transitions::*;
-use transitions::{recompute_work, set_state};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -33,14 +22,8 @@ pub enum Error {
     Conflict { current: Value },
     #[error("not found")]
     NotFound,
-    #[error("running")]
-    Running,
     #[error("invalid fractional rank")]
     InvalidRank,
-    #[error("conversation already hosts a 과제")]
-    ConversationOccupied,
-    #[error("cross-chat chain move")]
-    CrossChat,
     #[error("invalid operation: {0}")]
     Invalid(&'static str),
     #[error(transparent)]
@@ -76,7 +59,6 @@ impl UserAct {
 }
 #[derive(Debug, Clone)]
 pub enum Registration {
-    Private,
     Canon(UserAct),
 }
 
@@ -114,11 +96,7 @@ pub(super) fn rows(db: &Connection, statement: &str, params: impl Params) -> Res
 pub(super) fn cas(row: &Value, field: &str, expected: i64) -> Result<()> {
     if row[field].as_i64() != Some(expected) {
         return Err(Error::Conflict {
-            current: if field == "task_graph_revision" {
-                json!({"task_graph_revision":row[field]})
-            } else {
-                row.clone()
-            },
+            current: row.clone(),
         });
     }
     Ok(())

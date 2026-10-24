@@ -1,4 +1,4 @@
-//! Transactional work-model storage and pure queue invariants.
+//! Canon storage and pure queue invariants, separate from the BTCC engine.
 pub mod store;
 pub mod work_chain;
 pub mod work_ids;

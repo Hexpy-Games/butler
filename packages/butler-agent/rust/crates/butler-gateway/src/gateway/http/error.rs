@@ -71,7 +71,7 @@ impl From<GatewayApplicationError> for HttpError {
             ..
         } = &error
             && code == "conflict"
-            && let Some(current) = source.downcast_ref::<crate::gateway::AppWorkModelConflict>()
+            && let Some(current) = source.downcast_ref::<crate::gateway::AppCanonConflict>()
         {
             return Self::Conflict {
                 revision: current.revision,

@@ -111,7 +111,6 @@ pub(super) fn edit_plan(
 #[serde(deny_unknown_fields)]
 struct EpicInput {
     expected_revision: Option<i64>,
-    expected_task_graph_revision: Option<i64>,
     title: Option<String>,
     description: Option<String>,
     status: Option<CanonStatus>,
@@ -128,10 +127,7 @@ pub(super) fn create_epic(
     value: Value,
 ) -> Result<Value> {
     let input: EpicInput = input(value)?;
-    if input.expected_revision.is_some()
-        || input.expected_task_graph_revision.is_some()
-        || input.status.is_some()
-    {
+    if input.expected_revision.is_some() || input.status.is_some() {
         return Err(Error::Invalid("invalid creation fields"));
     }
     let title_value = input.title.clone().unwrap_or_default();
@@ -142,12 +138,10 @@ pub(super) fn create_epic(
         ctx,
         &NewWork {
             id: id.clone(),
-            scope_kind: ScopeKind::Project,
-            scope_ref: project.into(),
+            project_id: project.into(),
             title: title_value,
             description: input.description.clone().unwrap_or_default(),
             origin: Origin::Dialog,
-            draft: false,
         },
         &Registration::Canon(person(ctx)?),
         input.assignee.as_ref().and_then(|v| v.as_deref()),
@@ -188,17 +182,7 @@ pub(super) fn edit_epic(
     edit_fields(tx, ctx, id, &row, &input)?;
     if let Some(status) = input.status {
         let row = read_work(tx, id)?;
-        // Other members can change without advancing this Work's revision.
-        // Preserve the caller's graph CAS for terminal chain edits.
-        set_label(
-            tx,
-            ctx,
-            id,
-            revision(&row)?,
-            status,
-            &person(ctx)?,
-            input.expected_task_graph_revision,
-        )?;
+        set_label(tx, ctx, id, revision(&row)?, status, &person(ctx)?)?;
     }
     epic(tx, id)
 }
@@ -264,10 +248,7 @@ fn position(
     before: Option<&str>,
 ) -> Result<()> {
     let row = read_work(tx, id)?;
-    let project = text(&row, "scope_ref")?;
-    if row["scope_kind"] != "project" {
-        return Err(Error::Invalid("canon order requires project scope"));
-    }
+    let project = text(&row, "project_id")?;
     if let Some(plan) = plan {
         canon_row(read_plan(tx, plan)?)?;
     }

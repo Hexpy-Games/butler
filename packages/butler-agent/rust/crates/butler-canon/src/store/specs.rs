@@ -7,7 +7,7 @@ pub struct NewSpecNode {
     pub id: String,
     pub scope_kind: ScopeKind,
     pub scope_ref: String,
-    pub work_id: Option<String>,
+    pub epic_id: Option<String>,
     pub parent_node_id: Option<String>,
     pub concern_id: String,
 }
@@ -18,7 +18,6 @@ pub fn create_spec_node(
     registration: &Registration,
 ) -> Result<Value> {
     let visibility = match registration {
-        Registration::Private => "private",
         Registration::Canon(_) => "canon",
     };
     tx.execute(
@@ -27,7 +26,7 @@ pub fn create_spec_node(
             node.id,
             node.scope_kind.as_str(),
             node.scope_ref,
-            node.work_id,
+            node.epic_id,
             node.parent_node_id,
             node.concern_id,
             visibility,
@@ -70,7 +69,6 @@ pub struct Publication {
     pub revision: i64,
     pub body_hash: String,
     pub parser_version: String,
-    pub authoring_instruction_id: Option<String>,
     pub criteria: Vec<Criterion>,
 }
 pub fn publish_spec(
@@ -89,8 +87,7 @@ pub fn publish_spec(
             node_id,
             publication.revision,
             publication.body_hash,
-            publication.parser_version,
-            publication.authoring_instruction_id
+            publication.parser_version
         ],
     )?;
     for criterion in &publication.criteria {

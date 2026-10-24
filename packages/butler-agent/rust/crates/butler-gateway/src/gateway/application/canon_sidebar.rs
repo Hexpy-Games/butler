@@ -5,10 +5,10 @@ use rusqlite::OptionalExtension;
 use serde_json::json;
 
 async fn canon(app: &AppApplication, id: String) -> Result<Value, GatewayApplicationError> {
-    work_model::execute(
+    canon::execute(
         app,
-        AppWorkModelRequest {
-            resource: AppWorkModelResource::Canon,
+        AppCanonRequest {
+            resource: AppCanonResource::Canon,
             id,
             input: None,
         },
@@ -79,23 +79,48 @@ pub(crate) async fn reorder(
 pub(crate) async fn conversation(
     app: &AppApplication,
     id: String,
+    session_id: Option<String>,
 ) -> Result<Value, GatewayApplicationError> {
     // The existing application layer enforces active project / canon visibility.
-    work_model::execute(
+    canon::execute(
         app,
-        AppWorkModelRequest {
-            resource: AppWorkModelResource::Epic,
+        AppCanonRequest {
+            resource: AppCanonResource::Epic,
             id: id.clone(),
             input: None,
         },
     )
     .await?;
+    let session_id = if let Some(chat) = session_id {
+        Some(
+            app.storage
+                .read(move |db| {
+                    let exists: bool = db
+                        .query_row(
+                            "SELECT EXISTS(SELECT 1 FROM chats WHERE id=?1)",
+                            [&chat],
+                            |r| r.get(0),
+                        )
+                        .map_err(AppStorageError::sqlite)?;
+                    if !exists {
+                        return Ok(None);
+                    }
+                    sessions::identity::runtime_hint(db, &chat).map(Some)
+                })
+                .await
+                .map_err(app_error)?
+                .ok_or_else(|| public(404, "session_not_found", "Session not found."))?,
+        )
+    } else {
+        None
+    };
     let mut result = app
         .dependencies
-        .work_model
+        .canon
         .canon_operation(AppCanonOperation::Link {
             work_id: id,
-            session_id: format!("butler/app-{}", app.dependencies.identity_clock.new_uuid()),
+            session_id,
+            new_session_id: format!("butler/app-{}", app.dependencies.identity_clock.new_uuid()),
         })
         .await?;
     apply(app, result["intent"].take()).await?;
@@ -105,7 +130,7 @@ pub(crate) async fn conversation(
         .remove("intent");
     app.storage
         .read(move |db| {
-            work_model::public_sessions(db, &mut result)?;
+            canon::public_sessions(db, &mut result)?;
             Ok(result)
         })
         .await
@@ -132,7 +157,7 @@ async fn apply(app: &AppApplication, intent: Value) -> Result<(), GatewayApplica
     }
     if intent["state"] != "applied" {
         app.dependencies
-            .work_model
+            .canon
             .canon_operation(AppCanonOperation::Applied {
                 op_id: op,
                 revision,
@@ -170,10 +195,10 @@ async fn validate_intent(
     let work_id = payload["work_id"]
         .as_str()
         .ok_or_else(|| public(400, "work_model_invalid", "Invalid conversation intent."))?;
-    work_model::execute(
+    canon::execute(
         app,
-        AppWorkModelRequest {
-            resource: AppWorkModelResource::Epic,
+        AppCanonRequest {
+            resource: AppCanonResource::Epic,
             id: work_id.to_owned(),
             input: None,
         },
@@ -210,7 +235,7 @@ async fn project(
 }
 
 pub(super) fn start(app: &AppApplication) {
-    let Some(mut changes) = app.dependencies.work_model.changes() else {
+    let Some(mut changes) = app.dependencies.canon.changes() else {
         return;
     };
     let app = app.clone_handle();
@@ -232,7 +257,7 @@ async fn replay(app: &AppApplication) -> Result<(), GatewayApplicationError> {
     loop {
         let rows = app
             .dependencies
-            .work_model
+            .canon
             .canon_operation(AppCanonOperation::Pending {
                 after: after.clone(),
             })
@@ -263,7 +288,7 @@ async fn replay(app: &AppApplication) -> Result<(), GatewayApplicationError> {
                     // subsequent changes do not retry an impossible projection.
                     let result = app
                         .dependencies
-                        .work_model
+                        .canon
                         .canon_operation(AppCanonOperation::Applied {
                             op_id: after.clone(),
                             revision: row["revision"]

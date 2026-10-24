@@ -80,11 +80,11 @@ fn sqlite_plan_rank_order_matches_rust_byte_order() {
         ranks.insert(index, rank);
     }
     for (i, rank) in ranks.iter().enumerate().rev() {
-        db.execute("INSERT INTO wm_works(id,scope_kind,scope_ref,title,visibility,origin,plan_rank,created_at,updated_at,created_by)
-            VALUES(?1,'project','p','work','canon','board',?2,0,0,'{}')", [i.to_string(), rank.clone()]).unwrap();
+        db.execute("INSERT INTO canon_epics(id,project_id,title,origin,plan_rank,created_at,updated_at,created_by)
+            VALUES(?1,'p','work','board',?2,0,0,'{}')", [i.to_string(), rank.clone()]).unwrap();
     }
     let actual = db
-        .prepare("SELECT plan_rank FROM wm_works ORDER BY plan_rank")
+        .prepare("SELECT plan_rank FROM canon_epics ORDER BY plan_rank")
         .unwrap()
         .query_map([], |r| r.get::<_, String>(0))
         .unwrap()

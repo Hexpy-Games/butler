@@ -1,6 +1,6 @@
-//! Exercise the real conversation uniqueness guard while the scenario is stopped.
-use butler_turn::btcc::{BtccStorage, TestStorageFixture};
+//! Exercise many-to-many conversation binding on the real writer lane.
 use butler_canon::store;
+use butler_turn::btcc::{BtccStorage, TestStorageFixture};
 use serde_json::json;
 type Failure = Box<dyn std::error::Error + Send + Sync>;
 #[tokio::main]
@@ -18,25 +18,25 @@ async fn main() -> Result<(), Failure> {
     )?;
     config.path = path;
     let storage = BtccStorage::open(config).await?;
-    let error = storage
+    storage
         .canon_write(move |tx| {
-            let work = store::read_work(tx, &first)?;
+            let work = store::api::epic(tx, &first)?;
             store::api::canon_conversation::link(
                 tx,
                 &store::Context {
-                    now: 200,
+                    now: chrono::Utc::now().timestamp_millis(),
                     actor: json!({"person":"tester"}),
                 },
                 &second,
-                work["home_session_id"]
-                    .as_str()
-                    .ok_or(store::Error::Invalid("home"))?,
+                Some(
+                    work["sessions"][0]["session_id"]
+                        .as_str()
+                        .ok_or(store::Error::Invalid("session"))?,
+                ),
+                "unused-new-session",
             )
         })
-        .await
-        .err()
-        .ok_or("expected occupied conversation")?;
-    assert_eq!(error.code(), "conversation_occupied");
+        .await?;
     storage.close().await?;
     Ok(())
 }

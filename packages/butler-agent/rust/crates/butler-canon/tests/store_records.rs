@@ -37,18 +37,23 @@ fn plan_work_spec_cas_and_immutable_publication() {
         id: "sp".into(),
         scope_kind: ScopeKind::Project,
         scope_ref: "project".into(),
-        work_id: None,
+        epic_id: None,
         parent_node_id: None,
         concern_id: "concern".into(),
     };
-    create_spec_node(&tx, &context(), &node, &Registration::Private).unwrap();
+    create_spec_node(
+        &tx,
+        &context(),
+        &node,
+        &Registration::Canon(UserAct::new("tester")),
+    )
+    .unwrap();
     let hash = put_body(&tx, "# Body\n").unwrap();
     assert_eq!(hash, put_body(&tx, "# Body\n").unwrap());
     let publication = Publication {
         revision: 1,
         body_hash: hash.clone(),
         parser_version: "structured-1".into(),
-        authoring_instruction_id: None,
         criteria: vec![Criterion {
             id: "c".into(),
             part_id: "p".into(),
@@ -74,7 +79,7 @@ fn plan_work_spec_cas_and_immutable_publication() {
     );
     assert_eq!(
         tx.query_row::<String, _, _>(
-            "SELECT state FROM wm_spec_revisions WHERE node_id='sp' AND revision=1",
+            "SELECT state FROM canon_spec_revisions WHERE node_id='sp' AND revision=1",
             [],
             |r| r.get(0)
         )
@@ -83,7 +88,7 @@ fn plan_work_spec_cas_and_immutable_publication() {
     );
     let compressed: Vec<u8> = tx
         .query_row(
-            "SELECT body FROM wm_spec_bodies WHERE hash=?1",
+            "SELECT body FROM canon_spec_bodies WHERE hash=?1",
             [hash],
             |r| r.get(0),
         )
@@ -92,35 +97,6 @@ fn plan_work_spec_cas_and_immutable_publication() {
         zstd::stream::decode_all(compressed.as_slice()).unwrap(),
         b"# Body\n"
     );
-    tx.commit().unwrap();
-}
-// test-category: pure-logic
-#[test]
-fn home_rank_and_private_creation_have_typed_rules() {
-    let mut db = db();
-    work(&mut db, "a");
-    work(&mut db, "b");
-    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
-    assign_home(&tx, &context(), "a", 0, Some("home")).unwrap();
-    assert!(matches!(
-        assign_home(&tx, &context(), "b", 0, Some("home")),
-        Err(Error::ConversationOccupied)
-    ));
-    assert!(matches!(
-        set_plan_rank(&tx, &context(), "a", 1, None, Some("A"), Some("A")),
-        Err(Error::InvalidRank)
-    ));
-    assert!(matches!(
-        edit_work(
-            &tx,
-            &context(),
-            "a",
-            0,
-            &WorkFields::from_snapshot(&read_work(&tx, "a").unwrap()).unwrap()
-        ),
-        Err(Error::Conflict { .. })
-    ));
-    set_plan_rank(&tx, &context(), "a", 1, None, None, None).unwrap();
     tx.commit().unwrap();
 }
 // test-category: pure-logic
@@ -150,30 +126,6 @@ fn intent_replay_skips_domain_change_and_preserves_original_payload() {
         Err(Error::Conflict { .. })
     ));
     assert_eq!(pending_intents(&tx, "", 10).unwrap().len(), 1);
-    tx.commit().unwrap();
-}
-// test-category: pure-logic
-#[test]
-fn boot_marker_distinguishes_first_clean_and_crash_and_fences_old_boot() {
-    let mut db = db();
-    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
-    assert_eq!(
-        begin_boot(&tx, &context(), "first").unwrap(),
-        PreviousShutdown::FirstBoot
-    );
-    mark_clean_shutdown(&tx, &context(), "first").unwrap();
-    assert_eq!(
-        begin_boot(&tx, &context(), "second").unwrap(),
-        PreviousShutdown::Clean
-    );
-    assert_eq!(
-        begin_boot(&tx, &context(), "third").unwrap(),
-        PreviousShutdown::Crash
-    );
-    assert!(matches!(
-        mark_clean_shutdown(&tx, &context(), "second"),
-        Err(Error::Conflict { .. })
-    ));
     tx.commit().unwrap();
 }
 // test-category: pure-logic
@@ -224,7 +176,7 @@ fn every_store_statement_has_an_indexed_query_plan() {
             .unwrap()
             .join("\n");
         assert!(
-            !plan.contains("SCAN wm_") && !plan.contains("SCAN a") && !plan.contains("SCAN t"),
+            !plan.contains("SCAN canon_") && !plan.contains("SCAN a") && !plan.contains("SCAN t"),
             "{name}: {plan}"
         );
     }
@@ -247,7 +199,7 @@ fn epic_creation_records_fields_without_a_synthetic_edit() {
     assert_eq!(epic["assignee"], "person");
     let edits: i64 = tx
         .query_row(
-            "SELECT count(*) FROM wm_audit WHERE entity_id=?1 AND op='edit'",
+            "SELECT count(*) FROM canon_audit WHERE entity_id=?1 AND op='edit'",
             [epic["id"].as_str().unwrap()],
             |r| r.get(0),
         )

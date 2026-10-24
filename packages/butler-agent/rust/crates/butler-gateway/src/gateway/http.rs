@@ -41,6 +41,7 @@ mod router;
 pub(crate) use router::templates as route_templates;
 mod security;
 pub(super) use security::RequestPolicy;
+mod canon;
 mod canon_sidebar;
 mod security_settings;
 mod session_branches;
@@ -62,7 +63,6 @@ mod transcript_export;
 mod updates;
 mod wallpaper_modules;
 mod wallpapers;
-mod work_model;
 
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 

@@ -1,33 +1,33 @@
 //! Host-owned BTCC adapter; every SQL operation stays on its owning lane.
 mod canon_sidebar;
+use butler_canon::{store, work_queries::Query};
 use butler_gateway::gateway::{
-    AppWorkModelConflict, AppWorkModelEvent, AppWorkModelPort, AppWorkModelRequest,
-    AppWorkModelResource, AppWorkModelScope, ApplicationFuture, GatewayApplicationError,
+    AppCanonConflict, AppCanonEvent, AppCanonPort, AppCanonRequest, AppCanonResource,
+    ApplicationFuture, GatewayApplicationError,
 };
 use butler_turn::btcc::{BtccStorage, StorageError};
-use butler_canon::{store, work_queries::Query};
 use serde_json::{Value, json};
 use std::sync::Arc;
 
-pub(crate) struct AppWorkModel {
+pub(crate) struct AppCanon {
     storage: BtccStorage,
 }
-impl AppWorkModel {
+impl AppCanon {
     pub(crate) fn new(storage: BtccStorage) -> Self {
         Self { storage }
     }
 }
-impl AppWorkModelPort for AppWorkModel {
+impl AppCanonPort for AppCanon {
     fn canon_operation(
         &self,
         operation: butler_gateway::gateway::AppCanonOperation,
     ) -> ApplicationFuture<Value> {
         canon_sidebar::execute(self.storage.clone(), operation)
     }
-    fn execute(&self, request: AppWorkModelRequest) -> ApplicationFuture<Value> {
+    fn execute(&self, request: AppCanonRequest) -> ApplicationFuture<Value> {
         let storage = self.storage.clone();
         Box::pin(async move {
-            let AppWorkModelRequest {
+            let AppCanonRequest {
                 resource,
                 id,
                 input,
@@ -53,36 +53,11 @@ impl AppWorkModelPort for AppWorkModel {
             }
         })
     }
-    fn project_scope(
-        &self,
-        resource: AppWorkModelResource,
-        id: String,
-    ) -> ApplicationFuture<String> {
+    fn project_scope(&self, resource: AppCanonResource, id: String) -> ApplicationFuture<String> {
         let storage = self.storage.clone();
         Box::pin(async move {
             storage
-                .canon_read(move |db| {
-                    store::api::project_scope(db, store_resource(resource), &id)
-                })
-                .await
-                .map_err(error)
-        })
-    }
-    fn work_scope(&self, id: String) -> ApplicationFuture<AppWorkModelScope> {
-        let storage = self.storage.clone();
-        Box::pin(async move {
-            storage
-                .canon_read(move |db| {
-                    let (kind, id) = store::api::work_scope(db, &id)?;
-                    Ok(match kind {
-                        butler_canon::work_types::ScopeKind::Project => {
-                            AppWorkModelScope::Project(id)
-                        }
-                        butler_canon::work_types::ScopeKind::Session => {
-                            AppWorkModelScope::Session(id)
-                        }
-                    })
-                })
+                .canon_read(move |db| store::api::project_scope(db, store_resource(resource), &id))
                 .await
                 .map_err(error)
         })
@@ -90,7 +65,7 @@ impl AppWorkModelPort for AppWorkModel {
     fn changes(&self) -> Option<tokio::sync::watch::Receiver<()>> {
         Some(self.storage.subscribe_changes())
     }
-    fn unpublished(&self, after: i64) -> ApplicationFuture<Vec<AppWorkModelEvent>> {
+    fn unpublished(&self, after: i64) -> ApplicationFuture<Vec<AppCanonEvent>> {
         let storage = self.storage.clone();
         Box::pin(async move {
             storage
@@ -107,7 +82,7 @@ impl AppWorkModelPort for AppWorkModel {
                         .collect::<rusqlite::Result<Vec<_>>>()?;
                     rows.into_iter()
                         .map(|(seq, topic, payload)| {
-                            Ok(AppWorkModelEvent {
+                            Ok(AppCanonEvent {
                                 seq,
                                 topic,
                                 payload: serde_json::from_str(&payload)?,
@@ -139,9 +114,9 @@ fn error(error: StorageError) -> GatewayApplicationError {
         return GatewayApplicationError::internal_from(error);
     };
     let status = match *code {
-        "conflict" | "running" | "conversation_occupied" => 409,
+        "conflict" => 409,
         "work_model_not_found" => 404,
-        "invalid_rank" | "cross_chat" | "work_model_invalid" => 400,
+        "invalid_rank" | "work_model_invalid" => 400,
         _ => return GatewayApplicationError::internal_from(error),
     };
     let source = if *code == "conflict" {
@@ -149,14 +124,11 @@ fn error(error: StorageError) -> GatewayApplicationError {
             .as_deref()
             .and_then(|s| s.downcast_ref::<store::Error>())
             .and_then(|e| match e {
-                store::Error::Conflict { current } => current["revision"]
-                    .as_i64()
-                    .or(current["task_graph_revision"].as_i64()),
+                store::Error::Conflict { current } => current["revision"].as_i64(),
                 _ => None,
             })
             .map(|revision| {
-                Arc::new(AppWorkModelConflict { revision })
-                    as Arc<dyn std::error::Error + Send + Sync>
+                Arc::new(AppCanonConflict { revision }) as Arc<dyn std::error::Error + Send + Sync>
             })
     } else {
         None
@@ -169,13 +141,11 @@ fn error(error: StorageError) -> GatewayApplicationError {
     }
 }
 
-fn store_resource(resource: AppWorkModelResource) -> store::api::Resource {
-    use AppWorkModelResource::{
+fn store_resource(resource: AppCanonResource) -> store::api::Resource {
+    use AppCanonResource::{
         BacklogOrder, Canon, CreateEpic, CreatePlan, EditEpic, EditPlan, Epic, Plan, PlanOrder,
-        Queue,
     };
     match resource {
-        Queue => store::api::Resource::Queue,
         Canon => store::api::Resource::Canon,
         Plan => store::api::Resource::Plan,
         Epic => store::api::Resource::Epic,

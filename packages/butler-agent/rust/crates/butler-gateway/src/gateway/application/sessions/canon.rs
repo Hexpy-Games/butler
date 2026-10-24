@@ -37,9 +37,9 @@ pub(in crate::gateway::application) fn project(
         chat
     };
     db.execute(
-        "INSERT INTO app_canon_conversations(session_id,work_id,project_id,op_id)
-        VALUES(?1,?2,?3,?4) ON CONFLICT(work_id) DO UPDATE SET
-        session_id=excluded.session_id,project_id=excluded.project_id,op_id=excluded.op_id",
+        "INSERT INTO app_canon_conversations(session_id,epic_id,project_id,op_id)
+        VALUES(?1,?2,?3,?4) ON CONFLICT(session_id,epic_id) DO UPDATE SET
+        project_id=excluded.project_id,op_id=excluded.op_id",
         params![
             chat,
             payload["work_id"].as_str(),

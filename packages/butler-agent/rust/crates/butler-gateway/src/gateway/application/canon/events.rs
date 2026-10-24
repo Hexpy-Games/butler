@@ -1,5 +1,5 @@
 //! Durable, idempotent outbox bridge. Startup catch-up, then change signals only.
-use super::super::storage::schema::work_model::{PRUNE, RECEIPT};
+use super::super::storage::schema::canon::{PRUNE, RECEIPT};
 use super::*;
 use crate::gateway::application::storage::AppStorageError;
 use rusqlite::OptionalExtension;
@@ -12,10 +12,10 @@ struct Cursor {
 }
 
 pub(in crate::gateway::application) fn start(app: &AppApplication) {
-    let Some(mut changes) = app.dependencies.work_model.changes() else {
+    let Some(mut changes) = app.dependencies.canon.changes() else {
         return;
     };
-    let port = app.dependencies.work_model.clone();
+    let port = app.dependencies.canon.clone();
     let storage = app.storage.clone();
     let subscribers = app.subscribers.clone();
     let clock = app.dependencies.identity_clock.clone();
@@ -56,7 +56,7 @@ pub(in crate::gateway::application) fn start(app: &AppApplication) {
     });
 }
 async fn drain(
-    port: &Arc<dyn AppWorkModelPort>,
+    port: &Arc<dyn AppCanonPort>,
     storage: &super::super::storage::AppStorage,
     subscribers: &EventSubscribers,
     clock: &dyn AppIdentityClock,
@@ -109,7 +109,7 @@ fn append_rows(
     db: &rusqlite::Connection,
     subscribers: &EventSubscribers,
     now: &str,
-    rows: Vec<AppWorkModelEvent>,
+    rows: Vec<AppCanonEvent>,
 ) -> Result<(), AppStorageError> {
     for row in rows {
         let exists = db

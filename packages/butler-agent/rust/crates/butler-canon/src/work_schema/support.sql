@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS wm_audit (
+CREATE TABLE IF NOT EXISTS canon_audit (
   seq INTEGER PRIMARY KEY AUTOINCREMENT,
   entity_kind TEXT NOT NULL,
   entity_id TEXT NOT NULL,
@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS wm_audit (
   payload_json TEXT NOT NULL CHECK (json_valid(payload_json))
 );
 
-CREATE TABLE IF NOT EXISTS wm_outbox (
+CREATE TABLE IF NOT EXISTS canon_events (
   seq INTEGER PRIMARY KEY AUTOINCREMENT,
   topic TEXT NOT NULL,
   payload_json TEXT NOT NULL CHECK (json_valid(payload_json)),
@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS wm_outbox (
   created_at INTEGER NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS wm_counts (
+CREATE TABLE IF NOT EXISTS canon_counters (
   scope_kind TEXT NOT NULL CHECK (scope_kind IN ('session','project')),
   scope_ref TEXT NOT NULL,
   key TEXT NOT NULL,
@@ -25,48 +25,72 @@ CREATE TABLE IF NOT EXISTS wm_counts (
   PRIMARY KEY (scope_kind,scope_ref,key)
 );
 
-CREATE TABLE IF NOT EXISTS wm_legacy_map (
-  source TEXT NOT NULL,
-  source_id TEXT NOT NULL,
-  new_id TEXT NOT NULL,
-  source_hash TEXT NOT NULL,
-  imported_revision INTEGER NOT NULL,
-  batch TEXT NOT NULL,
-  PRIMARY KEY (source,source_id)
-);
-
-CREATE TABLE IF NOT EXISTS wm_migration (
-  singleton INTEGER PRIMARY KEY CHECK (singleton=1),
-  state TEXT NOT NULL CHECK (state IN ('pending','importing','needs_source','complete')),
-  cursor_json TEXT NOT NULL CHECK (json_valid(cursor_json)),
-  source_counts_json TEXT NOT NULL CHECK (json_valid(source_counts_json)),
-  writer_epoch INTEGER NOT NULL,
-  legacy_feed_watermark INTEGER NOT NULL,
-  needs_source_json TEXT NOT NULL CHECK (json_valid(needs_source_json))
-);
-
-CREATE TRIGGER IF NOT EXISTS wm_audit_no_update BEFORE UPDATE ON wm_audit
-BEGIN SELECT RAISE(ABORT, 'immutable work-model history'); END;
-CREATE TRIGGER IF NOT EXISTS wm_audit_no_delete BEFORE DELETE ON wm_audit
-BEGIN SELECT RAISE(ABORT, 'immutable work-model history'); END;
-CREATE TRIGGER IF NOT EXISTS wm_results_no_update BEFORE UPDATE ON wm_results
-BEGIN SELECT RAISE(ABORT, 'immutable work-model history'); END;
-CREATE TRIGGER IF NOT EXISTS wm_results_no_delete BEFORE DELETE ON wm_results
-BEGIN SELECT RAISE(ABORT, 'immutable work-model history'); END;
-CREATE TRIGGER IF NOT EXISTS wm_reviews_no_update BEFORE UPDATE ON wm_reviews
-BEGIN SELECT RAISE(ABORT, 'immutable work-model history'); END;
-CREATE TRIGGER IF NOT EXISTS wm_reviews_no_delete BEFORE DELETE ON wm_reviews
-BEGIN SELECT RAISE(ABORT, 'immutable work-model history'); END;
-CREATE TRIGGER IF NOT EXISTS wm_spec_bodies_no_update BEFORE UPDATE ON wm_spec_bodies
-BEGIN SELECT RAISE(ABORT, 'immutable work-model history'); END;
-CREATE TRIGGER IF NOT EXISTS wm_spec_bodies_no_delete BEFORE DELETE ON wm_spec_bodies
-BEGIN SELECT RAISE(ABORT, 'immutable work-model history'); END;
-CREATE TRIGGER IF NOT EXISTS wm_spec_criteria_no_update BEFORE UPDATE ON wm_spec_criteria
-BEGIN SELECT RAISE(ABORT, 'immutable work-model history'); END;
-CREATE TRIGGER IF NOT EXISTS wm_spec_criteria_no_delete BEFORE DELETE ON wm_spec_criteria
-BEGIN SELECT RAISE(ABORT, 'immutable work-model history'); END;
-CREATE TRIGGER IF NOT EXISTS wm_spec_revisions_no_content_update
-BEFORE UPDATE OF node_id,revision,body_hash,parser_version,authoring_instruction_id ON wm_spec_revisions
+CREATE TRIGGER IF NOT EXISTS canon_audit_no_update BEFORE UPDATE ON canon_audit
+BEGIN SELECT RAISE(ABORT, 'immutable canon history'); END;
+CREATE TRIGGER IF NOT EXISTS canon_audit_no_delete BEFORE DELETE ON canon_audit
+BEGIN SELECT RAISE(ABORT, 'immutable canon history'); END;
+CREATE TRIGGER IF NOT EXISTS canon_spec_bodies_no_update BEFORE UPDATE ON canon_spec_bodies
+BEGIN SELECT RAISE(ABORT, 'immutable canon history'); END;
+CREATE TRIGGER IF NOT EXISTS canon_spec_bodies_no_delete BEFORE DELETE ON canon_spec_bodies
+BEGIN SELECT RAISE(ABORT, 'immutable canon history'); END;
+CREATE TRIGGER IF NOT EXISTS canon_spec_criteria_no_update BEFORE UPDATE ON canon_spec_criteria
+BEGIN SELECT RAISE(ABORT, 'immutable canon history'); END;
+CREATE TRIGGER IF NOT EXISTS canon_spec_criteria_no_delete BEFORE DELETE ON canon_spec_criteria
+BEGIN SELECT RAISE(ABORT, 'immutable canon history'); END;
+CREATE TRIGGER IF NOT EXISTS canon_spec_revisions_no_content_update
+BEFORE UPDATE OF node_id,revision,body_hash,parser_version ON canon_spec_revisions
 BEGIN SELECT RAISE(ABORT, 'immutable spec revision content'); END;
-CREATE TRIGGER IF NOT EXISTS wm_spec_revisions_no_delete BEFORE DELETE ON wm_spec_revisions
+CREATE TRIGGER IF NOT EXISTS canon_spec_revisions_no_delete BEFORE DELETE ON canon_spec_revisions
 BEGIN SELECT RAISE(ABORT, 'immutable spec revision'); END;
+CREATE TABLE IF NOT EXISTS canon_intents (
+  op_id TEXT PRIMARY KEY NOT NULL,
+  kind TEXT NOT NULL,
+  payload_json TEXT NOT NULL CHECK (json_valid(payload_json)),
+  revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
+  state TEXT NOT NULL CHECK (state IN ('pending','applied')),
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS canon_cursors (
+  name TEXT PRIMARY KEY NOT NULL CHECK (name IN ('progress_feed','link_reconcile')),
+  value INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS canon_session_epics (
+  session_id TEXT NOT NULL,
+  epic_id TEXT NOT NULL REFERENCES canon_epics(id),
+  bound_at INTEGER NOT NULL,
+  bound_by TEXT NOT NULL CHECK (json_valid(bound_by)),
+  origin TEXT NOT NULL CHECK (origin IN ('user','butler')),
+  PRIMARY KEY (session_id,epic_id)
+);
+CREATE INDEX IF NOT EXISTS canon_session_epics_epic ON canon_session_epics(epic_id,bound_at,session_id);
+CREATE TABLE IF NOT EXISTS canon_epic_work_links (
+  epic_id TEXT NOT NULL REFERENCES canon_epics(id),
+  btcc_work_id TEXT NOT NULL UNIQUE,
+  session_id TEXT NOT NULL,
+  linked_at INTEGER NOT NULL,
+  linked_by TEXT NOT NULL CHECK (json_valid(linked_by)),
+  PRIMARY KEY (epic_id,btcc_work_id)
+);
+CREATE INDEX IF NOT EXISTS canon_epic_work_links_epic ON canon_epic_work_links(epic_id,linked_at);
+CREATE INDEX IF NOT EXISTS canon_epic_work_links_session ON canon_epic_work_links(session_id);
+CREATE TABLE IF NOT EXISTS canon_session_queue_heads (
+  session_id TEXT PRIMARY KEY NOT NULL,
+  graph_revision INTEGER NOT NULL DEFAULT 0 CHECK (graph_revision>=0)
+);
+CREATE TABLE IF NOT EXISTS canon_session_queue (
+  session_id TEXT NOT NULL REFERENCES canon_session_queue_heads(session_id),
+  epic_id TEXT NOT NULL REFERENCES canon_epics(id),
+  step_index INTEGER NOT NULL CHECK (step_index>=0),
+  stack_position INTEGER NOT NULL CHECK (stack_position>=0),
+  state TEXT NOT NULL CHECK (state IN ('waiting','running','held','done','removed')),
+  hold_reason TEXT,
+  held_by_epic_id TEXT REFERENCES canon_epics(id),
+  decision TEXT CHECK (decision IN ('run_anyway','delete')),
+  decided_at INTEGER,
+  question_message_id TEXT,
+  origin TEXT NOT NULL CHECK (origin IN ('user_message','schedule','detach')),
+  origin_message_id TEXT,
+  result_reported_at INTEGER,
+  PRIMARY KEY (session_id,epic_id)
+);

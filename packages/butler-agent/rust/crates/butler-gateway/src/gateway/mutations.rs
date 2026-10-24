@@ -13,7 +13,11 @@ pub trait GatewayMutationCommands: Send + Sync + 'static {
     ) -> ApplicationFuture<serde_json::Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
-    fn canon_conversation(&self, _id: String) -> ApplicationFuture<serde_json::Value> {
+    fn canon_conversation(
+        &self,
+        _id: String,
+        _session_id: Option<String>,
+    ) -> ApplicationFuture<serde_json::Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     /// An unattended schedule run skipped a step that needs permission (D8).

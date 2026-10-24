@@ -1,4 +1,4 @@
-//! Inert work-model port. SQL runs only on the BTCC writer/read lanes.
+//! Canon port. SQL runs only on the BTCC writer/read lanes.
 use super::{BtccStorage, StorageError, StorageResult};
 use butler_canon::store;
 use rusqlite::{Connection, TransactionBehavior};
@@ -40,11 +40,8 @@ fn work_error(error: store::Error) -> StorageError {
     }
     let code = match &error {
         store::Error::Conflict { .. } => "conflict",
-        store::Error::Running => "running",
         store::Error::NotFound => "work_model_not_found",
         store::Error::InvalidRank => "invalid_rank",
-        store::Error::ConversationOccupied => "conversation_occupied",
-        store::Error::CrossChat => "cross_chat",
         store::Error::Invalid(_) | store::Error::Chain(_) => "work_model_invalid",
         store::Error::Json(_)
         | store::Error::BodyCodec(_)

@@ -3,7 +3,6 @@ mod canon;
 pub mod canon_conversation;
 mod outbox;
 pub(super) use outbox::append as outbox;
-mod queue;
 mod reads;
 pub mod sql;
 use super::*;
@@ -12,11 +11,10 @@ use crate::{
     work_queries::Query,
     work_types::*,
 };
-pub use reads::{canon, epic, plan, queue};
+pub use reads::{canon, epic, plan};
 
 #[derive(Clone, Copy, Debug)]
 pub enum Resource {
-    Queue,
     Canon,
     Plan,
     Epic,
@@ -28,27 +26,15 @@ pub enum Resource {
     BacklogOrder,
 }
 use Resource::{
-    BacklogOrder, Canon, CreateEpic, CreatePlan, EditEpic, EditPlan, Epic, Plan, PlanOrder, Queue,
+    BacklogOrder, Canon, CreateEpic, CreatePlan, EditEpic, EditPlan, Epic, Plan, PlanOrder,
 };
-
-/// Work identity only; no Tasks, cards or spec bodies are read for App scope checks.
-pub fn work_scope(db: &Connection, id: &str) -> Result<(ScopeKind, String)> {
-    let (kind, scope): (String, String) = db
-        .query_row(sql::WORK_SCOPE, [id], |row| Ok((row.get(0)?, row.get(1)?)))
-        .optional()?
-        .ok_or(Error::NotFound)?;
-    Ok((
-        kind.parse().map_err(|_| Error::Invalid("scope kind"))?,
-        scope,
-    ))
-}
 
 /// Identity-only PK lookups, shared by reads and edits before App project checks.
 pub fn project_scope(db: &Connection, resource: Resource, id: &str) -> Result<String> {
     let sql = match resource {
         Plan | EditPlan | PlanOrder => sql::PLAN_SCOPE,
         Epic | EditEpic => sql::EPIC_SCOPE,
-        Queue | Canon | CreatePlan | CreateEpic | BacklogOrder => return Ok(id.to_owned()),
+        Canon | CreatePlan | CreateEpic | BacklogOrder => return Ok(id.to_owned()),
     };
     db.query_row(sql, [id], |row| row.get(0))
         .optional()?
@@ -57,7 +43,6 @@ pub fn project_scope(db: &Connection, resource: Resource, id: &str) -> Result<St
 
 pub fn read(db: &Connection, resource: Resource, id: &str) -> Result<Value> {
     match resource {
-        Queue => queue(db, id),
         Canon => canon(db, id),
         Plan => plan(db, id),
         Epic => epic(db, id),
@@ -74,7 +59,6 @@ pub fn write(
     input: Value,
 ) -> Result<Value> {
     match resource {
-        Queue => queue::edit(tx, ctx, id, input),
         CreatePlan => canon::create_plan(tx, ctx, id, input),
         EditPlan => canon::edit_plan(tx, ctx, id, input),
         CreateEpic => canon::create_epic(tx, ctx, id, input),
@@ -97,9 +81,6 @@ fn title(value: &str) -> Result<()> {
     Ok(())
 }
 fn canon_row(row: Value) -> Result<Value> {
-    if row["visibility"] != "canon" {
-        return Err(Error::NotFound);
-    }
     Ok(row)
 }
 

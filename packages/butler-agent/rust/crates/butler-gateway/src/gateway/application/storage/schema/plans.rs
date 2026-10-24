@@ -53,7 +53,7 @@ pub(super) fn hot_queries_use_their_indexes() {
     ] {
         assert_uses(&connection, sql, EVENTS_INDEX);
     }
-    for sql in [super::work_model::RECEIPT, super::work_model::PRUNE] {
+    for sql in [super::canon::RECEIPT, super::canon::PRUNE] {
         assert_uses(&connection, sql, "INTEGER PRIMARY KEY");
     }
     let sidebar = super::canon_sidebar::ORDERED_READ;
