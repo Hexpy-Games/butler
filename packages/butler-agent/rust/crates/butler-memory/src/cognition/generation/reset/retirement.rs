@@ -20,7 +20,8 @@ pub(super) fn retire(
             &old.clone(),
             Box::new(move || {
                 runtime.spawn(async move {
-                    let Ok(lease) = acquire(&root, &paths, &coordinator, &token).await else {
+                    let Ok(lease) = acquire(&root, &paths, &coordinator, "cutover", &token).await
+                    else {
                         return;
                     };
                     let removed = tokio::task::spawn_blocking(move || {
