@@ -103,3 +103,35 @@ impl Events {
         .map_err(|error| error.to_string())
     }
 }
+
+/// Production statements exposed for the stub E2E query-plan pins.
+pub fn pending_ask_plan_statements() -> Vec<(String, &'static str)> {
+    use super::super::pending_asks::{self, events, plans};
+    let mut statements = Vec::new();
+    for sql in [
+        plans::SESSION,
+        plans::FIND,
+        plans::DELETE,
+        plans::COUNT,
+        pending_asks::ATTENTION,
+    ] {
+        statements.push((sql.into(), "sqlite_autoindex_app_open_plan_decisions_1"));
+    }
+    for sql in [plans::GLOBAL, plans::BEFORE] {
+        statements.push((sql.into(), "app_open_plan_decisions_created"));
+    }
+    for sql in [
+        events::QUEUED,
+        events::CURSOR,
+        events::ADVANCE,
+        events::PRUNE,
+    ] {
+        statements.push((sql.into(), "INTEGER PRIMARY KEY"));
+    }
+    statements.push(("SELECT chat_id FROM app_open_plan_decisions INDEXED BY app_open_plan_decisions_message WHERE message_id=?1".into(), "app_open_plan_decisions_message"));
+    statements.push((pending_asks::CHAT.into(), "sqlite_autoindex_chats_1"));
+    for sql in [plans::INSERT, events::ENQUEUE] {
+        statements.push((sql.into(), ""));
+    }
+    statements
+}

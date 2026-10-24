@@ -25,8 +25,12 @@ pub(in crate::btcc::storage) fn close_pending_self_session_requests(
     now: &str,
 ) -> StorageResult<usize> {
     db.execute(
+        super::pending_asks::CLOSE_QUESTIONS,
+        params![session_id,serde_json::json!({"status":"closed","message_id":format!("close-{session_id}"),"reason":reason}).to_string(),now],
+    ).map_err(StorageError::sqlite)?;
+    db.execute(
         "UPDATE btcc_authority_requests SET close_reason=?1, close_scope='self_session', \
-         closed_at=?2, updated_at=?2 WHERE owner_session_id=?3 AND source_session_id=?3 \
+         closed_at=?2, updated_at=?2 WHERE owner_session_id=?3 AND (?1 IN ('session_archived','session_permanently_deleted') OR source_session_id=?3) \
          AND decision='pending' AND close_reason IS NULL",
         params![reason, now, session_id],
     )

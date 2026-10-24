@@ -111,6 +111,8 @@ impl GatewayMutationCommands for TestApplication {
     }
 }
 
+impl crate::gateway::GatewayPendingAsks for TestApplication {}
+
 impl GatewayApplication for TestApplication {
     fn get_operation_output(
         &self,

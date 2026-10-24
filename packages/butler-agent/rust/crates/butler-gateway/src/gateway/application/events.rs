@@ -21,6 +21,7 @@ type Listener = Arc<dyn Fn(Arc<PublishedEvent>) + Send + Sync>;
 #[derive(Clone, Default)]
 pub(super) struct EventSubscribers {
     inner: Arc<Mutex<SubscriberState>>,
+    pub(super) pending_asks_wake: Arc<tokio::sync::Notify>,
 }
 
 #[derive(Default)]
@@ -88,6 +89,12 @@ impl EventSubscribers {
 
     /// Delivers a committed event to every listener; they share its frame.
     pub(super) fn publish(&self, event: &Arc<PublishedEvent>) {
+        if matches!(
+            event.envelope().event_type.as_str(),
+            "session.updated" | "session.permanently_deleted" | "session.cleared"
+        ) {
+            self.pending_asks_wake.notify_one();
+        }
         let (listeners, cursor_observer) = {
             let mut state = self.inner.lock();
             state.thinking.finish(event.envelope());
@@ -229,4 +236,17 @@ pub(super) fn replay(
         .map_err(AppStorageError::sqlite)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(AppStorageError::sqlite)
+}
+
+/// The newest durable event cursor; storage is closed when it cannot be read.
+pub(super) async fn latest_event_cursor(
+    storage: &super::AppStorage,
+) -> Result<u64, super::GatewayApplicationError> {
+    match storage.read(latest).await {
+        Ok(cursor) => Ok(cursor),
+        Err(error) => {
+            let _ = storage.close().await;
+            Err(super::app_error(error))
+        }
+    }
 }

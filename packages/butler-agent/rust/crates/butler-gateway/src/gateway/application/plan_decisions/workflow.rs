@@ -207,6 +207,13 @@ impl AppApplication {
         self.storage
             .execute(move |db| {
                 let transaction = db.savepoint().map_err(AppStorageError::sqlite)?;
+                super::super::pending_asks::plans::close(
+                    &transaction,
+                    &subscribers,
+                    &input.chat_id,
+                    "answered",
+                    &now,
+                )?;
                 settings::create_plan_continuation(&transaction, &subscribers, input, &now)?;
                 transaction.commit().map_err(AppStorageError::sqlite)
             })
@@ -241,6 +248,13 @@ impl AppApplication {
         self.storage
             .execute(move |db| {
                 let transaction = db.savepoint().map_err(AppStorageError::sqlite)?;
+                super::super::pending_asks::plans::close(
+                    &transaction,
+                    &subscribers,
+                    &input.chat_id,
+                    "answered",
+                    &now,
+                )?;
                 settings::create_plan_instruction(&transaction, &subscribers, input, &now)?;
                 transaction.commit().map_err(AppStorageError::sqlite)
             })
@@ -264,8 +278,16 @@ impl AppApplication {
         let action = action.as_str().to_owned();
         self.storage
             .execute(move |db| {
+                let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
+                super::super::pending_asks::plans::close(
+                    &tx,
+                    &subscribers,
+                    &session,
+                    "answered",
+                    &now,
+                )?;
                 events::append(
-                    db,
+                    &tx,
                     &subscribers,
                     "session.plan_decision",
                     None,
@@ -280,7 +302,7 @@ impl AppApplication {
                     .unwrap_or_default(),
                     &now,
                 )?;
-                Ok(())
+                tx.commit().map_err(AppStorageError::sqlite)
             })
             .await
             .map_err(app_error)

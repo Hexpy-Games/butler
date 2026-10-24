@@ -35,6 +35,14 @@ fn commands(request: &Request<Body>) -> Option<Handler> {
     ) {
         return Some(Handler::CanonSidebar);
     }
+    if matches!(
+        parts.as_slice(),
+        ["pending-asks"]
+            | ["sessions", _, "pending-asks"]
+            | ["sessions", _, "pending-asks", _, "dismiss"]
+    ) {
+        return Some(Handler::PendingAsks);
+    }
     let routes = [
         (
             matches!(
