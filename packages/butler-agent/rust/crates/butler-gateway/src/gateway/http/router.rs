@@ -320,6 +320,7 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/updates/check", Handler::Updates),
     ("/updates/progress", Handler::Updates),
     ("/usage-monitor", Handler::Monitors),
+    ("/usage-history", Handler::Monitors),
     ("/user-work", Handler::Shell),
     ("/wallpaper-modules", Handler::Wallpapers),
     ("/wallpaper-modules/import", Handler::Wallpapers),

@@ -152,6 +152,7 @@ pub struct ProviderQuotaStore {
     plan_limits: Mutex<BTreeMap<String, PlanLimitReading>>,
     chatgpt_active: std::sync::atomic::AtomicBool,
     readings: Mutex<BTreeMap<String, ProviderQuotaReading>>,
+    registered: Mutex<Option<(Vec<String>, bool)>>,
     statuses: Mutex<BTreeMap<String, QuotaPollStatus>>,
     updates: broadcast::Sender<ProviderQuotaUpdate>,
     clock: Arc<dyn ProviderClock>,
@@ -168,6 +169,7 @@ impl ProviderQuotaStore {
         Self {
             persistence: persistence::Persistence::new(path),
             readings: Mutex::new(persisted.providers),
+            registered: Mutex::new(None),
             plan_limits: Mutex::new(persisted.plan_limit),
             chatgpt_active: std::sync::atomic::AtomicBool::new(false),
             statuses: Mutex::new(BTreeMap::new()),
@@ -178,6 +180,22 @@ impl ProviderQuotaStore {
 
     /// The provider's quota view: its latest reading, or why there is none.
     pub fn view(&self, provider_id: &str) -> ProviderQuotaView {
+        if self
+            .registered
+            .lock()
+            .as_ref()
+            .is_some_and(|(ids, chatgpt)| {
+                !ids.iter().any(|id| id == provider_id) || (provider_id == "openai" && !chatgpt)
+            })
+        {
+            let disabled = self
+                .statuses
+                .lock()
+                .get(provider_id)
+                .copied()
+                .filter(|status| *status == QuotaPollStatus::Disabled);
+            return view::without_reading(provider_id, disabled);
+        }
         if provider_id == "openai"
             && !self
                 .chatgpt_active
@@ -208,9 +226,13 @@ impl ProviderQuotaStore {
             .store(active, std::sync::atomic::Ordering::Release);
     }
 
-    /// Providers with a reading, in id order.
+    /// Registered providers in model order; standalone stores use reading ids.
     pub fn provider_ids(&self) -> Vec<String> {
-        self.readings.lock().keys().cloned().collect()
+        self.registered
+            .lock()
+            .as_ref()
+            .map(|(ids, _)| ids.clone())
+            .unwrap_or_else(|| self.readings.lock().keys().cloned().collect())
     }
 
     /// Receives every changed quota.
@@ -317,6 +339,11 @@ impl ProviderQuotaStore {
 }
 
 impl ProviderQuotaSink for ProviderQuotaStore {
+    fn registered_providers(&self, providers: &[String], chatgpt: bool) {
+        *self.registered.lock() = Some((providers.to_vec(), chatgpt));
+        self.set_chatgpt_active(chatgpt);
+    }
+
     fn account_changed(&self, provider: &str) {
         let before = self.view(provider);
         {
