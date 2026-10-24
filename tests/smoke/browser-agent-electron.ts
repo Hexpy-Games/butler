@@ -128,8 +128,10 @@ try {
     await app.call("control", { id: agentTab.id, holder: "agent" });
     await app.shot(`${language}-${theme}-timeline-still-1440`);
   }
-  const observation = await internal("tab.observe", agentTab.id);
-  assert.equal(observation.status, "ok");
+  // The hand-back reaches the Rust mirror after main publishes it.
+  let observation: any;
+  await waitBrowser(async()=>(observation = await internal("tab.observe", agentTab.id)).reason !== "user_control", "Rust mirror after hand-back");
+  assert.equal(observation.status, "ok", JSON.stringify(observation));
   await app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(agentTab.id)}).view.webContents.sendInputEvent({type:'mouseDown',x:100,y:100,button:'left',clickCount:1})`);
   await waitBrowser(async()=>(await state()).tabs.find(t=>t.id===agentTab.id)?.holder === "user", "native click takeover");
   stub.set([describeBrowser, ()=>bridgeBrowser("browser_wait_for_user", { tab: agentTab.id })]);
@@ -145,7 +147,12 @@ try {
   stub.set([describeBrowser,()=>bridgeBrowser("browser_wait_for_user",{tab:agentTab.id})]);
   await send("Hand-back races durable wait admission."); await delivered();
   await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ access_mode: "ask_first" }) });
-  stub.set([describeBrowser, ()=>bridgeBrowser("browser_observe", { tab: agentTab.id }), actConfirm]);
+  stub.set([describeBrowser, ()=>bridgeBrowser("browser_observe", { tab: agentTab.id }), request => {
+      const call = actConfirm(request);
+      const args = call.arguments.arguments as { steps: Array<Record<string, unknown>> };
+      args.steps[0].commits = true;
+      return call;
+    }]);
   await send("Approve the exact browser click");
   await waitBrowser(async()=>(await state()).tabs.find(t=>t.id===agentTab.id)?.waiting === true, "ask-first approval waiting");
   for (const language of ["ko", "en"]) for (const theme of ["light", "dark"]) { await settings(language,theme); await app.shot(`${language}-${theme}-approval-waiting-1440`); }
