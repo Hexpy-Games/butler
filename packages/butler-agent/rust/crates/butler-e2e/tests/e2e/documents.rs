@@ -64,7 +64,7 @@ fn seed_image(s: &Scenario) -> Result<(), HarnessError> {
     std::fs::create_dir_all(&path)?;
     std::fs::write(path.join(format!("{hash}.jpg")), &image.bytes)?;
     let db = db(s)?;
-    db.execute("INSERT INTO app_assets VALUES(?1,?2,'image/jpeg',?3,?4,?5,'Image alt','https://example.org/image','2026-10-25T00:00:00Z')",params![IMAGE,hash,image.width,image.height,image.bytes.len()])?;
+    db.execute("INSERT INTO app_assets(id,sha256,mime,width,height,bytes,alt,source_url,created_at) VALUES(?1,?2,'image/jpeg',?3,?4,?5,'Image alt','https://example.org/image','2026-10-25T00:00:00Z')",params![IMAGE,hash,image.width,image.height,image.bytes.len()])?;
     db.execute(
         "INSERT INTO app_asset_refs VALUES(?1,'chat','general')",
         [IMAGE],

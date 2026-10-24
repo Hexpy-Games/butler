@@ -1,3 +1,4 @@
+import { ConversationRequestAnchor } from "./ConversationRequestContext.tsx";
 import { useAppLocale } from "@/app/copy.ts";
 import { memo, useCallback } from "react";
 import type { MessageRecord } from "@/app/types.ts";
@@ -87,6 +88,7 @@ function MessageContentComponent({
             withCurrentControls={canRetryWithCurrentControls(message)}
           />
         )}
+      <ConversationRequestAnchor messageId={message.id} />
     </MessageImageContext.Provider>
   );
 }

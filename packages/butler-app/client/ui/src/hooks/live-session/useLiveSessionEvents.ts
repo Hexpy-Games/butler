@@ -1,4 +1,5 @@
 import { publishDocumentEvent } from "@/app/documentEvents";
+import { publishPendingAsksEvent } from "@/app/pendingAsks.ts";
 import { publishCanonEvent } from "@/app/canonEvents.ts";
 import { publishChatGptEvent } from "@/app/chatGptEvents.ts";
 import { receiveModelThinking, reconcileModelThinking, abandonModelThinking } from "@/app/modelThinking";
@@ -92,6 +93,7 @@ export function useLiveSessionEvents(): void {
       publishLibraryEvent(event);
       publishDocumentEvent(event);
       publishCanonEvent(event);
+      publishPendingAsksEvent(event);
       if (event.type.startsWith("authority.")) authorityPermissionsChanged();
       receiveTaskGraphEvent(event);
       if (event.type === "security.device_paired") pairedDevicesChanged();

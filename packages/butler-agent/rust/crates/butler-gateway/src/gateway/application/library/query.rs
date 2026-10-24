@@ -264,6 +264,10 @@ pub(super) fn compact(item: &Value, groups: &HashMap<String, String>) -> Value {
     if let Some(site) = item["site"].as_str().filter(|site| !site.is_empty()) {
         out["site"] = json!(site);
     }
+    if item["asset"].is_string() {
+        out["asset"] = item["asset"].clone();
+        out["img"] = item["asset"].clone();
+    }
     if item["autoTitle"].is_string() {
         out["autoTitle"] = item["autoTitle"].clone();
     }

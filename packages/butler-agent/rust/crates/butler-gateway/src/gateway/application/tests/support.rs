@@ -458,6 +458,7 @@ pub(super) fn command(client: &str, text: &str) -> SendMessageCommand {
     SendMessageCommand {
         chat_id: "general".into(),
         request: MessageSendRequest {
+            image_edit: None,
             expected_project_id: None,
             content_parts: None,
             chat_id: Some(json!("general")),

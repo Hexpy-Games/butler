@@ -48,9 +48,10 @@ pub use application::settings::{
     producer_log_config, startup_log_config, stored_ui_language_readonly,
 };
 pub use application::{
-    APP_PERSON_ID, AppAssetCommand, AppCanonOperation, AppCardInput, AppProfileInput,
-    AppSessionTopicClassifier, AppSessionTopicInput, AppSignInCommand, AppSignInUpsert,
-    AppVaultCommand, GatewaySignIns,
+    APP_PERSON_ID, AppAssetCommand, AppCanonOperation, AppCardInput, AppImageUsageCommand,
+    AppProfileInput, AppSessionTopicClassifier, AppSessionTopicInput, AppSignInCommand,
+    AppSignInUpsert, AppVaultCommand, GatewaySignIns, GeneratedAssetKind, ImageUsageOperation,
+    ImageUsageRecord, composite, mask_bounds,
 };
 pub use application::{
     AppAdmissionAuthority, AppApplication, AppApplicationConfig, AppApplicationDependencies,
@@ -184,3 +185,5 @@ pub fn http_route_templates() -> Vec<&'static str> {
 }
 
 pub use http::reset_browser_secret_keys;
+
+pub use protocol::ImageEditRequest;

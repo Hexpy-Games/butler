@@ -4,7 +4,7 @@ mod compact;
 pub(super) use compact::TabView;
 mod authority;
 pub(super) use assets::lookup_assets;
-mod client;
+pub(super) mod client;
 mod dialog;
 mod effect;
 mod grant;

@@ -13,6 +13,7 @@ import { DiagnosticsExportField } from "./DiagnosticsExportField";
 
 export function AboutSettings() {
   const locale = useAppLocale();
+  const taskGraphEnabled = useButlerStore(state => state.taskGraphEnabled);
   const [info, setInfo] = useState<AppInfoView | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -101,6 +102,11 @@ export function AboutSettings() {
         />
         <KeyValueRow data-setting-id="app-protocol" data-test-class="about-app-protocol" label={fields.appProtocol}
           value={info?.protocol_version ?? "-"} />
+      </SettingsSection>
+      <SettingsSection id="experiments" kind="form" title={appCopy.sessionInfo.experiments}>
+        <SettingsField id="task-graph-enabled" label={appCopy.sessionInfo.enableGraph}
+          control={<Switch id="task-graph-enabled" checked={taskGraphEnabled}
+            onCheckedChange={enabled => useButlerStore.setState({ taskGraphEnabled: enabled })} />} />
       </SettingsSection>
       <SettingsSection id="open-source" kind="info" title={locale === "ko-KR" ? "라이선스" : "Licenses"}>
         <OpenSourceLicenses />

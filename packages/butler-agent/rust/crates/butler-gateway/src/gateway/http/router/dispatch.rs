@@ -71,6 +71,9 @@ async fn commands(
     uri: &Uri,
 ) -> Result<Response, HttpError> {
     match handler {
+        Handler::ImageModels => image_models::route(state, request).await,
+        #[cfg(feature = "e2e-fixtures")]
+        Handler::ImageFixtures => image_fixtures::route(state, request).await,
         Handler::CanonSidebar => canon_sidebar::route(state, request, uri).await,
         Handler::Canon => canon::route(state, request, uri).await,
         Handler::TaskGraphs => task_graphs::route(state, request, uri).await,
