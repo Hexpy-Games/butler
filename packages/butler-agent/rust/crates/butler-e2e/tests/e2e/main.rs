@@ -52,6 +52,7 @@ mod browser_signin;
 mod browser_speed;
 mod browser_still_busy;
 mod browser_still_delivery;
+mod browser_tab_claims;
 mod browser_tool_args;
 mod browser_usage;
 mod cassette_lint;
