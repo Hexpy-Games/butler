@@ -52,8 +52,6 @@ Inventory of the previous sampling gates (all replaced):
 - `smoke/app-layout-smoke.ts`: bloom saturation/cell/mean/minimum luminance and
   silk coverage/spread thresholds replaced with actual module/tone readiness;
   assistant mark alpha scan replaced with draw completion. Geometry retained.
-- `smoke/question-input-geometry.ts`: CSS colour normalization no longer reads
-  canvas pixels; focus contrast >=3:1, token, clipping and geometry gates remain.
 - Unused `support/drawn-webgl-frame.ts` and `wallpaper-frame-sampler.ts` deleted.
   No image-diff pass/fail thresholds were found. The thinking-mark morph test's
   “pixel-identical” name refers to pure numeric geometry, not image sampling.
@@ -69,8 +67,6 @@ call the helper with a written expectation and an explicit stub/replay transport
 The stub harness proves the plumbing, not visual acceptance. There is no live
 transport in tests. If recording externally is necessary, use only
 `openai/gpt-6-luna`, then replay it; do not silently substitute a passing stub.
-Run `bun tests/smoke/visual-judge-harness.ts` in an isolated HOME/BUTLER_DATA
-(with `BUTLER_SMOKE_BROWSER_ARGS='["--single-process"]'` on restricted runners).
 
 `packages/butler-app/client/ui/scripts/wallpaper-paint-harness.ts` exercises
 real WebGL scene/tone switches, context loss/recovery, none/disposal and verifies
