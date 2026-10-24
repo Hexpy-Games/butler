@@ -4,7 +4,7 @@ import { useState, type Ref } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { EpicDetail as Epic, EpicInput, PlanCards, EpicProgressSnapshot, CanonStatus } from "@/app/canonApi.ts";
 import { Box, Button, ButtonContainer, IconButton, KeyValueRow, NativeSelect, NativeSelectOption, Pencil, Stack, Typo } from "@/butler-ds";
-import { CanonTagList } from "./CanonTagList.tsx";
+import { CanonTagsField } from "./CanonTagsField.tsx";
 import { CanonAvatar } from "./CanonAvatar.tsx";
 import { EpicEditForm } from "./EpicEditForm.tsx";
 import { CanonPersonSelect } from "./CanonPersonSelect.tsx";
@@ -27,7 +27,6 @@ export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef }: {
         <Typo.PanelTitle as="h3" tabIndex={-1} ref={titleRef} wrap="anywhere">{epic.title}</Typo.PanelTitle>
         <ButtonContainer size="sm"><IconButton label={copy.edit} disabled={busy} onClick={() => setEditing(true)}><Pencil size="sm" /></IconButton></ButtonContainer>
       </Stack>
-      <CanonTagList tags={epic.tags} />
       {epic.description && <Typo.Body wrap="pre">{epic.description}</Typo.Body>}
     </Stack>}
     <Stack gap="sm">
@@ -41,6 +40,8 @@ export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef }: {
           onChange={plan_id => void onWrite({ plan_id }, copy.moved(plans.find(plan => plan.id === plan_id)?.title ?? copy.backlog))} /></Box>
         {ordinal > 0 && <Typo.Caption wrap="nowrap" shrink={false}>· {copy.ordinal(ordinal)}</Typo.Caption>}
       </Stack>} />
+      <KeyValueRow valueTextSize="caption" label={<Typo.Caption wrap="nowrap">{copy.tags.label}</Typo.Caption>} value={<CanonTagsField row projectId={epic.project_id} value={epic.tags} disabled={busy}
+        onChange={tags => void onWrite({ tags: tags.map(tag => tag.id) })} />} />
     </Stack>
     {epic.home_session_id && <ButtonContainer size="sm"><Button size="sm" variant="link"
       onClick={() => { if (epic.home_session_id) void useButlerStore.getState().openSession(epic.home_session_id); }}>{copy.openConversation}</Button></ButtonContainer>}
