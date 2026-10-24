@@ -11,6 +11,8 @@
 
 #[path = "usage_history/delegated.rs"]
 mod delegated;
+#[path = "usage_history/insights.rs"]
+mod insights;
 #[path = "usage_history/lock.rs"]
 mod lock;
 #[path = "usage_history/memory.rs"]

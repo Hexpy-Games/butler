@@ -121,6 +121,7 @@ impl ModelConfiguration {
             serde_json::to_value(current).map_err(json_error)?,
         );
         write_json(&root.join("butler.config.json"), &config)?;
+        self.refresh_quota_configuration().await?;
         Ok(model)
     }
 
@@ -148,6 +149,7 @@ impl ModelConfiguration {
             serde_json::to_value(current).map_err(json_error)?,
         );
         write_json(&root.join("butler.config.json"), &config)?;
+        self.refresh_quota_configuration().await?;
         Ok(previous)
     }
 

@@ -187,3 +187,141 @@ fn header(value: &str) -> Result<HeaderValue, QuotaFetchError> {
 
 #[cfg(test)]
 mod tests;
+
+/// Metadata checks do not reread unchanged config or credential files.
+pub(super) struct Configuration {
+    refresh: tokio::sync::Mutex<()>,
+    state: parking_lot::RwLock<Eligibility>,
+    changes: tokio::sync::watch::Sender<u64>,
+}
+#[derive(Default)]
+struct Eligibility {
+    stamps: Option<Vec<Option<(std::time::SystemTime, u64)>>>,
+    providers: Vec<String>,
+    bindings: std::collections::BTreeMap<String, std::collections::BTreeSet<String>>,
+    disabled: Vec<String>,
+    chatgpt: bool,
+}
+impl ModelConfiguration {
+    /// Update only when registry/config/credential facts changed; no resident task.
+    pub async fn refresh_quota_configuration(
+        &self,
+    ) -> Result<(), crate::models::ModelCatalogError> {
+        let _refresh = self.quota_configuration.refresh.lock().await;
+        let mut stamps = Vec::new();
+        for file in ["butler.config.json", super::credentials::CREDENTIALS_FILE] {
+            stamps.push(
+                tokio::fs::metadata(self.data_root.join(file))
+                    .await
+                    .ok()
+                    .and_then(|m| m.modified().ok().map(|time| (time, m.len()))),
+            );
+        }
+        if self.quota_configuration.state.read().stamps.as_ref() == Some(&stamps) {
+            return Ok(());
+        }
+        let read = self.read().await?;
+        let state = Eligibility::from_read(&read, stamps);
+        if let Some(sink) = self.quota_sink.read().as_ref() {
+            let previous = self.quota_configuration.state.read();
+            for (provider, bindings) in &previous.bindings {
+                if state.bindings.get(provider) != Some(bindings) {
+                    sink.account_changed(provider);
+                }
+            }
+            sink.registered_providers(&state.providers, state.chatgpt);
+        }
+        *self.quota_configuration.state.write() = state;
+        self.quota_configuration
+            .changes
+            .send_modify(|revision| *revision = revision.wrapping_add(1));
+        Ok(())
+    }
+    pub fn quota_configuration_changes(&self) -> tokio::sync::watch::Receiver<u64> {
+        self.quota_configuration.changes.subscribe()
+    }
+    /// Registered credential bindings, in registry order; never inferred from telemetry.
+    pub fn quota_providers(&self) -> Vec<String> {
+        self.quota_configuration.state.read().providers.clone()
+    }
+    pub fn quota_polling_enabled(&self, provider: &str) -> bool {
+        let state = self.quota_configuration.state.read();
+        state.providers.iter().any(|p| p == provider)
+            && !state.disabled.iter().any(|p| p == provider)
+    }
+    /// The config switch is independent of whether a model currently binds the provider.
+    pub fn quota_polling_configured(&self, provider: &str) -> bool {
+        !self
+            .quota_configuration
+            .state
+            .read()
+            .disabled
+            .iter()
+            .any(|id| id == provider)
+    }
+    pub fn uses_chatgpt_quota(&self) -> bool {
+        self.quota_configuration.state.read().chatgpt
+    }
+}
+
+impl Default for Configuration {
+    fn default() -> Self {
+        Self {
+            refresh: Default::default(),
+            state: Default::default(),
+            changes: tokio::sync::watch::channel(0).0,
+        }
+    }
+}
+
+impl Eligibility {
+    fn from_read(
+        read: &ModelConfigurationRead,
+        stamps: Vec<Option<(std::time::SystemTime, u64)>>,
+    ) -> Self {
+        let mut state = Eligibility {
+            stamps: Some(stamps),
+            ..Default::default()
+        };
+        for model in &read.registered {
+            let uses = match model.auth_type {
+                ProviderAuthMethod::ApiKey => model
+                    .credential_id
+                    .as_deref()
+                    .and_then(|id| read.credential(id, &model.provider_id))
+                    .is_some(),
+                ProviderAuthMethod::ChatGptOauth => true,
+            };
+            if !uses {
+                continue;
+            }
+            state
+                .bindings
+                .entry(model.provider_id.clone())
+                .or_default()
+                .insert(format!(
+                    "{:?}:{}",
+                    model.auth_type,
+                    model.credential_id.as_deref().unwrap_or_default()
+                ));
+            state.chatgpt |= model.auth_type == ProviderAuthMethod::ChatGptOauth;
+            if !state.providers.contains(&model.provider_id) {
+                state.providers.push(model.provider_id.clone());
+            }
+        }
+        if let Some(providers) = read
+            .config
+            .get("providerQuota")
+            .and_then(serde_json::Value::as_object)
+        {
+            state.disabled = providers
+                .iter()
+                .filter(|(_, value)| {
+                    value.get("polling").and_then(serde_json::Value::as_bool) == Some(false)
+                })
+                .map(|(id, _)| id.clone())
+                .collect();
+        }
+        state
+    }
+}

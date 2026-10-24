@@ -1,5 +1,6 @@
 use super::*;
 use crate::gateway::AppBrowserStillCommand;
+use butler_runtime::operations::ProviderQuotaView as QuotaView;
 impl GatewayApplication for AppApplication {
     fn browser_still(&self, command: AppBrowserStillCommand) -> ApplicationFuture<Value> {
         let this = self.clone_handle();
@@ -15,17 +16,15 @@ impl GatewayApplication for AppApplication {
     fn hooks(&self) -> Option<std::sync::Arc<dyn butler_core::hooks::HookPort>> {
         self.dependencies.hooks.clone()
     }
+    fn get_usage_history(&self) -> ApplicationFuture<Value> {
+        super::monitoring::history::read(self.clone_handle())
+    }
+
     fn get_usage_monitor(&self, query: AppUsageMonitorQuery) -> ApplicationFuture<Value> {
         self.usage_monitor_query(query)
     }
-    fn get_provider_quota(
-        &self,
-        provider_id: String,
-        refresh: bool,
-    ) -> ApplicationFuture<butler_runtime::operations::ProviderQuotaView> {
-        self.dependencies
-            .monitoring
-            .provider_quota(provider_id, refresh)
+    fn get_provider_quota(&self, id: String, refresh: bool) -> ApplicationFuture<QuotaView> {
+        self.dependencies.monitoring.provider_quota(id, refresh)
     }
     fn work_status(&self) -> ApplicationFuture<Vec<AppBoundWorkStatusFact>> {
         self.dependencies.monitoring.work_status()

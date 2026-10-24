@@ -27,35 +27,7 @@ pub(super) async fn route(
             .and_then(|value| value.strip_suffix("/control"))
             .filter(|value| !value.is_empty() && !value.contains('/'))
     {
-        let worker_id = decode_component(encoded_id)?;
-        let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
-        let body: Value = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
-        let action = body
-            .as_object()
-            .and_then(|object| object.get("action"))
-            .and_then(Value::as_str)
-            .unwrap_or("cancel");
-        let worker = worker_detail(&state, &worker_id).await?;
-        let advertised = worker
-            .get("supported_controls")
-            .and_then(Value::as_array)
-            .is_some_and(|controls| {
-                controls
-                    .iter()
-                    .any(|control| control.as_str() == Some(action))
-            });
-        // The native worker projection currently advertises no controls.
-        // A supported action requires an actual owner operation before success is possible.
-        let code = if advertised {
-            "worker_control_unavailable"
-        } else {
-            "worker_control_unsupported"
-        };
-        return Err(HttpError::public(
-            409,
-            code,
-            "Worker control is not supported.",
-        ));
+        return worker_control(&state, request, encoded_id).await;
     }
     if request.method() != Method::GET {
         return Err(HttpError::public(404, "not_found", "Route not found."));
@@ -63,6 +35,7 @@ pub(super) async fn route(
     let parameters = query(uri);
     let path = uri.path();
     let data = match path {
+        "/usage-history" => state.application.get_usage_history().await?,
         "/usage-monitor" => {
             state
                 .application
@@ -79,21 +52,7 @@ pub(super) async fn route(
                 })
                 .await?
         }
-        "/worker-activity" => {
-            crate::gateway::app_worker_activity(
-                &*state.application,
-                AppWorkerActivityQuery {
-                    session_id: None,
-                    include_history: parameters
-                        .get("include_history")
-                        .is_some_and(|v| v == "true"),
-                    limit: page_limit(parameters.get("limit"), 200, 1, 200),
-                    offset: page_limit(parameters.get("offset"), 0, 0, 200),
-                    cursor: parameters.get("cursor").cloned(),
-                },
-            )
-            .await?
-        }
+        "/worker-activity" => worker_activity(&state, &parameters).await?,
         _ if path.starts_with("/worker-activity/") => {
             let encoded_id = path.strip_prefix("/worker-activity/").unwrap_or_default();
             if encoded_id.is_empty() || encoded_id.contains('/') {
@@ -297,4 +256,59 @@ fn hex(value: u8) -> Option<u8> {
         b'A'..=b'F' => Some(value - b'A' + 10),
         _ => None,
     }
+}
+
+async fn worker_control(
+    state: &HttpState,
+    request: Request<Body>,
+    encoded_id: &str,
+) -> Result<Response, HttpError> {
+    let worker_id = decode_component(encoded_id)?;
+    let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
+    let body: Value = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
+    let action = body
+        .as_object()
+        .and_then(|object| object.get("action"))
+        .and_then(Value::as_str)
+        .unwrap_or("cancel");
+    let worker = worker_detail(state, &worker_id).await?;
+    let advertised = worker
+        .get("supported_controls")
+        .and_then(Value::as_array)
+        .is_some_and(|controls| {
+            controls
+                .iter()
+                .any(|control| control.as_str() == Some(action))
+        });
+    // The native worker projection currently advertises no controls.
+    // A supported action requires an actual owner operation before success is possible.
+    let code = if advertised {
+        "worker_control_unavailable"
+    } else {
+        "worker_control_unsupported"
+    };
+    Err(HttpError::public(
+        409,
+        code,
+        "Worker control is not supported.",
+    ))
+}
+
+async fn worker_activity(
+    state: &HttpState,
+    parameters: &std::collections::HashMap<String, String>,
+) -> Result<Value, HttpError> {
+    Ok(crate::gateway::app_worker_activity(
+        &*state.application,
+        AppWorkerActivityQuery {
+            session_id: None,
+            include_history: parameters
+                .get("include_history")
+                .is_some_and(|v| v == "true"),
+            limit: page_limit(parameters.get("limit"), 200, 1, 200),
+            offset: page_limit(parameters.get("offset"), 0, 0, 200),
+            cursor: parameters.get("cursor").cloned(),
+        },
+    )
+    .await?)
 }

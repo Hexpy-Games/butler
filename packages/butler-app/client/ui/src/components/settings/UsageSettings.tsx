@@ -7,7 +7,9 @@ import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 import { UsageReadout } from "../usage/UsageReadout";
 import { usageClock, usageParts, usageShare, usageReadout, usageSeries, usageTimeline, usageTokens } from "../usage/usageTimeline";
 import { UsageBreakdown } from "./UsageBreakdown";
-import { UsageSessionSelect, usageSessionTitle } from "./UsageSessionSelect";
+import { UsageSessionSelect } from "./UsageSessionSelect";
+import { UsageHistory } from "../usage/UsageHistory";
+import { useUsageHistory } from "../usage/useUsageHistory";
 import { UsageProviderPanel } from "./UsageProviderPanel";
 
 /** Keep one scoped view and the all-chat view per range, rather than every visited chat. */
@@ -66,6 +68,8 @@ export function UsageSettings() {
   const [revision, setRevision] = useState(0);
   const refresh = () => setRevision(v => v + 1);
   const result = useUsageRange(hours, session, revision);
+  const history = useUsageHistory(revision);
+  const providers = (result.allView ?? result.view)?.providerUsage.providers ?? [];
   const [selection, setSelection] = useState<{ scope: string; index: number | null }>({ scope: "", index: null });
   const scope = `${hours}/${session}/${result.view?.generated_at}`;
   const selected = selection.scope === scope ? selection.index : null;
@@ -79,22 +83,22 @@ export function UsageSettings() {
   const selectedSession = result.view?.topSessions.find(item => item.sessionId === session);
   if (selectedSession && !sessions.some(item => item.sessionId === session)) sessions.push(selectedSession);
   sessions.sort((a, b) => b.totalTokens - a.totalTokens);
-  const label = `${session ? usageSessionTitle(sessions.find(s => s.sessionId === session)) : copy.all} · ${copy.recent(ranges.find(r => r.value === String(hours))!.label)}`;
+
   return <SettingsPage>
-    <SettingsSection id="usage-overview" kind="status"
+    <SettingsSection id="usage-overview" kind="status" title={copy.overviewTitle}
       state={result.error && !result.view ? "error" : "ready"} errorMessage={appCopy.interfacePanels.usageFailed} onRetry={refresh}>
       <Stack gap="lg">
         <Inline justify="between" cross="start" gap="md" wrap>
-          <Stack grow basis="md" gap="xs" minWidth="0" maxWidth="field"><Typo.Caption>{copy.chats}</Typo.Caption>
+          <Stack grow basis="md" gap="xs" minWidth="0" maxWidth="field">
             <UsageSessionSelect triggerRef={pickerTrigger} open={pickerOpen} onOpenChange={setPickerOpen} range={ranges.find(r => r.value === String(hours))!.label} sessions={sessions} value={session} onChange={setSession} /></Stack>
-          <Stack gap="xs" grow><Typo.Caption>{copy.period}</Typo.Caption>
+          <Stack gap="xs" grow>
             <Inline justify="between" cross="center" gap="md">
               <SegmentedControl ariaLabel={copy.period} size="default" options={ranges} value={String(hours)} onValueChange={v => setHours(Number(v))} />
               <Inline gap="xs" cross="center" wrap={false}><Typo.Caption>{result.view ? copy.updated(usageClock(Date.parse(result.view.generated_at))) : "—"}</Typo.Caption>
                 <IconButton label={appCopy.common.refresh} disabled={result.loading} onClick={refresh}><RefreshCcw size="sm" /></IconButton></Inline>
             </Inline></Stack>
         </Inline>
-        <UsageReadout view={result.view} values={usageReadout(result.view, bucket)} label={bucket?.label ?? label}
+        <UsageReadout view={result.view} values={usageReadout(result.view, bucket)} label={bucket?.label}
           panel selected={Boolean(bucket)} showCost delta={periodDelta(result.view, hours)} share={session && result.allView?.model.totalTokens
             ? usageShare((result.view?.model.totalTokens ?? 0) / result.allView.model.totalTokens) : undefined}
           parts={parts} onEmphasis={setEmphasis} />
@@ -104,8 +108,9 @@ export function UsageSettings() {
         <UsageBreakdown loading={!result.view} onShowAll={showAll} view={result.view} sessions={sessions} allTotal={result.allView?.model.totalTokens ?? 0} selected={session} onSelect={setSession} />
       </Stack>
     </SettingsSection>
-    {(result.allView ?? result.view)?.providerUsage.providers.length ? <SettingsSection id="usage-providers" title={copy.remaining} kind="status" state={!result.view ? "loading" : "ready"}>
-      <UsageProviderPanel providers={(result.allView ?? result.view)?.providerUsage.providers ?? []} />
+    <SettingsSection id="usage-history" title={copy.historyTitle} kind="status"><UsageHistory history={history} /></SettingsSection>
+    {providers.length ? <SettingsSection id="usage-providers" title={copy.remaining} kind="status" state={!result.view ? "loading" : "ready"}>
+      <UsageProviderPanel providers={providers} />
     </SettingsSection> : null}
   </SettingsPage>;
 }

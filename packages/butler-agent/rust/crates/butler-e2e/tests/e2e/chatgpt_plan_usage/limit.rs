@@ -47,6 +47,7 @@ async fn siwc_19_quota_advances_to_configured_backup() -> Result<(), HarnessErro
         .env("BUTLER_CHATGPT_API_BASE_URL", base)
         .start()
         .await?;
+    super::register_plan_model(&s).await?;
     let renamed =
         s.gw.patch(
             "/sessions/general",
