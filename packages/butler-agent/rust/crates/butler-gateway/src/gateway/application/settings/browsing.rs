@@ -82,3 +82,20 @@ pub(super) fn view(
         json!({"browsing_agent": value, "auto": auto}),
     );
 }
+
+/// Read the indexed App preference on a blocking worker; absent settings use Auto.
+pub async fn browsing_agent_setting(
+    path: std::path::PathBuf,
+) -> Result<String, GatewayApplicationError> {
+    use rusqlite::{OpenFlags, OptionalExtension};
+    tokio::task::spawn_blocking(move || {
+        let db = butler_platform::sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+        db.busy_timeout(std::time::Duration::from_secs(5))?;
+        let setting: Option<Option<String>> = db.query_row(
+            "SELECT json_extract(value_json, '$.browser.browsing_agent') FROM app_settings WHERE key='settings'",
+            [], |row| row.get(0),
+        ).optional()?;
+        Ok::<_, rusqlite::Error>(setting.flatten().unwrap_or_else(|| "auto".into()))
+    }).await.map_err(GatewayApplicationError::internal_from)?
+        .map_err(GatewayApplicationError::internal_from)
+}

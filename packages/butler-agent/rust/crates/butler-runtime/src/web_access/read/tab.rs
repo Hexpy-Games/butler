@@ -1,5 +1,5 @@
 //! `web_read {tab}`: the tab's document, read live on every call.
-use super::{bounded_result, live_page, observed};
+use super::{live_page, observed, read_result};
 use crate::web_access::{
     page::PageRead,
     service::{LivePage, WebAccessError, WebSession},
@@ -17,15 +17,17 @@ impl WebSession {
         (parsed, requested_url): (&Url, &str),
         (max_chars, max_chunks, start_chunk): (usize, usize, usize),
         observation_key: String,
+        query: Option<&str>,
     ) -> Result<Value, WebAccessError> {
         let page = live_page(live, requested_url).await?;
         let digest = content_digest(&page);
-        if let Some(previous) = self.cached_observation(&observation_key)
+        if query.is_none()
+            && let Some(previous) = self.cached_observation(&observation_key)
             && previous["content_sha256"] == digest.as_str()
         {
             return Ok(unchanged(&previous, &digest));
         }
-        let observation = bounded_result(&page, max_chars, max_chunks, start_chunk);
+        let observation = read_result(&page, max_chars, max_chunks, start_chunk, query);
         let mut result = observed(&page, parsed, observation);
         result["cache_hit"] = Value::Bool(false);
         result["duplicate_observation"] = Value::Bool(false);

@@ -9,6 +9,7 @@ pub(super) struct Client {
     bearer: String,
     admin: String,
     pub session: String,
+    pub approval_handoff: bool,
     turn: String,
 }
 impl Client {
@@ -42,6 +43,7 @@ impl Client {
             .ok()?
             .clone();
         Some(Self {
+            approval_handoff: false,
             client,
             turn: owner.binding.turn_id.clone(),
             base: endpoint.base_url,

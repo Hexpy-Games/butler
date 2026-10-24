@@ -18,6 +18,25 @@ pub(super) async fn execute(
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    execute_mode(owner, invocation, call, call_id, false).await
+}
+
+pub(in crate::host::guided::tools) async fn execute_executor(
+    owner: &GuidedTools,
+    invocation: GuidedInvocation<'_>,
+    call: &ModelRoundToolCall,
+    call_id: &str,
+) -> Result<JsonDocument, ToolExecutionError> {
+    execute_mode(owner, invocation, call, call_id, true).await
+}
+
+async fn execute_mode(
+    owner: &GuidedTools,
+    invocation: GuidedInvocation<'_>,
+    call: &ModelRoundToolCall,
+    call_id: &str,
+    executor: bool,
+) -> Result<JsonDocument, ToolExecutionError> {
     let mut arguments = Value::Object(call.arguments.clone());
     let live = if call.name == ToolName::WebRead {
         match super::super::browser::live_page(owner, &invocation, &arguments).await {
@@ -32,11 +51,12 @@ pub(super) async fn execute(
     {
         arguments["url"] = Value::String(page.final_url.clone());
     }
-    let approved = match authorize(owner, call, call_id, &arguments, live.is_some()).await? {
-        super::file_observation::Gate::Pending(result) => return super::encoded(&result),
-        super::file_observation::Gate::Allowed(reference) => reference,
-    };
-    let result = fetch(owner, invocation, call, &arguments, live).await;
+    let approved =
+        match authorize(owner, call, call_id, &arguments, live.is_some(), executor).await? {
+            super::file_observation::Gate::Pending(result) => return super::encoded(&result),
+            super::file_observation::Gate::Allowed(reference) => reference,
+        };
+    let result = fetch(owner, invocation, call, &arguments, live, executor).await;
     settle(owner, approved, &result).await?;
     // Search results are the turn's provenance by their ids (the web session
     // keeps both). A page read once is requested again with nothing new, so
@@ -99,8 +119,16 @@ async fn fetch(
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
     arguments: &Value,
-    live: Option<butler_runtime::web_access::LivePage>,
+    mut live: Option<butler_runtime::web_access::LivePage>,
+    executor: bool,
 ) -> Value {
+    if executor && let Some(live) = live.take() {
+        return owner
+            .web_session
+            .browse_read(arguments, live, invocation.cancellation)
+            .await
+            .unwrap_or_else(|error| json!({"ok":false,"error":{"code":error.code()}}));
+    }
     if call.name == ToolName::WebSearch {
         owner
             .web_session
@@ -126,6 +154,7 @@ async fn authorize(
     call_id: &str,
     arguments: &Value,
     open_tab: bool,
+    executor: bool,
 ) -> Result<super::file_observation::Gate, ToolExecutionError> {
     let target = arguments[if call.name == ToolName::WebSearch {
         "query"
@@ -160,6 +189,11 @@ async fn authorize(
     if matches!(decision, butler_turn::btcc::AccessDecision::Ask(_))
         || super::super::access::resumes(owner, call_id)
     {
+        if executor {
+            return Ok(super::file_observation::Gate::Pending(
+                super::super::browser::handoff(arguments, "approval_required"),
+            ));
+        }
         super::file_observation::gate(owner, call, call_id, arguments, false).await
     } else {
         Ok(super::file_observation::Gate::Allowed(None))
