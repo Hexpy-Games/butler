@@ -213,6 +213,15 @@ fn every_store_statement_has_an_indexed_query_plan() {
             .collect::<rusqlite::Result<Vec<_>>>()
             .unwrap()
             .join("\n");
+        let index = match *name {
+            "TAGS" => Some("sqlite_autoindex_canon_tags_2"),
+            "EPIC_TAGS" => Some("sqlite_autoindex_canon_epic_tags_1"),
+            "TAG_EPICS" => Some("canon_epic_tags_tag"),
+            _ => None,
+        };
+        if let Some(index) = index {
+            assert!(plan.contains(index), "{name}: {plan}");
+        }
         assert!(
             !plan.contains("SCAN canon_") && !plan.contains("SCAN a") && !plan.contains("SCAN t"),
             "{name}: {plan}"

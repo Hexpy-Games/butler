@@ -371,6 +371,11 @@ test("renderer and actual preload carry clear, reset and audited UI routes", asy
     ["GET", "/automations/a1/runs"], ["POST", "/automations/a1/run"],
     ["POST", "/automations/a1/pause"], ["POST", "/automations/a1/resume"], ["DELETE", "/automations/a1"],
     ["GET", "/authority-permissions"], ["POST", "/authority-permissions/revoke", { grants: [] }],
+    ["GET", "/projects/p1/canon/tags"],
+    ["POST", "/projects/p1/canon/tags", { name: "Bug", color: "blue" }],
+    ["PATCH", "/canon/tags/tag1", { expected_revision: 0, name: "Feature", color: "teal" }],
+    ["DELETE", "/canon/tags/tag1"],
+    ["PATCH", "/canon/epics/e1", { expected_revision: 2, tags: ["tag1"] }],
     ["GET", "/projects/p1/canon/sidebar"],
     ["POST", "/projects/p1/canon/sidebar-order", { group_key: "p1", work_ids: ["e1"] }],
     ["POST", "/canon/epics/e1/conversation", {}],
@@ -409,6 +414,22 @@ test("canon conflicts preserve the same numeric revision through browser and rea
       expect({ ...(error as object) }).toEqual({ code: "conflict", status: 409, current: { revision: 9 } });
     });
   } finally { globalThis.fetch = previousFetch; }
+});
+
+// test-category: pure-logic
+test("duplicate tags preserve the existing tag through browser and real preload", async () => {
+  const existing = { id: "tag1", project_id: "p1", name: "bug", name_key: "bug", color: "blue", revision: 0, created_at: 1, updated_at: 1, created_by: "{}" };
+  const failure = { error: { code: "tag_exists", message: "Tag already exists.", existing } };
+  const { bridge } = actualPreload(() => ({ ok: false, status: 409, json: async () => failure }));
+  const verify = async () => {
+    const error = await api("/projects/p1/canon/tags", { method: "POST", body: JSON.stringify({ name: "Bug", color: "red" }) }).catch(error => error);
+    expect({ ...(error as object) }).toEqual({ code: "tag_exists", status: 409, existing });
+  };
+  await withBridge(bridge, verify);
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(JSON.stringify(failure), { status: 409 })) as unknown as typeof fetch;
+  try { await withBridge(undefined as unknown as Record<string, unknown>, verify); }
+  finally { globalThis.fetch = previousFetch; }
 });
 
 test("preload refuses unlisted reset paths and methods without sending a request", async () => {

@@ -14,6 +14,7 @@ pub(in crate::store) fn append(
             let row = read_plan(tx, id)?;
             Some(row["project_id"].clone())
         }
+        "tag" => Some(one(tx, sql::TAG, [id])?["project_id"].clone()),
         "backlog" => Some(json!(id)),
         "work" => {
             let row = read_work(tx, id)?;

@@ -290,6 +290,7 @@ function browserRequest<T>(path: string, options: ApiOptions = {}): Promise<T> {
       Object.assign(error, {
         ...(typeof body.error?.code === "string" ? { code: body.error.code } : {}),
         status: response.status,
+        ...(body.error?.code === "tag_exists" && body.error?.existing ? { existing: body.error.existing } : {}),
         ...(Number.isSafeInteger(body.error?.current?.revision) ? { current: { revision: body.error.current.revision } } : {}),
       });
       throw error;
@@ -1044,6 +1045,7 @@ function unwrapBridgeResult<T>(value: BridgeResult<T> | T): T {
   const error = new Error(hookReason ?? appCopy.serverErrors[code] ?? appCopy.interfaceFeedback.requestFailed);
   Object.assign(error, {
     code,
+    ...(code === "tag_exists" && result.error?.existing ? { existing: result.error.existing } : {}),
     ...(Number.isSafeInteger(result.error?.current?.revision) ? { current: result.error.current } : {}),
     ...(typeof result.error?.status === "number" ? { status: result.error.status } : {}),
   });

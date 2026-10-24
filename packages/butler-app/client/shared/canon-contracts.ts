@@ -2,7 +2,21 @@
 export type CanonStatus = "planned" | "in_progress" | "in_review" | "blocked" | "done" | "cancelled";
 export type WorkTaskStatus = "draft" | "waiting" | "pending" | "running" | "in_review" | "held" | "failed" | "completed" | "blocked" | "paused" | "stopped" | "cancelled";
 export type TaskCounts = { total: number } & Partial<Record<WorkTaskStatus, number>>;
+export type CanonTagColor = "gray" | "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple";
+export interface EpicTag { id: string; name: string; color: CanonTagColor }
+export interface CanonTag extends EpicTag {
+  project_id: string;
+  name_key: string;
+  revision: number;
+  created_at: number;
+  updated_at: number;
+  created_by: string;
+}
+export interface CanonTagCreateInput { name: string; color: CanonTagColor }
+export interface CanonTagEditInput { expected_revision: number; name?: string; color?: CanonTagColor }
+export interface CanonTagExists extends Error { code: "tag_exists"; status: 409; existing: CanonTag }
 export interface CanonWork {
+  tags: EpicTag[];
   id: string;
   project_id: string;
   plan_id: string | null;
@@ -91,11 +105,12 @@ export interface EpicInput {
   assignee?: string | null;
   plan_id?: string | null;
   before_id?: string;
+  tags?: string[];
 }
 export interface CanonOrderInput { work_ids: string[]; expected_revision: number }
 export interface CanonChanged {
   project_id: string;
-  kind: "plan" | "backlog" | "work" | "spec_node";
+  kind: "plan" | "backlog" | "work" | "spec_node" | "tag";
   id: string;
   revision: number;
   origin: "local" | "remote" | "mcp" | "butler";

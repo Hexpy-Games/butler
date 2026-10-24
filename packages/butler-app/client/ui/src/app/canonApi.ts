@@ -1,10 +1,14 @@
 import { api } from "./api.ts";
-import type { CanonSidebar, CanonSidebarOrderInput, CanonConversation, CanonOverview, CanonOrderInput, EpicDetail, EpicInput, PlanDetail, PlanInput, EpicProgressSnapshot, CanonConversationInput } from "../../../shared/canon-contracts.ts";
+import type { CanonTag, CanonTagCreateInput, CanonTagEditInput, CanonSidebar, CanonSidebarOrderInput, CanonConversation, CanonOverview, CanonOrderInput, EpicDetail, EpicInput, PlanDetail, PlanInput, EpicProgressSnapshot, CanonConversationInput } from "../../../shared/canon-contracts.ts";
 export type * from "../../../shared/canon-contracts.ts";
 const projectPath = (id: string) => `/projects/${encodeURIComponent(id)}/canon`;
 const planPath = (id: string) => `/canon/plans/${encodeURIComponent(id)}`;
 const epicPath = (id: string) => `/canon/epics/${encodeURIComponent(id)}`;
 const write = <T>(path: string, method: string, input: unknown): Promise<T> => api(path, { method, body: JSON.stringify(input) });
+export const getCanonTags = (projectId: string): Promise<CanonTag[]> => api(`${projectPath(projectId)}/tags`);
+export const createCanonTag = (projectId: string, input: CanonTagCreateInput): Promise<CanonTag> => write(`${projectPath(projectId)}/tags`, "POST", input);
+export const editCanonTag = (id: string, input: CanonTagEditInput): Promise<CanonTag> => write(`/canon/tags/${encodeURIComponent(id)}`, "PATCH", input);
+export const deleteCanonTag = (id: string): Promise<{ id: string }> => api(`/canon/tags/${encodeURIComponent(id)}`, { method: "DELETE" });
 export const getCanon = (projectId: string): Promise<CanonOverview> => api(projectPath(projectId));
 export const getCanonPlan = (id: string): Promise<PlanDetail> => api(planPath(id));
 export const getCanonEpic = (id: string): Promise<EpicDetail> => api(epicPath(id));

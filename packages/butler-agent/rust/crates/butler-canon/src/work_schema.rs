@@ -23,6 +23,7 @@ pub fn ensure(connection: &Connection) -> rusqlite::Result<()> {
 fn create(connection: &Connection) -> rusqlite::Result<()> {
     connection.execute_batch(include_str!("work_schema/entities.sql"))?;
     connection.execute_batch(include_str!("work_schema/specs.sql"))?;
+    connection.execute_batch(include_str!("work_schema/tags.sql"))?;
     connection.execute_batch(include_str!("work_schema/support.sql"))?;
     connection.execute_batch(include_str!("work_schema/indexes.sql"))
 }

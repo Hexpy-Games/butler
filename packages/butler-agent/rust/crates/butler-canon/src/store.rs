@@ -20,6 +20,8 @@ pub enum Error {
     Id(#[from] crate::work_ids::IdError),
     #[error("conflict: {current}")]
     Conflict { current: Value },
+    #[error("tag already exists")]
+    TagExists { existing: Value },
     #[error("not found")]
     NotFound,
     #[error("invalid fractional rank")]

@@ -3,7 +3,7 @@ mod canon_sidebar;
 use butler_canon::{store, work_queries::Query};
 use butler_gateway::gateway::{
     AppCanonConflict, AppCanonEvent, AppCanonPort, AppCanonRequest, AppCanonResource,
-    ApplicationFuture, GatewayApplicationError,
+    AppCanonTagExists, ApplicationFuture, GatewayApplicationError,
 };
 use butler_turn::btcc::{BtccStorage, StorageError};
 use serde_json::{Value, json};
@@ -133,12 +133,23 @@ fn error(error: StorageError) -> GatewayApplicationError {
         return GatewayApplicationError::internal_from(error);
     };
     let status = match *code {
-        "conflict" => 409,
+        "conflict" | "tag_exists" => 409,
         "work_model_not_found" => 404,
         "invalid_rank" | "work_model_invalid" => 400,
         _ => return GatewayApplicationError::internal_from(error),
     };
-    let source = if *code == "conflict" {
+    let source = if *code == "tag_exists" {
+        source
+            .as_deref()
+            .and_then(|s| s.downcast_ref::<store::Error>())
+            .and_then(|e| match e {
+                store::Error::TagExists { existing } => Some(Arc::new(AppCanonTagExists {
+                    existing: existing.clone(),
+                })
+                    as Arc<dyn std::error::Error + Send + Sync>),
+                _ => None,
+            })
+    } else if *code == "conflict" {
         source
             .as_deref()
             .and_then(|s| s.downcast_ref::<store::Error>())
@@ -162,9 +173,14 @@ fn error(error: StorageError) -> GatewayApplicationError {
 
 fn store_resource(resource: AppCanonResource) -> store::api::Resource {
     use AppCanonResource::{
-        BacklogOrder, Canon, CreateEpic, CreatePlan, EditEpic, EditPlan, Epic, Plan, PlanOrder,
+        BacklogOrder, Canon, CreateEpic, CreatePlan, CreateTag, DeleteTag, EditEpic, EditPlan,
+        EditTag, Epic, Plan, PlanOrder, Tags,
     };
     match resource {
+        Tags => store::api::Resource::Tags,
+        CreateTag => store::api::Resource::CreateTag,
+        EditTag => store::api::Resource::EditTag,
+        DeleteTag => store::api::Resource::DeleteTag,
         Canon => store::api::Resource::Canon,
         Plan => store::api::Resource::Plan,
         Epic => store::api::Resource::Epic,

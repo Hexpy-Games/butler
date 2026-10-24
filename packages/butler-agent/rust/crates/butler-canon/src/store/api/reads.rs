@@ -80,6 +80,7 @@ fn public_work(db: &Connection, mut work: Value) -> Result<Value> {
             .collect::<Vec<_>>()
     );
     work["sessions"] = json!(sessions);
+    work["tags"] = json!(rows(db, sql::EPIC_TAGS, [text(&work, "id")?])?);
     // Empty progress until the link/progress branch supplies the derived view.
     work["tasks"] = json!([]);
     work["task_counts"] = json!({"total":0});

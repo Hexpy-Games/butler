@@ -119,6 +119,7 @@ struct EpicInput {
     #[serde(default, deserialize_with = "nullable")]
     plan_id: Option<Option<String>>,
     before_id: Option<String>,
+    tags: Option<Vec<String>>,
 }
 pub(super) fn create_epic(
     tx: &Transaction<'_>,
@@ -153,6 +154,9 @@ pub(super) fn create_epic(
         input.plan_id.as_ref().and_then(|v| v.as_deref()),
         input.before_id.as_deref(),
     )?;
+    if let Some(tags) = &input.tags {
+        tags::replace(tx, ctx, &read_work(tx, &id)?, tags)?;
+    }
     epic(tx, &id)
 }
 pub(super) fn edit_epic(
@@ -170,6 +174,9 @@ pub(super) fn edit_epic(
             .expected_revision
             .ok_or(Error::Invalid("expected_revision required"))?,
     )?;
+    if let Some(tags) = &input.tags {
+        tags::replace(tx, ctx, &read_work(tx, id)?, tags)?;
+    }
     if input.plan_id.is_some() || input.before_id.is_some() {
         let dest = input
             .plan_id

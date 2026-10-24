@@ -5,13 +5,13 @@
     "deploy/licenses/generate.mjs": "eb413c424649cc6ef3bc734cb1a9479cf8ddffb3af398601a974268c229d7c34",
     "deploy/licenses/inputs.mjs": "f9a38331fa5a8f26f9d745f0cf3bfaea028f2d5dc7c8e8aa4d7af1b923cb5124",
     "deploy/licenses/refresh.py": "bddecf7f564eb6da112439c87fca94158f22497a5094dd53d9389ff918ced71b",
-    "packages/butler-agent/rust/Cargo.lock": "64fce62a27d13948b4409a308de769e0ddcf5c5c0c64c4f5200d94b8a7ad82ed",
+    "packages/butler-agent/rust/Cargo.lock": "1be72aa2eea8c4f3df297798e95cb8985a0b6e53957f90f713b646c55d030a05",
     "packages/butler-agent/rust/Cargo.toml": "5d2d424ec9a5a0efc862cb4193c6c0902d8336747f23b3217091286ce99a7c9d",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
     "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "e08a77e7c8333077f8bdc812b31c8ad65d5c417aea2329e102b4266aa26a7d0d",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
     "packages/butler-agent/rust/crates/butler-agent/src/host/embedding/worker/assets.rs": "f11dc3b1952a178092fbf7da589b8c39e28021c4975f884e236cd71c78c8d7a9",
-    "packages/butler-agent/rust/crates/butler-canon/Cargo.toml": "a73d98d734ac777a559ee4d88eb5d6f4385c2f667475c00b72468fbc05326f6a",
+    "packages/butler-agent/rust/crates/butler-canon/Cargo.toml": "c052e4a6c10a0b82fb7120d819f8f09a5384716ee8607934b9d672bfd44f9ed2",
     "packages/butler-agent/rust/crates/butler-core/Cargo.toml": "5af0d77e72e26b381caea14946683d7b94d79a2f7304d524842fa26ea213d1dc",
     "packages/butler-agent/rust/crates/butler-core/src/js_date/parse/LICENSE.txt": "a0af5aa0d38e4c35e56c8e42a43a4b1e462619a26332e43249bb0772ad06a3e2",
     "packages/butler-agent/rust/crates/butler-e2e/Cargo.toml": "263121de00658972e28256c511c3000a5b636ff47ab3870df0b8a5f6cffbe370",
@@ -13575,6 +13575,31 @@
       ],
       "copyright": [
         "Copyright (c) 2018 Carl Lerche"
+      ]
+    },
+    {
+      "id": "rust:caseless@0.2.2",
+      "name": "caseless",
+      "version": "0.2.2",
+      "license": "MIT",
+      "source": "https://github.com/unicode-rs/rust-caseless/tree/f77d542c5439252f75d8da2f0cb4a13d3a13c5ea",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "9a1284e016a7770f3c033a108662a94490419796001b422f5c6738c9ebf486d7"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "links": [
+        "https://github.com/unicode-rs/rust-caseless/blob/f77d542c5439252f75d8da2f0cb4a13d3a13c5ea/LICENSE"
+      ],
+      "copyright": [
+        "Copyright (c) 2017 Simon Sapin"
       ]
     },
     {
