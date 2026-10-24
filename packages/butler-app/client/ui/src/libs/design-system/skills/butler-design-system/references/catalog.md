@@ -240,6 +240,7 @@
 | A sub-step (sign-in, API key, model pick) that keeps the flow's header and footer | `SetupWizardStepCard` |  |
 | A suggestion list as wide as its field (width="anchor" with SuggestionList) | `Popover` |  |
 | A suggestion or briefing entry with its own action | `Card` |  |
+| A summary stat strip at the top of a section (variant="joined") | `MetricGrid` |  |
 | A system message that needs a visual marker | `MessageAvatarBlock` |  |
 | A tab dragged from the pane to the sidebar | `DragPreview` |  |
 | A tab's own working or waiting state | `LiveTabCard` | `ActivityGlow` |
@@ -271,6 +272,7 @@
 | A warning about the composer | `Notice` | `ComposerAdjunctPanel` |
 | A whole row or card should be clickable | `Clickable` | `Button` |
 | A wrapping row of chips or metadata | `Inline` | `Stack` |
+| A year of daily usage at a glance (cell="compact", scrollAnchor="end") | `ActivityHeatmap` |  |
 | Actions for an item | `DropdownMenu` | `OptionMenu` |
 | Actions on one row of a list | `OverflowActionMenu` | `SelectionBar` |
 | Activity per calendar day over weeks | `ActivityHeatmap` | `UsageBars` |
@@ -2605,12 +2607,13 @@ Chooses a wallpaper: still thumbnails of none, every live module (the user's own
 
 `import { ActivityHeatmap } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/ActivityHeatmap`
 
-A calendar of days shaded by activity count, optionally selectable with a legend.
+A calendar of days shaded by activity count or by a screen-computed level, optionally selectable with a legend.
 
 - Use for: Show activity over weeks on a project dashboard
+- Use for: A year of daily usage at a glance (cell="compact", scrollAnchor="end")
 - Not for: Exact values per series → `ChartContainer`
 - Not for: One total → `MetricCard`
-- Tokens: `--accent`, `--selection`, `--radius-control`
+- Tokens: `--selection`, `--blue-02`, `--blue-04`, `--blue-06`, `--blue-08`, `--motion-base`, `--focus-ring-room`, `--radius-control`
 
 ### ActivityStrip
 
@@ -2671,12 +2674,13 @@ One labelled number, counting to new values, with an optional trend and icon.
 
 `import { MetricGrid } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/MetricGrid`
 
-A responsive grid for MetricCards (150px+ columns by default, or a column preset).
+A responsive grid for MetricCards (150px+ columns by default, or a column preset), or one joined card of stat tiles.
 
 - Use for: A row of metrics on a dashboard
+- Use for: A summary stat strip at the top of a section (variant="joined")
 - Not for: Cards that are not metrics → `Grid`
 - Not for: One metric → `MetricCard`
-- Tokens: `--space-md`, `--layout-basis-xs`
+- Tokens: `--space-md`, `--layout-basis-xs`, `--line`, `--surface-raised`, `--radius-control`
 
 ### UsageBars
 

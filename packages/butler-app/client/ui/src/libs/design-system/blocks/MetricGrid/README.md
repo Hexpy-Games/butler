@@ -32,6 +32,17 @@ import { MetricGrid, MetricCard } from "@/butler-ds";
 </MetricGrid>
 ```
 
+### Joined stat row
+
+```tsx
+<MetricGrid variant="joined">
+  <MetricCard value="4.41B" label="Lifetime tokens" />
+  <MetricCard value="300M" label="Busiest day" change="Sep 14" trend="neutral" />
+</MetricGrid>
+```
+
+`variant="joined"` draws one card with hairline dividers. Tiles grow from a ~136px basis, so wrapped rows always fill: five tiles read 5, 3 + 2, 2 + 2 + 1 or one column as the width shrinks. Labels and captions stay on one line and truncate. Tiles are not interactive (the card clips to its corners). `columns` is ignored.
+
 ## Accessibility
 
 - Standard grid layout
@@ -40,8 +51,8 @@ import { MetricGrid, MetricCard } from "@/butler-ds";
 
 ## Responsive behavior
 
-- Auto-fills columns based on width
-- Minimum 200px per column
+- `cards`: auto-fills columns of at least 150px (or the `columns` preset)
+- `joined`: tiles grow from ~136px and every row fills
 - Stacks on narrow viewports
 
 ## Wrong use cases
