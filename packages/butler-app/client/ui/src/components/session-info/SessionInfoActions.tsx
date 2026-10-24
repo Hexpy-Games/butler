@@ -24,7 +24,9 @@ export function SessionInfoActions() {
       </DialogContent>
     </Dialog>}
     <IconButton label={c.title} aria-label={indicator ? c.waitingLabel : c.title} pressed={open} indicator={indicator}
-      data-test-class="session-info-toggle" onClick={() => useButlerStore.setState({ sessionInfoOpen: !open })}>
+      data-test-class="session-info-toggle" onClick={async () => {
+        if (await leaveCanonEditor()) useButlerStore.setState(state => ({ sessionInfoOpen: !state.sessionInfoOpen }));
+      }}>
       <AppleReminder size="md" />
     </IconButton>
   </ButtonContainer>;

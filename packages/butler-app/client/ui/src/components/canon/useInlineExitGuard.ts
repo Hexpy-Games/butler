@@ -21,6 +21,9 @@ export function useInlineExitGuard(options: {
   const decide = async (choice: "keep" | "discard" | "save") => {
     if (choice === "save" && !await latest.current.save()) return;
     if (choice === "discard") latest.current.cancel();
+    // A single user action can invoke several navigation actions before React
+    // commits the closed editor. The decision already applies to all of them.
+    if (choice !== "keep") latest.current = { ...latest.current, editing: false, dirty: false };
     const request = pending.current;
     pending.current = null;
     setOpen(false);

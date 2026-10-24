@@ -3,7 +3,7 @@ import { strict as assert } from "node:assert";
 import type { Page } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
 import type { EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
-import { inlineShot } from "./canon-inline-edit-flows.ts";
+import { inlineShot, assertFocused } from "./canon-inline-edit-flows.ts";
 import { probeFocusRing } from "./focus-ring-clipping.ts";
 
 const detail = (page: Page) => page.locator('[data-test-class="canon-epic-detail"]');
@@ -15,6 +15,7 @@ const patch = (page: Page, id: string) => page.waitForResponse(response => respo
   && new URL(response.url()).pathname === `/canon/epics/${id}`);
 
 export async function verifyPaneExits(page: Page, server: NativeAppServerHandle, id: string, shots: string, otherId: string) {
+  await verifyDialogFocus(page);
   for (const exit of ["close", "conversation"]) {
     for (const choice of ["계속 편집", "저장 안 함", "저장"]) {
       const before = (await server.api<EpicDetail>(`/canon/epics/${id}`)).title;
@@ -22,11 +23,17 @@ export async function verifyPaneExits(page: Page, server: NativeAppServerHandle,
       if (exit === "close") await toggle(page).click();
       else await page.locator(`[data-canon-epic="${otherId}"]`).getByRole("button").first().click();
       await dialog(page).waitFor();
-      if (exit === "close" && choice === "계속 편집") await inlineShot(page, shots, "pane-unsaved-dialog");
+      let streamed: import("playwright").Locator | undefined;
+      if (exit === "close" && choice === "계속 편집" || exit === "conversation" && choice === "저장") {
+        streamed = await streamWhileGuardOpen(page, server, `${exit}-${choice}`);
+        if (exit === "close") await inlineShot(page, shots, "pane-unsaved-dialog");
+      }
       const saved = choice === "저장" ? patch(page, id) : null;
       await dialog(page).getByRole("button", { name: choice, exact: true }).click();
       if (saved) assert((await saved).ok());
       if (choice === "계속 편집") {
+        if (streamed) assert.equal(await streamed.count(), 1, "Keeping the draft retains streamed state");
+        await assertFocused(input(page));
         assert.equal(await input(page).inputValue(), `${before} 검토`);
         assert.equal(await detail(page).getAttribute("data-epic-id"), id);
         await input(page).press("Escape");
@@ -37,6 +44,7 @@ export async function verifyPaneExits(page: Page, server: NativeAppServerHandle,
           await page.locator(`[data-canon-epic="${id}"]`).getByRole("button").first().click();
         }
         await page.locator(`[data-test-class="canon-epic-detail"][data-epic-id="${id}"]`).waitFor();
+        if (streamed) await streamed.waitFor();
         assert.equal((await server.api<EpicDetail>(`/canon/epics/${id}`)).title, choice === "저장" ? `${before} 검토` : before);
       }
     }
@@ -71,6 +79,7 @@ export async function verifyInlineAttachment(page: Page, id: string) {
   await detail(page).getByRole("button", { name: "설명 편집", exact: true }).click();
   const textarea = detail(page).getByLabel("설명", { exact: true });
   const text = await textarea.inputValue();
+  await verifyWindowBlur(page, textarea);
   await textarea.fill(`${text}\n\n`); await textarea.press("End");
   let release!: () => void;
   const uploading = new Promise<void>(done => { release = done; });
@@ -88,10 +97,22 @@ export async function verifyInlineAttachment(page: Page, id: string) {
   await page.unroute(uploadPath);
   await page.waitForFunction(() => document.querySelector<HTMLTextAreaElement>('textarea[aria-label="설명"]')?.value.includes("attachment:"));
   assert((await textarea.inputValue()).includes(text));
+  const draft = await textarea.inputValue();
+  const pill = detail(page).locator('[data-slot="attachment-item"]');
+  assert.equal(await pill.count(), 1);
+  await textarea.fill(text);
+  assert.equal(await pill.count(), 0, "Deleting the draft link immediately removes its pill");
+  await textarea.fill(draft);
+  assert.equal(await pill.count(), 1);
   const saved = patch(page, id); await detail(page).getByRole("button", { name: "저장", exact: true }).click();
   assert((await saved).ok());
-  const file = detail(page).locator('[data-slot="attachment-list"]').getByRole("link", { name: "문서 검토.txt", exact: true });
+  const file = detail(page).locator('[data-test-class="canon-markdown"]').getByRole("link", { name: "문서 검토.txt", exact: true });
   await file.waitFor();
+  assert.equal(await detail(page).locator('[data-slot="attachment-list"]').count(), 0, "Markdown already renders the attached file");
+  await detail(page).getByRole("button", { name: "설명 편집", exact: true }).click();
+  await textarea.fill(text);
+  assert.equal(await pill.count(), 0, "Saved attachments also follow draft references");
+  await textarea.press("Escape");
   const downloaded = await page.request.get(new URL((await file.getAttribute("href"))!, page.url()).href);
   assert(downloaded.ok());
   assert.equal(await downloaded.text(), "검색 흐름과 문서 배치를 검토합니다.");
@@ -105,9 +126,62 @@ export async function verifyEmptyDescription(page: Page, id: string) {
   await textarea.fill("");
   const cleared = patch(page, id); await detail(page).getByRole("button", { name: "저장", exact: true }).click();
   assert((await cleared).ok());
-  await body.getByText("재현 방법, 기대 결과", { exact: true }).waitFor();
+  await detail(page).getByText("재현 방법, 기대 결과", { exact: true }).waitFor();
   await body.click(); assert.equal(await textarea.inputValue(), "");
   await textarea.fill(original);
   const restored = patch(page, id); await detail(page).getByRole("button", { name: "저장", exact: true }).click();
   assert((await restored).ok()); await body.waitFor();
+}
+
+async function verifyWindowBlur(page: Page, textarea: import("playwright").Locator) {
+  // Headless single-process Chromium reports every page focused. Replay the OS
+  // attention signal with a real DOM focusout, restoring the native method immediately.
+  await textarea.evaluate(element => {
+    const descriptor = Object.getOwnPropertyDescriptor(document, "hasFocus");
+    Object.defineProperty(document, "hasFocus", { configurable: true, value: () => false });
+    try {
+      window.dispatchEvent(new Event("blur"));
+      element.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: null }));
+    } finally {
+      if (descriptor) Object.defineProperty(document, "hasFocus", descriptor);
+      else Reflect.deleteProperty(document, "hasFocus");
+    }
+  });
+  assert.equal(await textarea.count(), 1, "A clean editor survives window blur");
+  assert.equal(await dialog(page).count(), 0);
+}
+
+async function verifyDialogFocus(page: Page) {
+  for (const field of ["제목", "설명"]) {
+    const trigger = detail(page).getByRole("button", { name: field === "제목" ? "제목 수정" : "설명 편집", exact: true });
+    const editor = detail(page).getByLabel(field, { exact: true });
+    for (const choice of ["계속 편집", "저장 안 함", "저장"]) {
+      await trigger.click(); await editor.fill(`${await editor.inputValue()} 검토`);
+      await editor.evaluate(element => (element as HTMLElement).blur());
+      await dialog(page).waitFor();
+      const saved = choice === "저장" ? patch(page, (await detail(page).getAttribute("data-epic-id"))!) : null;
+      await dialog(page).getByRole("button", { name: choice, exact: true }).click();
+      if (saved) assert((await saved).ok());
+      await assertFocused(choice === "계속 편집" ? editor : trigger);
+      if (choice === "계속 편집") { await editor.press("Escape"); await assertFocused(trigger); }
+    }
+  }
+}
+
+async function streamWhileGuardOpen(page: Page, server: NativeAppServerHandle, suffix: string) {
+  const view = await server.api<import("../../packages/butler-app/client/ui/src/app/types.ts").SessionView>(`/session-view?session_id=${await page.evaluate(() => JSON.parse(localStorage.getItem("butler:app-ui-state:v1")!).active_session_id)}`);
+  const message = { id: `guard-stream-${suffix}`, chat_id: view.session_id, role: "assistant" as const,
+    text: suffix.startsWith("close") ? "검토 자료가 도착했습니다." : "검색 흐름 검토 결과가 도착했습니다.", created_at: new Date().toISOString(), cursor: 1 };
+  await page.route("**/session-view?**", async route => {
+    if (new URL(route.request().url()).searchParams.get("session_id") !== view.session_id) { await route.fallback(); return; }
+    await route.fulfill({ json: { protocol_version: "butler.app.v1", data: { ...view, messages: [...view.messages, message] } } });
+  });
+  await page.evaluate(message => {
+    const sources = (window as unknown as { __sessionInfoEventSources: EventSource[] }).__sessionInfoEventSources;
+    sources.at(-1)!.dispatchEvent(new MessageEvent("message", { data: JSON.stringify({ type: "message.created", payload: { message } }) }));
+  }, message);
+  const streamed = page.getByText(message.text, { exact: true });
+  await streamed.waitFor();
+  assert.equal(await dialog(page).count(), 1);
+  return streamed;
 }

@@ -1,8 +1,9 @@
-import { useLayoutEffect, useRef, useState, type Ref, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type Ref, type RefObject, type ReactNode } from "react";
 import { appCopy } from "@/app/copy.ts";
 import type { EpicDetail, EpicInput } from "@/app/canonApi.ts";
-import { AttachmentList, Box, Clickable, Pencil, Presence, Stack, Tooltip, Typo } from "@/butler-ds";
+import { AttachmentList, Box, Clickable, IconButton, Pencil, Presence, Stack, Tooltip, Typo } from "@/butler-ds";
 import { useCanonInlineUploads } from "./CanonInlineDraft.tsx";
+import { epicAttachmentReferences } from "./epicAttachmentReferences.ts";
 import { EpicMarkdown } from "./EpicMarkdown.tsx";
 import { EpicFieldInput } from "./EpicFieldInput.tsx";
 import { absoluteGatewayUrl, messageFileSource } from "@/app/messageFileUrls.ts";
@@ -20,7 +21,18 @@ export function EpicInlineFields({ epic, busy, onWrite, titleRef, compact = fals
   busy = busy || Boolean(uploads.pendingFile);
   const save = () => busy ? Promise.resolve(false) : edit.save();
   const root = useRef<HTMLElement>(null);
-  const focus = () => root.current?.querySelector<HTMLElement>("input, textarea")?.focus();
+  const triggers = { title: useRef<HTMLElement>(null), description: useRef<HTMLElement>(null) };
+  const lastField = useRef<EpicTextField | null>(null);
+  const focus = () => {
+    if (edit.draft) root.current?.querySelector<HTMLElement>("input, textarea")?.focus();
+    else if (lastField.current) triggers[lastField.current].current?.focus();
+  };
+  useLayoutEffect(() => {
+    if (edit.draft) lastField.current = edit.draft.field;
+    else if (lastField.current) triggers[lastField.current].current?.focus();
+  }, [edit.draft]);
+  const references = epicAttachmentReferences(epic.description);
+  const unreferenced = (epic.attachments ?? []).filter(file => !references.has(file.file_id));
   const guard = useInlineExitGuard({ editing: Boolean(edit.draft), dirty: edit.dirty || Boolean(uploads.pendingFile), save, cancel: edit.cancel, focus });
   const remountedDraft = useRef(Boolean(edit.draft));
   useLayoutEffect(() => { if (remountedDraft.current) { remountedDraft.current = false; void guard.leave(); } }, []);
@@ -30,6 +42,7 @@ export function EpicInlineFields({ epic, busy, onWrite, titleRef, compact = fals
   };
   return <>
     <Stack gap="lg" onFocus={event => { root.current = event.currentTarget; }} onBlur={event => {
+      if (event.relatedTarget == null && !document.hasFocus()) return;
       const field = (event.target as HTMLElement).closest("[data-canon-inline-editor]");
       if (!edit.draft || guard.open || !field || field.contains(event.relatedTarget as Node)) return;
       guard.blur();
@@ -38,10 +51,10 @@ export function EpicInlineFields({ epic, busy, onWrite, titleRef, compact = fals
         {edit.draft?.field === field
           ? <EpicFieldInput epic={epic} field={field} value={edit.draft.value} busy={busy} valid={edit.valid}
             current={edit.draft.current} base={edit.draft.base} onChange={edit.change} onSave={save} onCancel={edit.cancel} />
-          : <EpicFieldRest field={field} epic={epic} compact={compact} titleRef={titleRef} busy={busy} onEdit={() => void begin(field)} />}
+          : <EpicFieldRest field={field} epic={epic} compact={compact} titleRef={titleRef} triggerRef={triggers[field]} busy={busy} onEdit={() => void begin(field)} />}
         {field === "title" && <>{summary}{properties}</>}
-        {field === "description" && edit.draft?.field !== field && Boolean(epic.attachments?.length) && <AttachmentList
-          items={epic.attachments!.map(file => ({ id: file.file_id, name: file.safe_name,
+        {field === "description" && edit.draft?.field !== field && unreferenced.length > 0 && <AttachmentList
+          items={unreferenced.map(file => ({ id: file.file_id, name: file.safe_name,
             href: messageFileSource(file) ? absoluteGatewayUrl(messageFileSource(file)!) : undefined }))} />}
       </Stack>)}
     </Stack>
@@ -49,21 +62,30 @@ export function EpicInlineFields({ epic, busy, onWrite, titleRef, compact = fals
   </>;
 }
 
-function EpicFieldRest({ field, epic, compact, busy, onEdit, titleRef }: {
-  field: EpicTextField; epic: EpicDetail; compact: boolean; busy: boolean; onEdit: () => void; titleRef?: Ref<HTMLElement>;
+function EpicFieldRest({ field, epic, compact, busy, onEdit, titleRef, triggerRef }: {
+  triggerRef: RefObject<HTMLElement | null>; field: EpicTextField; epic: EpicDetail; compact: boolean; busy: boolean; onEdit: () => void; titleRef?: Ref<HTMLElement>;
 }) {
   const [hover, setHover] = useState(false), [focused, setFocused] = useState(false);
   const title = field === "title", value = epic[field];
   const Title = compact ? Typo.Body : Typo.PanelTitle;
   const label = appCopy.canon.inlineEdit[field];
-  return <Tooltip label={label}><Clickable stretch disabled={busy} aria-label={label} onClick={event => { if (!(event.target as HTMLElement).closest("a")) onEdit(); }}
-    onMouseEnter={() => { if (title) setHover(true); }} onMouseLeave={() => { if (title) setHover(false); }}
-    onFocus={() => { if (title) setFocused(true); }} onBlur={() => { if (title) setFocused(false); }}>
-    <Stack inline align="row" cross="center" gap="xs" minWidth="0">
-      {title ? <Title as="h3" weight={compact ? "medium" : undefined} tabIndex={-1} ref={titleRef} wrap="anywhere">{value}</Title>
-        : value ? <EpicMarkdown epicId={epic.id} description={value} attachments={epic.attachments} density="compact" /> : <Typo.Caption>{appCopy.canon.descriptionPlaceholder}</Typo.Caption>}
-      {title && <Presence present={hover || focused} motion="fade"><Box shrink={false}><Pencil size="sm" /></Box></Presence>}
+  return <Tooltip label={label}><Clickable stretch disabled={busy} aria-label={label}
+    role={title ? "button" : "group"} tabIndex={title ? 0 : -1}
+    onClick={event => { if (!(event.target as HTMLElement).closest("a, button")) onEdit(); }}
+    onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+    onFocus={() => setFocused(true)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setFocused(false); }}>
+    <Stack inline align="row" cross={title ? "center" : "start"} gap="xs" minWidth="0">
+      {title ? <Title as="h3" weight={compact ? "medium" : undefined} tabIndex={-1} ref={node => {
+        triggerRef.current = node?.closest<HTMLElement>('[data-slot="clickable"]') ?? null;
+        if (typeof titleRef === "function") titleRef(node); else if (titleRef) titleRef.current = node;
+      }} wrap="anywhere">{value}</Title>
+        : <Box grow minWidth="0">{value ? <EpicMarkdown epicId={epic.id} description={value} attachments={epic.attachments} density="compact" />
+          : <Typo.Caption>{appCopy.canon.descriptionPlaceholder}</Typo.Caption>}</Box>}
+      {title ? <Presence present={hover || focused} motion="fade"><Box shrink={false}><Pencil size="sm" /></Box></Presence>
+        : <Box shrink={false}><IconButton label={label} disabled={busy} ref={node => { triggerRef.current = node; }}
+          onClick={event => { event.stopPropagation(); onEdit(); }}>
+          <Presence present={hover || focused} motion="fade"><Pencil size="sm" /></Presence>
+        </IconButton></Box>}
     </Stack>
   </Clickable></Tooltip>;
 }
-

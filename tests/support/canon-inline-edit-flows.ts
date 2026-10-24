@@ -1,7 +1,7 @@
 // test-category: race
 import { strict as assert } from "node:assert";
 import { join } from "node:path";
-import type { Page } from "playwright";
+import type { Page, Locator } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
 import type { EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 import { probeFocusRing } from "./focus-ring-clipping.ts";
@@ -14,6 +14,11 @@ const input = (page: Page) => detail(page).getByLabel("제목", { exact: true })
 const patch = (page: Page, id: string) => page.waitForResponse(response => response.request().method() === "PATCH"
   && new URL(response.url()).pathname === `/canon/epics/${id}`);
 const read = (server: NativeAppServerHandle, id: string) => server.api<EpicDetail>(`/canon/epics/${id}`);
+export async function assertFocused(target: Locator) {
+  await target.page().waitForFunction(element => document.activeElement === element, await target.elementHandle());
+  assert(await target.evaluate(element => document.activeElement === element));
+}
+
 export async function inlineShot(page: Page, dir: string, name: string) {
   if (name === "pane-saved") {
     await waitToast(page, "저장했습니다");
@@ -50,11 +55,14 @@ export async function verifyInlineFields(page: Page, server: NativeAppServerHand
   await page.keyboard.press("Tab"); await ring(page);
   await input(page).focus();
   const saved = patch(page, id); await input(page).press("Enter"); assert((await saved).ok());
-  await title(page).waitFor(); assert.equal((await read(server, id)).title, "문서 화면 정리와 검색 개선");
+  await title(page).waitFor(); await assertFocused(title(page)); assert.equal((await read(server, id)).title, "문서 화면 정리와 검색 개선");
   await title(page).click(); await input(page).fill("취소할 제목"); await input(page).press("Escape");
+  await assertFocused(title(page));
+  await title(page).click(); await detail(page).getByRole("button", { name: "취소", exact: true }).click();
+  await assertFocused(title(page));
   assert.equal((await read(server, id)).title, "문서 화면 정리와 검색 개선");
   const body = detail(page).getByRole("button", { name: "설명 편집", exact: true });
-  await body.hover(); await page.getByRole("tooltip", { name: "설명 편집", exact: true }).waitFor();
+  await detail(page).getByRole("group", { name: "설명 편집", exact: true }).hover(); await page.getByRole("tooltip", { name: "설명 편집", exact: true }).waitFor();
   await inlineShot(page, shots, "pane-desc-hover");
   await body.focus(); await page.keyboard.press("Enter");
   const textarea = detail(page).getByLabel("설명", { exact: true });
@@ -73,13 +81,20 @@ export async function verifyInlineFields(page: Page, server: NativeAppServerHand
   assert.equal(await detail(page).locator("strong").innerText(), "검색 결과");
   assert.equal((await read(server, id)).description, description);
   await inlineShot(page, shots, "pane-saved");
+  await assertFocused(body);
   await inlineShot(page, shots, "pane-desc-markdown");
+  await detail(page).getByRole("group", { name: "설명 편집", exact: true }).hover();
+  await inlineShot(page, shots, "pane-desc-hover");
+  await body.click(); await textarea.press("Escape"); await assertFocused(body);
+  await body.click(); await detail(page).getByRole("button", { name: "취소", exact: true }).click(); await assertFocused(body);
   await verifyMarkdownLink(page);
   await verifyConflict(page, server, id, shots);
 }
 
 async function verifyMarkdownLink(page: Page) {
   const link = detail(page).getByRole("link", { name: "검토 자료", exact: true });
+  await link.focus(); await assertFocused(link);
+  assert.equal(await link.evaluate(element => element.closest('[role="button"]')), null);
   assert.equal(await link.getAttribute("target"), "_blank");
   assert.equal(await link.getAttribute("href"), "https://example.com/guide");
   // Observe the real click without navigating the smoke to an external network.
@@ -102,7 +117,7 @@ async function verifyConflict(page: Page, server: NativeAppServerHandle, id: str
   assert.equal(await input(page).inputValue(), editedTitle);
   await inlineShot(page, shots, "pane-conflict");
   const saved = patch(page, id); await input(page).press("Enter"); assert((await saved).ok());
-  await title(page).waitFor(); assert.equal((await read(server, id)).title, editedTitle);
+  await title(page).waitFor(); await assertFocused(title(page)); assert.equal((await read(server, id)).title, editedTitle);
 }
 
 export async function verifyInlineExits(page: Page, server: NativeAppServerHandle, id: string, shots: string) {

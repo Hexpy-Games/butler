@@ -7,6 +7,7 @@ import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
 import { openCanonBoard, seedCanonBoard } from "../support/canon-board-scenarios.ts";
 import { verifyInlineFields, verifyInlineExits, inlineShot } from "../support/canon-inline-edit-flows.ts";
 import { verifyPaneExits, verifyInlineAttachment, verifyEmptyDescription } from "../support/canon-inline-pane-flows.ts";
+import { installPendingAskEvents } from "../support/session-info-fixtures.ts";
 import { showCanonSidebar } from "../support/canon-sidebar-scenarios.ts";
 import type { CanonOverview } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 
@@ -40,6 +41,7 @@ try {
   await page.addInitScript(id => localStorage.setItem("butler:app-ui-state:v1", JSON.stringify({
     schema: "butler.app-ui-state.v1", cached_at: new Date().toISOString(), left_open: true, right_open: false, right_panel_width: 376, active_session_id: id, session_info_open: true, task_graph_enabled: true,
   })), linked.session_id);
+  await installPendingAskEvents(page);
   await page.goto(server.url, { waitUntil: "load" });
   await page.locator('[data-test-class="canon-epic-detail"]').getByRole("heading", { name: "문서 화면 정리", exact: true }).waitFor();
   await showCanonSidebar(page);

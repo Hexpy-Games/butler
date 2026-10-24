@@ -1,3 +1,4 @@
+import { epicAttachmentReferences } from "./epicAttachmentReferences.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { EpicDetail } from "@/app/canonApi.ts";
 import { absoluteGatewayUrl, messageFileSource } from "@/app/messageFileUrls.ts";
@@ -13,7 +14,9 @@ export function EpicFieldInput({ epic, field, value, busy, valid, current, base,
   const attachments = useEpicAttachments(epic.project_id, value, onChange, busy);
   const saving = busy || attachments.uploading;
   const save = () => saving ? Promise.resolve(false) : onSave();
-  const items = [...new Map([...(epic.attachments ?? []), ...attachments.files.filter(file => value.includes(`attachment:${file.file_id}`))].map(file => [file.file_id, file])).values()]
+  const references = epicAttachmentReferences(value);
+  const items = [...new Map([...(epic.attachments ?? []), ...attachments.files].map(file => [file.file_id, file])).values()]
+    .filter(file => references.has(file.file_id))
     .map(file => ({ id: file.file_id, name: file.safe_name, href: messageFileSource(file) ? absoluteGatewayUrl(messageFileSource(file)!) : undefined }));
   const props = { autoFocus: true, "aria-label": copy[field], value, disabled: saving,
     onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange(event.target.value),
