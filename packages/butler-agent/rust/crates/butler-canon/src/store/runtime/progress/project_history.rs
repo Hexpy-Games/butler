@@ -29,10 +29,10 @@ pub(super) fn read(db: &Connection, work: &Value, views: &ProjectViews) -> Resul
             (Some("record_work_review"), Some("completion")) => Some("validation"),
             _ => None,
         };
-        if let Some(stage) = entry {
-            if history.last().is_none_or(|h| h["stage"] != stage) {
-                history.push(json!({"revision":call["rowid"],"stage":stage,"public_summary":args["summary"],"created_at":call["finished_at"]}));
-            }
+        if let Some(stage) = entry
+            && history.last().is_none_or(|h| h["stage"] != stage)
+        {
+            history.push(json!({"revision":call["rowid"],"stage":stage,"public_summary":args["summary"],"created_at":call["finished_at"]}));
         }
         let stage = args
             .get("stage")
@@ -45,12 +45,11 @@ pub(super) fn read(db: &Connection, work: &Value, views: &ProjectViews) -> Resul
         }
         history.push(json!({"revision":call["rowid"],"stage":stage,"public_summary":args.get("public_summary").or_else(||args.get("summary")).cloned().unwrap_or(json!("")),"created_at":call["finished_at"]}));
     }
-    if let Some(view) = views.get(id) {
-        if let Some(stage) = view.get("currentStage") {
-            if history.last().is_none_or(|h| h["stage"] != *stage) {
-                history.push(json!({"revision":view["latestCheckpoint"]["revision"],"stage":stage,"public_summary":view["latestCheckpoint"]["publicSummary"],"created_at":view["updatedAt"]}));
-            }
-        }
+    if let Some(view) = views.get(id)
+        && let Some(stage) = view.get("currentStage")
+        && history.last().is_none_or(|h| h["stage"] != *stage)
+    {
+        history.push(json!({"revision":view["latestCheckpoint"]["revision"],"stage":stage,"public_summary":view["latestCheckpoint"]["publicSummary"],"created_at":view["updatedAt"]}));
     }
     Ok(history)
 }
