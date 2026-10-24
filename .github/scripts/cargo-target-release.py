@@ -6,6 +6,7 @@ selects the latest generation; four generations per key survive package pruning,
 so a restore can fall back past producers that are still running or failed.
 """
 import importlib.util
+import http.client
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,8 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
+import urllib.error
 import urllib.request
 
 # Build scripts watch the recipe directory; imports must not create new inputs.
@@ -32,12 +35,23 @@ CHUNK_BYTES = 1800 * 1024**2
 KEEP = 4
 # Older generations a restore checks after the tagged one: one manifest lookup each.
 WALK_BACK = KEEP - 1
+# Seconds before each retry of one GitHub API request after a transient failure.
+HTTP_RETRY_DELAYS = (2, 8)
 # Transport and decompression failures; content/trust validation errors are never transient.
 TRANSIENT = (OSError, RuntimeError, subprocess.TimeoutExpired, tarfile.ReadError, EOFError)
 
 
 class UnsuccessfulProducer(ValueError):
     """A completed CI run can contain other failed lanes; never publish those."""
+
+
+def transient_http(error) -> bool:
+    """Timeouts, resets, 429 and 5xx; other HTTP answers and TLS trust failures are final."""
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code >= 500 or error.code == 429
+    if isinstance(error, urllib.error.URLError):
+        return isinstance(error.reason, Exception) and transient_http(error.reason)
+    return isinstance(error, (TimeoutError, ConnectionError, http.client.IncompleteRead))
 
 
 def api(endpoint, method='GET'):
@@ -53,16 +67,28 @@ def api(endpoint, method='GET'):
             'Accept': 'application/vnd.github+json',
             'X-GitHub-Api-Version': '2022-11-28',
         })
-        with urllib.request.urlopen(request, timeout=60) as response:
-            if method == 'DELETE':
-                return None
-            value = json.load(response)
-            if not field and not isinstance(value, list):
-                return value
-            entries.extend(value[field] if field else value)
-            links = response.headers.get('Link', '')
-            next_page = re.search(r'<([^>]+)>;\s*rel="next"', links)
-            url = next_page[1] if next_page else None
+        for attempt in range(len(HTTP_RETRY_DELAYS) + 1):
+            try:
+                with urllib.request.urlopen(request, timeout=60) as response:
+                    if method == 'DELETE':
+                        return None
+                    value = json.load(response)
+                    links = response.headers.get('Link', '')
+                break
+            except Exception as error:
+                if method == 'DELETE' and attempt and isinstance(error, urllib.error.HTTPError) and error.code == 404:
+                    return None
+                if not transient_http(error) or attempt == len(HTTP_RETRY_DELAYS):
+                    raise
+                delay = HTTP_RETRY_DELAYS[attempt]
+                print(f'GitHub API request failed ({type(error).__name__}: {error}); '
+                      f'retrying in {delay} s (attempt {attempt + 2} of {len(HTTP_RETRY_DELAYS) + 1}).')
+                time.sleep(delay)
+        if not field and not isinstance(value, list):
+            return value
+        entries.extend(value[field] if field else value)
+        next_page = re.search(r'<([^>]+)>;\s*rel="next"', links)
+        url = next_page[1] if next_page else None
     return {field: entries} if field else entries
 
 

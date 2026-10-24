@@ -84,11 +84,13 @@ function assertPanelSlide(
   }
 }
 
-/** Waits until finite (enter/exit) animations settle so geometry is read at rest. */
+/** Waits until finite time-based (enter/exit) animations settle so geometry is read at rest. */
 async function waitForMotionToSettle(page: Page): Promise<void> {
   await page.waitForFunction(() =>
     document.getAnimations().every((animation) =>
-      animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
+      // Scroll-driven animations follow scroll position, not time, and never finish.
+      animation.timeline !== document.timeline || animation.effect?.getTiming().iterations === Infinity ||
+        animation.playState !== "running"));
 }
 
 async function screenshot(page: Page, name: string): Promise<string> {
