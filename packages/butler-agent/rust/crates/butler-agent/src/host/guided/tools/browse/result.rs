@@ -1,6 +1,13 @@
 use super::*;
 
 impl Run {
+    pub(super) fn failed(&mut self, action: &Value, outcome: &Value) -> bool {
+        self.failures += 1;
+        self.log
+            .push(json!({"step":self.steps,"action":action,"outcome":outcome}));
+        self.failures >= 3
+    }
+
     pub(super) fn remember(&mut self, view: Value) {
         let url = view["untrusted_content"]["url"]
             .as_str()

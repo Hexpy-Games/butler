@@ -15,6 +15,19 @@ pub(super) async fn start(
     ),
     HarnessError,
 > {
+    start_with_failures(s, 0).await
+}
+
+pub(super) async fn start_with_failures(
+    s: &Scenario,
+    failures: usize,
+) -> Result<
+    (
+        tokio::task::JoinHandle<Result<(), HarnessError>>,
+        Arc<AtomicUsize>,
+    ),
+    HarnessError,
+> {
     let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
     let stream = reqwest::Client::new()
         .get(format!("{}/internal/browser-host", s.gw.base))
@@ -23,7 +36,7 @@ pub(super) async fn start(
         .send()
         .await?;
     let actions = Arc::new(AtomicUsize::new(0));
-    let task = tokio::spawn(serve(stream, admin, actions.clone()));
+    let task = tokio::spawn(serve(stream, admin, actions.clone(), failures));
     Ok((task, actions))
 }
 
@@ -31,6 +44,7 @@ async fn serve(
     mut stream: reqwest::Response,
     admin: AdminClient,
     actions: Arc<AtomicUsize>,
+    mut failures: usize,
 ) -> Result<(), HarnessError> {
     let mut buffer = String::new();
     let mut tabs = std::collections::BTreeMap::new();
@@ -57,11 +71,18 @@ async fn serve(
             "tab.observe" => {
                 let index = observed.entry(tab.to_owned()).or_default();
                 *index += 1;
-                let page = match tab {
+                let current = tabs[tab]["url"]
+                    .as_str()
+                    .unwrap()
+                    .rsplit('/')
+                    .next()
+                    .unwrap();
+                let page = match current {
                     "listing" => "Earlier listing",
-                    "product-a" => "First product: Price 18",
-                    "cart" => "Cart and checkout",
-                    _ => "Latest product",
+                    "product-a" => "First product: Aster desk lamp. Price 18",
+                    "cart" => "Cart: Birch desk lamp in cart",
+                    "checkout" => "Checkout: Birch desk lamp in cart",
+                    _ => "Latest product: Birch desk lamp",
                 };
                 let raw = crate::browser_observation_v2::fixture("product");
                 let button = if tabs[tab]["url"].as_str().unwrap().ends_with("checkout") {
@@ -83,8 +104,24 @@ async fn serve(
                     frame["args"]["steps"][0]["commits"], true,
                     "executor must not dispatch committing actions"
                 );
-                if tab == "cart" {
-                    tabs.get_mut(tab).unwrap()["url"] = json!("https://store.example/checkout");
+                if failures > 0 {
+                    failures -= 1;
+                    let path = format!(
+                        "/internal/browser-host/results/{}",
+                        frame["id"].as_str().unwrap()
+                    );
+                    admin.send(Method::POST, &path, Some(json!({"status":"stale_ref","reason":"The page changed.","recovery":"Observe again and use the new refs."})), &[]).await?;
+                    continue;
+                }
+                let current = tabs[tab]["url"].as_str().unwrap();
+                if current.ends_with("cart") || current.ends_with("product-b") {
+                    let destination = if current.ends_with("cart") {
+                        "checkout"
+                    } else {
+                        "cart"
+                    };
+                    tabs.get_mut(tab).unwrap()["url"] =
+                        json!(format!("https://store.example/{destination}"));
                     admin
                         .send(
                             Method::POST,
@@ -99,7 +136,7 @@ async fn serve(
             }
             "tabs.list" => json!({"status":"ok","tabs":tabs.values().collect::<Vec<_>>()}),
             "tab.read" => json!({"status":"ok","url":tabs[tab]["url"],"epoch":1,
-                "html":format!("<html><title>Product</title><article><p>Price 12</p><p>{}</p><p>{}</p></article></html>", "Complete product material. ".repeat(100), "가격 price options. ".repeat(100))}),
+                "html":format!("{}<article><p>{}</p><p>{}</p></article>", super::shop::PAGES[2].1, "Complete product material. ".repeat(100), "가격 price options. ".repeat(100))}),
             op => panic!("unexpected browser operation {op}"),
         };
         let path = format!(

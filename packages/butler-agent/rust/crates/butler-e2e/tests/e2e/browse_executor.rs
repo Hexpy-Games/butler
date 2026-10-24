@@ -6,6 +6,8 @@
     reason = "E2E assertions"
 )]
 mod host;
+mod recovery;
+pub(crate) mod shop;
 mod stub;
 use butler_e2e::e2e::{
     HarnessError,
@@ -108,12 +110,22 @@ async fn browse_provider_failure_returns_unavailable_without_switching_models()
         .stub_cassette(stub::cassette(true)?)
         .start()
         .await?;
-    let (host, _) = host::start(&s).await?;
+    let (host, actions) = host::start(&s).await?;
     let (_, turn) = s.turn("general", stub::TASK).await?;
     assert_eq!(turn["state"], "delivered");
     let requests = s.provider()?.requests();
     let results = outputs(requests.last().unwrap());
-    let result = &results.last().unwrap().0["output"];
+    let result = &results
+        .iter()
+        .find(|(v, _)| v["output"]["status"] == "executor_unavailable")
+        .unwrap()
+        .0["output"];
+    assert_eq!(
+        actions.load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "planner browser tools continue"
+    );
+    assert!(requests.iter().all(|r| r["model"] == requests[0]["model"]));
     assert_eq!(result["status"], "executor_unavailable", "{result}");
     assert!(result["error_code"].is_string());
     let executor: Vec<_> = requests
@@ -185,9 +197,12 @@ fn assert_requests(requests: &[Value]) {
         );
         assert!(scope["view"].get("delta_of").is_none());
         let view = scope["view"].to_string();
-        if view.contains("Latest product") {
-            assert!(!view.contains("Earlier listing"));
+        for marker in ["Earlier listing", "First product:", "Latest product"] {
+            if !view.contains(marker) {
+                assert!(!text.contains(marker), "earlier view leaked: {text}");
+            }
         }
+        assert!(!text.contains("delta_of"));
         assert!(scope["notes"].as_str().unwrap().chars().count() <= 2_000);
         if scope["view"]["ranked"] == true {
             let count = scope["view"]["chunks"].as_array().unwrap().len()
@@ -263,7 +278,7 @@ async fn query_read_returns_complete_ranked_chunks_and_keeps_the_rest_readable()
         .map(|(value, _)| &value["output"])
         .filter(|value| value.get("chunks").is_some())
         .collect();
-    assert_eq!(reads.len(), 3);
+    assert_eq!(reads.len(), 4);
     assert_eq!(reads[0]["ranked"], true);
     assert_eq!(reads[1]["chunks"], reads[0]["chunks"]);
     let selected = reads[0]["chunks"].as_array().unwrap();
@@ -276,7 +291,37 @@ async fn query_read_returns_complete_ranked_chunks_and_keeps_the_rest_readable()
     assert!(selected[0]["text"].as_str().unwrap().contains("가격"));
     assert!(reads[2].get("ranked").is_none());
     assert_eq!(reads[2]["returned_chunks"], reads[2]["total_chunks"]);
+    let all: std::collections::BTreeSet<_> = selected
+        .iter()
+        .map(|chunk| chunk["index"].as_u64().unwrap())
+        .chain(more.iter().map(|index| index.as_u64().unwrap()))
+        .collect();
+    assert_eq!(
+        all,
+        (0..reads[0]["total_chunks"].as_u64().unwrap()).collect()
+    );
     let full = reads[2]["markdown"].as_str().unwrap();
+    let complete = reads[3]["chunks"].as_array().unwrap();
+    assert_eq!(
+        complete.len() as u64,
+        reads[0]["total_chunks"].as_u64().unwrap()
+    );
+    assert_eq!(reads[3]["more_chunks"], json!([]));
+    for chunk in complete {
+        assert!(
+            full.contains(chunk["text"].as_str().unwrap()),
+            "every ranked chunk is intact"
+        );
+    }
+    for chunk in selected {
+        assert_eq!(
+            chunk,
+            complete
+                .iter()
+                .find(|c| c["index"] == chunk["index"])
+                .unwrap()
+        );
+    }
     for chunk in selected {
         assert!(
             full.contains(chunk["text"].as_str().unwrap()),

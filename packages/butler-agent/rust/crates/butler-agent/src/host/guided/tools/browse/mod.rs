@@ -23,6 +23,8 @@ struct Run {
     opened: Vec<Value>,
     log: Vec<Value>,
     notes: String,
+    notes_cut: bool,
+    failures: usize,
     view: Value,
     seen: Vec<(String, String)>,
 }
@@ -71,15 +73,16 @@ async fn start(
     if args.get("url").is_some() {
         let result = step::open(owner, invocation, occurrence, run, &args["url"]).await?;
         if result["status"] != "ok" {
-            return encoded(&run.finish(result, &model.model));
+            run.failed(&json!({"open":args["url"]}), &result);
         }
     }
     if run.tab.as_str().is_none_or(str::is_empty) {
-        return encoded(&run.finish(json!({"status":"stuck","summary":"No tab selected","needs":"Provide url or an open tab."}), &model.model));
+        run.view = json!({"status":"unavailable","reason":"No tab selected. Open a URL."});
+        return drive(owner, invocation, occurrence, model, run).await;
     }
     let observed = step::observe(owner, invocation, occurrence, &run.tab).await?;
     if observed["status"] != "ok" {
-        return encoded(&run.finish(observed, &model.model));
+        run.failed(&json!({"observe":run.tab}), &observed);
     }
     run.remember(observed);
     drive(owner, invocation, occurrence, model, run).await
@@ -98,13 +101,18 @@ async fn drive(
         let next = match response {
             Ok(response) => match step::parse(&response) {
                 Ok((notes, next)) => {
-                    run.notes = notes;
+                    run.notes_cut = notes.chars().count() > 2_000;
+                    run.notes = notes.chars().take(2_000).collect();
                     next
                 }
                 Err(reason) => {
-                    return encoded(
-                        &run.finish(json!({"status":"stuck","summary":reason}), &model.model),
-                    );
+                    let failure = json!({"status":"unusable_reply","reason":reason});
+                    if run.failed(&Value::Null, &failure) {
+                        return encoded(
+                            &run.finish(json!({"status":"stuck","summary":failure}), &model.model),
+                        );
+                    }
+                    continue;
                 }
             },
             Err(code) => {
@@ -114,6 +122,16 @@ async fn drive(
                 ));
             }
         };
+        if next.get("approve").is_some() && !step::valid_steps(&next["approve"]["steps"], &run.view)
+        {
+            let failure = json!({"status":"invalid_steps","reason":"Approval refs must be in the current view."});
+            if run.failed(&next, &failure) {
+                return encoded(
+                    &run.finish(json!({"status":"stuck","summary":failure}), &model.model),
+                );
+            }
+            continue;
+        }
         if let Some(done) = result::terminal(run, &next) {
             return encoded(&run.finish(done, &model.model));
         }
@@ -122,10 +140,12 @@ async fn drive(
         if outcome["status"] == "needs_approval" {
             return encoded(&run.finish(outcome, &model.model));
         }
-        run.log.push(json!({"step":index,"action":next,"outcome":outcome["action"].get("status").unwrap_or(&outcome["status"])}));
         if outcome["status"] == "ok" || outcome["ok"] == true {
+            run.failures = 0;
+            run.log
+                .push(json!({"step":index,"action":next,"outcome":"ok"}));
             run.remember(outcome);
-        } else {
+        } else if run.failed(&next, &outcome) {
             return encoded(&run.finish(json!({"status":"stuck","summary":outcome}), &model.model));
         }
     }
@@ -138,10 +158,14 @@ async fn request(
     model: &butler_runtime::web_access::BrowseModel,
     run: &Run,
 ) -> Result<String, String> {
-    let scope = json!({"fields":run.fields,
+    let mut scope = json!({"fields":run.fields,
         "step":format!("{} of {}", run.steps, run.max_steps),
-        "action_log":run.log,"notes":run.notes,"view":run.view})
-    .to_string();
+        "action_log":run.log,"notes":run.notes,"view":run.view});
+    if run.notes_cut {
+        scope["notes_notice"] = json!(
+            "Your notes were cut at 2,000 characters. Rewrite them to retain the goal's evidence within that limit."
+        );
+    }
     let prompt = format!("User request:\n{}\nCurrent scope:\n{scope}", run.goal);
     let attribution = PromptUsageAttribution {
         root_session_id: owner.web_session.browse_usage_root(),
@@ -195,6 +219,8 @@ impl Run {
             opened: vec![],
             log: vec![],
             notes: String::new(),
+            notes_cut: false,
+            failures: 0,
             view: Value::Null,
             seen: vec![],
         }

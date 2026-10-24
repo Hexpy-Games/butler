@@ -50,6 +50,18 @@ pub(super) fn cassette(failed: bool) -> Result<Cassette, HarnessError> {
         cassette.exchanges.push(approve);
         round.extend(["function_call".into(), "function_call_output".into()]);
     }
+    if failed {
+        let mut fallback = template.exchanges[0].clone();
+        fallback.request.key.user_request = TASK.into();
+        fallback.request.key.round = round.clone();
+        fallback.response = response(&[call(
+            "browser_act",
+            &json!({"tab":"listing","observation":"listing-o1","steps":[{"action":"wait","value":"50"}]}),
+            "fallback",
+        )]);
+        cassette.exchanges.push(fallback);
+        round.extend(["function_call".into(), "function_call_output".into()]);
+    }
     let mut last = template.exchanges[1].clone();
     last.request.key.user_request = TASK.into();
     last.request.key.round = round;
@@ -100,23 +112,23 @@ pub(super) fn cassette(failed: bool) -> Result<Cassette, HarnessError> {
         let mut exchange = template.exchanges[1].clone();
         exchange.request.key.user_request = goal.into();
         exchange.request.key.round.clear();
-        exchange.response = message(&reply.to_string());
+        exchange.response = message(&format!("Executor reply:\n```json\n{reply}\n```\n"));
         cassette.exchanges.push(exchange);
     }
     Ok(cassette)
 }
 
-fn call(name: &str, args: &Value, id: &str) -> Value {
+pub(super) fn call(name: &str, args: &Value, id: &str) -> Value {
     json!({"type":"function_call","id":format!("fc_{id}"),"call_id":format!("call_{id}"),"name":name,"arguments":args.to_string(),"status":"completed"})
 }
 
-fn message(text: &str) -> ResponseRecord {
+pub(super) fn message(text: &str) -> ResponseRecord {
     response(&[
         json!({"type":"message","id":"msg_browse","role":"assistant","status":"completed","content":[{"type":"output_text","text":text,"annotations":[]} ]}),
     ])
 }
 
-fn response(items: &[Value]) -> ResponseRecord {
+pub(super) fn response(items: &[Value]) -> ResponseRecord {
     let mut record = crate::browser_usage::stub::response(&items[0]);
     if items.len() == 1 {
         return record;
@@ -194,6 +206,10 @@ pub(super) fn ranked_cassette() -> Result<Cassette, HarnessError> {
             (
                 "web_read",
                 json!({"tab":"product-b","start_chunk":0,"max_chunks":8,"max_chars":8000}),
+            ),
+            (
+                "web_read",
+                json!({"tab":"product-b","query":"unmatched","start_chunk":0,"max_chunks":8}),
             ),
         ],
         "Read every chunk.",

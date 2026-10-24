@@ -1,15 +1,12 @@
 use super::*;
 
 pub(super) fn parse(text: &str) -> Result<(String, Value), &'static str> {
-    let value: Value = serde_json::from_str(text).map_err(|_| "invalid_executor_json")?;
+    let value: Value = first_object(text).ok_or("invalid_executor_json")?;
     let object = value.as_object().ok_or("invalid_executor_json")?;
     if object.len() != 2 {
         return Err("invalid_executor_response");
     }
     let notes = value["notes"].as_str().ok_or("invalid_executor_notes")?;
-    if notes.chars().count() > 2_000 {
-        return Err("executor_notes_too_long");
-    }
     let next = value["next"].as_object().ok_or("invalid_executor_next")?;
     if next.len() != 1
         || !next
@@ -23,6 +20,17 @@ pub(super) fn parse(text: &str) -> Result<(String, Value), &'static str> {
         return Err("invalid_executor_next");
     }
     Ok((notes.into(), next_value.clone()))
+}
+
+fn first_object(text: &str) -> Option<Value> {
+    text.char_indices()
+        .filter(|(_, ch)| *ch == '{')
+        .find_map(|(start, _)| {
+            serde_json::Deserializer::from_str(&text[start..])
+                .into_iter::<Value>()
+                .next()?
+                .ok()
+        })
 }
 
 fn call(name: &str, args: &Value) -> ModelRoundToolCall {
@@ -98,7 +106,11 @@ pub(super) async fn execute(
         }
         let result = open(owner, invocation, occurrence, run, &opened["url"]).await?;
         return if result["status"] == "ok" {
-            observe(owner, invocation, occurrence, &run.tab).await
+            let observed = observe(owner, invocation, occurrence, &run.tab).await?;
+            if observed["status"] != "ok" {
+                run.remember(observed.clone());
+            }
+            Ok(observed)
         } else {
             Ok(result)
         };
@@ -110,18 +122,25 @@ pub(super) async fn execute(
     }
     let steps = &next["act"]["steps"];
     if !valid_steps(steps, &run.view) {
-        return Ok(json!({"status":"invalid_steps"}));
+        return Ok(
+            json!({"status":"invalid_steps","reason":"Use only supported actions and refs in the current view.","recovery":"Rewrite the steps against the latest view."}),
+        );
     }
     let args = json!({"tab":run.tab,"observation":run.observation,"steps":steps,"observe":false});
     let result = browser_call(owner, invocation, occurrence, "browser_act", args).await?;
+    if result["status"] == "needs_approval" {
+        return Ok(result);
+    }
+    let observed = observe(owner, invocation, occurrence, &run.tab).await?;
     if result["status"] == "ok" {
-        observe(owner, invocation, occurrence, &run.tab).await
+        Ok(observed)
     } else {
+        run.remember(observed);
         Ok(result)
     }
 }
 
-fn valid_steps(steps: &Value, view: &Value) -> bool {
+pub(super) fn valid_steps(steps: &Value, view: &Value) -> bool {
     let Some(steps) = steps
         .as_array()
         .filter(|steps| !steps.is_empty() && steps.len() <= 10)
