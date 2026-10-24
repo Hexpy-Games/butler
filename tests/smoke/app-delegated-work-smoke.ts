@@ -234,7 +234,9 @@ try {
     const capture = async (state: string) => {
       await page.evaluate(() => document.fonts.ready);
       await page.waitForFunction(() => document.getAnimations().every(animation =>
-        animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
+        // Scroll-driven animations follow scroll position, not time, and never finish.
+        animation.timeline !== document.timeline || animation.effect?.getTiming().iterations === Infinity ||
+          animation.playState !== "running"));
       if (output) await page.waitForFunction(() => [...document.querySelectorAll<HTMLCanvasElement>("canvas[data-wallpaper-state]")]
         .every(canvas => canvas.dataset.wallpaperState !== "pending"));
       await page.waitForLoadState("networkidle");
