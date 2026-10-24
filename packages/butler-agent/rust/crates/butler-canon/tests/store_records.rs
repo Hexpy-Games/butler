@@ -1,6 +1,4 @@
 #![allow(clippy::unwrap_used, reason = "test assertions")]
-#[path = "support/attachments.rs"]
-mod attachments;
 mod store_support;
 use butler_canon::{store::*, work_ids::*, work_types::*};
 use serde_json::json;

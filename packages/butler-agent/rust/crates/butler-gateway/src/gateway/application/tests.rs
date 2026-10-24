@@ -1,4 +1,3 @@
-mod canon_files;
 mod child_results;
 mod controls;
 

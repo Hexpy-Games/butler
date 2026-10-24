@@ -3,7 +3,7 @@ use super::*;
 use butler_e2e::e2e::media;
 use std::fmt::Write as _;
 
-async fn upload(s: &Scenario, project: &str) -> Result<Value, HarnessError> {
+pub(super) async fn upload(s: &Scenario, project: &str) -> Result<Value, HarnessError> {
     Ok(data(
         s.gw.upload_file(
             &format!("/projects/{project}/canon/files"),
@@ -16,7 +16,11 @@ async fn upload(s: &Scenario, project: &str) -> Result<Value, HarnessError> {
     )["file"]
         .clone())
 }
-async fn save(s: &Scenario, project: &str, description: &str) -> Result<Value, HarnessError> {
+pub(super) async fn save(
+    s: &Scenario,
+    project: &str,
+    description: &str,
+) -> Result<Value, HarnessError> {
     let stream = LiveEvents::subscribe(&s.gw, 0).await?;
     let epic = data(
         s.gw.post(

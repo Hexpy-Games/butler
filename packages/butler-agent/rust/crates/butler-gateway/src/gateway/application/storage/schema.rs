@@ -175,6 +175,3 @@ mod plans;
 mod tests;
 
 pub(in crate::gateway::application) use core::create_settings_table;
-
-#[cfg(test)]
-pub(in crate::gateway) mod canon_file_tests;
