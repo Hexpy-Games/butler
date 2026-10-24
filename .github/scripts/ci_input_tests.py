@@ -101,6 +101,28 @@ class DerivedInputs(unittest.TestCase):
         print(f'DS import closure: {len(reached)} repository inputs')
 
     # test-category: pure-logic
+    def test_installed_windows_browser_imports_select_and_invalidate_release(self):
+        pending = [ROOT / 'tests/smoke/composer-permission-agent-smoke.ts']
+        reached = set()
+        while pending:
+            source = pending.pop()
+            if source in reached:
+                continue
+            reached.add(source)
+            pending.extend(local_imports(source))
+        groups = changes.job_groups('windows-preview-smoke.yml', integration=True)['release']
+        for source in reached:
+            path = source.relative_to(ROOT).as_posix()
+            with self.subTest(path=path):
+                categories = changes.categories(path)
+                self.assertIn('package', categories)
+                self.assertTrue(set(groups) & categories)
+                self.assertTrue(changes.windows_native(path))
+                outputs = {g: str(g in categories).lower() for g in changes.GROUPS}
+                jobs = changes.windows_preview_jobs(dict(outputs, windows='true', tier='integration'), 'push')
+                self.assertTrue(jobs['release'])
+
+    # test-category: pure-logic
     def test_rust_external_includes_and_build_reads_select_archives(self):
         rust = ROOT / ci_rust_inputs.RUST
         external = set()

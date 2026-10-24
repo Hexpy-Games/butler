@@ -36,7 +36,9 @@ Any Butler UI agent or developer building a searchable chooser popover.
 
 Group long results by a meaningful label. Keep footer options short and chip
 like. Icons align to the first text row, so two-line items stay visually stable.
-Search inputs should expose a clear button when populated, and filter chips
+The search box fills the popover's width and asks for the same intrinsic
+width on every platform, so the popover is as wide on Windows and Linux as on
+macOS. Search inputs should expose a clear button when populated, and filter chips
 should have enough breathing room to read as a separate control row.
 The result region should keep a stable fixed height around 200px and scroll
 internally, including when search has no matches.
