@@ -274,6 +274,8 @@ async fn failed_manual_run_does_not_prevent_tomorrows_schedule() -> Result<(), H
         )
         .await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
+    // Wait for turn memory completion to release the writer before running consolidation.
+    super::memory_fixture::settle(&s.sandbox.data).await?;
     let reply =
         s.gw.post(
             "/memory/consolidation",
