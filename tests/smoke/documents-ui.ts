@@ -20,10 +20,13 @@ const file = { file_id: "mf_abcdefghij", safe_name: "report.md", size_bytes: 16,
 const fileItem = { id: "file-report", kind: "document", title: "File report", session: "butler-client", url: file.url, file, capturedAt: artifact.created_at,
   revisions: [{ file, capturedAt: artifact.created_at }, { file: { ...file, file_id: "mf_klmnopqrst", url: "/message-files/mf_klmnopqrst" }, capturedAt: "2026-10-24T08:00:00Z" }] };
 const scrap = { id: "saved-metrics", kind: "scrap", title: "Saved budget", url: "", block: spec, capturedAt: artifact.created_at };
+const baselineRef = process.env.BUTLER_DOCUMENT_BASELINE;
+if (baselineRef) assert.equal(stage, "before", "baseline mode is for before captures only");
+if (stage === "before") assert(baselineRef, "BUTLER_DOCUMENT_BASELINE is required for before captures");
 const baseline = new Map<string, string>();
-if (stage === "before") for (const file of execFileSync("git", ["diff", "--name-only"], { encoding: "utf8" }).trim().split("\n")) {
-  if ((!file.startsWith("packages/butler-app/client/ui/src/") && !file.startsWith("packages/butler-i18n/src/")) || !/\.tsx?$/u.test(file) || file.includes("/design-system/")) continue;
-  baseline.set(resolve(root, file), execFileSync("git", ["show", `HEAD:${file}`], { encoding: "utf8" }));
+if (stage === "before") for (const file of execFileSync("git", ["diff", "--name-only", "--diff-filter=M", baselineRef!], { cwd: root, encoding: "utf8" }).trim().split("\n")) {
+  if (!file || (!file.startsWith("packages/butler-app/client/ui/src/") && !file.startsWith("packages/butler-i18n/src/")) || !/\.tsx?$/u.test(file) || file.includes("/design-system/")) continue;
+  baseline.set(resolve(root, file), execFileSync("git", ["show", `${baselineRef}:${file}`], { cwd: root, encoding: "utf8" }));
 }
 process.chdir(join(root, "packages/butler-app/client/ui"));
 const vite = await createServer({ plugins: [{ name: "documents-baseline", enforce: "pre", load(id) { return baseline.get(id.split("?")[0]!); } }], server: { host: "127.0.0.1", port: 0 }, logLevel: "error" }); await vite.listen();

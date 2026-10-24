@@ -24,11 +24,14 @@ const scrap = (path: string) => ({ id: `saved-${path.replaceAll("/", "-")}`, kin
   ...(stage === "before" ? { snapshot: { width: 480, height: 200 } } : {}) });
 const saved = [scrap("/blocks/0/blocks/0"), scrap("/blocks/0")];
 const calls: { path: string; body: Record<string, unknown> }[] = [], errors: string[] = [];
+const baseline = process.env.BUTLER_BLOCK_BASELINE;
+if (baseline) assert.equal(stage, "before", "baseline mode is for before captures only");
+if (stage === "before") assert(baseline, "BUTLER_BLOCK_BASELINE is required for before captures");
 const baselineSources = new Map<string, string>();
 if (stage === "before") {
   for (const file of ["conversation/AnswerBlocks.tsx", "conversation/AnswerContainers.tsx", "library/LibraryDetail.tsx", "library/LibraryItemCard.tsx"]) {
     const relative = `packages/butler-app/client/ui/src/components/${file}`;
-    baselineSources.set(resolve(root, relative), execFileSync("git", ["show", `207df85f3:${relative}`], { encoding: "utf8" }));
+    baselineSources.set(resolve(root, relative), execFileSync("git", ["show", `${baseline}:${relative}`], { cwd: root, encoding: "utf8" }));
   }
 }
 process.chdir(join(root, "packages/butler-app/client/ui"));
