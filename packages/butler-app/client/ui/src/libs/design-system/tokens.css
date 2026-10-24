@@ -195,6 +195,10 @@
      reveal), the ink bloom, and the whole reveal until the GL loop stops. */
   --motion-stagger-row: 30ms;
   --motion-stagger-intro: 70ms;
+  /* ActivityHeatmap shade wave: each cell waits 4ms per column and 18ms per
+     row above the bottom, so a year sweeps left to right, bottom up (~480ms). */
+  --motion-stagger-cell-column: 4ms;
+  --motion-stagger-cell-row: 18ms;
   --motion-morph-rows: 150ms;
   --motion-intro-drop: 350ms;
   --motion-intro-draw: 850ms;

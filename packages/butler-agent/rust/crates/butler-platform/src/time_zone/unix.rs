@@ -16,3 +16,14 @@ pub(super) fn zone_rules(name: &str) -> io::Result<Vec<u8>> {
     }
     Err(last.unwrap_or_else(|| io::ErrorKind::NotFound.into()))
 }
+
+pub(super) fn zone_file(name: &str) -> Option<std::path::PathBuf> {
+    ROOTS
+        .iter()
+        .map(|root| Path::new(root).join(name))
+        .find(|path| path.is_file())
+}
+
+pub(super) fn local_zone_file(_name: &str) -> Option<std::path::PathBuf> {
+    Some("/etc/localtime".into())
+}

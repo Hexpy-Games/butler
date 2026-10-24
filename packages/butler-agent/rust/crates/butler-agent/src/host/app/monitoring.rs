@@ -106,6 +106,20 @@ fn usage_monitor_view(
 }
 
 impl AppMonitoringPort for AppMonitoring {
+    fn usage_history(&self) -> ApplicationFuture<Value> {
+        let root = self.data_root.clone();
+        let monitor = self.usage.clone();
+        let catalog = self.catalog.clone();
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || {
+                monitor.history(&root, &|model| catalog.pricing(model))
+            })
+            .await
+            .map_err(GatewayApplicationError::internal_from)?
+            .map_err(GatewayApplicationError::internal_from)
+        })
+    }
+
     fn work_status(&self) -> ApplicationFuture<Vec<AppBoundWorkStatusFact>> {
         let session_work = self.session_work.clone();
         Box::pin(async move { work_status::read(session_work).await })
@@ -126,13 +140,18 @@ impl AppMonitoringPort for AppMonitoring {
         // session): opening it starts the quota polls that are due, and the
         // view answers with the stored quota; the quota broadcast delivers
         // what the polls find.
-        if let Some(poller) = self.poller.clone() {
-            poller.sync_switches();
-            if query.session_id.is_none() {
-                quota::poll_in_background(poller, QuotaPollTrigger::SettingsOpened);
-            }
-        }
+        let poller = self.poller.clone();
         Box::pin(async move {
+            configuration
+                .refresh_quota_configuration()
+                .await
+                .map_err(GatewayApplicationError::internal_from)?;
+            if let Some(poller) = poller {
+                poller.sync_switches();
+                if query.session_id.is_none() {
+                    quota::poll_in_background(poller, QuotaPollTrigger::SettingsOpened);
+                }
+            }
             let read = lineage.read.clone().lock_owned().await;
             let refresh = (root.clone(), catalog.clone(), monitor.clone());
             tokio::task::spawn_blocking(move || {
@@ -143,7 +162,11 @@ impl AppMonitoringPort for AppMonitoring {
             .await
             .map_err(GatewayApplicationError::internal_from)?;
             lineage.resolve().await;
-            let chatgpt_account = account.current(&configuration).await;
+            let chatgpt_account = if configuration.uses_chatgpt_quota() {
+                account.current(&configuration).await
+            } else {
+                None
+            };
             quota.set_chatgpt_active(chatgpt_account.is_some());
             // The first read parses the usage log and every transcript:
             // keep that off the async workers.
@@ -183,7 +206,15 @@ impl AppMonitoringPort for AppMonitoring {
         let configuration = self.configuration.clone();
         let account = self.account.clone();
         Box::pin(async move {
-            quota.set_chatgpt_active(account.current(&configuration).await.is_some());
+            configuration
+                .refresh_quota_configuration()
+                .await
+                .map_err(GatewayApplicationError::internal_from)?;
+            quota.set_chatgpt_active(
+                configuration.uses_chatgpt_quota()
+                    && account.current(&configuration).await.is_some(),
+            );
+            quota::sync_switch(&configuration, &quota, &provider_id);
             match poller {
                 Some(poller) if refresh => {
                     quota::poll_explicit(poller, provider_id.clone()).await;

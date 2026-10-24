@@ -1,3 +1,28 @@
 .grid {
   grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
 }
+/* One card: the 1px gaps show the card's line color as hairlines between tiles.
+   Tiles grow, so a wrapped row never leaves a hole. Tiles are not interactive,
+   so clipping to the rounded corners cannot cut a focus ring. */
+.joined {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--line);
+}
+.joined.joined > * {
+  flex: 1 1 136px;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--surface-raised);
+}
+/* Labels and captions keep one line each so tiles in a row stay level. */
+.joined.joined > * > :not(:first-child) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
