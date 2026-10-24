@@ -38,7 +38,7 @@ try {
     await detail.getByText("첨부 파일 과제", { exact: true }).waitFor();
     const capture = (view: string) => page.screenshot({ path: join(shots, `${before ? "before" : "after"}-${cell}-${view}.png`), animations: "disabled" });
     await capture("detail");
-    await detail.getByRole("button", { name: "고치기", exact: true }).click();
+    await detail.getByRole("button", { name: "설명 편집", exact: true }).click();
     await detail.locator("textarea").waitFor();
     await capture("edit");
     if (!before) await attachmentRing(page, detail);
@@ -94,19 +94,21 @@ async function verifyFiles(page: import("playwright").Page, server: Awaited<Retu
   const id = await detail.getAttribute("data-epic-id"); assert(id);
   const epic = await server.api<EpicDetail>(`/canon/epics/${id}`);
   const file = epic.attachments?.[0]; assert(file);
-  await detail.getByRole("button", { name: "고치기", exact: true }).click();
+  await detail.getByRole("button", { name: "설명 편집", exact: true }).click();
   const editDescription = detail.locator("textarea");
   await editDescription.focus();
   await page.keyboard.press("Control+Home");
   await detail.locator('input[type="file"]').setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("Reference notes") });
-  await page.waitForFunction(() => document.querySelector<HTMLTextAreaElement>("#canon-edit-description")?.value.startsWith("[notes.txt](attachment:"));
+  await page.waitForFunction(() => document.querySelector<HTMLTextAreaElement>('textarea[aria-label="설명"]')?.value.startsWith("[notes.txt](attachment:"));
+  const saved = page.waitForResponse(response => response.request().method() === "PATCH" && new URL(response.url()).pathname === `/canon/epics/${id}`);
   await detail.getByRole("button", { name: "저장", exact: true }).click();
+  assert((await saved).ok());
   const notes = detail.getByRole("link", { name: "notes.txt", exact: true });
   await notes.waitFor();
   const notesUrl = await notes.getAttribute("href"); assert(notesUrl);
   const notesFile = await fetch(new URL(notesUrl, server.url), { headers: server.authHeaders });
   assert.equal(notesFile.status, 200); assert.equal(await notesFile.text(), "Reference notes");
-  await detail.getByRole("button", { name: "고치기", exact: true }).click();
+  await detail.getByRole("button", { name: "설명 편집", exact: true }).click();
   await detail.locator('input[type="file"]').setInputFiles({ name: "large.txt", mimeType: "text/plain", buffer: Buffer.alloc(11 * 1024 * 1024) });
   await waitToast(page, "10MB 이하만 첨부할 수 있습니다");
   await page.route("**/projects/*/canon/files", route => route.fulfill({ status: 413, contentType: "application/json", body: JSON.stringify({ error: { code: "file_too_large" } }) }));
@@ -118,7 +120,6 @@ async function verifyFiles(page: import("playwright").Page, server: Awaited<Retu
   await detail.getByRole("button", { name: "저장", exact: true }).click();
   await waitToast(page, "파일은 20개까지 첨부할 수 있습니다");
 
-  await detail.getByRole("button", { name: "고치기", exact: true }).click();
   await detail.locator("textarea").fill("참고 파일을 뺐습니다");
   let releaseSave: () => void = () => {};
   const saving = new Promise<void>(resolve => { releaseSave = resolve; });
