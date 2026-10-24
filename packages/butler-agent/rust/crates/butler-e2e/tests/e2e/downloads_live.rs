@@ -57,12 +57,19 @@ async fn approvals(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), Harnes
     Ok(())
 }
 
+/// The acceptance verdict and the turn's visible text: assistant messages
+/// plus the cards still open when the wait ended.
+struct Outcome {
+    complete: bool,
+    transcript: String,
+}
+
 async fn run(
     access: Access,
     repeat: usize,
     profile: &str,
     downloads: &Path,
-) -> Result<bool, HarnessError> {
+) -> Result<Outcome, HarnessError> {
     let provider = live::gate("DOWNLOADS-LIVE")?.expect("live credentials required");
     let before = snapshot(downloads)?;
     let mut extensions = BTreeMap::<String, usize>::new();
@@ -159,6 +166,10 @@ async fn run(
         .iter()
         .any(|t| t.starts_with("run_command:") || t.starts_with("list_files:"));
     let complete = actual_totals && actual_types && move_confirmation && observed && !timed_out;
+    let mut transcript = answer.clone();
+    for card in s.gw.approval_requests("general").await? {
+        transcript.push_str(&format!("\ncard: {card}"));
+    }
     eprintln!(
         "DOWNLOADS-LIVE acceptance: totals={actual_totals}; types={actual_types}; confirmation={move_confirmation}; observed={observed}; timed_out={timed_out}"
     );
@@ -176,7 +187,10 @@ async fn run(
         timings(&s.sandbox.data)?
     );
     s.finish().await?;
-    Ok(complete)
+    Ok(Outcome {
+        complete,
+        transcript,
+    })
 }
 
 #[tokio::test]
@@ -192,7 +206,7 @@ async fn owner_downloads_six_real_chats() -> Result<(), HarnessError> {
     let mut completed = 0;
     for access in [Access::AskAlways, Access::FullAccess] {
         for repeat in 1..=3 {
-            completed += usize::from(run(access, repeat, &profile, &downloads).await?);
+            completed += usize::from(run(access, repeat, &profile, &downloads).await?.complete);
         }
     }
     assert_eq!(
@@ -221,8 +235,13 @@ async fn released_windows_folder_real_chat() -> Result<(), HarnessError> {
         std::fs::write(downloads.join(name), content)?;
     }
     let profile = setup.sandbox.home.to_str().unwrap();
+    let outcome = run(Access::AskAlways, 1, profile, &downloads).await?;
+    // The disposable fixture holds no private names, so a failure shows the turn.
+    if !outcome.complete {
+        eprintln!("RELEASED-FOLDER-LIVE transcript:\n{}", outcome.transcript);
+    }
     assert!(
-        run(Access::AskAlways, 1, profile, &downloads).await?,
+        outcome.complete,
         "Released real chat must list the complete folder and request approval before moving files"
     );
     Ok(())
