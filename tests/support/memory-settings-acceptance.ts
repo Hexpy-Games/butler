@@ -112,8 +112,10 @@ export async function checkConsolidationControls(page: Page, locale: string, sta
   if (state === "consolidation-busy") {
     await page.waitForFunction(() => document.querySelector('[data-setting-id="free-space"] button')?.getAttribute("aria-busy") === "true");
     assert(await button.isDisabled());
+    await page.mouse.move(0, 0);
     await button.hover();
     await page.getByRole("tooltip", { name: copy.inUse, exact: true }).waitFor();
+    assert.equal(await button.getAttribute("aria-label"), `${copy.runNow}. ${copy.inUse}`);
     assert.equal(fixture.counts().posts, 0);
     return;
   }
@@ -130,8 +132,11 @@ export async function checkConsolidationControls(page: Page, locale: string, sta
     await button.click();
     if (state === "consolidation-race") {
       await page.waitForFunction(() => (document.querySelector('[data-setting-id="consolidation-run"] button') as HTMLButtonElement)?.disabled);
+      // The click leaves the pointer inside; approach the disabled control afresh.
+      await page.mouse.move(0, 0);
       await button.hover();
       await page.getByRole("tooltip", { name: copy.inUse, exact: true }).waitFor();
+      assert.equal(await button.getAttribute("aria-label"), `${copy.runNow}. ${copy.inUse}`);
       assert.equal(fixture.counts().posts, 1);
       return;
     }

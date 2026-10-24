@@ -44,10 +44,13 @@ function ConsolidationRunButton({ running, locked, ready, start, "aria-described
   running: boolean; locked: boolean; ready: boolean; start: () => void; "aria-describedby"?: string;
 }) {
   const copy = appCopy.settings.memory;
-  return <Tooltip label={locked && !running ? copy.inUse : undefined} side="right">
+  const label = running ? copy.running : copy.runNow;
+  const reason = locked && !running ? copy.inUse : undefined;
+  return <Tooltip label={reason} side="right">
     <Button type="button" variant="outline" size="sm" disabled={running || locked || !ready} aria-describedby={describedBy}
+      aria-label={reason ? `${label}. ${reason}` : label}
       aria-busy={running || undefined} iconStart={running ? <Spinner size={14} /> : undefined} onClick={start}>
-      {running ? copy.running : copy.runNow}
+      {label}
     </Button>
   </Tooltip>;
 }
