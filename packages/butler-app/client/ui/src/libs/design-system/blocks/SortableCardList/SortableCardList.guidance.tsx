@@ -32,7 +32,9 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Up/down buttons on a static list are slow and inconsistent.", render: () => <CardList><CardListItem title="Claude Sonnet" meta="1" /></CardList> },
     },
   ],
-  content: ["Describe what the order means (Butler tries them in this order)."],
-  accessibility: ["dnd-kit keyboard sensor: Space to lift, arrows to move, Space to drop; moves are announced."],
+  content: ["Describe what the order means (Butler tries them in this order).",
+    "The lifted copy renders on <body> with the list's theme, so panels, glass and wallpaper surfaces never clip it; it keeps the row's columns."],
+  accessibility: ["dnd-kit keyboard sensor: Space to lift, arrows to move, Space to drop; moves are announced.",
+    "The lifted copy's grip is a static glyph (aria-hidden); the row's handle keeps the Reorder label."],
   tokens: ["--motion-scale-lift", "--shadow-drag-lift", "--motion-base", "--motion-ease-standard"],
 };

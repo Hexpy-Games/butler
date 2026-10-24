@@ -216,6 +216,59 @@
   box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
 }
 
+/* A row with trailing actions: the row owns the fill and the focus ring, so
+   the select button and its actions read as one menu row. */
+.row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border-radius: var(--radius-control);
+  transition: background-color var(--motion-fast) var(--motion-ease-standard);
+}
+
+.row:hover,
+.row:has(:focus-visible),
+.row:has([aria-expanded="true"]),
+.row[data-selected="true"] {
+  background: var(--selection);
+}
+
+.row:has(.item:focus-visible) {
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
+}
+
+.row .item:is(:hover, :focus-visible, [data-selected="true"]) {
+  background: transparent;
+  box-shadow: none;
+}
+
+/* The actions keep their column at rest, so revealing them never moves the
+   row; they show on hover, keyboard focus within the row and while their
+   menu is open (the NavRow reveal). Kept in keyboard order. */
+.itemActions {
+  --icon-button-size: var(--control-height-xs);
+  --icon-button-surface: var(--selection-strong);
+
+  display: inline-flex;
+  align-items: center;
+  padding-inline-end: var(--space-1);
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--motion-ease-standard);
+}
+
+.row:is(:hover, :has(:focus-visible), :has([aria-expanded="true"]))
+  .itemActions {
+  opacity: 1;
+}
+
+/* Touch screens cannot hover: the actions always show. */
+@media (hover: none) {
+  .itemActions {
+    opacity: 1;
+  }
+}
+
 .icon {
   display: inline-grid;
   width: 1lh;
@@ -273,6 +326,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .item,
+  .row,
+  .itemActions,
   .clearButton {
     transition: none;
   }

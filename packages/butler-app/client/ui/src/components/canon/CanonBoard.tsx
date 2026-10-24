@@ -1,3 +1,5 @@
+import { CanonTagChooser } from "./CanonTagChooser.tsx";
+import { useCanonTags } from "./useCanonTags.ts";
 import { CanonBoardPlanSelect } from "./CanonBoardPlanSelect.tsx";
 import { useCanonPlanSelection } from "./useCanonPlanSelection.ts";
 import { useMemo, useState } from "react";
@@ -20,6 +22,12 @@ export function CanonBoard({ projectId, bottomInset }: { projectId: string; bott
   const inspector = useCanonInspector(projectId);
   const [create, setCreate] = useState<{ planId: string | null } | null>(null);
   const [planForm, setPlanForm] = useState<{ plan?: CanonPlan } | null>(null);
+  const { tags } = useCanonTags(projectId);
+  const [filterState, setFilterState] = useState<{ projectId: string; ids: string[] }>({ projectId, ids: [] });
+  // A deleted tag drops out of the filter instead of leaving the board empty.
+  const tagFilter = (filterState.projectId === projectId ? filterState.ids : []).filter(id => tags.some(tag => tag.id === id));
+  const setTagFilter = (ids: string[]) => setFilterState({ projectId, ids });
+  const matches = (epic: { tags: { id: string }[] }) => !tagFilter.length || epic.tags.some(tag => tagFilter.includes(tag.id));
   const copy = appCopy.canon;
   const canon = board.canon?.project_id === projectId ? board.canon : null;
   const selection = useCanonPlanSelection(projectId, canon);
@@ -28,7 +36,8 @@ export function CanonBoard({ projectId, bottomInset }: { projectId: string; bott
   return <Stack gap="lg" data-test-class="canon-board">
     {disconnected && <Typo.Caption role="status">{appCopy.projectSignpost.disconnected}</Typo.Caption>}
     <Stack align="row" cross="center" justify="between" gap="sm" wrap>
-    <Stack minWidth="0" shrink><CanonBoardPlanSelect plans={canon?.plans ?? []} value={selection.id} bottomInset={bottomInset} onChange={id => { selection.select(id); inspector.select(null); }} /></Stack>
+    <Stack align="row" cross="center" gap="sm" minWidth="0" shrink wrap><Box minWidth="0" shrink><CanonBoardPlanSelect plans={canon?.plans ?? []} value={selection.id} bottomInset={bottomInset} onChange={id => { selection.select(id); inspector.select(null); }} /></Box>
+      <Box minWidth="0" shrink><CanonTagChooser filter tags={tags} value={tagFilter} onChange={setTagFilter} /></Box></Stack>
     <ButtonContainer size="sm" justify="end">
       <Button size="sm" variant="outline" onClick={() => setCreate({ planId: selection.id })}><Plus size="sm" />{copy.newEpic}</Button>
       <Button size="sm" onClick={() => setPlanForm({})}><Plus size="sm" />{copy.newPlan}</Button>
@@ -45,13 +54,13 @@ export function CanonBoard({ projectId, bottomInset }: { projectId: string; bott
           <KanbanLane laneId="backlog" label={copy.backlog} height="content" layout="grid" title={<Stack align="row" cross="baseline" gap="sm" wrap>
             <Typo.PanelTitle>{copy.backlog}</Typo.PanelTitle><Typo.Caption tone="secondary">{copy.backlogCount(canon.backlog.length)}</Typo.Caption>
           </Stack>}>
-              {canon.backlog.map(epic => <EpicCard key={epic.id} epic={epic} selected={inspector.selected === epic.id} onSelect={inspector.select} />)}
+              {canon.backlog.filter(matches).map(epic => <EpicCard key={epic.id} epic={epic} selected={inspector.selected === epic.id} onSelect={inspector.select} />)}
               {!canon.backlog.length && !canon.plans.length && <Typo.Caption tone="secondary">{copy.backlogDescription}</Typo.Caption>}
               <Button variant="borderless" size="xs" onClick={() => setCreate({ planId: null })}><Plus size="xs" />{copy.newEpic}</Button>
           </KanbanLane>
         </Box>}
         {(selectedPlan ? [selectedPlan] : []).map(plan => <CanonPlanLanes key={plan.id} plan={plan} caption={planCaption(plan, locale)}
-          selected={inspector.selected} onSelect={inspector.select} onCreate={planId => setCreate({ planId })}
+          matches={matches} selected={inspector.selected} onSelect={inspector.select} onCreate={planId => setCreate({ planId })}
           onEdit={() => setPlanForm({ plan })} />)}
       </Stack>
       </KanbanDragScope>

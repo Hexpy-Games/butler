@@ -24,6 +24,13 @@ export interface CanonCopy {
   moved: (plan: string) => string;
   personLabel: (name: string, self: boolean) => string;
   cardStatusChanged: (title: string, status: string) => string;
+  tags: {
+    label: string; add: string; filter: string; search: string; searchPlaceholder: string; empty: string; clearAll: string;
+    rename: string; recolor: string; remove: string; name: string; color: string; loading: string;
+    colors: Record<"gray" | "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple", string>;
+    create: (name: string) => string; menu: (name: string) => string; removeTag: (name: string) => string;
+    deleteTitle: (name: string) => string; deleteDetail: (n: number) => string;
+  };
   drag: {
     instructions: string; roleDescription: string;
     lifted: (item: string, lane: string, position: number) => string;
