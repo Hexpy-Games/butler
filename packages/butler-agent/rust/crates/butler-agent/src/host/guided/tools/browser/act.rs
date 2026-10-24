@@ -11,6 +11,12 @@ pub(super) async fn execute(
     if let Some(refused) = act_refusal(owner, invocation, &client, &mut args).await {
         return finish_batch(&args, refused);
     }
+    if client.approval_handoff {
+        if upload::requested(&args) {
+            return encoded(&handoff(&args, "upload"));
+        }
+        return run(owner, invocation, call, occurrence, client, args).await;
+    }
     let staged = match upload::resolve(owner, occurrence, &mut args).await {
         Ok(staged) => staged,
         Err(refused) => return finish_batch(&args, refused),
@@ -38,6 +44,9 @@ async fn run(
         invocation.cancellation,
     )
     .await?;
+    if client.approval_handoff && prepared["status"] != "ok" {
+        return executor_refusal(&args, prepared);
+    }
     if prepared["authority_pending"] == true {
         return finish_batch(&args, prepared);
     }
@@ -55,7 +64,14 @@ async fn run(
         return finish_batch(&args, prepared);
     }
     let scope = act_scope(&prepared);
-    let input = approval_input(&args, &mut prepared, &scope);
+    let input = approval_input(&args, &mut prepared, &scope, !client.approval_handoff);
+    if client.approval_handoff
+        && (input["commit"] == true
+            || input["always_confirm"] == true
+            || authority::reviews(&owner.binding.access_mode, &input))
+    {
+        return encoded(&handoff(&args, "approval_required"));
+    }
     let approval = match authority::act_gate(owner, call, occurrence, &input, &scope).await? {
         authority::Gate::Pending(value) => {
             client
@@ -69,6 +85,45 @@ async fn run(
         }
         authority::Gate::Allowed(reference) => reference,
     };
+    apply(
+        owner,
+        invocation,
+        call,
+        occurrence,
+        client,
+        &args,
+        PreparedAction {
+            prepared,
+            input,
+            scope,
+            approval,
+        },
+    )
+    .await
+}
+
+struct PreparedAction {
+    prepared: Value,
+    input: Value,
+    scope: String,
+    approval: Option<String>,
+}
+
+async fn apply(
+    owner: &GuidedTools,
+    invocation: &GuidedInvocation<'_>,
+    call: &ModelRoundToolCall,
+    occurrence: &str,
+    client: client::Client,
+    args: &Value,
+    batch: PreparedAction,
+) -> Result<JsonDocument, ToolExecutionError> {
+    let PreparedAction {
+        prepared,
+        input,
+        scope,
+        approval,
+    } = batch;
     client
         .waiting(&args["tab"], false, invocation.cancellation)
         .await;
@@ -78,16 +133,19 @@ async fn run(
         occurrence,
         client.clone(),
         ApprovedBatch {
-            args: &args,
+            args,
             prepared: &prepared,
             input,
             scope: &scope,
         },
     )
     .await?;
+    if client.approval_handoff && result["status"] == "dialog_pending" {
+        return encoded(&handoff(args, "dialog_pending"));
+    }
     if result["status"] == "dialog_pending" {
         settle(owner, approval, "unknown").await?;
-        return dialog::finish(owner, invocation, call, occurrence, client, &args, &result).await;
+        return dialog::finish(owner, invocation, call, occurrence, client, args, &result).await;
     }
     settle(
         owner,
@@ -95,5 +153,19 @@ async fn run(
         result["status"].as_str().unwrap_or("unknown"),
     )
     .await?;
-    observe_after::finish(owner, invocation, &client, &args, result).await
+    observe_after::finish(owner, invocation, &client, args, result).await
+}
+
+fn executor_refusal(args: &Value, prepared: Value) -> Result<JsonDocument, ToolExecutionError> {
+    let needs_user = prepared["status"] == "needs_approval"
+        || prepared["status"] == "dialog_pending"
+        || matches!(
+            prepared["reason"].as_str(),
+            Some("secure_field" | "user_required")
+        );
+    if needs_user {
+        encoded(&handoff(args, "approval_required"))
+    } else {
+        finish_batch(args, prepared)
+    }
 }

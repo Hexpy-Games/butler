@@ -76,6 +76,18 @@ impl GuidedTurnFactoryAdapter {
         ))
     }
 
+    async fn prepare(
+        &self,
+        start: &GuidedTurnStart<'_>,
+    ) -> Result<PreparedNativeGuidedTurn, BtccError> {
+        self.preparation
+            .prepare(
+                start,
+                self.monitoring.browsing_agent_setting().await != "off",
+            )
+            .await
+    }
+
     async fn skill_catalog(&self, project_id: Option<String>) -> Result<String, BtccError> {
         self.capabilities
             .compact_skill_catalog(project_id)
@@ -142,7 +154,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 operation_results,
                 budget,
                 source_revision,
-            } = self.preparation.prepare(&start).await?;
+            } = self.prepare(&start).await?;
             let (workspace_path, root_pins, inventory) =
                 self.resolved_workspace(&workspace, &mut phase).await?;
             let consent = workspace.consent();

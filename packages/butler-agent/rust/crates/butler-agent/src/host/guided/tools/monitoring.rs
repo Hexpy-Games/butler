@@ -22,6 +22,12 @@ pub(crate) struct MonitoringReaders {
 }
 
 impl MonitoringReaders {
+    pub(in crate::host::guided) async fn browsing_agent_setting(&self) -> String {
+        butler_gateway::gateway::browsing_agent_setting(self.app_database_path.clone())
+            .await
+            .unwrap_or_else(|_| "off".into())
+    }
+
     pub(in crate::host) fn new(
         (data_root, app_database_path): (PathBuf, PathBuf),
         configuration: Arc<butler_models::models::ModelConfiguration>,

@@ -8,7 +8,8 @@ import type {
 import type { SettingsSectionId } from "../../app/types.ts";
 
 export type SettingsCopy = AppCopy["settings"];
-export type SettingsUpdatePayload = Omit<Partial<SettingsData>, "web_search" | "wallpaper" | "conversation_background" | "composer_decoration"> & {
+export type SettingsUpdatePayload = Omit<Partial<SettingsData>, "browser" | "web_search" | "wallpaper" | "conversation_background" | "composer_decoration"> & {
+  browser?: { browsing_agent: string };
   web_search?: Partial<SettingsData["web_search"]> & { api_key?: string };
   /** Any subset of the setting; the gateway keeps the rest. */
   wallpaper?: Partial<SettingsData["wallpaper"]>;

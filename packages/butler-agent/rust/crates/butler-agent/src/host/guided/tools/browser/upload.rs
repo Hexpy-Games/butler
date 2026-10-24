@@ -16,18 +16,24 @@ const INTERNAL: &[&str] = &[
     "butler.config.json",
 ];
 
+pub(super) fn requested(args: &Value) -> bool {
+    args["steps"]
+        .as_array()
+        .is_some_and(|steps| steps.iter().any(|step| step["action"] == "upload"))
+}
+
 pub(super) async fn resolve(
     owner: &GuidedTools,
     operation: &str,
     args: &mut Value,
 ) -> Result<butler_platform::secure_fs::StagedFiles, Value> {
     let mut staged = butler_platform::secure_fs::StagedFiles::new(&owner.binding.butler_data);
+    if !requested(args) {
+        return Ok(staged);
+    }
     let Some(steps) = args["steps"].as_array_mut() else {
         return Ok(staged);
     };
-    if !steps.iter().any(|step| step["action"] == "upload") {
-        return Ok(staged);
-    }
     let root = owner
         .binding
         .workspace_reference
