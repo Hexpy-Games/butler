@@ -31,8 +31,14 @@ Product engineers, design-system maintainers, and coding agents can use it when 
   with safe-area bounds. Do not add mobile sheet offsets or per-dialog transforms.
 - Size with props, never styles: `size` (`sm` default 380px, `md`, `lg`, `xl`
   880px, `full`; `--dialog-width-*`), `layout="scroll-body"` (header, one
-  `ScrollArea fill` body, `DialogFooter`; the dialog does not scroll) and
-  `maxHeight="3/5"`. `DialogTitle visuallyHidden` replaces an `sr-only` class.
+  `ScrollArea fill` body, `DialogFooter`; the dialog does not scroll),
+  `maxHeight="3/5"` and `height="full"`. `DialogTitle visuallyHidden` replaces
+  an `sr-only` class.
+- A dialog is as tall as its content up to its cap (`--dialog-max-height`: the
+  viewport inside the safe area, 60% with `maxHeight="3/5"`, or the container).
+  `height="full"` makes the cap its height, so a `scroll-body` whose body is
+  short or empty (an empty task graph) fills it instead of collapsing to a strip.
+  Without it nothing changes.
 - Use ScrollArea for independently scrolling bodies. Do not mask the entire
   modal surface, which would also fade its border, header and shadow.
 - A dialog that scrolls itself reserves `scrollbar-gutter: stable both-edges`:

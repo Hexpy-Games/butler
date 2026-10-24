@@ -45,3 +45,18 @@ Use `textSize="label"` beside Typo.Label. It starts at one line, wraps long word
 and grows to `--textarea-max-lines` (six), then scrolls vertically with DS edge fades.
 Native `field-sizing: content` is preferred; older engines measure scrollHeight
 on edits and width changes. The container owns Enter/Shift+Enter confirmation.
+
+## Auto-grow
+
+`autoGrow` makes the default (bordered) Textarea grow with its text: it starts
+at the usual min height, grows line by line up to `--textarea-grow-max-lines`
+(twelve), then scrolls. It has no resize handle. Sizing is native
+(`field-sizing: content`), so there is no measuring pass and no jump while
+typing or during IME composition. Older engines measure scrollHeight on edits
+and width changes. A stable scrollbar gutter keeps the text width when the
+scrollbar appears. The height changes instantly without animation, so reduced
+motion has nothing to turn off. Without `autoGrow` the Textarea is unchanged.
+
+```tsx
+<Textarea id="brief" autoGrow value={brief} onChange={(event) => setBrief(event.target.value)} />
+```
