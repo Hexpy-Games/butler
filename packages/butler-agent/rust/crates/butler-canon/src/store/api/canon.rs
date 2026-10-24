@@ -119,6 +119,7 @@ struct EpicInput {
     #[serde(default, deserialize_with = "nullable")]
     plan_id: Option<Option<String>>,
     before_id: Option<String>,
+    tags: Option<Vec<String>>,
 }
 pub(super) fn create_epic(
     tx: &Transaction<'_>,
@@ -133,7 +134,7 @@ pub(super) fn create_epic(
     let title_value = input.title.clone().unwrap_or_default();
     title(&title_value)?;
     let id = IdGenerator::global_next(IdKind::Work, ctx.now)?;
-    super::super::entities::create_work_assigned(
+    super::super::entities::insert_work_assigned(
         tx,
         ctx,
         &NewWork {
@@ -145,6 +146,7 @@ pub(super) fn create_epic(
         },
         &Registration::Canon(person(ctx)?),
         input.assignee.as_ref().and_then(|v| v.as_deref()),
+        input.tags.as_deref().unwrap_or_default(),
     )?;
     position(
         tx,
@@ -170,6 +172,9 @@ pub(super) fn edit_epic(
             .expected_revision
             .ok_or(Error::Invalid("expected_revision required"))?,
     )?;
+    if let Some(tags) = &input.tags {
+        tags::replace(tx, ctx, &read_work(tx, id)?, tags)?;
+    }
     if input.plan_id.is_some() || input.before_id.is_some() {
         let dest = input
             .plan_id

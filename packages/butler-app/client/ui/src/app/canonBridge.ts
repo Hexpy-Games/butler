@@ -1,10 +1,14 @@
 /** Exact canon route allowlist; the preload retains ownership of authenticated requests. */
 export function canonBridgeInput(url: URL, verb: string, body: () => Record<string, unknown>): { method: string; input: Record<string, unknown> } | null {
-  const project = url.pathname.match(/^\/projects\/([^/]+)\/canon(?:\/(plans|epics|backlog\/order|sidebar|sidebar-order))?$/u);
+  const project = url.pathname.match(/^\/projects\/([^/]+)\/canon(?:\/(plans|epics|tags|backlog\/order|sidebar|sidebar-order))?$/u);
   if (project) {
-    const method = verb === "GET" ? (!project[2] ? "getCanon" : project[2] === "sidebar" ? "getCanonSidebar" : undefined) : verb === "POST" ?
-      ({ plans: "createCanonPlan", epics: "createCanonEpic", "backlog/order": "orderCanonBacklog", "sidebar-order": "orderCanonSidebar" }[project[2] ?? ""]) : undefined;
+    const method = verb === "GET" ? (!project[2] ? "getCanon" : project[2] === "sidebar" ? "getCanonSidebar" : project[2] === "tags" ? "getCanonTags" : undefined) : verb === "POST" ?
+      ({ tags: "createCanonTag", plans: "createCanonPlan", epics: "createCanonEpic", "backlog/order": "orderCanonBacklog", "sidebar-order": "orderCanonSidebar" }[project[2] ?? ""]) : undefined;
     return method ? { method, input: { id: decodeURIComponent(project[1]!), body: body() } } : null;
+  }
+  const tag = url.pathname.match(/^\/canon\/tags\/([^/]+)$/u);
+  if (tag && (verb === "PATCH" || verb === "DELETE")) {
+    return { method: verb === "PATCH" ? "editCanonTag" : "deleteCanonTag", input: { id: decodeURIComponent(tag[1]!), body: body() } };
   }
   const entity = url.pathname.match(/^\/canon\/(plans|epics)\/([^/]+)(\/order|\/conversation|\/progress)?$/u);
   if (entity) {

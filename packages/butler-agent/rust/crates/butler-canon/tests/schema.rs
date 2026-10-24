@@ -1,6 +1,8 @@
 #![allow(clippy::unwrap_used, reason = "test assertions")]
 #[path = "support/enum_columns.rs"]
 mod enum_columns;
+#[path = "support/tags.rs"]
+mod tags;
 #[path = "support/vocabulary.rs"]
 mod vocabulary;
 use butler_canon::{work_queries, work_schema};
@@ -76,6 +78,9 @@ fn local_canon_vocabulary_rejects_remote_status_sources_and_github_origins() {
 #[test]
 fn schema_constraints_and_idempotency() {
     vocabulary::roundtrips_match_sql();
+    tags::tag_keys_use_full_unicode_casefold_and_canonical_normalization();
+    tags::tag_color_check_matches_the_design_system_vocabulary();
+    tags::tag_schema_has_unique_names_cascading_links_and_idempotent_creation();
     let db = Connection::open_in_memory().unwrap();
     db.execute_batch("PRAGMA foreign_keys=ON").unwrap();
     work_schema::ensure(&db).unwrap();

@@ -99,6 +99,7 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
     if context.contains("## Canon epics in this conversation")
         && context.contains("untrusted_content")
         && context.contains("Release checks")
+        && context.contains("Release evidence")
     {
         script.context_seen.store(true, Ordering::SeqCst);
     }

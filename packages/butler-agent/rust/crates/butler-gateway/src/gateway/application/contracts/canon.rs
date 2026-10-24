@@ -14,6 +14,10 @@ pub enum AppCanonResource {
     EditEpic,
     PlanOrder,
     BacklogOrder,
+    Tags,
+    CreateTag,
+    EditTag,
+    DeleteTag,
 }
 
 #[derive(Clone, Debug)]
@@ -32,6 +36,12 @@ pub struct AppCanonEvent {
 #[error("work model revision conflict")]
 pub struct AppCanonConflict {
     pub revision: i64,
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("tag already exists")]
+pub struct AppCanonTagExists {
+    pub existing: Value,
 }
 
 pub const APP_PERSON_ID: &str = "app-user";

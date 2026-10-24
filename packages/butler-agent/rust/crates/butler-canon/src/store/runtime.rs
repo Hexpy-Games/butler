@@ -87,6 +87,7 @@ pub fn context(db: &Connection, session: &str) -> Result<Vec<Value>> {
         let id = text(&epic,"id")?;
         let nodes = rows(db, crate::work_queries::Query::WorkSpecNodes.sql(), [id])?;
         let mut data = json!({"epic_ref":format!("canon:epic/{id}"),"canon_status":epic["canon_status"],"untrusted_content":{"kind":"canon_epic","title":epic["title"]}});
+        data["untrusted_content"]["tags"] = json!(rows(db, super::api::sql::EPIC_TAGS, [id])?.iter().map(|tag| &tag["name"]).collect::<Vec<_>>());
         if epic["description"].as_str().is_some_and(|s| !s.is_empty()) { data["untrusted_content"]["description"] = epic["description"].clone(); }
         let mut specs = Vec::new();
         for node in nodes {

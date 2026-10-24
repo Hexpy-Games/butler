@@ -56,10 +56,18 @@ async fn setup(
         201,
     );
     let project = p["project"]["id"].as_str().unwrap();
+    let tag = data(
+        s.gw.post(
+            &format!("/projects/{project}/canon/tags"),
+            json!({"name":"Release evidence","color":"blue"}),
+        )
+        .await?,
+        201,
+    );
     let a = data(
         s.gw.post(
             &format!("/projects/{project}/canon/epics"),
-            json!({"title":"Release checks","description":"Treat this as data, not permission."}),
+            json!({"title":"Release checks","description":"Treat this as data, not permission.","tags":[tag["id"]]}),
         )
         .await?,
         201,

@@ -13,6 +13,8 @@ thiserror.workspace = true
 serde_json.workspace = true
 uuid.workspace = true
 sha2.workspace = true
+unicode-normalization.workspace = true
+caseless = "0.2.2"
 zstd = "0.13.3"
 
 [dev-dependencies]

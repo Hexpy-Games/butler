@@ -5,6 +5,7 @@ mod outbox;
 pub(super) use outbox::append as outbox;
 mod reads;
 pub mod sql;
+pub mod tags;
 use super::*;
 use crate::{
     work_ids::{IdGenerator, IdKind},
@@ -24,9 +25,14 @@ pub enum Resource {
     EditEpic,
     PlanOrder,
     BacklogOrder,
+    Tags,
+    CreateTag,
+    EditTag,
+    DeleteTag,
 }
 use Resource::{
-    BacklogOrder, Canon, CreateEpic, CreatePlan, EditEpic, EditPlan, Epic, Plan, PlanOrder,
+    BacklogOrder, Canon, CreateEpic, CreatePlan, CreateTag, DeleteTag, EditEpic, EditPlan, EditTag,
+    Epic, Plan, PlanOrder, Tags,
 };
 
 /// Identity-only PK lookups, shared by reads and edits before App project checks.
@@ -34,7 +40,10 @@ pub fn project_scope(db: &Connection, resource: Resource, id: &str) -> Result<St
     let sql = match resource {
         Plan | EditPlan | PlanOrder => sql::PLAN_SCOPE,
         Epic | EditEpic => sql::EPIC_SCOPE,
-        Canon | CreatePlan | CreateEpic | BacklogOrder => return Ok(id.to_owned()),
+        EditTag | DeleteTag => sql::TAG_SCOPE,
+        Canon | CreatePlan | CreateEpic | BacklogOrder | Tags | CreateTag => {
+            return Ok(id.to_owned());
+        }
     };
     db.query_row(sql, [id], |row| row.get(0))
         .optional()?
@@ -43,12 +52,12 @@ pub fn project_scope(db: &Connection, resource: Resource, id: &str) -> Result<St
 
 pub fn read(db: &Connection, resource: Resource, id: &str) -> Result<Value> {
     match resource {
+        Tags => tags::list(db, id),
         Canon => canon(db, id),
         Plan => plan(db, id),
         Epic => epic(db, id),
-        CreatePlan | EditPlan | CreateEpic | EditEpic | PlanOrder | BacklogOrder => {
-            Err(Error::Invalid("read requires a readable resource"))
-        }
+        CreatePlan | EditPlan | CreateEpic | EditEpic | PlanOrder | BacklogOrder | CreateTag
+        | EditTag | DeleteTag => Err(Error::Invalid("read requires a readable resource")),
     }
 }
 pub fn write(
@@ -59,13 +68,16 @@ pub fn write(
     input: Value,
 ) -> Result<Value> {
     match resource {
+        CreateTag => tags::create(tx, ctx, id, input),
+        EditTag => tags::edit(tx, ctx, id, input),
+        DeleteTag => tags::delete(tx, ctx, id),
         CreatePlan => canon::create_plan(tx, ctx, id, input),
         EditPlan => canon::edit_plan(tx, ctx, id, input),
         CreateEpic => canon::create_epic(tx, ctx, id, input),
         EditEpic => canon::edit_epic(tx, ctx, id, input),
         PlanOrder => canon::order(tx, ctx, Some(id), id, input),
         BacklogOrder => canon::order(tx, ctx, None, id, input),
-        Canon | Plan | Epic => Err(Error::Invalid("write requires an editable resource")),
+        Canon | Plan | Epic | Tags => Err(Error::Invalid("write requires an editable resource")),
     }
 }
 fn input<T: serde::de::DeserializeOwned>(value: Value) -> Result<T> {

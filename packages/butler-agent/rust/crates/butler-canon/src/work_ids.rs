@@ -15,6 +15,7 @@ pub enum IdKind {
     Spec,
     Chain,
     Decision,
+    Tag,
 }
 impl IdKind {
     pub const fn prefix(self) -> &'static str {
@@ -25,6 +26,7 @@ impl IdKind {
             Self::Spec => "sp_",
             Self::Chain => "ch_",
             Self::Decision => "hd_",
+            Self::Tag => "tag_",
         }
     }
 }

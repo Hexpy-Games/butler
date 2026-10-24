@@ -58,6 +58,7 @@ fn work_error(error: store::Error) -> StorageError {
     }
     let code = match &error {
         store::Error::Conflict { .. } => "conflict",
+        store::Error::TagExists { .. } => "tag_exists",
         store::Error::NotFound => "work_model_not_found",
         store::Error::InvalidRank => "invalid_rank",
         store::Error::Invalid(_) | store::Error::Chain(_) => "work_model_invalid",
