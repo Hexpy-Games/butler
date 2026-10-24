@@ -1,12 +1,12 @@
 import { canonTaskCounts, canonStatusInput } from "./canonProgressSource.ts";
 import { useButlerStore } from "@/app/store.ts";
-import { useState, type Ref } from "react";
+import type { Ref } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { EpicDetail as Epic, EpicInput, PlanCards, EpicProgressSnapshot, CanonStatus } from "@/app/canonApi.ts";
-import { Box, Button, ButtonContainer, IconButton, KeyValueRow, NativeSelect, NativeSelectOption, Pencil, Stack, Typo } from "@/butler-ds";
+import { Box, Button, ButtonContainer, KeyValueRow, NativeSelect, NativeSelectOption, Stack, Typo } from "@/butler-ds";
 import { CanonTagsField } from "./CanonTagsField.tsx";
 import { CanonAvatar } from "./CanonAvatar.tsx";
-import { EpicEditForm } from "./EpicEditForm.tsx";
+import { EpicInlineFields } from "./EpicInlineFields.tsx";
 import { CanonPersonSelect } from "./CanonPersonSelect.tsx";
 import { CanonPlanSelect } from "./CanonPlanSelect.tsx";
 import { SpecTree } from "./SpecTree.tsx";
@@ -16,19 +16,12 @@ export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef }: {
   onWrite: (input: EpicInput, message?: string) => Promise<boolean>;
 }) {
   useAppLocale();
-  const [editing, setEditing] = useState(false);
   const copy = appCopy.canon;
   const plan = plans.find(plan => plan.id === epic.plan_id);
   const ordinal = plan ? plan.works.findIndex(work => work.id === epic.id) + 1 : 0;
   const statusChanged = (status: CanonStatus) => void onWrite(canonStatusInput(epic, status), copy.statusChanged);
   return <Stack gap="lg" data-test-class="canon-epic-detail" data-epic-id={epic.id}>
-    {editing ? <EpicEditForm epic={epic} busy={busy} onSave={onWrite} onClose={() => setEditing(false)} /> : <Stack gap="sm">
-      <Stack align="row" cross="start" justify="between" gap="sm">
-        <Typo.PanelTitle as="h3" tabIndex={-1} ref={titleRef} wrap="anywhere">{epic.title}</Typo.PanelTitle>
-        <ButtonContainer size="sm"><IconButton label={copy.edit} disabled={busy} onClick={() => setEditing(true)}><Pencil size="sm" /></IconButton></ButtonContainer>
-      </Stack>
-      {epic.description && <Typo.Body wrap="pre">{epic.description}</Typo.Body>}
-    </Stack>}
+    <EpicInlineFields epic={epic} busy={busy} onWrite={onWrite} titleRef={titleRef} />
     <Stack gap="sm">
       <KeyValueRow valueTextSize="caption" label={copy.status} value={<NativeSelect size="sm" aria-label={copy.status} value={epic.canon_status} disabled={busy} onChange={event => statusChanged(event.target.value as CanonStatus)}>
         {Object.entries(copy.statuses).map(([value, label]) => <NativeSelectOption key={value} value={value}>{label}</NativeSelectOption>)}

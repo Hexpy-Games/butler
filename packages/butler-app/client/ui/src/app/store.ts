@@ -2,6 +2,7 @@ import { reconcileAnswerDrafts } from "./answerDrafts";
 import { retainAnswerBlocks } from "./stableAnswerBlocks";
 import { generalChatCleared } from "./generalChatEvents";
 import { create } from "zustand";
+import { withCanonEditGuard } from "./canonEditGuard.ts";
 import { useProjectDashboardState } from "./projectDashboardState.ts";
 import { mergeSessionViewWindow } from "./sessionViewWindow.ts";
 import { chromeEnvironment } from "./chromeEnvironment.ts";
@@ -946,7 +947,7 @@ let lastGeneralClearEvent = 0;
 const initialSettings = readCachedSettings();
 setAppCopyLanguage(initialSettings.language);
 
-export const useButlerStore = create<ButlerStore>((set, get) => ({
+export const useButlerStore = create<ButlerStore>()(withCanonEditGuard((set, get) => ({
   leftOpen: false,
   // New users start without the inspector; a saved UI state restores it.
   rightOpen: false,
@@ -2482,7 +2483,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     }
     set({ commandOpen: false });
   },
-}));
+})));
 
 useButlerStore.subscribe((state, previousState) => {
   if (state.activeChatId !== previousState.activeChatId) {

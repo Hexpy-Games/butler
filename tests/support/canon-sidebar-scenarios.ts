@@ -119,14 +119,16 @@ export async function verifySidebarOrder(page: Page, server: NativeAppServerHand
 }
 export async function verifyInspectorConflict(page: Page, server: NativeAppServerHandle, epicId: string) {
   const detail = page.locator('[data-test-class="canon-epic-detail"]');
-  await detail.getByRole("button", { name: "고치기", exact: true }).click();
+  await detail.getByRole("button", { name: "제목 수정", exact: true }).click();
   await detail.getByLabel("제목", { exact: true }).fill("오래된 편집");
   const old = await server.api<EpicDetail>(`/canon/epics/${epicId}`);
   await server.api(`/canon/epics/${epicId}`, { method: "PATCH", body: JSON.stringify({ expected_revision: old.revision, title: "서버에서 고친 과제" }) });
   const conflict = page.waitForResponse(response => response.request().method() === "PATCH" && new URL(response.url()).pathname === `/canon/epics/${epicId}`);
   await detail.getByRole("button", { name: "저장", exact: true }).click();
   assert.equal((await conflict).status(), 409); await waitToast(page, "다른 사람이 먼저 고쳤습니다");
-  await detail.getByText("서버에서 고친 과제", { exact: true }).waitFor();
+  await detail.getByText("제목: 서버에서 고친 과제", { exact: true }).waitFor();
+  assert.equal(await detail.getByLabel("제목", { exact: true }).inputValue(), "오래된 편집");
+  await detail.getByRole("button", { name: "취소", exact: true }).click();
 }
 
 export async function verifyOverviewLayout(page: Page, width: number) {
