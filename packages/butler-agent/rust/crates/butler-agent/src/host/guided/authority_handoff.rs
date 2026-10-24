@@ -93,6 +93,58 @@ impl AuthorityHandoff {
 }
 
 impl AppAuthorityHandoff for AuthorityHandoff {
+    fn pending_asks(
+        &self,
+        owner: Option<String>,
+        limit: usize,
+        before: Option<String>,
+    ) -> ApplicationFuture<Vec<butler_turn::btcc::PendingAsk>> {
+        let authority = self.authority.clone();
+        Box::pin(async move {
+            authority
+                .pending_asks(owner, limit, before)
+                .await
+                .map_err(authority_error)
+        })
+    }
+    fn pending_ask_signal(&self) -> Option<tokio::sync::watch::Receiver<()>> {
+        Some(self.authority.pending_ask_signal())
+    }
+    fn pending_ask_changes(
+        &self,
+        after: i64,
+    ) -> ApplicationFuture<Vec<butler_turn::btcc::PendingAskChange>> {
+        let authority = self.authority.clone();
+        Box::pin(async move {
+            authority
+                .pending_ask_changes(after)
+                .await
+                .map_err(authority_error)
+        })
+    }
+    fn ack_pending_asks(&self, through: i64) -> ApplicationFuture<()> {
+        let authority = self.authority.clone();
+        Box::pin(async move {
+            authority
+                .ack_pending_asks(through)
+                .await
+                .map_err(authority_error)
+        })
+    }
+    fn dismiss_pending_question(
+        &self,
+        owner: String,
+        reference: String,
+    ) -> ApplicationFuture<bool> {
+        let authority = self.authority.clone();
+        Box::pin(async move {
+            authority
+                .dismiss_pending_question(owner, reference)
+                .await
+                .map_err(authority_error)
+        })
+    }
+
     fn attention_sessions(&self, sessions: Vec<String>) -> ApplicationFuture<Vec<String>> {
         let authority = self.authority.clone();
         Box::pin(async move {

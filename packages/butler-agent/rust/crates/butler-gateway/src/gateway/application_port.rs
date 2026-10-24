@@ -1,8 +1,9 @@
-//! Application contract used by the HTTP gateway.
+//! Application operations consumed by authenticated HTTP adapters.
 use super::*;
 
 pub trait GatewayApplication:
     GatewayMutationCommands
+    + GatewayPendingAsks
     + GatewayProjectDashboard
     + GatewaySessionControls
     + GatewayDevices

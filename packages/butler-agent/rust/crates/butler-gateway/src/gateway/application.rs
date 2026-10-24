@@ -52,6 +52,7 @@ mod panic_isolation;
 mod personalization;
 pub use memory_management::{AppMemoryCommand, AppMemoryPort, MemoryEventSink};
 mod outputs;
+mod pending_asks;
 mod plan_decisions;
 mod progress_view;
 pub mod project_folder;
@@ -110,7 +111,7 @@ use admission_identity::stringify;
 pub(crate) use automations::*;
 pub use briefing_snapshot::{read_new_chat_briefing_projects, read_new_chat_briefing_settings};
 pub use contracts::*;
-use events::EventSubscribers;
+use events::{EventSubscribers, latest_event_cursor};
 use keyed_locks::KeyedLocks;
 pub use model_catalog::{AppModelCatalogCommand, AppModelCatalogPort};
 pub use monitoring::{
@@ -451,17 +452,6 @@ impl AppApplication {
             .read(move |db| read_model::list_turns(db, &chat_id, cursor))
             .await
             .map_err(app_error)
-    }
-}
-
-/// The newest durable event cursor; storage is closed when it cannot be read.
-async fn latest_event_cursor(storage: &AppStorage) -> Result<u64, GatewayApplicationError> {
-    match storage.read(events::latest).await {
-        Ok(cursor) => Ok(cursor),
-        Err(error) => {
-            let _ = storage.close().await;
-            Err(app_error(error))
-        }
     }
 }
 
