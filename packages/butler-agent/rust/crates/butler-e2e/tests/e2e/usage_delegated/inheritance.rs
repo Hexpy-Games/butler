@@ -164,6 +164,7 @@ async fn usage_policy_roots_are_independent_of_runtime_policy() -> Result<(), Ha
     ] {
         turn.context = json!({"executionPolicy":{"role":role,"trackingMode":"local","workspacePath":"/tmp","subsession":subsession}});
         let phase = select_phase(GuidedPhaseInput {
+            browsing_agent: false,
             turn: &turn,
             catalog: &catalog,
             phase_surface_flag: "0",

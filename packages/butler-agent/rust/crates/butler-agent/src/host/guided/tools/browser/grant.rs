@@ -30,6 +30,9 @@ pub(super) async fn call(
     let Some(grant) = needed(&result) else {
         return Ok(result);
     };
+    if client.approval_handoff {
+        return Ok(super::handoff(args, "signed_in_grant_required"));
+    }
     let site = grant["site"].as_str().unwrap_or("").to_owned();
     let target = butler_runtime::browser::signed_in_scope(&site);
     let input = json!({"grant": grant, "tab": tab, "mode": "signed_in", "always_confirm": true});

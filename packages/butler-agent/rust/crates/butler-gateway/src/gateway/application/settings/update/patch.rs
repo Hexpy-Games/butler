@@ -14,6 +14,7 @@ pub(super) fn project(
     wallpaper::project(current, patch, &mut output);
     composer_decoration::project(current, patch, &mut output);
     conversation_background::project(current, patch, &mut output);
+    super::super::browsing::project(current, patch, facts, &mut output);
     output
 }
 
@@ -40,5 +41,6 @@ pub(super) fn sanitize(
             patch.insert(conversation_background::KEY.into(), value);
         }
     }
+    super::super::browsing::sanitize(input, facts, &mut patch)?;
     Ok(patch)
 }

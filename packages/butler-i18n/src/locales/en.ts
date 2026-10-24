@@ -2406,6 +2406,12 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       phone: "Phone",
       email: "Email",
     },
+    browsingAgent: {
+      label: "Browsing agent",
+      auto: (model: string) => `Auto · ${model}`,
+      off: "Off",
+      conversationModel: "conversation model",
+    },
     browserImport: {
       chooseItems: "Include",
       purpose: "Bring bookmarks, passwords and history into Butler",
