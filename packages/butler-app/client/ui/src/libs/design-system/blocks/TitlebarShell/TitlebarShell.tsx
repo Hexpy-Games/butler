@@ -1,10 +1,11 @@
 import type { DsPrivateStyleProps } from "../../lib/dsProps";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { IconButton } from "../../components/IconButton";
 import { ArrowLeft } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
+import { clampBrowserChatWidth } from "../AdaptiveShell/conversationFrame";
 import styles from "./TitlebarShell.module.css";
 import { dsClass } from "../../lib/internal";
 
@@ -20,10 +21,23 @@ export interface TitlebarShellProps extends DsPrivateStyleProps {
   /** Shown on nested screens only; top-level screens pass nothing. The App binds ⌘[ / Alt+← to the same action. */
   back?: TitlebarBack;
   subtitle?: ReactNode;
+  /** Controls right after the title text (the conversation's ⋯ menu), before the subtitle. */
+  titleActions?: ReactNode;
   leading?: ReactNode;
   leadingVisibility?: "always" | "narrow";
   /** `glyph` (default): a square the size of the title line. `auto`: the control keeps its own size (a conversation button). */
   leadingSize?: "glyph" | "auto";
+  /**
+   * Controls at the chat card's trailing edge (the 세션 정보 toggle). They sit just before `trailing` while the
+   * browser pane is closed and at the chat card's end while it is open (`splitChatWidth`).
+   */
+  chatTrailing?: ReactNode;
+  /**
+   * The chat column width in px while the browser pane is open: the same `chatWidth` AdaptiveShellSplit gets, in
+   * the same render, so a drag moves both together. The title, titleActions and chatTrailing then span the chat
+   * card and `trailing` stays over the pane. Omit while the pane is closed.
+   */
+  splitChatWidth?: number;
   trailing?: ReactNode;
   windowControls?: ReactNode;
   collapsed?: boolean;
@@ -32,52 +46,77 @@ export interface TitlebarShellProps extends DsPrivateStyleProps {
   dataTestClass?: string;
 }
 
+type TitlebarIdentityProps = Pick<TitlebarShellProps, "title" | "back" | "subtitle" | "titleActions" | "leading" | "leadingVisibility" | "leadingSize">;
+
+/** Back, leading, then the title line: title, its actions and the subtitle (one baseline row). */
+function TitlebarIdentity({ title, back, subtitle, titleActions, leading, leadingVisibility, leadingSize }: TitlebarIdentityProps) {
+  return (
+    <Stack align="row" cross="center" gap="sm" className={dsClass(styles.identity)}>
+      {back ? (
+        <span className={cn(styles.back, "no-drag")} data-slot="titlebar-back">
+          <IconButton label={back.label} onClick={back.onBack} data-test-class="titlebar-back">
+            <ArrowLeft size="md" />
+          </IconButton>
+        </span>
+      ) : null}
+      {leading ? (
+        <span
+          className={styles.leading}
+          data-slot="titlebar-leading"
+          data-visibility={leadingVisibility}
+          data-size={leadingSize === "auto" ? "auto" : undefined}
+        >
+          {leading}
+        </span>
+      ) : null}
+      <div className={styles.copy} data-title-actions={titleActions ? "" : undefined}>
+        <Typo.AppTitle className={dsClass(styles.title)} data-slot="titlebar-title">
+          {title}
+        </Typo.AppTitle>
+        {subtitle ? (
+          <Typo.Caption className={dsClass(styles.subtitle)}>{subtitle}</Typo.Caption>
+        ) : null}
+        {/* After the subtitle in reading order, so title and subtitle read as one unit; shown after the title. */}
+        {titleActions ? (
+          <span className={cn(styles.titleActions, "no-drag")} data-slot="titlebar-title-actions">{titleActions}</span>
+        ) : null}
+      </div>
+    </Stack>
+  );
+}
+
 export function TitlebarShell({
-  title,
-  back,
-  subtitle,
-  leading,
   leadingVisibility = "always",
   leadingSize = "glyph",
+  chatTrailing,
+  splitChatWidth,
   trailing,
   windowControls,
   collapsed = false,
   dragRegion = false,
   className,
   dataTestClass,
+  ...identityProps
 }: TitlebarShellProps) {
+  const split = splitChatWidth !== undefined;
+  const grouped = Boolean(chatTrailing) || split;
+  const identity = <TitlebarIdentity {...identityProps} leadingVisibility={leadingVisibility} leadingSize={leadingSize} />;
   return (
     <header
       className={cn(styles.titlebar, collapsed && styles.collapsed, dragRegion && "drag-region", className)}
       data-test-class={dataTestClass}
+      data-grouped={grouped ? "" : undefined}
+      data-split={split ? "" : undefined}
+      style={split ? { "--titlebar-split-chat-width": `${clampBrowserChatWidth(splitChatWidth)}px` } as CSSProperties : undefined}
     >
-      <Stack align="row" cross="center" gap="sm" className={dsClass(styles.identity)}>
-        {back ? (
-          <span className={cn(styles.back, "no-drag")} data-slot="titlebar-back">
-            <IconButton label={back.label} onClick={back.onBack} data-test-class="titlebar-back">
-              <ArrowLeft size="md" />
-            </IconButton>
-          </span>
-        ) : null}
-        {leading ? (
-          <span
-            className={styles.leading}
-            data-slot="titlebar-leading"
-            data-visibility={leadingVisibility}
-            data-size={leadingSize === "auto" ? "auto" : undefined}
-          >
-            {leading}
-          </span>
-        ) : null}
-        <div className={styles.copy}>
-          <Typo.AppTitle className={dsClass(styles.title)} data-slot="titlebar-title">
-            {title}
-          </Typo.AppTitle>
-          {subtitle ? (
-            <Typo.Caption className={dsClass(styles.subtitle)}>{subtitle}</Typo.Caption>
+      {grouped ? (
+        <div className={styles.chatGroup} data-slot="titlebar-chat-group">
+          {identity}
+          {chatTrailing ? (
+            <div className={cn(styles.trailing, "no-drag")} data-slot="titlebar-chat-trailing">{chatTrailing}</div>
           ) : null}
         </div>
-      </Stack>
+      ) : identity}
       {trailing ? (
         <div className={cn(styles.trailing, "no-drag")}>{trailing}</div>
       ) : null}

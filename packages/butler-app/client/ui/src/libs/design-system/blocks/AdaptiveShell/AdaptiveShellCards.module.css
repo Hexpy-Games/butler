@@ -37,6 +37,12 @@
    (min-height: 0 in AdaptiveShell.module.css); only the cards scroll. */
 .root[data-frame="cards"][data-panel-layout="docked"]
   > [data-slot="adaptive-shell-workspace"] {
+  /* Where the cards start and end inside the title row, which spans the
+     workspace's padding box: TitlebarShell lines its split chat group up
+     with the chat card by them. */
+  --titlebar-card-start: 0px;
+  --titlebar-card-end: calc(var(--shell-card-inset) - var(--border-hairline));
+
   overflow: visible;
   contain: none;
   padding: 0 calc(var(--shell-card-inset) - var(--border-hairline))
@@ -49,6 +55,8 @@
 
 .root[data-frame="cards"][data-panel-layout="docked"][data-left-track="false"]
   > [data-slot="adaptive-shell-workspace"] {
+  --titlebar-card-start: calc(var(--shell-card-inset) - var(--border-hairline));
+
   padding-left: calc(var(--shell-card-inset) - var(--border-hairline));
 }
 
