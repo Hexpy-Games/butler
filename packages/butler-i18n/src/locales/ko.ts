@@ -1,3 +1,4 @@
+import { SESSION_INFO_COPY } from "./session-info.ts";
 import { CANON_COPY } from "./canon.ts";
 import { TASK_GRAPH_COPY } from "./task-graph.ts";
 import { lifecycleCopy } from "../lifecycle.ts";
@@ -341,6 +342,7 @@ export const koKrCopy: AppCopy = {
   },
   shell: { footerNav: "업데이트와 설정", update: { downloading: "업데이트 받는 중", working: "업데이트 준비 중", ready: "업데이트 준비됨", failed: "업데이트 실패", restart: "다시 시작" } },
   canon: CANON_COPY["ko-KR"],
+  sessionInfo: SESSION_INFO_COPY["ko-KR"],
   taskGraph: TASK_GRAPH_COPY["ko-KR"],
   lifecycle: lifecycleCopy.ko,
   browser: {
@@ -552,14 +554,11 @@ export const koKrCopy: AppCopy = {
     contextChart: "컨텍스트 사용량 차트",
     contextUnavailable: "컨텍스트를 확인할 수 없습니다",
     noProgress: "대화 진행 내역이 없습니다",
-    branchDetails: "브랜치 상세",
     gitBranch: "Git 브랜치",
-    noVisibleSkills: "표시할 스킬이 없습니다",
     detachedHead: "분리된 HEAD",
     notGit: "Git 작업공간이 아닙니다",
     noWorkspace: "프로젝트 작업공간이 없습니다",
     noGit: "Git이 설치되지 않았습니다",
-    unavailableWorktree: "대화 워크트리를 사용할 수 없습니다",
     worktree: "워크트리",
     projectFolder: "프로젝트 폴더",
     projectWorkspace: "프로젝트 작업공간",
@@ -567,7 +566,6 @@ export const koKrCopy: AppCopy = {
     unavailable: "사용 불가",
     dirty: "변경 있음",
     clean: "변경 없음",
-    noWorkers: "작업자 내역이 없습니다",
     recentActivity: "최근 활동",
     noRecentActivity: "최근 활동이 없습니다",
     activeSessions: "진행 중인 대화",
@@ -1342,7 +1340,6 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       workers: "작업자",
     },
     workers: {
-      showDetails: "상세",
       hideDetails: "닫기",
     },
   },
