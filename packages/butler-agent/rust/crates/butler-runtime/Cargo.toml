@@ -7,6 +7,8 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+pulldown-cmark = { version = "0.13.0", default-features = false }
+similar = "2.7"
 butler-log = { path = "../butler-log" }
 semver.workspace = true
 psl = "2.1"

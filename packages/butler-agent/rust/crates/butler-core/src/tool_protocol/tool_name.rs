@@ -149,6 +149,9 @@ tool_names! {
     BrowserHistorySearch = "browser_history_search",
     LibrarySearch = "library_search",
     LibraryOrganize = "library_organize",
+    DocumentCreate = "document_create",
+    DocumentRead = "document_read",
+    DocumentEdit = "document_edit",
 }
 
 impl std::fmt::Display for ToolName {

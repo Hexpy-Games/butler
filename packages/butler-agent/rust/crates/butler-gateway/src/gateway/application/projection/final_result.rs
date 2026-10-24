@@ -94,7 +94,7 @@ fn apply(
             "Assistant message changed during artifact materialization.",
         ));
     }
-    let visible = visible_result(input, &apply.files);
+    let visible = visible_result(&tx, input, &apply.files)?;
     if input.no_visible_reply || !visible {
         super::final_turn_events::append_if_missing(
             &tx,
@@ -401,11 +401,25 @@ fn save_message(
         db.execute("INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at,retryable,plan_json,blocks_json) VALUES(?1,?2,?3,'assistant',?4,'delivered',?5,?5,0,?6,?7)",
                 params![message_id,input.chat_id,input.turn_id,input.text,now,input.plan.as_ref().map(Value::to_string),input.answer_blocks.as_ref().map(Value::to_string)]).map_err(AppStorageError::sqlite)?;
     }
+    super::super::documents::bind_reply(
+        db,
+        &input.chat_id,
+        input.reply_to_message_id.as_deref(),
+        message_id,
+    )?;
     Ok(())
 }
 
-fn visible_result(input: &FinalCandidate, files: &[MaterializedResponderFile]) -> bool {
-    !input.text.is_empty()
+fn visible_result(
+    db: &Connection,
+    input: &FinalCandidate,
+    files: &[MaterializedResponderFile],
+) -> Result<bool, AppStorageError> {
+    Ok(super::super::documents::has_deliverable(
+        db,
+        &input.chat_id,
+        input.reply_to_message_id.as_deref(),
+    )? || !input.text.is_empty()
         || !files.is_empty()
         || !input.outputs.is_empty()
         || !input.changed_files.is_empty()
@@ -416,5 +430,5 @@ fn visible_result(input: &FinalCandidate, files: &[MaterializedResponderFile]) -
                 .get("limitation_codes")
                 .and_then(Value::as_array)
                 .is_some_and(|codes| !codes.is_empty())
-        })
+        }))
 }
