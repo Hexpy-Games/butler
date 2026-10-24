@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, reason = "test assertions")]
 mod store_support;
-use butler_work::{store::*, work_types::*};
+use butler_canon::{store::*, work_types::*};
 use serde_json::json;
 use store_support::*;
 
@@ -225,7 +225,7 @@ fn mutation_receipts_include_durable_questions_and_waiting_cannot_complete() {
             chain_id: "other".into(),
             target_chain_id: "ch".into(),
             task_id: "c".into(),
-            placement: butler_work::work_chain::Placement::NewStep(2),
+            placement: butler_canon::work_chain::Placement::NewStep(2),
         }],
     )
     .unwrap();

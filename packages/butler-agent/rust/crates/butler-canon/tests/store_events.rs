@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, reason = "test assertions")]
 mod store_support;
-use butler_work::{store::*, work_types::*};
+use butler_canon::{store::*, work_types::*};
 use serde_json::{Value, json};
 use store_support::*;
 

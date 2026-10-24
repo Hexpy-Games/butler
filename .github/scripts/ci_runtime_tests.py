@@ -59,7 +59,7 @@ class WindowsRuntimeSelection(unittest.TestCase):
 
     # test-category: pure-logic
     def test_agent_dependency_graph_changes_select_windows_smoke(self):
-        for path in [CRATES + 'butler-work/src/lib.rs', CRATES + 'butler-agent-cli/src/main.rs',
+        for path in [CRATES + 'butler-canon/src/lib.rs', CRATES + 'butler-agent-cli/src/main.rs',
                      'third_party/notify-windows-ledger/src/lib.rs',
                      'packages/butler-agent/rust/Cargo.lock']:
             with self.subTest(path=path):

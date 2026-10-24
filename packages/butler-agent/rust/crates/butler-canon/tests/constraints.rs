@@ -1,5 +1,5 @@
 #![allow(clippy::unwrap_used, reason = "test assertions")]
-use butler_work::work_schema;
+use butler_canon::work_schema;
 use rusqlite::Connection;
 
 fn database() -> Connection {

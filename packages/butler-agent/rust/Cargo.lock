@@ -922,7 +922,7 @@ dependencies = [
  "butler-platform",
  "butler-runtime",
  "butler-turn",
- "butler-work",
+ "butler-canon",
  "bytes",
  "chrono",
  "flate2",
@@ -1013,7 +1013,7 @@ dependencies = [
  "butler-runtime",
  "butler-test-support",
  "butler-turn",
- "butler-work",
+ "butler-canon",
  "bytes",
  "chrono",
  "futures-util",
@@ -1304,7 +1304,7 @@ dependencies = [
  "butler-core",
  "butler-platform",
  "butler-test-support",
- "butler-work",
+ "butler-canon",
  "chrono",
  "futures-util",
  "indexmap 2.14.2",
@@ -1324,7 +1324,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "butler-work"
+name = "butler-canon"
 version = "0.0.0"
 dependencies = [
  "rusqlite",

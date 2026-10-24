@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, reason = "test assertions")]
 mod store_support;
-use butler_work::{store::*, work_schema, work_types::*};
+use butler_canon::{store::*, work_schema, work_types::*};
 use rusqlite::{Connection, TransactionBehavior};
 use std::{
     path::PathBuf,

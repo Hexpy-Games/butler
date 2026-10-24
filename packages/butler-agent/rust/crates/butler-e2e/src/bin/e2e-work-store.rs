@@ -2,7 +2,7 @@
 //! agent is stopped. The WMS scenario owns the isolated data directory.
 #![allow(clippy::expect_used, reason = "fixture assertions")]
 use butler_turn::btcc::{BtccStorage, TestStorageFixture};
-use butler_work::{store::*, work_types::*};
+use butler_canon::{store::*, work_types::*};
 use serde_json::json;
 type Failure = Box<dyn std::error::Error + Send + Sync>;
 #[tokio::main]
@@ -36,7 +36,7 @@ async fn exercise(storage: &BtccStorage, id: String) -> std::result::Result<(), 
     let mut changes = storage.subscribe_changes();
     let work_id = id.clone();
     let written = storage
-        .work_model_write(move |tx| {
+        .canon_write(move |tx| {
             let ctx = Context {
                 now: 200,
                 actor: json!({"person":"companion"}),
@@ -58,14 +58,14 @@ async fn exercise(storage: &BtccStorage, id: String) -> std::result::Result<(), 
     changes.borrow_and_update();
     let chain = written["chain_id"].as_str().ok_or("chain id")?.to_owned();
     let rows = storage
-        .work_model_read(move |db| undecided_holds(db, &chain))
+        .canon_read(move |db| undecided_holds(db, &chain))
         .await?;
     assert_eq!(rows.len(), 1);
     assert!(!changes.has_changed()?);
     // Typed domain errors survive the port, and a failed write rolls back all
     // accompanying events/counters before a later read or restart can see it.
     let stale = storage
-        .work_model_write(move |tx| {
+        .canon_write(move |tx| {
             let ctx = Context {
                 now: 201,
                 actor: json!({"person":"companion"}),
@@ -81,8 +81,8 @@ async fn exercise(storage: &BtccStorage, id: String) -> std::result::Result<(), 
     } = stale
     {
         assert!(matches!(
-            source.downcast_ref::<butler_work::store::Error>(),
-            Some(butler_work::store::Error::Conflict { .. })
+            source.downcast_ref::<butler_canon::store::Error>(),
+            Some(butler_canon::store::Error::Conflict { .. })
         ));
     } else {
         return Err("typed conflict lost".into());
@@ -96,7 +96,7 @@ async fn change_status(
     status: TaskStatus,
 ) -> std::result::Result<(), Failure> {
     storage
-        .work_model_write(move |tx| {
+        .canon_write(move |tx| {
             let ctx = Context {
                 now: 202,
                 actor: json!({"person":"companion"}),

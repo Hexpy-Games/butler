@@ -1,7 +1,7 @@
 //! WMS: migration creates inert schemas and preserves a populated work model.
 #![allow(clippy::unwrap_used, clippy::panic, reason = "test assertions")]
 use butler_e2e::e2e::{HarnessError, scenario::Setup};
-use butler_work::{
+use butler_canon::{
     work_chain::{Chain, Step},
     work_queries,
     work_types::TaskId,
@@ -294,7 +294,7 @@ async fn p1_schema_upgrades_before_start_and_second_start_is_identical() -> Resu
     let original_works = db
         .prepare("SELECT id FROM wm_works ORDER BY id")?
         .query_map([], |r| r.get::<_, String>(0))?
-        .map(|id| Ok(butler_work::store::read_work(&db, &id?).unwrap()))
+        .map(|id| Ok(butler_canon::store::read_work(&db, &id?).unwrap()))
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let original = snapshot(&db)?;
     drop(db);
@@ -320,7 +320,7 @@ async fn p1_schema_upgrades_before_start_and_second_start_is_identical() -> Resu
     }
     assert_eq!(migrated["wm_works"].len(), original_works.len());
     for old in original_works {
-        let current = butler_work::store::read_work(&db, old["id"].as_str().unwrap()).unwrap();
+        let current = butler_canon::store::read_work(&db, old["id"].as_str().unwrap()).unwrap();
         for (column, value) in current.as_object().unwrap() {
             let expected = match column.as_str() {
                 "task_graph_revision" => serde_json::json!(0),

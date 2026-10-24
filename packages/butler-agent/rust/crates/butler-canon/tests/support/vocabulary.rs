@@ -1,4 +1,4 @@
-use butler_work::work_types::*;
+use butler_canon::work_types::*;
 
 pub(super) fn roundtrips_match_sql() {
     assert!("remote".parse::<CanonStatusSource>().is_err());

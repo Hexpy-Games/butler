@@ -15,17 +15,17 @@ pub(super) fn execute(
                 work_id,
                 session_id,
             } => storage
-                .work_model_write(move |tx| {
+                .canon_write(move |tx| {
                     store::api::canon_conversation::link(tx, &ctx, &work_id, &session_id)
                 })
                 .await
                 .map_err(error),
             AppCanonOperation::Pending { after } => storage
-                .work_model_read(move |db| Ok(json!(store::pending_intents(db, &after, 128)?)))
+                .canon_read(move |db| Ok(json!(store::pending_intents(db, &after, 128)?)))
                 .await
                 .map_err(error),
             AppCanonOperation::Applied { op_id, revision } => storage
-                .work_model_write(move |tx| {
+                .canon_write(move |tx| {
                     store::api::canon_conversation::applied(tx, &ctx, &op_id, revision)
                 })
                 .await

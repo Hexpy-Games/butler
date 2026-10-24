@@ -1,5 +1,5 @@
 [package]
-name = "butler-work"
+name = "butler-canon"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

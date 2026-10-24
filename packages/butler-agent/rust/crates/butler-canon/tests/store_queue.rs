@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, reason = "test assertions")]
 mod store_support;
-use butler_work::{store::*, work_chain::Placement, work_types::*};
+use butler_canon::{store::*, work_chain::Placement, work_types::*};
 use store_support::*;
 // test-category: pure-logic
 #[test]

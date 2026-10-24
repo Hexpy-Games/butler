@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, reason = "test assertions")]
 mod store_support;
-use butler_work::{store::*, work_ids::*, work_types::*};
+use butler_canon::{store::*, work_ids::*, work_types::*};
 use serde_json::json;
 use store_support::*;
 // test-category: pure-logic
@@ -211,7 +211,7 @@ fn identifiers_pin_crockford_format_and_monotonic_clock_regression() {
 #[test]
 fn every_store_statement_has_an_indexed_query_plan() {
     let db = db();
-    for (name, sql) in sql::ALL.iter().chain(butler_work::store::api::sql::ALL) {
+    for (name, sql) in sql::ALL.iter().chain(butler_canon::store::api::sql::ALL) {
         let mut stmt = db.prepare(&format!("EXPLAIN QUERY PLAN {sql}")).unwrap();
         let n = stmt.parameter_count();
         let plan = stmt
@@ -238,7 +238,7 @@ fn epic_creation_records_fields_without_a_synthetic_edit() {
     let epic = write_api(
         &tx,
         &context(),
-        butler_work::store::api::Resource::CreateEpic,
+        butler_canon::store::api::Resource::CreateEpic,
         "project",
         json!({"title":"Title","description":"Description","assignee":"person"}),
     )

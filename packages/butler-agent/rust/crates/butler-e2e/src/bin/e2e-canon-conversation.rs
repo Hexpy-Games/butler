@@ -1,6 +1,6 @@
 //! Exercise the real conversation uniqueness guard while the scenario is stopped.
 use butler_turn::btcc::{BtccStorage, TestStorageFixture};
-use butler_work::store;
+use butler_canon::store;
 use serde_json::json;
 type Failure = Box<dyn std::error::Error + Send + Sync>;
 #[tokio::main]
@@ -19,7 +19,7 @@ async fn main() -> Result<(), Failure> {
     config.path = path;
     let storage = BtccStorage::open(config).await?;
     let error = storage
-        .work_model_write(move |tx| {
+        .canon_write(move |tx| {
             let work = store::read_work(tx, &first)?;
             store::api::canon_conversation::link(
                 tx,

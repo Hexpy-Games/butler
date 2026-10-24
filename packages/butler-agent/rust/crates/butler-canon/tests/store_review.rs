@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, reason = "test assertions")]
 mod store_support;
-use butler_work::{store::*, work_types::*};
+use butler_canon::{store::*, work_types::*};
 use store_support::*;
 // test-category: pure-logic
 #[test]
@@ -130,7 +130,7 @@ fn inserted_and_moved_followers_rederive_holds_without_touching_started_tasks() 
             chain_id: "ch".into(),
             target_chain_id: "other".into(),
             task_id: "b".into(),
-            placement: butler_work::work_chain::Placement::Stack(TaskId("head".into())),
+            placement: butler_canon::work_chain::Placement::Stack(TaskId("head".into())),
         }],
     )
     .unwrap();

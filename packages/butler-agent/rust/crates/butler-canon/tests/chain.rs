@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, reason = "test assertions")]
-use butler_work::work_chain::{Chain, ChainError, Placement, Step, validate_part_dag};
-use butler_work::work_types::TaskId;
+use butler_canon::work_chain::{Chain, ChainError, Placement, Step, validate_part_dag};
+use butler_canon::work_types::TaskId;
 use std::collections::BTreeSet;
 
 fn id(s: &str) -> TaskId {

@@ -5,7 +5,7 @@ use butler_gateway::gateway::{
     AppWorkModelResource, AppWorkModelScope, ApplicationFuture, GatewayApplicationError,
 };
 use butler_turn::btcc::{BtccStorage, StorageError};
-use butler_work::{store, work_queries::Query};
+use butler_canon::{store, work_queries::Query};
 use serde_json::{Value, json};
 use std::sync::Arc;
 
@@ -40,14 +40,14 @@ impl AppWorkModelPort for AppWorkModel {
                     actor: json!({"person":butler_gateway::gateway::APP_PERSON_ID,"via":"app"}),
                 };
                 storage
-                    .work_model_write(move |tx| {
+                    .canon_write(move |tx| {
                         store::write_api(tx, &ctx, store_resource(resource), &id, input)
                     })
                     .await
                     .map_err(error)
             } else {
                 storage
-                    .work_model_read(move |db| store::read_api(db, store_resource(resource), &id))
+                    .canon_read(move |db| store::read_api(db, store_resource(resource), &id))
                     .await
                     .map_err(error)
             }
@@ -61,7 +61,7 @@ impl AppWorkModelPort for AppWorkModel {
         let storage = self.storage.clone();
         Box::pin(async move {
             storage
-                .work_model_read(move |db| {
+                .canon_read(move |db| {
                     store::api::project_scope(db, store_resource(resource), &id)
                 })
                 .await
@@ -72,13 +72,13 @@ impl AppWorkModelPort for AppWorkModel {
         let storage = self.storage.clone();
         Box::pin(async move {
             storage
-                .work_model_read(move |db| {
+                .canon_read(move |db| {
                     let (kind, id) = store::api::work_scope(db, &id)?;
                     Ok(match kind {
-                        butler_work::work_types::ScopeKind::Project => {
+                        butler_canon::work_types::ScopeKind::Project => {
                             AppWorkModelScope::Project(id)
                         }
-                        butler_work::work_types::ScopeKind::Session => {
+                        butler_canon::work_types::ScopeKind::Session => {
                             AppWorkModelScope::Session(id)
                         }
                     })
@@ -94,7 +94,7 @@ impl AppWorkModelPort for AppWorkModel {
         let storage = self.storage.clone();
         Box::pin(async move {
             storage
-                .work_model_read(move |db| {
+                .canon_read(move |db| {
                     let mut stmt = db.prepare(Query::UnpublishedOutbox.sql())?;
                     let rows = stmt
                         .query_map(rusqlite::params![after, 256], |r| {
@@ -123,7 +123,7 @@ impl AppWorkModelPort for AppWorkModel {
         let storage = self.storage.clone();
         Box::pin(async move {
             storage
-                .work_model_write(move |tx| store::mark_outbox_published(tx, &seqs))
+                .canon_write(move |tx| store::mark_outbox_published(tx, &seqs))
                 .await
                 .map_err(error)
         })

@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, reason = "test assertions")]
 mod store_support;
-use butler_work::{store::*, work_types::*};
+use butler_canon::{store::*, work_types::*};
 use serde_json::json;
 use store_support::*;
 // test-category: pure-logic
@@ -108,7 +108,7 @@ fn done_is_rejected_during_execution_and_structure_cas_does_not_need_entity_chan
         write_api(
             &tx,
             &context(),
-            butler_work::store::api::Resource::EditEpic,
+            butler_canon::store::api::Resource::EditEpic,
             "work",
             json!({"expected_revision":old["revision"],"expected_task_graph_revision":old_graph,"status":"done"})
         ),

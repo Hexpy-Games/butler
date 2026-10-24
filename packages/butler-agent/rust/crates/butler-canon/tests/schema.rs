@@ -3,7 +3,7 @@
 mod enum_columns;
 #[path = "support/vocabulary.rs"]
 mod vocabulary;
-use butler_work::{work_queries, work_schema};
+use butler_canon::{work_queries, work_schema};
 use rusqlite::{Connection, params_from_iter, types::Value};
 
 fn plan(db: &Connection, sql: &str) -> String {
@@ -207,7 +207,7 @@ fn p1_upgrade_preserves_works_and_unrelated_tables_and_is_idempotent() {
         .unwrap()
         .query_map([], |r| r.get::<_, String>(0))
         .unwrap()
-        .map(|id| butler_work::store::read_work(&db, &id.unwrap()).unwrap())
+        .map(|id| butler_canon::store::read_work(&db, &id.unwrap()).unwrap())
         .collect();
     db.execute_batch("BEGIN IMMEDIATE").unwrap();
     work_schema::ensure(&db).unwrap();
@@ -218,7 +218,7 @@ fn p1_upgrade_preserves_works_and_unrelated_tables_and_is_idempotent() {
     db.execute_batch("COMMIT").unwrap();
     work_schema::ensure(&db).unwrap();
     for old in before {
-        let current = butler_work::store::read_work(&db, old["id"].as_str().unwrap()).unwrap();
+        let current = butler_canon::store::read_work(&db, old["id"].as_str().unwrap()).unwrap();
         for (column, value) in current.as_object().unwrap() {
             let expected = match column.as_str() {
                 "task_graph_revision" => serde_json::json!(0),

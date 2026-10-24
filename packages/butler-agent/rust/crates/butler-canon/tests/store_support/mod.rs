@@ -1,5 +1,5 @@
 #![allow(dead_code, clippy::unwrap_used, reason = "test helpers")]
-use butler_work::{store::*, work_schema, work_types::*};
+use butler_canon::{store::*, work_schema, work_types::*};
 use rusqlite::Connection;
 use serde_json::{Value, json};
 pub(crate) fn db() -> Connection {

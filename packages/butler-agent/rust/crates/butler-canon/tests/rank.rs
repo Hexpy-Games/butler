@@ -1,5 +1,5 @@
 #![allow(clippy::unwrap_used, reason = "test assertions")]
-use butler_work::work_rank::between;
+use butler_canon::work_rank::between;
 
 // test-category: pure-logic
 #[test]
@@ -65,7 +65,7 @@ fn invalid_bounds_are_rejected_on_either_side() {
 // test-category: format-pin
 #[test]
 fn sqlite_plan_rank_order_matches_rust_byte_order() {
-    use butler_work::work_schema;
+    use butler_canon::work_schema;
     use rusqlite::Connection;
     let db = Connection::open_in_memory().unwrap();
     work_schema::ensure(&db).unwrap();

@@ -13,7 +13,7 @@
     "packages/butler-agent/rust/crates/butler-platform",
     "packages/butler-agent/rust/crates/butler-runtime",
     "packages/butler-agent/rust/crates/butler-turn",
-    "packages/butler-agent/rust/crates/butler-work",
+    "packages/butler-agent/rust/crates/butler-canon",
     "third_party/notify-windows-ledger"
   ]
 }

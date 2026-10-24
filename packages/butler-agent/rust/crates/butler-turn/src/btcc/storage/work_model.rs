@@ -1,6 +1,6 @@
 //! Inert work-model port. SQL runs only on the BTCC writer/read lanes.
 use super::{BtccStorage, StorageError, StorageResult};
-use butler_work::store;
+use butler_canon::store;
 use rusqlite::{Connection, TransactionBehavior};
 use store::Transaction;
 
@@ -8,7 +8,7 @@ impl BtccStorage {
     /// One domain operation (or batch), one IMMEDIATE transaction. Dropping the
     /// transaction rolls back domain rows, audit, counts, intents and outbox.
     /// `execute` provides the existing coalesced change notification.
-    pub async fn work_model_write<T, F>(&self, operation: F) -> StorageResult<T>
+    pub async fn canon_write<T, F>(&self, operation: F) -> StorageResult<T>
     where
         T: Send + 'static,
         F: FnOnce(&Transaction<'_>) -> store::Result<T> + Send + 'static,
@@ -25,7 +25,7 @@ impl BtccStorage {
         .await
     }
     /// Read closures cannot write through the durable read pool's connections.
-    pub async fn work_model_read<T, F>(&self, operation: F) -> StorageResult<T>
+    pub async fn canon_read<T, F>(&self, operation: F) -> StorageResult<T>
     where
         T: Send + 'static,
         F: FnOnce(&Connection) -> store::Result<T> + Send + 'static,
