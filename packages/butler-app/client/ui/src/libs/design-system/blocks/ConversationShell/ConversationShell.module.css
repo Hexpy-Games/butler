@@ -19,6 +19,7 @@
         var(--conversation-shell-content-gutter)
     )
   );
+  --conversation-aside-width: 272px;
 
   position: relative;
   display: block;
@@ -235,4 +236,76 @@
   .scrollToBottomButton {
     transition: none;
   }
+}
+
+/* The aside: session details in the right margin. Docked (the shell decides,
+   from 960px) it sits flat on the shell's background, sticky while the
+   messages scroll, and the column and the composer keep their width and move
+   left only as far as they must to stay --tab-rail-clearance clear of it (the
+   rail rule); they narrow only when they would come within the clearance of
+   the leading edge. Its own content scrolls inside (--conversation-aside-width
+   is set on .shell). */
+.shell[data-aside="docked"] > * {
+  --conversation-aside-keep-out: calc(
+    var(--space-lg) + var(--conversation-aside-width) +
+      var(--tab-rail-clearance)
+  );
+  --conversation-column-width: min(
+    var(--conversation-content-width),
+    calc(
+      100cqw - var(--conversation-aside-keep-out) - var(--tab-rail-clearance)
+    )
+  );
+  --conversation-column-shift: max(
+    0px,
+    calc(
+      var(--conversation-aside-keep-out) -
+        (100cqw - var(--conversation-column-width)) / 2
+    )
+  );
+}
+
+.shell[data-aside="docked"] .messageList {
+  width: var(--conversation-column-width);
+  margin-inline: calc(
+      (100% - var(--conversation-column-width)) / 2 -
+        var(--conversation-column-shift)
+    )
+    auto;
+}
+
+.aside {
+  position: absolute;
+  z-index: 11;
+  top: var(--tab-rail-top);
+  right: var(--space-lg);
+  bottom: var(--space-lg);
+  display: flex;
+  width: var(--conversation-aside-width);
+  min-height: 0;
+  flex-direction: column;
+}
+
+/* Floating: no room for the margin. Glass over the conversation, above the
+   composer's top; the column does not move. */
+.aside[data-layout="floating"] {
+  z-index: 13;
+  right: var(--space-sm);
+  bottom: calc(var(--composer-reserve) - var(--space-sm));
+  width: min(
+    calc(var(--conversation-aside-width) + var(--space-md) * 2),
+    calc(100% - var(--space-sm) * 2)
+  );
+}
+
+/* The glass is the floating aside's only surface; the aside's scroller pads
+   both inline edges alike (the scrollbar gutter included) and its edge
+   padding gives the block rhythm. */
+.asideGlass[data-slot="tinted-glass"] {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  padding: 0;
+  box-shadow: var(--shadow-window);
 }

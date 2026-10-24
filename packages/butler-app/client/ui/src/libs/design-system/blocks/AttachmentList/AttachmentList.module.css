@@ -101,6 +101,10 @@ button.name:focus-visible {
   color: var(--interactive-disabled-fg);
 }
 
+.item[data-upload="failed"] .icon {
+  color: var(--danger);
+}
+
 .item[data-blocked="true"] .thumbnail img {
   filter: grayscale(1);
 }

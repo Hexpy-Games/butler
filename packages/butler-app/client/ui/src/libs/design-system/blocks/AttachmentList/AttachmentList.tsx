@@ -1,6 +1,5 @@
 import type { DsPrivateStyleProps } from "../../lib/dsProps";
-import type { ReactNode, Ref } from "react";
-import type { TriggerProps } from "./AttachmentTiles";
+import type { ReactNode } from "react";
 import { Button } from "../../components/Button";
 import { FileText, X } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
@@ -10,6 +9,7 @@ import { windowDragClassName, type WindowDragProps } from "../../lib/windowDrag"
 import { ElementChip } from "../ElementChip";
 import styles from "./AttachmentList.module.css";
 import { AttachmentTiles } from "./AttachmentTiles";
+import { AttachmentStatusIcon, ItemName } from "./attachmentStatus";
 import { dsClass } from "../../lib/internal";
 
 export interface AttachmentListItem {
@@ -33,6 +33,8 @@ export interface AttachmentListItem {
   video?: { src: string };
   /** Tiles: the file-type label on a file face ("PDF", "DOCX"); the container localizes an unknown type. */
   extension?: string;
+  /** An upload still running (Spinner) or one that failed (danger); `meta` says how far or what to do. */
+  upload?: "uploading" | "failed";
 }
 
 export interface AttachmentListProps extends DsPrivateStyleProps, WindowDragProps {
@@ -46,6 +48,8 @@ export interface AttachmentListProps extends DsPrivateStyleProps, WindowDragProp
    * squares, end-aligned and wrapping, with the size line (a sent message). Default `wrap`.
    */
   tileLayout?: "row" | "wrap";
+  /** `wrap` tiles: `end` (default) for a sent message, `start` for a document or a detail pane. */
+  tileAlign?: "start" | "end";
   /**
    * Opens an item in the app (a viewer or the inspector). The name (list, chips) or the tile becomes a
    * button, and `href` is not used; without it a `href` stays a link.
@@ -64,6 +68,7 @@ export function AttachmentList({
   windowDrag,
   removeLabel = "Remove",
   tileLayout = "wrap",
+  tileAlign = "end",
   onOpen,
 }: AttachmentListProps) {
   const removeText = typeof removeLabel === "function" ? removeLabel : (name: string) => `${removeLabel} ${name}`;
@@ -76,7 +81,7 @@ export function AttachmentList({
   }
 
   if (variant === "tiles") {
-    return <AttachmentTiles items={items} layout={tileLayout} onOpen={onOpen} onRemove={onRemove} removeLabel={removeText}
+    return <AttachmentTiles items={items} layout={tileLayout} align={tileAlign} onOpen={onOpen} onRemove={onRemove} removeLabel={removeText}
       windowDrag={windowDrag} className={className} />;
   }
 
@@ -98,10 +103,13 @@ export function AttachmentList({
         <div
           className={styles.item}
           data-blocked={item.blockedReason ? "true" : undefined}
+          data-upload={item.upload}
           data-slot="attachment-item"
           key={item.id}
         >
-          {item.thumbnail ? (
+          {item.upload ? (
+            <span className={styles.icon} data-slot="attachment-icon" aria-hidden="true"><AttachmentStatusIcon status={item.upload} size="sm" /></span>
+          ) : item.thumbnail ? (
             <span className={styles.thumbnail} data-slot="attachment-thumbnail">
               <img
                 alt={item.thumbnail.alt ?? item.name}
@@ -140,16 +148,4 @@ export function AttachmentList({
       ))}
     </Stack>
   );
-}
-
-/** The name: a button with `onOpen`, else a link with `href`, else text. Tooltip's trigger props pass through. */
-function ItemName({ item, onOpen, ref, ...trigger }: { item: AttachmentListItem; onOpen?: (item: AttachmentListItem) => void } & TriggerProps) {
-  const shared = { ...trigger, "aria-label": blockedLabel(item), className: styles.name, "data-slot": "attachment-name" };
-  if (onOpen) return <button {...shared} ref={ref as Ref<HTMLButtonElement>} type="button" onClick={() => onOpen(item)}>{item.name}</button>;
-  if (item.href) return <a {...shared} ref={ref as Ref<HTMLAnchorElement>} href={item.href} target="_blank" rel="noreferrer">{item.name}</a>;
-  return <span {...shared} ref={ref as Ref<HTMLSpanElement>}>{item.name}</span>;
-}
-
-function blockedLabel(item: AttachmentListItem): string | undefined {
-  return item.blockedReason ? `${item.name}, ${item.blockedReason}` : undefined;
 }
