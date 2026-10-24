@@ -471,3 +471,5 @@ pub fn form_value<'a>(body: &'a str, name: &str) -> Option<&'a str> {
         .find(|(key, _)| *key == name)
         .map(|(_, value)| value)
 }
+
+pub mod images;

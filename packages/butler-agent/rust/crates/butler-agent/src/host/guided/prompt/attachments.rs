@@ -49,3 +49,18 @@ pub(super) fn provider_images(turn: &TurnRecord) -> Vec<Value> {
         })
         .collect()
 }
+
+/// The editor selection belongs to the current user message, after its text.
+pub(super) fn editor_note(turn: &TurnRecord) -> String {
+    let Some(edit) = turn.context.pointer("/messageContent/image_edit") else {
+        return String::new();
+    };
+    let Some(image) = edit["image"].as_str() else {
+        return String::new();
+    };
+    let mask = edit["mask"]
+        .as_str()
+        .map(|m| format!(" · mask {m}"))
+        .unwrap_or_default();
+    format!("\n[Image editor: image {image}{mask}]")
+}

@@ -42,7 +42,7 @@ impl Sections {
         self.push(
             "current-request",
             format!(
-                "{}\n{}",
+                "{}\n{}{}",
                 // A resumed user request remains a user request even while a
                 // worker suspension is recorded. Label the actual input identity.
                 if turn
@@ -59,7 +59,8 @@ impl Sections {
                 } else {
                     "## Current request"
                 },
-                turn.original_message
+                turn.original_message,
+                super::attachments::editor_note(turn)
             ),
         );
     }

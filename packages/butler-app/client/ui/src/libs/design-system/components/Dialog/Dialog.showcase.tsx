@@ -18,6 +18,7 @@ import {
   DialogTrigger,
 } from "./Dialog";
 import { ContainedDialogDemo } from "./Dialog.contained.demo";
+import { FullHeightDialogDemo } from "./Dialog.fullHeight.demo";
 
 export const meta: ShowcaseMeta = {
   title: "Dialog",
@@ -144,4 +145,6 @@ export const stories: ShowcaseStory[] = [
   },
   { name: "Wide reader (size xl, scroll-body, maxHeight 3/5)", render: (context) => <ReaderDialog context={context} /> },
   { name: "Anchored in a page card (container)", states: ["open"], render: (context) => <ContainedDialogDemo {...context} /> },
+  // height full: a scroll-body dialog with a nearly empty body keeps its full height (an empty task graph).
+  { name: "Full height with a nearly empty body (height full)", states: ["open"], render: (context) => <FullHeightDialogDemo {...context} /> },
 ];

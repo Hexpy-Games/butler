@@ -227,7 +227,7 @@ function AppWorkspaceContent({ leftOpen, paneOpen, chatWidth }: { leftOpen: bool
       <Sidebar />
     </AdaptiveShellSidebar>
     <AdaptiveShellWorkspace data-test-class="workspace">
-      <AdaptiveShellTitle><Titlebar sidebarOpen={leftOpen} /></AdaptiveShellTitle>
+      <AdaptiveShellTitle><Titlebar sidebarOpen={leftOpen} splitChatWidth={paneOpen ? chatWidth : undefined} /></AdaptiveShellTitle>
       {view.kind === "browser" && window.butlerBrowser ? (
         <Stack fill gap="none"><LiveConnectionNotice /><BrowserArea /></Stack>
       ) : view.kind === "history" ? (

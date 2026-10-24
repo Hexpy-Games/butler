@@ -14,12 +14,14 @@ use std::{
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum GeneratedAssetKind {
+    Original,
     Generated,
     Mask,
 }
 impl GeneratedAssetKind {
     fn as_str(self) -> &'static str {
         match self {
+            Self::Original => "original",
             Self::Generated => "generated",
             Self::Mask => "mask",
         }
@@ -86,19 +88,25 @@ pub(super) fn put_generated(
     let hash = format!("{digest:x}");
     let existing: Option<(String, String, Option<String>)> = tx
         .query_row(
-            "SELECT id,kind,parent_id FROM app_assets WHERE sha256=?1",
-            [&hash],
+            "SELECT id,kind,parent_id FROM app_assets WHERE sha256=?1 AND kind=?2 AND parent_id IS ?3",
+            params![hash, kind.as_str(), parent_id],
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
         )
         .optional()
         .map_err(AppStorageError::sqlite)?;
+    let existing = existing.filter(|_| kind != GeneratedAssetKind::Generated);
     let id = if let Some((id, stored_kind, parent)) = existing {
         if stored_kind != kind.as_str() || parent != parent_id {
             return Err(failed("image_asset_lineage_conflict"));
         }
         id
     } else {
-        let mut id = asset_id(&digest, 10);
+        let mut id = if kind == GeneratedAssetKind::Generated {
+            let occurrence = Sha256::digest(uuid::Uuid::new_v4().as_bytes());
+            asset_id(&occurrence, 12)
+        } else {
+            asset_id(&digest, 10)
+        };
         if tx
             .query_row("SELECT 1 FROM app_assets WHERE id=?1", [&id], |_| Ok(()))
             .optional()
@@ -107,12 +115,7 @@ pub(super) fn put_generated(
         {
             id = asset_id(&digest, 12);
         }
-        let path = file(root, &hash, image.mime)?;
-        secure_fs::create_private_dir_all(
-            path.parent().ok_or_else(|| failed("invalid_asset_path"))?,
-        )
-        .map_err(failed)?;
-        secure_fs::replace_private(&path, |f| f.write_all(&image.bytes), |e| e).map_err(failed)?;
+        write_blob(&tx, root, &hash, image)?;
         tx.execute("INSERT INTO app_assets(id,sha256,mime,width,height,bytes,alt,source_url,created_at,kind,parent_id,model_ref) VALUES(?1,?2,?3,?4,?5,?6,'','',strftime('%Y-%m-%dT%H:%M:%fZ','now'),?7,?8,?9)", params![id,hash,image.mime,image.width,image.height,image.bytes.len(),kind.as_str(),parent_id,model_ref]).map_err(AppStorageError::sqlite)?;
         if let Some(parent) = parent_id {
             tx.execute(
@@ -134,7 +137,7 @@ pub(super) fn put_generated(
 
 pub(super) fn meta(db: &Connection, id: &str) -> Result<Value, AppStorageError> {
     db.query_row("SELECT id,kind,mime,width,height,bytes,parent_id,model_ref,created_at FROM app_assets WHERE id=?1", [id], |r| Ok(json!({
-        "id":r.get::<_,String>(0)?,"kind":r.get::<_,String>(1)?,"mime":r.get::<_,String>(2)?,
+        "id":r.get::<_,String>(0)?,"img":r.get::<_,String>(0)?,"kind":r.get::<_,String>(1)?,"mime":r.get::<_,String>(2)?,
         "width":r.get::<_,u32>(3)?,"height":r.get::<_,u32>(4)?,"bytes":r.get::<_,u64>(5)?,
         "parent_id":r.get::<_,Option<String>>(6)?,"model_ref":r.get::<_,Option<String>>(7)?,"created_at":r.get::<_,String>(8)?
     }))).optional().map_err(AppStorageError::sqlite)?.ok_or_else(|| failed("asset_not_found"))
@@ -150,7 +153,7 @@ pub(super) fn versions(db: &Connection, id: &str) -> Result<Value, AppStorageErr
     let rows = query
         .query_map([id], |r| {
             Ok(
-                json!({"id":r.get::<_,String>(0)?,"parent_id":r.get::<_,Option<String>>(1)?,
+                json!({"id":r.get::<_,String>(0)?,"img":r.get::<_,String>(0)?,"parent_id":r.get::<_,Option<String>>(1)?,
         "width":r.get::<_,u32>(2)?,"height":r.get::<_,u32>(3)?,"created_at":r.get::<_,String>(4)?}),
             )
         })
@@ -187,5 +190,28 @@ fn validate_parent(
     } else if kind == GeneratedAssetKind::Mask {
         return Err(failed("image_mask_parent_required"));
     }
+    Ok(())
+}
+
+fn write_blob(
+    db: &Connection,
+    root: &Path,
+    hash: &str,
+    image: &ValidatedImage,
+) -> Result<(), AppStorageError> {
+    let present = db
+        .query_row("SELECT 1 FROM app_assets WHERE sha256=?1", [hash], |_| {
+            Ok(())
+        })
+        .optional()
+        .map_err(AppStorageError::sqlite)?
+        .is_some();
+    if present {
+        return Ok(());
+    }
+    let path = file(root, hash, image.mime)?;
+    secure_fs::create_private_dir_all(path.parent().ok_or_else(|| failed("invalid_asset_path"))?)
+        .map_err(failed)?;
+    secure_fs::replace_private(&path, |f| f.write_all(&image.bytes), |e| e).map_err(failed)?;
     Ok(())
 }

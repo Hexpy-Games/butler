@@ -6,6 +6,7 @@
     reason = "test assertions"
 )]
 mod agent;
+mod assets;
 mod migration;
 mod organize;
 mod pages;

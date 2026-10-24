@@ -5,7 +5,7 @@
     "deploy/licenses/generate.mjs": "eb413c424649cc6ef3bc734cb1a9479cf8ddffb3af398601a974268c229d7c34",
     "deploy/licenses/inputs.mjs": "f9a38331fa5a8f26f9d745f0cf3bfaea028f2d5dc7c8e8aa4d7af1b923cb5124",
     "deploy/licenses/refresh.py": "bddecf7f564eb6da112439c87fca94158f22497a5094dd53d9389ff918ced71b",
-    "packages/butler-agent/rust/Cargo.lock": "6fb0263f0300c7d9b542d181cc7e8f0374a7ac9c3a73cc53f804671e033f5de8",
+    "packages/butler-agent/rust/Cargo.lock": "356d2b55bfafc3e0a36fc4f66ec73cc4d0169a996f7424ee799a4040222edc90",
     "packages/butler-agent/rust/Cargo.toml": "5d2d424ec9a5a0efc862cb4193c6c0902d8336747f23b3217091286ce99a7c9d",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
     "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "e08a77e7c8333077f8bdc812b31c8ad65d5c417aea2329e102b4266aa26a7d0d",
@@ -20,7 +20,7 @@
     "packages/butler-agent/rust/crates/butler-log/Cargo.toml": "0f3523ba15e21a586f5c9d8bd883dce4100c7d1e7f95c0064da9af990c20f0bc",
     "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "e56bfc747329099c83768897038d0d40f2ba1efdf0ec5399eee1b976de5653c1",
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "4356081083793e9aaf34c237ce7c4d0c93b0b6d7ae75d9c197bb3f4202ba43b4",
-    "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "ba7731194c7b0861643761f24121b85c1f713897b2bb44eaccd48b8271d49c1f",
+    "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "446f223fa76294ea8a5e8479a0a4f522610ad92d3fdaa863cc7f9acffae8f8e5",
     "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "6ac2ceefd558c7be96a1b15da080aa3c45f7b6c5183be7df932ac3e0c504912e",
     "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "f553f4ac9fb2a534faae5a987b29c430d05648eada56583f2a0cec856a7d77e6",
     "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "15317b3544cdbcfacc5d46ab5b1cbddb1faa34c50ceca49221fdea0fa35a4592",
@@ -634,15 +634,15 @@
       ],
       "evidenceSha256": [
         "1658d8213209df7b9b86dfc05d724ede48d00dbc27abc15976ec7adec9601cde",
-        "dd0ddf9ab9520a4f378d51d863dd7ccdad7ddd225dc8cef0c934ac07bb0d5f4b"
+        "af45b31915e79186689e9871fd5a18654c9e1d5e15e7a32a09a57f767cd7c5f2"
       ],
       "files": [
-        "https://raw.githubusercontent.com/hugeicons/hugeicons/9c48f3723dfb243909fa83501aa7c6423ab972c0/LICENSE.md",
-        "https://raw.githubusercontent.com/hugeicons/hugeicons/9c48f3723dfb243909fa83501aa7c6423ab972c0/README.md (free icons MIT declaration)"
+        "https://raw.githubusercontent.com/hugeicons/hugeicons/4fd1c2d5572f832eb908d401ca95a18013069abf/LICENSE.md",
+        "https://raw.githubusercontent.com/hugeicons/hugeicons/4fd1c2d5572f832eb908d401ca95a18013069abf/README.md (free icons MIT declaration)"
       ],
       "integrity": "sha512-vkMvlnW7Atqh7juhZCadYDvqABWcEeVAkavAK6HJBFbYkLCme5CN51Oc91D5j5ruDja+HQPjMfWkTxxulcwvAQ==",
       "links": [
-        "https://raw.githubusercontent.com/hugeicons/hugeicons/9c48f3723dfb243909fa83501aa7c6423ab972c0/LICENSE.md"
+        "https://raw.githubusercontent.com/hugeicons/hugeicons/4fd1c2d5572f832eb908d401ca95a18013069abf/LICENSE.md"
       ],
       "copyright": [
         "Copyright (c) 2025 Hugeicons"
