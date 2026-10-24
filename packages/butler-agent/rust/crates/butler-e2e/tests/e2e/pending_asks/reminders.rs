@@ -54,10 +54,24 @@ async fn named_ask(
     script_: &stub::Script,
     title: &str,
 ) -> Result<Value, HarnessError> {
+    named_ask_with_questions(s, script_, title, crate::ask_user::stub::questions()).await
+}
+async fn named_ask_with_questions(
+    s: &Scenario,
+    script_: &stub::Script,
+    title: &str,
+    mut args: Value,
+) -> Result<Value, HarnessError> {
     let message = format!("Keep this choice on an open card: {title}");
-    let mut args = crate::ask_user::stub::questions();
     args["questions"][0]["title"] = json!(title);
     args["wait"] = json!(false);
+    let card_title = args["questions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|q| q["title"].as_str().unwrap())
+        .collect::<Vec<_>>()
+        .join(" · ");
     script(
         script_,
         &message,
@@ -70,7 +84,7 @@ async fn named_ask(
         .as_array()
         .unwrap()
         .iter()
-        .find(|q| q["title"] == title)
+        .find(|q| q["title"] == card_title)
         .unwrap()
         .clone())
 }
@@ -107,9 +121,14 @@ async fn rm_01_unrelated_reply_uses_one_closing_line_without_reasking() -> Resul
 async fn rm_02_chat_answer_settles_only_the_named_ask_and_updates_its_card()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (s, provider, server) = setup("RM-02").await?;
+    let (mut s, provider, server) = setup("RM-02").await?;
     let first = named_ask(&s, &provider, "Destination").await?;
-    let second = named_ask(&s, &provider, "Format").await?;
+    let mut questions = crate::ask_user::stub::questions();
+    let mut other = questions["questions"][0].clone();
+    other["id"] = json!("details");
+    other["title"] = json!("Which details?");
+    questions["questions"].as_array_mut().unwrap().push(other);
+    let second = named_ask_with_questions(&s, &provider, "Format", questions).await?;
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
     let message = "두 번째는\n A로";
     script(
@@ -149,6 +168,11 @@ async fn rm_02_chat_answer_settles_only_the_named_ask_and_updates_its_card()
         })
         .unwrap();
     assert_eq!(answer["response"]["answers"][0]["custom"], "A");
+    let answers = answer["response"]["answers"].as_array().unwrap();
+    assert_eq!(answers.len(), 2);
+    assert_eq!(answers.iter().filter(|a| a["custom"] == "A").count(), 1);
+    assert_eq!(answers[1]["skipped"], true);
+    assert_eq!(answers[1]["custom"], Value::Null);
     // The already settled ask must return its persisted state on another attempt.
     script(
         &provider,
@@ -173,6 +197,17 @@ async fn rm_02_chat_answer_settles_only_the_named_ask_and_updates_its_card()
                 .as_str()
                 .unwrap()
                 .contains("resolved_in_chat")
+    }));
+    let before = s.gw.turns("general").await?.len();
+    s.restart().await?;
+    s.turn("general", "Continue after restarting.").await?;
+    assert_eq!(s.gw.turns("general").await?.len(), before + 1);
+    let view = s.gw.get("/session-view?session_id=general").await?;
+    assert!(view.data()["messages"].as_array().unwrap().iter().all(|m| {
+        !m["text"]
+            .as_str()
+            .unwrap_or("")
+            .starts_with("Answers to your deferred questions")
     }));
     server.abort();
     s.finish().await

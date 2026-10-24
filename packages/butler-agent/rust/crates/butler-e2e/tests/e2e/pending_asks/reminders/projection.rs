@@ -18,6 +18,7 @@ async fn rm_projection_bounds_titles_orders_and_counts_every_open_ask() -> Resul
     let open = projection["open"].as_array().unwrap();
     assert_eq!(open.len(), 8);
     assert_eq!(projection["more"], 2);
+    assert_eq!(projection["settled_more"], Value::Null);
     assert_eq!(asks(&s, "general").await?["open_count"], 10);
     for (ask, expected) in open.iter().zip(ids.iter().rev()) {
         assert_eq!(&ask["ask_id"], expected);
@@ -41,7 +42,17 @@ async fn rm_projection_bounds_titles_orders_and_counts_every_open_ask() -> Resul
             + projection["settled"].as_array().unwrap().len(),
         8
     );
-    assert_eq!(projection["more"], 2);
+    assert_eq!(projection["open"].as_array().unwrap().len(), 8);
+    for (ask, expected) in projection["open"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .zip(ids.iter().rev())
+    {
+        assert_eq!(&ask["ask_id"], expected);
+    }
+    assert_eq!(projection["more"], 1);
+    assert_eq!(projection["settled_more"], 1);
     assert_eq!(asks(&s, "general").await?["open_count"], 9);
     server.abort();
     s.finish().await
@@ -56,10 +67,12 @@ async fn rm_card_settlement_is_visible_once_in_the_volatile_section() -> Result<
         .unwrap()
         .strip_prefix("question:")
         .unwrap();
+    let long_answer = "답".repeat(3000);
     let answer =
         s.gw.post(
             &format!("/authority-requests/{reference}/answer?session_id=general"),
-            crate::ask_user::answer(),
+            json!({"status":"answered","answers":[{"id":"format","selected":[],
+                "custom":long_answer,"skipped":false}]}),
         )
         .await?;
     assert_eq!(answer.status, 202, "{}", answer.text);
@@ -84,6 +97,34 @@ async fn rm_card_settlement_is_visible_once_in_the_volatile_section() -> Result<
     assert_eq!(settled["open"], json!([]));
     assert_eq!(settled["settled"][0]["ask_id"], q["ask_id"]);
     assert_eq!(settled["settled"][0]["response"]["status"], "answered");
+    let summary = settled["settled"][0]["response"]["answer"]
+        .as_str()
+        .unwrap();
+    assert_eq!(summary.chars().count(), 160);
+    assert!(summary.ends_with('…'));
+    let section = source(requests.last().unwrap())
+        .split("## Open asks")
+        .nth(1)
+        .unwrap()
+        .split("## Current request")
+        .next()
+        .unwrap();
+    assert!(
+        section.len() <= 1600,
+        "settled section: {} bytes",
+        section.len()
+    );
+    eprintln!(
+        "RM-SETTLED section_bytes={} answer_chars={} summary_chars={}",
+        section.len(),
+        long_answer.chars().count(),
+        summary.chars().count()
+    );
+    let view = s.gw.get("/session-view?session_id=general").await?;
+    assert_eq!(
+        view.data()["question_answers"][0]["response"]["answers"][0]["custom"],
+        long_answer
+    );
     provider.requests.lock().unwrap().clear();
     s.turn("general", "Continue after the answer.").await?;
     assert!(

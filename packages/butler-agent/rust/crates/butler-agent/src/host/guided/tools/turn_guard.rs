@@ -89,13 +89,15 @@ pub(super) fn restore_web(
     }
 }
 
-/// Tools whose results bring in content from the web, a connector or a page,
+/// Tools whose results bring in content from files, the web, a connector or a page,
 /// including a command that reaches the network.
 fn reads_external(name: &str, args: &Value) -> bool {
     (name == "run_command" && args["state_effect"] == "remote_observation")
         || matches!(
             name,
-            "browse"
+            "read_file"
+                | "grep_files"
+                | "browse"
                 | "web_search"
                 | "web_read"
                 | "call_mcp_tool"

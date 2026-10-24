@@ -1,7 +1,7 @@
 //! Chat settlements reuse the deferred-answer receipt lane; approvals stay click-only.
 use super::contracts::{AuthorityError, AuthorityResult, PrincipalAuthority, RequestDecision};
 use super::questions::{UserQuestionAnswer, UserQuestionResponse, UserQuestions};
-use crate::btcc::TurnRecord;
+use crate::btcc::{TurnRecord, TurnTaint};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -18,34 +18,11 @@ impl PrincipalAuthority {
     pub async fn resolve_ask(
         &self,
         turn: &TurnRecord,
+        taint: TurnTaint,
         input: ResolveAsk,
     ) -> AuthorityResult<Value> {
-        if turn.wake_identity.is_some()
-            || turn.context.get("scheduleRun").is_some()
-            || turn.context.get("subsessionResult").is_some()
-            || turn.context.get("messageOrigin").and_then(Value::as_str)
-                == Some("question_followup")
-            || turn
-                .original_message_id
-                .starts_with("worker-result-message:")
-        {
-            return Ok(refusal(
-                "not_user_turn",
-                "Only the user's own message can settle an ask. Leave it open.",
-            ));
-        }
-        let quote = normalized(&input.quote);
-        if quote.is_empty() || !normalized(&turn.original_message).contains(&quote) {
-            return Ok(refusal(
-                "quote_not_found",
-                "quote is not in the user's current message. Quote their own words, or ask if the reply is unclear.",
-            ));
-        }
-        if input.ask_id.starts_with("approval:") {
-            return Ok(refusal(
-                "approval_card_only",
-                "Approvals are settled only on their card. Tell the user it is waiting there.",
-            ));
+        if let Some(result) = guard(turn, taint, &input) {
+            return Ok(result);
         }
         let owner = turn.session_id.clone();
         let now = (self.clock)();
@@ -77,12 +54,59 @@ impl PrincipalAuthority {
                 return Ok(not_open(&state(&record)));
             }
             let receipt = receipt(&record.normalized_input_json, &input)?;
-            repo.record_question_followup(reference, &receipt.to_string(), &now)?;
-            repo.settle_question_followup(reference)?;
+            repo.settle_deferred_question(&owner, reference, &receipt.to_string(), &now)?;
             Ok(json!({"ok":true,"ask_id":input.ask_id,"state":"resolved_in_chat"}))
         })
         .await
     }
+}
+
+fn guard(turn: &TurnRecord, taint: TurnTaint, input: &ResolveAsk) -> Option<Value> {
+    if turn.wake_identity.is_some()
+        || turn.context.get("scheduleRun").is_some()
+        || turn.context.get("subsessionResult").is_some()
+        || turn.context.get("messageOrigin").and_then(Value::as_str) == Some("question_followup")
+        || turn
+            .original_message_id
+            .starts_with("worker-result-message:")
+    {
+        return Some(refusal(
+            "not_user_turn",
+            "Only the user's own message can settle an ask. Leave it open.",
+        ));
+    }
+    if input.ask_id.starts_with("approval:") {
+        return Some(refusal(
+            "approval_card_only",
+            "Approvals are settled only on their card. Tell the user it is waiting there.",
+        ));
+    }
+    if taint == TurnTaint::External {
+        return Some(refusal(
+            "untrusted_context",
+            "Settle asks before reading outside content in this turn. Leave it open; the user can answer on the card or in their next message.",
+        ));
+    }
+    let quote = normalized(&input.quote);
+    if quote.is_empty() || !normalized(&turn.original_message).contains(&quote) {
+        return Some(refusal(
+            "quote_not_found",
+            "quote is not in the user's current message. Quote their own words, or ask if the reply is unclear.",
+        ));
+    }
+    if !matches!(
+        (
+            input.outcome.as_str(),
+            input.answer.as_deref().filter(|s| !s.trim().is_empty())
+        ),
+        ("answered", Some(_)) | ("dropped", None)
+    ) {
+        return Some(refusal(
+            "invalid_outcome",
+            "Use answered with an answer for a question, or dropped. accepted and declined are for drafts.",
+        ));
+    }
+    None
 }
 
 fn receipt(questions: &str, input: &ResolveAsk) -> AuthorityResult<Value> {
@@ -91,20 +115,21 @@ fn receipt(questions: &str, input: &ResolveAsk) -> AuthorityResult<Value> {
     }
     let answer = input.answer.as_deref().filter(|s| !s.trim().is_empty());
     if input.outcome != "answered" || answer.is_none() {
-        return Err(AuthorityError::policy("invalid_arguments"));
+        return Err(AuthorityError::policy("invalid_outcome"));
     }
     let questions: UserQuestions = serde_json::from_str(questions)
         .map_err(|_| AuthorityError::policy("authority_request_corrupt"))?;
-    // A chat answer settles the ask card as a whole, retaining its question ids.
+    // A chat answer settles the whole card once, retaining its question ids.
     let response = UserQuestionResponse::Answered {
         answers: questions
             .questions
             .into_iter()
-            .map(|q| UserQuestionAnswer {
+            .enumerate()
+            .map(|(index, q)| UserQuestionAnswer {
                 id: q.id,
                 selected: Vec::new(),
-                custom: answer.map(str::to_owned),
-                skipped: false,
+                custom: answer.filter(|_| index == 0).map(str::to_owned),
+                skipped: index != 0,
             })
             .collect(),
     };

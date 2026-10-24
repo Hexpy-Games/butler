@@ -44,9 +44,13 @@ impl Reminders {
             .collect::<Vec<_>>();
         settled.sort_by(|a, b| b["resolved_at"].as_str().cmp(&a["resolved_at"].as_str()));
         let settled_room = 8_usize.saturating_sub(open.len());
-        let more = self.entries.len().saturating_sub(8);
-        let content = json!({"open":open.iter().take(8).collect::<Vec<_>>(),
+        let more = open.len().saturating_sub(8);
+        let settled_more = settled.len().saturating_sub(settled_room);
+        let mut content = json!({"open":open.iter().take(8).collect::<Vec<_>>(),
             "more":more,"settled":settled.into_iter().take(settled_room).collect::<Vec<_>>()});
+        if settled_more > 0 {
+            content["settled_more"] = json!(settled_more);
+        }
         serde_json::to_string(&content)
             .map(|s| Some(format!("{SECTION}\n{s}")))
             .map_err(|e| BtccError::relayed("ask_reminders_invalid", e.to_string()))

@@ -151,8 +151,33 @@ impl PrincipalAuthority {
                 Ok(serde_json::json!({"ask_id":ask.ask_id,"kind":ask.kind,
                 "title":ask.title.chars().take(160).collect::<String>(),
                 "created_at":ask.created_at,"resolved_at":receipt.as_ref().map(|_|resolved_at),
-                "response":receipt}))
+                "response":receipt.as_ref().map(reminder_response)}))
             })
             .collect()
     }
+}
+
+fn reminder_response(receipt: &serde_json::Value) -> serde_json::Value {
+    let answer = receipt
+        .get("answers")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|a| a.get("skipped").and_then(serde_json::Value::as_bool) != Some(true))
+        .flat_map(|a| {
+            a.get("selected")
+                .and_then(serde_json::Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(serde_json::Value::as_str)
+                .chain(a.get("custom").and_then(serde_json::Value::as_str))
+        })
+        .collect::<Vec<_>>()
+        .join(" · ");
+    let mut summary = answer.chars().take(160).collect::<String>();
+    if answer.chars().count() > 160 {
+        summary.pop();
+        summary.push('…');
+    }
+    serde_json::json!({"status":receipt.get("status"),"answer":summary})
 }
