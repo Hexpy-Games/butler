@@ -5,6 +5,7 @@ use serde_json::Value;
 pub(super) struct Material {
     documents: documents::DocumentProjection,
     pub effects: String,
+    pub canon: String,
     pub prior_tools: String,
     pub attachments: String,
     pub work_stream: String,
@@ -44,10 +45,12 @@ pub(super) async fn read(
         .await
         .map_err(|error| BtccError::relayed(error.code(), error.message()))?;
     let images = super::attachments::provider_images(turn);
+    let canon = super::canon::read(state, &turn.session_id).await?;
     let work_stream = super::work_stream_context(state, &turn.session_id).await?;
     Ok(Material {
         documents,
         effects,
+        canon,
         prior_tools,
         attachments,
         work_stream,

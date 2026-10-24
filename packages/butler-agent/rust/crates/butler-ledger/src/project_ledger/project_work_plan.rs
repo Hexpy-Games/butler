@@ -190,7 +190,7 @@ fn completed_action_keys(manifest: &Value) -> Result<Vec<String>, ProjectLedgerR
         .collect()
 }
 
-fn safe_id(id: &str) -> Result<(), ProjectLedgerReadError> {
+pub(super) fn safe_id(id: &str) -> Result<(), ProjectLedgerReadError> {
     if butler_core::public_text::trim_js_whitespace(id).is_empty()
         || id.encode_utf16().count() > 4096
         || matches!(id, "." | "..")
@@ -203,4 +203,29 @@ fn safe_id(id: &str) -> Result<(), ProjectLedgerReadError> {
 
 fn invalid() -> ProjectLedgerReadError {
     ProjectLedgerReadError::record_show("project_work_managed_record_invalid")
+}
+
+impl super::ProjectLedger {
+    /// Read one managed Work from its committed owner without publishing anything.
+    pub async fn read_project_work_view(
+        &self,
+        input: ProjectWorkPlanRead,
+    ) -> Result<Option<butler_turn::btcc::WorkView>, ProjectLedgerReadError> {
+        self.run(move |root, collation| {
+            safe_id(&input.ledger_project_id)?;
+            safe_id(&input.work_id)?;
+            let scope = butler_turn::btcc::ResolvedProjectWorkScope {
+                ledger_root: root
+                    .join("project-ledger/projects")
+                    .join(&input.ledger_project_id),
+                app_project_id: input.app_project_id,
+                ledger_project_id: input.ledger_project_id,
+            };
+            Ok(
+                super::work::read_current_project_work(&scope, &input.work_id, collation)?
+                    .map(|snapshot| snapshot.view),
+            )
+        })
+        .await
+    }
 }

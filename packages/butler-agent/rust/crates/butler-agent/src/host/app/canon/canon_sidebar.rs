@@ -3,6 +3,7 @@ use butler_gateway::gateway::{APP_PERSON_ID, AppCanonOperation};
 
 pub(super) fn execute(
     storage: BtccStorage,
+    ledger: progress::ProjectReader,
     operation: AppCanonOperation,
 ) -> ApplicationFuture<Value> {
     Box::pin(async move {
@@ -10,7 +11,7 @@ pub(super) fn execute(
             now: chrono::Utc::now().timestamp_millis(),
             actor: json!({"person": APP_PERSON_ID, "via":"app"}),
         };
-        match operation {
+        let result = match operation {
             AppCanonOperation::Link {
                 work_id,
                 session_id,
@@ -37,6 +38,7 @@ pub(super) fn execute(
                 })
                 .await
                 .map_err(error),
-        }
+        }?;
+        progress::enrich(&storage, &ledger, result).await
     })
 }

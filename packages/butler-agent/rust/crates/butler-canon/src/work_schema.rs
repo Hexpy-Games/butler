@@ -25,6 +25,13 @@ fn create(connection: &Connection) -> rusqlite::Result<()> {
     connection.execute_batch(include_str!("work_schema/specs.sql"))?;
     connection.execute_batch(include_str!("work_schema/tags.sql"))?;
     connection.execute_batch(include_str!("work_schema/support.sql"))?;
+    let mut stmt = connection.prepare("PRAGMA table_info(canon_epic_work_links)")?;
+    let columns = stmt
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    if !columns.iter().any(|name| name == "reported_applied") {
+        connection.execute_batch("ALTER TABLE canon_epic_work_links ADD COLUMN reported_applied INTEGER NOT NULL DEFAULT 0 CHECK (reported_applied IN (0,1))")?;
+    }
     connection.execute_batch(include_str!("work_schema/indexes.sql"))
 }
 
