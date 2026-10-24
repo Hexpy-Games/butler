@@ -108,25 +108,25 @@ pub(super) fn owned_service_check(data: &Path, installation: &ResolvedInstallati
             evidence: json!({"state": "ambiguous", "path": state_dir}),
         };
     }
-    let record = service_instance::read_record(data);
-    let lock = service_instance::instance_lock_is_held_read_only(data);
-    let (status, summary, evidence) = match (record, lock) {
-        (Err(_), _) | (_, Err(_)) => (
+    let ownership =
+        service_instance::observe(data).map(|ownership| (ownership.record, ownership.locked));
+    let (status, summary, evidence) = match ownership {
+        Err(_) => (
             "fail",
             "owned service identity could not be read safely",
             json!({"identity": "unavailable"}),
         ),
-        (Ok(None), Ok(false)) => (
+        Ok((None, false)) => (
             "warn",
             "no native service instance is currently recorded",
             json!({"state": "offline", "lockHeld": false}),
         ),
-        (Ok(None), Ok(true)) => (
+        Ok((None, true)) => (
             "fail",
             "instance lock is held without an ownership record",
             json!({"state": "ambiguous", "lockHeld": true}),
         ),
-        (Ok(Some(record)), Ok(lock_held)) => {
+        Ok((Some(record), lock_held)) => {
             let identity_matches = service_instance::process_matches(&record).unwrap_or(false);
             let executable_matches = Path::new(&record.executable) == installation.executable();
             let ready = lock_held

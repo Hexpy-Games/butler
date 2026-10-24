@@ -47,10 +47,9 @@ pub(crate) async fn record_helper_terminal(
             Err(error) => return Err(error),
         }
     };
-    if crate::host::service::instance::instance_is_locked(data_root)? {
-        let record = crate::host::service::instance::read_record_async(data_root)
-            .await?
-            .ok_or("restart_handoff_owner_ambiguous")?;
+    let ownership = crate::host::service::instance::observe_async(data_root).await?;
+    if ownership.locked {
+        let record = ownership.record.ok_or("restart_handoff_owner_ambiguous")?;
         if !crate::host::service::instance::process_matches(&record)? {
             return Err("restart_handoff_owner_ambiguous".into());
         }
@@ -64,12 +63,12 @@ pub(crate) async fn record_helper_terminal(
         // Admission remains held, so no new service can take DATA while this
         // helper waits briefly for the old BTCC owner to release it.
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(3);
-        while crate::host::service::instance::instance_is_locked(data_root)?
+        while crate::host::service::instance::instance_is_locked_async(data_root).await?
             && tokio::time::Instant::now() < deadline
         {
             tokio::time::sleep(std::time::Duration::from_millis(25)).await;
         }
-        if crate::host::service::instance::instance_is_locked(data_root)? {
+        if crate::host::service::instance::instance_is_locked_async(data_root).await? {
             return online;
         }
     }
