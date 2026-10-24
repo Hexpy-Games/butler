@@ -34,7 +34,9 @@ scrollbar takes no layout width, so the content gives the lane back and the
 scrollbar floats in it; a classic (always-shown) scrollbar is its own lane, so
 nothing more is reserved. The first ScrollArea in a document measures the thin
 scrollbar once and publishes it as `--scrollbar-width` on the root (`0px` for
-overlay scrollbars); nothing runs while idle or on scroll.
+overlay scrollbars); nothing runs while idle or on scroll. The probe is styled
+like the scroller (a stable gutter on a vertical auto scroller), so it reads
+the lane the scroller really reserves.
 
 Inset rule: the content's inline end sits on the column edge whether the
 content fits or overflows, with overlay or classic scrollbars. The vertical
@@ -48,7 +50,8 @@ content never widens into the lane. Horizontal scrollers have no inline lane.
 The frame keeps `--focus-ring-room` of paint room on every edge (it bleeds past
 the content's inline start, and across on the block edges, and the content pads
 it back), so a row flush with the content edge shows its whole ring and nothing
-moves. Keyboard focus scrolls a control clear of an active fade, ring included,
+moves. On the inline end the overlay lane holds that room; a classic lane sits
+past it, so both inline edges keep the same room with either scrollbar. Keyboard focus scrolls a control clear of an active fade, ring included,
 and while a ring shows inside, each fade turns solid `--focus-ring-room` sooner:
 a control resting at an edge keeps its whole ring even on the frame where the
 fade still lags the scroll. Nothing changes while nothing inside has focus.

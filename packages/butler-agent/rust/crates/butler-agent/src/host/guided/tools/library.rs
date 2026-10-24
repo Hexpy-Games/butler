@@ -113,7 +113,7 @@ fn failure(code: &str, message: &str) -> Value {
 }
 
 /// One request to the live App endpoint: its `data`, or a model-readable failure.
-async fn call(
+pub(super) async fn call(
     owner: &GuidedTools,
     method: Method,
     route: &str,
@@ -127,9 +127,18 @@ async fn call(
         )
     };
     let current = owner.app_endpoint.snapshot().ok_or_else(unavailable)?;
-    let mut request = butler_log::http::loopback()
-        .build()
-        .map_err(|_| unavailable())?
+    let client = owner
+        .browser_http
+        .get_or_try_init(|| async {
+            tokio::task::spawn_blocking(|| butler_log::http::loopback().build())
+                .await
+                .ok()
+                .and_then(Result::ok)
+                .ok_or(())
+        })
+        .await
+        .map_err(|()| unavailable())?;
+    let mut request = client
         .request(method, format!("{}{route}", current.base_url))
         .query(query)
         .timeout(Duration::from_secs(30));

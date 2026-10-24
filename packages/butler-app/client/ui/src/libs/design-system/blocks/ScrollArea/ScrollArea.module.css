@@ -4,9 +4,14 @@
      classic one (--scrollbar-width, measured once per document) is its own
      lane, and reserving both would push the content in twice. The vertical
      scroller keeps that lane even when the content fits (scrollbar-gutter
-     below), so this math never depends on whether it overflows. */
+     below), so this math never depends on whether it overflows. A classic
+     lane sits past the ring room, so the inline end keeps the same
+     --focus-ring-room as the inline start; an overlay lane already holds it. */
   --scroll-area-scrollbar-width: var(--scrollbar-width, 0px);
-  --scroll-area-scrollbar-offset: max(10px, var(--scroll-area-scrollbar-width));
+  --scroll-area-scrollbar-offset: max(
+    10px,
+    var(--scroll-area-scrollbar-width) + var(--scroll-area-ring-room)
+  );
   --scroll-area-fade-size: var(--scroll-fade-size);
   --scroll-area-fade-guard: var(--space-xs);
   --scroll-area-edge-padding: var(--scroll-area-fade-size);

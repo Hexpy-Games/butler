@@ -5,6 +5,7 @@ pub(in crate::gateway::application) mod canon;
 pub(in crate::gateway::application) mod canon_files;
 mod canon_sidebar;
 mod core;
+mod documents;
 mod library;
 mod message_ownership;
 mod migration;
@@ -37,16 +38,7 @@ pub(super) fn migrate(
 ) -> Result<(), AppStorageError> {
     let turns_new = !migration::table_exists(connection, "turns")?;
     core::create(connection)?;
-    migration::ensure_column(connection, "message_files", "title", "TEXT")?;
-    migration::ensure_column(connection, "message_files", "source_label", "TEXT")?;
-    migration::ensure_column(
-        connection,
-        "message_files",
-        "deliverable",
-        "INTEGER NOT NULL DEFAULT 0",
-    )?;
-    migration::ensure_column(connection, "message_files", "width", "INTEGER")?;
-    migration::ensure_column(connection, "message_files", "height", "INTEGER")?;
+    ensure_message_file_columns(connection)?;
     library::create(connection)?;
     canon_sidebar::create(connection)?;
     canon::create(connection)?;
@@ -69,6 +61,7 @@ pub(super) fn migrate(
     record_default_model_policy(connection, !turns_new)?;
     migration::add_current_columns(connection)?;
     assets::create(connection)?;
+    documents::create(connection)?;
     connection.execute_batch(
         "CREATE INDEX IF NOT EXISTS chats_archived_idx ON chats(archived);
          CREATE INDEX IF NOT EXISTS projects_archived_idx ON projects(archived);
@@ -110,6 +103,20 @@ pub(super) fn migrate(
     monitoring::migrate(connection)?;
     pending_asks::create(connection)?;
     library::recover(connection, butler_data)?;
+    Ok(())
+}
+
+fn ensure_message_file_columns(connection: &Connection) -> Result<(), AppStorageError> {
+    migration::ensure_column(connection, "message_files", "title", "TEXT")?;
+    migration::ensure_column(connection, "message_files", "source_label", "TEXT")?;
+    migration::ensure_column(
+        connection,
+        "message_files",
+        "deliverable",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
+    migration::ensure_column(connection, "message_files", "width", "INTEGER")?;
+    migration::ensure_column(connection, "message_files", "height", "INTEGER")?;
     Ok(())
 }
 
