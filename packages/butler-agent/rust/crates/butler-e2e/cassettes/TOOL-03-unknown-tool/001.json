@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-sol",
       "effort": "low",
       "user_request": "Create a file named made.txt in your workspace containing exactly the text: made-by-tool",
@@ -28,7 +28,7 @@
       },
       {
         "delay_ms": 828,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_03f1638f0384a1f2016ab8d35e48b087d097efa8a81382684c\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_BAVv53szlXvPRvWDs2YazBt7\",\"name\":\"replace_work_plan\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_03f1638f0384a1f2016ab8d35e48b087d097efa8a81382684c\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_BAVv53szlXvPRvWDs2YazBt7\",\"name\":\"replace_work_plan\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -324,7 +324,7 @@
       },
       {
         "delay_ms": 24,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_03f1638f0384a1f2016ab8d35e48b087d097efa8a81382684c\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Create made.txt in the workspace containing exactly made-by-tool\\\",\\\"execution_mode\\\":\\\"direct\\\",\\\"actions\\\":[{\\\"action_key\\\":\\\"Create made.txt with the exact requested text\\\",\\\"effect\\\":{\\\"capability\\\":\\\"Create a workspace file\\\",\\\"target\\\":\\\"made.txt containing exactly made-by-tool\\\"}}],\\\"checks\\\":[\\\"Verify the file contains exactly made-by-tool with no newline.\\\"]}\",\"call_id\":\"call_BAVv53szlXvPRvWDs2YazBt7\",\"name\":\"replace_work_plan\"},\"output_index\":0,\"sequence_number\":76}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_03f1638f0384a1f2016ab8d35e48b087d097efa8a81382684c\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Create made.txt in the workspace containing exactly made-by-tool\\\",\\\"execution_mode\\\":\\\"direct\\\",\\\"actions\\\":[{\\\"action_key\\\":\\\"Create made.txt with the exact requested text\\\",\\\"effect\\\":{\\\"capability\\\":\\\"Create a workspace file\\\",\\\"target\\\":\\\"made.txt containing exactly made-by-tool\\\"}}],\\\"checks\\\":[\\\"Verify the file contains exactly made-by-tool with no newline.\\\"]}\",\"call_id\":\"call_BAVv53szlXvPRvWDs2YazBt7\",\"name\":\"replace_work_plan\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":76}\n\n"
       },
       {
         "delay_ms": 44,

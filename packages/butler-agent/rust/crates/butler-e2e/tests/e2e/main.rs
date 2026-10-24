@@ -55,6 +55,10 @@ mod browser_tool_args;
 mod browser_usage;
 mod cassette_lint;
 mod catalog_provider_truth;
+mod chatgpt_plan_usage;
+mod chatgpt_session;
+mod chatgpt_sign_in;
+mod chatgpt_wire;
 mod cli_launcher;
 mod cli_remote;
 mod cli_reply_language;
@@ -143,6 +147,7 @@ mod queue_notifications;
 mod queue_pause;
 mod queue_shutdown;
 mod quota;
+mod reader_tab;
 mod recovery;
 mod reduce_motion;
 mod schedule_calendar;
@@ -270,3 +275,5 @@ mod usage_delegated;
 
 mod work_model_api;
 mod work_model_schema;
+
+mod worker_cap;

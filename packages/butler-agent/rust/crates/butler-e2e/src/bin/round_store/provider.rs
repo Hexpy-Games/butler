@@ -32,12 +32,9 @@ impl ProviderRequestConfigPort for Config {
                 api_shape: metadata.hosted_api_shape,
                 metadata,
                 endpoint: self.endpoint.clone(),
-                auth: ProviderAuth::Codex {
-                    mode: ProviderAuthMode::CodexSubscription,
-                    authorization: "Bearer offline-stub".into(),
-                    account_id: "offline".into(),
-                    user_agent: "offline".into(),
-                    originator: "butler".into(),
+                auth: ProviderAuth::ChatGptPlan {
+                    authorization: "Bearer offline-stub".to_owned().into(),
+                    registration: "fixture-registration".into(),
                 },
                 policy: ProviderRoundPolicy {
                     total: Duration::from_secs(10),

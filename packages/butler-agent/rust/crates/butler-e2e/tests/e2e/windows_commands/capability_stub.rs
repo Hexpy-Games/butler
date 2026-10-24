@@ -66,7 +66,7 @@ pub(super) async fn start(
     case: Case,
 ) -> Result<(String, Arc<Script>, tokio::task::JoinHandle<()>), HarnessError> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let url = format!("http://{}/codex", listener.local_addr()?);
+    let url = format!("http://{}", listener.local_addr()?);
     let script = Arc::new(Script {
         case: Mutex::new(case),
         step: Mutex::new(0),
@@ -82,7 +82,10 @@ pub(super) async fn start(
         marks: Mutex::new(Vec::new()),
     });
     let router = Router::new()
-        .route("/codex/responses", post(reply))
+        .route("/v1/responses", post(reply))
+        .route_layer(axum::middleware::from_fn(
+            butler_e2e::e2e::chatgpt_wire::validate,
+        ))
         .with_state(script.clone());
     let server = tokio::spawn(async move {
         let _ = axum::serve(listener, router).await;
@@ -98,7 +101,7 @@ async fn reply(
     let delegated = script.delegated.load(Ordering::SeqCst);
     let work = script.work.load(Ordering::SeqCst);
     let key = butler_e2e::e2e::matching::key(
-        "/codex/responses",
+        "/v1/responses",
         &body,
         &butler_e2e::e2e::sanitize::Placeholders::default(),
     );

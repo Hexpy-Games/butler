@@ -57,7 +57,7 @@ export function connectionCardId(
   // Models on this computer and typed servers both come from Other.
   if (providerId === "local") return "other";
   // ChatGPT sign-in and an OpenAI API key are separate cards for one provider.
-  if (authType === "codex_oauth") return "chatgpt";
+  if (authType === "chatgpt_oauth") return "chatgpt";
   const card = Object.values(PROVIDER_CARDS).find((spec) => spec.kind === "key" && spec.providerId === providerId);
   return card?.id ?? null;
 }

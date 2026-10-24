@@ -1,6 +1,6 @@
 ---
 title: "Cloud models"
-description: "Connect hosted models with an API key or OAuth."
+description: "Connect hosted models with a ChatGPT plan or an API key."
 section: models
 order: 1
 status: published
@@ -12,7 +12,7 @@ Cloud models are models hosted by a provider such as OpenAI or Anthropic. In **M
 
 | Provider | Auth method |
 | --- | --- |
-| **OpenAI** | API key or OAuth (OpenAI account sign-in) |
+| **OpenAI** | ChatGPT plan or API key |
 | **Anthropic** | API key |
 | **Google** | API key |
 | **xAI / Grok** | API key |
@@ -30,7 +30,7 @@ The model list for each provider comes from the model catalog included in Butler
   label="Auth method"
   items={[
     { value: "api-key", label: "API key" },
-    { value: "oauth", label: "OAuth (OpenAI)" },
+    { value: "oauth", label: "ChatGPT plan" },
   ]}
 >
   <TabPanel value="api-key">
@@ -48,17 +48,19 @@ The model list for each provider comes from the model catalog included in Butler
   <TabPanel value="oauth">
     <Steps>
       1. In the sidebar, open **Settings** and select **Models**.
-      2. In the **Butler model** section, click **Manage models**, then click **Add model**.
-      3. Leave **Provider** set to **OpenAI** and choose a **Model**.
-      4. Change **Auth method** to **OAuth**. The OpenAI sign-in page opens in your browser.
-      5. Finish signing in in the browser and return to Butler. When Butler confirms that authentication is complete, it registers the model automatically.
+      2. In **Butler model**, click **Manage models**, then **Add model**.
+      3. Leave **Provider** set to **OpenAI** and change **Auth method** to **ChatGPT plan**.
+      4. Click **Continue with ChatGPT**. Sign in in your browser and allow plan use.
+      5. Return to Butler and check **Signed in** and your account. Choose a **Model** in your plan, then click **Add**.
     </Steps>
 
-    If you have signed in before, **OAuth complete** appears and the browser does not open. Click **Add** to register the model.
+    Choosing the auth method does not start sign-in or open a browser. Until you sign in, **Add** is disabled with the **Sign in to ChatGPT first** hint.
 
-    - If the browser does not open, click **Open in browser** under **OAuth link**, or use **Copy link** to copy the address and open it yourself.
-    - If you finished signing in but the screen does not change, click **Check completion**.
-    - If authentication failed or you want to start over, click **Authenticate again**.
+    - While waiting, use **Copy link** or **Open in browser** to open the sign-in page.
+    - If sign-in times out or fails, click **Start sign-in again**.
+    - To connect another account, click **Use another account**.
+
+    ChatGPT plan uses the signed-in account's plan. An API key uses OpenAI API authentication and billing. The ChatGPT model list shows models in your plan that Butler supports. **Manage usage** opens [ChatGPT usage settings](https://chatgpt.com/settings/usage).
   </TabPanel>
 </Tabs>
 
@@ -140,7 +142,7 @@ Credentials are stored in the data folder (`~/.butler` by default). If you chang
 
 - API key list (provider, name, masked key): `~/.butler/auth/model-provider-credentials.json`
 - API keys: `~/.butler/auth/credential-store.json`
-- OpenAI OAuth sign-in data: `~/.butler/auth/openai-codex.json`
+- ChatGPT sign-in data: `~/.butler/auth/chatgpt.json`
 - Registered model list: `~/.butler/butler.config.json`
 
 The current release stores API keys in a file on this computer. The file permissions are set so that only the owner can read and write it (`0600`). The app shows **Stored only on this computer**.
@@ -149,7 +151,7 @@ A release signed with a Developer ID stores API keys in the macOS Keychain, and 
 
 If keys saved by an earlier version remain in `model-provider-credentials.json`, Butler Agent moves them to the storage location when it starts.
 
-Butler renews the OpenAI OAuth sign-in data automatically when it is close to expiring.
+Butler renews the ChatGPT sign-in data automatically when it is close to expiring.
 
 ## Notes
 
@@ -162,7 +164,7 @@ Butler renews the OpenAI OAuth sign-in data automatically when it is close to ex
 </Notice>
 
 <Notice tone="info">
-  OAuth is available only for OpenAI. Connect other providers with an API key.
+  ChatGPT plan is available only for OpenAI. Connect other providers with an API key.
 </Notice>
 
 ## Related pages

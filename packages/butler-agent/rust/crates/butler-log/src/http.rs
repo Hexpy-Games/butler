@@ -53,6 +53,7 @@ pub struct Phase {
     name: String,
     retry: u32,
     routine: bool,
+    sensitive: bool,
     trace_id: Option<String>,
     turn_id: Option<String>,
     chat_id: Option<String>,
@@ -71,6 +72,11 @@ impl Phase {
     /// Routine background attempts remain DEBUG, including fallback and HTTP rejection.
     pub fn routine(mut self) -> Self {
         self.routine = true;
+        self
+    }
+    /// Never capture request or response bodies; status, headers, sizes and timings are still logged.
+    pub fn sensitive(mut self) -> Self {
+        self.sensitive = true;
         self
     }
     pub fn trace_id(&self) -> Option<&str> {

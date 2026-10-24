@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-sol",
       "effort": "low",
       "user_request": "Use run_command with timeout_ms 3000 to run exactly: sh -c 'sleep 300 & echo $! > pids.txt; echo $$ >> pids.txt; sleep 300'. Then tell me what happened.",
@@ -28,7 +28,7 @@
       },
       {
         "delay_ms": 797,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0d10a5fe99636814016ab8e4f2cc8487d0ae03218fdd606968\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_o6FGyxGRnOLhpS0ijbf5iVDQ\",\"name\":\"replace_work_plan\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0d10a5fe99636814016ab8e4f2cc8487d0ae03218fdd606968\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_o6FGyxGRnOLhpS0ijbf5iVDQ\",\"name\":\"replace_work_plan\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -420,7 +420,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0d10a5fe99636814016ab8e4f2cc8487d0ae03218fdd606968\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Run the specified shell command with a 3000 ms timeout and report what happened.\\\",\\\"execution_mode\\\":\\\"direct\\\",\\\"actions\\\":[{\\\"action_key\\\":\\\"Run the exact command and report its timeout outcome\\\",\\\"effect\\\":{\\\"capability\\\":\\\"Run a shell command that writes a PID file and starts sleep processes\\\",\\\"target\\\":\\\"pids.txt in the workspace and the requested process execution\\\"}}],\\\"checks\\\":[\\\"Use timeout_ms 3000 and the exact command text; report the observed result.\\\"]}\",\"call_id\":\"call_o6FGyxGRnOLhpS0ijbf5iVDQ\",\"name\":\"replace_work_plan\"},\"output_index\":0,\"sequence_number\":100}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0d10a5fe99636814016ab8e4f2cc8487d0ae03218fdd606968\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Run the specified shell command with a 3000 ms timeout and report what happened.\\\",\\\"execution_mode\\\":\\\"direct\\\",\\\"actions\\\":[{\\\"action_key\\\":\\\"Run the exact command and report its timeout outcome\\\",\\\"effect\\\":{\\\"capability\\\":\\\"Run a shell command that writes a PID file and starts sleep processes\\\",\\\"target\\\":\\\"pids.txt in the workspace and the requested process execution\\\"}}],\\\"checks\\\":[\\\"Use timeout_ms 3000 and the exact command text; report the observed result.\\\"]}\",\"call_id\":\"call_o6FGyxGRnOLhpS0ijbf5iVDQ\",\"name\":\"replace_work_plan\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":100}\n\n"
       },
       {
         "delay_ms": 8,

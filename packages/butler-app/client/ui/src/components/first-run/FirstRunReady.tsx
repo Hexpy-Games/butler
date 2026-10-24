@@ -1,3 +1,7 @@
+import { useEffect, useState } from "react";
+import { appCopy } from "@/app/copy";
+import { acknowledgeChatGptNotice } from "@/app/setupSignIn";
+import { ManageChatGptUsage } from "../chatgpt/ChatGptPlanUsage";
 import { KeyValueRow, SetupWizardStepAction, Stack, Typo } from "@/butler-ds";
 import { SUPPORTED_UI_LANGUAGES } from "@/app/firstRunSetup.ts";
 import { FirstRunPrepStatus } from "./FirstRunPrepStatus";
@@ -7,6 +11,9 @@ import type { FirstRunFlow } from "./useFirstRunFlow";
 /** Finish: what was set up, then Start chatting (completion is written here). */
 export function FirstRunReady({ flow }: { flow: FirstRunFlow }) {
   const { copy, commit, reply, imported } = flow;
+  const [showPlanNotice, setShowPlanNotice] = useState(flow.chatgpt.account?.plan_notice_pending === true);
+  useEffect(() => { if (flow.chatgpt.account?.plan_notice_pending) setShowPlanNotice(true); }, [flow.chatgpt.account?.plan_notice_pending]);
+  useEffect(() => { if (showPlanNotice && commit.connected) void acknowledgeChatGptNotice("plan").then(flow.chatgpt.setAccount).catch(() => {}); }, [showPlanNotice, Boolean(commit.connected)]);
   const text = { ...copy, ...copy.import, ...copy.summary };
   if (!commit.connected) return (
     <FirstRunStepCard flow={flow} contentKey="finishing"
@@ -27,6 +34,7 @@ export function FirstRunReady({ flow }: { flow: FirstRunFlow }) {
         <KeyValueRow label={text.rowReply} value={SUPPORTED_UI_LANGUAGES.find(entry => entry.value === reply.value)?.label ?? "—"} />
         {agents ? <KeyValueRow label={text.rowAgents} value={text.agentCounts(agents.instructions, agents.servers)} /> : null}
       </Stack>
+      {showPlanNotice ? <Stack align="row" cross="center" gap="sm" wrap><Typo.Caption>{appCopy.firstRun.planNotice}</Typo.Caption><ManageChatGptUsage /></Stack> : null}
     </FirstRunStepCard>
   );
 }

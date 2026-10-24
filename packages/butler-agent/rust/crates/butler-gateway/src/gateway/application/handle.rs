@@ -31,6 +31,7 @@ impl AppApplication {
             plan_decision_locks: self.plan_decision_locks.clone(),
             // Only the dispatching application relays readiness events.
             setup_readiness: super::setup::ReadinessRelay::default(),
+            chatgpt_events: super::setup_events::AccountRelay::default(),
             quota_events: self.quota_events.clone(),
         }
     }

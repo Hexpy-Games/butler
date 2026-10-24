@@ -9,7 +9,7 @@ mod model;
 mod regexes;
 mod v3;
 use crate::live::hedge_v2 as v2;
-use butler_e2e::e2e::{HarnessError, fixtures, scenario::Setup};
+use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use serde_json::{Value, json};
 use std::sync::{Arc, Mutex};
 
@@ -19,11 +19,10 @@ pub(super) async fn run(mode: &str, case: &str) -> Result<(Value, Vec<Value>), H
     search.activate(case);
     let setup = Setup::new(&format!("HEDGE-V2-STUB-{mode}"))?
         .access(v2::EVAL_ACCESS)
-        .env("BUTLER_CODEX_BASE_URL", &model.base)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{}/v1", model.base))
         .env("BUTLER_BROWSER_HEADLESS", "off")
         .env("BUTLER_WEB_READER_BACKEND", "disabled")
         .env("BUTLER_BRAVE_SEARCH_API_KEY", "offline-fixture-key");
-    fixtures::stub_codex_auth(&setup.sandbox.codex_home())?;
     let s = setup.start().await?;
     v2::configure(&s, &search.base).await?;
     let language = {

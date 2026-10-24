@@ -2,13 +2,14 @@
 //!
 //! Codex (`x-codex-{primary,secondary}-*`) and Anthropic unified
 //! (`anthropic-ratelimit-unified-{5h,7d}-*`) responses report how much of each
-//! rolling window is used; Codex logins (`wham/usage`) and the Z.AI Coding
-//! Plan (`quota/limit`) also answer a usage endpoint that Butler polls. Only
+//! rolling window is used; the Z.AI Coding Plan (`quota/limit`) also
+//! answers a usage endpoint that Butler polls. Only
 //! the parsed numbers leave this module; raw header values and bodies are
 //! never stored.
 
-mod codex_usage;
+mod credits;
 mod fetch;
+pub use credits::{CreditsReading, PlanLimitReading};
 mod lenient;
 mod zai_usage;
 
@@ -16,7 +17,6 @@ use butler_core::json::{saturating_i64, saturating_u64};
 use reqwest::header::HeaderMap;
 use serde::{Deserialize, Serialize};
 
-pub(crate) use codex_usage::parse_codex_usage;
 pub use fetch::{QuotaBilling, QuotaFetch, QuotaFetchError, QuotaHttp};
 pub(crate) use zai_usage::parse_zai_quota;
 
@@ -60,20 +60,22 @@ pub struct ProviderQuotaReading {
     /// Where the reading came from.
     #[serde(default)]
     pub source: ProviderQuotaSource,
+    /// Undocumented response-header credit estimate.
+    #[serde(default)]
+    pub credits: Option<CreditsReading>,
 }
 
 /// Whether Butler can read a provider's remaining quota by polling.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum QuotaSupport {
-    /// Butler polls the provider's usage endpoint (Codex logins, the Z.AI
-    /// Coding Plan).
+    /// Butler polls the provider's usage endpoint (the Z.AI Coding Plan).
     Polled,
     /// The provider offers no quota to read; the value says how it bills.
     NotOffered(QuotaBilling),
 }
 
 /// The providers whose usage endpoint Butler polls.
-pub const QUOTA_POLLED_PROVIDERS: [&str; 2] = ["openai", "zai"];
+pub const QUOTA_POLLED_PROVIDERS: [&str; 1] = ["zai"];
 
 /// The static quota support of a provider id. OpenCode Go bills a plan but
 /// documents no quota surface, so it is not offered for now.
@@ -81,7 +83,7 @@ pub fn provider_quota_support(provider_id: &str) -> QuotaSupport {
     match provider_id {
         _ if QUOTA_POLLED_PROVIDERS.contains(&provider_id) => QuotaSupport::Polled,
         "opencode-go" => QuotaSupport::NotOffered(QuotaBilling::Subscription),
-        "anthropic" | "google" | "xai" | "qwen" | "kimi" | "zai-api" => {
+        "openai" | "anthropic" | "google" | "xai" | "qwen" | "kimi" | "zai-api" => {
             QuotaSupport::NotOffered(QuotaBilling::Api)
         }
         _ => QuotaSupport::NotOffered(QuotaBilling::Unknown),
@@ -92,6 +94,15 @@ pub fn provider_quota_support(provider_id: &str) -> QuotaSupport {
 pub trait ProviderQuotaSink: Send + Sync {
     /// Called once per successful response that carried quota headers.
     fn observe(&self, reading: ProviderQuotaReading);
+    /// Records a confirmed plan-limit transition, independent of header estimates.
+    fn plan_limit(&self, _provider: &str, _reading: Option<PlanLimitReading>) {}
+    /// The provider's plan limit while it applies at `now_ms`: recorded and
+    /// not past a known reset time.
+    fn active_plan_limit(&self, _provider: &str, _now_ms: i64) -> Option<PlanLimitReading> {
+        None
+    }
+    /// Forgets quota belonging to the provider's previous account.
+    fn account_changed(&self, _provider: &str) {}
 }
 
 const FIVE_HOURS: u64 = 300;
@@ -115,7 +126,9 @@ pub fn parse_quota_headers(
             windows.push(window);
         }
     }
-    (!windows.is_empty()).then(|| ProviderQuotaReading {
+    let credits = credits::parse(headers);
+    (!windows.is_empty() || credits.is_some()).then(|| ProviderQuotaReading {
+        credits,
         provider_id: provider_id.to_owned(),
         windows,
         observed_at_ms: now_ms,

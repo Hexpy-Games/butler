@@ -207,7 +207,7 @@ jobs:
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
           # Only the Agent's observation HOME/USERPROFILE is real. Its data,
-          # CODEX_HOME, XDG dirs, local/roaming profiles and fixtures stay temporary.
+          # XDG dirs, local/roaming profiles and fixtures stay temporary.
           $env:BUTLER_E2E_DOWNLOADS_REAL_PROFILE = $env:USERPROFILE
           $env:BUTLER_E2E_PERF = '1'
           try {

@@ -1,17 +1,15 @@
 //! Model facts first-run setup (#230) reads and writes: saving a provider
-//! key under a generated name, and who the saved ChatGPT sign-in belongs to.
+//! key under a generated name.
 
 use std::path::Path;
 
-use serde_json::Value;
-
 use super::super::{CredentialView, ModelCatalogError};
+use super::ModelConfiguration;
 use super::credential_admin::CredentialDraft;
 use super::credentials::{CredentialRecord, SecretHome};
 use super::key_check::{ProviderKeyCheckError, provider_key};
 use super::mutations::catalog_error;
 use super::secret_store;
-use super::{ModelConfiguration, auth};
 
 /// A key saved by first-run setup.
 pub struct SavedProviderKey {
@@ -85,29 +83,6 @@ impl ModelConfiguration {
             credential,
             created: true,
         })
-    }
-
-    /// The account label of the saved ChatGPT (Codex subscription) sign-in:
-    /// its email, else its account id, else a generic label. `None` when
-    /// there is no saved sign-in.
-    pub async fn openai_auth_profile_label(&self) -> Option<String> {
-        let profile = auth::AuthOwner {
-            data_root: &self.data_root,
-            environment: &self.environment,
-            clock: &self.clock,
-            client: &self.client,
-        }
-        .read_butler_profile()
-        .await?;
-        let raw = profile.as_json();
-        Some(
-            ["email", "accountId"]
-                .iter()
-                .find_map(|key| raw.get(*key).and_then(Value::as_str))
-                .filter(|value| !value.is_empty())
-                .unwrap_or("OpenAI account")
-                .to_owned(),
-        )
     }
 }
 

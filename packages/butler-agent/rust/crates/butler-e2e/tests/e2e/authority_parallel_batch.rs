@@ -182,7 +182,7 @@ async fn delegated_batch(fault: bool) -> Result<(), HarnessError> {
     let setup = Setup::new("AUTHORITY-PARALLEL-CHILD")?
         .access(Access::AskAlways)
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     *script.file_root.lock().unwrap() = setup.sandbox.data.display().to_string();
     for i in 0..3 {
         let root = setup.sandbox.data.join(format!("lookup-{i}"));

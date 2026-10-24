@@ -130,6 +130,25 @@ pub struct AppOauthStartInput {
     /// Start a new sign-in even when one is saved.
     #[serde(default)]
     pub force: bool,
+    #[serde(default)]
+    pub kind: butler_models::models::chatgpt::SignInKind,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChatGptNoticeInput {
+    pub kind: ChatGptNoticeKind,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChatGptNoticeKind {
+    Plan,
+    Legacy,
+}
+#[derive(Serialize)]
+pub struct ChatGptSignOutView {
+    pub revoked: bool,
+    pub account: butler_models::models::chatgpt::ChatGptAccountState,
 }
 
 /// A ChatGPT sign-in flow.
@@ -147,6 +166,8 @@ pub struct OauthFlowView {
     /// Stable failure code of a `failed` flow.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plan_enabled: Option<bool>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -209,6 +230,15 @@ pub trait AppSetupPort: Send + Sync + 'static {
     /// model uses is refused; one other models use is refused unless
     /// `force`, which unregisters those models.
     fn delete_credential(&self, name: String, force: bool) -> ApplicationFuture<DeletedCredential>;
+    fn chatgpt_revision(&self) -> watch::Receiver<u64>;
+    fn chatgpt_account(
+        &self,
+    ) -> ApplicationFuture<butler_models::models::chatgpt::ChatGptAccountState>;
+    fn chatgpt_notice(
+        &self,
+        input: ChatGptNoticeInput,
+    ) -> ApplicationFuture<butler_models::models::chatgpt::ChatGptAccountState>;
+    fn chatgpt_sign_out(&self) -> ApplicationFuture<ChatGptSignOutView>;
     fn start_oauth(&self, input: AppOauthStartInput) -> ApplicationFuture<OauthFlowView>;
     fn oauth_flow(&self, flow_id: String) -> ApplicationFuture<OauthFlowView>;
     /// Closes the flow's callback listener and drops its PKCE state.
@@ -327,6 +357,23 @@ pub(crate) fn test_setup_port() -> Arc<dyn AppSetupPort> {
             unsupported()
         }
         fn delete_credential(&self, _: String, _: bool) -> ApplicationFuture<DeletedCredential> {
+            unsupported()
+        }
+        fn chatgpt_revision(&self) -> watch::Receiver<u64> {
+            watch::channel(0).1
+        }
+        fn chatgpt_account(
+            &self,
+        ) -> ApplicationFuture<butler_models::models::chatgpt::ChatGptAccountState> {
+            unsupported()
+        }
+        fn chatgpt_notice(
+            &self,
+            _: ChatGptNoticeInput,
+        ) -> ApplicationFuture<butler_models::models::chatgpt::ChatGptAccountState> {
+            unsupported()
+        }
+        fn chatgpt_sign_out(&self) -> ApplicationFuture<ChatGptSignOutView> {
             unsupported()
         }
         fn start_oauth(&self, _: AppOauthStartInput) -> ApplicationFuture<OauthFlowView> {

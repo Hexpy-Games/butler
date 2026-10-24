@@ -72,12 +72,11 @@ impl ModelChoice {
 /// are passed through the product's own environment variable.
 #[derive(Clone, Debug)]
 pub enum Credential {
-    /// Dedicated OAuth profile (Butler or Codex format), refreshed in place.
-    CodexProfile(PathBuf),
-    /// Codex CLI `auth.json` (read-only mode), passed as `CODEX_AUTH_JSON`.
-    CodexAuthJson(PathBuf),
+    ChatGptAuthDir(PathBuf),
     /// A provider API key held in the named harness environment variable.
-    ApiKey { env_var: String },
+    ApiKey {
+        env_var: String,
+    },
 }
 
 /// The selected live provider (PROVIDER_CONFIG.md §2).
@@ -131,7 +130,7 @@ impl LiveProvider {
 
     pub fn upstream_default(&self) -> Option<&'static str> {
         match self.provider.as_str() {
-            "openai-subscription" => Some("https://chatgpt.com/backend-api"),
+            "openai-subscription" => Some("https://api.openai.com"),
             "openai" => Some("https://api.openai.com/v1"),
             "opencode-go" => Some("https://opencode.ai/zen/go/v1"),
             // The origin: the Coding Plan's model and quota endpoints differ
@@ -147,6 +146,7 @@ impl LiveProvider {
 /// model base, from which the product derives its quota URL.
 pub fn base_path(provider: &str) -> &'static str {
     match provider {
+        "openai-subscription" => "/v1",
         "zai" => "/api/coding/paas/v4",
         _ => "",
     }
@@ -154,7 +154,7 @@ pub fn base_path(provider: &str) -> &'static str {
 
 pub fn base_url_env(provider: &str) -> Option<&'static str> {
     Some(match provider {
-        "openai-subscription" => "BUTLER_CODEX_BASE_URL",
+        "openai-subscription" => "BUTLER_CHATGPT_API_BASE_URL",
         "openai" => "OPENAI_BASE_URL",
         "anthropic" => "BUTLER_ANTHROPIC_BASE_URL",
         "google" => "BUTLER_GOOGLE_BASE_URL",
@@ -170,26 +170,13 @@ pub fn base_url_env(provider: &str) -> Option<&'static str> {
 
 fn resolve_credential(provider: &str) -> Option<Credential> {
     if provider == "openai-subscription" {
-        let home = butler_platform::user_dirs::home_dir();
-        if let Some(path) = nonempty("BUTLER_E2E_CODEX_PROFILE").map(PathBuf::from) {
-            return existing(&path).map(Credential::CodexProfile);
-        }
-        if let Some(path) = nonempty("BUTLER_E2E_CODEX_AUTH_JSON").map(PathBuf::from) {
-            return existing(&path).map(Credential::CodexProfile);
-        }
-        if let Some(path) = home
-            .as_deref()
-            .map(|home| home.join(".butler-e2e-auth/auth/openai-codex.json"))
-            .and_then(|path| existing(&path))
-        {
-            return Some(Credential::CodexProfile(path));
-        }
-        let codex = nonempty("CODEX_AUTH_JSON")
+        let dir = nonempty("BUTLER_E2E_CHATGPT_AUTH_DIR")
             .map(PathBuf::from)
-            .or_else(|| home.map(|home| home.join(".codex/auth.json")));
-        return codex
-            .and_then(|path| existing(&path))
-            .map(Credential::CodexAuthJson);
+            .or_else(|| {
+                butler_platform::user_dirs::home_dir()
+                    .map(|home| home.join(".butler-e2e-auth/auth"))
+            })?;
+        return existing(&dir.join("chatgpt.json")).map(|_| Credential::ChatGptAuthDir(dir));
     }
     let env_var = nonempty("BUTLER_E2E_API_KEY_ENV").unwrap_or_else(|| default_key_env(provider));
     nonempty(&env_var).map(|_| Credential::ApiKey { env_var })

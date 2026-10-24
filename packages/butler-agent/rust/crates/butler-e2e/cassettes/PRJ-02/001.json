@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-luna",
       "effort": "max",
       "user_request": "Track this in the project as one work item: \"Build three raised garden beds\". Create it, record a short review that the plan is sound, then mark it completed. Use only your work and ledger tools; do not create or edit files.",
@@ -36,7 +36,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_09102c695689313d016ab90575823887d099ef2bb3257f268a\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_574Wudbo3CobNtFmgzv6llgU\",\"name\":\"replace_work_plan\"},\"output_index\":1,\"sequence_number\":4}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_09102c695689313d016ab90575823887d099ef2bb3257f268a\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_574Wudbo3CobNtFmgzv6llgU\",\"name\":\"replace_work_plan\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":4}\n\n"
       },
       {
         "delay_ms": 0,
@@ -576,7 +576,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_09102c695689313d016ab90575823887d099ef2bb3257f268a\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Create one project work item titled “Build three raised garden beds,” record a brief review that the plan is sound, and mark the item completed.\\\",\\\"execution_mode\\\":\\\"direct\\\",\\\"actions\\\":[{\\\"action_key\\\":\\\"Create and complete the garden-bed work item\\\",\\\"description\\\":\\\"Add exactly one project work item with the requested title, record the short plan-sound review, and mark the item completed.\\\",\\\"effect\\\":{\\\"capability\\\":\\\"Project Ledger work-item creation and completion\\\",\\\"target\\\":\\\"One project work item: Build three raised garden beds\\\"}}],\\\"checks\\\":[\\\"Exactly one matching project work item exists.\\\",\\\"Its review says the plan is sound, and its final status is completed.\\\"]}\",\"call_id\":\"call_574Wudbo3CobNtFmgzv6llgU\",\"name\":\"replace_work_plan\"},\"output_index\":1,\"sequence_number\":139}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_09102c695689313d016ab90575823887d099ef2bb3257f268a\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Create one project work item titled “Build three raised garden beds,” record a brief review that the plan is sound, and mark the item completed.\\\",\\\"execution_mode\\\":\\\"direct\\\",\\\"actions\\\":[{\\\"action_key\\\":\\\"Create and complete the garden-bed work item\\\",\\\"description\\\":\\\"Add exactly one project work item with the requested title, record the short plan-sound review, and mark the item completed.\\\",\\\"effect\\\":{\\\"capability\\\":\\\"Project Ledger work-item creation and completion\\\",\\\"target\\\":\\\"One project work item: Build three raised garden beds\\\"}}],\\\"checks\\\":[\\\"Exactly one matching project work item exists.\\\",\\\"Its review says the plan is sound, and its final status is completed.\\\"]}\",\"call_id\":\"call_574Wudbo3CobNtFmgzv6llgU\",\"name\":\"replace_work_plan\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":139}\n\n"
       },
       {
         "delay_ms": 16,

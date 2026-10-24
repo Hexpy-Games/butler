@@ -50,7 +50,7 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
     script.answer_blocks.store(true, Ordering::SeqCst);
     let setup = Setup::new("ANSWER-BLOCKS-COLLECTED")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let (static_path, static_bytes) = install_ui_asset(&setup)?;
     let mut s = setup.start().await?;
     let static_file = reqwest::get(format!("{}{static_path}", s.gw.base)).await?;
@@ -266,10 +266,7 @@ fn assert_presentation_contract(requests: &[Value]) {
             .contains("Put them on those items' answer_blocks cards in your own reply"),
         "delivered ids carry the presentation instruction"
     );
-    let blocks = result["tools"]
-        .as_array()
-        .unwrap()
-        .iter()
+    let blocks = butler_e2e::e2e::chatgpt_wire::functions(result)
         .find(|tool| tool["name"] == "answer_blocks")
         .expect("parent is offered answer_blocks");
     let catalog = butler_core::tool_catalog::load().unwrap();
@@ -281,7 +278,7 @@ fn assert_presentation_contract(requests: &[Value]) {
         blocks["description"]
             .as_str()
             .unwrap()
-            .contains("Use it unasked as the Plan's Presentation line decided")
+            .contains("Use it unasked, with or without a Plan")
             && blocks["description"]
                 .as_str()
                 .unwrap()
@@ -296,10 +293,7 @@ fn assert_presentation_contract(requests: &[Value]) {
 /// acceptance criteria, and are what result and completion reviews test.
 fn assert_acceptance_contract(parent: &Value, steward: &Value) {
     let tool = |request: &Value, name: &str| {
-        request["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
+        butler_e2e::e2e::chatgpt_wire::functions(request)
             .find(|tool| tool["name"] == name)
             .unwrap_or_else(|| panic!("{name} offered"))
             .clone()

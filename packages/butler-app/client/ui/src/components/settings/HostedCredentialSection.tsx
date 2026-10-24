@@ -1,5 +1,6 @@
 import { HostedCredentialFields } from "./HostedCredentialFields";
-import type { OpenAIOAuthLoginResult } from "./modelManagementApi";
+import type { ComponentProps } from "react";
+import { ChatGptSignInCard } from "../chatgpt/ChatGptSignInCard";
 import type { ModelCatalogView, ProviderAuthMethod } from "@/app/types.ts";
 
 interface HostedCredentialSectionProps {
@@ -10,8 +11,7 @@ interface HostedCredentialSectionProps {
   credentialId: string;
   credentialLabel: string;
   modelCatalog: ModelCatalogView;
-  oauthBusy?: boolean;
-  oauthLogin?: OpenAIOAuthLoginResult | null;
+  chatgpt: ComponentProps<typeof ChatGptSignInCard>;
   providerId: string;
   showApiBaseUrl?: boolean;
   onApiBaseUrlChange: (value: string) => void;
@@ -19,10 +19,6 @@ interface HostedCredentialSectionProps {
   onAuthMethodChange: (value: ProviderAuthMethod) => void;
   onCredentialIdChange: (value: string) => void;
   onCredentialLabelChange: (value: string) => void;
-  onOAuthCheck?: () => void;
-  onOAuthCopyUrl?: () => void;
-  onOAuthOpenUrl?: () => void;
-  onOAuthRestart?: () => void;
 }
 
 export function HostedCredentialSection({
@@ -33,8 +29,7 @@ export function HostedCredentialSection({
   credentialId,
   credentialLabel,
   modelCatalog,
-  oauthBusy,
-  oauthLogin,
+  chatgpt,
   providerId,
   showApiBaseUrl = false,
   onApiBaseUrlChange,
@@ -42,10 +37,6 @@ export function HostedCredentialSection({
   onAuthMethodChange,
   onCredentialIdChange,
   onCredentialLabelChange,
-  onOAuthCheck,
-  onOAuthCopyUrl,
-  onOAuthOpenUrl,
-  onOAuthRestart,
 }: HostedCredentialSectionProps) {
   if (authMethods.length === 0) return null;
 
@@ -58,8 +49,7 @@ export function HostedCredentialSection({
       apiKey={apiKey}
       apiBaseUrl={apiBaseUrl}
       credentialLabel={credentialLabel}
-      oauthBusy={oauthBusy}
-      oauthLogin={oauthLogin}
+      chatgpt={chatgpt}
       showApiBaseUrl={showApiBaseUrl}
       authMethods={authMethods}
       onApiBaseUrlChange={onApiBaseUrlChange}
@@ -67,10 +57,6 @@ export function HostedCredentialSection({
       onCredentialIdChange={onCredentialIdChange}
       onApiKeyChange={onApiKeyChange}
       onCredentialLabelChange={onCredentialLabelChange}
-      onOAuthCheck={onOAuthCheck}
-      onOAuthCopyUrl={onOAuthCopyUrl}
-      onOAuthOpenUrl={onOAuthOpenUrl}
-      onOAuthRestart={onOAuthRestart}
     />
   );
 }

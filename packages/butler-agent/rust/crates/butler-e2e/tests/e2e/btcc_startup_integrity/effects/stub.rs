@@ -11,9 +11,12 @@ pub(super) async fn start(
     tracked: bool,
 ) -> Result<(String, tokio::task::JoinHandle<()>), HarnessError> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let url = format!("http://{}/codex", listener.local_addr()?);
+    let url = format!("http://{}", listener.local_addr()?);
     let app = Router::new()
-        .route("/codex/responses", post(reply))
+        .route("/v1/responses", post(reply))
+        .route_layer(axum::middleware::from_fn(
+            butler_e2e::e2e::chatgpt_wire::validate,
+        ))
         .with_state((path, planned, tracked));
     let server = tokio::spawn(async move {
         let _ = axum::serve(listener, app).await;
@@ -25,7 +28,7 @@ async fn reply(
     State((path, planned, tracked)): State<(String, bool, bool)>,
     Json(body): Json<Value>,
 ) -> axum::response::Response {
-    let key = matching::key("/codex/responses", &body, &Placeholders::default());
+    let key = matching::key("/v1/responses", &body, &Placeholders::default());
     let n = body["input"]
         .as_array()
         .into_iter()

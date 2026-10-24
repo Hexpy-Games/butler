@@ -1,5 +1,5 @@
 //! Per-scenario sandbox: installation root, data dir `D`, workspace `W`, and a
-//! private `HOME`/`CODEX_HOME` so the owner's `~/.butler` and `~/.codex` are
+//! private `HOME` so the owner's `~/.butler` and `~/.codex` are
 //! never read or written.
 
 use butler_platform::secure_fs::Canonical as _;
@@ -70,7 +70,7 @@ impl Sandbox {
             &sandbox.data,
             &sandbox.workspace,
             &sandbox.logs,
-            &sandbox.home.join(".codex"),
+            &sandbox.home,
         ] {
             fs::create_dir_all(dir)?;
         }
@@ -85,10 +85,6 @@ impl Sandbox {
     /// Call only after every assertion and fallible teardown has succeeded.
     pub fn mark_success(&mut self) {
         self.directory.success = true;
-    }
-
-    pub fn codex_home(&self) -> PathBuf {
-        self.home.join(".codex")
     }
 
     /// Byte-level snapshot of the installation dir (relative path, size, hash)

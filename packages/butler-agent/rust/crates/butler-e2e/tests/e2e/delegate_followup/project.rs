@@ -11,7 +11,7 @@ async fn blocked_project_followup_rejected_plan_reaches_terminal() -> Result<(),
     script.hold_revision.store(true, Ordering::SeqCst);
     let s = Setup::new("PROJECT-FOLLOWUP-PLAN-REJECTION")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()
         .await?;
     let project =
@@ -105,7 +105,7 @@ async fn blocked_project_followup_rejected_plan_reaches_terminal() -> Result<(),
     let messages: Vec<_> = requests
         .iter()
         .filter(|body| {
-            butler_e2e::e2e::matching::key("/codex/responses", body, &Default::default())
+            butler_e2e::e2e::matching::key("/v1/responses", body, &Default::default())
                 .user_request
                 .starts_with(stub::MESSAGE)
         })

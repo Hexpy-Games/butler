@@ -1,4 +1,5 @@
 mod attachments;
+mod dispatch;
 mod result;
 mod serialize;
 
@@ -10,7 +11,7 @@ use crate::models::{
 };
 use butler_turn::btcc::ModelRoundError;
 
-use super::{ModelProvider, ProviderObservation, serialize::Carrier};
+use super::{ModelProvider, serialize::Carrier};
 
 impl ProviderPromptPort for ModelProvider {
     fn run_prompt<'a>(
@@ -36,10 +37,19 @@ async fn run(
     if let Some(entry) = lifecycle.adapter_entry {
         entry.entered()?;
     }
+    attempt(provider, request, &effective_model, Default::default()).await
+}
+async fn attempt(
+    provider: &ModelProvider,
+    request: ProviderPromptRequest<'_>,
+    effective_model: &str,
+    mut retry: super::chatgpt_plan::retry::Retry,
+) -> Result<ProviderPromptResult, ModelRoundError> {
     let config = provider
         .config
         .resolve(ProviderConfigRequest {
-            model_ref: &effective_model,
+            model_ref: effective_model,
+            rejected_authorization: retry.authorization(),
             butler_data: None,
         })
         .await
@@ -47,6 +57,7 @@ async fn run(
     let (carrier, mode, api) = crate::models::provider::client::carrier(&config);
     let serialize::PromptWire {
         body,
+        capability_revision,
         cache_retention,
     } = serialize::body(&request, &config, carrier)?;
     let serialized = butler_core::json::stringify(&body).map_err(|error| {
@@ -56,64 +67,20 @@ async fn run(
         }
     })?;
     let serialized = Bytes::from(serialized);
-    let prefix = provider.prefix_history.prepare(&body, &config)?;
-    let physical = admission(
+    let sent = dispatch::run(
         provider,
         &request,
         &config,
         &body,
-        serialized.clone(),
-        carrier,
-    )?;
-    let mut http = provider
-        .client
-        .post(config.endpoint.clone())
-        .header("content-type", "application/json");
-    if matches!(mode, crate::models::transport::ResponseMode::HostedChatSse) {
-        http = http.header("accept", "text/event-stream");
-    }
-    let http = crate::models::provider::client::authorize(
-        http.body(serialized.clone()),
-        &config.auth,
-        &config.metadata.provider_id,
-        carrier,
-    );
-    let http = super::route::cache_affinity(http, &config.auth, body);
-    let trace = super::request_trace::RequestTrace::prompt(provider, prefix, &request).await?;
-    let request_bytes = serialized.len();
-    let observe = || {
-        provider
-            .observations
-            .request(ProviderObservation { request_bytes });
-    };
-    let attempts = retry_attempts(request.provider_retry_attempts, config.retry_attempts);
-    let response = crate::models::transport::execute(crate::models::transport::RequestExecution {
-        request: http,
-        provider: &config.metadata.provider_id,
-        api,
-        policy: config.policy,
-        external: request.cancellation.clone(),
-        mode,
-        stream_observer: request.stream_observer,
-        attempts,
-        admission: None,
-        physical_admission: Some(&physical),
-        serialized_bytes: serialized.len(),
-        guard_start: if config.metadata.provider_id == "openai" {
-            crate::models::transport::GuardStart::AfterAdmission
-        } else {
-            crate::models::transport::GuardStart::BeforeAdmission
-        },
-        request_observer: &observe,
-        trace: &trace,
-        clock: provider.clock.as_ref(),
-        quota: provider.quota.as_deref(),
-    })
-    .await;
+        serialized,
+        (carrier, mode, api),
+    )
+    .await?;
+    let response = sent.response;
     let observation = UsageObservation {
         carrier,
         cache_retention,
-        prefix: trace.latest().unwrap_or(serde_json::Value::Null),
+        prefix: sent.prefix,
     };
     if response.is_err() && !observation.prefix.is_null() {
         observe_usage(provider, &request, &config, &observation, None)?;
@@ -121,6 +88,14 @@ async fn run(
     let response = match response {
         Ok(value) => value,
         Err(ModelRoundError::Provider(mut error)) => {
+            if retry.decide(
+                &config,
+                &mut error,
+                Some(&body),
+                capability_revision.as_deref(),
+            ) {
+                return Box::pin(attempt(provider, request, effective_model, retry)).await;
+            }
             error.endpoint = Some(crate::models::provider::client::safe_endpoint(
                 &config.endpoint,
             ));
@@ -151,17 +126,13 @@ fn admission<'a>(
             requested_output_tokens: super::serialize::requested_output_tokens(
                 body,
                 carrier,
-                matches!(
-                    config.auth.mode(),
-                    super::ProviderAuthMode::CodexOauth
-                        | super::ProviderAuthMode::CodexSubscription
-                )
-                .then(|| {
-                    request
-                        .usage_attribution
-                        .and_then(|value| value.requested_output_tokens)
-                })
-                .flatten(),
+                matches!(config.auth.mode(), super::ProviderAuthMode::ChatGptPlan)
+                    .then(|| {
+                        request
+                            .usage_attribution
+                            .and_then(|value| value.requested_output_tokens)
+                    })
+                    .flatten(),
             ),
             context_window_tokens: (config.metadata.provider_id == "local")
                 .then_some(config.metadata.context_window_tokens)
@@ -266,6 +237,12 @@ fn observe_usage(
             request.cache_scope.unwrap_or("btcc-agent-loop")
         };
         provider.prompt_metrics.append(PromptUsageMetricInput {
+            billing_account: match &config.auth {
+                super::ProviderAuth::ChatGptPlan { registration, .. } => {
+                    Some(registration.as_str())
+                }
+                _ => None,
+            },
             model: usage.map_or(config.metadata.model_ref.as_str(), |usage| &usage.model),
             scope,
             prompt_tokens: usage.and_then(|usage| usage.prompt_tokens),

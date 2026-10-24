@@ -254,7 +254,7 @@ fn configured_auth_mode(
     let auth = match registered {
         _ if provider == "local" => ProviderAuthMode::None,
         Some(ProviderAuthMethod::ApiKey) => ProviderAuthMode::ApiKey,
-        Some(ProviderAuthMethod::CodexOauth) => ProviderAuthMode::CodexOauth,
+        Some(ProviderAuthMethod::ChatGptOauth) => ProviderAuthMode::ChatGptPlan,
         None => ProviderAuthMode::None,
     };
     catalog.usage_auth_mode(&provider, auth)

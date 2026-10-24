@@ -183,6 +183,7 @@ fn is_web_search(value: &Value) -> bool {
                     | "brave"
                     | "tavily"
                     | "openai-web-search"
+                    | "chatgpt-plan-web-search"
                     | "codex-subscription-web-search"
                     | "disabled"
             )

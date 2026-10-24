@@ -13,7 +13,7 @@ mod model;
 mod resume;
 
 use butler_e2e::e2e::{
-    HarnessError, fixtures,
+    HarnessError,
     scenario::{Setup, accepted_turn_id},
     security::AdminClient,
 };
@@ -28,9 +28,11 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
     butler_e2e::gate!();
     let fixture = model::Fixture::start().await?;
     let setup = Setup::new("SEARCH-BROWSER")?
-        .env("BUTLER_CODEX_BASE_URL", &fixture.base)
+        .env(
+            "BUTLER_CHATGPT_API_BASE_URL",
+            format!("{}/v1", fixture.base),
+        )
         .env("BUTLER_BRAVE_SEARCH_API_KEY", "offline-fixture-key");
-    fixtures::stub_codex_auth(&setup.sandbox.codex_home())?;
     let s = setup.start().await?;
     super::outbound_http::logging(&s, "detailed").await?;
     let path = s.sandbox.data.join("butler.config.json");

@@ -1,5 +1,5 @@
 //! Format pins of every quota source: the Codex and Anthropic unified
-//! response headers, and the Codex `wham/usage` and Z.AI `quota/limit`
+//! response headers, and the Z.AI `quota/limit`
 //! bodies (their cases live next to each parser).
 
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
@@ -24,6 +24,9 @@ pub(crate) fn codex_windows_parse_used_percent_duration_and_reset() {
         "openai",
         &headers(&[
             ("x-codex-primary-used-percent", "12.5"),
+            ("x-codex-credits-has-credits", "true"),
+            ("x-codex-credits-unlimited", "false"),
+            ("x-codex-credits-balance", "12.5"),
             ("x-codex-primary-window-minutes", "300"),
             ("x-codex-primary-reset-after-seconds", "600"),
             ("x-codex-secondary-used-percent", "40"),
@@ -34,6 +37,14 @@ pub(crate) fn codex_windows_parse_used_percent_duration_and_reset() {
     )
     .unwrap();
     assert_eq!(reading.provider_id, "openai");
+    assert_eq!(
+        reading.credits,
+        Some(CreditsReading {
+            has_credits: Some(true),
+            unlimited: Some(false),
+            balance: Some("12.5".into())
+        })
+    );
     assert_eq!(
         reading.windows,
         vec![
@@ -108,6 +119,11 @@ pub(crate) fn absent_or_malformed_headers_yield_nothing() {
         &[("x-codex-primary-used-percent", "n/a")][..],
         &[("x-codex-primary-used-percent", "-3")][..],
         &[("x-ratelimit-remaining-requests", "10")][..],
+        &[("x-codex-credits-balance", "private-account")][..],
+        &[(
+            "x-codex-credits-balance",
+            "12345678901234567890123456789012345",
+        )][..],
     ] {
         assert_eq!(parse_quota_headers("openai", &headers(pairs), NOW), None);
     }
@@ -134,17 +150,12 @@ fn response_headers_parse() {
     absent_or_malformed_headers_yield_nothing();
 }
 
-/// Format pin: the `wham/usage` and `quota/limit` bodies, their lenient
+/// Format pin: the `quota/limit` bodies, their lenient
 /// variants, and the replies that are errors.
 // test-category: format-pin
 #[test]
 fn usage_endpoint_bodies_parse() {
-    use super::{codex_usage::tests as codex, zai_usage::tests as zai};
-    codex::primary_and_secondary_windows_and_the_plan_parse();
-    codex::camel_case_minutes_strings_and_resets_at_are_accepted();
-    codex::additional_limits_merge_and_a_disallowed_limit_is_fully_used();
-    codex::a_zero_length_window_is_absent_and_values_are_clamped();
-    codex::a_body_without_windows_or_plan_is_a_schema_mismatch();
+    use super::zai_usage::tests as zai;
     zai::token_and_tool_windows_parse_with_resets_and_the_level();
     zai::credit_limits_count_as_model_quota_and_counts_give_the_percentage();
     zai::undocumented_windows_are_skipped_not_guessed();

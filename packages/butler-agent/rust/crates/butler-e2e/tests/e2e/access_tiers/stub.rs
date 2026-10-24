@@ -19,7 +19,7 @@ impl Script {
             .expect("script lock")
             .iter()
             .filter(|request| {
-                matching::key("/codex/responses", request, &Placeholders::default()).user_request
+                matching::key("/v1/responses", request, &Placeholders::default()).user_request
                     == prompt
             })
             .cloned()
@@ -32,7 +32,10 @@ pub(crate) async fn start()
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let url = format!("http://{}", listener.local_addr()?);
     let app = Router::new()
-        .route("/codex/responses", post(reply))
+        .route("/v1/responses", post(reply))
+        .route_layer(axum::middleware::from_fn(
+            butler_e2e::e2e::chatgpt_wire::validate,
+        ))
         .with_state(script.clone());
     let server = tokio::spawn(async move {
         let _ = axum::serve(listener, app).await;
@@ -43,12 +46,12 @@ async fn reply(
     State(script): State<Arc<Script>>,
     Json(body): Json<Value>,
 ) -> axum::response::Response {
-    let key = matching::key("/codex/responses", &body, &Placeholders::default());
+    let key = matching::key("/v1/responses", &body, &Placeholders::default());
     let mut requests = script.requests.lock().expect("script lock");
     let step = requests
         .iter()
         .filter(|r| {
-            matching::key("/codex/responses", r, &Placeholders::default()).user_request
+            matching::key("/v1/responses", r, &Placeholders::default()).user_request
                 == key.user_request
         })
         .count();

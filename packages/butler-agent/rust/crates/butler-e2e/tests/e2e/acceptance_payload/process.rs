@@ -10,6 +10,7 @@ use std::{
 
 pub(in super::super) struct Process {
     child: Child,
+    wire: butler_e2e::e2e::chatgpt_wire::Scope,
 }
 impl Process {
     pub(in super::super) fn start(
@@ -23,7 +24,7 @@ impl Process {
         let child = Command::new(binary)
             .args([
                 sandbox.data.join("round-store.sqlite").to_str().unwrap(),
-                &format!("{endpoint}/responses"),
+                &format!("{endpoint}/v1/responses"),
                 "openai/gpt-6-luna",
                 &rounds.to_string(),
                 mode,
@@ -37,11 +38,16 @@ impl Process {
             .stdout(Stdio::from(log.try_clone()?))
             .stderr(Stdio::from(log))
             .spawn()?;
-        Ok(Self { child })
+        let wire = butler_e2e::e2e::chatgpt_wire::Scope::new(&[(
+            "BUTLER_CHATGPT_API_BASE_URL".into(),
+            endpoint.into(),
+        )]);
+        Ok(Self { child, wire })
     }
     pub(in super::super) fn kill9(&mut self) -> Result<(), HarnessError> {
         self.child.kill()?;
         self.child.wait()?;
+        self.wire.finish()?;
         Ok(())
     }
     pub(in super::super) async fn finish(self) -> Result<(), HarnessError> {
@@ -53,6 +59,7 @@ impl Process {
         tokio::time::timeout(Duration::from_secs(30), async {
             loop {
                 if let Some(status) = self.child.try_wait()? {
+                    self.wire.finish()?;
                     return Ok::<_, HarnessError>(status);
                 }
                 tokio::time::sleep(Duration::from_millis(10)).await;
@@ -84,6 +91,7 @@ pub(in super::super) async fn wait(
                 () = script.held.notified() => return Ok(()),
                 () = tokio::time::sleep(Duration::from_millis(10)) => {
                     if let Some(status) = child.child.try_wait()? {
+                        child.wire.finish()?;
                         return Err(butler_e2e::e2e::harness_error(format!("round-store exited before wire capture: {status}")));
                     }
                 }

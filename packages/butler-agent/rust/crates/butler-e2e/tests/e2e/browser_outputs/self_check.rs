@@ -152,7 +152,8 @@ async fn output_check_is_discoverable_bounded_and_absent_from_default_schema()
         "budget_exhausted"
     );
     for request in s.provider()?.requests() {
-        if let Some(tools) = request["tools"].as_array() {
+        let tools = butler_e2e::e2e::chatgpt_wire::functions(&request).collect::<Vec<_>>();
+        if !tools.is_empty() {
             let baseline: Vec<_> = tools
                 .iter()
                 .filter(|tool| {
@@ -160,7 +161,7 @@ async fn output_check_is_discoverable_bounded_and_absent_from_default_schema()
                 })
                 .collect();
             let before = serde_json::to_vec(&baseline).unwrap().len();
-            let after = serde_json::to_vec(tools).unwrap().len();
+            let after = serde_json::to_vec(&tools).unwrap().len();
             eprintln!(
                 "default provider schema: baseline={before} current={after} delta={:.3}%",
                 100.0 * (after - before) as f64 / before as f64
@@ -171,10 +172,7 @@ async fn output_check_is_discoverable_bounded_and_absent_from_default_schema()
             );
         }
         assert!(
-            request["tools"]
-                .as_array()
-                .unwrap()
-                .iter()
+            butler_e2e::e2e::chatgpt_wire::functions(&request)
                 .all(|tool| tool["name"] != "output_check"
                     && tool["function"]["name"] != "output_check")
         );

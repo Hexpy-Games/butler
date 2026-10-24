@@ -10,7 +10,6 @@ import { waitBrowser } from "../support/browser-agent-app";
 import { firstRunElectron } from "../support/first-run-electron";
 import { firstRunStub } from "../support/first-run-stub";
 import { nativeSmokeRuntime } from "../support/native-smoke-runtime";
-import { substepBackPaths } from "../support/first-run-substeps";
 import { settleFirstRun } from "../support/first-run-visual";
 import { installIntroProbe, assertIntroIdle } from "../support/first-run-intro";
 
@@ -68,7 +67,7 @@ async function capture(page: Page, name: string) {
   await page.screenshot({ path: join(output, `${name}.png`) });
   // A relaunched window has no emulated viewport yet; restore its natural size then.
   const viewport = page.viewportSize() ?? await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
-  for (const width of [1440, 390]) {
+  for (const width of [1440, 375]) {
     await page.setViewportSize({ width, height: 900 });
     await settleFirstRun(page);
     const theme = await server.api<{ appearance_theme: string }>("/settings");
@@ -98,7 +97,7 @@ async function capture(page: Page, name: string) {
 }
 
 async function reset(page: Page, language: "ko" | "en", theme: "light" | "dark") {
-  stub.state.oauthStatus = "pending"; stub.state.holdCommit = false; stub.state.failCommit = false; stub.state.local = false;
+  stub.state.oauthStatus = "pending"; stub.state.accountStatus = "signed_out"; stub.state.oauthError = ""; stub.state.holdCommit = false; stub.state.failCommit = false; stub.state.local = false;
   stub.state.importEmpty = false; stub.state.readiness = "ready"; stub.state.label = "person@example.test"; stub.state.memoryModel = "unset";
   await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language, appearance_theme: theme, onboarding: fresh }) });
   await page.reload();
@@ -168,51 +167,48 @@ async function finish(page: Page, language: "ko" | "en") {
 }
 
 async function signInStates(page: Page, language: "ko" | "en", prefix: string) {
-  const copy = firstRunCopy[language];
-  const before = await externalOpens();
+  const copy = firstRunCopy[language], shared = getAppCopy(language === "ko" ? "ko-KR" : "en-US");
+  const before = await externalOpens(), starts = stub.state.started;
   await page.locator('[data-card-id="chatgpt"]').click();
-  await page.getByRole("button", { name: copy.signInCopyLink, exact: true }).waitFor();
+  await page.getByRole("button", { name: shared.chatgptPlan.continue, exact: true }).waitFor();
+  assert.equal(stub.state.started, starts, "tile selection starts no flow");
+  assert.equal(await externalOpens(), before, "tile selection opens no browser");
+  assert(await page.getByRole("button", { name: copy.next, exact: true }).isDisabled());
+  assert.equal(await page.getByRole("button", { name: copy.cancel, exact: true }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: copy.retry, exact: true }).count(), 0);
+  assert.equal(await page.locator('[data-slot="setup-step-header"]').getByRole("button", { name: copy.back, exact: true }).count(), 1);
+  assert.deepEqual(await page.locator('[data-slot="setup-step-footer"]').getByRole("button").allTextContents(), [copy.next]);
+  await capture(page, `${prefix}-signin-start`);
+  await page.getByRole("button", { name: shared.chatgptPlan.continue, exact: true }).click();
+  await page.getByRole("button", { name: shared.chatgptSignIn.copy, exact: true }).waitFor();
+  assert.equal(stub.state.started, starts + 1);
+  await waitBrowser(async () => await externalOpens() === before + 1, "explicit sign-in");
+  assert.equal(await signInTabs(page), 0);
+  assert.equal(await page.getByRole("button", { name: shared.chatgptSignIn.copy, exact: true }).count(), 1);
+  const group = page.getByRole("button", { name: shared.chatgptSignIn.open, exact: true }).locator('..');
+  assert.equal(await group.locator('button').last().innerText(), shared.chatgptSignIn.open);
+  assert.deepEqual(await page.locator('[data-slot="setup-step-footer"]').getByRole("button").allTextContents(), [copy.cancel, copy.next]);
   await capture(page, `${prefix}-signin-waiting`);
-  await waitBrowser(async () => await externalOpens() === before + 1, "initial external sign-in");
-  const opens = await externalOpens();
-  assert.equal(opens, before + 1, "initial sign-in opens externally once");
-  assert.equal(await signInTabs(page), 0, "authentication creates no hidden in-app tab");
-  await page.getByRole("button", { name: copy.signInReopen, exact: true }).click();
-  await waitBrowser(async () => await externalOpens() === opens + 1, "reopen external sign-in");
-  assert.equal(await externalOpens(), opens + 1);
-  assert.equal(await signInTabs(page), 0, "reopen stays external");
-  await page.getByRole("button", { name: copy.signInCopyLink, exact: true }).click();
-  await page.getByRole("button", { name: copy.linkCopied, exact: true }).waitFor();
+  await page.getByRole("button", { name: shared.chatgptSignIn.copy, exact: true }).click();
+  await page.getByRole("button", { name: shared.chatgptSignIn.copied, exact: true }).waitFor();
   await page.getByRole("button", { name: copy.cancel, exact: true }).click();
-  await page.getByRole("heading", { name: copy.signInCancelled, exact: true }).waitFor();
-  await capture(page, `${prefix}-signin-cancelled`);
-  assert.equal(await page.getByRole("button", { name: /다른 서비스 고르기|Pick another/u }).count(), 0);
-  await page.getByRole("button", { name: copy.retry, exact: true }).click();
-  await page.getByRole("button", { name: copy.signInCopyLink, exact: true }).waitFor();
-  await page.clock.setSystemTime(Date.now() + 301_000);
-  await page.getByRole("heading", { name: copy.signInTimedOut, exact: true }).waitFor();
+  await page.getByRole("button", { name: shared.chatgptPlan.continue, exact: true }).waitFor();
+  await page.getByRole("button", { name: shared.chatgptPlan.continue, exact: true }).click();
+  stub.state.oauthStatus = "failed"; stub.state.oauthError = "oauth_timeout";
+  await page.getByText(shared.chatgptSignIn.timedOut, { exact: true }).waitFor();
   await capture(page, `${prefix}-signin-timedout`);
-  await page.clock.setSystemTime(Date.now());
-  await page.getByRole("button", { name: copy.retry, exact: true }).click();
-  stub.state.oauthStatus = "failed";
-  await page.getByRole("heading", { name: copy.signInFailed, exact: true }).waitFor();
+  stub.state.oauthError = "oauth_discovery_unavailable";
+  await page.getByRole("button", { name: shared.chatgptSignIn.restart, exact: true }).click();
+  await page.getByText(copy.signInDiscoveryOffline, { exact: true }).waitFor();
+  assert.equal(stub.state.starts.at(-1)?.force, true);
   await capture(page, `${prefix}-signin-failed`);
-  stub.state.oauthStatus = "pending";
-  await page.getByRole("button", { name: copy.retry, exact: true }).click();
-  await page.getByRole("button", { name: copy.signInCopyLink, exact: true }).waitFor();
-  stub.state.holdCommit = true; stub.state.oauthStatus = "completed";
-  await page.getByText(copy.connecting, { exact: true }).waitFor();
-  assert(await page.getByRole("button", { name: copy.cancel, exact: true }).isDisabled());
-  await capture(page, `${prefix}-signin-connecting`);
-  stub.state.failCommit = true; stub.state.holdCommit = false;
-  await page.getByText(copy.finishFailed, { exact: true }).waitFor();
-  await capture(page, `${prefix}-signin-commit-failed`);
-  stub.state.failCommit = false;
-  await page.getByRole("button", { name: copy.retry, exact: true }).click();
+  stub.state.oauthError = ""; stub.state.oauthStatus = "completed";
+  await page.getByRole("button", { name: shared.chatgptSignIn.restart, exact: true }).click();
   await page.getByRole("heading", { name: copy.readyTitle("ChatGPT"), exact: true }).waitFor();
-  await page.getByText(stub.state.label, { exact: true }).waitFor();
+  assert.equal(await page.getByRole("button", { name: copy.cancel, exact: true }).count(), 0);
   await capture(page, `${prefix}-signin-connected`);
-  await substepBackPaths(page, language, copy, stub.state, capture);
+  await nextFromAuth(page, language);
+  await page.locator("#first-run-reply-language:not(:disabled)").waitFor();
   await confirmReady(page, language, "ChatGPT");
 }
 
@@ -297,7 +293,9 @@ async function preparationStates(page: Page) {
   await reachProviders(page, "ko");
   stub.state.label = "Smoke profile"; stub.state.oauthStatus = "profile_exists";
   await page.locator('[data-card-id="chatgpt"]').click();
-  await page.getByText(copy.connecting, { exact: true }).waitFor();
+  await page.getByRole("button", { name: getAppCopy("ko-KR").chatgptPlan.continue, exact: true }).click();
+  await page.getByRole("heading", { name: copy.readyTitle("ChatGPT"), exact: true }).waitFor();
+  await page.getByRole("button", { name: copy.next, exact: true }).click();
   assert.equal(await page.locator("#first-run-reply-language").count(), 0, "preparation precedes reply language");
   assert.equal(await page.locator('[data-first-run-screen="import"]').count(), 0, "import waits for saved reply language");
   await capture(page, "after-finishing");

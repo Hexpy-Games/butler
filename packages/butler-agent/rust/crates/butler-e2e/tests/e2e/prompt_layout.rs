@@ -43,7 +43,7 @@ async fn request_layout_diagnostics_are_complete_and_request_driven() -> Result<
         .unwrap();
     assert_eq!(row["turnId"], id);
     assert_eq!(row["trigger"], "user");
-    assert_eq!(row["authRoute"], "oauth");
+    assert_eq!(row["authRoute"], "chatgpt_plan");
     assert!(row["model"].as_str().is_some());
     assert!(row["phase"].as_str().is_some());
     assert!(row["idleGapMs"].is_null());

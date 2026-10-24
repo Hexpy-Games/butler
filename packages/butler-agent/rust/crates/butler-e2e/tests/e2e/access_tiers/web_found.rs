@@ -31,7 +31,7 @@ async fn pages_the_browser_reached_are_read_without_asking() -> Result<(), Harne
     let s = Setup::new("PERM-WEB-FOUND")?
         .access(Access::Auto)
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()
         .await?;
     let config_path = s.sandbox.data.join("butler.config.json");

@@ -43,16 +43,6 @@ export function quotaReasonLabel(
       return planKind === "api"
         ? appCopy.interfaceStatus.quotaApiPlan
         : appCopy.interfaceStatus.quotaUnsupported;
-    case "provider_auth_not_applicable":
-      return appCopy.interfaceStatus.authNotApplicable;
-    case "provider_auth_required":
-      return appCopy.interfaceStatus.authRequired;
-    case "provider_auth_surface_mismatch":
-      return appCopy.interfaceStatus.authMismatch;
-    case "provider_auth_failure":
-      return appCopy.interfaceStatus.authFailure;
-    case "provider_executable_unavailable":
-      return appCopy.interfaceStatus.executableUnavailable;
     case "provider_timeout":
       return appCopy.interfaceStatus.quotaTimeout;
     case "provider_response_malformed":

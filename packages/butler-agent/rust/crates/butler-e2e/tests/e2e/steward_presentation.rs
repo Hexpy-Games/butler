@@ -411,7 +411,7 @@ fn diagnostic(script: &stub::Script) -> String {
     requests
         .iter()
         .map(|body| {
-            let key = butler_e2e::e2e::matching::key("/codex/responses", body, &Default::default());
+            let key = butler_e2e::e2e::matching::key("/v1/responses", body, &Default::default());
             let outputs: Vec<_> = body["input"]
                 .as_array()
                 .unwrap()
@@ -434,7 +434,7 @@ pub(crate) fn setup(id: &str, url: &str) -> Result<Setup, HarnessError> {
     }
     Ok(setup
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url))
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1")))
 }
 
 async fn assert_sidebar_work(

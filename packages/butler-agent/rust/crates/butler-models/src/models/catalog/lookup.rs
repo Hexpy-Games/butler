@@ -289,7 +289,7 @@ fn provider_views(
 
 pub(crate) fn provider_auth_methods(provider_id: &str) -> Vec<ProviderAuthMethod> {
     match provider_id {
-        "openai" => vec![ProviderAuthMethod::ApiKey, ProviderAuthMethod::CodexOauth],
+        "openai" => vec![ProviderAuthMethod::ApiKey, ProviderAuthMethod::ChatGptOauth],
         "local" => Vec::new(),
         _ => vec![ProviderAuthMethod::ApiKey],
     }

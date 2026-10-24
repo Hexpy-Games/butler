@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-luna",
       "effort": "medium",
       "user_request": "Analyze the following conversation and summarize it in the format below. Omit any sections that don't apply. **Task**: Work performed, decisions made, completed/incomplete items (dev/file/search etc.) **Learning**: New concepts learned, important insights **Chat**: Core of casual conversation, exchange of opinions **Preference**: User preferences/tastes/tendencies newly revealed in this conversation (exclude recurring ones) Each section in 1-2 lines max. Omit the section entirely if empty. Conversation: user: When should I prune the fig tree? butler: Prune figs in late winter, before new growth starts. user: And the lemon tree? butler: Lemons need only light pruning after harvest. user: mock placeholder",

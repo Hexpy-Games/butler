@@ -1,5 +1,6 @@
 //! Host adapter from App session projection/control to the BTCC owner.
 
+mod control;
 mod lifecycle;
 mod task_graphs;
 use std::sync::Arc;
@@ -8,9 +9,7 @@ use butler_gateway::gateway::{
     AppSessionViewPage, AppSubsessionPort, ApplicationFuture, GatewayApplicationError,
     OperationOutputChunk,
 };
-use butler_turn::btcc::{
-    StorageProgressPublication, SubsessionCancelRequest, SubsessionResumeRequest, SubsessionService,
-};
+use butler_turn::btcc::{StorageProgressPublication, SubsessionResumeRequest, SubsessionService};
 use butler_turn::conversation::{
     AgentConversationStore, ConversationMessageWithParts, ConversationPartKind, ConversationRole,
     ConversationStatus, conversation_session_id_for_durable_session,
@@ -43,6 +42,16 @@ impl AppSubsessions {
 }
 
 impl AppSubsessionPort for AppSubsessions {
+    fn worker_settings_changed(&self) -> ApplicationFuture<()> {
+        let service = self.service.clone();
+        Box::pin(async move {
+            service
+                .admit_waiting_workers()
+                .await
+                .map_err(GatewayApplicationError::internal_from)
+        })
+    }
+
     fn changes(&self) -> Option<tokio::sync::broadcast::Receiver<(String, String)>> {
         Some(self.service.subscribe_changes())
     }
@@ -144,25 +153,9 @@ impl AppSubsessionPort for AppSubsessions {
     ) -> ApplicationFuture<serde_json::Value> {
         let service = self.service.clone();
         let btcc = self.btcc.clone();
-        Box::pin(async move {
-            let accepted = service
-                .cancel(SubsessionCancelRequest {
-                    parent_session_id,
-                    parent_turn_id: "app-steward-control".into(),
-                    source_message_id: format!("app-steward-cancel:{relation_id}"),
-                    relation_id: Some(relation_id),
-                    safe_title: None,
-                    child_role: SessionRole::Steward,
-                })
-                .await
-                .map_err(|error| map_error(&error))?;
-            // Persist the stop request before fencing the running model. The
-            // queued stop still owns durable cancellation and result delivery.
-            if let Some(turn_id) = accepted["child_turn_id"].as_str() {
-                btcc.interrupt_turn(turn_id);
-            }
-            Ok(accepted)
-        })
+        Box::pin(
+            async move { control::cancel(&service, &btcc, parent_session_id, relation_id).await },
+        )
     }
 
     fn resume(

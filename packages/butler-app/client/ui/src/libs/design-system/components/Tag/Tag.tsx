@@ -5,8 +5,11 @@ import { Stack } from "../Stack";
 import { Typo } from "../Typo";
 import styles from "./Tag.module.css";
 import { dsClass } from "../../lib/internal";
+import type { TagLabelTone } from "./tagTones";
 
-export type TagTone = "neutral" | "accent" | "success" | "warning" | "danger";
+export { tagLabelTones, type TagLabelTone } from "./tagTones";
+/** Status tones (`neutral` … `danger`) or a categorical label tone (`gray` … `purple`). */
+export type TagTone = "neutral" | "accent" | "success" | "warning" | "danger" | TagLabelTone;
 /** `sm`: inline status and filter chips. `md`: page eyebrows and hero labels. */
 export type TagSize = "sm" | "md";
 

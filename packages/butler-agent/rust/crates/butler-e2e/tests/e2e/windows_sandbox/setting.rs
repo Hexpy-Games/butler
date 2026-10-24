@@ -22,7 +22,7 @@ async fn setting_roundtrip(kill_switch: bool) -> Result<(), HarnessError> {
     let mut setup = Setup::new("WIN-17")?
         .access(Access::Auto)
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .env("BUTLER_DEBUG_SANDBOX_TIMINGS", "1");
     if kill_switch {
         setup = setup.env("BUTLER_WINDOWS_PROJECT_SANDBOX", "0");

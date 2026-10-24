@@ -7,7 +7,7 @@
 )]
 mod fixture;
 
-use butler_e2e::e2e::{HarnessError, config::ModelChoice, fixtures, scenario::Setup};
+use butler_e2e::e2e::{HarnessError, config::ModelChoice, scenario::Setup};
 use serde_json::{Value, json};
 use std::sync::atomic::Ordering;
 
@@ -21,9 +21,11 @@ async fn web_search_profiles_planning_and_preserves_parallel_results_and_followu
             model: "openai/gpt-6-astra".into(),
             effort: Some("xhigh".into()),
         })
-        .env("BUTLER_CODEX_BASE_URL", &fixture.base)
+        .env(
+            "BUTLER_CHATGPT_API_BASE_URL",
+            format!("{}/v1", fixture.base),
+        )
         .env("BUTLER_BRAVE_SEARCH_API_KEY", "offline-fixture-key");
-    fixtures::stub_codex_auth(&setup.sandbox.codex_home())?;
     let s = setup.start().await?;
     let catalog = s.gw.get("/model-catalog").await?;
     let provider = catalog.data()["providers"]

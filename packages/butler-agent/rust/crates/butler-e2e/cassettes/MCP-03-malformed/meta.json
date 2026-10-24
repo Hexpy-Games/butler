@@ -12,40 +12,42 @@
     "JWT/sk-key/bearer/email/home path/host name -> fixed placeholders",
     "response.instructions -> {{REDACTED_ECHO}}, response.tools -> []",
     "response headers reduced to content-type, retry-after",
-    "chunks re-cut at SSE event boundaries (event bytes unchanged)"
+    "chunks re-cut at SSE event boundaries (event bytes unchanged)",
+    "siwc-path-migration",
+    "siwc-function-call-namespace"
   ],
   "files": [
     {
       "file": "000.json",
-      "sha256": "1c8a0859f9949587cff56aa0b40e9643243d72106d6f6e3654c2abc29d892b0d"
+      "sha256": "28fdc5758e8006f900d9b198e70db43d91d050489fdfd20de7de31512ab31037"
     },
     {
       "file": "001.json",
-      "sha256": "7f0cb8d345daacf5fa5ab180001423da872ec575b15e6fa947eac41fc7f9f705"
+      "sha256": "32a41452d082dcb4cfe5a689f517f4530cd65dda799ec5ee1a950d240296eb2c"
     },
     {
       "file": "002.json",
-      "sha256": "6fd25b2e40e8c65cc8f68764575409270bddb8c94f9a80c2a1aa1e2620fc9d37"
+      "sha256": "a960c0ac70cd4546d8335aae14cee6aabe3608ccf8e4f8c4154f11eeaa74b5ff"
     },
     {
       "file": "003.json",
-      "sha256": "282fbb9d40611ebe9864dfde5193043a7fa13bb10d535aecef485688cc31a949"
+      "sha256": "dfc01bc0a9d9d0cddcd488983010a88a39f8dfe26251d1cc51bd9bce322619f1"
     },
     {
       "file": "004.json",
-      "sha256": "58150131e82adb3dba07cd7d2aefc0b71d767d2fb7b3b5fe3db85464c1b6ae8c"
+      "sha256": "d1c1d6e45be21834248de45dab8f8c94efd709adeffd79a0d8cc121600e293ca"
     },
     {
       "file": "005.json",
-      "sha256": "98be4171a56af285df9a34e897b7de09b993137321f6c1ab2b951f731fd8af51"
+      "sha256": "838b8e659ee180d5602e1599ead22eb82ef857fbc6deb40ed494d81b941dad5e"
     },
     {
       "file": "006.json",
-      "sha256": "f00697e1d8ae5b74c5053bcb49b3b5cd0ca1098b30cf64b3d9d7bfd8773b22f4"
+      "sha256": "958951defed99019c34797972b16b315c7d8f6793692df42f0b5d2d194db0b83"
     },
     {
       "file": "007.json",
-      "sha256": "bd9680b34d9f796dd4a35b8e7fcba0e3001a425b87ed68174d0814f1a9f02fa4"
+      "sha256": "4b922273abab5434cd6d5a32f9f00da4eb746eb6266ddbb689f69dcc6a5af955"
     }
   ],
   "fingerprint": [

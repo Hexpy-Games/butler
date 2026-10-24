@@ -11,7 +11,7 @@ async fn delivery_refuses_credentials_and_stages_validated_content() -> Result<(
     let (url, script, server) = stub::start().await?;
     let setup = Setup::new("DELIVERABLE-CONTAINED")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", &url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     for path in [
         "auth/login",
         "state/app-gateway/project-folder-token-secret",
@@ -80,7 +80,7 @@ async fn redelivery_of_hard_linked_package_replaces_drawer_and_consumes_stage()
     let (url, script, server) = stub::start().await?;
     let setup = Setup::new("DELIVERABLE-REPLACE")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", &url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let data = setup.sandbox.data.clone();
     let source = "node_modules/.pnpm/pkg/node_modules/pkg/index.js";
     std::fs::create_dir_all(data.join(source).parent().unwrap())?;
@@ -175,7 +175,7 @@ async fn materialize_keeps_project_root_when_a_parent_directory_is_swapped()
     let (url, script, server) = stub::start().await?;
     let setup = Setup::new("MATERIALIZE-CONTAINED-PROJECT")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", &url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let credential = setup.sandbox.data.join("auth/login");
     std::fs::create_dir_all(credential.parent().unwrap())?;
     std::fs::write(&credential, "private-fixture")?;
@@ -266,7 +266,7 @@ async fn credential_named_write_is_reported_and_never_published() -> Result<(), 
     let setup = Setup::new("DELIVERABLE-SECRET-NAME")?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .access(butler_e2e::e2e::scenario::Access::FullAccess)
-        .env("BUTLER_CODEX_BASE_URL", &url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     *script.steps.lock().unwrap() = [
         write(path, "private-fixture"),
         call("output_publish", json!({"path":path,"title":"Key"})),

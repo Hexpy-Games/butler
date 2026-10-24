@@ -4,9 +4,8 @@ use super::{ModelConfiguration, ModelConfigurationEnvironment, ModelConfiguratio
 pub(super) fn register_environment_endpoints(environment: &ModelConfigurationEnvironment) {
     for endpoint in [
         &environment.openai_base_url,
-        &environment.codex_base_url,
-        &environment.oauth_authorize_url,
-        &environment.oauth_token_url,
+        &environment.chatgpt_api_base_url,
+        &environment.chatgpt_auth_issuer,
     ]
     .into_iter()
     .flatten()

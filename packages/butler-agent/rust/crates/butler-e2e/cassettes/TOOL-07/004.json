@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-luna",
       "effort": "max",
       "user_request": "Create approved.txt in your workspace containing exactly: approved-by-user",
@@ -69,7 +69,7 @@
       },
       {
         "delay_ms": 600,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_04bb240a39675c30016abb0dfb957887d09d15b5ca70c1d814\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_2l2PaDn36YsclKu4gSWr6Vjb\",\"name\":\"read_file\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_04bb240a39675c30016abb0dfb957887d09d15b5ca70c1d814\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_2l2PaDn36YsclKu4gSWr6Vjb\",\"name\":\"read_file\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -117,7 +117,7 @@
       },
       {
         "delay_ms": 11,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_04bb240a39675c30016abb0dfb957887d09d15b5ca70c1d814\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"requests\\\":[{\\\"path\\\":\\\"approved.txt\\\"}]}\",\"call_id\":\"call_2l2PaDn36YsclKu4gSWr6Vjb\",\"name\":\"read_file\"},\"output_index\":0,\"sequence_number\":14}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_04bb240a39675c30016abb0dfb957887d09d15b5ca70c1d814\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"requests\\\":[{\\\"path\\\":\\\"approved.txt\\\"}]}\",\"call_id\":\"call_2l2PaDn36YsclKu4gSWr6Vjb\",\"name\":\"read_file\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":14}\n\n"
       },
       {
         "delay_ms": 12,

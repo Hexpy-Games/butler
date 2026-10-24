@@ -50,12 +50,9 @@ impl ProviderRequestConfigPort for Config {
                 endpoint: self.endpoint.clone(),
                 api_shape: self.metadata.hosted_api_shape,
                 auth: if self.codex {
-                    ProviderAuth::Codex {
-                        mode: ProviderAuthMode::CodexSubscription,
-                        authorization: "Bearer test-only".into(),
-                        account_id: "account".into(),
-                        user_agent: "Butler test".into(),
-                        originator: "butler".into(),
+                    ProviderAuth::ChatGptPlan {
+                        authorization: "Bearer test-only".to_owned().into(),
+                        registration: "fixture-registration".into(),
                     }
                 } else {
                     ProviderAuth::ApiKey(String::from("test-only").into())

@@ -357,7 +357,6 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
   const installation = join(scratch, "install");
   const resources = join(installation, "resources");
   mkdirSync(butlerData, { recursive: true });
-  mkdirSync(join(home, ".codex"), { recursive: true });
   mkdirSync(join(installation, "bin"), { recursive: true });
   // APFS clone (cp -c semantics) keeps the ~500MB binary copy cheap; the service requires a
   // canonical executable inside its installation root (Windows launches only an .exe name).
@@ -395,7 +394,6 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
       env: {
         PATH: process.env.PATH ?? "/usr/bin:/bin",
         HOME: home,
-        CODEX_HOME: join(home, ".codex"),
         TMPDIR: tmpdir(),
         BUTLER_DATA: butlerData,
         BUTLER_APP_FOREGROUND_LEASE: "1",

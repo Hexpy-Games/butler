@@ -1,8 +1,9 @@
 //! LOG-HTTP-03: actual gateway setup and MCP operations, one record per wire call.
-use super::super::setup_oauth::{auth_param, callback, flow_until, start};
+use super::super::setup_oauth::{flow_until, start};
 use super::*;
 use butler_e2e::e2e::{
     agent::free_port,
+    fake_chatgpt::FakeChatGptAuthority,
     fake_servers::GOOD_KEY,
     scenario::{Fixture, Scenario, Setup},
 };
@@ -50,7 +51,7 @@ async fn assert_seen(s: &Scenario, server: &FakeServer) -> Result<(), HarnessErr
 async fn log_http_setup_oauth_local_models_and_mcp_are_logged_once() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let models = FakeServer::provider_models().await?;
-    let token = FakeServer::oauth_token().await?;
+    let token = FakeChatGptAuthority::start().await?;
     let local = FakeServer::local_models(ChatBehavior::default()).await?;
     let mcp = FakeServer::mcp_http().await?;
     let icons = FakeServer::favicons().await?;
@@ -62,10 +63,12 @@ async fn log_http_setup_oauth_local_models_and_mcp_are_logged_once() -> Result<(
         .env("BUTLER_E2E_FAVICON_ORIGIN", &icons.base_url)
         .env("BUTLER_OLLAMA_BASE_URL", &local.base_url)
         .env("BUTLER_LM_STUDIO_BASE_URL", &local.base_url)
-        .env("BUTLER_CODEX_OAUTH_PORT", port.to_string())
+        .env("BUTLER_CHATGPT_OAUTH_PORT", port.to_string())
+        .env("BUTLER_OAUTH_NO_BROWSER", "1")
+        .env("BUTLER_CHATGPT_AUTH_ISSUER", &token.issuer)
         .env(
-            "BUTLER_CODEX_OAUTH_TOKEN_URL",
-            format!("{}/oauth/token", token.base_url),
+            "BUTLER_CHATGPT_API_BASE_URL",
+            format!("{}/v1", token.issuer),
         )
         .start()
         .await?;
@@ -81,16 +84,20 @@ async fn log_http_setup_oauth_local_models_and_mcp_are_logged_once() -> Result<(
     );
     assert_eq!(s.gw.get("/setup/local-model-servers").await?.status, 200);
     let flow = start(&s.gw, json!({})).await?;
-    let state = auth_param(&flow, "state");
-    assert_eq!(
-        callback(port, &format!("code=e2e-code&state={state}"))
-            .await?
-            .0,
-        200
-    );
+    assert_eq!(token.browser(&flow).await?.0, 200);
     assert_eq!(
         flow_until(&s.gw, flow["flow_id"].as_str().unwrap(), "completed").await?["status"],
         "completed"
+    );
+    let oauth_rows = http_calls(&s, &format!("{}/api/accounts/oauth/token", token.issuer)).await?;
+    assert_eq!(oauth_rows.len(), 1);
+    assert_eq!(oauth_rows[0]["attrs"]["purpose"], "oauth");
+    assert_eq!(oauth_rows[0]["attrs"]["status"], 200);
+    assert!(
+        token
+            .seen()
+            .iter()
+            .all(|r| !r.headers.contains_key("traceparent"))
     );
     let added = s.gw.post("/mcp-servers",json!({"id":"e2e","display_name":"HTTP fixture","enabled":true,"transport":"http","url":format!("{}/mcp",mcp.base_url),"headers":[{"key":"Authorization","source":"literal","value":"Bearer outbound-mcp-fixture-token"}]})).await?;
     assert!(added.status < 300, "{}", added.text);
@@ -114,7 +121,7 @@ async fn log_http_setup_oauth_local_models_and_mcp_are_logged_once() -> Result<(
     })
     .await
     .expect("favicon fixture fetch missing")?;
-    for server in [&models, &token, &local, &mcp, &icons] {
+    for server in [&models, &local, &mcp, &icons] {
         assert_seen(&s, server).await?;
     }
     s.finish().await

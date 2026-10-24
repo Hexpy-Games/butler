@@ -53,7 +53,6 @@ impl super::Launch {
     pub fn env_command(&self, program: &Path) -> Command {
         let mut command = isolated_command(program, &self.home);
         command
-            .env("CODEX_HOME", self.home.join(".codex"))
             .env("TMPDIR", &self.tmp)
             .env("LANG", "en_US.UTF-8")
             .env("TZ", "UTC")

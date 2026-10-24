@@ -1,4 +1,5 @@
 import { publishCanonEvent } from "@/app/canonEvents.ts";
+import { publishChatGptEvent } from "@/app/chatGptEvents.ts";
 import { receiveModelThinking, reconcileModelThinking, abandonModelThinking } from "@/app/modelThinking";
 import { subscribeNativeUpdateProgress, refreshUpdateProgress } from "@/stores/updateProgressStore";
 import { receiveUpdateProgress } from "@/stores/updateProgressStore";
@@ -86,6 +87,7 @@ export function useLiveSessionEvents(): void {
       }
       receiveUpdateProgress(event);
       publishMemoryEvent(event);
+      publishChatGptEvent(event);
       publishLibraryEvent(event);
       publishCanonEvent(event);
       if (event.type.startsWith("authority.")) authorityPermissionsChanged();

@@ -145,7 +145,7 @@ fn measure(
         json!({"sections":sections, "instructions":tokens(instructions),
         "tools":tokens(&request["tools"].to_string()), "input":tokens(&input),
         "serialized_request":tokens(&request.to_string()), "guided_static_prefix":tokens(guided_prefix),
-        "tool_count":request["tools"].as_array().map_or(0, Vec::len)}),
+        "tool_count":butler_e2e::e2e::chatgpt_wire::functions(request).count()}),
     )
 }
 

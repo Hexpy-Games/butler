@@ -13,16 +13,18 @@
     "response.instructions -> {{REDACTED_ECHO}}, response.tools -> []",
     "response headers reduced to content-type, retry-after",
     "chunks re-cut at SSE event boundaries (event bytes unchanged)",
-    "2026-10-20 owner-authorized schema repair: rule -> instruction; omitted duration remains always; no live recording"
+    "2026-10-20 owner-authorized schema repair: rule -> instruction; omitted duration remains always; no live recording",
+    "siwc-path-migration",
+    "siwc-function-call-namespace"
   ],
   "files": [
     {
       "file": "000.json",
-      "sha256": "68eacb11d984c52cf93e9e6a116477b699cff1d688a8aae3e44e79f5427cdea0"
+      "sha256": "81df9695e0b979597358396852ca7bd98f5788da38ad3a5621c7e7239e5adfce"
     },
     {
       "file": "001.json",
-      "sha256": "c3f6a20dbbc6006e1a82475cac1080aad1707ecd0ea0b3b09474442cc17d1be9"
+      "sha256": "b649c529c4f7cb1803b1547ea59c0a4cc039cb4ebc8afb221ad8a69c0ed1ad05"
     }
   ],
   "fingerprint": [

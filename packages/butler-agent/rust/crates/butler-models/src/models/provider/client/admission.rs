@@ -10,12 +10,9 @@ impl ModelProvider {
         serialized: Bytes,
         carrier: serialize::Carrier,
     ) -> Result<request_admission::PreparedRequestAdmission<'a>, ModelRoundError> {
-        let codex_output = matches!(
-            config.auth.mode(),
-            ProviderAuthMode::CodexOauth | ProviderAuthMode::CodexSubscription
-        )
-        .then_some(request.max_output_tokens)
-        .flatten();
+        let codex_output = matches!(config.auth.mode(), ProviderAuthMode::ChatGptPlan)
+            .then_some(request.max_output_tokens)
+            .flatten();
         request_admission::PreparedRequestAdmission::new(
             &request_admission::PrepareAdmissionInput {
                 catalog: &self.catalog,

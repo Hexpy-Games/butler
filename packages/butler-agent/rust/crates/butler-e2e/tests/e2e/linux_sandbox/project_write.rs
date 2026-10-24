@@ -10,7 +10,7 @@ async fn auto_mutation_waits_for_approval_without_running() -> Result<(), Harnes
     let setup = test_support_agent(Setup::new("LINUX-AUTO-MUTATION-FALLBACK")?)?
         .access(Access::Auto)
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .env("BUTLER_TEST_LANDLOCK_ABI", "5");
     let folder = setup.sandbox.home.join("project");
     std::fs::create_dir_all(&folder)?;
@@ -48,7 +48,7 @@ async fn auto_project_writes_sweep_and_retry_asks() -> Result<(), HarnessError> 
     let setup = Setup::new("LINUX-AUTO-L1")?
         .access(Access::Auto)
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let folder = setup.sandbox.home.join("project");
     std::fs::create_dir_all(&folder)?;
     let mut s = setup.start().await?;

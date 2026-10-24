@@ -215,7 +215,7 @@ fn model_requests(s: &Scenario, prompts: &[String]) -> Result<Vec<usize>, Harnes
             requests
                 .iter()
                 .filter(|body| {
-                    matching::key("/codex/responses", body, &Placeholders::default()).user_request
+                    matching::key("/v1/responses", body, &Placeholders::default()).user_request
                         == *prompt
                 })
                 .count()
