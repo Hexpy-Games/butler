@@ -189,7 +189,8 @@ async function interactions(page: Page, reduced: boolean) {
   assert.deepEqual((await page.getByRole("menuitem").allTextContents()).map(text => text.trim()), ["문서로 만들기", "복사"]);
   await page.getByRole("menuitem", { name: "문서로 만들기", exact: true }).click();
   await page.getByRole("textbox", { name: "문서", exact: true }).waitFor();
-  assert.equal(new URL(page.url()).searchParams.get("doc"), "doc_created");
+  assert.equal(new URL(page.url()).searchParams.get("doc"), null);
+  await page.locator('[data-session-section="artifacts"] [data-document-id="doc_created"]').waitFor();
   assert.equal(calls.at(-1)?.path, "/documents");
   const body = calls.at(-1)!.body;
   assert.equal(body.title, "전시 안내");
@@ -260,15 +261,15 @@ async function touch() {
 try {
   const page = await browser.newPage({ timezoneId: "Asia/Seoul", locale: "ko-KR", reducedMotion: "no-preference" });
   await setup(page);
-  await screenshotMatrix(page);
+  const phase = process.env.BUTLER_BLOCK_PHASE;
+  if (!phase || phase === "matrix") await screenshotMatrix(page);
   if (stage === "after") {
-    await rightClick(page);
-    await interactions(page, false);
-    await interactions(page, true);
-    await touch();
+    if (!phase || phase === "pointer") await rightClick(page);
+    if (!phase || phase === "interactions") { await interactions(page, false); await interactions(page, true); }
+    if (!phase || phase === "touch") await touch();
   }
   assert.deepEqual(errors, []);
-  const result = { stage, screenshots: 32, modelCalls: 0, calls, ok: true };
-  writeFileSync(join(evidence, `${stage}-result.json`), JSON.stringify(result, null, 2));
+  const result = { stage, phase, screenshots: !phase || phase === "matrix" ? 32 : 0, modelCalls: 0, calls, ok: true };
+  writeFileSync(join(evidence, `${stage}${phase ? `-${phase}` : ""}-result.json`), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result));
 } finally { await browser.close(); await vite.close(); }

@@ -1,9 +1,9 @@
 // test-category: pure-logic
 import { expect, test } from "bun:test";
-import { createEditor, $getRoot, $isTextNode, $createParagraphNode, $createTextNode } from "lexical";
+import { createEditor, $getRoot, $isTextNode, $createParagraphNode, $createTextNode, type ParagraphNode } from "lexical";
 import { HeadingNode } from "@lexical/rich-text";
 import { ListNode, ListItemNode } from "@lexical/list";
-import { LinkNode } from "@lexical/link";
+import { $isLinkNode, LinkNode } from "@lexical/link";
 import { BlocksNode, ImageNode, RawMarkdownNode } from "./DocumentNodes";
 import { importDocument, exportDocument, markDocumentChanges, type MarkdownSource } from "./documentMarkdown";
 const fixture = '\n# Heading\n\nA **bold** and *italic* [link](https://example.org).\n\n- first\n- second\n\n1. one\n2. two\n\n```blocks\n{"v":2,"blocks":[{"type":"text","text":"Frozen"}]}\n```\n\n![alt](img_abcdefghij)\n\n> An unknown quote\n\n```toml\nvalue = 3\n```\n';
@@ -37,4 +37,24 @@ test("dirty descendants serialize only their top-level source slice; insert, mov
   }, { discrete: true });
   expect(editor.getEditorState().read(() => exportDocument(source))).toBe("Untouched paragraph.\n\n#  Raw heading\n\nAdded");
   expect(editor.getEditorState().read(() => exportDocument(source))).toBe("Untouched paragraph.\n\n#  Raw heading\n\nAdded");
+});
+
+
+test("inline import keeps decoded text, nested formats and link metadata editable", () => {
+  const markdown = 'Mixed ***bold italic*** and \\*literal\\* &amp; [a **link**](https://example.org/?x=1&y=2 "Title")';
+  const editor = createEditor({ namespace: "inline-semantics", nodes: [HeadingNode, LinkNode], onError: error => { throw error; } });
+  let source: MarkdownSource;
+  editor.update(() => { source = importDocument(markdown); }, { discrete: true });
+  editor.getEditorState().read(() => {
+    const heading = $getRoot().getFirstChildOrThrow<ParagraphNode>();
+    expect(heading.getTextContent()).toBe("Mixed bold italic and *literal* & a link");
+    const emphasis = heading.getAllTextNodes().find(node => node.getTextContent() === "bold italic")!;
+    expect(emphasis.hasFormat("bold")).toBe(true);
+    expect(emphasis.hasFormat("italic")).toBe(true);
+    const link = heading.getChildren().find($isLinkNode)!;
+    expect(link.getURL()).toBe("https://example.org/?x=1&y=2");
+    expect(link.getTitle()).toBe("Title");
+    expect(link.getLastChildOrThrow().getTextContent()).toBe("link");
+    expect(exportDocument(source)).toBe(markdown);
+  });
 });

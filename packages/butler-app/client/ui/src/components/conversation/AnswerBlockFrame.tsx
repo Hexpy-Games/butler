@@ -29,7 +29,7 @@ async function makeDocument(block: AnswerBlockView, origin: AnswerBlockOrigin) {
   const doc = await api<EditableDocument>("/documents", { method: "POST", body: JSON.stringify({ title, body: `\`\`\`blocks\n${spec}\n\`\`\``,
     author: "user", chat_id: origin.session, message_id: origin.message }) });
   libraryChanged();
-  openDocument(doc, !origin.saved);
+  openDocument({ ...doc, chat_id: doc.chat_id ?? origin.session }, true);
 }
 
 export function AnswerBlockFrame({ block, path, child, children }: { block: AnswerBlockView; path: string; child?: boolean; children: ReactNode }) {

@@ -1,6 +1,6 @@
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { createContext, useContext, type JSX } from "react";
-import { $getRoot, DecoratorNode, type NodeKey, type SerializedLexicalNode } from "lexical";
+import { $createNodeSelection, $setSelection, $getRoot, DecoratorNode, type NodeKey, type SerializedLexicalNode } from "lexical";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { useLexicalNodeSelection } from "@lexical/react/useLexicalNodeSelection";
 import { BlockActionFrame, DocumentBlockEmbed, MediaFrame } from "@/butler-ds";
@@ -26,7 +26,7 @@ function decorateImages(spec: AnswerBlocksView, assets: DocumentAsset[]): Answer
   });
 }
 function Unit({ nodeKey, raw, type }: { nodeKey: NodeKey; raw: string; type: string }) {
-  const [selected, setSelected, clear] = useLexicalNodeSelection(nodeKey);
+  const [selected] = useLexicalNodeSelection(nodeKey);
   const [editor] = useLexicalComposerContext();
   const assets = useContext(DocumentAssets);
   const operations = useContext(DocumentOperations);
@@ -52,7 +52,8 @@ function Unit({ nodeKey, raw, type }: { nodeKey: NodeKey; raw: string; type: str
     content = <MediaFrame src={gatewayImageSource(asset?.signed_url ?? asset?.url)} alt={image?.type === "image" ? image.alt ?? "" : ""} />;
   } else content = <pre>{raw}</pre>;
   return <div onMouseDown={event => { if (!(event.target as Element).closest("button,a,input")) event.preventDefault(); }}
-    onClick={event => { if ((event.target as Element).closest("button,a,input")) return; event.stopPropagation(); clear(); setSelected(true); editor.focus(); }}>
+    onClick={event => { if ((event.target as Element).closest("button,a,input")) return; event.stopPropagation(); editor.getRootElement()?.focus({ preventScroll: true });
+      editor.update(() => { const selection = $createNodeSelection(); selection.add(nodeKey); $setSelection(selection); }); }}>
     <DocumentBlockEmbed selected={selected}>{content}</DocumentBlockEmbed>
   </div>;
 }

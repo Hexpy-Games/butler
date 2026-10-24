@@ -3,6 +3,7 @@ import type { RootContent } from "mdast";
 import { $createParagraphNode, $getNodeByKey, $getRoot, type LexicalNode } from "lexical";
 import { $convertToMarkdownString, $generateNodesFromMarkdownString, HEADING, UNORDERED_LIST, ORDERED_LIST, BOLD_STAR, BOLD_UNDERSCORE, ITALIC_STAR, ITALIC_UNDERSCORE, LINK } from "@lexical/markdown";
 import { BlocksNode, ImageNode, RawMarkdownNode } from "./DocumentNodes";
+import { importTextPart } from "./documentTextImport";
 export const DOCUMENT_TRANSFORMERS = [HEADING, UNORDERED_LIST, ORDERED_LIST, BOLD_STAR, BOLD_UNDERSCORE, ITALIC_STAR, ITALIC_UNDERSCORE, LINK];
 interface Snapshot { raw: string; modified: boolean; gap: string }
 export interface MarkdownSource { nodes: Map<string, Snapshot>; prefix: string }
@@ -16,7 +17,9 @@ function importPart(raw: string, part: RootContent): LexicalNode[] {
     try { const spec = JSON.parse(part.value); if (spec.v === 2 && Array.isArray(spec.blocks)) return [new BlocksNode(raw)]; } catch { /* Preserve invalid/unknown fences as raw Markdown. */ }
   }
   if (part.type === "paragraph" && part.children.length === 1 && part.children[0]?.type === "image" && part.children[0].url.startsWith("img_")) return [new ImageNode(raw)];
-  return representable(part) ? $generateNodesFromMarkdownString(raw, DOCUMENT_TRANSFORMERS) : [new RawMarkdownNode(raw)];
+  if (!representable(part)) return [new RawMarkdownNode(raw)];
+  if (part.type === "paragraph") return [importTextPart(part)];
+  return $generateNodesFromMarkdownString(raw, DOCUMENT_TRANSFORMERS);
 }
 /** Keep source slices, including inter-node whitespace, until the corresponding node changes. */
 export function importDocument(markdown: string): MarkdownSource {

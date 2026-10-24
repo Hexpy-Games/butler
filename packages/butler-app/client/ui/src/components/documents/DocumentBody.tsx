@@ -36,7 +36,7 @@ function BodySync({ body, loadId, changed, editing, onDirty, registerDraft }: Pr
   useEffect(() => {
     if (body === current.current) return;
     current.current = body;
-    editor.update(() => { source.current = importDocument(body); $getRoot().selectEnd(); }, { tag: "document-load", discrete: true });
+    editor.update(() => { const selected = $getSelection() !== null; source.current = importDocument(body); if (selected) $getRoot().selectEnd(); }, { tag: "document-load", discrete: true });
   // Local keystrokes must never trigger a Markdown reload or move the caret.
   }, [loadId, editor]);
   useEffect(() => registerDraft(() => editor.getEditorState().read(() => {

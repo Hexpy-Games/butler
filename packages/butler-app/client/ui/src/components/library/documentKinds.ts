@@ -14,7 +14,7 @@ function openFile(item: LibraryItem) {
 const documentKinds = {
   doc: { media: { kind: "document" as const }, meta: (item: LibraryItem) => `${relativeAge(item.updatedAt ?? item.capturedAt)} · ${item.author === "butler" ? appCopy.documents.butler : appCopy.documents.me}`,
     open: (item: LibraryItem) => openDocument({ id: item.id, title: item.title, chat_id: item.session }),
-    source: (item: LibraryItem) => { if (item.session) useButlerStore.getState().openSession(item.session); } },
+    source: (item: LibraryItem) => { if (item.session) openDocument({ id: item.id, title: item.title, chat_id: item.session }, true); } },
   document: { media: { kind: "document" as const }, meta: undefined, open: openFile, source: openFile },
 };
 export const documentKind = (item: LibraryItem) => item.kind === "doc" || item.kind === "document" ? documentKinds[item.kind] : undefined;

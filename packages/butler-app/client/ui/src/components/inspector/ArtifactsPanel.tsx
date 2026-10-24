@@ -1,4 +1,4 @@
-import { DocumentPage } from "../documents/DocumentPage";
+import { DocumentArtifact } from "../documents/DocumentArtifact";
 import { SessionSectionHeader } from "../session-info/SessionSection.tsx";
 import { useAppLocale } from "@/app/copy.ts";
 import { useCallback } from "react";
@@ -62,7 +62,7 @@ export function ArtifactsPanel({
       >
         {compact && <SessionSectionHeader title={appCopy.sessionInfo.artifacts} count={allArtifacts.length} />}
         {selectedArtifact ? (
-          selectedArtifact.kind === "doc" ? <DocumentPage key={selectedArtifact.id} id={selectedArtifact.id} /> : <ArtifactViewer
+          selectedArtifact.kind === "doc" ? <DocumentArtifact key={selectedArtifact.id} id={selectedArtifact.id} title={selectedArtifact.title} onBack={() => setSelectedArtifactId(null)} /> : <ArtifactViewer
             artifact={selectedArtifact}
             onBack={() => setSelectedArtifactId(null)}
             refreshFileUrls={refreshFileUrls}
