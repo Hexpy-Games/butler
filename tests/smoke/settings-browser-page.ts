@@ -40,24 +40,32 @@ async function matrix(locale: "ko" | "en", theme: "light" | "dark") {
     wallpaper: { source: { kind: "none" }, motion: "paused", pauseOnBattery: false } }) });
   await open("security", copy.settings.sections.security);
   await section(page, "security-advanced").waitFor();
-  if (!before) {
-    assert.equal(await section(page, "sign-ins").count(), 0);
-    assert.equal(await section(page, "browser-import").count(), 0);
-    assert.equal(await section(page, "headless-browser").count(), 0);
-    for (const id of ["grants", "saved-keys"]) await section(page, id).waitFor();
-  } else {
-    await section(page, "sign-ins").locator('[data-test-class="sign-in-row"]').waitFor();
-    await section(page, "browser-import").getByText(copy.settings.browserImport.passwords, { exact: true }).waitFor();
-    await section(page, "sign-ins").scrollIntoViewIfNeeded();
-    await capture(`browser-sections-${key}`);
-    await section(page, "remote-access").scrollIntoViewIfNeeded();
-  }
+  assert.equal(await section(page, "sign-ins").count(), 0);
+  assert.equal(await section(page, "browser-import").count(), 0);
+  assert.equal(await section(page, "headless-browser").count(), 0);
+  for (const id of ["grants", "saved-keys"]) await section(page, id).waitFor();
   await capture(`security-${key}`);
-  if (!before) {
+  {
     await open("browser", copy.settings.sections.browser);
     await section(page, "sign-ins").locator('[data-test-class="sign-in-row"]').waitFor();
     await section(page, "browser-import").getByText(copy.settings.browserImport.passwords, { exact: true }).waitFor();
-    assert.deepEqual(await page.locator("[data-settings-section-id]").evaluateAll(nodes => nodes.map(n => n.getAttribute("data-settings-section-id"))), ["browser-history", "browser-site-data", "sign-ins", "browser-import", "payment-methods", "profiles", "purchase-sites"]);
+    assert.deepEqual(await page.locator("[data-settings-section-id]").evaluateAll(nodes => nodes.map(n => n.getAttribute("data-settings-section-id"))), [...(!before ? ["browsing-agent"] : []), "browser-history", "browser-site-data", "sign-ins", "browser-import", "payment-methods", "profiles", "purchase-sites"]);
+    if (!before) {
+      const settings = await server.api<{ browser: { auto: { model: string; available: boolean } } }>("/settings");
+      const catalog = await server.api<{ models: { model_ref: string; display_name: string }[]; registered_models: { model_ref: string; display_name: string }[] }>("/model-catalog");
+      const resolvedName = [...catalog.registered_models, ...catalog.models].find(model => model.model_ref === settings.browser.auto.model)?.display_name;
+      const autoLabel = copy.settings.browsingAgent.auto(settings.browser.auto.available && resolvedName ? resolvedName : copy.settings.browsingAgent.conversationModel);
+      const field = section(page, "browsing-agent");
+      const select = field.getByRole("combobox", { name: copy.settings.browsingAgent.label });
+      await select.getByText(autoLabel, { exact: true }).waitFor();
+      await select.click();
+      await page.getByRole("option", { name: copy.settings.browsingAgent.off, exact: true }).click();
+      await select.getByText(copy.settings.browsingAgent.off, { exact: true }).waitFor();
+      assert.equal((await server.api<{ browser: { browsing_agent: string } }>("/settings")).browser.browsing_agent, "off");
+      await select.click();
+      await page.getByRole("option", { name: autoLabel, exact: true }).click();
+      await select.getByText(autoLabel, { exact: true }).waitFor();
+    }
     await capture(`browser-${key}`);
     const group = page.getByText(copy.settings.groups.appAndSystem, { exact: true }).locator("..");
     assert(await group.count(), "app and system group remains visible");

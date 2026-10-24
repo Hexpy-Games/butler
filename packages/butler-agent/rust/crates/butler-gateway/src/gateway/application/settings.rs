@@ -6,6 +6,7 @@ use rusqlite::Connection;
 use serde_json::{Value, json};
 
 mod access;
+mod browsing;
 mod command_sandbox;
 mod logging;
 pub use command_sandbox::command_sandbox_enabled;

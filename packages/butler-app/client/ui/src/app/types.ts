@@ -506,6 +506,10 @@ export interface AppInfoView {
 }
 
 export interface SettingsView {
+  browser?: {
+    browsing_agent: string;
+    auto: { available?: boolean; model: string; effort: ReasoningEffort; rule: "family_sibling" | "provider_preset" | "conversation" };
+  };
   /** Opaque id of the agent's data; it changes when Butler is reset. */
   data_generation?: string;
   update_previews?: boolean;
