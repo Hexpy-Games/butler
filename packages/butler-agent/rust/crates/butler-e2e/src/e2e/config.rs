@@ -89,36 +89,32 @@ pub struct LiveProvider {
     pub base_url: Option<String>,
 }
 
-pub const DEFAULT_LIVE_MODEL: &str = "openai/gpt-6-luna@max";
-/// Owner decision: automated real calls use gpt-6-luna only (never
-/// gpt-6-sol or -astra), so the LIVE-07 matrix defaults to it alone; set
-/// `BUTLER_E2E_MODEL_MATRIX` to check more entries.
-pub const DEFAULT_LIVE_MATRIX: &str = "openai/gpt-6-luna@max";
-
 impl LiveProvider {
-    pub fn from_env() -> Self {
-        let provider =
-            nonempty("BUTLER_E2E_PROVIDER").unwrap_or_else(|| "openai-subscription".into());
-        let choice = nonempty("BUTLER_E2E_MODEL")
-            .and_then(|value| ModelChoice::parse(&value))
-            .or_else(|| ModelChoice::parse(DEFAULT_LIVE_MODEL))
-            .unwrap_or(ModelChoice {
-                model: "openai/gpt-6-luna".into(),
-                effort: Some("max".into()),
-            });
-        let matrix = nonempty("BUTLER_E2E_MODEL_MATRIX")
-            .unwrap_or_else(|| DEFAULT_LIVE_MATRIX.into())
-            .split(',')
-            .filter_map(ModelChoice::parse)
-            .collect();
-        let credential = resolve_credential(&provider);
-        Self {
+    pub fn from_env() -> Result<Self, String> {
+        Self::from_vars(&nonempty)
+    }
+
+    /// Reads the live selection from `var`. `BUTLER_E2E_PROVIDER` and
+    /// `BUTLER_E2E_MODEL` have no default, so no provider is implied; the
+    /// error names the missing variable. `BUTLER_E2E_MODEL_MATRIX` defaults
+    /// to the model.
+    pub fn from_vars(var: &dyn Fn(&str) -> Option<String>) -> Result<Self, String> {
+        let provider = var("BUTLER_E2E_PROVIDER").ok_or("BUTLER_E2E_PROVIDER is unset")?;
+        let model = var("BUTLER_E2E_MODEL").ok_or("BUTLER_E2E_MODEL is unset")?;
+        let choice =
+            ModelChoice::parse(&model).ok_or("BUTLER_E2E_MODEL is not provider/model[@effort]")?;
+        let matrix = match var("BUTLER_E2E_MODEL_MATRIX") {
+            Some(matrix) => matrix.split(',').filter_map(ModelChoice::parse).collect(),
+            None => vec![choice.clone()],
+        };
+        let credential = resolve_credential(&provider, var);
+        Ok(Self {
             provider,
             choice,
             matrix,
             credential,
-            base_url: nonempty("BUTLER_E2E_BASE_URL"),
-        }
+            base_url: var("BUTLER_E2E_BASE_URL"),
+        })
     }
 
     /// Environment variable name of the product's base-URL override for this
@@ -132,11 +128,10 @@ impl LiveProvider {
         match self.provider.as_str() {
             "openai-subscription" => Some("https://api.openai.com"),
             "openai" => Some("https://api.openai.com/v1"),
-            "opencode-go" => Some("https://opencode.ai/zen/go/v1"),
             // The origin: the Coding Plan's model and quota endpoints differ
             // in path (see `base_path`).
             "zai" => Some("https://api.z.ai"),
-            _ => None,
+            other => butler_models::models::default_hosted_provider_api_base_url(other),
         }
     }
 }
@@ -168,9 +163,9 @@ pub fn base_url_env(provider: &str) -> Option<&'static str> {
     })
 }
 
-fn resolve_credential(provider: &str) -> Option<Credential> {
+fn resolve_credential(provider: &str, var: &dyn Fn(&str) -> Option<String>) -> Option<Credential> {
     if provider == "openai-subscription" {
-        let dir = nonempty("BUTLER_E2E_CHATGPT_AUTH_DIR")
+        let dir = var("BUTLER_E2E_CHATGPT_AUTH_DIR")
             .map(PathBuf::from)
             .or_else(|| {
                 butler_platform::user_dirs::home_dir()
@@ -178,8 +173,8 @@ fn resolve_credential(provider: &str) -> Option<Credential> {
             })?;
         return existing(&dir.join("chatgpt.json")).map(|_| Credential::ChatGptAuthDir(dir));
     }
-    let env_var = nonempty("BUTLER_E2E_API_KEY_ENV").unwrap_or_else(|| default_key_env(provider));
-    nonempty(&env_var).map(|_| Credential::ApiKey { env_var })
+    let env_var = var("BUTLER_E2E_API_KEY_ENV").unwrap_or_else(|| default_key_env(provider));
+    var(&env_var).map(|_| Credential::ApiKey { env_var })
 }
 
 fn default_key_env(provider: &str) -> String {
