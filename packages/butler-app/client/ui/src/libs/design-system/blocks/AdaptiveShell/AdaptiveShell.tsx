@@ -73,7 +73,6 @@ export function AdaptiveShell({
     rootRef,
     rightOpen: inspectorOpen,
     animate: !drawer && !resizing && !settingsActive,
-    frame: shellFrame,
   });
   return (
     <ShellFrameContext.Provider value={shellFrame}>

@@ -14,15 +14,3 @@ export const ShellFrameContext = createContext<ShellFrame>("flat");
 export function useShellFrame(): ShellFrame {
   return useContext(ShellFrameContext);
 }
-
-/**
- * The workspace clip while the inspector slides in. Flat: the right edge, so nothing shows under the
- * panel. Cards: the same cut below the title row only, so the title icons (which span to the window
- * edge) stay visible and in place. `cut` is the clipped width in px; `title` the title row height.
- */
-export function inspectorSlideClip(frame: ShellFrame, cut: number, title: number): string {
-  const x = Math.round(cut);
-  if (frame === "flat") return `inset(0px ${x}px 0px 0px)`;
-  const t = Math.round(title);
-  return `polygon(0px 0px, 100% 0px, 100% ${t}px, calc(100% - ${x}px) ${t}px, calc(100% - ${x}px) 100%, 0px 100%)`;
-}

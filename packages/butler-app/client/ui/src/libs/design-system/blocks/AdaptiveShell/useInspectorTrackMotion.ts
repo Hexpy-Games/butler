@@ -1,81 +1,71 @@
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { animateMotion, prefersReducedMotion } from "../../lib/motion";
-import { inspectorSlideClip, type ShellFrame } from "./shellFrame";
 
 /**
- * Docked right inspector open/close as compositor motion, like the sidebar
- * (useSidebarTrackMotion). The right grid track never interpolates:
- * - opening keeps the 0px track while the inspector slides in (CSS
- *   transform) over the workspace, whose right edge is clipped in step so
- *   nothing shows under a translucent panel, and commits the track when the
- *   slide ends: the workspace reflows once, under the panel;
- * - closing commits the 0px track at once and the inspector slides out.
+ * Docked right inspector open/close. The inspector slides with a CSS
+ * transform (compositor) and the right grid track follows it: the track is
+ * committed at once and its width (`--adaptive-right-track`, a registered
+ * non-inherited length, so only the shell root restyles) is animated from
+ * where it was to the committed width on the inspector's own tokens (slow /
+ * emphasized). The workspace narrows on open and widens on close in lockstep
+ * with the panel instead of snapping at one end of the slide; the price is
+ * one workspace layout per frame while it moves. (The sidebar keeps its FLIP
+ * model, useSidebarTrackMotion.)
+ * Shell geometry keyed to the committed track, such as the cards title row
+ * that reaches over the inspector's column to the window edge, moves from its
+ * old to its new value with the same timing, so it stays in place.
  * Reduced motion, drawer layout and live resizing commit immediately.
- * In the cards frame the clip spares the title row (it spans to the window
- * edge, so its icons never move) and cuts at the inspector card's gap.
  */
 export function useInspectorTrackMotion({
   rootRef,
   rightOpen,
   animate,
-  frame = "flat",
 }: {
   rootRef: RefObject<HTMLDivElement | null>;
   rightOpen: boolean;
   animate: boolean;
-  frame?: ShellFrame;
 }): { rightTrack: boolean; switching: boolean } {
-  const [openedTrack, setOpenedTrack] = useState(rightOpen);
+  const [rightTrack, setRightTrack] = useState(rightOpen);
   const [switching, setSwitching] = useState(false);
-  const previousOpen = useRef(rightOpen);
-  const motion = useRef<Animation | null>(null);
-  const rightTrack = rightOpen && openedTrack;
+  const motion = useRef<Animation[]>([]);
+  const from = useRef<TrackGeometry | null>(null);
   const [renderedTrack, setRenderedTrack] = useState(rightTrack);
   if (renderedTrack !== rightTrack) {
     setRenderedTrack(rightTrack);
     setSwitching(true);
   }
 
+  // The open state changed: note where the geometry is now (mid-motion
+  // included), then commit the track in a second render before paint.
   useLayoutEffect(() => {
-    const wasOpen = previousOpen.current;
-    previousOpen.current = rightOpen;
-    if (wasOpen === rightOpen) return;
-    motion.current?.cancel();
-    motion.current = null;
-    if (!rightOpen) {
-      setOpenedTrack(false);
-      return;
-    }
+    if (rightOpen === rightTrack) return;
     const root = rootRef.current;
-    const workspace = root?.querySelector<HTMLElement>("[data-slot=adaptive-shell-workspace]");
-    const inspector = root?.querySelector<HTMLElement>("[data-slot=adaptive-shell-inspector]");
-    const width = inspector?.getBoundingClientRect().width ?? 0;
-    if (!animate || prefersReducedMotion() || !workspace || width <= 0) {
-      setOpenedTrack(true);
-      return;
-    }
-    const cut = frame === "cards" ? width + cssPx(root, "--shell-card-inset") + cssPx(root, "--shell-card-gap") : width;
-    const title = root?.querySelector<HTMLElement>("[data-slot=adaptive-shell-title]")?.offsetHeight ?? 0;
-    const animation = animateMotion(workspace, [
-      { clipPath: inspectorSlideClip(frame, 0, title) },
-      { clipPath: inspectorSlideClip(frame, cut, title) },
-    ], { duration: "slow", easing: "emphasized", fill: "forwards" });
-    motion.current = animation;
-    if (!animation) {
-      setOpenedTrack(true);
-      return;
-    }
-    animation.finished.then(() => {
-      if (motion.current === animation) setOpenedTrack(true);
-    }, () => undefined);
-  }, [rightOpen, animate, rootRef, frame]);
+    from.current = root && animate && !prefersReducedMotion() ? readGeometry(root) : null;
+    cancel(motion.current);
+    motion.current = [];
+    setRightTrack(rightOpen);
+  }, [rightOpen, rightTrack, animate, rootRef]);
 
-  // The committed track now narrows the workspace itself: drop the held clip.
+  // The track is committed: move the geometry from where it was to there.
   useLayoutEffect(() => {
-    if (!rightTrack || !motion.current) return;
-    motion.current.cancel();
-    motion.current = null;
-  }, [rightTrack]);
+    const start = from.current;
+    from.current = null;
+    const root = rootRef.current;
+    if (!start || !root) return;
+    const end = readGeometry(root);
+    const title = titleOf(root);
+    motion.current = [
+      animateBetween(root, "--adaptive-right-track", start.track, end.track),
+      title ? animateBetween(title, "right", start.title, end.title) : null,
+    ].filter((animation): animation is Animation => animation !== null);
+  }, [rightTrack, rootRef]);
+
+  // A resize drag takes the track over: never fight it with a stale motion.
+  useLayoutEffect(() => {
+    if (animate) return;
+    cancel(motion.current);
+    motion.current = [];
+  }, [animate]);
 
   useLayoutEffect(() => {
     if (!switching) return;
@@ -86,7 +76,29 @@ export function useInspectorTrackMotion({
   return { rightTrack, switching };
 }
 
-/** A length custom property resolved on the shell root, in px (0 when unset). */
-function cssPx(element: HTMLElement | null | undefined, name: string): number {
-  return element ? Number.parseFloat(getComputedStyle(element).getPropertyValue(name)) || 0 : 0;
+type TrackGeometry = { track: string; title: string | null };
+
+function titleOf(root: HTMLElement): HTMLElement | null {
+  return root.querySelector<HTMLElement>("[data-slot=adaptive-shell-title]");
+}
+
+/** Computed values, so a running motion reads at its current frame. */
+function readGeometry(root: HTMLElement): TrackGeometry {
+  const title = titleOf(root);
+  return {
+    track: getComputedStyle(root).getPropertyValue("--adaptive-right-track").trim(),
+    title: title ? getComputedStyle(title).right : null,
+  };
+}
+
+function animateBetween(element: HTMLElement, property: string, start: string | null, end: string | null) {
+  if (!start || !end || start === end) return null;
+  return animateMotion(element, [{ [property]: start }, { [property]: end }], {
+    duration: "slow",
+    easing: "emphasized",
+  });
+}
+
+function cancel(animations: Animation[]) {
+  for (const animation of animations) animation.cancel();
 }
