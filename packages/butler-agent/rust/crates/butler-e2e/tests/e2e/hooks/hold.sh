@@ -1,5 +1,5 @@
 #!/bin/sh
-# Signal that the tool result reached its post-tool hook, then wait for release.
+# Signal that the hold hook started, then wait for release.
 # The wait ends within the hook's 60 s timeout even if no release ever comes.
 cat > /dev/null
 : > "$HOOK_HELD"

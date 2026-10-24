@@ -3,7 +3,7 @@ import { useButlerStore } from "@/app/store.ts";
 import { useState, type Ref } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { EpicDetail as Epic, EpicInput, PlanCards, EpicProgressSnapshot, CanonStatus } from "@/app/canonApi.ts";
-import { Box, Button, ButtonContainer, IconButton, KeyValueRow, NativeSelect, NativeSelectOption, Pencil, Stack, Typo } from "@/butler-ds";
+import { Box, Button, ButtonContainer, IconButton, KeyValueRow, NativeSelect, NativeSelectOption, Pencil, Stack, Tooltip, Typo } from "@/butler-ds";
 import { CanonTagsField } from "./CanonTagsField.tsx";
 import { CanonAvatar } from "./CanonAvatar.tsx";
 import { EpicEditForm } from "./EpicEditForm.tsx";
@@ -30,9 +30,9 @@ export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef }: {
       {epic.description && <Typo.Body wrap="pre">{epic.description}</Typo.Body>}
     </Stack>}
     <Stack gap="sm">
-      <KeyValueRow valueTextSize="caption" label={copy.status} value={<NativeSelect size="sm" aria-label={copy.status} value={epic.canon_status} disabled={busy} onChange={event => statusChanged(event.target.value as CanonStatus)}>
-        {Object.entries(copy.statuses).map(([value, label]) => <NativeSelectOption key={value} value={value}>{label}</NativeSelectOption>)}
-      </NativeSelect>} />
+      <KeyValueRow valueTextSize="caption" label={copy.status} value={<Tooltip wrap label={tasks?.running ? `${copy.running} · ${copy.runningCancel}` : undefined} side="top"><NativeSelect size="sm" aria-label={copy.status} value={epic.canon_status} disabled={busy} onChange={event => statusChanged(event.target.value as CanonStatus)}>
+        {Object.entries(copy.statuses).map(([value, label]) => <NativeSelectOption key={value} value={value} disabled={Boolean(tasks?.running && (value === "done" || value === "cancelled"))}>{label}</NativeSelectOption>)}
+      </NativeSelect></Tooltip>} />
       <KeyValueRow valueTextSize="caption" label={copy.assignee} value={<Stack inline align="row" cross="center" gap="xs"><CanonAvatar person={epic.assignee} /><Box minWidth="0" shrink><CanonPersonSelect compact value={epic.assignee} disabled={busy} onChange={assignee => void onWrite({ assignee })} /></Box></Stack>} />
       <KeyValueRow valueTextSize="caption" label={copy.plan} value={<Stack inline align="row" cross="center" gap="xs">
         <Box minWidth="0" shrink>

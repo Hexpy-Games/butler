@@ -33,6 +33,7 @@ mod gateway_session_controls_impl;
 mod handle;
 mod hooks;
 mod internal_continuation;
+mod keyed_locks;
 mod library;
 mod still_delivery;
 pub use library::{AppLibraryChange, AppLibraryCommand, AppLibraryQuery};
@@ -110,6 +111,7 @@ pub(crate) use automations::*;
 pub use briefing_snapshot::{read_new_chat_briefing_projects, read_new_chat_briefing_settings};
 pub use contracts::*;
 use events::EventSubscribers;
+use keyed_locks::KeyedLocks;
 pub use model_catalog::{AppModelCatalogCommand, AppModelCatalogPort};
 pub use monitoring::{
     AppBoundWorkStatusFact, AppMonitorPage, AppMonitoringPort, AppUsageMonitorQuery,
@@ -124,7 +126,6 @@ pub use personalization::{
     AppPersonalizationCommand, AppPersonalizationEvent, AppPersonalizationPort,
     AppPersonalizationResult,
 };
-pub(crate) use plan_decisions::PlanDecisionLocks;
 #[cfg(test)]
 pub(crate) use plan_decisions::TestAppPlanDecisionLedger;
 pub use plan_decisions::{
@@ -225,7 +226,8 @@ pub struct AppApplication {
     wallpapers: AppWallpaperFiles,
     asset_cache: assets::AssetCache,
     settings_update_lock: Arc<tokio::sync::Mutex<()>>,
-    plan_decision_locks: PlanDecisionLocks,
+    canon_projection_locks: KeyedLocks,
+    plan_decision_locks: KeyedLocks,
     setup_readiness: setup::ReadinessRelay,
     chatgpt_events: setup_events::AccountRelay,
     quota_events: Arc<quota_events::QuotaEventForwarder>,
@@ -324,7 +326,8 @@ impl AppApplication {
             asset_cache: assets::AssetCache::default(),
             butler_data: config.butler_data,
             settings_update_lock: Arc::new(tokio::sync::Mutex::new(())),
-            plan_decision_locks: PlanDecisionLocks::default(),
+            canon_projection_locks: KeyedLocks::default(),
+            plan_decision_locks: KeyedLocks::default(),
             setup_readiness: setup::ReadinessRelay::default(),
             chatgpt_events: setup_events::AccountRelay::default(),
             quota_events: Arc::default(),
