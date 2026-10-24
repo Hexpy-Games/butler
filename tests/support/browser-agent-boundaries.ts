@@ -19,7 +19,8 @@ export async function browserBoundaryChecks(app: App, tab: string, evidence: str
   assert.equal(selected.nodes.filter((node:any)=>node.name==='Confirm').length,1);
   assert.ok(selected.nodes.every((node:any)=>node.ref.startsWith('f1-')));
   const missing=await app.main<any>(`${subject}.execute({op:'tab.observe',session:'general',tab:${id},args:{frame:'f999'}})`);
-  assert.deepEqual(missing,{status:'refused',reason:'frame_unavailable'});
+  // f4f8ef05f: an unknown frame id is refused with the ids the tab has.
+  assert.deepEqual(missing,{status:'refused',reason:'unknown_frame',frames:['f0','f1','f2'],recovery:'No frame has id f999. Omit frame to observe every frame, or use an id listed in frames.'});
   writeFileSync(join(evidence,'frame-scoped-observation.json'),JSON.stringify({selected,missing},null,2));
   assert.equal(observed.nodes.filter((node:any)=>node.name==="Confirm").length,3,"duplicate-URL frames have distinct isolated observations");
   await app.main(`${subject}.tabs.get(${id}).view.webContents.executeJavaScript("document.querySelectorAll('iframe[id^=browser-frame]').forEach(f=>f.remove())")`);
@@ -37,7 +38,9 @@ export async function browserBoundaryChecks(app: App, tab: string, evidence: str
   const keypadMarkup='<div id="keypad-fixture" class="nxkey" style="position:fixed;top:10px;left:700px;z-index:100"><button>Key seven</button></div>';
   await app.main(`${subject}.tabs.get(${id}).view.webContents.executeJavaScript(${JSON.stringify(`document.body.insertAdjacentHTML('beforeend',${JSON.stringify(keypadMarkup)})`)})`);
   const keypad=await app.main<any>(`(async()=>{const b=${subject},o=await b.execute({op:'tab.observe',session:'general',tab:${id},args:{}});const node=o.nodes.find(n=>n.name==='Key seven');return {node,receipt:await b.execute({op:'tab.prepare',session:'general',tab:${id},args:{observation:o.obs,steps:[{action:'click',ref:node.ref}]}})}})()`);
-  assert.equal(keypad.node.secure,true);assert.equal(keypad.node.actionable,false);assert.equal(keypad.receipt.reason,'secure_field');
+  assert.equal(keypad.node.secure,true);assert.equal(keypad.node.actionable,false);
+  // 4c60130e0: a secure keypad needs the user, who takes the tab over.
+  assert.equal(keypad.receipt.reason,'user_required');assert.equal(keypad.receipt.user_required,'secure_keypad');
   writeFileSync(join(evidence,'secure-keypad-descendant.json'),JSON.stringify(keypad,null,2));
   await app.main(`${subject}.tabs.get(${id}).view.webContents.executeJavaScript("document.getElementById('keypad-fixture').remove()")`);
   const addons=await app.main<any>(`(async()=>{const b=${subject},t=b.tabs.get(${id}),wc=t.view.webContents;await wc.executeJavaScript("document.body.insertAdjacentHTML('beforeend','<label id=addon-fixture><input type=checkbox id=addon-check>Bonus gift</label>')");const o=await b.execute({op:'tab.observe',session:'general',tab:t.id,args:{}}),ref=o.nodes.find(n=>n.name==='Confirm').ref;await wc.executeJavaScript("document.getElementById('addon-check').checked=true");const args={observation:o.obs,steps:[{action:'click',ref}]},p=await b.execute({op:'tab.prepare',session:'general',tab:t.id,args});await wc.executeJavaScript("document.getElementById('addon-check').checked=false");const receipt=await b.execute({op:'tab.act',session:'general',tab:t.id,args:{...args,prepared_steps:p.steps}});await wc.executeJavaScript("document.getElementById('addon-fixture').remove()");return {prepared:p,receipt}})()`);
@@ -86,8 +89,10 @@ async function checkDeniedReceipts(app:App,tab:string,evidence:string) {
 }
 
 async function checkStillFailureReceipts(app:App,tab:string,evidence:string) {
-  const receipt=await app.main<any>(`(async()=>{const b=globalThis.browserAgentSubject,t=b.tabs.get(${JSON.stringify(tab)}),wc=t.view.webContents,o=await b.execute({op:'tab.observe',session:'general',tab:t.id,args:{}}),ref=o.nodes.find(n=>n.name==='Confirm').ref,args={observation:o.obs,steps:[{action:'hover',ref},{action:'hover',ref}]},p=await b.execute({op:'tab.prepare',session:'general',tab:t.id,args}),capture=wc.capturePage;wc.capturePage=async()=>({isEmpty:()=>false,resize:()=>{throw new Error('injected still encoder failure')}});try{return await b.execute({op:'tab.act',session:'general',tab:t.id,args:{...args,prepared_steps:p.steps}})}finally{wc.capturePage=capture}})()`);
-  assert.equal(receipt.steps.length,2);assert.equal(receipt.steps[0].status,'unknown');
-  assert.equal(receipt.steps[1].status,'not_dispatched');assert.equal(receipt.steps[1].reason,'previous_step_failed');
+  const receipt=await app.main<any>(`(async()=>{const b=globalThis.browserAgentSubject,t=b.tabs.get(${JSON.stringify(tab)}),wc=t.view.webContents,o=await b.execute({op:'tab.observe',session:'general',tab:t.id,args:{}}),ref=o.nodes.find(n=>n.name==='Confirm').ref,args={observation:o.obs,steps:[{action:'hover',ref},{action:'hover',ref}]},p=await b.execute({op:'tab.prepare',session:'general',tab:t.id,args}),capture=wc.capturePage;wc.capturePage=async()=>({isEmpty:()=>false,resize:()=>{throw new Error('injected still encoder failure')}});const stills=[];try{const result=await b.execute({op:'tab.act',session:'general',tab:t.id,deliverStill:still=>{stills.push(still)},args:{...args,prepared_steps:p.steps}});while(t.stillJobs?.size)await Promise.all([...t.stillJobs].map(job=>job.promise));return {...result,stills}}finally{wc.capturePage=capture}})()`);
+  // 12393af02: a failed still never rewrites the act; each step's still receipt carries the failure instead.
+  assert.equal(receipt.steps.length,2);assert.ok(receipt.steps.every((step:{status:string})=>step.status==='completed'),JSON.stringify(receipt.steps));
+  assert.deepEqual(receipt.stills.map((still:{step:number})=>still.step),[0,1]);
+  assert.ok(receipt.stills.every((still:{still?:unknown;reason?:string})=>!still.still && still.reason),JSON.stringify(receipt.stills));
   writeFileSync(join(evidence,'still-failure-batch-receipts.json'),JSON.stringify(receipt,null,2));
 }

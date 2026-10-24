@@ -506,6 +506,10 @@ export interface AppInfoView {
 }
 
 export interface SettingsView {
+  browser?: {
+    browsing_agent: string;
+    auto: { available?: boolean; model: string; effort: ReasoningEffort; rule: "family_sibling" | "provider_preset" | "conversation" };
+  };
   /** Opaque id of the agent's data; it changes when Butler is reset. */
   data_generation?: string;
   update_previews?: boolean;
@@ -849,6 +853,8 @@ export interface MessageFileRef {
   /** Short-lived `url` with `?expires=..&signature=..` for token-less loads. */
   signed_url?: string;
   created_at: string;
+  width?: number | null;
+  height?: number | null;
 }
 
 export interface ChangedFileLine {
@@ -1352,6 +1358,18 @@ export interface UsageSectionBucketView {
   estimatedTokens: number;
 }
 
+export interface UsageHistoryView {
+  lifetimeTokens: number;
+  busiestDay: { date: string; tokens: number } | null;
+  longestTask: { durationMs: number; sessionId: string; title: string | null } | null;
+  longestStreak: { days: number; start: string | null; end: string | null };
+  currentStreak: { days: number; start: string | null };
+  days: [string, number][];
+  priorTotal: number;
+  firstActiveDate: string | null;
+  timeZone: string;
+}
+
 export interface UsageMonitorView {
   /** Session views append the slot's delegated tokens (prompt + output of every role other than "main"), then that work's requests, cached and output. */
   timeline: { slotMinutes: 15; slots: ([number, number, number, number, number] | [number, number, number, number, number, number, number, number, number])[] };
@@ -1392,6 +1410,7 @@ export interface UsageMonitorView {
     activeProviderId: string | null;
     providers: Array<UsageTokenBucketView & {
       providerId: string;
+      monthTokens?: number;
       source: "local_telemetry" | "provider_adapter";
       remaining: ProviderQuotaResultView;
       butlerUsage?: ButlerUsageView | null;

@@ -6,12 +6,15 @@ import type { EpicDetail as Epic, EpicInput, PlanCards, EpicProgressSnapshot, Ca
 import { Box, Button, ButtonContainer, KeyValueRow, NativeSelect, NativeSelectOption, Stack, Tooltip, Typo } from "@/butler-ds";
 import { CanonTagsField } from "./CanonTagsField.tsx";
 import { CanonAvatar } from "./CanonAvatar.tsx";
+import { CanonInlineDraftProvider } from "./CanonInlineDraft.tsx";
 import { EpicInlineFields } from "./EpicInlineFields.tsx";
 import { CanonPersonSelect } from "./CanonPersonSelect.tsx";
 import { CanonPlanSelect } from "./CanonPlanSelect.tsx";
 import { SpecTree } from "./SpecTree.tsx";
+import { EpicSessionSummary } from "./EpicSessionSummary.tsx";
 import { EpicProgress } from "./EpicProgress.tsx";
-export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef }: {
+export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef, compact = false }: {
+  compact?: boolean;
   titleRef?: Ref<HTMLElement>; epic: Epic; plans: PlanCards[]; tasks: EpicProgressSnapshot | null; busy: boolean;
   onWrite: (input: EpicInput, message?: string) => Promise<boolean>;
 }) {
@@ -20,9 +23,7 @@ export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef }: {
   const plan = plans.find(plan => plan.id === epic.plan_id);
   const ordinal = plan ? plan.works.findIndex(work => work.id === epic.id) + 1 : 0;
   const statusChanged = (status: CanonStatus) => void onWrite(canonStatusInput(epic, status), copy.statusChanged);
-  return <Stack gap="lg" data-test-class="canon-epic-detail" data-epic-id={epic.id}>
-    <EpicInlineFields epic={epic} busy={busy} onWrite={onWrite} titleRef={titleRef} />
-    <Stack gap="sm">
+  const properties = <Stack gap="sm">
       <KeyValueRow valueTextSize="caption" label={copy.status} value={<Tooltip wrap label={tasks?.running ? `${copy.running} · ${copy.runningCancel}` : undefined} side="top"><NativeSelect size="sm" aria-label={copy.status} value={epic.canon_status} disabled={busy} onChange={event => statusChanged(event.target.value as CanonStatus)}>
         {Object.entries(copy.statuses).map(([value, label]) => <NativeSelectOption key={value} value={value} disabled={Boolean(tasks?.running && (value === "done" || value === "cancelled"))}>{label}</NativeSelectOption>)}
       </NativeSelect></Tooltip>} />
@@ -35,10 +36,17 @@ export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef }: {
       </Stack>} />
       <KeyValueRow valueTextSize="caption" label={<Typo.Caption wrap="nowrap">{copy.tags.label}</Typo.Caption>} value={<CanonTagsField row projectId={epic.project_id} value={epic.tags} disabled={busy}
         onChange={tags => void onWrite({ tags: tags.map(tag => tag.id) })} />} />
-    </Stack>
-    {epic.home_session_id && <ButtonContainer size="sm"><Button size="sm" variant="link"
+    </Stack>;
+  return <Stack gap="lg" data-test-class="canon-epic-detail" data-epic-id={epic.id}>
+    <CanonInlineDraftProvider><EpicInlineFields epic={epic} busy={busy} onWrite={onWrite} titleRef={titleRef} compact={compact} properties={compact ? properties : undefined}
+      summary={compact ? <>
+        <Typo.Caption tone="secondary">{copy.statuses[epic.canon_status]} · {plan?.title ?? copy.backlog}</Typo.Caption>
+        <EpicSessionSummary epic={epic} tasks={tasks} />
+      </> : undefined} /></CanonInlineDraftProvider>
+    {!compact && properties}
+    {!compact && epic.home_session_id && <ButtonContainer size="sm"><Button size="sm" variant="link"
       onClick={() => { if (epic.home_session_id) void useButlerStore.getState().openSession(epic.home_session_id); }}>{copy.openConversation}</Button></ButtonContainer>}
-    <SpecTree nodes={epic.specs} />
-    <EpicProgress tasks={tasks} counts={canonTaskCounts(epic)} />
+    <SpecTree nodes={epic.specs} compact={compact} />
+    {!compact && <EpicProgress tasks={tasks} counts={canonTaskCounts(epic)} />}
   </Stack>;
 }

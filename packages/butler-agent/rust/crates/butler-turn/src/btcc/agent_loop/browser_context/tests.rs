@@ -1,10 +1,39 @@
 //! Cases for the existing agent-loop history regression: interleaved tabs,
 //! partial receipts, repeated preparation and multiple acts on one observation.
 #![allow(clippy::unwrap_used, reason = "fixture assertions")]
+#[path = "economics_tests.rs"]
+mod economics;
+
 use super::{
-    BrowserPrune, ModelRoundMessage, ModelRoundRole, ModelRoundToolCall, Value, is_superseded,
-    json, plan, prune,
+    BrowserPrune, ModelRoundMessage, ModelRoundRole, ModelRoundToolCall, PruneEconomy, Value,
+    is_superseded, json, plan, prune,
 };
+
+/// A model whose cache has no discount: any stale saving pays for a rewrite.
+fn uncached() -> PruneEconomy {
+    PruneEconomy {
+        byte_limit: u64::MAX,
+        cached_ratio: Some(1.0),
+        rounds_sent: 1,
+    }
+}
+
+/// A context at its byte budget: stale results are stubbed regardless of cache.
+fn pressed() -> PruneEconomy {
+    PruneEconomy {
+        byte_limit: 0,
+        cached_ratio: Some(0.05),
+        rounds_sent: 1,
+    }
+}
+
+fn cached(rounds_sent: u32) -> PruneEconomy {
+    PruneEconomy {
+        byte_limit: u64::MAX,
+        cached_ratio: Some(0.1),
+        rounds_sent,
+    }
+}
 
 fn call(
     messages: &mut Vec<ModelRoundMessage>,
@@ -51,10 +80,12 @@ fn observe(messages: &mut Vec<ModelRoundMessage>, tab: &str, obs: &str) {
 }
 
 pub(in crate::btcc::agent_loop) fn assert_per_tab_cycles() {
+    economics::assert_cache_economics();
+    economics::assert_delta_chain();
     assert_budget_boundaries();
     assert_resumed_summary_floor();
     assert_resolved_tab();
-    assert_zoom_and_byte_guard();
+    assert_zoom_and_pressure();
     let mut messages = Vec::new();
     observe(&mut messages, "a", "a1");
     call(&mut messages, "a", "a1", 2, 10);
@@ -153,32 +184,32 @@ pub(in crate::btcc::agent_loop) fn assert_act_with_observation() {
 fn assert_frozen_receipt() {
     let mut messages = Vec::new();
     observe(&mut messages, "a", "o5");
-    let frozen = messages[0].clone();
-    let mut state = BrowserPrune {
-        watermark: 1,
-        ..Default::default()
-    };
+    let mut state = BrowserPrune::default();
     observed_act(&mut messages, "o5", "o6");
     let mut value: Value = serde_json::from_str(&messages[2].content).unwrap();
     value["output"]["untrusted_content"]["text"] = "x".repeat(70_000).into();
     messages[2].content = value.to_string().into();
     observed_act(&mut messages, "o6", "o7");
-    prune(&mut messages, &mut state, 0, u64::MAX);
-    assert_eq!(messages[0], frozen, "normal prune keeps frozen source full");
+    prune(&mut messages, &mut state, 0, &cached(1));
+    assert!(
+        !messages.iter().any(|m| is_superseded(&m.content)),
+        "a cached history stays append-only"
+    );
+    prune(&mut messages, &mut state, 0, &uncached());
     let stub: Value = serde_json::from_str(&messages[2].content).unwrap();
     assert_eq!(stub["output"]["receipt"]["obs"], "o5");
     assert_eq!(
         stub["output"]["receipt"]["acted"],
         "hover f0-e2 ×2 completed"
     );
-    let once = messages[2].clone();
-    prune(&mut messages, &mut state, 0, 0);
+    let once = messages.clone();
+    prune(&mut messages, &mut state, 0, &pressed());
     let source: Value = serde_json::from_str(&messages[0].content).unwrap();
     assert_eq!(
         source["output"]["acted"],
         stub["output"]["receipt"]["acted"]
     );
-    assert_eq!(messages[2], once, "deep prune keeps receipt stub immutable");
+    assert_eq!(messages, once, "a stubbed history is final");
     assert!(source["output"].get("receipt").is_none());
 }
 
@@ -197,7 +228,7 @@ fn observed_act(messages: &mut Vec<ModelRoundMessage>, source: &str, next: &str)
 fn force_prune(messages: &mut [ModelRoundMessage]) {
     // Normalize fresh still metadata before establishing the sent prefix.
     let mut state = BrowserPrune::default();
-    prune(messages, &mut state, 0, u64::MAX);
+    prune(messages, &mut state, 0, &uncached());
     let before = messages.to_vec();
     let planned = plan(messages);
     assert_eq!(messages, before, "planning never mutates history");
@@ -206,7 +237,7 @@ fn force_prune(messages: &mut [ModelRoundMessage]) {
         value["output"]["untrusted_content"] = json!({"text":"x".repeat(70_000)});
         messages[stale.index].content = value.to_string().into();
     }
-    prune(messages, &mut state, 0, u64::MAX);
+    prune(messages, &mut state, 0, &uncached());
     for stale in planned {
         assert_eq!(
             messages[stale.index].content, stale.stub,
@@ -230,36 +261,22 @@ fn assert_budget_boundaries() {
         sized_observation(&mut messages, index, 19_000);
     }
     let before = messages.clone();
-    prune(&mut messages, &mut state, 0, u64::MAX);
-    assert_eq!(messages, before, "under budget stays full");
-    sized_observation(&mut messages, 4, 19_000);
-    prune(&mut messages, &mut state, 0, u64::MAX);
-    assert_eq!(state.watermark, 5);
-    assert!(messages[..4].iter().all(|m| is_superseded(&m.content)));
-    assert!(!is_superseded(&messages[4].content));
-    let once = messages.clone();
-    prune(&mut messages, &mut state, 0, u64::MAX);
-    assert_eq!(messages, once, "second call is a no-op");
-    for index in 5..9 {
-        sized_observation(&mut messages, index, 19_000);
-    }
-    prune(&mut messages, &mut state, 0, u64::MAX);
-    assert_eq!(messages[..5], once, "normal prune preserves frozen range");
-    let watermark = state.watermark;
-    for index in 9..13 {
-        sized_observation(&mut messages, index, 19_000);
-    }
-    let frozen = messages[..watermark].to_vec();
-    prune(&mut messages, &mut state, 0, u64::MAX);
-    assert!(
-        is_superseded(&messages[4].content),
-        "frozen total over half budget triggers deep prune"
+    prune(&mut messages, &mut state, 0, &cached(1));
+    assert_eq!(
+        messages, before,
+        "a cache miss costs more than one round saves"
     );
-    assert_ne!(messages[..watermark], frozen);
-    sized_observation(&mut messages, 13, 19_000);
+    prune(&mut messages, &mut state, 0, &cached(20));
+    assert_eq!(state.watermark, 4);
+    assert!(messages[..3].iter().all(|m| is_superseded(&m.content)));
+    assert!(!is_superseded(&messages[3].content));
+    let once = messages.clone();
+    prune(&mut messages, &mut state, 0, &uncached());
+    assert_eq!(messages, once, "second call is a no-op");
+    sized_observation(&mut messages, 4, 19_000);
     let mut floor_state = BrowserPrune::default();
     let before = messages.clone();
-    prune(&mut messages, &mut floor_state, before.len(), 0);
+    prune(&mut messages, &mut floor_state, before.len(), &pressed());
     assert_eq!(messages, before, "covered summary source is immutable");
     let mut image = tool(&json!({"image":{"mime_type":"image/jpeg","data":"a".repeat(100_000)}}));
     let stale = super::prune::Stale::new(0, &image, "stub".into());
@@ -294,7 +311,7 @@ fn assert_resolved_tab() {
     );
 }
 
-fn assert_zoom_and_byte_guard() {
+fn assert_zoom_and_pressure() {
     let mut messages = Vec::new();
     observe(&mut messages, "a", "a1");
     messages.push(tool(&json!({"schema":"butler.browser-zoom.v1","tab":"a","image":{"mime_type":"image/jpeg","data":"a".repeat(100_000)}})));
@@ -304,14 +321,28 @@ fn assert_zoom_and_byte_guard() {
     assert_eq!(planned.len(), 2, "older observation and close-up are stale");
     let newest = messages[2..].to_vec();
     let mut state = BrowserPrune::default();
-    prune(&mut messages, &mut state, 1, 200_000);
+    let sent = messages.clone();
+    prune(&mut messages, &mut state, 1, &uncached());
+    assert_eq!(
+        messages, sent,
+        "a stale JPEG alone saves too little to rewrite"
+    );
+    prune(
+        &mut messages,
+        &mut state,
+        1,
+        &PruneEconomy {
+            byte_limit: 200_000,
+            ..cached(1)
+        },
+    );
     assert!(
         !is_superseded(&messages[0].content),
         "covered source stays immutable"
     );
     assert!(
         is_superseded(&messages[1].content),
-        "stale JPEG crosses byte guard below token budget"
+        "stale JPEG bytes over the request byte guard stub the close-up"
     );
     assert_eq!(messages[2..], newest);
     assert_eq!(
@@ -362,7 +393,7 @@ fn assert_resumed_summary_floor() {
         &mut state.messages,
         &mut state.browser_prune,
         state.compacted_through,
-        0,
+        &pressed(),
     );
     assert_eq!(
         state.messages[..2],
@@ -378,7 +409,7 @@ fn assert_resumed_summary_floor() {
         &mut state.messages,
         &mut state.browser_prune,
         state.compacted_through,
-        u64::MAX,
+        &uncached(),
     );
     assert_eq!(state.messages[..once.len()], once);
     assert!(

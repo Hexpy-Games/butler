@@ -1,0 +1,40 @@
+tab t2 epoch 1 obs o2
+Node rects and icon positions are CSS coordinates. Pointer points and capture_regions use screenshot coordinates; use image_geometry to convert.
+Visible editable fields, top to bottom (2):
+1. combobox "Size" [f0-e9] value="Large"
+2. spinbutton "Quantity" [f0-e10] value="2"
+link "Back to results" [f0-e1] frame=store.example.org
+heading "Unbleached drawstring pouch XL" [f0-e2] frame=store.example.org
+image "Unbleached drawstring pouch XL" [f0-e3] frame=store.example.org
+button "Previous photo" [f0-e4] frame=store.example.org
+button "Next photo" [f0-e5] frame=store.example.org
+link "4.6 out of 5, 221 reviews" [f0-e6] frame=store.example.org
+radio "Pack of 1" [f0-e7] frame=store.example.org
+radio "Pack of 2" [f0-e8] checked frame=store.example.org
+combobox "Size" [f0-e9] value="Large" frame=store.example.org
+spinbutton "Quantity" [f0-e10] value="2" frame=store.example.org
+button "Add to cart" [f0-e11] frame=store.example.org
+button "Buy now" [f0-e12] frame=store.example.org
+checkbox "Gift wrap (+1,000)" [f0-e13] preselected frame=store.example.org
+link "Related: cotton strainer bag 30x40 cm 2,900 each" [f0-e20] frame=store.example.org
+image "Related: cotton strainer bag 30x40 cm" [f0-e21] frame=store.example.org
+link "Related: nylon mesh bag fine 4,200 each" [f0-e22] frame=store.example.org
+image "Related: nylon mesh bag fine" [f0-e23] frame=store.example.org
+link "Related: muslin cloth 1 m 3,100 each" [f0-e24] frame=store.example.org
+image "Related: muslin cloth 1 m" [f0-e25] frame=store.example.org
+link "Related: tea brewing pouch set 5,500 each" [f0-e26] frame=store.example.org
+image "Related: tea brewing pouch set" [f0-e27] frame=store.example.org
+heading "Customer questions" [f0-e28] frame=store.example.org
+button "Ask a question" [f0-e29] frame=store.example.org
+link "Is it safe for boiling water? Answered by seller" [f0-e30] frame=store.example.org
+link "How many uses before washing? Answered by seller" [f0-e31] frame=store.example.org
+iframe "Payment widget" [f1-e1] frame=pay.example.net
+button "Pay with saved card" [f1-e2] frame=pay.example.net
+Unbleached drawstring pouch XL
+3,990 · Free delivery · Arrives Saturday
+Material: 100% cotton, unbleached. Size: 40 x 60 cm. Food-contact certified.
+Wash before first use. Rinse in cold water after each use and dry in the shade.
+Ships in 1 business day from the seller warehouse. Returns accepted within 30 days if unused.
+Pack of 1
+Pack of 2
+interactive 25/25 · below fold 48 · hidden {"invisible":30,"low_contrast":1,"tiny":0}

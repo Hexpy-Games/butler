@@ -17,7 +17,7 @@ export interface SettingsSectionProps {
   description?: string;
   /** form: stacked fields; list: rows; status: live status rows; info: read-only key/value rows. */
   kind: SettingsSectionKind;
-  /** Header toolbar (page-level controls of a single-list page, compact header controls). */
+  /** List toolbar (add, refresh, filter, a bulk action on every row); only on `kind="list"`. */
   actions?: ReactNode;
   /** Section-level fetch state; `ready` renders the children. */
   state?: SettingsSectionState;

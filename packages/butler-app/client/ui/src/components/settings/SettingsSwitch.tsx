@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, type ReactNode } from "react";
 import { SettingsField, Switch } from "@/butler-ds";
 
 export function SettingsSwitch({
@@ -9,6 +9,7 @@ export function SettingsSwitch({
   checked,
   disabled,
   disabledReason,
+  afterControl,
   onChange,
 }: {
   label: string;
@@ -18,6 +19,8 @@ export function SettingsSwitch({
   checked: boolean;
   disabled?: boolean;
   disabledReason?: string;
+  /** Live state under the switch (a download in progress, a ready line). */
+  afterControl?: ReactNode;
   onChange: (value: boolean) => void;
 }) {
   const generatedId = useId();
@@ -32,6 +35,7 @@ export function SettingsSwitch({
       label={label}
       description={description}
       descriptionId={description ? descriptionId : undefined}
+      afterControl={afterControl}
       control={
         <Switch
           id={controlId}

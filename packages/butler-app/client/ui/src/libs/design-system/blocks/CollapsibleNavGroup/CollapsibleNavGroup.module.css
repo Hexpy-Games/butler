@@ -35,16 +35,23 @@
   backdrop-filter: var(--nav-sticky-filter, none);
 }
 
-.stickyGroup > .header[data-slot="clickable"]:hover {
+/* Doubled class: outranks NavRow's own fills. */
+.stickyGroup > .header.header[data-slot="clickable"]:hover {
   background:
-    linear-gradient(var(--selection), var(--selection)),
+    linear-gradient(
+      var(--nav-hover-bg, var(--selection)),
+      var(--nav-hover-bg, var(--selection))
+    ),
     var(--nav-sticky-surface, var(--color-surface-base));
 }
 
 /* Keep the sticky header opaque while pressed so rows never show through. */
-.stickyGroup > .header[data-slot="clickable"]:active {
+.stickyGroup > .header.header[data-slot="clickable"]:active {
   background:
-    linear-gradient(var(--selection-strong), var(--selection-strong)),
+    linear-gradient(
+      var(--nav-selected-bg, var(--selection-strong)),
+      var(--nav-selected-bg, var(--selection-strong))
+    ),
     var(--nav-sticky-surface, var(--color-surface-base));
 }
 

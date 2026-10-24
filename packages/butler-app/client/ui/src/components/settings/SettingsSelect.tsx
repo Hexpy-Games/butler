@@ -29,6 +29,7 @@ export function SettingsSelect({
   disabledReason,
   controlWidth,
   action,
+  meta,
   triggerTestClass,
   value,
   onChange,
@@ -43,6 +44,8 @@ export function SettingsSelect({
   disabledReason?: string;
   controlWidth?: "default" | "full";
   action?: ReactNode;
+  /** Facts about the chosen value, under the control. */
+  meta?: ReactNode;
   triggerTestClass?: string;
   value: string;
   onChange: (value: string) => void;
@@ -127,6 +130,7 @@ export function SettingsSelect({
       descriptionId={description ? descriptionId : undefined}
       controlWidth={controlWidth}
       control={control}
+      meta={meta}
     />
   );
 }

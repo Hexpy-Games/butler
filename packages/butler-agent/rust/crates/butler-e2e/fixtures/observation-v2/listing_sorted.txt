@@ -1,0 +1,40 @@
+tab t1 epoch 3 obs o5
+Node rects and icon positions are CSS coordinates. Pointer points and capture_regions use screenshot coordinates; use image_geometry to convert.
+Visible editable fields, top to bottom (1):
+1. textbox "Search the store" [f0-e4] value="linen bag"
+link "Home" [f0-e1] frame=shop.example
+image "Shop logo" [f0-e2] frame=shop.example
+link "Shop logo" [f0-e3] frame=shop.example
+textbox "Search the store" [f0-e4] value="linen bag" frame=shop.example
+button "Search" [f0-e5] frame=shop.example
+link "icon 20×20 at 1080,76" [f0-e6] frame=shop.example
+heading "Results for linen bag" [f0-e7] frame=shop.example
+button "Sort: relevance" [f0-e8] frame=shop.example
+button "Lowest price" [f0-e9] frame=shop.example
+button "Free delivery" [f0-e10] frame=shop.example
+link "Mesh filter pouch 24x40 cm 3,300 each, delivery 3,000, arrives Tuesday" [f0-e14] frame=shop.example
+image "Mesh filter pouch 24x40 cm" [f0-e15] frame=shop.example
+link "Large cotton strainer bag 40x60 cm, 2 pack 9,450 each, delivery 3,000, arrives tomorrow" [f0-e11] frame=shop.example
+image "Large cotton strainer bag 40x60 cm, 2 pack" [f0-e12] frame=shop.example
+image "Earn up to 2% points" [f0-e13] frame=shop.example
+link "Unbleached drawstring pouch XL 3,990 each, free delivery" [f0-e16] state=focused frame=shop.example
+image "Unbleached drawstring pouch XL" [f0-e17] frame=shop.example
+button "Large cotton strainer bag 40x60 cm, 2 pack 9,450 each, delivery 3,000, arrives tomorrow" [f0-e18] frame=shop.example
+button "Free delivery" [f0-e19] frame=shop.example
+link "Reusable cotton produce bag set of 3 7,500 each, free delivery" [f0-e40] frame=shop.example
+image "Reusable cotton produce bag set of 3" [f0-e41] frame=shop.example
+link "Fine mesh brewing pouch 20x30 cm 4,800 each, delivery 2,500" [f0-e42] frame=shop.example
+image "Fine mesh brewing pouch 20x30 cm" [f0-e43] frame=shop.example
+link "Organic muslin storage sack 45x65 cm 8,200 each, arrives Friday" [f0-e44] frame=shop.example
+image "Organic muslin storage sack 45x65 cm" [f0-e45] frame=shop.example
+link "Washable linen bread bag with drawstring 6,900 each, free delivery" [f0-e46] frame=shop.example
+image "Washable linen bread bag with drawstring" [f0-e47] frame=shop.example
+link "Heavy cotton shopping tote with long handles 11,500 each, arrives Thursday" [f0-e48] frame=shop.example
+image "Heavy cotton shopping tote with long handles" [f0-e49] frame=shop.example
+button "Load more results" [f0-e20] frame=shop.example
+iframe "Sponsored" [f1-e1] frame=ads.example
+link "Sponsored: kitchen towels" [f1-e2] frame=ads.example
+Free delivery
+Lowest price
+Showing 8 of 120 results
+interactive 32/32 · below fold 140 · hidden {"invisible":12,"low_contrast":0,"tiny":3}

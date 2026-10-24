@@ -1015,6 +1015,11 @@ const butlerApp = Object.freeze({
     });
     return requestJson(`/turns?${params.toString()}`);
   },
+  uploadCanonFile: ({ projectId, name, mimeType, bytes }) => {
+    const form = new FormData();
+    form.set("file", new Blob([bytes], { type: mimeType || "application/octet-stream" }), name || "attachment");
+    return requestBridgeResult(`/projects/${encodeURIComponent(projectId)}/canon/files`, { method: "POST", body: form });
+  },
   uploadMessageFile: ({ name, mimeType, bytes, sessionId }) => {
     const form = new FormData();
     const fileBytes = bytes instanceof ArrayBuffer
@@ -1049,6 +1054,17 @@ const butlerApp = Object.freeze({
     const params = new URLSearchParams({ session_id: sessionId });
     return requestJson(`/session-queue?${params.toString()}`);
   },
+  getSessionPendingAsks: ({ sessionId } = {}) => requestJson(`/sessions/${encodeURIComponent(sessionId ?? "")}/pending-asks`),
+  getPendingAsks: ({ limit, before } = {}) => {
+    const query = new URLSearchParams();
+    if (limit !== undefined) query.set("limit", String(limit));
+    if (before !== undefined) query.set("before", before);
+    return requestJson(`/pending-asks${query.size ? `?${query}` : ""}`);
+  },
+  dismissPendingAsk: ({ sessionId, askId } = {}) => requestJson(
+    `/sessions/${encodeURIComponent(sessionId ?? "")}/pending-asks/${encodeURIComponent(askId ?? "")}/dismiss`,
+    { method: "POST" },
+  ),
   getAuthorityPermissions: () => requestJson("/authority-permissions"),
   revokeAuthorityPermissions: ({ grants } = {}) => requestJson("/authority-permissions/revoke", {
     method: "POST", body: JSON.stringify({ grants }),

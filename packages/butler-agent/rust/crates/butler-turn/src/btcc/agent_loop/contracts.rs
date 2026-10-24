@@ -29,6 +29,10 @@ pub struct AdmittedModelSelection {
     pub controls: Map<String, Value>,
     pub controls_hash: String,
     pub context_window_tokens: Option<f64>,
+    /// Cached-input over uncached-input list price, from the catalog at
+    /// admission; `None` when unpublished. Prices in-turn history rewrites.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached_input_price_ratio: Option<f64>,
     #[serde(flatten)]
     // Passthrough: unknown fields kept for forward compatibility.
     pub extensions: Map<String, Value>,

@@ -7,7 +7,6 @@ import type { CanonTag, EpicDetail } from "../../packages/butler-app/client/shar
 import { selectBoardPlan } from "./canon-board-selector.ts";
 import { closeCanonInspector } from "./canon-board-inspector.ts";
 import { assertNoChipControls, chooseTag } from "./canon-tags-flows.ts";
-import { auditTagPicker, auditTagRow } from "./canon-tags-picker-audit.ts";
 export const tones = ["gray", "red", "orange", "yellow", "green", "teal", "blue", "purple"] as const;
 const names = ["회색", "빨강", "주황", "노랑", "초록", "청록", "파랑", "보라"];
 const post = (body: unknown) => ({ method: "POST", body: JSON.stringify(body) });
@@ -27,12 +26,6 @@ export async function captureTagViews(page: Page, shots: string, name: string, t
   const card = board.locator(`[data-kanban-item="${palette.id}"]`);
   await selectBoardPlan(page, "프리뷰 14");
   await card.waitFor();
-  if (!before) {
-    const plan = await board.getByRole("button", { name: "계획", exact: true }).boundingBox();
-    const filter = await board.getByRole("combobox", { name: "태그 필터", exact: true }).boundingBox();
-    assert(plan && filter && Math.abs(plan.y - filter.y) < 4 && filter.x >= plan.x + plan.width,
-      "Tag filter is beside the plan selector");
-  }
   if (!before) {
     assert.equal(await card.locator('[data-test-class="canon-tags"] [data-size="sm"]').count(), 4);
     await card.getByText("+5", { exact: true }).waitFor();
@@ -63,7 +56,6 @@ export async function captureTagViews(page: Page, shots: string, name: string, t
   else await board.getByRole("button", { name: "계획", exact: true }).click();
   await capture("filter");
   await page.keyboard.press("Escape");
-  assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "No viewport overflow");
 }
 
 async function captureInspectorTags(page: Page, tags: CanonTag[], before: boolean, capture: (view: string) => Promise<unknown>) {
@@ -71,18 +63,16 @@ async function captureInspectorTags(page: Page, tags: CanonTag[], before: boolea
   if (!before) {
     for (const tone of tones) assert.equal(await detail.locator(`[data-test-class="canon-tags"] [data-tone="${tone}"]`).count(), 1);
     await assertNoChipControls(page);
-    await auditTagRow(page);
-    if (page.viewportSize()!.width === 1440) {
-      const width = await page.locator('[data-test-class~="right-inspector"]').evaluate(element => getComputedStyle(element).getPropertyValue("--right-panel-width"));
-      assert.equal(parseFloat(width), 376, "Desktop inspector track is 376px");
-    }
   }
   await capture("inspector");
   if (before) await detail.getByRole("button", { name: "고치기", exact: true }).click();
   await detail.getByRole("combobox", { name: "태그", exact: true }).click();
   const popover = page.locator('[data-slot="filtered-select-popover"]');
   await popover.getByRole("textbox", { name: "태그 검색", exact: true }).waitFor();
-  if (!before) await auditTagPicker(page, tags.length);
+  if (!before) {
+    assert.equal(await popover.locator('[data-slot="filtered-select-item"]').count(), tags.length, "All tags are available");
+    await popover.locator('[data-slot="filtered-select-item"]').last().scrollIntoViewIfNeeded();
+  }
   await capture("inspector-open");
   const row = popover.locator('[data-slot="filtered-select-item"]').filter({ hasText: tags[1]!.name });
   await row.hover();

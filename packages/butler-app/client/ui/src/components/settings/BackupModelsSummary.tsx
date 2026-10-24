@@ -1,6 +1,6 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { useId, useState } from "react";
-import { Button, Collapsible, SettingsField, Stack } from "@/butler-ds";
+import { Button, Collapsible, SettingsField, SettingsFieldGroup } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { modelDisplayName } from "@/app/utils.ts";
 import type { AppModelSummary, SettingsView } from "@/app/types.ts";
@@ -56,9 +56,9 @@ export function BackupModelsSummary() {
         }
       />
       <Collapsible open={editing} id={editorId}>
-        <Stack gap="xl">
+        <SettingsFieldGroup>
           <BackupModelsSettings models={registeredModels} draft={draft} saving={saving} onUpdate={updateSettings} />
-        </Stack>
+        </SettingsFieldGroup>
       </Collapsible>
     </>
   );

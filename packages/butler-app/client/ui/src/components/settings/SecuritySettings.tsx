@@ -3,7 +3,7 @@ import { useSavedKeys } from "./hooks/useSavedKeys";
 import { useGrants } from "./useGrants";
 import { memo, useId, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { DisclosureRow, SettingsField, Stack } from "@/butler-ds";
+import { DisclosureRow, SettingsField, SettingsFieldGroup, Stack } from "@/butler-ds";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 import { SecurityAllowedHostsField } from "./SecurityAllowedHostsField";
 import { SecurityPairingSection } from "./SecurityPairingSection";
@@ -91,7 +91,7 @@ function SecurityAdvancedSection({ security, open, onToggle }: {
       >
         <Stack id={panelId} align="row" gap="none">
           <Stack.Item basis="lg" minWidth="0">
-            <Stack gap="xl">
+            <SettingsFieldGroup>
               <SettingsField
                 label={copy.hosts}
                 description={copy.hostsDescription}
@@ -104,7 +104,7 @@ function SecurityAdvancedSection({ security, open, onToggle }: {
                 descriptionId={contentHintId}
                 control={<SecurityAllowedHostsField content hosts={view.content_hosts ?? []} disabled={busy !== null} onSave={security.saveContentHosts} describedBy={contentHintId} />}
               />
-            </Stack>
+            </SettingsFieldGroup>
           </Stack.Item>
         </Stack>
       </DisclosureRow>

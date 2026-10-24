@@ -25,6 +25,7 @@ pub(super) fn provider_candidates(
     policy: &GuidedExecutionPolicy,
     phase: GuidedPhase,
     required_profiles: &[String],
+    browse: bool,
 ) -> HashSet<String> {
     let mut names = profile_candidates(catalog, authorized, policy, phase, required_profiles);
     if turn_admits_zai_image_tool(policy) {
@@ -64,7 +65,15 @@ pub(super) fn provider_candidates(
     {
         names.insert("project_artifacts".into());
     }
+    if browse {
+        names.retain(|name| !deferred_browser(name));
+        names.insert("browse".into());
+    }
     names
+}
+
+pub(super) fn deferred_browser(name: &str) -> bool {
+    BROWSER_CORE.contains(&name) && name != "browser_act"
 }
 
 /// Initial tools of the public-web, workspace (outside the direct phase),
@@ -139,7 +148,15 @@ pub(super) fn add_role_tools(
         }
     }
     if policy.role == PolicyRole::Steward {
-        names.extend(["delegate_to_worker", "steer_worker", "wait_for_worker"].map(str::to_owned));
+        names.extend(
+            [
+                "delegate_to_worker",
+                "steer_worker",
+                "wait_for_worker",
+                "read_prior_delegation",
+            ]
+            .map(str::to_owned),
+        );
     }
     if policy.role == PolicyRole::Butler {
         names.retain(|name| {

@@ -17,6 +17,7 @@ mod image;
 mod library;
 mod memory_write;
 pub(crate) use memory_write::MemoryWriteServices;
+mod browse;
 mod browser;
 mod message;
 mod monitoring;
@@ -133,6 +134,8 @@ struct State {
     output_images: u8,
     journal_by_provider: HashMap<String, String>,
     described_ids: HashSet<String>,
+    /// Per tab, the observation view the model holds (observation text v2).
+    browser_views: HashMap<String, browser::TabView>,
 }
 
 pub(crate) struct GuidedTools {
@@ -332,6 +335,7 @@ impl GuidedTools {
                     | ToolName::SteerWorker
                     | ToolName::CancelSteward
                     | ToolName::WaitForWorker
+                    | ToolName::ReadPriorDelegation
                     | ToolName::UpdateTodoList
                     | ToolName::ListTodoList
                     | ToolName::GetContextMonitor
@@ -347,6 +351,7 @@ impl GuidedTools {
                     | ToolName::RunDueAutomations
                     | ToolName::WebSearch
                     | ToolName::WebRead
+                    | ToolName::Browse
                     | ToolName::ListWallpapers
                     | ToolName::SetWallpaper
                     | ToolName::SaveWallpaperModule

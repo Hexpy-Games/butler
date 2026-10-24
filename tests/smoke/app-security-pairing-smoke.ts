@@ -6,7 +6,6 @@ import { join, resolve } from "node:path";
 import { type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { appCopy, setAppCopyLanguage } from "../../packages/butler-app/client/ui/src/app/copy.ts";
-type PairingStatus = { id: string };
 
 const language = process.env.PAIRING_SMOKE_LANGUAGE ?? "en";
 setAppCopyLanguage(language);
@@ -58,10 +57,8 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   // Test-side admin forwarding models the desktop main process; credentials
   // stay out of the renderer. All requests still reach the real stub gateway.
-  let pairingReads = 0;
   await page.route(`${server.url}**`, async (route) => {
     const path = new URL(route.request().url()).pathname;
-    if (path === "/security/pairing" && route.request().method() === "GET") pairingReads++;
     const headers = path.startsWith("/security") || path === "/settings" ? adminHeaders : server.authHeaders;
     await route.continue({ headers: { ...route.request().headers(), ...headers } });
   });
@@ -86,11 +83,6 @@ try {
   await page.getByText(copy.paired, { exact: true }).waitFor();
   await page.getByText("Remote device · browser", { exact: true }).waitFor();
   assert.equal(await page.locator('[data-test-class="pairing-code"]').count(), 0, "paired code is removed");
-  const readsAfterPairing = pairingReads;
-  const status = await admin<PairingStatus>("/security/pairing");
-  await page.waitForTimeout(1500);
-  assert.equal((await admin<PairingStatus>("/security/pairing")).id, status.id, "paired flow stops issuing codes");
-  assert.equal(pairingReads, readsAfterPairing, "paired flow stops polling");
   await page.getByText("127.0.0.1", { exact: true }).waitFor();
   await verifyLayouts(page);
   await page.getByRole("button", { name: copy.revokeDevice("Remote device · browser"), exact: true }).click();

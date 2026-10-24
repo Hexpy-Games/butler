@@ -23,10 +23,10 @@ const WORKER_PROFILE_FIELDS = [
 export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSectionSchema[]> = {
   memory: [
     { id: "instructions", kind: "list", fields: [] },
-    { id: "chat-memory", kind: "status", fields: [] },
+    { id: "chat-memory", kind: "form", fields: ["recall-mode", "recall-judge-model", "memory-free-space", "memory-reset-chat"] },
     { id: "memory-model", kind: "form", fields: ["memory-model"] },
-    { id: "profile-memory", kind: "status", fields: [] },
-    { id: "project-memory", kind: "status", fields: ["memory-project"] },
+    { id: "profile-memory", kind: "form", fields: ["memory-reset-profile"] },
+    { id: "project-memory", kind: "form", fields: ["memory-project", "memory-reset-project"] },
   ],
   general: [
     { id: "language-region", kind: "form", fields: ["language", "timezone"] },
@@ -78,7 +78,8 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   updates: [{ id: "updates", kind: "list", fields: [] }],
   usage: [
     { id: "usage-overview", kind: "status", fields: [] },
-    { id: "usage-providers", kind: "list", fields: [] },
+    { id: "usage-history", kind: "status", fields: [] },
+    { id: "usage-providers", kind: "status", fields: [] },
     { id: "usage-scope-tokens", kind: "list", fields: [] },
     { id: "usage-model-tokens", kind: "list", fields: [] },
     { id: "usage-prompt-sections", kind: "list", fields: [] },
@@ -87,10 +88,11 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   logs: [
     { id: "logs-level", kind: "form", fields: ["log-level"] },
     { id: "logs-viewer", kind: "list", fields: [] },
-    { id: "logs-storage", kind: "status", fields: [] },
+    { id: "logs-storage", kind: "status", fields: ["logs-export", "logs-clear"] },
     { id: "developer-context-estimates", kind: "list", fields: [] },
   ],
   browser: [
+    { id: "browsing-agent", kind: "form", fields: ["browsing-agent"] },
     { id: "browser-history", kind: "form", fields: ["browser-history"] },
     { id: "browser-site-data", kind: "form", fields: ["browser-site-data"] },
     { id: "sign-ins", kind: "list", fields: [] },

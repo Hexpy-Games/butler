@@ -30,6 +30,7 @@ impl AppApplication {
                 .await
                 .map_err(app_error)?;
         }
+        let dimensions = super::image_dimensions::read(&input.bytes);
         let written = self
             .dependencies
             .message_files
@@ -41,7 +42,7 @@ impl AppApplication {
             .await?;
         let row = self
             .storage
-            .execute(move |db| insert_uploaded(db, owner.as_ref(), &written))
+            .execute(move |db| insert_uploaded(db, owner.as_ref(), &written, dimensions))
             .await
             .map_err(app_error)?;
         self.dependencies
@@ -103,10 +104,12 @@ pub(super) fn insert_uploaded(
     db: &Connection,
     owner: Option<&String>,
     file: &super::MaterializedResponderFile,
+    dimensions: Option<(u32, u32)>,
 ) -> Result<AppMessageFileSnapshot, AppStorageError> {
+    let dimensions = dimensions.filter(|_| file.kind == "image");
     db.execute(
         "INSERT INTO message_files (id,owner_session_id,message_id,kind,mime_type,safe_name,\
-         size_bytes,sha256,storage_name,created_at) VALUES (?1,?2,NULL,?3,?4,?5,?6,?7,?8,?9)",
+         size_bytes,sha256,storage_name,created_at,width,height) VALUES (?1,?2,NULL,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
         params![
             file.id,
             owner,
@@ -116,7 +119,9 @@ pub(super) fn insert_uploaded(
             file.size_bytes,
             file.sha256,
             file.storage_name,
-            file.created_at
+            file.created_at,
+            dimensions.map(|size| size.0),
+            dimensions.map(|size| size.1)
         ],
     )
     .map_err(AppStorageError::sqlite)?;

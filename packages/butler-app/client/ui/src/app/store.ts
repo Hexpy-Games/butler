@@ -140,6 +140,8 @@ export interface NavigationSetOptions {
 interface ButlerStore {
   leftOpen: boolean;
   rightOpen: boolean;
+  sessionInfoOpen: boolean;
+  taskGraphEnabled: boolean;
   rightTab: string;
   selectedArtifactId: string | null;
   selectedArtifact: SessionArtifactSummary | null;
@@ -308,7 +310,6 @@ interface ButlerStore {
   ) => Promise<void>;
   retryTurn: (turnId: string) => Promise<void>;
   retryTurnWithCurrentControls: (turnId: string) => Promise<void>;
-  controlWorker: (workerId: string, action: string) => Promise<void>;
   navigateCommandResult: (result: CommandPaletteResult) => void;
 }
 
@@ -951,6 +952,8 @@ export const useButlerStore = create<ButlerStore>()(withCanonEditGuard((set, get
   leftOpen: false,
   // New users start without the inspector; a saved UI state restores it.
   rightOpen: false,
+  sessionInfoOpen: false,
+  taskGraphEnabled: false,
   rightTab: "summary",
   selectedArtifactId: null,
   selectedArtifact: null,
@@ -1028,12 +1031,12 @@ export const useButlerStore = create<ButlerStore>()(withCanonEditGuard((set, get
     set({ selectedArtifactId: artifactId, selectedArtifact: null }),
   openArtifact: (artifactId, artifact) =>
     set((state) => ({
-      ...normalizeAdaptivePanelState({
+      ...(state.view.kind === "session" ? { sessionInfoOpen: true } : normalizeAdaptivePanelState({
         mode: currentAdaptiveMode(chromeEnvironment()),
         requested: "right",
         leftOpen: state.leftOpen,
         rightOpen: true,
-      }),
+      })),
       rightTab: "artifacts",
       selectedArtifactId: artifactId,
       selectedArtifact: artifact ?? null,
@@ -1076,6 +1079,8 @@ export const useButlerStore = create<ButlerStore>()(withCanonEditGuard((set, get
       view: { kind: "session" },
       ...panels,
       rightTab: uiState.right_tab,
+      sessionInfoOpen: uiState.session_info_open === true,
+      taskGraphEnabled: uiState.task_graph_enabled === true,
       leftPanelWidth: uiState.left_panel_width,
       rightPanelWidth: uiState.right_panel_width,
       sidebarChatsCollapsed: uiState.sidebar_chats_collapsed,
@@ -2441,31 +2446,6 @@ export const useButlerStore = create<ButlerStore>()(withCanonEditGuard((set, get
     }
   },
 
-  controlWorker: async (workerId, action) => {
-    try {
-      const result = await api<{ notice?: MessageRecord }>(
-        `/worker-activity/${encodeURIComponent(workerId)}/control`,
-        {
-          method: "POST",
-          body: JSON.stringify({ action }),
-        },
-      );
-      if (result.notice?.chat_id === get().activeChatId) {
-        set((state) => ({
-          messages: result.notice
-            ? mergeMessages(state.messages, [result.notice])
-            : state.messages,
-        }));
-      }
-      await get().refreshSessionSummary(get().activeChatId);
-    } catch (error) {
-      notifyError(error, appCopy.interfaceFeedback.workerControlFailed, {
-        id: `worker-control-${workerId}`,
-      });
-      set({ status: { label: "ready", tone: "ok" } });
-    }
-  },
-
   navigateCommandResult: (result) => {
     if (result.route.startsWith("session:")) {
       get().openSession(result.route.slice("session:".length));
@@ -2532,7 +2512,6 @@ export const selectActiveChat = (state: ButlerStore) =>
 export const selectActiveSessionView = (state: ButlerStore) =>
   state.view.kind === "session";
 export const selectRightAvailable = (state: ButlerStore) =>
-  (selectActiveSessionView(state) && isServerBackedSessionId(state.activeChatId)) ||
   (state.view.kind === "project-dashboard" && Boolean(state.view.epicId));
 export const selectEffectiveRightOpen = (state: ButlerStore) =>
   state.rightOpen && selectRightAvailable(state);

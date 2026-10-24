@@ -68,6 +68,10 @@
 }
 
 [data-panel-layout="docked"] .shell[data-frame="cards"] .sidebar {
+  /* Row fills follow the shell surface, like the app sidebar's. */
+  --nav-hover-bg: var(--sidebar-hover-bg);
+  --nav-selected-bg: var(--sidebar-selected-bg);
+
   border-right: 0;
   background: transparent;
 }

@@ -20,13 +20,12 @@ let tab = "";
 const shot = async (name: string) => writeFileSync(join(evidence!, `${name}.png`), await app.page.screenshot());
 async function handOff(label: string) {
   await waitBrowser(() => app.page.expression(`Boolean(${card})`), `${label}: hand-off card`);
-  const shown = await tabOf(tab);
-  assert.deepEqual([shown.holder, shown.waiting], ["user", true], `${label}: the user holds the waiting tab`);
+  await waitBrowser(async () => { const shown = await tabOf(tab); return shown.holder === "user" && shown.waiting; },
+    `${label}: the user holds the waiting tab`);
   const text = await app.page.expression<string>(`${card}.innerText`);
   for (const line of ["Needs you in the tab", "Stop task", "Open to check"]) assert.ok(text.includes(line), `${label}: ${line} in ${text}`);
   assert.ok(!text.includes(tab) && !/Allow|Deny|risk/u.test(text), `${label}: no permission ask or tab id: ${text}`);
-  await new Promise(done => setTimeout(done, 1500));
-  assert.equal((await turn()).latest_turn?.state, "waiting_for_form", `${label}: still waiting for the hand-back`);
+  await waitBrowser(async () => (await turn()).latest_turn?.state === "waiting_for_form", `${label}: the turn waits for the hand-back`);
 }
 try {
   await app.page.reload();
@@ -43,6 +42,7 @@ try {
   await shot("not-taken-over-card");
   await app.call("control", { id: tab, holder: "agent" });
   await app.delivered();
+  await waitBrowser(() => app.page.expression(`!${card}`), "hand-back clears the card");
   console.log("not taken over: held until the hand-back");
 
   // 2. Already taken over: same card, same hand-back.
@@ -52,6 +52,7 @@ try {
   await handOff("taken over");
   await app.call("control", { id: tab, holder: "agent" });
   await app.delivered();
+  await waitBrowser(() => app.page.expression(`!${card}`), "hand-back clears the card");
   console.log("taken over: held until the hand-back");
 
   // 3. Stop task on the card ends the wait.

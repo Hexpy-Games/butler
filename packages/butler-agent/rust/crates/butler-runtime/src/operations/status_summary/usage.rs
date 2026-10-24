@@ -2,6 +2,7 @@
 
 mod availability;
 mod buckets;
+mod history;
 mod log;
 mod plan;
 mod row;
@@ -13,7 +14,7 @@ use parking_lot::Mutex;
 use serde_json::{Value, json};
 
 use super::health::{self, TranscriptActivityProjection};
-use super::stream::{number, visit_jsonl};
+use super::stream::visit_jsonl;
 
 use crate::context::TranscriptActivityCache;
 use buckets::Tokens;
@@ -30,7 +31,7 @@ pub struct UsageMonitorSources<'a> {
     pub pricing: &'a dyn Fn(&str) -> Option<butler_models::models::ModelPricing>,
     /// The latest quota view of a provider id.
     pub quota: &'a dyn Fn(&str) -> crate::operations::ProviderQuotaView,
-    /// Providers that reported quota, shown even without usage in the window.
+    /// Providers with registered credential bindings, in registry order.
     pub quota_providers: Vec<String>,
     /// Active signed-in ChatGPT account, independent of selected usage scope.
     pub chatgpt_account: Option<String>,
@@ -53,6 +54,17 @@ impl UsageMonitor {
             log: Mutex::new(UsageLogIndex::with_owners(owners)),
             ..Default::default()
         }
+    }
+
+    /// Refresh and project local activity on the caller's blocking worker.
+    pub fn history(
+        &self,
+        root: &Path,
+        pricing: &dyn Fn(&str) -> Option<butler_models::models::ModelPricing>,
+    ) -> std::io::Result<Value> {
+        let mut log = self.log.lock();
+        log.refresh(root, Some(pricing));
+        log.history()
     }
 
     /// Refresh the incremental log before asynchronous legacy resolution.
@@ -184,7 +196,9 @@ impl UsageMonitor {
         plan::include_provider(&mut provider_buckets, sources);
         let web_search = availability::read_web_search(data_root, since_ts, now, self);
         let mut providers = provider_summary(provider_buckets, sources);
-        plan::attach(&mut providers, &self.log.lock(), sources, now);
+        self.log
+            .lock()
+            .attach_provider_usage(&mut providers, sources, now);
         let tool_session = scope
             .as_deref()
             .map(|scope| scope.strip_prefix("btcc-guided:").unwrap_or(scope));
@@ -284,6 +298,9 @@ fn provider_summary(
     mut values: BTreeMap<String, Tokens>,
     sources: Option<&UsageMonitorSources<'_>>,
 ) -> Value {
+    if let Some(sources) = sources {
+        values.retain(|provider, _| sources.quota_providers.contains(provider));
+    }
     for provider in sources
         .map(|sources| sources.quota_providers.as_slice())
         .unwrap_or_default()
@@ -301,20 +318,14 @@ fn provider_summary(
         bucket.insert("billing".into(), json!({ "available": false, "reason": "Provider billing adapter is not configured." }));
         value
     }).collect::<Vec<_>>();
-    providers.sort_by(|left, right| {
-        number(right.get("totalTokens"))
-            .unwrap_or(0.0)
-            .total_cmp(&number(left.get("totalTokens")).unwrap_or(0.0))
-            .then_with(|| {
-                number(right.get("promptTokens"))
-                    .unwrap_or(0.0)
-                    .total_cmp(&number(left.get("promptTokens")).unwrap_or(0.0))
-            })
-            .then_with(|| {
-                left["providerId"]
-                    .as_str()
-                    .cmp(&right["providerId"].as_str())
-            })
-    });
+    if let Some(sources) = sources {
+        providers.sort_by_key(|value| {
+            sources
+                .quota_providers
+                .iter()
+                .position(|id| value["providerId"].as_str() == Some(id))
+                .unwrap_or(usize::MAX)
+        });
+    }
     json!({ "activeProviderId": providers.first().and_then(|value| value["providerId"].as_str()), "providers": providers })
 }

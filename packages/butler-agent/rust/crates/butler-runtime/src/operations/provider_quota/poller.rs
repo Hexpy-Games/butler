@@ -46,6 +46,10 @@ pub trait ProviderQuotaFetcher: Send + Sync {
     fn providers(&self) -> Vec<String>;
     /// Whether polling `provider_id` is enabled (the per-provider kill switch).
     fn enabled(&self, provider_id: &str) -> bool;
+    /// Registry changes cancel an in-flight fetch before it can publish stale quota.
+    fn changes(&self) -> Option<tokio::sync::watch::Receiver<u64>> {
+        None
+    }
     /// One poll; `allow_refresh` lets a rejected token be refreshed once.
     fn fetch<'a>(&'a self, provider_id: &'a str, allow_refresh: bool) -> QuotaFetchFuture<'a>;
 }
@@ -137,7 +141,9 @@ impl ProviderQuotaPoller {
 
     /// Records which providers are kill-switched, so their views say so.
     pub fn sync_switches(&self) {
-        for provider in self.fetcher.providers() {
+        let providers = self.fetcher.providers();
+        self.schedules.lock().retain(|id, _| providers.contains(id));
+        for provider in providers {
             let disabled = !self.fetcher.enabled(&provider);
             let marked = self.store.status(&provider) == Some(QuotaPollStatus::Disabled);
             if disabled && !marked {
@@ -183,7 +189,22 @@ impl ProviderQuotaPoller {
             .entry(provider.to_owned())
             .or_default()
             .last_attempt_ms = Some(now);
-        let fetch = self.fetcher.fetch(provider, allow_refresh).await;
+        let mut changes = self.fetcher.changes();
+        let changed = async {
+            match changes.as_mut() {
+                Some(changes) => {
+                    let _ = changes.changed().await;
+                }
+                None => std::future::pending::<()>().await,
+            }
+        };
+        let fetch = tokio::select! {
+            fetch = self.fetcher.fetch(provider, allow_refresh) => fetch,
+            () = changed => return,
+        };
+        if !self.fetcher.enabled(provider) {
+            return;
+        }
         let finished = self.clock.now_epoch_millis();
         if fetch.refreshed_login {
             self.schedules

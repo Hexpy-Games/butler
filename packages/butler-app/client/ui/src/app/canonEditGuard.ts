@@ -1,6 +1,6 @@
 import type { StateCreator } from "zustand";
 
-type Navigation = { view: unknown; rightOpen: boolean; rightTab: string; activeChatId: string };
+type Navigation = { view: unknown; rightOpen: boolean; rightTab: string; activeChatId: string; sessionInfoOpen: boolean };
 type EditGuard = { leave: () => Promise<boolean> };
 let editor: EditGuard | undefined;
 
@@ -10,8 +10,13 @@ export function registerCanonEditor(guard: EditGuard): () => void {
   return () => { if (editor === guard) editor = undefined; };
 }
 
+export function leaveCanonEditor(): Promise<boolean> {
+  return editor?.leave() ?? Promise.resolve(true);
+}
+
 function leavesInspector<T extends Navigation>(state: T, patch: Partial<T>): boolean {
-  return (patch.view !== undefined && JSON.stringify(patch.view) !== JSON.stringify(state.view))
+  return (patch.sessionInfoOpen !== undefined && patch.sessionInfoOpen !== state.sessionInfoOpen)
+    || (patch.view !== undefined && JSON.stringify(patch.view) !== JSON.stringify(state.view))
     || (patch.rightOpen !== undefined && patch.rightOpen !== state.rightOpen)
     || (patch.rightTab !== undefined && patch.rightTab !== state.rightTab)
     || (patch.activeChatId !== undefined && patch.activeChatId !== state.activeChatId);

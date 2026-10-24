@@ -1,3 +1,4 @@
+import { SessionSectionHeader } from "../session-info/SessionSection.tsx";
 import { useAppLocale } from "@/app/copy.ts";
 import { useCallback } from "react";
 import { EmptyPanelLine } from "@/components/common/Display.tsx";
@@ -14,9 +15,10 @@ import {
 } from "@/components/artifacts/artifactDisplay";
 
 export function ArtifactsPanel({
-  artifacts,
+  artifacts, compact = false,
 }: {
   artifacts: SessionArtifactSummary[];
+  compact?: boolean;
 }) {
   useAppLocale();
   const selectedArtifactId = useButlerStore(
@@ -54,9 +56,10 @@ export function ArtifactsPanel({
   return (
     <InspectorInset>
       <Section
-        title={appCopy.artifacts.title}
+        title={compact ? undefined : appCopy.artifacts.title}
         gap="md"
       >
+        {compact && <SessionSectionHeader title={appCopy.sessionInfo.artifacts} count={allArtifacts.length} />}
         {selectedArtifact ? (
           <ArtifactViewer
             artifact={selectedArtifact}

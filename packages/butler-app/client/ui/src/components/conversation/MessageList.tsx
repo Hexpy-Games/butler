@@ -1,3 +1,5 @@
+import { useConversationRequest } from "./ConversationRequestContext.tsx";
+import { MessageRow } from "@/butler-ds";
 import { memo, useMemo } from "react";
 import { useAnswerDrafts, draftTurns, withDraftMessages } from "@/app/answerDrafts";
 import { SessionBranchSeed } from "./SessionBranchSeed";
@@ -43,7 +45,10 @@ function MessageListComponent({ messages, turnProgress, bottomReserve, isSending
     [progressRows, turnState, turnStartedAt, turnId]);
   const enteringIds = useEnteringMessageIds(visibleMessages, activeChatId);
   const queue = useQueuedConversation(visibleMessages, activeChatId);
-  const itemCount = messageItemCount + queue.items.length;
+  const request = useConversationRequest();
+  const anchored = request?.active && visibleMessages.some(message => message.id === request.sourceMessageId);
+  const requestIndex = messageItemCount + queue.items.length;
+  const itemCount = requestIndex + (request?.active && !anchored ? 1 : 0);
   const { parentRef, seedRef, rowVirtualizer, topOffset, virtualListHeight, scrollState } = useMessageListLayout({
     visibleMessages, showTurnActivity, itemCount, bottomReserve, activeChatId, isSending,
     queuedKeys: queue.keys, branchSeed: summary?.branch_seed,
@@ -55,6 +60,10 @@ function MessageListComponent({ messages, turnProgress, bottomReserve, isSending
         <MessageListSurface height={virtualListHeight} onColumnRect={onColumnRect}>
           {summary?.branch_seed && <div ref={seedRef}><SessionBranchSeed /></div>}
           {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+            if (request?.active && !anchored && virtualRow.index === requestIndex) return <MessageRow key="pending-request" role="assistant"
+              index={virtualRow.index} rowRef={rowVirtualizer.measureElement} offsetY={virtualRow.start + topOffset}>
+              <div ref={request.setTarget} data-test-class="conversation-request" />
+            </MessageRow>;
             const queued = queue.items[virtualRow.index - messageItemCount];
             if (queued) return <QueuedMessageItem key={`queued-${queued.key}`} item={queued} queue={queue}
               virtualRow={virtualRow} topOffset={topOffset} rowVirtualizer={rowVirtualizer} />;

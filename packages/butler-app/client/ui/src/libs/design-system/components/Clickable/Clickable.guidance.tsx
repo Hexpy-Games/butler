@@ -63,11 +63,13 @@ export const guidance: ShowcaseGuidance = {
   content: [
     "The content is the label; give an aria-label when it is only an icon or a long composite row.",
     "bleed=\"inline\" needs room beside the row: use it inside a padded surface (a settings card), not flush against a clipping edge.",
+    "Row fills already fade on the hover token and press lands at once; a className needs no background transition of its own.",
   ],
   accessibility: [
     "role=\"button\" with Enter and Space activation; disabled removes it from the tab order.",
     "selected sets aria-pressed, so a toggle row announces its state; leave it undefined on rows that do not toggle.",
     "Nested IconButtons must stop propagation so the row does not fire.",
+    "With prefers-reduced-motion the fill fade is dropped: fills change at once.",
   ],
-  tokens: ["--selection", "--selection-strong", "--radius-control", "--focus-ring", "--interactive-disabled-fg", "--motion-fast"],
+  tokens: ["--selection", "--selection-strong", "--radius-control", "--focus-ring", "--interactive-disabled-fg", "--motion-fast", "--motion-instant", "--motion-ease-standard"],
 };

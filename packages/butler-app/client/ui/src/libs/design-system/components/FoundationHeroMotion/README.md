@@ -56,14 +56,15 @@ scenes, its prelude choreography and its builds.
   poster layout, so the same choreography fits the wide and tall canvases,
   every theme and both languages. The canvas is laid out at 2x (`zoom`) and
   drawn at half scale so camera push-ins stay sharp.
+- The finale frames the poster as it really ends: the hero's time-based
+  animations are held at the settled beat while the poster is measured.
+  Scroll-driven animations of real components inside (SidebarShell's scroll
+  fades) follow their scroller, not the beat, and are left as they are.
 - One shared `IntersectionObserver` and one `visibilitychange` listener serve
   every hero: offscreen or in a hidden tab the loops hold their frame
   (`data-hero-state="paused"`).
 - Reduced motion (OS setting or the DS `data-motion="reduced"` scope) shows
   the still poster with no animation (`data-hero-state="still"`).
-- `bun run app:motion:trace -- --only=heroes` measures every hero (frame
-  rate, main-thread cost per frame, long tasks, paused and still states);
-  add `--video` for one recorded loop of each hero in light and dark.
 
 ## Where and why
 

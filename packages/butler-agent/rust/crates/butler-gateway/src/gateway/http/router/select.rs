@@ -35,12 +35,20 @@ fn commands(request: &Request<Body>) -> Option<Handler> {
     ) {
         return Some(Handler::CanonSidebar);
     }
+    if matches!(
+        parts.as_slice(),
+        ["pending-asks"]
+            | ["sessions", _, "pending-asks"]
+            | ["sessions", _, "pending-asks", _, "dismiss"]
+    ) {
+        return Some(Handler::PendingAsks);
+    }
     let routes = [
         (
             matches!(
                 parts.as_slice(),
                 ["projects", _, "canon"]
-                    | ["projects", _, "canon", "plans" | "epics" | "tags"]
+                    | ["projects", _, "canon", "plans" | "epics" | "tags" | "files"]
                     | ["projects", _, "canon", "backlog", "order"]
                     | ["canon", "plans" | "epics" | "tags", _]
                     | ["canon", "plans", _, "order"]
@@ -85,7 +93,11 @@ fn monitors(request: &Request<Body>) -> Option<Handler> {
         (
             matches!(
                 path,
-                "/usage-monitor" | "/work-status" | "/worker-activity" | "/system-events"
+                "/usage-history"
+                    | "/usage-monitor"
+                    | "/work-status"
+                    | "/worker-activity"
+                    | "/system-events"
             ) || path.starts_with("/worker-activity/")
                 || (path.starts_with("/sessions/") && path.contains("/worker-activity")),
             Handler::Monitors,

@@ -15,6 +15,8 @@ export async function seedCanonSidebar(server: NativeAppServerHandle) {
   return seed;
 }
 export async function showCanonSidebar(page: Page) {
+  // The visibility checks below are instantaneous; wait until the chrome has rendered its sidebar toggle.
+  await page.getByRole("button", { name: /^사이드바 (보기|숨기기)$/u }).first().waitFor();
   const hideInspector = page.getByRole("button", { name: "오른쪽 패널 숨기기", exact: true });
   if (page.viewportSize()!.width === 390 && await hideInspector.isVisible()) {
     await hideInspector.click();
@@ -34,17 +36,13 @@ export async function openPlan(page: Page, planId: string | null) {
   // The row lives inside a drawer at phone widths; navigation closes it normally.
 }
 export async function showEpicInspector(page: Page) {
-  const inspector = page.locator('[data-test-class~="right-inspector"]');
-  const tab = inspector.getByRole("button", { name: "과제", exact: true });
-  if (!await tab.isVisible()) {
-    const show = page.getByRole("button", { name: "오른쪽 패널 보기", exact: true });
-    await show.click();
-  }
-  await tab.waitFor();
-  assert.equal(await inspector.getByRole("button").first().innerText(), "과제");
-  await tab.click();
-  await page.locator('[data-test-class="canon-epic-detail"]').waitFor();
-  assert.equal(await inspector.getByRole("button", { name: "대화 열기", exact: true }).count(), 1);
+  const toggle = page.getByRole("button", { name: "세션 정보", exact: true });
+  if (await toggle.getAttribute("aria-pressed") !== "true") await toggle.click();
+  const info = page.getByRole("complementary", { name: "세션 정보", exact: true });
+  await info.locator('[data-test-class="canon-epic-detail"]').waitFor();
+  assert.equal(await info.getByRole("button", { name: "대화 열기", exact: true }).count(), 0);
+  await info.getByRole("progressbar", { name: "작업", exact: true }).waitFor();
+  await info.getByRole("combobox", { name: "상태", exact: true }).waitFor();
 }
 export async function createFromSidebar(page: Page, projectId: string, planId: string): Promise<CanonConversation> {
   await showCanonSidebar(page);

@@ -325,7 +325,7 @@ export interface BrowserCopy {
     copy: string; selectAll: string; paste: string;
   };
   siteData: { title: string; label: string; description: string; clear: string; confirmTitle: string; confirmMessage: string; items: string; itemList: string; kept: string; cleared: string; failed: string; desktopOnly: string };
-  history: { erase: string; title: string; search: string; clear: string; butlerOnly: string; empty: string; hour: string; today: string; week: string; all: string; suggestions: string; };
+  history: { erase: string; title: string; search: string; clear: string; butlerOnly: string; empty: string; hour: string; today: string; week: string; all: string; suggestions: string; pageLabel: string; pageDescription: string; };
   tabCount: string; tabMoved: string; agentControl: string; handBack: string; stills: string; still: string; stillPending: string; stillUnavailable: string; stillFailure: Record<string, string>;
   title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string;
   reload: string; stop: string; loading: string; crashed: string; empty: string; conversationEmpty: string; updateRequired: string; restartRequired: string; failed: string;
@@ -455,6 +455,7 @@ export interface AppCopy {
     revokeUnconfirmed: string;
   };
   shell: { footerNav: string; update: { downloading: string; working: string; ready: string; failed: string; restart: string } };
+  sessionInfo: typeof import("./locales/session-info.ts").SESSION_INFO_COPY["en-US"];
   taskGraph: TaskGraphCopy;
   lifecycle: LifecycleCopy;
   browser: BrowserCopy;
@@ -580,14 +581,11 @@ export interface AppCopy {
     contextChart: string;
     contextUnavailable: string;
     noProgress: string;
-    branchDetails: string;
     gitBranch: string;
-    noVisibleSkills: string;
     detachedHead: string;
     notGit: string;
     noWorkspace: string;
     noGit: string;
-    unavailableWorktree: string;
     worktree: string;
     projectFolder: string;
     projectWorkspace: string;
@@ -595,7 +593,6 @@ export interface AppCopy {
     unavailable: string;
     dirty: string;
     clean: string;
-    noWorkers: string;
     recentActivity: string;
     noRecentActivity: string;
     activeSessions: string;
@@ -1039,6 +1036,15 @@ export interface AppCopy {
     queuedPosition: (position: number, total: number) => string;
     contextDetails: string;
     usage: {
+      overviewTitle: string; historyTitle: string;
+      lifetimeTokens: string; busiestDay: string; longestTask: string;
+      longestStreak: string; currentStreak: string; days: (n: number) => string;
+      viewDaily: string; viewWeekly: string; viewCumulative: string;
+      weekOf: (date: string) => string; throughWeek: (date: string) => string;
+      limitResetsIn: (t: string) => string; elapsedMinutes: (n: number) => string; durationHours: (n: number) => string;
+      checkedAgo: (t: string) => string; resetsIn: (t: string) => string;
+      limitReached: string; payAsYouGo: string; thisMonth: string;
+      refreshFailedStale: (t: string) => string; estimated: string;
       chatgptProvider: string;
       thisChat: string;
       conversationPart: string;
@@ -1075,14 +1081,12 @@ export interface AppCopy {
       similar: string;
       emptyRange: string;
       noRecords: string;
-      recent: (range: string) => string;
       tinyCost: string;
       tinyShare: string;
       noMatches: string;
       pickerFooter: (range: string) => string;
       viewAll: (count: number) => string;
       bucketHours: (start: number, end: number, single: boolean) => string;
-      checked: (time: string) => string;
       failures: (count: string) => string;
       details: string;
       cached: string;
@@ -1229,7 +1233,6 @@ export interface AppCopy {
       workers: string;
     };
     workers: {
-      showDetails: string;
       hideDetails: string;
     };
   };
@@ -1384,6 +1387,9 @@ export interface AppCopy {
       deleting: string; instructionsEmpty: string; deleteInstructionTitle: string;
       chatsKept: string; instructionDeleted: string; deleteFailed: string;
       freeWaiting: string; nothingToFree: string; inUse: string;
+      storageLabel: string; freeSpaceDescription: string;
+      resetChatLabel: string; resetChatDescription: string; resetProfileLabel: string; resetProfileDescription: string;
+      resetProjectLabel: string; resetProjectDescription: string;
       ago: (age: string) => string;
       freeing: (bytes: string) => string; freed: (bytes: string) => string;
       freeStopped: (bytes: string) => string; freeCancelled: (bytes: string) => string;
@@ -1705,6 +1711,9 @@ export interface AppCopy {
       clearMenu: string;
       clearTitle: string;
       clearBody: string;
+      exportDescription: string;
+      clearLabel: string;
+      clearDescription: string;
       cleared: (size: string) => string;
       clearFailed: string;
       diagnosticsLabel: string;
@@ -2077,6 +2086,12 @@ export interface AppCopy {
       passport: string;
     };
     /** Settings → Security → import from another browser (counts only). */
+    browsingAgent: {
+      label: string;
+      auto: (model: string) => string;
+      off: string;
+      conversationModel: string;
+    };
     browserImport: {
       chooseItems: string;
       /** One-line purpose under the import title. */

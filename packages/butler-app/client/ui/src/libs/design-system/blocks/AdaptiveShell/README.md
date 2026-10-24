@@ -111,6 +111,14 @@ rectangular shell.
   `--text-*`, `--muted-foreground`, `--menu-group-label-color`) to them.
   They equal the global tones except Windows dark, where acrylic over a light
   desktop lifts the shell (#1187); a solid shell takes the global tones.
+- Sidebar row fills follow the surface too, never a platform check. The root
+  picks `--sidebar-hover-bg` / `--sidebar-selected-bg` with the shell layer
+  (`--mac-sidebar-*` on macOS, `--windows-sidebar-*` on Windows; browsers and
+  Linux leave them unset) and the docked sidebar maps them to NavRow's
+  `--nav-hover-bg` / `--nav-selected-bg`. Light tinted shells (macOS and
+  Windows translucent, `.sidebar-solid` everywhere) set the white family;
+  the white base of web and Linux translucent, the drawer and the peek card
+  (both clear them) and all of dark keep the `--selection` shades.
 - Content sits in rounded cards (`--shell-card-bg`, `--shell-card-radius`
   12, one quiet `--shell-card-edge`, `--shell-card-shadow` none), inset
   `--shell-card-inset` (8) from the window and `--shell-card-gap` (8) from

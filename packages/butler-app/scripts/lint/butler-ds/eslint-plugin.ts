@@ -1,4 +1,5 @@
 import type { Rule } from "eslint";
+import { settingsEslintRules } from "./settings-rules.ts";
 
 // Loose JSX/TS AST node shape; ESLint's ESTree types do not model JSX or TS nodes.
 type Node = { type: string; [key: string]: any };
@@ -166,5 +167,6 @@ export const butlerDsEslintPlugin = {
     "no-raw-interactive": noRawInteractive,
     "no-raw-typography": noRawTypography,
     "unsafe-style-allowlist": unsafeStyleAllowlist,
+    ...settingsEslintRules,
   },
 };

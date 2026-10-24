@@ -146,3 +146,49 @@ describe("butler-ds/unsafe-style-allowlist", () => {
     ],
   });
 });
+
+describe("butler-ds/settings-field-grouping", () => {
+  const ds = 'import { Button, Inline, SettingsActionField, SettingsField, SettingsFieldGroup, SettingsSection, Stack } from "@/butler-ds";';
+  tester.run("settings-field-grouping", rules["settings-field-grouping"], {
+    valid: [
+      `${ds} const a = <SettingsSection id="s" kind="form"><SettingsField label="A" control={c} /><SettingsField label="B" control={c} /></SettingsSection>;`,
+      `${ds} const a = <><SettingsField label="A" control={c} />{on && <SettingsField label="B" control={c} />}</>;`,
+      `${ds} const a = <SettingsFieldGroup id="g"><SettingsField label="A" control={c} /><SettingsField label="B" control={c} /></SettingsFieldGroup>;`,
+      `${ds} const a = <Stack gap="none"><SettingsField label="A" control={c} /></Stack>;`,
+      `${ds} const a = <Stack align="row"><Stack.Item basis="lg"><SettingsFieldGroup><SettingsField label="A" control={c} /></SettingsFieldGroup></Stack.Item></Stack>;`,
+      `${ds} const a = <Stack gap="sm"><Button>Copy</Button><Button>Paste</Button></Stack>;`,
+      `${ds} const a = <SettingsSection id="s" kind="list" actions={<Button>Add</Button>}>{rows}</SettingsSection>;`,
+      `${ds} const a = <SettingsActionField label="Reset" description="Erases it." action={<Button>Reset</Button>} />;`,
+    ],
+    invalid: [
+      {
+        code: `${ds} const a = <Stack gap="md"><SettingsField label="A" control={c} /><SettingsField label="B" control={c} /></Stack>;`,
+        errors: [{ messageId: "gapWrapper", data: { wrapper: "Stack", child: "SettingsField" } }],
+      },
+      {
+        code: `${ds} const a = <Stack>{open ? <SettingsActionField label="A" description="B" action={x} /> : null}</Stack>;`,
+        errors: [{ messageId: "gapWrapper", data: { wrapper: "Stack", child: "SettingsActionField" } }],
+      },
+      {
+        code: `${ds} const a = <Inline>{items.map((item) => <SettingsField key={item} label={item} control={c} />)}</Inline>;`,
+        errors: [{ messageId: "gapWrapper", data: { wrapper: "Inline", child: "SettingsField" } }],
+      },
+      {
+        code: `${ds} const a = <Stack gap="md"><SettingsSection id="a" kind="form" /><SettingsSection id="b" kind="form" /></Stack>;`,
+        errors: [{ messageId: "gapWrapper", data: { wrapper: "Stack", child: "SettingsSection" } }],
+      },
+      {
+        code: `${ds} const a = <div gap="12px"><SettingsField label="A" control={c} /></div>;`,
+        errors: [{ messageId: "gapWrapper", data: { wrapper: "div", child: "SettingsField" } }],
+      },
+      {
+        code: `${ds} const a = <SettingsSection id="s" kind="status" actions={<Button>Reset</Button>}>{facts}</SettingsSection>;`,
+        errors: [{ messageId: "headerAction" }],
+      },
+      {
+        code: `${ds} const a = <SettingsSection id="s" kind={kind} actions={<Button>Reset</Button>} />;`,
+        errors: [{ messageId: "headerAction" }],
+      },
+    ],
+  });
+});

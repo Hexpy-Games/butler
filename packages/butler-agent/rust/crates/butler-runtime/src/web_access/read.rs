@@ -11,6 +11,8 @@ use url::Url;
 mod fetch;
 mod headless;
 pub(super) mod lightpanda;
+pub(super) mod rank;
+mod tab;
 
 impl super::service::WebAccess {
     pub async fn read_cli(
@@ -135,33 +137,44 @@ impl WebSession {
                 None => page_key(parsed.as_str()),
             },
         };
-        let observation_key = format!("{cache_key}:{start_chunk}:{max_chars}:{max_chunks}");
+        let query = args["query"]
+            .as_str()
+            .filter(|query| !query.trim().is_empty());
+        let observation_key =
+            format!("{cache_key}:{start_chunk}:{max_chars}:{max_chunks}:{query:?}");
+        if let Some(live) = live {
+            let window = (max_chars, max_chunks, start_chunk);
+            return self
+                .read_tab(
+                    live,
+                    (&parsed, &requested_url),
+                    window,
+                    observation_key,
+                    query,
+                )
+                .await;
+        }
         if let Some(mut cached) = self.cached_observation(&observation_key) {
             cached["cache_hit"] = Value::Bool(true);
             cached["duplicate_observation"] = Value::Bool(true);
             return Ok(cached);
         }
         // A parallel read of the same page waits for this one and reuses it.
-        let escalate = browsing && live.is_none();
         let gate = self.read_gate(&cache_key);
         let _reading = gate.lock().await;
-        let (page, cache_hit) = match (self.cached_page(&cache_key).await?, live) {
-            (Some(page), _) => (page, true),
-            (None, live) => {
-                let page = match live {
-                    Some(live) => live_page(live, &requested_url).await?,
-                    None => {
-                        self.access
-                            .read_page(parsed.clone(), &requested_url, &backend, cancellation)
-                            .await?
-                    }
-                };
+        let (page, cache_hit) = match self.cached_page(&cache_key).await? {
+            Some(page) => (page, true),
+            None => {
+                let page = self
+                    .access
+                    .read_page(parsed.clone(), &requested_url, &backend, cancellation)
+                    .await?;
                 self.remember_page(cache_key.clone(), &page).await?;
                 (page, false)
             }
         };
-        let mut observation = bounded_result(&page, max_chars, max_chunks, start_chunk);
-        if escalate && needs_tab(&page) {
+        let mut observation = read_result(&page, max_chars, max_chunks, start_chunk, query);
+        if browsing && needs_tab(&page) {
             to_tab(&page, &mut observation);
         }
         let mut result = observed(&page, &parsed, observation);
@@ -304,6 +317,19 @@ async fn live_page(live: LivePage, requested_url: &str) -> Result<PageRead, WebA
     })?
 }
 
+pub(super) fn read_result(
+    page: &PageRead,
+    max_chars: usize,
+    max_chunks: usize,
+    start: usize,
+    query: Option<&str>,
+) -> Value {
+    match query {
+        Some(query) => rank::result(page, query, max_chunks, start),
+        None => bounded_result(page, max_chars, max_chunks, start),
+    }
+}
+
 fn bounded_result(page: &PageRead, max_chars: usize, max_chunks: usize, start: usize) -> Value {
     let candidates = page
         .chunks
@@ -337,15 +363,7 @@ fn bounded_result(page: &PageRead, max_chars: usize, max_chunks: usize, start: u
     let next_start = (start + selected.len() < page.chunks.len()).then_some(start + selected.len());
     let has_more = next_start.is_some();
     let has_evidence = !markdown.trim().is_empty() || !selected.is_empty();
-    let evidence_quality = if !has_evidence {
-        "unavailable"
-    } else if page.ok && page.text.encode_utf16().count() >= 500 && page.warnings.is_empty() {
-        "good"
-    } else if page.ok && !page.text.is_empty() {
-        "limited"
-    } else {
-        "unavailable"
-    };
+    let evidence_quality = evidence_quality(page, has_evidence);
     let chunks = selected
         .iter()
         .map(|chunk| {
@@ -407,4 +425,16 @@ fn bounded_text(value: &str, max: usize) -> (String, bool) {
         .utf8_lossy()
         .into_owned();
     (format!("{}\n...[truncated]", text.trim_end()), true)
+}
+
+fn evidence_quality(page: &PageRead, has_evidence: bool) -> &'static str {
+    if !has_evidence {
+        "unavailable"
+    } else if page.ok && page.text.encode_utf16().count() >= 500 && page.warnings.is_empty() {
+        "good"
+    } else if page.ok && !page.text.is_empty() {
+        "limited"
+    } else {
+        "unavailable"
+    }
 }

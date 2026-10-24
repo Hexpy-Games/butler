@@ -96,7 +96,9 @@ async function routeFixture(page: Page) {
 async function capture(page: Page, name: string) {
   await page.evaluate(() => document.fonts.ready);
   await page.waitForFunction(() => document.getAnimations().every((animation) =>
-    animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
+    // Scroll-driven animations follow scroll position, not time, and never finish.
+    animation.timeline !== document.timeline || animation.effect?.getTiming().iterations === Infinity ||
+      animation.playState !== "running"));
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name}: no page overflow`);
   await page.screenshot({ path: resolve(shots, `${name}.png`), animations: "allow", timeout: 10_000 });
   await page.mouse.move(0, 0);

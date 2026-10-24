@@ -8,7 +8,7 @@
   background: var(--selection);
 }
 .error {
-  padding-inline: var(--space-lg);
+  padding-inline: var(--composer-panel-inset);
 }
 
 /* The focus foundation reserves ring space inside clipping scroll containers. */
@@ -20,7 +20,7 @@
   box-shadow: none;
 }
 .tabInset {
-  padding: var(--space-sm) var(--space-lg) 0;
+  padding: var(--space-sm) var(--composer-panel-inset) 0;
   min-width: 0;
 }
 .editingOption {

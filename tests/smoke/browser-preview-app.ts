@@ -42,6 +42,14 @@ async function reviewed(name: string, args: Record<string, unknown>, target: str
   await app.gateway.api(`/authority-requests/${approval.request_ref}/allow?session_id=${session}`, { method: "POST", body: JSON.stringify({ scope: "once" }) });
   await delivered();
 }
+function previewCwd(approval: Approval) {
+  const db = new Database(join(app.gateway.butlerData, "agent-runtime/btcc.sqlite"), { readonly: true });
+  try {
+    const row = db.query("SELECT workspace_path FROM btcc_authority_requests WHERE request_ref = ?").get(approval.request_ref) as { workspace_path: string } | null;
+    assert.ok(row);
+    return resolve(row.workspace_path, "preview-fixture");
+  } finally { db.close(); }
+}
 function toolResult() {
   const db = new Database(join(app.gateway.butlerData, "agent-runtime/btcc.sqlite"), { readonly: true });
   try {
@@ -76,8 +84,9 @@ try {
   await waitBrowser(async () => (await requests()).requests.length === 1, "exact preview approval");
   const approval = (await requests()).requests[0]!;
   assert.equal(approval.approval.operation.command, "bun serve.mjs");
-  const cwd = approval.approval.operation.targets[0]!;
-  assert.ok(cwd.endsWith("/preview-fixture") && cwd.startsWith("/"));
+  // 7ad7cd269: approval cards display workspace-relative paths.
+  assert.deepEqual(approval.approval.operation.targets, ["preview-fixture"]);
+  const cwd = previewCwd(approval);
   assert.equal(await fetch(`http://127.0.0.1:${port}/`).then(() => true, () => false), false, "no process before approval");
   await app.shot("approval-command-cwd");
   await app.gateway.api(`/authority-requests/${approval.request_ref}/allow?session_id=${session}`, { method: "POST", body: JSON.stringify({ scope: "once" }) });
@@ -122,7 +131,7 @@ try {
   await reviewed("preview_stop", { preview_id: result.preview_id }, result.preview_id);
   await waitBrowser(() => app.main(`!globalThis.browserAgentSubject.tabs.has(${JSON.stringify(tab)})`), "stop closes preview tab");
   assert.equal(await fetch(`http://127.0.0.1:${port}/`).then(() => true, () => false), false, "stop terminates Vite");
-  await reviewed("preview_start", { command: "bun serve.mjs", cwd: "preview-fixture", port }, cwd);
+  await reviewed("preview_start", { command: "bun serve.mjs", cwd: "preview-fixture", port }, "preview-fixture");
   const restarted = toolResult();
   assert.notEqual(restarted.preview_id, result.preview_id);
   const archiveTab = restarted.browser.tab;

@@ -1,12 +1,12 @@
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { getCanonEpic, type EpicDetail, type EpicInput } from "@/app/canonApi.ts";
 import { appCopy } from "@/app/copy.ts";
 
-export type EpicTextField = "title" | "description";
-type Draft = { field: EpicTextField; value: string; base: EpicDetail; revision: number; current?: EpicDetail };
+import { useCanonInlineDraft, type EpicTextField } from "./CanonInlineDraft.tsx";
+export type { EpicTextField } from "./CanonInlineDraft.tsx";
 
 export function useEpicInlineEdit(epic: EpicDetail, onWrite: (input: EpicInput, message?: string) => Promise<boolean>) {
-  const [draft, setDraft] = useState<Draft | null>(null);
+  const [draft, setDraft] = useCanonInlineDraft();
   const inFlight = useRef<Promise<boolean> | null>(null);
   const cancel = () => setDraft(null);
   const dirty = Boolean(draft && draft.value !== draft.base[draft.field]);
@@ -34,6 +34,6 @@ export function useEpicInlineEdit(epic: EpicDetail, onWrite: (input: EpicInput, 
   };
   return { draft, dirty, valid, save, cancel,
     begin: (field: EpicTextField) => setDraft({ field, value: epic[field], base: epic, revision: epic.revision }),
-    change: (value: string) => setDraft(current => current && { ...current, value }),
+    change: (value: string) => setDraft(current => current && current.base.id === epic.id && current.field === draft?.field ? { ...current, value } : current),
   };
 }

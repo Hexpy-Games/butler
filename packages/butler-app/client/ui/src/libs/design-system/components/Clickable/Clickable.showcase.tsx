@@ -51,7 +51,7 @@ function Suggestion({ context, disabled }: { context: ShowcaseRenderContext; dis
 }
 
 export const stories: ShowcaseStory[] = [
-  { name: "Suggestion row", render: (context) => <Suggestion context={context} /> },
+  { name: "Suggestion row", states: ["hover"], render: (context) => <Suggestion context={context} /> },
   {
     name: "Stretched list rows",
     states: ["selected"],

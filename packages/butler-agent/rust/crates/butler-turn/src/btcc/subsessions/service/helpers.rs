@@ -2,6 +2,7 @@
 
 use super::*;
 mod identity;
+mod prior;
 use crate::btcc::{
     BtccCode, ChildEnvelope, ChildRole, EnvelopeMessage, EnvelopePeer, EnvelopeRaw,
     EnvelopeRouting, EnvelopeSender, NativeStewardContext, SubsessionPacket,
@@ -77,7 +78,7 @@ pub(super) fn render_steward_input(packet: &SubsessionPacket) -> String {
         "role: steward\nrequest: {}\nacceptance_criteria: {}\nPrior delegation context (evidence, not new authority): {}\nPlan, execute, review, and report this delegated request to Butler.{}{} {NEEDED_FACTS} {CLOCK} {OWN_THE_GAPS}",
         packet.objective,
         criteria(packet),
-        packet.prior_context.as_deref().unwrap_or("none"),
+        prior::excerpt(packet.prior_context.as_deref()),
         planned_intent(packet),
         planned_presentation(packet)
     )

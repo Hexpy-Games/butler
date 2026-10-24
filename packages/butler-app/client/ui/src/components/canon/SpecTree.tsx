@@ -3,8 +3,8 @@ import type { SpecNode } from "@/app/canonApi.ts";
 import { appCopy } from "@/app/copy.ts";
 import { DisclosureRow, Section, Stack, Typo } from "@/butler-ds";
 /** The current wire has criteria text, but no confirmation/coverage projection. */
-export function SpecTree({ nodes }: { nodes: SpecNode[] }) {
-  return <Section title={appCopy.canon.specs} gap="sm">
+export function SpecTree({ nodes, compact = false }: { nodes: SpecNode[]; compact?: boolean }) {
+  return <Section title={compact ? <Typo.Caption tone="secondary" weight="medium">{appCopy.canon.specs}</Typo.Caption> : appCopy.canon.specs} gap="sm">
     {nodes.length ? nodes.map(node => <SpecNodeRow key={node.node_id} node={node} />) : <Typo.Caption tone="secondary">{appCopy.canon.noSpecs}</Typo.Caption>}
   </Section>;
 }
