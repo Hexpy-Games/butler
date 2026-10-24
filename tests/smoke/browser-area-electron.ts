@@ -73,13 +73,30 @@ async function quitAndStop(page: Page) {
   recordRestore("after-stop");
 }
 
-async function launch(): Promise<Page> {
+async function launch({ holdRestore = false } = {}): Promise<Page> {
   const executable = process.env.BUTLER_SMOKE_ELECTRON_EXECUTABLE;
   assert.ok(executable, "BUTLER_SMOKE_ELECTRON_EXECUTABLE must explicitly name Electron 44");
   const debugPort = await freePort();
   mkdirSync(join(dir, "home"), { recursive: true });
+  // Gate the renderer's first navigation from a test-owned entry point. The
+  // ready event runs before bootstrap's whenReady continuation imports main.
+  const entry = join(dir, "bootstrap.mjs");
+  writeFileSync(entry, `
+    import ${JSON.stringify(resolve(root, "packages/butler-app/client/electron/bootstrap.mjs"))};
+    import {APP_RENDERER_ENTRY_URL} from ${JSON.stringify(resolve(root, "packages/butler-app/client/electron/app-renderer-protocol.mjs"))};
+    const {app}=process.getBuiltinModule('module').createRequire(${JSON.stringify(resolve(root, "packages/butler-app/client/electron/package.json"))})('electron');
+    app.once('ready',()=>{
+      const {BrowserWindow}=process.getBuiltinModule('module').createRequire(${JSON.stringify(resolve(root, "packages/butler-app/client/electron/package.json"))})('electron');
+      const load=BrowserWindow.prototype.loadURL;
+      BrowserWindow.prototype.loadURL=function(url,...args){
+        if(url!==APP_RENDERER_ENTRY_URL)return load.call(this,url,...args);
+        BrowserWindow.prototype.loadURL=load;
+        return new Promise((done,fail)=>{globalThis.releaseRendererLoad=()=>{load.call(this,url,...args).then(done,fail)}});
+      };
+    });
+  `);
   child = spawnElectron(executable, [`--inspect=${inspectorPort}`, `--remote-debugging-port=${debugPort}`,
-    ...smokeElectronArgs(), resolve(root, "packages/butler-app/client/electron")], {
+    ...smokeElectronArgs(), entry], {
     cleanupPaths: [], // The restart flow owns this profile until final teardown.
     onOutput: bytes => logs.push(String(bytes).replace(/(__o\/)[^/\s]+/gu, "$1[redacted]")), env: { ...process.env, HOME: join(dir, "home"), BUTLER_HOME: join(dir, "home"), BUTLER_DATA: gateway!.butlerData,
       BUTLER_APP_ELECTRON_USER_DATA_DIR: join(dir, "profile"), BUTLER_APP_UI_URL: "",
@@ -88,15 +105,14 @@ async function launch(): Promise<Page> {
       BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1", BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1", BUTLER_E2E_TIER: "stub" } });
   child.on("exit", (code, signal)=>logs.push(JSON.stringify({ event:"child-exit", code, signal })));
   child.on("close", (code, signal)=>logs.push(JSON.stringify({ event:"child-close", code, signal })));
-  const page = await electronPage(debugPort, origin);
-  connected = page;
-  await main(`(() => {${win}.show();${win}.focus();${win}.webContents.focus()})()`);
+  await waitUntil(() => main<boolean>("Boolean(globalThis.releaseRendererLoad)").catch(() => false), "renderer navigation held");
   assert.match(await main<string>("process.versions.electron"), /^44\./u);
   await main(`(async () => {
     const module=process.getBuiltinModule('module').createRequire(${JSON.stringify(resolve(root, "packages/butler-app/client/electron/package.json"))})(${JSON.stringify(resolve(root, "packages/butler-app/client/electron/browser/tabs.mjs"))});
     const dummy=module.createUserBrowser({getPath:()=>${JSON.stringify(join(dir, "profile"))},on:()=>{}},()=>null);
     const prototype=Object.getPrototypeOf(dummy);const snapshot=prototype.snapshot;
     const open=prototype.open;
+    globalThis.holdBrowserRestore=${holdRestore};
     prototype.open=function(){
       if(globalThis.holdBrowserRestore && !this.initialization){
         const read=this.restore.read;
@@ -120,15 +136,18 @@ async function launch(): Promise<Page> {
       const entry={op,value:input?.value,owner:input?.owner,at:Date.now()};globalThis.browserTrace.push(entry);
       try{return await handler(event,op,input)}finally{entry.finished=Date.now();entry.children=${win}.contentView.children.length}
     });
+    globalThis.releaseRendererLoad();
   })()`);
+  const page = await electronPage(debugPort, origin);
+  connected = page;
+  await main(`(() => {${win}.show();${win}.focus();${win}.webContents.focus()})()`);
   return page;
 }
 
 /** Hold the real snapshot read until the mounted renderer has flushed its effects and IPC. */
 async function openDuringRestore(page: Page) {
-  await main("globalThis.holdBrowserRestore=true;globalThis.browserTrace=[]");
   try {
-    await click(page, "Browser");
+    if (!await page.expression("Boolean(document.querySelector('[data-test-class=browser-area]'))")) await click(page, "Browser");
     await waitUntil(() => main<boolean>("Boolean(globalThis.releaseBrowserRestore)"), "restore read held");
     await waitUntil(() => main<boolean>("globalThis.browserTrace.some(e=>e.op==='scope' && e.value===false && e.owner==='mine')"), "browser mount effects");
     // The scope and automatic-create effects run in the same passive-effect flush.
@@ -314,7 +333,7 @@ try {
   await shot(page, "after-artifact-return");
   const restoredUrls = (await state(page)).tabs.map(tab=>tab.url);
   await quitAndStop(page);
-  page = await launch();
+  page = await launch({ holdRestore: true });
   await main(`${win}.setSize(1440,900)`);
   await page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="browser-entry"]')));
   await openDuringRestore(page);
