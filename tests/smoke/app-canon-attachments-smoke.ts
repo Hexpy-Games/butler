@@ -131,7 +131,7 @@ async function verifyFiles(page: import("playwright").Page, server: Awaited<Retu
     await detail.getByRole("button", { name: "저장", exact: true }).click();
     const attach = detail.getByRole("button", { name: "파일 첨부", exact: true });
     assert(await attach.isDisabled());
-    await attach.locator("..").hover();
+    await attach.hover();
     await page.getByRole("tooltip").filter({ hasText: "저장 중" }).waitFor();
   } finally { releaseSave(); }
 
