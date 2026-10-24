@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 import type { CanonPlan } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 import { defaultCanonPlan } from "../../packages/butler-app/client/ui/src/components/canon/canonPlanSelection.ts";
 const plan = (id: string, due_on: string | null, updated_at: number, status: "open" | "closed" = "open"): CanonPlan => ({
-  id, due_on, updated_at, status, project_id: "project", title: id, description: "", visibility: "canon", revision: 1,
+  id, due_on, updated_at, status, project_id: "project", title: id, description: "", revision: 1,
 });
 const today = new Date(2030, 5, 10);
 test("default selects nearest future due date including today, regardless of API order", () => {

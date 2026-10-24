@@ -86,7 +86,7 @@ async function verifyCancelledMove(page: Page, server: NativeAppServerHandle, pr
   const canon = await server.api<CanonOverview>(`/projects/${projectId}/canon`);
   const card = canon.backlog[0]!;
   await server.api(`/canon/epics/${card.id}`, { method: "PATCH", body: JSON.stringify({
-    expected_revision: card.revision, expected_task_graph_revision: card.task_graph_revision, status: "cancelled",
+    expected_revision: card.revision, status: "cancelled",
   }) });
   await moveFromBacklog(page, card.title, planId);
   const saved = await server.api<CanonOverview>(`/projects/${projectId}/canon`);

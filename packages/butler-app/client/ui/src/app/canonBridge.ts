@@ -11,8 +11,9 @@ export function canonBridgeInput(url: URL, verb: string, body: () => Record<stri
     const plan = entity[1] === "plans";
     const method = entity[3] ? verb === "POST" ? (plan && entity[3] === "/order" ? "orderCanonPlan" : !plan && entity[3] === "/conversation" ? "linkCanonConversation" : undefined) : undefined :
       verb === "GET" ? plan ? "getCanonPlan" : "getCanonEpic" : verb === "PATCH" ? plan ? "editCanonPlan" : "editCanonEpic" : undefined;
-    return method ? { method, input: { id: decodeURIComponent(entity[2]!), body: body() } } : null;
+    if (!method) return null;
+    const input = body();
+    return { method, input: { id: decodeURIComponent(entity[2]!), ...(method === "linkCanonConversation" ? { sessionId: input.session_id } : { body: input }) } };
   }
-  const tasks = verb === "GET" ? url.pathname.match(/^\/works\/([^/]+)\/tasks$/u) : null;
-  return tasks ? { method: "getWorkTasks", input: { id: decodeURIComponent(tasks[1]!) } } : null;
+  return null;
 }

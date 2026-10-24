@@ -76,6 +76,7 @@ impl AppApplication {
         copy(&mut view, "steward_children", &subsessions);
         view.insert("work_streams".into(), work_streams);
         view.insert("branch".into(), branch);
+        view.insert("epic_ids".into(), json!(session.epic_ids));
         view.insert("skills_used".into(), json!(session.skills_used));
 
         view.insert("automations".into(), automation_targets);
@@ -161,6 +162,7 @@ impl AppApplication {
         view.insert("context_details".into(), context_details);
         view.insert("safe_errors".into(), json!(safe_errors(&messages.messages)));
         view.insert("branch_info".into(), branch_info);
+        view.insert("epic_ids".into(), json!(session.epic_ids));
         view.insert("skills_used".into(), json!(session.skills_used));
         let automation_targets = self.automation_targets(session_id.clone()).await?;
         view.insert("automation_targets".into(), automation_targets);

@@ -55,7 +55,7 @@ async fn wma_sidebar_conversation_navigation_and_replay() -> Result<(), HarnessE
     let (a, b) = tokio::join!(link(&s, &work["id"]), link(&s, &work["id"]));
     let a = a?;
     assert_eq!(a["session_id"], b?["session_id"]);
-    assert_eq!(a["work"]["home_session_id"], a["session_id"]);
+    assert_eq!(a["work"]["sessions"][0]["session_id"], a["session_id"]);
     let chat = a["session_id"].as_str().unwrap();
     let session = data(
         s.gw.get(&format!("/project-sessions?project_id={project}"))
@@ -86,7 +86,19 @@ async fn wma_sidebar_conversation_navigation_and_replay() -> Result<(), HarnessE
         s.gw.post("/canon/epics/missing/conversation", json!({}))
             .await?;
     assert_eq!(missing.status, 404);
-    let hooks = std::fs::read_to_string(&hook_output)?;
+    let hooks = match std::fs::read_to_string(&hook_output) {
+        Ok(hooks) => hooks,
+        Err(error) => {
+            let admin = butler_e2e::e2e::security::AdminClient::new(
+                s.gw.clone(),
+                s.agent.launch.admin_credential().unwrap(),
+            );
+            let runs = admin
+                .send(reqwest::Method::GET, "/hooks/runs", None, &[])
+                .await?;
+            return Err(HarnessError(format!("{error}; hooks: {}", runs.text)));
+        }
+    };
     let hooks: Vec<Value> = hooks
         .trim_start_matches('\u{feff}')
         .lines()
@@ -121,7 +133,7 @@ async fn wma_sidebar_conversation_navigation_and_replay() -> Result<(), HarnessE
     drop(app_db);
     let btcc = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
     btcc.execute(
-        "UPDATE wm_cross_db_intents SET state='pending' WHERE kind='canon_conversation'",
+        "UPDATE canon_intents SET state='pending' WHERE kind='canon_conversation'",
         [],
     )?;
     // The first receipt is terminally invalid; the following one still creates a chat.
@@ -138,10 +150,10 @@ async fn wma_sidebar_conversation_navigation_and_replay() -> Result<(), HarnessE
         ),
         ("001-replay", pending),
     ] {
-        btcc.execute("INSERT INTO wm_cross_db_intents(op_id,kind,payload_json,state,revision,created_at) VALUES(?1,'canon_conversation',?2,'pending',0,0)", rusqlite::params![op,payload.to_string()])?;
+        btcc.execute("INSERT INTO canon_intents(op_id,kind,payload_json,state,revision,created_at) VALUES(?1,'canon_conversation',?2,'pending',0,0)", rusqlite::params![op,payload.to_string()])?;
     }
     btcc.execute(
-        "UPDATE wm_works SET home_session_id=?1 WHERE id=?2",
+        "INSERT OR IGNORE INTO canon_session_epics(session_id,epic_id,bound_at,bound_by,origin) VALUES(?1,?2,0,'{}','user')",
         rusqlite::params![owner, other["id"].as_str()],
     )?;
     drop(btcc);
@@ -189,7 +201,11 @@ async fn wma_sidebar_conversation_navigation_and_replay() -> Result<(), HarnessE
     assert_eq!(hooks.iter().filter(|h| h["source"] == "created").count(), 2);
     s.agent.terminate().await?;
     let btcc = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-    let pending: i64 = btcc.query_row("SELECT count(*) FROM wm_cross_db_intents WHERE kind='canon_conversation' AND state='pending'", [], |r| r.get(0))?;
+    let pending: i64 = btcc.query_row(
+        "SELECT count(*) FROM canon_intents WHERE kind='canon_conversation' AND state='pending'",
+        [],
+        |r| r.get(0),
+    )?;
     assert_eq!(pending, 0);
     drop(btcc);
     s.finish().await
@@ -275,7 +291,7 @@ async fn wma_sidebar_personal_order_preserves_canon() -> Result<(), HarnessError
     let btcc = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
     assert_eq!(
         btcc.execute(
-            "DELETE FROM wm_plans WHERE id=?1",
+            "DELETE FROM canon_plans WHERE id=?1",
             [plan["id"].as_str().unwrap()]
         )?,
         1

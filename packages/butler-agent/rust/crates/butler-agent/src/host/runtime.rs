@@ -249,8 +249,7 @@ impl AgentRuntime {
             Arc::new(|| uuid::Uuid::new_v4().to_string()),
         ));
         let session_work = Arc::new(SessionWorkRepository::new(stores.btcc.clone(), now.clone()));
-        let (project_work, work_model) =
-            work_ports::create(&stores.btcc, &project_ledger, now.clone());
+        let (project_work, canon) = work_ports::create(&stores.btcc, &project_ledger, now.clone());
         let work_repository = Arc::new(
             crate::host::guided::scope_selected_work::ScopeSelectedWorkRepository::new(
                 stores.bindings.clone(),
@@ -395,7 +394,7 @@ impl AgentRuntime {
             memory_acquisition,
             service_shutdown: stop.clone(),
             btcc: assembly.btcc,
-            work_model,
+            canon,
             host: assembly.host,
             bindings,
             models,

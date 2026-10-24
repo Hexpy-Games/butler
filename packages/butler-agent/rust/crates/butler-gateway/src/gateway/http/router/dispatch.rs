@@ -70,7 +70,7 @@ async fn commands(
 ) -> Result<Response, HttpError> {
     match handler {
         Handler::CanonSidebar => canon_sidebar::route(state, request, uri).await,
-        Handler::WorkModel => work_model::route(state, request, uri).await,
+        Handler::Canon => canon::route(state, request, uri).await,
         Handler::TaskGraphs => task_graphs::route(state, request, uri).await,
         Handler::Subsessions => required(subsessions::route(state, request, uri).await?),
         Handler::Authority => authority::route(state, request, uri).await,

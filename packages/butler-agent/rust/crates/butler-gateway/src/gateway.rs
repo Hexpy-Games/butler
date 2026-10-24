@@ -55,7 +55,8 @@ pub use application::{
     AppApprovalClaims, AppArtifactMaterializer, AppAuthorityDecision, AppAuthorityDecisionInput,
     AppAuthorityHandoff, AppAuthorityPage, AppBoundWorkStatusFact, AppBranchCanonicalAnswer,
     AppBranchConversationReader, AppBranchSourceLocation, AppBranchSummarizer, AppBranchSummary,
-    AppBranchSummaryInput, AppCancellation, AppChatKind, AppChatSummary, AppContextBudgetFacts,
+    AppBranchSummaryInput, AppCancellation, AppCanonConflict, AppCanonEvent, AppCanonPort,
+    AppCanonRequest, AppCanonResource, AppChatKind, AppChatSummary, AppContextBudgetFacts,
     AppContextConfigurationFacts, AppContextReadFacts, AppContextReadPort, AppContextReadQuery,
     AppContextUsage, AppCreateProjectRequest, AppCreateProjectResult, AppCreateSessionInput,
     AppCreateSessionRequest, AppCreateSessionResult, AppExecutorReadiness, AppFileDownload,
@@ -90,16 +91,15 @@ pub use application::{
     AppSettingsFacts, AppSettingsFactsProvider, AppSettingsMutationPort, AppSourceDocument,
     AppSourceSnapshotRequest, AppSpaceCommand, AppSpaceMutationResult, AppSpaceOrigin,
     AppStartTopicConversationRequest, AppSubsessionPort, AppTaskGraphQuery, AppTurn,
-    AppUsageMonitorQuery, AppUsageMonitorView, AppWorkModelConflict, AppWorkModelEvent,
-    AppWorkModelPort, AppWorkModelRequest, AppWorkModelResource, AppWorkModelScope,
-    AppWorkOperationalNoticeFact, AppWorkProgress, AppWorkStatusConversationFact,
-    AppWorkStreamQuery, AppWorkStreamReader, AppWorkStreamTurnOutcome, AppWorkerActivityQuery,
-    AppWorkerActivitySourcePage, AppWorkspaceMode, ArtifactFileCandidate,
-    ArtifactMaterializationRequest, ArtifactMaterializationResult, ClaimedNativeSnapshot,
-    EnqueueReceipt, MaterializedResponderFile, MemoryEventSink, OperationOutputChunk,
-    OperationOutputView, ProjectSnapshot, ResolvedNativeAssets, TranscriptExport,
-    UnavailableWorkModel, VisualAdmissionRequest, project_task_graphs, task_graph_label,
-    task_graph_model_label, task_graph_response,
+    AppUsageMonitorQuery, AppUsageMonitorView, AppWorkOperationalNoticeFact, AppWorkProgress,
+    AppWorkStatusConversationFact, AppWorkStreamQuery, AppWorkStreamReader,
+    AppWorkStreamTurnOutcome, AppWorkerActivityQuery, AppWorkerActivitySourcePage,
+    AppWorkspaceMode, ArtifactFileCandidate, ArtifactMaterializationRequest,
+    ArtifactMaterializationResult, ClaimedNativeSnapshot, EnqueueReceipt,
+    MaterializedResponderFile, MemoryEventSink, OperationOutputChunk, OperationOutputView,
+    ProjectSnapshot, ResolvedNativeAssets, TranscriptExport, UnavailableCanon,
+    VisualAdmissionRequest, project_task_graphs, task_graph_label, task_graph_model_label,
+    task_graph_response,
 };
 pub use application::{
     AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
@@ -425,7 +425,7 @@ pub trait GatewayApplication:
         &self,
         turn_id: String,
     ) -> ApplicationFuture<MessageSendResult>;
-    fn work_model(&self, _request: AppWorkModelRequest) -> ApplicationFuture<serde_json::Value> {
+    fn canon(&self, _request: AppCanonRequest) -> ApplicationFuture<serde_json::Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn task_graph_read(&self, _query: AppTaskGraphQuery) -> ApplicationFuture<serde_json::Value> {

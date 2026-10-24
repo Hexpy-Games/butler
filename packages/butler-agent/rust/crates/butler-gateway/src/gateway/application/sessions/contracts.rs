@@ -123,6 +123,7 @@ pub trait AppWorkStreamReader: Send + Sync + 'static {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct AppChatSummary {
+    pub epic_ids: Vec<String>,
     pub id: String,
     pub title: String,
     pub kind: AppChatKind,
@@ -138,6 +139,7 @@ pub struct AppChatSummary {
 )]
 #[derive(Clone, Debug, Serialize)]
 pub struct AppSessionSummary {
+    pub epic_ids: Vec<String>,
     #[serde(skip)]
     pub latest_turn_id: Option<String>,
     pub skills_used: Vec<String>,

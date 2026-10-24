@@ -393,7 +393,7 @@ impl AppQueueOwnerLiveness for Liveness {
 
 pub(super) fn dependencies(native: Arc<Native>, clock: u64) -> AppApplicationDependencies {
     AppApplicationDependencies {
-        work_model: Arc::new(crate::gateway::UnavailableWorkModel),
+        canon: Arc::new(crate::gateway::UnavailableCanon),
         data_reset: None,
         hooks: None,
         service_shutdown: tokio_util::sync::CancellationToken::new(),

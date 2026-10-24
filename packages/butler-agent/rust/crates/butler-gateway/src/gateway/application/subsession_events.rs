@@ -8,7 +8,7 @@ use super::{AppApplication, events, service};
 pub(super) fn start(application: &AppApplication) {
     super::canon_sidebar::start(application);
     super::task_graphs::start_events(application);
-    super::work_model::start(application);
+    super::canon::start(application);
     let Some(mut changes) = application.dependencies.subsessions.changes() else {
         return;
     };

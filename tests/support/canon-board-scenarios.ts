@@ -14,7 +14,7 @@ export async function seedCanonBoard(server: NativeAppServerHandle): Promise<{ p
   for (const [index, title] of titles.entries()) {
     const epic = await server.api<EpicDetail>(`${prefix}/epics`, post({ title, description: `${title}의 계획`, plan_id: plan.id, assignee: index === 0 ? "app-user" : null }));
     await server.api(`/canon/epics/${epic.id}`, { method: "PATCH", body: JSON.stringify({
-      expected_revision: epic.revision, status: statuses[index], expected_task_graph_revision: epic.task_graph_revision,
+      expected_revision: epic.revision, status: statuses[index],
     }) });
     if (index === 0) await server.api(`/canon/epics/${epic.id}/conversation`, post({}));
   }
