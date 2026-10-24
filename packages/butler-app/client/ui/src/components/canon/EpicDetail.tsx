@@ -11,6 +11,7 @@ import { EpicEditForm } from "./EpicEditForm.tsx";
 import { CanonPersonSelect } from "./CanonPersonSelect.tsx";
 import { CanonPlanSelect } from "./CanonPlanSelect.tsx";
 import { SpecTree } from "./SpecTree.tsx";
+import { EpicSessionSummary } from "./EpicSessionSummary.tsx";
 import { EpicProgress } from "./EpicProgress.tsx";
 export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef, compact = false }: {
   compact?: boolean;
@@ -22,14 +23,19 @@ export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef, compac
   const copy = appCopy.canon;
   const plan = plans.find(plan => plan.id === epic.plan_id);
   const ordinal = plan ? plan.works.findIndex(work => work.id === epic.id) + 1 : 0;
+  const Title = compact ? Typo.Body : Typo.PanelTitle;
   const statusChanged = (status: CanonStatus) => void onWrite(canonStatusInput(epic, status), copy.statusChanged);
   return <Stack gap="lg" data-test-class="canon-epic-detail" data-epic-id={epic.id}>
     {editing ? <EpicEditForm epic={epic} busy={busy} onSave={onWrite} onClose={() => setEditing(false)} /> : <Stack gap="sm">
       <Stack align="row" cross="start" justify="between" gap="sm">
-        <Typo.PanelTitle as="h3" tabIndex={-1} ref={titleRef} wrap="anywhere">{epic.title}</Typo.PanelTitle>
+        <Stack gap="xs">
+          <Title as="h3" weight={compact ? "medium" : undefined} tabIndex={-1} ref={titleRef} wrap="anywhere">{epic.title}</Title>
+          {compact && <Typo.Caption tone="secondary">{copy.statuses[epic.canon_status]} · {plan?.title ?? copy.backlog}</Typo.Caption>}
+        </Stack>
         <ButtonContainer size="sm"><IconButton label={copy.edit} disabled={busy} onClick={() => setEditing(true)}><Pencil size="sm" /></IconButton></ButtonContainer>
       </Stack>
-      {epic.description && <EpicMarkdown epicId={epic.id} description={epic.description} attachments={epic.attachments} density={compact ? "compact" : "document"} />}
+      {compact && <EpicSessionSummary epic={epic} tasks={tasks} />}
+      {!compact && epic.description && <EpicMarkdown epicId={epic.id} description={epic.description} attachments={epic.attachments} density="document" />}
     </Stack>}
     <Stack gap="sm">
       <KeyValueRow valueTextSize="caption" label={copy.status} value={<Tooltip wrap label={tasks?.running ? `${copy.running} · ${copy.runningCancel}` : undefined} side="top"><NativeSelect size="sm" aria-label={copy.status} value={epic.canon_status} disabled={busy} onChange={event => statusChanged(event.target.value as CanonStatus)}>
@@ -45,9 +51,10 @@ export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef, compac
       <KeyValueRow valueTextSize="caption" label={<Typo.Caption wrap="nowrap">{copy.tags.label}</Typo.Caption>} value={<CanonTagsField row projectId={epic.project_id} value={epic.tags} disabled={busy}
         onChange={tags => void onWrite({ tags: tags.map(tag => tag.id) })} />} />
     </Stack>
-    {epic.home_session_id && <ButtonContainer size="sm"><Button size="sm" variant="link"
+    {!compact && epic.home_session_id && <ButtonContainer size="sm"><Button size="sm" variant="link"
       onClick={() => { if (epic.home_session_id) void useButlerStore.getState().openSession(epic.home_session_id); }}>{copy.openConversation}</Button></ButtonContainer>}
-    <SpecTree nodes={epic.specs} />
-    <EpicProgress tasks={tasks} counts={canonTaskCounts(epic)} />
+    {compact && epic.description && <EpicMarkdown epicId={epic.id} description={epic.description} attachments={epic.attachments} density="compact" />}
+    <SpecTree nodes={epic.specs} compact={compact} />
+    {!compact && <EpicProgress tasks={tasks} counts={canonTaskCounts(epic)} />}
   </Stack>;
 }

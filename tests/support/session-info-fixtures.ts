@@ -25,11 +25,10 @@ export function populatedSession(view: SessionView): SessionView {
 
 export async function replaySession(page: Page, view: () => SessionView, asksOpen = () => true) {
   await page.route("**/sessions/*/pending-asks", route => route.fulfill({ json: { protocol_version: "butler.app.v1", data: pendingPage(view(), asksOpen()) } }));
-  // This pinned native fixture predates the progress route; keep that unavailable
-  // native coverage distinct from the renderer's section-composition replay.
+  // Visual replay supplies a representative 3/5 task; native route coverage runs separately.
   await page.route("**/canon/epics/*/progress", route => {
     const progress: EpicProgressSnapshot = { epic_id: new URL(route.request().url()).pathname.split("/")[3]!,
-      running: false, stage: null, stage_history: [], actions: [], disposition: null, counts: { completed: 0, total: 0 } };
+      running: true, stage: null, stage_history: [], actions: [{ work_id: "release-review", actionKey: "review", dependencyKeys: [], description: "릴리스 노트 검토", status: "active" }], disposition: null, counts: { completed: 3, total: 5 } };
     return route.fulfill({ json: { protocol_version: "butler.app.v1", data: progress } });
   });
   await page.route("**/session-queue?**", route => {
@@ -66,6 +65,10 @@ function pendingPage(view: SessionView, open: boolean): SessionPendingAsks {
     source_call_id: null, title: question.questions.questions[0]!.title, blocking: true, deferred: false,
     waiting_since: view.updated_at, state: "open", created_at: view.updated_at, actions: ["answer"],
   }));
+    if (asks.length) asks.push(
+    { ...asks[0]!, ask_id: "release-approval", kind: "approval", title: "릴리스 노트 초안 커밋", actions: ["open"], waiting_since: new Date(Date.now() - 120000).toISOString() },
+    { ...asks[0]!, ask_id: "release-question", title: "릴리스 노트에 넣을지", deferred: true, actions: ["answer"], waiting_since: new Date(Date.now() - 240000).toISOString() },
+  );
   return { session_id: view.session_id, open_count: asks.length, asks };
 }
 export async function installPendingAskEvents(page: Page) {

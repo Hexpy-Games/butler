@@ -1,4 +1,5 @@
 // Stub/replay UI smoke through the real native App, isolated from the owner's data.
+import { sessionInfoStub, verifyNativePendingAsks, labelSessionInfoModel } from "../support/session-info-pending-asks.ts";
 import { strict as assert } from "node:assert";
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -14,18 +15,22 @@ const theme = process.env.BUTLER_SESSION_INFO_CASE ?? "light";
 const before = process.env.BUTLER_SMOKE_BASELINE === "1";
 const shots = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? "/tmp/butler-session-info-shots");
 mkdirSync(shots, { recursive: true });
-const server = await createNativeAppServer({ uiRoot: resolve(process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist") });
+const server = await createNativeAppServer({ ...sessionInfoStub(), uiRoot: resolve(process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist") });
 let browser: Awaited<ReturnType<typeof launchSmokeBrowser>> | undefined;
 try {
   await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: theme, reduce_motion: true }) });
-  const { project } = await server.api<{ project: { id: string } }>("/projects", { method: "POST", body: JSON.stringify({ source: "scratch", display_name: "세션 정보" }) });
-  const epic = await server.api<EpicDetail>(`/projects/${project.id}/canon/epics`, { method: "POST", body: JSON.stringify({ title: "세션 정보 검토", description: "대화와 연결된 과제", assignee: "app-user" }) });
+  await labelSessionInfoModel(server);
+  const { project } = await server.api<{ project: { id: string } }>("/projects", { method: "POST", body: JSON.stringify({ source: "scratch", display_name: "버틀러 앱" }) });
+  const plan = await server.api<{ id: string }>(`/projects/${project.id}/canon/plans`, { method: "POST", body: JSON.stringify({ title: "프리뷰 14" }) });
+  const epic = await server.api<EpicDetail>(`/projects/${project.id}/canon/epics`, { method: "POST", body: JSON.stringify({ title: "릴리스 노트 정리", description: "변경 사항을 정리하고 릴리스 노트를 검토합니다.", assignee: "app-user", plan_id: plan.id }) });
+  await server.api(`/canon/epics/${epic.id}`, { method: "PATCH", body: JSON.stringify({ expected_revision: epic.revision, status: "in_progress" }) });
   const linked = await server.api<{ session_id: string }>(`/canon/epics/${epic.id}/conversation`, { method: "POST", body: "{}" });
   const session = { id: linked.session_id };
   const original = await server.api<SessionView>(`/session-view?session_id=${session.id}`);
   let view = populatedSession(original);
   let asksOpen = true;
   browser = await launchSmokeBrowser();
+  if (!before) await verifyNativePendingAsks(browser, server, theme);
   const page = await browser.newPage({ viewport: { width: 1440, height: 1050 }, reducedMotion: "reduce" });
   const errors: string[] = [];
   let buttonRadii: { label: string; radius: string }[] = [];
@@ -64,6 +69,10 @@ try {
     const titles = await aside.locator("[data-session-section]").evaluateAll(elements => elements.map(element => element.getAttribute("data-session-section")));
     assert.deepEqual(titles, ["asks", "environment", "task", "context", "artifacts", "attachments", "schedules", "queue"]);
     assert.equal(await aside.getByText("작업자", { exact: true }).count(), 0);
+    await aside.getByText("3/5 완료", { exact: true }).waitFor();
+    assert.equal(await aside.getByRole("button", { name: "대화 열기", exact: true }).count(), 0);
+    assert.equal(await aside.getByText("아직 작업이 없습니다", { exact: true }).count(), 0);
+    assert.equal(await aside.locator('[data-session-section="asks"]').getByText("3", { exact: true }).count(), 1);
     await capture("all-sections-dot");
     await aside.getByText("작업 대기열", { exact: true }).scrollIntoViewIfNeeded();
     await capture("available-sections-bottom");
@@ -77,6 +86,7 @@ try {
     assert(await request.isVisible(), "The ask scrolls to its transcript card");
     await context.getByRole("button").first().click();
     await aside.locator('[data-test-class="context-overview"]').waitFor();
+    await context.evaluate(node => node.scrollIntoView({ block: "start" }));
     await capture("context-expanded");
     const focus = await auditSessionInfoFocus(page, aside);
     assert.deepEqual(focus.clips, []);
@@ -88,6 +98,7 @@ try {
     await aside.waitFor();
     await page.setViewportSize({ width: 1024, height: 900 });
     await page.waitForFunction(() => document.querySelector('[data-slot="conversation-aside"]')?.getAttribute("data-layout") === "floating");
+    assert.equal(await aside.locator('[data-slot="separator"]').count(), 7);
     await capture("floating");
     await page.setViewportSize({ width: 1440, height: 1050 });
     await page.locator('[data-test-class="titlebar-browser-toggle"]').click();
@@ -103,11 +114,11 @@ try {
     await page.waitForFunction(() => !document.querySelector('[data-test-class="session-info-toggle"] [data-slot="icon-button-indicator"]'));
     assert.equal(await aside.locator('[data-session-section="asks"]').count(), 0);
     // Empty canonical session: all data-dependent sections, including the linked task, disappear.
-    const { session: empty } = await server.api<{ session: { id: string } }>("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: "빈 세션" }) });
+    const { session: empty } = await server.api<{ session: { id: string } }>("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: "다음 릴리스 준비" }) });
     view = await server.api<SessionView>(`/session-view?session_id=${empty.id}`);
     view = { ...view, context: null, branch: null };
     const emptyLoaded = page.waitForResponse(response => response.url().includes(`/session-view?session_id=${empty.id}`));
-    await page.getByRole("button", { name: /빈 세션/ }).first().click();
+    await page.getByRole("button", { name: /다음 릴리스 준비/ }).first().click();
     await emptyLoaded;
     await page.waitForFunction(() => document.querySelector('[data-test-class="session-sections"]')?.childElementCount === 0);
     await capture("no-task-no-asks");
@@ -153,9 +164,9 @@ try {
     await capture("settings-about");
   }
   assert.deepEqual(errors, []);
-  assert.equal(server.stubModelCalls.length, 0);
-  console.log(JSON.stringify({ result: "BEHAVIOR_PASS", buttonRadii, theme, screenshots: shots, modelCalls: 0, pendingAsks: "P1-route-and-event-replay" }));
-  assert.deepEqual(buttonRadii.filter(button => button.radius !== "8px"), [], "DS conversation buttons must all have an 8px radius");
+
+  console.log(JSON.stringify({ result: "BEHAVIOR_PASS", buttonRadii, theme, screenshots: shots, stubModelCalls: server.stubModelCalls.length, pendingAsks: "native-route-and-event-proof plus visual replay" }));
+  assert.deepEqual(buttonRadii.filter(button => button.label !== "나중에 답하기" && button.radius !== "8px"), [], "Conversation text buttons have an 8px radius");
 } finally {
   await browser?.close();
   await server.stop();

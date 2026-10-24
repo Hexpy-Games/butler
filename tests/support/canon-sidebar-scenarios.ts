@@ -40,7 +40,9 @@ export async function showEpicInspector(page: Page) {
   if (await toggle.getAttribute("aria-pressed") !== "true") await toggle.click();
   const info = page.getByRole("complementary", { name: "세션 정보", exact: true });
   await info.locator('[data-test-class="canon-epic-detail"]').waitFor();
-  assert.equal(await info.getByRole("button", { name: "대화 열기", exact: true }).count(), 1);
+  assert.equal(await info.getByRole("button", { name: "대화 열기", exact: true }).count(), 0);
+  await info.getByRole("progressbar", { name: "작업", exact: true }).waitFor();
+  await info.getByRole("combobox", { name: "상태", exact: true }).waitFor();
 }
 export async function createFromSidebar(page: Page, projectId: string, planId: string): Promise<CanonConversation> {
   await showCanonSidebar(page);
