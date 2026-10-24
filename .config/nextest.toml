@@ -1,6 +1,16 @@
 [profile.default]
 slow-timeout = { period = "60s", terminate-after = 3 }
 
+# Each test loads its own bge-m3 worker. Concurrent loads of both starved the
+# other's 750 ms vector search on CI runners (#1493); one agent never loads
+# two, and alone each search stays far below its window.
+[test-groups]
+bge-m3 = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = 'binary(=e2e) and (test(=memory_wiring_more::wiring_more_correction_supersedes_previous_rule_in_next_prompt) or test(=memory_wiring_more::forget::rules_forget_and_correction_preserve_other_bindings_after_restart))'
+test-group = 'bge-m3'
+
 [[profile.default.overrides]]
 filter = 'test(/(^|::)ins_/)'
 slow-timeout = { period = "6m", terminate-after = 1 }

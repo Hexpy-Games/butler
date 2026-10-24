@@ -56,7 +56,10 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "A card titled like the page it is on repeats itself.", render: () => <FormSection title="General" description="General"><SettingsField id="x" label="Smart groups" control={<Switch id="x" />} /></FormSection> },
     },
   ],
-  content: ["Page titles are single nouns (General, Models); descriptions say what the page configures."],
+  content: [
+    "Page titles are single nouns (General, Models); descriptions say what the page configures.",
+    "In AdaptiveShell frame=\"cards\" (docked) the nav sits on the shell, so its rows take the shell's fills (--sidebar-hover-bg / --sidebar-selected-bg, see NavRow); other layouts keep the shades.",
+  ],
   accessibility: ["The navigation is a nav landmark; compact mode keeps a back button in the detail header."],
-  tokens: ["--settings-bg", "--settings-section-gap", "--settings-section-header-gap", "--page-max-width-reading"],
+  tokens: ["--settings-bg", "--sidebar-hover-bg", "--sidebar-selected-bg", "--settings-section-gap", "--settings-section-header-gap", "--page-max-width-reading"],
 };

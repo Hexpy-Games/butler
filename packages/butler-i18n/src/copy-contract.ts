@@ -325,7 +325,7 @@ export interface BrowserCopy {
     copy: string; selectAll: string; paste: string;
   };
   siteData: { title: string; label: string; description: string; clear: string; confirmTitle: string; confirmMessage: string; items: string; itemList: string; kept: string; cleared: string; failed: string; desktopOnly: string };
-  history: { erase: string; title: string; search: string; clear: string; butlerOnly: string; empty: string; hour: string; today: string; week: string; all: string; suggestions: string; };
+  history: { erase: string; title: string; search: string; clear: string; butlerOnly: string; empty: string; hour: string; today: string; week: string; all: string; suggestions: string; pageLabel: string; pageDescription: string; };
   tabCount: string; tabMoved: string; agentControl: string; handBack: string; stills: string; still: string; stillPending: string; stillUnavailable: string; stillFailure: Record<string, string>;
   title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string;
   reload: string; stop: string; loading: string; crashed: string; empty: string; conversationEmpty: string; updateRequired: string; restartRequired: string; failed: string;
@@ -1384,6 +1384,9 @@ export interface AppCopy {
       deleting: string; instructionsEmpty: string; deleteInstructionTitle: string;
       chatsKept: string; instructionDeleted: string; deleteFailed: string;
       freeWaiting: string; nothingToFree: string; inUse: string;
+      storageLabel: string; freeSpaceDescription: string;
+      resetChatLabel: string; resetChatDescription: string; resetProfileLabel: string; resetProfileDescription: string;
+      resetProjectLabel: string; resetProjectDescription: string;
       ago: (age: string) => string;
       freeing: (bytes: string) => string; freed: (bytes: string) => string;
       freeStopped: (bytes: string) => string; freeCancelled: (bytes: string) => string;
@@ -1705,6 +1708,9 @@ export interface AppCopy {
       clearMenu: string;
       clearTitle: string;
       clearBody: string;
+      exportDescription: string;
+      clearLabel: string;
+      clearDescription: string;
       cleared: (size: string) => string;
       clearFailed: string;
       diagnosticsLabel: string;

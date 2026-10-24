@@ -350,18 +350,18 @@
   /* Line tabs: space between a tab label and its sliding underline. */
   --tabs-line-indicator-gap: var(--space-md);
 
-  /* Settings hierarchy (proximity). Grouped settings: the section header
-     sits above its card, so header -> card (12) is far tighter than card ->
-     next section header (40, at least 3x). Inside the card the field ramp
-     runs label -> description (6), description -> control (12), field ->
-     field (20); the section gap stays at least 1.5x the field gap. The copy
-     gap is the one half step (6px) between xs and sm: label and description
-     (and section title and description) read as one block without
-     touching. */
-  --settings-field-copy-gap: 6px;
-  --settings-field-control-gap: var(--space-md);
+  /* Settings hierarchy (proximity): tight inside a setting, loose between
+     settings. Grouped settings: the section header sits above its card, so
+     header -> card (12) is far tighter than card -> next section header (40,
+     at least 3x). Inside the card the field ramp runs label -> description
+     (4), description -> control and control -> meta (8), field -> field
+     (24): the field gap is 3x the control gap, so a setting reads as one
+     unit and the next setting as a separate one. The section gap stays at
+     least 1.5x the field gap. */
+  --settings-field-copy-gap: var(--space-xs);
+  --settings-field-control-gap: var(--space-sm);
   --settings-section-header-gap: var(--space-md);
-  --settings-field-gap: var(--space-xl);
+  --settings-field-gap: var(--space-2xl);
   --settings-section-gap: var(--space-4xl);
   --settings-section-padding: var(--space-2xl);
 
@@ -825,6 +825,14 @@
   --mac-sidebar-text-tertiary: var(--color-text-tertiary);
   --windows-sidebar-text-secondary: var(--color-text-secondary);
   --windows-sidebar-text-tertiary: var(--color-text-tertiary);
+  /* Sidebar row fills on a tinted shell (NavRow, through AdaptiveShell's
+     --nav-hover-bg / --nav-selected-bg): a white family, hover part of the
+     way to white and selected the workspace white. A shell on a white base
+     (web/Linux translucent) defines none and keeps the --selection shades. */
+  --mac-sidebar-hover-bg: rgba(255, 255, 255, 0.45);
+  --mac-sidebar-selected-bg: var(--workspace-bg);
+  --windows-sidebar-hover-bg: rgba(255, 255, 255, 0.6);
+  --windows-sidebar-selected-bg: var(--workspace-bg);
   --sidebar-collapsed-bg: rgba(244, 245, 247, 0.18);
   /* Shell surfaces (frame="cards"): the one shell is the window material; cards are
      the workspace surface with one quiet edge. */
@@ -1291,6 +1299,11 @@
   --mac-sidebar-text-tertiary: var(--color-text-tertiary);
   --windows-sidebar-text-secondary: var(--neutral-dark-acrylic-text-secondary);
   --windows-sidebar-text-tertiary: var(--neutral-dark-acrylic-text-tertiary);
+  /* Dark keeps the --selection shades on every shell. */
+  --mac-sidebar-hover-bg: initial;
+  --mac-sidebar-selected-bg: initial;
+  --windows-sidebar-hover-bg: initial;
+  --windows-sidebar-selected-bg: initial;
   --sidebar-collapsed-bg: rgba(20, 21, 23, 0.18);
   /* Shell surfaces (frame="cards"): the one shell is the window material; cards are
      the workspace surface with one quiet edge. */
@@ -1507,6 +1520,14 @@
   --mac-sidebar-text-tertiary: var(--color-text-tertiary);
   --windows-sidebar-text-secondary: var(--color-text-secondary);
   --windows-sidebar-text-tertiary: var(--color-text-tertiary);
+  /* Sidebar row fills on a tinted shell (NavRow, through AdaptiveShell's
+     --nav-hover-bg / --nav-selected-bg): a white family, hover part of the
+     way to white and selected the workspace white. A shell on a white base
+     (web/Linux translucent) defines none and keeps the --selection shades. */
+  --mac-sidebar-hover-bg: rgba(255, 255, 255, 0.45);
+  --mac-sidebar-selected-bg: var(--workspace-bg);
+  --windows-sidebar-hover-bg: rgba(255, 255, 255, 0.6);
+  --windows-sidebar-selected-bg: var(--workspace-bg);
   --sidebar-collapsed-bg: rgba(244, 245, 247, 0.18);
   /* Shell surfaces (frame="cards"): the one shell is the window material; cards are
      the workspace surface with one quiet edge. */
@@ -1642,12 +1663,26 @@
   --sidebar-bg: rgba(246, 247, 249, 0.98);
   --mac-sidebar-bg: rgba(246, 247, 249, 0.98);
   --windows-sidebar-bg: rgba(246, 247, 249, 0.98);
+  /* The opaque shell is tinted on every platform: the white row family. */
+  --sidebar-hover-bg: rgba(255, 255, 255, 0.6);
+  --sidebar-selected-bg: var(--workspace-bg);
+  --mac-sidebar-hover-bg: rgba(255, 255, 255, 0.6);
+  --mac-sidebar-selected-bg: var(--workspace-bg);
+  --windows-sidebar-hover-bg: rgba(255, 255, 255, 0.6);
+  --windows-sidebar-selected-bg: var(--workspace-bg);
 }
 
 .theme-light.sidebar-solid {
   --sidebar-bg: rgba(246, 247, 249, 0.98);
   --mac-sidebar-bg: rgba(246, 247, 249, 0.98);
   --windows-sidebar-bg: rgba(246, 247, 249, 0.98);
+  /* The opaque shell is tinted on every platform: the white row family. */
+  --sidebar-hover-bg: rgba(255, 255, 255, 0.6);
+  --sidebar-selected-bg: var(--workspace-bg);
+  --mac-sidebar-hover-bg: rgba(255, 255, 255, 0.6);
+  --mac-sidebar-selected-bg: var(--workspace-bg);
+  --windows-sidebar-hover-bg: rgba(255, 255, 255, 0.6);
+  --windows-sidebar-selected-bg: var(--workspace-bg);
 }
 
 .theme-dark.sidebar-solid {
@@ -1657,6 +1692,12 @@
   /* An opaque shell takes the global text tones. */
   --windows-sidebar-text-secondary: var(--color-text-secondary);
   --windows-sidebar-text-tertiary: var(--color-text-tertiary);
+  --sidebar-hover-bg: initial;
+  --sidebar-selected-bg: initial;
+  --mac-sidebar-hover-bg: initial;
+  --mac-sidebar-selected-bg: initial;
+  --windows-sidebar-hover-bg: initial;
+  --windows-sidebar-selected-bg: initial;
 }
 
 * {

@@ -98,7 +98,12 @@ pub(crate) async fn until(mut ready: impl FnMut() -> bool) {
 }
 
 pub(crate) fn active_rules(data: &Path) -> Vec<Value> {
-    read_json(&data.join("cognition/memory/rules/manifest.json")).unwrap()["scopes"]
+    let bytes = match std::fs::read(data.join("cognition/memory/rules/manifest.json")) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return vec![],
+        Err(error) => panic!("{error}"),
+    };
+    serde_json::from_slice::<Value>(&bytes).unwrap()["scopes"]
         .as_object()
         .unwrap()
         .values()

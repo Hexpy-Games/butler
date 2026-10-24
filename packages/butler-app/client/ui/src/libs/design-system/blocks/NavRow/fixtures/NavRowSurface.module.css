@@ -1,0 +1,25 @@
+/* DS Viewer: the two sidebar surfaces a row can sit on. */
+.surface {
+  padding: var(--space-sm);
+  border-radius: var(--radius-control);
+}
+
+/* A light base (web and Linux translucent, the peek card, the drawer): rows
+   keep the --selection shades. */
+.base {
+  background: var(--color-surface-base);
+}
+
+/* A tinted shell: a stand-in for the macOS vibrancy under --mac-sidebar-bg,
+   with the row fills AdaptiveShell maps there (light theme). Dark defines none, so rows
+   keep the shades. */
+.tinted {
+  --nav-hover-bg: var(--mac-sidebar-hover-bg);
+  --nav-selected-bg: var(--mac-sidebar-selected-bg);
+
+  background: color-mix(
+    in srgb,
+    var(--text-primary) 7%,
+    var(--color-surface-base)
+  );
+}

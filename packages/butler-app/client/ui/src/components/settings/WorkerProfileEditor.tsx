@@ -4,6 +4,7 @@ import {
   Button,
   Input,
   SettingsField,
+  SettingsFieldGroup,
   Stack,
   Switch,
   Typo,
@@ -61,7 +62,7 @@ export function WorkerProfileEditor({
   }
 
   return (
-    <Stack gap="md" data-test-class="worker-profile">
+    <SettingsFieldGroup data-test-class="worker-profile">
         <Typo.PanelSectionTitle as="h3">{profile.label}</Typo.PanelSectionTitle>
         <SettingsField
           id={nameId}
@@ -131,6 +132,6 @@ export function WorkerProfileEditor({
             </Button>
           </Stack>
         )}
-    </Stack>
+    </SettingsFieldGroup>
   );
 }

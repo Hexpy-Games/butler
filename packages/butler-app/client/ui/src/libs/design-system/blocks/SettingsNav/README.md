@@ -19,7 +19,9 @@ Map settings sections into `SettingsNavItem` objects.
 Settings containers.
 
 ## Best practice
-Keep active routing state outside the block.
+Keep active routing state outside the block. Row fills come from the
+surface (NavRow): the white family on a light tinted shell (SettingsShell's
+cards frame maps it), the `--selection` shades elsewhere.
 
 ## Wrong use cases
 Do not use it for project/session lists. Use navigation blocks such as `NavRow`.

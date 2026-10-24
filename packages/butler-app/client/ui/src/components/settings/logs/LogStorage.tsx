@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { confirmAction } from "@/app/confirmation.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
-import { Button, ButtonContainer, ProgressMeter } from "@/butler-ds";
+import { Button, ProgressMeter, SettingsActionField } from "@/butler-ds";
 import { formatBytes } from "./logFormat";
 import { LogExportDialog } from "./LogExportDialog";
 import { clearLogs, readLogStorage, type LogStorageView, type LogStoreUsage } from "./logsApi";
@@ -72,7 +72,7 @@ function StoreMeter({ store }: { store: LogStoreUsage & { id: StoreKind } }) {
   );
 }
 
-/** 내보내기… and 모두 삭제… in the section header. */
+/** 저장 공간's actions: 로그 내보내기 and 로그 모두 삭제, each a SettingsActionField row under the meters. */
 export function LogStorageActions({ onCleared }: { onCleared: () => void }) {
   const copy = appCopy.settings.logs;
   const [exporting, setExporting] = useState(false);
@@ -93,10 +93,12 @@ export function LogStorageActions({ onCleared }: { onCleared: () => void }) {
   }
 
   return (
-    <ButtonContainer size="sm">
-      <Button type="button" size="sm" variant="outline" onClick={() => setExporting(true)}>{copy.exportMenu}</Button>
-      <Button type="button" size="sm" variant="outline" disabled={clearing} onClick={() => void clearAll()}>{copy.clearMenu}</Button>
+    <>
+      <SettingsActionField settingId="logs-export" label={copy.exportTitle} description={copy.exportDescription}
+        action={<Button type="button" size="sm" variant="outline" onClick={() => setExporting(true)}>{copy.exportMenu}</Button>} />
+      <SettingsActionField settingId="logs-clear" label={copy.clearLabel} description={copy.clearDescription}
+        action={<Button type="button" size="sm" variant="outline" disabled={clearing} onClick={() => void clearAll()}>{copy.clearMenu}</Button>} />
       {exporting ? <LogExportDialog onClose={() => setExporting(false)} /> : null}
-    </ButtonContainer>
+    </>
   );
 }

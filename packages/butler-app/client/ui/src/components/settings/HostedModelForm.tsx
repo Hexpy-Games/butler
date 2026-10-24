@@ -1,6 +1,6 @@
 import { signOutChatGpt } from "../chatgpt/chatGptActions";
 import { useAppLocale } from "@/app/copy.ts";
-import { ButtonContainer, Stack } from "@/butler-ds";
+import { ButtonContainer } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { SettingsSection } from "./SettingsFormComponents";
 import { HostedCredentialSection } from "./HostedCredentialSection";
@@ -35,7 +35,6 @@ export function HostedModelForm({
 
   return (
     <SettingsSection id="hosted-model" kind="form" title={editingModel ? copy.editTitle : copy.addTitle}>
-      <Stack gap="md">
         <HostedModelSelectFields
           modelOptions={form.providerModelOptions}
           modelRef={form.modelRef}
@@ -73,7 +72,6 @@ export function HostedModelForm({
           onClick={() => void form.save()}
         />
         </ButtonContainer>
-      </Stack>
     </SettingsSection>
   );
 }

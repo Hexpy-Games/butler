@@ -1,5 +1,5 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { Input, SettingsField, Stack } from "@/butler-ds";
+import { Input, SettingsField } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { ModelCatalogView, ProviderAuthMethod } from "@/app/types.ts";
 import type { ComponentProps } from "react";
@@ -54,7 +54,7 @@ export function HostedCredentialFields({
     (credentialId === NEW_CREDENTIAL_ID || credentials.length === 0);
 
   return (
-    <Stack gap="md">
+    <>
       {showAuthSelect ? (
         <SettingsSelect
           label={copy.authMethod}
@@ -115,6 +115,6 @@ export function HostedCredentialFields({
       {authMethod === "chatgpt_oauth" ? (
         <ChatGptSignInCard {...chatgpt} />
       ) : null}
-    </Stack>
+    </>
   );
 }
