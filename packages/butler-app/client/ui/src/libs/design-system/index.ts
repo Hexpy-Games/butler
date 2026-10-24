@@ -172,6 +172,7 @@ export * from "./blocks/ItemCard";
 export * from "./blocks/ImageViewer";
 export * from "./blocks/GroupTile";
 export * from "./blocks/TagField";
+export * from "./blocks/TagColorSwatches";
 export * from "./blocks/PopupWindowChrome";
 export * from "./blocks/StatusCapsule";
 export * from "./blocks/TabStrip";
