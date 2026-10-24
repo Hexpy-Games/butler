@@ -1,7 +1,7 @@
 import type { CanonCopy } from "../canon-copy.ts";
 export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
   "ko-KR": {
-    inlineEdit: { title: "제목 수정", description: "본문 편집", unsaved: "변경 내용을 저장할까요?", keep: "계속 편집", discard: "저장 안 함", saved: "저장했습니다", current: "현재 값" },
+    inlineEdit: { title: "제목 수정", description: "설명 편집", unsaved: "변경 내용을 저장할까요?", keep: "계속 편집", discard: "저장 안 함", saved: "저장했습니다", current: "현재 값" },
     searchPlan: "계획 검색", clearSearch: "검색 지우기", noResults: "검색 결과 없음",
     overview: "계획 개요", noPlan: "계획 없음",
     personalOrder: "내 사이드바 순서만 바뀝니다", sharedOrder: "기준 순서 · 끌어서 바꾸기",
@@ -43,7 +43,7 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
     },
   },
   "en-US": {
-    inlineEdit: { title: "Edit title", description: "Edit body", unsaved: "Save changes?", keep: "Keep editing", discard: "Discard", saved: "Saved", current: "Current value" },
+    inlineEdit: { title: "Edit title", description: "Edit description", unsaved: "Save changes?", keep: "Keep editing", discard: "Discard", saved: "Saved", current: "Current value" },
     searchPlan: "Search plans", clearSearch: "Clear search", noResults: "No results",
     overview: "Plan overview", noPlan: "No Plan",
     personalOrder: "Only your sidebar order changed", sharedOrder: "Shared order · Drag to reorder",

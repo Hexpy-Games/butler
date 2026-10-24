@@ -53,8 +53,8 @@ export async function verifyInlineFields(page: Page, server: NativeAppServerHand
   await waitToast(page, "저장했습니다"); assert.equal((await read(server, id)).title, "문서 화면 정리와 검색 개선");
   await title(page).click(); await input(page).fill("취소할 제목"); await input(page).press("Escape");
   assert.equal((await read(server, id)).title, "문서 화면 정리와 검색 개선");
-  const body = detail(page).getByRole("button", { name: "본문 편집", exact: true });
-  await body.hover(); await page.getByRole("tooltip", { name: "본문 편집", exact: true }).waitFor();
+  const body = detail(page).getByRole("button", { name: "설명 편집", exact: true });
+  await body.hover(); await page.getByRole("tooltip", { name: "설명 편집", exact: true }).waitFor();
   await shot(page, shots, "final-desc-hover");
   await body.focus(); await page.keyboard.press("Enter");
   const textarea = detail(page).getByLabel("설명", { exact: true });
@@ -115,7 +115,7 @@ export async function verifyInlineExits(page: Page, server: NativeAppServerHandl
       await title(page).waitFor();
     }
   }
-  await detail(page).getByRole("button", { name: "본문 편집", exact: true }).click();
+  await detail(page).getByRole("button", { name: "설명 편집", exact: true }).click();
   const textarea = detail(page).getByLabel("설명", { exact: true });
   await textarea.fill("설명 초안");
   await textarea.press("Tab"); await ring(page);
