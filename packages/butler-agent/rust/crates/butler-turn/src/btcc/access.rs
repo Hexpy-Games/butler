@@ -23,6 +23,8 @@ pub enum ApprovalExemptAction {
     AttachedImageAnalysis,
     /// Filing, tagging or renaming saved Library items (reversible by another call).
     LibraryOrganize,
+    /// Editing app-owned documents is reversible through version history.
+    DocumentWrite,
 }
 
 impl ApprovalExemptAction {
@@ -34,6 +36,7 @@ impl ApprovalExemptAction {
             }
             ToolName::UpdateExplicitMemory | ToolName::IngestTaskMemory => Some(Self::MemorySave),
             ToolName::AnalyzeAttachedImage => Some(Self::AttachedImageAnalysis),
+            ToolName::DocumentCreate | ToolName::DocumentEdit => Some(Self::DocumentWrite),
             ToolName::LibraryOrganize => Some(Self::LibraryOrganize),
             _ => None,
         }

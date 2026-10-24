@@ -9,6 +9,15 @@ pub(super) async fn call(state: Arc<HttpState>, mut frame: Value) -> Result<Resp
     let op = frame["op"].as_str().unwrap_or("").to_owned();
     let session = frame["session"].as_str().unwrap_or("").to_owned();
     super::calls_validation::validate(&state, &mut frame, &op, &session)?;
+    if matches!(
+        op.as_str(),
+        "images.resolve" | "images.store" | "images.usage"
+    ) {
+        return response(
+            0,
+            super::assets::image(&state, &session, &op, &frame["args"]).await?,
+        );
+    }
     if op == "assets.lookup" {
         return response(0, super::assets::lookup(&state, &frame["args"]).await?);
     }

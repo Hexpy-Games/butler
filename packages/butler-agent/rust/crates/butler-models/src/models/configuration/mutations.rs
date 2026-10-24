@@ -79,7 +79,11 @@ impl ModelConfiguration {
         let available = self
             .registration_catalog
             .find_static_model_metadata(Some(&requested))
-            .is_some_and(|model| model.provider_id == input.provider_id && model.runtime_supported);
+            .is_some_and(|model| {
+                model.provider_id == input.provider_id
+                    && model.runtime_supported
+                    && !model.is_image_output()
+            });
         if !available {
             return Err(error("Provider model is not available for registration."));
         }

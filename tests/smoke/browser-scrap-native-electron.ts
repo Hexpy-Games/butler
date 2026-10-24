@@ -1,9 +1,10 @@
 import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 // test-category: security
-/** Pick → Scrap → 서랍 → open, through the real App with native OS input: the scrap opens as exactly its clipped part. */
+/** Pick → Scrap → 서랍 → open, through the real App with CDP input: the scrap opens as exactly its clipped part. */
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { electronViewInput } from "../support/electron-view-input";
 import { redesignApp } from "../support/browser-redesign-app";
 import { waitBrowser } from "../support/browser-agent-app";
 import { nativeAligned, shellReady } from "../support/browser-shell-acceptance";
@@ -11,8 +12,7 @@ import { overlayRead, showPickSidebar } from "../support/browser-pick-acceptance
 import { pages } from "../support/browser-scrap-fixtures.mjs";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE!;
-const driver = process.env.BUTLER_NATIVE_MOUSE_EXECUTABLE!;
-assert.ok(evidence && driver, "Evidence and native mouse driver required");
+assert.ok(evidence, "Evidence directory required");
 mkdirSync(evidence, { recursive: true });
 const fontDir = new URL("../../packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-mono/", import.meta.url);
 const fonts: Record<string, URL> = {
@@ -36,13 +36,10 @@ async function pagePoint(selector: string): Promise<Point> {
     const r=await t.view.webContents.executeJavaScript(${JSON.stringify(`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`)});
     return {x:b.x+r.x*s,y:b.y+r.y*s};})()`);
 }
-async function input(action: string, from: Point, key?: number) {
-  const facts = await app.main<{ pid: number; x: number; y: number }>(`(()=>{${app.win}.show();${app.win}.focus();${app.win}.moveTop();const r=${app.win}.getContentBounds();return {pid:process.pid,x:r.x,y:r.y}})()`);
+const viewInput = electronViewInput(app);
+async function input(action: string, from: Point, to?: Point | string) {
   if (action === "key") await app.main(`${browser}.pointer.view.webContents.focus()`);
-  const args = [driver, String(facts.pid), action, String(facts.x + from.x), String(facts.y + from.y)];
-  if (key !== undefined) args.push(String(key));
-  const result = Bun.spawnSync(args);
-  assert.equal(result.exitCode, 0, result.stderr.toString());
+  await viewInput(action, from, to);
 }
 const label = () => overlayRead<string | null>(app, "document.querySelector('[data-pick-outline=hover]')?.textContent ?? null");
 const scraps = () => app.gateway.api<{ items: Array<{ id: string; title: string; snapshot?: { width: number; height: number } }> }>("/library?kind=scrap");
@@ -88,7 +85,7 @@ try {
   await waitBrowser(() => app.main(`${subject()}.picking && ${browser}.pointer.ready`), "pick overlay");
   const title = await pagePoint(".title");
   await input("move", title); await waitBrowser(async () => /^h2 · /u.test(await label() ?? ""), "title hovered");
-  await input("key", title, 126); await waitBrowser(async () => /^article · /u.test(await label() ?? ""), "↑ widens to the card");
+  await input("key", title, "ArrowUp"); await waitBrowser(async () => /^article · /u.test(await label() ?? ""), "↑ widens to the card");
   await input("click", title); await waitBrowser(() => app.main(`${subject()}.selections?.length===1`), "card picked");
   await app.shot("1-card-picked", true);
   // The overlay's Scrap action, clicked natively.
@@ -101,7 +98,7 @@ try {
   assert.ok(stored.html.startsWith("<!doctype html>") && stored.html.length < 5 * 1024 * 1024);
   const picked = await app.main<{ width: number; height: number }>(`${subject()}.view.webContents.executeJavaScript("document.querySelector('#card').getBoundingClientRect().toJSON()")`);
   assert.ok(Math.abs(saved.snapshot!.width - picked.width) <= 1 && Math.abs(saved.snapshot!.height - picked.height) <= 1, "copy sized like the card");
-  await input("key", title, 53); await waitBrowser(() => app.main(`!${subject()}.picking`), "Escape ends picking");
+  await input("key", title, "Escape"); await waitBrowser(() => app.main(`!${subject()}.picking`), "Escape ends picking");
 
   // Before (kept for scraps without a copy): opening one loads its whole source page.
   await openLibrary(false);

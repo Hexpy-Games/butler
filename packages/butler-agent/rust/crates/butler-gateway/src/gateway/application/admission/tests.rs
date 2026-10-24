@@ -75,6 +75,7 @@ fn retry_attachment_reuse_requires_the_exact_user_message_in_the_same_chat() {
 
 fn request(file_id: &str) -> MessageSendRequest {
     MessageSendRequest {
+        image_edit: None,
         expected_project_id: None,
         content_parts: None,
         chat_id: Some(json!("general")),

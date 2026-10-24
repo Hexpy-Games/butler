@@ -162,6 +162,7 @@ impl AppApplication {
             .await
             .map_err(map_retry_error)?;
         let request = MessageSendRequest {
+            image_edit: None,
             expected_project_id: None,
             content_parts: None,
             chat_id: Some(Value::String(source.chat_id.clone())),

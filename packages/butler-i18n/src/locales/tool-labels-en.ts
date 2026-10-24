@@ -83,6 +83,9 @@ export const additionalToolLabels = {
   preview_start: "Start preview",
   preview_stop: "Stop preview",
   library_search: "Search Library",
+  document_create: "Create document",
+  document_read: "Read document",
+  document_edit: "Edit document",
   library_organize: "Organize Library",
   deliver_files: "Deliver files",
 };
