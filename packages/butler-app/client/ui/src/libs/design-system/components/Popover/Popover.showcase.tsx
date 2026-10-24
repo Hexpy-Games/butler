@@ -137,4 +137,20 @@ export const stories: ShowcaseStory[] = [
       </Popover>
     ),
   },
+  {
+    // presentation="auto": a BottomSheet below 768px, the anchored popover above.
+    name: "Bottom sheet on phones (presentation=\"auto\")",
+    widths: ["375", "app"],
+    render: (context) => (
+      <Popover>
+        <PopoverTrigger asChild><SelectButton>{text(context).open}</SelectButton></PopoverTrigger>
+        <PopoverContent presentation="auto">
+          <PopoverHeader>
+            <PopoverTitle>{text(context).accessTitle}</PopoverTitle>
+            <PopoverDescription>{text(context).accessBody}</PopoverDescription>
+          </PopoverHeader>
+        </PopoverContent>
+      </Popover>
+    ),
+  },
 ];

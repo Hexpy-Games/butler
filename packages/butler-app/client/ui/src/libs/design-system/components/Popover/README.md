@@ -40,6 +40,13 @@ minus the titlebar and bottom safe area); taller content scrolls inside with
 fade (`--motion-enter-overlay`) and closes with a 4px slide and fade
 (`--motion-exit-fast`), without scale; reduced motion keeps only the fade.
 
+## Presentation
+`presentation="auto"` opens the content as a `BottomSheet` below 768px and
+anchored above; `"sheet"` always opens a sheet; `"popover"` (the app-wide
+default, `DEFAULT_OVERLAY_PRESENTATION`) stays anchored. A sheet keeps the
+same items, keyboard and dismissal. `width="anchor"` stays attached unless
+it asks for a sheet. See `BottomSheet`.
+
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.
 

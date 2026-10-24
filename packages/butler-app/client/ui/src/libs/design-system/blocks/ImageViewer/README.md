@@ -46,6 +46,14 @@ Esc and a click on the scrim (not on the picture or a capsule) close. Left and
 right arrows page the set; the position is the dialog description. The title is
 the caption or alt text.
 
+## Zoom
+Pictures open fitted to the stage and zoom from 1x to 4x: double-click or
+double-tap toggles 2x at the point, pinch and ctrl/cmd + wheel (trackpad
+pinch) zoom around the fingers or cursor, and a drag pans while zoomed (never
+past the picture's edges). `+`/`=`, `-` and `0` zoom from the keyboard. Pass
+`labels.zoomIn` and `labels.zoomOut` to show zoom buttons beside the actions.
+Paging to another picture starts it fitted again; videos do not zoom.
+
 ## Motion
 The scrim fades; the picture fades and scales in on `--motion-scale-dialog`,
 which reduced motion sets to 1, so it only fades.
@@ -56,7 +64,7 @@ caption is at most 640px wide and centered.
 
 ## Wrong use cases
 - Do not open a picture in a bare `Dialog` or a new window.
-- Do not add zoom or pan here without a DS zoom primitive.
+- Do not add a second zoom layer around the picture; the viewer zooms and pans itself.
 
 ## Tags
 image, lightbox, viewer, picture, gallery, overlay, provenance

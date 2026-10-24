@@ -1,0 +1,257 @@
+/* A glass sheet along the bottom edge. The surface carries the drag offset
+   (--sheet-drag-y, set while a finger moves it) and the keyboard inset
+   (--sheet-keyboard-inset, the on-screen keyboard's height). */
+.surface {
+  z-index: var(--z-popover);
+  display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  max-height: calc(
+    var(--adaptive-viewport-block-size) - var(--titlebar-safe-area-top) -
+      var(--sheet-keyboard-inset, 0px) - var(--space-6)
+  );
+  flex-direction: column;
+  margin-bottom: var(--sheet-keyboard-inset, 0);
+  padding-bottom: var(--safe-area-bottom);
+  border-bottom: 0;
+  border-end-end-radius: 0;
+  border-end-start-radius: 0;
+  color: var(--text-primary);
+  outline: none;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  transform: translateY(var(--sheet-drag-y, 0));
+  transition: transform var(--motion-slow) var(--motion-ease-settle);
+
+  /* Touch-sized rows for the menus and selects shown in a sheet. */
+  --menu-item-height: 44px;
+}
+
+/* Direct BottomSheet (a Dialog). Presentation sheets are placed by their
+   popper wrapper instead (sheet-presentation.css). */
+.surface[data-sheet="dialog"] {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+}
+
+.surface[data-dragging] {
+  transition: none;
+}
+
+/* Expandable sheets rest at half height; the expanded detent fills the
+   screen below the titlebar. */
+.surface[data-expandable] {
+  max-height: min(
+    50vh,
+    calc(
+      var(--adaptive-viewport-block-size) - var(--titlebar-safe-area-top) -
+        var(--sheet-keyboard-inset, 0px) - var(--space-6)
+    )
+  );
+}
+
+.surface[data-expandable][data-expanded] {
+  height: calc(
+    var(--adaptive-viewport-block-size) - var(--titlebar-safe-area-top) -
+      var(--sheet-keyboard-inset, 0px) - var(--space-6)
+  );
+  max-height: calc(
+    var(--adaptive-viewport-block-size) - var(--titlebar-safe-area-top) -
+      var(--sheet-keyboard-inset, 0px) - var(--space-6)
+  );
+}
+
+.surface[data-state="open"] {
+  animation:
+    sheet-slide-in var(--motion-deliberate) var(--motion-ease-settle),
+    sheet-fade-in var(--motion-fast) var(--motion-ease-standard);
+}
+
+.surface[data-state="closed"] {
+  animation:
+    sheet-slide-out var(--motion-exit-slow) var(--motion-ease-accelerate)
+      forwards,
+    sheet-fade-out var(--motion-exit-slow) var(--motion-ease-accelerate)
+      forwards;
+}
+
+/* Reduced motion (the OS setting, or the app's own setting, which the
+   components mirror as data-reduced): the sheet only fades. */
+.surface[data-reduced][data-state] {
+  animation-name: sheet-fade-in;
+}
+
+.surface[data-reduced][data-state="closed"] {
+  animation-name: sheet-fade-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .surface[data-state="open"] {
+    animation-name: sheet-fade-in;
+  }
+
+  .surface[data-state="closed"] {
+    animation-name: sheet-fade-out;
+  }
+}
+
+@keyframes sheet-slide-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes sheet-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* A dismissing drag continues from where the finger let go. */
+@keyframes sheet-slide-out {
+  from {
+    transform: translateY(var(--sheet-drag-y, 0));
+  }
+
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes sheet-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-popover);
+  background: var(--dialog-overlay-bg);
+  touch-action: none;
+}
+
+.backdrop[data-state="open"] {
+  animation: sheet-fade-in var(--motion-base) var(--motion-ease-standard);
+}
+
+.backdrop[data-state="closed"] {
+  animation: sheet-fade-out var(--motion-exit-slow)
+    var(--motion-ease-accelerate) forwards;
+}
+
+/* Grabber row: the drag handle for the whole sheet. */
+.handle {
+  display: flex;
+  flex: none;
+  justify-content: center;
+  padding-top: var(--space-1);
+  cursor: grab;
+  touch-action: none;
+}
+
+.surface[data-dragging] .handle {
+  cursor: grabbing;
+}
+
+.grabber {
+  display: inline-flex;
+  width: 48px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  cursor: inherit;
+}
+
+.grabber::before {
+  width: 36px;
+  height: 5px;
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+  content: "";
+}
+
+.grabber:focus-visible {
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+
+.title {
+  flex: none;
+  margin: 0;
+  padding: var(--space-1) var(--space-4) var(--space-2);
+  font-size: var(--typo-panel-title-size);
+  font-weight: var(--typo-panel-title-weight);
+  line-height: var(--typo-panel-title-line-height);
+}
+
+/* Rows scroll here; the inline padding leaves room for focus rings. */
+.body {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  padding: var(--focus-ring-room) var(--space-2) var(--space-2);
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+}
+
+.item {
+  display: flex;
+  min-height: var(--menu-item-height);
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  outline: none;
+}
+
+.item:not(:disabled):hover,
+.item:focus-visible {
+  background: var(--selection);
+}
+
+.item:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.item:disabled {
+  color: var(--interactive-disabled-fg);
+  cursor: var(--interactive-disabled-cursor);
+}
+
+.item[data-variant="destructive"] {
+  color: var(--danger);
+}
+
+.itemIcon {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.itemLabel {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.itemCheck {
+  display: inline-flex;
+  flex: none;
+  color: var(--accent-text);
+}

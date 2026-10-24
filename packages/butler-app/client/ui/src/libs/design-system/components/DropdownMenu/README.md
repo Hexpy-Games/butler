@@ -21,6 +21,12 @@ import { DropdownMenu } from "@/butler-ds";
 
 Prefer token-backed spacing and responsive composition. Check its showcase and usage guidance in the DS Viewer before using it in a domain flow.
 
+## Presentation
+`presentation="auto"` opens the content as a `BottomSheet` below 768px and
+anchored above; `"sheet"` always opens a sheet; `"popover"` (the app-wide
+default, `DEFAULT_OVERLAY_PRESENTATION`) stays anchored. A sheet keeps the
+same items, keyboard and dismissal. See `BottomSheet`.
+
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.
 
