@@ -158,7 +158,7 @@ async fn apply(app: &AppApplication, intent: Value) -> Result<(), GatewayApplica
     validate_intent(app, &payload).await?;
     // The projection receipt is visible before its admission hook completes.
     // Replay and HTTP callers must share that whole lifetime before returning.
-    let _projection = app.canon_projection_lock.lock().await;
+    let _projection = app.canon_projection_locks.acquire(op.clone()).await;
     if let Some(chat) = project(app, payload, op.clone()).await? {
         app.session_start_hook(chat, "created").await?;
     }
