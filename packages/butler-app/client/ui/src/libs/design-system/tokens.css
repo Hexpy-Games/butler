@@ -350,18 +350,18 @@
   /* Line tabs: space between a tab label and its sliding underline. */
   --tabs-line-indicator-gap: var(--space-md);
 
-  /* Settings hierarchy (proximity). Grouped settings: the section header
-     sits above its card, so header -> card (12) is far tighter than card ->
-     next section header (40, at least 3x). Inside the card the field ramp
-     runs label -> description (6), description -> control (12), field ->
-     field (20); the section gap stays at least 1.5x the field gap. The copy
-     gap is the one half step (6px) between xs and sm: label and description
-     (and section title and description) read as one block without
-     touching. */
-  --settings-field-copy-gap: 6px;
-  --settings-field-control-gap: var(--space-md);
+  /* Settings hierarchy (proximity): tight inside a setting, loose between
+     settings. Grouped settings: the section header sits above its card, so
+     header -> card (12) is far tighter than card -> next section header (40,
+     at least 3x). Inside the card the field ramp runs label -> description
+     (4), description -> control and control -> meta (8), field -> field
+     (24): the field gap is 3x the control gap, so a setting reads as one
+     unit and the next setting as a separate one. The section gap stays at
+     least 1.5x the field gap. */
+  --settings-field-copy-gap: var(--space-xs);
+  --settings-field-control-gap: var(--space-sm);
   --settings-section-header-gap: var(--space-md);
-  --settings-field-gap: var(--space-xl);
+  --settings-field-gap: var(--space-2xl);
   --settings-section-gap: var(--space-4xl);
   --settings-section-padding: var(--space-2xl);
 
