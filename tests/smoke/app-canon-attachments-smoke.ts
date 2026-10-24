@@ -5,6 +5,7 @@ import { createNativeAppServer } from "../support/native-app-server.ts";
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
 import { openCanonBoard, seedCanonBoard, waitToast } from "../support/canon-board-scenarios.ts";
 import { selectBoardPlan } from "../support/canon-board-selector.ts";
+import { closeCanonInspector } from "../support/canon-board-inspector.ts";
 import { probeFocusRing } from "../support/focus-ring-clipping.ts";
 import type { EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 
@@ -42,7 +43,7 @@ try {
     await capture("edit");
     if (!before) await attachmentRing(page, detail);
     await detail.getByRole("button", { name: "취소", exact: true }).click();
-    await page.keyboard.press("Escape");
+    await closeCanonInspector(page);
     await selectBoardPlan(page, "백로그");
     await board.locator('[data-canon-backlog]').getByRole("button", { name: "새 과제", exact: true }).click();
     const create = page.getByRole("dialog");
@@ -60,15 +61,16 @@ try {
 
 async function verifyFiles(page: import("playwright").Page, server: Awaited<ReturnType<typeof createNativeAppServer>>, projectId: string) {
   const board = page.locator('[data-test-class="canon-board"]');
-  // Close the inspector so the existing new-epic action is visible.
-  await page.keyboard.press("Escape");
   await selectBoardPlan(page, "백로그");
   await board.locator('[data-canon-backlog]').getByRole("button", { name: "새 과제", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("제목", { exact: true }).fill("파일 업로드 확인");
   const description = dialog.locator("textarea");
   await description.fill("앞 뒤");
-  await description.evaluate(element => { element.focus(); (element as HTMLTextAreaElement).setSelectionRange(2, 2); element.dispatchEvent(new Event("select", { bubbles: true })); });
+  await description.focus();
+  await page.keyboard.press("Home");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64");
   const picker = page.waitForEvent("filechooser");
   await dialog.getByRole("button", { name: "파일 첨부", exact: true }).click();
@@ -93,6 +95,18 @@ async function verifyFiles(page: import("playwright").Page, server: Awaited<Retu
   const epic = await server.api<EpicDetail>(`/canon/epics/${id}`);
   const file = epic.attachments?.[0]; assert(file);
   await detail.getByRole("button", { name: "고치기", exact: true }).click();
+  const editDescription = detail.locator("textarea");
+  await editDescription.focus();
+  await page.keyboard.press("Control+Home");
+  await detail.locator('input[type="file"]').setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("Reference notes") });
+  await page.waitForFunction(() => document.querySelector<HTMLTextAreaElement>("#canon-edit-description")?.value.startsWith("[notes.txt](attachment:"));
+  await detail.getByRole("button", { name: "저장", exact: true }).click();
+  const notes = detail.getByRole("link", { name: "notes.txt", exact: true });
+  await notes.waitFor();
+  const notesUrl = await notes.getAttribute("href"); assert(notesUrl);
+  const notesFile = await fetch(new URL(notesUrl, server.url), { headers: server.authHeaders });
+  assert.equal(notesFile.status, 200); assert.equal(await notesFile.text(), "Reference notes");
+  await detail.getByRole("button", { name: "고치기", exact: true }).click();
   await detail.locator('input[type="file"]').setInputFiles({ name: "large.txt", mimeType: "text/plain", buffer: Buffer.alloc(11 * 1024 * 1024) });
   await waitToast(page, "10MB 이하만 첨부할 수 있습니다");
   await detail.locator("textarea").fill("참고 파일을 뺐습니다");
@@ -101,6 +115,7 @@ async function verifyFiles(page: import("playwright").Page, server: Awaited<Retu
   await page.waitForFunction(async url => (await fetch(url)).status === 404, file.url);
   const response = await fetch(new URL(file.url, server.url), { headers: server.authHeaders });
   assert.equal(response.status, 404);
+  await page.waitForFunction(async url => (await fetch(url)).status === 404, notesUrl);
   assert.equal(projectId, epic.project_id);
 }
 
