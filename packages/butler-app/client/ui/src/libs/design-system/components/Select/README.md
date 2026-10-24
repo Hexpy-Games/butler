@@ -56,6 +56,12 @@ Disabled options, menu items, rows and Clickables use the DS disabled tone:
 or keyboard highlight fill. Product code passes `disabled`; it does not style
 the state.
 
+## Presentation
+`presentation="auto"` opens the content as a `BottomSheet` below 768px and
+anchored above; `"sheet"` always opens a sheet; `"popover"` (the app-wide
+default, `DEFAULT_OVERLAY_PRESENTATION`) stays anchored. A sheet keeps the
+same items, keyboard and dismissal. See `BottomSheet`.
+
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.
 

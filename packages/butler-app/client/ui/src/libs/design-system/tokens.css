@@ -1,6 +1,7 @@
 @import url("./fonts/fonts.css");
 @import url("./scroll-fade.css");
 @import url("./overlay-exit.css");
+@import url("./sheet-presentation.css");
 
 :root {
   color-scheme: light;

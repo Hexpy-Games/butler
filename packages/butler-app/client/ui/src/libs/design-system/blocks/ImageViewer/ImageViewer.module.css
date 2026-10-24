@@ -87,6 +87,19 @@
   box-shadow: var(--shadow-card);
   object-fit: contain;
   animation: image-viewer-enter var(--motion-base) var(--motion-ease-standard);
+  cursor: zoom-in;
+  touch-action: none;
+}
+
+/* Zoomed: the picture grows past its fitted box inside the stage and pans
+   under a drag; the clip margin keeps the side buttons' focus rings. */
+.picture[data-zoomed] {
+  cursor: grab;
+}
+
+.stage:has(> .picture[data-zoomed]) {
+  overflow: clip;
+  overflow-clip-margin: var(--focus-ring-room);
 }
 
 /* A video fills the stage, contained like a picture; its controls stay on it. */

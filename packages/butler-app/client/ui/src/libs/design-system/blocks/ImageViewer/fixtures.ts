@@ -7,11 +7,11 @@ type Locale = "en-US" | "ko-KR";
 export const VIEWER_LABELS: Record<Locale, ImageViewerLabels & { open: string; save: string; saved: string; copy: string; view: string }> = {
   "en-US": {
     close: "Close", previous: "Previous image", next: "Next image", position: (current, total) => `${current} / ${total}`,
-    failed: "The image could not load", open: "Open the source page", save: "Save to library", saved: "Saved to library", copy: "Copy image", view: "View",
+    failed: "The image could not load", zoomIn: "Zoom in", zoomOut: "Zoom out", open: "Open the source page", save: "Save to library", saved: "Saved to library", copy: "Copy image", view: "View",
   },
   "ko-KR": {
     close: "닫기", previous: "이전 이미지", next: "다음 이미지", position: (current, total) => `${current} / ${total}`,
-    failed: "이미지를 불러오지 못했습니다", open: "원본 페이지 열기", save: "서랍에 저장", saved: "서랍에 저장했어요", copy: "이미지 복사", view: "보기",
+    failed: "이미지를 불러오지 못했습니다", zoomIn: "확대", zoomOut: "축소", open: "원본 페이지 열기", save: "서랍에 저장", saved: "서랍에 저장했어요", copy: "이미지 복사", view: "보기",
   },
 };
 
