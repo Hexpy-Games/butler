@@ -5,18 +5,19 @@ import { useButlerStore } from "@/app/store.ts";
 import { EMPTY_TASK_GRAPHS, loadTaskGraphs, observeTaskGraphs, useTaskGraphs } from "@/app/taskGraphState.ts";
 import { getTaskDocument, type TaskGraphDocument, type TaskGraphNode } from "@/app/taskGraphApi.ts";
 import { notifyStatus } from "@/app/notifications.ts";
-import { Blocks, Button, InspectorInset, TaskGraphPanel } from "@/butler-ds";
+import { Blocks, Button, EmptyLine, InspectorInset, Stack, TaskGraphPanel } from "@/butler-ds";
 import { ProjectDocumentDialog } from "@/components/management/ProjectDocumentDialog.tsx";
 import { TaskGraphView } from "./TaskGraphView.tsx";
 import { graphMeta } from "./taskGraphPresentation.ts";
 
-export function TasksPanel() {
+/** `hideHeading`: the host (a dialog) already titles the view, so the panel's own heading is omitted. */
+export function TasksPanel({ hideHeading = false }: { hideHeading?: boolean }) {
   useAppLocale();
   const sessionId = useButlerStore(state => state.activeChatId);
-  return <SessionTasksPanel key={sessionId} sessionId={sessionId} />;
+  return <SessionTasksPanel key={sessionId} sessionId={sessionId} hideHeading={hideHeading} />;
 }
 
-function SessionTasksPanel({ sessionId }: { sessionId: string }) {
+function SessionTasksPanel({ sessionId, hideHeading }: { sessionId: string; hideHeading: boolean }) {
   const runtimeId = useButlerStore(s => sessionFromNavigation(s.navigation, sessionId)?.session_hint ?? sessionId);
   const onOpenSession = useButlerStore(state => state.openSessionObserver);
   const state = useTaskGraphs(s => s.taskGraphs[sessionId] ?? EMPTY_TASK_GRAPHS);
@@ -30,15 +31,19 @@ function SessionTasksPanel({ sessionId }: { sessionId: string }) {
     try { setDocument(await getTaskDocument(node.task_id, node.document.revision)); }
     catch { notifyStatus(appCopy.settings.sectionState.error, { tone: "error" }); }
   };
+  const emptyLabel = state.loading ? appCopy.settings.sectionState.loading : state.error ? appCopy.settings.sectionState.error : c.empty;
+  const sections = state.graphs.map(graph => <TaskGraphView key={graph.graph_id} graph={graph} selected={state.selected}
+    single={Boolean(single)} open={Boolean(state.open[graph.graph_id])}
+    onToggle={() => update(sessionId, { open: { ...state.open, [graph.graph_id]: !state.open[graph.graph_id] } })}
+    onSelect={onSelect} onOpenSession={onOpenSession} onOpenDocument={onOpenDocument} />);
   return <>
-    <TaskGraphPanel title={c.title} icon={<Blocks size="md" />} description={single?.title}
-      empty={state.graphs.length === 0} emptyLabel={state.loading ? appCopy.settings.sectionState.loading : state.error ? appCopy.settings.sectionState.error : c.empty}
-      headerMeta={single ? graphMeta(single) : state.graphs.length ? c.graphsSummary(state.graphs.length, state.graphs.filter(g => g.state === "running").length) : undefined}>
-      {state.graphs.map(graph => <TaskGraphView key={graph.graph_id} graph={graph} selected={state.selected}
-        single={Boolean(single)} open={Boolean(state.open[graph.graph_id])}
-        onToggle={() => update(sessionId, { open: { ...state.open, [graph.graph_id]: !state.open[graph.graph_id] } })}
-        onSelect={onSelect} onOpenSession={onOpenSession} onOpenDocument={onOpenDocument} />)}
-    </TaskGraphPanel>
+    {hideHeading
+      ? <Stack gap="xs">{state.graphs.length === 0 ? <InspectorInset><EmptyLine message={emptyLabel} /></InspectorInset> : sections}</Stack>
+      : <TaskGraphPanel title={c.title} icon={<Blocks size="md" />} description={single?.title}
+        empty={state.graphs.length === 0} emptyLabel={emptyLabel}
+        headerMeta={single ? graphMeta(single) : state.graphs.length ? c.graphsSummary(state.graphs.length, state.graphs.filter(g => g.state === "running").length) : undefined}>
+        {sections}
+      </TaskGraphPanel>}
     {state.error && <InspectorInset><Button size="sm" variant="outline" onClick={() => void loadTaskGraphs(sessionId)}>
       {appCopy.settings.sectionState.retry}
     </Button></InspectorInset>}
