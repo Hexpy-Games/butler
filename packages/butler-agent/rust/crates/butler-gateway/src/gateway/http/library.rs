@@ -14,10 +14,24 @@ pub(super) async fn route(
     let args = query(request.uri());
     let parts = components(&path)?;
     let parts = parts.iter().map(String::as_str).collect::<Vec<_>>();
-    let command = match (&method, parts.as_slice()) {
+    let command = command_from_request(&method, &parts, &args, request).await?;
+    let value = state.application.library(command).await?;
+    json(
+        StatusCode::OK,
+        json!({"protocol_version":APP_PROTOCOL_VERSION,"data":value}),
+    )
+}
+
+async fn command_from_request(
+    method: &Method,
+    parts: &[&str],
+    args: &std::collections::HashMap<String, String>,
+    request: Request<Body>,
+) -> Result<C, HttpError> {
+    Ok(match (method, parts) {
         (&Method::GET, []) => match args.get("url") {
             Some(url) => C::Bookmark { url: url.clone() },
-            None => C::Page(input::page(&args)?),
+            None => C::Page(input::page(args)?),
         },
         (&Method::POST, []) => C::Save(input::item(body(request, 10 * 1024 * 1024).await?)?),
         (&Method::POST, ["blocks"]) => {
@@ -33,7 +47,7 @@ pub(super) async fn route(
                 file_id: value["file_id"].as_str().unwrap_or_default().to_owned(),
             }
         }
-        (&Method::GET, ["search"]) => C::Search(input::search(&args)?),
+        (&Method::GET, ["search"]) => C::Search(input::search(args)?),
         (&Method::POST, ["organize"]) => {
             C::Change(input::change(&body(request, LIMIT).await?, true)?)
         }
@@ -85,12 +99,7 @@ pub(super) async fn route(
                 "Method not allowed.",
             ));
         }
-    };
-    let value = state.application.library(command).await?;
-    json(
-        StatusCode::OK,
-        json!({"protocol_version":APP_PROTOCOL_VERSION,"data":value}),
-    )
+    })
 }
 /// Body bytes of every organize command.
 const LIMIT: usize = 1024 * 1024;
