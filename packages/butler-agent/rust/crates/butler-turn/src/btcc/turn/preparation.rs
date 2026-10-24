@@ -91,6 +91,9 @@ pub struct AdmissionModelMetadata {
     pub reasoning_efforts: Vec<ReasoningEffort>,
     pub default_reasoning_effort: ReasoningEffort,
     pub context_window_tokens: Option<f64>,
+    /// Cached-input price over uncached-input price from the catalog's
+    /// published list price; `None` when the model has no published price.
+    pub cached_input_price_ratio: Option<f64>,
 }
 
 /// The catalog metadata admission decides on.

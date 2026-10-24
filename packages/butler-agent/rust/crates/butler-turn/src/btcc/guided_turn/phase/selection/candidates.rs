@@ -139,7 +139,15 @@ pub(super) fn add_role_tools(
         }
     }
     if policy.role == PolicyRole::Steward {
-        names.extend(["delegate_to_worker", "steer_worker", "wait_for_worker"].map(str::to_owned));
+        names.extend(
+            [
+                "delegate_to_worker",
+                "steer_worker",
+                "wait_for_worker",
+                "read_prior_delegation",
+            ]
+            .map(str::to_owned),
+        );
     }
     if policy.role == PolicyRole::Butler {
         names.retain(|name| {
