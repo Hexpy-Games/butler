@@ -137,10 +137,8 @@ async function verifyFiles(page: import("playwright").Page, server: Awaited<Retu
 
   await detail.getByText("참고 파일을 뺐습니다", { exact: true }).waitFor();
   await page.unroute(epicRoute);
-  await page.waitForFunction(async url => (await fetch(url)).status === 404, file.url);
-  const response = await fetch(new URL(file.url, server.url), { headers: server.authHeaders });
-  assert.equal(response.status, 404);
-  await page.waitForFunction(async url => (await fetch(url)).status === 404, notesUrl);
+  await fileRemoved(server, file.url);
+  await fileRemoved(server, notesUrl);
   assert.equal(projectId, epic.project_id);
 }
 
@@ -150,4 +148,20 @@ async function attachmentRing(page: import("playwright").Page, form: import("pla
   const ring = await probeFocusRing(page);
   assert(ring, "The upload button must have a keyboard focus ring");
   assert.deepEqual(ring.clips, []);
+}
+
+// Match the authenticated E2E check: an unsigned browser file URL can return
+// 404 before cleanup. Wait for the owner-visible row to disappear instead.
+async function fileRemoved(server: Awaited<ReturnType<typeof createNativeAppServer>>, url: string) {
+  const deadline = performance.now() + 30_000;
+  let status = 0;
+  do {
+    const response = await fetch(new URL(url, server.url), { headers: server.authHeaders });
+    status = response.status;
+    await response.body?.cancel();
+    if (status === 404) return;
+    assert.equal(status, 200);
+    await new Promise(resolve => setTimeout(resolve, 20));
+  } while (performance.now() < deadline);
+  assert.equal(status, 404, "The file must be removed after its last reference");
 }
