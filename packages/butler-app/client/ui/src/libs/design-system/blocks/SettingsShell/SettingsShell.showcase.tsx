@@ -7,6 +7,7 @@ import { SettingsField } from "../SettingsField";
 import { SettingsHeader } from "../SettingsHeader";
 import { SettingsNav } from "../SettingsNav";
 import { ShellFrameDemo } from "../AdaptiveShell/fixtures/ShellFrameDemo";
+import { NavRowSurface } from "../NavRow/fixtures/NavRowSurface";
 import { SettingsShell } from "./SettingsShell";
 import styles from "./SettingsShell.showcase.module.css";
 
@@ -74,11 +75,16 @@ export const stories: ShowcaseStory[] = [
   { name: "Single card whose header repeats the page", render: (context) => <Page {...context} page="mcp" /> },
   {
     // Docked cards frame: the nav sits on the shell and takes its row fills,
-    // the white family on the light macOS shell (dark keeps the shades).
+    // the white family on the light macOS shell (dark keeps the shades). The
+    // tinted surface stands in for the desktop vibrancy under the window.
     name: "Cards frame: nav fills follow the shell (macOS)",
     states: ["hover", "active", "selected"],
     widths: ["app", "wide"],
-    render: ({ locale }) => <ShellFrameDemo locale={locale} frame="cards" view="settings" width={1100} height={640} platform="darwin" />,
+    render: ({ locale }) => (
+      <NavRowSurface surface="tinted">
+        <ShellFrameDemo locale={locale} frame="cards" view="settings" width={1100} height={640} platform="darwin" />
+      </NavRowSurface>
+    ),
   },
   {
     name: "Page transition (select a page: down rises, up drops; reduced motion fades)",
