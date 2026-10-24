@@ -278,7 +278,7 @@ fn assert_presentation_contract(requests: &[Value]) {
         blocks["description"]
             .as_str()
             .unwrap()
-            .contains("Use it unasked as the Plan's Presentation line decided")
+            .contains("Use it unasked, with or without a Plan")
             && blocks["description"]
                 .as_str()
                 .unwrap()
