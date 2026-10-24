@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-sol",
       "effort": "low",
       "user_request": "Create out.txt in your workspace containing exactly `alpha {{NONCE}}`, then use edit_file to change alpha to beta.",
@@ -38,7 +38,7 @@
       },
       {
         "delay_ms": 559,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0a96678ad78df942016ab8e500dc1087d098abec8e1446dc77\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_XJ3B1MwQDPpQbkqa2yQt3BLc\",\"name\":\"record_work_disposition\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0a96678ad78df942016ab8e500dc1087d098abec8e1446dc77\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_XJ3B1MwQDPpQbkqa2yQt3BLc\",\"name\":\"record_work_disposition\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -466,7 +466,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0a96678ad78df942016ab8e500dc1087d098abec8e1446dc77\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"work_id\\\":\\\"{{ECHO_1}}\\\",\\\"disposition\\\":\\\"completed\\\",\\\"summary\\\":\\\"Created out.txt with exact initial content and used edit_file to replace alpha with beta; final content is beta {{NONCE}}.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create out.txt with the exact initial content, then change alpha to beta\\\",\\\"status\\\":\\\"done\\\"}]}\",\"call_id\":\"call_XJ3B1MwQDPpQbkqa2yQt3BLc\",\"name\":\"record_work_disposition\"},\"output_index\":0,\"sequence_number\":109}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0a96678ad78df942016ab8e500dc1087d098abec8e1446dc77\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"work_id\\\":\\\"{{ECHO_1}}\\\",\\\"disposition\\\":\\\"completed\\\",\\\"summary\\\":\\\"Created out.txt with exact initial content and used edit_file to replace alpha with beta; final content is beta {{NONCE}}.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create out.txt with the exact initial content, then change alpha to beta\\\",\\\"status\\\":\\\"done\\\"}]}\",\"call_id\":\"call_XJ3B1MwQDPpQbkqa2yQt3BLc\",\"name\":\"record_work_disposition\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":109}\n\n"
       },
       {
         "delay_ms": 30,

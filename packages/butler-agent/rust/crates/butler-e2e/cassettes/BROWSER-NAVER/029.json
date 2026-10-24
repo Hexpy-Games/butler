@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-luna",
       "effort": "high",
       "user_request": "네이버지도에서 중앙탑 → 떡버무리 → 충주댐 → 수주팔봉 순서로 차량 경로를 짜고, 결과 화면을 캡처해서 보여줘.",
@@ -96,7 +96,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "data: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0863bfae6f635227016ac96a6c7c2087d09740968d828cc111\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_057E5QgTGJTUYs6SSCFctQC3\",\"name\":\"tool_call\"},\"output_index\":1,\"sequence_number\":4}\n\n"
+        "text": "data: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0863bfae6f635227016ac96a6c7c2087d09740968d828cc111\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_057E5QgTGJTUYs6SSCFctQC3\",\"name\":\"tool_call\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":4}\n\n"
       },
       {
         "delay_ms": 0,
@@ -440,7 +440,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0863bfae6f635227016ac96a6c7c2087d09740968d828cc111\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"id\\\":\\\"native:browser_act\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"opaque-f7ebd0ccc28f455a955334e9102f0\\\",\\\"observation\\\":\\\"opaque-bcd53a4ff2a27142d8c6141e29a01\\\",\\\"steps\\\":[{\\\"ref\\\":\\\"f0-e66\\\",\\\"action\\\":\\\"fill\\\",\\\"value\\\":\\\"충주댐\\\"}]}}\",\"call_id\":\"call_057E5QgTGJTUYs6SSCFctQC3\",\"name\":\"tool_call\"},\"output_index\":1,\"sequence_number\":90}\n\n"
+        "text": "data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0863bfae6f635227016ac96a6c7c2087d09740968d828cc111\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"id\\\":\\\"native:browser_act\\\",\\\"arguments\\\":{\\\"tab\\\":\\\"opaque-f7ebd0ccc28f455a955334e9102f0\\\",\\\"observation\\\":\\\"opaque-bcd53a4ff2a27142d8c6141e29a01\\\",\\\"steps\\\":[{\\\"ref\\\":\\\"f0-e66\\\",\\\"action\\\":\\\"fill\\\",\\\"value\\\":\\\"충주댐\\\"}]}}\",\"call_id\":\"call_057E5QgTGJTUYs6SSCFctQC3\",\"name\":\"tool_call\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":90}\n\n"
       },
       {
         "delay_ms": 0,

@@ -299,6 +299,7 @@ pub(super) fn message(content: &str) -> ModelRoundMessage {
 }
 pub(super) fn provider(code: &str, status: Option<u16>) -> ModelRoundError {
     ModelRoundError::Provider(Box::new(ProviderRequestError {
+        auth_type: None,
         code: code.into(),
         message: code.into(),
         provider: "test".into(),

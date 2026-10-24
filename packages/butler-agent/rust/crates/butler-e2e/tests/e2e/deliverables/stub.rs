@@ -16,10 +16,13 @@ pub(super) struct Script {
 pub(super) async fn start()
 -> Result<(String, Arc<Script>, tokio::task::JoinHandle<()>), HarnessError> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let url = format!("http://{}/codex", listener.local_addr()?);
+    let url = format!("http://{}", listener.local_addr()?);
     let script = Arc::new(Script::default());
     let router = Router::new()
-        .route("/codex/responses", post(reply))
+        .route("/v1/responses", post(reply))
+        .route_layer(axum::middleware::from_fn(
+            butler_e2e::e2e::chatgpt_wire::validate,
+        ))
         .with_state(script.clone());
     let server = tokio::spawn(async move {
         let _ = axum::serve(listener, router).await;
@@ -38,7 +41,7 @@ async fn reply(
     State(script): State<Arc<Script>>,
     Json(body): Json<Value>,
 ) -> impl axum::response::IntoResponse {
-    let key = butler_e2e::e2e::matching::key("/codex/responses", &body, &Default::default());
+    let key = butler_e2e::e2e::matching::key("/v1/responses", &body, &Default::default());
     let selected = key.user_request == *script.prompt.lock().unwrap();
     script.requests.lock().unwrap().push(body.clone());
     let item = if selected {
@@ -84,10 +87,7 @@ async fn reply(
 
 fn assert_delivery_schema(body: &Value) {
     use butler_runtime::capabilities::validate_native_arguments;
-    let tool = body["tools"]
-        .as_array()
-        .unwrap()
-        .iter()
+    let tool = butler_e2e::e2e::chatgpt_wire::functions(body)
         .find(|tool| tool["name"] == "deliver_files")
         .expect("deliver_files must be visible");
     let schema = &tool["parameters"];

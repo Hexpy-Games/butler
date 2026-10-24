@@ -78,6 +78,7 @@ mod tests {
     #[test]
     fn local_failure_projection_removes_the_exact_bearer_secret() {
         let mut error = ProviderRequestError {
+            auth_type: None,
             code: "provider_api_error".into(),
             message: "request failed".into(),
             provider: "local".into(),

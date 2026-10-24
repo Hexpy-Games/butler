@@ -31,7 +31,6 @@ from run_campaign import (
     _prepare_arm,
     _suppress_daily_memory_jobs,
     _stored_model_registration,
-    _write_codex_oauth_profile,
     _write_provider_credential,
     _wait_ready,
 )
@@ -146,13 +145,14 @@ def _run_arm(*, arm: str, output_dir: Path, scratch_parent: Path,
         "schema": "butler.rust-benchmark.actual-provider-readiness-arm.v1",
         "arm": arm,
         "status": "not_observed",
-        "provider_id": "openai" if provider_input["mode"] == "codex_oauth" else "zai",
-        "auth_type": "codex_oauth" if provider_input["mode"] == "codex_oauth" else "api_key",
+        "provider_id": "openai" if provider_input["mode"] == "chatgpt_oauth" else "zai",
+        "auth_type": "chatgpt_oauth" if provider_input["mode"] == "chatgpt_oauth" else "api_key",
         "credential_record_count": source_facts["credential_record_count"],
         "credential_reference_fingerprint": credential_fingerprint,
-        "credential_fingerprint_basis": "ephemeral_salted_reference_id; secret value and hash excluded",
+        "credential_fingerprint_basis": "ephemeral_salted_reference; secret value and hash excluded",
         "credential_input": {
-                "alias": "frozen-input/openai-codex.json" if provider_input["mode"] == "codex_oauth" else "frozen-input/credential.json",
+                "alias": "shared-input/auth/chatgpt.json" if provider_input["mode"] == "chatgpt_oauth" else "frozen-input/credential.json",
+            "refresh_in_place": provider_input["mode"] == "chatgpt_oauth",
             "directory_mode": "0700",
             "file_mode": "0600",
             "unchanged_before_and_after": False,
@@ -198,11 +198,10 @@ def _run_arm(*, arm: str, output_dir: Path, scratch_parent: Path,
             config["system"]["butlerModel"] = MODEL
             config["system"]["openaiReasoningEffort"] = EFFORT
             config["user"]["modelFallback"] = FALLBACK_OFF.copy()
-            if provider_input["mode"] == "codex_oauth":
-                _write_codex_oauth_profile(prepared["data"], provider_input["profile"])
+            if provider_input["mode"] == "chatgpt_oauth":
                 config["models"] = {"registered": [{
-                    "provider_id": "openai", "model_id": "gpt-6-sol",
-                    "auth_type": "codex_oauth", "auth_profile": "codex_oauth",
+                    "provider_id": "openai", "model_id": MODEL.split("/", 1)[1],
+                    "auth_type": "chatgpt_oauth",
                 }]}
             else:
                 credential = provider_input["credential"]
@@ -399,7 +398,7 @@ def _run_arm(*, arm: str, output_dir: Path, scratch_parent: Path,
             postcondition_failures.append("owned_cleanup_not_verified")
         if receipt["installation_immutable"].get("status") != "observed":
             postcondition_failures.append("installation_immutability_not_verified")
-        if not receipt["credential_input"].get("unchanged_before_and_after"):
+        if provider_input["mode"] != "chatgpt_oauth" and not receipt["credential_input"].get("unchanged_before_and_after"):
             postcondition_failures.append("frozen_credential_input_changed")
         if receipt["embedding_conditions"].get("status") != "observed" or \
            receipt["embedding_conditions"].get("active_generation_after") != "absent" or \
@@ -422,7 +421,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     provider = parser.add_mutually_exclusive_group(required=True)
     provider.add_argument("--credential-file", type=Path)
-    provider.add_argument("--codex-oauth-file", type=Path)
+    provider.add_argument("--chatgpt-auth-dir", type=Path)
     parser.add_argument("--model", default=MODEL)
     parser.add_argument("--legacy-installation", type=Path, default=LEGACY_INSTALLATION)
     parser.add_argument("--candidate-installation", type=Path, default=CANDIDATE_INSTALLATION)
@@ -431,15 +430,15 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
     MODEL = args.model
-    if args.codex_oauth_file and MODEL != "openai/gpt-6-sol":
-        parser.error("Codex OAuth readiness currently requires openai/gpt-6-sol")
+    if args.chatgpt_auth_dir and not MODEL.startswith("openai/"):
+        parser.error("ChatGPT readiness requires an OpenAI model")
     EFFORT = "medium"
     LEGACY_INSTALLATION = args.legacy_installation.resolve(strict=True)
     CANDIDATE_INSTALLATION = args.candidate_installation.resolve(strict=True)
     FIXTURE_SEED_INSTALLATION = (args.fixture_seed_installation or LEGACY_INSTALLATION).resolve(strict=True)
     LEGACY_MANIFEST_SHA256 = digest(artifact_manifest(LEGACY_INSTALLATION))
     CANDIDATE_MANIFEST_SHA256 = digest(artifact_manifest(CANDIDATE_INSTALLATION))
-    credential_file = (args.codex_oauth_file or args.credential_file).resolve(strict=True)
+    credential_file = (args.chatgpt_auth_dir or args.credential_file).resolve(strict=True)
     scratch_parent = args.scratch_parent.resolve(strict=True)
     output_dir = args.output_dir.resolve(strict=False)
     if args.scratch_parent.is_symlink() or args.output_dir.is_symlink():
@@ -462,39 +461,42 @@ def main() -> None:
     os.chmod(scratch_parent, 0o700)
     # One explicit private provider input is shared by both isolated arms.
     provider_input = _load_provider_input({
-        ("provider_codex_oauth_file" if args.codex_oauth_file else "provider_credential_file"):
+        ("provider_chatgpt_auth_dir" if args.chatgpt_auth_dir else "provider_credential_file"):
             str(credential_file),
         "model": MODEL,
+        "candidate": {"installation_root": str(CANDIDATE_INSTALLATION)},
     })
-    reference_id = (provider_input["profile"].get("accountId")
-                    if provider_input["mode"] == "codex_oauth"
+    reference_id = (provider_input["auth_dir"]
+                    if provider_input["mode"] == "chatgpt_oauth"
                     else provider_input["credential"]["id"])
     fingerprint_salt = secrets.token_bytes(32)
     credential_fingerprint = hashlib.sha256(
         fingerprint_salt + reference_id.encode("utf-8")
     ).hexdigest()
     source_facts = {"credential_record_count": 1}
-    input_state_before = _credential_file_state(credential_file)
+    status_file = credential_file / "chatgpt.json" if args.chatgpt_auth_dir else credential_file
+    input_state_before = _credential_file_state(status_file)
     arms = {}
     for arm in ("legacy", "candidate"):
         arms[arm] = _run_arm(
             arm=arm, output_dir=output_dir, scratch_parent=scratch_parent,
             provider_input=provider_input, credential_fingerprint=credential_fingerprint,
-            credential_file=credential_file, source_facts=source_facts,
+            credential_file=status_file, source_facts=source_facts,
         )
-    input_state_after = _credential_file_state(credential_file)
+    input_state_after = _credential_file_state(status_file)
     summary = {
         "schema": "butler.rust-benchmark.actual-provider-readiness.v1",
         "status": "observed" if all(arm.get("status") == "observed" for arm in arms.values()) else "partial",
         "model": MODEL,
         "reasoning_effort": EFFORT,
         "fallback_settings": FALLBACK_OFF,
-        "provider_id": "openai" if provider_input["mode"] == "codex_oauth" else "zai",
-        "auth_type": "codex_oauth" if provider_input["mode"] == "codex_oauth" else "api_key",
+        "provider_id": "openai" if provider_input["mode"] == "chatgpt_oauth" else "zai",
+        "auth_type": "chatgpt_oauth" if provider_input["mode"] == "chatgpt_oauth" else "api_key",
         "credential_record_count": 1,
         "credential_reference_fingerprint": credential_fingerprint,
-        "credential_fingerprint_basis": "ephemeral_salted_reference_id; secret value and hash excluded",
-        "frozen_input_alias": "frozen-input/openai-codex.json" if provider_input["mode"] == "codex_oauth" else "frozen-input/credential.json",
+        "credential_fingerprint_basis": "ephemeral_salted_reference; secret value and hash excluded",
+        "frozen_input_alias": "shared-input/auth/chatgpt.json" if provider_input["mode"] == "chatgpt_oauth" else "frozen-input/credential.json",
+        "input_refresh_in_place": bool(args.chatgpt_auth_dir),
         "frozen_input_mode": "0600",
         "frozen_input_directory_mode": "0700",
         "frozen_input_unchanged": input_state_before == input_state_after,

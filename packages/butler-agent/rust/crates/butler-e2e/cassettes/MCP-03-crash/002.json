@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-sol",
       "effort": "low",
       "user_request": "Call the e2e_echo tool of the MCP server named e2e and tell me the token it returns.",
@@ -31,7 +31,7 @@
       },
       {
         "delay_ms": 803,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0854f3ed2f94f76c016ab8e3afd6b087d082b38ec6630c6902\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_yfYH5PgUFa379ft894G7cn0I\",\"name\":\"record_work_review\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0854f3ed2f94f76c016ab8e3afd6b087d082b38ec6630c6902\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_yfYH5PgUFa379ft894G7cn0I\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -219,7 +219,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0854f3ed2f94f76c016ab8e3afd6b087d082b38ec6630c6902\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"plan\\\",\\\"verdict\\\":\\\"accept\\\",\\\"summary\\\":\\\"Call the specified tool once and report its returned token.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Call e2e_echo and report its token\\\",\\\"status\\\":\\\"active\\\"}]}\",\"call_id\":\"call_yfYH5PgUFa379ft894G7cn0I\",\"name\":\"record_work_review\"},\"output_index\":0,\"sequence_number\":49}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0854f3ed2f94f76c016ab8e3afd6b087d082b38ec6630c6902\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"plan\\\",\\\"verdict\\\":\\\"accept\\\",\\\"summary\\\":\\\"Call the specified tool once and report its returned token.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Call e2e_echo and report its token\\\",\\\"status\\\":\\\"active\\\"}]}\",\"call_id\":\"call_yfYH5PgUFa379ft894G7cn0I\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":49}\n\n"
       },
       {
         "delay_ms": 34,

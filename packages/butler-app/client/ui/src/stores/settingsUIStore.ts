@@ -14,6 +14,7 @@ import { profileMigrationFeedbackFromResult } from "../app/profileMigrationFeedb
 import { useButlerStore } from "../app/store.ts";
 import { legacyWallpaperSetting } from "../app/wallpaperSetting.ts";
 import type {
+  ChatGptSignInKind,
   ModelCatalogView,
   PersonalizationProfileMigrationResultView,
   PersonalizationProfileView,
@@ -55,6 +56,7 @@ interface SettingsUIStore {
   // UI state
   activeSection: SettingsSectionId;
   setActiveSection: (section: SettingsSectionId) => Promise<boolean>;
+  chatgptSignInKind?: ChatGptSignInKind;
   modelRoute: SettingsModelRoute;
   modelRouteDirection: "forward" | "back";
   modelRouteLeaveGuard: (() => boolean | Promise<boolean>) | null;

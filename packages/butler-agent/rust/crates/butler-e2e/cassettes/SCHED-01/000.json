@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-luna",
       "effort": "max",
       "user_request": "Create a file named ask-{{NONCE}}.txt in your workspace containing exactly the text: scheduled",
@@ -32,7 +32,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0debc1e70dcb7c49016ab9a0b833d087d0b6f0ca2a9f032f59\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_WJamYtE3YjvHdjakwEJGz2WF\",\"name\":\"start_work\"},\"output_index\":1,\"sequence_number\":4}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0debc1e70dcb7c49016ab9a0b833d087d0b6f0ca2a9f032f59\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_WJamYtE3YjvHdjakwEJGz2WF\",\"name\":\"start_work\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":4}\n\n"
       },
       {
         "delay_ms": 0,
@@ -136,7 +136,7 @@
       },
       {
         "delay_ms": 6,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0debc1e70dcb7c49016ab9a0b833d087d0b6f0ca2a9f032f59\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Create ask-{{NONCE}}.txt in the workspace containing exactly “scheduled”\\\"}\",\"call_id\":\"call_WJamYtE3YjvHdjakwEJGz2WF\",\"name\":\"start_work\"},\"output_index\":1,\"sequence_number\":30}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0debc1e70dcb7c49016ab9a0b833d087d0b6f0ca2a9f032f59\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Create ask-{{NONCE}}.txt in the workspace containing exactly “scheduled”\\\"}\",\"call_id\":\"call_WJamYtE3YjvHdjakwEJGz2WF\",\"name\":\"start_work\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":30}\n\n"
       },
       {
         "delay_ms": 33,

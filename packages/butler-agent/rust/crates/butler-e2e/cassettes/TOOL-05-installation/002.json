@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-sol",
       "effort": "low",
       "user_request": "Create a file named inside.txt in your workspace containing exactly the text: hello-e2e",
@@ -31,7 +31,7 @@
       },
       {
         "delay_ms": 966,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_06074ac7a9ea60d2016ab8d38315f487d0b19c3fb238eab123\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_ZJnu93trW3OwJJ5Co2GR46ov\",\"name\":\"record_work_review\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_06074ac7a9ea60d2016ab8d38315f487d0b19c3fb238eab123\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_ZJnu93trW3OwJJ5Co2GR46ov\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -215,7 +215,7 @@
       },
       {
         "delay_ms": 4,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_06074ac7a9ea60d2016ab8d38315f487d0b19c3fb238eab123\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"plan\\\",\\\"verdict\\\":\\\"accept\\\",\\\"summary\\\":\\\"Create the requested file and verify its exact bytes.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create inside.txt with exactly hello-e2e\\\",\\\"status\\\":\\\"active\\\"}]}\",\"call_id\":\"call_ZJnu93trW3OwJJ5Co2GR46ov\",\"name\":\"record_work_review\"},\"output_index\":0,\"sequence_number\":48}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_06074ac7a9ea60d2016ab8d38315f487d0b19c3fb238eab123\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"plan\\\",\\\"verdict\\\":\\\"accept\\\",\\\"summary\\\":\\\"Create the requested file and verify its exact bytes.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create inside.txt with exactly hello-e2e\\\",\\\"status\\\":\\\"active\\\"}]}\",\"call_id\":\"call_ZJnu93trW3OwJJ5Co2GR46ov\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":48}\n\n"
       },
       {
         "delay_ms": 10,

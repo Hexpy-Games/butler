@@ -5,7 +5,7 @@ import type { AppModelSummary, ModelCatalogView } from "../../packages/butler-ap
 /** Only external authentication/discovery is stubbed; settings and completion stay durable in the native gateway. */
 export async function firstRunStub(gateway: NativeAppServerHandle) {
   const state = {
-    oauthStatus: "pending", label: "person@example.test", started: 0, cancelled: 0,
+    oauthStatus: "pending", oauthError: "", accountStatus: "signed_out", planEnabled: true, planNotice: false, starts: [] as Record<string, unknown>[], label: "person@example.test", started: 0, cancelled: 0,
     holdCommit: false, failCommit: false, readiness: "ready", local: false, localCalls: 0, localModels: 1,
     importEmpty: false, importRuns: 0, importUndos: 0, agentSources: [] as string[], agentRequests: [] as Record<string, unknown>[], agentPassthrough: false,
     memoryModel: "unset" as "unset" | "off" | "ready",
@@ -49,12 +49,18 @@ export async function firstRunStub(gateway: NativeAppServerHandle) {
     const path = new URL(request.url!, "http://localhost").pathname;
     if (await importFixture(path, request, response)) return;
     if (path === "/setup/oauth/start") {
-      state.started++;
+      state.started++; state.starts.push(await requestBody(request));
       return json(response, { status: "pending", flow_id: `stub-${state.started}`, auth_url: "https://signin.invalid/first-run" });
     }
     if (path.startsWith("/setup/oauth/")) {
       if (path.endsWith("/cancel")) { state.cancelled++; return json(response, { status: "cancelled" }); }
-      return json(response, { status: state.oauthStatus, label: state.label });
+      if (state.oauthStatus === "completed" || state.oauthStatus === "profile_exists") state.accountStatus = state.planEnabled ? "signed_in" : "plan_off";
+      return json(response, { status: state.oauthStatus, label: state.label, error: state.oauthError || undefined, plan_enabled: state.planEnabled });
+    }
+    if (path.startsWith("/setup/chatgpt-account")) {
+      if (path.endsWith("/sign-out")) { state.accountStatus = "signed_out"; return json(response, { revoked: true, account: { status: state.accountStatus, label: null, plan_notice_pending: false, legacy_prompt_pending: false } }); }
+      if (path.endsWith("/notice")) state.planNotice = false;
+      return json(response, { status: state.accountStatus, label: state.accountStatus === "signed_in" ? state.label : null, plan_notice_pending: state.planNotice, legacy_prompt_pending: false });
     }
     if (path === "/setup/memory-model") state.memoryModel = (await requestBody(request)).enabled ? "ready" : "off";
     if (path === "/setup/readiness" || path === "/setup/readiness/retry" || path === "/setup/memory-model") return json(response, {

@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-sol",
       "effort": "low",
       "user_request": "Use the run_command tool to run exactly `echo {{NONCE}} >> log.txt` in your workspace, then reply done.",
@@ -32,7 +32,7 @@
       },
       {
         "delay_ms": 5,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_049e99b9b1d4fb7d016ab8d5926d7087d0901b17d4e9bef680\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_Egc5BWMoXjyb8gA585n5WOTv\",\"name\":\"start_work\"},\"output_index\":1,\"sequence_number\":4}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_049e99b9b1d4fb7d016ab8d5926d7087d0901b17d4e9bef680\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_Egc5BWMoXjyb8gA585n5WOTv\",\"name\":\"start_work\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":4}\n\n"
       },
       {
         "delay_ms": 0,
@@ -96,7 +96,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_049e99b9b1d4fb7d016ab8d5926d7087d0901b17d4e9bef680\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Append the specified token to log.txt and confirm.\\\"}\",\"call_id\":\"call_Egc5BWMoXjyb8gA585n5WOTv\",\"name\":\"start_work\"},\"output_index\":1,\"sequence_number\":20}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_049e99b9b1d4fb7d016ab8d5926d7087d0901b17d4e9bef680\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Append the specified token to log.txt and confirm.\\\"}\",\"call_id\":\"call_Egc5BWMoXjyb8gA585n5WOTv\",\"name\":\"start_work\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":20}\n\n"
       },
       {
         "delay_ms": 26,

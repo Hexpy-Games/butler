@@ -48,9 +48,9 @@ pub use prompt::{
 };
 pub use prompt::{PromptBudgetStateSource, PromptCacheBoundary, UsageAuthMode};
 pub use quota::{
-    ProviderQuotaReading, ProviderQuotaSink, ProviderQuotaSource, ProviderQuotaWindow,
-    QUOTA_POLLED_PROVIDERS, QuotaBilling, QuotaFetch, QuotaFetchError, QuotaHttp, QuotaSupport,
-    parse_quota_headers, provider_quota_support,
+    CreditsReading, PlanLimitReading, ProviderQuotaReading, ProviderQuotaSink, ProviderQuotaSource,
+    ProviderQuotaWindow, QUOTA_POLLED_PROVIDERS, QuotaBilling, QuotaFetch, QuotaFetchError,
+    QuotaHttp, QuotaSupport, parse_quota_headers, provider_quota_support,
 };
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use visual_admission::ImageAdmissionError;
@@ -66,8 +66,7 @@ pub use provider::{
 pub(crate) use catalog::model_identity_key;
 pub use catalog::{
     ANTHROPIC_ADAPTIVE_MODELS, ANTHROPIC_BUDGET_MODEL, KIMI_ADAPTIVE_MODEL,
-    OPENAI_DYNAMIC_PLAIN_MODEL, OPENAI_EXPLICIT_CACHE_MODELS, OPENCODE_THINKING_MODEL,
-    ZAI_IMAGE_MODEL, ZAI_THINKING_REFS,
+    OPENAI_EXPLICIT_CACHE_MODELS, OPENCODE_THINKING_MODEL, ZAI_IMAGE_MODEL, ZAI_THINKING_REFS,
 };
 pub use catalog::{
     ApiKeyBilling, CredentialStorage, CredentialView, DEFAULT_PROVIDER, HostedApiShape,
@@ -92,6 +91,7 @@ use tokenizer::TokenizerOwner;
 
 /// Secret input for key commands: echo off at a terminal (#217).
 pub use butler_platform::secrets::read_secret_input;
+pub use configuration::chatgpt;
 pub use configuration::{
     CredentialError, CredentialFileSummary, CredentialList, CredentialListItem,
     CredentialMigrationFailure, CredentialMigrationReport, CredentialStoreError,
@@ -102,9 +102,9 @@ pub use configuration::{
 pub use configuration::{
     DiscoveredLocalModel, HostedModelMutation, LocalModelMutation, McpModelTarget,
     ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,
-    ModelConfigurationRead, ModelContextMetadataRead, OpenAiAuthProfile,
-    ProviderCredentialMutation, ProviderKeyCheck, ProviderKeyCheckError, ProviderKeySaveError,
-    SavedProviderKey, SettingsError, generate_pkce_verifier, pkce_challenge,
+    ModelConfigurationRead, ModelContextMetadataRead, ProviderCredentialMutation, ProviderKeyCheck,
+    ProviderKeyCheckError, ProviderKeySaveError, SavedProviderKey, SettingsError,
+    generate_pkce_verifier, pkce_challenge,
 };
 pub use status::{StatusModels, auth_status_with_environment, open_status_models};
 
@@ -142,9 +142,7 @@ impl ModelCatalog {
             return UsageAuthMode::Local;
         }
         match auth {
-            ProviderAuthMode::CodexSubscription | ProviderAuthMode::CodexOauth => {
-                UsageAuthMode::Subscription
-            }
+            ProviderAuthMode::ChatGptPlan => UsageAuthMode::Subscription,
             ProviderAuthMode::ApiKey => match self.static_catalog.api_key_billing(provider_id) {
                 ApiKeyBilling::PerToken => UsageAuthMode::ApiKey,
                 ApiKeyBilling::Subscription => UsageAuthMode::Subscription,

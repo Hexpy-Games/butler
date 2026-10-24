@@ -16,9 +16,6 @@ use super::super::sanitize::{keep_header, sanitize_body};
 use super::replay::{consume_fault, plain, take_fault};
 use super::{State, lock};
 
-/// Where `/oauth/*` requests are recorded from.
-const OAUTH_UPSTREAM: &str = "https://auth.openai.com";
-
 #[expect(clippy::too_many_arguments, reason = "one forwarding step, kept flat")]
 pub(super) async fn record(
     state: &Arc<State>,
@@ -35,13 +32,6 @@ pub(super) async fn record(
         method.as_str(),
         serde_json::to_string(&key).unwrap_or_default()
     );
-    // The Codex login refresh (`Setup::codex_login_refresh`) goes to the
-    // OpenAI auth host, whatever the provider's upstream.
-    let upstream = if path.starts_with("/oauth/") {
-        OAUTH_UPSTREAM
-    } else {
-        upstream
-    };
     let mut request = client.request(
         reqwest::Method::from_bytes(method.as_str().as_bytes()).unwrap_or(reqwest::Method::POST),
         format!("{}{path}", upstream.trim_end_matches('/')),
@@ -63,6 +53,10 @@ pub(super) async fn record(
         .inflight
         .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     let status = upstream_response.status().as_u16();
+    lock(&state.observed).header_names.push((
+        path.clone(),
+        super::budget::header_names(upstream_response.headers()),
+    ));
     let mut kept_headers = Vec::new();
     let mut builder = Response::builder().status(status);
     for (name, value) in upstream_response.headers() {

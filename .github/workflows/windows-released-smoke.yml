@@ -108,12 +108,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
-          CODEX_AUTH_SECRET: ${{ secrets.BUTLER_E2E_CODEX_AUTH_JSON }}
           API_KEY_SECRET: ${{ secrets.BUTLER_E2E_API_KEY }}
         run: |
           $ErrorActionPreference = 'Stop'
           if ($env:RELEASE_TAG -notmatch '^v0\.1\.0-preview\.\d+$') { throw 'Expected a preview tag' }
-          if (!$env:CODEX_AUTH_SECRET -and !$env:API_KEY_SECRET) { throw 'A live-e2e credential is required' }
+          $authDir = Join-Path $HOME '.butler-e2e-auth/auth'
+          $profile = Join-Path $authDir 'chatgpt.json'
+          if (!(Test-Path -LiteralPath $profile -PathType Leaf) -and !$env:API_KEY_SECRET) {
+            throw 'One-time setup: butler auth login --data "$HOME\.butler-e2e-auth"'
+          }
           $root = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
           New-Item -ItemType Directory $root | Out-Null
           try {
@@ -133,10 +136,8 @@ jobs:
             $env:BUTLER_E2E_MODEL = 'openai/gpt-6-luna@low'
             $env:BUTLER_E2E_LIVE_MAX_TURNS = '1'
             $env:BUTLER_E2E_RELEASED_VERSION = $env:RELEASE_TAG.Substring(1)
-            if ($env:CODEX_AUTH_SECRET) {
-              $credential = Join-Path $root 'codex-auth.json'
-              [System.IO.File]::WriteAllText($credential, $env:CODEX_AUTH_SECRET)
-              $env:BUTLER_E2E_CODEX_AUTH_JSON = $credential
+            if (Test-Path -LiteralPath $profile -PathType Leaf) {
+              $env:BUTLER_E2E_CHATGPT_AUTH_DIR = $authDir
               $env:BUTLER_E2E_PROVIDER = 'openai-subscription'
             } else {
               $env:BUTLER_E2E_API_KEY_ENV = 'API_KEY_SECRET'

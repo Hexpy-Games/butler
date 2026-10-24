@@ -65,9 +65,9 @@ fn exchange(prompt: &str, round: Vec<String>, item: &Value) -> Exchange {
     Exchange {
         request: RequestRecord {
             method: "POST".into(),
-            path: "/codex/responses".into(),
+            path: "/v1/responses".into(),
             key: MatchKey {
-                path: "/codex/responses".into(),
+                path: "/v1/responses".into(),
                 model: "gpt-6-luna".into(),
                 effort: Some("low".into()),
                 user_request: prompt.into(),
@@ -139,10 +139,13 @@ pub(crate) async fn default_folder_model()
 -> Result<(String, tokio::task::JoinHandle<()>, DefaultFolderRequests), HarnessError> {
     use axum::{Router, routing::post};
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let url = format!("http://{}/codex", listener.local_addr()?);
+    let url = format!("http://{}", listener.local_addr()?);
     let requests = DefaultFolderRequests::default();
     let app = Router::new()
-        .route("/codex/responses", post(default_folder_reply))
+        .route("/v1/responses", post(default_folder_reply))
+        .route_layer(axum::middleware::from_fn(
+            butler_e2e::e2e::chatgpt_wire::validate,
+        ))
         .with_state(requests.clone());
     let server = tokio::spawn(async move {
         let _ = axum::serve(listener, app).await;
@@ -156,7 +159,7 @@ async fn default_folder_reply(
 ) -> axum::response::Response {
     use axum::response::IntoResponse;
     use butler_e2e::e2e::{matching, sanitize::Placeholders};
-    let key = matching::key("/codex/responses", &body, &Placeholders::default());
+    let key = matching::key("/v1/responses", &body, &Placeholders::default());
     if key.user_request == "Check the unset default folder." {
         requests.lock().unwrap().push(body.to_string());
     }

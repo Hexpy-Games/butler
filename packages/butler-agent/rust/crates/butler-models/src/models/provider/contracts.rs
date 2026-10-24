@@ -11,8 +11,7 @@ use super::super::{HostedApiShape, ModelProviderMetadata, ReasoningEffort};
 pub enum ProviderAuthMode {
     None,
     ApiKey,
-    CodexSubscription,
-    CodexOauth,
+    ChatGptPlan,
 }
 
 /// Request-local credential lease. It is neither serializable nor debuggable;
@@ -20,12 +19,9 @@ pub enum ProviderAuthMode {
 pub enum ProviderAuth {
     None,
     ApiKey(zeroize::Zeroizing<String>),
-    Codex {
-        mode: ProviderAuthMode,
-        authorization: String,
-        account_id: String,
-        user_agent: String,
-        originator: String,
+    ChatGptPlan {
+        authorization: zeroize::Zeroizing<String>,
+        registration: String,
     },
 }
 
@@ -34,7 +30,7 @@ impl ProviderAuth {
         match self {
             Self::None => ProviderAuthMode::None,
             Self::ApiKey(_) => ProviderAuthMode::ApiKey,
-            Self::Codex { mode, .. } => *mode,
+            Self::ChatGptPlan { .. } => ProviderAuthMode::ChatGptPlan,
         }
     }
 }
@@ -48,6 +44,7 @@ pub struct ProviderRoundPolicy {
 
 pub struct ProviderConfigRequest<'a> {
     pub model_ref: &'a str,
+    pub rejected_authorization: Option<&'a str>,
     pub butler_data: Option<&'a str>,
 }
 

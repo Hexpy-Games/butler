@@ -91,6 +91,7 @@ pub(crate) fn parse_zai_quota(
         return Err(QuotaFetchError::Schema);
     }
     Ok(ProviderQuotaReading {
+        credits: None,
         provider_id: provider_id.to_owned(),
         windows,
         observed_at_ms: now_ms,

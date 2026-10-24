@@ -40,7 +40,7 @@ impl Scripted {
 
 impl ProviderQuotaFetcher for Scripted {
     fn providers(&self) -> Vec<String> {
-        vec!["openai".into()]
+        vec!["zai".into()]
     }
 
     fn enabled(&self, _provider_id: &str) -> bool {
@@ -88,13 +88,13 @@ impl Harness {
     }
 
     fn view(&self) -> crate::operations::ProviderQuotaView {
-        self.poller.store().view("openai")
+        self.poller.store().view("zai")
     }
 
     /// Scripts a successful poll observed now.
     fn ok(&self) {
         let now = self.clock.0.load(Ordering::SeqCst);
-        let mut reading = reading("openai", 10.0, ProviderQuotaSource::UsageEndpoint);
+        let mut reading = reading("zai", 10.0, ProviderQuotaSource::UsageEndpoint);
         reading.observed_at_ms = now;
         reading.windows[0].resets_at_ms = Some(now + 60 * MINUTE);
         self.fetcher.push(Ok(reading));
@@ -146,7 +146,7 @@ pub(crate) async fn failures_and_rate_limits_back_off() {
     for _ in 0..6 {
         h.at(now);
         h.poll(QuotaPollTrigger::Scheduled).await;
-        let due = h.poller.schedules.lock()["openai"].next_due_ms - NOW;
+        let due = h.poller.schedules.lock()["zai"].next_due_ms - NOW;
         delays.push((due - now) / MINUTE);
         now = due;
     }

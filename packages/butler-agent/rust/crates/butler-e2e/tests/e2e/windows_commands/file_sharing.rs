@@ -82,7 +82,7 @@ async fn run_sharing_case(external_save: bool) -> Result<(), HarnessError> {
     let s = setup
         .stub_cassette(super::observation_stub::cassette()?)
         .access(Access::FullAccess)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()
         .await?;
     let (turn, release) = tokio::join!(

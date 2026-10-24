@@ -1,5 +1,6 @@
 mod admission;
 mod dispatch;
+mod response;
 
 use std::sync::Arc;
 
@@ -23,6 +24,8 @@ type RoundFuture<'a> = std::pin::Pin<
 >;
 
 struct PreparedResponse {
+    body: Option<serde_json::Value>,
+    capability_revision: Option<String>,
     carrier: serialize::Carrier,
     continuation: Option<super::continuation::LegacyProjection>,
     identity: Option<serde_json::Value>,
@@ -94,9 +97,10 @@ impl ModelProvider {
         request: ModelRoundRequest<'_>,
         local_stream: bool,
         include_usage: bool,
+        retry: super::chatgpt_plan::retry::Retry,
         include_summary: bool,
     ) -> Result<ModelRoundResult, ModelRoundError> {
-        let config = self.round_config(&request).await?;
+        let config = self.round_config(&request, retry.authorization()).await?;
         let (carrier, mode, api) =
             self.local_streaming
                 .carrier(&config, carrier(&config), local_stream);
@@ -115,55 +119,15 @@ impl ModelProvider {
         let sent = self
             .dispatch(&request, &config, (carrier, mode, api), &watch, prepared)
             .await;
-        let prefix = (!sent.prepared.prefix.is_null()).then_some(&sent.prepared.prefix);
-        let response = match sent.response {
-            Ok(value) => value,
-            Err(ModelRoundError::Provider(error))
-                if sent.prepared.summary
-                    && super::thinking_summary::rejected(&error)
-                    && config.metadata.provider_id == "openai" =>
-            {
-                self.summaries.refuse(&config);
-                self.record_failed_usage(&request, &config, prefix)?;
-                return Box::pin(self.run(request, local_stream, include_usage, false)).await;
-            }
-            Err(ModelRoundError::Provider(error))
-                if include_usage && super::stream_usage::rejected(carrier, &error) =>
-            {
-                self.stream_usage.refuse(&config);
-                self.record_failed_usage(&request, &config, prefix)?;
-                return Box::pin(self.run(request, local_stream, false, include_summary)).await;
-            }
-            Err(ModelRoundError::Provider(error))
-                if local_stream
-                    && !super::stream_usage::rejected(carrier, &error)
-                    && local_stream::falls_back(carrier, &error, &watch) =>
-            {
-                self.record_failed_usage(&request, &config, prefix)?;
-                return self
-                    .run_without_streaming(request, config.endpoint.clone())
-                    .await;
-            }
-            Err(ModelRoundError::Provider(mut error)) => {
-                self.record_failed_usage(&request, &config, prefix)?;
-                if config.metadata.provider_id == "local"
-                    && let ProviderAuth::ApiKey(secret) = &config.auth
-                {
-                    super::redact::redact_local_error(&mut error, secret);
-                }
-                error.endpoint = Some(safe_endpoint(&config.endpoint));
-                error.model = Some(config.wire_model.clone());
-                self.observations.failure(&error);
-                return Err(ModelRoundError::Provider(error));
-            }
-            Err(error) => {
-                self.record_failed_usage(&request, &config, prefix)?;
-                return Err(error);
-            }
-        };
-        let result = self.complete(&request, &config, response, sent.prepared)?;
-        watch.complete_tools(&result);
-        Ok(result)
+        self.finish_round(
+            request,
+            config,
+            sent,
+            watch,
+            (local_stream, include_usage, include_summary),
+            retry,
+        )
+        .await
     }
 
     fn record_failed_usage(
@@ -267,6 +231,7 @@ impl ModelProvider {
     async fn round_config(
         &self,
         request: &ModelRoundRequest<'_>,
+        rejected_authorization: Option<&str>,
     ) -> Result<super::contracts::ProviderRequestConfig, ModelRoundError> {
         if request.cancellation.is_cancelled() {
             return Err(ModelRoundError::Cancelled);
@@ -275,6 +240,7 @@ impl ModelProvider {
             .config
             .resolve(ProviderConfigRequest {
                 model_ref: request.model,
+                rejected_authorization,
                 butler_data: None,
             })
             .await
@@ -306,7 +272,9 @@ impl ModelProvider {
         endpoint: url::Url,
     ) -> RoundFuture<'a> {
         Box::pin(async move {
-            let result = self.run(request, false, true, true).await;
+            let result = self
+                .run(request, false, true, Default::default(), true)
+                .await;
             if result.is_ok() {
                 self.local_streaming.refuse(&endpoint);
             }
@@ -437,6 +405,6 @@ impl ModelRoundPort for ModelProvider {
             dyn std::future::Future<Output = Result<ModelRoundResult, ModelRoundError>> + Send + 'a,
         >,
     > {
-        Box::pin(self.run(request, true, true, true))
+        Box::pin(self.run(request, true, true, Default::default(), true))
     }
 }

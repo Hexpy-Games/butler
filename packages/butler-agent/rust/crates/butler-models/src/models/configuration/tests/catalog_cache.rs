@@ -12,6 +12,7 @@ pub(super) async fn fresh_secret_with_same_mask(fixture: &Fixture, owner: &Model
     );
     let current = owner
         .resolve(ProviderConfigRequest {
+            rejected_authorization: None,
             model_ref: "openai/gpt-5.5",
             butler_data: None,
         })

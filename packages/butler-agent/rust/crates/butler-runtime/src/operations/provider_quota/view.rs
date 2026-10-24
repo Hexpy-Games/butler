@@ -36,6 +36,9 @@ pub(super) fn reading_view(
         matches!(status, Some(QuotaPollStatus::Failed(at)) if at >= reading.observed_at_ms);
     let (source_kind, source_id) = source(&reading.provider_id, reading.source);
     ProviderQuotaView {
+        estimated: false,
+        plan_usage: None,
+        credits: reading.credits.clone(),
         available: true,
         stale: failed_since || reset_passed || now_ms - reading.observed_at_ms > STALE_AFTER_MS,
         source_kind,
@@ -68,6 +71,9 @@ pub(super) fn without_reading(
     };
     let (source_kind, source_id) = self::source(provider_id, source);
     ProviderQuotaView {
+        estimated: false,
+        plan_usage: None,
+        credits: None,
         available: false,
         stale: false,
         source_kind,
@@ -134,7 +140,33 @@ fn window_view(window: &ProviderQuotaWindow) -> QuotaWindowView {
     }
 }
 
-fn iso(epoch_ms: i64) -> Option<String> {
+pub(super) fn iso(epoch_ms: i64) -> Option<String> {
     DateTime::<Utc>::from_timestamp_millis(epoch_ms)
         .map(|time| time.to_rfc3339_opts(SecondsFormat::Millis, true))
+}
+
+/// A signed-in plan needs no header reading to be available.
+pub(super) fn chatgpt_plan(
+    view: &mut ProviderQuotaView,
+    limit: Option<&butler_models::models::PlanLimitReading>,
+) {
+    view.available = true;
+    view.source_kind = "chatgpt_plan".into();
+    view.source_id = "openai-chatgpt-plan".into();
+    view.plan_kind = QuotaPlanKind::Subscription;
+    view.plan_name = None;
+    view.estimated = true;
+    view.plan_usage = Some(super::PlanUsageView {
+        state: if limit.is_some() {
+            "limit_reached"
+        } else {
+            "in_use"
+        }
+        .into(),
+        resets_at: limit.and_then(|r| r.resets_at_ms).and_then(iso),
+    });
+    view.reason = None;
+    if view.windows.is_empty() {
+        view.stale = false;
+    }
 }

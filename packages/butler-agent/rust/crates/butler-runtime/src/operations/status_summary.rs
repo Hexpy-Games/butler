@@ -53,6 +53,7 @@ pub async fn read_usage_tool(
     tokio::task::spawn_blocking(move || {
         let pricing = |model: &str| catalog.pricing(model);
         let sources = UsageMonitorSources {
+            chatgpt_account: None,
             pricing: &pricing,
             quota: &crate::operations::unavailable_quota_view,
             quota_providers: Vec::new(),

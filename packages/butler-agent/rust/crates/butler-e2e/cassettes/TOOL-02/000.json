@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-sol",
       "effort": "low",
       "user_request": "Create out.txt in your workspace containing exactly `alpha {{NONCE}}`, then use edit_file to change alpha to beta.",
@@ -24,7 +24,7 @@
       },
       {
         "delay_ms": 615,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_09ea6ad437e4a345016ab8e4f036bc87d0a489218c6a39316a\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_K5KjkJat1d3Qj6gkw49s9yWY\",\"name\":\"start_work\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_09ea6ad437e4a345016ab8e4f036bc87d0a489218c6a39316a\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_K5KjkJat1d3Qj6gkw49s9yWY\",\"name\":\"start_work\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -116,7 +116,7 @@
       },
       {
         "delay_ms": 0,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_09ea6ad437e4a345016ab8e4f036bc87d0a489218c6a39316a\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Create out.txt with the specified initial content and change alpha to beta using edit_file.\\\"}\",\"call_id\":\"call_K5KjkJat1d3Qj6gkw49s9yWY\",\"name\":\"start_work\"},\"output_index\":0,\"sequence_number\":25}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_09ea6ad437e4a345016ab8e4f036bc87d0a489218c6a39316a\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Create out.txt with the specified initial content and change alpha to beta using edit_file.\\\"}\",\"call_id\":\"call_K5KjkJat1d3Qj6gkw49s9yWY\",\"name\":\"start_work\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":25}\n\n"
       },
       {
         "delay_ms": 11,

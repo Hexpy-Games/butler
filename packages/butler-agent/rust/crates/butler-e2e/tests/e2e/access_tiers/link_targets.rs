@@ -23,7 +23,7 @@ async fn link_targets_ask_with_the_real_place_and_bind_it() -> Result<(), Harnes
     let setup = Setup::new("PERM-LINK")?
         .access(Access::AskAlways)
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let home = setup.sandbox.home.clone();
     let folder = home.join("proj");
     for directory in [&folder, &home.join("linked-a"), &home.join("linked-b")] {

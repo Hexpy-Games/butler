@@ -1,5 +1,6 @@
 //! Native monitor reads projected from Operations and existing BTCC owners.
 
+mod chatgpt;
 mod events;
 mod quota;
 mod work_status;
@@ -28,6 +29,8 @@ use crate::host::AgentRuntime;
 pub(crate) struct AppMonitoring {
     lineage: Arc<butler_runtime::operations::UsageLineage>,
     data_root: PathBuf,
+    configuration: Arc<butler_models::models::ModelConfiguration>,
+    account: Arc<chatgpt::Account>,
     session_work: Arc<SessionWorkRepository>,
     catalog: Arc<ModelCatalog>,
     quota: Arc<ProviderQuotaStore>,
@@ -47,6 +50,8 @@ impl AppMonitoring {
         let quota = runtime.models.quota.clone();
         Self {
             data_root: data_root.to_path_buf(),
+            configuration: runtime.models.configuration.clone(),
+            account: Arc::default(),
             session_work: runtime.session_work.clone(),
             catalog: runtime.models.catalog.clone(),
             poller: quota::poller(
@@ -68,11 +73,13 @@ fn usage_monitor_view(
     monitor: &Arc<UsageMonitor>,
     catalog: &ModelCatalog,
     quota: &ProviderQuotaStore,
+    chatgpt_account: Option<String>,
     projection_guard: tokio::sync::OwnedMutexGuard<()>,
 ) -> butler_gateway::gateway::AppUsageMonitorView {
     let pricing = |model_ref: &str| catalog.pricing(model_ref);
     let quota_view = |provider_id: &str| quota.view(provider_id);
     let sources = UsageMonitorSources {
+        chatgpt_account,
         pricing: &pricing,
         quota: &quota_view,
         quota_providers: quota.provider_ids(),
@@ -112,6 +119,8 @@ impl AppMonitoringPort for AppMonitoring {
         let catalog = self.catalog.clone();
         let quota = self.quota.clone();
         let monitor = self.usage.clone();
+        let configuration = self.configuration.clone();
+        let account = self.account.clone();
         let lineage = self.lineage.clone();
         // The Settings usage page reads the whole-process monitor (no
         // session): opening it starts the quota polls that are due, and the
@@ -134,10 +143,20 @@ impl AppMonitoringPort for AppMonitoring {
             .await
             .map_err(GatewayApplicationError::internal_from)?;
             lineage.resolve().await;
+            let chatgpt_account = account.current(&configuration).await;
+            quota.set_chatgpt_active(chatgpt_account.is_some());
             // The first read parses the usage log and every transcript:
             // keep that off the async workers.
             let mut view = tokio::task::spawn_blocking(move || {
-                usage_monitor_view(&root, &query, &monitor, &catalog, &quota, read)
+                usage_monitor_view(
+                    &root,
+                    &query,
+                    &monitor,
+                    &catalog,
+                    &quota,
+                    chatgpt_account,
+                    read,
+                )
             })
             .await
             .map_err(GatewayApplicationError::internal_from)?;
@@ -161,7 +180,10 @@ impl AppMonitoringPort for AppMonitoring {
     ) -> ApplicationFuture<ProviderQuotaView> {
         let quota = self.quota.clone();
         let poller = self.poller.clone();
+        let configuration = self.configuration.clone();
+        let account = self.account.clone();
         Box::pin(async move {
+            quota.set_chatgpt_active(account.current(&configuration).await.is_some());
             match poller {
                 Some(poller) if refresh => {
                     quota::poll_explicit(poller, provider_id.clone()).await;

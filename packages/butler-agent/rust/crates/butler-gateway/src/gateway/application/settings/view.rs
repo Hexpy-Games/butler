@@ -56,20 +56,10 @@ pub(super) fn read(
     let external = native_value(&native, "web_search_credentials");
     let configured_web = object(config_web);
     let stored_web = stored.get("web_search").and_then(Value::as_object);
-    let provider = enum_value(
+    let provider = search_provider(
         stored_web
             .and_then(|value| value.get("provider"))
             .or_else(|| configured_web.get("provider")),
-        &[
-            "duckduckgo-html",
-            "auto",
-            "brave",
-            "tavily",
-            "openai-web-search",
-            "codex-subscription-web-search",
-            "disabled",
-        ],
-        "duckduckgo-html",
     );
     let credential = object(external)
         .get(&provider)
@@ -398,4 +388,26 @@ fn recall_defaults(stored: &serde_json::Map<String, Value>) -> serde_json::Map<S
         ),
     );
     output
+}
+
+fn search_provider(value: Option<&Value>) -> String {
+    let provider = enum_value(
+        value,
+        &[
+            "duckduckgo-html",
+            "auto",
+            "brave",
+            "tavily",
+            "openai-web-search",
+            "chatgpt-plan-web-search",
+            "codex-subscription-web-search",
+            "disabled",
+        ],
+        "duckduckgo-html",
+    );
+    if provider == "codex-subscription-web-search" {
+        "chatgpt-plan-web-search".into()
+    } else {
+        provider
+    }
 }

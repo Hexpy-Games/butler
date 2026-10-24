@@ -1,17 +1,25 @@
+// test-category: race
 // Product usage surfaces in VisualHarness, offline gateway, no model calls.
 import assert from "node:assert/strict";
 import { readFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, extname, normalize, sep } from "node:path";
 import { probeFocusRing } from "../support/focus-ring-clipping";
 import { launchSmokeBrowser } from "../support/smoke-browser";
+import { createNativeAppServer } from "../support/native-app-server";
+import { chatGptPlanFixture, fallbackEvents } from "../support/chatgpt-plan-fixture";
+import { getAppCopy } from "../../packages/butler-i18n/src";
 import type { Locator, Page } from "playwright";
-import { usageView, quota, delegatedUsageView } from "../../packages/butler-app/client/ui/src/components/conversation/contextUsage.fixtures";
+import { usageView, quota, delegatedUsageView, chatGptUsageFixtures } from "../../packages/butler-app/client/ui/src/components/conversation/contextUsage.fixtures";
 import type { UsageMonitorView } from "../../packages/butler-app/client/ui/src/app/types";
 
 const dist = join(process.cwd(), "packages/butler-app/client/ui/dist");
 const shots = process.env.BUTLER_USAGE_SHOTS;
 if (shots) mkdirSync(shots, { recursive: true });
 const auth = process.env.BUTLER_USAGE_AUTH ?? "api_key";
+const planState = process.env.BUTLER_USAGE_PLAN_STATE ?? "headers";
+function planQuota() {
+  return planState === "limit" ? chatGptUsageFixtures.limit : planState === "no-headers" ? chatGptUsageFixtures.noHeaders : quota();
+}
 const before = process.env.BUTLER_USAGE_BEFORE === "1";
 const base = "http://usage.localhost";
 const browser = await launchSmokeBrowser();
@@ -35,7 +43,7 @@ const alignmentDeltas: number[] = [];
 let releaseLoading: (() => void)[] = [];
 function monitor(url: URL) {
   const delegated = state === "delegated" && !before;
-  const view = delegated ? delegatedUsageView({ quota: quota(), usd: 0.1563 }) : usageView({ quota: quota(), usd: 0.0842 });
+  const view = delegated ? delegatedUsageView({ quota: planQuota(), usd: 0.1563 }) : usageView({ quota: planQuota(), usd: 0.0842 });
   const now = Date.parse(view.generated_at);
   const hours = Number(url.searchParams.get("since_hours")) || 0;
   const session = url.searchParams.get("session_id");
@@ -178,7 +186,7 @@ try {
       if (state === "loading") await new Promise<void>(resolve => releaseLoading.push(resolve));
       return route.fulfill({ json: { ok: true, data: monitor(url) } });
     }
-    if (url.pathname === "/provider-quota") return route.fulfill({ json: { ok: true, data: quota() } });
+    if (url.pathname === "/provider-quota") return route.fulfill({ json: { ok: true, data: planQuota() } });
     if (url.pathname === "/session-queue") return route.fulfill({ json: { ok: true, data: { queued_messages: [] } } });
     if (/^\/sessions\/[^/]+\/controls$/u.test(url.pathname)) return route.fulfill({ json: { ok: true, data: { session_id: "butler-client", revision: 0,
       catalog_generation: "harness-model-catalog-v1", controls: { model: "openai/gpt-6-luna", reasoning_effort: "none", access_mode: "full_access", plan_mode: false } } } });
@@ -268,7 +276,16 @@ try {
       continue;
     }
     if (!before && scenario === "empty") assert.equal(await popover.locator('[data-test-class="usage-readout"]').count(), 0);
-    if (auth === "subscription") await popover.getByText("계정 한도", { exact: true }).waitFor();
+    if (auth === "subscription") {
+      const plan = popover.locator('[data-test-class="chatgpt-plan-usage"]');
+      await plan.getByText("버틀러 사용량", { exact: true }).waitFor();
+      assert.equal(await plan.getByText("계정 한도", { exact: true }).count(), planState === "headers" ? 1 : 0);
+      assert.equal(await plan.getByText("추정", { exact: true }).count(), planState === "headers" ? 2 : 0);
+      assert.equal(await plan.getByRole("button", { name: "사용량 관리", exact: true }).count(), 1);
+      assert.equal(await plan.getByText(/사용 한도 도달/u).count(), planState === "limit" ? 1 : 0);
+      assert.equal(await plan.locator('[data-test-class="key-value-row"]').count(), 3);
+      if (planState === "limit") await assertLimitAction(plan);
+    }
     if (!before && scenario === "ready") {
       const chart = popover.locator('[data-slot="usage-bars"]');
       assert.match(await popover.innerText(), /요청 3회/u);
@@ -295,6 +312,7 @@ try {
     }
     await popover.getByRole("button", { name: "자세히", exact: true }).click();
     await page.locator('[data-settings-section-id="usage-overview"]').waitFor();
+    if (auth === "subscription" && planState === "limit" && scenario !== "loading") await assertLimitAction(page.locator('[data-test-class="chatgpt-plan-usage"]'));
     await page.waitForTimeout(400);
     if (shots) await page.screenshot({ path: join(shots, `${before ? "before" : "after"}${auth === "subscription" ? "-subscription" : ""}-usage-${theme}-${width}-${scenario}.png`) });
     if (!before && scenario === "loading") {
@@ -391,6 +409,7 @@ try {
       assert(allReads > revisitReads, "revisit fetches fresh all-chat data");
     }
   }
+  await assertPlanFallbackStream();
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ ok: true, cells, reads, allReads, before, heightDeltas, alignmentDeltas, popoverHeights, splitHeightDeltas, maxGapDelta, maxShareDelta }));
 } finally {
@@ -398,4 +417,54 @@ try {
   releaseLoading.forEach(resolve => resolve());
   await Promise.all(browser.contexts().flatMap(context => context.pages().map(page => page.unrouteAll({ behavior: "wait" }))));
   await browser.close();
+}
+
+/** Real App bootstrap/cursor and SSE, rather than the VisualHarness's static data. */
+async function assertPlanFallbackStream() {
+  const gateway = await createNativeAppServer({ config: { language: "ko" } });
+  const fixture = await chatGptPlanFixture(gateway);
+  const page = await browser.newPage();
+  const copy = getAppCopy("ko-KR").chatgptPlan;
+  try {
+    await page.addInitScript(() => {
+      Object.assign(window, { usageOpens: [] as string[] });
+      window.open = (url) => { (window as unknown as { usageOpens: string[] }).usageOpens.push(String(url)); return null; };
+    });
+    await page.goto(fixture.url);
+    await page.locator('[data-test-class="workspace"]').waitFor();
+    await page.locator('[data-slot="composer-compact-preview"]').click();
+    await page.waitForFunction(() => document.querySelector('[data-slot="composer-input"]') || document.querySelector('[contenteditable="true"]'));
+    const toast = page.locator("[data-sonner-toast]").filter({ hasText: copy.limitFallback });
+    const connected = Date.now() + 10_000;
+    while (!fixture.connections && Date.now() < connected) await page.waitForTimeout(50);
+    assert(fixture.connections > 0, "existing App live cursor connected");
+    fixture.emit([...fallbackEvents("api-key", "api_key"), ...fallbackEvents("other-failure", "chatgpt_oauth", "provider_unavailable")]);
+    await page.waitForTimeout(250);
+    assert.equal(await toast.count(), 0, "only a quota-exhausted ChatGPT candidate shows the toast");
+    for (const [index, events] of [fallbackEvents("note-only").slice(0, 1), fallbackEvents("row-only").slice(1)].entries()) {
+      fixture.emit(events);
+      await toast.waitFor();
+      assert.equal(await toast.count(), 1);
+      await toast.getByRole("button", { name: copy.manageUsage, exact: true }).click();
+      await toast.waitFor({ state: "hidden" });
+      assert.deepEqual(await page.evaluate(() => (window as unknown as { usageOpens: string[] }).usageOpens), Array(index + 1).fill("https://chatgpt.com/settings/usage"));
+      fixture.emit(fallbackEvents(index === 0 ? "note-only" : "row-only"));
+      await page.waitForTimeout(250);
+      assert.equal(await toast.count(), 0, "replay and the paired projection do not toast twice");
+    }
+    assert.equal(gateway.stubModelCalls.length, 0);
+    console.log(JSON.stringify({ planFallbackStream: "pass", projections: 2, rejectedCandidates: 2, duplicatePairs: 2, modelCalls: 0 }));
+  } finally { await page.close(); fixture.stop(); await gateway.stop(); }
+}
+
+async function assertLimitAction(plan: Locator) {
+  const text = plan.getByText(/사용 한도 도달/u);
+  const row = text.locator("../..");
+  const link = row.getByRole("button", { name: "사용량 관리", exact: true });
+  await text.waitFor();
+  const [a, b, c] = await Promise.all([row.boundingBox(), link.boundingBox(), text.boundingBox()]);
+  assert(a && b && c);
+  assert(Math.abs(a.x + a.width - b.x - b.width) <= 1, "manage action stays at the end of the limit row");
+  assert(c.x + c.width <= b.x, "the complete limit text wraps before the unshrinking action");
+  assert.match(await text.innerText(), /초기화/u);
 }

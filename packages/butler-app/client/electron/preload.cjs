@@ -743,6 +743,13 @@ const butlerApp = Object.freeze({
     method: "POST",
     body: JSON.stringify(input ?? {}),
   }),
+  getChatGptAccount: () => requestBridgeResult("/setup/chatgpt-account"),
+  acknowledgeChatGptNotice: (request) => requestBridgeResult("/setup/chatgpt-account/notice", {
+    method: "POST", body: JSON.stringify(request ?? {}),
+  }),
+  signOutChatGpt: () => requestBridgeResult("/setup/chatgpt-account/sign-out", {
+    method: "POST", body: "{}",
+  }),
   startSetupOAuth: (request) => requestBridgeResult("/setup/oauth/start", {
     method: "POST",
     body: JSON.stringify(request ?? {}),
@@ -1279,17 +1286,6 @@ const butlerApp = Object.freeze({
     method: "POST",
     body: JSON.stringify(request ?? {}),
   }),
-  startOpenAIOAuthLogin: () =>
-    ipcRenderer.invoke("butler:start-openai-oauth-login"),
-  restartOpenAIOAuthLogin: () =>
-    ipcRenderer.invoke("butler:restart-openai-oauth-login"),
-  getOpenAIOAuthLoginStatus: () =>
-    ipcRenderer.invoke("butler:get-openai-oauth-login-status"),
-  // Fallback for agents without the #279 sign-in routes.
-  cancelOpenAIOAuthLogin: ({ flowId } = {}) =>
-    ipcRenderer.invoke("butler:cancel-openai-oauth-login", { flowId }),
-  submitOpenAIOAuthCallback: (request = {}) =>
-    ipcRenderer.invoke("butler:submit-openai-oauth-callback", request ?? {}),
   deleteHostedModel: ({ modelRef } = {}) => requestJson(`/model-catalog/registered-models/${encodeURIComponent(modelRef ?? "")}`, {
     method: "DELETE",
   }),

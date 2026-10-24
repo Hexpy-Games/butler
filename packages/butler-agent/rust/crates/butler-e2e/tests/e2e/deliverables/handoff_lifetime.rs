@@ -11,7 +11,7 @@ async fn cancelled_and_delivered_handoffs_return_to_baseline() -> Result<(), Har
     let (url, script, server) = stub::start().await?;
     let setup = Setup::new("DELIVERABLE-CANCELLED-HANDOFF")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", &url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     std::fs::write(setup.sandbox.data.join("report.md"), "Complete attachment")?;
     let s = setup.start().await?;
     let host = Host::attach(&s).await?;
@@ -81,7 +81,7 @@ async fn cancellation_during_handoff_promotion_finishes_and_reclaims() -> Result
     let (url, script, server) = stub::start().await?;
     let setup = Setup::new("DELIVERABLE-HANDOFF-CANCEL-RACE")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", &url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let release = setup.sandbox.root.join("handoff-release");
     let setup = setup
         .env("BUTLER_E2E_HOLD_POINT", "message_handoff_owner")
@@ -155,7 +155,7 @@ async fn kill_during_handoff_publication_leaves_no_ownerless_folder() -> Result<
     let (url, script, server) = stub::start().await?;
     let setup = Setup::new("DELIVERABLE-HANDOFF-INTERRUPTED")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", &url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let release = setup.sandbox.root.join("handoff-release");
     let setup = setup
         .env("BUTLER_E2E_HOLD_POINT", "message_handoff_owner")

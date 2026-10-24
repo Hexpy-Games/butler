@@ -100,24 +100,23 @@ fn probe_matches(
     base: &ModelProviderMetadata,
     codex_probe_base_url: Option<&str>,
 ) -> bool {
-    let effective_url = config
-        .api_base_url
-        .as_deref()
-        .or_else(|| {
-            (config.auth_type == ProviderAuthMethod::CodexOauth)
-                .then_some(codex_probe_base_url.unwrap_or("https://chatgpt.com/backend-api"))
-        })
-        .or_else(|| default_hosted_provider_api_base_url(&config.provider_id))
-        .or(Some("https://api.openai.com/v1"));
+    let effective_url = if config.auth_type == ProviderAuthMethod::ChatGptOauth {
+        Some(codex_probe_base_url.unwrap_or("https://api.openai.com/v1"))
+    } else {
+        config
+            .api_base_url
+            .as_deref()
+            .or_else(|| default_hosted_provider_api_base_url(&config.provider_id))
+            .or(Some("https://api.openai.com/v1"))
+    };
     probe.provider_id == config.provider_id
         && probe.model_id == config.model_id
         && probe.model_ref == config.model_ref
         && probe.auth_type == config.auth_type
         && match config.auth_type {
             ProviderAuthMethod::ApiKey => probe.credential_id == config.credential_id,
-            ProviderAuthMethod::CodexOauth => {
-                probe.auth_profile.as_deref()
-                    == config.auth_profile.as_deref().or(Some("codex_oauth"))
+            ProviderAuthMethod::ChatGptOauth => {
+                probe.auth_profile.as_deref() == config.auth_profile.as_deref().or(Some("chatgpt"))
             }
         }
         && Some(probe.api_base_url.as_str()) == effective_url
@@ -151,10 +150,10 @@ pub fn normalize_registered_hosted_model(
     let provider_id = hosted_provider(input.get("provider_id")?.as_str()?)?;
     let auth_type = match input.get("auth_type")?.as_str()? {
         "api_key" => ProviderAuthMethod::ApiKey,
-        "codex_oauth" => ProviderAuthMethod::CodexOauth,
+        "chatgpt_oauth" | "codex_oauth" => ProviderAuthMethod::ChatGptOauth,
         _ => return None,
     };
-    if auth_type == ProviderAuthMethod::CodexOauth && provider_id != "openai" {
+    if auth_type == ProviderAuthMethod::ChatGptOauth && provider_id != "openai" {
         return None;
     }
     let raw_requested = input
@@ -177,7 +176,14 @@ pub fn normalize_registered_hosted_model(
         return None;
     }
     let auth_profile = text(input.get("auth_profile"))
-        .or_else(|| (auth_type == ProviderAuthMethod::CodexOauth).then(|| "codex_oauth".into()));
+        .map(|v| {
+            if v == "codex_oauth" {
+                "chatgpt".into()
+            } else {
+                v
+            }
+        })
+        .or_else(|| (auth_type == ProviderAuthMethod::ChatGptOauth).then(|| "chatgpt".into()));
     Some(RegisteredHostedModelConfig {
         provider_id,
         provider_label: base.provider_label,

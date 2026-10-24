@@ -48,6 +48,7 @@ pub(super) fn reading(
     source: ProviderQuotaSource,
 ) -> ProviderQuotaReading {
     ProviderQuotaReading {
+        credits: None,
         provider_id: provider.into(),
         windows: vec![ProviderQuotaWindow {
             id: "tokens-5-hour".into(),
@@ -70,8 +71,8 @@ pub(crate) fn without_a_reading_polled_providers_are_pending_and_api_ones_not_of
     let (store, _) = store(&dir);
     let openai = store.view("openai");
     assert!(!openai.available);
-    assert_eq!(code(&openai), Some("provider_quota_pending"));
-    assert_eq!(openai.plan_kind, QuotaPlanKind::Unknown);
+    assert_eq!(code(&openai), Some("provider_quota_not_offered"));
+    assert_eq!(openai.plan_kind, QuotaPlanKind::Api);
     let zai_api = store.view("zai-api");
     assert_eq!(code(&zai_api), Some("provider_quota_not_offered"));
     assert_eq!(zai_api.plan_kind, QuotaPlanKind::Api);
@@ -118,53 +119,54 @@ pub(crate) fn a_polled_reading_is_shown_with_its_plan_and_source() {
     assert_eq!(view.windows[0].remaining_percent, Some(75.0));
     assert!(view.reason.is_none());
     assert_eq!(updates.try_recv().unwrap().remaining, view);
-    store.record_polled(reading("openai", 5.0, ProviderQuotaSource::UsageEndpoint));
-    assert_eq!(store.view("openai").source_id, "openai-usage-endpoint");
 }
 
 pub(crate) fn a_failed_poll_keeps_the_reading_stale_with_the_fetch_failed_reason() {
     let dir = Dir::new();
     let (store, clock) = store(&dir);
-    store.record_polled(reading("openai", 40.0, ProviderQuotaSource::UsageEndpoint));
+    store.record_polled(reading("zai", 40.0, ProviderQuotaSource::UsageEndpoint));
     let mut updates = store.subscribe();
     clock.0.store(NOW + 60_000, Ordering::SeqCst);
-    store.record_status("openai", QuotaPollStatus::Failed(NOW + 60_000));
-    let view = store.view("openai");
+    store.record_status("zai", QuotaPollStatus::Failed(NOW + 60_000));
+    let view = store.view("zai");
     assert!(view.available && view.stale, "{view:?}");
     assert_eq!(code(&view), Some("provider_quota_fetch_failed"));
     assert_eq!(view.windows[0].used_percent, Some(40.0));
     assert_eq!(updates.try_recv().unwrap().remaining, view);
     // A repeated failure changes nothing the App shows: no new event.
-    store.record_status("openai", QuotaPollStatus::Failed(NOW + 120_000));
+    store.record_status("zai", QuotaPollStatus::Failed(NOW + 120_000));
     assert!(updates.try_recv().is_err());
     // The next success is fresh again.
-    let mut fresh = reading("openai", 41.0, ProviderQuotaSource::UsageEndpoint);
+    let mut fresh = reading("zai", 41.0, ProviderQuotaSource::UsageEndpoint);
     fresh.observed_at_ms = NOW + 180_000;
     store.record_polled(fresh);
-    let view = store.view("openai");
+    let view = store.view("zai");
     assert!(!view.stale && view.reason.is_none(), "{view:?}");
 }
 
 pub(crate) fn header_readings_keep_the_polled_plan_name() {
     let dir = Dir::new();
     let (store, _) = store(&dir);
-    store.record_polled(reading("openai", 10.0, ProviderQuotaSource::UsageEndpoint));
-    store.observe(reading(
-        "openai",
-        12.0,
-        ProviderQuotaSource::ResponseHeaders,
-    ));
-    let view = store.view("openai");
+    store.record_polled(reading("zai", 10.0, ProviderQuotaSource::UsageEndpoint));
+    store.observe(reading("zai", 12.0, ProviderQuotaSource::ResponseHeaders));
+    let view = store.view("zai");
     assert_eq!(view.plan_name.as_deref(), Some("plus"));
-    assert_eq!(view.source_id, "openai-response-headers");
+    assert_eq!(view.source_id, "zai-response-headers");
     assert_eq!(view.windows[0].used_percent, Some(12.0));
 }
 
-pub(crate) fn readings_survive_a_restart_but_poll_outcomes_do_not() {
+pub(crate) async fn readings_survive_a_restart_but_poll_outcomes_do_not() {
     let dir = Dir::new();
     let (store, _) = store(&dir);
     store.record_polled(reading("zai", 30.0, ProviderQuotaSource::UsageEndpoint));
     store.record_status("zai", QuotaPollStatus::Failed(NOW));
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        while !dir.0.join(FILE).exists() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
     let (reopened, _) = self::store(&dir);
     let view = reopened.view("zai");
     assert!(view.available && !view.stale, "{view:?}");
@@ -185,7 +187,7 @@ async fn quota_polls_follow_their_cadence_and_shape_the_view() {
     a_polled_reading_is_shown_with_its_plan_and_source();
     a_failed_poll_keeps_the_reading_stale_with_the_fetch_failed_reason();
     header_readings_keep_the_polled_plan_name();
-    readings_survive_a_restart_but_poll_outcomes_do_not();
+    readings_survive_a_restart_but_poll_outcomes_do_not().await;
     poller::each_trigger_keeps_its_spacing().await;
     poller::failures_and_rate_limits_back_off().await;
     poller::rejected_tokens_refresh_rarely_and_block_background_polls().await;

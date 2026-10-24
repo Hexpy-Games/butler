@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-luna",
       "effort": "max",
       "user_request": "Change my App wallpaper to the Silk live wallpaper, app-wide.",
@@ -71,7 +71,7 @@
       },
       {
         "delay_ms": 680,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_05096986a06f1c76016abb0656bcd487d089391552dc36840f\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_NASl818sTwGdzDU48OwvKZtZ\",\"name\":\"record_work_review\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_05096986a06f1c76016abb0656bcd487d089391552dc36840f\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_NASl818sTwGdzDU48OwvKZtZ\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -303,7 +303,7 @@
       },
       {
         "delay_ms": 7,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_05096986a06f1c76016abb0656bcd487d089391552dc36840f\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"plan\\\",\\\"verdict\\\":\\\"accept\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Set app-wide wallpaper to Silk live wallpaper\\\",\\\"status\\\":\\\"active\\\"}],\\\"summary\\\":\\\"The plan checks that Silk is installed, sets it at the app-wide scope, and verifies the resulting setting.\\\"}\",\"call_id\":\"call_NASl818sTwGdzDU48OwvKZtZ\",\"name\":\"record_work_review\"},\"output_index\":0,\"sequence_number\":60}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_05096986a06f1c76016abb0656bcd487d089391552dc36840f\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"plan\\\",\\\"verdict\\\":\\\"accept\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Set app-wide wallpaper to Silk live wallpaper\\\",\\\"status\\\":\\\"active\\\"}],\\\"summary\\\":\\\"The plan checks that Silk is installed, sets it at the app-wide scope, and verifies the resulting setting.\\\"}\",\"call_id\":\"call_NASl818sTwGdzDU48OwvKZtZ\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":60}\n\n"
       },
       {
         "delay_ms": 57,

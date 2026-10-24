@@ -15,44 +15,46 @@
     "chunks re-cut at SSE event boundaries (event bytes unchanged)",
     "JSON account identifiers (account_id, user_id, email, ...) -> {{ACCOUNT}}/{{EMAIL}}",
     "JSON tokens (access_token, refresh_token, id_token, authorization) -> {{TOKEN}}",
-    "absolute reset times -> {{EPOCH_MS|S+delta}} relative to recording, rounded to the hour"
+    "absolute reset times -> {{EPOCH_MS|S+delta}} relative to recording, rounded to the hour",
+    "siwc-path-migration",
+    "siwc-function-call-namespace"
   ],
   "files": [
     {
       "file": "000.json",
-      "sha256": "627e35abf1704a4847ad2417a48c8378436e819be27f5591680ec3cb547bbe2a"
+      "sha256": "2b56cbe8c1f9cd74efe67ab3ac8696a178f4b2dc0fc1e0179a41f6768631a730"
     },
     {
       "file": "001.json",
-      "sha256": "bf9f75493ddb5d1e0336f1f1b14008a7cd72f3db710207f4ecbebe0ae4ba290e"
+      "sha256": "1e67f94b3501604ff80b005444d333951f8df744a61c248169c8f607f01e82e4"
     },
     {
       "file": "002.json",
-      "sha256": "929d0260e247b183a7eb3f39df88dffd0eec21b375d449ef24f99b4db8173083"
+      "sha256": "8c5343c3eed6d3fbe8e9f86d829e11c08cd8511e050d2ca49ec1c4633ea83f8f"
     },
     {
       "file": "003.json",
-      "sha256": "f5c36b0ee7a1e8a80fffe2b42de176778c10d501f2e539e8b59eac305be62588"
+      "sha256": "b7a566e0ea4825fc0d4161515087c5d627f76d0b4bc3819c399a095a49f27696"
     },
     {
       "file": "004.json",
-      "sha256": "a4a422ef4e36e4d471e33489c0232646694bf05f4cdda5737dcbc2ddbde28e33"
+      "sha256": "6a8df5f6620566c25a55be32f63ad65b049aeff3a8a165cc0d623928a299dc49"
     },
     {
       "file": "005.json",
-      "sha256": "0ed432dcf99b42760021364d4acfd9521d610cc894b0c0cf212d4d295692f7ab"
+      "sha256": "9bbd622f7b56039bea0e2e79d78f6720dbac6d804057ebc70cba270bc0ea2219"
     },
     {
       "file": "006.json",
-      "sha256": "ec6ac67397bd19950ce0f27dab4c3e0983c6524761c4546950f8235520d605ae"
+      "sha256": "51c64338686883293083cb9989c768ce3dcbce92c2f48b8422482795d58f75e3"
     },
     {
       "file": "007.json",
-      "sha256": "2f43ac334429bdb318e81ffacb6450c7adb6d237f25fed42f8249a3070e2829b"
+      "sha256": "5b337daa61f8cd512b4da2eb9d4e5593d3b05f21cbe1c9488eeab2525cd82f70"
     },
     {
       "file": "008.json",
-      "sha256": "3bb2f316a358299d6ad66a5285319aa0ed9c9e72b5913106723612dafd89c095"
+      "sha256": "29102ea65f3e010b0869ffa6a27191214e3c925bcb880d9d428adb2aafa998e1"
     }
   ],
   "fingerprint": [

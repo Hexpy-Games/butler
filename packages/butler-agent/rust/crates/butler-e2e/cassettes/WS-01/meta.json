@@ -12,20 +12,22 @@
     "JWT/sk-key/bearer/email/home path/host name -> fixed placeholders",
     "response.instructions -> {{REDACTED_ECHO}}, response.tools -> []",
     "response headers reduced to content-type, retry-after",
-    "chunks re-cut at SSE event boundaries (event bytes unchanged)"
+    "chunks re-cut at SSE event boundaries (event bytes unchanged)",
+    "siwc-path-migration",
+    "siwc-function-call-namespace"
   ],
   "files": [
     {
       "file": "000.json",
-      "sha256": "f1c88978db89b3b25594183d473b5367f61e6ab31e1cf35a78cc6fa02e5845e5"
+      "sha256": "1b6e455646a58be31234667c198709e5b42f810efc7f6cb51c82cb608053e84f"
     },
     {
       "file": "001.json",
-      "sha256": "1fb1ec821ed4adf2cc3ee1dfef06b0ec3088db1060babda643f40b5ac242fa0c"
+      "sha256": "b6115927a32197ed6744eb6f93ba371d6f7742e409e2ab6112de076802bfc894"
     },
     {
       "file": "002.json",
-      "sha256": "6440451fb342dc0d5609355711d3ee28dba26bc9696e60ab275dc020a5033e14"
+      "sha256": "9ac8bd6e88c5749e4b101fdce2b94e181cec5bb4b88840488f500dc73bddaaf0"
     }
   ],
   "fingerprint": [

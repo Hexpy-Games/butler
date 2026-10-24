@@ -36,7 +36,6 @@ PY
   exit "$result"
 }
 export HOME="$test_home/home" BUTLER_DATA="$test_home/data"
-export CODEX_HOME="$test_home/codex"
 export BUTLER_APP_ELECTRON_USER_DATA_DIR="$test_home/electron"
 export BUTLER_APP_DISABLE_SHELL_REGISTRATION=1 BUTLER_SERVICE_MANAGER=off
 export BUTLER_SECRET_STORE=file BUTLER_PLATFORM_SYSTEM_SECRETS=0
@@ -45,7 +44,7 @@ export BUTLER_APP_SERVER_HOST=127.0.0.1
 export BUTLER_APP_TEST_AUTO_CONNECT=1
 export BUTLER_APP_SERVER_PORT
 BUTLER_APP_SERVER_PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')
-mkdir -p "$HOME" "$BUTLER_DATA" "$CODEX_HOME" "$BUTLER_APP_ELECTRON_USER_DATA_DIR"
+mkdir -p "$HOME" "$BUTLER_DATA" "$BUTLER_APP_ELECTRON_USER_DATA_DIR"
 trap 'cleanup' EXIT
 trap 'exit 130' INT TERM
 set -- "${1:-}"

@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-luna",
       "effort": "max",
       "user_request": "Please save this as a durable explicit memory so you remember it in future conversations: my locker combination is {{NONCE}}. Use your explicit memory tool, then confirm in one short sentence.",
