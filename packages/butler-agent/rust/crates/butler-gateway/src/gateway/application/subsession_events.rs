@@ -9,6 +9,7 @@ pub(super) fn start(application: &AppApplication) {
     super::canon_sidebar::start(application);
     super::task_graphs::start_events(application);
     super::canon::start(application);
+    super::pending_asks::start(application);
     let Some(mut changes) = application.dependencies.subsessions.changes() else {
         return;
     };

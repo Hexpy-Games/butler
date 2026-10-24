@@ -5612,7 +5612,7 @@
       "definition": {
         "type": "function",
         "name": "ask_user",
-        "description": "Ask the user 1–4 structured questions and wait for answers or skipping. Use short topic eyebrows. Options are 2–6 concrete answers; mark recommendations without selecting them. The card always offers free input and Skip, so never add options to skip, answer later or type one's own answer. For a free-text answer use kind text with no options. A deferred response means the user will answer later. Never include an icon.",
+        "description": "Ask the user 1–4 structured questions on a card. By default the turn waits for answers or skipping; use that only when you cannot continue the current task without the answer. Set wait false when you need the answer later but can finish this reply without it, such as a choice of next step or a preference: the turn goes on, the card stays in the conversation for the user to answer any time, and it stays open until answered or dropped. Its answer arrives as a later message. Use short topic eyebrows. Options are 2–6 concrete answers; mark recommendations without selecting them. The card always offers free input and Skip, so never add options to skip, answer later or type one's own answer. For a free-text answer use kind text with no options. A deferred response means the user will answer later. Never include an icon.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -5693,6 +5693,10 @@
                   "allow_custom"
                 ]
               }
+            },
+            "wait": {
+              "type": "boolean",
+              "description": "Default true: the turn waits for the answer. false: the question becomes an open card and you finish this reply without the answer."
             }
           },
           "required": [
@@ -10207,7 +10211,7 @@
     "ask_user": {
       "type": "function",
       "name": "ask_user",
-      "description": "Ask the user 1–4 structured questions and wait for answers or skipping. Use short topic eyebrows. Options are 2–6 concrete answers; mark recommendations without selecting them. The card always offers free input and Skip, so never add options to skip, answer later or type one's own answer. For a free-text answer use kind text with no options. A deferred response means the user will answer later. Never include an icon.",
+      "description": "Ask the user 1–4 structured questions on a card. By default the turn waits for answers or skipping; use that only when you cannot continue the current task without the answer. Set wait false when you need the answer later but can finish this reply without it, such as a choice of next step or a preference: the turn goes on, the card stays in the conversation for the user to answer any time, and it stays open until answered or dropped. Its answer arrives as a later message. Use short topic eyebrows. Options are 2–6 concrete answers; mark recommendations without selecting them. The card always offers free input and Skip, so never add options to skip, answer later or type one's own answer. For a free-text answer use kind text with no options. A deferred response means the user will answer later. Never include an icon.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -10288,6 +10292,10 @@
                 "allow_custom"
               ]
             }
+          },
+          "wait": {
+            "type": "boolean",
+            "description": "Default true: the turn waits for the answer. false: the question becomes an open card and you finish this reply without the answer."
           }
         },
         "required": [
