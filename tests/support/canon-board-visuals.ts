@@ -9,8 +9,8 @@ export async function captureBoardEdges(page: Page, shots: string, name: string)
   const long = board.locator('[data-kanban-item]').filter({ hasText: "아주 긴 과제 제목" });
   await long.scrollIntoViewIfNeeded();
   await verifyEpicLabel(long);
-  const glyph = await long.locator('svg').first().boundingBox();
-  assert(glyph && glyph.width >= 14, "Long title never shrinks the status glyph");
+  const avatar = await long.getByRole("img", { name: "나", exact: true }).boundingBox();
+  assert(avatar && avatar.width >= 14, "Long title never shrinks the Avatar");
   await page.screenshot({ path: join(shots, `${name}-long-title.png`), animations: "disabled" });
   await board.evaluate(element => { element.scrollLeft = (element.scrollWidth - element.clientWidth) / 2; });
   await page.waitForFunction(() => {
