@@ -15,6 +15,7 @@
 }
 
 .tag[data-removable="true"],
+.tag[data-editable="true"],
 .tag[data-icon-end="true"] {
   padding-inline-end: var(--space-xs);
 }
@@ -120,6 +121,7 @@
   line-height: var(--typo-label-line-height-tight);
 }
 
-.remove {
+/* Trailing edit and remove buttons take the tag's ink. */
+.action {
   color: inherit;
 }
