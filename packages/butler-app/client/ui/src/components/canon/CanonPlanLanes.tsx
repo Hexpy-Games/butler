@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import type { PlanCards } from "@/app/canonApi.ts";
+import type { EpicCard as CardData, PlanCards } from "@/app/canonApi.ts";
 import { Box, Button, ButtonContainer, ArrowLeft, ArrowRight, Grid, IconButton, KanbanBoard, KanbanLane, Pencil, Plus, Section, Stack, Typo } from "@/butler-ds";
 import { EpicCard } from "./EpicCard.tsx";
 import { CANON_LANES, canonLaneId } from "./canonLanes.ts";
-export function CanonPlanLanes({ plan, caption, selected, onSelect, onCreate, onEdit }: {
+export function CanonPlanLanes({ plan, caption, selected, onSelect, onCreate, onEdit, matches }: {
+  matches: (epic: CardData) => boolean;
   plan: PlanCards; caption: string; onEdit: () => void; selected: string | null; onSelect: (id: string) => void; onCreate: (planId: string) => void;
 }) {
   useAppLocale();
@@ -48,7 +49,7 @@ export function CanonPlanLanes({ plan, caption, selected, onSelect, onCreate, on
       boardRef.current = element?.firstElementChild as HTMLElement | null;
     }}><KanbanBoard scroll data-plan-id={plan.id} data-test-class="canon-plan-lanes">
     {CANON_LANES.map(status => {
-      const cards = plan.works.filter(epic => (epic.canon_status === "cancelled" ? "done" : epic.canon_status) === status);
+      const cards = plan.works.filter(epic => matches(epic) && (epic.canon_status === "cancelled" ? "done" : epic.canon_status) === status);
       const label = status === "blocked" ? appCopy.canon.blockedLane : appCopy.canon.statuses[status];
       return <Box key={status} data-canon-lane={status}>
         <KanbanLane laneId={canonLaneId(plan.id, status)} label={`${plan.title} · ${label}`} height="content" title={`${label} · ${cards.length}`}>
