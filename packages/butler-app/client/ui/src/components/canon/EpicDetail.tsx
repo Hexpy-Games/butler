@@ -30,7 +30,8 @@ export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef }: {
     </Stack>}
     <Stack gap="sm">
       <KeyValueRow valueTextSize="caption" label={copy.status} value={<NativeSelect size="sm" aria-label={copy.status} value={epic.canon_status} disabled={busy} onChange={event => statusChanged(event.target.value as CanonStatus)}>
-        {Object.entries(copy.statuses).map(([value, label]) => <NativeSelectOption key={value} value={value}>{label}</NativeSelectOption>)}
+        {Object.entries(copy.statuses).map(([value, label]) => <NativeSelectOption key={value} value={value} disabled={Boolean(tasks?.running && (value === "done" || value === "cancelled"))}
+          title={tasks?.running ? value === "done" ? copy.running : value === "cancelled" ? copy.runningCancel : undefined : undefined}>{label}</NativeSelectOption>)}
       </NativeSelect>} />
       <KeyValueRow valueTextSize="caption" label={copy.assignee} value={<Stack inline align="row" cross="center" gap="xs"><CanonAvatar person={epic.assignee} /><Box minWidth="0" shrink><CanonPersonSelect compact value={epic.assignee} disabled={busy} onChange={assignee => void onWrite({ assignee })} /></Box></Stack>} />
       <KeyValueRow valueTextSize="caption" label={copy.plan} value={<Stack inline align="row" cross="center" gap="xs">

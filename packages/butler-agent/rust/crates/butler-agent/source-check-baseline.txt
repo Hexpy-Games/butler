@@ -44,5 +44,5 @@ src/host/memory_jobs/transcript_sync/hot.rs	LegacyHot::save	89
 src/host/runtime.rs	AgentRuntime::open	365
 src/host/service/ingress/bind.rs	bind_and_request	136
 src/host/service/ingress/bind.rs	control_request	81
-src/host/service/ingress/bind/policy.rs	upsert_app_binding	210
+src/host/service/ingress/bind/policy.rs	upsert_app_binding	208
 src/host/service/ingress/dispatch.rs	execute	127

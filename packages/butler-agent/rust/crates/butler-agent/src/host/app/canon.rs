@@ -60,13 +60,23 @@ impl AppCanonPort for AppCanon {
                 };
                 storage
                     .canon_write(move |tx| {
-                        store::write_api(tx, &ctx, store_resource(resource), &id, input)
+                        let mut result =
+                            store::write_api(tx, &ctx, store_resource(resource), &id, input)?;
+                        store::runtime::enrich(tx, &mut result)?;
+                        Ok(result)
                     })
                     .await
                     .map_err(error)
             } else {
                 storage
-                    .canon_read(move |db| store::read_api(db, store_resource(resource), &id))
+                    .canon_read(move |db| {
+                        if resource == AppCanonResource::EpicProgress {
+                            return store::runtime::progress(db, &id);
+                        }
+                        let mut result = store::read_api(db, store_resource(resource), &id)?;
+                        store::runtime::enrich(db, &mut result)?;
+                        Ok(result)
+                    })
                     .await
                     .map_err(error)
             }
@@ -87,6 +97,10 @@ impl AppCanonPort for AppCanon {
     fn unpublished(&self, after: i64) -> ApplicationFuture<Vec<AppCanonEvent>> {
         let storage = self.storage.clone();
         Box::pin(async move {
+            storage
+                .reconcile_canon(chrono::Utc::now().timestamp_millis())
+                .await
+                .map_err(error)?;
             storage
                 .canon_read(move |db| {
                     let mut stmt = db.prepare(Query::UnpublishedOutbox.sql())?;
@@ -162,12 +176,13 @@ fn error(error: StorageError) -> GatewayApplicationError {
 
 fn store_resource(resource: AppCanonResource) -> store::api::Resource {
     use AppCanonResource::{
-        BacklogOrder, Canon, CreateEpic, CreatePlan, EditEpic, EditPlan, Epic, Plan, PlanOrder,
+        BacklogOrder, Canon, CreateEpic, CreatePlan, EditEpic, EditPlan, Epic, EpicProgress, Plan,
+        PlanOrder,
     };
     match resource {
         Canon => store::api::Resource::Canon,
         Plan => store::api::Resource::Plan,
-        Epic => store::api::Resource::Epic,
+        Epic | EpicProgress => store::api::Resource::Epic,
         CreatePlan => store::api::Resource::CreatePlan,
         EditPlan => store::api::Resource::EditPlan,
         CreateEpic => store::api::Resource::CreateEpic,

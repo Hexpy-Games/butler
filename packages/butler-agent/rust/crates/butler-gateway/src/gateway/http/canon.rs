@@ -3,7 +3,8 @@ use super::*;
 use crate::gateway::{
     AppCanonRequest,
     AppCanonResource::{
-        BacklogOrder, Canon, CreateEpic, CreatePlan, EditEpic, EditPlan, Epic, Plan, PlanOrder,
+        BacklogOrder, Canon, CreateEpic, CreatePlan, EditEpic, EditPlan, Epic, EpicProgress, Plan,
+        PlanOrder,
     },
 };
 
@@ -17,6 +18,7 @@ pub(super) async fn route(
         (&Method::GET, ["projects", id, "canon"]) => (Canon, *id),
         (&Method::GET, ["canon", "plans", id]) => (Plan, *id),
         (&Method::GET, ["canon", "epics", id]) => (Epic, *id),
+        (&Method::GET, ["canon", "epics", id, "progress"]) => (EpicProgress, *id),
         (&Method::POST, ["projects", id, "canon", "plans"]) => (CreatePlan, *id),
         (&Method::PATCH, ["canon", "plans", id]) => (EditPlan, *id),
         (&Method::POST, ["canon", "plans", id, "order"]) => (PlanOrder, *id),

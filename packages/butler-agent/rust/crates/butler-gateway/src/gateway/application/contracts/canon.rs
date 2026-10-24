@@ -7,6 +7,7 @@ pub enum AppCanonResource {
     Canon,
     Plan,
     Epic,
+    EpicProgress,
     CreatePlan,
     EditPlan,
     CreateEpic,

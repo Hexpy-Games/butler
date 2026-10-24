@@ -1,10 +1,28 @@
 //! Canon port. SQL runs only on the BTCC writer/read lanes.
-use super::{BtccStorage, StorageError, StorageResult};
+use super::{BtccRepositories, BtccStorage, StorageError, StorageResult};
 use butler_canon::store;
 use rusqlite::{Connection, TransactionBehavior};
 use store::Transaction;
 
+impl BtccRepositories {
+    /// Composition adapter over the same SQL lanes, outside Work transactions.
+    pub fn canon_storage(&self) -> BtccStorage {
+        self.storage.clone()
+    }
+}
+
 impl BtccStorage {
+    /// Startup recovery and change-driven canon publication. Idle only reads.
+    pub async fn reconcile_canon(&self, now: i64) -> StorageResult<()> {
+        while self.canon_read(store::runtime::pending).await? {
+            self.canon_write(move |tx| {
+                store::runtime::catch_up(tx, &store::runtime::runtime_context(now))
+            })
+            .await?;
+        }
+        Ok(())
+    }
+
     /// One domain operation (or batch), one IMMEDIATE transaction. Dropping the
     /// transaction rolls back domain rows, audit, counts, intents and outbox.
     /// `execute` provides the existing coalesced change notification.

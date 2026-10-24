@@ -44,6 +44,7 @@ fn commands(request: &Request<Body>) -> Option<Handler> {
                     | ["projects", _, "canon", "backlog", "order"]
                     | ["canon", "plans" | "epics", _]
                     | ["canon", "plans", _, "order"]
+                    | ["canon", "epics", _, "progress"]
             ),
             Handler::Canon,
         ),

@@ -15,6 +15,7 @@ export const focusCanonSidebar: CanonSidebar = { project_id: "butler", groups: [
 export function canonFocusResponse(path: string): unknown | undefined {
   if (path === "/projects/butler/canon/sidebar") return focusCanonSidebar;
   if (path === "/projects/butler/canon") return focusCanon;
+  if (path === "/canon/epics/focus-epic/progress") return { epic_id: epic.id, stage: null, stage_history: [], actions: [], counts: { completed: 0, total: 0 }, running: false, disposition: null };
   if (path === "/canon/epics/focus-epic") return { ...epic, specs: [], tasks: [] };
   return undefined;
 }

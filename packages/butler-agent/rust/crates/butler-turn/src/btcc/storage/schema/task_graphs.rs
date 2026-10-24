@@ -1,6 +1,8 @@
 //! Derived read-model invalidations, outside the canonical BTCC receipt manifest.
 //! Source writes coalesce changes; reads and idle periods never write.
 pub(in crate::btcc::storage) const SCHEMA: &str = r"
+CREATE INDEX IF NOT EXISTS idx_btcc_turns_active ON btcc_turns(session_id)
+WHERE semantic_state IN ('admitted','delivery_committed');
 CREATE INDEX IF NOT EXISTS idx_btcc_graph_checkpoint_plan
 ON btcc_guided_work_checkpoint_revisions(work_id,plan_revision_id,revision DESC);
 CREATE INDEX IF NOT EXISTS idx_btcc_graph_bindings_session
@@ -51,6 +53,14 @@ CREATE TRIGGER IF NOT EXISTS task_graph_turn_insert AFTER INSERT ON btcc_turns B
 END;
 CREATE TRIGGER IF NOT EXISTS task_graph_turn_update AFTER UPDATE ON btcc_turns BEGIN
     INSERT INTO agent_task_graph_changes(session_id) SELECT parent_session_id FROM btcc_session_relations WHERE child_session_id=NEW.session_id
+    ON CONFLICT(session_id) DO UPDATE SET seq=excluded.seq;
+END;
+CREATE TRIGGER IF NOT EXISTS canon_progress_turn_insert AFTER INSERT ON btcc_turns BEGIN
+    INSERT INTO agent_task_graph_changes(session_id) VALUES(NEW.session_id)
+    ON CONFLICT(session_id) DO UPDATE SET seq=excluded.seq;
+END;
+CREATE TRIGGER IF NOT EXISTS canon_progress_turn_state AFTER UPDATE OF semantic_state ON btcc_turns BEGIN
+    INSERT INTO agent_task_graph_changes(session_id) VALUES(NEW.session_id)
     ON CONFLICT(session_id) DO UPDATE SET seq=excluded.seq;
 END;
 ";

@@ -8,8 +8,7 @@ const write = <T>(path: string, method: string, input: unknown): Promise<T> => a
 export const getCanon = (projectId: string): Promise<CanonOverview> => api(projectPath(projectId));
 export const getCanonPlan = (id: string): Promise<PlanDetail> => api(planPath(id));
 export const getCanonEpic = (id: string): Promise<EpicDetail> => api(epicPath(id));
-/** No linked work exists until the canon link branch. */
-export const getEpicProgress = (epicId: string): Promise<EpicProgressSnapshot> => Promise.resolve({ epic_id: epicId, running: false, counts: { completed: 0, total: 0 } });
+export const getEpicProgress = (epicId: string): Promise<EpicProgressSnapshot> => api(`${epicPath(epicId)}/progress`);
 export const createCanonPlan = (projectId: string, input: PlanInput): Promise<PlanDetail> => write(`${projectPath(projectId)}/plans`, "POST", input);
 export const editCanonPlan = (id: string, input: PlanInput): Promise<PlanDetail> => write(planPath(id), "PATCH", input);
 export const orderCanonPlan = (id: string, input: CanonOrderInput): Promise<PlanDetail> => write(`${planPath(id)}/order`, "POST", input);

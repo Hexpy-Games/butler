@@ -17,13 +17,15 @@ pub(super) fn execute(
                 new_session_id,
             } => storage
                 .canon_write(move |tx| {
-                    store::api::canon_conversation::link(
+                    let mut result = store::api::canon_conversation::link(
                         tx,
                         &ctx,
                         &work_id,
                         session_id.as_deref(),
                         &new_session_id,
-                    )
+                    )?;
+                    store::runtime::enrich(tx, &mut result)?;
+                    Ok(result)
                 })
                 .await
                 .map_err(error),
