@@ -11,7 +11,7 @@ use butler_e2e::e2e::{
     live,
     scenario::{Access, Setup, accepted_turn_id},
 };
-use serde_json::{Value, json};
+use serde_json::json;
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
@@ -33,10 +33,18 @@ fn snapshot(path: &Path) -> Result<Snapshot, HarnessError> {
 /// turn requests a mutation, which this acceptance never approves.
 async fn approvals(s: &butler_e2e::e2e::scenario::Scenario) -> Result<bool, HarnessError> {
     for card in s.gw.approval_requests("general").await? {
+        let capability = card["approval"]["action_kind"].as_str().unwrap_or("");
         if !card["questions"].is_null() {
             continue;
         }
-        if mutation_card(&card) {
+        let effect = card["approval"]["command_access"].as_str();
+        let observation = (capability == "other"
+            && matches!(
+                card["executable"].as_str(),
+                Some("read_file" | "list_files" | "grep_files")
+            ))
+            || (capability == "run_command" && effect == Some("read_only_unisolated"));
+        if !observation {
             return Ok(true);
         }
         let reference = card["request_ref"].as_str().unwrap();
@@ -49,18 +57,6 @@ async fn approvals(s: &butler_e2e::e2e::scenario::Scenario) -> Result<bool, Harn
         assert_eq!(reply.status, 202);
     }
     Ok(false)
-}
-
-fn mutation_card(card: &Value) -> bool {
-    let capability = card["approval"]["action_kind"].as_str().unwrap_or("");
-    let effect = card["approval"]["command_access"].as_str();
-    let observation = (capability == "other"
-        && matches!(
-            card["executable"].as_str(),
-            Some("read_file" | "list_files" | "grep_files")
-        ))
-        || (capability == "run_command" && effect == Some("read_only_unisolated"));
-    card["questions"].is_null() && !observation
 }
 
 /// The acceptance verdict and the turn's visible text: assistant messages
@@ -79,6 +75,18 @@ async fn run(
 ) -> Result<Outcome, HarnessError> {
     let provider = live::gate("DOWNLOADS-LIVE")?.expect("live credentials required");
     let before = snapshot(downloads)?;
+    let mut extensions = BTreeMap::<String, usize>::new();
+    for (path, metadata) in &before {
+        let kind = if metadata.0 {
+            "directory".into()
+        } else {
+            path.extension().map_or_else(
+                || "no-extension".into(),
+                |v| v.to_string_lossy().to_lowercase(),
+            )
+        };
+        *extensions.entry(kind).or_default() += 1;
+    }
     let files = before.values().filter(|v| !v.0).count();
     let folders = before.len() - files;
     let setup = Setup::new("DOWNLOADS-LIVE")?;
@@ -108,10 +116,24 @@ async fn run(
     let deadline = started + Duration::from_secs(300);
     let mut timed_out = false;
     let mut mutation_requested = false;
-    let settled = loop {
+    loop {
         if access == Access::AskAlways && approvals(&s).await? {
             mutation_requested = true;
-            break false;
+            break;
+        }
+        let answer = proposal(&s).await?;
+        let terminal_proposal = reported_types(&answer, &extensions)
+            && answer.contains(&files.to_string())
+            && answer.contains(&folders.to_string())
+            && (answer.contains("승인")
+                || answer.contains("확인")
+                || answer.contains("진행할까요"));
+        if terminal_proposal
+            && timings(&s.sandbox.data)?
+                .iter()
+                .any(|t| t.starts_with("run_command:") || t.starts_with("list_files:"))
+        {
+            break;
         }
         let cards = s.gw.approval_requests("general").await?;
         let question = cards.iter().any(|c| !c["questions"].is_null());
@@ -125,14 +147,14 @@ async fn run(
                 .iter()
                 .all(|t| butler_e2e::e2e::gateway::TERMINAL.contains(&turn_state(t)));
         if question || (settled && !children_pending && cards.is_empty()) {
-            break settled;
+            break;
         }
         if Instant::now() >= deadline {
             timed_out = true;
-            break settled;
+            break;
         }
         tokio::time::sleep(Duration::from_millis(200)).await;
-    };
+    }
     let messages = s.gw.messages("general").await?;
     let rows = tool_rows(&messages, &id);
     let tools: Vec<_> = rows
@@ -140,32 +162,29 @@ async fn run(
         .map(|r| r["safe_tool_name"].as_str().unwrap_or("?"))
         .collect();
     let answer = proposal(&s).await?;
-    let cards = s.gw.approval_requests("general").await?;
-    let asked_by_card = cards.iter().any(|card| {
-        card["source_turn_id"] == id
-            && (!card["questions"].is_null() || (mutation_requested && mutation_card(card)))
-    });
-    let asked_by_question = settled
-        && cards.is_empty()
-        && messages
-            .iter()
-            .rev()
-            .find(|m| m["role"] == "assistant" && m["turn_id"] == id)
-            .and_then(|m| m["text"].as_str())
-            .is_some_and(|text| text.trim().ends_with(['?', '？']));
-    let entries_observed = observed_entries(&s.sandbox.data, &id, &before)?;
-    let observed_complete = entries_observed == before.len();
-    let complete = observed_complete && (asked_by_card || asked_by_question) && !timed_out;
+    let actual_totals =
+        answer.contains(&files.to_string()) && answer.contains(&folders.to_string());
+    let actual_types = reported_types(&answer, &extensions);
+    let move_confirmation =
+        answer.contains("승인") || answer.contains("확인") || answer.contains("진행할까요");
+    let observed = timings(&s.sandbox.data)?
+        .iter()
+        .any(|t| t.starts_with("run_command:") || t.starts_with("list_files:"));
+    let complete = actual_totals
+        && actual_types
+        && move_confirmation
+        && observed
+        && !timed_out
+        && !mutation_requested;
     let mut transcript = answer.clone();
-    for card in &cards {
+    for card in s.gw.approval_requests("general").await? {
         transcript.push_str(&format!("\ncard: {card}"));
     }
     eprintln!(
-        "DOWNLOADS-LIVE acceptance: observed_complete={observed_complete}; entries_observed={entries_observed}/{}; asked_by_card={asked_by_card}; asked_by_question={asked_by_question}; mutation_requested={mutation_requested}; timed_out={timed_out}",
-        before.len()
+        "DOWNLOADS-LIVE acceptance: totals={actual_totals}; types={actual_types}; confirmation={move_confirmation}; observed={observed}; timed_out={timed_out}; mutation_requested={mutation_requested}"
     );
     eprintln!(
-        "DOWNLOADS-LIVE {access:?} #{repeat}: {:.2}s; entries={}; files={files}; folders={folders}; tools={tools:?}",
+        "DOWNLOADS-LIVE {access:?} #{repeat}: {:.2}s; entries={}; files={files}; folders={folders}; types={extensions:?}; tools={tools:?}",
         started.elapsed().as_secs_f64(),
         before.len()
     );
@@ -305,46 +324,17 @@ async fn proposal(s: &butler_e2e::e2e::scenario::Scenario) -> Result<String, Har
     Ok(text)
 }
 
-/// Match entry names across successful result strings, including paged results.
-fn observed_entries(data: &Path, id: &str, before: &Snapshot) -> Result<usize, HarnessError> {
-    let db = butler_platform::sqlite::open_with_flags(
-        data.join("agent-runtime/btcc.sqlite"),
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    )
-    .map_err(|e| butler_e2e::e2e::harness_error(e.to_string()))?;
-    let mut query = db
-        .prepare(
-            "SELECT result_json FROM btcc_guided_tool_calls \
-         WHERE turn_id = ?1 AND status = 'completed' AND error_code IS NULL",
-        )
-        .map_err(|e| butler_e2e::e2e::harness_error(e.to_string()))?;
-    let rows = query
-        .query_map([id], |r| r.get::<_, Option<String>>(0))
-        .map_err(|e| butler_e2e::e2e::harness_error(e.to_string()))?;
-    let mut results = Vec::new();
-    for row in rows {
-        if let Some(result) = row.map_err(|e| butler_e2e::e2e::harness_error(e.to_string()))? {
-            results.push(serde_json::from_str::<Value>(&result)?);
-        }
-    }
-    let mut observed = 0;
-    for path in before.keys() {
-        let name = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .ok_or_else(|| {
-                butler_e2e::e2e::harness_error("Downloads entry name is not valid UTF-8")
-            })?;
-        observed += usize::from(results.iter().any(|result| contains_name(result, name)));
-    }
-    Ok(observed)
-}
-
-fn contains_name(value: &Value, name: &str) -> bool {
-    match value {
-        Value::String(text) => text.contains(name),
-        Value::Array(items) => items.iter().any(|item| contains_name(item, name)),
-        Value::Object(fields) => fields.values().any(|item| contains_name(item, name)),
-        _ => false,
-    }
+/// Compare complete actual type counts without logging the private answer.
+fn reported_types(answer: &str, extensions: &BTreeMap<String, usize>) -> bool {
+    extensions
+        .iter()
+        .filter(|(kind, _)| kind.as_str() != "directory")
+        .all(|(kind, count)| {
+            answer.lines().any(|line| {
+                line.to_lowercase().contains(kind)
+                    && line
+                        .split(|c: char| !c.is_ascii_digit())
+                        .any(|n| n.parse::<usize>().ok() == Some(*count))
+            })
+        })
 }
