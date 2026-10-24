@@ -8,7 +8,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
-mod host;
+pub(crate) mod host;
 mod model;
 mod resume;
 
@@ -42,6 +42,8 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
     std::fs::write(path, serde_json::to_vec(&config)?)?;
     let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
     let host = host::Host::attach(admin).await?;
+    let log = host.log.clone();
+    let parallel_opens = host.parallel_opens.clone();
     let served = tokio::spawn(host.serve());
     let turn = accepted_turn_id(&s.gw.say("general", PROMPT).await?)?;
     let done =
@@ -53,7 +55,7 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
         "{done}"
     );
     served.abort();
-    let log = host::LOG.lock().unwrap().clone();
+    let log = log.lock().unwrap().clone();
     let outputs = fixture.outputs.lock().unwrap().clone();
 
     // The model saw one coherent toolset without asking for a browser.
@@ -97,7 +99,7 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
     assert_eq!(opened["status"], "ok", "{opened}");
     assert_eq!(opened["tabs"].as_array().unwrap().len(), 3, "{opened}");
     assert_eq!(
-        host::PARALLEL_OPENS.load(std::sync::atomic::Ordering::SeqCst),
+        parallel_opens.load(std::sync::atomic::Ordering::SeqCst),
         3,
         "{log:?}"
     );
@@ -112,7 +114,8 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
         "{log:?}"
     );
 
-    // web_read used the open tab's live document, once.
+    // web_read used the open tab's live document, read again for the
+    // continuation: a page can change without navigating.
     let read = &outputs[2];
     assert_eq!(read["reader"], "butler-browser-tab", "{read}");
     assert!(
@@ -124,7 +127,8 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
     );
     let again = &outputs[3];
     assert_eq!(again["reader"], "butler-browser-tab", "{again}");
-    assert_eq!(again["cache_hit"], true, "{again}");
+    assert_eq!(again["cache_hit"], false, "{again}");
+    assert_eq!(again["content_sha256"], read["content_sha256"], "{again}");
     // A long page keeps all its text: the continuation reaches the end.
     assert!(read["total_chunks"].as_u64().unwrap() >= 3, "{read}");
     assert_eq!(again["content_has_more"], false, "{again}");
@@ -137,7 +141,7 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
     );
     assert_eq!(
         log.iter().filter(|f| f["op"] == "tab.read").count(),
-        1,
+        2,
         "{log:?}"
     );
 

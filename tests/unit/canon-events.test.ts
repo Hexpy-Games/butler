@@ -13,7 +13,7 @@ test("canon and space changes target one project; unscoped space changes target 
   ];
   const publish = (type: string, payload = {}) => publishCanonEvent({ type, payload } as TimelineEvent);
   try {
-    for (const type of ["canon.changed", "space.changed"]) {
+    for (const type of ["canon.changed", "canon.progress_changed", "space.changed"]) {
       publish(type, { project_id: "a" });
       expect(received.splice(0)).toEqual(["sidebar-a", "board-a"]);
       publish(type, { project_id: "b" });

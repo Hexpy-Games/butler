@@ -380,7 +380,7 @@ test("renderer and actual preload carry clear, reset and audited UI routes", asy
     ["POST", "/projects/p1/canon/sidebar-order", { group_key: "p1", work_ids: ["e1"] }],
     ["POST", "/canon/epics/e1/conversation", {}],
     ["POST", "/canon/epics/e1/conversation", { session_id: "additional-chat" }],
-    ["GET", "/projects/p1/canon"], ["GET", "/canon/plans/p1"], ["GET", "/canon/epics/e1"],
+    ["GET", "/projects/p1/canon"], ["GET", "/canon/plans/p1"], ["GET", "/canon/epics/e1"], ["GET", "/canon/epics/e1/progress"],
     ["POST", "/projects/p1/canon/plans", { title: "Plan" }], ["PATCH", "/canon/plans/p1", { expected_revision: 1, due_on: null }],
     ["POST", "/canon/plans/p1/order", { expected_revision: 1, work_ids: ["e1"] }],
     ["POST", "/projects/p1/canon/backlog/order", { expected_revision: 2, work_ids: [] }],

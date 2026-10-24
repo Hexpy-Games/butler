@@ -132,6 +132,7 @@ impl AdmissionModelCatalogPort for ModelFixture {
                             reasoning_efforts: vec![ReasoningEffort::Medium],
                             default_reasoning_effort: ReasoningEffort::Medium,
                             context_window_tokens: Some(if changed { 10.0 } else { 200_000.0 }),
+                            cached_input_price_ratio: None,
                         }
                     })
                     .collect(),
@@ -186,6 +187,7 @@ async fn actual_sqlite_fresh_and_replay_skip_changed_context_and_catalog() {
             reasoning_efforts: vec![ReasoningEffort::Medium],
             default_reasoning_effort: ReasoningEffort::Medium,
             context_window_tokens: Some(200_000.0),
+            cached_input_price_ratio: None,
         }],
     };
     let truthy =

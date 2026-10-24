@@ -41,6 +41,7 @@ mod browser_jspaint;
 mod browser_library;
 mod browser_long;
 mod browser_naver;
+mod browser_observation_v2;
 mod browser_outputs;
 mod browser_parallel;
 mod browser_prefix;
@@ -225,6 +226,7 @@ mod cli_project_folder;
 mod data_perf;
 mod delegate_followup;
 mod delegate_host_lost;
+mod delegated_batching;
 mod deliverables;
 mod mac_app_update;
 mod memory_instructions;
@@ -279,3 +281,5 @@ mod work_model_api;
 mod work_model_schema;
 
 mod worker_cap;
+
+mod canon_link;

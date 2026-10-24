@@ -31,6 +31,10 @@ impl AdmissionModelCatalogPort for ModelConfiguration {
                             .collect(),
                         default_reasoning_effort: reasoning(model.default_reasoning_effort),
                         context_window_tokens: model.context_window_tokens,
+                        cached_input_price_ratio: model
+                            .pricing
+                            .as_ref()
+                            .and_then(super::super::ModelPricing::cached_input_ratio),
                     }
                 })
                 .collect();

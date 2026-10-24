@@ -1427,6 +1427,7 @@ const butlerApp = Object.freeze({
   deleteCanonTag: ({ id }) => requestBridgeResult(`/canon/tags/${encodeURIComponent(id)}`, { method: "DELETE" }),
   getCanon: ({ id }) => requestBridgeResult(`/projects/${encodeURIComponent(id)}/canon`),
   getCanonPlan: ({ id }) => requestBridgeResult(`/canon/plans/${encodeURIComponent(id)}`),
+  getEpicProgress: ({ id }) => requestBridgeResult(`/canon/epics/${encodeURIComponent(id)}/progress`),
   getCanonEpic: ({ id }) => requestBridgeResult(`/canon/epics/${encodeURIComponent(id)}`),
   createCanonPlan: ({ id, body }) => requestCanonWrite(`/projects/${encodeURIComponent(id)}/canon/plans`, "POST", body),
   editCanonPlan: ({ id, body }) => requestCanonWrite(`/canon/plans/${encodeURIComponent(id)}`, "PATCH", body),
