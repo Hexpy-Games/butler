@@ -1,6 +1,7 @@
 //! AT flows exercise the authenticated canon upload, event relay and file store.
 use super::*;
 use butler_e2e::e2e::media;
+use std::fmt::Write as _;
 
 async fn upload(s: &Scenario, project: &str) -> Result<Value, HarnessError> {
     Ok(data(
@@ -146,9 +147,14 @@ async fn at_05_upload_and_reference_limits() -> Result<(), HarnessError> {
         )
         .await?;
     assert_eq!(boundary.status, 201, "{}", boundary.text);
-    let references = (0..21)
-        .map(|n| format!("[file](attachment:file-00000000-0000-0000-0000-{n:012})"))
-        .collect::<String>();
+    let mut references = String::new();
+    for n in 0..21 {
+        write!(
+            references,
+            "[file](attachment:file-00000000-0000-0000-0000-{n:012})"
+        )
+        .unwrap();
+    }
     assert_eq!(
         s.gw.post(
             &format!("/projects/{project}/canon/epics"),

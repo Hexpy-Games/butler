@@ -1,5 +1,6 @@
 // Parser cases extend the epic creation invariant suite.
 use butler_canon::store::attachment_references as references;
+use std::fmt::Write as _;
 fn id(n: usize) -> String {
     format!("file-00000000-0000-0000-0000-{n:012}")
 }
@@ -12,9 +13,10 @@ pub(super) fn markdown_references_match_rendered_links_and_images() {
     assert_eq!(references(&markdown).unwrap(), vec![a, b]);
 }
 pub(super) fn attachment_limit_counts_unique_references_and_rejects_invalid_ids() {
-    let markdown = (0..20)
-        .map(|n| format!("![](attachment:{})", id(n)))
-        .collect::<String>();
+    let mut markdown = String::new();
+    for n in 0..20 {
+        write!(markdown, "![](attachment:{})", id(n)).unwrap();
+    }
     assert_eq!(references(&markdown).unwrap().len(), 20);
     assert!(references(&(markdown + &format!("[overflow](attachment:{})", id(20)))).is_err());
     assert!(references("![bad](attachment:../../secret)").is_err());
