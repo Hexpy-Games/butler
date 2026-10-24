@@ -7,16 +7,14 @@
 //! (the E2E harness default, so recorded scenarios make no unrecorded
 //! requests).
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
-
-use serde_json::Value;
 
 use butler_models::models::{ModelConfiguration, QUOTA_POLLED_PROVIDERS, QuotaHttp};
 use butler_runtime::operations::{
     ProviderQuotaFetcher, ProviderQuotaPoller, ProviderQuotaStore, QuotaFetchFuture,
-    QuotaPollTrigger,
+    QuotaPollStatus, QuotaPollTrigger,
 };
 
 use crate::host::SystemIdentity;
@@ -30,20 +28,23 @@ const POLLING_ENV: &str = "BUTLER_PROVIDER_QUOTA_POLLING";
 struct ModelQuotaFetcher {
     configuration: Arc<ModelConfiguration>,
     http: QuotaHttp,
-    config_path: PathBuf,
     disabled_by_environment: bool,
 }
 
 impl ProviderQuotaFetcher for ModelQuotaFetcher {
+    fn changes(&self) -> Option<tokio::sync::watch::Receiver<u64>> {
+        Some(self.configuration.quota_configuration_changes())
+    }
     fn providers(&self) -> Vec<String> {
-        QUOTA_POLLED_PROVIDERS
-            .iter()
-            .map(|id| (*id).to_owned())
+        self.configuration
+            .quota_providers()
+            .into_iter()
+            .filter(|id| QUOTA_POLLED_PROVIDERS.contains(&id.as_str()))
             .collect()
     }
 
     fn enabled(&self, provider_id: &str) -> bool {
-        !self.disabled_by_environment && polling_configured(&self.config_path, provider_id)
+        !self.disabled_by_environment && self.configuration.quota_polling_enabled(provider_id)
     }
 
     fn fetch<'a>(&'a self, provider_id: &'a str, allow_refresh: bool) -> QuotaFetchFuture<'a> {
@@ -59,7 +60,7 @@ impl ProviderQuotaFetcher for ModelQuotaFetcher {
 pub(super) fn poller(
     configuration: Arc<ModelConfiguration>,
     store: Arc<ProviderQuotaStore>,
-    data_root: &Path,
+    _data_root: &Path,
 ) -> Option<Arc<ProviderQuotaPoller>> {
     let http = QuotaHttp::new(configuration.quota_user_agent()).ok()?;
     let disabled_by_environment =
@@ -67,7 +68,6 @@ pub(super) fn poller(
     let fetcher = ModelQuotaFetcher {
         configuration,
         http,
-        config_path: data_root.join("butler.config.json"),
         disabled_by_environment,
     };
     Some(Arc::new(ProviderQuotaPoller::new(
@@ -75,23 +75,6 @@ pub(super) fn poller(
         Arc::new(fetcher),
         Arc::new(SystemIdentity),
     )))
-}
-
-/// Whether `butler.config.json` leaves polling `provider_id` on (the default).
-fn polling_configured(config_path: &Path, provider_id: &str) -> bool {
-    let Ok(bytes) = std::fs::read(config_path) else {
-        return true;
-    };
-    serde_json::from_slice::<Value>(&bytes)
-        .ok()
-        .and_then(|config| {
-            config
-                .get("providerQuota")?
-                .get(provider_id)?
-                .get("polling")?
-                .as_bool()
-        })
-        .unwrap_or(true)
 }
 
 /// Starts the due polls without waiting for them.
@@ -107,4 +90,24 @@ pub(super) async fn poll_explicit(poller: Arc<ProviderQuotaPoller>, provider_id:
             .await;
     });
     let _ = tokio::time::timeout(EXPLICIT_WAIT, task).await;
+}
+
+/// Preserve explicit kill-switch semantics even when the provider has no registered model.
+pub(super) fn sync_switch(
+    configuration: &ModelConfiguration,
+    store: &ProviderQuotaStore,
+    provider: &str,
+) {
+    if !QUOTA_POLLED_PROVIDERS.contains(&provider) {
+        return;
+    }
+    let environment_off =
+        std::env::var(POLLING_ENV).is_ok_and(|value| matches!(value.trim(), "0" | "false" | "off"));
+    let disabled = environment_off || !configuration.quota_polling_configured(provider);
+    let marked = store.status(provider) == Some(QuotaPollStatus::Disabled);
+    if disabled && !marked {
+        store.record_status(provider, QuotaPollStatus::Disabled);
+    } else if !disabled && marked {
+        store.clear_status(provider);
+    }
 }

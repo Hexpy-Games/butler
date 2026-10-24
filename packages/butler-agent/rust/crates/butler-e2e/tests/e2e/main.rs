@@ -151,6 +151,7 @@ mod queue_notifications;
 mod queue_pause;
 mod queue_shutdown;
 mod quota;
+mod quota_gating;
 mod reader_tab;
 mod recovery;
 mod reduce_motion;
