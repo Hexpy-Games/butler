@@ -169,10 +169,8 @@ jobs:
               }
             }
           }
-          # Name the required contracts and the paired shop acceptance explicitly.
-          # On-demand hedge evaluations keep their separate selection.
           $ErrorActionPreference = 'Continue'
-          python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e -- --ignored --test-threads=1 live::live_01_ live::live_02_ live::live_03_ live::live_04_ live::live_05_ live::live_06_ live::live_07_ live::live_08_ live::live_10_ live::live_siwc_ live::browse_shop::
+          python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e live:: -- --ignored --test-threads=1
           $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
