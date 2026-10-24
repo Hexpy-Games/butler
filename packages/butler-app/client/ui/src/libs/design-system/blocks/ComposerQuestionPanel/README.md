@@ -1,7 +1,14 @@
 # ComposerQuestionPanel
 
 ## What
-DS-only composer form, a sibling of ComposerDecisionPanel. Place it inside ComposerCard instead of editor and toolbar. The collapsed pill belongs above the normal composer; onExpand restores the form.
+DS-only question form, a sibling of ComposerDecisionPanel. Place it inside ComposerCard instead of editor and toolbar. The collapsed pill belongs above the normal composer; onExpand restores the form.
+
+## Placement
+`placement="conversation"` shows the same panel in the transcript, where
+Butler asked: inside a flat bordered `Card radius="lg"` (12px, no shadow, no
+TintedGlass), with a 12px content inset and control-radius (8px) buttons.
+The header row stays icon, small label and title. The default
+`placement="composer"` is unchanged. Collapsed is the same pill in both placements.
 
 ## Contract
 Pass 1–4 questions with unique ids, type, header, text, options and optional allowOther/placeholder. onSubmit returns one answer per question: id, selected option indices, text, other and skipped. Delivery state is caller-owned: open, submitting, error, collapsed or working. Remount with a new key for a new request. defaultAnswers/defaultStep are showcase and restoration seeds. Optional onDraftChange reports snapshots for a caller that remounts the surface when collapsing.
@@ -10,7 +17,7 @@ Pass 1–4 questions with unique ids, type, header, text, options and optional a
 Single-choice tap sends immediately for one question and advances for multiple questions. Multi/text/Other require confirmation. Multi-question review permits skipped answers and edits. Recommendation highlights without selecting. Keyboard: 1–9 choices, up/down highlight, Enter select/advance/send, Space multi toggle, Esc collapse, left/right questions. Other uses an underline Textarea that wraps and grows up to the DS six-line cap. Enter confirms, Shift+Enter inserts a newline, and composing Enter never confirms. Inputs preserve typing and IME; Tabs retains native navigation. Touch targets and scroll fades use DS primitives. Labels default to English; showcase supplies Korean.
 
 ## DS review rules
-Keyboard shortcuts have no visible hint row. Footer actions use `ButtonContainer size="sm" justify="end"`, following ComposerDecisionPanel and DialogForm. Line tabs share the header's token inset so they clear the ComposerCard radius. The focus foundation requires room for every ring: scroll contents have `--space-xs` padding; options and tabs use an inset token outline. Header icon size follows the caption (`sm`) with `IconSlot minHeight="line"` aligned to the first line. ListChecks is the fixed header icon; the question and block APIs expose no icon choice.
+Keyboard shortcuts have no visible hint row. Footer actions use `ButtonContainer size="sm" justify="end"`, following ComposerDecisionPanel and DialogForm; they take the composer radius in the composer and `--radius-control` in the conversation. Line tabs share the header's token inset so they clear the ComposerCard radius. The focus foundation requires room for every ring: scroll contents have `--space-xs` padding; options and tabs use an inset token outline. Header icon size follows the caption (`sm`) with `IconSlot minHeight="line"` aligned to the first line. ListChecks is the fixed header icon; the question and block APIs expose no icon choice.
 
 Other edits the label inside its existing row with `Input variant="underline"`, without nesting an input inside Clickable.
 
@@ -22,4 +29,4 @@ Tabs and options use the shared `scroll-fade.css` rule: each edge fades only whi
 No tool, gateway, store, persistence or product wiring. The caller owns collapse, resume, skip, delivery and transcript insertion. New-chat onboarding is a showcase only.
 
 ## Review
-Open `/?visual=design-system&page=blocks/ComposerQuestionPanel&theme=side-by-side&locale=ko&width=375&motion=reduced`.
+Open `/?visual=design-system&page=blocks/ComposerQuestionPanel&theme=side-by-side&locale=ko&width=375&motion=reduced`. The "In conversation" stories show `placement="conversation"`.
