@@ -208,8 +208,10 @@ jobs:
               ;;
             browser-input)
               smoke browser-pick-native-electron
+              smoke browser-selection-electron
               smoke browser-pointer-input-electron
               smoke browser-scrap-native-electron
+              smoke links-open-inapp-electron
               smoke library-organize-electron
               ;;
             browser-shell)
