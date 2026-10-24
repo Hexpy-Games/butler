@@ -1,5 +1,7 @@
 //! Future-only conversation reset by staging the shared graph's surviving projection.
 mod cache;
+#[cfg(feature = "e2e-fixtures")]
+mod receipt_hold;
 mod retirement;
 #[cfg(feature = "e2e-fixtures")]
 mod settlement;
@@ -54,6 +56,7 @@ pub(crate) async fn run(
     coordinator: Arc<CognitionWriteCoordinator>,
     id: String,
     token: CancellationToken,
+    stop: CancellationToken,
 ) -> io::Result<ResetResult> {
     let binding = (root.clone(), paths.clone(), id.clone());
     let mut result = tokio::task::spawn_blocking(move || {
@@ -68,7 +71,7 @@ pub(crate) async fn run(
         }
         return Ok(result);
     }
-    let lease = acquire(&root, &paths, &coordinator, &token).await?;
+    let lease = acquire(&root, &paths, &coordinator, "cutover", &token).await?;
     let prepared = prepare(root.clone(), paths.clone(), result.clone(), token.clone()).await;
     let outcome = match prepared {
         Ok(Some((old, new))) => {
@@ -109,12 +112,7 @@ pub(crate) async fn run(
             result.operation_id,
             result.phase
         );
-        let binding = (root, paths, result);
-        tokio::task::spawn_blocking(move || {
-            save_leased(&binding.0, &binding.1, &coordinator, &binding.2)
-        })
-        .await
-        .map_err(io::Error::other)??;
+        save_leased(root, paths, coordinator, result, stop).await?;
         return Err(error);
     }
     result.phase = "complete".into();
@@ -140,7 +138,7 @@ async fn save_completion(
         "[memory-reset-settlement] operation_id={} phase=acquiring",
         binding.2.operation_id
     );
-    let lease = acquire(&binding.0, &binding.1, &coordinator, &token).await?;
+    let lease = acquire(&binding.0, &binding.1, &coordinator, "cutover", &token).await?;
     tokio::task::spawn_blocking(move || {
         let saved = check(&token).and_then(|()| save(&binding.0, &binding.1, &binding.2));
         lease.release(saved.is_ok()).map_err(io::Error::other)?;
@@ -384,34 +382,42 @@ fn sync_tree(root: &Path, token: &CancellationToken) -> io::Result<()> {
     butler_platform::secure_fs::sync_path(root)
 }
 
-pub(crate) fn save_leased(
-    root: &Path,
-    paths: &CognitionPathEnvironment,
-    coordinator: &CognitionWriteCoordinator,
-    result: &ResetResult,
+/// Stores a terminal receipt under the shared writer lease, waiting for a
+/// current holder to release it. The receipt records the job's outcome,
+/// including its own cancellation, so only the service stop ends the wait.
+pub(crate) async fn save_leased(
+    root: PathBuf,
+    paths: CognitionPathEnvironment,
+    coordinator: Arc<CognitionWriteCoordinator>,
+    result: ResetResult,
+    stop: CancellationToken,
 ) -> io::Result<()> {
-    validate(root, paths, &result.operation_id)?;
-    let lease = coordinator
-        .try_acquire(&CognitionWriteAcquire::immediate(
-            paths.consolidation_lock(root),
-            "reset_receipt",
-        ))
-        .map_err(io::Error::other)?
-        .ok_or_else(|| io::Error::other("Memory is in use"))?;
-    let saved = save(root, paths, result);
-    lease.release(saved.is_ok()).map_err(io::Error::other)?;
-    saved
+    let binding = (root.clone(), paths.clone(), result.operation_id.clone());
+    tokio::task::spawn_blocking(move || validate(&binding.0, &binding.1, &binding.2))
+        .await
+        .map_err(io::Error::other)??;
+    #[cfg(feature = "e2e-fixtures")]
+    receipt_hold::hold(&root, &paths, &coordinator, &result.operation_id).await?;
+    let lease = acquire(&root, &paths, &coordinator, "reset_receipt", &stop).await?;
+    tokio::task::spawn_blocking(move || {
+        let saved = save(&root, &paths, &result);
+        lease.release(saved.is_ok()).map_err(io::Error::other)?;
+        saved
+    })
+    .await
+    .map_err(io::Error::other)?
 }
 
 async fn acquire(
     root: &Path,
     paths: &CognitionPathEnvironment,
     coordinator: &Arc<CognitionWriteCoordinator>,
+    purpose: &str,
     token: &CancellationToken,
 ) -> io::Result<crate::coordination::CognitionWriteLease> {
     let request = CognitionWriteAcquire {
         lock_path: paths.consolidation_lock(root),
-        purpose: Some("cutover".into()),
+        purpose: Some(purpose.into()),
         deadline_at_epoch_ms: None,
         cancellation: Some(token.clone()),
     };

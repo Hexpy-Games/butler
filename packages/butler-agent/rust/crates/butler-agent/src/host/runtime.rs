@@ -90,7 +90,7 @@ impl AgentRuntime {
         let metric_files = Arc::new(MetricFiles::new(paths.data_root.clone()));
         startup.phase("process_clocks");
         let (coordinator, embedding, vectors, fresh_memory, memory_management) =
-            memory_bootstrap::open(&paths, &environment.cognition_paths).await?;
+            memory_bootstrap::open(&paths, &environment.cognition_paths, stop).await?;
         startup.phase("memory_preflight");
         let files = WorkspaceFiles::new(4);
         let (image_files, attachment_context) = attachments::owners(&paths.data_root);

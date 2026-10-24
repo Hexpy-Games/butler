@@ -62,6 +62,8 @@ pub struct MemoryManagement {
     paths: CognitionPathEnvironment,
     coordinator: Arc<CognitionWriteCoordinator>,
     cache: Mutex<Option<MemoryInventory>>,
+    /// Service stop; the only signal that abandons a reset's terminal receipt.
+    stop: CancellationToken,
 }
 
 impl MemoryManagement {
@@ -70,12 +72,14 @@ impl MemoryManagement {
         root: PathBuf,
         paths: CognitionPathEnvironment,
         coordinator: Arc<CognitionWriteCoordinator>,
+        stop: CancellationToken,
     ) -> Self {
         Self {
             root,
             paths,
             coordinator,
             cache: Mutex::new(None),
+            stop,
         }
     }
 

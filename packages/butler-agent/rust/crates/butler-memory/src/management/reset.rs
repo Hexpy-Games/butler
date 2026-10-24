@@ -43,6 +43,7 @@ impl MemoryManagement {
             self.coordinator.clone(),
             operation_id,
             cancellation,
+            self.stop.clone(),
         )
         .await
     }
@@ -76,7 +77,8 @@ impl MemoryManagement {
         .await
         .map_err(io::Error::other)?
     }
-    /// Publishes the host's profile owner result under the shared writer lease.
+    /// Publishes the host's profile owner result under the shared writer lease,
+    /// waiting for a current holder instead of leaving the reset in progress.
     pub async fn complete_profile_reset(
         &self,
         id: String,
@@ -97,15 +99,14 @@ impl MemoryManagement {
         }
         result.phase = phase;
         result.sequence += 1;
-        let root = self.root.clone();
-        let paths = self.paths.clone();
-        let coordinator = self.coordinator.clone();
-        let saved = result.clone();
-        tokio::task::spawn_blocking(move || {
-            cognition::save_reset_receipt(&root, &paths, &coordinator, &saved)
-        })
-        .await
-        .map_err(io::Error::other)??;
+        cognition::save_reset_receipt(
+            self.root.clone(),
+            self.paths.clone(),
+            self.coordinator.clone(),
+            result.clone(),
+            self.stop.clone(),
+        )
+        .await?;
         Ok(result)
     }
 }
