@@ -24,8 +24,14 @@ fn snapshot(db: &Connection) -> rusqlite::Result<Snapshot> {
         .collect()
 }
 fn no_legacy(db: &Connection) -> rusqlite::Result<()> {
-    assert!(rows(db, "SELECT name FROM sqlite_schema WHERE name GLOB 'wm_*'")?.is_empty());
-    assert!(rows(db, "PRAGMA foreign_key_check")?.is_empty());
+    assert_eq!(
+        rows(db, "SELECT name FROM sqlite_schema WHERE name GLOB 'wm_*'")?,
+        Vec::<Vec<Value>>::new()
+    );
+    assert_eq!(
+        rows(db, "PRAGMA foreign_key_check")?,
+        Vec::<Vec<Value>>::new()
+    );
     Ok(())
 }
 fn seed(db: &Connection) -> rusqlite::Result<()> {

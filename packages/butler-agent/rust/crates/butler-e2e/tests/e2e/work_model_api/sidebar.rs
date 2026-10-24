@@ -86,9 +86,19 @@ async fn wma_sidebar_conversation_navigation_and_replay() -> Result<(), HarnessE
         s.gw.post("/canon/epics/missing/conversation", json!({}))
             .await?;
     assert_eq!(missing.status, 404);
-    let hook_runs = s.gw.get("/hooks/runs").await?;
-    let hooks = std::fs::read_to_string(&hook_output)
-        .map_err(|error| HarnessError(format!("{error}; hooks: {}", hook_runs.text)))?;
+    let hooks = match std::fs::read_to_string(&hook_output) {
+        Ok(hooks) => hooks,
+        Err(error) => {
+            let admin = butler_e2e::e2e::security::AdminClient::new(
+                s.gw.clone(),
+                s.agent.launch.admin_credential().unwrap(),
+            );
+            let runs = admin
+                .send(reqwest::Method::GET, "/hooks/runs", None, &[])
+                .await?;
+            return Err(HarnessError(format!("{error}; hooks: {}", runs.text)));
+        }
+    };
     let hooks: Vec<Value> = hooks
         .trim_start_matches('\u{feff}')
         .lines()

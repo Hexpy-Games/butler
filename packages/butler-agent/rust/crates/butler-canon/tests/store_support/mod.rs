@@ -1,7 +1,7 @@
 #![allow(dead_code, clippy::unwrap_used, reason = "test helpers")]
 use butler_canon::{store::*, work_schema, work_types::*};
 use rusqlite::Connection;
-use serde_json::{Value, json};
+use serde_json::json;
 pub(crate) fn db() -> Connection {
     let db = Connection::open_in_memory().unwrap();
     db.execute_batch("PRAGMA foreign_keys=ON").unwrap();

@@ -101,6 +101,32 @@ fn plan_work_spec_cas_and_immutable_publication() {
 }
 // test-category: pure-logic
 #[test]
+fn session_bindings_and_rank_have_typed_rules() {
+    let mut db = db();
+    work(&mut db, "a");
+    work(&mut db, "b");
+    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
+    bind_session(&tx, &context(), "a", "home").unwrap();
+    bind_session(&tx, &context(), "b", "home").unwrap();
+    assert!(matches!(
+        set_plan_rank(&tx, &context(), "a", 0, None, Some("A"), Some("A")),
+        Err(Error::InvalidRank)
+    ));
+    set_plan_rank(&tx, &context(), "a", 0, None, None, None).unwrap();
+    assert!(matches!(
+        edit_work(
+            &tx,
+            &context(),
+            "a",
+            0,
+            &WorkFields::from_snapshot(&read_work(&tx, "a").unwrap()).unwrap()
+        ),
+        Err(Error::Conflict { .. })
+    ));
+    tx.commit().unwrap();
+}
+// test-category: pure-logic
+#[test]
 fn intent_replay_skips_domain_change_and_preserves_original_payload() {
     let mut db = db();
     let tx = Transaction::new(db.transaction().unwrap()).unwrap();

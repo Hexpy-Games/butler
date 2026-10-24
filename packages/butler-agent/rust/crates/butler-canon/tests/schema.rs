@@ -47,3 +47,23 @@ fn migration_rolls_back_every_change_on_invalid_canon_reference() {
     assert!(db.prepare("SELECT * FROM canon_epics").is_err());
     db.execute_batch("ROLLBACK").unwrap();
 }
+
+// test-category: format-pin
+#[test]
+fn local_canon_vocabulary_rejects_remote_status_sources_and_github_origins() {
+    let db = Connection::open_in_memory().unwrap();
+    work_schema::ensure(&db).unwrap();
+    db.execute_batch("INSERT INTO canon_epics(id,project_id,title,origin,created_by,created_at,updated_at) VALUES('local','project','title','board','{}',1,1)").unwrap();
+    for (column, value) in [("canon_status_source", "remote"), ("origin", "github")] {
+        let error = db
+            .execute(
+                &format!("UPDATE canon_epics SET {column}=?1 WHERE id='local'"),
+                [value],
+            )
+            .unwrap_err();
+        assert_eq!(
+            error.sqlite_error().unwrap().extended_code,
+            rusqlite::ffi::SQLITE_CONSTRAINT_CHECK
+        );
+    }
+}
