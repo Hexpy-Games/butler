@@ -37,9 +37,27 @@ export function FilteredSelectItemButton({
     </button>
   );
 
-  return item.tooltipLabel ? (
+  const control = item.tooltipLabel ? (
     <Tooltip label={item.tooltipLabel}>{button}</Tooltip>
   ) : (
     button
+  );
+  if (!item.actions) return control;
+
+  // Actions sit beside the select button, never inside it: no nested buttons.
+  return (
+    <div
+      className={styles.row}
+      data-selected={item.selected ? "true" : undefined}
+      data-slot="filtered-select-row"
+    >
+      {control}
+      <span
+        className={styles.itemActions}
+        data-slot="filtered-select-item-actions"
+      >
+        {item.actions}
+      </span>
+    </div>
   );
 }

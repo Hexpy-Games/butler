@@ -4,6 +4,7 @@ import { useState, type Ref } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { EpicDetail as Epic, EpicInput, PlanCards, EpicProgressSnapshot, CanonStatus } from "@/app/canonApi.ts";
 import { Box, Button, ButtonContainer, IconButton, KeyValueRow, NativeSelect, NativeSelectOption, Pencil, Stack, Tooltip, Typo } from "@/butler-ds";
+import { CanonTagList } from "./CanonTagList.tsx";
 import { CanonAvatar } from "./CanonAvatar.tsx";
 import { EpicEditForm } from "./EpicEditForm.tsx";
 import { CanonPersonSelect } from "./CanonPersonSelect.tsx";
@@ -26,6 +27,7 @@ export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef }: {
         <Typo.PanelTitle as="h3" tabIndex={-1} ref={titleRef} wrap="anywhere">{epic.title}</Typo.PanelTitle>
         <ButtonContainer size="sm"><IconButton label={copy.edit} disabled={busy} onClick={() => setEditing(true)}><Pencil size="sm" /></IconButton></ButtonContainer>
       </Stack>
+      <CanonTagList tags={epic.tags} />
       {epic.description && <Typo.Body wrap="pre">{epic.description}</Typo.Body>}
     </Stack>}
     <Stack gap="sm">

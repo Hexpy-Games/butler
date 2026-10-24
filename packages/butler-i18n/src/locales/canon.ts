@@ -27,6 +27,13 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
     backlogCount: n => `${n}개 · 계획 없음`, moved: plan => `${plan}에 넣었습니다`,
     personLabel: (name, self) => self ? "나" : `${name} 님`,
     cardStatusChanged: (title, status) => `‘${title}’ ${status}`,
+    tags: {
+      label: "태그", add: "태그 추가", filter: "태그 필터", search: "태그 검색", searchPlaceholder: "태그 이름", empty: "태그 없음", clearAll: "모두 지우기",
+      rename: "이름 바꾸기", recolor: "색 바꾸기", remove: "삭제", name: "태그 이름", color: "태그 색", loading: "불러오는 중",
+      colors: { gray: "회색", red: "빨강", orange: "주황", yellow: "노랑", green: "초록", teal: "청록", blue: "파랑", purple: "보라" },
+      create: name => `‘${name}’ 만들기`, menu: name => `${name} 태그 메뉴`, removeTag: name => `${name} 빼기`,
+      deleteTitle: name => `‘${name}’ 태그를 지울까요?`, deleteDetail: n => `과제 ${n}개에서 빠집니다`,
+    },
     drag: {
       instructions: "스페이스로 카드를 들고, 화살표로 옮긴 뒤 스페이스로 놓습니다. Esc로 취소합니다.",
       roleDescription: "옮길 수 있는 과제",
@@ -63,6 +70,13 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
     backlogCount: n => `${n} · No Plan`, moved: plan => `Moved to ${plan}`,
     personLabel: (name, self) => self ? "Me" : name,
     cardStatusChanged: (title, status) => `‘${title}’ ${status}`,
+    tags: {
+      label: "Tags", add: "Add tag", filter: "Tag filter", search: "Search tags", searchPlaceholder: "Tag name", empty: "No tags", clearAll: "Clear all",
+      rename: "Rename", recolor: "Change color", remove: "Delete", name: "Tag name", color: "Tag color", loading: "Loading",
+      colors: { gray: "Gray", red: "Red", orange: "Orange", yellow: "Yellow", green: "Green", teal: "Teal", blue: "Blue", purple: "Purple" },
+      create: name => `Create ‘${name}’`, menu: name => `${name} tag menu`, removeTag: name => `Remove ${name}`,
+      deleteTitle: name => `Delete the ‘${name}’ tag?`, deleteDetail: n => n === 1 ? "It will be removed from 1 Epic" : `It will be removed from ${n} Epics`,
+    },
     drag: {
       instructions: "Press Space to pick the card up. Use arrows to move it, Space to drop it, Escape to cancel.",
       roleDescription: "draggable Epic",

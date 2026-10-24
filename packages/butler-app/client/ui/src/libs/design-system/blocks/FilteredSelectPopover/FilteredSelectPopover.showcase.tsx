@@ -1,6 +1,9 @@
 import { useState, type ReactElement } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
-import { Bot, Sparkles } from "../../components/Icons";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../components/DropdownMenu";
+import { Bot, Pencil, Sparkles } from "../../components/Icons";
+import { IconButton } from "../../components/IconButton";
+import { Tag, type TagLabelTone } from "../../components/Tag";
 import { FilteredSelectPopover } from "./FilteredSelectPopover";
 
 export const meta: ShowcaseMeta = {
@@ -15,11 +18,15 @@ const labels = {
     model: "Model", search: "Search models", placeholder: "Search models…", clear: "Clear search", empty: "No models found",
     all: "All", local: "Local", reasoning: "Reasoning", levels: ["Instant", "Low", "Medium", "High"], context: (size: string) => `${size} API context`,
     timezone: "Time zone", zones: ["Asia/Seoul", "America/Los_Angeles", "Europe/Berlin", "UTC"],
+    tags: "Tags", tagSearch: "Search tags", tagPlaceholder: "Search tags…", noTags: "No tags",
+    tagNames: ["bug", "design", "research"], tagMenu: (name: string) => `${name} tag menu`, rename: "Rename", recolor: "Change color", remove: "Delete",
   },
   "ko-KR": {
     model: "모델", search: "모델 검색", placeholder: "모델 검색…", clear: "검색 지우기", empty: "모델이 없습니다",
     all: "전체", local: "로컬", reasoning: "추론", levels: ["즉시", "낮음", "보통", "높음"], context: (size: string) => `API 컨텍스트 ${size}`,
     timezone: "시간대", zones: ["Asia/Seoul", "America/Los_Angeles", "Europe/Berlin", "UTC"],
+    tags: "태그", tagSearch: "태그 검색", tagPlaceholder: "태그 검색…", noTags: "태그가 없습니다",
+    tagNames: ["버그", "디자인", "조사"], tagMenu: (name: string) => `${name} 태그 메뉴`, rename: "이름 바꾸기", recolor: "색 바꾸기", remove: "삭제",
   },
 } as const;
 
@@ -66,7 +73,39 @@ function TimeZonePicker({ context }: { context: ShowcaseRenderContext }) {
   );
 }
 
+/** CanonTagChooser: each row carries its own edit menu beside the select button. */
+function TagPicker({ context }: { context: ShowcaseRenderContext }) {
+  const copy = labels[context.locale];
+  const [query, setQuery] = useState("");
+  const [chosen, setChosen] = useState<string[]>([copy.tagNames[1]]);
+  const tones: TagLabelTone[] = ["red", "teal", "purple"];
+  const items = copy.tagNames.map((name, index) => ({ name, tone: tones[index]! }))
+    .filter(({ name }) => name.toLowerCase().includes(query.toLowerCase()))
+    .map(({ name, tone }) => ({
+      id: name, label: <Tag tone={tone}>{name}</Tag>, selected: chosen.includes(name),
+      onSelect: () => setChosen((value) => value.includes(name) ? value.filter((item) => item !== name) : [...value, name]),
+      actions: (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild><IconButton label={copy.tagMenu(name)}><Pencil size="sm" /></IconButton></DropdownMenuTrigger>
+          <DropdownMenuContent align="end" sideOffset={8}>
+            <DropdownMenuItem>{copy.rename}</DropdownMenuItem>
+            <DropdownMenuItem>{copy.recolor}</DropdownMenuItem>
+            <DropdownMenuItem variant="destructive">{copy.remove}</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+    }));
+  return (
+    <FilteredSelectPopover
+      activeFilterId="all" emptyLabel={copy.noTags} filters={[]} onFilterChange={() => undefined}
+      groups={[{ id: "tags", title: copy.tags, items }]} onSearchChange={setQuery} searchClearLabel={copy.clear}
+      searchLabel={copy.tagSearch} searchPlaceholder={copy.tagPlaceholder} searchValue={query} title={copy.tags}
+    />
+  );
+}
+
 export const stories: ShowcaseStory[] = [
   { name: "Model picker", states: ["selected"], render: (context) => <ModelPicker context={context} /> },
   { name: "Searchable select (fixed width)", render: (context) => <TimeZonePicker context={context} /> },
+  { name: "Rows with actions", states: ["hover", "focus-visible"], render: (context) => <TagPicker context={context} /> },
 ];

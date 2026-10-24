@@ -1,0 +1,97 @@
+// test-category: race
+import { strict as assert } from "node:assert";
+import { join } from "node:path";
+import type { Page } from "playwright";
+import type { NativeAppServerHandle } from "./native-app-server.ts";
+import type { CanonTag, EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
+import { selectBoardPlan } from "./canon-board-selector.ts";
+import { closeCanonInspector } from "./canon-board-inspector.ts";
+import { assertNoLooseTagMenus, chooseTag } from "./canon-tags-flows.ts";
+export const tones = ["gray", "red", "orange", "yellow", "green", "teal", "blue", "purple"] as const;
+const names = ["회색", "빨강", "주황", "노랑", "초록", "청록", "파랑", "보라"];
+const post = (body: unknown) => ({ method: "POST", body: JSON.stringify(body) });
+export async function seedTagPalette(server: NativeAppServerHandle, projectId: string, planId: string) {
+  const tags: CanonTag[] = [];
+  for (const [index, color] of tones.entries()) {
+    const tag = await server.api<CanonTag>(`/projects/${projectId}/canon/tags`, post({ name: names[index], color }));
+    tags.push(tag);
+    for (const plan_id of [null, planId]) await server.api(`/projects/${projectId}/canon/epics`, post({ title: `${names[index]} 과제`, plan_id, tags: [tag.id] }));
+  }
+  const palette = await server.api<EpicDetail>(`/projects/${projectId}/canon/epics`, post({ title: "모든 색 태그", plan_id: planId, tags: tags.map(tag => tag.id) }));
+  return { tags, palette };
+}
+export async function captureTagViews(page: Page, shots: string, name: string, tags: CanonTag[], palette: EpicDetail, before: boolean) {
+  const capture = (view: string) => page.screenshot({ path: join(shots, `${name}-${view}.png`), animations: "disabled" });
+  const board = page.locator('[data-test-class="canon-board"]');
+  const card = board.locator(`[data-kanban-item="${palette.id}"]`);
+  await selectBoardPlan(page, "프리뷰 14");
+  await card.waitFor();
+  if (!before) {
+    const plan = await board.getByRole("button", { name: "계획", exact: true }).boundingBox();
+    const filter = await board.getByRole("combobox", { name: "태그 필터", exact: true }).boundingBox();
+    assert(plan && filter && Math.abs(plan.y - filter.y) < 4 && filter.x >= plan.x + plan.width,
+      "Tag filter is beside the plan selector");
+  }
+  if (!before) {
+    assert.equal(await card.locator('[data-test-class="canon-tags"] [data-size="sm"]').count(), 4);
+    await card.getByText("+5", { exact: true }).waitFor();
+    assert.equal(await card.locator("svg").count(), 0, "Tags add no status icon to idle cards");
+    assert.equal(await board.locator('[data-test-class="canon-tags"] [data-editable="true"]').count(), 0, "Board cards show no tag pencil");
+    // Every tone is also shown uncapped, on its own card.
+    for (const tone of tones) assert(await board.locator(`[data-test-class="canon-tags"] [data-tone="${tone}"]`).count() > 0);
+  }
+  await capture("cards");
+  for (const tag of tags) {
+    await board.locator('[data-kanban-item]').filter({ hasText: `${tag.name} 과제` }).scrollIntoViewIfNeeded();
+    await capture(`card-${tag.color}`);
+  }
+  await card.getByRole("button").first().click();
+  const detail = page.locator('[data-test-class="canon-epic-detail"]');
+  await detail.waitFor();
+  if (!before) for (const tone of tones) assert.equal(await detail.locator(`[data-test-class="canon-tags"] [data-tone="${tone}"]`).count(), 1);
+  if (!before) assert.equal(await detail.locator('[data-editable="true"]').count(), 0, "The read-only inspector shows no tag pencil");
+  await capture("inspector");
+  await detail.getByRole("button", { name: "고치기", exact: true }).click();
+  if (!before) {
+    // Chip pencils appear once the project's tag list has loaded.
+    const editable = detail.locator('[data-test-class="canon-tags-field"] [data-editable="true"]');
+    await editable.nth(tones.length - 1).waitFor();
+    assert.equal(await editable.count(), tones.length);
+    await assertNoLooseTagMenus(page);
+  }
+  await capture("inspector-edit");
+  await detail.getByRole("button", { name: `${tags[0]!.name} 태그 메뉴`, exact: true }).click();
+  await page.getByRole("menuitem", { name: "이름 바꾸기", exact: true }).waitFor();
+  await capture("inspector-edit-menu");
+  await page.keyboard.press("Escape");
+  await detail.getByRole("combobox", { name: "태그", exact: true }).click();
+  const popover = page.locator('[data-slot="filtered-select-popover"]');
+  const row = popover.locator('[data-slot="filtered-select-item"]').filter({ hasText: tags[1]!.name });
+  await row.hover();
+  await capture("picker-hover");
+  await page.mouse.move(0, 0);
+  await popover.getByRole("textbox", { name: "태그 검색", exact: true }).focus();
+  for (let step = 0; step < 4 && !await page.evaluate(() => Boolean(document.activeElement?.closest('[data-slot="filtered-select-item"], [data-slot="filtered-select-row"]'))); step++) await page.keyboard.press("Tab");
+  await capture("picker-focus");
+  if (!before) {
+    await popover.getByRole("button", { name: `${tags[1]!.name} 태그 메뉴`, exact: true }).click();
+    await page.getByRole("menuitem", { name: "색 바꾸기", exact: true }).waitFor();
+    await capture("picker-menu");
+    await page.keyboard.press("Escape");
+  }
+  await page.keyboard.press("Escape");
+  await closeCanonInspector(page);
+  await board.getByRole("button", { name: "새 과제", exact: true }).first().click();
+  await page.getByRole("dialog").getByLabel("제목", { exact: true }).fill("태그가 있는 과제");
+  if (!before) {
+    for (const tag of tags) await chooseTag(page, tag.name);
+    assert.equal(await page.getByRole("dialog").locator('[data-test-class="canon-tags-field"] [data-removable="true"][data-tone]').count(), 8);
+  }
+  await capture("dialog");
+  await page.getByRole("dialog").getByRole("button", { name: "취소", exact: true }).click();
+  if (!before) await board.getByRole("combobox", { name: "태그 필터", exact: true }).click();
+  else await board.getByRole("button", { name: "계획", exact: true }).click();
+  await capture("filter");
+  await page.keyboard.press("Escape");
+  assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "No viewport overflow");
+}
