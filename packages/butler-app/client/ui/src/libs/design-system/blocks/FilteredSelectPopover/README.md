@@ -40,6 +40,9 @@ Search inputs should expose a clear button when populated, and filter chips
 should have enough breathing room to read as a separate control row.
 The result region should keep a stable fixed height around 200px and scroll
 internally, including when search has no matches.
+Rows keep the results ScrollArea's focus-ring inset, so they line up with the
+search box and group labels, and the scrollbar sits in the ScrollArea's lane
+beside them. Do not reset the results content padding.
 When the popover opens, the selected row is scrolled into view inside the
 results region. The selected row shows a trailing check mark and exposes
 `aria-current="true"`.
