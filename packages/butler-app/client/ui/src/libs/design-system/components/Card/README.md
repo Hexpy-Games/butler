@@ -9,6 +9,15 @@ Use it when a component needs a clearly bounded card shape without taking on a
 domain-specific layout. Blocks such as `CardList` compose `Card` for each item
 and own their row content layout.
 
+## Radius
+
+`radius="control"` (default) keeps `--radius-control` (8px) for an item in a
+grid or list. `radius="lg"` takes `--radius-popover` (12px) for a card as wide
+as the conversation column: an epic draft, or a question or decision panel
+with `placement="conversation"`. A frame placed directly inside a card follows
+the card's corners (`border-radius: inherit`), so a 12px card never holds a
+30px composer frame.
+
 ## Running activity
 
 `<Card activity="running">` marks an item whose work is live (a running task in

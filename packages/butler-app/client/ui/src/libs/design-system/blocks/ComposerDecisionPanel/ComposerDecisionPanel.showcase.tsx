@@ -7,7 +7,7 @@ import { Folder, ListChecks, ShieldCheck, Terminal } from "../../components/Icon
 import { Tag } from "../../components/Tag";
 import { Typo } from "../../components/Typo";
 import { SplitButton } from "../SplitButton";
-import { ComposerDecisionPanel } from "./ComposerDecisionPanel";
+import { ComposerDecisionPanel, type ComposerDecisionPanelProps } from "./ComposerDecisionPanel";
 import { BrowserApproval, BrowserHandoff } from "./ComposerDecisionPanel.showcaseParts";
 
 export const meta: ShowcaseMeta = {
@@ -40,10 +40,12 @@ const labels = {
 
 const screenshots = ["Screenshot 2026-09-27 at 10.02.14.png", "Screenshot 2026-09-27 at 10.05.31.png", "Screenshot 2026-09-27 at 10.09.02.png"];
 
-function Plan({ context }: { context: ShowcaseRenderContext }) {
+type Placement = ComposerDecisionPanelProps["placement"];
+
+function Plan({ context, placement }: { context: ShowcaseRenderContext; placement?: Placement }) {
   const copy = labels[context.locale];
   return (
-    <ComposerDecisionPanel icon={<ListChecks aria-hidden="true" size="lg" />} title={copy.plan} eyebrow={context.locale === "ko-KR" ? "계획" : "Plan"} onOpen={() => undefined}
+    <ComposerDecisionPanel placement={placement} icon={<ListChecks aria-hidden="true" size="lg" />} title={copy.plan} eyebrow={context.locale === "ko-KR" ? "계획" : "Plan"} onOpen={() => undefined}
       actions={<ButtonContainer size="sm" justify="end">
         <Button type="button" size="sm" variant="outline">{copy.instruction}</Button>
         <Button type="button" size="sm" variant="secondary">{copy.reject}</Button>
@@ -73,7 +75,7 @@ function Authority({ context, error }: { context: ShowcaseRenderContext; error?:
 }
 
 /** ComposerAuthorityDecisionSurface with a structured request: a question, examples and a risk Tag. */
-function ApprovalRequest({ context, command }: { context: ShowcaseRenderContext; command?: boolean }) {
+function ApprovalRequest({ context, command, placement }: { context: ShowcaseRenderContext; command?: boolean; placement?: Placement }) {
   const copy = labels[context.locale];
   return command ? (
     <ComposerDecisionPanel icon={<Terminal aria-hidden="true" size="lg" />} eyebrow={context.locale === "ko-KR" ? "권한" : "Permission"} title={copy.command} onOpen={() => undefined}
@@ -82,7 +84,7 @@ function ApprovalRequest({ context, command }: { context: ShowcaseRenderContext;
       aside={<><Tag tone="danger">{copy.high}</Tag></>}
       actions={<AuthorityActions copy={copy} />} />
   ) : (
-    <ComposerDecisionPanel icon={<Folder aria-hidden="true" size="lg" />} eyebrow={context.locale === "ko-KR" ? "권한" : "Permission"} title={copy.rename} onOpen={() => undefined}
+    <ComposerDecisionPanel placement={placement} icon={<Folder aria-hidden="true" size="lg" />} eyebrow={context.locale === "ko-KR" ? "권한" : "Permission"} title={copy.rename} onOpen={() => undefined}
       details={[...screenshots, copy.more]} detailsShowMoreLabel={copy.showMore} detailsShowLessLabel={copy.showLess}
       aside={<><Tag tone="warning">{copy.medium}</Tag></>}
       actions={<AuthorityActions copy={copy} />} />
@@ -102,6 +104,10 @@ export const stories: ShowcaseStory[] = [
   // cropped from the page's top to --decision-media-narrow-height (140px). The approval draws a decoded ImageBitmap (canvas), the hand-off a still.
   { name: "Browser approval with the page", widths: ["320", "375", "app"], render: (context) => <ComposerCard><BrowserApproval {...context} /></ComposerCard> },
   { name: "Browser hand-off with the page", widths: ["320", "375", "app"], render: (context) => <ComposerCard><BrowserHandoff {...context} /></ComposerCard> },
+  // placement="conversation": the decision where it was asked, in a flat Card radius="lg" with control-radius buttons.
+  { name: "In conversation · approval request", widths: ["375", "app"], render: (context) => <ApprovalRequest context={context} placement="conversation" /> },
+  { name: "In conversation · plan decision", widths: ["375", "app"], render: (context) => <Plan context={context} placement="conversation" /> },
+  { name: "In conversation · browser approval", widths: ["320", "375", "app"], render: (context) => <BrowserApproval {...context} placement="conversation" /> },
 ];
 
 function KeyboardDecision({ context }: { context: ShowcaseRenderContext }) {

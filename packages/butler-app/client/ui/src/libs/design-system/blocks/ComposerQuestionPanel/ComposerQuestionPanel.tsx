@@ -44,7 +44,7 @@ function QuestionPanelBody(props: ComposerQuestionPanelProps) {
     (input ?? panel.current)?.focus({ preventScroll: true });
   }, [m.step]);
   const labels = props.labels ?? questionPanelLabels;
-  const { className, style, state = "open", error, questions, onExpand } = props;
+  const { className, style, state = "open", error, questions, onExpand, placement } = props;
   if (state === "collapsed") return <PillButton disabled={!onExpand} onClick={onExpand} icon={<MessageSquare size="md" aria-hidden="true" />}>{labels.pending}</PillButton>;
   const body = <>
     <ComposerPanelHeader icon={<ListChecks size="sm" aria-hidden="true" />} tabbed={questions.length > 1}
@@ -61,7 +61,7 @@ function QuestionPanelBody(props: ComposerQuestionPanelProps) {
     {state === "error" && error && <Typo.Caption className={dsClass(styles.error)} tone="secondary" role="alert">{error}</Typo.Caption>}
     <QuestionActions model={m} props={props} labels={labels} />
   </>;
-  return <ComposerPanelFrame panelRef={panel} className={className} style={style} tabIndex={m.busy ? -1 : 0} onKeyDownCapture={m.keyDown}
+  return <ComposerPanelFrame panelRef={panel} placement={placement} className={className} style={style} tabIndex={m.busy ? -1 : 0} onKeyDownCapture={m.keyDown}
     aria-label={m.review ? labels.review : m.question.text} aria-busy={state === "submitting"} data-state={state} data-tabbed={questions.length > 1} data-slot="composer-question-panel">
     {questions.length > 1 ? <Tabs value={String(m.step)} onValueChange={(value) => m.go(Number(value))}>
       <div className={styles.tabInset}><TabsList className={dsClass(styles.tabs)} variant="line" aria-label={labels.select}>{questions.map((q, i) => <TabsTrigger className={dsClass(styles.tab)} key={q.id} value={String(i)} disabled={m.busy}>{q.header}</TabsTrigger>)}
