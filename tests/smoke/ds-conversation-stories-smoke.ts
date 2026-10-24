@@ -199,6 +199,32 @@ async function checkAttachments(page: Page, baseUrl: string): Promise<void> {
   await chips.screenshot({ path: join(screenshotDir, "attachment-chips-375.png"), animations: "disabled" });
 }
 
+/** The aside's content keeps one inset on its start and end: docked (to the aside's edges) and floating (inside the glass). */
+async function asideInsets(story: Locator): Promise<{ shell: string | null; layout: string | null; start: number; end: number; clear: boolean }> {
+  return await story.locator("[data-ds-theme]").first().evaluate((frame) => {
+    const shell = frame.querySelector<HTMLElement>('[data-test-class="conversation"]')!;
+    const aside = shell.querySelector<HTMLElement>('[data-slot="conversation-aside"]');
+    if (!aside) return { shell: shell.dataset.aside ?? null, layout: null, start: 0, end: 0, clear: true };
+    const box = (aside.querySelector('[data-slot="tinted-glass"]') ?? aside).getBoundingClientRect();
+    const first = aside.querySelector('[data-slot="conversation-aside-scroll"] section')!.getBoundingClientRect();
+    const column = shell.querySelector('[data-test-class~="message-list"]')!.getBoundingClientRect();
+    return { shell: shell.dataset.aside ?? null, layout: aside.dataset.layout ?? null, start: first.left - box.left,
+      end: box.right - first.right, clear: aside.dataset.layout === "floating" || column.right < box.left };
+  });
+}
+
+async function checkConversationAside(page: Page, baseUrl: string): Promise<void> {
+  const plain = await asideInsets(await openStory(page, baseUrl, "blocks/ConversationShell", "Messages"));
+  assert(plain.shell === null && plain.layout === null, `an unused aside slot adds nothing: ${JSON.stringify(plain)}`);
+  for (const [name, layout] of [["Aside docked: margin cards", "docked"], ["Aside floating", "floating"]] as const) {
+    const story = await openStory(page, baseUrl, "blocks/ConversationShell", name, "wide");
+    const state = await asideInsets(story);
+    assert(state.shell === layout && state.layout === layout && state.clear, `${name}: ${layout}, clear of the column: ${JSON.stringify(state)}`);
+    assert(state.start > 0 && Math.abs(state.start - state.end) <= 1, `${name}: start and end insets match: ${JSON.stringify(state)}`);
+    await story.screenshot({ path: join(screenshotDir, `aside-${layout}.png`), animations: "disabled" });
+  }
+}
+
 async function checkActivityTurns(page: Page, baseUrl: string): Promise<void> {
   const running = await openStory(page, baseUrl, "blocks/MessageRow", "Running activity", "375");
   const live = running.locator("[data-ds-theme]").first();
@@ -255,6 +281,7 @@ try {
   await checkCurrentStatusLine(page, server.url);
   await checkInlineImage(page, server.url);
   await checkAttachments(page, server.url);
+  await checkConversationAside(page, server.url);
   console.log(JSON.stringify({
     ok: true,
     service: "butler-ds-conversation-stories-smoke",
@@ -264,7 +291,7 @@ try {
       "work-block-plain-surface", "work-title-weight-wrap-tone", "work-dot-marker", "work-content-starts-align",
       "tool-row-outlined-capped-pointer", "tool-group-counted-summary", "tool-row-operation-label", "tool-rows-keyboard-expand", "tool-details-muted", "inline-disclosure-unpadded-underline-hover",
       "current-status-one-clipped-line", "markdown-inline-image-bounded", "message-attachments-thumbnail",
-      "composer-chips-wrap-truncate-remove",
+      "composer-chips-wrap-truncate-remove", "conversation-aside-unused-adds-nothing", "conversation-aside-docked-floating-symmetric-insets",
     ],
     screenshots: screenshotDir,
     stubModelCalls: server.stubModelCalls.length,

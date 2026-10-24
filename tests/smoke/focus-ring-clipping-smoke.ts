@@ -286,6 +286,11 @@ async function auditCell(page: Page, cell: Cell) {
   await page.goto(`${base}?visual=design-system&page=blocks/FilteredSelectPopover&theme=${cell.theme}&locale=ko`);
   await page.locator('[data-ds-story="Rows with actions"] [data-slot="filtered-select-item-actions"]').first().waitFor();
   await auditScope(page, cell, "filtered-select-row-actions", '[data-ds-story="Rows with actions"]', 40);
+  // The floating conversation aside (DS viewer story, unscaled): rows flush with its own scroller on glass.
+  await page.goto(`${base}?visual=design-system&page=blocks/ConversationShell&theme=${cell.theme}&locale=ko`);
+  const aside = '[data-ds-story="Aside floating"] [data-slot="conversation-aside"]';
+  await page.locator(`${aside} [data-slot="clickable"]`).first().waitFor();
+  await auditScope(page, cell, "conversation-aside-floating", aside, 20);
 }
 
 /** Settings › Usage with a delegating chat selected (linked split rows, the chart), then the context popover. */

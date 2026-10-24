@@ -250,3 +250,48 @@
 .codePre [data-syntax="deletion"] {
   color: var(--syntax-deletion);
 }
+
+/* Compact density (a detail pane, a card): body line height, block gaps one
+   step down, headings at body size and semibold, one step above their text. */
+.markdown[data-density="compact"] {
+  line-height: var(--typo-body-line-height);
+}
+
+.markdown[data-density="compact"]
+  > :where(p, ul, ol, pre, blockquote, table)
+  + :where(p, ul, ol, pre, blockquote, table) {
+  margin-top: var(--space-2);
+}
+
+.markdown[data-density="compact"] :where(h1, h2, h3, h4, h5, h6) {
+  margin-top: var(--space-4);
+  font-size: var(--font-size-3);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--typo-body-line-height);
+}
+
+.markdown[data-density="compact"] > :where(h1, h2, h3, h4, h5, h6):first-child {
+  margin-top: 0;
+}
+
+.markdown[data-density="compact"]
+  :where(h1, h2, h3, h4, h5, h6)
+  + :where(p, ul, ol, pre, blockquote, table) {
+  margin-top: var(--space-1);
+}
+
+.markdown[data-density="compact"] :where(ul, ol) {
+  padding-left: var(--space-5);
+}
+
+.markdown[data-density="compact"] :where(li + li, li > ul, li > ol) {
+  margin-top: var(--space-1);
+}
+
+.markdown[data-density="compact"] :where(hr) {
+  margin-block: var(--space-4);
+}
+
+.markdown[data-density="compact"] .codeFrame {
+  margin-block: var(--space-2);
+}
