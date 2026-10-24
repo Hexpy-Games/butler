@@ -18,6 +18,7 @@ pub(super) fn app_error(error: AppStorageError) -> GatewayApplicationError {
         | "too_many_attachments"
         | "empty_queued_message"
         | "invalid_message_content"
+        | "invalid_library_item"
         | "invalid_library_request"
         | "library_group_kind_mismatch" => public(400, error.code(), &error.detail()),
         "automation_not_enabled"

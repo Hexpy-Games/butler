@@ -74,6 +74,7 @@ export const guidance: ShowcaseGuidance = {
     "The header title is the page name; meta counts what is listed.",
     "A background is decoration: keep the calm treatment unless the page shows no text over it.",
     "aside shows the selected item's detail (title, compact MarkdownContent, start-aligned tiles); it never replaces the page's own sections.",
+    "Over a wallpaper, pass onColumnRect to the background's columnRect: the column reaches a docked aside's far edge, so the dots keep out from behind both.",
   ],
   accessibility: [
     "as=\"form\" when the page is an editor; the footer stays reachable by keyboard.",

@@ -639,6 +639,7 @@
 | Tabs the user and conversations open, grouped by owner | `TabStrip` |  |
 | Tags on a saved Library item (card popover, detail panel) | `TagField` |  |
 | Teach a shortcut next to the control or in a hint | `Kbd` |  |
+| Text whose length varies: autoGrow grows the bordered box, then scrolls | `Textarea` |  |
 | The action is an icon without a visible label | `IconButton` | `Button` |
 | The action needs words to be understood | `Button` | `IconButton` |
 | The address in BrowserToolbar | `AddressField` |  |
@@ -958,9 +959,10 @@ A multi-line text box for prompts, personas, arguments and descriptions.
 
 - Use for: Enter a paragraph or a list with one item per line
 - Use for: In-place wrapping entry: variant=underline, textSize=label beside Typo.Label
+- Use for: Text whose length varies: autoGrow grows the bordered box, then scrolls
 - Not for: A single-line value → `Input`
 - Not for: Writing a chat message → `ComposerCard`
-- Tokens: `--line`, `--radius-control`, `--placeholder`, `--focus-ring`, `--focus-ring-width`, `--textarea-max-lines`, `--scroll-fade-size`
+- Tokens: `--line`, `--radius-control`, `--placeholder`, `--focus-ring`, `--focus-ring-width`, `--textarea-max-lines`, `--textarea-grow-max-lines`, `--scroll-fade-size`
 
 ## Components · Overlay
 
