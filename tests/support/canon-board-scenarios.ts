@@ -98,12 +98,16 @@ async function verifyCanonConflict(page: Page, server: NativeAppServerHandle, id
   await server.api(`/canon/epics/${id}`, { method: "PATCH", body: JSON.stringify({ expected_revision: current.revision, title: "실시간으로 고친 제목" }) });
   await detail.getByText("실시간으로 고친 제목", { exact: true }).waitFor();
   // The open edit retains its starting revision while canon.changed reloads the background.
-  await detail.getByRole("button", { name: "고치기", exact: true }).click();
+  await detail.getByRole("button", { name: "제목 수정", exact: true }).click();
   const epic = await server.api<EpicDetail>(`/canon/epics/${id}`);
   await server.api(`/canon/epics/${id}`, { method: "PATCH", body: JSON.stringify({ expected_revision: epic.revision, title: "다른 사람이 쓴 제목" }) });
   await detail.getByLabel("제목", { exact: true }).fill("오래된 화면의 제목");
+  const conflict = page.waitForResponse(response => response.request().method() === "PATCH" && new URL(response.url()).pathname === `/canon/epics/${id}`);
   await detail.getByRole("button", { name: "저장", exact: true }).click();
+  assert.equal((await conflict).status(), 409);
   await waitToast(page, "다른 사람이 먼저 고쳤습니다");
-  await detail.getByText("다른 사람이 쓴 제목", { exact: true }).waitFor();
+  await detail.getByText("제목: 다른 사람이 쓴 제목", { exact: true }).waitFor();
+  assert.equal(await detail.getByLabel("제목", { exact: true }).inputValue(), "오래된 화면의 제목");
+  await detail.getByRole("button", { name: "취소", exact: true }).click();
   assert.equal((await server.api<EpicDetail>(`/canon/epics/${id}`)).title, "다른 사람이 쓴 제목");
 }

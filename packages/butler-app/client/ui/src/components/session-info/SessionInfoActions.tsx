@@ -1,3 +1,4 @@
+import { leaveCanonEditor } from "@/app/canonEditGuard.ts";
 import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -15,7 +16,7 @@ export function SessionInfoActions() {
   const indicator = Boolean(asks?.open_count);
   const c = appCopy.sessionInfo;
   return <ButtonContainer size="icon-sm">
-    {graphEnabled && <Dialog open={graphOpen} onOpenChange={setGraphOpen}>
+    {graphEnabled && <Dialog open={graphOpen} onOpenChange={next => { void (async () => { if (!next || await leaveCanonEditor()) setGraphOpen(next); })(); }}>
       <DialogTrigger asChild><IconButton label={appCopy.taskGraph.title}><Blocks size="md" /></IconButton></DialogTrigger>
       <DialogContent size="full" layout="scroll-body" closeLabel={appCopy.common.close}>
         <DialogHeader><DialogTitle>{appCopy.taskGraph.title}</DialogTitle></DialogHeader>
@@ -23,7 +24,9 @@ export function SessionInfoActions() {
       </DialogContent>
     </Dialog>}
     <IconButton label={c.title} aria-label={indicator ? c.waitingLabel : c.title} pressed={open} indicator={indicator}
-      data-test-class="session-info-toggle" onClick={() => useButlerStore.setState({ sessionInfoOpen: !open })}>
+      data-test-class="session-info-toggle" onClick={async () => {
+        if (await leaveCanonEditor()) useButlerStore.setState(state => ({ sessionInfoOpen: !state.sessionInfoOpen }));
+      }}>
       <AppleReminder size="md" />
     </IconButton>
   </ButtonContainer>;
