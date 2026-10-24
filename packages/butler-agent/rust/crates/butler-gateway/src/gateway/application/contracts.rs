@@ -3,8 +3,10 @@ mod artifacts;
 mod authority;
 pub use authority::*;
 mod canon;
+mod message_files;
 pub use artifacts::*;
 pub use canon::*;
+pub use message_files::AppMessageFileStorage;
 
 use super::sessions::{
     AppSessionWorkProgress, AppSessionWorkspaceProvisioner, AppWorkStreamReader,
@@ -97,17 +99,6 @@ pub trait AppAdmissionAuthority: Send + Sync + 'static {
     ) -> ApplicationFuture<MaterializedResponderFile>;
     fn admit_visual(&self, request: VisualAdmissionRequest) -> ApplicationFuture<Value>;
 }
-pub trait AppMessageFileStorage: Send + Sync + 'static {
-    fn replace_browser_still(
-        &self,
-        file: AppMessageFileSnapshot,
-        bytes: Bytes,
-        name: String,
-    ) -> ApplicationFuture<MaterializedResponderFile>;
-    fn write_upload(&self, input: AppFileWrite) -> ApplicationFuture<MaterializedResponderFile>;
-    fn prepare_uploaded(&self, file: AppMessageFileSnapshot) -> ApplicationFuture<()>;
-    fn read_original(&self, file: AppMessageFileSnapshot) -> ApplicationFuture<Bytes>;
-}
 pub trait AppSettingsFactsProvider: Send + Sync + 'static {
     /// Returns an immutable snapshot prepared by the native config and model owners.
     /// This call must not enter App SQLite, perform I/O, or wait on async work.
@@ -192,6 +183,8 @@ pub struct AppMessageFileSnapshot {
     pub mime_type: String,
     pub safe_name: String,
     pub size_bytes: u64,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
     pub sha256: String,
     pub storage_name: String,
     pub created_at: String,

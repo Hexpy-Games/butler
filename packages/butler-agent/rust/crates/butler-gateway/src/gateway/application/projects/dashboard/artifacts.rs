@@ -125,7 +125,7 @@ fn read_artifact_page(
     let mut statement = db
         .prepare(
             "SELECT m.rowid,m.id,c.id,m.turn_id,c.title,f.id,f.kind,f.mime_type,\
-             f.safe_name,f.size_bytes,f.sha256,f.storage_name,f.created_at,f.source_label,f.deliverable,f.title \
+             f.safe_name,f.size_bytes,f.sha256,f.storage_name,f.created_at,f.source_label,f.deliverable,f.title,f.width,f.height \
              FROM chats c CROSS JOIN app_message_owners mo ON mo.chat_id=c.id \
              CROSS JOIN messages m ON m.chat_id=mo.source_chat_id AND m.rowid BETWEEN mo.first_rowid AND mo.last_rowid \
              JOIN message_attachments a ON a.message_id=m.id \
@@ -143,6 +143,8 @@ fn read_artifact_page(
             |row| {
                 let file = crate::gateway::application::AppMessageFileSnapshot {
                     title: row.get(15)?,
+                    width: row.get(16)?,
+                    height: row.get(17)?,
                     source_label: row.get(13)?,
                     deliverable: row.get(14)?,
                     id: row.get(5)?,
@@ -293,7 +295,7 @@ pub(super) fn read_artifact(
     let row = db
         .query_row(
             "SELECT m.id,c.id,m.turn_id,c.title, f.id,f.kind,f.mime_type,\
-             f.safe_name,f.size_bytes,f.sha256,f.storage_name,f.created_at,f.source_label,f.deliverable,f.title FROM chats c \
+             f.safe_name,f.size_bytes,f.sha256,f.storage_name,f.created_at,f.source_label,f.deliverable,f.title,f.width,f.height FROM chats c \
              CROSS JOIN app_message_owners mo ON mo.chat_id=c.id \
              CROSS JOIN messages m ON m.chat_id=mo.source_chat_id AND m.rowid BETWEEN mo.first_rowid AND mo.last_rowid JOIN message_attachments a ON a.message_id=m.id \
              JOIN message_files f ON f.id=a.file_id WHERE c.project_id=?1 AND f.id=?2 \
@@ -318,6 +320,8 @@ pub(super) fn read_artifact(
                     row.get::<_, String>(3)?,
                     crate::gateway::application::AppMessageFileSnapshot {
                         title: row.get(14)?,
+                        width: row.get(15)?,
+                        height: row.get(16)?,
                         source_label: row.get(12)?,
                         deliverable: row.get(13)?,
                         id: file_id,
