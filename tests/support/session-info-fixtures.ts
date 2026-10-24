@@ -1,6 +1,6 @@
 import type { SessionPendingAsks } from "../../packages/butler-app/client/shared/pending-asks-contracts.ts";
 import { probeFocusRingFrames, type FocusRingClip } from "./focus-ring-clipping.ts";
-import type { Locator, Page } from "playwright";
+import type { Locator, Page, Route } from "playwright";
 import type { EpicProgressSnapshot } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 import type { QueuedMessageRecord, SessionView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 import { HARNESS_SUMMARY } from "../../packages/butler-app/client/ui/src/app/fixtures.ts";
@@ -41,6 +41,15 @@ export async function replaySession(page: Page, view: () => SessionView, asksOpe
   await page.route("**/session-view?**", route => route.fulfill({ json: { protocol_version: "butler.app.v1", data: view() } }));
 }
 
+/** Fail only the browser projection request; the native App remains unchanged. */
+export async function failPendingAsksRead(page: Page) {
+  const fail = (route: Route) => route.fulfill({
+    status: 503, json: { error: "Projection temporarily unavailable" },
+  });
+  await page.route("**/sessions/*/pending-asks", fail);
+  return () => page.unroute("**/sessions/*/pending-asks", fail);
+}
+
 export async function installSessionBrowser(page: Page) {
   await page.addInitScript(() => {
     const state = { enabled: true, blocked: false, activeId: null, nativeCovered: false, tabs: [] };
@@ -63,7 +72,7 @@ function pendingPage(view: SessionView, open: boolean): SessionPendingAsks {
     ask_id: question.request_ref, kind: "question", session_id: view.session_id, source_session_id: view.session_id,
     source_turn_id: question.source_turn_id, source_message_id: view.messages.find(message => message.role === "assistant")?.id ?? null,
     source_call_id: null, title: question.questions.questions[0]!.title, blocking: true, deferred: false,
-    waiting_since: view.updated_at, state: "open", created_at: view.updated_at, actions: ["answer"],
+    waiting_since: new Date().toISOString(), state: "open", created_at: view.updated_at, actions: ["answer"],
   }));
     if (asks.length) asks.push(
     { ...asks[0]!, ask_id: "release-approval", kind: "approval", title: "릴리스 노트 초안 커밋", actions: ["open"], waiting_since: new Date(Date.now() - 120000).toISOString() },

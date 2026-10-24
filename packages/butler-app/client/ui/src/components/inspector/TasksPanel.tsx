@@ -18,12 +18,11 @@ export function TasksPanel() {
 
 function SessionTasksPanel({ sessionId }: { sessionId: string }) {
   const runtimeId = useButlerStore(s => sessionFromNavigation(s.navigation, sessionId)?.session_hint ?? sessionId);
-  const visible = true;
   const onOpenSession = useButlerStore(state => state.openSessionObserver);
   const state = useTaskGraphs(s => s.taskGraphs[sessionId] ?? EMPTY_TASK_GRAPHS);
   const update = useTaskGraphs(s => s.update);
   const [document, setDocument] = useState<TaskGraphDocument | null>(null);
-  useEffect(() => visible ? observeTaskGraphs(sessionId, runtimeId) : undefined, [sessionId, runtimeId, visible]);
+  useEffect(() => observeTaskGraphs(sessionId, runtimeId), [sessionId, runtimeId]);
   const c = appCopy.taskGraph;
   const single = state.graphs.length === 1 ? state.graphs[0] : undefined;
   const onSelect = (selected: string) => update(sessionId, { selected, selectionExplicit: true });
@@ -36,7 +35,7 @@ function SessionTasksPanel({ sessionId }: { sessionId: string }) {
       empty={state.graphs.length === 0} emptyLabel={state.loading ? appCopy.settings.sectionState.loading : state.error ? appCopy.settings.sectionState.error : c.empty}
       headerMeta={single ? graphMeta(single) : state.graphs.length ? c.graphsSummary(state.graphs.length, state.graphs.filter(g => g.state === "running").length) : undefined}>
       {state.graphs.map(graph => <TaskGraphView key={graph.graph_id} graph={graph} selected={state.selected}
-        single={Boolean(single)} open={Boolean(state.open[graph.graph_id])} visible={visible}
+        single={Boolean(single)} open={Boolean(state.open[graph.graph_id])}
         onToggle={() => update(sessionId, { open: { ...state.open, [graph.graph_id]: !state.open[graph.graph_id] } })}
         onSelect={onSelect} onOpenSession={onOpenSession} onOpenDocument={onOpenDocument} />)}
     </TaskGraphPanel>

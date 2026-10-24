@@ -309,7 +309,6 @@ interface ButlerStore {
   ) => Promise<void>;
   retryTurn: (turnId: string) => Promise<void>;
   retryTurnWithCurrentControls: (turnId: string) => Promise<void>;
-  controlWorker: (workerId: string, action: string) => Promise<void>;
   navigateCommandResult: (result: CommandPaletteResult) => void;
 }
 
@@ -2443,31 +2442,6 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       set({ status: { label: "ready", tone: "ok" } });
     } finally {
       set({ retryingTurnId: null });
-    }
-  },
-
-  controlWorker: async (workerId, action) => {
-    try {
-      const result = await api<{ notice?: MessageRecord }>(
-        `/worker-activity/${encodeURIComponent(workerId)}/control`,
-        {
-          method: "POST",
-          body: JSON.stringify({ action }),
-        },
-      );
-      if (result.notice?.chat_id === get().activeChatId) {
-        set((state) => ({
-          messages: result.notice
-            ? mergeMessages(state.messages, [result.notice])
-            : state.messages,
-        }));
-      }
-      await get().refreshSessionSummary(get().activeChatId);
-    } catch (error) {
-      notifyError(error, appCopy.interfaceFeedback.workerControlFailed, {
-        id: `worker-control-${workerId}`,
-      });
-      set({ status: { label: "ready", tone: "ok" } });
     }
   },
 

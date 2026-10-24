@@ -581,14 +581,11 @@ export interface AppCopy {
     contextChart: string;
     contextUnavailable: string;
     noProgress: string;
-    branchDetails: string;
     gitBranch: string;
-    noVisibleSkills: string;
     detachedHead: string;
     notGit: string;
     noWorkspace: string;
     noGit: string;
-    unavailableWorktree: string;
     worktree: string;
     projectFolder: string;
     projectWorkspace: string;
@@ -596,7 +593,6 @@ export interface AppCopy {
     unavailable: string;
     dirty: string;
     clean: string;
-    noWorkers: string;
     recentActivity: string;
     noRecentActivity: string;
     activeSessions: string;
@@ -1237,7 +1233,6 @@ export interface AppCopy {
       workers: string;
     };
     workers: {
-      showDetails: string;
       hideDetails: string;
     };
   };

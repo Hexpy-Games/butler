@@ -48,6 +48,19 @@ export function publishPendingAsksEvent(event: TimelineEvent) {
     for (const [sessionId, reader] of readers) refresh(sessionId, reader);
   } else if (event.type === "pending_asks.changed" && typeof event.payload?.session_id === "string") {
     const reader = readers.get(event.payload.session_id);
-    if (reader) refresh(event.payload.session_id, reader);
+    if (!reader) return;
+    const sessionId = event.payload.session_id;
+    const { open_count: openCount, ask_id: askId, state } = event.payload as Record<string, unknown>;
+    if (typeof openCount === "number" && Number.isInteger(openCount) && openCount >= 0) {
+      reader.controller?.abort();
+      reader.revision++;
+      reader.page = {
+        session_id: sessionId,
+        open_count: openCount,
+        asks: openCount === 0 ? [] : (reader.page?.asks ?? []).filter(ask => ask.ask_id !== askId || state === "open"),
+      };
+      for (const listener of reader.listeners) listener();
+    }
+    refresh(sessionId, reader);
   }
 }

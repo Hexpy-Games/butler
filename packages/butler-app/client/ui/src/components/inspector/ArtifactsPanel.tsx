@@ -15,10 +15,9 @@ import {
 } from "@/components/artifacts/artifactDisplay";
 
 export function ArtifactsPanel({
-  artifacts, title, compact = false,
+  artifacts, compact = false,
 }: {
   artifacts: SessionArtifactSummary[];
-  title?: string;
   compact?: boolean;
 }) {
   useAppLocale();
@@ -57,7 +56,7 @@ export function ArtifactsPanel({
   return (
     <InspectorInset>
       <Section
-        title={compact ? undefined : title ?? appCopy.artifacts.title}
+        title={compact ? undefined : appCopy.artifacts.title}
         gap="md"
       >
         {compact && <SessionSectionHeader title={appCopy.sessionInfo.artifacts} count={allArtifacts.length} />}

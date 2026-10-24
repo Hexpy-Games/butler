@@ -1,10 +1,13 @@
 import type { PendingAsk } from "@/app/pendingAsks.ts";
-import { appCopy, getAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
+import { relativeAge } from "@/app/utils.ts";
+import { useMinuteClock } from "@/app/space/minute-clock.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useMessageNavigation } from "@/app/messageNavigation.ts";
 import { Clickable, IconSlot, MessageSquare, ShieldQuestion, Stack, Typo } from "@/butler-ds";
 
 export function PendingAskRows({ asks }: { asks: PendingAsk[] }) {
+  useMinuteClock(asks.length > 0);
   return asks.map(ask => {
     const row = <Stack align="row" cross="start" gap="sm">
       <IconSlot size="sm" minHeight="line" tone="secondary">
@@ -22,10 +25,7 @@ export function PendingAskRows({ asks }: { asks: PendingAsk[] }) {
 
 function askMeta(ask: PendingAsk): string {
   const c = appCopy.sessionInfo;
-  const elapsed = Math.max(0, Date.now() - Date.parse(ask.waiting_since));
-  const unit = elapsed >= 86400000 ? "day" : elapsed >= 3600000 ? "hour" : "minute";
-  const divisor = unit === "day" ? 86400000 : unit === "hour" ? 3600000 : 60000;
-  const time = new Intl.RelativeTimeFormat(getAppLocale(), { numeric: "auto" }).format(-Math.floor(elapsed / divisor), unit);
+  const time = relativeAge(ask.waiting_since);
   return [ask.kind === "approval" ? c.approval : c.question, time, ask.deferred ? c.deferred : null].filter(Boolean).join(" · ");
 }
 

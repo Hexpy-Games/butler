@@ -5,7 +5,7 @@ import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
-import { auditSessionInfoFocus, installSessionBrowser, installPendingAskEvents, pendingAsksChanged, populatedSession, replaySession, sessionQuestion } from "../support/session-info-fixtures.ts";
+import { auditSessionInfoFocus, failPendingAsksRead, installSessionBrowser, installPendingAskEvents, pendingAsksChanged, populatedSession, replaySession, sessionQuestion } from "../support/session-info-fixtures.ts";
 import type { SessionView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 import type { EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 
@@ -50,7 +50,7 @@ try {
   await page.goto(server.url);
   await loaded;
   await page.locator('[data-test-class~="conversation"]').waitFor();
-  const capture = (name: string) => page.screenshot({ path: join(shots, `${before ? "before-" : ""}${name}-${theme}-${page.viewportSize()!.width}.png`), animations: "disabled" });
+  const capture = (name: string) => process.env.BUTLER_SESSION_INFO_CAPTURE_ONLY && name !== process.env.BUTLER_SESSION_INFO_CAPTURE_ONLY ? Promise.resolve() : page.screenshot({ path: join(shots, `${before ? "before-" : ""}${name}-${theme}-${page.viewportSize()!.width}.png`), animations: "disabled" });
   if (before) {
     await capture("conversation");
     await page.getByRole("button", { name: "오른쪽 패널 보기", exact: true }).click();
@@ -73,6 +73,7 @@ try {
     assert.equal(await aside.getByRole("button", { name: "대화 열기", exact: true }).count(), 0);
     assert.equal(await aside.getByText("아직 작업이 없습니다", { exact: true }).count(), 0);
     assert.equal(await aside.locator('[data-session-section="asks"]').getByText("3", { exact: true }).count(), 1);
+    await aside.getByText("질문 · 지금", { exact: true }).waitFor();
     await capture("all-sections-dot");
     await aside.getByText("작업 대기열", { exact: true }).scrollIntoViewIfNeeded();
     await capture("available-sections-bottom");
@@ -108,11 +109,13 @@ try {
     await page.locator('[data-test-class="titlebar-browser-toggle"]').click();
     assert.equal(await page.getByRole("button", { name: "작업 그래프", exact: true }).count(), 0);
     asksOpen = false;
-    const changed = page.waitForResponse(response => response.url().endsWith(`/sessions/${session.id}/pending-asks`) && response.ok());
+    const restorePendingAsksRead = await failPendingAsksRead(page);
+    const changed = page.waitForResponse(response => response.url().endsWith(`/sessions/${session.id}/pending-asks`) && response.status() === 503);
     await pendingAsksChanged(page, session.id);
     await changed;
     await page.waitForFunction(() => !document.querySelector('[data-test-class="session-info-toggle"] [data-slot="icon-button-indicator"]'));
     assert.equal(await aside.locator('[data-session-section="asks"]').count(), 0);
+    await restorePendingAsksRead();
     // Empty canonical session: all data-dependent sections, including the linked task, disappear.
     const { session: empty } = await server.api<{ session: { id: string } }>("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: "다음 릴리스 준비" }) });
     view = await server.api<SessionView>(`/session-view?session_id=${empty.id}`);
