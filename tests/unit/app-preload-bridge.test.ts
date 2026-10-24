@@ -485,7 +485,9 @@ test("canon upload preserves bounded desktop error codes and file metadata", asy
     expect(apiErrorCode(error)).toBe(code);
     expect((error as { status: number }).status).toBe(status);
   }
-  const stored = { file_id: "file-id", width: 31, height: 17 };
+  const stored = { file_id: "file-id", width: 31, height: 17, kind: "image" as const,
+    mime_type: "image/png", safe_name: "image.png", size_bytes: 1, sha256: "hash",
+    url: "/message-files/file-id", created_at: "now" };
   const result = await withBridge({ uploadCanonFile: async () => ({ ok: true, data: { file: stored } }) }, () => uploadCanonFile("project", file));
   expect(result).toEqual(stored);
 });
