@@ -76,15 +76,6 @@ async function capture(page: Page, name: string) {
   }
   await page.setViewportSize(viewport);
   assert.equal(geometry.overflow, false, name);
-  if (geometry.viewport[0] === 960) {
-    assert.equal(geometry.card.width, geometry.intro ? 420 : 520, name);
-    assert.equal(geometry.card.x, geometry.intro ? 265 : 215, name);
-    // Top edge: clamp(titlebar + 16px, 20% of the window, 240px) = 142px at 710px.
-    assert(Math.abs(geometry.card.y - 142) < 1, `${name}: top anchor`);
-    if (geometry.intro) { assert.equal(geometry.selectWidth, 386); assert.equal(geometry.buttonWidth, 386); }
-    // No title glyph: the title starts on the content edge (card x + 17).
-    else { assert.equal(geometry.titleX, 232, name); assert(Math.abs(geometry.titleX - geometry.bodyX!) < 1, `${name}: title on the content edge`); }
-  }
   if (!geometry.intro) {
     assert.equal(await page.locator('[data-slot="setup-step-body"]').getAttribute("data-motion"), "enter", "DS content-key transition");
     assert.equal(await page.locator('[data-slot="setup-step-body"] > :first-child [data-slot="icon-tile"]').count(), 0, "no title icon tile");

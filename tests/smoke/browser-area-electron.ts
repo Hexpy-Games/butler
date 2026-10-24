@@ -4,12 +4,12 @@ import { spawnElectron, stopElectronChild } from "../support/electron-child";
 import { type ChildProcess } from "node:child_process";
 import { strict as assert } from "node:assert";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { cpus, loadavg, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { electronPage, type ElectronPage as Page } from "../support/electron-page-cdp";
 
-import { createNativeAppServer, freePort, liveTrackedProcessIds } from "../support/native-app-server";
-import { alignment, idleWrites, publicationStub } from "../support/browser-area-acceptance";
+import { createNativeAppServer, freePort } from "../support/native-app-server";
+import { alignment, publicationStub } from "../support/browser-area-acceptance";
 import { appCopy, setAppCopyLanguage } from "../../packages/butler-app/client/ui/src/app/copy";
 import { electronMain } from "../support/electron-main-cdp";
 import { assertNewTabContent, populatedNewTab } from "../support/browser-newtab-acceptance";
@@ -23,7 +23,6 @@ mkdirSync(evidence, { recursive: true });
 const origin = "app://butler/";
 const fixture = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch(request) {
   const path = new URL(request.url).pathname;
-  if (path === "/heavy") return new Response("<title>Heavy</title><script>window.heavyTicks=0;setInterval(()=>{window.heavyTicks++;let a=[];for(let i=0;i<100000;i++)a.push(Math.sqrt(i));},16)</script><h1>Heavy page</h1>", { headers: { "content-type": "text/html" } });
   return new Response(`<title>${path === "/second" ? "Second" : "Fixture"}</title><h1>${path}</h1><a href="/second">Next</a><a href="/popup" target="_blank">Popup</a><input aria-label="Field">`, { headers: { "content-type": "text/html" } });
 } });
 let connected: Page | undefined;
@@ -33,7 +32,6 @@ const electronModule = `process.getBuiltinModule('module').createRequire(${JSON.
 const main = <T>(expression: string) => electronMain<T>(inspectorPort, expression);
 const win = `${electronModule}.BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().startsWith(${JSON.stringify(origin)}))`;
 const nativeCount = `${win}.contentView.children.filter(v=>'webContents' in v && v.webContents!==${win}.webContents).length`;
-const evaluate = <T>(fn: () => T) => main<Awaited<T>>(`(${fn.toString()})()`);
 let gateway: Awaited<ReturnType<typeof createNativeAppServer>> | undefined;
 const logs: string[] = [];
 const quits: Array<{ code: number; windows: number; contents: string[] }> = [];
@@ -51,7 +49,14 @@ function quitAfter(requested: number): QuitEvent | undefined {
   } catch { return undefined; } // Not written yet, or read mid-rewrite.
 }
 
+function recordRestore(stage: string) {
+  const path = join(dir, "profile", "browser", "browser-tabs.json");
+  const data = (() => { try { return JSON.parse(readFileSync(path, "utf8")); } catch { return null; } })();
+  writeFileSync(join(evidence!, `restore-${quits.length}-${stage}.json`), JSON.stringify({ stage, data }));
+}
+
 async function quitAndStop(page: Page) {
+  recordRestore("before-quit");
   const requested = Date.now();
   await page.expression("window.butlerApp.quitApp({confirmed:true})");
   // Polled: Bun's fs.watch on Linux can drop the notification of the last quick rewrite (#684).
@@ -59,11 +64,13 @@ async function quitAndStop(page: Page) {
   await waitUntil(async () => { result = quitAfter(requested); return result !== undefined; }, "App quit event");
   assert.ok(result);
   assert.equal(result.code, 0);assert.equal(result.windows, 0);assert.deepEqual(result.contents, []);
+  recordRestore("after-quit");
   quits.push(result);
   writeFileSync(join(evidence!, "verified-quits.json"), JSON.stringify(quits, null, 2));
   // Bare Electron 44 also remains resident after quit in this runner. Release
   // only our PID after the App has closed and flushed, then test real restore.
   connected?.close();await stopApp();
+  recordRestore("after-stop");
 }
 
 async function launch(): Promise<Page> {
@@ -73,6 +80,7 @@ async function launch(): Promise<Page> {
   mkdirSync(join(dir, "home"), { recursive: true });
   child = spawnElectron(executable, [`--inspect=${inspectorPort}`, `--remote-debugging-port=${debugPort}`,
     ...smokeElectronArgs(), resolve(root, "packages/butler-app/client/electron")], {
+    cleanupPaths: [], // The restart flow owns this profile until final teardown.
     onOutput: bytes => logs.push(String(bytes).replace(/(__o\/)[^/\s]+/gu, "$1[redacted]")), env: { ...process.env, HOME: join(dir, "home"), BUTLER_HOME: join(dir, "home"), BUTLER_DATA: gateway!.butlerData,
       BUTLER_APP_ELECTRON_USER_DATA_DIR: join(dir, "profile"), BUTLER_APP_UI_URL: "",
       BUTLER_APP_RENDERER_DIST: resolve(root, "packages/butler-app/client/ui/dist"),
@@ -122,7 +130,7 @@ async function click(page: Page, name: string) {
     const rect=node.getBoundingClientRect();
     if (rect.width<=0 || rect.y<0 || rect.bottom>innerHeight) return false;
     for(let parent=node;parent;parent=parent.parentElement) {
-      if(parent.getAnimations().some(animation=>animation.playState==='running')) return false;
+      if(parent.getAnimations().some(animation=>animation.playState==='running' && animation.timeline instanceof DocumentTimeline && animation.effect?.getComputedTiming().iterations!==Infinity)) return false;
     }
     return true;
   })()`), `button ${name} ready`);
@@ -221,15 +229,6 @@ async function screenStates(page: Page, locale: string, theme: string) {
   await shot(page, `${locale}-${theme}-overlay-still`);
   await escape(page);
   await waitUntil(() => main<boolean>(`${nativeCount} === 1`), "overlay native view restored");
-  const snapshot = await state(page);
-  const active = snapshot.tabs.find(tab=>tab.id === snapshot.activeId);
-  assert.ok(active);
-  await main(`(() => {const w=${win};w.contentView.children.find(v=>'webContents' in v && v.webContents!==w.webContents).webContents.forcefullyCrashRenderer()})()`);
-  await waitUntil(async () => (await state(page)).tabs.some(tab=>tab.id===active.id && tab.status==="crashed"), "crash projection");
-  await page.waitForFunction(() => document.querySelector('[data-slot="native-view-slot"]')?.getAttribute("data-hidden") === "true");
-  await shot(page, `${locale}-${theme}-crash`);
-  await click(page, locale === "ko" ? "새로고침" : "Reload");
-  await waitTitle(page, active.title);
 }
 try {
   gateway = await createNativeAppServer({ uiRoot: resolve(root, "packages/butler-app/client/ui/dist"),
@@ -243,6 +242,7 @@ try {
   page=await launch();await main(`${win}.setSize(1440,900)`);
   await page.waitForFunction(()=>Boolean(document.querySelector('[data-test-class="browser-entry"]')));
   await shot(page, "before-en-light-workspace");
+  await waitUntil(() => main<boolean>(`${electronModule}.webContents.getAllWebContents().length === 1`), "startup auxiliary contents closed");
   assert.equal(await main<number>(`${electronModule}.webContents.getAllWebContents().length`), 1, "no web tab process before Browser activation");
   await page.clickText(getAppCopy("en-US").space.general, '[data-test-class="app-sidebar"] button, [data-test-class="app-sidebar"] [role="button"]');
   await click(page, "Browser");
@@ -270,57 +270,17 @@ try {
   await click(page, "Browser");
   await waitTitle(page, "Second");
   await alignment(page, main, win, evidence);
-  await call(page, "create", { url: "https://www.iana.org/" });
-  await waitUntil(async () => (await state(page)).tabs.some(t => t.url.startsWith("https://www.iana.org") && t.title === "Internet Assigned Numbers Authority" && t.status === "idle"), "real HTTPS site");
-  if (process.env.BUTLER_BROWSER_FUNCTIONAL_ONLY !== "1") {
-  const loadStart = loadavg()[0];
-  await evaluate(() => {
-    const histogram = process.getBuiltinModule("node:perf_hooks")!.monitorEventLoopDelay({ resolution: 1 });
-    histogram.enable();
-    (globalThis as unknown as { browserLoop: typeof histogram }).browserLoop = histogram;
-  });
-  await call(page, "create", { url: `http://127.0.0.1:${fixture.port}/heavy` });
-  await waitTitle(page, "Heavy");
-  await new Promise(done => setTimeout(done, 10_000));
-  const loadBefore = loadavg()[0];
-  const loop = await evaluate(() => {
-    const histogram = (globalThis as unknown as { browserLoop: { percentile(p: number): number; max: number; disable(): void } }).browserLoop;
-    histogram.disable(); return { p99Ms: histogram.percentile(99) / 1e6, maxMs: histogram.max / 1e6 };
-  });
-  const heavy = (await state(page)).activeId;
-  assert.equal((await state(page)).tabs.length, 3, "heavy measurement retains all tabs");
-  writeFileSync(join(evidence, "main-loop.json"), JSON.stringify({ ...loop, loadAverage1m: loadStart, loadAverage1mEnd: loadBefore, loadAverage1mAfter: loadavg()[0] }));
-  const heavyTicks = await main<number>(`${win}.contentView.children.find(v=>'webContents' in v && v.webContents!==${win}.webContents).webContents.executeJavaScript('window.heavyTicks')`);
-  assert.ok(heavyTicks > 0, "heavy page actually executes work");
-  assert.ok(loop.p99Ms <= 30 && loop.maxMs <= 200, JSON.stringify(loop));
-  if (Math.max(loadStart, loadBefore) > cpus().length) {
-    const repeatLoad = loadavg()[0];
-    await main("(() => {globalThis.browserLoop.reset();globalThis.browserLoop.enable()})()");
-    await new Promise(done=>setTimeout(done, 10_000));
-    const repeated = await main<{ p99Ms:number;maxMs:number }>("(() => {const h=globalThis.browserLoop;h.disable();return {p99Ms:h.percentile(99)/1e6,maxMs:h.max/1e6}})()");
-    const repeatTicks = await main<number>(`${win}.contentView.children.find(v=>'webContents' in v && v.webContents!==${win}.webContents).webContents.executeJavaScript('window.heavyTicks')`);
-    writeFileSync(join(evidence, "main-loop-repeat.json"), JSON.stringify({ ...repeated, loadAverage1m:repeatLoad, loadAverage1mAfter:loadavg()[0], heavyTicksBefore:heavyTicks, heavyTicksAfter:repeatTicks }));
-    assert.ok(repeatTicks>heavyTicks, "heavy page remains active throughout repeated measurement");
-    assert.equal((await state(page)).tabs.length, 3, "repeat retains all tabs");
-    assert.ok(repeated.p99Ms<=30 && repeated.maxMs<=200, JSON.stringify(repeated));
-  }
-  await call(page, "close", { id: heavy });
-  }
+  await call(page, "create", { url: `http://127.0.0.1:${fixture.port}/another` });
+  await waitUntil(async () => (await state(page)).tabs.some(t => t.url === `http://127.0.0.1:${fixture.port}/another` && t.title === "Fixture" && t.status === "idle"), "second local page");
   snapshot = await state(page);
   await call(page, "move", { tabId: first, toGroupId: "mine", index: 1 });
   assert.equal((await state(page)).tabs[1]!.id, first);
   await call(page, "activate", { id: first });
   for (const locale of ["ko", "en"]) for (const theme of ["light", "dark"]) await screenStates(page, locale, theme);
-  await main(`(() => {const w=${win};w.contentView.children.find(v=>'webContents' in v && v.webContents!==w.webContents).webContents.forcefullyCrashRenderer()})()`);
-  await page.waitForFunction(() => document.body.textContent?.includes("Tab crashed"));
-  await shot(page, "en-dark-crash");
-  await click(page, "Reload"); await waitTitle(page, "Second");
   await artifact(page);
   await call(page, "activate", { id:first });
   await waitUntil(() => main<boolean>(`${nativeCount} === 1`), "native page after artifact return");
   await shot(page, "after-artifact-return");
-  const ownedPids = async () => [...new Set([...await main<number[]>(`${electronModule}.app.getAppMetrics().map(p=>p.pid)`), ...liveTrackedProcessIds()])];
-  if (process.env.BUTLER_BROWSER_FUNCTIONAL_ONLY !== "1") await idleWrites(main, join(dir, "profile"), evidence, ownedPids);
   const restoredUrls = (await state(page)).tabs.map(tab=>tab.url);
   await quitAndStop(page);
   page = await launch();

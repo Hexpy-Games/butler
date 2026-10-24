@@ -29,7 +29,10 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Hand-built rows drift in icon size and active style.", render: () => <Stack gap="xs"><NavRow label="General" active /><NavRow label="Appearance" /></Stack> },
     },
   ],
-  content: ["Section names match the page titles exactly."],
+  content: [
+    "Section names match the page titles exactly.",
+    "Row fills follow the surface (see NavRow): in the cards frame a tinted light shell gives the white family; elsewhere the shades.",
+  ],
   accessibility: ["Active items set aria-current; badges are text (a number), not color only."],
-  tokens: ["--sidebar-row-height", "--selection-strong", "--typo-section-title-size"],
+  tokens: ["--sidebar-row-height", "--selection-strong", "--sidebar-selected-bg", "--sidebar-hover-bg", "--typo-section-title-size"],
 };

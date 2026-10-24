@@ -15,7 +15,13 @@ boundaries.
 - ESLint rules (`butler-ds/eslint-plugin.ts`): `no-classname-on-ds`,
   `no-inline-style`, `no-raw-interactive`, `no-raw-typography`,
   `unsafe-style-allowlist` (every `UNSAFE_style` is counted per file against
-  `butler-ds/baseline/unsafe-style.json`; new uses need owner approval).
+  `butler-ds/baseline/unsafe-style.json`; new uses need owner approval),
+  `settings-field-grouping` (`butler-ds/settings-rules.ts`: a `Stack`,
+  `Inline`, `Grid` or `gap` wrapper around settings fields or sections, which
+  must take their spacing from the section card and `SettingsPage`, and
+  section header `actions` on a section whose `kind` is not `"list"`; a
+  product component counts as a field or section when its module renders one,
+  followed through imports and re-exports).
 - Stylelint rules (`butler-ds/stylelint-plugin.ts`): `token-only-values`,
   `no-ds-internal-selector`, `no-ds-custom-prop-override`.
 - `no-new-css-module`: product `*.module.css` files are frozen to the

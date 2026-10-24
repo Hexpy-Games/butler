@@ -2,7 +2,6 @@ import { useAppLocale } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { modelDisplayName, runtimeModels } from "@/app/utils.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
-import { Stack } from "@/butler-ds";
 import { SettingsSelect } from "./SettingsSelect";
 
 export function RecallSettings() {
@@ -14,7 +13,7 @@ export function RecallSettings() {
   const catalog = useButlerStore((state) => state.modelCatalog);
   if (!draft) return null;
   const models = runtimeModels(catalog).filter((model) => model.enabled !== false && model.registered === true);
-  return <Stack gap="md">
+  return <>
     <SettingsSelect settingId="recall-mode" label={ko ? "회상 방식" : "Recall"}
       description={ko ? "정확하게 회상하면 몇 초 더 걸릴 수 있어요." : "More accurate recall can take a few seconds longer."}
       value={draft.recall_mode} disabled={saving}
@@ -25,5 +24,5 @@ export function RecallSettings() {
       onChange={(value) => { void update({ recall_judge_model: value }, setSettings); }}
       options={[{ value: "default", label: ko ? "기억 모델과 동일" : "Same as memory model" },
         ...models.map((model) => ({ value: model.model_ref, label: `${model.provider_label} / ${modelDisplayName(model)}` }))]} />}
-  </Stack>;
+  </>;
 }

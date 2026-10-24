@@ -37,3 +37,12 @@
 .meta {
   color: var(--text-tertiary);
 }
+
+/* Fields revealed together (a disclosure panel, an expanded region): the
+   same field gap as fields placed directly in the section card. */
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--settings-field-gap);
+  min-width: 0;
+}

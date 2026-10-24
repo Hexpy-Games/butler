@@ -76,6 +76,9 @@ try {
   await waitBrowser(() => app.page.expression(`!document.querySelector('${pane}') && document.querySelector('[data-test-class=custom-titlebar]')?.textContent.includes('Second conversation')`), "second conversation has its own closed browser pane");
   assert.equal(await app.page.expression(`Boolean(document.querySelector('${pane}'))`), false);
   await togglePane(app, true);
+  // 8edeb6fce5: conversation panes create tabs only through New tab.
+  await app.click("New tab");
+  await waitBrowser(async () => (await app.call<{ activeId: string }>("state")).activeId !== second, "second conversation creates its own tab");
   const other = (await app.call<{ activeId: string }>("state")).activeId;
   assert.notEqual(other, second);
   await app.click(getAppCopy("en-US").space.general); await nativeAligned(app);
@@ -108,10 +111,11 @@ try {
     await waitBrowser(() => app.page.expression("innerWidth === 344 && innerHeight === 480"), "window at its minimum size");
     assert.deepEqual(await app.main(`${app.win}.getMinimumSize()`), [344, 480]);
     await nativeAligned(app);
+    // 266487a220: overflow tabs scroll sideways once their minimum widths no longer fit.
     const clipped = await app.page.expression<string[]>(`[...document.querySelectorAll('${pane} [data-slot=browser-toolbar] :is(button,input), ${pane} [role=tab]')]
-      .filter(n => n.getBoundingClientRect().width > 0).flatMap(n => { const r = n.getBoundingClientRect(), hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+      .filter(n => n.getBoundingClientRect().width > 0).flatMap(n => { n.scrollIntoView({block:"nearest",inline:"center",behavior:"instant"}); const r = n.getBoundingClientRect(), hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
         return r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight && n.contains(hit) ? [] : [n.getAttribute('aria-label') || n.textContent]; })`);
-    assert.deepEqual(clipped, [], "Browser tab strip and toolbar fit the minimum window");
+    assert.deepEqual(clipped, [], "Browser tabs and toolbar remain reachable at the minimum window");
     await app.shot(`${locale}-${theme}-minimum-hub`);
   }
   writeFileSync(join(evidence, "shell-result.json"), JSON.stringify({ ok: true, elapsedMs: Date.now() - started, facts }, null, 2));

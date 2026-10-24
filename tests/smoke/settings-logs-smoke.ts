@@ -117,8 +117,11 @@ async function expectZipDownload(page: Page, click: () => Promise<void>) {
 async function developerOffChecks(page: Page, prefix: string) {
   await page.keyboard.press("ControlOrMeta+k");
   const dialog = page.getByRole("dialog", { name: copy.commandPalette.label });
+  // The palette searches each query after it renders; its answer means the query is shown.
+  const searched = page.waitForResponse((response) =>
+    response.url().includes(`/command-palette?query=${encodeURIComponent(copy.settings.sections.logs)}`));
   await dialog.getByRole("combobox").fill(copy.settings.sections.logs);
-  await page.waitForTimeout(400);
+  await searched;
   assert.equal(await dialog.getByRole("option").filter({ has: page.getByText(copy.settings.sections.logs, { exact: true }) }).count(), 0,
     "로그 is hidden outside developer mode");
   await page.keyboard.press("Escape");
@@ -187,14 +190,24 @@ async function rowChecks(page: Page, prefix: string) {
 /** Live rows: at the top they join the list; scrolled away they wait behind 새 줄 N개. */
 async function liveChecks(page: Page, server: NativeAppServerHandle) {
   const viewer = section(page, "logs-viewer");
-  await viewer.getByRole("switch", { name: logs.live, exact: true }).click();
-  await page.waitForTimeout(500);
+  const live = viewer.getByRole("switch", { name: logs.live, exact: true });
+  const streaming = page.waitForResponse((response) => new URL(response.url()).pathname === "/logs/live");
+  await live.click();
+  await streaming;
   const before = await rows(page).count();
   await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko" }) });
   await page.waitForFunction(([selector, count]) => document.querySelectorAll(selector as string).length > (count as number),
     ['[data-settings-section-id="logs-viewer"] [data-test-class="log-row"]', before] as const);
   await rows(page).last().scrollIntoViewIfNeeded();
-  await page.waitForTimeout(300);
+  // Live rows wait once the filters leave the view; let the list see that before the next row.
+  await live.evaluate((element) => new Promise<void>((done) => {
+    const watcher = new IntersectionObserver(([entry]) => {
+      if (entry?.isIntersecting) return;
+      watcher.disconnect();
+      requestAnimationFrame(() => done());
+    });
+    watcher.observe(element);
+  }));
   const scrolled = await rows(page).count();
   await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko" }) });
   const pending = page.locator('[data-test-class="logs-new-lines"]');

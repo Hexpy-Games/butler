@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { Stack } from "@/butler-ds";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import { useLocalModelState } from "./hooks/useLocalModelState";
@@ -105,7 +104,7 @@ export function LocalModelSettings({
   });
 
   return (
-    <Stack gap="md">
+    <>
       <LocalModelApiSection
         apiKey={apiKey}
         setApiKey={setApiKey}
@@ -149,6 +148,6 @@ export function LocalModelSettings({
           onDelete={deleteModel}
         />
       )}
-    </Stack>
+    </>
   );
 }

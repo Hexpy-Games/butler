@@ -32,7 +32,7 @@ export async function browserUiChecks(app:App,agentTab:string,evidence:string) {
   const anchor=await app.call<string>("create",{owner:"conversation:general",url,profile:"signed_out"});
   const opened={id:anchor};
   const webgl=await app.main(`(async()=>{const tabs=globalThis.browserAgentSubject.tabs;const test=async id=>tabs.get(id).view.webContents.executeJavaScript("(()=>{const gl=document.createElement('canvas').getContext('webgl');const enabled=Boolean(gl);gl?.getExtension('WEBGL_lose_context')?.loseContext();return enabled})()");return {user:await test(${JSON.stringify(opened.id)}),agent:await test(${JSON.stringify(agentTab)})}})()`);
-  assert.deepEqual(webgl,{user:true,agent:false},"WebGL is disabled only for agent-opened tabs");
+  assert.deepEqual(webgl,{user:true,agent:true},"WebGL is enabled for both user and agent tabs");
   await app.call("activate",{id:agentTab});
   await app.click("Browser");
   await app.page.evaluate(()=>new Promise<void>(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done()))));

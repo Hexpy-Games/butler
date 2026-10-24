@@ -60,6 +60,8 @@ const [expanded, setExpanded] = useState(true);
   boundary and clips it below this header. This permits a transparent
   `--nav-sticky-surface` without overlapping text or losing native vibrancy.
   Outside that shell, use an opaque sticky surface to occlude scrolling content.
+  The header's hover and pressed fills follow NavRow's (`--nav-hover-bg` /
+  `--nav-selected-bg`, else the `--selection` shades) over that surface.
 
 ## Wrong use cases
 

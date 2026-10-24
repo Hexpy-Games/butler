@@ -4,6 +4,8 @@ import { ButtonContainer } from "../../components/ButtonContainer";
 import { Input } from "../../components/Input";
 import { Switch } from "../../components/Switch";
 import { KeyValueRow } from "../KeyValueRow";
+import { ProgressMeter } from "../ProgressMeter";
+import { SettingsActionField } from "../SettingsActionField";
 import { SettingsField } from "../SettingsField";
 import { SettingsPage } from "./SettingsPage";
 import { SettingsSection } from "./SettingsSection";
@@ -22,6 +24,8 @@ const copy = {
     notifications: "Notifications", replies: "New replies", check: "Check for updates",
     updates: "App", upToDate: "Up to date", info: "App info", version: "Version", name: "Name",
     apply: "Apply", reset: "Reset profile", servers: "No MCP servers yet.",
+    storage: "Storage", agentLogs: "Agent", agentMeta: "12 MB of 100 MB · 14 days",
+    clear: "Delete all logs", clearDescription: "Removes saved logs and bodies. This can't be undone.", clearAction: "Delete all…",
   },
   "ko-KR": {
     labels: { loading: "불러오는 중", error: "이 섹션을 불러오지 못했습니다.", retry: "다시 시도", empty: "아직 표시할 항목이 없습니다." },
@@ -29,6 +33,8 @@ const copy = {
     notifications: "알림", replies: "새 답변", check: "업데이트 확인",
     updates: "앱", upToDate: "최신 버전", info: "앱 정보", version: "버전", name: "이름",
     apply: "적용", reset: "프로필 초기화", servers: "아직 MCP 서버가 없습니다.",
+    storage: "저장 공간", agentLogs: "에이전트", agentMeta: "100 MB 중 12 MB · 14일",
+    clear: "로그 모두 삭제", clearDescription: "저장된 로그와 본문을 지웁니다. 되돌릴 수 없습니다.", clearAction: "모두 삭제…",
   },
 } as const;
 
@@ -61,6 +67,19 @@ function States({ locale }: ShowcaseRenderContext) {
   );
 }
 
+function StatusWithAction({ locale }: ShowcaseRenderContext) {
+  const t = copy[locale];
+  return (
+    <SettingsPage labels={t.labels}>
+      <SettingsSection id="storage" kind="status" title={t.storage}>
+        <ProgressMeter label={t.agentLogs} value={12} meta={t.agentMeta} />
+        <SettingsActionField id="sc-clear" label={t.clear} description={t.clearDescription}
+          action={<Button id="sc-clear" size="sm" variant="outline">{t.clearAction}</Button>} />
+      </SettingsSection>
+    </SettingsPage>
+  );
+}
+
 function Info({ locale }: ShowcaseRenderContext) {
   const t = copy[locale];
   return (
@@ -82,4 +101,5 @@ export const stories: ShowcaseStory[] = [
   { name: "Form sections", widths: ["375", "app"], render: (context) => <Form {...context} /> },
   { name: "Toolbar, loading, error and empty", widths: ["375", "app"], render: (context) => <States {...context} /> },
   { name: "Info rows with a sticky footer", render: (context) => <Info {...context} /> },
+  { name: "Status card with an action row (field gap)", widths: ["375", "app"], render: (context) => <StatusWithAction {...context} /> },
 ];

@@ -250,6 +250,6 @@ Before reporting completion:
 1. `npm --prefix packages/butler-app/client/ui run --silent typecheck`.
 2. `bun run lint:design` and `bun run lint:css` when CSS changed.
 3. `bun run lint:ds && bun run app:design-system:smoke`.
-4. `bun run app:design-system:smoke` (bundle check, navigation, viewer, cell overflow audit and motion trace) and `bun run app:layout:smoke` for layout changes.
+4. `bun run app:design-system:smoke` (bundle check, bundled fonts and conversation stories) and `bun run app:layout:smoke` for layout changes.
 5. `bun run render <ComponentName...>` (add `--viewport=mobile`) when rendered DS output changed.
 6. Run `packages/project-ledger/bin/project-ledger check --project "$PWD" --silent` for project closeout.

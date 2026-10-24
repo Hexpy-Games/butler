@@ -11,9 +11,11 @@ not inside a section, so fields can never float between cards.
 ## When to use this block
 
 Use it for every settings page and settings subpage. Pick `kind` by content:
-`form` for stacked fields, `list` for repeated rows (servers, archives,
-events), `status` for live status (usage metrics, permission diagnostics),
-`info` for read-only `KeyValueRow`s (app info).
+`form` for stacked fields and action rows, `list` for repeated rows
+(servers, archives, events), `status` for live status (usage metrics, log
+storage meters), `info` for read-only `KeyValueRow`s (app info). Fields are
+always 24px apart: a `status` or `info` card that holds a field uses the
+field gap (see `FormSection`, "Card gap by kind").
 
 ## Props
 
@@ -22,7 +24,7 @@ events), `status` for live status (usage metrics, permission diagnostics),
 `footer` (sticky page actions).
 
 `SettingsSection`: `id` (stable, listed in the page schema), `title?`,
-`description?`, `kind`, `actions?` (header toolbar), `state?`
+`description?`, `kind`, `actions?` (list toolbar, `kind="list"` only), `state?`
 (`ready | loading | error | empty`), `onRetry?`, `errorMessage?`,
 `emptyMessage?`.
 
@@ -66,7 +68,10 @@ import { SettingsPage, SettingsSection } from "@/butler-ds";
 ## Responsive behavior
 
 - The header toolbar sits at the inline end of the title and wraps under it
-  at narrow widths.
+  at narrow widths. It is a list toolbar: add, refresh or check, filter, or a
+  bulk action on every row of a `kind="list"` section. Reset, clear, free
+  up space, export and every other action is a `SettingsActionField` row in
+  the card (`bun run lint:ds` rejects header actions on other kinds).
 - The sticky footer spans the page width at every width.
 
 ## Wrong use cases
@@ -75,6 +80,9 @@ import { SettingsPage, SettingsSection } from "@/butler-ds";
 - Do not show an empty message while a section is still loading or failed.
 - Do not nest cards or panels inside the section card.
 - Do not repeat the page title as a section title.
+- Do not put a reset or clear button beside the section title; use a
+  `SettingsActionField` row with a description of what it removes.
+- Do not wrap sections in a `Stack`; `SettingsPage` owns the section gap.
 
 ## Tags
 

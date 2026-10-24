@@ -10,6 +10,7 @@ export const DS_ESLINT_RULES = [
   "no-raw-interactive",
   "no-raw-typography",
   "unsafe-style-allowlist",
+  "settings-field-grouping",
 ] as const;
 
 export const DS_STYLELINT_RULES = [

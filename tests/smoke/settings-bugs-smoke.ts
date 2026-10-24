@@ -59,7 +59,9 @@ async function capture(page: Page, prefix: string, state: string) {
   assert.equal(await page.evaluate(() => document.hidden), false, `${state}: capture page is visible`);
   await page.evaluate(() => document.fonts.ready);
   await page.waitForFunction(() => document.getAnimations().every((animation) =>
-    animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
+    // Scroll-driven animations follow scroll position, not time, and never finish.
+    animation.timeline !== document.timeline || animation.effect?.getTiming().iterations === Infinity ||
+      animation.playState !== "running"));
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${state}: no page overflow`);
   const name = `${prefix}-${state}.png`;
   console.log(`capture ${name}`);
