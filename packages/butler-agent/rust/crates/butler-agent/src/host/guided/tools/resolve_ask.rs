@@ -11,9 +11,10 @@ pub(super) async fn execute(
     let result = match serde_json::from_value::<ResolveAsk>(json!(call.arguments)) {
         Ok(input) => {
             let id = input.ask_id.clone();
+            let has_other_tool_result = owner.state.lock().has_other_tool_result;
             let result = owner
                 .authority
-                .resolve_ask(invocation.turn, owner.taint(), input)
+                .resolve_ask(invocation.turn, has_other_tool_result, input)
                 .await;
             match result {
                 Ok(result) => {

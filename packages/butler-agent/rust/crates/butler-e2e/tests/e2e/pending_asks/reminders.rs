@@ -1,6 +1,7 @@
 //! RM-01–RM-05 drive the real tool executor and cards with a scripted provider.
 use super::*;
 mod guards;
+mod ordering;
 mod projection;
 
 fn call(name: &str, args: &Value) -> Value {

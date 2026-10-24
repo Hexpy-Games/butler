@@ -1,7 +1,7 @@
 //! Chat settlements reuse the deferred-answer receipt lane; approvals stay click-only.
 use super::contracts::{AuthorityError, AuthorityResult, PrincipalAuthority, RequestDecision};
 use super::questions::{UserQuestionAnswer, UserQuestionResponse, UserQuestions};
-use crate::btcc::{TurnRecord, TurnTaint};
+use crate::btcc::TurnRecord;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -18,10 +18,10 @@ impl PrincipalAuthority {
     pub async fn resolve_ask(
         &self,
         turn: &TurnRecord,
-        taint: TurnTaint,
+        has_other_tool_result: bool,
         input: ResolveAsk,
     ) -> AuthorityResult<Value> {
-        if let Some(result) = guard(turn, taint, &input) {
+        if let Some(result) = guard(turn, has_other_tool_result, &input) {
             return Ok(result);
         }
         let owner = turn.session_id.clone();
@@ -61,7 +61,7 @@ impl PrincipalAuthority {
     }
 }
 
-fn guard(turn: &TurnRecord, taint: TurnTaint, input: &ResolveAsk) -> Option<Value> {
+fn guard(turn: &TurnRecord, has_other_tool_result: bool, input: &ResolveAsk) -> Option<Value> {
     if turn.wake_identity.is_some()
         || turn.context.get("scheduleRun").is_some()
         || turn.context.get("subsessionResult").is_some()
@@ -81,7 +81,7 @@ fn guard(turn: &TurnRecord, taint: TurnTaint, input: &ResolveAsk) -> Option<Valu
             "Approvals are settled only on their card. Tell the user it is waiting there.",
         ));
     }
-    if taint == TurnTaint::External {
+    if has_other_tool_result {
         return Some(refusal(
             "untrusted_context",
             "Settle asks before reading outside content in this turn. Leave it open; the user can answer on the card or in their next message.",

@@ -132,6 +132,8 @@ impl GuidedToolBinding {
 struct State {
     next_call_index: u64,
     output_checks: u8,
+    /// Any result other than resolve_ask has entered this turn.
+    has_other_tool_result: bool,
     answer_blocks: Vec<Value>,
     output_images: u8,
     journal_by_provider: HashMap<String, String>,
@@ -279,6 +281,12 @@ impl GuidedTools {
             binding,
             state: Mutex::new(State {
                 described_ids,
+                has_other_tool_result: restored.is_some_and(|saved| {
+                    saved
+                        .tool_results
+                        .iter()
+                        .any(|result| result.name != "resolve_ask")
+                }),
                 ..State::default()
             }),
             resume: OnceCell::new(),

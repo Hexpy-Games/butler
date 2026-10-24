@@ -1,4 +1,6 @@
 //! Volatile reminders. Canon can contribute entries without sharing lifecycle authority.
+mod budget;
+
 use butler_turn::btcc::BtccError;
 use serde_json::{Value, json};
 
@@ -51,8 +53,6 @@ impl Reminders {
         if settled_more > 0 {
             content["settled_more"] = json!(settled_more);
         }
-        serde_json::to_string(&content)
-            .map(|s| Some(format!("{SECTION}\n{s}")))
-            .map_err(|e| BtccError::relayed("ask_reminders_invalid", e.to_string()))
+        budget::encode(content).map(|s| Some(format!("{SECTION}\n{s}")))
     }
 }
