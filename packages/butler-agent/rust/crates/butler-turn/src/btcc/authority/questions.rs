@@ -362,11 +362,15 @@ fn answered_question(r: AuthorityRecord) -> AuthorityResult<AnsweredQuestion> {
 }
 
 fn chat_response(value: serde_json::Value) -> AuthorityResult<UserQuestionResponse> {
-    let value = if value["status"] == "resolved_in_chat" {
-        value["response"].clone()
-    } else {
-        value
-    };
+    let value =
+        if value.get("status").and_then(serde_json::Value::as_str) == Some("resolved_in_chat") {
+            value
+                .get("response")
+                .cloned()
+                .ok_or_else(|| AuthorityError::policy("authority_request_corrupt"))?
+        } else {
+            value
+        };
     serde_json::from_value(value).map_err(|_| AuthorityError::policy("authority_request_corrupt"))
 }
 

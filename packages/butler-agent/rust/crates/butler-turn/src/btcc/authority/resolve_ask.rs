@@ -23,7 +23,8 @@ impl PrincipalAuthority {
         if turn.wake_identity.is_some()
             || turn.context.get("scheduleRun").is_some()
             || turn.context.get("subsessionResult").is_some()
-            || turn.context["messageOrigin"] == "question_followup"
+            || turn.context.get("messageOrigin").and_then(Value::as_str)
+                == Some("question_followup")
             || turn
                 .original_message_id
                 .starts_with("worker-result-message:")
@@ -123,7 +124,12 @@ fn state(record: &super::contracts::AuthorityRecord) -> String {
         .outcome_receipt_json
         .as_deref()
         .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
-        .and_then(|receipt| receipt["status"].as_str().map(str::to_owned))
+        .and_then(|receipt| {
+            receipt
+                .get("status")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        })
         .unwrap_or_else(|| "open".into())
 }
 fn not_open(state: &str) -> Value {
