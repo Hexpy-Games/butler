@@ -1320,6 +1320,8 @@ const butlerApp = Object.freeze({
     return result;
   },
   // Envelopes keep the code and status of the gateway's local-only rule.
+  listOauthCredentials: () => requestSecurity("listOauthCredentials"),
+  removeOauthCredential: ({ id } = {}) => requestSecurity("removeOauthCredential", { id }),
   getSecurity: () => requestSecurity("getSecurity"),
   issuePairingCode: () => requestSecurity("issuePairingCode"),
   getPairingStatus: () => requestSecurity("getPairingStatus"),

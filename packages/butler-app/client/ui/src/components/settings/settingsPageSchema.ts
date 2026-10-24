@@ -107,6 +107,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "paired-devices", kind: "list", fields: [], optional: true },
     { id: "grants", kind: "list", fields: [] },
     { id: "saved-keys", kind: "list", fields: [] },
+    { id: "connected-accounts", kind: "list", fields: [], optional: true },
     { id: "security-advanced", kind: "form", fields: ["allowed-hosts"], optional: true },
   ],
   system: [{ id: "system-events", kind: "list", fields: [] }],

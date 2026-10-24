@@ -249,6 +249,8 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/security/browser-import/start", Handler::Security),
     ("/security/browser-import/undo", Handler::Security),
     ("/security/connection-code/rotate", Handler::Security),
+    ("/security/oauth", Handler::Security),
+    ("/security/oauth/{id}", Handler::Security),
     ("/security/devices", Handler::Security),
     ("/security/devices/{id}", Handler::Security),
     ("/security/pairing", Handler::Security),

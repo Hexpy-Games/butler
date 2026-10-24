@@ -17,6 +17,7 @@ pub struct Seen {
     pub headers: BTreeMap<String, String>,
 }
 pub(super) struct State {
+    pub revoke_delay: Mutex<std::time::Duration>,
     pub issuer: String,
     pub refresh: Mutex<BTreeMap<String, String>>,
     pub models: Mutex<Vec<Value>>,
@@ -37,6 +38,7 @@ impl FakeChatGptAuthority {
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await?;
         let issuer = format!("http://{}", listener.local_addr()?);
         let state = Arc::new(State {
+            revoke_delay: Mutex::new(std::time::Duration::ZERO),
             issuer: issuer.clone(),
             refresh: Mutex::new(BTreeMap::new()),
             models: Mutex::new(models::defaults()),
@@ -55,6 +57,13 @@ impl FakeChatGptAuthority {
             state,
             task,
         })
+    }
+    pub fn revoke_delay(&self, delay: std::time::Duration) {
+        *self
+            .state
+            .revoke_delay
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = delay;
     }
     pub fn models(&self, models: Vec<Value>) {
         *self

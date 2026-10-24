@@ -1060,6 +1060,9 @@ const CODED_SETTINGS_METHODS = new Set([
 /** Settings → Browser → Sign-ins and browser import: main adds the admin credential. */
 function signInBridgeCall(method: string, path: string, body: ApiOptions["body"]): { action: string; input?: unknown } | null {
   const payload = () => parseBody(body);
+  if (path === "/security/oauth" && method === "GET") return { action: "listOauthCredentials" };
+  const credential = path.match(/^\/security\/oauth\/([^/]+)$/u)?.[1];
+  if (credential && method === "DELETE") return { action: "removeOauthCredential", input: { id: decodeURIComponent(credential) } };
   if (path === "/security/signins") return method === "GET" ? { action: "listSignIns" } : method === "POST" ? { action: "addSignIn", input: payload() } : null;
   if (path === "/security/signins/site" && method === "POST") return { action: "updateSignInSite", input: payload() };
   const entry = path.match(/^\/security\/signins\/([0-9a-f-]{36})$/u)?.[1];
