@@ -22,8 +22,8 @@ export const guidance: ShowcaseGuidance = {
   purpose: "One content block with its title and a ⋯ menu that shows on hover or focus; a right-click or a touch long-press opens the same menu, for the innermost block only. Pair with flySaveToTarget for the save flight.",
   whenToUse: ["Answer blocks, 서랍 block scraps and blocks in a document", "Container blocks and their children (level=\"child\" for the children)"],
   whenNotToUse: [
-    { when: "A list row's actions", use: "ListRow or HistoryRow actions" },
-    { when: "A card's own menu", use: "LibraryCard menu or OverflowActionMenu" },
+    { when: "A list row's actions", use: "ListRow" },
+    { when: "A card's own menu", use: "OverflowActionMenu" },
   ],
   recipes: [{ name: "An answer block with actions", description: "The ⋯ sits at the title row's end; untitled blocks float it on the top end corner.", render: () => <AnswerBlock /> }],
   doDont: [
