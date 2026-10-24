@@ -11,7 +11,8 @@ fn values(db: &Connection, sql: &str) -> rusqlite::Result<serde_json::Value> {
                     Value::Null => serde_json::Value::Null,
                     Value::Integer(n) => json!(n),
                     Value::Text(s) => json!(s),
-                    other => panic!("unexpected fixture value: {other:?}"),
+                    Value::Real(n) => json!(n),
+                    Value::Blob(bytes) => json!(bytes),
                 })
                 .collect::<Vec<_>>())
             .collect::<Vec<_>>()

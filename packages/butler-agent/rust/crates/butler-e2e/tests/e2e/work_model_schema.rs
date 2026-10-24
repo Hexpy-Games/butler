@@ -204,7 +204,7 @@ async fn cb_12_reupgrade_keeps_colliding_history_and_outpaces_stale_receipts()
             .enumerate()
             .map(move |(index, (kind, id))| {
                 vec![
-                    Value::Integer(round * 4 + index as i64 + 1),
+                    Value::Integer(round * 4 + i64::try_from(index).unwrap() + 1),
                     Value::Text(kind.into()),
                     Value::Text(id.into()),
                 ]
