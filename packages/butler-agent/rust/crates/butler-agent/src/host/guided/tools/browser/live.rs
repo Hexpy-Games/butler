@@ -1,6 +1,6 @@
 //! The open tab a `web_read` reads instead of fetching the page again: the
-//! named `tab`, or this conversation's signed-out tab showing the URL. A tab
-//! page this turn already read (same tab, epoch and URL) is not read again.
+//! named `tab`, or this conversation's signed-out tab showing the URL. The
+//! tab is read on every call: a click can change its page without navigating.
 use super::super::GuidedTools;
 use super::client::Client;
 use butler_runtime::web_access::LivePage;
@@ -38,14 +38,6 @@ pub(in crate::host::guided::tools) async fn page(
             None => Ok(None),
         };
     };
-    if owner.web_session.has_tab_page(&tab.id, tab.epoch, &tab.url) {
-        return Ok(Some(LivePage {
-            tab: tab.id,
-            epoch: tab.epoch,
-            final_url: tab.url,
-            html: String::new(),
-        }));
-    }
     let read = client
         .call(
             "tab.read",

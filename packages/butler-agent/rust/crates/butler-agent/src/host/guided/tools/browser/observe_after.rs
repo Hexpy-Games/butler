@@ -2,7 +2,9 @@
 //! round per batch instead of act + observe. The observation is the newest cycle;
 //! it carries pixels only when the batch's result is visual (see `look`).
 use super::super::GuidedTools;
-use super::{batch_value, client::Client, images, look, page_data, project_observation};
+use super::{
+    batch_value, client::Client, compact_view, images, look, page_data, project_observation,
+};
 use butler_core::json::JsonDocument;
 use butler_turn::btcc::{GuidedInvocation, ToolExecutionError};
 use serde_json::{Value, json};
@@ -43,6 +45,7 @@ pub(super) async fn finish(
         return super::encoded(&action);
     }
     project_observation(&mut observation);
+    compact_view(owner, args, &mut observation);
     super::encoded(&combine(observation, action))
 }
 

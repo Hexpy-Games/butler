@@ -1,5 +1,7 @@
 //! Conversation-owned browser tools; web content cannot select authority or owners.
 mod assets;
+mod compact;
+pub(super) use compact::TabView;
 mod authority;
 pub(super) use assets::lookup_assets;
 mod client;
@@ -122,6 +124,7 @@ pub(super) async fn execute(
         result["schema"] = json!("butler.browser-zoom.v1");
     } else if call.name == "browser_observe" && result["status"] == "ok" {
         project_observation(&mut result);
+        compact_view(owner, &args, &mut result);
     }
     super::answer_blocks::remember_browser_source(owner, call, occurrence, &result).await?;
     encode_page_data(result)
@@ -162,6 +165,23 @@ fn project_observation(result: &mut Value) {
         ] {
             object.remove(field);
         }
+    }
+}
+
+/// Encodes an observation as v2 text against the tab's previous view in this
+/// execution; `full: true` asks for the whole listing.
+fn compact_view(owner: &GuidedTools, args: &Value, result: &mut Value) {
+    let Some(tab) = result["tab"]
+        .as_str()
+        .or_else(|| args["tab"].as_str())
+        .map(str::to_owned)
+    else {
+        return;
+    };
+    let mut state = owner.state.lock();
+    let previous = state.browser_views.remove(&tab);
+    if let Some(view) = compact::encode(result, previous.as_ref(), args["full"] == true) {
+        state.browser_views.insert(tab, view);
     }
 }
 

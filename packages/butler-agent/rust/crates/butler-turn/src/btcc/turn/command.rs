@@ -192,6 +192,7 @@ impl CommandModelSelection {
                 controls: serde_json::Map::new(),
                 controls_hash: String::new(),
                 context_window_tokens: Some(100.0),
+                cached_input_price_ratio: None,
                 extensions: serde_json::Map::new(),
             },
             model_route: None,
