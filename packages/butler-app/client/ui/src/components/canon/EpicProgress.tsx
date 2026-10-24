@@ -1,8 +1,8 @@
 import { appCopy } from "@/app/copy.ts";
-import type { TaskCounts, WorkTasks } from "@/app/canonApi.ts";
+import type { TaskCounts, EpicProgressSnapshot } from "@/app/canonApi.ts";
 import { DisclosureRow, Section, Stack, Tag, Typo } from "@/butler-ds";
 import { CanonStatusGlyph } from "./CanonStatusGlyph.tsx";
-export function EpicProgress({ tasks, counts }: { tasks: WorkTasks | null; counts: TaskCounts }) {
+export function EpicProgress({ tasks, counts }: { tasks: EpicProgressSnapshot | null; counts: TaskCounts }) {
   return <Section title={appCopy.canon.progress} actions={counts.total > 0 ? <Typo.Caption>{appCopy.canon.done(counts.completed ?? 0, counts.total)}</Typo.Caption> : undefined} gap="sm">
     {tasks?.chains.some(chain => chain.steps.some(step => step.tasks.length)) ? tasks.chains.map(chain =>
       <Stack key={chain.id} gap="sm" data-chain-id={chain.id}>

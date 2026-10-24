@@ -18,8 +18,8 @@ export function CanonEpicRow({ projectId, groupKey, epic, busy, onDrop }: {
   projectId: string; groupKey: string; epic: EpicCard; busy: boolean;
   onDrop: (sourceId: string, targetId: string, after: boolean) => void;
 }) {
-  const row = useButlerStore(state => epic.home_session_id ? projectSpace(state.navigation).get(`s:${epic.home_session_id}`) : undefined);
-  const active = useButlerStore(state => state.activeChatId === epic.home_session_id && state.view.kind === "session");
+  const row = useButlerStore(state => epic.sessions?.[0]?.session_id ? projectSpace(state.navigation).get(`s:${epic.sessions?.[0]?.session_id}`) : undefined);
+  const active = useButlerStore(state => state.activeChatId === epic.sessions?.[0]?.session_id && state.view.kind === "session");
   const unread = useSessionUnread(row?.session);
   const running = spaceActivity(row?.session) === "working";
   const [menuOpen, setMenuOpen] = useState(false);

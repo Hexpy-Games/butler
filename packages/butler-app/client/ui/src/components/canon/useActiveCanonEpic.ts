@@ -26,7 +26,7 @@ function refreshProject(projectId: string) {
 export function useActiveCanonEpic() {
   const sessionId = useButlerStore(state => state.activeChatId);
   const projectId = useButlerStore(state => sessionFromNavigation(state.navigation, state.activeChatId)?.project_id);
-  const match = useCanonSidebarState(state => state.sessions[sessionId]);
+  const match = useCanonSidebarState(state => state.sessions[sessionId]?.[0]);
   useEffect(() => {
     if (!projectId) return;
     if (!useCanonSidebarState.getState().sessions[sessionId]) void readProject(projectId).catch(() => {});

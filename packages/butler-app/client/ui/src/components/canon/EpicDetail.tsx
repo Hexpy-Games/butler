@@ -2,7 +2,7 @@ import { canonTaskCounts, canonStatusInput } from "./canonProgressSource.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useState, type Ref } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import type { EpicDetail as Epic, EpicInput, PlanCards, WorkTasks, CanonStatus } from "@/app/canonApi.ts";
+import type { EpicDetail as Epic, EpicInput, PlanCards, EpicProgressSnapshot, CanonStatus } from "@/app/canonApi.ts";
 import { Box, Button, ButtonContainer, IconButton, KeyValueRow, NativeSelect, NativeSelectOption, Pencil, Stack, Typo } from "@/butler-ds";
 import { CanonAvatar } from "./CanonAvatar.tsx";
 import { EpicEditForm } from "./EpicEditForm.tsx";
@@ -11,7 +11,7 @@ import { CanonPlanSelect } from "./CanonPlanSelect.tsx";
 import { SpecTree } from "./SpecTree.tsx";
 import { EpicProgress } from "./EpicProgress.tsx";
 export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef }: {
-  titleRef?: Ref<HTMLElement>; epic: Epic; plans: PlanCards[]; tasks: WorkTasks | null; busy: boolean;
+  titleRef?: Ref<HTMLElement>; epic: Epic; plans: PlanCards[]; tasks: EpicProgressSnapshot | null; busy: boolean;
   onWrite: (input: EpicInput, message?: string) => Promise<boolean>;
 }) {
   useAppLocale();
@@ -40,8 +40,8 @@ export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef }: {
         {ordinal > 0 && <Typo.Caption wrap="nowrap" shrink={false}>· {copy.ordinal(ordinal)}</Typo.Caption>}
       </Stack>} />
     </Stack>
-    {epic.home_session_id && <ButtonContainer size="sm"><Button size="sm" variant="link"
-      onClick={() => useButlerStore.getState().openSession(epic.home_session_id!)}>{copy.openConversation}</Button></ButtonContainer>}
+    {epic.sessions?.[0]?.session_id && <ButtonContainer size="sm"><Button size="sm" variant="link"
+      onClick={() => useButlerStore.getState().openSession(epic.sessions?.[0]?.session_id!)}>{copy.openConversation}</Button></ButtonContainer>}
     <SpecTree nodes={epic.specs} />
     <EpicProgress tasks={tasks} counts={canonTaskCounts(epic)} />
   </Stack>;

@@ -1,7 +1,7 @@
 import { readCanonProgress } from "./canonProgressSource.ts";
 import { useCanonSidebarState } from "@/app/canonSidebarState.ts";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getCanon, getCanonEpic, editCanonEpic, type CanonOverview, type EpicDetail, type EpicInput, type WorkTasks } from "@/app/canonApi.ts";
+import { getCanon, getCanonEpic, editCanonEpic, type CanonOverview, type EpicDetail, type EpicInput, type EpicProgressSnapshot } from "@/app/canonApi.ts";
 import { subscribeCanonChanges } from "@/app/canonEvents.ts";
 import { notifyStatus } from "@/app/notifications.ts";
 import { useCanonMove } from "./useCanonMove.ts";
@@ -12,7 +12,7 @@ export function useCanonBoard(projectId: string) {
   const [canon, setCanon] = useState<CanonOverview | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<EpicDetail | null>(null);
-  const [tasks, setTasks] = useState<WorkTasks | null>(null);
+  const [tasks, setTasks] = useState<EpicProgressSnapshot | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const generation = useRef(0);

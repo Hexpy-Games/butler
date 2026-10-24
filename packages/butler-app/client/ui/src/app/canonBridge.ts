@@ -13,6 +13,5 @@ export function canonBridgeInput(url: URL, verb: string, body: () => Record<stri
       verb === "GET" ? plan ? "getCanonPlan" : "getCanonEpic" : verb === "PATCH" ? plan ? "editCanonPlan" : "editCanonEpic" : undefined;
     return method ? { method, input: { id: decodeURIComponent(entity[2]!), body: body() } } : null;
   }
-  const tasks = verb === "GET" ? url.pathname.match(/^\/works\/([^/]+)\/tasks$/u) : null;
-  return tasks ? { method: "getWorkTasks", input: { id: decodeURIComponent(tasks[1]!) } } : null;
+  return null;
 }

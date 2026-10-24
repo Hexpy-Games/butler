@@ -4,23 +4,18 @@ export type WorkTaskStatus = "draft" | "waiting" | "pending" | "running" | "in_r
 export type TaskCounts = { total: number } & Partial<Record<WorkTaskStatus, number>>;
 export interface CanonWork {
   id: string;
-  scope_kind: "session" | "project";
-  scope_ref: string;
+  project_id: string;
   plan_id: string | null;
-  home_session_id: string | null;
+  sessions: Array<{ session_id: string; bound_at: number; bound_by: string; origin: "user" | "butler" }>;
   title: string;
   description: string;
   kind: string | null;
-  run_state: "idle" | "running" | "in_review" | "blocked" | "failed" | "paused" | "stopped" | "done" | "cancelled";
   canon_status: CanonStatus;
-  canon_status_source: "runtime" | "person";
+  canon_status_source: "runtime" | "person" | null;
   assignee: string | null;
   plan_rank: string | null;
-  task_graph_revision: number;
-  visibility: "canon";
-  origin: "chat" | "dialog" | "board" | "mcp" | "migration";
+  origin: "chat" | "dialog" | "board" | "mcp";
   revision: number;
-  draft: boolean;
 }
 export interface EpicCard extends CanonWork { task_counts: TaskCounts }
 export interface CanonPlan {
@@ -31,7 +26,6 @@ export interface CanonPlan {
   description: string;
   due_on: string | null;
   status: "open" | "closed";
-  visibility: "canon";
   revision: number;
 }
 export interface PlanCards extends CanonPlan { works: EpicCard[] }
@@ -75,9 +69,10 @@ export interface WorkTask {
   revision: number;
 }
 export interface EpicDetail extends EpicCard { specs: SpecNode[]; tasks: WorkTask[] }
-export interface WorkTasks {
-  work_id: string;
-  task_graph_revision: number;
+export interface EpicProgressSnapshot {
+  epic_id: string;
+  running: boolean;
+  counts: { completed: number; total: number };
   chains: Array<{
     id: string;
     work_id: string;
@@ -97,7 +92,6 @@ export interface PlanInput {
 }
 export interface EpicInput {
   expected_revision?: number;
-  expected_task_graph_revision?: number;
   title?: string;
   description?: string;
   status?: CanonStatus;
@@ -119,15 +113,6 @@ export interface CanonConflict extends Error {
   status: 409;
   current: { revision: number };
 }
-export type WorkTaskEdit =
-  | { op: "move_to_new_step"; chain_id: string; task_id: string; index: number }
-  | { op: "join_stack"; chain_id: string; task_id: string; target: string }
-  | { op: "move_to_chain"; chain_id: string; task_id: string; target_chain_id: string; index?: number; target?: string }
-  | { op: "start_now" | "delete"; chain_id: string; task_id: string }
-  | { op: "split_stack"; chain_id: string; index: number }
-  | { op: "decide_hold"; chain_id: string; id: string; decision: "run_anyway" | "delete" };
-export interface WorkTasksEditInput { ops: WorkTaskEdit[]; expected_task_graph_revision: number }
-
 export interface CanonSidebarGroup {
   key: string;
   kind: "backlog" | "plan";
