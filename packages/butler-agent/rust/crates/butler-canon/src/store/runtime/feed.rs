@@ -41,22 +41,21 @@ impl Batch {
     }
 }
 
-pub fn prepare(db: &Connection, after: i64, owner: (&str, u64)) -> Result<Batch> {
+pub fn prepare(db: &Connection, after: i64) -> Result<Batch> {
     let link_cursor = cursor(db, "link_reconcile")?;
     let mut plans = rows(db, Query::Plans.sql(), [link_cursor])?;
     let end = plans
         .iter()
         .position(|row| {
             row["tool_name"] == "replace_work_plan"
-                && (row["status"] == "awaiting_authority"
-                    || (row["status"] == "started"
-                        && matches!(
-                            row["semantic_state"].as_str(),
-                            Some("admitted" | "delivery_committed")
-                        )
-                        && row["claim_status"] == "active"
-                        && row["owner_id"].as_str() == Some(owner.0)
-                        && row["owner_generation"].as_u64() == Some(owner.1)))
+                && matches!(
+                    row["status"].as_str(),
+                    Some("started" | "awaiting_authority")
+                )
+                && matches!(
+                    row["semantic_state"].as_str(),
+                    Some("admitted" | "delivery_committed")
+                )
         })
         .unwrap_or(plans.len());
     plans.truncate(end);

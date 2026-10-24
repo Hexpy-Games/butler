@@ -22,6 +22,11 @@ async fn every_canon_runtime_statement_is_indexed_and_idle_writes_nothing()
                     .any(|line| line == "SEARCH c USING INTEGER PRIMARY KEY (rowid>?)"),
                 "{plan:?}"
             );
+            assert!(
+                plan.iter().any(|line| line
+                    == "SEARCH t USING INDEX sqlite_autoindex_btcc_turns_1 (turn_id=?) LEFT-JOIN"),
+                "turn lookup must use its primary key: {plan:?}"
+            );
         }
         assert!(
             plan.iter()

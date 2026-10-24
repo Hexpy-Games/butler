@@ -57,8 +57,7 @@ CREATE TRIGGER IF NOT EXISTS canon_progress_turn_insert AFTER INSERT ON btcc_tur
     INSERT INTO agent_task_graph_changes(session_id) VALUES(NEW.session_id)
     ON CONFLICT(session_id) DO UPDATE SET seq=excluded.seq;
 END;
-DROP TRIGGER IF EXISTS canon_progress_turn_state;
-CREATE TRIGGER canon_progress_turn_state AFTER UPDATE OF semantic_state ON btcc_turns
+CREATE TRIGGER IF NOT EXISTS canon_progress_turn_state AFTER UPDATE OF semantic_state ON btcc_turns
 WHEN OLD.semantic_state IS NOT NEW.semantic_state BEGIN
     INSERT INTO agent_task_graph_changes(session_id) VALUES(NEW.session_id)
     ON CONFLICT(session_id) DO UPDATE SET seq=excluded.seq;

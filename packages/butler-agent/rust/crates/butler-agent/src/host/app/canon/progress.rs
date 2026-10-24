@@ -98,10 +98,8 @@ pub(super) async fn reconcile(
 ) -> Result<(), GatewayApplicationError> {
     use std::sync::atomic::Ordering;
     let cursor = after.load(Ordering::Relaxed);
-    let (owner, generation) = storage.runtime_owner();
-    let owner = owner.to_owned();
     let mut batch = storage
-        .canon_read(move |db| store::runtime::prepare(db, cursor, (&owner, generation)))
+        .canon_read(move |db| store::runtime::prepare(db, cursor))
         .await
         .map_err(error)?;
     if batch.is_empty() {

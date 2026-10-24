@@ -2,19 +2,8 @@ use super::*;
 use butler_canon::store::{runtime, runtime_context};
 use rusqlite::{Connection, params};
 
-fn owner(db: &Connection) -> Result<(String, u64), HarnessError> {
-    Ok(db.query_row(
-        "SELECT owner_id,owner_generation FROM btcc_runtime_owners ORDER BY rowid DESC LIMIT 1",
-        [],
-        |r| Ok((r.get(0)?, r.get(1)?)),
-    )?)
-}
 fn pass(db: &mut Connection) -> Result<(), HarnessError> {
-    let (owner, generation) = owner(db)?;
-    pass_for(db, (&owner, generation))
-}
-fn pass_for(db: &mut Connection, owner: (&str, u64)) -> Result<(), HarnessError> {
-    let batch = runtime::prepare(db, 0, owner).map_err(|e| HarnessError(e.to_string()))?;
+    let batch = runtime::prepare(db, 0).map_err(|e| HarnessError(e.to_string()))?;
     let tx = butler_canon::store::Transaction::new(db.transaction()?)
         .map_err(|e| HarnessError(e.to_string()))?;
     let result = runtime::catch_up(&tx, &runtime_context(1), &Default::default(), 0, batch)
@@ -54,7 +43,7 @@ async fn non_matching_rows_advance_exactly_one_bounded_window_per_signal()
 }
 
 #[tokio::test]
-async fn unfinished_earlier_plan_is_linked_after_later_plan_completes() -> Result<(), HarnessError>
+async fn crash_replayed_plan_stays_pending_until_completed_and_linked() -> Result<(), HarnessError>
 {
     butler_e2e::gate!();
     let (mut s, script, server, id, chat) = setup("CB-PLAN-ORDER", false, false).await?;
@@ -71,7 +60,7 @@ async fn unfinished_earlier_plan_is_linked_after_later_plan_completes() -> Resul
     for (row, status, arguments) in [
         (100, "started", args.as_str()),
         (101, "completed", "{}"),
-        (102, "started", "{}"),
+        (102, "started", args.as_str()),
     ] {
         db.execute("INSERT INTO btcc_guided_tool_calls(rowid,call_id,turn_id,tool_name,raw_arguments,arguments_json,status,result_json,started_at) VALUES(?1,?2,?3,'replace_work_plan','{}',?4,?5,?6,'now')",params![row,format!("plan-{row}"),turn,arguments,status,if row==101 {"{\"ok\":false}"} else {result.as_str()}])?;
     }
@@ -95,29 +84,101 @@ async fn unfinished_earlier_plan_is_linked_after_later_plan_completes() -> Resul
         r.get(0)
     })?;
     assert_eq!(linked, id, "reconcile repairs X's missing link");
-    // Crash recovery leaves this admitted Turn and started journal row intact.
-    // The new runtime generation no longer owns the old execution claim.
-    let (owner, generation) = owner(&db)?;
-    pass_for(&mut db, (&owner, generation + 1))?;
-    assert_eq!(
-        cursor(&db)?,
-        102,
-        "inactive started call cannot wedge recovery"
-    );
-    let status: String = db.query_row(
-        "SELECT status FROM btcc_guided_tool_calls WHERE rowid=102",
+    // Restart reconciliation runs before a recovered Turn takes over its claim.
+    db.execute_batch("DELETE FROM btcc_state_claims; DELETE FROM canon_epic_work_links;")?;
+    pass(&mut db)?;
+    assert_eq!(cursor(&db)?, 101, "the admitted replay still blocks");
+    db.execute(
+        "UPDATE btcc_guided_tool_calls SET status='completed' WHERE rowid=102",
         [],
+    )?;
+    let session: String = db.query_row(
+        "SELECT session_id FROM btcc_turns WHERE turn_id=?1",
+        [&turn],
         |r| r.get(0),
     )?;
+    // The replay commits its result, but the separate link transaction fails.
+    db.execute_batch("CREATE TRIGGER fail_link BEFORE INSERT ON canon_epic_work_links BEGIN SELECT RAISE(ABORT,'link write failed'); END;")?;
+    {
+        let tx = butler_canon::store::Transaction::new(db.transaction()?)
+            .map_err(|e| HarnessError(e.to_string()))?;
+        let result: Value = serde_json::from_str(&result)?;
+        let result = result.get("output").unwrap_or(&result);
+        let error = runtime::link(
+            &tx,
+            &runtime_context(1),
+            &session,
+            result["work"]["work_id"].as_str().unwrap(),
+            &[format!("canon:epic/{id}")],
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("link write failed"), "{error}");
+    }
     assert_eq!(
-        status, "started",
-        "canon never mutates BTCC journal ownership"
+        db.query_row::<i64, _, _>("SELECT count(*) FROM canon_epic_work_links", [], |r| r
+            .get(0))?,
+        0
+    );
+    db.execute_batch("DROP TRIGGER fail_link")?;
+    pass(&mut db)?;
+    assert_eq!(cursor(&db)?, 102);
+    let linked: String = db.query_row("SELECT epic_id FROM canon_epic_work_links", [], |r| {
+        r.get(0)
+    })?;
+    assert_eq!(
+        linked, id,
+        "reconcile repairs the crash-replayed call's link"
     );
     drop(db);
     script.release();
     s.finish().await?;
     server.abort();
     Ok(())
+}
+
+#[tokio::test]
+async fn terminal_or_missing_turns_do_not_block_unfinished_plan_calls() -> Result<(), HarnessError>
+{
+    butler_e2e::gate!();
+    let mut s = Setup::new("CB-FINAL-PLAN")?.start().await?;
+    s.agent.terminate().await?;
+    let mut db = Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    db.execute_batch("INSERT INTO btcc_turns(turn_id,session_id,inbox_id,trigger_key,original_message_id,original_message,admission_snapshot_ref,model_selection_json,context_json,semantic_state,revision,execution_fence) VALUES('turn','own','inbox','key','message','input','snapshot','{}','{}','admitted',1,1);")?;
+    for state in [
+        "admitted",
+        "delivery_committed",
+        "cancelled",
+        "delivered",
+        "missing",
+    ] {
+        db.execute(
+            "UPDATE btcc_turns SET semantic_state=?1 WHERE turn_id='turn'",
+            [if state == "missing" {
+                "delivered"
+            } else {
+                state
+            }],
+        )?;
+        for status in ["started", "awaiting_authority"] {
+            db.execute_batch("DELETE FROM btcc_guided_tool_calls; DELETE FROM canon_cursors; INSERT INTO canon_cursors VALUES('link_reconcile',99);")?;
+            db.execute("INSERT INTO btcc_guided_tool_calls(rowid,call_id,turn_id,tool_name,raw_arguments,arguments_json,status,started_at) VALUES(100,'unfinished',?1,'replace_work_plan','{}','{}',?2,'now')", params![if state == "missing" { "absent" } else { "turn" }, status])?;
+            pass(&mut db)?;
+            let blocked = matches!(state, "admitted" | "delivery_committed");
+            assert_eq!(
+                cursor(&db)?,
+                if blocked { 99 } else { 100 },
+                "{state}/{status}"
+            );
+            let after: String = db.query_row(
+                "SELECT status FROM btcc_guided_tool_calls WHERE rowid=100",
+                [],
+                |r| r.get(0),
+            )?;
+            assert_eq!(after, status, "canon never mutates BTCC journal state");
+        }
+    }
+    drop(db);
+    s.finish().await
 }
 
 #[tokio::test]
