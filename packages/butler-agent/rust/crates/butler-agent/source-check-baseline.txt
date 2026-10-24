@@ -10,7 +10,7 @@ src/host/app/runtime_ports/session_workspaces.rs	<AppSessionWorkspaces as AppSes
 src/host/guided/activity.rs	new_group	99
 src/host/guided/activity/content.rs	content	160
 src/host/guided/activity/snapshot.rs	restore	97
-src/host/guided/command.rs	GuidedCommand::execute_observation	155
+src/host/guided/command.rs	GuidedCommand::execute_observation	151
 src/host/guided/command/evidence.rs	capability_receipts	85
 src/host/guided/command/output.rs	from_streams	171
 src/host/guided/command/output/assemble.rs	assemble	139
