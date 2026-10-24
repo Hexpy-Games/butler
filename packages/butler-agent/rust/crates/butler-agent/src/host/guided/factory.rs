@@ -132,6 +132,19 @@ impl GuidedTurnFactoryAdapter {
             let profiles = self.subsessions.enabled_worker_profiles().await?;
             surface::with_worker_profile_choices(phase, &profiles)?;
         }
+        if self
+            .monitoring
+            .configuration
+            .image_model_settings()
+            .await
+            .ok()
+            .is_none_or(|v| v["selected"].is_null())
+        {
+            for name in ["generate_image", "edit_image"] {
+                phase.authorized_names.retain(|n| n != name);
+                phase.provider_tools.retain(|t| t["name"] != name);
+            }
+        }
         surface::available(phase, self.preparation.catalog.snapshot())
     }
 }

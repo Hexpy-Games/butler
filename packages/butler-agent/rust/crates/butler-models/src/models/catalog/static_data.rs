@@ -15,6 +15,11 @@ impl StaticCatalog {
     pub(crate) fn load() -> Result<Self, ModelCatalogError> {
         let catalog: Self = serde_json::from_str(include_str!("static-catalog.json"))
             .map_err(ModelCatalogError::Catalog)?;
+        for model in &catalog.models {
+            if let Some(capability) = &model.image_output {
+                capability.validate()?;
+            }
+        }
         let preset = catalog
             .routine_preset(super::DEFAULT_PROVIDER)
             .ok_or_else(|| {

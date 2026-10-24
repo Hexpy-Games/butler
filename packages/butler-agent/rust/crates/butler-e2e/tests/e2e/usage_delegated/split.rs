@@ -41,7 +41,7 @@ async fn deleg_use_06_conversation_and_subtasks_add_up() -> Result<(), HarnessEr
     let (url, script, server) = stub::start().await?;
     let s = Setup::new("DELEG-USE-06")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", &url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()
         .await?;
     s.turn("general", super::super::delegate_followup::stub::OWNER)

@@ -143,6 +143,8 @@ fn unavailable(parsed: ParsedModelRef, reason: &str) -> ModelProviderMetadata {
 /// Metadata with every optional fact unset, for struct-update construction.
 pub(super) fn blank_metadata() -> ModelProviderMetadata {
     ModelProviderMetadata {
+        output_modalities: None,
+        image_output: None,
         provider_id: String::new(),
         provider_label: String::new(),
         provider_family_id: None,
@@ -207,6 +209,7 @@ pub(super) fn build_view(
         .models
         .iter()
         .chain(input.extra_models.iter())
+        .filter(|model| !model.is_image_output())
         .cloned()
         .collect::<Vec<_>>();
     let lookup = overwrite_by_ref(
@@ -214,7 +217,8 @@ pub(super) fn build_view(
             .models
             .iter()
             .chain(input.configured_local.iter())
-            .chain(input.extra_models.iter()),
+            .chain(input.extra_models.iter())
+            .filter(|model| !model.is_image_output()),
     );
     let preset = static_data.default_preset(None);
     let default = resolve_model_metadata(
@@ -224,6 +228,7 @@ pub(super) fn build_view(
     let registered = input
         .registered_models
         .iter()
+        .filter(|model| !model.is_image_output())
         .cloned()
         .map(|mut model| {
             model.registered = Some(true);

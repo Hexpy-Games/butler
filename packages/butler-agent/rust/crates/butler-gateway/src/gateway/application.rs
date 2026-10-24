@@ -1,10 +1,12 @@
 //! Durable application service behind the native App HTTP facade.
 
 mod assets;
+mod image_usage;
+pub use image_usage::{AppImageUsageCommand, ImageUsageOperation, ImageUsageRecord};
 mod canon;
 pub(crate) mod canon_sidebar;
 mod data_reset;
-pub use assets::AppAssetCommand;
+pub use assets::{AppAssetCommand, GeneratedAssetKind, composite, mask_bounds};
 mod admission;
 mod admission_identity;
 mod answer_drafts;
@@ -23,6 +25,7 @@ use crate::gateway::shutdown_trace::measure as measure_shutdown;
 use errors::{app_error, public};
 mod browser_stills;
 mod devices;
+mod documents;
 mod event_reads;
 #[cfg(feature = "e2e-fixtures")]
 mod faults;
@@ -35,6 +38,7 @@ mod hooks;
 mod internal_continuation;
 mod keyed_locks;
 mod library;
+pub use documents::AppDocumentCommand;
 mod still_delivery;
 pub use library::{AppLibraryChange, AppLibraryCommand, AppLibraryQuery};
 mod signins;

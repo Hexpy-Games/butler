@@ -17,6 +17,7 @@ pub enum CapabilityKind {
     CommandMutation {
         sandbox: CommandSandbox,
     },
+    ImageModelCall,
     Network,
     Connector,
     FileEdit,
@@ -136,7 +137,8 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
         {
             Allow
         }
-        ProjectRecord if auto => Allow,
+        CapabilityKind::ImageModelCall | ProjectRecord if auto => Allow,
+        CapabilityKind::ImageModelCall => Ask(GrantUse::Ignore),
         Network | Connector if request.taint == TurnTaint::External => Ask(GrantUse::Ignore),
         _ => Ask(GrantUse::Honor),
     }
@@ -210,6 +212,7 @@ impl CapabilityKind {
             PreviewStart | PreviewStop => Self::CommandMutation {
                 sandbox: CommandSandbox::None,
             },
+            ToolName::GenerateImage | ToolName::EditImage => Self::ImageModelCall,
             CallMcpTool => Self::Connector,
             WriteFile | EditFile => Self::FileEdit,
             CreateAutomation | UpdateAutomation | DeleteAutomation | RunDueAutomations => {
