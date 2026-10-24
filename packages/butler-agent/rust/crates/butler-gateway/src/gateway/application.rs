@@ -1,10 +1,12 @@
 //! Durable application service behind the native App HTTP facade.
 
 mod assets;
+mod image_usage;
+pub use image_usage::{AppImageUsageCommand, ImageUsageOperation, ImageUsageRecord};
 mod canon;
 pub(crate) mod canon_sidebar;
 mod data_reset;
-pub use assets::AppAssetCommand;
+pub use assets::{AppAssetCommand, GeneratedAssetKind};
 mod admission;
 mod admission_identity;
 mod answer_drafts;

@@ -33,6 +33,7 @@ pub(super) fn create(db: &Connection) -> Result<(), AppStorageError> {
         DELETE FROM app_asset_refs WHERE owner_kind='library' AND owner_id=NEW.id
         AND asset_id NOT IN(SELECT value FROM json_tree(NEW.payload) WHERE type='text');
       END;").map_err(AppStorageError::sqlite)?;
+    generated_columns(db)?;
     message_bindings(db)
 }
 
@@ -61,4 +62,21 @@ fn message_bindings(db: &Connection) -> Result<(), AppStorageError> {
       DELETE FROM app_asset_refs WHERE owner_kind='message' AND owner_id=NEW.id
       AND asset_id NOT IN(SELECT value FROM json_tree(COALESCE(NEW.blocks_json,'[]')) WHERE type='text');
       END;") .map_err(AppStorageError::sqlite)
+}
+
+fn generated_columns(db: &Connection) -> Result<(), AppStorageError> {
+    for (name, declaration) in [
+        ("kind", "TEXT NOT NULL DEFAULT 'collected'"),
+        ("parent_id", "TEXT"),
+        ("model_ref", "TEXT"),
+    ] {
+        super::migration::ensure_column(db, "app_assets", name, declaration)?;
+    }
+    db.execute_batch(
+        "CREATE INDEX IF NOT EXISTS app_assets_parent ON app_assets(parent_id);
+      CREATE TRIGGER IF NOT EXISTS asset_version_delete AFTER DELETE ON app_assets BEGIN
+        DELETE FROM app_asset_refs WHERE owner_kind='asset' AND owner_id=OLD.id;
+      END;",
+    )
+    .map_err(AppStorageError::sqlite)
 }

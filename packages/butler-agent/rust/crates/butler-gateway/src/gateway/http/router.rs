@@ -9,6 +9,9 @@ use std::sync::Arc;
 #[derive(Clone, Copy)]
 pub(super) enum Handler {
     NotFound,
+    ImageModels,
+    #[cfg(feature = "e2e-fixtures")]
+    ImageFixtures,
     DataReset,
     Authority,
     PendingAsks,
@@ -200,6 +203,11 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/memory/reset/projects/{id}", Handler::Personalization),
     ("/memory/reset/{id}", Handler::Personalization),
     ("/message-assets/{id}", Handler::MessageFiles),
+    ("/message-assets/{id}/meta", Handler::MessageFiles),
+    ("/message-assets/{id}/versions", Handler::MessageFiles),
+    ("/message-assets/masks", Handler::ImageModels),
+    ("/settings/image-model", Handler::ImageModels),
+    ("/usage/images", Handler::ImageModels),
     ("/message-files", Handler::MessageUpload),
     ("/message-files/{id}", Handler::MessageFiles),
     ("/message-files/{id}/view", Handler::MessageFiles),
@@ -365,6 +373,7 @@ fn table() -> impl Iterator<Item = (&'static str, Handler)> {
 #[cfg(feature = "e2e-fixtures")]
 const FIXTURE_ROUTES: &[(&str, Handler)] = &[
     ("/internal/e2e/logs/expire", Handler::Expire),
+    ("/internal/e2e/images/{action}", Handler::ImageFixtures),
     ("/internal/e2e/logs/writer/{action}", Handler::LogWriter),
     (
         "/automations/_test/scheduler-next-due-reads",

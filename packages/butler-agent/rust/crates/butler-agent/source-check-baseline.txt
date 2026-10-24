@@ -3,7 +3,6 @@
 # Entries may only shrink or disappear; new entries need review.
 src/host/app/monitoring/events.rs	run_events	94
 src/host/app/runtime_ports/assets.rs	<AppAssets as AppNativeAssetResolver>::resolve	95
-src/host/app/runtime_ports/model_catalog.rs	AppModelCatalog::execute_inner	109
 src/host/app/runtime_ports/personalization.rs	AppPersonalization::execute_inner	82
 src/host/app/runtime_ports/personalization.rs	AppPersonalization::update	97
 src/host/app/runtime_ports/session_workspaces.rs	<AppSessionWorkspaces as AppSessionWorkspaceProvisioner>::provision	90
