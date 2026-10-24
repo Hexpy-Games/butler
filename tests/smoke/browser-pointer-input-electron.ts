@@ -1,9 +1,10 @@
 import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 // test-category: security
-/** Native OS input through the real App overlay; no CDP mouse injection. */
+/** CDP input routed through the real App native view stack. */
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { electronViewInput } from "../support/electron-view-input";
 import { redesignApp } from "../support/browser-redesign-app";
 import { waitBrowser } from "../support/browser-agent-app";
 import { nativeAligned, shellReady } from "../support/browser-shell-acceptance";
@@ -11,8 +12,7 @@ import { showPickSidebar } from "../support/browser-pick-acceptance";
 import { pointerPage } from "../support/browser-pointer-page";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE!;
-const driver = process.env.BUTLER_NATIVE_MOUSE_EXECUTABLE!;
-assert.ok(evidence && driver, "Evidence and native mouse driver required");
+assert.ok(evidence, "Evidence directory required");
 mkdirSync(evidence, { recursive: true });
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response(pointerPage, { headers: { "content-type": "text/html" } }) });
 const app = await redesignApp(evidence).catch(error => { server.stop(true); throw error; });
@@ -28,20 +28,14 @@ async function point(selector: string, where = 0.5): Promise<Point> {
   return { ...at, selector, where };
 }
 const rendererPoint = async (selector: string): Promise<Point> => ({ ...await app.page.expression<Point>(`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`), selector, renderer: true });
+const viewInput = electronViewInput(app);
 async function input(action: string, from: Point, to?: Point) {
-  const facts = await app.main<{ pid: number; x: number; y: number }>(`(()=>{${app.win}.show();${app.win}.focus();${app.win}.moveTop();const r=${app.win}.getContentBounds();return {pid:process.pid,x:r.x,y:r.y}})()`);
-  // Let the real pointer dismiss renderer tooltips and settle native occlusion
-  // before pressing. Unlike old smokes, the held gesture never changes targets.
-  const moved = Bun.spawnSync([driver, String(facts.pid), "move", String(facts.x + from.x), String(facts.y + from.y)]);
-  assert.equal(moved.exitCode, 0, moved.stderr.toString());
+  await viewInput("move", from);
   await nativeAligned(app);
   if (from.selector) from = from.renderer ? await rendererPoint(from.selector) : await point(from.selector, from.where);
   if (to?.selector) to = to.renderer ? await rendererPoint(to.selector) : await point(to.selector, to.where);
   console.log(action, from, to ?? "");
-  const args = [driver, String(facts.pid), action, String(facts.x + from.x), String(facts.y + from.y)];
-  if (to) args.push(String(facts.x + to.x), String(facts.y + to.y));
-  const result = Bun.spawnSync(args);
-  assert.equal(result.exitCode, 0, result.stderr.toString());
+  await viewInput(action, from, to);
 }
 async function picks(count: number) { await waitBrowser(() => app.main(`${subject()}.selections?.length===${count}`), `${count} picks`); }
 async function dragPick(source: "page" | "bar", destination: string) {
