@@ -89,7 +89,7 @@ fn one(
         .optional()
         .map_err(sql)
 }
-fn many(
+pub(super) fn many(
     db: &Connection,
     sql_text: &str,
     parameters: &[&dyn ToSql],
@@ -151,20 +151,19 @@ pub(super) fn list_permissions(
         .collect::<Result<Vec<_>, _>>()
         .map_err(sql)
 }
-pub(super) fn list_pending(db: &Connection, owner: &str) -> AuthorityResult<Vec<AuthorityRecord>> {
-    many(
-        db,
-        &format!(
-            "SELECT * FROM ({ROW} WHERE owner_session_id=?1 AND close_reason IS NULL \
+pub(super) fn pending_sql() -> String {
+    format!(
+        "SELECT * FROM ({ROW} WHERE owner_session_id=?1 AND close_reason IS NULL \
         AND decision='pending' AND source_call_id IS NOT NULL AND EXISTS (SELECT 1 FROM btcc_turns turn \
         WHERE turn.turn_id=source_turn_id AND turn.suspension_reason='authority_pending') \
         UNION ALL {ROW} INDEXED BY idx_btcc_questions_deferred WHERE owner_session_id=?1 AND capability='ask_user' AND decision='modified' \
         AND close_reason IS NULL AND outcome_receipt_json IS NULL \
         AND json_extract(CASE WHEN capability='ask_user' THEN private_alternative_input END,'$.status')='deferred') \
         ORDER BY CASE WHEN decision='pending' THEN 0 ELSE 1 END, created_at ASC"
-        ),
-        &[&owner],
     )
+}
+pub(super) fn list_pending(db: &Connection, owner: &str) -> AuthorityResult<Vec<AuthorityRecord>> {
+    many(db, &pending_sql(), &[&owner])
 }
 pub(super) fn list_decided(db: &Connection) -> AuthorityResult<Vec<AuthorityRecord>> {
     many(
@@ -271,7 +270,7 @@ pub(super) fn question_history(
         } else {
             "source_turn_id"
         };
-        records.extend(many(db, &format!("{ROW} WHERE owner_session_id=?1 AND capability='ask_user' AND {column}=?2 AND decision='modified' AND close_reason IS NULL ORDER BY created_at"), &[&owner, &turn])?);
+        records.extend(many(db, &format!("{ROW} WHERE owner_session_id=?1 AND capability='ask_user' AND {column}=?2 AND decision='modified' AND close_reason IS NULL AND (outcome_receipt_json IS NULL OR json_extract(outcome_receipt_json,'$.status')='answered') ORDER BY created_at"), &[&owner, &turn])?);
     }
     let mut seen = std::collections::HashSet::new();
     records.retain(|r| seen.insert(r.request_ref.clone()));
@@ -320,12 +319,7 @@ pub(super) fn permission_records(
     many(db, &format!("{ROW} {PERMISSION_FILTER}"), &[&owner])
 }
 
-pub(super) fn attention_owners(db: &Connection, owners: &[String]) -> AuthorityResult<Vec<String>> {
-    let owners = serde_json::to_string(owners)
-        .map_err(|error| AuthorityError::policy("authority_request_corrupt").with_source(error))?;
-    let mut statement = db
-        .prepare_cached(
-            "SELECT a.owner_session_id FROM json_each(?1) p \
+pub(super) const ATTENTION_SQL: &str = "SELECT a.owner_session_id FROM json_each(?1) p \
          JOIN btcc_authority_requests a ON a.owner_session_id=p.value \
          JOIN btcc_turns t ON t.turn_id=a.source_turn_id \
          WHERE a.close_reason IS NULL AND a.decision='pending' \
@@ -334,9 +328,12 @@ pub(super) fn attention_owners(db: &Connection, owners: &[String]) -> AuthorityR
          JOIN btcc_authority_requests a INDEXED BY idx_btcc_questions_deferred ON a.owner_session_id=p.value \
          WHERE a.capability='ask_user' AND a.decision='modified' AND a.close_reason IS NULL \
          AND a.outcome_receipt_json IS NULL \
-         AND json_extract(CASE WHEN a.capability='ask_user' THEN a.private_alternative_input END,'$.status')='deferred'",
-        )
-        .map_err(sql)?;
+         AND json_extract(CASE WHEN a.capability='ask_user' THEN a.private_alternative_input END,'$.status')='deferred'";
+
+pub(super) fn attention_owners(db: &Connection, owners: &[String]) -> AuthorityResult<Vec<String>> {
+    let owners = serde_json::to_string(owners)
+        .map_err(|error| AuthorityError::policy("authority_request_corrupt").with_source(error))?;
+    let mut statement = db.prepare_cached(ATTENTION_SQL).map_err(sql)?;
     statement
         .query_map([owners], |row| row.get(0))
         .map_err(sql)?

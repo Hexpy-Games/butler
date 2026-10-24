@@ -336,6 +336,7 @@ export interface AppEventEnvelope {
   protocol_version: typeof APP_PROTOCOL_VERSION;
   id: number;
   type:
+    | "pending_asks.changed"
     | "message.created"
     | "message.deleted"
     | "chat.created"
