@@ -1,0 +1,134 @@
+import type { ShellApp } from "./browser-shell-acceptance";
+
+type Point = { x: number; y: number };
+
+/** Content DIP coordinates routed through the native view stack. DOM pointer
+ * capture keeps cross-view gestures in their origin until release or detachment.
+ * HTML5 drags use Chromium's intercepted data, never fabricated product payloads.
+ */
+export function electronViewInput(app: ShellApp) {
+  const state = "globalThis[Symbol.for('butler.smoke.view-input')]";
+  const ready = app.main(`(${install.toString()})(${app.win})`);
+  const send = async (type: string, point: Point, extra: Record<string, unknown> = {}) => {
+    await ready;
+    await app.main(`${state}.send(${JSON.stringify({ type, ...point, ...extra })})`);
+  };
+  return async (action: string, from: Point, to?: Point | string) => {
+    await ready;
+    await app.main(`${state}.activate()`);
+    if (action === "key") {
+      await app.main(`${state}.key(${JSON.stringify(to)})`);
+      return;
+    }
+    const modifiers = action === "altdrag" ? 1 : 0;
+    if (action === "up") { await send("mouseReleased", from, { button: "left", buttons: 0, clickCount: 1 }); return; }
+    if (action === "dragmove") { await send("mouseMoved", from, { button: "left", buttons: 1 }); return; }
+    await send("mouseMoved", from, { buttons: 0, modifiers });
+    if (action === "move") return;
+    if (action === "wheel") { await send("mouseWheel", from, { deltaX: 0, deltaY: 300 }); return; }
+    const button = action === "right" ? "right" : "left", buttons = button === "right" ? 2 : 1;
+    for (let clickCount = 1; clickCount <= (action === "double" ? 2 : 1); clickCount++) {
+      await send("mousePressed", from, { button, buttons, clickCount, modifiers });
+      if (action === "down") return;
+      try {
+        if (action === "drag" || action === "altdrag") {
+          if (!to || typeof to === "string") throw new Error("Drag destination required");
+          for (let step = 1; step <= 24; step++) {
+            await send("mouseMoved", { x: from.x + (to.x - from.x) * step / 24, y: from.y + (to.y - from.y) * step / 24 }, { button, buttons, modifiers });
+            await new Promise(done => setTimeout(done, 20));
+          }
+        }
+      } finally {
+        await send("mouseReleased", typeof to === "object" ? to : from, { button, buttons: 0, clickCount, modifiers });
+      }
+    }
+  };
+}
+
+/** Serialized into the main inspector. Only Electron and DOM input APIs are used. */
+function install(win: any) {
+  const attached = new Set<any>();
+  let pressed: any, drag: any, dragTarget: any;
+  const contains = (b: any, p: Point) => p.x >= b.x && p.y >= b.y && p.x < b.x + b.width && p.y < b.y + b.height;
+  const views = () => {
+    const result: any[] = [];
+    const visit = (view: any, origin: Point) => {
+      if (!view.getVisible()) return;
+      const b = view.getBounds(), at = { x: origin.x + b.x, y: origin.y + b.y };
+      if (view.webContents && !view.webContents.isDestroyed()) result.push({ contents: view.webContents, ...at, width: b.width, height: b.height });
+      for (const child of view.children) visit(child, at);
+    };
+    for (const child of win.contentView.children) visit(child, { x: 0, y: 0 });
+    const b = win.getContentBounds();
+    return [{ contents: win.webContents, x: 0, y: 0, width: b.width, height: b.height }, ...result];
+  };
+  const connect = async (contents: any) => {
+    if (attached.has(contents)) return;
+    if (contents.debugger.isAttached()) throw new Error("Input target already has a debugger");
+    contents.debugger.attach("1.3");
+    attached.add(contents);
+    contents.debugger.on("message", (_event: unknown, method: string, params: any) => {
+      if (method === "Input.dragIntercepted") drag = params.data;
+    });
+    await contents.debugger.sendCommand("Input.setInterceptDrags", { enabled: true });
+    const source = `(() => {
+      const state = { pointer: null, captured: false };
+      globalThis[Symbol.for('butler.smoke.pointer-capture')] = state;
+      document.addEventListener('pointerdown', event => state.pointer = event.pointerId, true);
+      document.addEventListener('gotpointercapture', () => state.captured = true, true);
+      document.addEventListener('lostpointercapture', () => state.captured = false, true);
+    })()`;
+    await contents.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source });
+    await contents.debugger.sendCommand("Runtime.evaluate", { expression: source });
+  };
+  const captured = async () => {
+    if (!pressed || pressed.contents.isDestroyed()) return false;
+    const result = await pressed.contents.debugger.sendCommand("Runtime.evaluate", {
+      // hasPointerCapture includes a pending capture before gotpointercapture.
+      expression: "(() => {const s=globalThis[Symbol.for('butler.smoke.pointer-capture')];return s?.captured || s?.pointer != null && [...document.querySelectorAll('*')].some(n=>n.hasPointerCapture(s.pointer))})()", returnByValue: true,
+    });
+    return result.result.value === true;
+  };
+  const state = {
+    activate() {
+      const focused = views().findLast(v => v.contents.isFocused())?.contents;
+      win.show(); win.focus(); win.moveTop();
+      focused?.focus();
+    },
+    async send(event: any) {
+      const stack = views();
+      for (const view of stack) await connect(view.contents);
+      const hit = stack.findLast(view => contains(view, event));
+      if (!hit) throw new Error(`No WebContents under ${event.x}, ${event.y}`);
+      // A detached view loses native capture, exposing the view below it.
+      const origin = stack.find(v => v.contents === pressed?.contents);
+      const target = !drag && origin && await captured() ? origin : hit;
+      const params = { ...event, x: (event.x - target.x) / target.contents.getZoomFactor(), y: (event.y - target.y) / target.contents.getZoomFactor() };
+      if (drag && ["mouseMoved", "mouseReleased"].includes(event.type)) {
+        const send = (type: string) => target.contents.debugger.sendCommand("Input.dispatchDragEvent", { type, x: params.x, y: params.y, data: drag, modifiers: event.modifiers ?? 0 });
+        if (dragTarget !== target.contents) { await send("dragEnter"); dragTarget = target.contents; }
+        await send("dragOver");
+        if (event.type === "mouseReleased") { await send("drop"); drag = undefined; dragTarget = undefined; pressed = undefined; }
+        return;
+      }
+      if (event.type === "mousePressed") { pressed = target; target.contents.focus(); }
+      await target.contents.debugger.sendCommand("Input.dispatchMouseEvent", params);
+      if (event.type === "mouseReleased") pressed = undefined;
+    },
+    async key(key: string) {
+      const codes: Record<string, number> = { Enter: 13, Escape: 27, ArrowUp: 38 };
+      if (!codes[key]) throw new Error(`Unsupported key: ${key}`);
+      const target = views().findLast(v => v.contents.isFocused());
+      if (!target) {
+        const targets = await Promise.all(views().map(async ({ contents }) => ({
+          id: contents.id, focused: contents.isFocused(), zoom: contents.getZoomFactor(),
+          visibility: await contents.executeJavaScript("document.visibilityState").catch(() => null),
+        })));
+        throw new Error(`No focused WebContents for key input: ${JSON.stringify(targets)}`);
+      }
+      await connect(target.contents);
+      for (const type of ["keyDown", "keyUp"]) await target.contents.debugger.sendCommand("Input.dispatchKeyEvent", { type, key, code: key, windowsVirtualKeyCode: codes[key] });
+    },
+  };
+  (globalThis as any)[Symbol.for("butler.smoke.view-input")] = state;
+}
