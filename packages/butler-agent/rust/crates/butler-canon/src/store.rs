@@ -1,6 +1,8 @@
 //! Transaction operations. The caller owns an IMMEDIATE transaction and must
 //! roll it back on any error. No operation commits, opens a DB, or starts work.
 pub mod api;
+mod attachments;
+pub use attachments::references as attachment_references;
 pub mod runtime;
 pub use api::{mark_outbox_published, read as read_api, write as write_api};
 pub use runtime::{

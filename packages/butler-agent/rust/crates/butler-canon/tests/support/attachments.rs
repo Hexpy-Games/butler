@@ -1,5 +1,5 @@
 // Parser cases extend the epic creation invariant suite.
-use butler_canon::attachments::references;
+use butler_canon::store::attachment_references as references;
 fn id(n: usize) -> String {
     format!("file-00000000-0000-0000-0000-{n:012}")
 }

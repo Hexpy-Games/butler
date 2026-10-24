@@ -47,3 +47,10 @@ pub(in crate::gateway::application) const REMOVE_REFS: &str =
 pub(in crate::gateway::application) const DELETE_EXPIRED: &str =
     "DELETE FROM app_file_pending WHERE expires_at<=?1
     AND NOT EXISTS(SELECT 1 FROM app_canon_epic_files WHERE file_id=app_file_pending.file_id)";
+
+/// An installed reference already protects its file. A rejected edit must not
+/// leave an extra pending lifetime that delays removal of that reference.
+pub(in crate::gateway::application) const PIN_PENDING: &str =
+    "INSERT INTO app_file_pending SELECT ?1,?2
+    WHERE NOT EXISTS(SELECT 1 FROM app_canon_epic_files WHERE file_id=?1)
+    ON CONFLICT(file_id) DO UPDATE SET expires_at=excluded.expires_at";

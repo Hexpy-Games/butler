@@ -3,7 +3,7 @@ use crate::store::{Error, Result};
 use pulldown_cmark::{Event, Options, Parser, Tag};
 use std::collections::BTreeSet;
 
-pub const MAX_ATTACHMENTS: usize = 20;
+const MAX_ATTACHMENTS: usize = 20;
 
 pub fn references(description: &str) -> Result<Vec<String>> {
     let mut ids = BTreeSet::new();
@@ -26,7 +26,7 @@ pub fn references(description: &str) -> Result<Vec<String>> {
     Ok(ids.into_iter().collect())
 }
 
-pub fn valid_id(id: &str) -> bool {
+fn valid_id(id: &str) -> bool {
     id.starts_with("file-")
         && id.len() == 41
         && id[5..].bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')

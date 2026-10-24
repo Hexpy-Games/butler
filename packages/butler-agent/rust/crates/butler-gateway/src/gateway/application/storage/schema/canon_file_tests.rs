@@ -81,8 +81,8 @@ pub(in crate::gateway) fn sweep_rechecks_a_concurrent_new_reference() {
 pub(super) fn attachment_statements_use_keyed_and_expiry_indexes() {
     let db = db();
     use storage::schema::canon_files::{
-        DELETE_EXPIRED, DELETE_PENDING, DELETE_UNUSED, EPIC_FILES, EXPIRED, REMOVE_REFS,
-        REMOVE_SWEEP, SWEEP_QUEUE,
+        DELETE_EXPIRED, DELETE_PENDING, DELETE_UNUSED, EPIC_FILES, EXPIRED, PIN_PENDING,
+        REMOVE_REFS, REMOVE_SWEEP, SWEEP_QUEUE,
     };
     for (sql, index) in [
         (EPIC_FILES, "sqlite_autoindex_app_canon_epic_files"),
@@ -93,6 +93,7 @@ pub(super) fn attachment_statements_use_keyed_and_expiry_indexes() {
         (REMOVE_SWEEP, "sqlite_autoindex_app_file_sweep"),
         (DELETE_PENDING, "sqlite_autoindex_app_file_pending"),
         (REMOVE_REFS, "sqlite_autoindex_app_canon_epic_files"),
+        (PIN_PENDING, "app_canon_epic_files_file"),
     ] {
         let mut stmt = db.prepare(&format!("EXPLAIN QUERY PLAN {sql}")).unwrap();
         let bindings = rusqlite::params_from_iter(std::iter::repeat_n(
@@ -107,9 +108,9 @@ pub(super) fn attachment_statements_use_keyed_and_expiry_indexes() {
             .join("\n");
         assert!(plan.contains(index), "{sql}: {plan}");
         assert!(
-            !plan
-                .lines()
-                .any(|line| line.contains("SCAN ") && !line.contains("json_each")),
+            !plan.lines().any(|line| line.contains("SCAN ")
+                && !line.contains("json_each")
+                && !line.contains("SCAN CONSTANT ROW")),
             "{sql}: {plan}"
         );
     }

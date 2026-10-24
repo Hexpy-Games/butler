@@ -63,6 +63,16 @@ async fn at_02_removing_last_reference_sweeps_the_file() -> Result<(), HarnessEr
         &format!("![](attachment:{})", file["file_id"].as_str().unwrap()),
     )
     .await?;
+    // A rejected stale edit must not keep the last reference alive afterward.
+    assert_eq!(
+        s.gw.patch(
+            &format!("/canon/epics/{}", epic["id"].as_str().unwrap()),
+            json!({"expected_revision":0,"description":epic["description"]}),
+        )
+        .await?
+        .status,
+        409
+    );
     let stream = LiveEvents::subscribe(&s.gw, 0).await?;
     let edited = data(
         s.gw.patch(

@@ -40,7 +40,7 @@ pub(in crate::store) fn append(
         }
         if kind == "work" {
             let row = read_work(tx, id)?;
-            payload["attachments"] = json!(crate::attachments::references(
+            payload["attachments"] = json!(crate::store::attachments::references(
                 row["description"].as_str().unwrap_or_default(),
             )?);
         }

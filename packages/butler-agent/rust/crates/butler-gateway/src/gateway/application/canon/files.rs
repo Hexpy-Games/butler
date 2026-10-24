@@ -1,7 +1,7 @@
 //! Keyed reference reconciliation and change-driven, durable file cleanup.
 use super::super::storage::schema::canon_files::{
-    DELETE_EXPIRED, DELETE_PENDING, DELETE_UNUSED, EPIC_FILES, EXPIRED, REMOVE_REFS, REMOVE_SWEEP,
-    SWEEP_QUEUE,
+    DELETE_EXPIRED, DELETE_PENDING, DELETE_UNUSED, EPIC_FILES, EXPIRED, PIN_PENDING, REMOVE_REFS,
+    REMOVE_SWEEP, SWEEP_QUEUE,
 };
 use super::super::*;
 use crate::gateway::MessageFileRef;
@@ -62,7 +62,7 @@ pub(in crate::gateway::application) fn append_session_references(
     description: &str,
     file_ids: &[String],
 ) -> Result<String, GatewayApplicationError> {
-    let existing = butler_canon::attachments::references(description)
+    let existing = butler_canon::store::attachment_references(description)
         .map_err(|_| public(400, "invalid_attachments", "Invalid attachments."))?;
     let mut result = description.to_owned();
     let mut seen: std::collections::BTreeSet<_> = existing.into_iter().collect();
@@ -79,7 +79,7 @@ pub(in crate::gateway::application) fn append_session_references(
             result.push_str(&format!("\n![](attachment:{id})"));
         }
     }
-    butler_canon::attachments::references(&result)
+    butler_canon::store::attachment_references(&result)
         .map_err(|_| public(400, "invalid_attachments", "Invalid attachments."))?;
     Ok(result)
 }
@@ -232,7 +232,7 @@ pub(super) async fn validate_write(
     else {
         return Ok(());
     };
-    let ids = butler_canon::attachments::references(description)
+    let ids = butler_canon::store::attachment_references(description)
         .map_err(|_| public(400, "invalid_attachments", "Invalid attachments."))?;
     let expires = app
         .dependencies
@@ -249,12 +249,8 @@ pub(super) async fn validate_write(
             // A pending write pins its files until the outbox installs the references.
             // This closes the cross-owner handoff against a concurrent expiry/sweep.
             for id in ids {
-                db.execute(
-                    "INSERT INTO app_file_pending VALUES(?1,?2)
-                ON CONFLICT(file_id) DO UPDATE SET expires_at=excluded.expires_at",
-                    params![id, expires],
-                )
-                .map_err(AppStorageError::sqlite)?;
+                db.execute(PIN_PENDING, params![id, expires])
+                    .map_err(AppStorageError::sqlite)?;
             }
             Ok(true)
         })
