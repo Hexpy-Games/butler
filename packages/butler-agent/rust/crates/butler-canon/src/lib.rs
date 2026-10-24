@@ -1,4 +1,5 @@
 //! Canon storage and pure queue invariants, separate from the BTCC engine.
+pub mod attachments;
 pub mod store;
 pub mod work_chain;
 pub mod work_ids;

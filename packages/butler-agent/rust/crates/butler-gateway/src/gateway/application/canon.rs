@@ -1,5 +1,6 @@
 //! App identity/scope resolution, over the host-owned canon port.
 mod events;
+pub(super) mod files;
 use super::*;
 use AppCanonResource::{
     BacklogOrder, Canon, CreateEpic, CreatePlan, CreateTag, DeleteTag, EditEpic, EditPlan, EditTag,
@@ -11,10 +12,18 @@ pub(super) fn execute(app: &AppApplication, request: AppCanonRequest) -> Applica
     let app = app.clone_handle();
     Box::pin(async move {
         validate_scope(&app, &request).await?;
+        // A relay batch cannot consume this write's lifetime pin before canon commits.
+        let _files = app.canon_file_lifetimes.lock().await;
+        files::validate_write(&app, &request).await?;
+        let detail = matches!(request.resource, Epic | CreateEpic | EditEpic);
         let mut result = app.dependencies.canon.execute(request).await?;
         app.storage
             .read(move |db| {
                 public_sessions(db, &mut result)?;
+                if detail {
+                    result["attachments"] =
+                        files::list(db, result["id"].as_str().unwrap_or_default())?;
+                }
                 Ok(result)
             })
             .await

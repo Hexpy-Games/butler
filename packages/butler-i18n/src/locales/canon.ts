@@ -1,6 +1,7 @@
 import type { CanonCopy } from "../canon-copy.ts";
 export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
   "ko-KR": {
+    attachFile: "파일 첨부", fileTooLarge: "10MB 이하만 첨부할 수 있습니다",
     searchPlan: "계획 검색", clearSearch: "검색 지우기", noResults: "검색 결과 없음",
     overview: "계획 개요", noPlan: "계획 없음",
     personalOrder: "내 사이드바 순서만 바뀝니다", sharedOrder: "기준 순서 · 끌어서 바꾸기",
@@ -44,6 +45,7 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
     },
   },
   "en-US": {
+    attachFile: "Attach file", fileTooLarge: "Files up to 10 MB",
     searchPlan: "Search plans", clearSearch: "Clear search", noResults: "No results",
     overview: "Plan overview", noPlan: "No Plan",
     personalOrder: "Only your sidebar order changed", sharedOrder: "Shared order · Drag to reorder",

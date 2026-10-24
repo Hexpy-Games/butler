@@ -226,6 +226,7 @@ pub struct AppApplication {
     wallpapers: AppWallpaperFiles,
     asset_cache: assets::AssetCache,
     settings_update_lock: Arc<tokio::sync::Mutex<()>>,
+    canon_file_lifetimes: Arc<tokio::sync::Mutex<()>>,
     canon_projection_locks: KeyedLocks,
     plan_decision_locks: KeyedLocks,
     setup_readiness: setup::ReadinessRelay,
@@ -243,25 +244,12 @@ async fn initial_project_root(storage: &AppStorage) -> Result<PathBuf, GatewayAp
     }
 }
 
-async fn open_storage(
-    config: &AppApplicationConfig,
-    dependencies: &AppApplicationDependencies,
-) -> Result<AppStorage, GatewayApplicationError> {
-    AppStorage::open(
-        config.database_path.clone(),
-        Some(config.butler_data.clone()),
-        dependencies.identity_clock.now_iso(),
-    )
-    .await
-    .map_err(app_error)
-}
-
 impl AppApplication {
     pub async fn open(
         config: AppApplicationConfig,
         dependencies: AppApplicationDependencies,
     ) -> Result<Self, GatewayApplicationError> {
-        let storage = open_storage(&config, &dependencies).await?;
+        let storage = handle::open_storage(&config, &dependencies).await?;
         let queue_owner = queue_owner_id(dependencies.identity_clock.as_ref());
         let project_root = initial_project_root(&storage).await?;
         let dependencies = Arc::new(dependencies);
@@ -326,6 +314,7 @@ impl AppApplication {
             asset_cache: assets::AssetCache::default(),
             butler_data: config.butler_data,
             settings_update_lock: Arc::new(tokio::sync::Mutex::new(())),
+            canon_file_lifetimes: Arc::new(tokio::sync::Mutex::new(())),
             canon_projection_locks: KeyedLocks::default(),
             plan_decision_locks: KeyedLocks::default(),
             setup_readiness: setup::ReadinessRelay::default(),
@@ -498,3 +487,6 @@ pub(crate) use test_support::seed_test_assistant_attachment;
 mod snapshot_input;
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+pub(super) use storage::schema::canon_file_tests::sweep_rechecks_a_concurrent_new_reference;

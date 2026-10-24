@@ -160,6 +160,23 @@ function sessionViewResyncPath(
   return `${url.pathname}${url.search}`;
 }
 
+export async function uploadCanonFile(projectId: string, file: File): Promise<MessageFileRef> {
+  const bridge = typeof window !== "undefined" ? window.butlerApp : undefined;
+  if (typeof bridge?.uploadCanonFile === "function") {
+    const result = await callBridge<{ file: MessageFileRef }>(bridge, "uploadCanonFile", {
+      projectId, name: file.name, mimeType: file.type, bytes: await file.arrayBuffer(),
+    });
+    return result.file;
+  }
+  const form = new FormData();
+  form.set("file", file, file.name);
+  const response = await fetch(`/projects/${encodeURIComponent(projectId)}/canon/files`, { method: "POST", body: form });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(response.status === 413 ? appCopy.canon.fileTooLarge
+    : payload?.error?.message ?? appCopy.interfaceFeedback.uploadFailed);
+  return payload.data.file as MessageFileRef;
+}
+
 export async function uploadMessageFile(file: File, sessionId?: string): Promise<MessageFileRef> {
   const bridge = typeof window !== "undefined" ? window.butlerApp : undefined;
   if (typeof bridge?.uploadMessageFile === "function") {

@@ -21,6 +21,7 @@ async fn source_artifact_is_stored_once_with_original_metadata() {
         interrupted_write(&point).await;
         return;
     }
+    crate::gateway::application::sweep_rechecks_a_concurrent_new_reference();
     interrupted_children();
     let root = std::env::temp_dir().join(format!("butler-app-files-{}", uuid::Uuid::new_v4()));
     let source = root.join("artifacts/public-data/report.MD");

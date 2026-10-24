@@ -38,6 +38,12 @@ pub(in crate::store) fn append(
         if let (Some(payload), Some(details)) = (payload.as_object_mut(), details.as_object()) {
             payload.extend(details.clone());
         }
+        if kind == "work" {
+            let row = read_work(tx, id)?;
+            payload["attachments"] = json!(crate::attachments::references(
+                row["description"].as_str().unwrap_or_default(),
+            )?);
+        }
         tx.execute(
             super::super::sql::OUTBOX,
             params!["canon.changed", payload.to_string(), ctx.now],

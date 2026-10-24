@@ -222,6 +222,7 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/canon/plans/{id}/order", Handler::Canon),
     ("/projects/{id}/canon/backlog/order", Handler::Canon),
     ("/projects/{id}/canon/epics", Handler::Canon),
+    ("/projects/{id}/canon/files", Handler::Canon),
     ("/previews/{*path}", Handler::Preview),
     ("/project-sessions", Handler::ProjectSessions),
     ("/projects", Handler::Projects),

@@ -84,7 +84,11 @@ export interface WorkTask {
   failure_reason: string | null;
   revision: number;
 }
-export interface EpicDetail extends EpicCard { specs: SpecNode[]; tasks: WorkTask[] }
+export interface CanonAttachment {
+  file_id: string; kind: "image" | "text" | "generic"; mime_type: string; safe_name: string;
+  size_bytes: number; sha256: string; url: string; signed_url?: string; created_at: string;
+}
+export interface EpicDetail extends EpicCard { attachments?: CanonAttachment[]; specs: SpecNode[]; tasks: WorkTask[] }
 export interface EpicProgressSnapshot {
   epic_id: string;
   running: boolean;

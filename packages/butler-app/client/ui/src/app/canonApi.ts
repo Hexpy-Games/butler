@@ -23,3 +23,5 @@ export const editCanonEpic = (id: string, input: EpicInput): Promise<EpicDetail>
 export const getCanonSidebar = (id: string): Promise<CanonSidebar> => api(`${projectPath(id)}/sidebar`);
 export const orderCanonSidebar = (id: string, input: CanonSidebarOrderInput): Promise<CanonSidebar> => write(`${projectPath(id)}/sidebar-order`, "POST", input);
 export const linkCanonConversation = (id: string, { sessionId }: CanonConversationInput = {}): Promise<CanonConversation> => write(`${epicPath(id)}/conversation`, "POST", { session_id: sessionId });
+
+export { uploadCanonFile } from "./api.ts";

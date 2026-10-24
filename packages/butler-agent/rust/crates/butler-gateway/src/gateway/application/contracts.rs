@@ -1,8 +1,10 @@
 //! Required composition ports and owned App transport values.
 mod artifacts;
 mod canon;
+mod message_files;
 pub use artifacts::*;
 pub use canon::*;
+pub use message_files::AppMessageFileStorage;
 
 use super::sessions::{
     AppSessionWorkProgress, AppSessionWorkspaceProvisioner, AppWorkStreamReader,
@@ -94,17 +96,6 @@ pub trait AppAdmissionAuthority: Send + Sync + 'static {
         request: AppSourceSnapshotRequest,
     ) -> ApplicationFuture<MaterializedResponderFile>;
     fn admit_visual(&self, request: VisualAdmissionRequest) -> ApplicationFuture<Value>;
-}
-pub trait AppMessageFileStorage: Send + Sync + 'static {
-    fn replace_browser_still(
-        &self,
-        file: AppMessageFileSnapshot,
-        bytes: Bytes,
-        name: String,
-    ) -> ApplicationFuture<MaterializedResponderFile>;
-    fn write_upload(&self, input: AppFileWrite) -> ApplicationFuture<MaterializedResponderFile>;
-    fn prepare_uploaded(&self, file: AppMessageFileSnapshot) -> ApplicationFuture<()>;
-    fn read_original(&self, file: AppMessageFileSnapshot) -> ApplicationFuture<Bytes>;
 }
 pub trait AppSettingsFactsProvider: Send + Sync + 'static {
     /// Returns an immutable snapshot prepared by the native config and model owners.

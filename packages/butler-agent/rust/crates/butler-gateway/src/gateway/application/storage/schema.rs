@@ -2,6 +2,7 @@
 
 mod assets;
 pub(in crate::gateway::application) mod canon;
+pub(in crate::gateway::application) mod canon_files;
 mod canon_sidebar;
 mod core;
 mod library;
@@ -46,6 +47,7 @@ pub(super) fn migrate(
     library::create(connection)?;
     canon_sidebar::create(connection)?;
     canon::create(connection)?;
+    canon_files::create(connection)?;
     still_delivery::recover(connection)?;
     super::history::schema::create(connection)?;
     security::create(connection)?;
@@ -171,3 +173,6 @@ mod plans;
 mod tests;
 
 pub(in crate::gateway::application) use core::create_settings_table;
+
+#[cfg(test)]
+pub(in crate::gateway) mod canon_file_tests;
