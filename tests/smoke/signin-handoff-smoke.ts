@@ -1,8 +1,9 @@
 // test-category: race
 /** Sign-in hand-off through the real gateway and UI; stub model, a scripted browser host and a
- * throwaway keychain (BUTLER_E2E_KEYCHAINS, never the user's). MFA → hand-off card → Open to check →
+ * throwaway keychain (optionally BUTLER_E2E_KEYCHAINS, never the user's). MFA → hand-off card → Open to check →
  * Give back to Butler → the call resumes; Stop task cancels. Desktop pages get a recording
  * browser bridge; the phone page has none. */
+import { spawnSync } from "node:child_process";
 import { strict as assert } from "node:assert";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,13 +13,19 @@ import { createNativeAppServer, type StubModelRequest } from "../support/native-
 import { launchSmokeBrowser } from "../support/smoke-browser";
 
 const evidence = process.env.BUTLER_SIGNIN_HANDOFF_EVIDENCE; assert.ok(evidence, "BUTLER_SIGNIN_HANDOFF_EVIDENCE required");
-const keychains = process.env.BUTLER_E2E_KEYCHAINS; assert.ok(keychains, "BUTLER_E2E_KEYCHAINS (a throwaway keychain folder) required");
 mkdirSync(evidence, { recursive: true });
 const TAB = "tab-handoff-7f3a", LOGIN = "https://login.fixture-shop.test/session", CANARY = "canary-pw-handoff-5c1";
 const FINAL = { ko: "로그인을 마쳤습니다.", en: "Signed in." };
 const agentHome = mkdtempSync(join(tmpdir(), "signin-handoff-home-"));
-mkdirSync(join(agentHome, "Library"), { recursive: true }); mkdirSync(join(agentHome, ".codex"));
-symlinkSync(keychains, join(agentHome, "Library/Keychains"));
+mkdirSync(join(agentHome, "Library/Preferences"), { recursive: true }); mkdirSync(join(agentHome, ".codex"));
+if (process.env.BUTLER_E2E_KEYCHAINS) symlinkSync(process.env.BUTLER_E2E_KEYCHAINS, join(agentHome, "Library/Keychains"));
+else {
+  assert.equal(process.platform, "darwin", "the saved sign-in needs a system store: macOS, or BUTLER_E2E_KEYCHAINS");
+  const keychain = join(agentHome, "Library/Keychains/butler-test.keychain-db"); mkdirSync(join(agentHome, "Library/Keychains"));
+  for (const args of [["create-keychain", "-p", "butler-test"], ["default-keychain", "-d", "user", "-s"], ["unlock-keychain", "-p", "butler-test"]]) {
+    assert.equal(spawnSync("/usr/bin/security", [...args, keychain], { env: { ...process.env, HOME: agentHome } }).status, 0, `test keychain ${args[0]}`);
+  }
+}
 
 // The model: describe, call browser_sign_in once per armed turn, then answer.
 let armed = false, round = 0, language: "ko" | "en" = "ko";
