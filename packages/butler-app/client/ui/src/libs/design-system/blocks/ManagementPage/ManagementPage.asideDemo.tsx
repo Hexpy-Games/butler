@@ -1,3 +1,4 @@
+import { useMemo, useState, type ReactNode } from "react";
 import type { ShowcaseRenderContext } from "../../showcase";
 import { Box } from "../../components/Box";
 import { Button } from "../../components/Button";
@@ -12,7 +13,8 @@ import { ScaledFrame } from "../BrowserPane/fixtures/ScaledFrame";
 import { ComposerCard } from "../ComposerCard";
 import { DashboardHeader } from "../DashboardHeader";
 import { MarkdownContent } from "../MarkdownContent";
-import { ManagementPage } from "./ManagementPage";
+import { Wallpaper, type WallpaperSource } from "../Wallpaper";
+import { ManagementPage, type ManagementPageColumnRect } from "./ManagementPage";
 import styles from "./ManagementPage.showcase.module.css";
 
 const copy = {
@@ -60,10 +62,15 @@ function TaskDetail({ locale }: ShowcaseRenderContext) {
 }
 
 /** A project board with the selected task in the page's aside, and the overlay composer. */
-export function BoardWithTask({ locale, floatOpen = true }: ShowcaseRenderContext & { floatOpen?: boolean }) {
+export function BoardWithTask({ locale, floatOpen = true, background, onColumnRect }: ShowcaseRenderContext & {
+  floatOpen?: boolean;
+  background?: ReactNode;
+  onColumnRect?: (rect: ManagementPageColumnRect) => void;
+}) {
   const text = copy[locale];
   return (
     <ManagementPage dataTestClass="management-page-aside-showcase" asideFloatOpen={floatOpen} asideLabel={text.label}
+      background={background} backgroundTreatment="none" onColumnRect={onColumnRect}
       aside={<Box paddingX="sm"><TaskDetail locale={locale} /></Box>} footerPlacement="overlay" footerReserve={48}
       footer={<ComposerCard floating><Typo.Body as="p" tone="secondary">{text.prompt}</Typo.Body></ComposerCard>}>
       <DashboardHeader title={text.project} description={text.description} action={<Button variant="outline">{text.action}</Button>} />
@@ -87,4 +94,22 @@ export function WideBoard(context: ShowcaseRenderContext) {
 /** Narrow: under 1000px the task floats on glass over the board. */
 export function NarrowBoard(context: ShowcaseRenderContext) {
   return <div className={styles.stage} data-width="narrow"><BoardWithTask {...context} /></div>;
+}
+
+/** The riso print: its dots keep out of the reading column. */
+const RISO: WallpaperSource = { kind: "live", module: "butler.riso-print" };
+
+/**
+ * Wide, over a wallpaper: `onColumnRect` reaches the docked aside's far edge, so the print keeps its dots
+ * out of the board and the aside alike (the conversation aside does the same).
+ */
+export function WideBoardOverWallpaper(context: ShowcaseRenderContext) {
+  const [column, setColumn] = useState<ManagementPageColumnRect | undefined>(undefined);
+  const columnRect = useMemo(() => column ? { x: column.left, y: column.top, width: column.right - column.left, height: 0 } : undefined, [column]);
+  return (
+    <ScaledFrame width={1280} height={640}>
+      <BoardWithTask {...context} onColumnRect={setColumn}
+        background={<Wallpaper scope="container" source={RISO} columnRect={columnRect} />} />
+    </ScaledFrame>
+  );
 }

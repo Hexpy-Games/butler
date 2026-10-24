@@ -31,7 +31,8 @@
       max(var(--space-4), var(--safe-area-left), var(--safe-area-right))
   );
   min-width: 0;
-  max-height: calc(
+  /* The height cap; `height="full"` makes it the definite height too. */
+  --dialog-max-height: calc(
     var(--adaptive-viewport-block-size) - 2 *
       max(
         var(--space-4),
@@ -39,6 +40,8 @@
         var(--safe-area-bottom)
       )
   );
+
+  max-height: var(--dialog-max-height);
   gap: var(--space-4);
   overflow: auto;
   padding: var(--space-4);
@@ -108,7 +111,13 @@
 }
 
 .content[data-max-height="3/5"] {
-  max-height: 60%;
+  --dialog-max-height: 60%;
+}
+
+/* A definite height at the cap, so a scroll-body's ScrollArea fill fills it
+   even when its content is short (an empty graph or list). */
+.content[data-height="full"] {
+  height: var(--dialog-max-height);
 }
 
 .content[data-project-ledger-modal="true"] {
@@ -177,7 +186,7 @@
     left: 0;
     width: 100%;
     max-width: 100%;
-    max-height: var(--adaptive-viewport-block-size);
+    --dialog-max-height: var(--adaptive-viewport-block-size);
     padding-top: var(--safe-area-top);
     padding-inline: var(--safe-area-left) var(--safe-area-right);
     border-radius: 0 0 var(--radius-popover) var(--radius-popover);
@@ -212,7 +221,7 @@
   top: var(--space-2xl);
   width: min(var(--dialog-width), calc(100% - var(--space-3xl)));
   max-width: calc(100% - var(--space-3xl));
-  max-height: calc(100% - var(--space-2xl) * 2);
+  --dialog-max-height: calc(100% - var(--space-2xl) * 2);
   transform: translateX(-50%);
 }
 
