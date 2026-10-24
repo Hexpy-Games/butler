@@ -36,12 +36,12 @@ async fn reply(
         ASK if key.round.is_empty() => {
             let mut args = crate::ask_user::stub::questions();
             args["wait"] = json!(false);
-            call("ask", "ask_user", args)
+            call("ask", "ask_user", &args)
         }
         APPROVE if key.round.is_empty() => call(
             "files",
             "list_files",
-            json!({"root":*script.root.lock().unwrap()}),
+            &json!({"root":*script.root.lock().unwrap()}),
         ),
         _ => {
             json!({"type":"message","id":"msg_done","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Saved. The reply is complete.","annotations":[]}]})
@@ -58,6 +58,6 @@ async fn reply(
     )
         .into_response()
 }
-fn call(id: &str, name: &str, arguments: Value) -> Value {
+fn call(id: &str, name: &str, arguments: &Value) -> Value {
     json!({"type":"function_call","id":format!("fc_{id}"),"call_id":format!("call_{id}"),"name":name,"arguments":arguments.to_string(),"status":"completed"})
 }
