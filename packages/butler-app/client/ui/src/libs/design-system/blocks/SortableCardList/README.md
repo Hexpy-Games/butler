@@ -25,3 +25,9 @@ The dragged card lifts in a DragOverlay (`--motion-scale-lift`,
 transforms timed by `--motion-base` and `--motion-ease-standard`. Reduced
 motion moves neighbors at once and keeps only the shadow.
 
+## Drag overlay
+The lifted copy is portaled to `<body>`, so contained, filtered or glass
+ancestors (a page panel over a wallpaper) never clip or offset it, and it keeps
+the list's theme class (a light panel in dark chrome stays light). It keeps the
+grip's column as a static glyph hidden from assistive tech, so its columns match
+the row it was lifted from.

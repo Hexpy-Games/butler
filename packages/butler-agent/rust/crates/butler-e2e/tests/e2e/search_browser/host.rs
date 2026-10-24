@@ -13,7 +13,7 @@ pub(super) static LOG: LazyLock<Mutex<Vec<Value>>> = LazyLock::new(Mutex::defaul
 /// The most `tab.open` frames that were pending at once.
 pub(super) static PARALLEL_OPENS: AtomicUsize = AtomicUsize::new(0);
 
-pub(super) struct Host {
+pub(crate) struct Host {
     stream: reqwest::Response,
     buffer: String,
     admin: AdminClient,
@@ -26,7 +26,7 @@ pub(super) fn page_text(url: &str) -> String {
 }
 
 impl Host {
-    pub(super) async fn attach(admin: AdminClient) -> Result<Self, HarnessError> {
+    pub(crate) async fn attach(admin: AdminClient) -> Result<Self, HarnessError> {
         let stream = reqwest::Client::new()
             .get(format!("{}/internal/browser-host", admin.gw.base))
             .bearer_auth(&admin.gw.token)
@@ -77,7 +77,7 @@ impl Host {
 
     /// Answers browser calls until the test ends. `tab.open` frames that
     /// arrive together are answered together, after the last one arrives.
-    pub(super) async fn serve(mut self) -> Result<(), HarnessError> {
+    pub(crate) async fn serve(mut self) -> Result<(), HarnessError> {
         let mut opens = Vec::new();
         loop {
             let frame = if opens.is_empty() {

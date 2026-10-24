@@ -9,13 +9,15 @@ export interface CanonCopy {
   epic: string; title: string; description: string; optional: string; plan: string; assignee: string;
   none: string; me: string; cancel: string; create: string; save: string; edit: string; editPlan: string; close: string; dueOn: string;
   titlePlaceholder: string; descriptionPlaceholder: string; titleRequired: string;
-  created: string; conflict: string; statusChanged: string; reordered: string; running: string;
+  created: string; conflict: string; statusChanged: string; reordered: string; running: string; runningCancel: string;
   openConversation: string; noConversation: string; status: string; specs: string; noSpecs: string; progress: string; noTasks: string;
   statuses: Record<"planned" | "in_progress" | "in_review" | "blocked" | "done" | "cancelled", string>;
   blockedLane: string; previousLanes: string; nextLanes: string;
   taskStatuses: Record<"draft" | "waiting" | "pending" |
     "running" | "in_review" | "held" | "failed" | "completed" | "blocked" |
     "paused" | "stopped" | "cancelled", string>;
+  actionStatuses: Record<"pending" | "active" | "done" | "blocked" | "skipped", string>;
+  stages: Record<"conception" | "planning" | "execution" | "review" | "validation" | "reporting", string>;
   done: (done: number, total: number) => string;
   tasks: (done: number, total: number) => string;
   due: (date: string) => string;
@@ -24,6 +26,13 @@ export interface CanonCopy {
   moved: (plan: string) => string;
   personLabel: (name: string, self: boolean) => string;
   cardStatusChanged: (title: string, status: string) => string;
+  tags: {
+    label: string; add: string; filter: string; search: string; searchPlaceholder: string; empty: string; clearAll: string;
+    rename: string; recolor: string; remove: string; name: string; color: string; loading: string;
+    colors: Record<"gray" | "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple", string>;
+    create: (name: string) => string; menu: (name: string) => string; removeTag: (name: string) => string;
+    deleteTitle: (name: string) => string; deleteDetail: (n: number) => string;
+  };
   drag: {
     instructions: string; roleDescription: string;
     lifted: (item: string, lane: string, position: number) => string;
