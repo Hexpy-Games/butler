@@ -235,51 +235,98 @@ fn every_store_statement_has_an_indexed_query_plan() {
 // test-category: pure-logic
 #[test]
 fn epic_creation_records_fields_without_a_synthetic_edit() {
-    let mut db = store_support::db();
-    let tx = Transaction::new(db.transaction().unwrap()).unwrap();
-    let tag = write_api(
-        &tx,
-        &context(),
-        butler_canon::store::api::Resource::CreateTag,
-        "project",
-        json!({"name":"Feature","color":"blue"}),
-    )
-    .unwrap();
-    let epic = write_api(
-        &tx,
-        &context(),
-        butler_canon::store::api::Resource::CreateEpic,
-        "project",
-        json!({"title":"Title","description":"Description","assignee":"person","tags":[tag["id"]]}),
-    )
-    .unwrap();
-    assert_eq!(epic["description"], "Description");
-    assert_eq!(epic["assignee"], "person");
-    assert_eq!(epic["revision"], 0);
-    let audits: i64 = tx
-        .query_row("SELECT count(*) FROM canon_audit", [], |r| r.get(0))
-        .unwrap();
-    assert_eq!(audits, 2); // Tag creation and epic creation only.
-    let payload: String = tx
-        .query_row(
-            "SELECT payload_json FROM canon_audit WHERE entity_id=?1",
-            [epic["id"].as_str().unwrap()],
-            |r| r.get(0),
-        )
-        .unwrap();
-    assert_eq!(
-        serde_json::from_str::<serde_json::Value>(&payload).unwrap()["tags"],
-        epic["tags"]
-    );
-    let mut stmt = tx
-        .prepare("SELECT payload_json FROM canon_events WHERE topic='canon.changed'")
-        .unwrap();
-    let events = stmt
-        .query_map([], |r| r.get::<_, String>(0))
-        .unwrap()
-        .map(|r| serde_json::from_str::<serde_json::Value>(&r.unwrap()).unwrap())
-        .collect::<Vec<_>>();
-    assert_eq!(events.len(), 2); // Tag creation and epic creation only.
-    let created = events.iter().find(|e| e["id"] == epic["id"]).unwrap();
-    assert_eq!(created["tags"], epic["tags"]);
+    for tagged in [false, true] {
+        for planned in [false, true] {
+            let mut db = store_support::db();
+            let tx = Transaction::new(db.transaction().unwrap()).unwrap();
+            let tag = write_api(
+                &tx,
+                &context(),
+                api::Resource::CreateTag,
+                "project",
+                json!({"name":"Feature","color":"blue"}),
+            )
+            .unwrap();
+            let plan = write_api(
+                &tx,
+                &context(),
+                api::Resource::CreatePlan,
+                "project",
+                json!({"title":"Plan"}),
+            )
+            .unwrap();
+            let mut input =
+                json!({"title":"Title","description":"Description","assignee":"person"});
+            if tagged {
+                input["tags"] = json!([tag["id"]]);
+            }
+            if planned {
+                input["plan_id"] = plan["id"].clone();
+            }
+            let epic =
+                write_api(&tx, &context(), api::Resource::CreateEpic, "project", input).unwrap();
+            assert_eq!(epic["description"], "Description");
+            assert_eq!(epic["assignee"], "person");
+            assert_eq!(epic["revision"], 1);
+            assert_eq!(epic["tags"].as_array().unwrap().len(), usize::from(tagged));
+            let mut stmt = tx
+                .prepare("SELECT payload_json FROM canon_audit ORDER BY seq")
+                .unwrap();
+            let audits = stmt
+                .query_map([], |r| r.get::<_, String>(0))
+                .unwrap()
+                .skip(2) // Tag and plan setup records.
+                .map(|r| serde_json::from_str::<serde_json::Value>(&r.unwrap()).unwrap())
+                .collect::<Vec<_>>();
+            let mut expected = vec![
+                json!(["work", epic["id"], 0, "create"]),
+                json!(["work", epic["id"], 1, "reorder"]),
+                json!(["backlog", "project", 1, "order"]),
+            ];
+            if planned {
+                expected.push(json!(["plan", plan["id"], 1, "order"]));
+            }
+            assert_eq!(
+                audits
+                    .iter()
+                    .map(|a| json!([a["entity_kind"], a["entity_id"], a["revision"], a["op"]]))
+                    .collect::<Vec<_>>(),
+                expected
+            );
+            let mut stmt = tx.prepare("SELECT payload_json FROM canon_events WHERE topic='canon.changed' ORDER BY seq").unwrap();
+            let events = stmt
+                .query_map([], |r| r.get::<_, String>(0))
+                .unwrap()
+                .skip(2) // Tag and plan setup records.
+                .map(|r| serde_json::from_str::<serde_json::Value>(&r.unwrap()).unwrap())
+                .collect::<Vec<_>>();
+            assert_eq!(
+                events
+                    .iter()
+                    .map(|e| json!([e["kind"], e["id"], e["revision"]]))
+                    .collect::<Vec<_>>(),
+                expected
+                    .iter()
+                    .map(|e| json!([e[0], e[1], e[2]]))
+                    .collect::<Vec<_>>()
+            );
+            for payload in [&audits[0], &events[0]] {
+                if tagged {
+                    assert_eq!(payload["tags"], epic["tags"]);
+                } else {
+                    assert!(payload.get("tags").is_none());
+                }
+            }
+            assert!(
+                audits[1..]
+                    .iter()
+                    .chain(&events[1..])
+                    .all(|p| p.get("tags").is_none())
+            );
+            assert_eq!(
+                read_plan(&tx, plan["id"].as_str().unwrap()).unwrap()["revision"],
+                i64::from(planned)
+            );
+        }
+    }
 }

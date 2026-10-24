@@ -24,7 +24,6 @@ EPIC_TAGS = "SELECT t.id,t.name,t.color FROM canon_epic_tags a JOIN canon_tags t
 TAG_EPICS = "SELECT e.id,e.revision FROM canon_epic_tags a JOIN canon_epics e ON e.id=a.epic_id WHERE a.tag_id=?1 ORDER BY a.epic_id";
 CLEAR_TAGS = "DELETE FROM canon_epic_tags WHERE epic_id=?1";
 ASSIGN_TAG = "INSERT INTO canon_epic_tags(epic_id,tag_id) VALUES(?1,?2) ON CONFLICT DO NOTHING";
-INITIAL_POSITION = "UPDATE canon_epics SET plan_id=?2,plan_rank=?3 WHERE id=?1";
 BUMP_EPIC = "UPDATE canon_epics SET revision=revision+1,updated_at=?2 WHERE id=?1 AND revision=?3";
 PUBLISHED = "UPDATE canon_events SET published=1 WHERE seq=?1 AND published=0";
 }

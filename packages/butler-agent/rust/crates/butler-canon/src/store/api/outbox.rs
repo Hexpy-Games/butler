@@ -7,7 +7,7 @@ pub(in crate::store) fn append(
     kind: &str,
     id: &str,
     revision: i64,
-    op: &str,
+    details: &Value,
 ) -> Result<()> {
     let project = match kind {
         "plan" => {
@@ -35,8 +35,8 @@ pub(in crate::store) fn append(
         };
         let mut payload =
             json!({"project_id":project,"kind":kind,"id":id,"revision":revision,"origin":origin});
-        if kind == "work" && op == "create" {
-            payload["tags"] = json!(rows(tx, sql::EPIC_TAGS, [id])?);
+        if let (Some(payload), Some(details)) = (payload.as_object_mut(), details.as_object()) {
+            payload.extend(details.clone());
         }
         tx.execute(
             super::super::sql::OUTBOX,

@@ -92,9 +92,7 @@ pub fn create_work(
     input: &NewWork,
     registration: &Registration,
 ) -> Result<Value> {
-    let row = insert_work_assigned(tx, ctx, input, registration, None, &[])?;
-    event(tx, ctx, "work", &input.id, 0, "create")?;
-    Ok(row)
+    insert_work_assigned(tx, ctx, input, registration, None, &[])
 }
 
 pub(super) fn insert_work_assigned(
@@ -124,6 +122,12 @@ pub(super) fn insert_work_assigned(
         tx.execute(api::sql::ASSIGN_TAG, params![input.id, tag])?;
     }
     count(tx, ("project", &input.project_id), "epics", 1)?;
+    let details = if tags.is_empty() {
+        json!({})
+    } else {
+        json!({"tags": rows(tx, api::sql::EPIC_TAGS, [&input.id])?})
+    };
+    event_with_details(tx, ctx, ("work", &input.id, 0, "create"), &details)?;
     read_work(tx, &input.id)
 }
 pub fn edit_work(

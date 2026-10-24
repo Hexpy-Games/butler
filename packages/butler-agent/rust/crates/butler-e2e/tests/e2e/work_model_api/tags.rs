@@ -302,7 +302,7 @@ async fn tg_04_delete_cascades_without_epic_revision_changes() -> Result<(), Har
 }
 
 #[tokio::test]
-async fn tg_05_creation_with_tags_is_one_initial_revision() -> Result<(), HarnessError> {
+async fn tg_05_creation_with_tags_preserves_create_ordering() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("TG-05")?.start().await?;
     let project = project(&s).await?;
@@ -333,7 +333,7 @@ async fn tg_05_creation_with_tags_is_one_initial_revision() -> Result<(), Harnes
             .await?,
         201,
     );
-    assert_eq!(epic["revision"], 0);
+    assert_eq!(epic["revision"], 1);
     let expected = json!([{ "id":tag["id"],"name":"Feature","color":"blue" }]);
     assert_eq!(epic["tags"], expected);
     assert_eq!(
@@ -359,18 +359,24 @@ async fn tg_05_creation_with_tags_is_one_initial_revision() -> Result<(), Harnes
                 [],
                 |r| r.get(0)
             )?,
-            1
+            2
         );
         let mut stmt =
             db.prepare("SELECT payload_json FROM canon_events WHERE topic='canon.changed'")?;
         let events = stmt
             .query_map([], |r| r.get::<_, String>(0))?
             .map(|r| serde_json::from_str::<Value>(&r.unwrap()).unwrap())
-            .filter(|e| e["kind"] == "work")
+            .filter(|e| e["kind"] == "work" || e["kind"] == "backlog")
             .collect::<Vec<_>>();
-        assert_eq!(events.len(), 1);
+        assert_eq!(events.len(), 3);
         assert_eq!(events[0]["id"], epic["id"]);
         assert_eq!(events[0]["tags"], expected);
+        assert_eq!(events[0]["revision"], 0);
+        assert_eq!(events[1]["id"], epic["id"]);
+        assert_eq!(events[1]["revision"], 1);
+        assert_eq!(events[2]["kind"], "backlog");
+        assert_eq!(events[2]["id"], project);
+        assert_eq!(events[2]["revision"], 1);
         Ok(())
     })
     .await

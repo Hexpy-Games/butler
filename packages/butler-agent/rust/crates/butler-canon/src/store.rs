@@ -116,9 +116,17 @@ pub(super) fn event(
     revision: i64,
     op: &str,
 ) -> Result<()> {
+    event_with_details(tx, ctx, (kind, id, revision, op), &json!({}))
+}
+fn event_with_details(
+    tx: &Transaction<'_>,
+    ctx: &Context,
+    (kind, id, revision, op): (&str, &str, i64, &str),
+    details: &Value,
+) -> Result<()> {
     let mut payload = json!({"entity_kind":kind,"entity_id":id,"revision":revision,"op":op});
-    if kind == "work" && op == "create" {
-        payload["tags"] = json!(rows(tx, api::sql::EPIC_TAGS, [id])?);
+    if let (Some(payload), Some(details)) = (payload.as_object_mut(), details.as_object()) {
+        payload.extend(details.clone());
     }
     tx.execute(
         sql::AUDIT,
@@ -132,7 +140,7 @@ pub(super) fn event(
             payload.to_string()
         ],
     )?;
-    api::outbox(tx, ctx, kind, id, revision, op)?;
+    api::outbox(tx, ctx, kind, id, revision, details)?;
     Ok(())
 }
 pub(super) fn count(
