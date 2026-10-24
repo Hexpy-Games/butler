@@ -1,8 +1,9 @@
 import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
-/** Public Library paths in an isolated real App; native input, stub models, stills only. */
+/** Public Library paths in an isolated real App; CDP input, stub models, stills only. */
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { electronViewInput } from "../support/electron-view-input";
 import { redesignApp } from "../support/browser-redesign-app";
 import { waitBrowser } from "../support/browser-agent-app";
 import { nativeAligned, shellReady } from "../support/browser-shell-acceptance";
@@ -11,8 +12,7 @@ import { showPickSidebar, overlayRead } from "../support/browser-pick-acceptance
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE!;
 const phase = process.env.BUTLER_LIBRARY_SMOKE_PHASE ?? "all";
 assert.ok(["all", "organize", "matrix"].includes(phase));
-const driver = process.env.BUTLER_NATIVE_MOUSE_EXECUTABLE!;
-assert.ok(evidence && driver);
+assert.ok(evidence);
 mkdirSync(evidence, { recursive: true });
 const app = await redesignApp(evidence);
 let lastUI = "";
@@ -36,13 +36,9 @@ async function box(selector: string) {
   await waitBrowser(() => app.page.expression(`document.querySelector(${JSON.stringify(selector)})!==null`), `input target loaded: ${selector}`);
   return app.page.expression<Point>(`(()=>{const n=document.querySelector(${JSON.stringify(selector)});n.scrollIntoView({block:'nearest'});const r=n.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
 }
-async function input(action: string, from: Point, to?: Point | number) {
-  const window = await app.main<{ pid: number; x: number; y: number }>(`(()=>{${app.win}.show();${app.win}.focus();${app.win}.moveTop();const r=${app.win}.getContentBounds();return {pid:process.pid,x:r.x,y:r.y}})()`);
-  const args = [driver, String(window.pid), action, String(window.x + from.x), String(window.y + from.y)];
-  if (typeof to === "number") args.push(String(to));
-  else if (to) args.push(String(window.x + to.x), String(window.y + to.y));
-  const result = Bun.spawnSync(args);
-  assert.equal(result.exitCode, 0, result.stderr.toString());
+const viewInput = electronViewInput(app);
+async function input(action: string, from: Point, to?: Point | string) {
+  await viewInput(action, from, to);
   if (action === "down" || action === "dragmove") held = from;
   if (action === "up") held = undefined;
 }
@@ -85,7 +81,7 @@ async function nativeDrops(group: string) {
   assert.equal(capture.exitCode, 0, capture.stderr.toString());
   writeFileSync(join(evidence, "native-pick-chooser-renderer.png"), await app.page.screenshot());
   notes.push({ chooserFocus: await app.page.expression("({tag:document.activeElement.tagName,text:document.activeElement.textContent})") });
-  await input("key", { x: 0, y: 0 }, 36);
+  await input("key", { x: 0, y: 0 }, "Enter");
   await waitBrowser(() => app.page.expression("document.querySelector('[data-test-class=library-saved-chooser]')===null"), "Enter keeps ungrouped save");
   point = await picking();
   const barPoint = await app.main<Point>(`(async()=>{const p=${browser}.pointer.view,b=p.getBounds();const r=await p.webContents.executeJavaScript("(()=>{const n=[...document.querySelectorAll('[data-slot=selection-bar] button')].find(n=>n.textContent.trim()==='Scrap');const r=n.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()");return {x:b.x+r.x,y:b.y+r.y}})()`);
@@ -93,7 +89,7 @@ async function nativeDrops(group: string) {
   await input("click", barPoint);
   await waitBrowser(() => app.page.expression("document.querySelector('[data-test-class=library-saved-chooser]')!==null"), "SelectionBar Scrap opens the same chooser");
   assert.equal((await rows()).length, barSaved, "saving a kept pick again updates its item without duplicating it");
-  await input("key", { x: 0, y: 0 }, 36);
+  await input("key", { x: 0, y: 0 }, "Enter");
   await waitBrowser(() => app.page.expression("document.querySelector('[data-test-class=library-saved-chooser]')===null"), "SelectionBar default leaves ungrouped");
   point = await picking();
   const grouped = (await rows()).filter((item) => item.group === group).length;

@@ -20,7 +20,7 @@ double.addEventListener('dblclick',()=>proof.double++);
 let held;first.addEventListener('dragstart',e=>{held=first;proof.drags++;e.dataTransfer.setData('text/plain','first')});
 second.addEventListener('dragover',e=>e.preventDefault());
 second.addEventListener('drop',e=>{e.preventDefault();second.after(held)});
-for(const type of ['mousedown','mousemove','mouseup','wheel'])document.addEventListener(type,e=>{
+for(const type of ['pointerdown','pointerup','mousedown','mousemove','mouseup','click','dragstart','drop','wheel'])document.addEventListener(type,e=>{
   (proof.events??=[]).push({type,x:e.clientX,y:e.clientY,buttons:e.buttons,detail:e.detail,deltaY:e.deltaY});
 });
 </script>`;

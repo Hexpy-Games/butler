@@ -24,6 +24,20 @@ pub struct ApprovalOperation {
     /// Why `browser_wait_for_user` hands the tab to the user.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wait_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<ImageApprovalOperation>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImageApprovalOperation {
+    pub action: String,
+    pub model: String,
+    pub model_ref: String,
+    pub size: String,
+    pub quality: String,
+    pub images: Vec<String>,
+    pub mask: Option<String>,
+    pub prompt: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -93,13 +107,25 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
         targets,
         command,
         // R5 web requests are never covered by a standing permission.
-        allow_conversation: matches!(facts.capability, "web_read" | "web_search").then_some(false),
+        allow_conversation: matches!(
+            facts.capability,
+            "web_read" | "web_search" | "generate_image" | "edit_image"
+        )
+        .then_some(false),
         browser_tab: None,
         browser_mode: None,
         browser_steps: Vec::new(),
         sign_in_step: None,
         wait_reason: None,
+        image: image_operation(&facts),
     }
+}
+
+fn image_operation(facts: &ApprovalFacts<'_>) -> Option<ImageApprovalOperation> {
+    if !matches!(facts.capability, "generate_image" | "edit_image") {
+        return None;
+    }
+    serde_json::from_value(facts.input.clone()).ok()
 }
 
 fn paths<'a>(input: &'a Value, key: &str) -> Vec<&'a str> {
@@ -166,6 +192,7 @@ fn browser_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
         browser_steps,
         sign_in_step: None,
         wait_reason: None,
+        image: None,
     }
 }
 
@@ -200,6 +227,7 @@ fn signed_in_operation(facts: &ApprovalFacts<'_>) -> Option<ApprovalOperation> {
         sign_in_step: (tool == "browser_sign_in_wait")
             .then(|| text(input.pointer("/wait/reason").unwrap_or(&Value::Null))),
         wait_reason: None,
+        image: None,
         browser_steps: Vec::new(),
     })
 }
@@ -259,6 +287,7 @@ fn pay_operation(facts: &ApprovalFacts<'_>) -> Option<ApprovalOperation> {
         browser_steps: Vec::new(),
         sign_in_step: None,
         wait_reason,
+        image: None,
     })
 }
 
@@ -281,6 +310,7 @@ fn wait_operation(facts: &ApprovalFacts<'_>) -> ApprovalOperation {
         browser_mode: None,
         browser_steps: Vec::new(),
         sign_in_step: None,
+        image: None,
         wait_reason: input
             .pointer("/wait/reason")
             .and_then(Value::as_str)

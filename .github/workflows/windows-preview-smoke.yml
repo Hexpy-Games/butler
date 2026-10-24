@@ -389,6 +389,49 @@ jobs:
       - name: Install ZIP, authenticate browser UI and exercise lifecycle
         working-directory: .
         run: ./deploy/windows-preview-smoke.ps1
+      - uses: ./.github/actions/bun-setup
+      - name: Install smoke dependencies and Chromium
+        working-directory: .
+        run: |
+          $profile = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+          $env:HOME = Join-Path $profile 'home'
+          $env:BUTLER_DATA = Join-Path $profile 'data'
+          $env:PLAYWRIGHT_BROWSERS_PATH = Join-Path $env:RUNNER_TEMP 'playwright-browsers'
+          New-Item -ItemType Directory -Force $env:HOME,$env:BUTLER_DATA | Out-Null
+          try {
+            $ErrorActionPreference = 'Continue'
+            bun install --frozen-lockfile --ignore-scripts
+            $code = $LASTEXITCODE
+            $ErrorActionPreference = 'Stop'
+            if ($code -ne 0) { throw "Dependency installation failed: $code" }
+            $ErrorActionPreference = 'Continue'
+            bun x playwright install chromium
+            $code = $LASTEXITCODE
+            $ErrorActionPreference = 'Stop'
+            if ($code -ne 0) { throw "Chromium installation failed: $code" }
+          } finally { Remove-Item $profile -Recurse -Force }
+      - name: Installed agent composer permission smoke
+        working-directory: .
+        run: |
+          $agentRoot = $env:BUTLER_E2E_INSTALLED_ROOT
+          if (!$agentRoot -or !(Test-Path "$agentRoot/butler-agent.exe" -PathType Leaf) -or
+              !(Test-Path "$agentRoot/resources" -PathType Container)) {
+            throw 'Installed agent executable and resources are required'
+          }
+          $profile = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+          $env:HOME = Join-Path $profile 'home'
+          $env:BUTLER_DATA = Join-Path $profile 'data'
+          $env:PLAYWRIGHT_BROWSERS_PATH = Join-Path $env:RUNNER_TEMP 'playwright-browsers'
+          $env:BUTLER_APP_DISABLE_SHELL_REGISTRATION = '1'
+          $env:BUTLER_PERMISSION_SCREENSHOTS = Join-Path $env:PREVIEW_ROOT 'logs/composer-permission'
+          New-Item -ItemType Directory -Force $env:HOME,$env:BUTLER_DATA | Out-Null
+          try {
+            $ErrorActionPreference = 'Continue'
+            bun tests/smoke/composer-permission-agent-smoke.ts "$agentRoot"
+            $code = $LASTEXITCODE
+            $ErrorActionPreference = 'Stop'
+            if ($code -ne 0) { throw "Composer permission smoke failed: $code" }
+          } finally { Remove-Item $profile -Recurse -Force }
       - name: Pure Task Scheduler XML from compiled harness
         run: ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests windows_startup_xml
       - name: Installed release stub chat

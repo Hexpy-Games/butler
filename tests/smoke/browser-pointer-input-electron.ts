@@ -1,9 +1,10 @@
 import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 // test-category: security
-/** Native OS input through the real App overlay; no CDP mouse injection. */
+/** CDP input routed through the real App native view stack. */
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { electronViewInput } from "../support/electron-view-input";
 import { redesignApp } from "../support/browser-redesign-app";
 import { waitBrowser } from "../support/browser-agent-app";
 import { nativeAligned, shellReady } from "../support/browser-shell-acceptance";
@@ -11,8 +12,7 @@ import { showPickSidebar } from "../support/browser-pick-acceptance";
 import { pointerPage } from "../support/browser-pointer-page";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE!;
-const driver = process.env.BUTLER_NATIVE_MOUSE_EXECUTABLE!;
-assert.ok(evidence && driver, "Evidence and native mouse driver required");
+assert.ok(evidence, "Evidence directory required");
 mkdirSync(evidence, { recursive: true });
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response(pointerPage, { headers: { "content-type": "text/html" } }) });
 const app = await redesignApp(evidence).catch(error => { server.stop(true); throw error; });
@@ -28,20 +28,14 @@ async function point(selector: string, where = 0.5): Promise<Point> {
   return { ...at, selector, where };
 }
 const rendererPoint = async (selector: string): Promise<Point> => ({ ...await app.page.expression<Point>(`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`), selector, renderer: true });
+const viewInput = electronViewInput(app);
 async function input(action: string, from: Point, to?: Point) {
-  const facts = await app.main<{ pid: number; x: number; y: number }>(`(()=>{${app.win}.show();${app.win}.focus();${app.win}.moveTop();const r=${app.win}.getContentBounds();return {pid:process.pid,x:r.x,y:r.y}})()`);
-  // Let the real pointer dismiss renderer tooltips and settle native occlusion
-  // before pressing. Unlike old smokes, the held gesture never changes targets.
-  const moved = Bun.spawnSync([driver, String(facts.pid), "move", String(facts.x + from.x), String(facts.y + from.y)]);
-  assert.equal(moved.exitCode, 0, moved.stderr.toString());
+  await viewInput("move", from);
   await nativeAligned(app);
   if (from.selector) from = from.renderer ? await rendererPoint(from.selector) : await point(from.selector, from.where);
   if (to?.selector) to = to.renderer ? await rendererPoint(to.selector) : await point(to.selector, to.where);
   console.log(action, from, to ?? "");
-  const args = [driver, String(facts.pid), action, String(facts.x + from.x), String(facts.y + from.y)];
-  if (to) args.push(String(facts.x + to.x), String(facts.y + to.y));
-  const result = Bun.spawnSync(args);
-  assert.equal(result.exitCode, 0, result.stderr.toString());
+  await viewInput(action, from, to);
 }
 async function picks(count: number) { await waitBrowser(() => app.main(`${subject()}.selections?.length===${count}`), `${count} picks`); }
 async function dragPick(source: "page" | "bar", destination: string) {
@@ -56,10 +50,13 @@ try {
   tab = await app.call<string>("create", { owner: "conversation:general", profile: "signed_out", url: server.url.href });
   await app.click("Show browser"); await app.call("activate", { id: tab }); await nativeAligned(app);
   await waitBrowser(() => page("document.title==='Atlas search workspace'"), "search workspace loaded");
-  await app.main(`(()=>{globalThis.pointerProof={raw:[],forwarded:[],drags:[],hidden:[],uncaught:[],dialogs:[],warnings:0};
+  await app.main(`(()=>{globalThis.pointerProof={raw:[],native:[],intercepted:[],forwarded:[],drags:[],hidden:[],uncaught:[],dialogs:[],warnings:0};
     process.on('uncaughtExceptionMonitor',e=>pointerProof.uncaught.push(String(e)));
     const electron=process.getBuiltinModule('module').createRequire(${JSON.stringify(join(process.cwd(), "packages/butler-app/client/electron/package.json"))})('electron');
     electron.dialog.showErrorBox=(...args)=>pointerProof.dialogs.push(args);
+    const contents=${subject()}.view.webContents;
+    contents.on('input-event',(event,input)=>pointerProof.native.push({input,prevented:event.defaultPrevented}));
+    contents.debugger.on('message',(_event,method,params)=>{if(method==='Input.dragIntercepted')pointerProof.intercepted.push(params)});
     const warn=console.warn;console.warn=(...args)=>{if(String(args[0]).includes('[browser-pointer]'))pointerProof.warnings++;warn(...args)};
   })()`);
   // A page's preload must answer drag IPC even before an overlay exists.
@@ -145,6 +142,13 @@ try {
   await app.shot("after-native-input", true);
   writeFileSync(join(evidence, "result.json"), JSON.stringify({ ok: true, elapsedMs: Date.now() - started, proof, page: await page("proof") }, null, 2));
 } catch (error) {
-  writeFileSync(join(evidence, "failure.json"), JSON.stringify({ error: String(error), main: app.lastMain(), proof: await app.main("pointerProof").catch(() => null), state: await app.call("state"), page: await page("({proof,range:range.value,text:getSelection().toString(),list:list.innerText})").catch(() => null) }, null, 2));
+  const main = app.lastMain();
+  const native = await app.main(`(async()=>{
+    const t=${subject()},c=t.view.webContents,w=${app.win};
+    return {holder:t.holder,attached:Boolean(t.attached),covered:t.covered,bounds:t.bounds,view:t.view.getBounds(),visible:t.view.getVisible(),zoom:c.getZoomFactor(),
+      occluded:typeof c.isOccluded==='function'?c.isOccluded():null,captured:c.isBeingCaptured(),window:{visible:w.isVisible(),focused:w.isFocused(),minimized:w.isMinimized()},
+      page:await c.executeJavaScript("({visibility:document.visibilityState,hidden:document.hidden,focus:document.hasFocus(),width:innerWidth,height:innerHeight,dpr:devicePixelRatio})")};
+  })()`).catch(() => null);
+  writeFileSync(join(evidence, "failure.json"), JSON.stringify({ error: String(error), native, main, proof: await app.main("pointerProof").catch(() => null), state: await app.call("state"), page: await page("({proof,range:range.value,text:getSelection().toString(),list:list.innerText})").catch(() => null) }, null, 2));
   await app.shot("failure", true).catch(() => {}); throw error;
 } finally { server.stop(true); await app.stop(); }

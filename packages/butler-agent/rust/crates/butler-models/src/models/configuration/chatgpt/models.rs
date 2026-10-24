@@ -94,7 +94,18 @@ impl ModelConfiguration {
                 state.cached = Some(cached);
             }
         }
-        Ok(state.cached.as_ref().map(|c| c.models.clone()))
+        Ok(state.cached.as_ref().map(|c| {
+            c.models
+                .iter()
+                .filter(|m| {
+                    !self
+                        .registration_catalog
+                        .find_static_model_metadata(Some(&format!("openai/{}", m.slug)))
+                        .is_some_and(|metadata| metadata.is_image_output())
+                })
+                .cloned()
+                .collect()
+        }))
     }
     async fn fetch_chatgpt_models(
         &self,
