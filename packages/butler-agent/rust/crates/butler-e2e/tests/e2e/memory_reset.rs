@@ -1,5 +1,6 @@
 //! Reset through authenticated App routes, actual ingestion and daily catch-up.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
+mod after_launch;
 mod settlement;
 use super::memory_reset_support as support;
 use butler_e2e::e2e::HarnessError;

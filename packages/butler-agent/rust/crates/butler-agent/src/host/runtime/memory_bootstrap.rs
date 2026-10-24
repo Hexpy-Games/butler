@@ -14,6 +14,7 @@ use std::sync::Arc;
 pub(super) async fn open(
     paths: &RuntimePaths,
     cognition_paths: &CognitionPathEnvironment,
+    stop: &tokio_util::sync::CancellationToken,
 ) -> Result<
     (
         Arc<CognitionWriteCoordinator>,
@@ -58,6 +59,7 @@ pub(super) async fn open(
         paths.data_root.clone(),
         cognition_paths.clone(),
         coordinator.clone(),
+        stop.clone(),
     ));
     Ok((coordinator, embedding, vectors, fresh, management))
 }

@@ -92,10 +92,12 @@ jobs:
             if ($LASTEXITCODE) { throw 'Published preview update failed' }
           } finally { Remove-Item -Recurse -Force $profile }
 
-  real-chat:
-    name: Released Windows real folder chat (live model)
+  # The uncached debug harness build takes about 15 minutes on a hosted
+  # runner. It needs no credentials, so it runs beside the install check and
+  # the live job spends its own budget on the turn alone.
+  harness:
+    name: Build the E2E harness for the released live chat
     runs-on: windows-latest
-    environment: live-e2e
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -103,6 +105,37 @@ jobs:
         with:
           native-deps: protoc
           cache-key: released-windows-live
+      - name: Compile the existing E2E harness
+        shell: pwsh
+        working-directory: packages/butler-agent/rust
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $messages = python ../../../.github/scripts/isolated.py cargo test --locked -p butler-e2e --test e2e --no-run --message-format=json
+          if ($LASTEXITCODE) { throw 'E2E harness build failed' }
+          $executables = @($messages | ForEach-Object { $_ | ConvertFrom-Json } | Where-Object { $_.reason -eq 'compiler-artifact' -and $_.target.name -eq 'e2e' -and $_.profile.test } | ForEach-Object executable)
+          if ($executables.Count -ne 1) { throw 'Expected one E2E harness executable' }
+          $out = Join-Path $env:RUNNER_TEMP 'released-live-harness'
+          New-Item -ItemType Directory $out | Out-Null
+          Copy-Item $executables[0] (Join-Path $out 'e2e.exe')
+      - uses: actions/upload-artifact@v4
+        with:
+          name: released-windows-live-harness
+          path: ${{ runner.temp }}/released-live-harness/e2e.exe
+          retention-days: 1
+          if-no-files-found: error
+
+  real-chat:
+    name: Released Windows real folder chat (live model)
+    needs: harness
+    runs-on: windows-latest
+    environment: live-e2e
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: released-windows-live-harness
+          path: ${{ runner.temp }}/released-live-harness
       - name: Verify and use the published Agent for one real folder turn
         shell: pwsh
         env:
@@ -154,9 +187,11 @@ jobs:
             New-Item -ItemType Directory $env:LOCALAPPDATA,$env:APPDATA | Out-Null
             $version = python .github/scripts/isolated.py $env:BUTLER_E2E_BIN --version
             if ($LASTEXITCODE -or $version -notmatch [regex]::Escape($env:BUTLER_E2E_RELEASED_VERSION)) { throw 'Released binary version mismatch' }
+            $harness = Join-Path $env:RUNNER_TEMP 'released-live-harness/e2e.exe'
             Push-Location packages/butler-agent/rust
             try {
-              python ../../../.github/scripts/isolated.py cargo test --locked -p butler-e2e --test e2e downloads_live::released_windows_folder_real_chat -- --exact --test-threads=1 --nocapture
+              $env:BUTLER_E2E_WORKSPACE_ROOT = (Get-Location).Path
+              python ../../../.github/scripts/isolated.py $harness downloads_live::released_windows_folder_real_chat --exact --test-threads=1 --nocapture
               if ($LASTEXITCODE) { throw 'Released real folder chat failed' }
             } finally { Pop-Location }
           } finally { Remove-Item -Recurse -Force $root }
