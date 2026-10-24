@@ -106,7 +106,7 @@ async fn check(owner: &GuidedTools, invocation: &GuidedInvocation<'_>, args: &Va
     let data = owner.binding.butler_data.clone();
     let admin = tokio::task::spawn_blocking(move || {
         let file = butler_platform::secure_fs::open_read_no_follow(
-            &data.join("app/runtime/auth/local-admin.json"),
+            &data.join(butler_platform::data_paths::LOCAL_ADMIN),
         )?;
         serde_json::from_reader::<_, Value>(file).map_err(std::io::Error::other)
     })

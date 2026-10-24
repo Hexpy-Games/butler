@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 pub fn relative_path(target: &Path, root: &Path) -> Option<PathBuf> {
     #[cfg(windows)]
     {
-        if !is_within(target, root) {
+        if !path_is_within(target, root) {
             return None;
         }
         Some(

@@ -4,7 +4,8 @@
 mod trust;
 
 use butler_core::public_text::fixed_regex;
-use std::path::{Component, Path, PathBuf};
+use butler_platform::command_sandbox::{PathCandidate, PathScreen};
+use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -58,7 +59,7 @@ static ASYNC: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 pub(super) fn guard(
-    command: &str,
+    (command, paths): (&str, &PathScreen),
     cwd: &Path,
     workspace: &Path,
     data: &Path,
@@ -83,7 +84,7 @@ pub(super) fn guard(
     {
         return Some(value);
     }
-    if !trusted && let Some(value) = native_paths(command, cwd, workspace, data, home) {
+    if !trusted && let Some(value) = native_paths(paths, workspace) {
         return Some(value);
     }
     let write = write_candidates(command);
@@ -120,25 +121,20 @@ pub(super) fn guard(
 }
 
 // Regex write hints alone do not cover cmdlets and alias parameter syntax.
-fn native_paths(
-    command: &str,
-    cwd: &Path,
-    workspace: &Path,
-    data: &Path,
-    home: Option<&Path>,
-) -> Option<Value> {
-    let paths = butler_platform::command_sandbox::path_tokens(command);
-    let normalized: Vec<_> = paths
-        .iter()
-        .map(|path| butler_platform::command_sandbox::normalize_path_token(path))
-        .collect();
-    first_protected(
-        normalized.iter().map(String::as_str),
-        cwd,
-        workspace,
-        data,
-        home,
-    )
+fn native_paths(paths: &PathScreen, workspace: &Path) -> Option<Value> {
+    let root = real_or_nearest(&workspace.join(".project-ledger"));
+    for candidate in &paths.candidates {
+        let resolved = PathCandidate {
+            text: candidate.text.clone(),
+            glob: candidate.glob,
+            posix_glob: candidate.posix_glob,
+            path: candidate.path.as_deref().map(real_or_nearest),
+        };
+        if resolved.could_access(&root) {
+            return Some(denied(&candidate.text));
+        }
+    }
+    None
 }
 
 fn write_candidates(command: &str) -> Vec<String> {
@@ -207,12 +203,7 @@ fn first_protected<'a>(
             continue;
         };
         if protected(&path, workspace, data, home) {
-            return Some(json!({
-                "ok":false,"error":"protected_path",
-                "message":"Project Ledger source records must be mutated through Project Ledger commands.",
-                "protected_path":candidate,
-                "next":[{"command":"project-ledger record update --id <id> --from FILE|-"}]
-            }));
+            return Some(denied(candidate));
         }
     }
     None
@@ -224,30 +215,34 @@ pub(super) fn resolve(
     data: &Path,
     home: Option<&Path>,
 ) -> Option<PathBuf> {
-    let path = if let Some(suffix) = candidate
-        .strip_prefix("$BUTLER_DATA/")
-        .or_else(|| candidate.strip_prefix("${BUTLER_DATA}/"))
-    {
-        data.join(suffix)
-    } else if let Some(suffix) = candidate
-        .strip_prefix("$HOME/")
-        .or_else(|| candidate.strip_prefix("${HOME}/"))
-    {
-        home?.join(suffix)
-    } else if let Some(suffix) = candidate.strip_prefix("~/") {
-        home?.join(suffix)
-    } else if candidate.starts_with("/project-ledger/projects/") {
+    let mut environment = std::collections::HashMap::from([(
+        "BUTLER_DATA".into(),
+        data.to_string_lossy().into_owned(),
+    )]);
+    if let Some(home) = home {
+        environment.insert("HOME".into(), home.to_string_lossy().into_owned());
+    }
+    let candidate = if candidate.starts_with("/project-ledger/projects/") {
         data.join(candidate.trim_start_matches('/'))
+            .to_string_lossy()
+            .into_owned()
     } else if candidate.starts_with("/.project-ledger/") {
         cwd.join(candidate.trim_start_matches('/'))
-    } else if Path::new(candidate).is_absolute() {
-        PathBuf::from(candidate)
+            .to_string_lossy()
+            .into_owned()
     } else if candidate.starts_with("project-ledger/projects/") {
-        data.join(candidate)
+        data.join(candidate).to_string_lossy().into_owned()
     } else {
-        cwd.join(candidate)
+        candidate.to_owned()
     };
-    Some(lexical(&path))
+    butler_platform::command_sandbox::resolve_path_token(&candidate, cwd, &environment)
+}
+
+fn denied(candidate: &str) -> Value {
+    json!({"ok":false,"error":"protected_path",
+        "message":"Project Ledger source records must be mutated through Project Ledger commands.",
+        "protected_path":candidate,
+        "next":[{"command":"project-ledger record update --id <id> --from FILE|-"}]})
 }
 
 fn protected(path: &Path, workspace: &Path, _data: &Path, _home: Option<&Path>) -> bool {
@@ -260,7 +255,7 @@ fn protected(path: &Path, workspace: &Path, _data: &Path, _home: Option<&Path>) 
 }
 
 pub(super) fn real_or_nearest(path: &Path) -> PathBuf {
-    let mut current = lexical(path);
+    let mut current = butler_platform::command_sandbox::lexical_path(path);
     let mut suffix = Vec::new();
     loop {
         if let Ok(real) = butler_platform::secure_fs::canonicalize(&current) {
@@ -270,27 +265,13 @@ pub(super) fn real_or_nearest(path: &Path) -> PathBuf {
                 .fold(real, |path, part| path.join(part));
         }
         let Some(name) = current.file_name().map(std::borrow::ToOwned::to_owned) else {
-            return lexical(path);
+            return butler_platform::command_sandbox::lexical_path(path);
         };
         suffix.push(name);
         if !current.pop() {
-            return lexical(path);
+            return butler_platform::command_sandbox::lexical_path(path);
         }
     }
-}
-
-fn lexical(path: &Path) -> PathBuf {
-    let mut result = PathBuf::new();
-    for part in path.components() {
-        match part {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                result.pop();
-            }
-            other => result.push(other.as_os_str()),
-        }
-    }
-    result
 }
 
 fn has_background(command: &str) -> bool {

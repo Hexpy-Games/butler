@@ -2,6 +2,11 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
 mod authority;
 mod auto;
+mod command_guard;
+mod command_guard_fallback;
+mod command_guard_followup;
+mod command_guard_paths;
+mod command_guard_strict;
 mod link_targets;
 pub(super) use authority::{approve, assert_counts, delivered, paused};
 mod sandbox_data_reads;
@@ -283,8 +288,8 @@ pub(super) async fn outputs(
             .get("output")
             .filter(|v| v.is_object())
             .unwrap_or(&value);
-        // Failed operations have model feedback but no output artifact (PROJECT-WORKSPACE).
-        // Successful results must also remain readable through the public inspector.
+        // Some tool errors have no output payload. Check successful results here;
+        // command refusal scenarios also inspect their failure payload publicly.
         if body["ok"] == true {
             let evidence = s.gw.operation_output(id, &row).await?;
             assert!(!evidence.contains("authority_pending"));

@@ -51,7 +51,10 @@ pub fn secret_name(name: &str) -> bool {
 
 pub(crate) fn roots(environment: &HashMap<String, String>) -> Vec<PathBuf> {
     let mut roots = Vec::new();
-    if let Some(home) = environment.get("HOME") {
+    if let Some(home) = environment
+        .get("HOME")
+        .or_else(|| environment.get("USERPROFILE"))
+    {
         let home = PathBuf::from(home);
         roots.extend(COMMON_ROOTS.iter().map(|name| home.join(name)));
         #[cfg(target_os = "linux")]
@@ -65,6 +68,7 @@ pub(crate) fn roots(environment: &HashMap<String, String>) -> Vec<PathBuf> {
         .or_else(|| {
             environment
                 .get("HOME")
+                .or_else(|| environment.get("USERPROFILE"))
                 .map(|home| PathBuf::from(home).join(".butler"))
         });
     if let Some(data) = &data {

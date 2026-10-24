@@ -40,6 +40,9 @@ pub(crate) struct GuidedCommand {
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CommandExecution {
     Sandboxed,
+    /// Project-write mutations execute with kernel read/write containment.
+    ProjectWrite,
+    /// Registered shell execution has no kernel read containment.
     Registered,
 }
 
@@ -49,6 +52,7 @@ pub(crate) struct CommandScope<'a> {
     pub workspace_path: &'a Path,
     pub butler_data: &'a Path,
     pub execution: CommandExecution,
+    pub full_access: bool,
     pub contained_reads: bool,
     pub abort: CancellationToken,
     pub allowed_tools_and_effects: Option<&'a [String]>,
@@ -124,6 +128,10 @@ impl GuidedCommand {
         } else {
             args.get("timeout_ms").and_then(Value::as_f64)
         };
+        if let Some(rejected) = self.check_paths(args, &scope).await? {
+            timing.mark("refused");
+            return Ok(rejected);
+        }
         if registered {
             timing.mark("before_cwd_job");
             let guarded_root = root.clone();
@@ -137,10 +145,6 @@ impl GuidedCommand {
                 .await?
                 .map_err(BtccError::from)?;
             timing.mark("before_guard");
-            if let Some(rejected) = self.check_paths(args, &scope).await? {
-                timing.mark("refused");
-                return Ok(rejected);
-            }
             let before_git = registered_artifacts::snapshot(
                 &self.commands,
                 &root,

@@ -83,6 +83,7 @@ impl SecretInventory {
             data,
             &[
                 "HOME",
+                "USERPROFILE",
                 "CODEX_HOME",
                 "CODEX_AUTH_JSON",
                 "BUTLER_CHATGPT_AUTH_DIR",

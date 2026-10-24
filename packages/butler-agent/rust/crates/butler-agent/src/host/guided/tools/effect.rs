@@ -84,6 +84,7 @@ async fn execute_effect(
         } else {
             crate::host::guided::command::CommandExecution::Sandboxed
         },
+        full_access: owner.binding.access_mode == AccessMode::FullAccess,
         contained_reads: false,
         abort: invocation.cancellation.clone(),
         allowed_tools_and_effects: owner.binding.allowed_tools_and_effects.as_deref(),
