@@ -30,7 +30,31 @@ Use NavRow for sidebar navigation items, project rows, session rows, settings it
 
 ## Container vs Presenter
 
-**NavRow is a presenter block.** It owns visual layout, states (active, disabled), hover behavior, and accessibility slots. The active row is clearly stronger than hover: `--selection-strong` background, primary text, medium label weight, and a full-opacity icon; hover uses a softer tint of `--selection`. It must not import Butler domain data, stores, routes, or app copy.
+**NavRow is a presenter block.** It owns visual layout, states (active, disabled), hover behavior, and accessibility slots. The active row has primary text, medium label weight and a full-opacity icon. It must not import Butler domain data, stores, routes, or app copy.
+
+### Fills
+
+Fills are flat (no motion between rows, no shadow or edge) and come from the
+surface the row sits on. NavRow reads `--nav-hover-bg` and
+`--nav-selected-bg`; selected + hover and pressed show the selected fill.
+
+- **Shades** (the default, when the surface sets neither): hover
+  `--selection`, selected and pressed `--selection-strong` (75% of
+  `--selection` inside a `SidebarShell`). A white base keeps them: web and
+  Linux translucent, the hidden sidebar's peek card, the drawer, and all of
+  dark theme.
+- **White family** (light theme, a sidebar tinted against the content):
+  AdaptiveShell maps the shell's pair onto the docked sidebar, and SettingsShell
+  onto its nav in the cards frame. macOS translucent uses
+  `--mac-sidebar-hover-bg` (white 0.45), Windows translucent
+  `--windows-sidebar-hover-bg` (white 0.60), and the opaque sidebar setting
+  (`.sidebar-solid`, every platform) `--sidebar-hover-bg` (white 0.60);
+  selected is the workspace white (`--workspace-bg`). On the near-white
+  Windows and opaque shells hover is faint by design and the medium label
+  weight carries the selection.
+
+The rule is the surface, never a platform check. NavRow's fills outrank
+Clickable's.
 
 **Container responsibilities:** Domain components inject project names, session titles, route matching for active state, click handlers that navigate, app copy for labels, and domain-specific actions.
 

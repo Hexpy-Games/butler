@@ -1619,7 +1619,7 @@ The sidebar frame: titlebar space, fixed navigation, a scrolling list with fades
 - Use for: The app sidebar and other sidebar-like navigation columns
 - Not for: Settings navigation lists → `SettingsNav`
 - Not for: A scrolling region in content → `ScrollArea`
-- Tokens: `--sidebar-bg`, `--sidebar-width`, `--sidebar-row-height`, `--scroll-fade-size`, `--sidebar-padding-inline`
+- Tokens: `--sidebar-bg`, `--mac-sidebar-hover-bg`, `--mac-sidebar-selected-bg`, `--sidebar-width`, `--sidebar-row-height`, `--scroll-fade-size`, `--sidebar-padding-inline`
 
 ### SurfacePanel
 
@@ -1858,7 +1858,7 @@ A navigation folder: a header row that expands and folds its child rows with the
 - Use for: Collapsible categories in a navigation list
 - Not for: A heading that never collapses → `NavSection`
 - Not for: Expanding details in content → `DisclosureRow`
-- Tokens: `--sidebar-row-height`, `--motion-base`, `--motion-exit-base`
+- Tokens: `--sidebar-row-height`, `--selection`, `--selection-strong`, `--motion-base`, `--motion-exit-base`
 
 ### CommandPanel
 
@@ -1918,7 +1918,7 @@ The navigation row: icon and label on the left, badge or actions on the right, f
 - Not for: A data row that is not navigation → `ListRow`
 - Not for: A folder that expands → `CollapsibleNavGroup`
 - Not for: A generic clickable surface → `Clickable`
-- Tokens: `--sidebar-row-height`, `--selection-strong`, `--selection`, `--sidebar-action-size`, `--motion-fast`
+- Tokens: `--sidebar-row-height`, `--selection-strong`, `--selection`, `--mac-sidebar-hover-bg`, `--mac-sidebar-selected-bg`, `--windows-sidebar-hover-bg`, `--windows-sidebar-selected-bg`, `--sidebar-action-size`, `--motion-fast`
 
 ### NavSection
 
@@ -2521,7 +2521,7 @@ A titled group of settings sections as navigation rows, from an items array.
 - Use for: The settings sidebar, one SettingsNav per group
 - Not for: The app sidebar → `SidebarShell`
 - Not for: Rows with custom content → `NavRow`
-- Tokens: `--sidebar-row-height`, `--selection-strong`, `--typo-section-title-size`
+- Tokens: `--sidebar-row-height`, `--selection-strong`, `--sidebar-selected-bg`, `--sidebar-hover-bg`, `--typo-section-title-size`
 
 ### SettingsSecretRows
 
@@ -2557,7 +2557,7 @@ The settings layout: navigation master, detail header and detail pane, single-pa
 - Use for: The settings screen and settings-like editors
 - Not for: A management page (automations, dashboards) → `ManagementPage`
 - Not for: A setup flow → `SetupWizardShell`
-- Tokens: `--settings-bg`, `--settings-section-gap`, `--settings-section-header-gap`, `--page-max-width-reading`
+- Tokens: `--settings-bg`, `--sidebar-hover-bg`, `--sidebar-selected-bg`, `--settings-section-gap`, `--settings-section-header-gap`, `--page-max-width-reading`
 
 ### SortableCardList
 
