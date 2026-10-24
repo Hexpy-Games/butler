@@ -19,7 +19,7 @@ mkdirSync(shots, { recursive: true });
 const server = await createNativeAppServer({ ...sessionInfoStub(), uiRoot: resolve(process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist") });
 let browser: Awaited<ReturnType<typeof launchSmokeBrowser>> | undefined;
 try {
-  await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: theme, reduce_motion: true }) });
+  await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: theme, reduce_motion: true, wallpaper: { source: { kind: "live", module: "butler.riso-print" }, motion: "paused", pauseOnBattery: false } }) });
   await labelSessionInfoModel(server);
   const { project } = await server.api<{ project: { id: string } }>("/projects", { method: "POST", body: JSON.stringify({ source: "scratch", display_name: "버틀러 앱" }) });
   const plan = await server.api<{ id: string }>(`/projects/${project.id}/canon/plans`, { method: "POST", body: JSON.stringify({ title: "프리뷰 14" }) });
@@ -166,7 +166,10 @@ try {
     const dialog = page.getByRole("dialog", { name: "작업 그래프", exact: true });
     await dialog.waitFor();
     await dialog.getByText("아직 작업이 없습니다", { exact: true }).waitFor();
-    await capture("graph-modal");
+    const height = (await dialog.boundingBox())!.height;
+    assert(height >= page.viewportSize()!.height * 0.8, `Graph modal fills the viewport: ${height}`);
+    console.log(JSON.stringify({ graphModalHeight: height, viewportHeight: page.viewportSize()!.height }));
+    await capture("graph-modal-full");
     assert.equal(await dialog.getByText("작업 그래프", { exact: true }).count(), 1, "Exactly one 작업 그래프 heading");
     await page.keyboard.press("Escape");
     await dialog.waitFor({ state: "hidden" });

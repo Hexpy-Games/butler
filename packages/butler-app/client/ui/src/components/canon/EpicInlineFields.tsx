@@ -69,7 +69,7 @@ function EpicFieldRest({ field, epic, compact, busy, onEdit, titleRef, triggerRe
   const title = field === "title", value = epic[field];
   const Title = compact ? Typo.Body : Typo.PanelTitle;
   const label = appCopy.canon.inlineEdit[field];
-  return <Tooltip label={label}><Clickable stretch disabled={busy} aria-label={label}
+  return <Tooltip label={label}><Clickable bleed="inline" stretch disabled={busy} aria-label={label}
     role={title ? "button" : "group"} tabIndex={title ? 0 : -1}
     onClick={event => { if (!(event.target as HTMLElement).closest("a, button")) onEdit(); }}
     onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}

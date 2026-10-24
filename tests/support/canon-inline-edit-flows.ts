@@ -70,6 +70,14 @@ export async function verifyInlineFields(page: Page, server: NativeAppServerHand
   let writes = 0;
   const countWrite = (request: import("playwright").Request) => { if (request.method() === "PATCH") writes++; };
   page.on("request", countWrite);
+  await textarea.fill("문서 목록을 검토합니다.\n검색 흐름을 확인합니다.\n수정 내용을 정리합니다.");
+  const initialHeight = (await textarea.boundingBox())!.height;
+  await textarea.press("End");
+  for (let line = 0; line < 5; line++) { await textarea.press("Enter"); await textarea.pressSequentially("추가 설명"); }
+  const grownHeight = (await textarea.boundingBox())!.height;
+  assert(grownHeight > initialHeight, `Description grows after five lines: ${initialHeight} → ${grownHeight}`);
+  console.log(JSON.stringify({ descriptionInitialHeight: initialHeight, descriptionGrownHeight: grownHeight }));
+  await inlineShot(page, shots, "desc-editing-autogrow");
   await textarea.fill(description.split("\n")[0]!); await textarea.press("Enter"); await textarea.pressSequentially(description.split("\n").slice(1).join("\n"));
   assert.equal(await textarea.inputValue(), description); assert.equal(writes, 0);
   assert.equal((await read(server, id)).revision, before.revision);
