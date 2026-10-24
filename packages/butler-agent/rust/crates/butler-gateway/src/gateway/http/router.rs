@@ -181,6 +181,7 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/mcp-servers", Handler::Mcp),
     ("/mcp-servers/{id}", Handler::Mcp),
     ("/mcp-servers/{id}/probe", Handler::Mcp),
+    ("/memory/consolidation", Handler::Personalization),
     ("/memory/cleanup", Handler::Personalization),
     ("/memory/cleanup/{id}", Handler::Personalization),
     ("/memory/instructions", Handler::Personalization),

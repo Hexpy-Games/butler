@@ -65,6 +65,11 @@ impl AppMemoryManagement {
         project_id: Option<String>,
         sink: MemoryEventSink,
     ) -> Result<Value, GatewayApplicationError> {
+        let gate = self.daily.gate.clone();
+        let admission = gate.admission.lock().await;
+        if gate.active().is_some() {
+            return Err(error(std::io::Error::other("Memory is in use")));
+        }
         let receipt = if profile_reset {
             self.owner
                 .begin_profile_reset(operation_id.clone(), inventory_revision)
@@ -94,41 +99,59 @@ impl AppMemoryManagement {
             jobs.insert(operation_id.clone(), token.clone());
         }
         let response = encode(receipt.clone())?;
-        tokio::spawn(async move {
-            if let Ok(value) = encode(receipt) {
-                let _ = sink(value).await;
-            }
-            let result = if profile_reset {
-                crate::host::memory_jobs::reset_profile(
-                    &self.owner,
-                    &self.profile,
-                    operation_id.clone(),
-                    token,
-                )
-                .await
-            } else if project_id.is_some() {
-                self.owner
-                    .reset_project(operation_id.clone(), self.instructions.clone(), token)
-                    .await
-            } else {
-                self.owner
-                    .reset_conversations(operation_id.clone(), token)
-                    .await
-            };
-            let result = match result {
-                Ok(result) => Some(result),
-                Err(error) => self.failed_reset(&operation_id, error).await,
-            };
-            if let Some(result) = result
-                && let Ok(value) = encode(result)
-            {
-                let _ = sink(value).await;
-            }
-            if let Ok(mut jobs) = self.jobs.lock() {
-                jobs.remove(&operation_id);
-            }
-        });
+        drop(admission);
+        tokio::spawn(self.drive_reset(
+            operation_id,
+            profile_reset,
+            project_id,
+            token,
+            receipt,
+            sink,
+        ));
         Ok(response)
+    }
+
+    async fn drive_reset(
+        self,
+        operation_id: String,
+        profile_reset: bool,
+        project_id: Option<String>,
+        token: CancellationToken,
+        receipt: butler_memory::management::ResetResult,
+        sink: MemoryEventSink,
+    ) {
+        if let Ok(value) = encode(receipt) {
+            let _ = sink(value).await;
+        }
+        let result = if profile_reset {
+            crate::host::memory_jobs::reset_profile(
+                &self.owner,
+                &self.profile,
+                operation_id.clone(),
+                token,
+            )
+            .await
+        } else if project_id.is_some() {
+            self.owner
+                .reset_project(operation_id.clone(), self.instructions.clone(), token)
+                .await
+        } else {
+            self.owner
+                .reset_conversations(operation_id.clone(), token)
+                .await
+        };
+        let result = match result {
+            Ok(result) => Some(result),
+            Err(error) => self.failed_reset(&operation_id, error).await,
+        };
+        if let Some(result) = result
+            && let Ok(value) = encode(result)
+        {
+            let _ = sink(value).await;
+        }
+        if let Ok(mut jobs) = self.jobs.lock() {
+            jobs.remove(&operation_id);
+        }
     }
 
     async fn failed_reset(

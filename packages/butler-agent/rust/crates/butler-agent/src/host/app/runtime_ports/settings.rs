@@ -154,6 +154,7 @@ async fn load(
         },
         "web_search_credentials": web_search_credentials(&private_environment),
         "consolidation": {
+            "time_of_day": read.config.pointer("/cognition/consolidationCycle/timeOfDay").and_then(Value::as_str).unwrap_or("04:00"),
             "model": extractor.configured_model,
             "reasoning_effort": extractor.reasoning_effort,
             "effective_model": extractor.effective_model,

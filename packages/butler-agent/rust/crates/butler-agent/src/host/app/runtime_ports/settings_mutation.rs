@@ -17,20 +17,23 @@ pub(crate) struct AppSettingsMutation {
     profile: Arc<ProfileService>,
     installation: ResolvedInstallation,
     data_root: PathBuf,
+    gate: Arc<crate::host::memory_jobs::consolidation::ConsolidationRunGate>,
 }
 
 impl AppSettingsMutation {
-    pub(crate) fn new(
+    pub(in crate::host) fn new(
         configuration: Arc<ModelConfiguration>,
         profile: Arc<ProfileService>,
         installation: ResolvedInstallation,
         data_root: PathBuf,
+        gate: Arc<crate::host::memory_jobs::consolidation::ConsolidationRunGate>,
     ) -> Self {
         Self {
             configuration,
             profile,
             installation,
             data_root,
+            gate,
         }
     }
 
@@ -72,6 +75,7 @@ impl AppSettingsMutation {
 
         let mut destinations = Vec::new();
         let writes_config = patch.contains_key("update_previews")
+            || patch.contains_key("consolidation_time")
             || patch.contains_key("consolidation_model")
             || patch.contains_key("consolidation_reasoning_effort")
             || patch.contains_key("web_search")
@@ -110,6 +114,15 @@ impl AppSettingsMutation {
                 .map_err(GatewayApplicationError::internal_from)?;
         }
 
+        self.apply_user_settings(&patch, &projection, &root).await
+    }
+
+    async fn apply_user_settings(
+        &self,
+        patch: &Map<String, Value>,
+        projection: &Value,
+        root: &std::path::Path,
+    ) -> Result<(), GatewayApplicationError> {
         let mut user_patch = Map::new();
         if let Some(value) = patch.get("language") {
             user_patch.insert("language".into(), value.clone());
@@ -124,7 +137,13 @@ impl AppSettingsMutation {
         }
         if !user_patch.is_empty() {
             self.configuration
-                .update_user_settings(&Value::Object(user_patch), Some(&root))
+                .update_user_settings(&Value::Object(user_patch), Some(root))
+                .await
+                .map_err(GatewayApplicationError::internal_from)?;
+        }
+        if let Some(timezone) = patch.get("timezone").and_then(Value::as_str) {
+            self.gate
+                .set_timezone(timezone.to_owned())
                 .await
                 .map_err(GatewayApplicationError::internal_from)?;
         }
@@ -136,6 +155,20 @@ impl AppSettingsMutation {
         patch: &serde_json::Map<String, Value>,
         root: &std::path::Path,
     ) -> Result<(), GatewayApplicationError> {
+        if let Some(time) = patch.get("consolidation_time").and_then(Value::as_str) {
+            self.configuration
+                .set_consolidation_time(time, root)
+                .await
+                .map_err(GatewayApplicationError::internal_from)?;
+            let now = crate::host::app::schedule_clock::clock().now_iso();
+            let now = chrono::DateTime::parse_from_rfc3339(&now)
+                .map_err(GatewayApplicationError::internal_from)?
+                .timestamp_millis();
+            self.gate
+                .set_time(time.to_owned(), now)
+                .await
+                .map_err(GatewayApplicationError::internal_from)?;
+        }
         if let Some(enabled) = patch.get("update_previews").and_then(Value::as_bool) {
             self.configuration
                 .set_update_previews(enabled, root)
@@ -188,6 +221,7 @@ impl AppSettingsMutationPort for AppSettingsMutation {
             profile: self.profile.clone(),
             installation: self.installation.clone(),
             data_root: self.data_root.clone(),
+            gate: self.gate.clone(),
         };
         Box::pin(async move {
             this.apply_inner(patch.clone(), projection.clone()).await?;
