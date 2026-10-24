@@ -7,6 +7,7 @@ use super::{lookup::provider_auth_methods, *};
 
 mod browsing;
 mod image_admission;
+mod image_output;
 mod presets;
 mod provider_truth;
 
@@ -24,9 +25,17 @@ fn setup_providers(catalog: &StaticCatalog) -> BTreeSet<String> {
         .collect()
 }
 
+// test-category: pure-logic
 #[test]
 fn every_static_model_has_a_tier_and_pricing() {
+    image_output::assert_output_catalog();
     for model in &catalog().models {
+        if model.is_image_output() {
+            model.image_output.as_ref().unwrap().validate().unwrap();
+            assert!(model.tier.is_none());
+            assert!(model.pricing.is_none());
+            continue;
+        }
         provider_truth::assert_lifecycle_suffix(model);
         assert!(model.tier.is_some(), "{} has no tier", model.model_ref);
         match &model.pricing {

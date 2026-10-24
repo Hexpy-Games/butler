@@ -20,6 +20,8 @@ export interface AppUiStateSnapshot {
   active_session_id: string;
   left_open: boolean;
   right_open: boolean;
+  task_graph_enabled?: boolean;
+  session_info_open?: boolean;
   right_tab: string;
   left_panel_width: number;
   right_panel_width: number;
@@ -70,6 +72,8 @@ export function snapshotForAppUiState(
     active_session_id: normalizeString(input.active_session_id, "draft:chat"),
     left_open: input.left_open ?? true,
     right_open: input.right_open ?? false,
+    task_graph_enabled: input.task_graph_enabled === true,
+    session_info_open: input.session_info_open === true,
     right_tab: normalizeString(input.right_tab, "summary"),
     left_panel_width: clampPanelWidth(
       Number(input.left_panel_width ?? DEFAULT_LEFT_PANEL_WIDTH),

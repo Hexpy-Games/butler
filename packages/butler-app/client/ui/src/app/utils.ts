@@ -2173,9 +2173,3 @@ export function hasFollowableWorkerActivity(
     workers?.some((worker) => isWorkerVisibleInComposer(worker, now)),
   );
 }
-
-export function workerControlLabel(value: string): string {
-  if (value === "resume") return appCopy.interfaceFeedback.requestResume;
-  if (value === "cancel") return appCopy.interfaceFeedback.requestCancel;
-  return `Request ${String(value).replace(/_/gu, " ")}`;
-}

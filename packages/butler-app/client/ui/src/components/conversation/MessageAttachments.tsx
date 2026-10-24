@@ -8,10 +8,11 @@ import { attachmentViewerKind, useOpenMessageImage } from "./messageImages";
 /** A sent message's files as tiles: pictures and videos open the viewer over the session, other files its inspector. */
 export function MessageAttachments({
   attachments,
-  sessionId,
+  sessionId, tileAlign,
 }: {
   attachments: MessageFileRef[];
   sessionId: string;
+  tileAlign?: "start" | "end";
 }) {
   useAppLocale();
   const openImage = useOpenMessageImage();
@@ -25,6 +26,7 @@ export function MessageAttachments({
       <AttachmentList
         variant="tiles"
         tileLayout="wrap"
+        tileAlign={tileAlign}
         items={attachments.map((file) => ({ id: file.file_id, ...attachmentTile(file) }))}
         onOpen={(item) => {
           const file = files.get(item.id);
