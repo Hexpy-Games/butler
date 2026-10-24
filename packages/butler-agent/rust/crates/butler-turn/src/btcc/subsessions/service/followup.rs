@@ -65,6 +65,17 @@ impl SubsessionService {
         Ok(Some(self.prior_context(&relation).await?.to_string()))
     }
 
+    /// The full prior delegation context of `child_session`'s own packet; its
+    /// input shows only an excerpt.
+    pub async fn prior_delegation(&self, child_session: &str) -> Result<Option<String>, BtccError> {
+        Ok(self
+            .repository
+            .by_child(child_session.into())
+            .await
+            .map_err(BtccError::from)?
+            .and_then(|relation| relation.packet.prior_context))
+    }
+
     /// One indexed current snapshot, not a transcript or parent-history scan.
     pub async fn latest_steward_prompt(&self, parent: String) -> Result<String, BtccError> {
         let Some(relation) = self

@@ -6,7 +6,8 @@ import type { NativeAppServerHandle } from "./native-app-server.ts";
 import type { CanonTag, EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 import { selectBoardPlan } from "./canon-board-selector.ts";
 import { closeCanonInspector } from "./canon-board-inspector.ts";
-import { assertNoLooseTagMenus, chooseTag } from "./canon-tags-flows.ts";
+import { assertNoChipControls, chooseTag } from "./canon-tags-flows.ts";
+import { auditTagPicker, auditTagRow } from "./canon-tags-picker-audit.ts";
 export const tones = ["gray", "red", "orange", "yellow", "green", "teal", "blue", "purple"] as const;
 const names = ["회색", "빨강", "주황", "노랑", "초록", "청록", "파랑", "보라"];
 const post = (body: unknown) => ({ method: "POST", body: JSON.stringify(body) });
@@ -48,38 +49,7 @@ export async function captureTagViews(page: Page, shots: string, name: string, t
   await card.getByRole("button").first().click();
   const detail = page.locator('[data-test-class="canon-epic-detail"]');
   await detail.waitFor();
-  if (!before) for (const tone of tones) assert.equal(await detail.locator(`[data-test-class="canon-tags"] [data-tone="${tone}"]`).count(), 1);
-  if (!before) assert.equal(await detail.locator('[data-editable="true"]').count(), 0, "The read-only inspector shows no tag pencil");
-  await capture("inspector");
-  await detail.getByRole("button", { name: "고치기", exact: true }).click();
-  if (!before) {
-    // Chip pencils appear once the project's tag list has loaded.
-    const editable = detail.locator('[data-test-class="canon-tags-field"] [data-editable="true"]');
-    await editable.nth(tones.length - 1).waitFor();
-    assert.equal(await editable.count(), tones.length);
-    await assertNoLooseTagMenus(page);
-  }
-  await capture("inspector-edit");
-  await detail.getByRole("button", { name: `${tags[0]!.name} 태그 메뉴`, exact: true }).click();
-  await page.getByRole("menuitem", { name: "이름 바꾸기", exact: true }).waitFor();
-  await capture("inspector-edit-menu");
-  await page.keyboard.press("Escape");
-  await detail.getByRole("combobox", { name: "태그", exact: true }).click();
-  const popover = page.locator('[data-slot="filtered-select-popover"]');
-  const row = popover.locator('[data-slot="filtered-select-item"]').filter({ hasText: tags[1]!.name });
-  await row.hover();
-  await capture("picker-hover");
-  await page.mouse.move(0, 0);
-  await popover.getByRole("textbox", { name: "태그 검색", exact: true }).focus();
-  for (let step = 0; step < 4 && !await page.evaluate(() => Boolean(document.activeElement?.closest('[data-slot="filtered-select-item"], [data-slot="filtered-select-row"]'))); step++) await page.keyboard.press("Tab");
-  await capture("picker-focus");
-  if (!before) {
-    await popover.getByRole("button", { name: `${tags[1]!.name} 태그 메뉴`, exact: true }).click();
-    await page.getByRole("menuitem", { name: "색 바꾸기", exact: true }).waitFor();
-    await capture("picker-menu");
-    await page.keyboard.press("Escape");
-  }
-  await page.keyboard.press("Escape");
+  await captureInspectorTags(page, tags, before, capture);
   await closeCanonInspector(page);
   await board.getByRole("button", { name: "새 과제", exact: true }).first().click();
   await page.getByRole("dialog").getByLabel("제목", { exact: true }).fill("태그가 있는 과제");
@@ -94,4 +64,42 @@ export async function captureTagViews(page: Page, shots: string, name: string, t
   await capture("filter");
   await page.keyboard.press("Escape");
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "No viewport overflow");
+}
+
+async function captureInspectorTags(page: Page, tags: CanonTag[], before: boolean, capture: (view: string) => Promise<unknown>) {
+  const detail = page.locator('[data-test-class="canon-epic-detail"]');
+  if (!before) {
+    for (const tone of tones) assert.equal(await detail.locator(`[data-test-class="canon-tags"] [data-tone="${tone}"]`).count(), 1);
+    await assertNoChipControls(page);
+    await auditTagRow(page);
+    if (page.viewportSize()!.width === 1440) {
+      const width = await page.locator('[data-test-class~="right-inspector"]').evaluate(element => getComputedStyle(element).getPropertyValue("--right-panel-width"));
+      assert.equal(parseFloat(width), 376, "Desktop inspector track is 376px");
+    }
+  }
+  await capture("inspector");
+  if (before) await detail.getByRole("button", { name: "고치기", exact: true }).click();
+  await detail.getByRole("combobox", { name: "태그", exact: true }).click();
+  const popover = page.locator('[data-slot="filtered-select-popover"]');
+  await popover.getByRole("textbox", { name: "태그 검색", exact: true }).waitFor();
+  if (!before) await auditTagPicker(page, tags.length);
+  await capture("inspector-open");
+  const row = popover.locator('[data-slot="filtered-select-item"]').filter({ hasText: tags[1]!.name });
+  await row.hover();
+  await capture("picker-hover");
+  await page.mouse.move(0, 0);
+  await popover.getByRole("textbox", { name: "태그 검색", exact: true }).focus();
+  for (let step = 0; step < 4 && !await page.evaluate(() => Boolean(document.activeElement?.closest('[data-slot="filtered-select-item"], [data-slot="filtered-select-row"]'))); step++) await page.keyboard.press("Tab");
+  await capture("picker-focus");
+  await popover.getByRole("button", { name: `${tags[1]!.name} 태그 메뉴`, exact: true }).click();
+  await page.getByRole("menuitem", { name: "색 바꾸기", exact: true }).waitFor();
+  await capture("picker-menu");
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  if (!before) {
+    await detail.getByRole("button", { name: "고치기", exact: true }).click();
+    assert.equal(await detail.locator('form [data-test-class="canon-tags-field"]').count(), 0, "Edit form has only title and description");
+    await capture("inspector-edit");
+    await detail.getByRole("button", { name: "취소", exact: true }).click();
+  }
 }

@@ -68,15 +68,6 @@ pub(crate) fn tab_key(tab: &str, epoch: u64, url: &str) -> String {
 }
 
 impl WebSession {
-    /// Whether this turn already read `tab` at `epoch` showing `url`, so its
-    /// document need not be read again.
-    pub fn has_tab_page(&self, tab: &str, epoch: u64, url: &str) -> bool {
-        self.state
-            .lock()
-            .page_cache
-            .contains_key(&tab_key(tab, epoch, url))
-    }
-
     /// `r<n>` ids for `(url, title)` results; a URL keeps its id all turn.
     pub(in crate::web_access) fn result_ids(&self, results: &[(String, String)]) -> Vec<String> {
         let mut state = self.state.lock();
