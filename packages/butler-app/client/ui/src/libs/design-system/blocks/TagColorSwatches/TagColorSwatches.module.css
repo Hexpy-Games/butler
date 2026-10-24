@@ -1,0 +1,125 @@
+/* Round swatches, each a miniature of its Tag: the tone's fill and border,
+   with a dot (or the check when chosen) in its text color. Selection, hover
+   and the focus ring are inset rings on the swatch's own box, so a clipping
+   container never cuts them and no --focus-ring-room is needed. */
+.group {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.swatch {
+  --swatch-size: var(--control-height-sm);
+  --swatch-chip-size: calc(var(--control-height-sm) - var(--space-sm));
+
+  display: inline-grid;
+  width: var(--swatch-size);
+  height: var(--swatch-size);
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--swatch-fg);
+  cursor: pointer;
+  outline: none;
+  place-items: center;
+  transition: box-shadow var(--motion-fast) var(--motion-ease-standard);
+}
+
+.chip {
+  display: inline-grid;
+  width: var(--swatch-chip-size);
+  height: var(--swatch-chip-size);
+  border-radius: var(--radius-pill);
+  background: var(--swatch-bg);
+  box-shadow: inset 0 0 0 var(--border-hairline) var(--swatch-border);
+  place-items: center;
+}
+
+.swatch[data-state="off"] .chip::after {
+  width: var(--space-sm);
+  height: var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: currentcolor;
+  content: "";
+}
+
+.chip svg {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+}
+
+.swatch:hover:not([data-state="on"]) {
+  box-shadow: inset 0 0 0 var(--border-hairline) var(--line-strong);
+}
+
+.swatch[data-state="on"] {
+  box-shadow: inset 0 0 0 var(--border-width-strong) var(--text-primary);
+}
+
+.swatch:focus-visible {
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
+}
+
+.swatch[data-tone="gray"] {
+  --swatch-bg: var(--tag-label-gray-bg);
+  --swatch-fg: var(--tag-label-gray-fg);
+  --swatch-border: var(--tag-label-gray-border);
+}
+
+.swatch[data-tone="red"] {
+  --swatch-bg: var(--tag-label-red-bg);
+  --swatch-fg: var(--tag-label-red-fg);
+  --swatch-border: var(--tag-label-red-border);
+}
+
+.swatch[data-tone="orange"] {
+  --swatch-bg: var(--tag-label-orange-bg);
+  --swatch-fg: var(--tag-label-orange-fg);
+  --swatch-border: var(--tag-label-orange-border);
+}
+
+.swatch[data-tone="yellow"] {
+  --swatch-bg: var(--tag-label-yellow-bg);
+  --swatch-fg: var(--tag-label-yellow-fg);
+  --swatch-border: var(--tag-label-yellow-border);
+}
+
+.swatch[data-tone="green"] {
+  --swatch-bg: var(--tag-label-green-bg);
+  --swatch-fg: var(--tag-label-green-fg);
+  --swatch-border: var(--tag-label-green-border);
+}
+
+.swatch[data-tone="teal"] {
+  --swatch-bg: var(--tag-label-teal-bg);
+  --swatch-fg: var(--tag-label-teal-fg);
+  --swatch-border: var(--tag-label-teal-border);
+}
+
+.swatch[data-tone="blue"] {
+  --swatch-bg: var(--tag-label-blue-bg);
+  --swatch-fg: var(--tag-label-blue-fg);
+  --swatch-border: var(--tag-label-blue-border);
+}
+
+.swatch[data-tone="purple"] {
+  --swatch-bg: var(--tag-label-purple-bg);
+  --swatch-fg: var(--tag-label-purple-fg);
+  --swatch-border: var(--tag-label-purple-border);
+}
+
+@media (pointer: coarse) {
+  .swatch {
+    --swatch-size: var(--control-hit-target);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .swatch {
+    transition: none;
+  }
+}

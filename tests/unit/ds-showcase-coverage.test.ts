@@ -26,7 +26,7 @@ const REQUIRES_STATE_MATRIX = [
   "components/CopyButton", "components/DoneIconButton", "components/IconButton", "components/Input", "components/NativeSelect", "components/PillButton",
   "components/SegmentedControl", "components/Select", "components/Slider", "components/Switch", "components/Tabs",
   "components/Textarea", "blocks/ComposerControl", "blocks/DisclosureRow", "blocks/NavRow", "blocks/OptionMenu",
-  "blocks/SplitButton", "blocks/ChoiceCard", "blocks/TabStrip",
+  "blocks/SplitButton", "blocks/ChoiceCard", "blocks/TabStrip", "blocks/TagColorSwatches",
 ];
 
 function folderIds(): string[] {
@@ -275,7 +275,7 @@ describe("specimens are derived from tokens.css", () => {
 
   test("palette ramps group every numbered step", () => {
     const families = paletteFamilies(catalog);
-    expect(families.map((family) => family.family)).toEqual(["grayscale", "blue", "green", "red", "amber"]);
+    expect(families.map((family) => family.family)).toEqual(["grayscale", "blue", "green", "red", "amber", "orange", "teal", "purple"]);
     expect(families.find((family) => family.family === "grayscale")?.steps).toHaveLength(12);
   });
 

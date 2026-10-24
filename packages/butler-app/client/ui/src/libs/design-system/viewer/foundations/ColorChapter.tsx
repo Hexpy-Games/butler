@@ -126,7 +126,7 @@ export function ColorChapter({ chapter, anchor, locale, onOpen }: ChapterProps) 
   ]);
   return (
     <ChapterLayout anchor={anchor} chapter={chapter} locale={locale} onOpen={onOpen} sections={s.list}
-      lead="Neutrals carry the interface; blue marks the one action that matters; green, amber and red speak only for status. Product code uses role tokens. Palette steps only feed them.">
+      lead="Neutrals carry the interface; blue marks the one action that matters; green, amber and red speak only for status; the label hues only tell Tag categories apart. Product code uses role tokens. Palette steps only feed them.">
       <GuideSection spec={s.at("palette")} lead="Ten-step ramps and twelve greys. Steps are raw material, never used directly in product CSS.">
         <PaletteBands />
       </GuideSection>
