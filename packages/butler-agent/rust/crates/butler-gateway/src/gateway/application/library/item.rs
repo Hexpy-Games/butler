@@ -216,9 +216,16 @@ pub(super) fn refresh(db: &Connection, id: &str) -> Result<Value, AppStorageErro
     )
     .and_then(|mut s| s.execute(params![id, item.to_string(), title, site, key(&title)]))
     .map_err(sql)?;
+    let document_text = if item["kind"] == "doc" {
+        let head = super::super::documents::head(db, id)?;
+        butler_runtime::documents::parse(head["body"].as_str().unwrap_or_default()).text
+    } else {
+        String::new()
+    };
     let terms = ["title", "autoTitle", "text", "url"]
         .iter()
         .filter_map(|field| item[*field].as_str())
+        .chain(std::iter::once(document_text.as_str()))
         .chain(tags.iter().map(String::as_str))
         .chain(group_name.as_deref())
         .collect::<Vec<_>>()

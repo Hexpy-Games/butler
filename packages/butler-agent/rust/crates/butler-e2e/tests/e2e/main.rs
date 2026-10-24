@@ -75,6 +75,7 @@ mod credentials;
 mod custom_model_errors;
 mod custom_model_images;
 mod default_model;
+mod documents;
 mod downloads_live;
 mod durable_configuration;
 mod durable_files;

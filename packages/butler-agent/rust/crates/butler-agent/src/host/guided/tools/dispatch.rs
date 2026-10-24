@@ -285,6 +285,9 @@ async fn domain_tool(
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Option<Result<JsonDocument, ToolExecutionError>> {
+    if super::documents::supports(&call.name) {
+        return Some(super::documents::execute(owner, call, invocation).await);
+    }
     if super::library::supports(&call.name) {
         return Some(super::library::execute(owner, call).await);
     }
