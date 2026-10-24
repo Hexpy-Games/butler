@@ -225,6 +225,8 @@ impl AppApplication {
         &self,
         session: &mut AppSessionSummary,
     ) -> Result<(), GatewayApplicationError> {
+        self.load_session_epics(std::slice::from_mut(session))
+            .await?;
         let _measurement = self.storage.measure_view("skills");
         session.skills_used = self
             .dependencies
@@ -242,7 +244,26 @@ impl AppApplication {
     }
 
     pub(crate) async fn list_chats(&self) -> Result<Vec<AppChatSummary>, GatewayApplicationError> {
-        self.storage.read(read::chats).await.map_err(app_error)
+        let (mut chats, owners) = self
+            .storage
+            .read(|db| {
+                let chats = read::chats(db)?;
+                let owners = chats
+                    .iter()
+                    .map(|c| identity::runtime_hint(db, &c.id))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok((chats, owners))
+            })
+            .await
+            .map_err(app_error)?;
+        let ids = self.dependencies.canon.session_epics(owners).await?;
+        if ids.len() != chats.len() {
+            return Err(GatewayApplicationError::internal());
+        }
+        for (chat, epic_ids) in chats.iter_mut().zip(ids) {
+            chat.epic_ids = epic_ids;
+        }
+        Ok(chats)
     }
 
     /// Source Work progress is projected by the required external Steward reader.
@@ -256,6 +277,7 @@ impl AppApplication {
             .read(move |db| read::sessions(db, kind.as_deref(), project_id.as_deref()))
             .await
             .map_err(app_error)?;
+        self.load_session_epics(&mut sessions).await?;
         let running = self
             .dependencies
             .subsessions

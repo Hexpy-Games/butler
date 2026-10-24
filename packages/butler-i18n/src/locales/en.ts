@@ -626,6 +626,7 @@ export const enUsCopy: AppCopy = {
       webRequest: "Send this web request?",
       webRequestDesc: "This request may carry outside content.",
       taintReason: "Asking again because this turn read outside content.",
+      unsandboxedReason: "Runs without a sandbox · can read secret files",
       scheduleUnavailable: "Schedule details unavailable.",
       scheduleMode: mode => `Run permission: ${mode}`,
       networkCommandOutside: "Run a command that uses the internet outside the project folder?",

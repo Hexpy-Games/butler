@@ -83,6 +83,44 @@ pub fn project_write_available() -> bool {
     capabilities().project_write_available()
 }
 
+/// Whether the kernel can keep Butler's secrets and the user's credential
+/// stores unreadable to an approved command that otherwise runs with the
+/// user's access ([`deny_secret_reads`]). macOS only: Landlock cannot
+/// subtract a folder without also hiding files the command creates next to
+/// it, and Windows containment confines writes to the project.
+pub fn secret_reads_deniable() -> bool {
+    #[cfg(feature = "test-support")]
+    if std::env::var("BUTLER_TEST_SECRET_READ_DENIAL").as_deref() == Ok("unavailable") {
+        return false;
+    }
+    cfg!(target_os = "macos")
+}
+
+/// What [`deny_secret_reads`] withholds, for a command that failed under it.
+pub const SECRET_READ_LIMITS: &str = "This command ran with the user's access, except that credential stores (such as ~/.ssh and ~/.aws) and Butler's own secret files were unreadable and could not be moved or changed. SSH authenticates only through a running SSH agent. If it needs those files, run it again with sandbox \"none\"; the user will be asked each time.";
+
+/// `invocation` with every credential root (the one policy behind
+/// `SecretInventory`) unreadable, unwritable and unmovable, by path and by
+/// real path, and with writes below `write_protected` denied. Writes
+/// elsewhere and network stay the user's. Hosts without
+/// [`secret_reads_deniable`] refuse it.
+pub fn deny_secret_reads(
+    invocation: Invocation,
+    environment: &HashMap<String, String>,
+    write_protected: Option<&Path>,
+) -> Result<Invocation, SandboxError> {
+    if !secret_reads_deniable() {
+        return Err(SandboxError::SecretReadsUnavailable);
+    }
+    #[cfg(target_os = "macos")]
+    return macos::deny_secret_reads(invocation, environment, write_protected);
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (invocation, environment, write_protected);
+        Err(SandboxError::SecretReadsUnavailable)
+    }
+}
+
 /// Mechanism used by project-write containment; availability is probed separately.
 pub const fn project_write_mechanism() -> &'static str {
     if cfg!(target_os = "macos") {
@@ -186,6 +224,9 @@ pub enum SandboxError {
     /// This host cannot contain a mutating command to its project.
     #[error("this host cannot contain commands to the project folder")]
     ProjectWriteUnavailable,
+    /// This host cannot keep credential stores unreadable to approved commands.
+    #[error("this host cannot deny credential reads to approved commands")]
+    SecretReadsUnavailable,
     /// The project inventory is still building or being verified.
     #[error("project write inventory pending")]
     ProjectWritePending,

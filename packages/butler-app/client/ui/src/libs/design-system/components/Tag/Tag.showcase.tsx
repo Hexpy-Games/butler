@@ -1,7 +1,8 @@
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import { CheckCircle2, ChevronRight, CircleAlert, ListChecks } from "../Icons";
 import { Inline } from "../Inline";
-import { Tag, type TagTone } from "./Tag";
+import { Tag, tagLabelTones, type TagTone } from "./Tag";
+import { OnWallpapers, tagLabelToneNames } from "./Tag.demo";
 
 export const meta: ShowcaseMeta = {
   title: "Tag",
@@ -19,7 +20,12 @@ function text({ locale }: ShowcaseRenderContext) {
   return labels[locale];
 }
 
-const tones: TagTone[] = ["neutral", "accent", "success", "warning", "danger"];
+const tones = ["neutral", "accent", "success", "warning", "danger"] as const satisfies readonly TagTone[];
+
+function LabelTones({ locale }: ShowcaseRenderContext) {
+  const names = tagLabelToneNames[locale];
+  return <Inline>{tagLabelTones.map((tone) => <Tag key={tone} tone={tone}>{names[tone]}</Tag>)}</Inline>;
+}
 
 export const stories: ShowcaseStory[] = [
   {
@@ -27,6 +33,15 @@ export const stories: ShowcaseStory[] = [
     render: (context) => (
       <Inline>{tones.map((tone) => <Tag key={tone} tone={tone}>{text(context)[tone]}</Tag>)}</Inline>
     ),
+  },
+  {
+    name: "Label tones",
+    render: (context) => <LabelTones {...context} />,
+  },
+  {
+    name: "Label tones on wallpaper",
+    widths: ["app", "375"],
+    render: (context) => <OnWallpapers><LabelTones {...context} /></OnWallpapers>,
   },
   {
     name: "Sizes",

@@ -12,9 +12,9 @@
 mod inventory;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub(crate) use inventory::credential_roots;
-#[cfg(target_os = "macos")]
-pub(crate) use inventory::secret_pattern;
 pub use inventory::{RootPin, SecretInventory, environment_data, secret_name};
+#[cfg(target_os = "macos")]
+pub(crate) use inventory::{secret_pattern, ssh_agent_readable};
 mod stage;
 pub use stage::{
     ReaderStaging, StageScope, StagedFiles, handoff_staged, reclaim_handoff, remove_staged,

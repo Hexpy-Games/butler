@@ -69,3 +69,14 @@ pub(super) fn scratch_environment(
     env.insert("BUTLER_ARTIFACT_DIR".into(), artifacts);
     Ok(env)
 }
+
+/// A command whose credential reads are denied authenticates over SSH only
+/// through the user's agent socket; the key files stay unreadable.
+pub(super) fn ssh_agent(host: &HashMap<String, String>, environment: &mut HashMap<String, String>) {
+    if let Some(socket) = host
+        .get("SSH_AUTH_SOCK")
+        .filter(|socket| !socket.is_empty())
+    {
+        environment.insert("SSH_AUTH_SOCK".into(), socket.clone());
+    }
+}

@@ -79,6 +79,7 @@ function bridgeErrorEnvelope(error) {
   const status = safeBridgeStatus(error && error.status);
   return {
     schema: bridgeErrorSchema,
+    ...(code === "tag_exists" && error?.existing ? { existing: error.existing } : {}),
     ...(Number.isSafeInteger(error?.current?.revision) ? { current: { revision: error.current.revision } } : {}),
     code,
     ...(code === "hook_blocked" && typeof error?.message === "string" ? { hook_reason: error.message.slice(0, 16384) } : {}),
@@ -288,6 +289,7 @@ async function requestJson(path, options = {}) {
     const error = new Error(body?.error?.message ?? `Request failed with status ${response.status}.`);
     error.code = body?.error?.code ?? "request_failed";
     error.status = response.status;
+    if (error.code === "tag_exists" && body?.error?.existing) error.existing = body.error.existing;
     if (Number.isSafeInteger(body?.error?.current?.revision)) error.current = { revision: body.error.current.revision };
     throw error;
   }
@@ -1418,11 +1420,14 @@ const butlerApp = Object.freeze({
   },
   getCanonSidebar: ({ id }) => requestBridgeResult(`/projects/${encodeURIComponent(id)}/canon/sidebar`),
   orderCanonSidebar: ({ id, body }) => requestCanonWrite(`/projects/${encodeURIComponent(id)}/canon/sidebar-order`, "POST", body),
-  linkCanonConversation: ({ id }) => requestCanonWrite(`/canon/epics/${encodeURIComponent(id)}/conversation`, "POST", {}),
+  linkCanonConversation: ({ id, sessionId }) => requestCanonWrite(`/canon/epics/${encodeURIComponent(id)}/conversation`, "POST", { session_id: sessionId }),
+  getCanonTags: ({ id }) => requestBridgeResult(`/projects/${encodeURIComponent(id)}/canon/tags`),
+  createCanonTag: ({ id, body }) => requestCanonWrite(`/projects/${encodeURIComponent(id)}/canon/tags`, "POST", body),
+  editCanonTag: ({ id, body }) => requestCanonWrite(`/canon/tags/${encodeURIComponent(id)}`, "PATCH", body),
+  deleteCanonTag: ({ id }) => requestBridgeResult(`/canon/tags/${encodeURIComponent(id)}`, { method: "DELETE" }),
   getCanon: ({ id }) => requestBridgeResult(`/projects/${encodeURIComponent(id)}/canon`),
   getCanonPlan: ({ id }) => requestBridgeResult(`/canon/plans/${encodeURIComponent(id)}`),
   getCanonEpic: ({ id }) => requestBridgeResult(`/canon/epics/${encodeURIComponent(id)}`),
-  getWorkTasks: ({ id }) => requestBridgeResult(`/works/${encodeURIComponent(id)}/tasks`),
   createCanonPlan: ({ id, body }) => requestCanonWrite(`/projects/${encodeURIComponent(id)}/canon/plans`, "POST", body),
   editCanonPlan: ({ id, body }) => requestCanonWrite(`/canon/plans/${encodeURIComponent(id)}`, "PATCH", body),
   orderCanonPlan: ({ id, body }) => requestCanonWrite(`/canon/plans/${encodeURIComponent(id)}/order`, "POST", body),

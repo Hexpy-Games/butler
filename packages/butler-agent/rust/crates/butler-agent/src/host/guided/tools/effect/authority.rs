@@ -43,7 +43,7 @@ fn public_action_title(call: &ModelRoundToolCall) -> Option<String> {
 pub(super) async fn gate(
     owner: &GuidedTools,
     call: &ModelRoundToolCall,
-    (occurrence, decision): (&str, butler_turn::btcc::AccessDecision),
+    (occurrence, decision, unsandboxed): (&str, butler_turn::btcc::AccessDecision, bool),
     work: &WorkView,
     target: &str,
     input: &Value,
@@ -65,6 +65,7 @@ pub(super) async fn gate(
         adapter,
         honor_standing_permission: decision
             != butler_turn::btcc::AccessDecision::Ask(butler_turn::btcc::GrantUse::Ignore),
+        unsandboxed,
     };
     let resume_ref = owner.binding.authority_request_ref.as_deref().filter(|_| {
         owner.binding.authority_source_call_id.as_deref() == Some(occurrence)
@@ -83,6 +84,7 @@ struct ReviewedOperation<'a> {
     normalized_input: Value,
     adapter: &'a dyn EffectAdapter,
     honor_standing_permission: bool,
+    unsandboxed: bool,
 }
 
 async fn admit(
@@ -99,10 +101,13 @@ async fn admit(
         normalized_input,
         adapter,
         honor_standing_permission,
+        unsandboxed,
     } = operation;
     let subject = grant_subject(call, &normalized_target);
     let input = AuthorityAdmissionInput {
-        public_action_title: if honor_standing_permission {
+        public_action_title: if unsandboxed {
+            Some(super::super::access::UNSANDBOXED_REASON.into())
+        } else if honor_standing_permission {
             public_action_title(call)
         } else {
             Some("authority.taintReason".into())
@@ -288,6 +293,7 @@ async fn resume(
         normalized_input,
         adapter,
         honor_standing_permission: _,
+        unsandboxed: _,
     } = operation;
     let execution = match owner
         .authority

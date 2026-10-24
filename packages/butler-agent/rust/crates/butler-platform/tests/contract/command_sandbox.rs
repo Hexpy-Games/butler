@@ -48,6 +48,7 @@ fn read_only_commands_run_sandboxed_or_are_refused() {
     butler_platform::command_sandbox::verify_mount_plan_contract().unwrap();
     timeout_markers_require_both_code_and_trailing_marker();
     super::project_secrets::verify();
+    super::secret_reads::verify();
     cmd_arguments_remain_verbatim();
     expected_host_sandbox_is_enforced();
     assert_eq!(

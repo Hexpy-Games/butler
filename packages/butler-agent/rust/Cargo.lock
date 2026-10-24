@@ -885,6 +885,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "butler-canon"
+version = "0.0.0"
+dependencies = [
+ "caseless",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.20",
+ "unicode-normalization",
+ "uuid",
+ "zstd",
+]
+
+[[package]]
 name = "butler-core"
 version = "0.0.0"
 dependencies = [
@@ -915,6 +930,7 @@ dependencies = [
  "arrow-array",
  "axum",
  "base64 0.22.1",
+ "butler-canon",
  "butler-core",
  "butler-gateway",
  "butler-log",
@@ -922,7 +938,6 @@ dependencies = [
  "butler-platform",
  "butler-runtime",
  "butler-turn",
- "butler-work",
  "bytes",
  "chrono",
  "flate2",
@@ -1004,6 +1019,7 @@ dependencies = [
  "arrow-array",
  "arrow-schema",
  "base64 0.22.1",
+ "butler-canon",
  "butler-core",
  "butler-gateway",
  "butler-ledger",
@@ -1014,7 +1030,6 @@ dependencies = [
  "butler-runtime",
  "butler-test-support",
  "butler-turn",
- "butler-work",
  "bytes",
  "chrono",
  "futures-util",
@@ -1303,10 +1318,10 @@ name = "butler-turn"
 version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
+ "butler-canon",
  "butler-core",
  "butler-platform",
  "butler-test-support",
- "butler-work",
  "chrono",
  "futures-util",
  "indexmap 2.14.2",
@@ -1323,19 +1338,6 @@ dependencies = [
  "tracing",
  "unicode-normalization",
  "uuid",
-]
-
-[[package]]
-name = "butler-work"
-version = "0.0.0"
-dependencies = [
- "rusqlite",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "thiserror 2.0.20",
- "uuid",
- "zstd",
 ]
 
 [[package]]
@@ -1375,6 +1377,15 @@ name = "bytes"
 version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
+
+[[package]]
+name = "caseless"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b6fd507454086c8edfd769ca6ada439193cdb209c7681712ef6275cccbfe5d8"
+dependencies = [
+ "unicode-normalization",
+]
 
 [[package]]
 name = "castaway"

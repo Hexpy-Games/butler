@@ -107,9 +107,12 @@ async fn fetch(
             .web_search(arguments, invocation.cancellation)
             .await
     } else {
+        // A turn that may open tabs is sent to one for a page the reader
+        // could not show in full.
+        let browsing = owner.binding.authorized_names.contains("browser_open");
         owner
             .web_session
-            .web_read_from(arguments, live, invocation.cancellation)
+            .web_read_from(arguments, live, browsing, invocation.cancellation)
             .await
     }
     .unwrap_or_else(
@@ -157,7 +160,7 @@ async fn authorize(
     if matches!(decision, butler_turn::btcc::AccessDecision::Ask(_))
         || super::super::access::resumes(owner, call_id)
     {
-        super::file_observation::gate(owner, call, call_id, arguments).await
+        super::file_observation::gate(owner, call, call_id, arguments, false).await
     } else {
         Ok(super::file_observation::Gate::Allowed(None))
     }

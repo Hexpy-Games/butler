@@ -5,15 +5,14 @@ use std::path::Path;
 
 use crate::host::ResolvedInstallation;
 use crate::host::service::instance::{
-    InstanceRecord, instance_is_locked, process_matches, read_record,
+    DATA_BUSY, InstanceRecord, Ownership, observe, process_matches,
 };
 
 pub(super) fn verified_instance(
     data_root: &Path,
     installation: &ResolvedInstallation,
 ) -> Result<Option<InstanceRecord>, crate::host::HostError> {
-    let locked = instance_is_locked(data_root)?;
-    let record = read_record(data_root)?;
+    let Ownership { locked, record } = observe(data_root)?;
     match (locked, record) {
         (false, None) => Ok(None),
         (false, Some(record)) => {
@@ -49,7 +48,7 @@ pub(super) fn verified_instance(
             }
             Ok(Some(record))
         }
-        (true, None) => Err("native_service_instance_ambiguous: DATA lock has no record".into()),
+        (true, None) => Err(DATA_BUSY.into()),
     }
 }
 

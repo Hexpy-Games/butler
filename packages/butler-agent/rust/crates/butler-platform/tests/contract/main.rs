@@ -15,6 +15,7 @@ mod instance;
 mod mxc_policy;
 mod process_control;
 mod project_secrets;
+mod secret_reads;
 mod secrets;
 mod secure_fs;
 #[cfg(windows)]

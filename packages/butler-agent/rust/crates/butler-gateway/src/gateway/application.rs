@@ -1,9 +1,9 @@
 //! Durable application service behind the native App HTTP facade.
 
 mod assets;
+mod canon;
 pub(crate) mod canon_sidebar;
 mod data_reset;
-mod work_model;
 pub use assets::AppAssetCommand;
 mod admission;
 mod admission_identity;

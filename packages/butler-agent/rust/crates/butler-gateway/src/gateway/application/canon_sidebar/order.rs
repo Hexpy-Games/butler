@@ -45,13 +45,13 @@ pub(super) fn validate(canon: &Value, input: &Order) -> Result<(), GatewayApplic
             status: 409,
             code: "conflict".into(),
             message: "Group membership changed.".into(),
-            source: Some(std::sync::Arc::new(AppWorkModelConflict { revision })),
+            source: Some(std::sync::Arc::new(AppCanonConflict { revision })),
         });
     }
     Ok(())
 }
 fn visible(work: &Value) -> bool {
-    work["home_session_id"].is_string() || work["assignee"] == APP_PERSON_ID
+    work["sessions"].as_array().is_some_and(|s| !s.is_empty()) || work["assignee"] == APP_PERSON_ID
 }
 pub(super) fn replace(
     db: &Connection,

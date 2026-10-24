@@ -12,7 +12,7 @@ publish.workspace = true
 # butler-platform is not product code: it is the OS boundary every crate uses.
 [dependencies]
 ring.workspace = true
-butler-work = { path = "../butler-work" }
+butler-canon = { path = "../butler-canon" }
 butler-log = { path = "../butler-log", features = ["e2e-fixtures"] }
 butler-gateway = { path = "../butler-gateway", features = ["test-support"] }
 butler-runtime = { path = "../butler-runtime", features = ["test-support"] }

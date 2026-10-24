@@ -45,11 +45,11 @@ pub use task_graphs::{
     GraphScope as TaskGraphScope, ReviewRecord as TaskGraphReviewRecord,
     WorkRecord as TaskGraphWorkRecord,
 };
+mod canon;
 mod tool_journal;
 mod transitions;
 mod wake;
 mod work;
-mod work_model;
 
 pub(crate) use authority::{SqliteAuthorityReader, SqliteAuthorityRepository};
 pub use bootstrap::{

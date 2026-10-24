@@ -26,6 +26,9 @@ pub(super) fn json<T: Serialize>(status: StatusCode, value: T) -> Result<Respons
 }
 
 pub(crate) enum HttpError {
+    TagExists {
+        existing: serde_json::Value,
+    },
     Conflict {
         revision: i64,
     },
@@ -53,7 +56,7 @@ impl HttpError {
 
     pub(super) fn status(&self) -> StatusCode {
         match self {
-            Self::Conflict { .. } => StatusCode::CONFLICT,
+            Self::TagExists { .. } | Self::Conflict { .. } => StatusCode::CONFLICT,
             Self::Public { status, .. } => {
                 StatusCode::from_u16(*status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
             }
@@ -71,10 +74,20 @@ impl From<GatewayApplicationError> for HttpError {
             ..
         } = &error
             && code == "conflict"
-            && let Some(current) = source.downcast_ref::<crate::gateway::AppWorkModelConflict>()
+            && let Some(current) = source.downcast_ref::<crate::gateway::AppCanonConflict>()
         {
             return Self::Conflict {
                 revision: current.revision,
+            };
+        }
+        if let GatewayApplicationError::Public {
+            source: Some(source),
+            ..
+        } = &error
+            && let Some(tag) = source.downcast_ref::<crate::gateway::AppCanonTagExists>()
+        {
+            return Self::TagExists {
+                existing: tag.existing.clone(),
             };
         }
         match error {
@@ -104,6 +117,14 @@ impl From<GatewayApplicationError> for HttpError {
 }
 
 pub(super) fn error_response(error: &HttpError) -> Response {
+    if let HttpError::TagExists { existing } = error {
+        return json(
+            StatusCode::CONFLICT,
+            serde_json::json!({"protocol_version":APP_PROTOCOL_VERSION,
+            "error":{"code":"tag_exists","message":"Tag already exists.","existing":existing}}),
+        )
+        .unwrap_or_else(|_| Response::new(Body::empty()));
+    }
     if let HttpError::Conflict { revision } = error {
         return json(StatusCode::CONFLICT, serde_json::json!({"protocol_version":APP_PROTOCOL_VERSION,
             "error":{"code":"conflict","message":"Revision changed.","current":{"revision":revision}}}))
@@ -120,6 +141,7 @@ pub(super) fn error_response(error: &HttpError) -> Response {
         } => (*status, code.as_str(), message.as_str()),
         HttpError::PayloadTooLarge => (413, "payload_too_large", "Request body is too large."),
         HttpError::Conflict { .. } => (409, "conflict", "Revision changed."),
+        HttpError::TagExists { .. } => (409, "tag_exists", "Tag already exists."),
         HttpError::Internal => (500, "internal_error", "Request failed."),
     };
     let envelope = ApiErrorEnvelope {

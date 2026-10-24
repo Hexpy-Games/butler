@@ -297,7 +297,7 @@ async fn streaming_scenario(id: &str) -> Result<(Scenario, String), HarnessError
     streaming_with_setup(Setup::new(id)?).await
 }
 
-async fn streaming_with_setup(setup: Setup) -> Result<(Scenario, String), HarnessError> {
+pub(crate) async fn streaming_with_setup(setup: Setup) -> Result<(Scenario, String), HarnessError> {
     let mut cassette = Cassette::load("TURN-03")?;
     cassette.exchanges.truncate(1);
     let prompt = cassette.exchanges[0].request.key.user_request.clone();

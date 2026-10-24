@@ -4,6 +4,7 @@
   "crates": [
     "packages/butler-agent/rust/crates/butler-agent",
     "packages/butler-agent/rust/crates/butler-agent-cli",
+    "packages/butler-agent/rust/crates/butler-canon",
     "packages/butler-agent/rust/crates/butler-core",
     "packages/butler-agent/rust/crates/butler-gateway",
     "packages/butler-agent/rust/crates/butler-ledger",
@@ -13,7 +14,6 @@
     "packages/butler-agent/rust/crates/butler-platform",
     "packages/butler-agent/rust/crates/butler-runtime",
     "packages/butler-agent/rust/crates/butler-turn",
-    "packages/butler-agent/rust/crates/butler-work",
     "third_party/notify-windows-ledger"
   ]
 }

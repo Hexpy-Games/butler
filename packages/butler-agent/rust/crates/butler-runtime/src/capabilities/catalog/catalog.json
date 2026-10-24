@@ -47,7 +47,7 @@
       "definition": {
         "type": "function",
         "name": "answer_blocks",
-        "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use it unasked as the Plan's Presentation line decided, or when the answer presents several comparable items: cards for the items (img ids from image_collect when they are visual) and a table comparing them. The blocks are the only copy of what they show: the reply never repeats their rows, cards or values as a table or list; its prose adds only what they don't say. Other blocks: gallery, facts, metrics, chart, callout or actions. A value requires source and checked from a page opened in this chat. Text is plain; the app chooses layout. For other layouts or interactions, use output_publish.",
+        "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use it unasked, with or without a Plan, whenever the answer compares options, presents several candidates or gives key numbers, and as a Plan's Presentation line decided: cards for the items (img ids from image_collect when they are visual) and a table comparing them. The blocks are the only copy of what they show: the reply never repeats their rows, cards or values as a table or list; its prose adds only what they don't say. Other blocks: gallery, facts, metrics, chart, callout or actions. A value requires source and checked from a page this chat read with web_read (url or tab) or opened in the browser. Text is plain; the app chooses layout. For other layouts or interactions, use output_publish.",
         "parameters": {
           "$ref": "answer-blocks.schema.json"
         },
@@ -132,7 +132,7 @@
       "definition": {
         "type": "function",
         "name": "web_read",
-        "description": "Get a page's text as bounded evidence. Pass tab to read an open tab as it shows now, or url: a page already open in a tab is read from that tab, any other through Butler's page reader. Each page is read once per turn. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. If a page fails, is blocked, or returns little or no text (script-built or image-only), open it in a tab and read or observe it there when browser tools are available, or read another source for the same fact; after one corrected call and one other route, report what still fails and what you tried.",
+        "description": "Get a page's text as bounded evidence. Pass url to read a static document (article, documentation, reference, PDF) through Butler's page reader, or tab to read an open tab as it shows now; a url already open in a tab is read from that tab. App-like or script-built pages, such as stores, product listings or dashboards, show their content only in a tab: open them with browser_open first, then pass tab. Each page is read once per turn. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. ok:false with next_action open_in_tab means the reader got only part of the page: open it with browser_open and read the tab before using anything from it. Read another source for the same fact only after the tab fails too, or when browser tools are unavailable; then report what still fails and what you tried.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -6933,7 +6933,7 @@
     "answer_blocks": {
       "type": "function",
       "name": "answer_blocks",
-      "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use it unasked as the Plan's Presentation line decided, or when the answer presents several comparable items: cards for the items (img ids from image_collect when they are visual) and a table comparing them. The blocks are the only copy of what they show: the reply never repeats their rows, cards or values as a table or list; its prose adds only what they don't say. Other blocks: gallery, facts, metrics, chart, callout or actions. A value requires source and checked from a page opened in this chat. Text is plain; the app chooses layout. For other layouts or interactions, use output_publish.",
+      "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use it unasked, with or without a Plan, whenever the answer compares options, presents several candidates or gives key numbers, and as a Plan's Presentation line decided: cards for the items (img ids from image_collect when they are visual) and a table comparing them. The blocks are the only copy of what they show: the reply never repeats their rows, cards or values as a table or list; its prose adds only what they don't say. Other blocks: gallery, facts, metrics, chart, callout or actions. A value requires source and checked from a page this chat read with web_read (url or tab) or opened in the browser. Text is plain; the app chooses layout. For other layouts or interactions, use output_publish.",
       "parameters": {
         "$ref": "answer-blocks.schema.json"
       },
@@ -9847,7 +9847,7 @@
     "web_read": {
       "type": "function",
       "name": "web_read",
-      "description": "Get a page's text as bounded evidence. Pass tab to read an open tab as it shows now, or url: a page already open in a tab is read from that tab, any other through Butler's page reader. Each page is read once per turn. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. If a page fails, is blocked, or returns little or no text (script-built or image-only), open it in a tab and read or observe it there when browser tools are available, or read another source for the same fact; after one corrected call and one other route, report what still fails and what you tried.",
+      "description": "Get a page's text as bounded evidence. Pass url to read a static document (article, documentation, reference, PDF) through Butler's page reader, or tab to read an open tab as it shows now; a url already open in a tab is read from that tab. App-like or script-built pages, such as stores, product listings or dashboards, show their content only in a tab: open them with browser_open first, then pass tab. Each page is read once per turn. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. ok:false with next_action open_in_tab means the reader got only part of the page: open it with browser_open and read the tab before using anything from it. Read another source for the same fact only after the tab fails too, or when browser tools are unavailable; then report what still fails and what you tried.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,

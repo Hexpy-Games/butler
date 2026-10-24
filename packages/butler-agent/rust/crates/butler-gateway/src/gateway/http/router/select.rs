@@ -39,15 +39,13 @@ fn commands(request: &Request<Body>) -> Option<Handler> {
         (
             matches!(
                 parts.as_slice(),
-                ["works", _, "tasks"]
-                    | ["works", _, "tasks", "edits"]
-                    | ["projects", _, "canon"]
-                    | ["projects", _, "canon", "plans" | "epics"]
+                ["projects", _, "canon"]
+                    | ["projects", _, "canon", "plans" | "epics" | "tags"]
                     | ["projects", _, "canon", "backlog", "order"]
-                    | ["canon", "plans" | "epics", _]
+                    | ["canon", "plans" | "epics" | "tags", _]
                     | ["canon", "plans", _, "order"]
             ),
-            Handler::WorkModel,
+            Handler::Canon,
         ),
         (
             matches!(

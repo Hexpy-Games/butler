@@ -65,8 +65,8 @@ async fn wma_sidebar_seeded_visibility_and_plan_order() -> Result<(), HarnessErr
         ids(&before["plans"][0]["works"])
     );
     assert_eq!(
-        view["groups"][1]["rows"][0]["home_session_id"],
-        before["plans"][0]["works"][0]["home_session_id"]
+        view["groups"][1]["rows"][0]["sessions"][0]["session_id"],
+        before["plans"][0]["works"][0]["sessions"][0]["session_id"]
     );
     let path = format!("/projects/{project_id}/canon/sidebar-order");
     let mut order = ids(&view["groups"][1]["rows"]);
