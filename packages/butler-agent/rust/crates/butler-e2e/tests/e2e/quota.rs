@@ -236,7 +236,9 @@ async fn use_04_zai_coding_plan_quota_is_polled() -> Result<(), HarnessError> {
 /// refreshed login is written back to the same profile. Returns the
 /// profile path and its original `expiresAt`.
 fn expire_test_login() -> Result<(std::path::PathBuf, Value), HarnessError> {
-    let Some(Credential::CodexProfile(path)) = LiveProvider::from_env().credential else {
+    let Some(Credential::CodexProfile(path)) =
+        LiveProvider::from_env().ok().and_then(|p| p.credential)
+    else {
         panic!("recording USE-05 needs the Butler test login (~/.butler-e2e-auth)");
     };
     let mut profile: Value = serde_json::from_slice(&fs::read(&path)?)?;

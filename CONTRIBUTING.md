@@ -131,7 +131,7 @@ cargo clippy -p butler-host -p butler-agent --all-targets --locked --no-default-
 
 Run Clippy on the crates you changed; the example selects the Agent's static build. For default prebuilt builds, omit those feature flags. CI also runs the workspace with `cargo nextest run --workspace --locked`.
 
-Test changed behavior E2E first: `BUTLER_E2E_TIER=stub cargo test --locked -p butler-e2e`. Use stub or replay only. Non-E2E tests require a `// test-category: race`, `security`, `pure-logic` or `format-pin` marker directly above the test function; source-check ratchets the counts in `source-check-tests.txt`, which may only decrease. Live cassette recording, when explicitly required, uses only `openai/gpt-6-luna`. The [harness README](packages/butler-agent/rust/crates/butler-e2e/README.md) covers tiers and recording.
+Test changed behavior E2E first: `BUTLER_E2E_TIER=stub cargo test --locked -p butler-e2e`. Use stub or replay only. Non-E2E tests require a `// test-category: race`, `security`, `pure-logic` or `format-pin` marker directly above the test function; source-check ratchets the counts in `source-check-tests.txt`, which may only decrease. Live cassette recording, when explicitly required, uses only the model in the `live-e2e` environment variable `BUTLER_E2E_LIVE_MODEL`. The [harness README](packages/butler-agent/rust/crates/butler-e2e/README.md) covers tiers and recording.
 
 Keep source files at most 500 lines and production functions at most 80 lines. OS-specific code belongs only in `butler-platform`; unsafe code is forbidden. Performance checks must verify complete, current results. Follow the detailed request-path and idle-work rules in [AGENTS.md](AGENTS.md).
 
@@ -162,7 +162,7 @@ PRs require only hosted fast checks: repository/CI lint, Linux x64 and hosted Wi
 While main CI is red, only fixes for it can merge into main: the `ci:main-fix` label, a `fix/revert-pr-*` branch from this repository, or a `fix/` branch or `Revert` PR that closes the open reporter issue for the current failing main run (`Fixes #N`). `Related #N` or any other mention does not pass.
 The gate fails open with a warning if the main-run Actions API lookup is unavailable. A PR whose gate passed before main turned red keeps that result; main failures do not retroactively rerun PR gates.
 
-Heavy archives/tests, native Windows stub/shards, signing and packaging/install smoke coverage runs on main pushes at smoke tier and release integration. Run `gh workflow run rust-quality.yml --ref <branch>` for the moved Rust/macOS/packaging/install/signing checks, and `gh workflow run windows-preview-smoke.yml --ref <branch>` for native Windows stub/shards. Dispatch selects the full smoke set regardless of changed paths. Same-repository PR re-pushes reuse only successful completed receipts from the same PR, head branch and base ref with identical merged-tree job inputs; uncertainty runs the job. Release integration additionally runs E2E, perf, live E2E (only `openai/gpt-6-luna`) and test packages; unchanged successful integration jobs/shards reuse input receipts and restore producer artifacts.
+Heavy archives/tests, native Windows stub/shards, signing and packaging/install smoke coverage runs on main pushes at smoke tier and release integration. Run `gh workflow run rust-quality.yml --ref <branch>` for the moved Rust/macOS/packaging/install/signing checks, and `gh workflow run windows-preview-smoke.yml --ref <branch>` for native Windows stub/shards. Dispatch selects the full smoke set regardless of changed paths. Same-repository PR re-pushes reuse only successful completed receipts from the same PR, head branch and base ref with identical merged-tree job inputs; uncertainty runs the job. Release integration additionally runs E2E, perf, live E2E (the provider and model in the `live-e2e` environment variables) and test packages; unchanged successful integration jobs/shards reuse input receipts and restore producer artifacts.
 
 Release branches are `release/X.Y.Z` or `release/X.Y.Z-preview.N`. New features stay on main. Nothing syncs automatically: when asked, cherry-pick a main change with `-x` onto a release fix branch. After tagging, merge the release branch back to main as a merge commit, then delete it. A published-preview hotfix ships as the next preview, cut from the last tag or ready main.
 
@@ -198,9 +198,19 @@ The app release gate fails when the bundled agent version changes and the app ve
 
 Windows preview releases include the unsigned Agent and Squirrel App installer.
 
+### Live E2E provider
+
+Live E2E jobs read the provider and model from the `live-e2e` environment
+variables `BUTLER_E2E_LIVE_PROVIDER` (a catalog provider id, e.g. `zai-api`)
+and `BUTLER_E2E_LIVE_MODEL` (`provider/model[@effort]`, e.g.
+`zai-api/glm-5.3-flash@low`), and fail when either is unset. An API-key
+provider takes its key from the `BUTLER_E2E_API_KEY` secret. Switching
+providers changes only these settings.
+
 ### Live E2E OAuth setup (self-hosted Windows runner)
 
-On a self-hosted Windows runner, sign in once in PowerShell:
+Only with `BUTLER_E2E_LIVE_PROVIDER=openai-subscription`: on a self-hosted
+Windows runner, sign in once in PowerShell:
 
 ```powershell
 $env:CODEX_HOME = "$HOME\.butler-e2e-auth"; npx -y @openai/codex login

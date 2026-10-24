@@ -104,6 +104,7 @@ mod lifecycle;
 mod lifecycle_intent;
 mod linux_sandbox;
 mod live;
+mod live_config;
 mod long_paths;
 mod mcp;
 mod memory;
