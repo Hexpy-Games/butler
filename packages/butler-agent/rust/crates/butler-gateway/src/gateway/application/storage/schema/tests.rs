@@ -13,8 +13,6 @@ use butler_turn::btcc::AccessMode;
 // test-category: format-pin
 #[test]
 fn app_schema_migrations_keep_existing_data() {
-    super::canon_file_tests::attachment_statements_use_keyed_and_expiry_indexes();
-    super::canon_file_tests::session_reference_helper_validates_ownership_and_deduplicates();
     fresh_schema_has_full_support_and_functional_message_fts();
     failed_vault_upgrade_rolls_back_and_releases_savepoint();
     deployed_events_gain_actual_turn_index_without_rewriting_payloads();

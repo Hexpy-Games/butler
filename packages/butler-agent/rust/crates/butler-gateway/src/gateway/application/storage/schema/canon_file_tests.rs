@@ -9,8 +9,10 @@ fn db() -> Connection {
       VALUES(?1,'image','image/png','image.png',1,'sha',?1,'now')", [FILE]).unwrap();
     db
 }
-// Deterministic interleaving, exercised by the file owner race suite.
-pub(in crate::gateway) fn sweep_rechecks_a_concurrent_new_reference() {
+// Deterministic interleaving between pending-write pins, relay and cleanup.
+// test-category: race
+#[test]
+fn sweep_rechecks_a_concurrent_new_reference() {
     let path =
         std::env::temp_dir().join(format!("canon-file-race-{}.sqlite", uuid::Uuid::new_v4()));
     let mut db = Connection::open(&path).unwrap();
@@ -77,8 +79,10 @@ pub(in crate::gateway) fn sweep_rechecks_a_concurrent_new_reference() {
     drop(db);
     std::fs::remove_file(path).unwrap();
 }
-// Query plans extend the App schema format pin.
-pub(super) fn attachment_statements_use_keyed_and_expiry_indexes() {
+// Pin the actual bounded queue scan and indexed reference/expiry operations.
+// test-category: format-pin
+#[test]
+fn attachment_statements_use_keyed_and_expiry_indexes() {
     let db = db();
     use storage::schema::canon_files::{
         DELETE_EXPIRED, DELETE_PENDING, DELETE_UNUSED, EPIC_FILES, EXPIRED, PIN_PENDING,
@@ -110,13 +114,17 @@ pub(super) fn attachment_statements_use_keyed_and_expiry_indexes() {
         assert!(
             !plan.lines().any(|line| line.contains("SCAN ")
                 && !line.contains("json_each")
-                && !line.contains("SCAN CONSTANT ROW")),
+                && !line.contains("SCAN CONSTANT ROW")
+                // This ordered scan is bounded to 100 pending deletions, not file history.
+                && !(sql == SWEEP_QUEUE && line.contains("SCAN app_file_sweep USING COVERING INDEX"))),
             "{sql}: {plan}"
         );
     }
 }
 // Session ownership is part of the App file binding contract.
-pub(super) fn session_reference_helper_validates_ownership_and_deduplicates() {
+// test-category: security
+#[test]
+fn session_reference_helper_validates_ownership_and_deduplicates() {
     let db = db();
     db.execute("INSERT INTO chats(id,title,kind,created_at,updated_at) VALUES('chat','chat','chat','now','now')",[]).unwrap();
     db.execute(
@@ -124,8 +132,30 @@ pub(super) fn session_reference_helper_validates_ownership_and_deduplicates() {
         [FILE],
     )
     .unwrap();
+    db.execute(
+        "UPDATE chats SET runtime_session_hint='rotated-owner' WHERE id='chat'",
+        [],
+    )
+    .unwrap();
+    assert!(files::append_session_references(&db, "rotated-owner", "", &[FILE.into()]).is_err());
     assert!(files::append_session_references(&db, "other", "", &[FILE.into()]).is_err());
     let markdown =
         files::append_session_references(&db, "chat", "", &[FILE.into(), FILE.into()]).unwrap();
-    assert_eq!(markdown, format!("\n![](attachment:{FILE})"));
+    assert_eq!(markdown, format!("\n![image.png](attachment:{FILE})"));
+    for kind in ["text", "generic"] {
+        db.execute(
+            "UPDATE message_files SET kind=?1,safe_name=?2 WHERE id=?3",
+            rusqlite::params![kind, "[notes]\\draft\n.txt", FILE],
+        )
+        .unwrap();
+        let markdown = files::append_session_references(&db, "chat", "", &[FILE.into()]).unwrap();
+        assert_eq!(
+            markdown,
+            format!("\n[\\[notes\\]\\\\draft .txt](attachment:{FILE})")
+        );
+        assert_eq!(
+            butler_canon::store::attachment_references(&markdown).unwrap(),
+            vec![FILE]
+        );
+    }
 }

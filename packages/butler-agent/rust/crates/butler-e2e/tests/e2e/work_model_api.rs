@@ -1,5 +1,6 @@
 //! WMA local canon and work queue flows over the authenticated HTTP surface.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test assertions")]
+mod attachment_sizes;
 mod attachments;
 mod canon;
 mod events;

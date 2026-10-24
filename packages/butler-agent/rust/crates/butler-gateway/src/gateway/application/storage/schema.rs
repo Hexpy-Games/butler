@@ -44,6 +44,8 @@ pub(super) fn migrate(
         "deliverable",
         "INTEGER NOT NULL DEFAULT 0",
     )?;
+    migration::ensure_column(connection, "message_files", "width", "INTEGER")?;
+    migration::ensure_column(connection, "message_files", "height", "INTEGER")?;
     library::create(connection)?;
     canon_sidebar::create(connection)?;
     canon::create(connection)?;

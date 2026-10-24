@@ -39,6 +39,7 @@ mod still_delivery;
 pub use library::{AppLibraryChange, AppLibraryCommand, AppLibraryQuery};
 mod signins;
 pub use signins::*;
+mod image_dimensions;
 mod mcp_servers;
 mod memory_management;
 mod message_files;
@@ -226,7 +227,8 @@ pub struct AppApplication {
     wallpapers: AppWallpaperFiles,
     asset_cache: assets::AssetCache,
     settings_update_lock: Arc<tokio::sync::Mutex<()>>,
-    canon_file_lifetimes: Arc<tokio::sync::Mutex<()>>,
+    // True only after the startup relay has installed every pending reference.
+    canon_file_lifetimes: Arc<tokio::sync::Mutex<bool>>,
     canon_projection_locks: KeyedLocks,
     plan_decision_locks: KeyedLocks,
     setup_readiness: setup::ReadinessRelay,
@@ -314,7 +316,7 @@ impl AppApplication {
             asset_cache: assets::AssetCache::default(),
             butler_data: config.butler_data,
             settings_update_lock: Arc::new(tokio::sync::Mutex::new(())),
-            canon_file_lifetimes: Arc::new(tokio::sync::Mutex::new(())),
+            canon_file_lifetimes: Arc::new(tokio::sync::Mutex::new(false)),
             canon_projection_locks: KeyedLocks::default(),
             plan_decision_locks: KeyedLocks::default(),
             setup_readiness: setup::ReadinessRelay::default(),
@@ -487,6 +489,3 @@ pub(crate) use test_support::seed_test_assistant_attachment;
 mod snapshot_input;
 #[cfg(test)]
 mod tests;
-
-#[cfg(test)]
-pub(super) use storage::schema::canon_file_tests::sweep_rechecks_a_concurrent_new_reference;

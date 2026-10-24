@@ -237,8 +237,6 @@ fn every_store_statement_has_an_indexed_query_plan() {
 // test-category: pure-logic
 #[test]
 fn epic_creation_records_fields_without_a_synthetic_edit() {
-    attachments::markdown_references_match_rendered_links_and_images();
-    attachments::attachment_limit_counts_unique_references_and_rejects_invalid_ids();
     for tagged in [false, true] {
         for planned in [false, true] {
             let mut db = store_support::db();

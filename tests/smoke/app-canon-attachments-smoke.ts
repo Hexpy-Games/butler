@@ -80,7 +80,7 @@ async function verifyFiles(page: import("playwright").Page, server: Awaited<Retu
   assert.match(markdown, /^앞 !\[capture.png\]\(attachment:file-[a-f0-9-]+\)뒤$/u);
   const remote: string[] = [];
   page.on("request", request => { if (request.url().includes("remote-image.invalid")) remote.push(request.url()); });
-  await description.fill(`${markdown}\n<script>globalThis.epicExecuted=true</script>\n<img src="https://remote-image.invalid/raw.png">\n![remote](https://remote-image.invalid/image.png)\n[bad](javascript:alert(1))`);
+  await description.fill(`${markdown.replace("attachment:", "AtTaChMeNt:")}\n<script>globalThis.epicExecuted=true</script>\n<img src="https://remote-image.invalid/raw.png">\n![remote](https://remote-image.invalid/image.png)\n[bad](javascript:alert(1))`);
   await dialog.getByRole("button", { name: "만들기", exact: true }).click();
   await waitToast(page, "과제를 만들었습니다");
   const detail = page.locator('[data-test-class="canon-epic-detail"]');
@@ -109,9 +109,34 @@ async function verifyFiles(page: import("playwright").Page, server: Awaited<Retu
   await detail.getByRole("button", { name: "고치기", exact: true }).click();
   await detail.locator('input[type="file"]').setInputFiles({ name: "large.txt", mimeType: "text/plain", buffer: Buffer.alloc(11 * 1024 * 1024) });
   await waitToast(page, "10MB 이하만 첨부할 수 있습니다");
-  await detail.locator("textarea").fill("참고 파일을 뺐습니다");
+  await page.route("**/projects/*/canon/files", route => route.fulfill({ status: 413, contentType: "application/json", body: JSON.stringify({ error: { code: "file_too_large" } }) }));
+  await detail.locator('input[type="file"]').setInputFiles({ name: "small.txt", mimeType: "text/plain", buffer: Buffer.from("small") });
+  await waitToast(page, "10MB 이하만 첨부할 수 있습니다");
+  await page.unroute("**/projects/*/canon/files");
+  const excess = Array.from({ length: 21 }, (_, index) => `[file](attachment:file-00000000-0000-4000-8000-${String(index).padStart(12, "0")})`).join("\n");
+  await detail.locator("textarea").fill(excess);
   await detail.getByRole("button", { name: "저장", exact: true }).click();
+  await waitToast(page, "파일은 20개까지 첨부할 수 있습니다");
+
+  await detail.getByRole("button", { name: "고치기", exact: true }).click();
+  await detail.locator("textarea").fill("참고 파일을 뺐습니다");
+  let releaseSave: () => void = () => {};
+  const saving = new Promise<void>(resolve => { releaseSave = resolve; });
+  const epicRoute = `**/canon/epics/${id}`;
+  await page.route(epicRoute, async route => {
+    if (route.request().method() === "PATCH") await saving;
+    await route.continue();
+  });
+  try {
+    await detail.getByRole("button", { name: "저장", exact: true }).click();
+    const attach = detail.getByRole("button", { name: "파일 첨부", exact: true });
+    assert(await attach.isDisabled());
+    await attach.locator("..").hover();
+    await page.getByRole("tooltip").filter({ hasText: "저장 중" }).waitFor();
+  } finally { releaseSave(); }
+
   await detail.getByText("참고 파일을 뺐습니다", { exact: true }).waitFor();
+  await page.unroute(epicRoute);
   await page.waitForFunction(async url => (await fetch(url)).status === 404, file.url);
   const response = await fetch(new URL(file.url, server.url), { headers: server.authHeaders });
   assert.equal(response.status, 404);

@@ -1018,7 +1018,7 @@ const butlerApp = Object.freeze({
   uploadCanonFile: ({ projectId, name, mimeType, bytes }) => {
     const form = new FormData();
     form.set("file", new Blob([bytes], { type: mimeType || "application/octet-stream" }), name || "attachment");
-    return requestJson(`/projects/${encodeURIComponent(projectId)}/canon/files`, { method: "POST", body: form });
+    return requestBridgeResult(`/projects/${encodeURIComponent(projectId)}/canon/files`, { method: "POST", body: form });
   },
   uploadMessageFile: ({ name, mimeType, bytes, sessionId }) => {
     const form = new FormData();

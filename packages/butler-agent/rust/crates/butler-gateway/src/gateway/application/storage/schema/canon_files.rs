@@ -35,7 +35,7 @@ pub(in crate::gateway::application) const DELETE_UNUSED: &str =
     AND NOT EXISTS(SELECT 1 FROM app_file_pending WHERE file_id=?1)";
 
 pub(in crate::gateway::application) const SWEEP_QUEUE: &str =
-    "SELECT file_id FROM app_file_sweep WHERE file_id>'' ORDER BY file_id";
+    "SELECT file_id FROM app_file_sweep ORDER BY file_id LIMIT 100";
 pub(in crate::gateway::application) const REMOVE_SWEEP: &str =
     "DELETE FROM app_file_sweep WHERE file_id=?1";
 pub(in crate::gateway::application) const DELETE_PENDING: &str =

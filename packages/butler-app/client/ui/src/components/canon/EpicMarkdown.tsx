@@ -10,7 +10,7 @@ import { rememberSignedFileUrls, absoluteGatewayUrl, messageFileSource } from "@
 export function EpicMarkdown({ epicId, description, attachments = [] }: {
   epicId: string; description: string; attachments?: MessageFileRef[];
 }) {
-  const fileFor = (url?: string) => url?.startsWith("attachment:")
+  const fileFor = (url?: string) => url && /^attachment:/iu.test(url)
     ? attachments.find(file => file.file_id === url.slice("attachment:".length)) : undefined;
   const source = (file: MessageFileRef) => {
     const url = messageFileSource(file);
@@ -23,7 +23,7 @@ export function EpicMarkdown({ epicId, description, attachments = [] }: {
         table: MarkdownTable,
         a: ({ href, children }) => {
           const file = fileFor(href);
-          const url = href?.startsWith("attachment:") ? file && source(file) : href;
+          const url = href && /^attachment:/iu.test(href) ? file && source(file) : href;
           return <MarkdownLink href={url}>{children}</MarkdownLink>;
         },
         img: ({ src, alt }) => {

@@ -248,6 +248,8 @@ pub struct AppMessageFileSnapshot {
     pub mime_type: String,
     pub safe_name: String,
     pub size_bytes: u64,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
     pub sha256: String,
     pub storage_name: String,
     pub created_at: String,

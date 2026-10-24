@@ -1,4 +1,6 @@
-import { api } from "./api.ts";
+import { api, callBridge } from "./api.ts";
+import { appCopy } from "./copy.ts";
+import type { MessageFileRef } from "./types.ts";
 import type { CanonTag, CanonTagCreateInput, CanonTagEditInput, CanonSidebar, CanonSidebarOrderInput, CanonConversation, CanonOverview, CanonOrderInput, EpicDetail, EpicInput, PlanDetail, PlanInput, EpicProgressSnapshot, CanonConversationInput } from "../../../shared/canon-contracts.ts";
 export type * from "../../../shared/canon-contracts.ts";
 const projectPath = (id: string) => `/projects/${encodeURIComponent(id)}/canon`;
@@ -24,4 +26,20 @@ export const getCanonSidebar = (id: string): Promise<CanonSidebar> => api(`${pro
 export const orderCanonSidebar = (id: string, input: CanonSidebarOrderInput): Promise<CanonSidebar> => write(`${projectPath(id)}/sidebar-order`, "POST", input);
 export const linkCanonConversation = (id: string, { sessionId }: CanonConversationInput = {}): Promise<CanonConversation> => write(`${epicPath(id)}/conversation`, "POST", { session_id: sessionId });
 
-export { uploadCanonFile } from "./api.ts";
+export async function uploadCanonFile(projectId: string, file: File): Promise<MessageFileRef> {
+  const bridge = typeof window !== "undefined" ? window.butlerApp : undefined;
+  if (typeof bridge?.uploadCanonFile === "function") {
+    const result = await callBridge<{ file: MessageFileRef }>(bridge, "uploadCanonFile", {
+      projectId, name: file.name, mimeType: file.type, bytes: await file.arrayBuffer(),
+    });
+    return result.file;
+  }
+  const form = new FormData();
+  form.set("file", file, file.name);
+  const response = await fetch(`/projects/${encodeURIComponent(projectId)}/canon/files`, { method: "POST", body: form });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) throw Object.assign(new Error(appCopy.interfaceFeedback.uploadFailed), {
+    code: payload?.error?.code, status: response.status,
+  });
+  return payload.data.file as MessageFileRef;
+}

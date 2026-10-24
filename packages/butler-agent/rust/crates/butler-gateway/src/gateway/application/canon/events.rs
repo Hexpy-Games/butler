@@ -72,7 +72,7 @@ async fn drain(
     clock: &dyn AppIdentityClock,
     cursor: &mut Cursor,
 ) -> Result<(), GatewayApplicationError> {
-    let _files = app.canon_file_lifetimes.lock().await;
+    let mut files_ready = app.canon_file_lifetimes.lock().await;
     loop {
         // Keep a failed cleanup pending across the bounded drain retry too.
         if let Some(last) = cursor.prune {
@@ -84,6 +84,7 @@ async fn drain(
             // Apply the durable outbox before expiring unsaved uploads after a crash.
             super::files::sweep(app, !cursor.started).await?;
             cursor.started = true;
+            *files_ready = true;
             return Ok(());
         }
         let last = rows.last().map(|r| r.seq).unwrap_or(cursor.after);

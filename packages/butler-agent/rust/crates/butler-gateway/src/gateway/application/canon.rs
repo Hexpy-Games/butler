@@ -13,16 +13,29 @@ pub(super) fn execute(app: &AppApplication, request: AppCanonRequest) -> Applica
     Box::pin(async move {
         validate_scope(&app, &request).await?;
         // A relay batch cannot consume this write's lifetime pin before canon commits.
-        let _files = app.canon_file_lifetimes.lock().await;
-        files::validate_write(&app, &request).await?;
+        let writing = matches!(request.resource, CreateEpic | EditEpic);
+        let _files = if writing {
+            Some(app.canon_file_lifetimes.lock().await)
+        } else {
+            None
+        };
+        let ids = files::validate_write(&app, &request).await?;
         let detail = matches!(request.resource, Epic | CreateEpic | EditEpic);
         let mut result = app.dependencies.canon.execute(request).await?;
         app.storage
             .read(move |db| {
                 public_sessions(db, &mut result)?;
                 if detail {
-                    result["attachments"] =
-                        files::list(db, result["id"].as_str().unwrap_or_default())?;
+                    result["attachments"] = if writing {
+                        let ids = ids.unwrap_or_else(|| {
+                            butler_canon::store::attachment_references_lenient(
+                                result["description"].as_str().unwrap_or_default(),
+                            )
+                        });
+                        files::from_ids(db, &ids)?
+                    } else {
+                        files::list(db, result["id"].as_str().unwrap_or_default())?
+                    };
                 }
                 Ok(result)
             })

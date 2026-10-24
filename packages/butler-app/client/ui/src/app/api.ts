@@ -160,23 +160,6 @@ function sessionViewResyncPath(
   return `${url.pathname}${url.search}`;
 }
 
-export async function uploadCanonFile(projectId: string, file: File): Promise<MessageFileRef> {
-  const bridge = typeof window !== "undefined" ? window.butlerApp : undefined;
-  if (typeof bridge?.uploadCanonFile === "function") {
-    const result = await callBridge<{ file: MessageFileRef }>(bridge, "uploadCanonFile", {
-      projectId, name: file.name, mimeType: file.type, bytes: await file.arrayBuffer(),
-    });
-    return result.file;
-  }
-  const form = new FormData();
-  form.set("file", file, file.name);
-  const response = await fetch(`/projects/${encodeURIComponent(projectId)}/canon/files`, { method: "POST", body: form });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(response.status === 413 ? appCopy.canon.fileTooLarge
-    : payload?.error?.message ?? appCopy.interfaceFeedback.uploadFailed);
-  return payload.data.file as MessageFileRef;
-}
-
 export async function uploadMessageFile(file: File, sessionId?: string): Promise<MessageFileRef> {
   const bridge = typeof window !== "undefined" ? window.butlerApp : undefined;
   if (typeof bridge?.uploadMessageFile === "function") {
@@ -1070,6 +1053,7 @@ function unwrapBridgeResult<T>(value: BridgeResult<T> | T): T {
 }
 
 const CODED_SETTINGS_METHODS = new Set([
+  "uploadCanonFile",
   "listMcpServers", "createMcpServer", "probeMcpServer", "updateMcpServer", "deleteMcpServer",
   "importSkill", "discoverLocalModels", "registerLocalModel", "updateLocalModel",
 ]);
@@ -1116,7 +1100,7 @@ function vaultBridgeCall(method: string, path: string, payload: () => unknown): 
   return null;
 }
 
-async function callBridge<T>(bridge: ButlerAppBridge, method: string, input?: unknown): Promise<T> {
+export async function callBridge<T>(bridge: ButlerAppBridge, method: string, input?: unknown): Promise<T> {
   const fn = bridge[method];
   if (typeof fn !== "function") throw new Error(`Butler desktop bridge is missing ${method}.`);
   const value = await fn(input);

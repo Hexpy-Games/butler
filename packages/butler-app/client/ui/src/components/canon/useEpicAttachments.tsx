@@ -2,6 +2,7 @@ import { useId, useLayoutEffect, useRef, useState, type SyntheticEvent } from "r
 import { Button, ButtonContainer, Input, Tooltip } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { uploadCanonFile } from "@/app/canonApi.ts";
+import { apiErrorCode } from "@/app/api.ts";
 import { notifyError } from "@/app/notifications.ts";
 
 /** The same small upload control is composed into both existing epic forms. */
@@ -37,13 +38,18 @@ export function useEpicAttachments(projectId: string, description: string, onDes
         caret.current = { element: saved.element, position: start + reference.length };
         selection.current = { ...saved, start: start + reference.length, end: start + reference.length };
       }
-    } catch (error) { notifyError(error, appCopy.interfaceFeedback.uploadFailed); }
+    } catch (error) {
+      const code = apiErrorCode(error);
+      const copy = code === "file_too_large" ? appCopy.canon.fileTooLarge
+        : code === "too_many_attachments" ? appCopy.canon.tooManyAttachments : undefined;
+      notifyError(copy ? null : error, copy ?? appCopy.interfaceFeedback.uploadFailed);
+    }
     finally { setUploading(false); }
   };
   const control = <ButtonContainer size="sm">
     <Input type="file" hidden aria-label={appCopy.canon.attachFile} id={pickerId} disabled={disabled || uploading}
       onChange={event => { void upload(event.target.files?.[0]); event.target.value = ""; }} />
-    <Tooltip wrap label={disabled || uploading ? appCopy.canon.tags.loading : undefined}>
+    <Tooltip wrap label={uploading ? appCopy.canon.uploadingFile : disabled ? appCopy.canon.saving : undefined}>
       <Button type="button" size="sm" variant="outline" disabled={disabled || uploading}
         onClick={() => { const picker = document.getElementById(pickerId); if (picker instanceof HTMLInputElement) picker.click(); }}>{appCopy.canon.attachFile}</Button>
     </Tooltip>

@@ -26,6 +26,12 @@ async fn save(s: &Scenario, project: &str, description: &str) -> Result<Value, H
         .await?,
         201,
     );
+    let ids = butler_canon::store::attachment_references(description).unwrap();
+    assert_eq!(
+        epic["attachments"].as_array().unwrap().len(),
+        ids.len(),
+        "create response precedes relay installation"
+    );
     event(&stream, "canon.changed", epic["id"].as_str().unwrap()).await?;
     Ok(data(
         s.gw.get(&format!("/canon/epics/{}", epic["id"].as_str().unwrap()))
@@ -138,6 +144,7 @@ async fn at_05_upload_and_reference_limits() -> Result<(), HarnessError> {
         )
         .await?;
     assert_eq!(oversized.status, 413);
+    assert_eq!(oversized.body["error"]["code"], "file_too_large");
     let boundary =
         s.gw.upload_file(
             &path,
@@ -155,15 +162,14 @@ async fn at_05_upload_and_reference_limits() -> Result<(), HarnessError> {
         )
         .unwrap();
     }
-    assert_eq!(
+    let overflow =
         s.gw.post(
             &format!("/projects/{project}/canon/epics"),
-            json!({"title":"Too many","description":references})
+            json!({"title":"Too many","description":references}),
         )
-        .await?
-        .status,
-        400
-    );
+        .await?;
+    assert_eq!(overflow.status, 409);
+    assert_eq!(overflow.body["error"]["code"], "too_many_attachments");
     s.finish().await
 }
 mod requires_e2e_fixtures {
@@ -218,4 +224,123 @@ mod requires_e2e_fixtures {
         .await
         .map_err(|e| HarnessError(e.to_string()))?
     }
+}
+
+#[tokio::test]
+async fn at_07_chat_delete_sweeps_only_unreferenced_files() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("AT-07")?.start().await?;
+    let project = project(&s).await?;
+    let chat = data(s.gw.post("/sessions", json!({"kind":"chat"})).await?, 201);
+    let chat = chat["session"]["id"].as_str().unwrap();
+    let mut files = Vec::new();
+    for _ in 0..2 {
+        files.push(
+            data(
+                s.gw.upload("note.txt", "text/plain", b"Notes", Some(chat))
+                    .await?,
+                201,
+            )["file"]
+                .clone(),
+        );
+    }
+    let epic = save(
+        &s,
+        &project,
+        &format!(
+            "[notes](attachment:{})",
+            files[1]["file_id"].as_str().unwrap()
+        ),
+    )
+    .await?;
+    let deleted =
+        s.gw.delete(&format!("/sessions/{chat}?permanent=true"))
+            .await?;
+    assert_eq!(deleted.status, 200, "{}", deleted.text);
+    assert_eq!(
+        s.gw.get(files[0]["url"].as_str().unwrap()).await?.status,
+        404
+    );
+    assert!(
+        !s.sandbox
+            .data
+            .join("app-server/message-files")
+            .join(files[0]["file_id"].as_str().unwrap())
+            .exists()
+    );
+    assert_eq!(
+        s.gw.download(files[1]["url"].as_str().unwrap()).await?.1,
+        b"Notes"
+    );
+    let loaded = data(
+        s.gw.get(&format!("/canon/epics/{}", epic["id"].as_str().unwrap()))
+            .await?,
+        200,
+    );
+    assert_eq!(loaded["attachments"][0]["file_id"], files[1]["file_id"]);
+    s.finish().await
+}
+
+#[tokio::test]
+async fn at_09_historical_references_do_not_block_label_or_tag_events() -> Result<(), HarnessError>
+{
+    butler_e2e::gate!();
+    let mut s = Setup::new("AT-09")?.start().await?;
+    let project = project(&s).await?;
+    let epic = create_epic(&s, &project, "Historical").await?;
+    let tag = data(
+        s.gw.post(
+            &format!("/projects/{project}/canon/tags"),
+            json!({"name":"Notes","color":"blue"}),
+        )
+        .await?,
+        201,
+    );
+    s.agent.terminate().await?;
+    let mut description = "[old](attachment:invalid)".to_owned();
+    for n in 0..21 {
+        write!(
+            description,
+            "[file](attachment:file-00000000-0000-4000-8000-{n:012})"
+        )
+        .unwrap();
+    }
+    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    db.execute(
+        "UPDATE canon_epics SET description=?1 WHERE id=?2",
+        rusqlite::params![description, epic["id"].as_str()],
+    )?;
+    drop(db);
+    s.restart().await?;
+    let stream = LiveEvents::subscribe(&s.gw, 0).await?;
+    let changed = data(
+        s.gw.patch(
+            &format!("/canon/epics/{}", epic["id"].as_str().unwrap()),
+            json!({"expected_revision":epic["revision"],"status":"in_progress","tags":[tag["id"]]}),
+        )
+        .await?,
+        200,
+    );
+    assert_eq!(changed["description"], description);
+    assert_eq!(changed["attachments"], json!([]));
+    let relayed = stream
+        .wait_for(Duration::from_secs(10), |event| {
+            event["type"] == "canon.changed"
+                && event["payload"]["id"] == epic["id"]
+                && event["payload"]["revision"] == changed["revision"]
+        })
+        .await?;
+    assert_eq!(
+        relayed["payload"]["attachments"].as_array().unwrap().len(),
+        22
+    );
+    let loaded = data(
+        s.gw.get(&format!("/canon/epics/{}", epic["id"].as_str().unwrap()))
+            .await?,
+        200,
+    );
+    assert_eq!(loaded["description"], description);
+    assert_eq!(loaded["canon_status"], "in_progress");
+    assert_eq!(loaded["tags"][0]["id"], tag["id"]);
+    s.finish().await
 }
