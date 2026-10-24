@@ -93,6 +93,7 @@ pub fn provider_quota_support(provider_id: &str) -> QuotaSupport {
 /// Receives quota readings parsed from successful provider responses.
 pub trait ProviderQuotaSink: Send + Sync {
     /// Called once per successful response that carried quota headers.
+    fn registered_providers(&self, _providers: &[String], _chatgpt: bool) {}
     fn observe(&self, reading: ProviderQuotaReading);
     /// Records a confirmed plan-limit transition, independent of header estimates.
     fn plan_limit(&self, _provider: &str, _reading: Option<PlanLimitReading>) {}

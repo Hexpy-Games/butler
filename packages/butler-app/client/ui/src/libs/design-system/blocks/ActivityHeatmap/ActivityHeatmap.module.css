@@ -1,22 +1,38 @@
 .root {
+  /* Cell size and gap; the month axis, weekday labels and tooltip anchor share them. */
+  --heatmap-cell: 24px;
+  --heatmap-gap: 0px;
+  --heatmap-pitch: calc(var(--heatmap-cell) + var(--heatmap-gap));
+  min-width: 0;
+}
+.root[data-cell="compact"] {
+  --heatmap-cell: 10px;
+  --heatmap-gap: 3px;
+}
+/* Weekday labels stay pinned beside the scroller. */
+.frame {
+  display: flex;
+  gap: var(--space-xs);
   min-width: 0;
 }
 .viewport {
+  flex: 1 1 auto;
+  min-width: 0;
   max-width: 100%;
   overflow-x: auto;
-  padding-block: var(--space-xs);
+  /* Room for cell focus rings inside the clipping scroller. */
+  padding: calc(var(--space-xs) + var(--focus-ring-room)) var(--focus-ring-room);
 }
 .calendar {
   display: grid;
-  grid-template-columns: auto max-content;
   gap: var(--space-xs);
   width: max-content;
 }
-.calendar:not(:has(.weekdays)) {
-  grid-template-columns: max-content;
-}
 .months {
   display: grid;
+  grid-template-columns: repeat(var(--heatmap-weeks), var(--heatmap-cell));
+  column-gap: var(--heatmap-gap);
+  grid-template-rows: var(--typo-caption-line-height);
   color: var(--text-secondary);
   font-size: var(--typo-caption-size);
   line-height: var(--typo-caption-line-height);
@@ -24,6 +40,8 @@
 .months > span {
   overflow: hidden;
   white-space: nowrap;
+}
+.root:not([data-cell="compact"]) .months > span {
   padding-inline: var(--space-xs);
 }
 .legend {
@@ -48,56 +66,105 @@
   white-space: nowrap;
 }
 .heatmap {
+  position: relative;
   display: grid;
   grid-auto-flow: column;
-  grid-template-rows: repeat(7, 24px);
-  grid-auto-columns: 24px;
+  grid-template-rows: repeat(7, var(--heatmap-cell));
+  grid-auto-columns: var(--heatmap-cell);
+  gap: var(--heatmap-gap);
   flex: none;
 }
 .weekdays {
   display: grid;
-  grid-template-rows: repeat(7, 24px);
+  grid-template-rows: repeat(7, var(--heatmap-cell));
+  row-gap: var(--heatmap-gap);
   align-items: center;
   flex: none;
+  /* Matches the scroller's top padding so labels line up with their rows. */
+  padding-block: calc(var(--space-xs) + var(--focus-ring-room));
   color: var(--text-tertiary);
   font-size: var(--typo-caption-size);
   line-height: var(--typo-caption-line-height);
+  white-space: nowrap;
+}
+.weekdays:has(.monthSpacer) {
+  grid-template-rows:
+    calc(var(--typo-caption-line-height) + var(--space-xs) - var(--heatmap-gap))
+    repeat(7, var(--heatmap-cell));
 }
 .day.day {
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: var(--heatmap-cell);
+  height: var(--heatmap-cell);
   min-width: 0;
   min-height: 0;
   padding: 0;
   background: transparent;
   border-radius: var(--radius-control);
+  outline: none;
 }
 .day::before {
   content: "";
   width: 16px;
   height: 16px;
   border-radius: calc(var(--radius-control) / 4);
-  background: var(--context-track-bg);
+  background: var(--selection);
+  /* Shade changes run as a wave: left to right, bottom up. */
+  transition:
+    background-color var(--motion-base) var(--motion-ease-standard)
+      calc(
+        var(--heatmap-column, 0) * var(--motion-stagger-cell-column) +
+          (6 - var(--heatmap-row, 6)) * var(--motion-stagger-cell-row)
+      ),
+    box-shadow var(--motion-fast) var(--motion-ease-standard);
 }
+.root[data-cell="compact"] .day.day {
+  border-radius: 3px;
+}
+.root[data-cell="compact"] .day::before {
+  width: 100%;
+  height: 100%;
+  border-radius: 3px;
+}
+/* Light steps darken with intensity; dark steps brighten. */
 .day[data-level="1"]::before {
-  background: color-mix(in srgb, var(--accent) 25%, var(--context-track-bg));
+  background: light-dark(var(--blue-02), var(--blue-08));
 }
 .day[data-level="2"]::before {
-  background: color-mix(in srgb, var(--accent) 45%, var(--context-track-bg));
+  background: light-dark(var(--blue-04), var(--blue-06));
 }
 .day[data-level="3"]::before {
-  background: color-mix(in srgb, var(--accent) 70%, var(--context-track-bg));
+  background: light-dark(var(--blue-06), var(--blue-04));
 }
 .day[data-level="4"]::before {
-  background: var(--accent);
+  background: light-dark(var(--blue-08), var(--blue-02));
 }
 .day[data-level="unknown"]::before {
   background: transparent;
   border: 1px dashed var(--text-tertiary);
 }
+.heatmap .day:hover::before {
+  box-shadow: inset 0 0 0 1px var(--text-tertiary);
+}
+.day:focus-visible {
+  box-shadow: var(--focus-ring);
+}
 .day[aria-pressed="true"]::before {
   outline: 1px solid var(--text-primary);
   outline-offset: 2px;
+}
+/* The shared tooltip opens over the hovered or focused cell. */
+.tooltipAnchor {
+  position: absolute;
+  top: calc(var(--heatmap-row) * var(--heatmap-pitch));
+  left: calc(var(--heatmap-column) * var(--heatmap-pitch));
+  width: var(--heatmap-cell);
+  height: var(--heatmap-cell);
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .day::before {
+    transition: none;
+  }
 }
