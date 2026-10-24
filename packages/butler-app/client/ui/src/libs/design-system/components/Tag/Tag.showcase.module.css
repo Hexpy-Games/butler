@@ -1,0 +1,21 @@
+/* DS Viewer stages: bounded boxes a container-scoped wallpaper fills. */
+.stages {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: var(--space-md);
+}
+
+.stage {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-panel);
+  isolation: isolate;
+}
+
+.layer {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+}
