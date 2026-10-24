@@ -8,6 +8,7 @@ mod body;
 mod browser_host;
 mod browser_stills;
 mod content;
+mod documents;
 #[cfg(feature = "e2e-fixtures")]
 mod image_fixtures;
 mod image_models;

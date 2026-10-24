@@ -8,6 +8,7 @@ pub(in crate::host::guided) use answer_blocks_stream::AnswerBlocksStream;
 mod deliver;
 mod discovery;
 mod dispatch;
+mod documents;
 mod effect;
 mod execute;
 mod feedback;
@@ -361,6 +362,7 @@ impl GuidedTools {
                     | ToolName::LibraryOrganize
             )
         ) || image_gen::supports(name)
+            || documents::supports(name)
             || browser::supports(name)
             || GuidedWorkTools::is_work_tool(name)
             || crate::host::guided::project_tools::GuidedProjectTools::supports(name)

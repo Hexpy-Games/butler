@@ -40,6 +40,7 @@ pub(in crate::gateway::http) async fn route(
         Handler::DataReset => data_reset::route(state, request).await,
         Handler::NotFound => Err(HttpError::public(404, "not_found", "Route not found.")),
         Handler::Logs => logs::route(state, request, &uri).await,
+        Handler::Documents => documents::route(state, request).await,
         Handler::Library => library::route(state, request).await,
         Handler::History => library::history::route(state, request).await,
         Handler::Browser => browser_host::route(state, request, &client).await,

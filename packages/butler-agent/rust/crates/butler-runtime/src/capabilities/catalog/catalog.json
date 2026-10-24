@@ -39,7 +39,10 @@
     "output_publish",
     "preview_start",
     "preview_stop",
-    "deliver_files"
+    "deliver_files",
+    "document_create",
+    "document_read",
+    "document_edit"
   ],
   "tools": [
     {
@@ -6737,7 +6740,8 @@
                 "scrap",
                 "document",
                 "bookmark",
-                "output"
+                "output",
+                "doc"
               ]
             },
             "group": {
@@ -6986,6 +6990,152 @@
         "browser",
         "web",
         "tabs"
+      ],
+      "durable": false
+    },
+    {
+      "name": "document_create",
+      "definition": {
+        "type": "function",
+        "name": "document_create",
+        "description": "Create a document in the user's 서랍: a final deliverable they will keep, revise or export, such as a report, plan, guide or brief. body is Markdown. Embed answer blocks as a fenced ```blocks code block holding one spec ({v, blocks}, the answer_blocks contract), and images as ![alt](img_…) with ids from image_collect. The user can edit it; you see their edits on your next turn. For a short answer use reply text and answer_blocks; for a page with its own layout or interactions use output_publish.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "body": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "title",
+            "body"
+          ]
+        },
+        "effectBoundary": "turn_local",
+        "concurrencySafe": false,
+        "interruptBehavior": "continue",
+        "transcriptVisibility": "visible"
+      },
+      "effectBoundary": "turn_local",
+      "category": "file",
+      "tags": [
+        "document",
+        "doc",
+        "서랍",
+        "deliverable",
+        "markdown",
+        "create"
+      ],
+      "durable": false
+    },
+    {
+      "name": "document_read",
+      "definition": {
+        "type": "function",
+        "name": "document_read",
+        "description": "Read a document's current Markdown and revision number. Read it before editing unless you saw its latest revision in this chat.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ]
+        },
+        "effectBoundary": "none",
+        "concurrencySafe": true,
+        "interruptBehavior": "continue",
+        "transcriptVisibility": "visible"
+      },
+      "effectBoundary": "none",
+      "category": "file",
+      "tags": [
+        "document",
+        "doc",
+        "서랍",
+        "deliverable",
+        "markdown",
+        "read"
+      ],
+      "durable": false
+    },
+    {
+      "name": "document_edit",
+      "definition": {
+        "type": "function",
+        "name": "document_edit",
+        "description": "Edit a document with exact replacements. base_rev is the revision you last read. Each anchor is text copied exactly from that revision that occurs there once; replace is its new text (empty deletes). To add text, anchor on nearby lines and repeat them in replace. The whole edit fails if an anchor is missing or repeated, or the user has since changed that part; then read the document again and redo the edit on the new text. The user sees each change and can undo it.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "base_rev": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "ops": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 20,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "anchor": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  },
+                  "replace": {
+                    "type": "string",
+                    "maxLength": 16000
+                  }
+                },
+                "required": [
+                  "anchor",
+                  "replace"
+                ]
+              }
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "id",
+            "base_rev",
+            "ops"
+          ]
+        },
+        "effectBoundary": "turn_local",
+        "concurrencySafe": false,
+        "interruptBehavior": "continue",
+        "transcriptVisibility": "visible"
+      },
+      "effectBoundary": "turn_local",
+      "category": "file",
+      "tags": [
+        "document",
+        "doc",
+        "서랍",
+        "deliverable",
+        "markdown",
+        "edit"
       ],
       "durable": false
     },
@@ -12318,7 +12468,8 @@
               "scrap",
               "document",
               "bookmark",
-              "output"
+              "output",
+              "doc"
             ]
           },
           "group": {
@@ -12535,6 +12686,110 @@
         ]
       }
     },
+    "document_create": {
+      "type": "function",
+      "name": "document_create",
+      "description": "Create a document in the user's 서랍: a final deliverable they will keep, revise or export, such as a report, plan, guide or brief. body is Markdown. Embed answer blocks as a fenced ```blocks code block holding one spec ({v, blocks}, the answer_blocks contract), and images as ![alt](img_…) with ids from image_collect. The user can edit it; you see their edits on your next turn. For a short answer use reply text and answer_blocks; for a page with its own layout or interactions use output_publish.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "body": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "body"
+        ]
+      },
+      "effectBoundary": "turn_local",
+      "concurrencySafe": false,
+      "interruptBehavior": "continue",
+      "transcriptVisibility": "visible"
+    },
+    "document_read": {
+      "type": "function",
+      "name": "document_read",
+      "description": "Read a document's current Markdown and revision number. Read it before editing unless you saw its latest revision in this chat.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "effectBoundary": "none",
+      "concurrencySafe": true,
+      "interruptBehavior": "continue",
+      "transcriptVisibility": "visible"
+    },
+    "document_edit": {
+      "type": "function",
+      "name": "document_edit",
+      "description": "Edit a document with exact replacements. base_rev is the revision you last read. Each anchor is text copied exactly from that revision that occurs there once; replace is its new text (empty deletes). To add text, anchor on nearby lines and repeat them in replace. The whole edit fails if an anchor is missing or repeated, or the user has since changed that part; then read the document again and redo the edit on the new text. The user sees each change and can undo it.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "base_rev": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "ops": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "anchor": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4000
+                },
+                "replace": {
+                  "type": "string",
+                  "maxLength": 16000
+                }
+              },
+              "required": [
+                "anchor",
+                "replace"
+              ]
+            }
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "id",
+          "base_rev",
+          "ops"
+        ]
+      },
+      "effectBoundary": "turn_local",
+      "concurrencySafe": false,
+      "interruptBehavior": "continue",
+      "transcriptVisibility": "visible"
+    },
     "generate_image": {
       "type": "function",
       "name": "generate_image",
@@ -12656,7 +12911,10 @@
       "project_artifacts",
       "browser_history_search",
       "library_search",
-      "library_organize"
+      "library_organize",
+      "document_create",
+      "document_read",
+      "document_edit"
     ],
     "project": [
       "project_ledger_status",
