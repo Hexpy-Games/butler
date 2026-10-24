@@ -40,7 +40,8 @@ export function CanonTagChooser({ tags, value, onChange, onCreate, onManage, dis
       <FilteredSelectPopover title={filter ? copy.filter : copy.label} searchLabel={copy.search} searchPlaceholder={copy.searchPlaceholder}
         searchClearLabel={appCopy.canon.clearSearch} searchValue={search} onSearchChange={setSearch}
         filters={[]} activeFilterId="all" onFilterChange={() => undefined}
-        groups={[{ id: "tags", title: copy.label, items }]} emptyLabel={copy.empty}
+        // Seven 30px units end mid-row for both desktop and touch tag rows, so the cut row under the edge fade signals more tags.
+        groups={[{ id: "tags", title: copy.label, items }]} emptyLabel={copy.empty} resultsMaxRows={7}
         footerOptions={[{ id: "clear", label: copy.clearAll, onSelect: () => { if (!disabled) onChange([]); } }]} />
     </PopoverContent>
   </Popover>;

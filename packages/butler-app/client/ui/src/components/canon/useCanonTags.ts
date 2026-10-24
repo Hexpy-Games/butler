@@ -20,7 +20,7 @@ export function useCanonTags(projectId: string) {
     void refresh();
     let queued = false, active = true;
     const unsubscribe = subscribeCanonChanges(event => {
-      if (event && event.kind !== "tag") return;
+      if (event && (!("kind" in event) || event.kind !== "tag")) return;
       if (queued) return;
       queued = true;
       queueMicrotask(() => { queued = false; if (active) void refresh(); });

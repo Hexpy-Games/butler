@@ -2,7 +2,6 @@
 
 mod contracts;
 mod helpers;
-mod locks;
 mod workflow;
 
 #[cfg(test)]
@@ -12,4 +11,3 @@ pub use contracts::{
     AppPlanDecisionLedgerPort, AppPlanDecisionPlan, AppPlanDecisionRequest, AppPlanDecisionResult,
     AppPlanDecisionStatus,
 };
-pub(crate) use locks::PlanDecisionLocks;

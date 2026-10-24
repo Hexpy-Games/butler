@@ -82,12 +82,13 @@ impl AppApplication {
             .native_assets
             .resolve(snapshot.clone())
             .await?;
-        Ok(rebuilt_turn(
+        self.with_canon_epics(rebuilt_turn(
             snapshot,
             assets,
             &conversation_access,
             default_project_folder,
         ))
+        .await
     }
 }
 

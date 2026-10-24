@@ -17,11 +17,15 @@ const labels = {
     row: (index: number) => `Turn ${index}: read the settings pages and summarized the section headers.`,
     tags: ["Token pages", "Motion", "States matrix", "Patterns", "Icons", "Overview", "Recipes", "Search"],
     hint: "Scroll: the edge that clips content fades; the fade disappears at the boundary.",
+    column: "Column edge",
+    item: (index: number) => `Section ${index}`,
   },
   "ko-KR": {
     row: (index: number) => `턴 ${index}: 설정 페이지를 읽고 섹션 헤더를 요약했습니다.`,
     tags: ["토큰 페이지", "모션", "상태 매트릭스", "패턴", "아이콘", "개요", "레시피", "검색"],
     hint: "스크롤하면 내용이 잘리는 가장자리가 흐려지고, 끝에 닿으면 흐림이 사라집니다.",
+    column: "열 끝",
+    item: (index: number) => `섹션 ${index}`,
   },
 } as const;
 
@@ -29,7 +33,33 @@ function text({ locale }: ShowcaseRenderContext) {
   return labels[locale];
 }
 
+/** Settings-nav shape: a full-width field above, filled rows below; both must end on the column edge. */
+function ColumnRows({ context, count }: { context: ShowcaseRenderContext; count: number }) {
+  return (
+    <Stack gap="xs">
+      <Box surface="muted" radius="control" paddingX="sm" paddingY="xs"><Typo.Caption tone="secondary">{text(context).column}</Typo.Caption></Box>
+      <ScrollArea maxHeight="xs">
+        <Stack gap="xs">
+          {Array.from({ length: count }, (_, index) => (
+            <Box key={index} surface="muted" radius="control" paddingX="sm" paddingY="xs"><Typo.Body>{text(context).item(index + 1)}</Typo.Body></Box>
+          ))}
+        </Stack>
+      </ScrollArea>
+    </Stack>
+  );
+}
+
 export const stories: ShowcaseStory[] = [
+  {
+    // Settings nav with few sections: rows end on the column edge with either scrollbar style.
+    name: "Content fits",
+    render: (context) => <ColumnRows context={context} count={3} />,
+  },
+  {
+    // The same column once it scrolls: a classic scrollbar takes the lane, rows keep the column edge.
+    name: "Content overflows",
+    render: (context) => <ColumnRows context={context} count={12} />,
+  },
   {
     // A bounded transcript (SessionObserverDialog, DeveloperLogRawBlock): vertical fade on both edges.
     name: "Vertical with edge fades",
