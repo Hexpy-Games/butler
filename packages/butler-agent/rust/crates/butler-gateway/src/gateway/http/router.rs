@@ -11,6 +11,7 @@ pub(super) enum Handler {
     NotFound,
     DataReset,
     Authority,
+    PendingAsks,
     Automations,
     Browser,
     BrowserStills,
@@ -97,6 +98,12 @@ pub(crate) fn templates() -> Vec<&'static str> {
     table().map(|(path, _)| path).collect()
 }
 const ROUTES: &[(&str, Handler)] = &[
+    ("/pending-asks", Handler::PendingAsks),
+    ("/sessions/{id}/pending-asks", Handler::PendingAsks),
+    (
+        "/sessions/{id}/pending-asks/{ask_id}/dismiss",
+        Handler::PendingAsks,
+    ),
     ("/authority-requests", Handler::Authority),
     ("/app-info", Handler::Shell),
     ("/data/reset", Handler::DataReset),
@@ -223,6 +230,7 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/canon/plans/{id}/order", Handler::Canon),
     ("/projects/{id}/canon/backlog/order", Handler::Canon),
     ("/projects/{id}/canon/epics", Handler::Canon),
+    ("/projects/{id}/canon/files", Handler::Canon),
     ("/previews/{*path}", Handler::Preview),
     ("/project-sessions", Handler::ProjectSessions),
     ("/projects", Handler::Projects),

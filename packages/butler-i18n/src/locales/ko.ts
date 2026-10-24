@@ -2416,6 +2416,12 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       phone: "전화",
       email: "이메일",
     },
+    browsingAgent: {
+      label: "브라우징 에이전트",
+      auto: (model: string) => `자동 · ${model}`,
+      off: "사용 안 함",
+      conversationModel: "대화 모델",
+    },
     browserImport: {
       chooseItems: "가져올 항목",
       purpose: "북마크, 비밀번호, 방문 기록을 버틀러로 옮겨요",

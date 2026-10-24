@@ -129,6 +129,7 @@ pub(super) fn event_payload(projection: &Value) -> Map<String, Value> {
         "desktop_notifications",
         "desktop_tray_enabled",
         "web_search",
+        "browser",
         "model_fallback",
         "default_project_workspace_label",
         onboarding::KEY,

@@ -1,6 +1,8 @@
+import type { ReactNode, SyntheticEvent } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { Field, FieldLabel, Input, Textarea } from "@/butler-ds";
-export function CanonFormFields({ prefix, title, description, onTitle, onDescription }: {
+export function CanonFormFields({ prefix, title, description, onTitle, onDescription, attachmentControl, onDescriptionSelect }: {
+  attachmentControl?: ReactNode; onDescriptionSelect?: (event: SyntheticEvent<HTMLTextAreaElement>) => void;
   prefix: string; title: string; description: string; onTitle: (value: string) => void; onDescription: (value: string) => void;
 }) {
   const copy = appCopy.canon;
@@ -10,6 +12,6 @@ export function CanonFormFields({ prefix, title, description, onTitle, onDescrip
         value={title} onChange={event => onTitle(event.target.value)} /></Field>
     <Field><FieldLabel htmlFor={`${prefix}-description`}>{copy.description} · {copy.optional}</FieldLabel>
       <Textarea id={`${prefix}-description`} placeholder={copy.descriptionPlaceholder}
-        value={description} onChange={event => onDescription(event.target.value)} /></Field>
+        value={description} onSelect={onDescriptionSelect} onChange={event => onDescription(event.target.value)} />{attachmentControl}</Field>
   </>;
 }

@@ -6,7 +6,7 @@ mod mcp;
 mod project;
 mod publication;
 mod steward;
-mod web;
+pub(super) mod web;
 pub(super) use web::web_provenance;
 mod work;
 mod worker;

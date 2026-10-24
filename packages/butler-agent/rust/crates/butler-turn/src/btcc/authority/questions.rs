@@ -202,6 +202,14 @@ impl PrincipalAuthority {
         binding: QuestionBinding,
         questions: UserQuestions,
     ) -> AuthorityResult<AuthorityAdmissionResult> {
+        self.ask_user_with_wait(binding, questions, true).await
+    }
+    pub async fn ask_user_with_wait(
+        &self,
+        binding: QuestionBinding,
+        questions: UserQuestions,
+        wait: bool,
+    ) -> AuthorityResult<AuthorityAdmissionResult> {
         questions
             .validate_normalized()
             .map_err(|_| AuthorityError::policy("question_input_invalid"))?;
@@ -230,7 +238,11 @@ impl PrincipalAuthority {
                 }
                 return projection::admission(&record, &collation);
             }
-            let record = question_record(binding, questions, sha, now, &collation)?;
+            let mut record = question_record(binding, questions, sha, now, &collation)?;
+            if !wait {
+                record.decision = RequestDecision::Modified;
+                record.private_alternative_input = Some(r#"{"status":"deferred"}"#.into());
+            }
             repo.insert(&record)?;
             projection::admission(&record, &collation)
         })

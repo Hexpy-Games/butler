@@ -103,3 +103,14 @@ impl Events {
         .map_err(|error| error.to_string())
     }
 }
+
+/// Production statements exposed for the stub E2E query-plan pins.
+pub fn pending_ask_plan_statements() -> Vec<(String, &'static str)> {
+    use super::super::pending_asks::{self, events, metadata};
+    vec![
+        (events::CURSOR.into(), "INTEGER PRIMARY KEY"),
+        (events::ADVANCE.into(), "INTEGER PRIMARY KEY"),
+        (pending_asks::CHAT.into(), "sqlite_autoindex_chats_1"),
+        (metadata::CHAT_MESSAGE.into(), "messages_assistant_turn_idx"),
+    ]
+}

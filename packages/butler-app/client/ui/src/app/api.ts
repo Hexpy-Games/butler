@@ -1,3 +1,5 @@
+import { pendingAsksBridgeInput } from "./pendingAsksBridge.ts";
+import type { PendingAsksBridge } from "../../../shared/pending-asks-contracts.ts";
 import { canonBridgeInput } from "./canonBridge.ts";
 import { taskGraphBridgeInput } from "./taskGraphBridge.ts";
 import { appCopy } from "./copy.ts";
@@ -57,7 +59,7 @@ export interface PowerState {
   constrained: boolean;
 }
 
-interface ButlerAppBridge {
+interface ButlerAppBridge extends PendingAsksBridge {
   log?: (row: { level: "DEBUG"; category: "http.client"; event: "image.fetch"; attrs: { url: string } }) => void;
   writeCachedComposerDraft?: (input: { snapshot: import("./composerDraftCache").ComposerDraftSnapshot }) => Promise<unknown>;
   history?: (input: { path: string; method: string; body?: unknown }) => Promise<unknown>;
@@ -310,6 +312,8 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (url.pathname.startsWith("/library/") && url.pathname.endsWith("/snapshot") && method === "GET") return callBridge<T>(bridge,"librarySnapshot",decodeURIComponent(url.pathname.slice(9, -9)));
   if (/^\/library\/(groups|tags|facets|items)(\/|$)/.test(url.pathname)) return callBridge<T>(bridge, "organizeLibrary", { path: url.pathname + url.search, method, ...(options.body == null ? {} : { body: parseBody(options.body) }) });
   if (url.pathname.startsWith("/library/") && method === "DELETE") return callBridge<T>(bridge,"deleteLibrary",decodeURIComponent(url.pathname.slice(9)));
+  const asks = pendingAsksBridgeInput(url, method);
+  if (asks) return await callBridge<T>(bridge, asks.method, asks.input);
   const canon = canonBridgeInput(url, method, () => parseBody(options.body));
   if (canon) return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, canon.method, canon.input));
   const graph = method === "GET" ? taskGraphBridgeInput(url) : null;
@@ -1067,6 +1071,7 @@ function unwrapBridgeResult<T>(value: BridgeResult<T> | T): T {
 }
 
 const CODED_SETTINGS_METHODS = new Set([
+  "uploadCanonFile",
   "listMcpServers", "createMcpServer", "probeMcpServer", "updateMcpServer", "deleteMcpServer",
   "importSkill", "discoverLocalModels", "registerLocalModel", "updateLocalModel",
 ]);
@@ -1113,7 +1118,7 @@ function vaultBridgeCall(method: string, path: string, payload: () => unknown): 
   return null;
 }
 
-async function callBridge<T>(bridge: ButlerAppBridge, method: string, input?: unknown): Promise<T> {
+export async function callBridge<T>(bridge: ButlerAppBridge, method: string, input?: unknown): Promise<T> {
   const fn = bridge[method];
   if (typeof fn !== "function") throw new Error(`Butler desktop bridge is missing ${method}.`);
   const value = await fn(input);

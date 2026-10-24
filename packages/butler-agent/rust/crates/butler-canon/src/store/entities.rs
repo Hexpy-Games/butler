@@ -104,6 +104,7 @@ pub(super) fn insert_work_assigned(
     tags: &[String],
 ) -> Result<Value> {
     let Registration::Canon(_) = registration;
+    crate::store::attachments::references(&input.description)?;
     api::tags::validate_creation(tx, &input.project_id, tags)?;
     tx.execute(
         sql::INSERT_WORK,
@@ -137,6 +138,7 @@ pub fn edit_work(
     expected_revision: i64,
     fields: &WorkFields,
 ) -> Result<Value> {
+    crate::store::attachments::references(&fields.description)?;
     cas(&read_work(tx, id)?, "revision", expected_revision)?;
     tx.execute(
         sql::EDIT_WORK,

@@ -183,6 +183,25 @@ async fn page_read_returns_turn_evidence_and_drops_data_spool_with_session() {
         .unwrap();
     assert_eq!(cached["cache_hit"], true);
     assert_eq!(cached["duplicate_observation"], true);
+    let ranked_args = json!({"url":endpoint,"query":"source details","max_chunks":2});
+    let live = || super::LivePage {
+        tab: "reader-tab".into(),
+        epoch: 1,
+        final_url: endpoint.clone(),
+        html: html.clone(),
+    };
+    let first = session
+        .web_read_from(&ranked_args, Some(live()), true, &CancellationToken::new())
+        .await
+        .unwrap();
+    let second = session
+        .web_read_from(&ranked_args, Some(live()), true, &CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(second["ranked"], true);
+    assert_eq!(first["chunks"], second["chunks"]);
+    assert!(second.get("unchanged").is_none());
+    assert_eq!(first["chunks"][0]["text"], first["markdown"]);
     server.await.unwrap();
     let spool_dir = root.join("tmp/web-access-spool");
     assert_eq!(fs::read_dir(&spool_dir).unwrap().count(), 1);
@@ -349,8 +368,45 @@ async fn disabled_reader_does_not_fetch_and_credentials_are_rejected() {
     let _ = fs::remove_dir_all(root);
 }
 
+// test-category: format-pin
 #[test]
 fn evidence_projection_matches_source_utf16_truncation_and_deduplicates_limitations() {
+    use super::{page::extract_page, read::rank};
+    let text = format!(
+        "<html><title>Sources</title><article><p>{}</p><p>{}</p><p>{}</p></article></html>",
+        "ordinary source context. ".repeat(100),
+        "가격 비교 price details. ".repeat(100),
+        "ending material. ".repeat(100)
+    );
+    let page = extract_page(
+        "https://example.com",
+        "https://example.com",
+        200,
+        true,
+        Some("text/html"),
+        text.as_bytes(),
+        "butler-lightweight",
+    )
+    .unwrap();
+    assert_eq!(rank::tokens("가격, PRICE 비교"), ["가격", "price", "비교"]);
+    let ranked = rank::result(&page, "가격 price", 1, 0);
+    assert_eq!(ranked["ranked"], true);
+    let chunks = ranked["chunks"].as_array().unwrap();
+    assert!(chunks[0]["text"].as_str().unwrap().contains("가격"));
+    let index = usize::try_from(chunks[0]["index"].as_u64().unwrap()).unwrap();
+    assert_eq!(chunks[0]["text"], page.chunks[index].text);
+    let mut union = ranked["more_chunks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| usize::try_from(v.as_u64().unwrap()).unwrap())
+        .collect::<Vec<_>>();
+    union.push(index);
+    union.sort_unstable();
+    assert_eq!(union, (0..page.chunks.len()).collect::<Vec<_>>());
+    let again = rank::result(&page, "가격 price", 1, 0);
+    assert_eq!(ranked, again);
+
     let input = "😀".repeat(12);
     let (bounded, truncated) = super::evidence::bounded_text(&input, 20);
     assert!(truncated);

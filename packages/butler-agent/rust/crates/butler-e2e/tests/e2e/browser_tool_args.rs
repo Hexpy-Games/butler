@@ -50,6 +50,11 @@ pub(super) async fn run(messages: Vec<Value>) -> Result<(Vec<Value>, Vec<Value>)
     .await?;
     let s = super::setup_local_models::with_local_server("BROWSER-ARGS", &server).await?;
     super::setup_local_models::use_local_model(&s, &server.base_url).await?;
+    s.patch_settings(
+        json!({"browser":{"browsing_agent":"off"}}),
+        "direct browser tools",
+    )
+    .await?;
     let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
     let stream = reqwest::Client::new()
         .get(format!("{}/internal/browser-host", s.gw.base))
