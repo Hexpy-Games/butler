@@ -15,18 +15,18 @@ exclusive open-panel state.
 
 ## Responsive behavior
 
-- Expanded layouts use resizable grid tracks. Tracks never interpolate: the
-  docked sidebar slides with a transform while the workspace is
-  FLIP-translated (and clipped) in step. Closing collapses the track at once;
-  opening keeps the collapsed track until the slide ends, so the workspace
-  reflows once. Reduced motion commits at once and the sidebar only fades.
-  The docked right inspector uses the same model
-  (`useInspectorTrackMotion`): it keeps its full width at the right edge and
-  slides with a transform; opening keeps the 0px right track while the panel
-  slides in over the workspace (clipped in step) and commits the track when
-  the slide ends; closing commits the 0px track at once and the panel slides
-  out. In the medium drawer layout the workspace width follows the committed
-  track after the push, never a width transition.
+- Expanded layouts use resizable grid tracks. The left track never
+  interpolates: the docked sidebar slides with a transform while the
+  workspace is FLIP-translated (and clipped) in step. Closing collapses the
+  track at once; opening keeps the collapsed track until the slide ends, so
+  the workspace reflows once. Reduced motion commits at once and the sidebar
+  only fades. The docked right inspector (`useInspectorTrackMotion`) keeps
+  its full width at the right edge and slides with a transform, while the
+  right track's width animates on the same tokens (slow, emphasized): the
+  workspace narrows as the panel opens and widens as it closes, in lockstep.
+  Reduced motion and live resizing commit the track at once. In the medium
+  drawer layout the workspace width follows the committed track after the
+  push, never a width transition.
 - Resize handles (`AdaptivePanelResizeHandle`, the `AdaptiveShellSplit`
   handle) draw no line: the divider is the surfaces' hairline. Hovered,
   focused or dragged they show a 4×64px pill grabber centred on it; with
