@@ -97,7 +97,7 @@ export function ExpandableText({ children, collapsedLines = 1, meta, id }: Expan
     <div className={styles.root} data-slot="expandable-text" data-interactive={overflows ? "" : undefined} data-expanded={expanded ? "" : undefined}
       role={overflows ? "button" : undefined} tabIndex={overflows ? 0 : undefined} aria-expanded={overflows ? expanded : undefined}
       aria-controls={overflows ? textId : undefined} onClick={overflows ? toggle : undefined} onKeyDown={overflows ? onKeyDown : undefined}>
-      <div className={styles.layout}>
+      <div className={styles.layout} data-meta={meta ? "" : undefined}>
         {meta ? <span className={styles.meta}>{meta}</span> : null}
         <div ref={box} className={styles.box}>
           <span ref={text} id={textId} className={styles.text} data-clamped={clamped ? String(collapsedLines) : undefined}>{children}</span>

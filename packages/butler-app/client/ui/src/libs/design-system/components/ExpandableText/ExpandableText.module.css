@@ -20,6 +20,11 @@
   min-width: 0;
 }
 
+/* No caption: no empty first row and no gap above the text. */
+.layout:not([data-meta]) {
+  grid-template-areas: "text chevron";
+}
+
 .root[data-interactive] {
   cursor: pointer;
 }
