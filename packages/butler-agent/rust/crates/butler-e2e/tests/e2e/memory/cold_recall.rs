@@ -291,6 +291,9 @@ async fn slow_model_load_leaves_complete_text_fallback_within_capped_wait()
 #[path = "cold_overrun.rs"]
 mod overrun;
 
+#[path = "lane_overrun.rs"]
+mod lane_overrun;
+
 #[path = "drain_bounds.rs"]
 mod drain_bounds;
 
