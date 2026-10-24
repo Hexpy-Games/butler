@@ -130,11 +130,7 @@ pub(in crate::host::guided::tools) async fn gate(
             model_ref: owner.binding.model_ref.clone(),
             reasoning_effort: owner.binding.reasoning_effort.clone(),
             category: Some(category(call).into()),
-            public_action_title: Some(if unsandboxed {
-                super::super::access::UNSANDBOXED_REASON.into()
-            } else {
-                approval_reason(call)
-            }),
+            public_action_title: Some(approval_reason(call, unsandboxed)),
             honor_standing_permission: !unsandboxed
                 && !matches!(call.name.as_str(), "web_read" | "web_search"),
             unattended: owner.unattended(),
@@ -237,8 +233,10 @@ fn request_target(call: &ModelRoundToolCall, args: &Value) -> String {
         format!("observation:{}", call.name)
     }
 }
-fn approval_reason(call: &ModelRoundToolCall) -> String {
-    if matches!(call.name.as_str(), "web_read" | "web_search") {
+fn approval_reason(call: &ModelRoundToolCall, unsandboxed: bool) -> String {
+    if unsandboxed {
+        super::super::access::UNSANDBOXED_REASON.into()
+    } else if matches!(call.name.as_str(), "web_read" | "web_search") {
         "authority.taintReason".into()
     } else {
         call.name.clone()

@@ -3,7 +3,6 @@
 //! whatever shell construct names them. A host that cannot deny those reads
 //! asks for every command the lexical guard cannot resolve, with a card that
 //! says it runs without a sandbox; a standing permission never covers it.
-#[cfg(target_os = "macos")]
 mod ssh;
 
 use super::stub::{self, Script, call};
@@ -38,7 +37,7 @@ async fn approved_commands_cannot_read_secrets() -> Result<(), HarnessError> {
     let setup = Setup::new("PERM-SECRETS")?
         .access(Access::AskAlways)
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let home = setup.sandbox.home.clone();
     std::fs::create_dir_all(home.join(".ssh"))?;
     // A plain name: the lexical guard already refuses key-like names.
@@ -144,7 +143,7 @@ async fn hosts_without_secret_denial_ask_with_the_unsandboxed_card() -> Result<(
     let setup = Setup::new("PERM-UNSANDBOXED")?
         .access(Access::AskExceptReads)
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .env("BUTLER_TEST_SECRET_READ_DENIAL", "unavailable");
     let folder = setup.sandbox.home.join("proj");
     std::fs::create_dir_all(&folder)?;

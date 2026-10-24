@@ -7,6 +7,18 @@ impl CommandScope<'_> {
         self.workspace_reference
             .and_then(butler_turn::workspace::WorkspaceReference::read_inventory)
     }
+    /// The registered shell: program files write-protected and, outside
+    /// Full Access on hosts that can, secrets unreadable.
+    pub(super) fn legacy_shell(&self, command: &str) -> LegacyShell {
+        LegacyShell {
+            command: command.into(),
+            pipefail: true,
+            read_only_installation_root: self.installation_root.map(Path::to_path_buf),
+            deny_secret_reads: (self.deny_secret_reads
+                && butler_platform::command_sandbox::secret_reads_deniable())
+            .then(|| self.butler_data.to_path_buf()),
+        }
+    }
     pub(super) fn output_origin<'b>(
         &'b self,
         args: &'b Map<String, Value>,

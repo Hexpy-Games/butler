@@ -179,14 +179,7 @@ impl GuidedCommand {
                     stdin: String::new(),
                     timeout_ms,
                     abort: scope.abort.clone(),
-                    legacy: Some(LegacyShell {
-                        command: command.into(),
-                        pipefail: true,
-                        read_only_installation_root: scope.installation_root.map(Path::to_path_buf),
-                        deny_secret_reads: (scope.deny_secret_reads
-                            && butler_platform::command_sandbox::secret_reads_deniable())
-                        .then(|| scope.butler_data.to_path_buf()),
-                    }),
+                    legacy: Some(scope.legacy_shell(command)),
                 })
                 .map_err(BtccError::from)?
                 .await

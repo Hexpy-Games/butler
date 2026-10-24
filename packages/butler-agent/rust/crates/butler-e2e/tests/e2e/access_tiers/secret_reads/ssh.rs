@@ -138,7 +138,7 @@ async fn git_over_ssh_authenticates_through_the_agent_only() -> Result<(), Harne
     let setup = Setup::new("PERM-SECRETS-SSH")?
         .access(Access::AskAlways)
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let home = setup.sandbox.home.clone();
     std::fs::create_dir_all(home.join(".ssh"))?;
     let key = home.join(".ssh/id_ed25519");
