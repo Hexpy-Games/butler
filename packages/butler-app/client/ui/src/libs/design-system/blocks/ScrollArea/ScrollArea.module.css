@@ -2,7 +2,9 @@
   /* The frame bleeds a scrollbar lane past the inline end. An overlay
      scrollbar takes no layout width, so the content gives the lane back; a
      classic one (--scrollbar-width, measured once per document) is its own
-     lane, and reserving both would push the content in twice. */
+     lane, and reserving both would push the content in twice. The vertical
+     scroller keeps that lane even when the content fits (scrollbar-gutter
+     below), so this math never depends on whether it overflows. */
   --scroll-area-scrollbar-width: var(--scrollbar-width, 0px);
   --scroll-area-scrollbar-offset: max(10px, var(--scroll-area-scrollbar-width));
   --scroll-area-fade-size: var(--scroll-fade-size);
@@ -99,6 +101,12 @@
   --scroll-area-ring-room: 0px;
 
   margin-block: calc(-1 * var(--focus-ring-room));
+}
+
+/* A classic scrollbar's lane stays reserved while the content fits, so the
+   content ends on the column either way; an overlay scrollbar reserves none. */
+.frame:not([data-orientation="x"]) > .scroll {
+  scrollbar-gutter: stable;
 }
 
 .frame[data-orientation="x"] > .scroll {
