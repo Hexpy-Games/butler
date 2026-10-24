@@ -38,7 +38,7 @@ pub(super) fn migrate(
 ) -> Result<(), AppStorageError> {
     let turns_new = !migration::table_exists(connection, "turns")?;
     core::create(connection)?;
-    message_file_columns(connection)?;
+    ensure_message_file_columns(connection)?;
     library::create(connection)?;
     canon_sidebar::create(connection)?;
     canon::create(connection)?;
@@ -106,6 +106,20 @@ pub(super) fn migrate(
     Ok(())
 }
 
+fn ensure_message_file_columns(connection: &Connection) -> Result<(), AppStorageError> {
+    migration::ensure_column(connection, "message_files", "title", "TEXT")?;
+    migration::ensure_column(connection, "message_files", "source_label", "TEXT")?;
+    migration::ensure_column(
+        connection,
+        "message_files",
+        "deliverable",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
+    migration::ensure_column(connection, "message_files", "width", "INTEGER")?;
+    migration::ensure_column(connection, "message_files", "height", "INTEGER")?;
+    Ok(())
+}
+
 /// Added after legacy queue columns have been backfilled.
 fn create_queue_order_index(connection: &Connection) -> Result<(), AppStorageError> {
     connection.execute_batch(
@@ -170,17 +184,3 @@ mod plans;
 mod tests;
 
 pub(in crate::gateway::application) use core::create_settings_table;
-
-fn message_file_columns(connection: &Connection) -> Result<(), AppStorageError> {
-    migration::ensure_column(connection, "message_files", "title", "TEXT")?;
-    migration::ensure_column(connection, "message_files", "source_label", "TEXT")?;
-    migration::ensure_column(
-        connection,
-        "message_files",
-        "deliverable",
-        "INTEGER NOT NULL DEFAULT 0",
-    )?;
-    migration::ensure_column(connection, "message_files", "width", "INTEGER")?;
-    migration::ensure_column(connection, "message_files", "height", "INTEGER")?;
-    Ok(())
-}

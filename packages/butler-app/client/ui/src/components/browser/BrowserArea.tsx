@@ -41,10 +41,10 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
     void browserCall("scope", { value: false, owner: sessionId ? `conversation:${sessionId}` : "mine" });
   }, [sessionId]);
   useEffect(() => {
-    if (sessionId || !state.enabled || tabs.length || creating.current) return;
+    if (sessionId || !state.restored || !state.enabled || tabs.length || creating.current) return;
     creating.current = true;
     void browserCall("create").finally(() => { creating.current = false; });
-  }, [sessionId, state.enabled, tabs.length]);
+  }, [sessionId, state.restored, state.enabled, tabs.length]);
   const groups: TabStripGroup[] = [];
   for (const item of tabs) {
     let group = groups.find((entry) => entry.id === item.owner);
