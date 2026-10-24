@@ -20,7 +20,7 @@ export function SessionInfoActions() {
       <DialogTrigger asChild><IconButton label={appCopy.taskGraph.title}><Blocks size="md" /></IconButton></DialogTrigger>
       <DialogContent size="full" layout="scroll-body" closeLabel={appCopy.common.close}>
         <DialogHeader><DialogTitle>{appCopy.taskGraph.title}</DialogTitle></DialogHeader>
-        <ScrollArea fill>{graphOpen && <TasksPanel key={sessionId} />}</ScrollArea>
+        <ScrollArea fill>{graphOpen && <TasksPanel key={sessionId} hideHeading />}</ScrollArea>
       </DialogContent>
     </Dialog>}
     <IconButton label={c.title} aria-label={indicator ? c.waitingLabel : c.title} pressed={open} indicator={indicator}

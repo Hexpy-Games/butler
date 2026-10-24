@@ -152,6 +152,10 @@ try {
     await restored;
     const graph = page.getByRole("button", { name: "작업 그래프", exact: true });
     await graph.waitFor();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const sessionAside = page.getByRole("complementary", { name: "세션 정보", exact: true });
+    if (await sessionAside.count() === 0) await page.locator('[data-test-class="session-info-toggle"]').click();
+    await sessionAside.getByText("질문 · 지금", { exact: true }).waitFor();
     await capture("header-graph-icon");
     const graphRead = page.waitForResponse(response => /\/sessions\/[^/]+\/task-graphs/u.test(response.url()) && response.ok());
     await graph.click();
@@ -160,6 +164,7 @@ try {
     await dialog.waitFor();
     await dialog.getByText("아직 작업이 없습니다", { exact: true }).waitFor();
     await capture("graph-modal");
+    assert.equal(await dialog.getByText("작업 그래프", { exact: true }).count(), 1, "Exactly one 작업 그래프 heading");
     await page.keyboard.press("Escape");
     await dialog.waitFor({ state: "hidden" });
   } else {

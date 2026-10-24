@@ -15,7 +15,6 @@ const patch = (page: Page, id: string) => page.waitForResponse(response => respo
   && new URL(response.url()).pathname === `/canon/epics/${id}`);
 
 export async function verifyPaneExits(page: Page, server: NativeAppServerHandle, id: string, shots: string, otherId: string) {
-  const current = (await server.api<EpicDetail>(`/canon/epics/${id}`)).title;
   for (const exit of ["close", "conversation"]) {
     for (const choice of ["계속 편집", "저장 안 함", "저장"]) {
       const before = (await server.api<EpicDetail>(`/canon/epics/${id}`)).title;
@@ -42,7 +41,6 @@ export async function verifyPaneExits(page: Page, server: NativeAppServerHandle,
       }
     }
   }
-  assert(current);
   await verifyLayoutAndGraph(page, shots);
 }
 
@@ -73,6 +71,7 @@ export async function verifyInlineAttachment(page: Page, id: string) {
   await detail(page).getByRole("button", { name: "설명 편집", exact: true }).click();
   const textarea = detail(page).getByLabel("설명", { exact: true });
   const text = await textarea.inputValue();
+  await textarea.fill(`${text}\n\n`); await textarea.press("End");
   let release!: () => void;
   const uploading = new Promise<void>(done => { release = done; });
   const uploadPath = "**/projects/*/canon/files";
@@ -96,4 +95,19 @@ export async function verifyInlineAttachment(page: Page, id: string) {
   const downloaded = await page.request.get(new URL((await file.getAttribute("href"))!, page.url()).href);
   assert(downloaded.ok());
   assert.equal(await downloaded.text(), "검색 흐름과 문서 배치를 검토합니다.");
+}
+
+export async function verifyEmptyDescription(page: Page, id: string) {
+  const body = detail(page).getByRole("button", { name: "설명 편집", exact: true });
+  await body.click();
+  const textarea = detail(page).getByLabel("설명", { exact: true });
+  const original = await textarea.inputValue();
+  await textarea.fill("");
+  const cleared = patch(page, id); await detail(page).getByRole("button", { name: "저장", exact: true }).click();
+  assert((await cleared).ok());
+  await body.getByText("재현 방법, 기대 결과", { exact: true }).waitFor();
+  await body.click(); assert.equal(await textarea.inputValue(), "");
+  await textarea.fill(original);
+  const restored = patch(page, id); await detail(page).getByRole("button", { name: "저장", exact: true }).click();
+  assert((await restored).ok()); await body.waitFor();
 }

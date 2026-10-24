@@ -6,7 +6,7 @@ import { createNativeAppServer } from "../support/native-app-server.ts";
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
 import { openCanonBoard, seedCanonBoard } from "../support/canon-board-scenarios.ts";
 import { verifyInlineFields, verifyInlineExits, inlineShot } from "../support/canon-inline-edit-flows.ts";
-import { verifyPaneExits, verifyInlineAttachment } from "../support/canon-inline-pane-flows.ts";
+import { verifyPaneExits, verifyInlineAttachment, verifyEmptyDescription } from "../support/canon-inline-pane-flows.ts";
 import { showCanonSidebar } from "../support/canon-sidebar-scenarios.ts";
 import type { CanonOverview } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 
@@ -15,7 +15,7 @@ if (await runSmokeCases(cases, "BUTLER_INLINE_EDIT_CASE", import.meta.path, { is
 const theme = process.env.BUTLER_INLINE_EDIT_CASE ?? "dark";
 const shots = join(resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? "/tmp/canon-inline-edit-smoke"), theme);
 mkdirSync(shots, { recursive: true });
-const server = await createNativeAppServer({ uiRoot: resolve("packages/butler-app/client/ui/dist") });
+const server = await createNativeAppServer({ uiRoot: resolve(process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist") });
 let browser: Awaited<ReturnType<typeof launchSmokeBrowser>> | undefined;
 let failure: unknown;
 let cleanupErrors: unknown[] = [];
@@ -45,6 +45,7 @@ try {
   await showCanonSidebar(page);
   await page.waitForFunction(() => document.querySelector('[data-slot="conversation-aside"]')?.getAttribute("data-layout") === "docked");
   await verifyInlineFields(page, server, epic.id, shots);
+  await verifyEmptyDescription(page, epic.id);
   await verifyInlineAttachment(page, epic.id);
   await verifyPaneExits(page, server, epic.id, shots, other.id);
   await openCanonBoard(page);
