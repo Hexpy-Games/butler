@@ -23,7 +23,7 @@ const labels = locale === "en" ? {
   showMore: "더 보기", showLess: "접기", moreItems: (count: number) => `${count}개 더 보기`,
   checkedTime: "오후 5:41", checkedLabel: "오후 5:41 확인 · musinsa.com",
 };
-const evidence = process.env.BUTLER_ANSWER_EVIDENCE ?? resolve(".tmp/answer-blocks-ui");
+const evidence = process.env.BUTLER_ANSWER_EVIDENCE ?? resolve(process.env.TMPDIR ?? "/tmp", "answer-blocks-ui");
 mkdirSync(evidence, { recursive: true });
 const mock = JSON.parse(readFileSync(join(root, "tests/smoke/answer-blocks-mock.json"), "utf8")) as AnswerBlocks;
 const neutral = JSON.parse(readFileSync(join(root, "packages/butler-agent/rust/crates/butler-e2e/tests/answer_blocks/fixtures.json"), "utf8")).specs.neutral as AnswerBlocks;
@@ -310,6 +310,66 @@ async function checkLeniencyAndExpand(page: Page) {
   assert.equal(await page.locator("tbody tr").count(), 12);
 }
 
+async function checkV2(page: Page, width: number, theme: string, background: string) {
+  const fixture = JSON.parse(readFileSync(join(root, "tests/smoke/answer-blocks-mock.json"), "utf8"));
+  const spec = fixture.v2 as AnswerBlocks;
+  const expected = fixture.v2Markdown as string;
+  servePhotos = true;
+  await open(page, spec, width, theme, background);
+  if (stage === "after") {
+    const columns = page.locator('[data-slot="block-columns"] [data-answer-block]');
+    const [first, second] = await columns.evaluateAll(nodes => nodes.map(node => {
+      const { x, y, width, height } = node.getBoundingClientRect();
+      return { x, y, width, height };
+    }));
+    assert(first && second);
+    if (width === 1440) assert(Math.abs(first.y - second.y) < 2 && second.x > first.x + first.width, "desktop columns share a row");
+    else assert(second.y >= first.y + first.height && Math.abs(first.x - second.x) < 2, "phone columns stack");
+    const checks = page.getByRole("checkbox");
+    assert.equal(await checks.count(), 2);
+    assert.deepEqual(await checks.evaluateAll(nodes => nodes.map(node => [node.getAttribute("aria-checked"), node.getAttribute("aria-readonly")])), [["true", "true"], ["false", "true"]]);
+    await page.getByRole("tab", { name: "Picture", exact: true }).click();
+    await page.locator('[data-answer-block="image"]').waitFor({ state: "visible" });
+    const imageBlock = page.locator('[data-answer-block="image"]');
+    const frame = await imageBlock.locator('[data-slot="media-frame"]').boundingBox();
+    const target = await imageBlock.getByRole("button", { name: viewerLabels.view("Record image"), exact: true }).boundingBox();
+    assert(frame && frame.width > 0 && frame.height > 0, "the image frame has visible dimensions");
+    assert(target && target.width >= frame.width && target.height >= frame.height, "the click target contains the image");
+    await page.waitForFunction(() => (document.querySelector('[data-answer-block="image"] img') as HTMLImageElement | null)?.naturalWidth);
+    geometry.push({ v2Image: { width, theme, background, frame, target } });
+    await page.getByRole("button", { name: viewerLabels.view("Record image"), exact: true }).click();
+    await page.getByRole("dialog").waitFor();
+    await page.keyboard.press("Escape");
+    await page.getByRole("dialog").waitFor({ state: "detached" });
+    await page.waitForFunction(label => document.activeElement?.getAttribute("aria-label") === label, viewerLabels.view("Record image"));
+    await page.getByRole("tab", { name: "Picture", exact: true }).focus();
+    await page.keyboard.press("ArrowLeft");
+    await page.getByRole("tab", { name: "Status", exact: true, selected: true }).waitFor();
+    assert.equal(await page.getByRole("tab", { name: "Status", exact: true }).getAttribute("aria-selected"), "true");
+    const progress = page.getByRole("progressbar", { name: "Tasks", exact: true });
+    assert.equal(await progress.getAttribute("aria-valuenow"), "25");
+    await page.locator('[data-answer-block="metrics"]').scrollIntoViewIfNeeded();
+    const danger = await page.locator('[data-answer-block="metrics"]').evaluate(node => {
+      const delta = [...node.querySelectorAll("*")].find(child => child.textContent === "+2" && child.children.length === 0);
+      const sample = document.createElement("span"); sample.style.color = "var(--color-danger)"; node.append(sample);
+      const result = [delta ? getComputedStyle(delta).color : "missing", getComputedStyle(sample).color]; sample.remove(); return result;
+    });
+    assert.equal(danger[0], danger[1], "positive down-good delta uses danger");
+    await page.locator('[data-test-class="assistant-footer"]').getByRole("button", { name: new RegExp(labels.copy) }).click();
+    assert.equal(await page.evaluate(() => (window as Window & { copiedText?: string }).copiedText), `${message(spec).text}\n\n${expected}`);
+  }
+  await page.locator('[data-test-class~="conversation-scroll"]').evaluate(node => { node.scrollTop = 0; });
+  await page.screenshot({ path: join(evidence, `${locale}-${stage}-v2-${width}-${theme}-${background}.png`) });
+  if (stage === "after") {
+    await page.getByRole("tab", { name: "Picture", exact: true }).click();
+    await page.locator('[data-answer-block="image"]').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: join(evidence, `${locale}-${stage}-v2-image-${width}-${theme}-${background}.png`) });
+    await page.locator('[data-answer-block="group"]').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: join(evidence, `${locale}-${stage}-v2-notes-${width}-${theme}-${background}.png`) });
+  }
+  servePhotos = false;
+}
+
 try {
   const page = await browser.newPage({ timezoneId: "Asia/Seoul", locale: locale === "en" ? "en-US" : "ko-KR", reducedMotion: "reduce" });
   await initialize(page);
@@ -345,6 +405,7 @@ try {
     return route.continue();
   });
   for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (const background of ["plain", "wallpaper"]) await checkMock(page, width, theme, background);
+  for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (const background of ["plain", "wallpaper"]) await checkV2(page, width, theme, background);
   if (stage === "after") {
     await checkInteractions(page);
     await checkCardTargetsAndViewer(page, 1440, "light");
@@ -352,7 +413,7 @@ try {
     await checkLeniencyAndExpand(page);
   }
   assert.deepEqual(errors, [], "no uncaught renderer errors");
-  const result = { stage, ok: true, screenshots: stage === "after" ? 16 : 8, geometry, interactions: calls.map(call => call.path), modelCalls: 0 };
+  const result = { stage, ok: true, screenshots: stage === "after" ? 40 : 16, geometry, interactions: calls.map(call => call.path), modelCalls: 0 };
   result.screenshots += locale === "en" && stage === "after" ? 1 : 0;
   writeFileSync(join(evidence, `${locale}-${stage}-result.json`), JSON.stringify({ ...result, locale }, null, 2));
   console.log(JSON.stringify({ ...result, locale }));

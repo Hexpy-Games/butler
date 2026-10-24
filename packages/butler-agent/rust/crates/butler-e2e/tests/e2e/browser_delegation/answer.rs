@@ -25,12 +25,15 @@ pub(crate) fn parent_item(body: &Value, step: &mut usize) -> Value {
             assert_eq!(ids.len(), 2, "parent received two collected ids");
             (
                 "answer_blocks",
-                json!({"v":1,"blocks":[
+                with_v2_children(
+                    json!({"v":2,"blocks":[
                 {"type":"cards","items":[
                     {"title":"First image","img":ids[0],"source":"https://example.com/","checked":chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(5 * 3600 + 45 * 60).unwrap()).to_rfc3339(),"value":{"amount":2,"unit":"items"}},
                     {"title":"Second image","img":ids[1]}]},
                 {"type":"gallery","items":[{"img":ids[0],"caption":"First image"},{"img":ids[1],"caption":"Second image"}]},
                 {"type":"table","columns":["Image","Count"],"rows":[["First",1],["Second",1]]}]}),
+                    &ids[0],
+                ),
             )
         }
         _ => {
@@ -40,6 +43,15 @@ pub(crate) fn parent_item(body: &Value, step: &mut usize) -> Value {
         }
     };
     json!({"type":"function_call","id":format!("parent-{current}"),"call_id":format!("parent-{current}"),"name":name,"arguments":args.to_string(),"status":"completed"})
+}
+
+fn with_v2_children(mut spec: Value, image: &str) -> Value {
+    let fixture: Value =
+        serde_json::from_str(include_str!("../../answer_blocks/fixtures.json")).unwrap();
+    let mut blocks = fixture["specs"]["v2"]["blocks"].as_array().unwrap().clone();
+    blocks[1]["tabs"][1]["blocks"][0]["img"] = json!(image);
+    spec["blocks"].as_array_mut().unwrap().extend(blocks);
+    spec
 }
 
 #[tokio::test]
@@ -94,7 +106,7 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
         "a table shown as a block is not repeated in the prose"
     );
     let sets = &message["answer_blocks"];
-    assert_eq!(sets[0]["spec"]["blocks"].as_array().unwrap().len(), 3);
+    assert_eq!(sets[0]["spec"]["blocks"].as_array().unwrap().len(), 6);
     assert!(
         sets[0]["spec"]["blocks"][0]["items"][0]["checked"]
             .as_str()
@@ -126,6 +138,17 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
             )?;
         }
     }
+    let image = sets[0]["spec"]["blocks"][0]["items"][0]["img"]
+        .as_str()
+        .unwrap();
+    let mut expected = with_v2_children(json!({"v":2,"blocks":[]}), image);
+    butler_runtime::capabilities::answer_blocks::normalize(&mut expected);
+    let mut actual = sets[0]["spec"].clone();
+    strip_signatures(&mut actual);
+    assert_eq!(
+        &actual["blocks"].as_array().unwrap()[3..],
+        expected["blocks"].as_array().unwrap()
+    );
     assert_stored_ids(&s)?;
     assert_request_view_hides_presentation(&s, &session).await?;
     s.restart().await?;
