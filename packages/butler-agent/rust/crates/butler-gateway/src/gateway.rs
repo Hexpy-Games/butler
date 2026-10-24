@@ -19,7 +19,9 @@ mod image_files;
 mod live;
 mod message_validation;
 mod mutations;
+mod pending_asks_port;
 mod protocol;
+pub use pending_asks_port::GatewayPendingAsks;
 mod published_event;
 mod rate_limit;
 mod security_settings;
@@ -162,8 +164,8 @@ pub use data_reset::{AppDataResetPort, FullResetRequest, ResetNonce};
 mod browser_still_delivery;
 pub use browser_still_delivery::AppBrowserStillCommand;
 
-pub use application_port::GatewayApplication;
 mod application_port;
+pub use application_port::GatewayApplication;
 
 mod inbound_queue;
 mod message_file_store;

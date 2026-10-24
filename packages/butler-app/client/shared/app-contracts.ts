@@ -190,3 +190,5 @@ export type AnswerBlockSet = {
   set_ids: Array<string>;
   spec: AnswerBlocks;
 };
+
+export type { PendingAsk, PendingAskKind, PendingAskState, SessionPendingAsks, GlobalPendingAsks, PendingAsksChanged, PendingAsksBridge } from "./pending-asks-contracts.ts";

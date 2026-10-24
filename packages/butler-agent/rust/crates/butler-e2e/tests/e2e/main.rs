@@ -131,6 +131,7 @@ mod nfd_paths;
 mod onboarding;
 mod onboarding_form;
 mod outbox_identity;
+mod pending_asks;
 mod perf_ask_user;
 mod perf_turn;
 mod personalization;

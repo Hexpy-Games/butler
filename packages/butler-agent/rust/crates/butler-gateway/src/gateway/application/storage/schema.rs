@@ -8,6 +8,7 @@ mod library;
 mod message_ownership;
 mod migration;
 mod monitoring;
+pub(super) mod pending_asks;
 mod project_ledger_bindings;
 mod schedule_access;
 mod schedule_legacy;
@@ -103,6 +104,7 @@ pub(super) fn migrate(
     message_ownership::migrate(connection)?;
     session_reads::create(connection)?;
     monitoring::migrate(connection)?;
+    pending_asks::create(connection)?;
     library::recover(connection, butler_data)?;
     Ok(())
 }

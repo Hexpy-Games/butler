@@ -36,6 +36,7 @@ pub(in crate::gateway::http) async fn route(
         };
     };
     match handler {
+        Handler::PendingAsks => pending_asks::route(state, request).await,
         Handler::DataReset => data_reset::route(state, request).await,
         Handler::NotFound => Err(HttpError::public(404, "not_found", "Route not found.")),
         Handler::Logs => logs::route(state, request, &uri).await,

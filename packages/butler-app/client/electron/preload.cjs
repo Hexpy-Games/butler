@@ -1049,6 +1049,17 @@ const butlerApp = Object.freeze({
     const params = new URLSearchParams({ session_id: sessionId });
     return requestJson(`/session-queue?${params.toString()}`);
   },
+  getSessionPendingAsks: ({ sessionId } = {}) => requestJson(`/sessions/${encodeURIComponent(sessionId ?? "")}/pending-asks`),
+  getPendingAsks: ({ limit, before } = {}) => {
+    const query = new URLSearchParams();
+    if (limit !== undefined) query.set("limit", String(limit));
+    if (before !== undefined) query.set("before", before);
+    return requestJson(`/pending-asks${query.size ? `?${query}` : ""}`);
+  },
+  dismissPendingAsk: ({ sessionId, askId } = {}) => requestJson(
+    `/sessions/${encodeURIComponent(sessionId ?? "")}/pending-asks/${encodeURIComponent(askId ?? "")}/dismiss`,
+    { method: "POST" },
+  ),
   getAuthorityPermissions: () => requestJson("/authority-permissions"),
   revokeAuthorityPermissions: ({ grants } = {}) => requestJson("/authority-permissions/revoke", {
     method: "POST", body: JSON.stringify({ grants }),

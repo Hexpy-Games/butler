@@ -38,7 +38,7 @@ pub(crate) fn cassette() -> Result<Cassette, HarnessError> {
     c.exchanges.push(followup);
     Ok(c)
 }
-fn response(item: &Value) -> ResponseRecord {
+pub(crate) fn response(item: &Value) -> ResponseRecord {
     let completed = json!({"id":"resp_question","object":"response","status":"completed","model":"gpt-6-sol",
         "output":[item.clone()],"usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120}});
     let mut events = vec![
