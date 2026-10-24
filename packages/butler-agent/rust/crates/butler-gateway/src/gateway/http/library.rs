@@ -66,7 +66,7 @@ pub(super) async fn route(
             name: (*name).to_owned(),
         },
         (&Method::GET, ["facets"]) => C::Facets {
-            kind: input::kind(args.get("kind"))?,
+            kind: input::kinds(&args)?,
             group: args.get("group").cloned(),
         },
         (&Method::GET, [id, "snapshot"]) => C::Snapshot {

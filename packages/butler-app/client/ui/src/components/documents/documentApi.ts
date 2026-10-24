@@ -1,0 +1,26 @@
+import { api } from "@/app/api";
+import { libraryChanged } from "@/app/libraryEvents";
+import { useButlerStore } from "@/app/store";
+export interface DocumentAsset { id: string; url: string; signed_url?: string }
+export interface DocumentRevision { rev: number; author: "user" | "butler"; created_at: string; updated_at: string }
+export interface EditableDocument extends DocumentRevision {
+  id: string; title: string; body: string; chat_id?: string; message_id?: string; assets?: DocumentAsset[];
+}
+export const documentPath = (id: string) => `/documents/${encodeURIComponent(id)}`;
+export const readDocument = (id: string, rev?: number) => api<EditableDocument>(`${documentPath(id)}${rev ? `/revisions/${rev}` : ""}`);
+export const revisions = (id: string) => api<DocumentRevision[]>(`${documentPath(id)}/revisions`);
+export async function restoreDocument(id: string, rev: number) {
+  for (;;) {
+    const head = await readDocument(id);
+    try {
+      const result = await api<EditableDocument>(`${documentPath(id)}/restore`, { method: "POST", body: JSON.stringify({ rev, expected_rev: head.rev, author: "user" }) });
+      libraryChanged(); return result;
+    } catch (error) { if ((error as { code?: string }).code !== "revision_conflict") throw error; }
+  }
+}
+/** Chat documents use the existing artifacts Inspector, drawer documents have a durable route. */
+export function openDocument(doc: Pick<EditableDocument, "id" | "title" | "chat_id" | "message_id">, chat = false) {
+  const store = useButlerStore.getState();
+  if (chat) store.openArtifact(doc.id, { id: doc.id, title: doc.title, kind: "doc", session_id: doc.chat_id, message_id: doc.message_id, created_at: new Date().toISOString(), deliverable: true });
+  else store.setView({ kind: "library", section: "document", doc: doc.id });
+}

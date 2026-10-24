@@ -257,7 +257,7 @@ Copyright (c) 2021-present Floating UI contributors
 =====
 @hugeicons/core-free-icons 4.1.4
 MIT
-License: https://raw.githubusercontent.com/hugeicons/hugeicons/9c48f3723dfb243909fa83501aa7c6423ab972c0/LICENSE.md
+License: https://raw.githubusercontent.com/hugeicons/hugeicons/4fd1c2d5572f832eb908d401ca95a18013069abf/LICENSE.md
 Copyright (c) 2025 Hugeicons
 
 =====
@@ -854,6 +854,12 @@ devlop 1.1.0
 MIT
 License: https://www.npmjs.com/package/devlop/v/1.1.0
 Copyright (c) 2023 Titus Wormer <tituswormer@gmail.com>
+
+=====
+diff 9.0.0
+BSD-3-Clause
+License: https://www.npmjs.com/package/diff/v/9.0.0
+Copyright (c) 2009-2015, Kevin Decker <kpdecker@gmail.com>
 
 =====
 electron 44.5.1

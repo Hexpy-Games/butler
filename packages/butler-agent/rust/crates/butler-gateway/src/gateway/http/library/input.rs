@@ -104,10 +104,26 @@ fn filters(args: &HashMap<String, String>, query: &mut AppLibraryQuery) -> Resul
     };
     Ok(())
 }
-/// `GET /library`: one kind, every filter, pages of 60.
+pub(super) fn kinds(args: &HashMap<String, String>) -> Result<String, HttpError> {
+    let Some(values) = args.get("kinds") else {
+        return kind(args.get("kind"));
+    };
+    let mut result = Vec::new();
+    for value in values.split(',').take(6) {
+        let value = kind(Some(&value.to_owned()))?;
+        if !result.contains(&value) {
+            result.push(value);
+        }
+    }
+    if result.is_empty() || values.split(',').count() > 5 {
+        return Err(invalid("Choose one to five kinds."));
+    }
+    Ok(result.join(","))
+}
+/// `GET /library`: indexed kinds, every filter, pages of 60.
 pub(super) fn page(args: &HashMap<String, String>) -> Result<AppLibraryQuery, HttpError> {
     let mut query = AppLibraryQuery {
-        kind: Some(kind(args.get("kind"))?),
+        kind: Some(kinds(args)?),
         limit: 60,
         ..AppLibraryQuery::default()
     };

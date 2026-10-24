@@ -92,11 +92,25 @@ async fn editable_document_create_correct_search_coalesce_diff_edit_restore_dele
     assert_eq!(head["rev"], 1);
     assert_eq!(head["author"], "butler");
     let messages = s.gw.messages("general").await?;
-    assert!(
-        messages
-            .iter()
-            .any(|message| message["role"] == "assistant" && message["id"] == head["message_id"])
-    );
+    assert!(messages.iter().any(|message| {
+        message["role"] == "assistant"
+            && message["id"] == head["message_id"]
+            && message["artifacts"].as_array().is_some_and(|items| {
+                items.iter().any(|item| {
+                    item["kind"] == "doc" && item["id"] == id && item["deliverable"] == true
+                })
+            })
+    }));
+    mixed_document_section(&s, id)?;
+    let mixed = ok(s.gw.get("/library?kinds=doc,document").await?);
+    let kinds = mixed["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["kind"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(kinds, vec!["document", "doc"]);
+    assert_eq!(mixed["items"][1]["id"], id);
     for word in ["청자", "orchard"] {
         let url = reqwest::Url::parse_with_params(
             "http://localhost/library",
@@ -196,6 +210,15 @@ async fn editable_document_create_correct_search_coalesce_diff_edit_restore_dele
         .find(|m| m["role"] == "user" && m["turn_id"] == turn_id)
         .unwrap();
     assert_eq!(user["text"], EDIT);
+    assert!(messages.iter().any(|message| {
+        message["role"] == "assistant"
+            && message["turn_id"] == turn_id
+            && message["artifacts"].as_array().is_some_and(|items| {
+                items.iter().any(|item| {
+                    item["kind"] == "doc" && item["id"] == id && item["deliverable"] == true
+                })
+            })
+    }));
     assert!(!json!(messages).to_string().contains("invalid_embeds"));
     let restored = ok(s
         .gw
@@ -288,4 +311,10 @@ async fn editable_document_create_correct_search_coalesce_diff_edit_restore_dele
         "documents: 6 revisions (2 user saves coalesced); 2 language searches; asset refs released"
     );
     s.finish().await
+}
+
+fn mixed_document_section(s: &Scenario, _id: &str) -> Result<(), HarnessError> {
+    let payload = json!({"id":"file-deliverable","kind":"document","title":"Deliverable","url":"/message-files/file","capturedAt":"2099-01-01T00:00:00Z"});
+    db(s)?.execute("INSERT INTO browser_library(id,kind,title,url,payload,created_at) VALUES('file-deliverable','document','Deliverable','/message-files/file',?1,'2099-01-01T00:00:00Z')", [payload.to_string()])?;
+    Ok(())
 }

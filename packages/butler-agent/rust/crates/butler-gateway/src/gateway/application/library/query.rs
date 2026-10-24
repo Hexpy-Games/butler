@@ -13,7 +13,7 @@ const PAGE: usize = 60;
 /// One Library listing: every filter narrows the result (AND).
 #[derive(Clone, Debug, Default)]
 pub struct AppLibraryQuery {
-    /// One kind; `None` lists every kind (agent search).
+    /// Comma-separated kinds; `None` lists every kind (agent search).
     pub kind: Option<String>,
     pub search: String,
     pub cursor: String,
@@ -91,10 +91,11 @@ fn cursor(sort: &str, [time, id, title, site]: &[String; 4]) -> String {
 /// The SQL of one page and its arguments.
 fn statement(query: &AppLibraryQuery, terms: &str, limit: usize) -> (String, Vec<Sql>) {
     let mut sql_text = String::from(if terms.is_empty() {
-        "SELECT l.payload,l.created_at,l.id,l.title_key,l.site FROM browser_library l"
+        "SELECT CASE WHEN d.id IS NULL THEN l.payload ELSE json_set(l.payload,'$.author',r.author,'$.updatedAt',d.updated_at) END,l.created_at,l.id,l.title_key,l.site FROM browser_library l"
     } else {
-        "SELECT l.payload,l.created_at,l.id,l.title_key,l.site FROM browser_library_fts JOIN browser_library l ON l.rowid=browser_library_fts.rowid"
+        "SELECT CASE WHEN d.id IS NULL THEN l.payload ELSE json_set(l.payload,'$.author',r.author,'$.updatedAt',d.updated_at) END,l.created_at,l.id,l.title_key,l.site FROM browser_library_fts JOIN browser_library l ON l.rowid=browser_library_fts.rowid"
     });
+    sql_text.push_str(" LEFT JOIN documents d ON d.id=l.id LEFT JOIN document_revisions r ON r.document_id=d.id AND r.rev=d.head_rev");
     let mut clauses: Vec<&str> = Vec::new();
     let mut args: Vec<Sql> = Vec::new();
     let mut push = |clause: &'static str, values: Vec<String>| {
@@ -105,7 +106,10 @@ fn statement(query: &AppLibraryQuery, terms: &str, limit: usize) -> (String, Vec
         push("browser_library_fts MATCH ?", vec![terms.to_owned()]);
     }
     if let Some(kind) = &query.kind {
-        push("l.kind=?", vec![kind.clone()]);
+        push(
+            "l.kind IN (SELECT value FROM json_each(?))",
+            vec![json!(kind.split(',').collect::<Vec<_>>()).to_string()],
+        );
     }
     match query.group.as_deref() {
         None => {}

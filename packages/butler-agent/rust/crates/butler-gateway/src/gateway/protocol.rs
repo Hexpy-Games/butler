@@ -213,6 +213,7 @@ pub enum ArtifactKind {
     TableFile,
     ChartFile,
     Image,
+    Doc,
     Document,
     Code,
     Report,

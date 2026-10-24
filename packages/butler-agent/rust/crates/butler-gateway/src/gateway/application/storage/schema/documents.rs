@@ -7,6 +7,10 @@ pub(super) fn create(db: &Connection) -> Result<(), AppStorageError> {
       created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS documents_chat ON documents(chat_id);
       CREATE INDEX IF NOT EXISTS documents_message ON documents(chat_id,message_id);
+      CREATE TABLE IF NOT EXISTS document_deliveries(
+      document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+      chat_id TEXT NOT NULL,message_id TEXT NOT NULL,PRIMARY KEY(document_id,chat_id,message_id));
+      CREATE INDEX IF NOT EXISTS document_deliveries_message ON document_deliveries(chat_id,message_id);
       CREATE TABLE IF NOT EXISTS document_bodies(sha256 TEXT PRIMARY KEY,body TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS document_revisions(
       document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,rev INTEGER NOT NULL,

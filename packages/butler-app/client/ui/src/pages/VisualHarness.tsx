@@ -1,3 +1,4 @@
+import { initialDocumentView } from "@/app/documentRoute";
 import { useSessionAttentionNotifications } from "@/hooks/live-session/useSessionAttentionNotifications";
 import { useEffect, useMemo } from "react";
 import { stewardHarnessSummary } from "./stewardHarnessSummary.ts";
@@ -195,7 +196,7 @@ export function VisualHarness() {
     }
     setRightOpen(!fixture);
     setRightTab("summary");
-    setView({ kind: "session" });
+    setView(initialDocumentView());
     setActiveChatId("butler-client");
     setNavigation(harnessNavigation);
     setMessages(fixture?.messages ?? HARNESS_MESSAGES);

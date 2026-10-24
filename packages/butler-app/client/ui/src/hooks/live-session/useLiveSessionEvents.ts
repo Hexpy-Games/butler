@@ -1,3 +1,4 @@
+import { publishDocumentEvent } from "@/app/documentEvents";
 import { publishCanonEvent } from "@/app/canonEvents.ts";
 import { publishChatGptEvent } from "@/app/chatGptEvents.ts";
 import { receiveModelThinking, reconcileModelThinking, abandonModelThinking } from "@/app/modelThinking";
@@ -89,6 +90,7 @@ export function useLiveSessionEvents(): void {
       publishMemoryEvent(event);
       publishChatGptEvent(event);
       publishLibraryEvent(event);
+      publishDocumentEvent(event);
       publishCanonEvent(event);
       if (event.type.startsWith("authority.")) authorityPermissionsChanged();
       receiveTaskGraphEvent(event);

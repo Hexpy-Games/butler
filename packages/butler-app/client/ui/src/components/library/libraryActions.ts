@@ -1,3 +1,4 @@
+import { documentKind } from "./documentKinds";
 import { appCopy } from "@/app/copy";
 import { notifyStatus } from "@/app/notifications";
 import type { LibraryItem } from "../browser/libraryStore";
@@ -40,6 +41,8 @@ export async function tagItems(items: LibraryItem[], addTags: string[], removeTa
 
 /** One line of meta: source, version (when kept in several), saved date. The version precedes the date so a narrow card truncates the date. */
 export function itemMeta(item: LibraryItem) {
+  const meta = documentKind(item)?.meta;
+  if (meta) return meta(item);
   const host = item.site ?? (item.kind === "bookmark" ? safeHost(item.url) : undefined);
   const versions = item.revisions?.length ?? 0;
   const version = versions > 1 ? `${appCopy.artifacts.revision} ${versions}` : undefined;

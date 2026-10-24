@@ -1,3 +1,4 @@
+import { DocumentPage } from "../documents/DocumentPage";
 import { useAppLocale } from "@/app/copy.ts";
 import { useCallback } from "react";
 import { EmptyPanelLine } from "@/components/common/Display.tsx";
@@ -58,7 +59,7 @@ export function ArtifactsPanel({
         gap="md"
       >
         {selectedArtifact ? (
-          <ArtifactViewer
+          selectedArtifact.kind === "doc" ? <DocumentPage key={selectedArtifact.id} id={selectedArtifact.id} /> : <ArtifactViewer
             artifact={selectedArtifact}
             onBack={() => setSelectedArtifactId(null)}
             refreshFileUrls={refreshFileUrls}

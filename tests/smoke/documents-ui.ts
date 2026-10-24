@@ -1,0 +1,247 @@
+// UI behavior smoke: offline gateway fixtures, real Lexical editor and product screens.
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import type { Page } from "playwright";
+import { createServer } from "../../packages/butler-app/client/ui/node_modules/vite/dist/node/index.js";
+import { launchSmokeBrowser } from "../support/smoke-browser";
+const root = process.cwd(), stage = process.env.BUTLER_DOCUMENT_STAGE ?? "after";
+const evidence = process.env.BUTLER_SMOKE_EVIDENCE ?? resolve(".tmp/documents-ui"); mkdirSync(evidence, { recursive: true });
+const spec = { v: 2, blocks: [{ type: "metrics", title: "Budget", items: [{ label: "Total", value: 120 }] }] };
+const initial = `# Report\n\nAn **important** paragraph with *emphasis*.\n\n- first\n- second\n\n1. one\n2. two\n\n\`\`\`blocks\n${JSON.stringify(spec)}\n\`\`\`\n\n![image](img_abcdefghij)\n\n> Preserve unknown Markdown\n`;
+const artifact = { id: "doc_report", title: "Report", kind: "doc", session_id: "butler-client", message_id: "answer", created_at: "2026-10-25T08:00:00Z", deliverable: true };
+const message = { id: "answer", chat_id: "butler-client", role: "assistant", status: "delivered", text: "Here is your report.", created_at: artifact.created_at, artifacts: [artifact] };
+let head = { id: artifact.id, title: "Report", body: initial, rev: 1, author: "butler", chat_id: "butler-client", message_id: "answer", created_at: artifact.created_at, updated_at: artifact.created_at,
+  assets: [{ id: "img_abcdefghij", url: "/message-assets/img_abcdefghij", signed_url: "/message-assets/img_abcdefghij?signed=fixture" }] };
+let history = [structuredClone(head)], conflict = false;
+const puts: Record<string, unknown>[] = [], restores: Record<string, unknown>[] = [], exports: Record<string, string>[] = [], queries: string[] = [], errors: string[] = [];
+const file = { file_id: "mf_abcdefghij", safe_name: "report.md", size_bytes: 16, mime_type: "text/markdown", kind: "text", url: "/message-files/mf_abcdefghij", created_at: artifact.created_at };
+const fileItem = { id: "file-report", kind: "document", title: "File report", session: "butler-client", url: file.url, file, capturedAt: artifact.created_at,
+  revisions: [{ file, capturedAt: artifact.created_at }, { file: { ...file, file_id: "mf_klmnopqrst", url: "/message-files/mf_klmnopqrst" }, capturedAt: "2026-10-24T08:00:00Z" }] };
+const scrap = { id: "saved-metrics", kind: "scrap", title: "Saved budget", url: "", block: spec, capturedAt: artifact.created_at };
+const baseline = new Map<string, string>();
+if (stage === "before") for (const file of execFileSync("git", ["diff", "--name-only"], { encoding: "utf8" }).trim().split("\n")) {
+  if ((!file.startsWith("packages/butler-app/client/ui/src/") && !file.startsWith("packages/butler-i18n/src/")) || !/\.tsx?$/u.test(file) || file.includes("/design-system/")) continue;
+  baseline.set(resolve(root, file), execFileSync("git", ["show", `HEAD:${file}`], { encoding: "utf8" }));
+}
+process.chdir(join(root, "packages/butler-app/client/ui"));
+const vite = await createServer({ plugins: [{ name: "documents-baseline", enforce: "pre", load(id) { return baseline.get(id.split("?")[0]!); } }], server: { host: "127.0.0.1", port: 0 }, logLevel: "error" }); await vite.listen();
+const base = vite.resolvedUrls!.local[0]!, browser = await launchSmokeBrowser();
+let background = "plain";
+async function setup(page: Page) {
+  page.on("pageerror", error => errors.push(error.message));
+  await page.route("**/*", async route => {
+    const request = route.request(), url = new URL(request.url()), path = url.pathname;
+    if (path.startsWith("/src/") || path.startsWith("/node_modules/") || path.startsWith("/@")) return route.continue();
+    if (url.origin !== new URL(base).origin) return route.abort();
+    const answer = (data: unknown) => route.fulfill({ json: { ok: true, data } });
+    if (path === "/") {
+      const response = await route.fetch(), fixture = JSON.stringify({ messages: [message], background, settings: { reduce_motion: false } }).replaceAll("<", "\\u003c");
+      return route.fulfill({ response, body: (await response.text()).replace("<head>", `<head><script>window.butlerConversationFixture=${fixture}</script>`) });
+    }
+    if (path === `/documents/${head.id}`) {
+      if (request.method() === "PUT") {
+        const body = request.postDataJSON(); puts.push(body);
+        if (conflict) { conflict = false; head = { ...head, body: head.body.replace("Preserve unknown", "Remote unknown"), rev: head.rev + 1 }; history.unshift(structuredClone(head)); return route.fulfill({ status: 409, json: { error: { code: "revision_conflict", message: "Conflict" } } }); }
+        assert.equal(body.expected_rev, head.rev); head = { ...head, body: body.body, author: "user", rev: head.rev + 1 }; history.unshift(structuredClone(head));
+      }
+      return answer(head);
+    }
+    if (path.endsWith("/revisions")) return answer(history);
+    if (path.includes("/revisions/")) return answer(history.find(row => row.rev === Number(path.split("/").at(-1))));
+    if (path.endsWith("/restore")) {
+      const body = request.postDataJSON(); restores.push(body);
+      const old = history.find(row => row.rev === body.rev)!;
+      head = { ...head, body: old.body, author: "user", rev: head.rev + 1 }; history.unshift(structuredClone(head)); return answer(head);
+    }
+    if (path === "/library") { queries.push(url.search); return answer({ items: url.searchParams.has("kinds") ? [{ ...head, kind: "doc", capturedAt: head.created_at, updatedAt: head.updated_at, session: head.chat_id }, fileItem] : url.searchParams.get("kind") === "scrap" ? [scrap] : url.searchParams.get("kind") === "document" ? [fileItem] : [], next_cursor: null }); }
+    if (path === "/library/groups") return answer({ groups: [], ungrouped: 1, total: 1 });
+    if (path === "/library/facets") return answer({ total: 2, tags: [], sites: [] });
+    if (path === "/library/tags") return answer({ tags: [] });
+    if (path.startsWith("/message-assets/")) return route.fulfill({ contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl9sAAAAASUVORK5CYII=", "base64") });
+    if (path.startsWith("/message-files/")) return route.fulfill({ contentType: "text/markdown", body: "# File report\n" });
+    if (path.endsWith("/controls")) return answer({ session_id: "butler-client", revision: 0, catalog_generation: "harness-model-catalog-v1", controls: { model: "openai/gpt-5.6-sol", reasoning_effort: "none", access_mode: "full_access", plan_mode: false } });
+    if (path === "/session-queue") return answer({ queued_messages: [] });
+    if (/^\/projects\/[^/]+\/canon(\/sidebar)?$/u.test(path)) return answer(path.endsWith("/sidebar") ? { groups: [] } : { backlog: [], plans: [], backlog_revision: 0 });
+    if (["/session-view", "/summary", "/navigation", "/events/live", "/health"].includes(path)) return answer({});
+    if (path === "/favicons") return route.fulfill({ status: 404 });
+    return route.continue();
+  });
+  await page.exposeFunction("captureExport", (value: Record<string, string>) => exports.push(value));
+}
+async function open(page: Page, width = 1440, theme = "light") {
+  await page.setViewportSize({ width, height: 1000 });
+  await page.goto(`${base}?visual=components&theme=${theme}&locale=ko`);
+  await page.locator('[data-test-class="message-artifact-list"]').getByText("Report", { exact: true }).click();
+  await page.getByRole("textbox", { name: "문서", exact: true }).waitFor();
+  await page.evaluate(() => document.fonts.ready);
+}
+const editor = (page: Page) => page.getByRole("textbox", { name: "문서", exact: true });
+async function selectText(page: Page) {
+  await editor(page).locator("p, li").first().evaluate(node => {
+    const selection = window.getSelection()!, range = document.createRange(); range.selectNodeContents(node); selection.removeAllRanges(); selection.addRange(range);
+    node.dispatchEvent(new MouseEvent("mouseup", { bubbles: true })); document.dispatchEvent(new Event("selectionchange"));
+  });
+  await page.getByRole("toolbar", { name: "서식" }).waitFor();
+}
+async function shot(page: Page, name: string, width: number, theme: string) {
+  await page.screenshot({ path: join(evidence, `${stage}-${name}-${width}-${theme}-${background}.png`), animations: "disabled" });
+}
+async function live(page: Page) {
+  const before = head.rev;
+  head = { ...head, body: head.body.replace("important", "Butler revised"), author: "butler", rev: head.rev + 1 }; history.unshift(structuredClone(head));
+  await page.evaluate(async ({ id, rev }) => {
+    const path = "/src/app/documentEvents.ts", events = await import(/* @vite-ignore */ path);
+    events.publishDocumentEvent({ type: "document.updated", payload: { id, rev, author: "butler", changed: [{ start_line: 3, end_line: 3 }] } });
+  }, { id: head.id, rev: head.rev });
+  await page.getByText("버틀러가 수정 중", { exact: true }).waitFor();
+  await page.locator('[data-butler-editing="true"]').first().waitFor();
+  return before;
+}
+async function interactions(page: Page) {
+  await open(page); const count = puts.length;
+  await page.waitForTimeout(950); assert.equal(puts.length, count, "opening preserves exact Markdown without PUT");
+  await editor(page).locator("h1").click(); await page.keyboard.press("ControlOrMeta+End"); await page.keyboard.type("My new paragraph");
+  await page.getByText("저장됨", { exact: true }).waitFor(); assert.equal(puts.length, count + 1); assert.ok(head.body.includes("My new paragraph"));
+  await selectText(page); await page.getByRole("button", { name: "굵게", exact: true }).click();
+  await selectText(page); await page.getByRole("button", { name: "제목", exact: true }).click();
+  await editor(page).locator("h2").waitFor();
+  await editor(page).locator("h2").evaluate(node => { const selection = window.getSelection()!, range = document.createRange(); range.selectNodeContents(node); selection.removeAllRanges(); selection.addRange(range); document.dispatchEvent(new Event("selectionchange")); });
+  await page.getByRole("button", { name: "목록", exact: true }).click();
+  await selectText(page); await page.getByRole("button", { name: "블록 추가", exact: true }).click();
+  await page.getByRole("button", { name: "Saved budget", exact: true }).click();
+  await page.getByRole("dialog").waitFor({ state: "hidden" });
+  assert.equal(await editor(page).locator('[data-test-class="answer-blocks"]').count(), 2, "two block embeds");
+  await page.getByText("저장됨", { exact: true }).waitFor();
+  const undo = await live(page); await page.getByText("버틀러가 수정했어요", { exact: true }).waitFor();
+  const restored = page.waitForResponse(response => response.url().endsWith("/restore"));
+  await page.locator('[data-sonner-toast]').getByRole("button", { name: "되돌리기" }).click();
+  await restored;
+  await page.waitForFunction(() => !document.querySelector('[data-butler-editing="true"]'));
+  assert.equal(restores.at(-1)?.rev, undo);
+  conflict = true;
+  await editor(page).locator("h1").click(); await page.keyboard.press("ControlOrMeta+End"); await page.keyboard.type(" typed through conflict");
+  await page.getByText("저장됨", { exact: true }).waitFor();
+  assert.ok(head.body.includes("typed through conflict")); assert.ok(head.body.includes("Remote unknown"));
+  await page.getByRole("button", { name: "버전 기록", exact: true }).click();
+  await page.getByRole("listbox", { name: "버전 기록" }).getByText("버틀러", { exact: true }).first().waitFor();
+  await page.getByRole("option").last().click(); await page.locator('[data-slot="version-history"]').getByRole("button", { name: "되돌리기" }).click();
+  await editor(page).waitFor();
+  await page.evaluate(() => {
+    (window as unknown as { butlerApp: unknown }).butlerApp = { exportDocument: (window as unknown as { captureExport: (value: unknown) => void }).captureExport };
+  });
+  await page.getByRole("button", { name: "내보내기", exact: true }).click(); await page.getByRole("menuitem", { name: "Markdown", exact: true }).click();
+  await page.waitForTimeout(200); assert.equal(exports.at(-1)?.format, "markdown"); assert.ok(!exports.at(-1)!.content.includes("```blocks")); assert.ok(exports.at(-1)!.content.includes("data:image/png;base64,"));
+  const expected = initial.replace(/```blocks\n[^]*?\n```/u, "### Budget\n\n- Total: 120").replace("(img_abcdefghij)", "(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl9sAAAAASUVORK5CYII=)");
+  assert.equal(exports.at(-1)!.content, expected);
+  await page.getByRole("button", { name: "내보내기", exact: true }).click(); await page.getByRole("menuitem", { name: "PDF", exact: true }).click();
+  await page.waitForTimeout(200); assert.equal(exports.at(-1)?.format, "pdf"); assert.ok(exports.at(-1)!.content.includes("data-document-read-only")); assert.ok(!exports.at(-1)!.content.includes("contenteditable=\"true\""));
+  await page.evaluate(() => { delete window.butlerApp; });
+}
+async function drawer(page: Page) {
+  await page.evaluate(async () => { const path = "/src/components/library/libraryNav.ts"; (await import(/* @vite-ignore */ path)).openLibrary({ section: "document" }); });
+  await page.locator('[data-library-item="doc_report"]').waitFor(); await page.locator('[data-library-item="file-report"]').waitFor();
+}
+async function measure(page: Page) {
+  const embeds = Array.from({ length: 10 }, () => `\`\`\`blocks\n${JSON.stringify(spec)}\n\`\`\`\n\n`).join("");
+  const prefix = "# Large document\n\n" + embeds;
+  const text = "Complete paragraph with **bold** words.\n\n";
+  const length = 256 * 1024 - prefix.length;
+  head = { ...head, body: prefix + text.repeat(Math.ceil(length / text.length)).slice(0, length) };
+  assert.equal(Buffer.byteLength(head.body), 256 * 1024);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(`${base}?visual=components&theme=light&locale=ko`);
+  const start = performance.now();
+  await page.locator('[data-test-class="message-artifact-list"]').getByText("Report", { exact: true }).click();
+  await editor(page).waitFor();
+  await editor(page).locator('[data-test-class="answer-blocks"]').nth(9).waitFor();
+  assert.equal(await editor(page).getAttribute("contenteditable"), "true");
+  const openMs = performance.now() - start;
+  assert.equal(await editor(page).locator('[data-test-class="answer-blocks"]').count(), 10);
+  const original = head.body, count = puts.length;
+  await editor(page).focus();
+  await editor(page).evaluate(root => {
+    const text = document.createTreeWalker(root.querySelector("h1")!, NodeFilter.SHOW_TEXT).nextNode()!;
+    const range = document.createRange(); range.setStart(text, 0); range.setEnd(text, 1);
+    const selection = window.getSelection()!; selection.removeAllRanges(); selection.addRange(range); document.dispatchEvent(new Event("selectionchange"));
+    (window as unknown as { documentPaint: Promise<number> }).documentPaint = new Promise(resolve => {
+      root.addEventListener("keydown", () => { const start = performance.now(); requestAnimationFrame(() => requestAnimationFrame(() => resolve(performance.now() - start))); }, { once: true });
+    });
+  });
+  await page.keyboard.type("t");
+  const paintMs = await page.evaluate(() => (window as unknown as { documentPaint: Promise<number> }).documentPaint);
+  await page.getByText("저장됨", { exact: true }).waitFor();
+  const expected = original.replace("# Large document", "# targe document");
+  assert.equal(head.body, expected);
+  assert.equal(puts.length, count + 1, "one debounced save for the large document");
+  assert.equal(puts.at(-1)?.body, expected, "the complete Markdown reaches the server");
+  assert.equal(await editor(page).locator("h1").innerText(), "targe document");
+  assert.equal(await editor(page).locator('[data-test-class="answer-blocks"]').count(), 10);
+  const result = { bytes: Buffer.byteLength(original), blocks: 10, openMs, keystrokeToPaintMs: paintMs };
+  writeFileSync(join(evidence, "performance.json"), JSON.stringify(result, null, 2)); console.log(JSON.stringify(result));
+  assert.ok(paintMs <= 100, `typing must paint within 100 ms: ${paintMs}`);
+  assert.ok(openMs <= 3000, `the complete document must be editable within 3000 ms: ${openMs}`);
+}
+async function keyboardUnits(page: Page) {
+  await open(page);
+  const unit = editor(page).locator('[data-test-class="answer-blocks"]').first();
+  const position = () => unit.evaluate(node => {
+    const root = node.closest('[role="textbox"]')!; let top: Element = node;
+    while (top.parentElement !== root) top = top.parentElement!;
+    return [...root.children].indexOf(top);
+  });
+  const before = await position();
+  await unit.getByText("Total", { exact: true }).click();
+  await page.locator('[data-slot="document-block-embed"][data-selected="true"]').waitFor();
+  await page.keyboard.press("Alt+ArrowUp"); assert.equal(await position(), before - 1);
+  await page.keyboard.press("Delete");
+  await unit.waitFor({ state: "hidden" });
+  await page.getByText("저장됨", { exact: true }).waitFor();
+  assert.ok(!head.body.includes("```blocks")); assert.ok(head.body.includes("![image](img_abcdefghij)"));
+  await editor(page).locator("h1").click(); await page.keyboard.press("End"); await page.keyboard.type("ordered");
+  await page.getByText("저장됨", { exact: true }).waitFor(); assert.ok(head.body.includes("ordered"));
+}
+async function beforeMatrix(page: Page) {
+  for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (background of ["plain", "wallpaper"]) {
+    await page.setViewportSize({ width, height: 1000 }); await page.goto(`${base}?visual=components&theme=${theme}&locale=ko`);
+    await page.locator('[data-test-class="message-artifact-list"]').getByText("Report", { exact: true }).click();
+    await page.locator('[data-test-class="artifact-viewer"]').waitFor(); await shot(page, "chat-document", width, theme);
+    await page.evaluate(async () => { const path = "/src/components/library/libraryNav.ts"; (await import(/* @vite-ignore */ path)).openLibrary({ section: "document" }); });
+    await page.locator('[data-library-item="file-report"]').waitFor(); await shot(page, "drawer", width, theme);
+    await page.locator('[data-library-item="file-report"]').getByText("File report", { exact: true }).click();
+    await page.getByRole("combobox", { name: "버전", exact: true }).waitFor(); await shot(page, "file-viewer", width, theme);
+  }
+}
+async function matrix(page: Page) {
+  for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (background of ["plain", "wallpaper"]) {
+    head = { ...head, body: initial }; history = [structuredClone(head), { ...head, rev: head.rev - 1, author: "user" }];
+    await open(page, width, theme); await shot(page, "chat-document", width, theme);
+    await selectText(page); await shot(page, "format", width, theme); await page.keyboard.press("ArrowRight");
+    await live(page); await shot(page, "butler-editing", width, theme);
+    await page.getByRole("button", { name: "버전 기록", exact: true }).click(); await page.getByRole("listbox").waitFor(); await shot(page, "versions", width, theme); await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "내보내기", exact: true }).click(); await page.getByRole("menuitem", { name: "PDF", exact: true }).waitFor(); await shot(page, "export", width, theme); await page.keyboard.press("Escape");
+    await drawer(page); await shot(page, "drawer", width, theme);
+    await page.locator('[data-library-item="doc_report"]').getByText("Report", { exact: true }).click(); await editor(page).waitFor(); await shot(page, "drawer-document", width, theme);
+    assert.equal(new URL(page.url()).searchParams.get("doc"), head.id);
+    await page.reload(); await editor(page).waitFor();
+    await drawer(page); await page.locator('[data-library-item="file-report"]').getByText("File report", { exact: true }).click();
+    await page.getByRole("combobox", { name: "버전", exact: true }).waitFor(); await page.locator('[data-test-class="artifact-viewer"]').waitFor();
+    await shot(page, "file-viewer", width, theme);
+  }
+}
+try {
+  const page = await browser.newPage(); await setup(page);
+  if (stage === "before") await beforeMatrix(page);
+  else {
+    await interactions(page); await keyboardUnits(page); await matrix(page); await measure(page);
+    assert.ok(queries.some(query => query.includes("kinds=doc%2Cdocument")));
+  }
+  assert.deepEqual(errors, []);
+  writeFileSync(join(evidence, `${stage}-result.json`), JSON.stringify({ ok: true, puts: puts.length, restores: restores.length, exports: exports.map(item => item.format), modelCalls: 0 }, null, 2));
+  console.log("documents-ui: passed");
+} catch (error) {
+  const page = browser.contexts()[0]?.pages()[0];
+  if (page) { await page.screenshot({ path: join(evidence, `${stage}-failure.png`) }); writeFileSync(join(evidence, `${stage}-failure.txt`), JSON.stringify({ error: String(error), errors, body: await page.locator("body").innerText(), head, puts, restores })); }
+  throw error;
+} finally { await browser.close(); await vite.close(); }

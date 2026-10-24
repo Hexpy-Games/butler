@@ -67,7 +67,11 @@ async function setup(page: Page) {
     const answer = (data: unknown) => route.fulfill({ json: { ok: true, data } });
     if (request.method() === "POST" && ["/library/blocks", "/documents"].includes(url.pathname)) {
       const body = request.postDataJSON(); calls.push({ path: url.pathname, body });
-      return answer(url.pathname === "/documents" ? { id: "doc_created", rev: 1 } : scrap(body.path));
+      return answer(url.pathname === "/documents" ? { ...body, id: "doc_created", rev: 1 } : scrap(body.path));
+    }
+    if (url.pathname === "/documents/doc_created") {
+      const created = calls.findLast(call => call.path === "/documents")!.body;
+      return answer({ ...created, id: "doc_created", rev: 1, author: "user", created_at: "2026-10-25T08:00:00Z", updated_at: "2026-10-25T08:00:00Z" });
     }
     if (url.pathname === "/library") return answer({ items: url.searchParams.get("kind") === "scrap" ? saved : [], next_cursor: null });
     if (url.pathname === "/library/groups") return answer({ groups: [], ungrouped: 2, total: 2 });
@@ -181,7 +185,8 @@ async function interactions(page: Page, reduced: boolean) {
   await page.locator('[data-test-class="library-detail"] [data-answer-block="quote"]').getByRole("button", { name: "더 보기", exact: true }).click();
   assert.deepEqual((await page.getByRole("menuitem").allTextContents()).map(text => text.trim()), ["문서로 만들기", "복사"]);
   await page.getByRole("menuitem", { name: "문서로 만들기", exact: true }).click();
-  await page.locator('[data-sonner-toast]').filter({ hasText: "문서를 만들었어요" }).getByRole("button", { name: "열기", exact: true }).click();
+  await page.getByRole("textbox", { name: "문서", exact: true }).waitFor();
+  assert.equal(new URL(page.url()).searchParams.get("doc"), "doc_created");
   assert.equal(calls.at(-1)?.path, "/documents");
   const body = calls.at(-1)!.body;
   assert.equal(body.title, "전시 안내");

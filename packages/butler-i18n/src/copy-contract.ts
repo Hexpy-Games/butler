@@ -463,6 +463,9 @@ export interface AppCopy {
   lifecycle: LifecycleCopy;
   browser: BrowserCopy;
   library: LibraryCopy;
+  documents: { title: string; saved: string; editing: string; edited: string; restore: string;
+    versions: string; current: string; me: string; butler: string; export: string; markdown: string; pdf: string;
+    bold: string; heading: string; list: string; addBlock: string; format: string; originalChat: string };
   projectSignpost: {
     evidenceCount: (count: number) => string;
     importantMaterials: string; projectDocuments: string; selectedDay: string; calculation: string;

@@ -1,3 +1,4 @@
+import { initialDocumentView, persistDocumentView } from "./documentRoute";
 import { reconcileAnswerDrafts } from "./answerDrafts";
 import { retainAnswerBlocks } from "./stableAnswerBlocks";
 import { generalChatCleared } from "./generalChatEvents";
@@ -958,7 +959,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   sidebarChatsCollapsed: false,
   sidebarProjectsCollapsed: false,
   sidebarCollapsedProjectIds: [],
-  view: { kind: "session" },
+  view: initialDocumentView(),
   settingsReturnView: { kind: "session" },
   activeChatId: "draft:chat",
   navigation: EMPTY_NAVIGATION,
@@ -1072,7 +1073,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     });
     set({
       activeChatId: uiState.active_session_id,
-      view: { kind: "session" },
+      view: initialDocumentView(),
       ...panels,
       rightTab: uiState.right_tab,
       leftPanelWidth: uiState.left_panel_width,
@@ -2485,6 +2486,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
 }));
 
 useButlerStore.subscribe((state, previousState) => {
+  if (state.view !== previousState.view && typeof window !== "undefined") persistDocumentView(state.view);
   if (state.activeChatId !== previousState.activeChatId) {
     activeSessionGeneration += 1;
     // Session navigation/hydration re-projects the durable authority stack

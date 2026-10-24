@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy";
 import { relativeAge } from "@/app/utils.ts";
 import type { SessionArtifactSummary } from "@/app/types.ts";
 import { absoluteGatewayUrl, messageFileSource } from "@/app/messageFileUrls.ts";
@@ -49,7 +50,7 @@ export function artifactDescription(artifact: SessionArtifactSummary): string {
     typeof artifact.size_bytes === "number"
       ? formatArtifactSize(artifact.size_bytes)
       : "";
-  return [artifact.kind, size].filter(Boolean).join(" / ");
+  return [artifact.kind === "doc" ? appCopy.documents.title : artifact.kind, size].filter(Boolean).join(" / ");
 }
 
 export function artifactMeta(artifact: SessionArtifactSummary): string {

@@ -1,3 +1,4 @@
+import { openDocument, type EditableDocument } from "../documents/documentApi";
 import { createContext, useContext, useRef, type ReactNode } from "react";
 import type { AnswerBlockView } from "../../../../shared/answer-blocks-view";
 import { toMarkdown } from "../../../../shared/answer-blocks-markdown";
@@ -7,7 +8,7 @@ import { appCopy } from "@/app/copy";
 import { gatewayImageSource } from "@/app/messageFileUrls";
 import { libraryChanged } from "@/app/libraryEvents";
 import { notifyStatus } from "@/app/notifications";
-import { openDetail, openLibrary } from "../library/libraryNav";
+import { openDetail } from "../library/libraryNav";
 import type { LibraryItem } from "../browser/libraryStore";
 import { runAnswerAction } from "./answerBlockActions";
 
@@ -22,14 +23,13 @@ function visibleLibraryTarget(): Element | null {
 }
 
 async function makeDocument(block: AnswerBlockView, origin: AnswerBlockOrigin) {
-  const copy = appCopy.conversation.answerBlocks;
   // Signed URLs are transport metadata, never part of the editable snapshot.
   const spec = JSON.stringify({ v: 2, blocks: [block] }, (key, value) => key === "image_url" ? undefined : value);
   const title = (block.title || origin.reply?.trim().split(/\s+/u).slice(0, 10).join(" ") || block.type).slice(0, 200);
-  await api("/documents", { method: "POST", body: JSON.stringify({ title, body: `\`\`\`blocks\n${spec}\n\`\`\``,
+  const doc = await api<EditableDocument>("/documents", { method: "POST", body: JSON.stringify({ title, body: `\`\`\`blocks\n${spec}\n\`\`\``,
     author: "user", chat_id: origin.session, message_id: origin.message }) });
   libraryChanged();
-  notifyStatus(copy.documentCreated, { action: { label: appCopy.library.open, onClick: () => openLibrary({ section: "document" }) } });
+  openDocument(doc, !origin.saved);
 }
 
 export function AnswerBlockFrame({ block, path, child, children }: { block: AnswerBlockView; path: string; child?: boolean; children: ReactNode }) {
