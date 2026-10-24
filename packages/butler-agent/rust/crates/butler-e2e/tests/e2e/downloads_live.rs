@@ -71,6 +71,7 @@ async fn run(
     repeat: usize,
     profile: &str,
     downloads: &Path,
+    request: &str,
 ) -> Result<Outcome, HarnessError> {
     let provider = live::gate("DOWNLOADS-LIVE")?.expect("live credentials required");
     let before = snapshot(downloads)?;
@@ -111,7 +112,7 @@ async fn run(
     assert_eq!(language.status, 200);
     live::spend_turn()?;
     let started = Instant::now();
-    let id = accepted_turn_id(&s.gw.say("general", "다운로드 폴더 정리해줘").await?)?;
+    let id = accepted_turn_id(&s.gw.say("general", request).await?)?;
     let deadline = started + Duration::from_secs(300);
     let mut timed_out = false;
     let mut mutation_requested = false;
@@ -215,7 +216,17 @@ async fn owner_downloads_six_real_chats() -> Result<(), HarnessError> {
     let mut completed = 0;
     for access in [Access::AskAlways, Access::FullAccess] {
         for repeat in 1..=3 {
-            completed += usize::from(run(access, repeat, &profile, &downloads).await?.complete);
+            completed += usize::from(
+                run(
+                    access,
+                    repeat,
+                    &profile,
+                    &downloads,
+                    "다운로드 폴더 정리해줘",
+                )
+                .await?
+                .complete,
+            );
         }
     }
     assert_eq!(
@@ -244,7 +255,11 @@ async fn released_windows_folder_real_chat() -> Result<(), HarnessError> {
         std::fs::write(downloads.join(name), content)?;
     }
     let profile = setup.sandbox.home.to_str().unwrap();
-    let outcome = run(Access::AskAlways, 1, profile, &downloads).await?;
+    // Windows resolves the Downloads known folder from the account profile,
+    // not USERPROFILE, so "the Downloads folder" is the runner's real one.
+    // Name the disposable folder instead.
+    let request = format!("{} 폴더 정리해줘", downloads.display());
+    let outcome = run(Access::AskAlways, 1, profile, &downloads, &request).await?;
     // The disposable fixture holds no private names, so a failure shows the turn.
     if !outcome.complete {
         eprintln!("RELEASED-FOLDER-LIVE transcript:\n{}", outcome.transcript);
