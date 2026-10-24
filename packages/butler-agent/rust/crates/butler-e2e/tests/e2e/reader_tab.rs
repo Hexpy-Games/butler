@@ -14,7 +14,6 @@ mod model;
 use butler_e2e::e2e::{
     HarnessError,
     config::ModelChoice,
-    fixtures,
     scenario::{Scenario, Setup},
     security::AdminClient,
 };
@@ -123,9 +122,10 @@ async fn flow(wire: Wire) -> Result<(), HarnessError> {
 async fn start(wire: Wire, base: &str) -> Result<Scenario, HarnessError> {
     match wire {
         Wire::Codex => {
-            let setup = Setup::new("READER-TAB-OPENAI")?.env("BUTLER_CODEX_BASE_URL", base);
-            fixtures::stub_codex_auth(&setup.sandbox.codex_home())?;
-            setup.start().await
+            Setup::new("READER-TAB-OPENAI")?
+                .env("BUTLER_CHATGPT_API_BASE_URL", format!("{base}/v1"))
+                .start()
+                .await
         }
         Wire::Anthropic => {
             let s = Setup::new("READER-TAB-ANTHROPIC")?
