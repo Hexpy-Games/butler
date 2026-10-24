@@ -98,7 +98,7 @@ async function captureInspectorTags(page: Page, tags: CanonTag[], before: boolea
   await page.keyboard.press("Escape");
   if (!before) {
     await detail.getByRole("button", { name: "제목 수정", exact: true }).click();
-    assert.equal(await detail.locator('form [data-test-class="canon-tags-field"]').count(), 0, "Edit form has only title and description");
+    assert.equal(await detail.locator('[data-canon-inline-editor] [data-test-class="canon-tags-field"]').count(), 0, "Inline editor keeps the immediate-save tag row outside the draft");
     await capture("inspector-edit");
     await detail.getByRole("button", { name: "취소", exact: true }).click();
   }
