@@ -50,7 +50,6 @@ impl WorkerProfileReader for EmptyProfiles {
     }
 }
 
-// test-category: race
 #[tokio::test]
 async fn cancelled_child_abandons_bound_work_and_commits_cancelled_result() {
     let fixture = TestStorageFixture::activated();

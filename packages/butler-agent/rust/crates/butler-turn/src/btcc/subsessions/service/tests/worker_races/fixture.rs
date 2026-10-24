@@ -4,21 +4,12 @@ use super::*;
 pub(super) struct Queue {
     pub(super) inputs: Mutex<Vec<SubsessionEnqueue>>,
     pub(super) hold_dispatch: AtomicBool,
-    pub(super) fail_dispatch: AtomicBool,
     pub(super) permanent_failure: AtomicBool,
     pub(super) reached: tokio::sync::Notify,
     pub(super) release: (Mutex<bool>, std::sync::Condvar),
 }
 impl SubsessionChildQueue for Queue {
     fn enqueue(&self, input: SubsessionEnqueue) -> Result<(), BtccError> {
-        if input.envelope["control"]["kind"] != "cancel_turn"
-            && self.fail_dispatch.swap(false, Ordering::SeqCst)
-        {
-            return Err(BtccError::relayed(
-                "inbound_queue_io_failed",
-                "Queue unavailable",
-            ));
-        }
         if self.hold_dispatch.swap(false, Ordering::SeqCst) {
             self.reached.notify_one();
             let (lock, cv) = &self.release;

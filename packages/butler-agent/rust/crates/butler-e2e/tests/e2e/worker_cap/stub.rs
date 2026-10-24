@@ -31,6 +31,8 @@ impl Gate {
 
 pub(crate) struct Script {
     count: usize,
+    pub(crate) repeat_first: AtomicBool,
+    pub(crate) repeated_outputs: Mutex<Vec<Value>>,
     pub(crate) steer: AtomicBool,
     pub(crate) hold_continuation: AtomicBool,
     pub(crate) continuation_release: Gate,
@@ -55,6 +57,8 @@ pub(crate) async fn start(
     let url = format!("http://{}/codex", listener.local_addr()?);
     let script = Arc::new(Script {
         count,
+        repeat_first: AtomicBool::new(false),
+        repeated_outputs: Default::default(),
         steer: AtomicBool::new(false),
         hold_continuation: AtomicBool::new(false),
         continuation_release: Gate::new(),
@@ -114,6 +118,25 @@ async fn reply(
         .iter()
         .filter(|kind| kind.as_str() == "function_call_output")
         .count();
+    // Repeating arguments is a new tool call, with its own journal identity.
+    let response_id = format!("{actor}-{step}");
+    let repeat_first = role == "steward" && script.repeat_first.load(Ordering::SeqCst);
+    if repeat_first && step == 4 {
+        *script.repeated_outputs.lock().unwrap() = body["input"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|item| item["output"].as_str())
+            .filter_map(|text| serde_json::from_str::<Value>(text).ok())
+            .filter_map(|value| value.get("output").cloned())
+            .filter(|output| output["relation_id"].is_string())
+            .collect();
+    }
+    let step = if repeat_first && step >= 3 {
+        step - 1
+    } else {
+        step
+    };
     eprintln!("CB-11 provider actor={actor} step={step}");
     if body["input"].as_array().is_some_and(|items| items.iter().any(|item| {
         item["output"].as_str().and_then(|text| serde_json::from_str::<Value>(text).ok()).is_some_and(|value| {
@@ -145,7 +168,6 @@ async fn reply(
         }
         script.releases[&actor].wait().await;
     }
-    let response_id = format!("{actor}-{step}");
     let steering = script.steer.load(Ordering::SeqCst);
     let step = if role == "steward" && steering && step >= 6 {
         script.steered.store(true, Ordering::SeqCst);

@@ -15,6 +15,8 @@ pub(crate) mod recovery;
 mod regressions;
 #[path = "worker_cap/stub.rs"]
 pub(crate) mod stub;
+#[path = "worker_cap/user_flows.rs"]
+mod user_flows;
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
