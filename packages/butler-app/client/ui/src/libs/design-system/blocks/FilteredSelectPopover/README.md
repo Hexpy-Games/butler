@@ -44,6 +44,16 @@ When the popover opens, the selected row is scrolled into view inside the
 results region. The selected row shows a trailing check mark and exposes
 `aria-current="true"`.
 
+## Row Actions
+
+An item's optional `actions` (one `IconButton` that opens a `DropdownMenu`,
+such as a tag's rename / recolor / delete menu) render after the label,
+outside the row's select button, so buttons never nest. The actions keep
+their column at rest and show on row hover, keyboard focus within the row and
+while their menu is open (the NavRow reveal); touch screens always show them.
+Rows without `actions` render as before. Pass them only where the listed items
+are editable; a filter-only picker leaves them out.
+
 ## Wrong Use Cases
 
 Do not use it for simple three-item menus; use OptionMenu. Do not put forms or

@@ -39,7 +39,9 @@ export const guidance: ShowcaseGuidance = {
       },
     },
   ],
-  content: ["Placeholder names what is searched; the empty label suggests trying fewer words."],
-  accessibility: ["The search input is labelled; results are buttons with selected state; Escape clears then closes."],
+  content: ["Placeholder names what is searched; the empty label suggests trying fewer words.",
+    "actions: a row's own edit menu (one IconButton opening a DropdownMenu), only where the listed items are editable; pickers that only filter leave it out."],
+  accessibility: ["The search input is labelled; results are buttons with selected state; Escape clears then closes.",
+    "Row actions sit beside the select button, never inside it, and follow it in keyboard order; focus within the row reveals them, touch screens always show them."],
   tokens: ["--menu-item-height", "--radius-popover", "--scroll-fade-size"],
 };

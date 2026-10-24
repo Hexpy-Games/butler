@@ -24,6 +24,13 @@ export interface FilteredSelectItem {
   selected?: boolean;
   icon?: ReactNode;
   onSelect?: () => void;
+  /**
+   * Trailing row actions (an IconButton that opens a row menu), rendered
+   * beside the row's select button, never inside it. They show on row hover,
+   * keyboard focus within the row and while their menu is open; touch
+   * screens always show them.
+   */
+  actions?: ReactNode;
 }
 
 export interface FilteredSelectGroup {
