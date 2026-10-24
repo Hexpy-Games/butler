@@ -24,6 +24,7 @@ mod monitoring;
 mod occurrence;
 mod outputs;
 mod question;
+mod resolve_ask;
 pub(in crate::host) use monitoring::MonitoringReaders;
 mod profile;
 mod project_artifacts;
@@ -60,6 +61,7 @@ use tokio::sync::OnceCell;
 
 pub(crate) struct GuidedToolBinding {
     pub turn_id: String,
+    pub(super) open_asks: Arc<Mutex<super::prompt::open_asks::Reminders>>,
     pub app_session_id: Option<String>,
     pub access_mode: butler_turn::btcc::AccessMode,
     pub enable_project_ledger_effects: bool,
@@ -289,6 +291,7 @@ impl GuidedTools {
             ToolName::parse(name),
             Some(
                 ToolName::AskUser
+                    | ToolName::ResolveAsk
                     | ToolName::ReadFile
                     | ToolName::RunCommand
                     | ToolName::WriteFile

@@ -2,6 +2,7 @@
 
 mod authority;
 mod hooks;
+mod prompt_state;
 mod surface;
 mod workspace;
 
@@ -23,8 +24,8 @@ use butler_turn::conversation::CanonicalMemoryReadBinding;
 
 use crate::host::{
     GuidedActivity, GuidedJournal, GuidedPreparation, GuidedPrompt, GuidedSteering,
-    GuidedTextState, GuidedToolBinding, GuidedTools, GuidedWorkAdapter, GuidedWorkTools,
-    PreparedNativeGuidedTurn, TurnGuard, resolve_guided_response_language,
+    GuidedToolBinding, GuidedTools, GuidedWorkAdapter, GuidedWorkTools, PreparedNativeGuidedTurn,
+    TurnGuard, resolve_guided_response_language,
 };
 
 /// All fields are process services or immutable host configuration, never Turn state.
@@ -184,6 +185,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
             {
                 activity.restore(&saved.activity)?;
             }
+            let open_asks = prompt_state::reminders(self, start.turn).await?;
             let tools = Arc::new(GuidedTools::new(
                 self.capabilities.clone(),
                 self.command.clone(),
@@ -222,6 +224,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 semantic.authority.as_ref(),
                 GuidedToolBinding {
                     turn_id: start.turn.turn_id.clone(),
+                    open_asks: open_asks.clone(),
                     app_session_id: app_session_id(&start.turn.context),
                     access_mode: policy.access_mode.clone(),
                     enable_project_ledger_effects: policy.access_mode
@@ -262,25 +265,21 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
             )?);
             let journal = self.journal(&start.turn.turn_id, activity.clone());
             let hooks = self.hook_binding(start.turn, &phase).await?;
-            let text = Arc::new(GuidedTextState {
-                skill_catalog: self
-                    .skill_catalog(phase.execution_policy.project_id.clone())
-                    .await?,
-                phase,
-                work: initial_work,
-                work_service: self.preparation.work.clone(),
-                work_scope,
-                documents: self.documents.clone(),
-                journal: self.preparation.journal.clone(),
-                attachment_context: self.attachment_context.clone(),
-                effects: self.effects.clone(),
-                accepted_plan,
-                butler_data: self.butler_data.to_string_lossy().into_owned(),
-                response_language: language,
-                continuation_budget_enabled: budget.is_some(),
-                work_streams: self.work_streams.clone(),
-                subsessions: self.subsessions.clone(),
-            });
+            let text = Arc::new(
+                prompt_state::state(
+                    self,
+                    prompt_state::Inputs {
+                        open_asks,
+                        phase,
+                        work: initial_work,
+                        work_scope,
+                        accepted_plan,
+                        response_language: language,
+                        continuation_budget_enabled: budget.is_some(),
+                    },
+                )
+                .await?,
+            );
             let prompt = Arc::new(GuidedPrompt::new(text.clone()));
             let steering = Arc::new(GuidedSteering::new(
                 text,

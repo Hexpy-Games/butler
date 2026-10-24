@@ -112,3 +112,25 @@ pub(super) fn serialize_optional(
 pub(super) fn stringify(value: &impl serde::Serialize) -> Result<String, GatewayApplicationError> {
     serde_json::to_string(value).map_err(GatewayApplicationError::internal_from)
 }
+
+/// Generated question replies are still queued messages, but cannot authorize chat settlements.
+pub(super) fn resolve_message(
+    db: &rusqlite::Connection,
+    subscribers: &super::EventSubscribers,
+    chat: &str,
+    request: &crate::gateway::MessageSendRequest,
+    facts: &std::sync::Arc<super::AppSettingsFacts>,
+    now: &str,
+) -> Result<super::settings::ResolvedControls, super::storage::AppStorageError> {
+    let mut resolution =
+        super::settings::resolve_for_message_send(db, subscribers, chat, request, facts, now)?;
+    if request
+        .client_message_id
+        .as_ref()
+        .and_then(Value::as_str)
+        .is_some_and(|id| id.starts_with("question-followup-"))
+    {
+        resolution.persisted["message_origin"] = "question_followup".into();
+    }
+    Ok(resolution)
+}

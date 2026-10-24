@@ -202,7 +202,7 @@ impl AppApplication {
                     transaction.commit().map_err(AppStorageError::sqlite)?;
                     return Ok((false, resolution));
                 }
-                let resolved = settings::resolve_for_message_send(
+                let resolved = admission_identity::resolve_message(
                     &transaction,
                     &subscribers,
                     &reservation_base.chat_id,
