@@ -455,6 +455,7 @@ export interface AppCopy {
     revokeUnconfirmed: string;
   };
   shell: { footerNav: string; update: { downloading: string; working: string; ready: string; failed: string; restart: string } };
+  sessionInfo: typeof import("./locales/session-info.ts").SESSION_INFO_COPY["en-US"];
   taskGraph: TaskGraphCopy;
   lifecycle: LifecycleCopy;
   browser: BrowserCopy;

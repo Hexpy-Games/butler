@@ -14,9 +14,10 @@ import {
 } from "@/components/artifacts/artifactDisplay";
 
 export function ArtifactsPanel({
-  artifacts,
+  artifacts, title,
 }: {
   artifacts: SessionArtifactSummary[];
+  title?: string;
 }) {
   useAppLocale();
   const selectedArtifactId = useButlerStore(
@@ -54,7 +55,7 @@ export function ArtifactsPanel({
   return (
     <InspectorInset>
       <Section
-        title={appCopy.artifacts.title}
+        title={title ?? appCopy.artifacts.title}
         gap="md"
       >
         {selectedArtifact ? (

@@ -107,6 +107,8 @@ export function useAppBootstrap() {
           active_session_id: current.activeChatId,
           left_open: current.leftOpen,
           right_open: current.rightOpen,
+          session_info_open: current.sessionInfoOpen,
+          task_graph_enabled: current.taskGraphEnabled,
           right_tab: current.rightTab,
           left_panel_width: current.leftPanelWidth,
           right_panel_width: current.rightPanelWidth,
@@ -127,6 +129,8 @@ export function useAppBootstrap() {
         state.activeChatId !== previous.activeChatId ||
         state.leftOpen !== previous.leftOpen ||
         state.rightOpen !== previous.rightOpen ||
+        state.sessionInfoOpen !== previous.sessionInfoOpen ||
+        state.taskGraphEnabled !== previous.taskGraphEnabled ||
         state.rightTab !== previous.rightTab ||
         state.leftPanelWidth !== previous.leftPanelWidth ||
         state.rightPanelWidth !== previous.rightPanelWidth ||

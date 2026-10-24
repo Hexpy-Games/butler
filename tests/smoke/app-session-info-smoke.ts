@@ -1,0 +1,162 @@
+// Stub/replay UI smoke through the real native App, isolated from the owner's data.
+import { strict as assert } from "node:assert";
+import { mkdirSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { createNativeAppServer } from "../support/native-app-server.ts";
+import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
+import { auditSessionInfoFocus, installSessionBrowser, installPendingAskEvents, pendingAsksChanged, populatedSession, replaySession, sessionQuestion } from "../support/session-info-fixtures.ts";
+import type { SessionView } from "../../packages/butler-app/client/ui/src/app/types.ts";
+import type { EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
+
+const cases = ["light", "dark"];
+if (await runSmokeCases(cases, "BUTLER_SESSION_INFO_CASE", import.meta.path, { isolate: true })) process.exit(0);
+const theme = process.env.BUTLER_SESSION_INFO_CASE ?? "light";
+const before = process.env.BUTLER_SMOKE_BASELINE === "1";
+const shots = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? "/tmp/butler-session-info-shots");
+mkdirSync(shots, { recursive: true });
+const server = await createNativeAppServer({ uiRoot: resolve(process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist") });
+let browser: Awaited<ReturnType<typeof launchSmokeBrowser>> | undefined;
+try {
+  await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: theme, reduce_motion: true }) });
+  const { project } = await server.api<{ project: { id: string } }>("/projects", { method: "POST", body: JSON.stringify({ source: "scratch", display_name: "세션 정보" }) });
+  const epic = await server.api<EpicDetail>(`/projects/${project.id}/canon/epics`, { method: "POST", body: JSON.stringify({ title: "세션 정보 검토", description: "대화와 연결된 과제", assignee: "app-user" }) });
+  const linked = await server.api<{ session_id: string }>(`/canon/epics/${epic.id}/conversation`, { method: "POST", body: "{}" });
+  const session = { id: linked.session_id };
+  const original = await server.api<SessionView>(`/session-view?session_id=${session.id}`);
+  let view = populatedSession(original);
+  let asksOpen = true;
+  browser = await launchSmokeBrowser();
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1050 }, reducedMotion: "reduce" });
+  const errors: string[] = [];
+  let buttonRadii: { label: string; radius: string }[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  page.on("response", response => { if (response.status() >= 400) console.error("HTTP_FAILURE", response.status(), new URL(response.url()).pathname); });
+  page.on("console", message => { if (message.type() === "error") console.error("RENDER_ERROR", message.text()); });
+  await installSessionBrowser(page);
+  await installPendingAskEvents(page);
+  await replaySession(page, () => view, () => asksOpen);
+  await page.addInitScript(id => {
+    if (!localStorage.getItem("butler:app-ui-state:v1")) localStorage.setItem("butler:app-ui-state:v1", JSON.stringify({
+      schema: "butler.app-ui-state.v1", cached_at: new Date().toISOString(), active_session_id: id, left_open: true, right_open: false,
+    }));
+  }, session.id);
+  await server.signIn(page);
+  const loaded = page.waitForResponse(response => response.url().includes("/session-view?") && response.ok());
+  await page.goto(server.url);
+  await loaded;
+  await page.locator('[data-test-class~="conversation"]').waitFor();
+  const capture = (name: string) => page.screenshot({ path: join(shots, `${before ? "before-" : ""}${name}-${theme}-${page.viewportSize()!.width}.png`), animations: "disabled" });
+  if (before) {
+    await capture("conversation");
+    await page.getByRole("button", { name: "오른쪽 패널 보기", exact: true }).click();
+    await page.locator('[data-test-class~="right-inspector"]').waitFor();
+    await capture("inspector");
+  } else {
+    const toggle = page.locator('[data-test-class="session-info-toggle"]');
+    const aside = page.getByRole("complementary", { name: "세션 정보", exact: true });
+    assert.equal(await toggle.getAttribute("aria-pressed"), "false");
+    await page.waitForFunction(() => document.querySelector('[data-test-class="session-info-toggle"]')?.getAttribute("aria-label") === "세션 정보 · 답을 기다리는 요청 있음");
+    assert.equal(await toggle.locator('[data-slot="icon-button-indicator"]').count(), 1);
+    await toggle.click();
+    await aside.waitFor();
+    assert.equal(await aside.getAttribute("data-layout"), "docked");
+    await aside.locator('[data-test-class="canon-epic-detail"]').waitFor();
+    const titles = await aside.locator("[data-session-section]").evaluateAll(elements => elements.map(element => element.getAttribute("data-session-section")));
+    assert.deepEqual(titles, ["asks", "environment", "task", "context", "artifacts", "attachments", "schedules", "queue"]);
+    assert.equal(await aside.getByText("작업자", { exact: true }).count(), 0);
+    await capture("all-sections-dot");
+    await aside.getByText("작업 대기열", { exact: true }).scrollIntoViewIfNeeded();
+    await capture("available-sections-bottom");
+    await aside.getByText("환경", { exact: true }).scrollIntoViewIfNeeded();
+    const context = aside.locator('[data-test-class="session-context"]');
+    assert.equal(await context.getByRole("button").first().getAttribute("aria-expanded"), "false");
+    await capture("context-collapsed");
+    await aside.getByText("어떤 범위를 검토할까요?", { exact: true }).click();
+    const request = page.locator('[data-request-source-message="session-info-message"]');
+    await request.waitFor();
+    assert(await request.isVisible(), "The ask scrolls to its transcript card");
+    await context.getByRole("button").first().click();
+    await aside.locator('[data-test-class="context-overview"]').waitFor();
+    await capture("context-expanded");
+    const focus = await auditSessionInfoFocus(page, aside);
+    assert.deepEqual(focus.clips, []);
+    console.log(JSON.stringify({ sessionInfoFocusStops: focus.stops, clipped: focus.clips.length }));
+    await context.getByRole("button").first().click();
+    await toggle.click();
+    await aside.waitFor({ state: "hidden" });
+    await toggle.click();
+    await aside.waitFor();
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await page.waitForFunction(() => document.querySelector('[data-slot="conversation-aside"]')?.getAttribute("data-layout") === "floating");
+    await capture("floating");
+    await page.setViewportSize({ width: 1440, height: 1050 });
+    await page.locator('[data-test-class="titlebar-browser-toggle"]').click();
+    await page.locator('[data-test-class="browser-area"]').waitFor();
+    await page.waitForFunction(() => document.querySelector('[data-slot="conversation-aside"]')?.getAttribute("data-layout") === "floating");
+    await capture("browser-open");
+    await page.locator('[data-test-class="titlebar-browser-toggle"]').click();
+    assert.equal(await page.getByRole("button", { name: "작업 그래프", exact: true }).count(), 0);
+    asksOpen = false;
+    const changed = page.waitForResponse(response => response.url().endsWith(`/sessions/${session.id}/pending-asks`) && response.ok());
+    await pendingAsksChanged(page, session.id);
+    await changed;
+    await page.waitForFunction(() => !document.querySelector('[data-test-class="session-info-toggle"] [data-slot="icon-button-indicator"]'));
+    assert.equal(await aside.locator('[data-session-section="asks"]').count(), 0);
+    // Empty canonical session: all data-dependent sections, including the linked task, disappear.
+    const { session: empty } = await server.api<{ session: { id: string } }>("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: "빈 세션" }) });
+    view = await server.api<SessionView>(`/session-view?session_id=${empty.id}`);
+    view = { ...view, context: null, branch: null };
+    const emptyLoaded = page.waitForResponse(response => response.url().includes(`/session-view?session_id=${empty.id}`));
+    await page.getByRole("button", { name: /빈 세션/ }).first().click();
+    await emptyLoaded;
+    await page.waitForFunction(() => document.querySelector('[data-test-class="session-sections"]')?.childElementCount === 0);
+    await capture("no-task-no-asks");
+    assert.equal(await toggle.locator('[data-slot="icon-button-indicator"]').count(), 0);
+    console.log(JSON.stringify({ sectionTitles: titles, hiddenSections: 8, layouts: ["docked", "floating", "browser-floating"] }));
+    asksOpen = true;
+    view = { ...view, pending_questions: [sessionQuestion(empty.id)] };
+    const questionRead = page.waitForResponse(response => response.url().includes("/session-view?") && response.ok());
+    await page.reload();
+    await questionRead;
+    const question = page.locator('[data-test-class="conversation-request"] [data-placement="conversation"]');
+    await question.waitFor();
+    assert.equal(await question.locator("..").getAttribute("data-radius"), "lg");
+    buttonRadii = await question.getByRole("button").evaluateAll(elements => elements.map(element => ({ label: element.getAttribute("aria-label") ?? element.textContent ?? "", radius: getComputedStyle(element).borderRadius })));
+    await capture("transcript-question");
+  }
+  await page.goto(`${server.url}?settings=about`);
+  const experimental = page.getByRole("switch", { name: "작업 그래프 사용하기", exact: true });
+  if (!before) {
+    await experimental.waitFor();
+    assert.equal(await experimental.getAttribute("aria-checked"), "false");
+    await experimental.click();
+    assert.equal(await experimental.getAttribute("aria-checked"), "true");
+    await capture("settings-experimental");
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem("butler:app-ui-state:v1") ?? "{}").task_graph_enabled === true);
+    const restored = page.waitForResponse(response => response.url().includes("/session-view?") && response.ok());
+    await page.goto(server.url);
+    await restored;
+    const graph = page.getByRole("button", { name: "작업 그래프", exact: true });
+    await graph.waitFor();
+    await capture("header-graph-icon");
+    const graphRead = page.waitForResponse(response => /\/sessions\/[^/]+\/task-graphs/u.test(response.url()) && response.ok());
+    await graph.click();
+    await graphRead;
+    const dialog = page.getByRole("dialog", { name: "작업 그래프", exact: true });
+    await dialog.waitFor();
+    await dialog.getByText("아직 작업이 없습니다", { exact: true }).waitFor();
+    await capture("graph-modal");
+    await page.keyboard.press("Escape");
+    await dialog.waitFor({ state: "hidden" });
+  } else {
+    await page.locator('[data-settings-section-id="app-info"]').waitFor();
+    await capture("settings-about");
+  }
+  assert.deepEqual(errors, []);
+  assert.equal(server.stubModelCalls.length, 0);
+  console.log(JSON.stringify({ result: "BEHAVIOR_PASS", buttonRadii, theme, screenshots: shots, modelCalls: 0, pendingAsks: "P1-route-and-event-replay" }));
+  assert.deepEqual(buttonRadii.filter(button => button.radius !== "8px"), [], "DS conversation buttons must all have an 8px radius");
+} finally {
+  await browser?.close();
+  await server.stop();
+}

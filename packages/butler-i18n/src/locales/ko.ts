@@ -1,3 +1,4 @@
+import { SESSION_INFO_COPY } from "./session-info.ts";
 import { CANON_COPY } from "./canon.ts";
 import { TASK_GRAPH_COPY } from "./task-graph.ts";
 import { lifecycleCopy } from "../lifecycle.ts";
@@ -341,6 +342,7 @@ export const koKrCopy: AppCopy = {
   },
   shell: { footerNav: "업데이트와 설정", update: { downloading: "업데이트 받는 중", working: "업데이트 준비 중", ready: "업데이트 준비됨", failed: "업데이트 실패", restart: "다시 시작" } },
   canon: CANON_COPY["ko-KR"],
+  sessionInfo: SESSION_INFO_COPY["ko-KR"],
   taskGraph: TASK_GRAPH_COPY["ko-KR"],
   lifecycle: lifecycleCopy.ko,
   browser: {

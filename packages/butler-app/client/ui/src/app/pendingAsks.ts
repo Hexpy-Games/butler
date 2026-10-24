@@ -1,0 +1,53 @@
+import { api } from "./api.ts";
+import type { TimelineEvent } from "./types.ts";
+import type { SessionPendingAsks } from "../../../shared/pending-asks-contracts.ts";
+export type { PendingAsk, SessionPendingAsks } from "../../../shared/pending-asks-contracts.ts";
+
+type Reader = { page: SessionPendingAsks | null; listeners: Set<() => void>; controller?: AbortController; revision: number; queued: boolean };
+const readers = new Map<string, Reader>();
+
+export function getSessionPendingAsks(sessionId: string, signal: AbortSignal) {
+  return api<SessionPendingAsks>(`/sessions/${encodeURIComponent(sessionId)}/pending-asks`, { signal });
+}
+export const pendingAsksSnapshot = (sessionId: string) => readers.get(sessionId)?.page ?? null;
+
+/** Header and margin share one demand-driven reader and the App's existing event stream. */
+export function observePendingAsks(sessionId: string, listener: () => void): () => void {
+  let reader = readers.get(sessionId);
+  if (!reader) {
+    reader = { page: null, listeners: new Set(), revision: 0, queued: false };
+    readers.set(sessionId, reader);
+    refresh(sessionId, reader);
+  }
+  reader.listeners.add(listener);
+  return () => {
+    reader.listeners.delete(listener);
+    if (!reader.listeners.size) { reader.controller?.abort(); readers.delete(sessionId); }
+  };
+}
+function refresh(sessionId: string, reader: Reader) {
+  if (reader.queued) return;
+  reader.queued = true;
+  queueMicrotask(() => {
+    reader.queued = false;
+    if (readers.get(sessionId) !== reader) return;
+    reader.controller?.abort();
+    const controller = new AbortController();
+    reader.controller = controller;
+    const revision = ++reader.revision;
+    void getSessionPendingAsks(sessionId, controller.signal).then(page => {
+      if (!controller.signal.aborted && reader.revision === revision && page.session_id === sessionId) {
+        reader.page = page;
+        for (const listener of reader.listeners) listener();
+      }
+    }).catch(() => { /* An unavailable projection never fabricates a section or a dot. */ });
+  });
+}
+export function publishPendingAsksEvent(event: TimelineEvent) {
+  if (event.type === "stream.reconcile_required") {
+    for (const [sessionId, reader] of readers) refresh(sessionId, reader);
+  } else if (event.type === "pending_asks.changed" && typeof event.payload?.session_id === "string") {
+    const reader = readers.get(event.payload.session_id);
+    if (reader) refresh(event.payload.session_id, reader);
+  }
+}

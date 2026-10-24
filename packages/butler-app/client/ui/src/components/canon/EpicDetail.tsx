@@ -1,3 +1,4 @@
+import { ProjectDocumentMarkdownContent } from "../management/ProjectDocumentMarkdownContent.tsx";
 import { canonTaskCounts, canonStatusInput } from "./canonProgressSource.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useState, type Ref } from "react";
@@ -11,7 +12,8 @@ import { CanonPersonSelect } from "./CanonPersonSelect.tsx";
 import { CanonPlanSelect } from "./CanonPlanSelect.tsx";
 import { SpecTree } from "./SpecTree.tsx";
 import { EpicProgress } from "./EpicProgress.tsx";
-export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef }: {
+export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef, compact = false }: {
+  compact?: boolean;
   titleRef?: Ref<HTMLElement>; epic: Epic; plans: PlanCards[]; tasks: EpicProgressSnapshot | null; busy: boolean;
   onWrite: (input: EpicInput, message?: string) => Promise<boolean>;
 }) {
@@ -27,7 +29,7 @@ export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef }: {
         <Typo.PanelTitle as="h3" tabIndex={-1} ref={titleRef} wrap="anywhere">{epic.title}</Typo.PanelTitle>
         <ButtonContainer size="sm"><IconButton label={copy.edit} disabled={busy} onClick={() => setEditing(true)}><Pencil size="sm" /></IconButton></ButtonContainer>
       </Stack>
-      {epic.description && <Typo.Body wrap="pre">{epic.description}</Typo.Body>}
+      {epic.description && (compact ? <ProjectDocumentMarkdownContent markdown={epic.description} density="compact" /> : <Typo.Body wrap="pre">{epic.description}</Typo.Body>)}
     </Stack>}
     <Stack gap="sm">
       <KeyValueRow valueTextSize="caption" label={copy.status} value={<Tooltip wrap label={tasks?.running ? `${copy.running} · ${copy.runningCancel}` : undefined} side="top"><NativeSelect size="sm" aria-label={copy.status} value={epic.canon_status} disabled={busy} onChange={event => statusChanged(event.target.value as CanonStatus)}>
