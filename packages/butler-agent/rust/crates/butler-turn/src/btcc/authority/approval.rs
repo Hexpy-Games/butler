@@ -67,6 +67,8 @@ pub enum ApprovalActionKind {
     WebRequest,
     /// Call a tool of a connected MCP server.
     UseConnector,
+    GenerateImage,
+    EditImage,
     /// Create, delete or run schedules.
     ManageSchedule,
     /// Record project work (plans, tasks, attempts, reviews).
@@ -132,6 +134,16 @@ pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
         "run_command_remote_observation" => command(facts, ApprovalActionKind::NetworkCommand),
         "web_read" | "web_search" => single(
             ApprovalActionKind::WebRequest,
+            ApprovalTargetKind::Other,
+            facts.target,
+            ApprovalRisk::High,
+        ),
+        "generate_image" | "edit_image" => single(
+            if facts.capability == "generate_image" {
+                ApprovalActionKind::GenerateImage
+            } else {
+                ApprovalActionKind::EditImage
+            },
             ApprovalTargetKind::Other,
             facts.target,
             ApprovalRisk::High,

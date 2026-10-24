@@ -33,6 +33,7 @@ pub(super) fn configure(connection: &Connection) -> StorageResult<()> {
         ("journal_mode", "WAL".to_owned()),
         ("wal_autocheckpoint", "0".to_owned()),
         ("foreign_keys", "ON".to_owned()),
+        ("recursive_triggers", "ON".to_owned()),
         ("synchronous", "NORMAL".to_owned()),
         ("cache_size", PAGE_CACHE_KIB.to_string()),
         ("mmap_size", MMAP_BYTES.to_string()),

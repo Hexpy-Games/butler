@@ -14,7 +14,7 @@ pub(crate) struct MonitoringReaders {
     data_root: PathBuf,
     lineage: Arc<butler_runtime::operations::UsageLineage>,
     pub(in crate::host::guided) app_database_path: PathBuf,
-    configuration: Arc<butler_models::models::ModelConfiguration>,
+    pub(in crate::host::guided) configuration: Arc<butler_models::models::ModelConfiguration>,
     catalog: Arc<butler_models::models::ModelCatalog>,
     memory_health: Arc<butler_memory::cognition::MemoryHealthService>,
     profile: Arc<butler_memory::profile::ProfileService>,

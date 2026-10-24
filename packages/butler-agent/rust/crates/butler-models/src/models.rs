@@ -70,8 +70,9 @@ pub use catalog::{
 };
 pub use catalog::{
     ApiKeyBilling, BrowsingResolution, BrowsingRule, CredentialStorage, CredentialView,
-    DEFAULT_PROVIDER, HostedApiShape, ImageLimitField, ImageLimitSources, ImageProbeEvidence,
-    LEGACY_DEFAULT_MODEL, LocalImageDiscovery, LocalModelConfig, LocalModelPlatform,
+    DEFAULT_PROVIDER, HostedApiShape, ImageLimitField, ImageLimitSources, ImageMask,
+    ImageOutputCapability, ImageOutputEndpoint, ImageOutputPricing, ImageProbeEvidence,
+    ImageSizeKind, LEGACY_DEFAULT_MODEL, LocalImageDiscovery, LocalModelConfig, LocalModelPlatform,
     LocalModelSource, ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelPreset, ModelPricing,
     ModelProviderMetadata, ModelTier, NextPrices, ParsedModelRef, ParsedModelRefSource,
     PromptPriceTier, ProviderAuthMethod, ProviderPresets, ReasoningEffort,
@@ -101,11 +102,11 @@ pub use configuration::{
     credential_store_policy, reset_secret_keys,
 };
 pub use configuration::{
-    DiscoveredLocalModel, HostedModelMutation, LocalModelMutation, McpModelTarget,
-    ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,
-    ModelConfigurationRead, ModelContextMetadataRead, ProviderCredentialMutation, ProviderKeyCheck,
-    ProviderKeyCheckError, ProviderKeySaveError, SavedProviderKey, SettingsError,
-    generate_pkce_verifier, pkce_challenge,
+    DiscoveredLocalModel, HostedModelMutation, ImageModelError, ImageModelSelection,
+    LocalModelMutation, McpModelTarget, ModelConfiguration, ModelConfigurationClock,
+    ModelConfigurationEnvironment, ModelConfigurationRead, ModelContextMetadataRead,
+    ProviderCredentialMutation, ProviderKeyCheck, ProviderKeyCheckError, ProviderKeySaveError,
+    ResolvedImageModel, SavedProviderKey, SettingsError, generate_pkce_verifier, pkce_challenge,
 };
 pub use status::{StatusModels, auth_status_with_environment, open_status_models};
 
@@ -212,3 +213,9 @@ impl ModelCatalogError {
 
 #[cfg(test)]
 mod tests;
+
+mod image_gen;
+pub use image_gen::{
+    Background, ImageGenError, ImageGenRequest, ImageGenResult, ImageUsage, InputImage,
+    NormalizedRect, effective_size as image_effective_size, generate as generate_image,
+};

@@ -40,27 +40,8 @@ async fn execute_spec(
 ) -> Result<butler_core::json::JsonDocument, ToolExecutionError> {
     let mut spec = Value::Object(call.arguments.clone());
     answer_blocks::normalize(&mut spec);
-    let candidates = answer_blocks::sources(&spec);
-    let sources = owner
-        .journal
-        .read_sources(owner.binding.source_session_id.clone(), candidates)
-        .await
-        .map_err(|e| ToolExecutionError::Integrity(e.into()))?;
-    let image_ids = spec["blocks"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .flat_map(|block| block["items"].as_array().into_iter().flatten())
-        .filter_map(|item| item["img"].as_str().map(str::to_owned))
-        .collect();
-    let images = super::browser::lookup_assets(owner, image_ids).await;
-    let context = AnswerBlocksContext {
-        now: chrono::Utc::now(),
-        // Asset acceptance is owned by image_collect's store (T4).
-        image_exists: &|id| images.contains(id),
-        read_sources: &sources,
-    };
-    if let Err(problems) = answer_blocks::validate_answer_blocks(&spec, &context) {
+    let problems = validate_spec(owner, &spec).await?;
+    if !problems.is_empty() {
         return encoded(
             &json!({"ok":false,"error":{"code":"invalid_blocks","message":"Correct the listed fields and resend the complete spec.","problems":problems}}),
         );
@@ -103,4 +84,34 @@ pub(super) async fn remember_browser_source(
         remember_source(owner, call_id, source).await?;
     }
     Ok(())
+}
+
+/// Shared turn evidence for answer blocks in replies and editable documents.
+pub(super) async fn validate_spec(
+    owner: &GuidedTools,
+    spec: &Value,
+) -> Result<Vec<answer_blocks::AnswerBlocksProblem>, ToolExecutionError> {
+    let candidates = answer_blocks::sources(spec);
+    let sources = owner
+        .journal
+        .read_sources(owner.binding.source_session_id.clone(), candidates)
+        .await
+        .map_err(|e| ToolExecutionError::Integrity(e.into()))?;
+    let image_ids = spec["blocks"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|block| block["items"].as_array().into_iter().flatten())
+        .filter_map(|item| item["img"].as_str().map(str::to_owned))
+        .collect();
+    let images = super::browser::lookup_assets(owner, image_ids).await;
+    let context = AnswerBlocksContext {
+        now: chrono::Utc::now(),
+        // Asset acceptance is owned by image_collect's store (T4).
+        image_exists: &|id| images.contains(id),
+        read_sources: &sources,
+    };
+    Ok(answer_blocks::validate_answer_blocks(spec, &context)
+        .err()
+        .unwrap_or_default())
 }

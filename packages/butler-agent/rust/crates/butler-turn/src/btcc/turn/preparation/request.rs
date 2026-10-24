@@ -293,6 +293,7 @@ fn apply_request_context(request: &TurnRequest, context: &mut Value) -> Result<(
             ("branchSeed", "branchSeed"),
             ("defaultProjectFolder", "defaultProjectFolder"),
             ("contentParts", "messageContent"),
+            ("documentEdits", "documentEdits"),
         ] {
             if let Some(value) = app.get(source).filter(|value| js_truthy(value)) {
                 fields.insert(target.into(), value.clone());

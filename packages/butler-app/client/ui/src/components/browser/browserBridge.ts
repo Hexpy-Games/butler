@@ -27,7 +27,8 @@ export interface BrowserTab {
   saveOffer?: { username: string; host: string };
 }
 export interface BrowserSnapshot {
-  enabled: boolean; blocked: boolean; activeId: string | null; nativeCovered: boolean; focusRequest?: string; tabs: BrowserTab[];
+  /** Saved tabs have finished loading; an empty list is authoritative only then. */
+  restored: boolean; enabled: boolean; blocked: boolean; activeId: string | null; nativeCovered: boolean; focusRequest?: string; tabs: BrowserTab[];
 }
 export interface BrowserFrame { tab: string; seq: number; bytes: Uint8Array; masked: boolean }
 interface BrowserBridge {
@@ -44,7 +45,7 @@ interface BrowserBridge {
 }
 declare global { interface Window { butlerBrowser?: BrowserBridge } }
 export const useBrowserState = create<BrowserSnapshot>(() => ({
-  enabled: false, blocked: false, activeId: null, nativeCovered: false, tabs: [],
+  restored: false, enabled: false, blocked: false, activeId: null, nativeCovered: false, tabs: [],
 }));
 let unsubscribe: (() => void) | undefined;
 let downloadUnsubscribe: (() => void) | undefined;

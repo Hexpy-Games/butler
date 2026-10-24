@@ -66,7 +66,7 @@ async fn office_file_opens_only_as_marked_allowlisted_copy() -> Result<(), Harne
     let (url, script, server) = stub::start().await?;
     let setup = Setup::new("OPEN-IN-APP")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", &url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let docx = package(DOCX_MAIN, "word/document.xml", &[]);
     std::fs::write(setup.sandbox.data.join("plan.docx"), &docx)?;
     let mut s = setup.start().await?;
