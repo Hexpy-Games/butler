@@ -52,6 +52,9 @@ jobs:
         id: reuse
         env:
           GH_TOKEN: ${{ github.token }}
+          # rust-agent-setup's macOS release recipe; part of the provenance identity.
+          CARGO_PROFILE_RELEASE_LTO: thin
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '1'
         run: |
           version="${GITHUB_REF_NAME#v}"
           # Same rule as the Agent build (butler-agent-cli/build.rs): a non-version ref builds <package version>-dev.

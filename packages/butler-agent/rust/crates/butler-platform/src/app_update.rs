@@ -187,26 +187,27 @@ fn await_activation() -> Result<(), String> {
     }
 }
 
-/// Only offer packages the currently running App can activate.
-pub fn package_format() -> &'static str {
+/// Packages the running App can activate, most preferred first. A macOS disk
+/// image keeps the bundle's hard links; ZIP remains for releases without one.
+pub fn package_formats() -> &'static [&'static str] {
     #[cfg(target_os = "macos")]
     {
-        "zip"
+        &["dmg", "zip"]
     }
     #[cfg(target_os = "linux")]
     {
         if std::env::var_os("APPIMAGE").is_some() {
-            "appimage"
+            &["appimage"]
         } else {
-            "deb"
+            &["deb"]
         }
     }
     #[cfg(target_os = "windows")]
     {
-        "nupkg"
+        &["nupkg"]
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
-        "exe"
+        &["exe"]
     }
 }

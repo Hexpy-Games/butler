@@ -6,6 +6,11 @@ use std::path::Path;
 
 /// Build an ad-hoc signed runnable bundle under a temporary root.
 pub fn signed_bundle(root: &Path, version: &str) -> std::io::Result<()> {
+    signed_bundle_with_agent(root, version, Path::new("/usr/bin/true"))
+}
+
+/// Build an ad-hoc signed runnable bundle whose bundled Agent is `agent`.
+pub fn signed_bundle_with_agent(root: &Path, version: &str, agent: &Path) -> std::io::Result<()> {
     #[cfg(target_os = "macos")]
     {
         use std::{fs, process::Command};
@@ -41,7 +46,7 @@ pub fn signed_bundle(root: &Path, version: &str) -> std::io::Result<()> {
                 .parent()
                 .ok_or_else(|| std::io::Error::other("fixture parent"))?,
         )?;
-        fs::copy("/usr/bin/true", &binary)?;
+        fs::copy(agent, &binary)?;
         crate::process_names::prepare(&binary)?;
         let output = Command::new("codesign")
             .args(["--force", "--deep", "--sign", "-"])
@@ -65,7 +70,7 @@ pub fn signed_bundle(root: &Path, version: &str) -> std::io::Result<()> {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = (root, version);
+        let _ = (root, version, agent);
         Err(std::io::Error::other("macOS fixture unavailable"))
     }
 }
@@ -91,6 +96,55 @@ pub fn bundle_zip(bundle: &Path, archive: &Path) -> std::io::Result<()> {
     {
         let _ = (bundle, archive);
         Err(std::io::Error::other("macOS fixture unavailable"))
+    }
+}
+
+/// Build a local disk image laid out like the release DMG; `sign` ad-hoc signs it.
+pub fn bundle_dmg(bundle: &Path, image: &Path, sign: bool) -> std::io::Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        let source = image.with_extension("source");
+        std::fs::create_dir(&source)?;
+        let built = (|| {
+            command(
+                Command::new("ditto")
+                    .arg(bundle)
+                    .arg(source.join("Butler.app")),
+            )?;
+            std::os::unix::fs::symlink("/Applications", source.join("Applications"))?;
+            command(
+                Command::new("hdiutil")
+                    .args(["create", "-quiet", "-volname", "Butler", "-format", "ULMO"])
+                    .arg("-srcfolder")
+                    .arg(&source)
+                    .arg(image),
+            )?;
+            if sign {
+                command(Command::new("codesign").args(["--sign", "-"]).arg(image))?;
+            }
+            Ok(())
+        })();
+        command(Command::new("chmod").arg("-R").arg("u+w").arg(&source))?;
+        std::fs::remove_dir_all(&source)?;
+        built
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (bundle, image, sign);
+        Err(std::io::Error::other("macOS fixture unavailable"))
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn command(command: &mut std::process::Command) -> std::io::Result<()> {
+    let output = command.output()?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(std::io::Error::other(
+            String::from_utf8_lossy(&output.stderr).into_owned(),
+        ))
     }
 }
 

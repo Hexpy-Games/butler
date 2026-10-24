@@ -240,13 +240,13 @@ fn select_app_artifact(array: &[Value], previews: bool) -> Result<&Value, Update
         .filter(|value| value.get("component").and_then(Value::as_str) == Some("app"))
         .collect();
     let eligible =
-        |value: &&Value| super::channel::eligible(value, previews) && compatible_package(value);
+        |value: &&Value| super::channel::eligible(value, previews) && package_rank(value).is_some();
     let selected =
-        super::channel::newest(app.iter().copied().filter(eligible).filter(|value| {
+        preferred(app.iter().copied().filter(eligible).filter(|value| {
             value.get("platform").and_then(Value::as_str) == Some(platform.as_str())
         }))
         .or_else(|| {
-            super::channel::newest(
+            preferred(
                 app.iter()
                     .copied()
                     .filter(eligible)
@@ -257,7 +257,17 @@ fn select_app_artifact(array: &[Value], previews: bool) -> Result<&Value, Update
     Ok(selected)
 }
 
-fn compatible_package(artifact: &Value) -> bool {
+/// The newest release; one release may list several packages, so take the
+/// format this App prefers.
+fn preferred<'a>(items: impl Iterator<Item = &'a Value>) -> Option<&'a Value> {
+    let mut items: Vec<&Value> = items.collect();
+    // `newest` keeps the last of equally new items: put the preferred package last.
+    items.sort_by_key(|item| std::cmp::Reverse(package_rank(item)));
+    super::channel::newest(items.into_iter())
+}
+
+/// Position in this App's package preference; `None` when it cannot activate it.
+fn package_rank(artifact: &Value) -> Option<usize> {
     let format = artifact
         .get("package_format")
         .and_then(Value::as_str)
@@ -271,5 +281,9 @@ fn compatible_package(artifact: &Value) -> bool {
                 .and_then(|ext| ext.to_str())
                 .map(str::to_ascii_lowercase)
         });
-    format.is_none_or(|format| format == butler_platform::app_update::package_format())
+    let formats = butler_platform::app_update::package_formats();
+    match format {
+        Some(format) => formats.iter().position(|accepted| *accepted == format),
+        None => Some(formats.len()),
+    }
 }

@@ -163,3 +163,53 @@ async fn stable_install_can_receive_preview_then_newer_stable() -> Result<(), Ha
     assert_eq!(stable.data()["components"][0]["available_version"], "0.1.1");
     s.finish().await
 }
+
+#[tokio::test]
+async fn a_release_with_several_packages_offers_the_preferred_format() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = Setup::new("UPDATE-PACKAGE-FORMAT")?.env("BUTLER_APP_VERSION", "0.1.0");
+    let manifest = setup.sandbox.root.join("app-update-manifest.json");
+    let formats = butler_platform::app_update::package_formats();
+    let entry = |format: &str| {
+        json!({
+            "component":"app", "version":"0.2.0", "channel":"stable",
+            "platform":butler_platform::launcher::release_platform(),
+            "package_format":format, "sha256":"0".repeat(64),
+            "artifact_url":format!("https://example.invalid/butler-app-0.2.0.{format}"),
+            "staging_policy":"butler-data-updates", "activation_policy":"user-installs-app-package",
+            "rollback_policy":"not-managed-by-butler"
+        })
+    };
+    // Manifest order never decides; a format this App cannot activate is skipped.
+    let mut artifacts: Vec<_> = formats.iter().rev().map(|format| entry(format)).collect();
+    artifacts.insert(0, entry("unsupported"));
+    std::fs::write(&manifest, json!({"artifacts":artifacts}).to_string())?;
+    let s = setup
+        .env("BUTLER_APP_UPDATE_MANIFEST", manifest.to_string_lossy())
+        .start()
+        .await?;
+    let selected = |format: &str| format!("https://example.invalid/butler-app-0.2.0.{format}");
+    let check =
+        s.gw.post("/updates/check", json!({"component":"app"}))
+            .await?;
+    assert_eq!(check.status, 200, "{}", check.text);
+    assert_eq!(
+        check.data()["components"][0]["artifact_url"],
+        selected(formats[0])
+    );
+    // A release that lists only a less preferred accepted format still updates.
+    let fallback = formats[formats.len() - 1];
+    std::fs::write(
+        &manifest,
+        json!({"artifacts":[entry(fallback)]}).to_string(),
+    )?;
+    let check =
+        s.gw.post("/updates/check", json!({"component":"app"}))
+            .await?;
+    assert_eq!(
+        check.data()["components"][0]["artifact_url"],
+        selected(fallback)
+    );
+    assert_eq!(check.data()["components"][0]["update_available"], true);
+    s.finish().await
+}

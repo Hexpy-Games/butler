@@ -1,19 +1,10 @@
 #!/usr/bin/env bun
-import { normalizeMacBundle, signMacBundle, runMacSigning, verifyMacBundleIcon } from "./native-mac-signing.ts";
+import { normalizeMacBundle, signMacBundle, signMacDmg, runMacSigning, verifyMacBundleIcon } from "./native-mac-signing.ts";
 import { isPreviewRelease } from "./preview-policy.ts";
 import { stageElectronPackageSource } from "./electron-package-source.ts";
 import { createHash } from "node:crypto";
 import {
-  chmodSync,
-  copyFileSync,
-  cpSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  symlinkSync,
+  chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -122,20 +113,21 @@ function createNativeMacReleasePackage(options: AppReleasePackageOptions): AppRe
     const releaseManifestPath = join(outDir, "app-release-manifest.json");
     writeJson(releaseManifestPath, manifest);
     const updateManifestPath = join(outDir, "app-update-manifest.json");
+    const updateArtifact = (packageFormat: "dmg" | "zip", path: string, name: string, sha256: string) => ({
+      component: "app", product: "butler-app", platform: "darwin-arm64", version: manifest.version,
+      app_version: manifest.version, channel: isPreviewRelease() ? "preview" : "stable",
+      artifact_url: artifactDownloadUrl(options.artifactBaseUrl, path, name), sha256,
+      package_format: packageFormat, payload_format: "platform-app-package", update_policy: "app-user-action",
+      restart_policy: "restart-app", updater_owner: "butler-app", bundled_agent_version: manifest.bundledAgentVersion,
+      staging_policy: item.stagingPolicy, activation_policy: item.activationPolicy, rollback_policy: item.rollbackPolicy,
+    });
     writeJson(updateManifestPath, {
       schema: "butler.update-manifest.v1", product: "butler-app", app_version: manifest.version,
       bundled_agent_version: manifest.bundledAgentVersion, updater_owner: "butler-app",
-      artifacts: [{
-        component: "app", product: "butler-app", platform: "darwin-arm64", version: manifest.version,
-        app_version: manifest.version, channel: isPreviewRelease() ? "preview" : "stable",
-        artifact_url: artifactDownloadUrl(options.artifactBaseUrl, artifact.updaterArtifactPath, artifact.updaterArtifactName),
-        sha256: artifact.updaterSha256, payload_format: "platform-app-package", update_policy: "app-user-action",
-        restart_policy: "restart-app", updater_owner: "butler-app",
-        bundled_agent_version: manifest.bundledAgentVersion,
-        staging_policy: item.stagingPolicy,
-        activation_policy: item.activationPolicy,
-        rollback_policy: item.rollbackPolicy,
-      }],
+      // The signed DMG keeps the Agent's role hard links. Apps before preview.14
+      // accept only the ZIP, where each link becomes a full copy.
+      artifacts: [updateArtifact("dmg", artifact.artifactPath, artifact.artifactName, artifact.sha256),
+        updateArtifact("zip", artifact.updaterArtifactPath, artifact.updaterArtifactName, artifact.updaterSha256)],
     });
     return { artifacts: [artifact], releaseManifestPath, updateManifestPath, version: manifest.version };
   } finally {
@@ -199,7 +191,7 @@ function packagePlatform(input: {
   verifyNativeMacBundle(appBundle, nativeClosure);
   runMacSigning(input.root, "notarize", appBundle);
   createMacDmg({ appBundle, artifactPath });
-  runMacSigning(input.root, "sign-dmg", artifactPath);
+  signMacDmg(input.root, artifactPath);
   runMacSigning(input.root, "notarize", artifactPath);
   const updaterArtifactName = `butler-app-${input.manifest.version}-darwin-arm64.zip`;
   const updaterArtifactPath = join(input.outDir, updaterArtifactName);
@@ -364,7 +356,8 @@ export function createMacDmg(input: { appBundle: string; artifactPath: string })
       staging,
       "-ov",
       "-format",
-      "UDZO",
+      // LZMA: about a third smaller than UDZO; this DMG is also the update download.
+      "ULMO",
       input.artifactPath,
     ], { encoding: "utf8" });
     if (result.status !== 0) {

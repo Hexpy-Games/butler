@@ -47,9 +47,10 @@ def merge(mac_manifest, linux_dir, version, base_url, windows_dir=None):
             manifest["artifacts"].append(item)
     fresh = {item["platform"] for item in manifest["artifacts"]}
     manifest["artifacts"][:0] = [item for item in published if item["platform"] not in fresh]
-    platforms = [item["platform"] for item in manifest["artifacts"]]
-    if len(platforms) != len(set(platforms)):
-        raise ValueError("Duplicate App platform")
+    # One platform may offer several package formats (macOS: DMG and ZIP).
+    packages = [(item["platform"], item.get("package_format")) for item in manifest["artifacts"]]
+    if len(packages) != len(set(packages)):
+        raise ValueError("Duplicate App platform package")
     return manifest
 
 

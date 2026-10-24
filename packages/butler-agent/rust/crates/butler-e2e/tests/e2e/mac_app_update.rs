@@ -31,7 +31,7 @@ fn helper(launch: &Launch, artifact: &Path, bundle: &Path, checkpoint: &str) -> 
 #[test]
 fn hostile_zips_cannot_change_the_installed_bundle_or_escape_staging() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    if butler_platform::app_update::package_format() != "zip" {
+    if !butler_platform::app_update::package_formats().contains(&"zip") {
         return Ok(());
     }
     let (sandbox, launch) = install_support::sandbox("mac-hostile-zip")?;
@@ -74,7 +74,7 @@ fn hostile_zips_cannot_change_the_installed_bundle_or_escape_staging() -> Result
 async fn killed_update_helpers_leave_a_runnable_bundle_and_startup_recovers()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    if butler_platform::app_update::package_format() != "zip" {
+    if !butler_platform::app_update::package_formats().contains(&"zip") {
         return Ok(());
     }
     for checkpoint in ["journal", "exchange", "synced", "launched", "cleanup"] {
@@ -212,7 +212,7 @@ fn startup_recovery(sandbox: &Sandbox, bundle: &Path, expected: &[u8]) -> Result
 #[test]
 fn signed_but_unrunnable_candidate_is_rejected_before_exchange() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    if butler_platform::app_update::package_format() != "zip" {
+    if !butler_platform::app_update::package_formats().contains(&"zip") {
         return Ok(());
     }
     let (sandbox, launch) = install_support::sandbox("mac-non-executable")?;
@@ -233,5 +233,113 @@ fn signed_but_unrunnable_candidate_is_rejected_before_exchange() -> Result<(), H
             .stdout,
         b"1\n"
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn zip_era_bundle_updates_from_a_signed_disk_image_with_distinct_role_names()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    if !butler_platform::app_update::package_formats().contains(&"dmg") {
+        return Ok(());
+    }
+    use butler_platform::app_update::test_support as fixture;
+    let (sandbox, launch) = install_support::sandbox("mac-dmg-update")?;
+    let bundle = sandbox.root.join("installed/Butler.app");
+    // A long-running Agent stand-in lets each role keep its own process.
+    let agent = Path::new("/bin/sleep");
+    fixture::signed_bundle_with_agent(&bundle, "1", agent)?;
+    // Zip era: the role links arrive as copies and the helper relinks them.
+    let zipped = sandbox.root.join("zip/Butler.app");
+    fixture::signed_bundle_with_agent(&zipped, "2", agent)?;
+    let archive = sandbox.root.join("update.zip");
+    fixture::bundle_zip(&zipped, &archive)?;
+    activate(&launch, &archive, &bundle).await?;
+    assert_eq!(run_bundle(&bundle)?, b"2\n");
+    let imaged = sandbox.root.join("dmg/Butler.app");
+    fixture::signed_bundle_with_agent(&imaged, "3", agent)?;
+    let unsigned = sandbox.root.join("unsigned.dmg");
+    fixture::bundle_dmg(&imaged, &unsigned, false)?;
+    let output = helper(&launch, &unsigned, &bundle, "").output()?;
+    assert!(!output.status.success(), "accepted an unsigned image");
+    assert!(String::from_utf8_lossy(&output.stderr).contains("not signed at all"));
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("app-update-ready"));
+    let image = sandbox.root.join("update.dmg");
+    fixture::bundle_dmg(&imaged, &image, true)?;
+    activate(&launch, &image, &bundle).await?;
+    assert_eq!(run_bundle(&bundle)?, b"3\n");
+    let verified = Command::new("codesign")
+        .args(["--verify", "--deep", "--strict", "--verbose=4"])
+        .arg(&bundle)
+        .output()?;
+    assert!(
+        verified.status.success(),
+        "{}",
+        String::from_utf8_lossy(&verified.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&Command::new("hdiutil").arg("info").output()?.stdout)
+            .matches(sandbox.root.to_string_lossy().as_ref())
+            .count(),
+        0,
+        "the update image stayed attached"
+    );
+    distinct_role_names(&bundle.join("Contents/Resources/bundled-agent/bin/butler-agent"))
+}
+
+fn run_bundle(bundle: &Path) -> Result<Vec<u8>, HarnessError> {
+    Ok(Command::new(bundle.join("Contents/MacOS/Butler"))
+        .output()?
+        .stdout)
+}
+
+async fn activate(launch: &Launch, artifact: &Path, bundle: &Path) -> Result<(), HarnessError> {
+    use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+    let mut child = tokio::process::Command::from(helper(launch, artifact, bundle, ""))
+        .kill_on_drop(true)
+        .spawn()?;
+    let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
+    let ready = tokio::time::timeout(Duration::from_secs(60), lines.next_line())
+        .await
+        .unwrap()?;
+    let mut stdin = child.stdin.take().unwrap();
+    if ready.as_deref() == Some("app-update-ready") {
+        stdin.write_all(b"activate\n").await?;
+    }
+    drop(stdin);
+    let status = tokio::time::timeout(Duration::from_secs(60), child.wait())
+        .await
+        .unwrap()?;
+    let mut diagnostic = String::new();
+    child
+        .stderr
+        .take()
+        .unwrap()
+        .read_to_string(&mut diagnostic)
+        .await?;
+    assert_eq!(ready.as_deref(), Some("app-update-ready"), "{diagnostic}");
+    assert!(status.success(), "{diagnostic}");
+    Ok(())
+}
+
+/// One file under every role name, and each running role shows its own name.
+fn distinct_role_names(binary: &Path) -> Result<(), HarnessError> {
+    use butler_platform::process_names::{self, Role};
+    let canonical = process_names::canonical_executable(binary)?;
+    for role in [Role::Memory, Role::Restart, Role::Update] {
+        let alias = process_names::executable(binary, role)?;
+        assert_eq!(
+            alias.file_name().and_then(|name| name.to_str()),
+            Some(role.file_name())
+        );
+        assert_eq!(process_names::canonical_executable(&alias)?, canonical);
+        let mut child = Command::new(&alias).arg("30").spawn()?;
+        let observed = process_names::observed_name(child.id(), role);
+        child.kill()?;
+        child.wait()?;
+        if let Some((observed, expected)) = observed? {
+            assert_eq!(observed, expected);
+        }
+    }
     Ok(())
 }
