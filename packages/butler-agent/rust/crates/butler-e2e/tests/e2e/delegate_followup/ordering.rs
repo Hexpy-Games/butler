@@ -26,7 +26,7 @@ async fn ordered(endpoint: &str, restart: bool) -> Result<(), HarnessError> {
     let mut s = Setup::new("CHILD-RESULT-BEFORE-FOLLOWUPS")?
         .app_supervisor()
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CHATGPT_API_BASE_URL", &url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .env(
             "BUTLER_E2E_RESULT_DELIVERED_BARRIER",
             delivered.local_addr()?.to_string(),
