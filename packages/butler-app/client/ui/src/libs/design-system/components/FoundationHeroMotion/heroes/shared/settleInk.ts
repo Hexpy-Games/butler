@@ -12,7 +12,9 @@ import { CANVAS, type HeroLayout } from "./grid";
 function measureSettled(root: HTMLElement, layout: HeroLayout, beat: number, beats: number): Box | null {
   const world = root.querySelector<HTMLElement>('[data-t="world"]');
   const poster = root.querySelector<HTMLElement>('[data-t="poster"]');
-  const animations = root.getAnimations({ subtree: true });
+  // Only time-based animations seek to a beat. A scroll-driven one (a real SidebarShell's scroll fades) follows
+  // its scroller and has no duration ("auto"), so it keeps its pose.
+  const animations = root.getAnimations({ subtree: true }).filter((animation) => animation.timeline === root.ownerDocument.timeline);
   if (!world || !poster || animations.length === 0) return null;
   // Seek and read within one task (the timeline does not advance meanwhile), then seek back: no play or pause
   // call, so the stage's own animation-play-state (offscreen, hidden) keeps control.
