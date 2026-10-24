@@ -6,11 +6,13 @@ import { windowDragClassName, type WindowDragProps } from "../../lib/windowDrag"
 import { cn } from "../../lib/utils";
 import type { AttachmentListItem } from "./AttachmentList";
 import { AttachmentTileFace, AttachmentTileRemove } from "./AttachmentTileFace";
+import { attachmentLabel } from "./attachmentStatus";
 import styles from "./AttachmentTiles.module.css";
 
 export interface AttachmentTilesProps extends WindowDragProps {
   items: AttachmentListItem[];
   layout: "row" | "wrap";
+  align?: "start" | "end";
   onOpen?: (item: AttachmentListItem) => void;
   onRemove?: (id: string) => void;
   removeLabel: (name: string) => string;
@@ -24,7 +26,7 @@ export type TriggerProps = Omit<HTMLAttributes<HTMLElement>, "children" | "class
 
 /** The face: a button with `onOpen`, else a link with `href`, else a picture. Tooltip's trigger props pass through. */
 function TileTarget({ item, onOpen, children, ref, ...trigger }: { item: AttachmentListItem; onOpen?: AttachmentTilesProps["onOpen"]; children: ReactNode } & TriggerProps) {
-  const label = item.blockedReason ? `${item.name}, ${item.blockedReason}` : item.name;
+  const label = attachmentLabel(item) ?? item.name;
   const shared = { ...trigger, className: styles.face, "aria-label": label };
   if (onOpen) {
     return <button {...shared} ref={ref as Ref<HTMLButtonElement>} type="button" onClick={() => onOpen(item)}>{children}</button>;
@@ -35,7 +37,7 @@ function TileTarget({ item, onOpen, children, ref, ...trigger }: { item: Attachm
   return <span {...shared} ref={ref as Ref<HTMLSpanElement>} role="img">{children}</span>;
 }
 
-function Tile({ item, layout, onOpen, onRemove, removeLabel, register }: Omit<AttachmentTilesProps, "items" | "windowDrag"> & {
+function Tile({ item, layout, onOpen, onRemove, removeLabel, register }: Omit<AttachmentTilesProps, "items" | "windowDrag" | "align"> & {
   item: AttachmentListItem; register: Register;
 }) {
   const node = useRef<HTMLDivElement | null>(null);
@@ -52,7 +54,8 @@ function Tile({ item, layout, onOpen, onRemove, removeLabel, register }: Omit<At
   const ref = (element: HTMLDivElement | null) => { node.current = element; register(item.id, element); };
   return (
     <div ref={ref} className={styles.tile} data-slot="attachment-tile" data-kind={item.video ? "video" : item.thumbnail ? "image" : "file"}
-      data-blocked={item.blockedReason ? "true" : undefined} data-leaving={leaving ? "true" : undefined}>
+      data-blocked={item.blockedReason ? "true" : undefined} data-upload={item.upload}
+      aria-busy={item.upload === "uploading" ? true : undefined} data-leaving={leaving ? "true" : undefined}>
       <Tooltip label={item.blockedReason ?? item.name}>
         <TileTarget item={item} onOpen={onOpen}><AttachmentTileFace item={item} withMeta={layout === "wrap"} /></TileTarget>
       </Tooltip>
@@ -88,16 +91,16 @@ function useSlideClosed(order: string): Register {
 
 /**
  * Square attachment tiles: `row` 64px in one sideways-scrolling row with the shared edge fade (composer),
- * `wrap` 96px end-aligned and wrapping, with the size line (a sent message). Every item shows.
+ * `wrap` 96px wrapping (end-aligned in a sent message, `align="start"` in a document), with the size line. Every item shows.
  */
-export function AttachmentTiles({ items, layout, onOpen, onRemove, removeLabel, windowDrag, className }: AttachmentTilesProps) {
+export function AttachmentTiles({ items, layout, align, onOpen, onRemove, removeLabel, windowDrag, className }: AttachmentTilesProps) {
   const edges = useScrollEdges("x", layout === "row");
   const register = useSlideClosed(items.map((item) => item.id).join("\n"));
   const tiles = items.map((item) => (
     <Tile key={item.id} item={item} layout={layout} onOpen={onOpen} onRemove={onRemove} removeLabel={removeLabel} register={register} />
   ));
   if (layout === "wrap") {
-    return <div className={cn(styles.wrap, windowDragClassName(windowDrag), className)} data-slot="attachment-list" data-variant="tiles" data-layout="wrap">{tiles}</div>;
+    return <div className={cn(styles.wrap, windowDragClassName(windowDrag), className)} data-slot="attachment-list" data-variant="tiles" data-layout="wrap" data-align={align}>{tiles}</div>;
   }
   return (
     <div ref={edges} className={cn(styles.row, windowDragClassName(windowDrag), className)} data-slot="attachment-list" data-variant="tiles" data-layout="row">

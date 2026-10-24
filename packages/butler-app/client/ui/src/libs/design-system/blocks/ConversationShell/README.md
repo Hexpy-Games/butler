@@ -92,6 +92,44 @@ ComposerCard reads.
 </ConversationShell>
 ```
 
+### Aside
+
+`aside` puts content in the conversation's right margin (session details:
+open requests, the task, results, attachments, environment). The shell owns
+where it sits and scrolls it in a scroller of its own (the shared edge fade,
+the scrollbar gutter reserved on both edges):
+
+- Docked (a 960px shell or wider; a floating aside docks again from 992px, so a
+  width on the line never flaps): flat on the shell's background, 272px
+  (`--conversation-aside-width`), `--space-lg` from the top rail line, the end
+  and the bottom. It stays put while the messages scroll. The column and the
+  composer follow the rail rule: they keep their width and move left only as
+  far as they must to stay `--tab-rail-clearance` clear of it, through
+  `--conversation-column-width` and `--conversation-column-shift`.
+  `onColumnRect` then reports the aside's far edge as `right`, so a background
+  keeps the aside clear too.
+- Floating (narrower, e.g. beside the browser area): one TintedGlass panel over
+  the conversation, ending above the composer, shown only while
+  `asideFloatOpen`. The column does not move.
+
+Pass a function to get the layout (`"docked" | "floating"`), and drop your own
+cards on glass: margin variant B is one flat `Card` per section, 12px apart
+(`Stack gap="md"`), docked; the same sections bare on the glass. The aside
+element carries `data-layout` and the shell `data-aside`. Each layout enters
+and leaves with the DS Presence fade, so opening, closing and a docked/floating
+flip cross-fade (none under reduced motion). Both layouts keep one inset on
+the start and the end, whatever the scrollbar (overlay, classic or hidden). Name
+the landmark with `asideLabel`. Without `aside` the shell renders exactly as
+before. A docked aside and a `TabRail` share the right margin: show one at a
+time.
+
+```tsx
+<ConversationShell composerReserve={reserve} asideLabel={copy.sessionDetails} asideFloatOpen={detailsOpen}
+  aside={detailsOpen ? (layout) => <SessionDetails layout={layout} /> : undefined}>
+  …
+</ConversationShell>
+```
+
 ## Who can use this component
 
 Agents building Butler chat, transcript, or conversation preview surfaces.
@@ -114,4 +152,4 @@ blocks such as `ChromeFrame`, `SurfacePanel`, or `InspectorPanel` instead.
 
 ## Tags
 
-conversation, chat, virtual-list, scroll, composer-reserve, background, wallpaper, rail, tabs
+conversation, chat, virtual-list, scroll, composer-reserve, background, wallpaper, rail, tabs, aside, session details

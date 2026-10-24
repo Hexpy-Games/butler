@@ -9,6 +9,7 @@ import {
   MessageListSurface,
 } from "./ConversationShell";
 import { SharedBackground } from "./ConversationShell.demo";
+import { AsideBesideBrowser, DockedAside, FloatingAside } from "./ConversationShell.asideDemo";
 import { InConversation } from "../TabRail/tabRailDemo";
 import styles from "./ConversationShell.showcase.module.css";
 
@@ -76,4 +77,8 @@ export const stories: ShowcaseStory[] = [
   { name: "Background behind messages", widths: ["app", "wide", "375"], render: (context) => <SharedBackground {...context} startWithMessages /> },
   // rail: a TabRail; the column and composer move left only as far as needed (full, compact), or start below a shelf.
   { name: "Tab rail beside the messages", widths: ["320", "375", "app", "wide"], render: ({ locale }) => <InConversation locale={locale} /> },
+  // aside: docked flat in the margin from a 960px shell (Wide), one Card per section (margin variant B).
+  { name: "Aside docked: margin cards", widths: ["app", "wide"], render: (context) => <DockedAside {...context} /> },
+  { name: "Aside floating", states: ["open"], widths: ["375", "app", "wide"], render: (context) => <FloatingAside {...context} /> },
+  { name: "Aside floating beside the browser pane", widths: ["app", "wide"], render: (context) => <AsideBesideBrowser {...context} /> },
 ];
