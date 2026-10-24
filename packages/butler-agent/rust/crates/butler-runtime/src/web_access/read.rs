@@ -94,15 +94,18 @@ impl WebSession {
         args: &Value,
         cancellation: &CancellationToken,
     ) -> Result<Value, WebAccessError> {
-        self.web_read_from(args, None, cancellation).await
+        self.web_read_from(args, None, false, cancellation).await
     }
 
     /// `web_read`, from `live` (the agent tab showing the page) when given:
     /// its document goes through the same extraction as a fetched page.
+    /// With `browsing` (the turn can open tabs), a fetched page only a tab
+    /// shows in full is a failed read that names the tab as the next step.
     pub async fn web_read_from(
         &self,
         args: &Value,
         live: Option<LivePage>,
+        browsing: bool,
         cancellation: &CancellationToken,
     ) -> Result<Value, WebAccessError> {
         let requested_url = args
@@ -139,6 +142,7 @@ impl WebSession {
             return Ok(cached);
         }
         // A parallel read of the same page waits for this one and reuses it.
+        let escalate = browsing && live.is_none();
         let gate = self.read_gate(&cache_key);
         let _reading = gate.lock().await;
         let (page, cache_hit) = match (self.cached_page(&cache_key).await?, live) {
@@ -156,16 +160,40 @@ impl WebSession {
                 (page, false)
             }
         };
-        let mut result = observed(
-            &page,
-            &parsed,
-            bounded_result(&page, max_chars, max_chunks, start_chunk),
-        );
+        let mut observation = bounded_result(&page, max_chars, max_chunks, start_chunk);
+        if escalate && needs_tab(&page) {
+            to_tab(&page, &mut observation);
+        }
+        let mut result = observed(&page, &parsed, observation);
         result["cache_hit"] = Value::Bool(cache_hit);
         result["duplicate_observation"] = Value::Bool(false);
         self.remember_observation(observation_key, result.clone());
         Ok(result)
     }
+}
+
+/// A fetched page a browser tab shows better: script-built, blocked, failed
+/// or little text from an HTML document. A missing page stays missing.
+fn needs_tab(page: &PageRead) -> bool {
+    let html = matches!(page.method.as_str(), "readability" | "raw-html");
+    let tiny = page
+        .warnings
+        .iter()
+        .any(|warning| warning == "tiny-content");
+    !matches!(page.status, Some(404 | 410)) && (page.render_recommended || html && tiny)
+}
+
+/// Marks the read failed, keeping what the reader got, with the tab as the
+/// next step: the model must not answer from a partial page.
+fn to_tab(page: &PageRead, observation: &mut Value) {
+    let reason = page.error.as_deref().unwrap_or(
+        "Only part of this page reached the reader: it is built by scripts, blocked or nearly empty here.",
+    );
+    observation["ok"] = Value::Bool(false);
+    observation["error"] = Value::String(format!(
+        "{reason} Open it with browser_open, then read the tab with web_read {{tab}}."
+    ));
+    observation["next_action"] = Value::String("open_in_tab".into());
 }
 
 /// The bounded page window with its evidence items and receipts.

@@ -3,6 +3,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { RISO_INKS } from "./components/ButlerThinkingMark/butlerMarkTheme";
+import { tagLabelTones } from "./components/Tag/tagTones";
 
 // WCAG 2.x AA: body text needs 4.5:1 against what it sits on; non-text UI
 // boundaries (focus ring, interactive borders) need 3:1. Every text role is
@@ -210,6 +211,21 @@ describe("non-text boundaries meet 3:1 in both themes", () => {
           .map(([surface, layers]) => ({ surface, ratio: Number(contrast(role, layers, theme).toFixed(2)) }))
           .filter(({ ratio }) => ratio < 3);
         expect(failures).toEqual([]);
+      });
+    }
+  }
+});
+
+// Tag label tones (categorical colors) fill opaquely, so the wallpaper or
+// glass under a Tag never changes its text contrast: fg on bg is the whole
+// story on light, dark and wallpaper surfaces.
+describe("Tag label tones", () => {
+  for (const theme of themes) {
+    for (const tone of tagLabelTones) {
+      test(`${theme} ${tone}: opaque fill, border declared, text 4.5:1`, () => {
+        expect(parseColor(resolve(`--tag-label-${tone}-bg`, theme))[3]).toBe(1);
+        expect(parseColor(resolve(`--tag-label-${tone}-border`, theme))[3]).toBe(1);
+        expect(contrast(`--tag-label-${tone}-fg`, [`--tag-label-${tone}-bg`], theme)).toBeGreaterThanOrEqual(4.5);
       });
     }
   }

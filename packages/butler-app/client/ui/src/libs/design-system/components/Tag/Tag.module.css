@@ -47,6 +47,55 @@
   color: var(--color-danger-text);
 }
 
+/* Label tones: categorical colors with an opaque fill (tokens.css). */
+.tag[data-tone="gray"] {
+  border-color: var(--tag-label-gray-border);
+  background: var(--tag-label-gray-bg);
+  color: var(--tag-label-gray-fg);
+}
+
+.tag[data-tone="red"] {
+  border-color: var(--tag-label-red-border);
+  background: var(--tag-label-red-bg);
+  color: var(--tag-label-red-fg);
+}
+
+.tag[data-tone="orange"] {
+  border-color: var(--tag-label-orange-border);
+  background: var(--tag-label-orange-bg);
+  color: var(--tag-label-orange-fg);
+}
+
+.tag[data-tone="yellow"] {
+  border-color: var(--tag-label-yellow-border);
+  background: var(--tag-label-yellow-bg);
+  color: var(--tag-label-yellow-fg);
+}
+
+.tag[data-tone="green"] {
+  border-color: var(--tag-label-green-border);
+  background: var(--tag-label-green-bg);
+  color: var(--tag-label-green-fg);
+}
+
+.tag[data-tone="teal"] {
+  border-color: var(--tag-label-teal-border);
+  background: var(--tag-label-teal-bg);
+  color: var(--tag-label-teal-fg);
+}
+
+.tag[data-tone="blue"] {
+  border-color: var(--tag-label-blue-border);
+  background: var(--tag-label-blue-bg);
+  color: var(--tag-label-blue-fg);
+}
+
+.tag[data-tone="purple"] {
+  border-color: var(--tag-label-purple-border);
+  background: var(--tag-label-purple-bg);
+  color: var(--tag-label-purple-fg);
+}
+
 .icon,
 .iconEnd {
   display: inline-flex;
