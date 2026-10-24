@@ -22,7 +22,7 @@ async fn missing_child_capability_returns_structurally_and_parent_completes()
     let (url, script, server) = stub::start().await?;
     let mut s = Setup::new("SCHEDULE-HANDOFF")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", &url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()
         .await?;
     assert_eq!(

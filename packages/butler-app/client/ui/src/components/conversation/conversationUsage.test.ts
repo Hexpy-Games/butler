@@ -30,17 +30,17 @@ describe("conversationUsageSummary", () => {
     expect(summary.updatedLabel).toBeUndefined();
   });
 
-  test("a subscription without a reported quota is unavailable", () => {
-    expect(conversationUsageSummary({ mode: "subscription", context, view: usageView(), status: "ready" })?.state).toBe("unavailable");
+  test("a ChatGPT plan without headers retains the plan and Butler usage", () => {
+    expect(conversationUsageSummary({ mode: "subscription", context, view: usageView(), status: "ready" })?.planUsage?.state).toBe("in_use");
     const noWindows = usageView({ quota: quota({ windows: [] }) });
-    expect(conversationUsageSummary({ mode: "subscription", context, view: noWindows, status: "ready" })?.state).toBe("unavailable");
+    expect(conversationUsageSummary({ mode: "subscription", context, view: noWindows, status: "ready" })?.butlerUsage?.windows.length).toBe(3);
     const otherProvider = { ...context, provider_id: "anthropic" };
     expect(conversationUsageSummary({ mode: "subscription", context: otherProvider, view: usageView({ quota: quota() }), status: "ready" })?.state)
       .toBe("unavailable");
   });
 
   test("a stale quota keeps its windows and adds the updated time", () => {
-    const summary = conversationUsageSummary({ mode: "subscription", context, view: usageView({ quota: quota({ stale: true }) }), status: "ready" })!;
+    const summary = conversationUsageSummary({ mode: "subscription", context, view: usageView({ quota: quota({ stale: true, sourceKind: "provider_quota", planUsage: null }) }), status: "ready" })!;
     expect(summary.quotaWindows!.length).toBe(2);
     expect(String(summary.updatedLabel)).toBe(`Updated ${usageTime("2026-09-28T05:05:00.000Z")}`);
   });

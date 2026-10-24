@@ -213,6 +213,8 @@ fn tool_row(kind: &str, p: &Map<String, Value>, id: &str, row: &mut Map<String, 
 }
 
 fn work_decision(p: &Map<String, Value>, row: &mut Map<String, Value>) {
+    copy(p, row, "failureCode", "failure_code");
+    copy(p, row, "authType", "auth_type");
     contract(p, row);
     let source = optional(p.get("decisionSource").or_else(|| p.get("source")));
     let summary = optional(p.get("decisionSummary").or_else(|| p.get("summary")));

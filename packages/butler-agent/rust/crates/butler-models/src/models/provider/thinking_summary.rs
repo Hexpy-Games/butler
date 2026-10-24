@@ -21,14 +21,14 @@ fn key(config: &ProviderRequestConfig) -> [u8; 32] {
     match &config.auth {
         ProviderAuth::None => hash.update(b"none"),
         ProviderAuth::ApiKey(secret) => hash.update(secret.as_bytes()),
-        ProviderAuth::Codex {
+        ProviderAuth::ChatGptPlan {
             authorization,
-            account_id,
+            registration,
             ..
         } => {
             hash.update(authorization.as_bytes());
             hash.update([0]);
-            hash.update(account_id.as_bytes());
+            hash.update(registration.as_bytes());
         }
     }
     hash.finalize().into()

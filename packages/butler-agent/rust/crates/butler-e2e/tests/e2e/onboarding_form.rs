@@ -75,11 +75,7 @@ async fn onboarding_form_replays_questions_and_persists_profile() -> Result<(), 
         let requests = s.provider()?.requests();
         let request = requests.last().unwrap();
         assert!(
-            request["tools"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|t| t["name"] == "ask_user"),
+            butler_e2e::e2e::chatgpt_wire::functions(request).any(|t| t["name"] == "ask_user"),
             "ask_user hidden: {}",
             request["tools"]
         );

@@ -91,10 +91,7 @@ async fn final_report_preserves_schemas_and_blocks_repeated_native_calls()
 /// never repeats what the blocks show.
 fn assert_final_presentation(requests: &[Value]) {
     assert!(
-        requests[0]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
+        butler_e2e::e2e::chatgpt_wire::functions(&requests[0])
             .any(|tool| tool["name"] == "answer_blocks"),
         "answer_blocks is offered before the final report"
     );

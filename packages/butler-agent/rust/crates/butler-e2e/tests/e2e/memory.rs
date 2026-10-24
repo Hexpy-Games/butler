@@ -204,8 +204,7 @@ async fn mem_03_recall_optional_arguments_require_user_intent() -> Result<(), Ha
     let requests = s.provider()?.requests();
     let recall = requests
         .iter()
-        .filter_map(|request| request["tools"].as_array())
-        .flatten()
+        .flat_map(butler_e2e::e2e::chatgpt_wire::functions)
         .find(|tool| tool["name"] == "recall_memory")
         .expect("recall tool must be exposed to the calling model");
     let properties = &recall["parameters"]["properties"];

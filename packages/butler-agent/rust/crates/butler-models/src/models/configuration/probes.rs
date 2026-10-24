@@ -17,13 +17,13 @@ pub(super) fn read(config: &Value) -> Vec<ImageProbeEvidence> {
                 record.model_id.clone(),
                 match record.auth_type {
                     ProviderAuthMethod::ApiKey => "api_key",
-                    ProviderAuthMethod::CodexOauth => "codex_oauth",
+                    ProviderAuthMethod::ChatGptOauth => "chatgpt_oauth",
                 }
                 .into(),
                 match record.auth_type {
                     ProviderAuthMethod::ApiKey => record.credential_id.as_deref().unwrap_or(""),
-                    ProviderAuthMethod::CodexOauth => {
-                        record.auth_profile.as_deref().unwrap_or("codex_oauth")
+                    ProviderAuthMethod::ChatGptOauth => {
+                        record.auth_profile.as_deref().unwrap_or("chatgpt")
                     }
                 }
                 .into(),
@@ -38,7 +38,7 @@ fn normalize(value: &Value) -> Option<ImageProbeEvidence> {
     let provider_id = hosted_provider(value.get("provider_id")?.as_str()?)?;
     let auth_type = match value.get("auth_type")?.as_str()? {
         "api_key" => ProviderAuthMethod::ApiKey,
-        "codex_oauth" => ProviderAuthMethod::CodexOauth,
+        "chatgpt_oauth" | "codex_oauth" => ProviderAuthMethod::ChatGptOauth,
         _ => return None,
     };
     let model_id = text(value.get("model_id"))?.into();
@@ -60,9 +60,15 @@ fn normalize(value: &Value) -> Option<ImageProbeEvidence> {
         return None;
     }
     let credential_id = text(value.get("credential_id")).map(str::to_owned);
-    let auth_profile = text(value.get("auth_profile")).map(str::to_owned);
+    let auth_profile = text(value.get("auth_profile")).map(|v| {
+        if v == "codex_oauth" {
+            "chatgpt".into()
+        } else {
+            v.to_owned()
+        }
+    });
     if (auth_type == ProviderAuthMethod::ApiKey && credential_id.is_none())
-        || (auth_type == ProviderAuthMethod::CodexOauth && auth_profile.is_none())
+        || (auth_type == ProviderAuthMethod::ChatGptOauth && auth_profile.is_none())
     {
         return None;
     }

@@ -347,7 +347,7 @@ async fn hooks_subagentstop_has_parent_and_exact_answer() -> Result<(), HarnessE
     let (url, _script, server) = child_stub::start(false).await?;
     let setup = Setup::new("HOOK-CHILD")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", &url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     configure(&setup, &[observer(&setup, "SubagentStop")])?;
     let s = setup.start().await?;
     s.turn("general", child_stub::OWNER).await?;

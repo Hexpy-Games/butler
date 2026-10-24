@@ -308,16 +308,21 @@ fn provider_route_identity(value: &Value) -> StorageResult<Value> {
             .is_some_and(|v| v <= 9_007_199_254_740_991)
         && o.get("providerId")
             .and_then(Value::as_str)
-            .is_some_and(|v| matches!(v, "openai" | "openai-codex"))
+            .is_some_and(|v| matches!(v, "openai" | "openai-codex" | "openai-chatgpt"))
         && o.get("modelRef")
             .and_then(Value::as_str)
             .is_some_and(|v| !v.is_empty() && utf16_len(v) <= 200)
-        && o.get("authMode")
-            .and_then(Value::as_str)
-            .is_some_and(|v| matches!(v, "api_key" | "codex_subscription" | "codex_oauth"))
+        && o.get("authMode").and_then(Value::as_str).is_some_and(|v| {
+            matches!(
+                v,
+                "api_key" | "codex_subscription" | "codex_oauth" | "chatgpt_plan"
+            )
+        })
         && o.get("capabilityDigest")
             .and_then(Value::as_str)
             .is_some_and(digest)
+        && o.get("capabilityMemoRevision")
+            .is_none_or(|v| v.as_str().is_some_and(digest))
         && o.get("toolSurfaceDigest")
             .is_none_or(|v| v.as_str().is_some_and(digest))
         && o.get("serializerContract")
@@ -325,7 +330,9 @@ fn provider_route_identity(value: &Value) -> StorageResult<Value> {
             .is_some_and(|v| {
                 matches!(
                     v,
-                    "butler.openai-responses-final-json.v1" | "butler.openai-codex-final-json.v1"
+                    "butler.openai-responses-final-json.v1"
+                        | "butler.openai-codex-final-json.v1"
+                        | "butler.openai-chatgpt-plan-final-json.v1"
                 )
             })
         && o.get("toolProfileRevision")

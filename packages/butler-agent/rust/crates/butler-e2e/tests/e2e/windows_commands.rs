@@ -133,8 +133,7 @@ async fn run(case: &str, command: &str) -> Result<Value, HarnessError> {
     let requests = s.provider()?.requests();
     let definition = requests
         .iter()
-        .filter_map(|request| request["tools"].as_array())
-        .flatten()
+        .flat_map(butler_e2e::e2e::chatgpt_wire::functions)
         .find(|tool| tool["name"] == "run_command")
         .expect("model receives the command schema");
     assert!(

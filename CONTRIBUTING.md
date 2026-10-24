@@ -201,9 +201,9 @@ Windows preview releases include the unsigned Agent and Squirrel App installer.
 ### Live E2E provider
 
 Live E2E jobs read the provider and model from the `live-e2e` environment
-variables `BUTLER_E2E_LIVE_PROVIDER` (a catalog provider id, e.g. `zai-api`)
+variables `BUTLER_E2E_LIVE_PROVIDER` (a catalog provider id, e.g. `zai`)
 and `BUTLER_E2E_LIVE_MODEL` (`provider/model[@effort]`, e.g.
-`zai-api/glm-5.3-flash@low`), and fail when either is unset. An API-key
+`zai/glm-5.3-flash@max`), and fail when either is unset. An API-key
 provider takes its key from the `BUTLER_E2E_API_KEY` secret. Switching
 providers changes only these settings.
 

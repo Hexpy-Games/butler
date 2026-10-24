@@ -10,7 +10,7 @@ async fn child_repetition_and_parent_redelegation_have_separate_feedback()
     script.failing.store(true, Ordering::SeqCst);
     let mut s = Setup::new("DELEGATION-FAILURE-FEEDBACK")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()
         .await?;
     s.turn("general", stub::OWNER).await?;
@@ -45,7 +45,7 @@ async fn child_repetition_and_parent_redelegation_have_separate_feedback()
     let child_requests: Vec<_> = requests
         .iter()
         .filter(|r| {
-            butler_e2e::e2e::matching::key("/codex/responses", r, &Default::default())
+            butler_e2e::e2e::matching::key("/v1/responses", r, &Default::default())
                 .user_request
                 .starts_with("role: steward")
         })
@@ -60,7 +60,7 @@ async fn child_repetition_and_parent_redelegation_have_separate_feedback()
     let parent_results: Vec<_> = requests
         .iter()
         .filter(|r| {
-            butler_e2e::e2e::matching::key("/codex/responses", r, &Default::default())
+            butler_e2e::e2e::matching::key("/v1/responses", r, &Default::default())
                 .user_request
                 .contains("Delegated result")
         })
@@ -136,7 +136,7 @@ async fn duplicate_assignment_returns_the_running_relation() -> Result<(), Harne
     script.duplicate.store(true, Ordering::SeqCst);
     let s = Setup::new("DELEGATION-ALREADY-RUNNING")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()
         .await?;
     s.gw.say("general", stub::OWNER).await?;

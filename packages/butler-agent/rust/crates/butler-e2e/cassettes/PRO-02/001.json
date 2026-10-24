@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-luna",
       "effort": "xhigh",
       "user_request": "Profiling mode: basic Import source: chatgpt Import ref: third_party_profile_import:chatgpt:5171104080d6c1d7 Imported at: {{TIME}} Analyze this third-party assistant export and return profile candidates as JSON. Every evidence_refs item must be exactly the Import ref above. Do not preserve or quote raw import text. Imported export: \"## Identity [unknown] - Name: Sam Rivera; prefers to be called Sam. [unknown] - Lives in Lisbon. ## Career [2024-03-01] - Works as a landscape architect. ## Preferences [unknown] - Prefers short, direct answers.\"",

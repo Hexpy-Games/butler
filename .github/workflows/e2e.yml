@@ -59,13 +59,13 @@ jobs:
         id: credential
         working-directory: ${{ github.workspace }}
         env:
-          CODEX_AUTH_SECRET: ${{ secrets.BUTLER_E2E_CODEX_AUTH_JSON }}
           API_KEY_SECRET: ${{ secrets.BUTLER_E2E_API_KEY }}
         run: |
           if (-not $env:BUTLER_E2E_PROVIDER) { Write-Output '::error::Set the live-e2e variable BUTLER_E2E_LIVE_PROVIDER'; exit 1 }
           if (-not $env:BUTLER_E2E_MODEL) { Write-Output '::error::Set the live-e2e variable BUTLER_E2E_LIVE_MODEL'; exit 1 }
           Write-Output "Live provider: $env:BUTLER_E2E_PROVIDER, model: $env:BUTLER_E2E_MODEL"
-          $profile = Join-Path $env:USERPROFILE '.butler-e2e-auth/auth.json'
+          $authDir = Join-Path $HOME '.butler-e2e-auth/auth'
+          $profile = Join-Path $authDir 'chatgpt.json'
           if ($env:BUTLER_E2E_PROVIDER -ne 'openai-subscription') {
             if (-not $env:API_KEY_SECRET) {
               Write-Output '::error::Set the live-e2e secret BUTLER_E2E_API_KEY'
@@ -75,16 +75,12 @@ jobs:
             @('BUTLER_E2E_API_KEY_ENV=BUTLER_E2E_API_KEY_VALUE',
               "BUTLER_E2E_API_KEY_VALUE=$env:API_KEY_SECRET") | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           } elseif (Test-Path -LiteralPath $profile -PathType Leaf) {
-            # Mask before exporting; the dedicated file is refreshed in place.
-            Write-Output "::add-mask::$profile"
-            Write-Output 'Persistent live OAuth profile exists'
-            "BUTLER_E2E_CODEX_AUTH_JSON=$profile" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          } elseif ($env:CODEX_AUTH_SECRET) {
-            $path = Join-Path $env:RUNNER_JOB_ROOT 'codex-auth.json'
-            [IO.File]::WriteAllText($path, $env:CODEX_AUTH_SECRET, (New-Object Text.UTF8Encoding($false)))
-            "BUTLER_E2E_CODEX_AUTH_JSON=$path" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            # Use the runner's registration in place; never copy rotating tokens.
+            Write-Output "::add-mask::$authDir"
+            Write-Output 'Persistent ChatGPT sign-in exists'
+            "BUTLER_E2E_CHATGPT_AUTH_DIR=$authDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           } else {
-            Write-Output '::error::openai-subscription requires credentials. One-time PowerShell setup: $env:CODEX_HOME = "$HOME\.butler-e2e-auth"; npx -y @openai/codex login'
+            Write-Output '::error::openai-subscription requires a one-time setup: butler auth login --data "$HOME\.butler-e2e-auth"'
             exit 1
           }
           'available=true' | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
@@ -132,7 +128,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Verify persistent profile refresh with a stub
+      - name: Verify ChatGPT token refresh with a stub
         env:
           BUTLER_E2E_TIER: stub
           BUTLER_E2E_SKIP_BUILD: "1"
@@ -140,7 +136,7 @@ jobs:
           RUSTFLAGS: -C target-feature=+crt-static
         run: |
           $ErrorActionPreference = 'Continue'
-          python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e setup_oauth::dedicated_codex_profile_refresh_survives_restart -- --test-threads=1
+          python "$env:GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e chatgpt_session::siwc_08_token_refresh_survives_restart -- --test-threads=1
           $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -154,20 +150,22 @@ jobs:
         run: |
           # Diagnose access to the sibling gate without locking or modifying
           # the persistent profile, exposing paths, ACL identities or tokens.
-          $gate = "$env:BUTLER_E2E_CODEX_AUTH_JSON.lock"
-          if ($env:BUTLER_E2E_CODEX_AUTH_JSON -and (Test-Path -LiteralPath $gate -PathType Leaf)) {
+          if ($env:BUTLER_E2E_CHATGPT_AUTH_DIR) {
+            $gate = Join-Path $env:BUTLER_E2E_CHATGPT_AUTH_DIR 'chatgpt.json.lock'
             Write-Output "::add-mask::$gate"
-            foreach ($access in @([IO.FileAccess]::Read, [IO.FileAccess]::ReadWrite)) {
-              try {
-                $handle = [IO.File]::Open($gate, [IO.FileMode]::Open, $access,
-                  ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
-                $handle.Dispose()
-                Write-Output "OAuth gate open: access=$access accepted=true"
-              } catch {
-                $cause = $_.Exception
-                while ($cause.InnerException) { $cause = $cause.InnerException }
-                $code = $cause.HResult -band 0xffff
-                Write-Output "OAuth gate open: access=$access accepted=false code=$code"
+            if (Test-Path -LiteralPath $gate -PathType Leaf) {
+              foreach ($access in @([IO.FileAccess]::Read, [IO.FileAccess]::ReadWrite)) {
+                try {
+                  $handle = [IO.File]::Open($gate, [IO.FileMode]::Open, $access,
+                    ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+                  $handle.Dispose()
+                  Write-Output "OAuth gate open: access=$access accepted=true"
+                } catch {
+                  $cause = $_.Exception
+                  while ($cause.InnerException) { $cause = $cause.InnerException }
+                  $code = $cause.HResult -band 0xffff
+                  Write-Output "OAuth gate open: access=$access accepted=false code=$code"
+                }
               }
             }
           }

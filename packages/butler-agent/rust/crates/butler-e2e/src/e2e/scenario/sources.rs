@@ -42,31 +42,28 @@ pub(super) fn live_source(
 }
 
 /// Replay mode: cassette `name` served by the local provider. With
-/// `stub_codex_home`, a subscription cassette gets the placeholder Codex
+/// `_stub_data`, a subscription cassette gets the placeholder Codex
 /// credential there.
 pub(super) async fn replay_source(
     name: &str,
     placeholders: &Placeholders,
-    stub_codex_home: Option<std::path::PathBuf>,
     launch: &mut Launch,
 ) -> Result<SourceSetup, HarnessError> {
-    replay_loaded_cassette(Cassette::load(name)?, placeholders, stub_codex_home, launch).await
+    replay_loaded_cassette(Cassette::load(name)?, placeholders, launch).await
 }
 
 /// Replays an in-memory test stub through the same local provider as a cassette.
 pub(super) async fn stub_source(
     cassette: Cassette,
     placeholders: &Placeholders,
-    stub_codex_home: Option<std::path::PathBuf>,
     launch: &mut Launch,
 ) -> Result<SourceSetup, HarnessError> {
-    replay_loaded_cassette(cassette, placeholders, stub_codex_home, launch).await
+    replay_loaded_cassette(cassette, placeholders, launch).await
 }
 
 async fn replay_loaded_cassette(
     cassette: Cassette,
     placeholders: &Placeholders,
-    stub_codex_home: Option<std::path::PathBuf>,
     launch: &mut Launch,
 ) -> Result<SourceSetup, HarnessError> {
     let choice = ModelChoice {
@@ -79,11 +76,6 @@ async fn replay_loaded_cassette(
         let path = super::super::config::base_path(&provider_name);
         launch.set_env(key, format!("{}{path}", provider.base_url));
     }
-    if provider_name == "openai-subscription"
-        && let Some(codex_home) = stub_codex_home
-    {
-        fixtures::stub_codex_auth(&codex_home)?;
-    }
     Ok((Some(provider), choice, None))
 }
 
@@ -91,7 +83,6 @@ async fn replay_loaded_cassette(
 pub(super) async fn synthetic_source(
     script: super::super::provider::Script,
     model: Option<ModelChoice>,
-    stub_codex_home: Option<std::path::PathBuf>,
     launch: &mut Launch,
 ) -> Result<SourceSetup, HarnessError> {
     let choice = model.unwrap_or_else(|| ModelChoice {
@@ -102,9 +93,6 @@ pub(super) async fn synthetic_source(
     if let Some(key) = super::super::config::base_url_env("openai-subscription") {
         let path = super::super::config::base_path("openai-subscription");
         launch.set_env(key, format!("{}{path}", provider.base_url));
-    }
-    if let Some(codex_home) = stub_codex_home {
-        fixtures::stub_codex_auth(&codex_home)?;
     }
     Ok((Some(provider), choice, None))
 }
@@ -173,11 +161,8 @@ pub(super) fn apply_credential(
     choice: &ModelChoice,
 ) {
     match credential {
-        Credential::CodexProfile(path) => {
-            launch.set_env("BUTLER_CODEX_AUTH_PROFILE", path.display().to_string());
-        }
-        Credential::CodexAuthJson(path) => {
-            launch.set_env("CODEX_AUTH_JSON", path.display().to_string());
+        Credential::ChatGptAuthDir(path) => {
+            launch.set_env("BUTLER_CHATGPT_AUTH_DIR", path.display().to_string());
         }
         Credential::ApiKey { env_var } => {
             if provider == "openai"
@@ -213,40 +198,17 @@ fn now_utc() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
-/// The refresh token of the placeholder login [`route_login_refresh`] gives
-/// a replayed scenario.
-pub const STUB_REFRESH_TOKEN: &str = "e2e-replay-refresh";
-
-/// The agent refreshes its Codex login through the provider:
-/// `BUTLER_CODEX_OAUTH_TOKEN_URL` names `<provider>/oauth/token`, which the
-/// recorder forwards to `auth.openai.com`. A replayed scenario runs with a
-/// refreshable placeholder Butler login (`<sandbox>/codex-profile.json`, not
-/// expiring) instead of the read-only Codex CLI file; a recording uses the
-/// live credential, refreshed in place.
-pub(super) fn route_login_refresh(
+/// An owned fake authority for stub inference, including registration rotation.
+pub(super) async fn stub_authority(
     launch: &mut Launch,
-    provider: &Provider,
-    sandbox: &super::super::sandbox::Sandbox,
-) -> Result<(), HarnessError> {
-    launch.set_env(
-        "BUTLER_CODEX_OAUTH_TOKEN_URL",
-        format!("{}/oauth/token", provider.base_url),
-    );
-    if provider.is_recording() {
-        return Ok(());
+    data: &std::path::Path,
+    enabled: bool,
+) -> Result<Option<super::super::fake_chatgpt::FakeChatGptAuthority>, HarnessError> {
+    if !enabled {
+        return Ok(None);
     }
-    let profile = sandbox.root.join("codex-profile.json");
-    std::fs::write(
-        &profile,
-        serde_json::json!({
-            "provider": "openai-codex",
-            "type": "oauth",
-            "accessToken": "e2e-replay-placeholder",
-            "refreshToken": STUB_REFRESH_TOKEN,
-            "expiresAt": 0,
-        })
-        .to_string(),
-    )?;
-    launch.set_env("BUTLER_CODEX_AUTH_PROFILE", profile.display().to_string());
-    Ok(())
+    let authority = super::super::fake_chatgpt::FakeChatGptAuthority::start().await?;
+    super::super::fixtures::stub_chatgpt_auth(data, &authority)?;
+    launch.set_env("BUTLER_CHATGPT_AUTH_ISSUER", &authority.issuer);
+    Ok(Some(authority))
 }

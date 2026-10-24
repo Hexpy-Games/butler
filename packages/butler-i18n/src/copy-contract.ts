@@ -83,16 +83,12 @@ interface FirstRunCopy {
   noUsable: string;
   back: string;
   signInTitle: (name: string) => string;
+  planNotice: string;
+  signInPlanOff: string;
+  signInPlanOffBody: string;
+  signInAccountMismatch: string;
+  signInDiscoveryOffline: string;
   signInBody: string;
-  signInWaiting: string;
-  signInReopen: string;
-  signInCopyLink: string;
-  linkCopied: string;
-  signInCancelled: string;
-  signInCancelledBody: string;
-  signInFailed: string;
-  signInTimedOut: string;
-  signInTimedOutBody: string;
   keyTitle: (name: string) => string;
   keyLabel: string;
   keyHint: string;
@@ -422,6 +418,41 @@ export interface LogTraceCopy {
 /** Browser copy (`browser.*`): chrome, page band, pointer, picking, library, page dialogs and sign-in settings. */
 export interface AppCopy {
   canon: CanonCopy;
+  chatgptSignIn: {
+    idle: string;
+    pending: string;
+    open: string;
+    copy: string;
+    copied: string;
+    timedOut: string;
+    failed: string;
+    restart: string;
+    complete: string;
+    addHint: string;
+  };
+  chatgptPlan: {
+    continue: string;
+    otherAccount: string;
+    usingPlan: string;
+    manageUsage: string;
+    limitReached: string;
+    limitFallback: string;
+    butlerUsage: string;
+    usageWindow5h: string;
+    usageWindow7d: string;
+    usageWindow30d: string;
+    estimate: string;
+    estimateHint: string;
+    resetsAt: (time: string) => string;
+    planOff: string;
+    turnOn: string;
+    signInAgainHint: string;
+    notInPlanHint: string;
+    legacyToast: string;
+    signOut: string;
+    signedOut: string;
+    revokeUnconfirmed: string;
+  };
   shell: { footerNav: string; update: { downloading: string; working: string; ready: string; failed: string; restart: string } };
   taskGraph: TaskGraphCopy;
   lifecycle: LifecycleCopy;
@@ -850,11 +881,6 @@ export interface AppCopy {
     apiUsage: string;
     unconfirmed: string;
     unknown: string;
-    authNotApplicable: string;
-    authRequired: string;
-    authMismatch: string;
-    authFailure: string;
-    executableUnavailable: string;
     quotaTimeout: string;
     quotaMalformed: string;
     quotaFailure: string;
@@ -1012,7 +1038,7 @@ export interface AppCopy {
     queuedPosition: (position: number, total: number) => string;
     contextDetails: string;
     usage: {
-      codexProvider: string;
+      chatgptProvider: string;
       thisChat: string;
       conversationPart: string;
       delegatedPart: string;
@@ -1556,7 +1582,7 @@ export interface AppCopy {
       searchProviderBrave: string;
       searchProviderTavily: string;
       searchProviderOpenAi: string;
-      searchProviderCodex: string;
+      searchProviderChatGpt: string;
       searchProviderDisabled: string;
       searchReaderBrowser: string;
       searchReaderLightweight: string;
@@ -1909,17 +1935,8 @@ export interface AppCopy {
       credential: string;
       credentialLabel: string;
       newCredential: string;
-      codexOauth: string;
+      chatgptOauth: string;
       apiKeyAuth: string;
-      oauthCheck: string;
-      oauthComplete: string;
-      oauthCopy: string;
-      oauthFailed: string;
-      oauthLink: string;
-      oauthOpen: string;
-      oauthPending: string;
-      oauthReady: string;
-      oauthRetry: string;
       save: string;
       saveAdd: string;
       saveEdit: string;

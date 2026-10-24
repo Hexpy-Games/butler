@@ -2,27 +2,6 @@
 
 use super::*;
 
-pub(crate) fn codex_usage_url_follows_the_configured_codex_base() {
-    let url = |base: Option<&str>| codex_usage_url(base).map(|url| url.to_string());
-    assert_eq!(
-        url(None).as_deref(),
-        Some("https://chatgpt.com/backend-api/wham/usage")
-    );
-    assert_eq!(
-        url(Some("https://chatgpt.com/backend-api/")).as_deref(),
-        Some("https://chatgpt.com/backend-api/wham/usage")
-    );
-    assert_eq!(
-        url(Some("https://chatgpt.com/backend-api/codex/responses")).as_deref(),
-        Some("https://chatgpt.com/backend-api/wham/usage")
-    );
-    assert_eq!(
-        url(Some("http://127.0.0.1:4321")).as_deref(),
-        Some("http://127.0.0.1:4321/wham/usage")
-    );
-    assert_eq!(url(Some("file:///tmp/x")), None);
-}
-
 pub(crate) fn zai_quota_url_comes_only_from_an_official_coding_plan_base() {
     let url = |base: &str, loopback: bool| zai_quota_url(base, loopback).map(|url| url.to_string());
     assert_eq!(
@@ -64,7 +43,10 @@ pub(crate) fn zai_quota_url_admits_loopback_only_from_the_environment() {
 }
 
 pub(crate) fn providers_without_a_quota_surface_are_not_offered() {
-    assert_eq!(provider_quota_support("openai"), QuotaSupport::Polled);
+    assert_eq!(
+        provider_quota_support("openai"),
+        QuotaSupport::NotOffered(QuotaBilling::Api)
+    );
     assert_eq!(provider_quota_support("zai"), QuotaSupport::Polled);
     assert_eq!(
         provider_quota_support("zai-api"),
@@ -85,7 +67,6 @@ pub(crate) fn providers_without_a_quota_surface_are_not_offered() {
 // test-category: security
 #[test]
 fn quota_credentials_go_only_to_official_endpoints() {
-    codex_usage_url_follows_the_configured_codex_base();
     zai_quota_url_comes_only_from_an_official_coding_plan_base();
     zai_quota_url_admits_loopback_only_from_the_environment();
     providers_without_a_quota_surface_are_not_offered();

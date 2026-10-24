@@ -1,3 +1,11 @@
+const REQUEST_ID_HEADERS: &[&str] = &[
+    "openai-request-id",
+    "x-oai-request-id",
+    "x-request-id",
+    "request-id",
+    "x-zai-request-id",
+];
+pub(super) mod plan;
 use butler_core::public_text::fixed_regex;
 use std::sync::LazyLock;
 
@@ -63,6 +71,21 @@ pub(super) fn empty(provider: &str, api: &str) -> ProviderRequestError {
     )
 }
 
+/// A ChatGPT-plan request held back because the plan limit still applies; it
+/// fails the way the provider's limit response does, without being sent.
+pub(super) fn plan_limit_paused(
+    provider: &str,
+    api: &str,
+    resets_at_ms: Option<i64>,
+) -> ProviderRequestError {
+    let code = "provider_quota_exhausted";
+    let mut failure = error(code, http_message(code), provider, api, false);
+    failure.retry_at = resets_at_ms
+        .and_then(chrono::DateTime::from_timestamp_millis)
+        .map(|at| at.to_rfc3339());
+    failure
+}
+
 pub(super) fn http(
     provider: &str,
     api: &str,
@@ -81,7 +104,10 @@ pub(super) fn http(
     );
     let tools_refused = matches!(status, 400 | 422)
         && refuses_tools(string(identity, &["param"]).as_deref(), detail.as_deref());
-    let normalized = if tools_refused {
+    let plan = plan::classify(api, status, body);
+    let normalized = if let Some((code, _)) = plan {
+        Some(code)
+    } else if tools_refused {
         Some("provider_tools_unsupported")
     } else {
         normalized_code(
@@ -102,7 +128,10 @@ pub(super) fn http(
             "provider_api_error"
         }
     });
-    let retryable = normalized.is_none() && !context && (status == 429 || status >= 500);
+    let retryable = plan.map_or(
+        normalized.is_none() && !context && (status == 429 || status >= 500),
+        |(_, retryable)| retryable,
+    );
     let message = http_message(code);
     let mut failure = error(code, message, provider, api, retryable);
     failure.status_code = Some(status);
@@ -114,8 +143,7 @@ pub(super) fn http(
         .map(Value::Object)
         .and_then(|value| sanitize(&value, 0))
         .map(Box::new);
-    failure.provider_request_id =
-        header(headers, &["x-request-id", "request-id", "x-zai-request-id"]);
+    failure.provider_request_id = header(headers, REQUEST_ID_HEADERS);
     failure.retry_at = headers.and_then(retry::at);
     let retry_after = header(headers, &["retry-after"]);
     let reset = header(headers, &["ratelimit-reset", "x-ratelimit-reset"]);
@@ -172,6 +200,7 @@ fn error(
     retryable: bool,
 ) -> ProviderRequestError {
     ProviderRequestError {
+        auth_type: None,
         code: code.into(),
         message: message.into(),
         provider: provider.into(),
@@ -258,9 +287,10 @@ fn normalized_code(
             .any(|term| message.contains(term)))
     {
         Some("provider_model_not_found")
-    } else if contains(
+    } else if quota::matches(
         &identity,
         &[
+            "usage_limit_exceeded",
             "insufficient_quota",
             "quota_exceeded",
             "quota_exhausted",
@@ -455,3 +485,5 @@ fn sanitize(value: &Value, depth: usize) -> Option<Value> {
     }
 }
 mod retry;
+
+mod quota;

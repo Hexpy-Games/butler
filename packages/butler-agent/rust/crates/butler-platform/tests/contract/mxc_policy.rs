@@ -288,7 +288,16 @@ fn environment_redirects_profiles_without_importing_host_credentials() {
     assert_eq!(env["PATH"], r"c:\scratch\bin;c:\installs\node");
     assert_eq!(env["CARGO_HOME"], host["CARGO_HOME"]);
     assert_eq!(env["BUTLER_COMMAND_CWD"], r"l:\");
+    host.insert("BUTLER_DATA".into(), r"C:\data".into());
+    host.insert("BUTLER_CHATGPT_AUTH_DIR".into(), r"D:\private-auth".into());
     let roots = environment::credential_roots(&host).unwrap();
+    assert!(roots.contains(&path(r"D:\private-auth")));
+    host.insert("BUTLER_CHATGPT_AUTH_DIR".into(), r"private-auth".into());
+    assert!(
+        environment::credential_roots(&host)
+            .unwrap()
+            .contains(&path(r"C:\data\private-auth"))
+    );
     assert!(roots.contains(&path(r"C:\Users\person\AppData\Roaming\Microsoft\Protect")));
     let settings = BTreeMap::from([
         ("user.name".into(), "A \"quoted\" name".into()),

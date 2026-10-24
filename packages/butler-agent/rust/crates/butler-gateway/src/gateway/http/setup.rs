@@ -77,6 +77,16 @@ pub(super) async fn route(
             let input: AppOauthStartInput = optional_body(request).await?;
             envelope(StatusCode::OK, setup.start_oauth(input).await?)
         }
+        (&Method::GET, "/setup/chatgpt-account") => {
+            envelope(StatusCode::OK, setup.chatgpt_account().await?)
+        }
+        (&Method::POST, "/setup/chatgpt-account/notice") => {
+            let input = body(request).await?;
+            envelope(StatusCode::OK, setup.chatgpt_notice(input).await?)
+        }
+        (&Method::POST, "/setup/chatgpt-account/sign-out") => {
+            envelope(StatusCode::OK, setup.chatgpt_sign_out().await?)
+        }
         (_, path) if path.starts_with("/credentials/") => {
             credential_route(&setup, request, uri).await
         }

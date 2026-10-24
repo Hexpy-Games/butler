@@ -6,7 +6,7 @@ pub(super) fn assert_intent_carried(requests: &[Value]) {
     let request = requests
         .iter()
         .find(|request| {
-            matching::key("/codex/responses", request, &Placeholders::default())
+            matching::key("/v1/responses", request, &Placeholders::default())
                 .user_request
                 .starts_with("role: steward")
         })
@@ -23,7 +23,10 @@ pub(super) fn assert_intent_carried(requests: &[Value]) {
         assert!(input.contains(expected), "missing {expected}: {input}");
     }
     assert!(!input.contains("as unconfirmed"), "{input}");
-    let packet = matching::key("/codex/responses", request, &Placeholders::default()).user_request;
+    // The request block is the delivered packet. Other prompt sections may
+    // quote the same stored message, so the carried Conception is counted
+    // where the packet carries it.
+    let packet = matching::key("/v1/responses", request, &Placeholders::default()).user_request;
     assert!(packet.starts_with("role: steward"), "{packet}");
     assert!(packet.contains(super::stub::REVISED_CHECK), "{packet}");
     assert_eq!(
@@ -48,7 +51,7 @@ pub(crate) fn assert_packet_stated_once(requests: &[Value]) {
     assert_child_packets_stated_once(requests);
     assert_eq!(goal_count, 1, "first child whole-input Goal count");
     for body in requests {
-        let key = matching::key("/codex/responses", body, &Placeholders::default());
+        let key = matching::key("/v1/responses", body, &Placeholders::default());
         if key.user_request == super::stub::OWNER {
             let input = body["input"].to_string();
             let collapsed = input.split_whitespace().collect::<Vec<_>>().join(" ");

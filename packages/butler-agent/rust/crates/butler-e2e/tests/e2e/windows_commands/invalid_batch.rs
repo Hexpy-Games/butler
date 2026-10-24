@@ -26,7 +26,7 @@ async fn invalid_path_batch_preserves_good_file_and_turn() -> Result<(), Harness
         let s = setup
             .stub_cassette(observation_stub::cassette()?)
             .access(access)
-            .env("BUTLER_CODEX_BASE_URL", url)
+            .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
             .start()
             .await?;
         let accepted = s.gw.say("general", provider::PROMPT).await?;

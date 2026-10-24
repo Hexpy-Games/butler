@@ -10,6 +10,7 @@
 //! ports remain explicit; domains do not depend on this composition module.
 
 pub(crate) mod build_info;
+mod chatgpt_sign_in;
 mod error;
 mod installation;
 mod mcp;

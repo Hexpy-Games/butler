@@ -107,7 +107,7 @@ async fn race(stop_first: bool, entry: &'static str) -> Result<(), HarnessError>
     let (url, script, server) = stub::start(false).await?;
     let setup = Setup::new("TURN-FENCED-CANCEL")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", &url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let (mut barriers, address) =
         Barriers::start(setup.sandbox.data.join("agent-runtime/btcc.sqlite"), entry).await;
     let s = setup
@@ -194,7 +194,7 @@ async fn race(stop_first: bool, entry: &'static str) -> Result<(), HarnessError>
             })
             .collect();
         let parent_cancelled = script.requests.lock().unwrap().iter().any(|r| {
-            let text = butler_e2e::e2e::matching::key("/codex/responses", r, &Default::default())
+            let text = butler_e2e::e2e::matching::key("/v1/responses", r, &Default::default())
                 .user_request;
             text.contains("Delegated result") && text.contains("status: cancelled")
         });
@@ -225,9 +225,8 @@ async fn race(stop_first: bool, entry: &'static str) -> Result<(), HarnessError>
         let results = requests
             .iter()
             .filter(|r| {
-                let text =
-                    butler_e2e::e2e::matching::key("/codex/responses", r, &Default::default())
-                        .user_request;
+                let text = butler_e2e::e2e::matching::key("/v1/responses", r, &Default::default())
+                    .user_request;
                 text.contains("Delegated result") && text.contains("status: cancelled")
             })
             .count();

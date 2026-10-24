@@ -1,15 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useChatGptAccount } from "../chatgpt/useChatGptAccount";
+import { useSignIn } from "../first-run/useSignIn";
+import { useEffect, useMemo, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import { modelDisplayName } from "@/app/utils.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import {
-  getOpenAIOAuthLoginStatus,
   registerHostedModel,
-  restartOpenAIOAuthLogin,
-  startOpenAIOAuthLogin,
-  type OpenAIOAuthLoginResult,
 } from "./modelManagementApi";
 import {
   NEW_CREDENTIAL_ID,
@@ -69,12 +67,16 @@ export function useHostedModelForm({
   const [apiKey, setApiKey] = useState("");
   const [credentialLabel, setCredentialLabel] = useState("");
   const [busy, setBusy] = useState(false);
-  const [oauthBusy, setOauthBusy] = useState(false);
-  const [oauthRegistering, setOauthRegistering] = useState(false);
-  const [oauthLogin, setOauthLogin] = useState<OpenAIOAuthLoginResult | null>(null);
-  const oauthAutoStartKeyRef = useRef<string | null>(null);
-  const oauthPollingRef = useRef(false);
-  const oauthRegisteringRef = useRef(false);
+  const chatgpt = useChatGptAccount();
+  const signIn = useSignIn({ onSignedIn: () => { void chatgpt.refresh(); } });
+  const requestedKind = useSettingsUIStore(state => state.chatgptSignInKind);
+  useEffect(() => {
+    if (!requestedKind) return;
+    useSettingsUIStore.setState({ chatgptSignInKind: undefined });
+    setAuthMethod("chatgpt_oauth");
+    void signIn.start({ kind: requestedKind });
+  }, [requestedKind]);
+  const oauthReady = signIn.phase === "idle" && (chatgpt.account ? chatgpt.account.status === "signed_in" : signIn.view?.status === "completed" || signIn.view?.status === "profile_exists");
 
   useEffect(() => {
     setModelRef((current) =>
@@ -97,72 +99,15 @@ export function useHostedModelForm({
   }, [defaultApiBaseUrl, editingModel?.api_base_url, providerId]);
 
   const selectedModel = providerModelOptions.find((model) => model.model_ref === modelRef);
-  const oauthSaveBlocked = authMethod === "codex_oauth" &&
-    (oauthBusy || oauthRegistering);
-  const canSave = Boolean(selectedModel) &&
-    authMethods.includes(authMethod) &&
-    !oauthSaveBlocked &&
-    (authMethod !== "api_key" ||
-      credentialId !== NEW_CREDENTIAL_ID ||
-      apiKey.trim().length > 0);
-  const oauthReady = oauthLogin?.status === "completed" ||
-    oauthLogin?.status === "profile_exists";
-  const oauthSessionActive = oauthReady ||
-    oauthLogin?.status === "pending" ||
-    oauthLogin?.status === "starting";
-
-  useEffect(() => {
-    if (authMethod !== "codex_oauth" || editingModel) {
-      oauthAutoStartKeyRef.current = null;
-      return;
-    }
-    if (oauthBusy || oauthSessionActive) return;
-    const key = `${providerId}:${modelRef || "default"}`;
-    if (oauthAutoStartKeyRef.current === key) return;
-    oauthAutoStartKeyRef.current = key;
-    void startOAuthSession();
-  }, [authMethod, editingModel, modelRef, oauthBusy, oauthSessionActive, providerId]);
-
-  useEffect(() => {
-    if (
-      authMethod !== "codex_oauth" ||
-      (oauthLogin?.status !== "pending" && oauthLogin?.status !== "starting") ||
-      oauthBusy ||
-      oauthRegistering
-    ) return;
-    let cancelled = false;
-    const poll = () => {
-      if (oauthPollingRef.current || oauthRegisteringRef.current) return;
-      oauthPollingRef.current = true;
-      void checkOAuthCompletion({ silent: true, cancelled: () => cancelled })
-        .finally(() => {
-          oauthPollingRef.current = false;
-        });
-    };
-    const timer = window.setInterval(poll, 1000);
-    poll();
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [authMethod, oauthBusy, oauthLogin?.status, oauthRegistering]);
-
+  const canSave = Boolean(selectedModel) && authMethods.includes(authMethod)
+    && (authMethod === "chatgpt_oauth" ? oauthReady : credentialId !== NEW_CREDENTIAL_ID || apiKey.trim().length > 0);
   async function save() {
     if (
       !selectedModel ||
-      !canSave ||
-      oauthSaveBlocked ||
-      oauthRegisteringRef.current
+      !canSave
     ) return;
     setBusy(true);
     try {
-      if (authMethod === "codex_oauth" && !oauthReady) {
-        const login = await startOAuthSession();
-        if (login.status === "completed" || login.status === "profile_exists") {
-          await registerCurrentModel();
-        }
-        return;
-      }
       await registerCurrentModel();
     } catch (error) {
       notifyError(error, copy.errors.save, { id: "hosted-model-save" });
@@ -195,87 +140,21 @@ export function useHostedModelForm({
     back();
   }
 
-  async function handleOAuthCheck() {
-    await withOAuthBusy(async () => {
-      await checkOAuthCompletion();
-    });
-  }
-
-  async function handleOAuthRestart() {
-    await startOAuthSession(true);
-  }
-
-  async function withOAuthBusy(action: () => Promise<void>) {
-    setOauthBusy(true);
-    try {
-      await action();
-    } catch (error) {
-      notifyError(error, copy.errors.oauthLogin, { id: "hosted-model-oauth" });
-    } finally {
-      setOauthBusy(false);
-    }
-  }
-
-  async function checkOAuthCompletion(input?: {
-    cancelled?: () => boolean;
-    silent?: boolean;
-  }) {
-    let status: OpenAIOAuthLoginResult;
-    try {
-      status = await getOpenAIOAuthLoginStatus();
-    } catch (error) {
-      if (!input?.silent) {
-        notifyError(error, copy.errors.oauthLogin, { id: "hosted-model-oauth" });
-      }
-      return;
-    }
-    if (input?.cancelled?.()) return;
-    setOauthLogin(status);
-    if (
-      (status.status === "completed" || status.status === "profile_exists") &&
-      !oauthRegisteringRef.current
-    ) {
-      oauthRegisteringRef.current = true;
-      setOauthRegistering(true);
-      try {
-        await registerCurrentModel();
-      } catch (error) {
-        oauthRegisteringRef.current = false;
-        setOauthRegistering(false);
-        notifyError(error, copy.errors.save, { id: "hosted-model-save" });
-      }
-    }
-  }
-
-  async function startOAuthSession(force = false) {
-    let result: OpenAIOAuthLoginResult | null = null;
-    await withOAuthBusy(async () => {
-      result = force
-        ? await restartOpenAIOAuthLogin()
-        : await startOpenAIOAuthLogin();
-      setOauthLogin(result);
-    });
-    if (!result) {
-      result = { status: "failed", error: copy.errors.oauthLogin };
-      setOauthLogin(result);
-    }
-    return result;
-  }
-
   return {
     apiKey,
     apiBaseUrl,
     authMethod,
     authMethods,
-    busy: busy || oauthRegistering,
+    busy,
     canSave,
     copy,
     credentialId,
     credentialLabel,
     modelCatalog,
     modelRef,
-    oauthBusy,
-    oauthLogin,
+    signIn,
+    chatgpt,
+    oauthReady,
     providerId,
     providerModelOptions,
     providers,
@@ -287,8 +166,7 @@ export function useHostedModelForm({
     setCredentialLabel,
     setModelRef,
     setProviderId,
-    handleOAuthCheck,
-    handleOAuthRestart,
+
     save,
   };
 }

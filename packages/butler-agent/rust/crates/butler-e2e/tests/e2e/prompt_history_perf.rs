@@ -8,7 +8,7 @@ async fn perf_history_assembly_and_idle_writes() -> Result<(), HarnessError> {
     let (url, stub, server) = provider::start(false).await?;
     let setup = Setup::new("PROMPT-history")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1")
         .env("BUTLER_STARTUP_TRACE", "1");
     let mut s = setup.start().await?;

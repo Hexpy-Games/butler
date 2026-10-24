@@ -122,15 +122,10 @@ pub(in crate::models::provider) fn identity(
         .map_err(|_| invariant("stable_provider_prefix_serializer_order_invalid"))?;
     let (provider_id, auth_mode, serializer) = match config.auth.mode() {
         ProviderAuthMode::ApiKey => ("openai", "api_key", "butler.openai-responses-final-json.v1"),
-        ProviderAuthMode::CodexSubscription => (
-            "openai-codex",
-            "codex_subscription",
-            "butler.openai-codex-final-json.v1",
-        ),
-        ProviderAuthMode::CodexOauth => (
-            "openai-codex",
-            "codex_oauth",
-            "butler.openai-codex-final-json.v1",
+        ProviderAuthMode::ChatGptPlan => (
+            "openai-chatgpt",
+            "chatgpt_plan",
+            "butler.openai-chatgpt-plan-final-json.v1",
         ),
         ProviderAuthMode::None => {
             return Err(invariant("stable_provider_prefix_contract_invalid"));
@@ -173,8 +168,11 @@ pub(in crate::models::provider) fn identity(
         "serializedStablePrefixBytes".into(),
         stable_bytes.len().into(),
     );
+    super::super::chatgpt_plan::bind_identity(&mut identity, config);
     let identity = Value::Object(identity);
-    if let Some(previous) = previous {
+    if let Some(previous) =
+        previous.filter(|p| super::super::chatgpt_plan::same_prefix(p, &identity, config))
+    {
         let old = butler_core::json::stringify(previous).ok();
         let current = butler_core::json::stringify(&identity).ok();
         if old != current {

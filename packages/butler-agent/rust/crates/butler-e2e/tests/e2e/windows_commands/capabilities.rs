@@ -268,7 +268,7 @@ async fn setup(
     let s = setup
         .stub_cassette(super::observation_stub::cassette()?)
         .access(access)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         // Match the installed App, not the runner's PowerShell console and
         // its potentially large third-party module discovery path.
         .env("PSModulePath", "")

@@ -11,12 +11,15 @@ pub(super) async fn fallback(
     turn_id: &str,
     round_id: &str,
     candidate: u32,
-    model_ref: &str,
+    target: (&str, (&str, Option<&str>)),
 ) {
+    let (model_ref, failure) = target;
     let summary = "대체 모델 경로로 계속 진행합니다.";
     let mut event = RuntimeTurnEventInput::new("assistant.public_note");
     event.payload = json!({
         "note": summary,
+        "failureCode": failure.0,
+        "authType": failure.1,
         "btccState": state_text(state),
         "decisionTitle": "대체 모델 경로 선택",
         "decisionSummary": summary,

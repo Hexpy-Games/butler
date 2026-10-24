@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-luna",
       "effort": "max",
       "user_request": "Create approved.txt in your workspace containing exactly: approved-by-user",
@@ -74,7 +74,7 @@
       },
       {
         "delay_ms": 351,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0db81c3b825b770a016abb0e03df5487d08823fc118914d116\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_DUW4LS7iv1bDq6z3bkpAVZlm\",\"name\":\"record_work_review\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0db81c3b825b770a016abb0e03df5487d08823fc118914d116\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_DUW4LS7iv1bDq6z3bkpAVZlm\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 19,
@@ -314,7 +314,7 @@
       },
       {
         "delay_ms": 22,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0db81c3b825b770a016abb0e03df5487d08823fc118914d116\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"completion\\\",\\\"verdict\\\":\\\"accept\\\",\\\"summary\\\":\\\"The requested file was created in the workspace, read back, and verified to contain exactly approved-by-user. No work remains.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create approved.txt with the exact requested contents\\\",\\\"status\\\":\\\"done\\\"}]}\",\"call_id\":\"call_DUW4LS7iv1bDq6z3bkpAVZlm\",\"name\":\"record_work_review\"},\"output_index\":0,\"sequence_number\":62}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0db81c3b825b770a016abb0e03df5487d08823fc118914d116\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"subject\\\":\\\"completion\\\",\\\"verdict\\\":\\\"accept\\\",\\\"summary\\\":\\\"The requested file was created in the workspace, read back, and verified to contain exactly approved-by-user. No work remains.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create approved.txt with the exact requested contents\\\",\\\"status\\\":\\\"done\\\"}]}\",\"call_id\":\"call_DUW4LS7iv1bDq6z3bkpAVZlm\",\"name\":\"record_work_review\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":62}\n\n"
       },
       {
         "delay_ms": 32,

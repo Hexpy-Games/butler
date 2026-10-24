@@ -108,7 +108,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
-          CODEX_AUTH_SECRET: ${{ secrets.BUTLER_E2E_CODEX_AUTH_JSON }}
           API_KEY_SECRET: ${{ secrets.BUTLER_E2E_API_KEY }}
           BUTLER_E2E_PROVIDER: ${{ vars.BUTLER_E2E_LIVE_PROVIDER }}
           BUTLER_E2E_MODEL: ${{ vars.BUTLER_E2E_LIVE_MODEL }}
@@ -118,7 +117,10 @@ jobs:
           if (!$env:BUTLER_E2E_PROVIDER) { throw 'Set the live-e2e variable BUTLER_E2E_LIVE_PROVIDER' }
           if (!$env:BUTLER_E2E_MODEL) { throw 'Set the live-e2e variable BUTLER_E2E_LIVE_MODEL' }
           $subscription = $env:BUTLER_E2E_PROVIDER -eq 'openai-subscription'
-          if ($subscription -and !$env:CODEX_AUTH_SECRET) { throw 'Set the live-e2e secret BUTLER_E2E_CODEX_AUTH_JSON' }
+          $authDir = Join-Path $HOME '.butler-e2e-auth/auth'
+          if ($subscription -and !(Test-Path -LiteralPath (Join-Path $authDir 'chatgpt.json') -PathType Leaf)) {
+            throw 'openai-subscription needs a one-time setup: butler auth login --data "$HOME\.butler-e2e-auth"'
+          }
           if (!$subscription -and !$env:API_KEY_SECRET) { throw 'Set the live-e2e secret BUTLER_E2E_API_KEY' }
           Write-Output "Live provider: $env:BUTLER_E2E_PROVIDER, model: $env:BUTLER_E2E_MODEL"
           $root = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
@@ -140,9 +142,7 @@ jobs:
             $env:BUTLER_E2E_LIVE_MAX_TURNS = '1'
             $env:BUTLER_E2E_RELEASED_VERSION = $env:RELEASE_TAG.Substring(1)
             if ($subscription) {
-              $credential = Join-Path $root 'codex-auth.json'
-              [System.IO.File]::WriteAllText($credential, $env:CODEX_AUTH_SECRET)
-              $env:BUTLER_E2E_CODEX_AUTH_JSON = $credential
+              $env:BUTLER_E2E_CHATGPT_AUTH_DIR = $authDir
             } else {
               $env:BUTLER_E2E_API_KEY_ENV = 'API_KEY_SECRET'
             }

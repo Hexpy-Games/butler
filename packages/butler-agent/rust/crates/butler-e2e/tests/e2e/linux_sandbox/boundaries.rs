@@ -155,7 +155,7 @@ async fn credential_roots_and_data_auth_stay_denied() -> Result<(), HarnessError
         ("HOME".into(), home.display().to_string()),
         ("BUTLER_DATA".into(), data.display().to_string()),
         (
-            "BUTLER_CODEX_AUTH_PROFILE".into(),
+            "BUTLER_CHATGPT_AUTH_DIR".into(),
             home.join("external-profile/provider.json")
                 .display()
                 .to_string(),

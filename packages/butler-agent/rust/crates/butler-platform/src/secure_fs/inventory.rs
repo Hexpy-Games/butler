@@ -85,8 +85,7 @@ impl SecretInventory {
                 "HOME",
                 "CODEX_HOME",
                 "CODEX_AUTH_JSON",
-                "BUTLER_CODEX_AUTH_PROFILE",
-                "BUTLER_OPENAI_AUTH_PROFILE",
+                "BUTLER_CHATGPT_AUTH_DIR",
             ]
             .into_iter()
             .filter_map(|key| std::env::var(key).ok().map(|value| (key.to_owned(), value)))

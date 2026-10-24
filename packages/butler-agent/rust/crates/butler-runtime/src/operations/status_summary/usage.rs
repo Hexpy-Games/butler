@@ -3,6 +3,7 @@
 mod availability;
 mod buckets;
 mod log;
+mod plan;
 mod row;
 mod web;
 
@@ -31,6 +32,8 @@ pub struct UsageMonitorSources<'a> {
     pub quota: &'a dyn Fn(&str) -> crate::operations::ProviderQuotaView,
     /// Providers that reported quota, shown even without usage in the window.
     pub quota_providers: Vec<String>,
+    /// Active signed-in ChatGPT account, independent of selected usage scope.
+    pub chatgpt_account: Option<String>,
 }
 
 /// The usage monitor with what it keeps between reads: the parsed prompt-usage
@@ -174,12 +177,14 @@ impl UsageMonitor {
         };
         drop(projection_guard);
         let cost = buckets.cost_value();
-        let (mut model_value, provider_buckets) = buckets.views();
+        let (mut model_value, mut provider_buckets) = buckets.views();
         if let Some(by_role) = by_role {
             model_value["byRole"] = by_role;
         }
+        plan::include_provider(&mut provider_buckets, sources);
         let web_search = availability::read_web_search(data_root, since_ts, now, self);
-        let providers = provider_summary(provider_buckets, sources);
+        let mut providers = provider_summary(provider_buckets, sources);
+        plan::attach(&mut providers, &self.log.lock(), sources, now);
         let tool_session = scope
             .as_deref()
             .map(|scope| scope.strip_prefix("btcc-guided:").unwrap_or(scope));

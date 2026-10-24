@@ -149,7 +149,7 @@ async fn skill_222_catalog_load_resource_and_guard() -> Result<(), HarnessError>
     let skill_requests: Vec<_> = repeated
         .iter()
         .filter(|request| {
-            butler_e2e::e2e::matching::key("/codex/responses", request, &Default::default())
+            butler_e2e::e2e::matching::key("/v1/responses", request, &Default::default())
                 .user_request
                 == PROMPT
         })

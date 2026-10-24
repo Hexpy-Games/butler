@@ -2,6 +2,7 @@
 use super::*;
 use butler_e2e::e2e::{
     agent::free_port,
+    fake_chatgpt::FakeChatGptAuthority,
     scenario::{Fixture, Setup},
 };
 use std::process::Stdio;
@@ -20,32 +21,35 @@ async fn log_http_native_oauth_cli_exit_bounds_stalled_close() -> Result<(), Har
 }
 
 async fn oauth_cli(close_delay: Option<&str>) -> Result<(), HarnessError> {
-    let token = FakeServer::oauth_token().await?;
+    let token = FakeChatGptAuthority::start().await?;
     let port = free_port()?;
     let s = Setup::new("LOG-HTTP-CLI")?
         .fixture(Fixture::Empty)
         .without_credential()
-        .env("BUTLER_CODEX_OAUTH_PORT", port.to_string())
-        .env("BUTLER_CODEX_OAUTH_NO_BROWSER", "1")
-        .env("BUTLER_CODEX_BASE_URL", &token.base_url)
+        .env("BUTLER_CHATGPT_OAUTH_PORT", port.to_string())
+        .env("BUTLER_OAUTH_NO_BROWSER", "1")
+        .env("BUTLER_CHATGPT_AUTH_ISSUER", &token.issuer)
         .env(
-            "BUTLER_CODEX_OAUTH_TOKEN_URL",
-            format!("{}/oauth/token", token.base_url),
+            "BUTLER_CHATGPT_API_BASE_URL",
+            format!("{}/v1", token.issuer),
         )
         .start()
         .await?;
     logging(&s, "full").await?;
     help_without_logging(&s)?;
-    run_cli(&s, port, close_delay).await?;
-    let rows = http_calls(&s, &format!("{}/oauth/token", token.base_url)).await?;
+    run_cli(&s, &token, close_delay).await?;
+    let rows = http_calls(&s, &format!("{}/api/accounts/oauth/token", token.issuer)).await?;
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0]["attrs"]["purpose"], "oauth");
     assert_eq!(rows[0]["attrs"]["status"], 200);
-    assert_eq!(
-        rows[0]["content"]["request"]["grant_type"],
-        "authorization_code"
+    assert!(rows[0].get("content").is_none_or(
+        |body| body.is_null() || body.as_object().is_some_and(serde_json::Map::is_empty)
+    ));
+    assert!(
+        rows[0]
+            .get("body_ref")
+            .is_none_or(serde_json::Value::is_null)
     );
-    assert_eq!(rows[0]["content"]["request"]["code"], "[REDACTED]");
     assert!(!serde_json::to_string(&rows)?.contains("private-native-cli-authorization-code"));
     assert!(
         token
@@ -58,7 +62,7 @@ async fn oauth_cli(close_delay: Option<&str>) -> Result<(), HarnessError> {
 
 async fn run_cli(
     s: &butler_e2e::e2e::scenario::Scenario,
-    port: u16,
+    authority: &FakeChatGptAuthority,
     close_delay: Option<&str>,
 ) -> Result<(), HarnessError> {
     let stderr = std::fs::File::create(s.agent.launch.logs.join("oauth-cli.log"))?;
@@ -67,7 +71,7 @@ async fn run_cli(
         command.env("BUTLER_E2E_LOG_CLOSE_DELAY_MS", delay);
     }
     let mut child = command
-        .arg("oauth-login")
+        .args(["auth", "login", "--data", s.sandbox.data.to_str().unwrap()])
         .stdout(Stdio::piped())
         .stderr(stderr)
         .kill_on_drop(true)
@@ -77,17 +81,10 @@ async fn run_cli(
     tokio::time::timeout(Duration::from_secs(5), stdout.read_line(&mut authorize))
         .await
         .map_err(std::io::Error::other)??;
-    let authorize = url::Url::parse(authorize.trim()).unwrap();
-    let state = authorize
-        .query_pairs()
-        .find(|(key, _)| key == "state")
-        .unwrap()
-        .1
-        .into_owned();
     let exit_start = std::time::Instant::now();
-    let code = "private-native-cli-authorization-code";
-    let (status, _) =
-        super::super::setup_oauth::callback(port, &format!("code={code}&state={state}")).await?;
+    let (status, _) = authority
+        .browser(&json!({"auth_url":authorize.trim()}))
+        .await?;
     assert_eq!(status, 200);
     assert!(
         tokio::time::timeout(Duration::from_secs(5), child.wait())

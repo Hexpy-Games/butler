@@ -7,7 +7,7 @@ async fn external_working_file_stays_readable_without_a_drawer_item() -> Result<
     let (url, script, server) = stub::start().await?;
     let setup = Setup::new("DELIVERABLE-EXTERNAL")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", &url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let outside = setup.sandbox.home.join("outside.md");
     *script.steps.lock().unwrap() =
         [write(outside.to_str().unwrap(), "Working bytes"), done()].into();
@@ -47,7 +47,7 @@ async fn delivery_accepts_backslashes_and_raw_absolute_workspace_paths() -> Resu
     let (url, script, server) = stub::start().await?;
     let setup = Setup::new("DELIVERABLE-PATHS")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", &url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let absolute = setup.sandbox.data.join("report.md");
     *script.steps.lock().unwrap() = [
         write("nested/table.csv", "a,b"),

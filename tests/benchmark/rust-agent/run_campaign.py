@@ -23,6 +23,7 @@ import time
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from chatgpt_auth import chatgpt_auth_input
 from app_protocol import AppClient, AppProtocolError
 from correctness import assess_case, workspace_hashes
 from distribution_evidence import BUN_PATH, bun_executable_evidence, inspect_distribution
@@ -78,15 +79,15 @@ def _private_input_path(value: Any, label: str) -> Path:
 
 
 def _provider_input_mode(contract: dict[str, Any]) -> tuple[str, Path]:
-    has_oauth_file = "provider_codex_oauth_file" in contract
+    has_auth_dir = "provider_chatgpt_auth_dir" in contract
     has_credential_file = "provider_credential_file" in contract
     env_presence = ["provider_env_file" in contract.get(arm, {})
                     for arm in ("legacy", "candidate")]
-    if has_oauth_file:
+    if has_auth_dir:
         if has_credential_file or any(env_presence) or "provider_credential_id" in contract:
-            raise ValueError("Codex OAuth input cannot be combined with another provider input")
-        return "codex_oauth", _private_input_path(
-            contract["provider_codex_oauth_file"], "Codex OAuth profile")
+            raise ValueError("ChatGPT auth input cannot be combined with another provider input")
+        return "chatgpt_oauth", _private_input_path(
+            contract["provider_chatgpt_auth_dir"], "ChatGPT auth directory")
     if has_credential_file:
         if any(env_presence):
             raise ValueError("provider credential file and provider environment input are mutually exclusive")
@@ -107,17 +108,15 @@ def _provider_input_mode(contract: dict[str, Any]) -> tuple[str, Path]:
 
 def _load_provider_input(contract: dict[str, Any]) -> dict[str, Any]:
     mode, path = _provider_input_mode(contract)
+    if mode == "chatgpt_oauth":
+        if not isinstance(contract.get("model"), str) or not contract["model"].startswith("openai/"):
+            raise ValueError("ChatGPT auth input requires an OpenAI model")
+        executable = Path(contract["candidate"]["installation_root"]) / "butler-agent"
+        return chatgpt_auth_input(path, executable)
     try:
         value = json.loads(_private_file(path))
     except (OSError, ValueError, json.JSONDecodeError) as error:
         raise ValueError("provider input is not valid private JSON") from error
-    if mode == "codex_oauth":
-        if contract.get("model") != "openai/gpt-6-sol" or not isinstance(value, dict) or \
-           value.get("provider") != "openai-codex" or value.get("type") != "oauth" or \
-           not all(isinstance(value.get(field), str) and value[field]
-                   for field in ("accessToken", "refreshToken", "accountId")):
-            raise ValueError("frozen Codex OAuth profile or selected model invalid")
-        return {"mode": mode, "profile": value}
     if mode == "environment":
         if not isinstance(value, dict) or not value or not all(
             isinstance(key, str) and isinstance(item, str) for key, item in value.items()
@@ -175,17 +174,6 @@ def _write_provider_credential(data_root: Path, credential: dict[str, str]) -> P
     os.chmod(auth_dir, PRIVATE_DIRECTORY_MODE)
     path = auth_dir / "model-provider-credentials.json"
     _new_private_file(path, json.dumps({"credentials": [credential]}).encode())
-    return path
-
-
-def _write_codex_oauth_profile(data_root: Path, profile: dict[str, Any]) -> Path:
-    auth_dir = data_root / "auth"
-    if auth_dir.is_symlink():
-        raise ValueError("isolated provider auth directory must not be a symbolic link")
-    auth_dir.mkdir(mode=PRIVATE_DIRECTORY_MODE, parents=True, exist_ok=True)
-    os.chmod(auth_dir, PRIVATE_DIRECTORY_MODE)
-    path = auth_dir / "openai-codex.json"
-    _new_private_file(path, json.dumps(profile).encode())
     return path
 
 
@@ -641,6 +629,8 @@ def _make_env(prepared: dict[str, Any], arm: str, contract: dict[str, Any],
            if key in {"PATH", "LANG", "LC_ALL", "TZ", "TMPDIR", "SYSTEMROOT"}}
     if provider_input["mode"] == "environment":
         env.update(provider_input["environment"])
+    if provider_input["mode"] == "chatgpt_oauth":
+        env["BUTLER_CHATGPT_AUTH_DIR"] = provider_input["auth_dir"]
     home = prepared["arm"] / "home"
     home.mkdir(mode=PRIVATE_DIRECTORY_MODE, exist_ok=True)
     os.chmod(home, PRIVATE_DIRECTORY_MODE)
@@ -741,11 +731,10 @@ def _run_arm(contract: dict[str, Any], installation: dict[str, Any], pair_root: 
         credential = provider_input["credential"]
         _write_provider_credential(prepared["data"], credential)
         config["models"] = {"registered": [_stored_model_registration(contract["model"], credential)]}
-    elif provider_input["mode"] == "codex_oauth":
-        _write_codex_oauth_profile(prepared["data"], provider_input["profile"])
+    elif provider_input["mode"] == "chatgpt_oauth":
         config["models"] = {"registered": [{
-            "provider_id": "openai", "model_id": "gpt-6-sol",
-            "auth_type": "codex_oauth", "auth_profile": "codex_oauth",
+            "provider_id": "openai", "model_id": contract["model"].split("/", 1)[1],
+            "auth_type": "chatgpt_oauth",
         }]}
     _new_private_file(prepared["data"] / "butler.config.json", json.dumps(config).encode())
     if not _port_still_free(prepared["port"]):

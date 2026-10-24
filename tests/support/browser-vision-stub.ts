@@ -6,10 +6,16 @@ import type { NativeAppServerOptions, StubModelRequest } from "./native-app-serv
 
 export async function browserVisionStub(root: string, handler: NonNullable<NativeAppServerOptions["stubToolCall"]>, reply?: NativeAppServerOptions["stubReply"]) {
   const requests: StubModelRequest[] = [];
-  const profile = join(root, "codex-stub.json");
+  const profile = join(root, "chatgpt.json");
   mkdirSync(root, { recursive: true });
-  writeFileSync(profile, JSON.stringify({ provider: "openai-codex", type: "oauth", accessToken: "e2e-replay-placeholder", expiresAt: 0 }), { mode: 0o600 });
+  writeFileSync(profile, JSON.stringify({ client_id: "smoke-client", subject: "smoke-account", access_token: "smoke-access", refresh_token: "smoke-refresh",
+    expires_at: Date.now() + 3600000, scopes: ["openid", "chatgpt.tokens.use.direct"] }), { mode: 0o600 });
   const server = createServer(async (request, response) => {
+    if (request.method === "GET" && request.url?.endsWith("/models")) {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ models: [{ slug: "gpt-6-luna", display_name: "Luna", visibility: "list" }] }));
+      return;
+    }
     if (request.method !== "POST" || !request.url?.endsWith("/responses")) { response.writeHead(404); response.end(); return; }
     const chunks: Buffer[] = []; for await (const chunk of request) chunks.push(chunk as Buffer);
     const body = JSON.parse(Buffer.concat(chunks).toString()) as Record<string, unknown>;
@@ -27,7 +33,7 @@ export async function browserVisionStub(root: string, handler: NonNullable<Nativ
       response.end(JSON.stringify({ error: { message: "Injected stub provider failure", type: "server_error" } }));
       return;
     }
-    const item = tool ? { type: "function_call", id: `fc-${id}`, call_id: `call-${id}`, name: tool.name, arguments: JSON.stringify(tool.arguments), status: "completed" }
+    const item = tool ? { type: "function_call", namespace: "butler", id: `fc-${id}`, call_id: `call-${id}`, name: tool.name, arguments: JSON.stringify(tool.arguments), status: "completed" }
       : { type: "message", id: `msg-${id}`, role: "assistant", status: "completed", content: [{ type: "output_text", text, annotations: [] }] };
     const events = [
       { type: "response.created", response: { id, status: "in_progress", output: [] } },
@@ -44,8 +50,8 @@ export async function browserVisionStub(root: string, handler: NonNullable<Nativ
   await new Promise<void>(done => server.listen(0, "127.0.0.1", done));
   const address = server.address(); if (!address || typeof address === "string") throw new Error("Missing stub address");
   const options: NativeAppServerOptions = {
-    config: { system: { defaultModel: "openai/gpt-6-luna", butlerModel: "openai/gpt-6-luna", workerModel: "openai/gpt-6-luna", stewardModel: "openai/gpt-6-luna" }, models: { registered: [{ provider_id: "openai", model_id: "gpt-6-luna", auth_type: "codex_oauth", auth_profile: "codex_oauth" }] } },
-    env: { BUTLER_CODEX_AUTH_PROFILE: profile, BUTLER_CODEX_BASE_URL: `http://127.0.0.1:${address.port}`, BUTLER_E2E_TIER: "stub" },
+    config: { system: { defaultModel: "openai/gpt-6-luna", butlerModel: "openai/gpt-6-luna", workerModel: "openai/gpt-6-luna", stewardModel: "openai/gpt-6-luna" }, models: { registered: [{ provider_id: "openai", model_id: "gpt-6-luna", auth_type: "chatgpt_oauth" }] } },
+    env: { BUTLER_CHATGPT_AUTH_DIR: root, BUTLER_CHATGPT_API_BASE_URL: `http://127.0.0.1:${address.port}`, BUTLER_E2E_TIER: "stub" },
   };
   return { options, requests, stop: async () => { server.closeAllConnections(); await new Promise<void>(done => server.close(() => done())); } };
 }

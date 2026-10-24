@@ -27,8 +27,6 @@ mod stub;
 
 use sources::{apply_credential, live_source, record_source, replay_source, stub_source};
 
-pub use sources::STUB_REFRESH_TOKEN;
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Fixture {
     /// `F0-empty`.
@@ -100,7 +98,7 @@ pub struct Setup {
     launch_mode: LaunchMode,
     replay_only: bool,
     extends: Option<String>,
-    login_refresh: bool,
+    record_budget: Option<(String, u32, u32)>,
 }
 
 /// A running scenario. Field order is drop order: agent before sandbox.
@@ -110,7 +108,9 @@ pub struct Scenario {
     pub agent: Agent,
     pub provider: Option<Provider>,
     pub model: ModelChoice,
+    pub authority: Option<super::fake_chatgpt::FakeChatGptAuthority>,
     pub sandbox: Sandbox,
+    wire: super::chatgpt_wire::Scope,
 }
 
 impl Setup {
@@ -161,6 +161,14 @@ impl Setup {
         self
     }
 
+    /// Record mode reaches the upstream at most `responses` times, only for
+    /// `user_request`, plus `models` model-list reads (see
+    /// [`Provider::limit_recording`]); set before the agent starts.
+    pub fn record_budget(mut self, user_request: &str, responses: u32, models: u32) -> Self {
+        self.record_budget = Some((user_request.to_owned(), responses, models));
+        self
+    }
+
     /// Starts the agent without token variables, as `butler start` does:
     /// the agent owns the token in its data folder.
     pub fn data_folder_token(mut self) -> Self {
@@ -181,13 +189,6 @@ impl Setup {
     /// into it, so a record run can never overwrite that cassette.
     pub fn replay_only(mut self) -> Self {
         self.replay_only = true;
-        self
-    }
-
-    /// Sends the Codex login refresh through the provider
-    /// ([`sources::route_login_refresh`]).
-    pub fn codex_login_refresh(mut self) -> Self {
-        self.login_refresh = true;
         self
     }
 
@@ -231,7 +232,7 @@ impl Setup {
             launch_mode,
             replay_only,
             extends,
-            login_refresh,
+            record_budget,
             unset_env,
         } = self;
         let app_now = sources::fixture_app_now(&env);
@@ -248,15 +249,7 @@ impl Setup {
         let (provider, choice, credential) = match source {
             Source::None => (None, model.unwrap_or(default_model), None),
             Source::Live(live_provider) => live_source(&live_provider, model, &mut launch),
-            Source::Stub(cassette) => {
-                stub_source(
-                    cassette,
-                    &placeholders,
-                    stub_credential.then(|| sandbox.codex_home()),
-                    &mut launch,
-                )
-                .await?
-            }
+            Source::Stub(cassette) => stub_source(cassette, &placeholders, &mut launch).await?,
             Source::Cassette(name)
                 if (flag("BUTLER_E2E_RECORD") && !replay_only) || record_into.is_some() =>
             {
@@ -271,24 +264,29 @@ impl Setup {
                 .await?
             }
             Source::Synthetic(script) => {
-                sources::synthetic_source(
-                    script,
-                    model,
-                    stub_credential.then(|| sandbox.codex_home()),
-                    &mut launch,
-                )
-                .await?
+                sources::synthetic_source(script, model, &mut launch).await?
             }
-            Source::Cassette(name) => {
-                let stub_codex_home = stub_credential.then(|| sandbox.codex_home());
-                replay_source(&name, &placeholders, stub_codex_home, &mut launch).await?
-            }
+            Source::Cassette(name) => replay_source(&name, &placeholders, &mut launch).await?,
         };
+        if let (Some(provider), Some((request, responses, models))) = (&provider, &record_budget) {
+            provider.limit_recording(request, *responses, *models);
+        }
         if let Some((provider_name, credential)) = &credential {
             apply_credential(&mut launch, provider_name, credential, &choice);
         }
-        if login_refresh && let Some(provider) = &provider {
-            sources::route_login_refresh(&mut launch, provider, &sandbox)?;
+        let authority = sources::stub_authority(
+            &mut launch,
+            &sandbox.data,
+            stub_credential
+                && credential.is_none()
+                && (provider.as_ref().is_some_and(Provider::is_chatgpt_plan)
+                    || env
+                        .iter()
+                        .any(|(key, _)| key == "BUTLER_CHATGPT_API_BASE_URL")),
+        )
+        .await?;
+        if let (Some(provider), Some(authority)) = (&provider, &authority) {
+            provider.chatgpt_authority(&authority.issuer);
         }
         for (key, value) in env {
             launch.set_env(&key, value);
@@ -304,13 +302,16 @@ impl Setup {
             }
             Fixture::Empty => {}
         }
+        let wire = super::chatgpt_wire::Scope::new(&launch.env);
         let (agent, gw) = Agent::start(launch).await?;
         let scenario = Scenario {
             id,
             gw,
             agent,
             provider,
+            wire,
             model: choice,
+            authority,
             sandbox,
         };
         if let Some((provider_name, Credential::ApiKey { env_var })) = &credential
@@ -392,6 +393,7 @@ impl Scenario {
 
     /// Stops the provider: replay checks strictness, record writes cassettes.
     pub async fn finish(mut self) -> Result<(), HarnessError> {
+        self.wire.finish()?;
         if let Some(provider) = self.provider.take() {
             provider.finish().await?;
         }

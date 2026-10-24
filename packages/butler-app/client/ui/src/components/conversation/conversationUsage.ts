@@ -1,5 +1,5 @@
 import { appCopy, getAppLocale } from "@/app/copy.ts";
-import type { ContextDetailsView, ProviderQuotaResultView, UsageMonitorView } from "@/app/types.ts";
+import type { ContextDetailsView, ProviderQuotaResultView, UsageMonitorView, ButlerUsageView } from "@/app/types.ts";
 import type { UsageQuotaWindow, UsageSummaryRowsProps } from "@/butler-ds";
 import { windowLabel } from "../settings/providerQuotaPresentation";
 import type { UsageAuthMode } from "./usageAuthMode";
@@ -52,7 +52,11 @@ function quotaUpdatedAt(quota: ProviderQuotaResultView | null | undefined, fallb
  * The popover's usage section for this conversation, or null when the mode
  * has no account quota (only subscriptions show this section).
  */
-export function conversationUsageSummary({ mode, context, view, quota, status }: ConversationUsageInput): UsageSummaryRowsProps | null {
+export function conversationUsageSummary({ mode, context, view, quota, status }: ConversationUsageInput): (UsageSummaryRowsProps & {
+  planUsage?: ProviderQuotaResultView["planUsage"];
+  butlerUsage?: ButlerUsageView | null;
+  planQuota?: ProviderQuotaResultView;
+}) | null {
   if (mode !== "subscription") return null;
   const copy = appCopy.composer.usage;
   const base: UsageSummaryRowsProps = {
@@ -66,6 +70,11 @@ export function conversationUsageSummary({ mode, context, view, quota, status }:
   // stands in until the monitor answers.
   const own = view ? viewQuota(view, context) : undefined;
   const source = own?.available ? own : quota ?? own;
+  if (source?.sourceKind === "chatgpt_plan" && source.planUsage) return {
+    ...base, state: "ready", planUsage: source.planUsage, planQuota: source,
+    butlerUsage: view?.providerUsage.providers.find(provider => provider.providerId === "openai")?.butlerUsage,
+    quotaWindows: quotaWindows(source) ?? [],
+  };
   const windows = quotaWindows(source);
   if (!windows) return { ...base, state: !view && status !== "failed" ? "loading" : "unavailable" };
   const staleAt = status === "failed" && view ? view.generated_at : null;

@@ -155,7 +155,7 @@ export function defaultModelSettingsPatch(settings: SettingsView, model: AppMode
 
 export type PendingConnection =
   | {
-    kind: "hosted"; cardId: FirstRunProviderCardId; providerId: string; authType: "api_key" | "codex_oauth"; credentialId?: string;
+    kind: "hosted"; cardId: FirstRunProviderCardId; providerId: string; authType: "api_key" | "chatgpt_oauth"; credentialId?: string;
     /** Run setup again with the AI already in use: keep the chat model, effort and Workers. */
     keepDefaults?: boolean;
   }
@@ -184,9 +184,14 @@ async function registerConnectionModel(
   const catalog = await api<ModelCatalogView>("/model-catalog");
   const provider = catalog.providers.find((entry) => entry.provider_id === connection.providerId);
   const inUse = connection.keepDefaults ? provider?.models.find((entry) => entry.model_ref === settings.model) : undefined;
-  const preset = inUse
+  let preset = inUse
     ? { model: inUse, modelId: inUse.model_id, modelRef: inUse.model_ref, effort: settings.reasoning_effort }
     : routinePreset(catalog, connection.providerId);
+  const planModels = connection.authType === "chatgpt_oauth" ? provider?.chatgpt_plan_models : null;
+  if (planModels?.length && (!preset || !planModels.includes(preset.modelId))) {
+    const model = provider?.models.find(item => item.model_id === planModels[0]);
+    if (model) preset = { model, modelId: model.model_id, modelRef: model.model_ref, effort: model.default_reasoning_effort };
+  }
   if (!preset) throw Object.assign(new Error("no_usable_model"), { code: "no_usable_model" });
   const result = await api<HostedModelRegistrationResult>("/model-catalog/registered-models", {
     method: "POST",

@@ -119,14 +119,30 @@ pub fn install_tree(name: &str, data: &Path) -> Result<(), HarnessError> {
     copy_tree(&source, data)
 }
 
-/// Fake Codex CLI auth file for replay: the stub accepts any bearer, and the
-/// product needs a credential to select subscription mode. No real token.
-pub fn stub_codex_auth(codex_home: &Path) -> Result<(), HarnessError> {
-    fs::create_dir_all(codex_home)?;
-    fs::write(
-        codex_home.join("auth.json"),
-        json!({"tokens": {"access_token": "e2e-replay-placeholder"}}).to_string(),
-    )?;
+/// A protected, refreshable registration issued by the owned fake authority.
+pub fn stub_chatgpt_auth(
+    data: &Path,
+    authority: &super::fake_chatgpt::FakeChatGptAuthority,
+) -> Result<(), HarnessError> {
+    let dir = data.join("auth");
+    fs::create_dir_all(&dir)?;
+    for (name, raw) in [
+        (
+            "chatgpt-host.json",
+            json!({"schema_version":1,
+        "ext_agent_host_id":format!("urn:uuid:{}",uuid::Uuid::new_v4()), "created_at":FIXTURE_TIME}),
+        ),
+        ("chatgpt.json", authority.registration()),
+    ] {
+        butler_platform::secure_fs::replace_private(
+            &dir.join(name),
+            |file| {
+                use std::io::Write;
+                file.write_all(raw.to_string().as_bytes())
+            },
+            std::convert::identity,
+        )?;
+    }
     Ok(())
 }
 

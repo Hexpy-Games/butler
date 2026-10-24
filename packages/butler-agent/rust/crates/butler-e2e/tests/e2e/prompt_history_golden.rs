@@ -35,7 +35,7 @@ fn capture_frame(
     let sections = fingerprints(&loaded_sections(data, turn_id, request, placeholders)?);
     Ok(json!({"sections":sections,"blocks":blocks,
         "instructions_sha256":format!("{:x}",Sha256::digest(instructions)),
-        "tools_sha256":format!("{:x}",Sha256::digest(serde_json::to_vec(&request["tools"])?)),
+        "tools_sha256":format!("{:x}",Sha256::digest(serde_json::to_vec(&butler_e2e::e2e::chatgpt_wire::tools(request).collect::<Vec<_>>())?)),
         "history":history}))
 }
 

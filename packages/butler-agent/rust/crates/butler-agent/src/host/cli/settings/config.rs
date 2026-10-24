@@ -43,6 +43,7 @@ const WEB_SEARCH_PROVIDERS: &[&str] = &[
     "brave",
     "tavily",
     "openai-web-search",
+    "chatgpt-plan-web-search",
     "codex-subscription-web-search",
     "auto",
     "mock",
@@ -100,7 +101,10 @@ pub(super) fn value_at_path<'a>(config: &'a Value, dotted_path: &str) -> Option<
     })
 }
 
-pub(super) fn set_path(config: &mut Value, dotted_path: &str, value: Value) {
+pub(super) fn set_path(config: &mut Value, dotted_path: &str, mut value: Value) {
+    if dotted_path == "webSearch.provider" && value == "codex-subscription-web-search" {
+        value = "chatgpt-plan-web-search".into();
+    }
     if dotted_path == "user.responseLanguage" {
         set_path(
             config,

@@ -1,3 +1,4 @@
+import { useChatGptAccount } from "../chatgpt/useChatGptAccount";
 import { useEffect, useState } from "react";
 import { setAppCopyLanguage } from "@/app/copy.ts";
 import { detectFirstRunLanguage, firstRunCopy, type FirstRunLanguage } from "@/app/firstRunSetup.ts";
@@ -105,11 +106,12 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
       setScreen("connect");
     }
   }, [commit.connected]);
-  const signIn = useSignIn({
-    onSignedIn: () => commit.submit({
-      kind: "hosted", cardId: "chatgpt", providerId: "openai", authType: "codex_oauth", keepDefaults: current === "chatgpt",
-    }),
-  });
+  const chatgpt = useChatGptAccount({ standalone: true });
+  const signIn = useSignIn({ onSignedIn: () => { void chatgpt.refresh(); } });
+  const connectChatGpt = () => {
+    setAdvanceOnConnect(true);
+    commit.submit({ kind: "hosted", cardId: "chatgpt", providerId: "openai", authType: "chatgpt_oauth", keepDefaults: current === "chatgpt" });
+  };
 
   useEffect(() => {
     setAppCopyLanguage(language);
@@ -125,7 +127,7 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
   const substep = step === "connect" ? { index: ["pick", "auth", "reply"].indexOf(aiStage) + 1, total: 3 } : undefined;
 
   return {
-    mode, copy, language, setLanguage, online, screen, step, focusStart, view, savingConsent, local, signIn, commit, reply, memory,
+    mode, copy, language, setLanguage, online, screen, step, focusStart, view, savingConsent, local, signIn, chatgpt, connectChatGpt, commit, reply, memory,
     currentCardId: commit.connected?.cardId ?? current,
     readiness: setup.readiness,
     retryPreparation: setup.retry,
