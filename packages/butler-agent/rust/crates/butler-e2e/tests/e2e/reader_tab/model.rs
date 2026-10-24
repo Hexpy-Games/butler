@@ -40,7 +40,7 @@ impl Fixture {
         let base = format!("http://{}", socket.local_addr()?);
         let state = Arc::new(StateData::default());
         let app = match wire {
-            Wire::Codex => Router::new().route("/codex/responses", post(codex)),
+            Wire::Codex => Router::new().route("/v1/responses", post(codex)),
             Wire::Anthropic => Router::new().route("/v1/messages", post(anthropic)).route(
                 "/v1/models",
                 axum::routing::get(|| async { Json(json!({"data":[]})) }),
