@@ -94,6 +94,12 @@ pub(super) struct Buckets {
 }
 
 impl Buckets {
+    pub(super) fn provider_totals(&self) -> impl Iterator<Item = (&str, f64)> {
+        self.providers
+            .iter()
+            .map(|(id, tokens)| (id.as_ref(), tokens.total))
+    }
+
     pub(super) fn tokens(&self) -> &Tokens {
         &self.model
     }

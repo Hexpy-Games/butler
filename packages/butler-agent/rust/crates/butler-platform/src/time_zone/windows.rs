@@ -48,3 +48,11 @@ fn take<'a>(input: &mut &'a [u8], length: usize) -> Option<&'a [u8]> {
     *input = tail;
     Some(head)
 }
+
+pub(super) fn zone_file(_name: &str) -> Option<std::path::PathBuf> {
+    None
+}
+
+pub(super) fn local_zone_file(_name: &str) -> Option<std::path::PathBuf> {
+    None
+}

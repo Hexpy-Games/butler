@@ -119,6 +119,22 @@ impl ModelPricing {
         Some(band(base, prompt_tiers, input_tokens))
     }
 
+    /// Cached-input over uncached-input price of the base band: what reading
+    /// a prompt prefix from the cache costs relative to sending it anew.
+    /// `1.0` when caching has no published discount; `None` when unpriced.
+    pub fn cached_input_ratio(&self) -> Option<f64> {
+        let Self::Published { base, .. } = self else {
+            return None;
+        };
+        if base.input_per_mtok_usd.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
+            return None;
+        }
+        let cached = base
+            .cached_input_per_mtok_usd
+            .unwrap_or(base.input_per_mtok_usd);
+        Some((cached / base.input_per_mtok_usd).clamp(0.0, 1.0))
+    }
+
     /// The date the published price was read, if one is published.
     pub fn as_of(&self) -> Option<&str> {
         match self {

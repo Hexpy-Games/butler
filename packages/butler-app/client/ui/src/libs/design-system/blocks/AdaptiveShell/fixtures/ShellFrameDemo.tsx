@@ -99,15 +99,18 @@ export interface ShellFrameDemoProps {
   wallpaper?: boolean;
   /** Content card body; `long` also fills the inspector past the window height. */
   content?: ShellContent;
+  /** The Electron platform whose shell material (and sidebar row fills) the root picks; omitted is the browser. */
+  platform?: "darwin" | "win32";
 }
 
 /** A whole window in either frame: the App's shell composition with viewer stand-ins for its content. */
-export function ShellFrameDemo({ locale, frame, width, height, view = "chat", sidebar = "open", wallpaper = false, content = "chat" }: ShellFrameDemoProps) {
+export function ShellFrameDemo({ locale, frame, width, height, view = "chat", sidebar = "open", wallpaper = false, content = "chat", platform }: ShellFrameDemoProps) {
   const geometry = { height: "100%", ...adaptivePanelStyle({ leftWidth: 304, rightWidth: 376 }) };
+  const chrome = platform ? { chromeEnvironment: "electron" as const, platform } : {};
   if (view === "settings") {
     return (
       <ScaledFrame width={width} height={height}>
-        <AdaptiveShell frame={frame} leftOpen rightOpen={false} settingsActive UNSAFE_style={geometry}>
+        <AdaptiveShell frame={frame} leftOpen rightOpen={false} settingsActive UNSAFE_style={geometry} {...chrome}>
           <DemoSettings locale={locale} />
         </AdaptiveShell>
       </ScaledFrame>
@@ -117,7 +120,7 @@ export function ShellFrameDemo({ locale, frame, width, height, view = "chat", si
   return (
     <ScaledFrame width={width} height={height}>
       <AdaptiveShell frame={frame} leftOpen={leftOpen} rightOpen={view === "inspector"} splitOpen={view === "browser"}
-        leftPeek={sidebar === "peek"} transparentWorkspace={wallpaper} UNSAFE_style={geometry}>
+        leftPeek={sidebar === "peek"} transparentWorkspace={wallpaper} UNSAFE_style={geometry} {...chrome}>
         {leftOpen ? null : (
           <ChromeFloatingToggleLayer>
             <IconButton label={COPY[locale].showSidebar}><PanelLeft size="md" /></IconButton>

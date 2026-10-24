@@ -127,6 +127,7 @@ pub struct ModelConfiguration {
     chatgpt_authority: Arc<chatgpt::authority::ChatGptAuthority>,
     chatgpt_models: chatgpt::models::Cache,
     account_revision: tokio::sync::watch::Sender<u64>,
+    quota_configuration: quota::Configuration,
     quota_sink: parking_lot::RwLock<Option<Arc<dyn super::ProviderQuotaSink>>>,
 }
 
@@ -199,6 +200,7 @@ impl ModelConfiguration {
             chatgpt_models: chatgpt::models::Cache::default(),
             chatgpt_authority,
             account_revision: tokio::sync::watch::channel(0).0,
+            quota_configuration: quota::Configuration::default(),
             quota_sink: parking_lot::RwLock::default(),
             data_root,
             environment,

@@ -108,3 +108,18 @@ pub(in crate::gateway::application) fn runtime_session(
     let scope = bound.is_none().then(|| id.to_owned());
     Ok((bound.unwrap_or(fallback), scope))
 }
+
+/// Resolve only the longest turn's root through the same indexed chat binding.
+pub(super) fn enrich_history(db: &Connection, view: &mut Value) -> Result<(), AppStorageError> {
+    let Some(task) = view.get_mut("longestTask").filter(|task| task.is_object()) else {
+        return Ok(());
+    };
+    let Some(session) = task["sessionId"].as_str().map(str::to_owned) else {
+        return Ok(());
+    };
+    if let Some((id, title)) = metadata(db, std::slice::from_ref(&session))?.remove(&session) {
+        task["sessionId"] = json!(id);
+        task["title"] = json!(title);
+    }
+    Ok(())
+}

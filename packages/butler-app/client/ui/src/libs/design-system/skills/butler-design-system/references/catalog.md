@@ -247,6 +247,7 @@
 | A sub-step (sign-in, API key, model pick) that keeps the flow's header and footer | `SetupWizardStepCard` |  |
 | A suggestion list as wide as its field (width="anchor" with SuggestionList) | `Popover` |  |
 | A suggestion or briefing entry with its own action | `Card` |  |
+| A summary stat strip at the top of a section (variant="joined") | `MetricGrid` |  |
 | A system message that needs a visual marker | `MessageAvatarBlock` |  |
 | A tab dragged from the pane to the sidebar | `DragPreview` |  |
 | A tab's own working or waiting state | `LiveTabCard` | `ActivityGlow` |
@@ -279,6 +280,7 @@
 | A warning about the composer | `Notice` | `ComposerAdjunctPanel` |
 | A whole row or card should be clickable | `Clickable` | `Button` |
 | A wrapping row of chips or metadata | `Inline` | `Stack` |
+| A year of daily usage at a glance (cell="compact", scrollAnchor="end") | `ActivityHeatmap` |  |
 | Actions for an item | `DropdownMenu` | `OptionMenu` |
 | Actions on one row of a list | `OverflowActionMenu` | `SelectionBar` |
 | Activity per calendar day over weeks | `ActivityHeatmap` | `UsageBars` |
@@ -761,7 +763,7 @@ Makes a row, tile or piece of text one keyboard-operable click target without a 
 - Not for: A sidebar navigation row → `NavRow`
 - Not for: A card that opens something → `Card`
 - Not for: Choosing one of a few labelled options → `SegmentedControl`
-- Tokens: `--selection`, `--selection-strong`, `--radius-control`, `--focus-ring`, `--interactive-disabled-fg`, `--motion-fast`
+- Tokens: `--selection`, `--selection-strong`, `--radius-control`, `--focus-ring`, `--interactive-disabled-fg`, `--motion-fast`, `--motion-instant`, `--motion-ease-standard`
 
 ### CopyButton
 
@@ -1651,7 +1653,7 @@ The sidebar frame: titlebar space, fixed navigation, a scrolling list with fades
 - Use for: The app sidebar and other sidebar-like navigation columns
 - Not for: Settings navigation lists → `SettingsNav`
 - Not for: A scrolling region in content → `ScrollArea`
-- Tokens: `--sidebar-bg`, `--sidebar-width`, `--sidebar-row-height`, `--scroll-fade-size`, `--sidebar-padding-inline`
+- Tokens: `--sidebar-bg`, `--mac-sidebar-hover-bg`, `--mac-sidebar-selected-bg`, `--sidebar-width`, `--sidebar-row-height`, `--scroll-fade-size`, `--sidebar-padding-inline`
 
 ### SurfacePanel
 
@@ -1890,7 +1892,7 @@ A navigation folder: a header row that expands and folds its child rows with the
 - Use for: Collapsible categories in a navigation list
 - Not for: A heading that never collapses → `NavSection`
 - Not for: Expanding details in content → `DisclosureRow`
-- Tokens: `--sidebar-row-height`, `--motion-base`, `--motion-exit-base`
+- Tokens: `--sidebar-row-height`, `--selection`, `--selection-strong`, `--motion-base`, `--motion-exit-base`
 
 ### CommandPanel
 
@@ -1950,7 +1952,7 @@ The navigation row: icon and label on the left, badge or actions on the right, f
 - Not for: A data row that is not navigation → `ListRow`
 - Not for: A folder that expands → `CollapsibleNavGroup`
 - Not for: A generic clickable surface → `Clickable`
-- Tokens: `--sidebar-row-height`, `--selection-strong`, `--selection`, `--sidebar-action-size`, `--motion-fast`
+- Tokens: `--sidebar-row-height`, `--selection-strong`, `--selection`, `--mac-sidebar-hover-bg`, `--mac-sidebar-selected-bg`, `--windows-sidebar-hover-bg`, `--windows-sidebar-selected-bg`, `--sidebar-action-size`, `--motion-fast`
 
 ### NavSection
 
@@ -2553,7 +2555,7 @@ A titled group of settings sections as navigation rows, from an items array.
 - Use for: The settings sidebar, one SettingsNav per group
 - Not for: The app sidebar → `SidebarShell`
 - Not for: Rows with custom content → `NavRow`
-- Tokens: `--sidebar-row-height`, `--selection-strong`, `--typo-section-title-size`
+- Tokens: `--sidebar-row-height`, `--selection-strong`, `--sidebar-selected-bg`, `--sidebar-hover-bg`, `--typo-section-title-size`
 
 ### SettingsSecretRows
 
@@ -2589,7 +2591,7 @@ The settings layout: navigation master, detail header and detail pane, single-pa
 - Use for: The settings screen and settings-like editors
 - Not for: A management page (automations, dashboards) → `ManagementPage`
 - Not for: A setup flow → `SetupWizardShell`
-- Tokens: `--settings-bg`, `--settings-section-gap`, `--settings-section-header-gap`, `--page-max-width-reading`
+- Tokens: `--settings-bg`, `--sidebar-hover-bg`, `--sidebar-selected-bg`, `--settings-section-gap`, `--settings-section-header-gap`, `--page-max-width-reading`
 
 ### SortableCardList
 
@@ -2655,12 +2657,13 @@ Chooses a wallpaper: still thumbnails of none, every live module (the user's own
 
 `import { ActivityHeatmap } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/ActivityHeatmap`
 
-A calendar of days shaded by activity count, optionally selectable with a legend.
+A calendar of days shaded by activity count or by a screen-computed level, optionally selectable with a legend.
 
 - Use for: Show activity over weeks on a project dashboard
+- Use for: A year of daily usage at a glance (cell="compact", scrollAnchor="end")
 - Not for: Exact values per series → `ChartContainer`
 - Not for: One total → `MetricCard`
-- Tokens: `--accent`, `--selection`, `--radius-control`
+- Tokens: `--selection`, `--blue-02`, `--blue-04`, `--blue-06`, `--blue-08`, `--motion-base`, `--focus-ring-room`, `--radius-control`
 
 ### ActivityStrip
 
@@ -2721,12 +2724,13 @@ One labelled number, counting to new values, with an optional trend and icon.
 
 `import { MetricGrid } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/MetricGrid`
 
-A responsive grid for MetricCards (150px+ columns by default, or a column preset).
+A responsive grid for MetricCards (150px+ columns by default, or a column preset), or one joined card of stat tiles.
 
 - Use for: A row of metrics on a dashboard
+- Use for: A summary stat strip at the top of a section (variant="joined")
 - Not for: Cards that are not metrics → `Grid`
 - Not for: One metric → `MetricCard`
-- Tokens: `--space-md`, `--layout-basis-xs`
+- Tokens: `--space-md`, `--layout-basis-xs`, `--line`, `--surface-raised`, `--radius-control`
 
 ### UsageBars
 

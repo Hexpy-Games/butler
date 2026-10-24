@@ -130,6 +130,7 @@ class Selection(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertTrue(tool_path.selected(crate_path(path)))
         self.assertTrue(tool_path.selected('.github/scripts/ci_tool_path.py'))
+        self.assertTrue(tool_path.selected('.config/nextest.toml'))
 
     # test-category: pure-logic
     def test_unrelated_changes_do_not_select(self):

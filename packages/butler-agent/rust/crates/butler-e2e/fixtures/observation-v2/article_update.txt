@@ -1,0 +1,21 @@
+tab t3 epoch 1 obs o2
+link "News" [f0-e1] frame=news.example
+link "Sign in" [f0-e2] frame=news.example
+heading "City opens new riverside market" [f0-e3] frame=news.example
+link "Share" [f0-e4] frame=news.example
+button "Listen" [f0-e5] frame=news.example
+City opens new riverside market
+The market runs every Saturday from 9 a.m. with 40 stalls selling produce and crafts.
+Parking is free for the first two hours. Bicycles can be left at the north gate.
+Stall applications for the second month open next Monday on the city website.
+Vendors must bring their own tables; tents are provided at the north and east rows.
+A shuttle bus runs every 20 minutes from the central station between 8 a.m. and 2 p.m.
+Food stalls will be grouped near the river terrace, with seating for about 200 people.
+Recycling stations are placed at each entrance, and single-use plastic bags are not allowed.
+The market committee meets monthly; minutes are published a week after each meeting.
+Dogs on a leash are welcome in the outdoor rows but not in the covered hall.
+Musicians can sign up for a 30-minute slot at the information desk on the day.
+Organizers expect 3,000 visitors on the opening weekend.
+Update: the opening is moved to Sunday because of rain.
+Share
+interactive 5/5 · below fold 12 · hidden {"invisible":2,"low_contrast":0,"tiny":0}

@@ -56,6 +56,8 @@ try {
   await app.main("globalThis.browserAgentSubject.execute({op:'use.ended',args:{id:'s3-presentation'}})"); await holder("none");
   // Hold a real observe call at native ingress so actual user input hits a busy Butler page.
   await app.main(`(()=>{const t=${subject()},debug=t.view.webContents.debugger,send=debug.sendCommand.bind(debug);globalThis.controlSend=send;debug.sendCommand=(method,...args)=>method==='Page.getFrameTree'?new Promise(resolve=>{debug.sendCommand=send;globalThis.controlRelease=()=>send(method,...args).then(resolve)}):send(method,...args)})()`);
+  // The call runs in a turn, as gateway frames carry it: taking over pauses that turn, and only then shows your band.
+  await app.main(`globalThis.browserAgentSubject.execute({op:'use.started',id:'s3-held',session:'general',turn_id:'s3-turn',tab:${JSON.stringify(tab)}})`);
   const pending = app.internal("tab.observe", tab);
   await waitBrowser(() => app.main("Boolean(globalThis.controlRelease)"), "held native observation");
   assert.equal(await app.page.expression("document.querySelector('[data-slot=page-band-actions] button').getAttribute('data-variant')"), "default");
@@ -65,6 +67,7 @@ try {
   await app.click("Take over"); await holder("user");
   await app.main(`(()=>{${subject()}.view.webContents.debugger.sendCommand=globalThis.controlSend;globalThis.controlRelease()})()`);
   assert.equal((await pending).reason, "user_control");
+  await app.main("globalThis.browserAgentSubject.execute({op:'use.ended',args:{id:'s3-held'}})");
   await app.click("Give back to Butler"); await holder("none");
   await app.call("control", { id: tab, holder: "user" });
   app.stub.set([describeBrowser, () => bridgeBrowser("browser_wait_for_user", { tab })]);
@@ -79,7 +82,7 @@ try {
     await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-slot=page-card]'))"), "card mounted"); await nativeAligned(app);
     await app.call("control", { id: tab, holder: "agent" });
     const prefix = `${language}-${theme}-${width}`;
-    await app.main(`globalThis.browserAgentSubject.execute({op:'use.started',id:'s3-presentation',session:'general',tab:${JSON.stringify(tab)}})`);
+    await app.main(`globalThis.browserAgentSubject.execute({op:'use.started',id:'s3-presentation',session:'general',turn_id:'s3-presentation-turn',tab:${JSON.stringify(tab)}})`);
     const release = await holdObservation(app, tab);
     await holder("butler");
     await waitBrowser(() => app.page.expression("document.querySelector('[data-slot=page-band-actions] button').dataset.variant === 'default'"), "busy takeover emphasis");

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
-import { ActivityHeatmap } from "./ActivityHeatmap";
+import { SegmentedControl } from "../../components/SegmentedControl";
+import { Stack } from "../../components/Stack";
+import { ActivityHeatmap, type ActivityHeatmapDay, type ActivityHeatmapLevel } from "./ActivityHeatmap";
 
 export const meta: ShowcaseMeta = {
   title: "ActivityHeatmap",
@@ -46,7 +48,52 @@ function Statistics({ context }: { context: ShowcaseRenderContext }) {
   );
 }
 
+const YEAR_START = new Date(2025, 9, 19);
+const yearCopy = {
+  "en-US": { year: "Usage over the past year", none: "No usage", daily: "Daily", weekly: "Weekly", view: "View" },
+  "ko-KR": { year: "지난 1년 사용량", none: "사용 없음", daily: "일별", weekly: "주별", view: "보기" },
+} as const;
+
+/** A deterministic, heavy-tailed year of usage: idle weekends, a few huge days. */
+function yearTokens(index: number) {
+  const weekday = (YEAR_START.getDay() + index) % 7;
+  if (weekday === 0 || (index * 13) % 11 === 0) return 0;
+  return ((index * 7919) % 97) * 1_000_000 * (index % 37 === 0 ? 8 : 1);
+}
+
+/** Usage page pattern: 53 full weeks of compact cells; levels come from the screen, Weekly fills columns bottom-up. */
+function UsageYear({ context }: { context: ShowcaseRenderContext }) {
+  const [view, setView] = useState("daily");
+  const copy = yearCopy[context.locale];
+  const tokens = Array.from({ length: 371 }, (_, index) => yearTokens(index));
+  const max = Math.max(...tokens);
+  const weekTotals = Array.from({ length: 53 }, (_, week) => tokens.slice(week * 7, week * 7 + 7).reduce((sum, value) => sum + value, 0));
+  const maxWeek = Math.max(...weekTotals);
+  const days: ActivityHeatmapDay[] = tokens.map((count, index) => {
+    const date = new Date(YEAR_START.getFullYear(), YEAR_START.getMonth(), YEAR_START.getDate() + index);
+    const week = Math.floor(index / 7);
+    const filled = Math.ceil(7 * weekTotals[week]! / maxWeek);
+    const level: ActivityHeatmapLevel = view === "weekly" ? (6 - (index % 7) < filled ? 3 : 0)
+      : count === 0 ? 0 : (Math.min(4, Math.ceil(4 * count / max)) as ActivityHeatmapLevel);
+    return {
+      id: `year-${index}`,
+      label: date.toLocaleDateString(context.locale, { month: "short", day: "numeric" }),
+      monthLabel: date.toLocaleDateString(context.locale, { month: "short" }),
+      countLabel: count === 0 ? copy.none : `${Math.round(count / 1_000_000)}M`,
+      count,
+      level,
+    };
+  });
+  const weekdayLabels = Array.from({ length: 7 }, (_, index) => index % 2 === 1
+    ? new Date(2026, 0, 4 + index).toLocaleDateString(context.locale, { weekday: "short" }) : "");
+  return <Stack gap="md">
+    <SegmentedControl ariaLabel={copy.view} options={[{ value: "daily", label: copy.daily }, { value: "weekly", label: copy.weekly }]} value={view} onValueChange={setView} />
+    <ActivityHeatmap ariaLabel={copy.year} cell="compact" scrollAnchor="end" startWeekday={0} weekdayLabels={weekdayLabels} days={days} />
+  </Stack>;
+}
+
 export const stories: ShowcaseStory[] = [
+  { name: "Usage year (compact, levels, wave)", widths: ["375", "app", "wide"], render: (context) => <UsageYear context={context} /> },
   { name: "Project statistics (selectable)", states: ["selected"], widths: ["375", "app", "wide"], render: (context) => <Statistics context={context} /> },
   {
     // ProjectActivityPanel: compact, read-only, no legend.
