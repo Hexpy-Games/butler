@@ -1419,6 +1419,11 @@ const butlerApp = Object.freeze({
   subscribeLogs: (handlers = {}) => subscribeLogs(handlers),
   exportLogs: ({ since, includeBodies } = {}) =>
     ipcRenderer.invoke("butler:export-logs", { since, includeBodies: includeBodies === true }),
+  getImageModelSettings: () => requestJson("/settings/image-model"),
+  getImageUsage: ({ days = 7 } = {}) => {
+    const params = new URLSearchParams({ days: String(days) });
+    return requestJson(`/usage/images?${params.toString()}`);
+  },
   getUsageMonitor: ({ sessionId, sinceHours } = {}) => {
     const params = new URLSearchParams();
     if (sessionId) params.set("session_id", sessionId);

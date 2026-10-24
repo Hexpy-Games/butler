@@ -520,6 +520,10 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (["/logs", "/logs/config", "/logs/storage", "/logs/trace"].includes(url.pathname) || url.pathname.startsWith("/logs/trace/")) {
     return await callBridge<T>(bridge, "logs", { path: url.pathname + url.search, method, ...(options.body == null ? {} : { body: parseBody(options.body) }) });
   }
+  if (method === "GET" && url.pathname === "/settings/image-model") return await callBridge<T>(bridge, "getImageModelSettings");
+  if (method === "GET" && url.pathname === "/usage/images") {
+    return await callBridge<T>(bridge, "getImageUsage", { days: numericSearchParam(url.searchParams, "days") });
+  }
   if (method === "GET" && url.pathname === "/usage-monitor") {
     return await callBridge<T>(bridge, "getUsageMonitor", {
       // Preserve the joint session/range filter for the native bridge as well as HTTP.

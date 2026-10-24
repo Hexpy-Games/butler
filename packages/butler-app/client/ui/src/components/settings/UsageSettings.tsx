@@ -10,6 +10,7 @@ import { UsageBreakdown } from "./UsageBreakdown";
 import { UsageSessionSelect } from "./UsageSessionSelect";
 import { UsageHistory } from "../usage/UsageHistory";
 import { useUsageHistory } from "../usage/useUsageHistory";
+import { UsageImagesSection } from "./UsageImagesSection";
 import { UsageProviderPanel } from "./UsageProviderPanel";
 
 /** Keep one scoped view and the all-chat view per range, rather than every visited chat. */
@@ -109,6 +110,7 @@ export function UsageSettings() {
       </Stack>
     </SettingsSection>
     <SettingsSection id="usage-history" title={copy.historyTitle} kind="status"><UsageHistory history={history} /></SettingsSection>
+    <UsageImagesSection revision={revision} onRetry={refresh} />
     {providers.length ? <SettingsSection id="usage-providers" title={copy.remaining} kind="status" state={!result.view ? "loading" : "ready"}>
       <UsageProviderPanel providers={providers} />
     </SettingsSection> : null}
