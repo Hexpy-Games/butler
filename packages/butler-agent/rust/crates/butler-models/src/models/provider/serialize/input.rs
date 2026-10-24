@@ -10,10 +10,7 @@ pub(super) fn response_input(
     if config.metadata.provider_id != "openai" {
         return Ok(Value::Array(messages::response_items(request)));
     }
-    let stateless = matches!(
-        config.auth.mode(),
-        ProviderAuthMode::CodexOauth | ProviderAuthMode::CodexSubscription
-    );
+    let stateless = matches!(config.auth.mode(), ProviderAuthMode::ChatGptPlan);
     // Codex sends the complete stateless history. Do not construct and discard
     // a second projection of that same history for a stateful request first.
     if let Some(continuation) = continuation {

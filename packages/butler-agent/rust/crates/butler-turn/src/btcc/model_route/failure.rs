@@ -13,6 +13,8 @@ const ADVANCE: &[&str] = &[
     "provider_tools_unsupported",
 ];
 const RETRY: &[&str] = &[
+    "provider_plan_usage_unavailable",
+    "provider_auth_refresh_unavailable",
     "provider_empty_response",
     "provider_network_error",
     "provider_protocol_error",
@@ -21,6 +23,15 @@ const RETRY: &[&str] = &[
     "provider_stream_interrupted",
 ];
 const SURFACE: &[&str] = &[
+    "chatgpt_sign_in_required",
+    "chatgpt_plan_not_enabled",
+    "chatgpt_store_unreadable",
+    "provider_plan_not_eligible",
+    "provider_plan_not_authorized",
+    "provider_route_not_supported",
+    "provider_unsupported_capability",
+    "provider_unsupported_input",
+    "provider_response_incomplete",
     "admission_invariant_violation",
     "provider_auth_error",
     "provider_context_limit_exceeded",

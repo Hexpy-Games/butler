@@ -1,3 +1,4 @@
+import { ChatGptPlanUsage } from "../chatgpt/ChatGptPlanUsage";
 import { useMemo, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { ContextDetailsView } from "@/app/types.ts";
@@ -69,7 +70,7 @@ export function ContextUsagePopover({ context, mode, sessionId, onDetails, load,
           </UsageReadout>}
       </> : null}
       {mode === "subscription" && summary ? <><Separator /><Stack gap="sm">
-        <Typo.Caption>{copy.accountLimits}</Typo.Caption><UsageSummaryRows {...summary} />
+        {summary.planQuota ? <ChatGptPlanUsage quota={summary.planQuota} usage={summary.butlerUsage} popover /> : <><Typo.Caption>{copy.accountLimits}</Typo.Caption><UsageSummaryRows {...summary} /></>}
       </Stack></> : null}
       {onDetails ? (
         <Inline justify="end">

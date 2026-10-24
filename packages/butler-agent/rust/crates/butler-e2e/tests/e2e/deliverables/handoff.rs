@@ -22,7 +22,7 @@ async fn restart(crash: bool) -> Result<(), HarnessError> {
     let (url, script, server) = stub::start().await?;
     let setup = Setup::new("DELIVERABLE-HANDOFF")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", &url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let release = setup.sandbox.root.join("attach-release");
     let setup = setup
         .env("BUTLER_E2E_HOLD_POINT", "message_attachment")
@@ -76,7 +76,7 @@ async fn materialize_missing_handoff_preserves_other_attachments() -> Result<(),
     let (url, script, server) = stub::start().await?;
     let setup = Setup::new("DELIVERABLE-MISSING-HANDOFF")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", &url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let release = setup.sandbox.root.join("attach-release");
     let setup = setup
         .env("BUTLER_E2E_HOLD_POINT", "message_attachment")

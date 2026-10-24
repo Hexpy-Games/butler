@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-sol",
       "effort": "low",
       "user_request": "Use run_command with timeout_ms 3000 to run exactly: sh -c 'sleep 300 & echo $! > pids.txt; echo $$ >> pids.txt; sleep 300'. Then tell me what happened.",
@@ -32,7 +32,7 @@
       },
       {
         "delay_ms": 1,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0ee2e36777d589a3016ab8e4f037c887d0a4d85b0327aba6bc\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_CsjDO7JDAfhRknILkUT57vJz\",\"name\":\"start_work\"},\"output_index\":1,\"sequence_number\":4}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0ee2e36777d589a3016ab8e4f037c887d0a4d85b0327aba6bc\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_CsjDO7JDAfhRknILkUT57vJz\",\"name\":\"start_work\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":4}\n\n"
       },
       {
         "delay_ms": 6,
@@ -124,7 +124,7 @@
       },
       {
         "delay_ms": 7,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0ee2e36777d589a3016ab8e4f037c887d0a4d85b0327aba6bc\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Run the specified shell command with a 3000 ms timeout and report what happened.\\\"}\",\"call_id\":\"call_CsjDO7JDAfhRknILkUT57vJz\",\"name\":\"start_work\"},\"output_index\":1,\"sequence_number\":27}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0ee2e36777d589a3016ab8e4f037c887d0a4d85b0327aba6bc\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Run the specified shell command with a 3000 ms timeout and report what happened.\\\"}\",\"call_id\":\"call_CsjDO7JDAfhRknILkUT57vJz\",\"name\":\"start_work\",\"namespace\":\"butler\"},\"output_index\":1,\"sequence_number\":27}\n\n"
       },
       {
         "delay_ms": 26,

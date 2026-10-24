@@ -38,7 +38,7 @@ export function connectionActions({ stages, commit, signIn, current, onCancel }:
     ...stageActions(stages, commit),
     pick: (cardId: FirstRunProviderCardId) => {
       setAuthDone(false); setReplyDone(false); setAdvanceOnConnect(false);
-      pickProvider(cardId, commit, signIn, setView);
+      pickProvider(cardId, commit, setView);
     },
     cancel: () => {
       signIn.leave();
@@ -61,16 +61,15 @@ function connectionView(cardId: FirstRunProviderCardId): ConnectView {
   return kind === "key" ? { kind: "key", cardId } : { kind };
 }
 
-/** Preserve the existing option kinds and start sign-in only after an explicit pick. */
+/** Selecting a provider only opens its connection screen. */
 function pickProvider(
   cardId: FirstRunProviderCardId,
   commit: ReturnType<typeof useConnectionCommit>,
-  signIn: ReturnType<typeof useSignIn>,
   setView: (view: ConnectView) => void,
 ): void {
   commit.clear();
   setView(connectionView(cardId));
-  if (PROVIDER_CARDS[cardId].kind === "signin") void signIn.start();
+
 }
 
 function stageActions(stages: ReturnType<typeof useFirstRunStages>, commit: ReturnType<typeof useConnectionCommit>) {

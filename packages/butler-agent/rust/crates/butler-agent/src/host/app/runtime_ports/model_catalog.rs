@@ -47,7 +47,7 @@ impl AppModelCatalog {
             AppModelCatalogCommand::Read => {
                 self.validate_model_files()?;
                 let read = self.read_catalog().await?;
-                catalog_value(&read.catalog.view())
+                self.project_catalog(&read.catalog.view()).await
             }
             AppModelCatalogCommand::UpsertCredential(value) => {
                 self.validate_model_files()?;
@@ -68,39 +68,7 @@ impl AppModelCatalog {
                 let catalog = self.refresh_catalog().await?;
                 Ok(json!({"credential":credential,"catalog":catalog}))
             }
-            AppModelCatalogCommand::RegisterHosted(value) => {
-                self.validate_model_files()?;
-                let input: HostedInput = decode(value)?;
-                let mutation = HostedModelMutation {
-                    provider_id: input.provider_id,
-                    model_id: input.model_id,
-                    auth_type: input.auth_type,
-                    credential_id: input.credential_id,
-                    api_key: input.api_key,
-                    credential_label: input.credential_label,
-                    display_name: input.display_name,
-                    api_base_url: input.api_base_url,
-                    auth_profile: None,
-                };
-                let registered = self
-                    .configuration
-                    .register_hosted_model(&mutation, Some(&self.validated_root()?))
-                    .await
-                    .map_err(|error| operation_error("hosted_model_registration_failed", &error))?;
-                let catalog = self.refresh_catalog().await?;
-                let model = catalog
-                    .get("registered_models")
-                    .and_then(Value::as_array)
-                    .and_then(|models| {
-                        models.iter().find(|model| {
-                            model.get("model_ref").and_then(Value::as_str)
-                                == Some(registered.model_ref.as_str())
-                        })
-                    })
-                    .cloned()
-                    .ok_or(GatewayApplicationError::internal())?;
-                Ok(json!({"model":model,"catalog":catalog}))
-            }
+            AppModelCatalogCommand::RegisterHosted(value) => self.register_hosted(value).await,
             AppModelCatalogCommand::DeleteHosted(lookup) => {
                 self.validate_model_files()?;
                 let removed = self
@@ -207,6 +175,59 @@ impl AppModelCatalog {
         self.validated_root().map(|_| ())
     }
 
+    async fn register_hosted(&self, value: Value) -> Result<Value, GatewayApplicationError> {
+        self.validate_model_files()?;
+        let input: HostedInput = decode(value)?;
+        if input.auth_type == ProviderAuthMethod::ChatGptOauth {
+            let models = self
+                .configuration
+                .chatgpt_models()
+                .await
+                .map_err(|_| GatewayApplicationError::internal())?;
+            let id = input
+                .model_id
+                .strip_prefix("openai/")
+                .unwrap_or(&input.model_id);
+            if models.is_some_and(|models| !models.iter().any(|model| model.slug == id)) {
+                return Err(GatewayApplicationError::Public {
+                    status: 400,
+                    code: "model_not_in_chatgpt_plan".into(),
+                    message: "That model is not in your ChatGPT plan.".into(),
+                    source: None,
+                });
+            }
+        }
+        let mutation = HostedModelMutation {
+            provider_id: input.provider_id,
+            model_id: input.model_id,
+            auth_type: input.auth_type,
+            credential_id: input.credential_id,
+            api_key: input.api_key,
+            credential_label: input.credential_label,
+            display_name: input.display_name,
+            api_base_url: input.api_base_url,
+            auth_profile: None,
+        };
+        let registered = self
+            .configuration
+            .register_hosted_model(&mutation, Some(&self.validated_root()?))
+            .await
+            .map_err(|error| operation_error("hosted_model_registration_failed", &error))?;
+        let catalog = self.refresh_catalog().await?;
+        let model = catalog
+            .get("registered_models")
+            .and_then(Value::as_array)
+            .and_then(|models| {
+                models.iter().find(|model| {
+                    model.get("model_ref").and_then(Value::as_str)
+                        == Some(registered.model_ref.as_str())
+                })
+            })
+            .cloned()
+            .ok_or(GatewayApplicationError::internal())?;
+        Ok(json!({"model":model,"catalog":catalog}))
+    }
+
     async fn read_catalog(
         &self,
     ) -> Result<butler_models::models::ModelConfigurationRead, GatewayApplicationError> {
@@ -216,10 +237,42 @@ impl AppModelCatalog {
             .map_err(GatewayApplicationError::internal_from)
     }
 
+    async fn project_catalog<T: serde::Serialize>(
+        &self,
+        catalog: &T,
+    ) -> Result<Value, GatewayApplicationError> {
+        let mut value = catalog_value(catalog)?;
+        if self
+            .configuration
+            .chatgpt_catalog(&mut value)
+            .await
+            .is_err()
+        {
+            if let Some(providers) = value["providers"].as_array_mut() {
+                for provider in providers {
+                    if provider["provider_id"] == "openai" || provider["id"] == "openai" {
+                        provider["chatgpt_plan_models"] = Value::Null;
+                    }
+                }
+            }
+            if let Some(models) = value["registered_models"].as_array_mut() {
+                for model in models {
+                    model["availability"] = if model["auth_type"] == "chatgpt_oauth" {
+                        "sign_in_required"
+                    } else {
+                        "ready"
+                    }
+                    .into();
+                }
+            }
+        }
+        Ok(value)
+    }
+
     async fn refresh_catalog(&self) -> Result<Value, GatewayApplicationError> {
         self.settings.refresh().await?;
         let read = self.read_catalog().await?;
-        catalog_value(&read.catalog.view())
+        self.project_catalog(&read.catalog.view()).await
     }
 }
 

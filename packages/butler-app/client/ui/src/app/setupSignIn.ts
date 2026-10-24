@@ -1,48 +1,27 @@
 import { api } from "./api.ts";
-import { isMissingRoute } from "./setupConnection.ts";
-import {
-  cancelOpenAIOAuthLogin,
-  getOpenAIOAuthLoginStatus,
-  startOpenAIOAuthLogin,
-  type OpenAIOAuthLoginResult,
-} from "@/components/settings/modelManagementApi";
-
-/**
- * ChatGPT sign-in during first run. The agent runs the flow (#279):
- * `POST /setup/oauth/start`, `GET /setup/oauth/{flow_id}`,
- * `POST /setup/oauth/{flow_id}/cancel`; the app opens the browser at
- * `auth_url`. An agent without those routes falls back to the desktop app's
- * sign-in helper, which opens the browser itself.
- */
-export type SignInBackend = "agent" | "desktop";
-
-export interface SignInSession {
-  backend: SignInBackend;
-  view: OpenAIOAuthLoginResult;
+import type { OpenAIOAuthLoginResult } from "@/components/settings/modelManagementApi";
+export type { ChatGptSignInKind as SignInKind } from "./types.ts";
+import type { ChatGptSignInKind as SignInKind } from "./types.ts";
+export interface ChatGptAccountView {
+  status: "signed_out" | "legacy_sign_in_required" | "sign_in_required" | "plan_off" | "signed_in";
+  label: string | null;
+  plan_notice_pending: boolean;
+  legacy_prompt_pending: boolean;
 }
-
-export async function startSignIn(): Promise<SignInSession> {
-  try {
-    const view = await api<OpenAIOAuthLoginResult>("/setup/oauth/start", { method: "POST", body: JSON.stringify({}) });
-    return { backend: "agent", view };
-  } catch (error) {
-    if (!isMissingRoute(error)) throw error;
-    return { backend: "desktop", view: await startOpenAIOAuthLogin() };
-  }
+export interface SignInSession { backend: "agent"; view: OpenAIOAuthLoginResult }
+export async function startSignIn(input: { force?: boolean; kind?: SignInKind } = {}): Promise<SignInSession> {
+  return { backend: "agent", view: await api<OpenAIOAuthLoginResult>("/setup/oauth/start", {
+    method: "POST", body: JSON.stringify({ kind: "default", ...input }),
+  }) };
 }
-
 export async function signInStatus(session: SignInSession): Promise<OpenAIOAuthLoginResult> {
-  if (session.backend === "desktop" || !session.view.flow_id) return await getOpenAIOAuthLoginStatus();
-  return await api<OpenAIOAuthLoginResult>(`/setup/oauth/${encodeURIComponent(session.view.flow_id)}`);
+  return await api<OpenAIOAuthLoginResult>(`/setup/oauth/${encodeURIComponent(session.view.flow_id!)}`);
 }
-
-/**
- * Closes the flow's callback listener and drops its state. Answers the flow:
- * `cancelled`, or `completed` when the code exchange had already finished.
- */
 export async function cancelSignIn(session: SignInSession): Promise<OpenAIOAuthLoginResult | undefined> {
-  const flowId = session.view.flow_id;
-  if (session.backend === "desktop") return await cancelOpenAIOAuthLogin(flowId);
-  if (!flowId) return undefined;
-  return await api<OpenAIOAuthLoginResult>(`/setup/oauth/${encodeURIComponent(flowId)}/cancel`, { method: "POST", body: JSON.stringify({}) });
+  if (!session.view.flow_id) return undefined;
+  return await api<OpenAIOAuthLoginResult>(`/setup/oauth/${encodeURIComponent(session.view.flow_id)}/cancel`, { method: "POST", body: "{}" });
+}
+export function chatGptAccount(): Promise<ChatGptAccountView> { return api("/setup/chatgpt-account"); }
+export function acknowledgeChatGptNotice(kind: "plan" | "legacy"): Promise<ChatGptAccountView> {
+  return api("/setup/chatgpt-account/notice", { method: "POST", body: JSON.stringify({ kind }) });
 }

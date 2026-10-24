@@ -59,13 +59,13 @@ PY
 run() {
     export BUTLER_E2E_HEDGE_EVAL=1
     [[ ${1:-} == --rounds && ${2:-} =~ ^[1-9][0-9]*$ && $# == 2 ]] || { echo "run --rounds N" >&2; exit 1; }
-    : "${BUTLER_E2E_CODEX_PROFILE:?operator must supply the dedicated Codex auth path}"
-    [[ -f "$BUTLER_E2E_CODEX_PROFILE" ]] || { echo "Codex auth profile does not exist" >&2; exit 1; }
+    : "${BUTLER_E2E_CHATGPT_AUTH_DIR:?operator must supply the dedicated ChatGPT auth directory}"
+    [[ -f "$BUTLER_E2E_CHATGPT_AUTH_DIR/chatgpt.json" ]] || { echo "ChatGPT sign-in does not exist" >&2; exit 1; }
     export BUTLER_E2E_TIER=live BUTLER_E2E_PROVIDER=openai-subscription
     export BUTLER_E2E_MODEL='openai/gpt-6.1-sol@medium'
     export BUTLER_E2E_MODEL_MATRIX='openai/gpt-6.1-sol@medium'
     export BUTLER_E2E_BROWSER_CACHE="$eval_root/chromium"
-    unset OPENAI_API_KEY BUTLER_E2E_CODEX_AUTH_JSON CODEX_AUTH_JSON
+    unset OPENAI_API_KEY
     local round case side root
     for ((round=1;round<=$2;round++)); do
         for case in W1 W2 W3 W3N W3D M1 M1D A1 D1 D2 L1 L2 P1 C1 C2 C3 C4 C5 R1 J1 J2 U1 U2 U3; do

@@ -17,6 +17,8 @@ pub struct ProviderRequestError {
     pub code: String,
     pub message: String,
     pub provider: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth_type: Option<String>,
     pub api: String,
     pub status_code: Option<u16>,
     pub endpoint: Option<String>,

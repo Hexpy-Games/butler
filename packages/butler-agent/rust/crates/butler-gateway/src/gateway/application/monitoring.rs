@@ -355,16 +355,7 @@ pub(super) fn append_relation_workers(
             .unwrap_or("Native child Work");
         let phase = worker_phase(status);
         let ordinal = relation.get("ordinal").and_then(Value::as_u64).unwrap_or(0);
-        let label = if role == "steward" {
-            "Steward"
-        } else {
-            "Worker"
-        };
-        let ordinal_label = if role == "steward" || ordinal == 0 {
-            label.to_owned()
-        } else {
-            format!("{label} {ordinal}")
-        };
+        let (label, ordinal_label) = worker_labels(role, ordinal);
         let updated_at = child
             .get("updated_at")
             .and_then(Value::as_str)
@@ -384,6 +375,10 @@ pub(super) fn append_relation_workers(
             "updated_at": updated_at,
             "supported_controls": [],
         });
+        if child.get("waiting_for_slot").and_then(Value::as_bool) == Some(true) {
+            worker["status_reference"] =
+                json!({"key":"workerStatus","parameters":{"phase":"waiting"}});
+        }
         if let Some(parent_turn_id) = relation.get("parent_turn_id").and_then(Value::as_str) {
             worker["parent_turn_id"] = json!(parent_turn_id);
         }
@@ -475,4 +470,18 @@ impl super::AppApplication {
                 .map_err(super::app_error)
         })
     }
+}
+
+fn worker_labels(role: &str, ordinal: u64) -> (&'static str, String) {
+    let label = if role == "steward" {
+        "Steward"
+    } else {
+        "Worker"
+    };
+    let ordinal_label = if role == "steward" || ordinal == 0 {
+        label.to_owned()
+    } else {
+        format!("{label} {ordinal}")
+    };
+    (label, ordinal_label)
 }

@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-sol",
       "effort": "low",
       "user_request": "Call the e2e_echo tool of the MCP server named e2e and tell me the token it returns.",
@@ -28,7 +28,7 @@
       },
       {
         "delay_ms": 830,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_051ae4babeae783a016ab8e3d2755c87d0929251e702607edc\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_MUXxYgoMEmAR5XExZktCYC5G\",\"name\":\"replace_work_plan\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_051ae4babeae783a016ab8e3d2755c87d0929251e702607edc\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_MUXxYgoMEmAR5XExZktCYC5G\",\"name\":\"replace_work_plan\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 0,
@@ -312,7 +312,7 @@
       },
       {
         "delay_ms": 2,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_051ae4babeae783a016ab8e3d2755c87d0929251e702607edc\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Call the e2e MCP server's e2e_echo tool and report its returned token.\\\",\\\"execution_mode\\\":\\\"direct\\\",\\\"actions\\\":[{\\\"action_key\\\":\\\"Call e2e_echo and capture its returned token\\\",\\\"effect\\\":{\\\"capability\\\":\\\"e2e_echo MCP tool\\\",\\\"target\\\":\\\"Retrieve the token from the e2e server\\\"}}]}\",\"call_id\":\"call_MUXxYgoMEmAR5XExZktCYC5G\",\"name\":\"replace_work_plan\"},\"output_index\":0,\"sequence_number\":73}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_051ae4babeae783a016ab8e3d2755c87d0929251e702607edc\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"objective\\\":\\\"Call the e2e MCP server's e2e_echo tool and report its returned token.\\\",\\\"execution_mode\\\":\\\"direct\\\",\\\"actions\\\":[{\\\"action_key\\\":\\\"Call e2e_echo and capture its returned token\\\",\\\"effect\\\":{\\\"capability\\\":\\\"e2e_echo MCP tool\\\",\\\"target\\\":\\\"Retrieve the token from the e2e server\\\"}}]}\",\"call_id\":\"call_MUXxYgoMEmAR5XExZktCYC5G\",\"name\":\"replace_work_plan\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":73}\n\n"
       },
       {
         "delay_ms": 8,

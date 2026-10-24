@@ -30,6 +30,7 @@ pub const HEADER_ALLOWLIST: &[&str] = &["content-type", "retry-after"];
 pub const QUOTA_HEADER_PREFIXES: &[&str] = &[
     "x-codex-primary-",
     "x-codex-secondary-",
+    "x-codex-credits-",
     "anthropic-ratelimit-unified-",
 ];
 

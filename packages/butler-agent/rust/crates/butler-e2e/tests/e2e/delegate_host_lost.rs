@@ -17,7 +17,7 @@ async fn browser_host_lost_mid_delegation_still_answers_the_parent() -> Result<(
     let (url, script, server) = stub::start().await?;
     let s = Setup::new("DELEGATE-HOST-LOST")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", &url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .env("BUTLER_BROWSER_HEADLESS", "off")
         .start()
         .await?;

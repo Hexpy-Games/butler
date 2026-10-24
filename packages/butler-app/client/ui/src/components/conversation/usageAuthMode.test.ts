@@ -16,8 +16,8 @@ const context = (fields: Partial<ContextDetailsView> = {}): ContextDetailsView =
 });
 
 describe("usageAuthMode", () => {
-  test("codex OAuth is a subscription, an API key is api_key", () => {
-    expect(usageAuthMode(model({ auth_type: "codex_oauth" }), context())).toBe("subscription");
+  test("ChatGPT OAuth is a subscription, an API key is api_key", () => {
+    expect(usageAuthMode(model({ auth_type: "chatgpt_oauth" }), context())).toBe("subscription");
     expect(usageAuthMode(model({ auth_type: "api_key" }), context())).toBe("api_key");
   });
 

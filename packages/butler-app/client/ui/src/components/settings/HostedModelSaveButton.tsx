@@ -1,10 +1,11 @@
-import { Button } from "@/butler-ds";
+import { Button, Tooltip } from "@/butler-ds";
 
 interface HostedModelSaveButtonProps {
   busy: boolean;
   disabled: boolean;
   label: string;
   savingLabel: string;
+  disabledHint?: string;
   onClick: () => void;
 }
 
@@ -13,11 +14,12 @@ export function HostedModelSaveButton({
   disabled,
   label,
   savingLabel,
+  disabledHint,
   onClick,
 }: HostedModelSaveButtonProps) {
   return (
-    <Button type="button" disabled={disabled || busy} onClick={onClick}>
+    <Tooltip label={disabledHint}><Button type="button" disabled={disabled || busy} onClick={onClick}>
       {busy ? savingLabel : label}
-    </Button>
+    </Button></Tooltip>
   );
 }

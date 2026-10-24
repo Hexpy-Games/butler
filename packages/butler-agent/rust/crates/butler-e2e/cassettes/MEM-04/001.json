@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-luna",
       "effort": "xhigh",
       "user_request": "{ \"task\": \"general_new_chat_briefing\", \"locale\": \"en\", \"now\": \"{{TIME}}\", \"time_of_day\": \"{{TIME_OF_DAY}}\", \"consolidation_run_id\": \"{{RUN_ID}}\", \"persona\": null, \"runtime_projection\": null, \"profile_summaries\": [], \"project\": null, \"scope_rules\": [ \"Use general user-level signals, unfinished topics, repeated questions, current interests, adjacent directions, and timely context.\", \"Do not turn unfinished work into pressure or obligation.\" ], \"output_shape\": { \"moment\": \"short time label\", \"title\": \"one short fallback greeting or question for the surface\", \"description\": \"one short sentence about why these cards are here\", \"suggestions\": [ { \"id\": \"stable-kebab-id\", \"title\": \"topic name\", \"description\": \"why this is useful to open\", \"text\": \"message to send if selected\", \"source_kind\": \"one allowed source kind\" } ], \"title_variants\": { \"morning\": \"surface headline for local morning\", \"afternoon\": \"surface headline for local afternoon\", \"evening\": \"surface headline for local evening\", \"night\": \"surface headline for local night\" } } }",

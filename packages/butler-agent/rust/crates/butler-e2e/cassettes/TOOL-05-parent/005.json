@@ -1,9 +1,9 @@
 {
   "request": {
     "method": "POST",
-    "path": "/codex/responses",
+    "path": "/v1/responses",
     "key": {
-      "path": "/codex/responses",
+      "path": "/v1/responses",
       "model": "gpt-6-sol",
       "effort": "low",
       "user_request": "Create a file named inside.txt in your workspace containing exactly the text: hello-e2e",
@@ -38,7 +38,7 @@
       },
       {
         "delay_ms": 674,
-        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0abf1c7d110be3ef016ab8d39d022c87d0b0457fedcffcac2d\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_PlpxDosrlFYwtWN5jkyUhO2X\",\"name\":\"record_work_disposition\"},\"output_index\":0,\"sequence_number\":2}\n\n"
+        "text": "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0abf1c7d110be3ef016ab8d39d022c87d0b0457fedcffcac2d\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_PlpxDosrlFYwtWN5jkyUhO2X\",\"name\":\"record_work_disposition\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":2}\n\n"
       },
       {
         "delay_ms": 5,
@@ -398,7 +398,7 @@
       },
       {
         "delay_ms": 30,
-        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0abf1c7d110be3ef016ab8d39d022c87d0b0457fedcffcac2d\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"work_id\\\":\\\"{{ECHO_1}}\\\",\\\"disposition\\\":\\\"completed\\\",\\\"summary\\\":\\\"Created inside.txt containing exactly hello-e2e.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create inside.txt with exact text\\\",\\\"status\\\":\\\"done\\\"}]}\",\"call_id\":\"call_PlpxDosrlFYwtWN5jkyUhO2X\",\"name\":\"record_work_disposition\"},\"output_index\":0,\"sequence_number\":92}\n\n"
+        "text": "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0abf1c7d110be3ef016ab8d39d022c87d0b0457fedcffcac2d\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"work_id\\\":\\\"{{ECHO_1}}\\\",\\\"disposition\\\":\\\"completed\\\",\\\"summary\\\":\\\"Created inside.txt containing exactly hello-e2e.\\\",\\\"action_updates\\\":[{\\\"action_key\\\":\\\"Create inside.txt with exact text\\\",\\\"status\\\":\\\"done\\\"}]}\",\"call_id\":\"call_PlpxDosrlFYwtWN5jkyUhO2X\",\"name\":\"record_work_disposition\",\"namespace\":\"butler\"},\"output_index\":0,\"sequence_number\":92}\n\n"
       },
       {
         "delay_ms": 93,

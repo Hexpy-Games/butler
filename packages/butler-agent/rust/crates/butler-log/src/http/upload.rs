@@ -8,13 +8,15 @@ use std::sync::{
 #[derive(Default)]
 pub(super) struct Capture {
     bytes: AtomicU64,
+    sensitive: bool,
     body: Mutex<super::capture::Capture>,
 }
 impl Capture {
-    pub(super) fn attach(request: &mut reqwest::Request) -> Arc<Self> {
+    pub(super) fn attach(request: &mut reqwest::Request, sensitive: bool) -> Arc<Self> {
         use futures_util::TryStreamExt;
         use http_body_util::BodyExt;
         let capture = Arc::new(Self {
+            sensitive,
             body: Mutex::new(super::capture::Capture::new(request.headers())),
             ..Self::default()
         });
@@ -35,7 +37,7 @@ impl Capture {
     }
     fn observe(&self, bytes: &[u8]) {
         self.bytes.fetch_add(bytes.len() as u64, Ordering::Relaxed);
-        if full() {
+        if full() && !self.sensitive {
             self.body.lock().observe(bytes);
         }
     }

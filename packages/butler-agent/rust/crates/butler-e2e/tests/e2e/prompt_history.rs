@@ -24,13 +24,16 @@ mod provider {
         heavy: bool,
     ) -> Result<(String, Arc<Stub>, tokio::task::JoinHandle<()>), HarnessError> {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-        let url = format!("http://{}/codex", listener.local_addr()?);
+        let url = format!("http://{}", listener.local_addr()?);
         let stub = Arc::new(Stub {
             requests: Mutex::new(vec![]),
             heavy,
         });
         let app = Router::new()
-            .route("/codex/responses", post(reply))
+            .route("/v1/responses", post(reply))
+            .route_layer(axum::middleware::from_fn(
+                butler_e2e::e2e::chatgpt_wire::validate,
+            ))
             .with_state(stub.clone());
         let server = tokio::spawn(async move {
             let _ = axum::serve(listener, app).await;
@@ -95,7 +98,7 @@ async fn run(heavy: bool, verify: bool) -> Result<(), HarnessError> {
     let (url, stub, server) = provider::start(heavy).await?;
     let setup = Setup::new("PROMPT-HISTORY")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1")
         .env(
             "BUTLER_E2E_DB_LOAD",
@@ -310,7 +313,7 @@ async fn direct_case(verify: bool) -> Result<(), HarnessError> {
     let (url, stub, server) = provider::start(false).await?;
     let setup = Setup::new("PROMPT-DIRECT")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1");
     let placeholders = setup.placeholders.clone();
     let mut s = setup.start().await?;

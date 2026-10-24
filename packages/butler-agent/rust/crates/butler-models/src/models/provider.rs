@@ -2,6 +2,7 @@
 
 mod anthropic_cache;
 mod anthropic_thinking;
+pub(crate) mod chatgpt_plan;
 mod continuation;
 mod contracts;
 mod local_stream;

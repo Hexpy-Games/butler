@@ -13,7 +13,7 @@ async fn late_terminal_message_is_appended_with_identity_and_timestamp() -> Resu
     let (url, stub, server) = provider::start(false).await?;
     let s = Setup::new("PROMPT-LATE")?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1")
         .start()
         .await?;

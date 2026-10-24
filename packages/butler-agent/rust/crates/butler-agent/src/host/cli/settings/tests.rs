@@ -58,14 +58,21 @@ fn config_safe_projection_redacts_nested_values_in_human_arrays() {
 }
 
 #[test]
-fn relative_auth_profile_override_resolves_under_data() {
-    let mut environment = HashMap::new();
-    environment.insert(
-        "BUTLER_CODEX_AUTH_PROFILE".to_owned(),
-        "auth/override.json".to_owned(),
-    );
+fn chatgpt_auth_directory_override_is_shared() {
+    let data = Path::new("/tmp/butler-data");
     assert_eq!(
-        super::path::auth_profile_path(Path::new("/tmp/butler-data"), &environment),
-        Path::new("/tmp/butler-data/auth/override.json")
+        super::path::auth_profile_path(data, &HashMap::new()),
+        data.join("auth/chatgpt.json")
     );
+    for (directory, expected) in [
+        ("/tmp/chatgpt-auth", "/tmp/chatgpt-auth/chatgpt.json"),
+        ("private-auth", "/tmp/butler-data/private-auth/chatgpt.json"),
+    ] {
+        let environment =
+            HashMap::from([("BUTLER_CHATGPT_AUTH_DIR".to_owned(), directory.to_owned())]);
+        assert_eq!(
+            super::path::auth_profile_path(data, &environment),
+            Path::new(expected)
+        );
+    }
 }

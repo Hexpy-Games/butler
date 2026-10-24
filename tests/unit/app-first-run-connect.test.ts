@@ -1,3 +1,4 @@
+// test-category: pure-logic
 import { expect, test } from "bun:test";
 import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 import { EMPTY_MODEL_CATALOG, EMPTY_SETTINGS } from "../../packages/butler-app/client/ui/src/app/constants.ts";
@@ -208,7 +209,7 @@ test("the default model patch sets the chat model, effort and every worker profi
 
 test("the connected model maps back to its first-run card (Run setup again shows it as current)", () => {
   const model = (patch: Partial<AppModelSummary>): AppModelSummary => ({ ...FIRST_RUN_TEST_MODEL, ...patch });
-  expect(connectionCardId(model({ provider_id: "openai", auth_type: "codex_oauth" }))).toBe("chatgpt");
+  expect(connectionCardId(model({ provider_id: "openai", auth_type: "chatgpt_oauth" }))).toBe("chatgpt");
   expect(connectionCardId(model({ provider_id: "openai", auth_type: "api_key" }))).toBe("openai");
   expect(connectionCardId(model({ provider_id: "anthropic" }))).toBe("claude");
   expect(connectionCardId(model({ provider_id: "google" }))).toBe("gemini");

@@ -73,6 +73,7 @@ struct SelectedBuckets {
 pub(crate) struct UsageLogIndex {
     pub(super) owners: Arc<crate::operations::UsageOwners>,
     tail: LogTail,
+    pub(super) plan: super::plan::PlanUsageIndex,
     names: Names,
     slots: BTreeMap<i64, Slot>,
     scope_names: HashSet<Arc<str>>,
@@ -97,6 +98,7 @@ impl UsageLogIndex {
             self,
             |index| {
                 index.rows.clear();
+                index.plan = Default::default();
                 index.slots.clear();
                 index.by_scope.clear();
                 index.scope_names.clear();
@@ -125,6 +127,7 @@ impl UsageLogIndex {
             row.role.as_deref(),
         );
         self.scope_names.insert(row.scope.clone());
+        self.plan.push(&row, chrono::Utc::now().timestamp_millis());
         let start = slot_start(row.ts);
         self.session_totals = None;
         self.selected = None;
@@ -146,6 +149,26 @@ impl UsageLogIndex {
             .add(&row, pricing, &self.names);
         global.rows.push(index);
         self.rows.push(row);
+    }
+    pub(super) fn plan_usage(&self, account: &str, now: i64) -> Value {
+        self.plan.view(account, now, |start, end| {
+            let mut tokens = super::plan::PlanTokens::default();
+            if let Some(slot) = self.slots.get(&slot_start(start as f64)) {
+                for row in self.matching_rows(
+                    &slot.rows,
+                    Window {
+                        since_ts: Some(start as f64),
+                        until_ts: Some(end as f64),
+                        scope: None,
+                    },
+                ) {
+                    if super::plan::account(row) == Some(account) {
+                        tokens.add(row);
+                    }
+                }
+            }
+            tokens
+        })
     }
     pub(super) fn resolve_scope(
         &self,

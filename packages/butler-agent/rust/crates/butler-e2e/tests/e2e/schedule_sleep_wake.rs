@@ -25,13 +25,20 @@ async fn setup(id: &str) -> Result<(Scenario, String), HarnessError> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     let address = listener.local_addr()?.to_string();
     drop(listener);
-    let setup = Setup::new(id)?
+    let mut setup = Setup::new(id)?
         .cassette("TURN-01")
         .replay_only()
         .env("BUTLER_E2E_APP_NOW", "2026-10-13T21:55:00.000Z")
         .env("BUTLER_E2E_APP_CLOCK_ADDRESS", &address)
         .env("BUTLER_E2E_SCHEDULER_INSTRUMENTATION", "1");
     super::memory_fixture::initialize_empty(&setup.sandbox.data)?;
+    if id == "SCHED-07" {
+        let mut cassette = butler_e2e::e2e::cassette::Cassette::load("TURN-01")?;
+        super::memory_stubs::daily_briefing(&mut cassette, &setup.sandbox.data)?;
+        let model = cassette.exchanges[0].request.key.model.clone();
+        cassette.exchanges.last_mut().unwrap().request.key.model = model;
+        setup = setup.stub_cassette(cassette);
+    }
     let s = setup.start().await?;
     Ok((s, address))
 }

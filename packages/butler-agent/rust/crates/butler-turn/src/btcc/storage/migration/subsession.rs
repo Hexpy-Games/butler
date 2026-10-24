@@ -155,3 +155,20 @@ fn table_columns(db: &Connection, table: &str) -> rusqlite::Result<Vec<String>> 
         .query_map([], |row| row.get(1))?
         .collect::<rusqlite::Result<Vec<_>>>()
 }
+
+// Old reservation columns are ignored idempotently, without rewriting rows.
+pub(super) fn ensure_worker_admission(db: &Connection) -> rusqlite::Result<()> {
+    db.execute_batch(
+        "DROP INDEX IF EXISTS idx_btcc_worker_slots;
+         DROP INDEX IF EXISTS idx_btcc_worker_turns;
+         CREATE INDEX IF NOT EXISTS idx_btcc_worker_parent
+           ON btcc_session_relations(parent_session_id,activity_role);
+         CREATE INDEX IF NOT EXISTS idx_btcc_dispatch_pending
+           ON btcc_subsession_delegations(dispatch_state,created_at);
+         CREATE INDEX IF NOT EXISTS idx_btcc_worker_live_turns
+           ON btcc_turns(session_id,semantic_state,turn_id)
+           WHERE semantic_state IN ('admitted','delivery_committed');
+         CREATE INDEX IF NOT EXISTS idx_btcc_worker_results
+           ON btcc_steward_results(relation_id,child_turn_id);",
+    )
+}

@@ -9,7 +9,7 @@ use axum::{
     routing::{get, post},
 };
 use butler_e2e::e2e::{
-    HarnessError, fixtures,
+    HarnessError,
     gateway::turn_state,
     scenario::{Access, Scenario, Setup, accepted_turn_id},
     security::AdminClient,
@@ -44,7 +44,10 @@ async fn result_ids_and_found_pages_survive_approval_resumes() -> Result<(), Har
     let socket = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let base = format!("http://{}", socket.local_addr()?);
     let app = Router::new()
-        .route("/codex/responses", post(reply))
+        .route("/v1/responses", post(reply))
+        .route_layer(axum::middleware::from_fn(
+            butler_e2e::e2e::chatgpt_wire::validate,
+        ))
         .route("/search", get(search))
         .with_state(script.clone());
     let server = tokio::spawn(async move {
@@ -52,9 +55,8 @@ async fn result_ids_and_found_pages_survive_approval_resumes() -> Result<(), Har
     });
     let setup = Setup::new("SEARCH-BROWSER-RESUME")?
         .access(Access::AskExceptReads)
-        .env("BUTLER_CODEX_BASE_URL", &base)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{base}/v1"))
         .env("BUTLER_BRAVE_SEARCH_API_KEY", "offline-fixture-key");
-    fixtures::stub_codex_auth(&setup.sandbox.codex_home())?;
     let mut files = Vec::new();
     for name in ["first.txt", "second.txt"] {
         let path = setup.sandbox.home.join(name);

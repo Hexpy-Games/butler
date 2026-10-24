@@ -23,7 +23,7 @@ async fn attachment_reads_skip_approval_only_for_this_turn() -> Result<(), Harne
     let s = Setup::new("ATT-REACH-01")?
         .access(Access::AskExceptReads)
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()
         .await?;
     let mut big = b"aaaaaaaaa\n".repeat(59_998);
@@ -221,7 +221,7 @@ async fn attachment_reads_in_project_respect_access_modes() -> Result<(), Harnes
     let setup = Setup::new("ATT-REACH-02")?
         .access(Access::AskExceptReads)
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CODEX_BASE_URL", url);
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let folder = setup.sandbox.home.join("project");
     std::fs::create_dir_all(&folder)?;
     assert!(!folder.starts_with(&setup.sandbox.data));
