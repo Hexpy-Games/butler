@@ -2,12 +2,14 @@
 
 mod assets;
 pub(in crate::gateway::application) mod canon;
+pub(in crate::gateway::application) mod canon_files;
 mod canon_sidebar;
 mod core;
 mod library;
 mod message_ownership;
 mod migration;
 mod monitoring;
+pub(super) mod pending_asks;
 mod project_ledger_bindings;
 mod schedule_access;
 mod schedule_legacy;
@@ -43,9 +45,12 @@ pub(super) fn migrate(
         "deliverable",
         "INTEGER NOT NULL DEFAULT 0",
     )?;
+    migration::ensure_column(connection, "message_files", "width", "INTEGER")?;
+    migration::ensure_column(connection, "message_files", "height", "INTEGER")?;
     library::create(connection)?;
     canon_sidebar::create(connection)?;
     canon::create(connection)?;
+    canon_files::create(connection)?;
     still_delivery::recover(connection)?;
     super::history::schema::create(connection)?;
     security::create(connection)?;
@@ -103,6 +108,7 @@ pub(super) fn migrate(
     message_ownership::migrate(connection)?;
     session_reads::create(connection)?;
     monitoring::migrate(connection)?;
+    pending_asks::create(connection)?;
     library::recover(connection, butler_data)?;
     Ok(())
 }

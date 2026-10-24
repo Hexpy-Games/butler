@@ -1,5 +1,6 @@
 //! App identity/scope resolution, over the host-owned canon port.
 mod events;
+pub(super) mod files;
 use super::*;
 use AppCanonResource::{
     BacklogOrder, Canon, CreateEpic, CreatePlan, CreateTag, DeleteTag, EditEpic, EditPlan, EditTag,
@@ -11,10 +12,35 @@ pub(super) fn execute(app: &AppApplication, request: AppCanonRequest) -> Applica
     let app = app.clone_handle();
     Box::pin(async move {
         validate_scope(&app, &request).await?;
+        // A relay batch cannot consume this write's lifetime pin before canon commits.
+        let writing = matches!(request.resource, CreateEpic | EditEpic);
+        let _files = if writing {
+            Some(app.canon_file_lifetimes.lock().await)
+        } else {
+            None
+        };
+        let ids = files::validate_write(&app, &request).await?;
+        #[cfg(feature = "e2e-fixtures")]
+        if writing {
+            hold(&app, "canon_write").await?;
+        }
+        let detail = matches!(request.resource, Epic | CreateEpic | EditEpic);
         let mut result = app.dependencies.canon.execute(request).await?;
         app.storage
             .read(move |db| {
                 public_sessions(db, &mut result)?;
+                if detail {
+                    result["attachments"] = if writing {
+                        let ids = ids.unwrap_or_else(|| {
+                            butler_canon::store::attachment_references_lenient(
+                                result["description"].as_str().unwrap_or_default(),
+                            )
+                        });
+                        files::from_ids(db, &ids)?
+                    } else {
+                        files::list(db, result["id"].as_str().unwrap_or_default())?
+                    };
+                }
                 Ok(result)
             })
             .await
@@ -86,4 +112,16 @@ pub(super) fn public_sessions(
         _ => {}
     }
     Ok(())
+}
+
+/// Reuse the platform fixture barrier without occupying a Tokio worker.
+#[cfg(feature = "e2e-fixtures")]
+async fn hold(app: &AppApplication, point: &'static str) -> Result<(), GatewayApplicationError> {
+    let shutdown = app.dependencies.service_shutdown.clone();
+    tokio::task::spawn_blocking(move || {
+        butler_platform::secure_fs::hold_point(point, || shutdown.is_cancelled())
+    })
+    .await
+    .map_err(GatewayApplicationError::internal_from)?
+    .map_err(GatewayApplicationError::internal_from)
 }

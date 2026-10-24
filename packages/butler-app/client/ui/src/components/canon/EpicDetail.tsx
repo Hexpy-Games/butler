@@ -6,6 +6,7 @@ import type { EpicDetail as Epic, EpicInput, PlanCards, EpicProgressSnapshot, Ca
 import { Box, Button, ButtonContainer, IconButton, KeyValueRow, NativeSelect, NativeSelectOption, Pencil, Stack, Tooltip, Typo } from "@/butler-ds";
 import { CanonTagsField } from "./CanonTagsField.tsx";
 import { CanonAvatar } from "./CanonAvatar.tsx";
+import { EpicMarkdown } from "./EpicMarkdown.tsx";
 import { EpicEditForm } from "./EpicEditForm.tsx";
 import { CanonPersonSelect } from "./CanonPersonSelect.tsx";
 import { CanonPlanSelect } from "./CanonPlanSelect.tsx";
@@ -27,7 +28,7 @@ export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef }: {
         <Typo.PanelTitle as="h3" tabIndex={-1} ref={titleRef} wrap="anywhere">{epic.title}</Typo.PanelTitle>
         <ButtonContainer size="sm"><IconButton label={copy.edit} disabled={busy} onClick={() => setEditing(true)}><Pencil size="sm" /></IconButton></ButtonContainer>
       </Stack>
-      {epic.description && <Typo.Body wrap="pre">{epic.description}</Typo.Body>}
+      {epic.description && <EpicMarkdown epicId={epic.id} description={epic.description} attachments={epic.attachments} />}
     </Stack>}
     <Stack gap="sm">
       <KeyValueRow valueTextSize="caption" label={copy.status} value={<Tooltip wrap label={tasks?.running ? `${copy.running} · ${copy.runningCancel}` : undefined} side="top"><NativeSelect size="sm" aria-label={copy.status} value={epic.canon_status} disabled={busy} onChange={event => statusChanged(event.target.value as CanonStatus)}>

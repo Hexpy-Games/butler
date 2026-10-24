@@ -39,6 +39,7 @@ mod still_delivery;
 pub use library::{AppLibraryChange, AppLibraryCommand, AppLibraryQuery};
 mod signins;
 pub use signins::*;
+mod image_dimensions;
 mod mcp_servers;
 mod memory_management;
 mod message_files;
@@ -52,6 +53,7 @@ mod panic_isolation;
 mod personalization;
 pub use memory_management::{AppMemoryCommand, AppMemoryPort, MemoryEventSink};
 mod outputs;
+mod pending_asks;
 mod plan_decisions;
 mod progress_view;
 pub mod project_folder;
@@ -110,7 +112,7 @@ use admission_identity::stringify;
 pub(crate) use automations::*;
 pub use briefing_snapshot::{read_new_chat_briefing_projects, read_new_chat_briefing_settings};
 pub use contracts::*;
-use events::EventSubscribers;
+use events::{EventSubscribers, latest_event_cursor};
 use keyed_locks::KeyedLocks;
 pub use model_catalog::{AppModelCatalogCommand, AppModelCatalogPort};
 pub use monitoring::{
@@ -226,6 +228,8 @@ pub struct AppApplication {
     wallpapers: AppWallpaperFiles,
     asset_cache: assets::AssetCache,
     settings_update_lock: Arc<tokio::sync::Mutex<()>>,
+    // True only after the startup relay has installed every pending reference.
+    canon_file_lifetimes: Arc<tokio::sync::Mutex<bool>>,
     canon_projection_locks: KeyedLocks,
     plan_decision_locks: KeyedLocks,
     setup_readiness: setup::ReadinessRelay,
@@ -243,25 +247,12 @@ async fn initial_project_root(storage: &AppStorage) -> Result<PathBuf, GatewayAp
     }
 }
 
-async fn open_storage(
-    config: &AppApplicationConfig,
-    dependencies: &AppApplicationDependencies,
-) -> Result<AppStorage, GatewayApplicationError> {
-    AppStorage::open(
-        config.database_path.clone(),
-        Some(config.butler_data.clone()),
-        dependencies.identity_clock.now_iso(),
-    )
-    .await
-    .map_err(app_error)
-}
-
 impl AppApplication {
     pub async fn open(
         config: AppApplicationConfig,
         dependencies: AppApplicationDependencies,
     ) -> Result<Self, GatewayApplicationError> {
-        let storage = open_storage(&config, &dependencies).await?;
+        let storage = handle::open_storage(&config, &dependencies).await?;
         let queue_owner = queue_owner_id(dependencies.identity_clock.as_ref());
         let project_root = initial_project_root(&storage).await?;
         let dependencies = Arc::new(dependencies);
@@ -326,6 +317,7 @@ impl AppApplication {
             asset_cache: assets::AssetCache::default(),
             butler_data: config.butler_data,
             settings_update_lock: Arc::new(tokio::sync::Mutex::new(())),
+            canon_file_lifetimes: Arc::new(tokio::sync::Mutex::new(false)),
             canon_projection_locks: KeyedLocks::default(),
             plan_decision_locks: KeyedLocks::default(),
             setup_readiness: setup::ReadinessRelay::default(),
@@ -451,17 +443,6 @@ impl AppApplication {
             .read(move |db| read_model::list_turns(db, &chat_id, cursor))
             .await
             .map_err(app_error)
-    }
-}
-
-/// The newest durable event cursor; storage is closed when it cannot be read.
-async fn latest_event_cursor(storage: &AppStorage) -> Result<u64, GatewayApplicationError> {
-    match storage.read(events::latest).await {
-        Ok(cursor) => Ok(cursor),
-        Err(error) => {
-            let _ = storage.close().await;
-            Err(app_error(error))
-        }
     }
 }
 

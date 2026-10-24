@@ -73,6 +73,10 @@ pub fn registered_hosted_model_metadata(
             };
             base.registered = Some(true);
             base.auth_type = Some(config.auth_type);
+            if let Some(profile) = &config.auth_profile {
+                base.extensions
+                    .insert("auth_profile".into(), Value::String(profile.clone()));
+            }
             base.credential_id = config.credential_id.clone();
             base.credential_label = credential.map(|value| value.label.clone());
             base.credential_masked_value = credential.map(|value| value.masked_value.clone());

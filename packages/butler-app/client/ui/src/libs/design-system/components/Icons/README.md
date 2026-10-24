@@ -66,6 +66,7 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 `GeneralChat` is the rounded conversation bubble for a default chat channel.
 `Briefcase` identifies a project; `LayoutDashboard` opens its dashboard.
 `Flag` marks a milestone or goal in a plan.
+`AppleReminder` (a reminder card with a checklist) toggles 세션 정보 (Session info).
 Use them to distinguish conversation kinds without adding an action symbol.
 
 iconography, action, status

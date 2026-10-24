@@ -135,6 +135,8 @@ async fn interrupted_write(point: &str) {
             owner
                 .prepare_uploaded(AppMessageFileSnapshot {
                     title: None,
+                    width: None,
+                    height: None,
                     source_label: None,
                     deliverable: false,
                     id: id.into(),

@@ -17,6 +17,7 @@ mod image;
 mod library;
 mod memory_write;
 pub(crate) use memory_write::MemoryWriteServices;
+mod browse;
 mod browser;
 mod message;
 mod monitoring;
@@ -350,6 +351,7 @@ impl GuidedTools {
                     | ToolName::RunDueAutomations
                     | ToolName::WebSearch
                     | ToolName::WebRead
+                    | ToolName::Browse
                     | ToolName::ListWallpapers
                     | ToolName::SetWallpaper
                     | ToolName::SaveWallpaperModule

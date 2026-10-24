@@ -130,7 +130,7 @@ fn modify_error() -> HttpError {
     )
 }
 
-fn decode_component(encoded: &str) -> Result<String, HttpError> {
+pub(super) fn decode_component(encoded: &str) -> Result<String, HttpError> {
     let mut bytes = Vec::with_capacity(encoded.len());
     let mut source = encoded.as_bytes().iter().copied();
     while let Some(byte) = source.next() {

@@ -2103,6 +2103,12 @@ export interface AppCopy {
       passport: string;
     };
     /** Settings → Security → import from another browser (counts only). */
+    browsingAgent: {
+      label: string;
+      auto: (model: string) => string;
+      off: string;
+      conversationModel: string;
+    };
     browserImport: {
       chooseItems: string;
       /** One-line purpose under the import title. */

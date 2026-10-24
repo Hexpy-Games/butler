@@ -4,7 +4,9 @@ import { notifyError, notifyStatus } from "@/app/notifications.ts";
 /** Writes never retry. Conflicts reload both board and selected detail. */
 export async function canonWriteFailure(error: unknown, refresh: () => Promise<void>): Promise<void> {
   const code = apiErrorCode(error);
-  if (code === "conflict" || code === "running") {
+  if (code === "too_many_attachments" || code === "file_too_large") {
+    notifyError(null, code === "too_many_attachments" ? appCopy.canon.tooManyAttachments : appCopy.canon.fileTooLarge);
+  } else if (code === "conflict" || code === "running") {
     notifyStatus(code === "conflict" ? appCopy.canon.conflict : appCopy.canon.running, { tone: "error" });
     await refresh();
   } else notifyError(error, appCopy.interfaceFeedback.requestFailed);
