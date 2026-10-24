@@ -48,4 +48,3 @@ export function filterSettingsSectionGroups(
     })
     .filter((group) => group.sections.length > 0);
 }
-
