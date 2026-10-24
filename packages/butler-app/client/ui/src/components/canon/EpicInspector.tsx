@@ -14,7 +14,7 @@ export function EpicInspector({ projectId, epicId, focusTitle = false, embedded 
   }, [focusTitle, state.detail?.id]);
   useEffect(() => { state.select(epicId); }, [projectId, epicId]);
   const content = <>
-    {state.error ? <Notice tone="error" message={appCopy.interfaceFeedback.requestFailed}
+    {state.error && !state.detail ? <Notice tone="error" message={appCopy.interfaceFeedback.requestFailed}
       action={<Button size="sm" onClick={() => void state.refresh()}>{appCopy.feedback.retry}</Button>} /> :
       state.detail && state.canon ? <EpicDetail compact={embedded} titleRef={title} key={epicId} epic={state.detail} plans={state.canon.plans} tasks={state.tasks} busy={state.busy} onWrite={state.write} /> :
         <ProgressMeter indeterminate label={appCopy.feedback.dashboardLoading} />}
