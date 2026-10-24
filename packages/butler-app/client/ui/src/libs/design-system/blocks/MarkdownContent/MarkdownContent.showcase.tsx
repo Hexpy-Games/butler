@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import { Button } from "../../components/Button";
+import { Card } from "../../components/Card";
 import { CopyButton } from "../../components/CopyButton";
 import { Stack } from "../../components/Stack";
 import { MessageFooter } from "../MessageRow";
@@ -125,6 +126,26 @@ export const stories: ShowcaseStory[] = [
         <p><img alt={text(context).imageAlt} src={INLINE_IMAGE} /></p>
       </MarkdownContent>
     ),
+  },
+  {
+    // density="compact": a detail pane or card (a task description in the aside), body line height, tighter blocks.
+    name: "Compact density",
+    widths: ["320", "375", "app"],
+    render: (context) => {
+      const copy = text(context);
+      return (
+        <Card padding="sm">
+          <MarkdownContent density="compact">
+            <p>{copy.intro} <code>project-ledger check</code> {copy.and} <a href="#spec">{copy.links}</a>{copy.stay}</p>
+            <h3>{copy.h2}</h3>
+            <p>{copy.sub}</p>
+            <ul><li>{copy.items[0]}</li><li>{copy.items[1]}<ul><li>{copy.nested}</li></ul></li></ul>
+            <ol><li>{copy.steps[0]}</li><li>{copy.steps[1]}</li></ol>
+            <blockquote><p>{copy.quote}</p></blockquote>
+          </MarkdownContent>
+        </Card>
+      );
+    },
   },
   // MessageInlineImage: captures fill the column up to a bounded height; Open and Save sit under them.
   { name: "Reply captures", widths: ["375", "430", "app", "wide"], render: (context) => <MarkdownImageSample {...context} /> },
