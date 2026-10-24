@@ -317,6 +317,7 @@ async fn route(
             session_branches::post(state, request).await
         }
         (Method::GET, router::Handler::Projects) => projects::list(state, &uri).await,
+        (Method::GET, router::Handler::ProjectFolders) => projects::folders(state, &uri).await,
         (Method::GET, router::Handler::NewChatBriefing) => {
             new_chat_briefing::get(state, &uri).await
         }

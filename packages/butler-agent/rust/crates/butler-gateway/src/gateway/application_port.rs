@@ -3,6 +3,7 @@ use super::*;
 
 pub trait GatewayApplication:
     GatewayMutationCommands
+    + project_folder::GatewayProjectFolders
     + GatewayProjectDashboard
     + GatewaySessionControls
     + GatewayDevices

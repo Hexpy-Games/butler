@@ -111,6 +111,8 @@ impl GatewayMutationCommands for TestApplication {
     }
 }
 
+impl project_folder::GatewayProjectFolders for TestApplication {}
+
 impl GatewayApplication for TestApplication {
     fn get_operation_output(
         &self,
