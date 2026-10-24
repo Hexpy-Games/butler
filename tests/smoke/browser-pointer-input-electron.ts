@@ -50,10 +50,13 @@ try {
   tab = await app.call<string>("create", { owner: "conversation:general", profile: "signed_out", url: server.url.href });
   await app.click("Show browser"); await app.call("activate", { id: tab }); await nativeAligned(app);
   await waitBrowser(() => page("document.title==='Atlas search workspace'"), "search workspace loaded");
-  await app.main(`(()=>{globalThis.pointerProof={raw:[],forwarded:[],drags:[],hidden:[],uncaught:[],dialogs:[],warnings:0};
+  await app.main(`(()=>{globalThis.pointerProof={raw:[],native:[],intercepted:[],forwarded:[],drags:[],hidden:[],uncaught:[],dialogs:[],warnings:0};
     process.on('uncaughtExceptionMonitor',e=>pointerProof.uncaught.push(String(e)));
     const electron=process.getBuiltinModule('module').createRequire(${JSON.stringify(join(process.cwd(), "packages/butler-app/client/electron/package.json"))})('electron');
     electron.dialog.showErrorBox=(...args)=>pointerProof.dialogs.push(args);
+    const contents=${subject()}.view.webContents;
+    contents.on('input-event',(event,input)=>pointerProof.native.push({input,prevented:event.defaultPrevented}));
+    contents.debugger.on('message',(_event,method,params)=>{if(method==='Input.dragIntercepted')pointerProof.intercepted.push(params)});
     const warn=console.warn;console.warn=(...args)=>{if(String(args[0]).includes('[browser-pointer]'))pointerProof.warnings++;warn(...args)};
   })()`);
   // A page's preload must answer drag IPC even before an overlay exists.
@@ -139,6 +142,13 @@ try {
   await app.shot("after-native-input", true);
   writeFileSync(join(evidence, "result.json"), JSON.stringify({ ok: true, elapsedMs: Date.now() - started, proof, page: await page("proof") }, null, 2));
 } catch (error) {
-  writeFileSync(join(evidence, "failure.json"), JSON.stringify({ error: String(error), main: app.lastMain(), proof: await app.main("pointerProof").catch(() => null), state: await app.call("state"), page: await page("({proof,range:range.value,text:getSelection().toString(),list:list.innerText})").catch(() => null) }, null, 2));
+  const main = app.lastMain();
+  const native = await app.main(`(async()=>{
+    const t=${subject()},c=t.view.webContents,w=${app.win};
+    return {holder:t.holder,attached:Boolean(t.attached),covered:t.covered,bounds:t.bounds,view:t.view.getBounds(),visible:t.view.getVisible(),zoom:c.getZoomFactor(),
+      occluded:typeof c.isOccluded==='function'?c.isOccluded():null,captured:c.isBeingCaptured(),window:{visible:w.isVisible(),focused:w.isFocused(),minimized:w.isMinimized()},
+      page:await c.executeJavaScript("({visibility:document.visibilityState,hidden:document.hidden,focus:document.hasFocus(),width:innerWidth,height:innerHeight,dpr:devicePixelRatio})")};
+  })()`).catch(() => null);
+  writeFileSync(join(evidence, "failure.json"), JSON.stringify({ error: String(error), native, main, proof: await app.main("pointerProof").catch(() => null), state: await app.call("state"), page: await page("({proof,range:range.value,text:getSelection().toString(),list:list.innerText})").catch(() => null) }, null, 2));
   await app.shot("failure", true).catch(() => {}); throw error;
 } finally { server.stop(true); await app.stop(); }

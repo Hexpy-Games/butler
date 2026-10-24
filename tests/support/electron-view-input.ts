@@ -119,7 +119,13 @@ function install(win: any) {
       const codes: Record<string, number> = { Enter: 13, Escape: 27, ArrowUp: 38 };
       if (!codes[key]) throw new Error(`Unsupported key: ${key}`);
       const target = views().findLast(v => v.contents.isFocused());
-      if (!target) throw new Error("No focused WebContents for key input");
+      if (!target) {
+        const targets = await Promise.all(views().map(async ({ contents }) => ({
+          id: contents.id, focused: contents.isFocused(), zoom: contents.getZoomFactor(),
+          visibility: await contents.executeJavaScript("document.visibilityState").catch(() => null),
+        })));
+        throw new Error(`No focused WebContents for key input: ${JSON.stringify(targets)}`);
+      }
       await connect(target.contents);
       for (const type of ["keyDown", "keyUp"]) await target.contents.debugger.sendCommand("Input.dispatchKeyEvent", { type, key, code: key, windowsVirtualKeyCode: codes[key] });
     },
