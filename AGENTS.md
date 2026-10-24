@@ -7,7 +7,7 @@ This file holds the standing repository and agent rules. Each feedback-log entry
 - **Tests:** E2E first in `packages/butler-agent/rust/crates/butler-e2e`, stub tier. Non-E2E tests require `// test-category: <category>`: `race`, `security`, `pure-logic` or `format-pin`. Source-check ratchets `source-check-tests.txt`; counts may only go down. UI behavior uses harness/smoke tests, no unit tests or screen recordings.
 - **Code shape:** files ≤500 lines, production functions ≤80 lines. OS-specific code only in `butler-platform`; no unsafe code. Keep code readable and minimal; never game checks.
 - **Performance design:** No full scans on request paths, blocking I/O on Tokio workers (use `spawn_blocking`), or per-poll whole-file reads. Idle work must be change-driven.
-- **E2E auth:** stub/replay only; authorized live cassette recording uses only `openai/gpt-6-luna` with the owner's `~/.butler-e2e-auth` profile.
+- **E2E auth:** stub/replay only; live calls and authorized cassette recording use only the provider and model set in the `live-e2e` environment variables `BUTLER_E2E_LIVE_PROVIDER`/`BUTLER_E2E_LIVE_MODEL` (currently Z.AI GLM-5.3-Flash). Never hard-code one provider.
 - **UI copy:** a few words, disabled state with tooltip, or brief toast; no banners. Korean: “예약 작업” (never “자동화”), “버틀러”. English: “schedule”.
 - **Security:** never print tokens or widen access defaults. Approval cards show the exact action.
 - **Issue links:** a PR body names each issue with a closing keyword (`Fixes #N`), or `Part of #N` / `Related #N` when it stays open; never a bare `#N` or `Refs #N`. The `issue-links` PR check reports violations, and merging into `release/**` also closes the `Fixes` issues.
@@ -31,7 +31,7 @@ This routine requires Ledger access and publication authorization. Codex workers
   - Never read or write the owner's real `~/.butler`, unless the task explicitly grants read access.
   - Never touch port 18765, `~/Applications/ButlerAgent`, or launchd services.
 - **Scope.** Write only inside your worktree, plus the build caches (`~/.cargo`, `~/.bun`, temp dirs). Never kill processes by name pattern (`pkill`, `killall`); kill only PIDs you started. Never print tokens or keys.
-- **Model calls.** Tests use stub or replay only. If a cassette must be re-recorded live, use only `openai/gpt-6-luna`, even when existing cassettes name other models.
+- **Model calls.** Tests use stub or replay only. If a cassette must be re-recorded live, use only the model configured in `BUTLER_E2E_LIVE_MODEL` (currently Z.AI GLM-5.3-Flash), even when existing cassettes name other models.
 - **TypeScript validation.** Do not run the full `bun run check`: it runs lifecycle-check, lint, typecheck and about 960 TS unit tests, and often reaches its 900-second limit.
   - For changes to `packages/butler-app/**`, `packages/butler-i18n/**` or any `*.ts`/`*.tsx`, run `bun run lint` and `bun run typecheck`. Run lifecycle-check only when UI lifecycle assets or inputs change, and run only TS tests covering the changed files.
   - For Rust-only changes, skip all Bun checks. E2E and real-app verification remain the primary evidence.
@@ -120,5 +120,5 @@ Newest first. The coordinator adds an entry whenever a mistake repeats. Each ent
   - What happened: a PR-body draft was committed under `plans/`.
 - **2026-09-29: plan items were skipped silently.** Deliver every plan item, or list it as left undone with the reason.
   - What happened: a plan's acceptance items (a chat-tool E2E and an idle-read measurement) were skipped without being called out.
-- **2026-09-29: a cassette was recorded with the wrong model.** Use only `openai/gpt-6-luna` for live recording.
+- **2026-09-29: a cassette was recorded with the wrong model.** Use only the configured live model (`BUTLER_E2E_LIVE_MODEL`) for live recording.
   - What happened: a cassette was re-recorded with `gpt-6-sol`, copying the model named in older cassettes.
