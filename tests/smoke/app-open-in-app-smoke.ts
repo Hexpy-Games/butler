@@ -69,7 +69,6 @@ const app = await browserAgentApp(evidence, (request) => {
 async function capture(name: string, keepPointer = false) {
   if (!shots) return;
   if (!keepPointer) await app.page.movePointer(5, 890);
-  else await app.page.evaluate(() => new Promise((done) => setTimeout(done, 400)));
   // Panels slide in; capture what the user sees once they settle.
   // Scroll-driven and endless animations never finish; wait only for timed ones.
   await waitBrowser(() => app.page.expression(`document.getAnimations().every((animation) => animation.playState !== "running"
@@ -98,7 +97,6 @@ async function openDrawerItem(name: string) {
   await showSidebar();
   await click('[data-test-class="library-entry"]');
   await waitBrowser(() => app.page.expression(`Boolean(document.querySelector('[data-library-item] [aria-label="${drawerTitle}"]'))`), "drawer card");
-  await app.page.evaluate(() => new Promise((done) => setTimeout(done, 400)));
   await capture(`drawer-${name}`);
   await click(`[data-library-item] [aria-label="${drawerTitle}"]`);
   await waitBrowser(() => app.page.expression(`Boolean(document.querySelector('${viewer}'))`), "drawer item in the inspector");

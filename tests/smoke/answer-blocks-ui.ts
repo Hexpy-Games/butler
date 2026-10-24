@@ -165,11 +165,11 @@ async function checkInteractions(page: Page) {
   assert.deepEqual(saved.body.fields, Object.fromEntries(Object.entries({ title: card?.title, sub: card?.sub, label: card?.label, value: card?.value,
     facts: card?.facts, text: card?.text, source: card?.source, checked: card?.checked }).filter(([, value]) => value !== undefined)));
   assert.equal(await page.locator("[data-butler-snapshot]").count(), 0, "the copy marker is removed");
-  const libraryCalls = calls.filter(call => call.path === "/library").length;
+  const scrapped = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === "/library");
   await page.locator('[data-answer-block="gallery"]').getByRole("button", { name: labels.save, exact: true }).click();
   await page.waitForFunction(count => (window as Window & { snapshotted?: string[] }).snapshotted?.length === count, 2);
   assert.deepEqual(await page.evaluate(() => (window as Window & { snapshotted?: string[] }).snapshotted), ["item-card", "answer-item"], "a gallery item is copied by itself");
-  for (let i = 0; i < 50 && calls.filter(call => call.path === "/library").length === libraryCalls; i++) await page.waitForTimeout(100);
+  await scrapped;
   assert.equal(calls.filter(call => call.path === "/library").at(-1)?.body.snapshot && true, true, "the gallery scrap keeps its copy");
   await page.locator('[data-test-class="assistant-footer"]').getByRole("button", { name: new RegExp(labels.copy) }).click();
   assert.equal(await page.evaluate(() => (window as Window & { copiedText?: string }).copiedText), `${message(neutral).text}\n\n${toMarkdown(neutral)}`);
@@ -336,6 +336,11 @@ try {
     if (url.pathname.startsWith("/message-assets/") || url.pathname === "/favicons") return route.fulfill({ status: 404 });
     if (/^\/sessions\/[^/]+\/controls$/u.test(url.pathname)) return route.fulfill({ json: { ok: true, data: { session_id: "butler-client", revision: 0, catalog_generation: "harness-model-catalog-v1", controls: { model: "openai/gpt-5.6-sol", reasoning_effort: "none", access_mode: "full_access", plan_mode: false } } } });
     if (url.pathname === "/session-queue") return route.fulfill({ json: { ok: true, data: { queued_messages: [] } } });
+    // The fixture's project has no canon plans; its sidebar reads the canon since 734a125f3.
+    const canon = /^\/projects\/([^/]+)\/canon(\/sidebar)?$/u.exec(url.pathname);
+    if (canon) return route.fulfill({ json: { ok: true, data: canon[2]
+      ? { project_id: decodeURIComponent(canon[1]!), groups: [{ key: "backlog", kind: "backlog", title: "", rows: [] }] }
+      : { project_id: decodeURIComponent(canon[1]!), backlog_revision: 0, backlog: [], plans: [] } } });
     if (["/session-view", "/summary", "/navigation", "/events/live", "/health"].includes(url.pathname)) return route.fulfill({ json: { ok: true, data: {} } });
     return route.continue();
   });

@@ -1,3 +1,4 @@
+import { chooseReplyLanguage, verifyReplyLanguageSaved } from "../support/first-run-reply-language";
 import { connectToElectronPage, waitForExpression, evaluateBoolean, evaluateString, clickButton, fillInput, waitForHeading, waitForText, type CdpClient } from "../support/first-run-cdp";
 import { spawnElectron, stopElectronChild } from "../support/electron-child";
 import { smokeElectronArgs } from "../support/smoke-browser.ts";
@@ -300,6 +301,9 @@ function reportFirstRun(serverPort: number): void {
       "no-jargon-in-ai-list",
       "openai-compatible-server-models",
       "workspace-gate-opens-after-connection",
+      "reply-backend-preselection-resume-nondefault-choice",
+      "reply-explicit-persistence-ui-language-independence-ask-once",
+      "reply-six-responsive-widths",
     ],
     appServerUrl: `http://127.0.0.1:${serverPort}/`,
   }));
@@ -361,7 +365,7 @@ async function verifyFirstRun(cdp: CdpClient): Promise<void> {
   await verifyConnection(cdp);
 }
 
-const captureDir = resolve(root, ".tmp", "memory-model-opt-in");
+const captureDir = process.env.BUTLER_SMOKE_SCREENSHOTS ?? join(tempDir, "screenshots");
 
 /** One capture per theme; the first run and the workspace follow the system theme. */
 async function captureThemes(client: CdpClient, name: string): Promise<void> {
@@ -369,11 +373,22 @@ async function captureThemes(client: CdpClient, name: string): Promise<void> {
   for (const theme of ["light", "dark"] as const) {
     await client.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: theme }] });
     await waitForExpression(client, `document.body.classList.contains('theme-dark') === ${theme === "dark"}`, `${name} ${theme} theme`);
-    await new Promise((done) => setTimeout(done, 900));
+    await waitForVisualSettle(client);
     const shot = await client.send<{ data: string }>("Page.captureScreenshot", { format: "png" });
     writeFileSync(join(captureDir, `${name}-ko-${theme}.png`), Buffer.from(shot.data, "base64"));
   }
   await client.send("Emulation.setEmulatedMedia", { features: [] });
+}
+
+async function waitForVisualSettle(client: CdpClient): Promise<void> {
+  assert(await evaluateBoolean(client, `(async () => {
+    await document.fonts.ready;
+    await Promise.all(document.getAnimations().filter((animation) =>
+      animation.timeline === document.timeline && animation.effect?.getTiming().iterations !== Infinity
+    ).map((animation) => animation.finished.catch(() => undefined)));
+    await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+    return true;
+  })()`), "visual state settled");
 }
 
 /** The memory step needs a choice; off never downloads and is saved for Settings → Memory. */
@@ -424,9 +439,12 @@ async function verifyConnection(cdp: CdpClient): Promise<void> {
   assert(!(await evaluateBoolean(cdp, failed)), "OpenAI-compatible server connection failed");
   assert(await evaluateBoolean(cdp, `window.butlerApp.getModelCatalog().then((catalog) => [...(catalog.models ?? []), ...catalog.providers.flatMap((provider) => provider.models)].some((model) => model.model_id === ${JSON.stringify(stubModelId)} && model.context_window_tokens > 0))`),
     "registered OpenAI-compatible model has a positive context window");
+  const replyLanguage = await chooseReplyLanguage(cdp);
   await clickButton(cdp, "다음");
   await waitForHeading(cdp, "다른 AI에서 가져오기");
-  await clickButton(cdp, "건너뛰기");
+  // Empty imports advance with Next since 58a5a00fb; the isolated HOME has no AI tool data.
+  await waitForText(cdp, "가져올 AI 도구 없음");
+  await clickButton(cdp, "다음");
   await waitForHeading(cdp, "준비를 마쳤습니다");
   await clickButton(cdp, "시작하기");
   await waitForExpression(
@@ -435,10 +453,11 @@ async function verifyConnection(cdp: CdpClient): Promise<void> {
     "workspace after first-run completion",
   );
   // The connect step already showed the connection: no late toast greets the workspace.
-  await new Promise((done) => setTimeout(done, 1500));
+  await waitForVisualSettle(cdp);
   await captureThemes(cdp, "first-run-landing");
   assert(!(await evaluateBoolean(cdp, "[...document.querySelectorAll('[data-sonner-toast]')].some((toast) => toast.textContent?.includes('연결했습니다'))")),
     "no connected toast after first-run");
+  await verifyReplyLanguageSaved(cdp, replyLanguage);
   await verifyMemorySettings(cdp);
 
 }

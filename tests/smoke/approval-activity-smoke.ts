@@ -2,7 +2,7 @@
 import { strict as assert } from "node:assert";
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { createNativeAppServer } from "../support/native-app-server";
+import { createNativeAppServer, type StubModelRequest } from "../support/native-app-server";
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser";
 
 if (await runSmokeCases(["light", "dark"], "BUTLER_APPROVAL_ACTIVITY_CASE", import.meta.path)) process.exit(0);
@@ -19,17 +19,20 @@ let release: (() => void) | undefined;
 let resumed: Promise<void>;
 const preamble = "요청하신 내용을 확인했습니다.";
 const answer = "요청하신 작업을 완료했습니다.";
+// Background rounds (title, smart group) stream too but offer no tools; only the conversation turn does.
+const conversation = (request: StubModelRequest) => Array.isArray(request.body.tools) && request.body.tools.length > 0;
 const server = await createNativeAppServer({
   uiRoot: resolve("packages/butler-app/client/ui/dist"),
   stubReply: async request => {
     if (!request.stream) return "{}";
+    if (!conversation(request)) return "";
     if (pendingTool) return preamble;
     resumeStarted = true;
     await resumed;
     return answer;
   },
   stubToolCall: request => {
-    if (!request.stream || !pendingTool) return null;
+    if (!conversation(request) || !pendingTool) return null;
     if (!observedSkills) {
       observedSkills = true;
       return { name: "list_skills", arguments: {} };

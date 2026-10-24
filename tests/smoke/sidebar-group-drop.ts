@@ -23,9 +23,12 @@ try {
     key: FIRST_RUN_STORAGE_KEY, value: legacyFirstRunCompleteRecord(),
   });
   let groupRequests = 0;
+  // Hold the request until the form has shown its pending state.
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
   await page.route("**/space/group-sessions", async route => {
     groupRequests++;
-    await new Promise(resolve => setTimeout(resolve, 700));
+    await held;
     await route.continue();
   });
   await page.goto(server.url);
@@ -40,7 +43,10 @@ try {
   const targetRow = page.locator(`[data-tree-item="s:${target.id}"]`);
   await sourceRow.waitFor();
   await targetRow.waitFor();
-  await page.waitForTimeout(250);
+  // Scroll-driven animations follow scroll position, not time, and never finish.
+  await page.waitForFunction(() => document.getAnimations().every(animation =>
+    animation.timeline !== document.timeline || animation.effect?.getTiming().iterations === Infinity ||
+      animation.playState !== "running"));
   const from = await sourceRow.boundingBox();
   const to = await targetRow.locator('[data-test-class="tree-row"]').boundingBox();
   assert(from && to);
@@ -48,8 +54,12 @@ try {
   await page.mouse.down();
   await page.mouse.move(from.x + 45, from.y + from.height / 2 + 12, { steps: 8 });
   await page.mouse.move(to.x + 45, to.y + to.height / 2, { steps: 16 });
-  await page.waitForTimeout(150);
-  console.log(JSON.stringify({ hint: await targetRow.getAttribute("data-drop") }));
+  // Hovering a chat row turns "after" into "group" once the dwell completes. A resting OS
+  // drag keeps sending dragover; Playwright sends one per move, so nudge the pointer.
+  for (let step = 0, deadline = Date.now() + 30_000; await targetRow.getAttribute("data-drop") !== "group"; step++) {
+    assert(Date.now() < deadline, "hovered chat row never offered to group");
+    await page.mouse.move(to.x + 45, to.y + to.height / 2 + step % 2);
+  }
   await page.mouse.up();
   const dialog = page.getByRole("dialog");
   await dialog.waitFor();
@@ -59,6 +69,7 @@ try {
   await dialog.locator('button[type="submit"]').click();
   await dialog.locator('form[aria-busy="true"]').waitFor();
   assert.equal(groupRequests, 1);
+  release();
   await dialog.waitFor({ state: "hidden" });
   assert.equal((await navigation()).space.groups[0]?.title, "사슴벌레");
   const groupKey = `g:${(await navigation()).space.groups[0]?.id}`;

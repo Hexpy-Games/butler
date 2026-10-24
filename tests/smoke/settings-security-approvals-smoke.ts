@@ -11,7 +11,7 @@ import { appCopy, setAppCopyLanguage } from "../../packages/butler-app/client/ui
 import type { GrantRecord } from "../../packages/butler-app/client/ui/src/components/settings/grantRows.ts";
 
 const before = process.env.BUTLER_APPROVALS_BEFORE === "1";
-const output = resolve(`.tmp/security-approvals/${before ? "before" : "after"}`);
+const output = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? `.tmp/security-approvals/${before ? "before" : "after"}`);
 mkdirSync(output, { recursive: true });
 const browser = await launchSmokeBrowser();
 const section = (page: Page, id: string) => page.locator(`[data-settings-section-id="${id}"]`);
