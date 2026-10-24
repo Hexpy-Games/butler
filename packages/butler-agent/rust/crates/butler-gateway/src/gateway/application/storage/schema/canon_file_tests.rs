@@ -112,11 +112,15 @@ fn attachment_statements_use_keyed_and_expiry_indexes() {
             .join("\n");
         assert!(plan.contains(index), "{sql}: {plan}");
         assert!(
-            !plan.lines().any(|line| line.contains("SCAN ")
-                && !line.contains("json_each")
-                && !line.contains("SCAN CONSTANT ROW")
+            plan.lines().all(|line| {
                 // This ordered scan is bounded to 100 pending deletions, not file history.
-                && !(sql == SWEEP_QUEUE && line.contains("SCAN app_file_sweep USING COVERING INDEX"))),
+                let bounded_queue =
+                    sql == SWEEP_QUEUE && line.contains("SCAN app_file_sweep USING COVERING INDEX");
+                !line.contains("SCAN ")
+                    || line.contains("json_each")
+                    || line.contains("SCAN CONSTANT ROW")
+                    || bounded_queue
+            }),
             "{sql}: {plan}"
         );
     }

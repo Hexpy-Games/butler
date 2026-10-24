@@ -87,7 +87,8 @@ pub(in crate::gateway::application) fn append_session_references(
             result.push_str(&format!("\n{image}[{name}](attachment:{id})"));
         }
     }
-    butler_canon::store::attachment_references(&result).map_err(attachment_error)?;
+    butler_canon::store::attachment_references(&result)
+        .map_err(|error| attachment_error(&error))?;
     Ok(result)
 }
 
@@ -258,7 +259,8 @@ pub(super) async fn validate_write(
     else {
         return Ok(None);
     };
-    let ids = butler_canon::store::attachment_references(description).map_err(attachment_error)?;
+    let ids = butler_canon::store::attachment_references(description)
+        .map_err(|error| attachment_error(&error))?;
     let expires = app
         .dependencies
         .identity_clock
@@ -292,7 +294,7 @@ pub(super) async fn validate_write(
     Ok(Some(checked))
 }
 
-fn attachment_error(error: butler_canon::store::Error) -> GatewayApplicationError {
+fn attachment_error(error: &butler_canon::store::Error) -> GatewayApplicationError {
     if matches!(
         error,
         butler_canon::store::Error::Invalid("at most 20 attachments per epic")
