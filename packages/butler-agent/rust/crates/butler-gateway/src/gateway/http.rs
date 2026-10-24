@@ -8,6 +8,7 @@ mod body;
 mod browser_host;
 mod browser_stills;
 mod content;
+mod documents;
 mod library;
 mod pending_asks;
 mod start;

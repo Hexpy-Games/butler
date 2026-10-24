@@ -17,7 +17,7 @@ impl AppApplication {
     ) -> Result<AppTurn, GatewayApplicationError> {
         let queued_id = claim.queued_message_id.clone();
         let claim_id = claim.claim_id.clone();
-        let (snapshot, conversation_access, default_project_folder) = self
+        let (snapshot, conversation_access, default_project_folder, document_edits) = self
             .storage
             .execute(move |db| claimed_input(db, &queued_id, &claim_id))
             .await
@@ -82,26 +82,28 @@ impl AppApplication {
             .native_assets
             .resolve(snapshot.clone())
             .await?;
-        self.with_canon_epics(rebuilt_turn(
+        let mut turn = rebuilt_turn(
             snapshot,
             assets,
             &conversation_access,
             default_project_folder,
-        ))
-        .await
+        );
+        turn.app_turn_context["documentEdits"] = json!(document_edits);
+        self.with_canon_epics(turn).await
     }
 }
 
 /// The claimed snapshot and its conversation's own access mode now.
-fn claimed_input(
+pub(super) fn claimed_input(
     db: &Connection,
     queued_id: &str,
     claim_id: &str,
-) -> Result<(ClaimedNativeSnapshot, AccessMode, String), AppStorageError> {
+) -> Result<(ClaimedNativeSnapshot, AccessMode, String, Vec<String>), AppStorageError> {
     let snapshot = claimed_snapshot(db, queued_id, claim_id)?;
     let access = settings::conversation_access_mode(db, &snapshot.chat_id)?;
     let folder = projects::effective_root(db)?.to_string_lossy().into_owned();
-    Ok((snapshot, access, folder))
+    let edits = super::documents::context::for_turn(db, &snapshot.chat_id, queued_id)?;
+    Ok((snapshot, access, folder, edits))
 }
 
 fn claimed_snapshot(

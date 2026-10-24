@@ -10,12 +10,14 @@ use crate::gateway::ApplicationFuture;
 pub use organize::AppLibraryChange;
 pub use query::AppLibraryQuery;
 pub(super) use records::{
-    bookmark_in_folder, create_folder_groups, deliverable, document, output, save,
+    bookmark_in_folder, create_folder_groups, deliverable, document, editable_document, output,
+    save,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 /// Explicit user (and agent tool) commands over App-owned Library records.
 pub enum AppLibraryCommand {
+    Document(super::AppDocumentCommand),
     /// Browsing visits share the existing App-owned browser command lane.
     History(crate::gateway::AppHistoryCommand),
     Page(AppLibraryQuery),
@@ -68,6 +70,7 @@ impl AppApplication {
     pub(super) fn library_owned(&self, command: AppLibraryCommand) -> ApplicationFuture<Value> {
         use AppLibraryCommand as C;
         match command {
+            C::Document(command) => self.documents_owned(command),
             C::History(command) => self.history_owned(command),
             C::Page(q) => self.library_read(move |db| query::page(db, &q)),
             C::Search(q) => self.library_read(move |db| query::search(db, &q)),
@@ -154,6 +157,15 @@ fn save_item(db: &Connection, mut item: Value) -> Result<Value, AppStorageError>
     Ok(saved)
 }
 pub(super) fn delete(db: &Connection, id: &str) -> Result<Value, AppStorageError> {
+    let kind: Option<String> = db
+        .query_row("SELECT kind FROM browser_library WHERE id=?1", [id], |r| {
+            r.get(0)
+        })
+        .optional()
+        .map_err(AppStorageError::sqlite)?;
+    if kind.as_deref() == Some("doc") {
+        super::documents::delete(db, id)?;
+    }
     let sql = AppStorageError::sqlite;
     db.execute("DELETE FROM browser_library_fts WHERE rowid=(SELECT rowid FROM browser_library WHERE id=?1)",[id]).map_err(sql)?;
     db.execute("DELETE FROM browser_library_snapshot WHERE id=?1", [id])

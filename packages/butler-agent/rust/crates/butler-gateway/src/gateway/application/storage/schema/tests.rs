@@ -67,6 +67,15 @@ fn fresh_schema_has_full_support_and_functional_message_fts() {
     assert!(table_exists(&connection, "app_session_branches"));
     assert!(table_exists(&connection, "app_space_nodes"));
     assert!(table_exists(&connection, "app_wallpaper_assets"));
+    for table in [
+        "documents",
+        "document_bodies",
+        "document_revisions",
+        "document_seen",
+        "session_queued_document_edits",
+    ] {
+        assert!(table_exists(&connection, table));
+    }
     assert!(table_exists(&connection, "app_wallpaper_module_status"));
     // A deployed General conversation keeps its messages while the internal seed title is repaired.
     super::seed(&connection, "later").unwrap();

@@ -39,6 +39,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // internals remain private. Operations and web access build on Context.
         "capabilities" => &["skills"],
         "context" | "skills" | "outputs" | "browser" | "previews" => &[],
+        // Markdown documents are pure codecs; storage and turn evidence stay in adapters.
+        "documents" => &[],
         // Imported sign-ins key on the browser policy's registrable site.
         "browser_import" => &["browser"],
         // Other agents' MCP servers and instructions: parsing only.

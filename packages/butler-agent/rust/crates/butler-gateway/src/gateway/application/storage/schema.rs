@@ -5,6 +5,7 @@ pub(in crate::gateway::application) mod canon;
 pub(in crate::gateway::application) mod canon_files;
 mod canon_sidebar;
 mod core;
+mod documents;
 mod library;
 mod message_ownership;
 mod migration;
@@ -60,6 +61,7 @@ pub(super) fn migrate(
     record_default_model_policy(connection, !turns_new)?;
     migration::add_current_columns(connection)?;
     assets::create(connection)?;
+    documents::create(connection)?;
     connection.execute_batch(
         "CREATE INDEX IF NOT EXISTS chats_archived_idx ON chats(archived);
          CREATE INDEX IF NOT EXISTS projects_archived_idx ON projects(archived);
