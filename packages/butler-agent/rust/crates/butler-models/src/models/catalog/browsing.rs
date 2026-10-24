@@ -67,19 +67,21 @@ pub fn resolve_browsing_model(
             rule: BrowsingRule::FamilySibling,
         };
     }
-    let preset = preset
-        .map(|preset| (preset, BrowsingRule::ProviderPreset))
-        .or_else(|| planning.map(|preset| (preset, BrowsingRule::PlanningPreset)));
-    if let Some((preset, rule)) = preset
-        && let Some(model) = registered.iter().filter(usable).find(|model| {
-            model.model_ref == preset.model && model.reasoning_efforts.contains(&preset.effort)
-        })
-    {
-        return BrowsingResolution {
-            model: model.model_ref.clone(),
-            effort: preset.effort,
-            rule,
-        };
+    for (preset, rule) in [
+        (preset, BrowsingRule::ProviderPreset),
+        (planning, BrowsingRule::PlanningPreset),
+    ] {
+        if let Some(preset) = preset
+            && let Some(model) = registered.iter().filter(usable).find(|model| {
+                model.model_ref == preset.model && model.reasoning_efforts.contains(&preset.effort)
+            })
+        {
+            return BrowsingResolution {
+                model: model.model_ref.clone(),
+                effort: preset.effort,
+                rule,
+            };
+        }
     }
     BrowsingResolution {
         model: conversation.model_ref.clone(),

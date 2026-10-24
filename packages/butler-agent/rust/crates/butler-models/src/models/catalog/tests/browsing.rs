@@ -99,6 +99,14 @@ pub(super) fn assert_resolution_rules() {
         (chosen.model, chosen.effort),
         (preset.model.clone(), preset.effort)
     );
+    let mut browsing_on_other_account = other_family.clone();
+    browsing_on_other_account.credential_id = Some("account-b".into());
+    let chosen = resolve_presets(&[sibling.clone(), browsing_on_other_account], Some(&preset));
+    assert_eq!(chosen.rule, BrowsingRule::PlanningPreset);
+    assert_eq!(
+        (chosen.model, chosen.effort),
+        (planning.model.clone(), planning.effort)
+    );
     for kind in 0..10 {
         let mut bad = sibling.clone();
         match kind {
