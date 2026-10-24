@@ -11,7 +11,8 @@ pub(super) fn app_error(error: AppStorageError) -> GatewayApplicationError {
             .with_source(error);
     }
     match error.code() {
-        "automation_interval_invalid"
+        "invalid_document_request"
+        | "automation_interval_invalid"
         | "project_required"
         | "message_file_not_found"
         | "too_many_attachments"
@@ -34,7 +35,8 @@ pub(super) fn app_error(error: AppStorageError) -> GatewayApplicationError {
         | "space_project_boundary"
         | "library_group_exists" => public(409, error.code(), &error.detail()),
         "message_file_wrong_session" => public(403, error.code(), &error.detail()),
-        "session_not_found"
+        "document_not_found"
+        | "session_not_found"
         | "automation_not_found"
         | "project_not_found"
         | "queued_message_not_found"

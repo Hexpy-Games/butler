@@ -45,6 +45,8 @@ wire_codes! {
         AutomationStateInvalid = "automation_state_invalid",
         BranchJsonInvalid = "branch_json_invalid",
         BranchReservationLost = "branch_reservation_lost",
+        DocumentNotFound = "document_not_found",
+        InvalidDocumentRequest = "invalid_document_request",
         EmptyQueuedMessage = "empty_queued_message",
         GeneralChannelProtected = "general_channel_protected",
         InvalidJson = "invalid_json",

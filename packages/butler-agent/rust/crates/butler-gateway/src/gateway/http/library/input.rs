@@ -15,8 +15,10 @@ fn invalid(message: &str) -> HttpError {
 /// One of the Library kinds; listings default to scraps.
 pub(super) fn kind(value: Option<&String>) -> Result<String, HttpError> {
     match value.map(String::as_str).unwrap_or("scrap") {
-        kind @ ("scrap" | "document" | "bookmark" | "output") => Ok(kind.to_owned()),
-        _ => Err(invalid("kind must be scrap, document, bookmark or output.")),
+        kind @ ("scrap" | "document" | "doc" | "bookmark" | "output") => Ok(kind.to_owned()),
+        _ => Err(invalid(
+            "kind must be scrap, document, doc, bookmark or output.",
+        )),
     }
 }
 /// A kind with groups: scrap or bookmark.

@@ -49,6 +49,17 @@
   min-width: 0;
 }
 
+/* A tab strip scrolls sideways without a scrollbar (the TabStrip rule): a
+   classic one would take block size the strip does not have, lift the cards
+   off centre and cut their focus rings at the strip's top. */
+.shelf [data-slot="tab-rail-shelf-scroll"] {
+  scrollbar-width: none;
+}
+
+.shelf [data-slot="tab-rail-shelf-scroll"]::-webkit-scrollbar {
+  display: none;
+}
+
 .shelfRow {
   align-items: center;
   gap: var(--space-xs);
