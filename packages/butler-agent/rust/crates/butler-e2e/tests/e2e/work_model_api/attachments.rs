@@ -214,7 +214,10 @@ pub(super) mod requires_e2e_fixtures {
         }
         s.finish().await
     }
-    pub(in super::super) async fn jump(address: String, now: &'static str) -> Result<(), HarnessError> {
+    pub(in super::super) async fn jump(
+        address: String,
+        now: &'static str,
+    ) -> Result<(), HarnessError> {
         tokio::task::spawn_blocking(move || -> Result<(), HarnessError> {
             use std::io::{BufRead, BufReader, Write};
             let mut stream = std::net::TcpStream::connect(address)?;
