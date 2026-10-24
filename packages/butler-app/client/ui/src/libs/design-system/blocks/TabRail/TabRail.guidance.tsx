@@ -47,7 +47,7 @@ export const guidance: ShowcaseGuidance = {
     "The rail is a labelled region; each card is one button named by title and state, × a separate button.",
     "The layer around the rail takes no pointer input, so the transcript scrolls and selects under it.",
     "Reduced motion: no enter or exit motion and still thinking marks.",
-    "The shelf scrolls sideways inside its strip; the page never scrolls horizontally.",
+    "The shelf scrolls sideways inside its strip without a scrollbar (the TabStrip rule), so a classic scrollbar never lifts the cards or cuts their focus rings; the page never scrolls horizontally.",
   ],
   tokens: ["--tab-rail-width", "--tab-rail-compact-width", "--tab-rail-shelf-height", "--tab-rail-inset", "--tab-rail-clearance", "--motion-base", "--motion-fast", "--motion-distance-sm"],
 };
