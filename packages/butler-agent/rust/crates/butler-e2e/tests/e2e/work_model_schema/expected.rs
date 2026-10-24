@@ -30,7 +30,7 @@ pub(super) fn assert_rows(db: &Connection) -> rusqlite::Result<()> {
         ("canon_audit", 4),
         ("canon_events", 1),
         ("canon_counters", 4),
-        ("canon_intents", 1),
+        ("canon_intents", 0),
         ("canon_cursors", 0),
         ("canon_epic_work_links", 0),
     ] {
@@ -197,10 +197,7 @@ pub(super) fn assert_rows(db: &Connection) -> rusqlite::Result<()> {
             ["project", "butler", "spec_nodes", 8]
         ])
     );
-    assert_eq!(
-        values(db, "SELECT * FROM canon_intents")?,
-        json!([["pending-op", "projection", "{}", 3, "pending", 1]])
-    );
+    assert_eq!(values(db, "SELECT * FROM canon_intents")?, json!([]));
     assert_eq!(
         values(
             db,

@@ -49,13 +49,14 @@ fn migrated_app(db: &Connection) -> rusqlite::Result<()> {
     assert_eq!(
         rows(
             db,
-            "SELECT session_id,epic_id,project_id,op_id FROM app_canon_conversations"
+            "SELECT session_id,epic_id,project_id,op_id,is_home FROM app_canon_conversations"
         )?,
         vec![vec![
             Value::Text("old-chat".into()),
             Value::Text("wk_canon".into()),
             Value::Text("butler".into()),
-            Value::Text("old-op".into())
+            Value::Text("old-op".into()),
+            Value::Integer(1)
         ]]
     );
     db.execute_batch("INSERT INTO app_canon_conversations(session_id,epic_id,project_id,op_id) VALUES('old-chat','wk_docs','butler','op-2'),('second-chat','wk_canon','butler','op-3');")
@@ -103,26 +104,29 @@ async fn cb_12_dev_upgrade_preserves_canon_and_second_start_is_identical()
     assert_eq!(
         rows(
             &Connection::open(&app_path)?,
-            "SELECT session_id,epic_id,project_id,op_id FROM app_canon_conversations ORDER BY session_id,epic_id"
+            "SELECT session_id,epic_id,project_id,op_id,is_home FROM app_canon_conversations ORDER BY session_id,epic_id"
         )?,
         vec![
             vec![
                 Value::Text("old-chat".into()),
                 Value::Text("wk_canon".into()),
                 Value::Text("butler".into()),
-                Value::Text("old-op".into())
+                Value::Text("old-op".into()),
+                Value::Integer(1)
             ],
             vec![
                 Value::Text("old-chat".into()),
                 Value::Text("wk_docs".into()),
                 Value::Text("butler".into()),
-                Value::Text("op-2".into())
+                Value::Text("op-2".into()),
+                Value::Integer(0)
             ],
             vec![
                 Value::Text("second-chat".into()),
                 Value::Text("wk_canon".into()),
                 Value::Text("butler".into()),
-                Value::Text("op-3".into())
+                Value::Text("op-3".into()),
+                Value::Integer(0)
             ],
         ]
     );
@@ -139,7 +143,9 @@ async fn cb_12_downgraded_dev_rows_merge_with_existing_canon_ids_winning()
     let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
     let db = Connection::open(&path)?;
     db.execute_batch("INSERT INTO canon_plans VALUES('pl_p14','butler','Winning title','',NULL,'closed',99,1,2,'{}');")?;
+    db.execute_batch("INSERT INTO canon_audit(entity_kind,entity_id,revision,actor_json,op,at,payload_json) VALUES('plan','pl_p14',99,'{}','create',2,'{}');")?;
     seed(&db)?;
+    db.execute_batch("INSERT INTO wm_audit VALUES(1,'plan','pl_p14',1,'{}','create',1,'{}'),(2,'work','wk_canon',1,'{}','create',1,'{}');")?;
     drop(db);
     s.restart().await?;
     s.agent.terminate().await?;
@@ -158,6 +164,29 @@ async fn cb_12_downgraded_dev_rows_merge_with_existing_canon_ids_winning()
     assert_eq!(
         rows(&db, "SELECT count(*) FROM canon_epics")?,
         vec![vec![Value::Integer(9)]]
+    );
+    let audit = rows(&db, "SELECT * FROM canon_audit ORDER BY seq")?;
+    assert_eq!(audit.len(), 2);
+    assert_eq!(audit[0][3], Value::Integer(99));
+    seed(&db)?;
+    db.execute_batch("UPDATE wm_works SET home_session_id='losing-chat',created_at=0 WHERE id='wk_canon';
+        INSERT INTO wm_audit VALUES(1,'plan','pl_p14',1,'{}','create',1,'{}'),(2,'work','wk_canon',2,'{}','edit',3,'{}');")?;
+    drop(db);
+    s.restart().await?;
+    s.agent.terminate().await?;
+    let db = Connection::open(&path)?;
+    no_legacy(&db)?;
+    let epic =
+        butler_canon::store::read_api(&db, butler_canon::store::api::Resource::Epic, "wk_canon")
+            .unwrap();
+    assert_eq!(epic["home_session_id"], "chat_canon");
+    assert_eq!(rows(&db, "SELECT * FROM canon_audit ORDER BY seq")?, audit);
+    assert_eq!(
+        rows(
+            &db,
+            "SELECT session_id FROM canon_session_epics WHERE epic_id='wk_canon'"
+        )?,
+        vec![vec![Value::Text("chat_canon".into())]]
     );
     drop(db);
     s.finish().await
@@ -192,25 +221,22 @@ async fn cb_12_reupgrade_keeps_colliding_history_and_outpaces_stale_receipts()
     s.agent.terminate().await?;
     let db = Connection::open(&path)?;
     no_legacy(&db)?;
-    let expected: Vec<_> = (0..2)
-        .flat_map(|round| {
-            [
-                ("work", "wk_canon"),
-                ("plan", "pl_p14"),
-                ("spec_node", "sp_canon"),
-                ("backlog", "butler"),
-            ]
-            .into_iter()
-            .enumerate()
-            .map(move |(index, (kind, id))| {
-                vec![
-                    Value::Integer(round * 4 + i64::try_from(index).unwrap() + 1),
-                    Value::Text(kind.into()),
-                    Value::Text(id.into()),
-                ]
-            })
-        })
-        .collect();
+    let expected: Vec<_> = [
+        ("work", "wk_canon"),
+        ("plan", "pl_p14"),
+        ("spec_node", "sp_canon"),
+        ("backlog", "butler"),
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(index, (kind, id))| {
+        vec![
+            Value::Integer(i64::try_from(index).unwrap() + 1),
+            Value::Text(kind.into()),
+            Value::Text(id.into()),
+        ]
+    })
+    .collect();
     assert_eq!(
         rows(
             &db,

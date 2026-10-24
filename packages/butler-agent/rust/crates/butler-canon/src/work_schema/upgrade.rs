@@ -51,7 +51,23 @@ pub(super) fn merged(db: &Connection) -> rusqlite::Result<bool> {
     db.execute_batch(include_str!("drop_merged.sql"))?;
     Ok(copied)
 }
+// Copy dependent rows before entities so collision guards see the pre-upgrade state.
 const COPIES: &[(&str, &str)] = &[
+    (
+        "wm_works",
+        "INSERT INTO canon_session_epics SELECT home_session_id,id,created_at,created_by,'user' FROM wm_works WHERE visibility='canon' AND home_session_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM canon_epics WHERE id=wm_works.id) ON CONFLICT(session_id,epic_id) DO NOTHING",
+    ),
+    (
+        "wm_audit",
+        "INSERT INTO canon_audit(entity_kind,entity_id,revision,actor_json,op,at,payload_json)
+         SELECT entity_kind,entity_id,revision,actor_json,op,at,payload_json
+         FROM wm_audit WHERE (entity_kind='work' AND NOT EXISTS(SELECT 1 FROM canon_epics WHERE id=wm_audit.entity_id) AND entity_id IN (SELECT id FROM wm_works WHERE visibility='canon'))
+         OR (entity_kind='plan' AND NOT EXISTS(SELECT 1 FROM canon_plans WHERE id=wm_audit.entity_id) AND entity_id IN (SELECT id FROM wm_plans WHERE visibility='canon'))
+         OR (entity_kind='spec_node' AND NOT EXISTS(SELECT 1 FROM canon_spec_nodes WHERE node_id=wm_audit.entity_id) AND entity_id IN (SELECT node_id FROM wm_spec_nodes WHERE visibility='canon'))
+         OR (entity_kind='backlog' AND NOT EXISTS(SELECT 1 FROM canon_counters WHERE scope_kind='project' AND scope_ref=wm_audit.entity_id AND key='backlog_revision') AND entity_id IN (SELECT scope_ref FROM wm_counts WHERE scope_kind='project' AND key='backlog_revision'))
+         OR (entity_kind='intent' AND NOT EXISTS(SELECT 1 FROM canon_intents WHERE op_id=wm_audit.entity_id) AND entity_id IN (SELECT op_id FROM wm_cross_db_intents WHERE state='pending' AND kind='canon_conversation' AND json_extract(payload_json,'$.work_id') IN (SELECT id FROM wm_works WHERE visibility='canon')))
+         ORDER BY seq",
+    ),
     (
         "wm_plans",
         "INSERT INTO canon_plans SELECT id,project_id,title,description,due_on,status,revision,created_at,updated_at,created_by FROM wm_plans WHERE visibility='canon' ON CONFLICT(id) DO NOTHING",
@@ -77,21 +93,6 @@ const COPIES: &[(&str, &str)] = &[
         "INSERT INTO canon_spec_criteria SELECT c.* FROM wm_spec_criteria c JOIN wm_spec_nodes n ON n.node_id=c.node_id WHERE n.visibility='canon' ON CONFLICT(node_id,revision,criterion_id) DO NOTHING",
     ),
     (
-        "wm_works",
-        "INSERT INTO canon_session_epics SELECT home_session_id,id,created_at,created_by,'user' FROM wm_works WHERE visibility='canon' AND home_session_id IS NOT NULL ON CONFLICT(session_id,epic_id) DO NOTHING",
-    ),
-    (
-        "wm_audit",
-        "INSERT INTO canon_audit(entity_kind,entity_id,revision,actor_json,op,at,payload_json)
-         SELECT entity_kind,entity_id,revision,actor_json,op,at,payload_json
-         FROM wm_audit WHERE (entity_kind='work' AND entity_id IN (SELECT id FROM wm_works WHERE visibility='canon'))
-         OR (entity_kind='plan' AND entity_id IN (SELECT id FROM wm_plans WHERE visibility='canon'))
-         OR (entity_kind='spec_node' AND entity_id IN (SELECT node_id FROM wm_spec_nodes WHERE visibility='canon'))
-         OR (entity_kind='backlog' AND entity_id IN (SELECT scope_ref FROM wm_counts WHERE scope_kind='project' AND key='backlog_revision'))
-         OR (entity_kind='intent' AND entity_id IN (SELECT op_id FROM wm_cross_db_intents WHERE kind='canon_conversation' AND json_extract(payload_json,'$.work_id') IN (SELECT id FROM wm_works WHERE visibility='canon')))
-         ORDER BY seq",
-    ),
-    (
         "wm_outbox",
         "INSERT INTO sqlite_sequence(name,seq) SELECT 'canon_events',0 WHERE NOT EXISTS(SELECT 1 FROM sqlite_sequence WHERE name='canon_events'); UPDATE sqlite_sequence SET seq=MAX(seq,COALESCE((SELECT MAX(seq) FROM wm_outbox),0)) WHERE name='canon_events'; INSERT INTO canon_events(topic,payload_json,published,created_at) SELECT topic,payload_json,published,created_at FROM wm_outbox WHERE published=0 AND topic='canon.changed' ORDER BY seq",
     ),
@@ -101,6 +102,6 @@ const COPIES: &[(&str, &str)] = &[
     ),
     (
         "wm_cross_db_intents",
-        "INSERT INTO canon_intents SELECT * FROM wm_cross_db_intents WHERE state='pending' ON CONFLICT(op_id) DO NOTHING",
+        "INSERT INTO canon_intents SELECT * FROM wm_cross_db_intents WHERE state='pending' AND kind='canon_conversation' AND json_extract(payload_json,'$.work_id') IN (SELECT id FROM wm_works WHERE visibility='canon') ON CONFLICT(op_id) DO NOTHING",
     ),
 ];

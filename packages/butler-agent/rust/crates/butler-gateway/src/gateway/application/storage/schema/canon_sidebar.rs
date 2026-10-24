@@ -34,7 +34,7 @@ fn create_tables(connection: &Connection) -> Result<(), AppStorageError> {
         )
         .map_err(AppStorageError::sqlite)?;
     if exists && !has_home {
-        connection.execute_batch("ALTER TABLE app_canon_conversations ADD COLUMN is_home INTEGER NOT NULL DEFAULT 1 CHECK(is_home IN (0,1));
+        connection.execute_batch("ALTER TABLE app_canon_conversations ADD COLUMN is_home INTEGER NOT NULL DEFAULT 0 CHECK(is_home IN (0,1));
             WITH homes AS (SELECT MIN(rowid) AS home FROM app_canon_conversations GROUP BY epic_id)
             UPDATE app_canon_conversations SET is_home=(rowid IN (SELECT home FROM homes))")
             .map_err(AppStorageError::sqlite)?;
@@ -44,7 +44,7 @@ fn create_tables(connection: &Connection) -> Result<(), AppStorageError> {
             "CREATE TABLE IF NOT EXISTS app_canon_conversations (
             session_id TEXT NOT NULL,
             epic_id TEXT NOT NULL,
-            is_home INTEGER NOT NULL DEFAULT 1 CHECK(is_home IN (0,1)),
+            is_home INTEGER NOT NULL DEFAULT 0 CHECK(is_home IN (0,1)),
             project_id TEXT NOT NULL,
             op_id TEXT NOT NULL UNIQUE,
             PRIMARY KEY(session_id,epic_id)

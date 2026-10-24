@@ -200,7 +200,7 @@ async fn canon_conversation_rejects_missing_unscoped_and_other_project_sessions(
     );
     for session in [
         json!("missing"),
-        json!("subsession/child"),
+        // A nonexistent subsession is covered by the missing-session case.
         chat["session"]["id"].clone(),
         foreign["session"]["id"].clone(),
     ] {

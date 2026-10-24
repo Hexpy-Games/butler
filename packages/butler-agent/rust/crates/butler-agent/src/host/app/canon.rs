@@ -29,10 +29,10 @@ impl AppCanonPort for AppCanon {
         Box::pin(async move {
             storage
                 .canon_read(move |db| {
+                    let mut stmt = db.prepare(Query::ConversationWork.sql())?;
                     sessions
                         .into_iter()
                         .map(|session| {
-                            let mut stmt = db.prepare(Query::ConversationWork.sql())?;
                             Ok(stmt
                                 .query_map([session], |r| r.get::<_, String>("id"))?
                                 .collect::<rusqlite::Result<Vec<_>>>()?)
