@@ -69,6 +69,10 @@ const COPIES: &[(&str, &str)] = &[
          ORDER BY seq",
     ),
     (
+        "wm_cross_db_intents",
+        "INSERT INTO canon_intents SELECT * FROM wm_cross_db_intents WHERE state='pending' AND kind='canon_conversation' AND NOT EXISTS(SELECT 1 FROM canon_epics WHERE id=json_extract(payload_json,'$.work_id')) AND json_extract(payload_json,'$.work_id') IN (SELECT id FROM wm_works WHERE visibility='canon') ON CONFLICT(op_id) DO NOTHING",
+    ),
+    (
         "wm_plans",
         "INSERT INTO canon_plans SELECT id,project_id,title,description,due_on,status,revision,created_at,updated_at,created_by FROM wm_plans WHERE visibility='canon' ON CONFLICT(id) DO NOTHING",
     ),
@@ -99,9 +103,5 @@ const COPIES: &[(&str, &str)] = &[
     (
         "wm_counts",
         "INSERT INTO canon_counters SELECT scope_kind,scope_ref,key,count FROM wm_counts WHERE scope_kind='project' AND key='backlog_revision' ON CONFLICT(scope_kind,scope_ref,key) DO NOTHING",
-    ),
-    (
-        "wm_cross_db_intents",
-        "INSERT INTO canon_intents SELECT * FROM wm_cross_db_intents WHERE state='pending' AND kind='canon_conversation' AND json_extract(payload_json,'$.work_id') IN (SELECT id FROM wm_works WHERE visibility='canon') ON CONFLICT(op_id) DO NOTHING",
     ),
 ];

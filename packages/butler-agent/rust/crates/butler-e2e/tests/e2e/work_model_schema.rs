@@ -170,6 +170,7 @@ async fn cb_12_downgraded_dev_rows_merge_with_existing_canon_ids_winning()
     assert_eq!(audit[0][3], Value::Integer(99));
     seed(&db)?;
     db.execute_batch("UPDATE wm_works SET home_session_id='losing-chat',created_at=0 WHERE id='wk_canon';
+        INSERT INTO wm_cross_db_intents VALUES('losing-op','canon_conversation','{\"work_id\":\"wk_canon\",\"session_id\":\"losing-chat\",\"project_id\":\"butler\"}',1,'pending',0);
         INSERT INTO wm_audit VALUES(1,'plan','pl_p14',1,'{}','create',1,'{}'),(2,'work','wk_canon',2,'{}','edit',3,'{}');")?;
     drop(db);
     s.restart().await?;
@@ -180,6 +181,10 @@ async fn cb_12_downgraded_dev_rows_merge_with_existing_canon_ids_winning()
         butler_canon::store::read_api(&db, butler_canon::store::api::Resource::Epic, "wk_canon")
             .unwrap();
     assert_eq!(epic["home_session_id"], "chat_canon");
+    assert_eq!(
+        rows(&db, "SELECT * FROM canon_intents WHERE op_id='losing-op'")?,
+        Vec::<Vec<Value>>::new()
+    );
     assert_eq!(rows(&db, "SELECT * FROM canon_audit ORDER BY seq")?, audit);
     assert_eq!(
         rows(
@@ -193,7 +198,7 @@ async fn cb_12_downgraded_dev_rows_merge_with_existing_canon_ids_winning()
 }
 
 #[tokio::test]
-async fn cb_12_reupgrade_keeps_colliding_history_and_outpaces_stale_receipts()
+async fn cb_12_reupgrade_discards_colliding_history_and_outpaces_stale_receipts()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("CB-12-REUPGRADE")?.start().await?;
