@@ -38,7 +38,7 @@ async fn browsing_settings_roundtrip_and_account_scoped_auto() -> Result<(), Har
     butler_e2e::gate!();
     let mut s = Setup::new("BROWSING-SETTINGS")?.start().await?;
     let initial = s.gw.settings().await?;
-    assert_eq!(initial["browser"]["browsing_agent"], "off");
+    assert_eq!(initial["browser"]["browsing_agent"], "auto");
     assert_eq!(initial["browser"]["auto"]["model"], initial["model"]);
     assert_eq!(initial["browser"]["auto"]["rule"], "conversation");
     let a = credential(&s, "account-a").await?;
