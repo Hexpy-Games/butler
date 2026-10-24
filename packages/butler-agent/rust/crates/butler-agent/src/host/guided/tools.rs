@@ -361,11 +361,7 @@ impl GuidedTools {
                     | ToolName::LibrarySearch
                     | ToolName::LibraryOrganize
             )
-        ) || image_gen::supports(name)
-            || documents::supports(name)
-            || browser::supports(name)
-            || GuidedWorkTools::is_work_tool(name)
-            || crate::host::guided::project_tools::GuidedProjectTools::supports(name)
+        ) || module_supports(name)
     }
 
     async fn resume_pool(&self) -> Result<&Mutex<ResumePool>, BtccError> {
@@ -483,4 +479,13 @@ impl GuidedTools {
             ))
         }
     }
+}
+
+/// Tools whose modules own their names.
+fn module_supports(name: &str) -> bool {
+    image_gen::supports(name)
+        || documents::supports(name)
+        || browser::supports(name)
+        || GuidedWorkTools::is_work_tool(name)
+        || crate::host::guided::project_tools::GuidedProjectTools::supports(name)
 }
