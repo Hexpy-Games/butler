@@ -20,6 +20,10 @@ try {
     wallpaper: { source: { kind: "live", module: "butler.riso-print" }, motion: "paused", pauseOnBattery: false } }) });
   const canon = await server.api<CanonOverview>(`/projects/${projectId}/canon`);
   const epic = canon.plans.find(plan => plan.id === planId)!.works.find(work => work.title === "문서")!;
+  await server.api(`/canon/epics/${epic.id}`, { method: "PATCH", body: JSON.stringify({
+    expected_revision: epic.revision, title: "문서 화면 정리",
+    description: "문서 목록과 상세 화면의 구성을 정리합니다.\n제목과 최근 수정일을 쉽게 찾을 수 있도록 배치합니다.\n검색 결과에서 본문을 확인하는 흐름을 점검합니다.",
+  }) });
   browser = await launchSmokeBrowser();
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors: string[] = [];
@@ -31,7 +35,7 @@ try {
   await page.goto(server.url, { waitUntil: "load" });
   await openCanonBoard(page);
   await page.locator(`[data-kanban-item="${epic.id}"]`).getByRole("button").first().click();
-  await page.locator('[data-test-class="canon-epic-detail"]').getByRole("heading", { name: "문서", exact: true }).waitFor();
+  await page.locator('[data-test-class="canon-epic-detail"]').getByRole("heading", { name: "문서 화면 정리", exact: true }).waitFor();
   await verifyInlineFields(page, server, epic.id, shots);
   await verifyInlineExits(page, server, epic.id, shots);
   assert.deepEqual(errors, []);

@@ -1,7 +1,7 @@
 import { useRef, useState, type Ref } from "react";
 import { appCopy } from "@/app/copy.ts";
 import type { EpicDetail, EpicInput } from "@/app/canonApi.ts";
-import { Box, ButtonContainer, CheckIcon, Clickable, IconButton, Input, Pencil, Presence, Stack, Textarea, Tooltip, Typo, X } from "@/butler-ds";
+import { Box, Button, ButtonContainer, CheckIcon, Clickable, Input, Pencil, Presence, Stack, Textarea, Tooltip, Typo, X } from "@/butler-ds";
 import { InlineUnsavedDialog } from "./InlineUnsavedDialog.tsx";
 import { useInlineExitGuard } from "./useInlineExitGuard.ts";
 import { useEpicInlineEdit, type EpicTextField } from "./useEpicInlineEdit.ts";
@@ -62,9 +62,9 @@ function EpicFieldInput({ field, value, busy, valid, current, base, onChange, on
       if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (!busy) onCancel(); }
       if (event.key === "Enter" && !multiline) { event.preventDefault(); void onSave(); }
     } };
-  const actions = <ButtonContainer size="sm" justify="end">
-    <IconButton label={copy.cancel} disabled={busy} onClick={onCancel}><X size="sm" /></IconButton>
-    <IconButton label={copy.save} disabled={busy || !valid} onClick={() => void onSave()}><CheckIcon size="sm" /></IconButton>
+  const actions = <ButtonContainer size="icon-sm" justify="end">
+    <Tooltip label={copy.cancel}><Button size="icon-sm" variant="outline" aria-label={copy.cancel} disabled={busy} onClick={onCancel}><X size="sm" /></Button></Tooltip>
+    <Tooltip label={copy.save}><Button size="icon-sm" aria-label={copy.save} disabled={busy || !valid} onClick={() => void onSave()}><CheckIcon size="sm" /></Button></Tooltip>
   </ButtonContainer>;
   return <Presence present motion="fade"><Stack gap="sm" data-canon-inline-editor>
     {multiline ? <><Textarea {...props} rows={5} />{actions}</>
