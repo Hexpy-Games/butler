@@ -108,7 +108,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        part: [ui-core, ui-settings, ui-work, browser-tabs, browser-shell]
+        part: [ui-core, ui-settings, ui-work, browser-tabs, browser-shell, browser-input]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/bun-setup
@@ -205,6 +205,12 @@ jobs:
               smoke browser-library-electron
               smoke browser-journey-electron
               smoke app-task-graph-smoke
+              ;;
+            browser-input)
+              smoke browser-pick-native-electron
+              smoke browser-pointer-input-electron
+              smoke browser-scrap-native-electron
+              smoke library-organize-electron
               ;;
             browser-shell)
               smoke browser-wait-durable-electron
