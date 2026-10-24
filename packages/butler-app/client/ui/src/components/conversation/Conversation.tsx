@@ -1,10 +1,12 @@
+import { ConversationRequestProvider } from "./ConversationRequestContext.tsx";
+import { SessionSections } from "../session-info/SessionSections.tsx";
 import { ComposerCrashFallback } from "./ComposerCrashFallback.tsx";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
 import { useAppLocale } from "@/app/copy.ts";
 import { useCallback, useMemo, useState } from "react";
 import { activeChatFromNavigation } from "@/app/utils.ts";
 import { appCopy } from "@/app/copy.ts";
-import { useButlerStore } from "@/app/store.ts";
+import { selectActiveAuthorityApprovals, useButlerStore } from "@/app/store.ts";
 import { useAppearanceTheme } from "@/stores/appearanceStore.ts";
 import { useConversationWallpaper } from "./hooks/useConversationWallpaper";
 import { EmptyState } from "./EmptyState";
@@ -30,6 +32,7 @@ void appCopy;
 export function Conversation() {
   const locale = useAppLocale();
   const activeChatId = useButlerStore((state) => state.activeChatId);
+  const infoOpen = useButlerStore(state => state.sessionInfoOpen);
   const browserOpen = useBrowserShellState(state => Boolean(state.conversations[activeChatId]?.open));
   const branchProjectId = useButlerStore((state) => {
     if (activeChatId === "general") return null;
@@ -43,7 +46,8 @@ export function Conversation() {
     ?? (state.sessionView?.session_id === activeChatId ? state.sessionView.question_answers : undefined));
   const pendingQuestions = useButlerStore(state => state.sessionViews[activeChatId]?.pending_questions
     ?? (state.sessionView?.session_id === activeChatId ? state.sessionView.pending_questions : undefined));
-  const messages = useMemo(() => withQuestionAnswers(storedMessages, questionAnswers ?? [], pendingQuestions ?? []), [storedMessages, questionAnswers, pendingQuestions]);
+  const messages = useMemo(() => withQuestionAnswers(storedMessages, questionAnswers ?? []), [storedMessages, questionAnswers]);
+  const approvals = useButlerStore(selectActiveAuthorityApprovals);
   const summary = useButlerStore((state) => state.summary);
   const turnProgress = useButlerStore((state) => state.turnProgress);
   const messageLoadPending = useButlerStore(
@@ -86,7 +90,7 @@ export function Conversation() {
     summary?.steward_children?.some((child) => child.active_turn) ||
     summary?.latest_progress?.safe_progress_rows?.length,
   );
-  const showMessageList = hasMessages || hasDurableActivity || Boolean(summary?.branch_seed);
+  const showMessageList = hasMessages || Boolean(pendingQuestions?.length || approvals.length) || hasDurableActivity || Boolean(summary?.branch_seed);
   const showEmptyState = !showMessageList && !messageLoadPending;
   const wallpaper = useConversationWallpaper(showEmptyState, isActiveChatSending);
   const composerLarge = true;
@@ -99,9 +103,12 @@ export function Conversation() {
     : undefined;
   const markTheme = resolveButlerMarkTheme(appearanceTheme);
   return (
-    <ConversationShell
+    <ConversationRequestProvider key={activeChatId}><ConversationShell
+      asideLabel={appCopy.sessionInfo.title}
+      asideFloatOpen={infoOpen}
+      aside={infoOpen ? layout => <SessionSections key={activeChatId} layout={layout} /> : undefined}
       railView={activeChatId}
-      rail={window.butlerBrowser && !browserOpen ? <AgentTabRail session={activeChatId} /> : undefined}
+      rail={window.butlerBrowser && !browserOpen && !infoOpen ? <AgentTabRail session={activeChatId} /> : undefined}
       background={wallpaper.background}
       composerReserve={composerReserve}
       contentGutter={newChatTitleIconGutter}
@@ -141,6 +148,6 @@ export function Conversation() {
           large={composerLarge}
         />
       </ErrorBoundary>
-    </ConversationShell>
+    </ConversationShell></ConversationRequestProvider>
   );
 }

@@ -7,7 +7,8 @@ import { getCanonEpic } from "@/app/canonApi.ts";
 import { rememberSignedFileUrls, absoluteGatewayUrl, messageFileSource } from "@/app/messageFileUrls.ts";
 
 /** Only explicit attachment references can load images from this epic's file set. */
-export function EpicMarkdown({ epicId, description, attachments = [] }: {
+export function EpicMarkdown({ epicId, description, attachments = [], density }: {
+  density?: "document" | "compact";
   epicId: string; description: string; attachments?: MessageFileRef[];
 }) {
   const fileFor = (url?: string) => url && /^attachment:/iu.test(url)
@@ -16,7 +17,7 @@ export function EpicMarkdown({ epicId, description, attachments = [] }: {
     const url = messageFileSource(file);
     return url ? absoluteGatewayUrl(url) : undefined;
   };
-  return <MarkdownContent data-test-class="canon-markdown">
+  return <MarkdownContent density={density} data-test-class="canon-markdown">
     <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml
       urlTransform={url => /^(attachment:|https?:|mailto:)/iu.test(url) ? url : ""}
       components={{
