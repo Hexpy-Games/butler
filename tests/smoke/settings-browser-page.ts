@@ -17,6 +17,7 @@ const section = (page: Page, id: string) => page.locator(`[data-settings-section
 const browser = await launchSmokeBrowser();
 const server = await createNativeAppServer({ uiRoot: resolve(before ?? "packages/butler-app/client/ui/dist") });
 const admin = JSON.parse(readFileSync(join(server.butlerData, "app/runtime/auth/local-admin.json"), "utf8")).secret as string;
+const defaultBrowsingAgent = (await server.api<{ browser: { browsing_agent: string } }>("/settings")).browser.browsing_agent;
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce" });
 
 async function capture(name: string) {
@@ -57,7 +58,9 @@ async function matrix(locale: "ko" | "en", theme: "light" | "dark") {
       const autoLabel = copy.settings.browsingAgent.auto(settings.browser.auto.available && resolvedName ? resolvedName : copy.settings.browsingAgent.conversationModel);
       const field = section(page, "browsing-agent");
       const select = field.getByRole("combobox", { name: copy.settings.browsingAgent.label });
-      await select.getByText(autoLabel, { exact: true }).waitFor();
+      const defaultLabel = defaultBrowsingAgent === "auto" ? autoLabel : copy.settings.browsingAgent.off;
+      await select.getByText(defaultLabel, { exact: true }).waitFor();
+      await capture(`browser-default-${key}`);
       await select.click();
       await page.getByRole("option", { name: copy.settings.browsingAgent.off, exact: true }).click();
       await select.getByText(copy.settings.browsingAgent.off, { exact: true }).waitFor();
@@ -65,6 +68,9 @@ async function matrix(locale: "ko" | "en", theme: "light" | "dark") {
       await select.click();
       await page.getByRole("option", { name: autoLabel, exact: true }).click();
       await select.getByText(autoLabel, { exact: true }).waitFor();
+      await select.click();
+      await page.getByRole("option", { name: defaultLabel, exact: true }).click();
+      await select.getByText(defaultLabel, { exact: true }).waitFor();
     }
     await capture(`browser-${key}`);
     const group = page.getByText(copy.settings.groups.appAndSystem, { exact: true }).locator("..");
@@ -116,5 +122,5 @@ try {
     assert.deepEqual(report, baseline.report, "General search sections retain all copy, controls and order");
   }
   writeFileSync(join(output, stage, "report.json"), JSON.stringify({ stage, report, modelCalls: 0 }, null, 2));
-  console.log(JSON.stringify({ ok: true, stage, cells: report.length, screenshots: report.length * 3, modelCalls: 0 }));
+  console.log(JSON.stringify({ ok: true, stage, cells: report.length, screenshots: report.length * (before ? 3 : 4), modelCalls: 0 }));
 } finally { await browser.close(); await server.stop(); }

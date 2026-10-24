@@ -8,6 +8,7 @@ use super::{ModelPreset, ModelProviderMetadata, ModelTier, ReasoningEffort};
 pub enum BrowsingRule {
     FamilySibling,
     ProviderPreset,
+    PlanningPreset,
     Conversation,
 }
 
@@ -40,6 +41,7 @@ pub fn resolve_browsing_model(
     registered: &[ModelProviderMetadata],
     multi_vendor: bool,
     preset: Option<&ModelPreset>,
+    planning: Option<&ModelPreset>,
 ) -> BrowsingResolution {
     let usable = |model: &&ModelProviderMetadata| {
         model.provider_id == conversation.provider_id
@@ -65,7 +67,10 @@ pub fn resolve_browsing_model(
             rule: BrowsingRule::FamilySibling,
         };
     }
-    if let Some(preset) = preset
+    let preset = preset
+        .map(|preset| (preset, BrowsingRule::ProviderPreset))
+        .or_else(|| planning.map(|preset| (preset, BrowsingRule::PlanningPreset)));
+    if let Some((preset, rule)) = preset
         && let Some(model) = registered.iter().filter(usable).find(|model| {
             model.model_ref == preset.model && model.reasoning_efforts.contains(&preset.effort)
         })
@@ -73,7 +78,7 @@ pub fn resolve_browsing_model(
         return BrowsingResolution {
             model: model.model_ref.clone(),
             effort: preset.effort,
-            rule: BrowsingRule::ProviderPreset,
+            rule,
         };
     }
     BrowsingResolution {
@@ -92,18 +97,18 @@ pub(super) fn auto_resolutions(
         let multi_vendor = view.models.iter().any(|model| {
             model.provider_id == conversation.provider_id && model_family(&model.model_id) != family
         });
-        let preset = view
+        let presets = view
             .providers
             .iter()
             .find(|provider| provider.provider_id == conversation.provider_id)
-            .and_then(|provider| provider.presets.as_ref())
-            .and_then(|presets| presets.browsing.as_ref());
+            .and_then(|provider| provider.presets.as_ref());
         let resolution = resolve_browsing_model(
             conversation,
             conversation.default_reasoning_effort,
             &view.registered_models,
             multi_vendor,
-            preset,
+            presets.and_then(|presets| presets.browsing.as_ref()),
+            presets.and_then(|presets| presets.planning.as_ref()),
         );
         let mut value = serde_json::json!(resolution);
         value["available"] = serde_json::json!(view.registered_models.iter().any(|model| {

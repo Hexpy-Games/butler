@@ -38,7 +38,7 @@ async fn browsing_settings_roundtrip_and_account_scoped_auto() -> Result<(), Har
     butler_e2e::gate!();
     let mut s = Setup::new("BROWSING-SETTINGS")?.start().await?;
     let initial = s.gw.settings().await?;
-    assert_eq!(initial["browser"]["browsing_agent"], "auto");
+    assert_eq!(initial["browser"]["browsing_agent"], "off");
     assert_eq!(initial["browser"]["auto"]["model"], initial["model"]);
     assert_eq!(initial["browser"]["auto"]["rule"], "conversation");
     let a = credential(&s, "account-a").await?;
@@ -47,8 +47,11 @@ async fn browsing_settings_roundtrip_and_account_scoped_auto() -> Result<(), Har
     register(&s, &b, "glm-5.3-flash").await?;
     register(&s, &a, "gpt-6-luna").await?;
     let reply =
-        s.gw.patch("/settings", json!({"model":"opencode-go/glm-5.3"}))
-            .await?;
+        s.gw.patch(
+            "/settings",
+            json!({"model":"opencode-go/glm-5.3", "browser":{"browsing_agent":"auto"}}),
+        )
+        .await?;
     assert_eq!(reply.status, 200, "{}", reply.text);
     assert_eq!(reply.data()["browser"]["auto"]["rule"], "conversation");
     assert_eq!(

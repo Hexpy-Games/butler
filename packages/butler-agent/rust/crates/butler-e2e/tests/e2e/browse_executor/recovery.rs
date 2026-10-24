@@ -41,6 +41,10 @@ async fn fenced_json_long_notes_and_stale_step_recover_with_feedback() -> Result
         ])?)
         .start()
         .await?;
+    let reply =
+        s.gw.patch("/settings", json!({"browser":{"browsing_agent":"auto"}}))
+            .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
     let (host, _) = host::start_with_failures(&s, 1).await?;
     let (_, turn) = s.turn("general", "Recover page task").await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
@@ -90,6 +94,10 @@ async fn three_consecutive_unusable_replies_or_failed_steps_end_stuck() -> Resul
             .stub_cassette(cassette(&replies)?)
             .start()
             .await?;
+        let reply =
+            s.gw.patch("/settings", json!({"browser":{"browsing_agent":"auto"}}))
+                .await?;
+        assert_eq!(reply.status, 200, "{}", reply.text);
         let (host, actions) = host::start_with_failures(&s, 3).await?;
         let (_, turn) = s.turn("general", "Recover page task").await?;
         assert_eq!(turn["state"], "delivered");

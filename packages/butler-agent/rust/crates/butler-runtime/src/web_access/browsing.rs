@@ -29,18 +29,18 @@ impl WebSession {
                 model.provider_id == conversation.provider_id
                     && butler_models::models::model_family(&model.model_id) != family
             });
-            let preset = view
+            let presets = view
                 .providers
                 .iter()
                 .find(|provider| provider.provider_id == conversation.provider_id)
-                .and_then(|provider| provider.presets.as_ref())
-                .and_then(|presets| presets.browsing.as_ref());
+                .and_then(|provider| provider.presets.as_ref());
             let resolved = butler_models::models::resolve_browsing_model(
                 &conversation,
                 effort,
                 &view.registered_models,
                 multi,
-                preset,
+                presets.and_then(|presets| presets.browsing.as_ref()),
+                presets.and_then(|presets| presets.planning.as_ref()),
             );
             (resolved.model, resolved.effort)
         } else {

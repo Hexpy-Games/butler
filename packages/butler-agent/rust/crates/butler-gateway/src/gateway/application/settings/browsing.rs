@@ -45,7 +45,7 @@ pub(super) fn project(
         .pointer("/browser/browsing_agent")
         .or_else(|| current.pointer("/browser/browsing_agent"))
         .cloned()
-        .unwrap_or(json!("auto"));
+        .unwrap_or(json!("off"));
     if let Some(object) = output.as_object_mut() {
         object.insert("browser".into(), json!({"browsing_agent": value}));
         view(&Map::new(), facts, object);
@@ -62,7 +62,7 @@ pub(super) fn view(
         .or_else(|| stored.get("browser"))
         .and_then(|browser| browser.get("browsing_agent"))
         .cloned()
-        .unwrap_or(json!("auto"));
+        .unwrap_or(json!("off"));
     let model = output
         .get("model")
         .and_then(Value::as_str)
@@ -83,7 +83,7 @@ pub(super) fn view(
     );
 }
 
-/// Read the indexed App preference on a blocking worker; absent settings use Auto.
+/// Read the indexed App preference on a blocking worker; absent settings use Off.
 pub async fn browsing_agent_setting(
     path: std::path::PathBuf,
 ) -> Result<String, GatewayApplicationError> {
@@ -95,7 +95,7 @@ pub async fn browsing_agent_setting(
             "SELECT json_extract(value_json, '$.browser.browsing_agent') FROM app_settings WHERE key='settings'",
             [], |row| row.get(0),
         ).optional()?;
-        Ok::<_, rusqlite::Error>(setting.flatten().unwrap_or_else(|| "auto".into()))
+        Ok::<_, rusqlite::Error>(setting.flatten().unwrap_or_else(|| "off".into()))
     }).await.map_err(GatewayApplicationError::internal_from)?
         .map_err(GatewayApplicationError::internal_from)
 }

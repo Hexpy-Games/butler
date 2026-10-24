@@ -23,7 +23,14 @@ pub(super) fn assert_resolution_rules() {
         effort: ReasoningEffort::Low,
     };
     let resolve = |models: &[ModelProviderMetadata], multi, preset| {
-        resolve_browsing_model(&conversation, ReasoningEffort::High, models, multi, preset)
+        resolve_browsing_model(
+            &conversation,
+            ReasoningEffort::High,
+            models,
+            multi,
+            preset,
+            None,
+        )
     };
     let chosen = resolve(
         &[other_family.clone(), sibling.clone()],
@@ -62,6 +69,58 @@ pub(super) fn assert_resolution_rules() {
         }
         assert_eq!(resolve(&[bad], true, None).rule, BrowsingRule::Conversation);
     }
+    let planning = ModelPreset {
+        model: sibling.model_ref.clone(),
+        effort: sibling.default_reasoning_effort,
+    };
+    let resolve_presets = |models: &[ModelProviderMetadata], browsing| {
+        resolve_browsing_model(
+            &conversation,
+            ReasoningEffort::High,
+            models,
+            false,
+            browsing,
+            Some(&planning),
+        )
+    };
+    let chosen = resolve_presets(&[sibling.clone(), other_family.clone()], None);
+    assert_eq!(chosen.rule, BrowsingRule::PlanningPreset);
+    assert_eq!(
+        (chosen.model, chosen.effort),
+        (planning.model.clone(), planning.effort)
+    );
+    assert_eq!(
+        serde_json::to_value(chosen.rule).unwrap(),
+        "planning_preset"
+    );
+    let chosen = resolve_presets(&[sibling.clone(), other_family.clone()], Some(&preset));
+    assert_eq!(chosen.rule, BrowsingRule::ProviderPreset);
+    assert_eq!(
+        (chosen.model, chosen.effort),
+        (preset.model.clone(), preset.effort)
+    );
+    for kind in 0..10 {
+        let mut bad = sibling.clone();
+        match kind {
+            0 => bad.credential_id = Some("account-b".into()),
+            1 => bad.provider_id = "other-provider".into(),
+            2 => bad.enabled = Some(false),
+            3 => bad.registered = Some(false),
+            4 => bad.runtime_supported = false,
+            5 => bad.auth_type = Some(ProviderAuthMethod::ChatGptOauth),
+            6 => bad.api_base_url = Some("https://other.invalid".into()),
+            7 => bad.server_url = Some("https://other.invalid".into()),
+            8 => {
+                bad.extensions
+                    .insert("auth_profile".into(), serde_json::json!("other"));
+            }
+            _ => bad.reasoning_efforts.clear(),
+        }
+        assert_eq!(
+            resolve_presets(&[bad], None).rule,
+            BrowsingRule::Conversation
+        );
+    }
     let mut unsupported_effort = other_family;
     unsupported_effort.reasoning_efforts = vec![ReasoningEffort::High];
     assert_eq!(
@@ -81,7 +140,15 @@ pub(super) fn assert_resolution_rules() {
         .extensions
         .insert("auth_profile".into(), serde_json::json!("b"));
     assert_eq!(
-        resolve_browsing_model(&oauth, ReasoningEffort::High, &[other_oauth], true, None).rule,
+        resolve_browsing_model(
+            &oauth,
+            ReasoningEffort::High,
+            &[other_oauth],
+            true,
+            None,
+            None
+        )
+        .rule,
         BrowsingRule::Conversation
     );
     assert_tier_schemes(&catalog);

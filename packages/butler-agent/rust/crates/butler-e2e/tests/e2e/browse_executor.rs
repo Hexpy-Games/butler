@@ -26,6 +26,10 @@ async fn browse_batches_stateless_tasks_and_hands_exact_steps_to_browser_act()
         .access(Access::AskExceptReads)
         .start()
         .await?;
+    let reply =
+        s.gw.patch("/settings", json!({"browser":{"browsing_agent":"auto"}}))
+            .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
     let (host, actions) = host::start(&s).await?;
     let id = butler_e2e::e2e::scenario::accepted_turn_id(&s.gw.say("general", stub::TASK).await?)?;
     let turn =
@@ -110,6 +114,10 @@ async fn browse_provider_failure_returns_unavailable_without_switching_models()
         .stub_cassette(stub::cassette(true)?)
         .start()
         .await?;
+    let reply =
+        s.gw.patch("/settings", json!({"browser":{"browsing_agent":"auto"}}))
+            .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
     let (host, actions) = host::start(&s).await?;
     let (_, turn) = s.turn("general", stub::TASK).await?;
     assert_eq!(turn["state"], "delivered");
@@ -268,6 +276,10 @@ async fn query_read_returns_complete_ranked_chunks_and_keeps_the_rest_readable()
         .stub_cassette(stub::ranked_cassette()?)
         .start()
         .await?;
+    let reply =
+        s.gw.patch("/settings", json!({"browser":{"browsing_agent":"auto"}}))
+            .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
     let (host, _) = host::start(&s).await?;
     let (_, turn) = s.turn("general", "Read ranked source windows").await?;
     assert_eq!(turn["state"], "delivered");
@@ -341,6 +353,10 @@ async fn executor_hands_off_payment_even_with_a_standing_merchant_permission()
         .stub_cassette(stub::payment_cassette()?)
         .start()
         .await?;
+    let reply =
+        s.gw.patch("/settings", json!({"browser":{"browsing_agent":"auto"}}))
+            .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
     let (host, actions) = host::start(&s).await?;
     let (_, turn) = s.turn("general", "Inspect checkout").await?;
     assert_eq!(turn["state"], "delivered");
