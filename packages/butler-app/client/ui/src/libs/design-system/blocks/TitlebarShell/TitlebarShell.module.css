@@ -1,4 +1,9 @@
 .titlebar {
+  /* The inline paddings, kept as properties so the split chat group can
+     measure from the bar's edges (see .chatGroup). */
+  --titlebar-start-padding: 18px;
+  --titlebar-end-padding: 18px;
+
   display: flex;
   position: absolute;
   z-index: 5;
@@ -9,8 +14,10 @@
   align-items: center;
   justify-content: space-between;
   min-height: var(--titlebar-safe-area-top);
-  padding: 0 18px;
-  padding-right: calc(18px + var(--window-controls-width, 0px));
+  padding: 0 var(--titlebar-end-padding) 0 var(--titlebar-start-padding);
+  padding-right: calc(
+    var(--titlebar-end-padding) + var(--window-controls-width, 0px)
+  );
   color: var(--text-primary);
   background: var(--titlebar-bg);
   user-select: none;
@@ -19,8 +26,9 @@
 }
 
 .collapsed {
+  --titlebar-start-padding: var(--titlebar-collapsed-left-padding);
+
   left: 0;
-  padding-left: var(--titlebar-collapsed-left-padding);
 }
 
 .identity,
@@ -93,11 +101,13 @@
   -webkit-app-region: no-drag;
 }
 
-.trailing button {
+.trailing button,
+.titleActions button {
   --icon-button-size: var(--titlebar-action-size, 30px);
 }
 
-.trailing button svg {
+.trailing button svg,
+.titleActions button svg {
   width: var(--titlebar-action-icon-size, var(--icon-size-md));
   height: var(--titlebar-action-icon-size, var(--icon-size-md));
 }
@@ -116,6 +126,66 @@
   -webkit-app-region: no-drag;
 }
 
+/* Two groups: the chat group (title, titleActions, chatTrailing) and
+   `trailing`. Closed pane: the chat group fills the row and its end controls
+   sit one button gap (ButtonContainer icon-sm) before `trailing`, as the
+   titlebar's buttons always have. */
+.titlebar[data-grouped] {
+  gap: var(--space-sm);
+}
+
+.chatGroup {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+/* Open pane: the chat group ends where the chat card does, its end controls
+   keeping the inset `trailing` has from the card at the window edge, and
+   `trailing` stays over the pane. The card's offsets inside the title row
+   (--titlebar-card-start/-end) come from the shell (AdaptiveShell cards
+   frame); without them the chat column starts and ends at the row's edges.
+   It follows splitChatWidth in the same render as the split, with no motion
+   of its own: the chat card resizes without motion and the pane brings its
+   own entrance. */
+.titlebar[data-split] .chatGroup {
+  flex: 0 1
+    calc(
+      var(--titlebar-split-chat-width) + var(--titlebar-card-start, 0px) -
+        var(--titlebar-start-padding) - var(--titlebar-end-padding) +
+        var(--titlebar-card-end, 0px)
+    );
+}
+
+/* Title actions: right after the title, on its line. They come after the
+   subtitle in the DOM (title and subtitle read as one unit), so the subtitle
+   is ordered after them. Centred on the title line and no taller than it, so
+   the line keeps its height and baseline; the bar does not clip them. */
+.copy[data-title-actions] {
+  overflow: visible;
+}
+
+.copy[data-title-actions] > .subtitle {
+  order: 1;
+}
+
+.titleActions {
+  display: inline-flex;
+  flex: none;
+  align-self: center;
+  margin-block: calc(
+    (
+        var(--typo-app-title-line-height) -
+          var(--titlebar-action-size, var(--control-height-md))
+      ) /
+      2
+  );
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
 .fixture {
   position: relative;
   min-height: var(--titlebar-height);
@@ -126,10 +196,11 @@
 }
 
 .fixtureTitlebar {
+  --titlebar-start-padding: 18px;
+
   position: relative;
   right: auto;
   left: auto;
-  padding-left: 18px;
 }
 
 /* Viewer fixture of a collapsed sidebar: the inset AdaptiveShell provides
@@ -153,15 +224,17 @@
 
 @media (width <=640px) {
   .titlebar {
-    min-height: var(--titlebar-safe-area-top);
-    gap: var(--space-xs);
-    padding-top: var(--safe-area-top);
-    padding-right: max(var(--space-md), var(--safe-area-right));
-    padding-left: calc(
+    --titlebar-start-padding: calc(
       max(var(--space-md), var(--safe-area-left)) +
         var(--chrome-floating-toggle-left) +
         var(--chrome-floating-toggle-size, var(--control-hit-target))
     );
+    --titlebar-end-padding: max(var(--space-md), var(--safe-area-right));
+
+    min-height: var(--titlebar-safe-area-top);
+    gap: var(--space-xs);
+    padding-top: var(--safe-area-top);
+    padding-right: var(--titlebar-end-padding);
   }
 
   .leading[data-visibility="narrow"] {
@@ -174,6 +247,11 @@
 
   .trailing {
     min-width: 0;
+  }
+
+  /* The bar's narrow gap between the title and the end controls. */
+  .chatGroup {
+    gap: var(--space-xs);
   }
 
   .windowControls {
