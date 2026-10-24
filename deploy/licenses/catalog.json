@@ -5,17 +5,17 @@
     "deploy/licenses/generate.mjs": "eb413c424649cc6ef3bc734cb1a9479cf8ddffb3af398601a974268c229d7c34",
     "deploy/licenses/inputs.mjs": "f9a38331fa5a8f26f9d745f0cf3bfaea028f2d5dc7c8e8aa4d7af1b923cb5124",
     "deploy/licenses/refresh.py": "bddecf7f564eb6da112439c87fca94158f22497a5094dd53d9389ff918ced71b",
-    "packages/butler-agent/rust/Cargo.lock": "1be72aa2eea8c4f3df297798e95cb8985a0b6e53957f90f713b646c55d030a05",
+    "packages/butler-agent/rust/Cargo.lock": "2bcc3ac588d4d5ce95589e63b49d66866e269e29aa3bccf75071df1bddc467d0",
     "packages/butler-agent/rust/Cargo.toml": "5d2d424ec9a5a0efc862cb4193c6c0902d8336747f23b3217091286ce99a7c9d",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
     "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "e08a77e7c8333077f8bdc812b31c8ad65d5c417aea2329e102b4266aa26a7d0d",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
     "packages/butler-agent/rust/crates/butler-agent/src/host/embedding/worker/assets.rs": "f11dc3b1952a178092fbf7da589b8c39e28021c4975f884e236cd71c78c8d7a9",
-    "packages/butler-agent/rust/crates/butler-canon/Cargo.toml": "c052e4a6c10a0b82fb7120d819f8f09a5384716ee8607934b9d672bfd44f9ed2",
+    "packages/butler-agent/rust/crates/butler-canon/Cargo.toml": "4bb95619e7c48ee265da3a42ea559538b94a91a16e94a71eeef899cb86359a06",
     "packages/butler-agent/rust/crates/butler-core/Cargo.toml": "5af0d77e72e26b381caea14946683d7b94d79a2f7304d524842fa26ea213d1dc",
     "packages/butler-agent/rust/crates/butler-core/src/js_date/parse/LICENSE.txt": "a0af5aa0d38e4c35e56c8e42a43a4b1e462619a26332e43249bb0772ad06a3e2",
     "packages/butler-agent/rust/crates/butler-e2e/Cargo.toml": "263121de00658972e28256c511c3000a5b636ff47ab3870df0b8a5f6cffbe370",
-    "packages/butler-agent/rust/crates/butler-gateway/Cargo.toml": "a97b7489b48eca15e83ea079103e2f30c05e992981323d1d3f47491513ac65ec",
+    "packages/butler-agent/rust/crates/butler-gateway/Cargo.toml": "e0d5b3d35f378e4d1e563430c62ad0fd9b9165cfa4aa598e8946d8ec0fc0e2f0",
     "packages/butler-agent/rust/crates/butler-ledger/Cargo.toml": "ccc46a2a8bb225eebcdf7858d73f5bddd3742ea57477e0208ca3c16464815b54",
     "packages/butler-agent/rust/crates/butler-log/Cargo.toml": "0f3523ba15e21a586f5c9d8bd883dce4100c7d1e7f95c0064da9af990c20f0bc",
     "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "e56bfc747329099c83768897038d0d40f2ba1efdf0ec5399eee1b976de5653c1",
@@ -23708,6 +23708,31 @@
       ],
       "copyright": [
         "Copyright (c) 2016 Rushmore Mushambi"
+      ]
+    },
+    {
+      "id": "rust:pulldown-cmark@0.13.5",
+      "name": "pulldown-cmark",
+      "version": "0.13.5",
+      "license": "MIT",
+      "source": "https://github.com/raphlinus/pulldown-cmark/tree/48a2767b5b8ab0a4893e80d942e510065889fc6b",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "c4f10f55904bdb9f27d3fbf94c354926d6cfe8b982276e556238c258941b243b"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "links": [
+        "https://github.com/raphlinus/pulldown-cmark/blob/48a2767b5b8ab0a4893e80d942e510065889fc6b/pulldown-cmark/LICENSE"
+      ],
+      "copyright": [
+        "Copyright 2015 Google Inc. All rights reserved."
       ]
     },
     {

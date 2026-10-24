@@ -20,7 +20,7 @@ pub(super) fn list(
                ORDER BY rowid DESC LIMIT 200 \
              ) \
              SELECT m.message_rowid,m.id,m.chat_id,m.turn_id, \
-                    f.id,f.kind,f.mime_type,f.safe_name,f.size_bytes,f.sha256,f.created_at,f.source_label,f.deliverable,f.title \
+                    f.id,f.kind,f.mime_type,f.safe_name,f.size_bytes,f.sha256,f.created_at,f.source_label,f.deliverable,f.title,f.width,f.height \
              FROM latest_messages AS m \
              JOIN message_attachments AS a ON a.message_id=m.id \
              JOIN message_files AS f ON f.id=a.file_id \
@@ -42,7 +42,14 @@ pub(super) fn list(
                 row.get(7)?,
                 row.get(8)?,
                 row.get(9)?,
-                (row.get(10)?, row.get(11)?, row.get(12)?, row.get(13)?),
+                (
+                    row.get(10)?,
+                    row.get(11)?,
+                    row.get(12)?,
+                    row.get(13)?,
+                    row.get(14)?,
+                    row.get(15)?,
+                ),
             )?;
             Ok((message_rowid, message_id, chat_id, turn_id, file))
         })

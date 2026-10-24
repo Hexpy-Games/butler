@@ -7,10 +7,9 @@ import { projectDocumentMarkdownView } from "@/app/projectDocuments.ts";
 const MARKDOWN_COMPONENTS = { a: MarkdownLink };
 
 export function ProjectDocumentMarkdownContent({
-  markdown, density,
+  markdown,
 }: {
   markdown: string;
-  density?: "compact" | "document";
 }) {
   const view = projectDocumentMarkdownView(markdown);
   return (
@@ -34,7 +33,7 @@ export function ProjectDocumentMarkdownContent({
           </Stack>
         </SurfacePanel>
       ) : null}
-      <MarkdownContent density={density} faviconSrc={faviconSrc}>
+      <MarkdownContent faviconSrc={faviconSrc}>
         <ReactMarkdown
           components={MARKDOWN_COMPONENTS}
           remarkPlugins={[remarkGfm]}

@@ -14,6 +14,25 @@ pub(super) async fn route(
     uri: &Uri,
 ) -> Result<Response, HttpError> {
     let parts: Vec<_> = uri.path().trim_start_matches('/').split('/').collect();
+    if request.method() == Method::POST
+        && let ["projects", id, "canon", "files"] = parts.as_slice()
+    {
+        let id = subsessions::decode_component(id)?;
+        let _upload = state
+            .uploads
+            .acquire()
+            .await
+            .map_err(|_| HttpError::Internal)?;
+        let input = super::message_files::parse_upload(request).await?;
+        let file = state.application.upload_canon_file(id, input).await?;
+        return json(
+            StatusCode::CREATED,
+            ApiEnvelope {
+                protocol_version: APP_PROTOCOL_VERSION,
+                data: serde_json::json!({"file":file}),
+            },
+        );
+    }
     let (resource, id) = match (request.method(), parts.as_slice()) {
         (&Method::GET, ["projects", id, "canon", "tags"]) => (Tags, *id),
         (&Method::POST, ["projects", id, "canon", "tags"]) => (CreateTag, *id),
