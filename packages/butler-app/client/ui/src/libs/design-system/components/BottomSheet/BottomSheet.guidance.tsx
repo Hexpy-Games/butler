@@ -44,7 +44,7 @@ export const guidance: ShowcaseGuidance = {
   whenNotToUse: [
     { when: "A desktop chooser anchored to its control", use: "Popover" },
     { when: "A form or a decision that needs the whole screen's attention", use: "Dialog" },
-    { when: "A suggestion list under its field", use: "Popover width=\"anchor\"" },
+    { when: "A suggestion list under its field (width=\"anchor\")", use: "Popover" },
   ],
   recipes: [
     { name: "Tool chooser on a phone", description: "Direct use: title, closeLabel and BottomSheetItem rows.", render: () => <ToolChooser /> },
