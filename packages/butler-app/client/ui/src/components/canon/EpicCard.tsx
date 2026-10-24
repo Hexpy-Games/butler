@@ -3,7 +3,7 @@ import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { EpicCard as CardData } from "@/app/canonApi.ts";
 import { KanbanCard, Stack, Tag, Typo } from "@/butler-ds";
 import { CanonAvatar } from "./CanonAvatar.tsx";
-import { CanonEpicStatus } from "./CanonEpicStatus.tsx";
+import { CanonEpicActivity } from "./CanonEpicStatus.tsx";
 export function EpicCard({ epic, ordinal, selected, onSelect }: {
   epic: CardData; ordinal?: number; selected: boolean; onSelect: (id: string) => void;
 }) {
@@ -14,7 +14,7 @@ export function EpicCard({ epic, ordinal, selected, onSelect }: {
   return <KanbanCard itemId={epic.id} label={epic.title} selected={selected} onOpen={() => onSelect(epic.id)}>
     <Stack gap="sm">
       <Stack align="row" cross="center" gap="sm">
-        <Stack shrink={false}><CanonEpicStatus epic={epic} /></Stack>
+        <CanonEpicActivity epic={epic} />
         <Typo.Body data-test-class="canon-epic-title" truncate shrink minWidth="0">{epic.title}</Typo.Body>
         <Stack shrink={false}><CanonAvatar person={epic.assignee} /></Stack>
       </Stack>

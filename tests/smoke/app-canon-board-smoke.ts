@@ -62,6 +62,7 @@ try {
       await capture(page, `${name}-rest.png`); count++;
       const card = board.locator("[data-kanban-item]").filter({ hasText: "캐논" }).getByRole("button").first();
       assert.equal(await card.getByRole("img", { name: "나", exact: true }).count(), 1, "Assigned card has an Avatar after its title");
+      assert.equal(await card.locator("svg").count(), 0, "Idle card shows no status icon: the lane shows the status");
       if (width === 1440 && !wallpaper) await verifyDashboardSelection(page, projectId, shots, name);
       await card.focus(); await card.press("Enter");
       await page.locator('[data-test-class="canon-epic-detail"]').waitFor();
