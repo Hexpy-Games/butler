@@ -3,7 +3,7 @@ import type { EpicDetail, EpicProgressSnapshot } from "@/app/canonApi.ts";
 import { KeyValueRow, ProgressMeter, Stack } from "@/butler-ds";
 import { canonTaskCounts } from "./canonProgressSource.ts";
 
-/** Compact session summary above the editable properties. */
+/** Shared task progress below the editable properties. */
 export function EpicSessionSummary({ epic, tasks }: { epic: EpicDetail; tasks: EpicProgressSnapshot | null }) {
   const copy = appCopy.canon;
   const counts = tasks?.counts ?? canonTaskCounts(epic);

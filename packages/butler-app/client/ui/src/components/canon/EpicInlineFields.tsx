@@ -11,8 +11,8 @@ import { InlineUnsavedDialog } from "./InlineUnsavedDialog.tsx";
 import { useInlineExitGuard } from "./useInlineExitGuard.ts";
 import { useEpicInlineEdit, type EpicTextField } from "./useEpicInlineEdit.ts";
 
-export function EpicInlineFields({ epic, busy, onWrite, titleRef, compact = false, summary, properties }: {
-  compact?: boolean; summary?: ReactNode; properties?: ReactNode;
+export function EpicInlineFields({ epic, busy, onWrite, titleRef, compact = false, summary }: {
+  compact?: boolean; summary?: ReactNode;
   epic: EpicDetail; busy: boolean; titleRef?: Ref<HTMLElement>;
   onWrite: (input: EpicInput, message?: string) => Promise<boolean>;
 }) {
@@ -52,7 +52,7 @@ export function EpicInlineFields({ epic, busy, onWrite, titleRef, compact = fals
           ? <EpicFieldInput epic={epic} field={field} value={edit.draft.value} busy={busy} valid={edit.valid}
             current={edit.draft.current} base={edit.draft.base} onChange={edit.change} onSave={save} onCancel={edit.cancel} />
           : <EpicFieldRest field={field} epic={epic} compact={compact} titleRef={titleRef} triggerRef={triggers[field]} busy={busy} onEdit={() => void begin(field)} />}
-        {field === "title" && <>{summary}{properties}</>}
+        {field === "title" && summary}
         {field === "description" && edit.draft?.field !== field && unreferenced.length > 0 && <AttachmentList
           items={unreferenced.map(file => ({ id: file.file_id, name: file.safe_name,
             href: messageFileSource(file) ? absoluteGatewayUrl(messageFileSource(file)!) : undefined }))} />}

@@ -1,3 +1,4 @@
+import { verifyTaskOrder, verifyCompactContext, verifyDashboardTask } from "../support/session-pane-followups.ts";
 // Stub/replay UI smoke through the real native App, isolated from the owner's data.
 import { sessionInfoStub, verifyNativePendingAsks, labelSessionInfoModel } from "../support/session-info-pending-asks.ts";
 import { strict as assert } from "node:assert";
@@ -74,7 +75,8 @@ try {
     assert.equal(await aside.getByText("아직 작업이 없습니다", { exact: true }).count(), 0);
     assert.equal(await aside.locator('[data-session-section="asks"]').getByText("3", { exact: true }).count(), 1);
     await aside.getByText("질문 · 지금", { exact: true }).waitFor();
-    await capture("all-sections-dot");
+    await verifyTaskOrder(aside.locator('[data-test-class="canon-epic-detail"]'));
+    await capture("pane-task-order");
     await aside.getByText("작업 대기열", { exact: true }).scrollIntoViewIfNeeded();
     await capture("available-sections-bottom");
     await aside.getByText("환경", { exact: true }).scrollIntoViewIfNeeded();
@@ -86,13 +88,14 @@ try {
     await request.waitFor();
     assert(await request.isVisible(), "The ask scrolls to its transcript card");
     await context.getByRole("button").first().click();
-    await aside.locator('[data-test-class="context-overview"]').waitFor();
+    await aside.locator('[data-test-class="context-compact"]').waitFor();
     await context.evaluate(node => node.scrollIntoView({ block: "start" }));
-    await capture("context-expanded");
+    await verifyCompactContext(context, capture);
     const focus = await auditSessionInfoFocus(page, aside);
     assert.deepEqual(focus.clips, []);
     console.log(JSON.stringify({ sessionInfoFocusStops: focus.stops, clipped: focus.clips.length }));
     await context.getByRole("button").first().click();
+    await verifyDashboardTask(page, epic.id, capture);
     await toggle.click();
     await aside.waitFor({ state: "hidden" });
     await toggle.click();
