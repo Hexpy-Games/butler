@@ -10,7 +10,7 @@ import { toMarkdown } from "../../packages/butler-app/client/shared/answer-block
 import type { AnswerBlocks } from "../../packages/butler-app/client/shared/app-contracts";
 
 const root = process.cwd(), stage = process.env.BUTLER_BLOCK_STAGE ?? "after";
-const evidence = resolve(process.env.TMPDIR ?? "/tmp", "bd/shots/pr2");
+const evidence = process.env.BUTLER_SMOKE_EVIDENCE ?? resolve(".tmp/block-scraps-ui");
 mkdirSync(evidence, { recursive: true });
 const spec: AnswerBlocks = { v: 2, blocks: [{ type: "columns", id: "plan", title: "주말 계획", blocks: [
   { type: "quote", id: "note", title: "전시 안내", text: "청자 panorama 전시를 둘러보세요.", cite: "전시 노트", source: "https://example.org/exhibition" },
@@ -252,14 +252,15 @@ async function touch() {
 try {
   const page = await browser.newPage({ timezoneId: "Asia/Seoul", locale: "ko-KR", reducedMotion: "no-preference" });
   await setup(page);
-  if (!process.env.BUTLER_BLOCK_CASE || process.env.BUTLER_BLOCK_CASE === "matrix") await screenshotMatrix(page);
-  if (stage === "after" && process.env.BUTLER_BLOCK_CASE !== "matrix") {
+  await screenshotMatrix(page);
+  if (stage === "after") {
     await rightClick(page);
-    if (process.env.BUTLER_BLOCK_CASE !== "touch") { await interactions(page, false); await interactions(page, true); }
+    await interactions(page, false);
+    await interactions(page, true);
     await touch();
   }
   assert.deepEqual(errors, []);
-  const result = { stage, screenshots: process.env.BUTLER_BLOCK_CASE && process.env.BUTLER_BLOCK_CASE !== "matrix" ? 0 : 32, modelCalls: 0, calls, ok: true };
-  writeFileSync(join(evidence, `${stage}-${process.env.BUTLER_BLOCK_CASE ?? "full"}-result.json`), JSON.stringify(result, null, 2));
+  const result = { stage, screenshots: 32, modelCalls: 0, calls, ok: true };
+  writeFileSync(join(evidence, `${stage}-result.json`), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result));
 } finally { await browser.close(); await vite.close(); }
