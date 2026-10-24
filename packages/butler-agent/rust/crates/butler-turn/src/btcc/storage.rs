@@ -133,6 +133,7 @@ pub struct BtccStorage {
 }
 
 struct StorageInner {
+    runtime_owner: (String, u64),
     payload: payload::PayloadMemo,
     changes: tokio::sync::watch::Sender<()>,
     lane: AsyncMutex<LaneState>,
@@ -147,6 +148,11 @@ struct LaneState {
 }
 
 impl BtccStorage {
+    /// Identity of this connection's registered execution owner.
+    pub fn runtime_owner(&self) -> (&str, u64) {
+        (&self.inner.runtime_owner.0, self.inner.runtime_owner.1)
+    }
+
     /// Opens the store, verifying its activation and runtime owner.
     pub async fn open(config: BtccStorageConfig) -> StorageResult<Self> {
         let (sender, receiver) = mpsc::channel(OPERATION_QUEUE_CAPACITY);
@@ -198,9 +204,9 @@ impl BtccStorage {
                 return Err(error);
             }
         };
-        let _ = owner;
         Ok(Self {
             inner: Arc::new(StorageInner {
+                runtime_owner: owner,
                 payload: Default::default(),
                 changes,
                 readers,

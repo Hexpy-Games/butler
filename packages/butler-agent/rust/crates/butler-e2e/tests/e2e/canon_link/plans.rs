@@ -15,6 +15,14 @@ async fn every_canon_runtime_statement_is_indexed_and_idle_writes_nothing()
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         eprintln!("CANON-PLAN {query:?} {plan:?}");
+        if matches!(query, butler_canon::store::runtime::queries::Query::Plans) {
+            assert!(query.sql().ends_with("ORDER BY c.rowid LIMIT 256"));
+            assert!(
+                plan.iter()
+                    .any(|line| line == "SEARCH c USING INTEGER PRIMARY KEY (rowid>?)"),
+                "{plan:?}"
+            );
+        }
         assert!(
             plan.iter()
                 .all(|line| !line.starts_with("SCAN ") || line == "SCAN CONSTANT ROW"),

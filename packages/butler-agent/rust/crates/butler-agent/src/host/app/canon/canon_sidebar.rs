@@ -3,7 +3,7 @@ use butler_gateway::gateway::{APP_PERSON_ID, AppCanonOperation};
 
 pub(super) fn execute(
     storage: BtccStorage,
-    ledger: butler_ledger::project_ledger::ProjectLedger,
+    ledger: progress::ProjectReader,
     operation: AppCanonOperation,
 ) -> ApplicationFuture<Value> {
     Box::pin(async move {

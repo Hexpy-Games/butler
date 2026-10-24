@@ -119,9 +119,9 @@ pub(super) fn reported(db: &Connection, work: &Value, views: &ProjectViews) -> R
     let id = text(work, "work_id")?;
     let disposition = disposition(db, work, views)?;
     let (review, checkpoint) = if work["scope_kind"] == "project" {
-        let view = views
-            .get(id)
-            .ok_or(Error::Invalid("project Work view missing"))?;
+        let Some(view) = views.get(id) else {
+            return Ok(false);
+        };
         (
             view["latestCompletionValidation"].clone(),
             view["latestCheckpoint"].clone(),
@@ -160,8 +160,8 @@ fn disposition(db: &Connection, work: &Value, views: &ProjectViews) -> Result<Va
     if work["scope_kind"] == "project" {
         Ok(views
             .get(id)
-            .ok_or(Error::Invalid("project Work view missing"))?["latestDisposition"]
-            .clone())
+            .map(|view| view["latestDisposition"].clone())
+            .unwrap_or(Value::Null))
     } else {
         Ok(latest(db, Query::Disposition, id)?.unwrap_or(Value::Null))
     }
@@ -172,9 +172,9 @@ fn work_actions(db: &Connection, work: &Value, views: &ProjectViews) -> Result<V
     if work["scope_kind"] != "project" {
         return actions(db, id);
     }
-    let view = views
-        .get(id)
-        .ok_or(Error::Invalid("project Work view missing"))?;
+    let Some(view) = views.get(id) else {
+        return Ok(Vec::new());
+    };
     let mut actions = view["currentPlan"]["actions"]
         .as_array()
         .cloned()

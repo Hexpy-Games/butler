@@ -16,7 +16,7 @@ queries! {
     Link => "SELECT epic_id FROM canon_epic_work_links WHERE btcc_work_id=?1",
     Bound => "SELECT 1 FROM canon_session_epics WHERE session_id=?1 AND epic_id=?2",
     Cursor => "SELECT value FROM canon_cursors WHERE name=?1",
-    Plans => "SELECT c.rowid,c.arguments_json,c.result_json,t.session_id FROM btcc_guided_tool_calls c JOIN btcc_turns t ON t.turn_id=c.turn_id WHERE c.rowid>?1 AND c.tool_name='replace_work_plan' AND c.status='completed' ORDER BY c.rowid LIMIT 256",
+    Plans => "SELECT c.rowid,c.arguments_json,c.result_json,c.tool_name,c.status,t.session_id,t.semantic_state,k.owner_id,k.owner_generation,k.status AS claim_status FROM btcc_guided_tool_calls c LEFT JOIN btcc_turns t ON t.turn_id=c.turn_id LEFT JOIN btcc_state_claims k ON k.turn_id=t.turn_id AND k.turn_revision=t.revision AND k.semantic_state=t.semantic_state WHERE c.rowid>?1 ORDER BY c.rowid LIMIT 256",
     Feed => "SELECT seq,session_id FROM agent_task_graph_changes WHERE seq>?1 ORDER BY seq LIMIT 256",
     SessionEpics => "SELECT epic_id FROM canon_session_epics WHERE session_id=?1 UNION SELECT epic_id FROM canon_epic_work_links WHERE session_id=?1",
     Works => "SELECT w.*,l.linked_at,l.reported_applied FROM canon_epic_work_links l JOIN btcc_guided_works w ON w.work_id=l.btcc_work_id WHERE l.epic_id=?1 ORDER BY l.linked_at,l.btcc_work_id",

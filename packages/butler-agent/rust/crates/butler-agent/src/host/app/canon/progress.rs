@@ -3,8 +3,34 @@ use super::*;
 use butler_ledger::project_ledger::{ProjectLedger, ProjectWorkPlanRead};
 use store::runtime::ProjectViews;
 
+#[derive(Clone)]
+pub(super) struct ProjectReader {
+    ledger: ProjectLedger,
+    unreadable: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+}
+impl ProjectReader {
+    pub(super) fn new(ledger: ProjectLedger) -> Self {
+        Self {
+            ledger,
+            unreadable: Arc::default(),
+        }
+    }
+    fn observed(&self, id: &str, failure: Option<String>) {
+        let Ok(mut unreadable) = self.unreadable.lock() else {
+            return;
+        };
+        if let Some(error) = failure {
+            if unreadable.insert(id.to_owned()) {
+                butler_core::diagnostic!("Canon project Work read failed work_id={id}: {error}");
+            }
+        } else {
+            unreadable.remove(id);
+        }
+    }
+}
+
 pub(super) async fn views(
-    ledger: &ProjectLedger,
+    reader: &ProjectReader,
     works: Vec<Value>,
 ) -> Result<ProjectViews, GatewayApplicationError> {
     let mut views = ProjectViews::new();
@@ -23,13 +49,14 @@ pub(super) async fn views(
                 .to_owned(),
             work_id: id.to_owned(),
         };
-        let view = match ledger.read_project_work_view(input).await {
+        let view = match reader.ledger.read_project_work_view(input).await {
             Ok(view) => view,
             Err(error) => {
-                tracing::warn!(%error, work_id = id, "Canon project Work read failed");
+                reader.observed(id, Some(error.to_string()));
                 continue;
             }
         };
+        reader.observed(id, view.is_none().then(|| "Work view missing".to_owned()));
         if let Some(view) = view {
             views.insert(
                 id.to_owned(),
@@ -42,7 +69,7 @@ pub(super) async fn views(
 
 pub(super) async fn enrich(
     storage: &BtccStorage,
-    ledger: &ProjectLedger,
+    reader: &ProjectReader,
     value: Value,
 ) -> Result<Value, GatewayApplicationError> {
     let copy = value.clone();
@@ -50,7 +77,7 @@ pub(super) async fn enrich(
         .canon_read(move |db| store::runtime::project_works(db, &copy))
         .await
         .map_err(error)?;
-    let views = views(ledger, works).await?;
+    let views = views(reader, works).await?;
     storage
         .canon_read(move |db| {
             let mut value = value;
@@ -66,38 +93,36 @@ pub(super) async fn enrich(
 
 pub(super) async fn reconcile(
     storage: BtccStorage,
-    ledger: ProjectLedger,
+    reader: ProjectReader,
     after: Arc<std::sync::atomic::AtomicI64>,
 ) -> Result<(), GatewayApplicationError> {
     use std::sync::atomic::Ordering;
-    loop {
-        let cursor = after.load(Ordering::Relaxed);
-        if !storage
-            .canon_read(move |db| store::runtime::pending(db, cursor))
-            .await
-            .map_err(error)?
-        {
-            return Ok(());
-        }
-        let works = storage
-            .canon_read(move |db| store::runtime::changed_works(db, cursor))
-            .await
-            .map_err(error)?;
-        let views = views(&ledger, works).await?;
-        let next = storage
-            .canon_write(move |tx| {
-                store::runtime::catch_up(
-                    tx,
-                    &store::runtime_context(chrono::Utc::now().timestamp_millis()),
-                    &views,
-                    cursor,
-                )
-            })
-            .await
-            .map_err(error)?;
-        for (row, error) in next.diagnostics {
-            tracing::warn!(%error, %row, "Canon reconcile row quarantined");
-        }
-        after.store(next.after, Ordering::Relaxed);
+    let cursor = after.load(Ordering::Relaxed);
+    let (owner, generation) = storage.runtime_owner();
+    let owner = owner.to_owned();
+    let mut batch = storage
+        .canon_read(move |db| store::runtime::prepare(db, cursor, (&owner, generation)))
+        .await
+        .map_err(error)?;
+    if batch.is_empty() {
+        return Ok(());
     }
+    let views = views(&reader, std::mem::take(&mut batch.works)).await?;
+    let next = storage
+        .canon_write(move |tx| {
+            store::runtime::catch_up(
+                tx,
+                &store::runtime_context(chrono::Utc::now().timestamp_millis()),
+                &views,
+                cursor,
+                batch,
+            )
+        })
+        .await
+        .map_err(error)?;
+    for (row, error) in next.diagnostics {
+        tracing::warn!(%error, %row, "Canon reconcile row quarantined");
+    }
+    after.store(next.after, Ordering::Relaxed);
+    Ok(())
 }

@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 pub(crate) struct AppCanon {
     storage: BtccStorage,
-    ledger: butler_ledger::project_ledger::ProjectLedger,
+    ledger: progress::ProjectReader,
     feed_after: Arc<std::sync::atomic::AtomicI64>,
 }
 impl AppCanon {
@@ -22,7 +22,7 @@ impl AppCanon {
     ) -> Self {
         Self {
             storage,
-            ledger,
+            ledger: progress::ProjectReader::new(ledger),
             feed_after: Arc::new(std::sync::atomic::AtomicI64::new(0)),
         }
     }

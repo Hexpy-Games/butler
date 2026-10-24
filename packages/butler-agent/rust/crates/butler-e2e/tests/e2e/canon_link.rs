@@ -9,6 +9,7 @@ mod delegation;
 mod plans;
 mod recovery;
 mod stub;
+mod window;
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
