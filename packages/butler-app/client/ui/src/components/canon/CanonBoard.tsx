@@ -24,7 +24,8 @@ export function CanonBoard({ projectId, bottomInset }: { projectId: string; bott
   const [planForm, setPlanForm] = useState<{ plan?: CanonPlan } | null>(null);
   const { tags } = useCanonTags(projectId);
   const [filterState, setFilterState] = useState<{ projectId: string; ids: string[] }>({ projectId, ids: [] });
-  const tagFilter = filterState.projectId === projectId ? filterState.ids : [];
+  // A deleted tag drops out of the filter instead of leaving the board empty.
+  const tagFilter = (filterState.projectId === projectId ? filterState.ids : []).filter(id => tags.some(tag => tag.id === id));
   const setTagFilter = (ids: string[]) => setFilterState({ projectId, ids });
   const matches = (epic: { tags: { id: string }[] }) => !tagFilter.length || epic.tags.some(tag => tagFilter.includes(tag.id));
   const copy = appCopy.canon;
