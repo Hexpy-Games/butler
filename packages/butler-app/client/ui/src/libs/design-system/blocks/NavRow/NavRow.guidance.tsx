@@ -33,14 +33,17 @@ export const guidance: ShowcaseGuidance = {
   recipes: [{ name: "Sidebar row with hover actions", description: "In the SidebarShell, NavRowSwap reveals the row menu on hover and focus in place of the row's rest status.", render: () => <SessionNavRow /> }],
   doDont: [
     {
-      do: { caption: "The active row is a flat selection fill.", render: () => <NavRow icon={<Folder size="md" />} label="butler" active onClick={() => undefined} /> },
+      do: { caption: "The active row is a flat fill from the surface's family.", render: () => <NavRow icon={<Folder size="md" />} label="butler" active onClick={() => undefined} /> },
       dont: {
         caption: "A Clickable row loses NavRow's regions, truncation and density.",
         render: () => <Clickable onClick={() => undefined}><Stack align="row" gap="sm"><Folder size="md" /><Typo.Body>butler</Typo.Body></Stack></Clickable>,
       },
     },
   ],
-  content: ["windowDrag=\"no-drag\" keeps a row clickable inside a titlebar drag region.", "Labels are titles as the user named them; truncate, never wrap, unless multiline is set."],
+  content: ["Fills follow the sidebar surface, never the platform: a tinted shell (light macOS or Windows translucent, the opaque sidebar setting) takes the white family; a white base (web and Linux translucent, the peek card, the drawer) and dark keep the --selection shades.",
+    "Fills stay flat: no motion between rows, no shadow or edge. Selected + hover and pressed show the selected fill; the medium label weight marks selection where hover is faint.",
+    "windowDrag=\"no-drag\" keeps a row clickable inside a titlebar drag region.", "Labels are titles as the user named them; truncate, never wrap, unless multiline is set."],
   accessibility: ["Active rows carry aria-current; actions stop propagation; iconInteractive exposes an icon control."],
-  tokens: ["--sidebar-row-height", "--selection-strong", "--selection", "--sidebar-action-size", "--motion-fast"],
+  tokens: ["--sidebar-row-height", "--selection-strong", "--selection", "--mac-sidebar-hover-bg", "--mac-sidebar-selected-bg",
+    "--windows-sidebar-hover-bg", "--windows-sidebar-selected-bg", "--sidebar-action-size", "--motion-fast"],
 };

@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import { Activity, AiChip, Database, McpServer, Palette, Settings, ShieldCheck, Sparkles } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
+import { NavRowSurface } from "../NavRow/fixtures/NavRowSurface";
 import { SettingsNav } from "./SettingsNav";
 
 export const meta: ShowcaseMeta = {
@@ -48,6 +49,19 @@ function SettingsSidebar({ context }: { context: ShowcaseRenderContext }) {
 
 export const stories: ShowcaseStory[] = [
   { name: "Grouped sections", states: ["selected"], widths: ["320", "375", "app"], render: (context) => <SettingsSidebar context={context} /> },
+  {
+    // In the cards frame the nav sits on the shell: a tinted light shell gives
+    // the white family (SettingsShell maps it), a white base keeps the shades.
+    name: "Fills: white base and tinted shell",
+    states: ["hover", "active", "selected"],
+    render: (context) => (
+      <Stack gap="sm">
+        {(["white", "tinted"] as const).map((surface) => (
+          <NavRowSurface key={surface} surface={surface}><SettingsSidebar context={context} /></NavRowSurface>
+        ))}
+      </Stack>
+    ),
+  },
   {
     name: "Untitled group",
     render: (context) => (

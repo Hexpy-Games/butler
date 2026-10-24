@@ -14,6 +14,7 @@ import { OverflowActionMenu } from "../OverflowActionMenu";
 import { SidebarShell } from "../SidebarShell";
 import { NavRow } from "./NavRow";
 import { NavRowSwap } from "./NavRowSwap";
+import { NAV_ROW_SURFACE_VARIANTS, NavRowSurface } from "./fixtures/NavRowSurface";
 
 export const meta: ShowcaseMeta = {
   title: "NavRow",
@@ -143,17 +144,17 @@ export const stories: ShowcaseStory[] = [
 ];
 
 export const stateMatrix: ShowcaseStateMatrix = {
-  states: ["default", "hover", "focus-visible", "active", "selected", "disabled"],
-  render: (context) => (
-    <Sidebar copy={text(context)}>
-      <NavRow
-        actions={rowMenu(text(context))}
-        active={context.state === "selected"}
-        disabled={context.state === "disabled"}
-        icon={<Folder size="md" />}
-        label={text(context).project}
-        onClick={() => undefined}
-      />
-    </Sidebar>
-  ),
+  states: ["default", "hover", "focus-visible", "active", "disabled"],
+  variants: Object.keys(NAV_ROW_SURFACE_VARIANTS),
+  render: (context) => {
+    const variant = NAV_ROW_SURFACE_VARIANTS[context.variant] ?? { surface: "white", selected: false };
+    return (
+      <NavRowSurface surface={variant.surface}>
+        <Sidebar copy={text(context)}>
+          <NavRow actions={rowMenu(text(context))} active={variant.selected} disabled={context.state === "disabled"}
+            icon={<Folder size="md" />} label={text(context).project} onClick={() => undefined} />
+        </Sidebar>
+      </NavRowSurface>
+    );
+  },
 };

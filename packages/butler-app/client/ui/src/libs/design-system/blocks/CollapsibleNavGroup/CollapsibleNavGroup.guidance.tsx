@@ -32,7 +32,10 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Rows that pop in without the reveal shift the list abruptly.", render: () => <Stack gap="xs"><NavRow label="Design system" /><NavRow label="Token pages" /></Stack> },
     },
   ],
-  content: ["Folder names as the user typed them."],
+  content: [
+    "Folder names as the user typed them.",
+    "A sticky header's hover and pressed fills follow the surface like NavRow's (--nav-hover-bg / --nav-selected-bg over the sticky surface).",
+  ],
   accessibility: ["The header exposes aria-expanded; children unmount after the exit."],
-  tokens: ["--sidebar-row-height", "--motion-base", "--motion-exit-base"],
+  tokens: ["--sidebar-row-height", "--selection", "--selection-strong", "--motion-base", "--motion-exit-base"],
 };
