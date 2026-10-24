@@ -42,8 +42,8 @@ pub use crate::gateway::inbound_queue::{
 };
 pub use crate::gateway::message_file_store::AppMessageFiles;
 pub use application::settings::{
-    command_sandbox_enabled, diagnostics_enabled_readonly, producer_log_config, startup_log_config,
-    stored_ui_language_readonly,
+    browsing_agent_setting, command_sandbox_enabled, diagnostics_enabled_readonly,
+    producer_log_config, startup_log_config, stored_ui_language_readonly,
 };
 pub use application::{
     APP_PERSON_ID, AppAssetCommand, AppCanonOperation, AppCardInput, AppProfileInput,

@@ -132,7 +132,7 @@
       "definition": {
         "type": "function",
         "name": "web_read",
-        "description": "Get a page's text as bounded evidence. Pass url to read a static document (article, documentation, reference, PDF) through Butler's page reader, or tab to read an open tab as it shows now; a url already open in a tab is read from that tab. App-like or script-built pages, such as stores, product listings or dashboards, show their content only in a tab: open them with browser_open first, then pass tab. URL reads are reused within the turn; tab reads check the live page and return unchanged only when its content is identical. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. Reads of different pages and tabs, and their continuations, are independent: request them together in one round. ok:false with next_action open_in_tab means the reader got only part of the page: open it with browser_open and read the tab before using anything from it. Read another source for the same fact only after the tab fails too, or when browser tools are unavailable; then report what still fails and what you tried.",
+        "description": "Get a page's text as bounded evidence. Pass url to read a static document (article, documentation, reference, PDF) through Butler's page reader, or tab to read an open tab as it shows now; a url already open in a tab is read from that tab. App-like or script-built pages, such as stores, product listings or dashboards, show their content only in a tab: open them with browser_open first, then pass tab. URL reads are reused within the turn; tab reads check the live page and return unchanged only when its content is identical. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. Reads of different pages and tabs, and their continuations, are independent: request them together in one round. ok:false with next_action open_in_tab means the reader got only part of the page: open it with browser_open and read the tab before using anything from it. Read another source for the same fact only after the tab fails too, or when browser tools are unavailable; then report what still fails and what you tried. With query, the chunks that best match it come first; read the others with start_chunk.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -164,6 +164,9 @@
               "minimum": 0,
               "default": 0,
               "description": "Zero-based chunk offset for continuing through the page (default 0). Use next_start_chunk from the previous result."
+            },
+            "query": {
+              "type": "string"
             }
           },
           "required": []
@@ -6936,6 +6939,51 @@
         "file"
       ],
       "durable": false
+    },
+    {
+      "name": "browse",
+      "definition": {
+        "type": "function",
+        "name": "browse",
+        "description": "Do one page task in a browser tab with a fast browsing agent and get back only the result: the requested fields with quoted evidence, a short summary and the tab. Use it to find, compare, check prices or options, fill a form up to its submit step, or reach a cart or checkout. Give a concrete goal and the fields you need; pass url or an open tab. Run independent browse calls in one round. A result with status needs_approval carries the exact steps that order, pay, submit or sign in: run them with browser_act so the user approves them. stuck and step_limit say what was reached; follow up with a narrower goal or use browser tools directly.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "goal": {
+              "type": "string"
+            },
+            "fields": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "url": {
+              "type": "string"
+            },
+            "tab": {
+              "type": "string"
+            },
+            "max_steps": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30
+            }
+          },
+          "required": [
+            "goal"
+          ]
+        }
+      },
+      "effectBoundary": "none",
+      "category": "control",
+      "tags": [
+        "browser",
+        "web",
+        "tabs"
+      ],
+      "durable": false
     }
   ],
   "workerForbidden": [
@@ -9893,7 +9941,7 @@
     "web_read": {
       "type": "function",
       "name": "web_read",
-      "description": "Get a page's text as bounded evidence. Pass url to read a static document (article, documentation, reference, PDF) through Butler's page reader, or tab to read an open tab as it shows now; a url already open in a tab is read from that tab. App-like or script-built pages, such as stores, product listings or dashboards, show their content only in a tab: open them with browser_open first, then pass tab. URL reads are reused within the turn; tab reads check the live page and return unchanged only when its content is identical. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. Reads of different pages and tabs, and their continuations, are independent: request them together in one round. ok:false with next_action open_in_tab means the reader got only part of the page: open it with browser_open and read the tab before using anything from it. Read another source for the same fact only after the tab fails too, or when browser tools are unavailable; then report what still fails and what you tried.",
+      "description": "Get a page's text as bounded evidence. Pass url to read a static document (article, documentation, reference, PDF) through Butler's page reader, or tab to read an open tab as it shows now; a url already open in a tab is read from that tab. App-like or script-built pages, such as stores, product listings or dashboards, show their content only in a tab: open them with browser_open first, then pass tab. URL reads are reused within the turn; tab reads check the live page and return unchanged only when its content is identical. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. Reads of different pages and tabs, and their continuations, are independent: request them together in one round. ok:false with next_action open_in_tab means the reader got only part of the page: open it with browser_open and read the tab before using anything from it. Read another source for the same fact only after the tab fails too, or when browser tools are unavailable; then report what still fails and what you tried. With query, the chunks that best match it come first; read the others with start_chunk.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -9937,6 +9985,9 @@
               "disabled"
             ],
             "description": "Optional page reader backend override."
+          },
+          "query": {
+            "type": "string"
           }
         },
         "required": []
@@ -12337,6 +12388,40 @@
       "concurrencySafe": false,
       "interruptBehavior": "continue",
       "transcriptVisibility": "visible"
+    },
+    "browse": {
+      "type": "function",
+      "name": "browse",
+      "description": "Do one page task in a browser tab with a fast browsing agent and get back only the result: the requested fields with quoted evidence, a short summary and the tab. Use it to find, compare, check prices or options, fill a form up to its submit step, or reach a cart or checkout. Give a concrete goal and the fields you need; pass url or an open tab. Run independent browse calls in one round. A result with status needs_approval carries the exact steps that order, pay, submit or sign in: run them with browser_act so the user approves them. stuck and step_limit say what was reached; follow up with a narrower goal or use browser tools directly.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "goal": {
+            "type": "string"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "url": {
+            "type": "string"
+          },
+          "tab": {
+            "type": "string"
+          },
+          "max_steps": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30
+          }
+        },
+        "required": [
+          "goal"
+        ]
+      }
     }
   },
   "allLedgerEffects": [

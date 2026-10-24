@@ -1,0 +1,3 @@
+<!doctype html><meta charset="utf-8"><title>Checkout</title>
+<h1>Checkout</h1><p id="item"></p><script>document.querySelector('#item').textContent=localStorage.getItem('cart')||'Empty cart';</script>
+<form method="post" onsubmit="event.preventDefault();document.querySelector('#result').textContent='Order placed';"><button type="submit">Place order</button></form><p id="result">Order not placed</p>

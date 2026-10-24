@@ -32,5 +32,4 @@ src/operations/status_summary/context.rs	read_context_for_session	87
 src/operations/status_summary/health.rs	read_health	83
 src/web_access/html/extraction.rs	markdown_from_html	89
 src/web_access/page.rs	extract_page	114
-src/web_access/read.rs	bounded_result	83
 src/web_access/read/lightpanda.rs	run_dump	89
