@@ -2,6 +2,7 @@
 
 pub(super) mod activity;
 mod conversation;
+pub(super) mod history;
 pub(super) mod materialized;
 mod sessions;
 pub(super) mod usage;
@@ -83,6 +84,9 @@ pub struct AppWorkStatusConversationFact {
 /// File-backed monitor reads remain owned by the native Host projection.
 pub trait AppMonitoringPort: Send + Sync + 'static {
     fn work_status(&self) -> ApplicationFuture<Vec<AppBoundWorkStatusFact>>;
+    fn usage_history(&self) -> ApplicationFuture<Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn usage_monitor(&self, query: AppUsageMonitorQuery) -> ApplicationFuture<AppUsageMonitorView>;
     fn system_events(&self, page: AppMonitorPage) -> ApplicationFuture<Value>;
     /// The provider's latest subscription quota, polled first when

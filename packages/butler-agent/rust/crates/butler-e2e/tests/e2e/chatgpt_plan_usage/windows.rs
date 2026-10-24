@@ -80,6 +80,7 @@ async fn siwc_17_account_windows_and_incremental_tail() -> Result<(), HarnessErr
         .env("BUTLER_CHATGPT_API_BASE_URL", base)
         .start()
         .await?;
+    super::register_plan_model(&s).await?;
     let key = account_key(&s.sandbox.data)?;
     let empty = read(&s, "/usage-monitor").await?;
     assert_windows(&empty, [0, 0, 0]);

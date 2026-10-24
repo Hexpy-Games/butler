@@ -93,7 +93,11 @@ fn monitors(request: &Request<Body>) -> Option<Handler> {
         (
             matches!(
                 path,
-                "/usage-monitor" | "/work-status" | "/worker-activity" | "/system-events"
+                "/usage-history"
+                    | "/usage-monitor"
+                    | "/work-status"
+                    | "/worker-activity"
+                    | "/system-events"
             ) || path.starts_with("/worker-activity/")
                 || (path.starts_with("/sessions/") && path.contains("/worker-activity")),
             Handler::Monitors,

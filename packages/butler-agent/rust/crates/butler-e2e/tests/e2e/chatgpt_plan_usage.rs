@@ -62,3 +62,18 @@ pub(super) mod windows;
 mod search;
 
 mod account;
+
+/// Quota projections require a registered model that uses the signed-in plan.
+async fn register_plan_model(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), HarnessError> {
+    let reply =
+        s.gw.post(
+            "/model-catalog/registered-models",
+            json!({
+                "provider_id":s.model.provider(), "model_id":s.model.model,
+                "auth_type":"chatgpt_oauth"
+            }),
+        )
+        .await?;
+    assert!(reply.status < 300, "{}", reply.text);
+    Ok(())
+}

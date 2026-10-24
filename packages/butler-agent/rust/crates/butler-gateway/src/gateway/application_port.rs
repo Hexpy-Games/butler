@@ -99,6 +99,9 @@ pub trait GatewayApplication:
         limit: Option<usize>,
         offset: Option<usize>,
     ) -> ApplicationFuture<serde_json::Value>;
+    fn get_usage_history(&self) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn get_usage_monitor(
         &self,
         query: AppUsageMonitorQuery,

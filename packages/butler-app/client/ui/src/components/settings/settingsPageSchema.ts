@@ -78,7 +78,8 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   updates: [{ id: "updates", kind: "list", fields: [] }],
   usage: [
     { id: "usage-overview", kind: "status", fields: [] },
-    { id: "usage-providers", kind: "list", fields: [] },
+    { id: "usage-history", kind: "status", fields: [] },
+    { id: "usage-providers", kind: "status", fields: [] },
     { id: "usage-scope-tokens", kind: "list", fields: [] },
     { id: "usage-model-tokens", kind: "list", fields: [] },
     { id: "usage-prompt-sections", kind: "list", fields: [] },
