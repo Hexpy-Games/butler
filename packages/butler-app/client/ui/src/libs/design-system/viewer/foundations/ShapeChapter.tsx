@@ -18,7 +18,7 @@ const step = (name: string) => ({ "--step": `var(${name})` }) as CSSProperties;
 const SHAPES: Record<string, { label: string; shape: string }> = {
   "--radius-control": { label: "Buttons, fields, rows", shape: "control" },
   "--radius-panel": { label: "Cards and panels", shape: "panel" },
-  "--radius-popover": { label: "Menus, popovers, dialogs", shape: "popover" },
+  "--radius-popover": { label: "Menus, popovers, dialogs, column-wide cards", shape: "popover" },
   "--radius-composer": { label: "Composer and glass", shape: "composer" },
   "--radius-pill": { label: "Tags, switches, pills", shape: "pill" },
   "--adaptive-composer-radius": { label: "Composer on narrow screens", shape: "composer" },
@@ -116,7 +116,7 @@ export function ShapeChapter({ chapter, anchor, locale, onOpen }: ChapterProps) 
       <GuideSection spec={s.at("radius")} lead="Each radius on the surface it belongs to.">
         <RadiusShapes />
       </GuideSection>
-      <GuideSection spec={s.at("nesting")} lead="A menu keeps --radius-popover (12px) on its surface and --radius-control (8px) on its rows, so a row matches every other control. The inset only sets the gap: 6px in DropdownMenu and ContextMenu, --space-1 (4px) for OptionMenu in a Popover.">
+      <GuideSection spec={s.at("nesting")} lead="A menu keeps --radius-popover (12px) on its surface and --radius-control (8px) on its rows, so a row matches every other control. The inset only sets the gap: 6px in DropdownMenu and ContextMenu, --space-1 (4px) for OptionMenu in a Popover. A column-wide Card (radius lg, 12px) works the same way: a frame directly inside follows the card's corners and its buttons keep 8px.">
         <NestedRadius locale={locale} />
       </GuideSection>
       <GuideSection spec={s.at("layers")} lead="Page, card, control, overlay, drag: each step up casts a longer, softer shadow.">

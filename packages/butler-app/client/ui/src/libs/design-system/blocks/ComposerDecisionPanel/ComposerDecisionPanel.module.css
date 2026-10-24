@@ -20,9 +20,9 @@
 
 .error {
   padding-block: var(--space-sm);
-  padding-inline: var(--space-lg);
+  padding-inline: var(--composer-panel-inset);
   padding-inline-start: calc(
-    var(--space-lg) + var(--icon-size-sm) + var(--space-sm)
+    var(--composer-panel-inset) + var(--icon-size-sm) + var(--space-sm)
   );
 }
 
@@ -58,7 +58,8 @@
   grid-column: 2;
   align-self: start;
   justify-content: flex-end;
-  padding: var(--space-lg) var(--space-lg) var(--space-sm) 0;
+  padding: var(--composer-panel-inset) var(--composer-panel-inset)
+    var(--space-sm) 0;
 }
 
 .mediaTarget {
@@ -94,8 +95,8 @@
     grid-row: auto;
     grid-column: 1;
     justify-content: flex-start;
-    padding: 0 var(--space-lg) var(--space-md)
-      calc(var(--space-lg) + var(--icon-size-sm) + var(--space-sm));
+    padding: 0 var(--composer-panel-inset) var(--space-md)
+      calc(var(--composer-panel-inset) + var(--icon-size-sm) + var(--space-sm));
   }
 
   /* The thumbnail keeps the column's width and shows the top of the page:

@@ -8,6 +8,11 @@
   color: var(--text-primary);
 }
 
+/* lg: a column-wide card takes the popover tier. */
+.card[data-radius="lg"] {
+  border-radius: var(--radius-popover);
+}
+
 .card[data-padding="none"] {
   padding: 0;
 }

@@ -8,7 +8,7 @@ import { LIVE_PAGES, demoTabs } from "../LiveTabCard/fixtures";
 import { LiveTabFrame } from "../LiveTabCard/LiveTabFrame";
 import { useDemoFrame } from "../LiveTabCard/liveTabDemo";
 import { SplitButton } from "../SplitButton";
-import { ComposerDecisionPanel } from "./ComposerDecisionPanel";
+import { ComposerDecisionPanel, type ComposerDecisionPanelProps } from "./ComposerDecisionPanel";
 
 const words = {
   "en-US": { eyebrow: "Permission", click: "Click ‘Book now’", detail: "Pine Grove Campground · Oct 20 and 22, deck site, 2 nights · $84", medium: "Medium risk",
@@ -18,12 +18,12 @@ const words = {
 } as const;
 
 /** A browser-action approval with the tab's frame as `media`: one decoded ImageBitmap, as the App draws it (static while the decision waits). */
-export function BrowserApproval({ locale }: ShowcaseRenderContext) {
+export function BrowserApproval({ locale, placement }: ShowcaseRenderContext & Pick<ComposerDecisionPanelProps, "placement">) {
   const text = words[locale];
   const tab = demoTabs(locale)[0]!;
   const frame = useDemoFrame(LIVE_PAGES.bookingApproval);
   return (
-    <ComposerDecisionPanel icon={<ShieldCheck aria-hidden="true" size="lg" />} eyebrow={text.eyebrow} title={text.click} onOpen={() => undefined}
+    <ComposerDecisionPanel placement={placement} icon={<ShieldCheck aria-hidden="true" size="lg" />} eyebrow={text.eyebrow} title={text.click} onOpen={() => undefined}
       details={[text.detail]} aside={<Tag tone="warning">{text.medium}</Tag>}
       media={{ content: <LiveTabFrame frame={frame} favicon={tab.favicon} />, label: `${text.open} · ${tab.title}`, onOpen: () => undefined }}
       actions={<ButtonContainer size="sm" justify="end">

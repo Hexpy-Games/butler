@@ -1,10 +1,38 @@
 .surface {
+  --composer-panel-inset: var(--space-lg);
+  --composer-panel-body-inset: var(--space-sm);
+  --composer-panel-actions-inset: var(--space-sm);
+  --composer-panel-button-radius: var(--adaptive-composer-radius);
+
   display: grid;
   min-width: 0;
   border-radius: var(--adaptive-composer-radius);
 }
+
+/* In the conversation the panel sits in a flat Card radius="lg": a 12px
+   content inset like a Card padding="md", and control-radius buttons. */
+.surface[data-placement="conversation"] {
+  --composer-panel-inset: var(--space-md);
+  --composer-panel-body-inset: var(--space-xs);
+  --composer-panel-actions-inset: var(--space-md);
+  --composer-panel-button-radius: var(--radius-control);
+}
+
+/* A frame directly inside a Card follows the card's corners (8px, or 12px
+   for radius="lg"), never the composer's. */
+[data-slot="card"] > .surface {
+  border-radius: inherit;
+}
+
+/* The decision media's narrow layout queries the panel's width, as it does
+   inside ComposerCard. */
+.conversationCard {
+  container-name: composer;
+  container-type: inline-size;
+}
 .subject {
-  padding: var(--space-lg) var(--space-lg) var(--space-xs);
+  padding: var(--composer-panel-inset) var(--composer-panel-inset)
+    var(--space-xs);
 }
 /* A title-only body needs the same footer gap as the scroll body. */
 .subject:has(+ .actions) {
@@ -30,7 +58,7 @@
   line-height: var(--typo-caption-line-height);
 }
 .body {
-  padding: 0 var(--space-sm) var(--space-sm);
+  padding: 0 var(--composer-panel-body-inset) var(--composer-panel-body-inset);
   min-width: 0;
 }
 .singleContent {
@@ -46,12 +74,12 @@
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-sm);
-  padding: var(--space-sm);
+  padding: var(--composer-panel-actions-inset);
   border-top: var(--border-hairline) solid var(--composer-glass-divider);
 }
 .actions button {
   flex-shrink: 0;
-  border-radius: var(--adaptive-composer-radius);
+  border-radius: var(--composer-panel-button-radius);
 }
 .surface:focus-visible,
 .surface button:focus-visible,

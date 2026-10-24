@@ -1,7 +1,7 @@
 import { useRef, type HTMLAttributes, type ReactNode } from "react";
 import type { DsBaseProps } from "../../lib/dsProps";
 import { Clickable } from "../../components/Clickable";
-import { ComposerPanelFrame, ComposerPanelHeader, ComposerPanelBody, ComposerPanelActions } from "../../lib/composerPanel";
+import { ComposerPanelFrame, ComposerPanelHeader, ComposerPanelBody, ComposerPanelActions, type ComposerPanelPlacement } from "../../lib/composerPanel";
 import { useComposerPanelTransition } from "../../lib/useComposerPanelTransition";
 import { composerDecisionKeyboard } from "../../lib/composerDecisionKeyboard";
 import { Typo } from "../../components/Typo";
@@ -29,7 +29,7 @@ export interface ComposerDecisionPanelProps extends Omit<DsBaseProps<HTMLAttribu
   aside?: ReactNode;
   /** A failed decision, announced as an alert between the subject and the actions. */
   error?: string;
-  /** The decision buttons, usually a ButtonContainer justify="end"; they take the composer radius. */
+  /** The decision buttons, usually a ButtonContainer justify="end"; they take the composer radius (control radius in the conversation). */
   actions: ReactNode | ((complete: (action: () => void) => void) => ReactNode);
   /**
    * A 16:10 page thumbnail at the subject row's end (a `LiveTabFrame` of the tab the decision acts on): 144px wide,
@@ -37,6 +37,11 @@ export interface ComposerDecisionPanelProps extends Omit<DsBaseProps<HTMLAttribu
    * `--decision-media-narrow-height` (140px). `onOpen` opens the page; without it the thumbnail is a plain image; `label` names it.
    */
   media?: ComposerDecisionMedia;
+  /**
+   * `composer` (default): in place of the composer input, inside ComposerCard. `conversation`: in the transcript,
+   * inside a flat bordered `Card radius="lg"` with control-radius buttons.
+   */
+  placement?: ComposerPanelPlacement;
 }
 
 export interface ComposerDecisionMedia {
@@ -53,11 +58,11 @@ function DecisionMedia({ content, label, onOpen }: ComposerDecisionMedia) {
 }
 
 /** A pending decision shown in place of the composer input: subject row, optional details and error, media, actions. */
-export function ComposerDecisionPanel({ icon, eyebrow, title, onOpen, details, detailsShowMoreLabel, detailsShowLessLabel, aside, error, actions, media, renderText, className, onKeyDown, ...props }: ComposerDecisionPanelProps) {
+export function ComposerDecisionPanel({ icon, eyebrow, title, onOpen, details, detailsShowMoreLabel, detailsShowLessLabel, aside, error, actions, media, renderText, placement, className, onKeyDown, ...props }: ComposerDecisionPanelProps) {
   const panel = useRef<HTMLDivElement>(null);
   const { defer, deferring } = useComposerPanelTransition(panel);
   const hasDetails = Boolean(details?.length);
-  return <ComposerPanelFrame panelRef={panel} className={media ? dsClass(styles.withMedia, className) : className} tabIndex={0} aria-label={title} aria-busy={deferring}
+  return <ComposerPanelFrame panelRef={panel} placement={placement} className={media ? dsClass(styles.withMedia, className) : className} tabIndex={0} aria-label={title} aria-busy={deferring}
     onKeyDown={(event) => { if (deferring) { event.preventDefault(); event.stopPropagation(); return; } composerDecisionKeyboard(event); onKeyDown?.(event); }} {...props}>
     <ComposerPanelHeader icon={icon} eyebrow={eyebrow} dataSlot="composer-decision-subject" hasDetails={hasDetails}
       title={<Clickable variant="text" onClick={onOpen} title={title}>
