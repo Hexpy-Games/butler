@@ -21,6 +21,10 @@ async function shot(page: Page, dir: string, name: string) {
       .every(element => getComputedStyle(element).opacity === "1"));
   }
   else await page.waitForFunction(() => document.querySelectorAll("[data-sonner-toast]").length === 0);
+  if (!name.endsWith("-hover")) {
+    await page.mouse.move(5, 895); // Park the pointer so no hover tooltip overlaps the capture.
+    await page.waitForFunction(() => document.querySelectorAll('[role="tooltip"]:not([data-slot="resize-hint"])').length === 0);
+  }
   await page.screenshot({ path: join(dir, `${name}.png`) });
 }
 
