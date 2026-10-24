@@ -6,7 +6,7 @@ pub use image_usage::{AppImageUsageCommand, ImageUsageOperation, ImageUsageRecor
 mod canon;
 pub(crate) mod canon_sidebar;
 mod data_reset;
-pub use assets::{AppAssetCommand, GeneratedAssetKind};
+pub use assets::{AppAssetCommand, GeneratedAssetKind, composite, mask_bounds};
 mod admission;
 mod admission_identity;
 mod answer_drafts;

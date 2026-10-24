@@ -213,3 +213,9 @@ impl ModelCatalogError {
 
 #[cfg(test)]
 mod tests;
+
+mod image_gen;
+pub use image_gen::{
+    Background, ImageGenError, ImageGenRequest, ImageGenResult, ImageUsage, InputImage,
+    NormalizedRect, effective_size as image_effective_size, generate as generate_image,
+};

@@ -3,7 +3,7 @@ use super::super::GuidedTools;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 #[derive(Clone)]
-pub(super) struct Client {
+pub(in crate::host::guided::tools) struct Client {
     client: butler_log::http::Client,
     base: String,
     bearer: String,
@@ -13,10 +13,10 @@ pub(super) struct Client {
     turn: String,
 }
 impl Client {
-    pub(super) async fn vision(&self, model: &str) -> bool {
+    pub(in crate::host::guided::tools) async fn vision(&self, model: &str) -> bool {
         super::super::outputs::vision(&self.client, &self.base, &self.bearer, model).await
     }
-    pub(super) async fn new(owner: &GuidedTools) -> Option<Self> {
+    pub(in crate::host::guided::tools) async fn new(owner: &GuidedTools) -> Option<Self> {
         let endpoint = owner.app_endpoint.snapshot()?;
         let data = owner.binding.butler_data.clone();
         let admin = tokio::task::spawn_blocking(move || {
@@ -56,11 +56,16 @@ impl Client {
                 .ok()??,
         })
     }
-    pub(super) async fn waiting(&self, tab: &Value, value: bool, signal: &CancellationToken) {
+    pub(in crate::host::guided::tools) async fn waiting(
+        &self,
+        tab: &Value,
+        value: bool,
+        signal: &CancellationToken,
+    ) {
         self.call("tab.waiting", tab, &json!({"value":value}), signal)
             .await;
     }
-    pub(super) async fn call(
+    pub(in crate::host::guided::tools) async fn call(
         &self,
         op: &str,
         tab: &Value,
@@ -70,7 +75,7 @@ impl Client {
         let call_id = uuid::Uuid::new_v4().to_string();
         let request = self
             .client
-            .post(format!("{}/internal/browser/calls", self.base))
+            .post(format!("{}{}", self.base, if op.starts_with("images.") {"/internal/images/calls"} else {"/internal/browser/calls"}))
             .bearer_auth(&self.bearer)
             .header("x-butler-admin", &self.admin)
             .json(&json!({"op":op,"session":self.session,"tab":tab,"args":args,"call_id":call_id,"turn_id":self.turn}))

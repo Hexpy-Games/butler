@@ -204,6 +204,7 @@ impl AppApplication {
     ) -> DispatchResult {
         let model = self.automation_model_override(row.model.as_deref());
         let request = MessageSendRequest {
+            image_edit: None,
             expected_project_id: None,
             content_parts: None,
             chat_id: Some(json!(row.target_id)),
