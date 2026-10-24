@@ -2003,6 +2003,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
           text,
           client_message_id: clientMessageId,
           content_parts: controls.contentParts,
+          image_edit: controls.imageEdit,
           model: controls.model,
           reasoning_effort: controls.reasoningEffort,
           access_mode: controls.accessMode,
@@ -2033,6 +2034,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         throw new Error("Message send returned no accepted message.");
       }
       const accepted = result.accepted;
+      if (accepted.turn_id) controls.onImageEditAccepted?.(accepted.turn_id);
       controls.onAccepted?.();
       if (dashboardTarget && dashboardIsVisible() && get().activeChatId === targetChatId) set({ view: { kind: "session" } });
       const replies = result.replies ?? (result.reply ? [result.reply] : []);

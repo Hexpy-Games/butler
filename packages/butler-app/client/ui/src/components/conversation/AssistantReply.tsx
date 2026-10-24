@@ -1,3 +1,4 @@
+import { GeneratedImages } from "../images/GeneratedImages";
 import type { MessageRecord } from "@/app/types";
 import type { RefreshFileUrls } from "@/hooks/useMessageFileSource";
 import { MessageMarkdown } from "./MessageMarkdown";
@@ -8,6 +9,7 @@ export function AssistantReply({ message, refreshFileUrls }: { message: MessageR
   return <>
     <MessageMarkdown artifacts={message.artifacts} attachments={message.attachments}
       refreshFileUrls={refreshFileUrls} streaming={message.status === "streaming"} text={message.text} />
+    <GeneratedImages message={message} />
     <AnswerBlocks sets={message.answer_blocks} sessionId={message.chat_id} turnId={message.turn_id} />
   </>;
 }

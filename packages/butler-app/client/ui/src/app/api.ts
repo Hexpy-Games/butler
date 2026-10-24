@@ -312,6 +312,13 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (url.pathname.startsWith("/library/") && url.pathname.endsWith("/snapshot") && method === "GET") return callBridge<T>(bridge,"librarySnapshot",decodeURIComponent(url.pathname.slice(9, -9)));
   if (/^\/library\/(groups|tags|facets|items)(\/|$)/.test(url.pathname)) return callBridge<T>(bridge, "organizeLibrary", { path: url.pathname + url.search, method, ...(options.body == null ? {} : { body: parseBody(options.body) }) });
   if (url.pathname.startsWith("/library/") && method === "DELETE") return callBridge<T>(bridge,"deleteLibrary",decodeURIComponent(url.pathname.slice(9)));
+  if (url.pathname === "/settings/image-model" && (method === "GET" || method === "PUT"))
+    return unwrapBridgeResult<T>(await callBridge(bridge, "imageModelSettings", { method, body: method === "PUT" ? parseBody(options.body) : undefined }));
+  if (method === "GET" && /^\/message-assets\/img_[a-z0-9]+\/(meta|versions)$/u.test(url.pathname))
+    return unwrapBridgeResult<T>(await callBridge(bridge, "imageAssetInfo", { path: url.pathname }));
+  if (method === "POST" && url.pathname === "/message-assets/masks" && options.body instanceof Blob)
+    return unwrapBridgeResult<T>(await callBridge(bridge, "uploadImageMask", { session: url.searchParams.get("session"),
+      image: url.searchParams.get("for"), bytes: new Uint8Array(await options.body.arrayBuffer()) }));
   const asks = pendingAsksBridgeInput(url, method);
   if (asks) return await callBridge<T>(bridge, asks.method, asks.input);
   const canon = canonBridgeInput(url, method, () => parseBody(options.body));
@@ -785,6 +792,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       chatId: body.chat_id,
       text: body.text,
       contentParts: body.content_parts,
+      imageEdit: body.image_edit,
       model: body.model,
       reasoningEffort: body.reasoning_effort,
       accessMode: body.access_mode,
@@ -800,6 +808,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       queuedMessageId: decodeURIComponent(queuedMessageMatch[1]!),
       text: body.text,
       contentParts: body.content_parts,
+      imageEdit: body.image_edit,
       model: body.model,
       reasoningEffort: body.reasoning_effort,
       accessMode: body.access_mode,
@@ -830,6 +839,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       text: body.text,
       clientMessageId: body.client_message_id,
       contentParts: body.content_parts,
+      imageEdit: body.image_edit,
       model: body.model,
       reasoningEffort: body.reasoning_effort,
       accessMode: body.access_mode,

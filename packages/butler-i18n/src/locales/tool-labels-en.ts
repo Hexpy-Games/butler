@@ -1,4 +1,6 @@
 export const additionalToolLabels = {
+  generate_image: "Create image",
+  edit_image: "Edit image",
   browser_history_search: "Search browsing history",
   forget_explicit_memory: "Remove an instruction",
   project_artifacts: "Find project artifacts",

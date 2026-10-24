@@ -706,6 +706,22 @@ const butlerApp = Object.freeze({
   saveLibrary: (item) => requestJson("/library", { method: "POST", body: JSON.stringify(item) }),
   deleteLibrary: (id) => requestJson(`/library/${encodeURIComponent(id)}`, { method: "DELETE" }),
   librarySnapshot: (id) => requestJson(`/library/${encodeURIComponent(id)}/snapshot`),
+  imageModelSettings: ({ method = "GET", body } = {}) => {
+    if (!["GET", "PUT"].includes(method)) throw new Error("invalid_image_settings_method");
+    return requestBridgeResult("/settings/image-model", { method, ...(method === "PUT" ? { body: JSON.stringify(body) } : {}) });
+  },
+  imageAssetInfo: ({ path }) => {
+    if (!/^\/message-assets\/img_[a-z0-9]{10}(?:[a-z0-9]{2})?\/(meta|versions)$/u.test(path)) throw new Error("invalid_image_asset_route");
+    return requestBridgeResult(path);
+  },
+  uploadImageMask: ({ session, image, bytes }) => {
+    if (typeof session !== "string" || !/^img_[a-z0-9]{10}(?:[a-z0-9]{2})?$/u.test(image)
+      || !(bytes instanceof Uint8Array) || bytes.length > 50 * 1024 * 1024) throw new Error("invalid_image_mask");
+    return requestBridgeResult(`/message-assets/masks?${new URLSearchParams({ session, for: image })}`, {
+      method: "POST", headers: { "content-type": "image/png" }, body: Buffer.from(bytes),
+    });
+  },
+  saveImageAsset: ({ id, suggestedName }) => ipcRenderer.invoke("butler:save-image-asset", { id, suggestedName }),
   protocolVersion: "butler.app.v1",
   signalStartupReady: () => ipcRenderer.send("butler:renderer-ready"),
   setupWindowReady: () => ipcRenderer.invoke("butler:setup-window-ready"),
@@ -1034,7 +1050,7 @@ const butlerApp = Object.freeze({
       body: form,
     });
   },
-  sendMessage: ({ chatId, text, contentParts, clientMessageId, model, reasoningEffort, accessMode, planMode, queuePolicy, attachments, traceparent }) => requestBridgeResult("/messages", {
+  sendMessage: ({ chatId, text, contentParts, imageEdit, clientMessageId, model, reasoningEffort, accessMode, planMode, queuePolicy, attachments, traceparent }) => requestBridgeResult("/messages", {
     method: "POST",
     headers: traceHeaders(traceparent),
     body: JSON.stringify({
@@ -1042,6 +1058,7 @@ const butlerApp = Object.freeze({
       text,
       client_message_id: clientMessageId,
       content_parts: contentParts,
+      image_edit: imageEdit,
       model,
       reasoning_effort: reasoningEffort,
       access_mode: accessMode,
@@ -1114,6 +1131,7 @@ const butlerApp = Object.freeze({
       chat_id: chatId,
       text,
       content_parts: contentParts,
+      image_edit: imageEdit,
       model,
       reasoning_effort: reasoningEffort,
       access_mode: accessMode,
@@ -1127,6 +1145,7 @@ const butlerApp = Object.freeze({
       body: JSON.stringify({
         text,
         content_parts: contentParts,
+      image_edit: imageEdit,
         model,
         reasoning_effort: reasoningEffort,
         access_mode: accessMode,

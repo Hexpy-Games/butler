@@ -1,3 +1,4 @@
+import { LibraryImage } from "../images/LibraryImage";
 import { useEffect, useRef, useState } from "react";
 import { appCopy } from "@/app/copy";
 import { notifyStatus } from "@/app/notifications";
@@ -7,7 +8,7 @@ import {
   MetaList, PageContainer, Popup, ScrollArea, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Stack, TagField, Trash2, Typo,
 } from "@/butler-ds";
 import { openLibraryItem } from "../browser/LibraryItemCard";
-import { deleteLibrary, librarySnapshot, type LibraryItem } from "../browser/libraryStore";
+import { libraryImageSource, deleteLibrary, librarySnapshot, type LibraryItem } from "../browser/libraryStore";
 import { useLibraryGroups, useLibraryTags } from "./libraryApi";
 import { fileItems, itemMeta, renameItem, safeHost, tagItems } from "./libraryActions";
 import { useLibraryDialogs } from "./libraryDialogs";
@@ -55,7 +56,7 @@ export function LibraryDetail({ view, onAttach }: { view: LibraryView; onAttach:
     <ScrollArea fill dataTestClass="library-detail"><PageContainer width="full" gutter="xl"><Box paddingY="xl">
       <Grid columns={{ compact: "1", base: "1", wide: "main-aside" }} gap="xl">
         <ArtifactPreview>
-          {loaded?.html && item.snapshot ? <ArtifactPreviewFrame srcDoc={loaded.html} title={item.title} intrinsicSize={item.snapshot}
+          {item.asset ? <LibraryImage src={libraryImageSource(item)} alt={item.title} preview /> : loaded?.html && item.snapshot ? <ArtifactPreviewFrame srcDoc={loaded.html} title={item.title} intrinsicSize={item.snapshot}
             sandbox="allow-popups allow-popups-to-escape-sandbox" referrerPolicy="no-referrer" data-test-class="scrap-frame" />
             : loaded && item.crop ? <ArtifactPreviewImage src={item.crop} alt={item.title} />
               : <Typo.Caption>{loaded ? appCopy.browser.failed : appCopy.artifacts.loading}</Typo.Caption>}
@@ -77,12 +78,12 @@ export function LibraryDetail({ view, onAttach }: { view: LibraryView; onAttach:
             <TagField value={item.tags ?? []} onChange={setTags} suggestions={tags.tags} label={copy.tags} placeholder={copy.addTag}
               removeLabel={copy.removeTag} createLabel={copy.createTag} /></Field>
           <MetaList items={[
-            { label: copy.source, value: item.site ?? safeHost(item.url) },
+            ...(item.url || item.site ? [{ label: copy.source, value: item.site ?? safeHost(item.url) }] : []),
             { label: copy.saved, value: itemMeta(item).split(" · ").pop() ?? "" },
             ...(item.snapshot ? [{ label: copy.size, value: `${Math.round(item.snapshot.width)} × ${Math.round(item.snapshot.height)}` }] : []),
           ]} />
           <ButtonContainer size="sm">
-            <Button size="sm" variant="outline" iconStart={<Popup size="sm" />} onClick={() => void openLibraryItem(item, true)}>{appCopy.browser.openSourcePage}</Button>
+            {item.url && <Button size="sm" variant="outline" iconStart={<Popup size="sm" />} onClick={() => void openLibraryItem(item, true)}>{appCopy.browser.openSourcePage}</Button>}
             <Button size="sm" iconStart={<MessageSquarePlus size="sm" />} onClick={() => onAttach(item)}>{appCopy.browser.attach}</Button>
             <Button size="sm" variant="ghost" iconStart={<Trash2 size="sm" />} onClick={remove}>{copy.deleteItem}</Button>
           </ButtonContainer>

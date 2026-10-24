@@ -273,7 +273,15 @@ interface ConversationCopy {
       open: (site: string) => string;
     };
   };
+  imageTools: {
+    model: string; off: string; apiKey: string; apiKeyOnly: string; defaultQuality: string;
+    quality: Record<"low" | "medium" | "high" | "xhigh" | "max", string>;
+    size: string; qualityLabel: string; prompt: string; default: string; edit: string; download: string;
+    editor: string; brush: string; eraser: string; brushSize: string; undo: string; original: string; compare: string;
+    versions: string; version: (n: number) => string; instruction: string; send: string; readOnly: string; noModel: string; failed: string;
+  };
   imageViewer: {
+    zoomIn: string; zoomOut: string;
     viewImage: (name: string) => string;
     close: string;
     previous: string;
@@ -1357,7 +1365,7 @@ export interface AppCopy {
       downloadMeta: string; downloadedBytes: string; cancelled: string;
     };
     updateErrors: Record<"download" | "damaged" | "incompatible" | "storage" | "apply" | "generic", string>;
-    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "fullReset" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "agentImport" | "paymentMethods" | "profiles" | "purchaseSites", string>;
+    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "fullReset" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "imageModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "agentImport" | "paymentMethods" | "profiles" | "purchaseSites", string>;
     pageSectionDescriptions: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "learning" | "grants", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     grants: {

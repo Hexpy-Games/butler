@@ -3,6 +3,7 @@ import {
   SelectContent,
   SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
   Inline,
@@ -16,6 +17,9 @@ interface SettingsOption {
   value: string;
   label: string;
   description?: string;
+  disabled?: boolean;
+  disabledReason?: string;
+  group?: string;
   /** Decorative glyph before the label (a service logo). */
   icon?: ReactNode;
 }
@@ -85,29 +89,10 @@ export function SettingsSelect({
       {/* Beside the trigger, clear of the label and description stacked above it. */}
       {disabledReason ? <Tooltip label={disabledReason} side="right">{trigger}</Tooltip> : trigger}
       <SelectContent>
-        <SelectGroup>
-          {options.map((option) => (
-            <SelectItem
-              key={option.value}
-              value={option.value}
-              icon={option.icon}
-              textValue={
-                option.description
-                  ? `${option.label} - ${option.description}`
-                  : option.label
-              }
-            >
-              <span data-slot="select-item-stack">
-                <span data-slot="select-item-label">{option.label}</span>
-                {option.description && (
-                  <span data-slot="select-item-description">
-                    {option.description}
-                  </span>
-                )}
-              </span>
-            </SelectItem>
-          ))}
-        </SelectGroup>
+        {optionGroups(options).map(([group, items]) => <SelectGroup key={group}>
+          {group && <SelectLabel>{group}</SelectLabel>}
+          {items.map(option => <SettingsSelectOption key={option.value} option={option} />)}
+        </SelectGroup>)}
       </SelectContent>
     </Select>
   );
@@ -133,4 +118,23 @@ export function SettingsSelect({
       meta={meta}
     />
   );
+}
+
+function optionGroups(options: SettingsOption[]): Array<[string, SettingsOption[]]> {
+  const groups = new Map<string, SettingsOption[]>();
+  for (const option of options) {
+    const key = option.group ?? "";
+    groups.set(key, [...groups.get(key) ?? [], option]);
+  }
+  return [...groups];
+}
+
+function SettingsSelectOption({ option }: { option: SettingsOption }) {
+  const item = <SelectItem value={option.value} icon={option.icon} disabled={option.disabled || Boolean(option.disabledReason)}
+    textValue={option.description ? `${option.label} - ${option.description}` : option.label}>
+    <span data-slot="select-item-stack"><span data-slot="select-item-label">{option.label}</span>
+      {option.description && <span data-slot="select-item-description">{option.description}</span>}
+    </span>
+  </SelectItem>;
+  return option.disabledReason ? <Tooltip label={option.disabledReason}>{item}</Tooltip> : item;
 }

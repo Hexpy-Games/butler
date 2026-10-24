@@ -3,7 +3,7 @@ import { appCopy } from "@/app/copy";
 import { notifyStatus } from "@/app/notifications";
 import type { LibraryView } from "@/app/types";
 import { Box, Folder, LibraryCard, MessageSquarePlus, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, IconButton, MoreHorizontal, PencilLine, Popup, TagIcon, Trash2 } from "@/butler-ds";
-import { deleteLibrary, type LibraryItem } from "../browser/libraryStore";
+import { libraryImageSource, deleteLibrary, type LibraryItem } from "../browser/libraryStore";
 import { openLibraryItem } from "../browser/LibraryItemCard";
 import { hasGroups } from "./libraryApi";
 import { itemMeta, renameItem } from "./libraryActions";
@@ -23,6 +23,7 @@ export interface CardSelection {
 
 /** One saved item: open (a scrap opens its detail panel), rename in place, file, tag, attach, open source, delete, drag. */
 export function LibraryItemCard({ item, view, selection, onAttach }: { item: LibraryItem; view: LibraryView; selection?: CardSelection; onAttach: () => void }) {
+  const image = libraryImageSource(item, 400);
   const copy = appCopy.library;
   const renaming = useRef(false);
   const [editing, setEditing] = useState(false);
@@ -38,12 +39,12 @@ export function LibraryItemCard({ item, view, selection, onAttach }: { item: Lib
     ...(hasGroups(kind) ? [{ icon: <Folder size="sm" />, label: `${copy.groups[kind].moveTo}…`, onSelect: () => useLibraryDialogs.setState({ move: { kind, items: [item] } }) }] : []),
     { icon: <TagIcon size="sm" />, label: copy.editTags, onSelect: () => useLibraryDialogs.setState({ tagItems: [item] }) },
     { icon: <MessageSquarePlus size="sm" />, label: appCopy.browser.attach, onSelect: onAttach },
-    { icon: <Popup size="sm" />, label: appCopy.browser.openSource, onSelect: () => void openLibraryItem(item, true) },
+    ...(item.url ? [{ icon: <Popup size="sm" />, label: appCopy.browser.openSource, onSelect: () => void openLibraryItem(item, true) }] : []),
     { icon: <Trash2 size="sm" />, label: copy.deleteItem, variant: "destructive" as const, onSelect: remove },
   ];
   return (
     <Box data-library-item={item.id} data-butler-link={item.url}><LibraryCard title={item.title} tag={KIND_TAG()[kind]} meta={itemMeta(item)} tags={item.tags ?? []}
-      media={item.crop ? { kind: "image", src: item.crop } : kind === "bookmark" ? { kind: "quote", text: itemMeta(item).split(" · ")[0] ?? item.url } : { kind: "document" }}
+      media={image ? { kind: "image", src: image, alt: item.title } : kind === "bookmark" ? { kind: "quote", text: itemMeta(item).split(" · ")[0] ?? item.url } : { kind: "document" }}
       onOpen={open} selected={selection?.selected} selectionMode={selection?.mode} selectLabel={selection ? copy.select : undefined}
       onSelectedChange={selection?.onSelect} dragging={dragging}
       onDragPointerDown={(event) => startCardDrag(event, () => selection?.selected ? selection.dragItems() : [item])}
