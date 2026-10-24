@@ -48,9 +48,10 @@ pub use application::settings::{
     producer_log_config, startup_log_config, stored_ui_language_readonly,
 };
 pub use application::{
-    APP_PERSON_ID, AppAssetCommand, AppCanonOperation, AppCardInput, AppProfileInput,
-    AppSessionTopicClassifier, AppSessionTopicInput, AppSignInCommand, AppSignInUpsert,
-    AppVaultCommand, GatewaySignIns,
+    APP_PERSON_ID, AppAssetCommand, AppCanonOperation, AppCardInput, AppImageUsageCommand,
+    AppProfileInput, AppSessionTopicClassifier, AppSessionTopicInput, AppSignInCommand,
+    AppSignInUpsert, AppVaultCommand, GatewaySignIns, GeneratedAssetKind, ImageUsageOperation,
+    ImageUsageRecord,
 };
 pub use application::{
     AppAdmissionAuthority, AppApplication, AppApplicationConfig, AppApplicationDependencies,

@@ -163,10 +163,14 @@ impl ResourceSigner {
 
 /// Whether `path` names one message file or collected image.
 pub(in crate::gateway::http) fn is_file_path(path: &str) -> bool {
-    if path
-        .strip_prefix("/message-assets/")
-        .is_some_and(super::super::assets::valid_id)
-    {
+    if path.strip_prefix("/message-assets/").is_some_and(|suffix| {
+        let mut parts = suffix.split('/');
+        parts.next().is_some_and(super::super::assets::valid_id)
+            && parts
+                .next()
+                .is_none_or(|p| matches!(p, "meta" | "versions"))
+            && parts.next().is_none()
+    }) {
         return true;
     }
     path.strip_prefix(FILE_ROUTE_PREFIX)

@@ -1,5 +1,7 @@
 //! App-owned content assets. No timers, disk thumbnails or duplicate file writes.
 mod cache;
+mod generated;
+pub use generated::GeneratedAssetKind;
 mod store;
 use super::{AppApplication, GatewayApplicationError, app_error};
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -22,6 +24,19 @@ pub enum AppAssetCommand {
     Read {
         id: String,
         width: Option<u32>,
+    },
+    PutGenerated {
+        session: String,
+        bytes: Vec<u8>,
+        kind: GeneratedAssetKind,
+        parent_id: Option<String>,
+        model_ref: Option<String>,
+    },
+    Meta {
+        id: String,
+    },
+    Versions {
+        id: String,
     },
     Sweep,
 }
@@ -62,6 +77,26 @@ impl AppApplication {
                 .await
                 .map_err(app_error),
             AppAssetCommand::Read { id, width } => self.read_asset(id, width).await,
+            AppAssetCommand::PutGenerated {
+                session,
+                bytes,
+                kind,
+                parent_id,
+                model_ref,
+            } => {
+                self.put_generated(session, bytes, kind, parent_id, model_ref)
+                    .await
+            }
+            AppAssetCommand::Meta { id } => self
+                .storage
+                .read(move |db| generated::meta(db, &id))
+                .await
+                .map_err(asset_read_error),
+            AppAssetCommand::Versions { id } => self
+                .storage
+                .read(move |db| generated::versions(db, &id))
+                .await
+                .map_err(app_error),
             AppAssetCommand::Sweep => {
                 let root = self.butler_data.join(butler_platform::data_paths::ASSETS);
                 self.storage
@@ -80,9 +115,9 @@ impl AppApplication {
     ) -> Result<Value, GatewayApplicationError> {
         let root = self.butler_data.join(butler_platform::data_paths::ASSETS);
         let identity = id.clone();
-        let hash = self
+        let (hash, mime) = self
             .storage
-            .read(move |db| store::hash(db, &identity))
+            .read(move |db| store::identity(db, &identity))
             .await
             .map_err(|e| GatewayApplicationError::public(404, e.code(), "Image not found."))?;
         let key = format!("{hash}:{}", width.unwrap_or(0));
@@ -91,7 +126,7 @@ impl AppApplication {
             bytes
         } else {
             let bytes = tokio::task::spawn_blocking(move || {
-                store::resize(store::read(&root, &hash)?, width)
+                store::resize(store::read(&root, &hash, &mime)?, width)
             })
             .await
             .map_err(|_| GatewayApplicationError::internal())?
@@ -99,6 +134,74 @@ impl AppApplication {
             self.asset_cache.0.lock().insert(key, bytes.clone());
             bytes
         };
-        Ok(json!({"data":STANDARD.encode(bytes),"mime":"image/jpeg"}))
+        let mime = match image::guess_format(&bytes) {
+            Ok(image::ImageFormat::Png) => "image/png",
+            Ok(image::ImageFormat::WebP) => "image/webp",
+            _ => "image/jpeg",
+        };
+        Ok(json!({"data":STANDARD.encode(bytes),"mime":mime}))
     }
+}
+
+impl AppApplication {
+    pub async fn put_generated(
+        &self,
+        session: String,
+        bytes: Vec<u8>,
+        kind: GeneratedAssetKind,
+        parent_id: Option<String>,
+        model_ref: Option<String>,
+    ) -> Result<Value, GatewayApplicationError> {
+        let image = tokio::task::spawn_blocking(move || generated::validate(bytes))
+            .await
+            .map_err(GatewayApplicationError::internal_from)?
+            .map_err(|code| GatewayApplicationError::public(400, code, "Invalid image."))?;
+        if kind == GeneratedAssetKind::Mask {
+            let parent = parent_id.clone().ok_or_else(|| {
+                GatewayApplicationError::public(400, "image_mask_invalid", "Invalid mask.")
+            })?;
+            let meta = self
+                .storage
+                .read(move |db| generated::meta(db, &parent))
+                .await
+                .map_err(app_error)?;
+            if !image.valid_mask(&meta) {
+                return Err(GatewayApplicationError::public(
+                    400,
+                    "image_mask_invalid",
+                    "Invalid mask.",
+                ));
+            }
+        }
+        let root = self.butler_data.join(butler_platform::data_paths::ASSETS);
+        self.storage
+            .execute(move |db| {
+                generated::put_generated(
+                    db,
+                    &root,
+                    &session,
+                    &image,
+                    kind,
+                    parent_id,
+                    model_ref.as_deref(),
+                )
+            })
+            .await
+            .map_err(app_error)
+    }
+}
+
+fn asset_read_error(error: super::AppStorageError) -> GatewayApplicationError {
+    if error.code() == "message_file_not_found" {
+        GatewayApplicationError::public(404, "asset_not_found", "Image not found.")
+    } else {
+        app_error(error)
+    }
+}
+
+pub(super) fn execute(
+    this: AppApplication,
+    command: AppAssetCommand,
+) -> super::ApplicationFuture<Value> {
+    Box::pin(async move { this.assets_owned(command).await })
 }

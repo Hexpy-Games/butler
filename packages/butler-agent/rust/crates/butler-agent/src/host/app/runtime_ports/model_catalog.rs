@@ -44,30 +44,14 @@ impl AppModelCatalog {
         cancellation: CancellationToken,
     ) -> Result<Value, GatewayApplicationError> {
         match command {
+            AppModelCatalogCommand::ReadImageModel => self.image_model(None).await,
+            AppModelCatalogCommand::SetImageModel(value) => self.image_model(Some(value)).await,
             AppModelCatalogCommand::Read => {
                 self.validate_model_files()?;
                 let read = self.read_catalog().await?;
                 self.project_catalog(&read.catalog.view()).await
             }
-            AppModelCatalogCommand::UpsertCredential(value) => {
-                self.validate_model_files()?;
-                let input: CredentialInput = decode(value)?;
-                let credential = self
-                    .configuration
-                    .upsert_provider_credential(
-                        &ProviderCredentialMutation {
-                            provider_id: input.provider_id,
-                            api_key: input.api_key,
-                            label: input.label,
-                            credential_id: input.credential_id,
-                        },
-                        Some(&self.validated_root()?),
-                    )
-                    .await
-                    .map_err(|error| operation_error("provider_credential_save_failed", &error))?;
-                let catalog = self.refresh_catalog().await?;
-                Ok(json!({"credential":credential,"catalog":catalog}))
-            }
+            AppModelCatalogCommand::UpsertCredential(value) => self.upsert_credential(value).await,
             AppModelCatalogCommand::RegisterHosted(value) => self.register_hosted(value).await,
             AppModelCatalogCommand::DeleteHosted(lookup) => {
                 self.validate_model_files()?;
@@ -80,34 +64,7 @@ impl AppModelCatalog {
                 Ok(json!({"removed_model_ref":removed.model_ref,"catalog":catalog}))
             }
             AppModelCatalogCommand::DiscoverLocal(value) => {
-                self.validate_model_files()?;
-                let input: LocalDiscoveryInput = decode(value)?;
-                let root = self.validated_root()?;
-                let result = tokio::select! {
-                    result = self.configuration.discover_local_models(
-                        &input.server_url,
-                        input.platform,
-                        input.model_ref.as_deref(),
-                        input.api_key.as_deref(),
-                        Some(&root),
-                    ) => result,
-                    () = cancellation.cancelled() => return Err(GatewayApplicationError::internal()),
-                }
-                .map_err(|error| {
-                    operation_error_status("local_model_discovery_failed", 502, &error)
-                })?;
-                let models = result
-                    .models
-                    .iter()
-                    .map(discovered_model)
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(json!({
-                    "server_url": result.server_url,
-                    "api_base_url": result.api_base_url,
-                    "api_type": result.api_type,
-                    "platform": result.platform,
-                    "models": models,
-                }))
+                self.discover_local(value, cancellation).await
             }
             AppModelCatalogCommand::RegisterLocal(value) => {
                 self.validate_model_files()?;
@@ -228,6 +185,73 @@ impl AppModelCatalog {
         Ok(json!({"model":model,"catalog":catalog}))
     }
 
+    async fn image_model(&self, value: Option<Value>) -> Result<Value, GatewayApplicationError> {
+        self.validate_model_files()?;
+        self.validated_root()?;
+        match value {
+            Some(value) => self
+                .configuration
+                .set_image_model(value)
+                .await
+                .map_err(image_model_error),
+            None => self
+                .configuration
+                .image_model_settings()
+                .await
+                .map_err(image_model_error),
+        }
+    }
+    async fn upsert_credential(&self, value: Value) -> Result<Value, GatewayApplicationError> {
+        self.validate_model_files()?;
+        let input: CredentialInput = decode(value)?;
+        let credential = self
+            .configuration
+            .upsert_provider_credential(
+                &ProviderCredentialMutation {
+                    provider_id: input.provider_id,
+                    api_key: input.api_key,
+                    label: input.label,
+                    credential_id: input.credential_id,
+                },
+                Some(&self.validated_root()?),
+            )
+            .await
+            .map_err(|error| operation_error("provider_credential_save_failed", &error))?;
+        let catalog = self.refresh_catalog().await?;
+        Ok(json!({"credential":credential,"catalog":catalog}))
+    }
+    async fn discover_local(
+        &self,
+        value: Value,
+        cancellation: CancellationToken,
+    ) -> Result<Value, GatewayApplicationError> {
+        self.validate_model_files()?;
+        let input: LocalDiscoveryInput = decode(value)?;
+        let root = self.validated_root()?;
+        let result = tokio::select! {
+            result = self.configuration.discover_local_models(
+                &input.server_url,
+                input.platform,
+                input.model_ref.as_deref(),
+                input.api_key.as_deref(),
+                Some(&root),
+            ) => result,
+            () = cancellation.cancelled() => return Err(GatewayApplicationError::internal()),
+        }
+        .map_err(|error| operation_error_status("local_model_discovery_failed", 502, &error))?;
+        let models = result
+            .models
+            .iter()
+            .map(discovered_model)
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(json!({
+            "server_url": result.server_url,
+            "api_base_url": result.api_base_url,
+            "api_type": result.api_type,
+            "platform": result.platform,
+            "models": models,
+        }))
+    }
     async fn read_catalog(
         &self,
     ) -> Result<butler_models::models::ModelConfigurationRead, GatewayApplicationError> {
@@ -424,5 +448,19 @@ fn unsafe_model_path() -> GatewayApplicationError {
         code: "unsafe_configuration_path".into(),
         message: "Model configuration is outside the selected DATA directory.".into(),
         source: None,
+    }
+}
+
+fn image_model_error(error: butler_models::models::ImageModelError) -> GatewayApplicationError {
+    let status = if error.code == "image_model_store_failed" {
+        500
+    } else {
+        400
+    };
+    GatewayApplicationError::Public {
+        status,
+        code: error.code.into(),
+        message: "Image model setting could not be applied.".into(),
+        source: Some(Arc::new(error)),
     }
 }

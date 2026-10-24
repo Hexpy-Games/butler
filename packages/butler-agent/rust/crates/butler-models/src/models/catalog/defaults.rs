@@ -98,14 +98,16 @@ impl ModelCatalog {
             format!("{provider}/{id}")
         };
         super::lookup::find_model_metadata(Some(&requested), &self.static_catalog.models)
-            .is_some_and(|model| model.runtime_supported && model.provider_id == provider)
+            .is_some_and(|model| {
+                model.runtime_supported && !model.is_image_output() && model.provider_id == provider
+            })
     }
 
     pub fn model_refs(&self) -> Vec<String> {
         self.static_catalog
             .models
             .iter()
-            .filter(|model| model.runtime_supported)
+            .filter(|model| model.runtime_supported && !model.is_image_output())
             .map(|model| model.model_ref.clone())
             .collect()
     }
