@@ -34,6 +34,9 @@ pub struct ProviderPresets {
     /// Lightweight query planning; providers without one use routine.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub planning: Option<ModelPreset>,
+    /// Acceptance-tested browsing choice; absent until results exist.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub browsing: Option<ModelPreset>,
 }
 
 /// How a provider bills requests made with an API key.
@@ -56,48 +59,70 @@ pub(crate) struct StaticProviderEntry {
 
 /// A refreshed model id's tier and version, inferred from the provider's
 /// naming scheme. Only providers with a stable scheme are inferred.
-fn infer_tier_and_version(provider_id: &str, model_id: &str) -> Option<(ModelTier, Vec<u64>)> {
-    let lower = model_id.to_ascii_lowercase();
-    let tier = match provider_id {
-        "openai" => openai_tier(&lower)?,
-        "anthropic" => anthropic_tier(&lower)?,
-        "google" => google_tier(&lower)?,
-        _ => return None,
-    };
-    let version = numeric_version(&lower)?;
+pub(super) fn infer_tier_and_version(
+    provider_id: &str,
+    model_id: &str,
+) -> Option<(ModelTier, Vec<u64>)> {
+    let pattern = naming_pattern(model_id);
+    let version = numeric_version(model_id)?;
+    let schemes =
+        TIER_SCHEMES.get_or_init(|| serde_json::from_str(include_str!("tier-schemes.json")).ok());
+    let tier = schemes
+        .as_ref()?
+        .iter()
+        .find(|scheme| {
+            scheme.provider_id == provider_id
+                && scheme.pattern == pattern
+                && scheme
+                    .min_version
+                    .as_ref()
+                    .is_none_or(|minimum| &version >= minimum)
+        })?
+        .tier;
     Some((tier, version))
 }
 
-fn openai_tier(model: &str) -> Option<ModelTier> {
-    let tail = model.strip_prefix("gpt-")?;
-    let suffix = tail.trim_start_matches(|c: char| c.is_ascii_digit() || c == '.');
-    match suffix {
-        "-astra" => Some(ModelTier::Flagship),
-        "-sol" | "-terra" => Some(ModelTier::Balanced),
-        "-luna" => Some(ModelTier::Efficient),
-        _ => None,
-    }
+#[derive(Deserialize)]
+struct TierScheme {
+    provider_id: String,
+    pattern: String,
+    tier: ModelTier,
+    #[serde(default)]
+    min_version: Option<Vec<u64>>,
 }
 
-fn anthropic_tier(model: &str) -> Option<ModelTier> {
-    let family = model.strip_prefix("claude-")?.split('-').next()?;
-    match family {
-        "opus" | "fable" => Some(ModelTier::Flagship),
-        "sonnet" => Some(ModelTier::Balanced),
-        "haiku" => Some(ModelTier::Efficient),
-        _ => None,
-    }
-}
+static TIER_SCHEMES: std::sync::OnceLock<Option<Vec<TierScheme>>> = std::sync::OnceLock::new();
 
-fn google_tier(model: &str) -> Option<ModelTier> {
-    let tail = model.strip_prefix("gemini-")?;
-    let family = tail.trim_start_matches(|c: char| c.is_ascii_digit() || c == '.');
-    match family {
-        "-pro" => Some(ModelTier::Flagship),
-        "-flash" => Some(ModelTier::Balanced),
-        "-flash-lite" => Some(ModelTier::Efficient),
-        _ => None,
+fn naming_pattern(model: &str) -> String {
+    let mut chars = model
+        .to_ascii_lowercase()
+        .chars()
+        .collect::<Vec<_>>()
+        .into_iter()
+        .peekable();
+    let mut pattern = String::new();
+    while let Some(ch) = chars.next() {
+        if !ch.is_ascii_digit() {
+            pattern.push(ch);
+            continue;
+        }
+        pattern.push('#');
+        while chars.peek().is_some_and(char::is_ascii_digit) {
+            chars.next();
+        }
+        while chars.peek().is_some_and(|ch| matches!(ch, '.' | '-')) {
+            let mut next = chars.clone();
+            next.next();
+            if !next.peek().is_some_and(char::is_ascii_digit) {
+                break;
+            }
+            chars.next();
+            while chars.peek().is_some_and(char::is_ascii_digit) {
+                chars.next();
+            }
+        }
     }
+    pattern
 }
 
 /// The dotted or dashed version numbers in a model id: `gpt-6.1-sol` → [6, 1],

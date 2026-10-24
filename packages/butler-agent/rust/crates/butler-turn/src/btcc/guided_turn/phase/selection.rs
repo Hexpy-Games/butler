@@ -24,6 +24,7 @@ const REVISION: &str = "butler.btcc-tool-instruction-policy.v2";
 #[derive(Clone, Copy)]
 pub struct GuidedPhaseInput<'a> {
     pub turn: &'a TurnRecord,
+    pub browsing_agent: bool,
     pub catalog: &'a GuidedCatalogSnapshot,
     pub phase_surface_flag: &'a str,
     pub operation_replay_flag: &'a str,
@@ -98,6 +99,12 @@ pub fn select_phase(
     let catalog = input.catalog;
     let image_tool_admitted = turn_admits_zai_image_tool(&policy);
     let mut authorized = base_authorized(input, &policy);
+    let browse = input.browsing_agent
+        && matches!(policy.role, PolicyRole::Butler | PolicyRole::Steward)
+        && authorized.iter().any(|tool| tool.name == "browser_open");
+    if browse {
+        push_missing(&mut authorized, catalog, &["browse"]);
+    }
     let phase = phase(&policy, catalog);
     let replay_mode = if enabled(input.operation_replay_flag) {
         ReplayMode::Available
@@ -105,22 +112,7 @@ pub fn select_phase(
         ReplayMode::Disabled
     };
     if !enabled(input.phase_surface_flag) {
-        let mut provider = legacy_visible(&authorized, &policy);
-        push_missing(&mut provider, catalog, &EXACT_READ_TOOLS);
-        return Ok(GuidedPhaseSelection {
-            #[cfg(any(test, feature = "test-support"))]
-            mode: SurfaceMode::Legacy,
-            phase,
-            execution_policy: policy.clone(),
-            authorized_names: authorized.iter().map(|tool| tool.name.clone()).collect(),
-            provider_tools: provider
-                .iter()
-                .map(|tool| tool.definition.clone())
-                .collect(),
-            stable_instruction_prefix: instructions::prefix(SurfaceMode::Legacy, phase, &policy)?,
-            stable_provider_cache_prefix: None,
-            replay_mode,
-        });
+        return select_legacy(input, &policy, &authorized, phase, replay_mode, browse);
     }
     let required_profiles = required_profiles(catalog, &policy, phase)?;
     admit_phase_tools(&mut authorized, catalog, &policy, &required_profiles);
@@ -130,8 +122,14 @@ pub fn select_phase(
             && (tool.name != ToolName::AnalyzeAttachedImage || image_tool_admitted)
     });
     require_tools(&authorized, &policy, phase)?;
-    let provider_names =
-        provider_candidates(catalog, &authorized, &policy, phase, &required_profiles);
+    let provider_names = provider_candidates(
+        catalog,
+        &authorized,
+        &policy,
+        phase,
+        &required_profiles,
+        browse,
+    );
     let provider: Vec<_> = authorized
         .iter()
         .filter(|tool| {
@@ -165,6 +163,40 @@ pub fn select_phase(
             .collect(),
         stable_instruction_prefix,
         stable_provider_cache_prefix,
+        replay_mode,
+    })
+}
+
+fn select_legacy(
+    input: GuidedPhaseInput<'_>,
+    policy: &GuidedExecutionPolicy,
+    authorized: &[&GuidedCatalogTool],
+    phase: GuidedPhase,
+    replay_mode: ReplayMode,
+    browse: bool,
+) -> Result<GuidedPhaseSelection, GuidedPreparationError> {
+    let catalog = input.catalog;
+    let mut provider = legacy_visible(authorized, policy);
+    if browse {
+        provider.retain(|tool| !deferred_browser(&tool.name));
+        push_missing(&mut provider, catalog, &["browse"]);
+        if authorized.iter().any(|tool| tool.name == "browser_act") {
+            push_missing(&mut provider, catalog, &["browser_act"]);
+        }
+    }
+    push_missing(&mut provider, catalog, &EXACT_READ_TOOLS);
+    Ok(GuidedPhaseSelection {
+        #[cfg(any(test, feature = "test-support"))]
+        mode: SurfaceMode::Legacy,
+        phase,
+        execution_policy: policy.clone(),
+        authorized_names: authorized.iter().map(|tool| tool.name.clone()).collect(),
+        provider_tools: provider
+            .iter()
+            .map(|tool| tool.definition.clone())
+            .collect(),
+        stable_instruction_prefix: instructions::prefix(SurfaceMode::Legacy, phase, policy)?,
+        stable_provider_cache_prefix: None,
         replay_mode,
     })
 }

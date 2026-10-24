@@ -65,6 +65,11 @@ async fn result_ids_and_found_pages_survive_approval_resumes() -> Result<(), Har
     }
     *script.files.lock().unwrap() = files;
     let s = setup.start().await?;
+    s.patch_settings(
+        json!({"browser":{"browsing_agent":"off"}}),
+        "direct browser tools",
+    )
+    .await?;
     let path = s.sandbox.data.join("butler.config.json");
     let mut config: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
     config["webSearch"] = json!({"provider":"brave","planning":{"enabled":false},

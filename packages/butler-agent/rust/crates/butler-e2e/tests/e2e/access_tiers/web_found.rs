@@ -34,6 +34,11 @@ async fn pages_the_browser_reached_are_read_without_asking() -> Result<(), Harne
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()
         .await?;
+    s.patch_settings(
+        json!({"browser":{"browsing_agent":"off"}}),
+        "direct browser tools",
+    )
+    .await?;
     let config_path = s.sandbox.data.join("butler.config.json");
     let mut config: Value = serde_json::from_slice(&std::fs::read(&config_path)?)?;
     config["webSearch"] =

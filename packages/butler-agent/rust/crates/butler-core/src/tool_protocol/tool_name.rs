@@ -127,6 +127,7 @@ tool_names! {
     UpdateWorkStreamState = "update_work_stream_state",
     WaitForWorker = "wait_for_worker",
     WebRead = "web_read",
+    Browse = "browse",
     WebSearch = "web_search",
     WriteFile = "write_file",
     BrowserOpen = "browser_open",
