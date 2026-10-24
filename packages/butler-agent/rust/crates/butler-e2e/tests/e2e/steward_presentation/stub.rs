@@ -395,15 +395,15 @@ pub(crate) fn message(text: &str) -> Value {
 }
 
 fn wire(item: Value) -> String {
-    wire_items(if item["call_id"] == "delegate" {
-        vec![message("I'll compare both approaches."), item]
+    if item["call_id"] == "delegate" {
+        wire_items(&[message("I'll compare both approaches."), item])
     } else {
-        vec![item]
-    })
+        wire_items(&[item])
+    }
 }
 
 /// One streamed reply carrying `items` in order, such as a batch of calls.
-pub(crate) fn wire_items(items: Vec<Value>) -> String {
+pub(crate) fn wire_items(items: &[Value]) -> String {
     let mut events = vec![
         json!({"type":"response.created","response":{"id":"stub","status":"in_progress","output":[]}}),
     ];

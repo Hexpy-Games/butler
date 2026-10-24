@@ -76,7 +76,7 @@ async fn reply(State(script): State<Arc<Script>>, Json(body): Json<Value>) -> im
         .lock()
         .unwrap()
         .push((child, body, items.clone()));
-    ([("content-type", "text/event-stream")], wire_items(items))
+    ([("content-type", "text/event-stream")], wire_items(&items))
 }
 
 fn next_round(script: &Script, child: bool) -> usize {
