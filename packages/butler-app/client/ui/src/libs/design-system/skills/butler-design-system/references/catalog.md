@@ -748,7 +748,7 @@ Makes a row, tile or piece of text one keyboard-operable click target without a 
 - Not for: A sidebar navigation row → `NavRow`
 - Not for: A card that opens something → `Card`
 - Not for: Choosing one of a few labelled options → `SegmentedControl`
-- Tokens: `--selection`, `--selection-strong`, `--radius-control`, `--focus-ring`, `--interactive-disabled-fg`, `--motion-fast`
+- Tokens: `--selection`, `--selection-strong`, `--radius-control`, `--focus-ring`, `--interactive-disabled-fg`, `--motion-fast`, `--motion-instant`, `--motion-ease-standard`
 
 ### CopyButton
 

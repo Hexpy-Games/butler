@@ -13,7 +13,11 @@
   border-radius: var(--radius-control);
   cursor: pointer;
   outline: none;
-  transition: scale var(--motion-fast) var(--motion-ease-standard);
+  /* The hover and selected fills fade on the hover token; press lands at
+     once (see :active below). */
+  transition:
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    scale var(--motion-fast) var(--motion-ease-standard);
 }
 
 /* A row narrower than its content shrinks its text (truncating children such
@@ -52,22 +56,17 @@
 
 .clickable:active:not([data-disabled="true"]) {
   background: var(--selection-strong);
+  transition-duration: var(--motion-instant);
 }
 
 /* Compact clickables press in; stretched rows keep only the pressed fill so
    wide rows do not visibly shrink. */
 .clickable:active:not([data-disabled="true"], [data-stretch="true"]) {
   scale: var(--motion-scale-press);
-  transition-duration: var(--motion-instant);
 }
 
-/* Toggle rows (selected set): a lighter hover, the strong fill while pressed
-   or selected, and fills that fade between states. */
-.clickable[data-selected] {
-  transition:
-    background-color var(--motion-fast) var(--motion-ease-standard),
-    scale var(--motion-fast) var(--motion-ease-standard);
-}
+/* Toggle rows (selected set): a lighter hover and the strong fill while
+   pressed or selected. */
 
 .clickable[data-selected]:hover:not([data-disabled="true"]) {
   background: color-mix(in srgb, var(--selection) 60%, transparent);
@@ -97,6 +96,13 @@
 
 .clickable:focus-visible {
   box-shadow: var(--focus-ring);
+}
+
+/* Reduced motion: fills change at once. */
+@media (prefers-reduced-motion: reduce) {
+  .clickable {
+    transition: none;
+  }
 }
 
 /* Bare text has no padding to hold the ring: it sits off the text instead. */
