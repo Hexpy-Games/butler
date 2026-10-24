@@ -5,9 +5,11 @@
     clippy::panic,
     reason = "E2E assertions"
 )]
+mod backfill;
 mod delegated;
 mod plan;
 mod queries;
+mod regressions;
 mod stub;
 use butler_e2e::e2e::{
     HarnessError,
@@ -49,6 +51,7 @@ async fn ask(s: &Scenario, chat: &str) -> Result<Value, HarnessError> {
     let page = asks(s, chat).await?;
     assert_eq!(page["open_count"], 1);
     assert_eq!(page["asks"][0]["blocking"], false);
+    assert_fields(s, chat, &page["asks"][0], true, Some("ask_user")).await?;
     Ok(page["asks"][0].clone())
 }
 async fn event(live: &LiveEvents, id: &Value, state: &str) -> Result<Value, HarnessError> {
@@ -69,7 +72,7 @@ async fn chat(s: &Scenario, title: &str) -> Result<String, HarnessError> {
 #[tokio::test]
 async fn pa_01_nonblocking_card_answer_removes_ask_and_emits_event() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (s, _, server) = setup("PA-01").await?;
+    let (s, script, server) = setup("PA-01").await?;
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
     let q = ask(&s, "general").await?;
     assert_eq!(
@@ -93,6 +96,7 @@ async fn pa_01_nonblocking_card_answer_removes_ask_and_emits_event() -> Result<(
         0
     );
     assert_eq!(asks(&s, "general").await?["asks"], json!([]));
+    regressions::assert_followup(&s, &script, &q).await?;
     server.abort();
     s.finish().await
 }
@@ -147,6 +151,7 @@ async fn pa_05_archive_closes_questions_and_attention() -> Result<(), HarnessErr
     let (s, _, server) = setup("PA-05").await?;
     let chat = chat(&s, "Questions").await?;
     let q = ask(&s, &chat).await?;
+    attention(&s, &chat, true).await?;
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
     let reply =
         s.gw.post(&format!("/sessions/{chat}/archive"), json!({}))
@@ -157,6 +162,11 @@ async fn pa_05_archive_closes_questions_and_attention() -> Result<(), HarnessErr
         0
     );
     assert_eq!(asks(&s, &chat).await?["open_count"], 0);
+    let reply =
+        s.gw.patch(&format!("/sessions/{chat}"), json!({"archived":false}))
+            .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    attention(&s, &chat, false).await?;
     assert_eq!(s.gw.get("/pending-asks").await?.data()["asks"], json!([]));
     server.abort();
     s.finish().await
@@ -191,4 +201,69 @@ async fn pa_06_dismiss_survives_restart_and_the_next_turn() -> Result<(), Harnes
     assert_eq!(view.data()["question_answers"], json!([]));
     server.abort();
     s.finish().await
+}
+
+async fn attention(s: &Scenario, chat: &str, expected: bool) -> Result<(), HarnessError> {
+    let nav = s.gw.get("/navigation").await?;
+    let item = nav.data()["chats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .chain(
+            nav.data()["projects"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .flat_map(|p| p["sessions"].as_array().into_iter().flatten()),
+        )
+        .find(|c| c["id"] == chat)
+        .unwrap();
+    assert_eq!(item["attention_required"], expected, "{item}");
+    Ok(())
+}
+async fn assert_fields(
+    s: &Scenario,
+    chat: &str,
+    ask: &Value,
+    deferred: bool,
+    call: Option<&str>,
+) -> Result<(), HarnessError> {
+    assert_eq!(ask["source_session_id"], chat);
+    if let Some(tool) = call {
+        let data = s.sandbox.data.clone();
+        let id = ask["source_call_id"].as_str().unwrap().to_owned();
+        let turn = ask["source_turn_id"].as_str().unwrap().to_owned();
+        let name: String = tokio::task::spawn_blocking(move || {
+            let db = butler_platform::sqlite::open(data.join("agent-runtime/btcc.sqlite"))?;
+            Ok::<_, HarnessError>(db.query_row(
+                "SELECT tool_name FROM btcc_guided_tool_calls WHERE call_id=?1 AND turn_id=?2",
+                rusqlite::params![id, turn],
+                |r| r.get(0),
+            )?)
+        })
+        .await
+        .map_err(|e| HarnessError(e.to_string()))??;
+        assert_eq!(name, tool);
+    } else {
+        assert_eq!(ask["source_call_id"], Value::Null);
+    }
+    assert_eq!(ask["deferred"], deferred);
+    chrono::DateTime::parse_from_rfc3339(ask["waiting_since"].as_str().unwrap()).unwrap();
+    let view =
+        s.gw.get(&format!("/session-view?session_id={chat}"))
+            .await?;
+    let messages = view.data()["messages"].as_array().unwrap();
+    let message = messages
+        .iter()
+        .rev()
+        .find(|m| m["role"] == "assistant" && m["turn_id"] == ask["source_turn_id"])
+        .or_else(|| {
+            messages
+                .iter()
+                .rev()
+                .find(|m| m["role"] == "user" && m["turn_id"] == ask["source_turn_id"])
+        })
+        .unwrap();
+    assert_eq!(ask["source_message_id"], message["id"]);
+    Ok(())
 }

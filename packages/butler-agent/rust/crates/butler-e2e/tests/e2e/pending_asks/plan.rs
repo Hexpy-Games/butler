@@ -36,6 +36,8 @@ async fn pa_04_draft_plan_accept_and_later_reply_remove_the_projection() -> Resu
         let page = asks(&s, &chat).await?;
         assert_eq!(page["open_count"], 1, "{page}");
         assert_eq!(page["asks"][0]["kind"], "plan_decision");
+        assert_fields(&s, &chat, &page["asks"][0], false, None).await?;
+        attention(&s, &chat, false).await?;
         let live = LiveEvents::subscribe(&s.gw, 0).await?;
         if accept {
             let reply =

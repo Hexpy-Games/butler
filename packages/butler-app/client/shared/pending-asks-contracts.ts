@@ -7,6 +7,10 @@ export interface PendingAsk {
   session_id: string;
   source_session_id: string;
   source_turn_id: string;
+  source_message_id: string | null;
+  source_call_id: string | null;
+  deferred: boolean;
+  waiting_since: string;
   title: string;
   summary?: string;
   blocking: boolean;

@@ -66,6 +66,7 @@ pub(super) async fn dependencies(
         authority_handoff: Arc::new(AuthorityHandoff::new(
             runtime.authority.clone(),
             owners.queue.clone(),
+            runtime.conversations.clone(),
             Arc::new(|| butler_models::models::ModelConfigurationClock::now_iso(&SystemIdentity)),
         )),
         session_workspaces: session_workspaces.clone(),

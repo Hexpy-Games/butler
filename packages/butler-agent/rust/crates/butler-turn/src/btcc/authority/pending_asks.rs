@@ -9,6 +9,10 @@ pub struct PendingAsk {
     pub session_id: String,
     pub source_session_id: String,
     pub source_turn_id: String,
+    pub source_message_id: Option<String>,
+    pub source_call_id: Option<String>,
+    pub deferred: bool,
+    pub waiting_since: String,
     pub title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
@@ -41,50 +45,7 @@ impl PrincipalAuthority {
             .pending_ask_records(owner, limit, before)
             .await
             .map_err(|e| AuthorityError::storage(e.code(), e.message()))??;
-        records
-            .into_iter()
-            .map(|r| {
-                let question = r.capability == "ask_user";
-                let blocking = r.decision == RequestDecision::Pending;
-                let title = if question {
-                    let questions: super::questions::UserQuestions =
-                        serde_json::from_str(&r.normalized_input_json)
-                            .map_err(|_| AuthorityError::policy("authority_request_corrupt"))?;
-                    questions
-                        .questions
-                        .into_iter()
-                        .map(|q| q.title)
-                        .collect::<Vec<_>>()
-                        .join(" · ")
-                } else {
-                    r.reason
-                };
-                let kind = if question { "question" } else { "approval" };
-                let actions = if question {
-                    if blocking {
-                        vec!["open", "answer"]
-                    } else {
-                        vec!["open", "answer", "dismiss"]
-                    }
-                } else {
-                    vec!["open", "allow", "deny"]
-                };
-                Ok(PendingAsk {
-                    ask_id: format!("{kind}:{}", r.request_ref),
-                    kind: kind.into(),
-                    session_id: r.owner_session_id,
-                    source_session_id: r.source_session_id,
-                    source_turn_id: r.source_turn_id,
-                    title,
-                    summary: None,
-                    blocking,
-                    state: "open".into(),
-                    created_at: r.created_at,
-                    actions: actions.into_iter().map(str::to_owned).collect(),
-                    session_title: None,
-                })
-            })
-            .collect()
+        records.into_iter().map(project).collect()
     }
     pub fn pending_ask_signal(&self) -> tokio::sync::watch::Receiver<()> {
         self.storage.subscribe_changes()
@@ -112,4 +73,54 @@ impl PrincipalAuthority {
             .await
             .map_err(|e| AuthorityError::storage(e.code(), e.message()))
     }
+}
+
+fn project(r: super::contracts::AuthorityRecord) -> AuthorityResult<PendingAsk> {
+    let question = r.capability == "ask_user";
+    let blocking = r.decision == RequestDecision::Pending;
+    let title = if question {
+        let questions: super::questions::UserQuestions =
+            serde_json::from_str(&r.normalized_input_json)
+                .map_err(|_| AuthorityError::policy("authority_request_corrupt"))?;
+        questions
+            .questions
+            .into_iter()
+            .map(|q| q.title)
+            .collect::<Vec<_>>()
+            .join(" · ")
+    } else {
+        r.reason
+    };
+    let kind = if question { "question" } else { "approval" };
+    let actions = if question {
+        if blocking {
+            vec!["open", "answer"]
+        } else {
+            vec!["open", "answer", "dismiss"]
+        }
+    } else {
+        vec!["open", "allow", "deny"]
+    };
+    Ok(PendingAsk {
+        ask_id: format!("{kind}:{}", r.request_ref),
+        kind: kind.into(),
+        session_id: r.owner_session_id,
+        source_session_id: r.source_session_id,
+        source_turn_id: r.source_turn_id,
+        source_message_id: None,
+        source_call_id: r.source_call_id,
+        deferred: question && !blocking,
+        waiting_since: if question && !blocking {
+            r.updated_at
+        } else {
+            r.created_at.clone()
+        },
+        title,
+        summary: None,
+        blocking,
+        state: "open".into(),
+        created_at: r.created_at,
+        actions: actions.into_iter().map(str::to_owned).collect(),
+        session_title: None,
+    })
 }

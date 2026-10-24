@@ -88,8 +88,11 @@ impl super::BtccStorage {
 #[cfg(feature = "test-support")]
 pub(super) fn pending_ask_statements() -> Vec<(String, &'static str)> {
     vec![
-        (pending_asks::global_sql(false), "idx_btcc_authority_open"),
-        (pending_asks::global_sql(true), "idx_btcc_authority_open"),
+        (
+            pending_asks::global_sql(false),
+            "idx_btcc_authority_open_v2",
+        ),
+        (pending_asks::global_sql(true), "idx_btcc_authority_open_v2"),
         (pending_asks::CHANGES.into(), "INTEGER PRIMARY KEY"),
         (pending_asks::ACK.into(), "INTEGER PRIMARY KEY"),
         (
@@ -104,5 +107,10 @@ pub(super) fn pending_ask_statements() -> Vec<(String, &'static str)> {
 }
 #[cfg(feature = "test-support")]
 pub(super) fn existing_ask_statements() -> Vec<String> {
-    vec![query::pending_sql(), query::ATTENTION_SQL.into()]
+    vec![
+        query::pending_sql(),
+        query::ATTENTION_SQL.into(),
+        close::CLOSE_SOURCE_WORK.into(),
+        close::CLOSE_OWNER.into(),
+    ]
 }

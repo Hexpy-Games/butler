@@ -8,7 +8,7 @@ mod library;
 mod message_ownership;
 mod migration;
 mod monitoring;
-mod pending_asks;
+pub(super) mod pending_asks;
 mod project_ledger_bindings;
 mod schedule_access;
 mod schedule_legacy;

@@ -4,6 +4,7 @@ use butler_e2e::e2e::{matching, sanitize::Placeholders};
 use std::sync::{Arc, Mutex};
 
 pub(super) const ASK: &str = "Save a question for my next step and finish this reply.";
+pub(super) const BLOCK: &str = "Ask me which format to use and wait for my answer.";
 pub(super) const APPROVE: &str = "Read the files in the review directory.";
 #[derive(Default)]
 pub(super) struct Script {
@@ -37,6 +38,9 @@ async fn reply(
             let mut args = crate::ask_user::stub::questions();
             args["wait"] = json!(false);
             call("ask", "ask_user", &args)
+        }
+        BLOCK if key.round.is_empty() => {
+            call("ask", "ask_user", &crate::ask_user::stub::questions())
         }
         APPROVE if key.round.is_empty() => call(
             "files",

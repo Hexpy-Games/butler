@@ -1,5 +1,8 @@
 //! Map runtime owners through indexed App identities; page past non-App owners.
 use super::*;
+use rusqlite::params;
+
+pub(crate) const CHAT_MESSAGE: &str = "SELECT COALESCE((SELECT id FROM messages INDEXED BY messages_assistant_turn_idx WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' ORDER BY rowid DESC LIMIT 1),(SELECT user_message_id FROM turns WHERE id=?2 AND chat_id=?1))";
 
 impl AppApplication {
     pub(super) async fn authority_ask_page(
@@ -54,6 +57,16 @@ fn decorate(
             }
         };
         if let Some((chat, title)) = metadata {
+            let source =
+                super::super::sessions::identity::resolve_owner(db, &ask.source_session_id)?;
+            if let Some(source) = source {
+                ask.source_session_id = source.clone();
+                ask.source_message_id = db
+                    .query_row(CHAT_MESSAGE, params![source, ask.source_turn_id], |r| {
+                        r.get(0)
+                    })
+                    .map_err(AppStorageError::sqlite)?;
+            }
             ask.session_id = chat.clone();
             ask.session_title = Some(title.clone());
         }

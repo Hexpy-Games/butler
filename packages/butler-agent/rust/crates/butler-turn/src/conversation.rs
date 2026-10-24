@@ -372,3 +372,9 @@ async fn join_owner_thread(
         )
     })?
 }
+
+/// Production anchor query for the stub E2E query-plan check.
+#[cfg(feature = "test-support")]
+pub fn latest_assistant_message_statement() -> &'static str {
+    messages::latest_assistant_message_statement()
+}

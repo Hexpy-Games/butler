@@ -106,15 +106,9 @@ impl Events {
 
 /// Production statements exposed for the stub E2E query-plan pins.
 pub fn pending_ask_plan_statements() -> Vec<(String, &'static str)> {
-    use super::super::pending_asks::{self, events, plans};
+    use super::super::pending_asks::{self, events, metadata, plans};
     let mut statements = Vec::new();
-    for sql in [
-        plans::SESSION,
-        plans::FIND,
-        plans::DELETE,
-        plans::COUNT,
-        pending_asks::ATTENTION,
-    ] {
+    for sql in [plans::SESSION, plans::FIND, plans::DELETE, plans::COUNT] {
         statements.push((sql.into(), "sqlite_autoindex_app_open_plan_decisions_1"));
     }
     for sql in [plans::GLOBAL, plans::BEFORE] {
@@ -133,5 +127,10 @@ pub fn pending_ask_plan_statements() -> Vec<(String, &'static str)> {
     for sql in [plans::INSERT, events::ENQUEUE] {
         statements.push((sql.into(), ""));
     }
+    statements.push((metadata::CHAT_MESSAGE.into(), "messages_assistant_turn_idx"));
+    statements.push((
+        super::schema::pending_asks::LATEST_ASSISTANT.into(),
+        "messages_chat_assistant_rowid",
+    ));
     statements
 }

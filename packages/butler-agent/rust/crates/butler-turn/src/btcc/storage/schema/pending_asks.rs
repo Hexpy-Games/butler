@@ -1,8 +1,11 @@
 //! Indexed read projection invalidations; authority remains the owner.
 pub(in crate::btcc::storage) const SCHEMA: &str = r"
-CREATE INDEX IF NOT EXISTS idx_btcc_authority_open ON btcc_authority_requests(created_at)
+DROP INDEX IF EXISTS idx_btcc_authority_open;
+CREATE INDEX IF NOT EXISTS idx_btcc_authority_open_v2 ON btcc_authority_requests(created_at)
 WHERE close_reason IS NULL AND (decision='pending' OR
- (capability='ask_user' AND decision='modified' AND outcome_receipt_json IS NULL));
+ (capability='ask_user' AND decision='modified' AND outcome_receipt_json IS NULL AND json_extract(CASE WHEN capability='ask_user' THEN private_alternative_input END,'$.status')='deferred'));
+-- The suspension trigger seeks this turn only; the deployed indexes start with
+-- owner_session_id or source_work_id and cannot bound a source_turn_id lookup.
 CREATE INDEX IF NOT EXISTS idx_btcc_authority_pending_turn ON btcc_authority_requests(source_turn_id)
 WHERE decision='pending' AND close_reason IS NULL;
 CREATE TABLE IF NOT EXISTS agent_pending_ask_changes (

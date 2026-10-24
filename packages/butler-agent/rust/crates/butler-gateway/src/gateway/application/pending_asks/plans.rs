@@ -51,6 +51,10 @@ pub(super) fn read(
                 session_id: chat.clone(),
                 source_session_id: chat,
                 source_turn_id: row.get::<_, Option<String>>(4)?.unwrap_or_default(),
+                source_message_id: row.get(2)?,
+                source_call_id: None,
+                deferred: false,
+                waiting_since: row.get(3)?,
                 title: plan
                     .get("title")
                     .and_then(Value::as_str)

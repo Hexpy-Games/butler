@@ -3,10 +3,10 @@ use super::query::{ROW, many, sql};
 use crate::btcc::authority::contracts::{AuthorityRecord, AuthorityResult};
 use rusqlite::Connection;
 
-pub(crate) const GLOBAL_FILTER: &str = "close_reason IS NULL AND (decision='pending' OR (capability='ask_user' AND decision='modified' AND outcome_receipt_json IS NULL))";
+pub(crate) const GLOBAL_FILTER: &str = "close_reason IS NULL AND (decision='pending' OR (capability='ask_user' AND decision='modified' AND outcome_receipt_json IS NULL AND json_extract(CASE WHEN capability='ask_user' THEN private_alternative_input END,'$.status')='deferred'))";
 pub(crate) fn global_sql(cursor: bool) -> String {
     format!(
-        "{ROW} INDEXED BY idx_btcc_authority_open WHERE {GLOBAL_FILTER} {} \
+        "{ROW} INDEXED BY idx_btcc_authority_open_v2 WHERE {GLOBAL_FILTER} {} \
       AND ((decision='pending' AND source_call_id IS NOT NULL AND EXISTS \
         (SELECT 1 FROM btcc_turns t WHERE t.turn_id=source_turn_id AND t.suspension_reason='authority_pending')) \
       OR (capability='ask_user' AND decision='modified' AND json_extract(private_alternative_input,'$.status')='deferred')) \

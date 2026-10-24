@@ -1,6 +1,6 @@
 //! Read projection across independent ask owners. Canon kinds can join later.
 pub(super) mod events;
-mod metadata;
+pub(super) mod metadata;
 pub(super) mod plans;
 use super::{AppApplication, GatewayApplicationError, app_error, storage::AppStorageError};
 use butler_turn::btcc::PendingAsk;
@@ -95,28 +95,6 @@ fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
     }
 }
 
-pub(crate) const ATTENTION: &str = "SELECT chat_id FROM app_open_plan_decisions WHERE chat_id IN (SELECT value FROM json_each(?1))";
-impl AppApplication {
-    pub(super) async fn plan_attention(
-        &self,
-        chats: Vec<String>,
-    ) -> Result<std::collections::HashSet<String>, GatewayApplicationError> {
-        let chats =
-            serde_json::to_string(&chats).map_err(GatewayApplicationError::internal_from)?;
-        self.storage
-            .read(move |db| {
-                db.prepare_cached(ATTENTION)
-                    .map_err(AppStorageError::sqlite)?
-                    .query_map([chats], |r| r.get(0))
-                    .map_err(AppStorageError::sqlite)?
-                    .collect::<Result<_, _>>()
-                    .map_err(AppStorageError::sqlite)
-            })
-            .await
-            .map_err(app_error)
-    }
-}
-
 impl crate::gateway::GatewayPendingAsks for AppApplication {
     fn pending_asks(
         &self,
@@ -149,12 +127,8 @@ impl AppApplication {
             .await?
             .into_iter()
             .collect::<std::collections::HashSet<_>>();
-        let plans = self
-            .plan_attention(sessions.iter().map(|s| s.id.clone()).collect())
-            .await?;
         for session in sessions {
-            session.attention_required =
-                attention.contains(&session.session_hint) || plans.contains(&session.id);
+            session.attention_required = attention.contains(&session.session_hint);
         }
         Ok(())
     }
