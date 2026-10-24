@@ -1674,12 +1674,12 @@ A bordered panel surface with an elevation step for settings rows and grouped co
 
 `import { TitlebarShell } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/TitlebarShell`
 
-The window titlebar: leading toggle, title and subtitle, trailing actions and window controls, draggable.
+The window titlebar: leading toggle, title, its actions and subtitle, chat-card controls that follow the browser split, trailing actions and window controls, draggable.
 
 - Use for: The top bar of the app window
 - Not for: A panel header → `PanelHeader`
 - Not for: A page title → `DashboardHeader`
-- Tokens: `--titlebar-height`, `--titlebar-bg`, `--chrome-floating-toggle-size`
+- Tokens: `--titlebar-height`, `--titlebar-bg`, `--chrome-floating-toggle-size`, `--shell-card-inset`
 
 ### Wallpaper
 

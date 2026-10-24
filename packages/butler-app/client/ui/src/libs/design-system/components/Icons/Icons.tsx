@@ -10,7 +10,7 @@ import type { HugeiconsIconProps } from "@hugeicons/react";
 import { createIcon } from "./iconBase";
 // Named imports keep the bundle to the glyphs mapped below.
 import {
-  Activity01Icon, Add01Icon, ArrowTurnBackwardIcon, AiChipIcon, AlertCircleIcon, ArchiveIcon, ArrowDown01Icon,
+  Activity01Icon, Add01Icon, ArrowTurnBackwardIcon, AiChipIcon, AlertCircleIcon, AppleReminderIcon, ArchiveIcon, ArrowDown01Icon,
   ArrowLeft01Icon, ArrowRight01Icon, ArrowUp01Icon, ArrowUpDownIcon, AttachmentIcon,
   BookOpen01Icon, BotIcon, Briefcase01Icon, BubbleChatIcon, Cancel01Icon, CancelCircleIcon,
   CheckListIcon, CheckmarkCircle02Icon, CircleIcon, Clock03Icon, CollapseIcon, CommandIcon, ComputerIcon,
@@ -33,6 +33,8 @@ export * from "./BrowserIcons";
 export const Activity = createIcon(Activity01Icon);
 export const AiChip = createIcon(AiChipIcon);
 export const AlertCircle = createIcon(AlertCircleIcon);
+/** A reminder card with a checklist: opens 세션 정보 (Session info), the conversation's side pane. */
+export const AppleReminder = createIcon(AppleReminderIcon);
 export const Archive = createIcon(ArchiveIcon);
 export const CheckCircle2 = createIcon(CheckmarkCircle02Icon);
 export const CheckList = createIcon(CheckListIcon);
