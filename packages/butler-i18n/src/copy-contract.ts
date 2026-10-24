@@ -1039,6 +1039,15 @@ export interface AppCopy {
     queuedPosition: (position: number, total: number) => string;
     contextDetails: string;
     usage: {
+      overviewTitle: string; historyTitle: string;
+      lifetimeTokens: string; busiestDay: string; longestTask: string;
+      longestStreak: string; currentStreak: string; days: (n: number) => string;
+      viewDaily: string; viewWeekly: string; viewCumulative: string;
+      weekOf: (date: string) => string; throughWeek: (date: string) => string;
+      limitResetsIn: (t: string) => string; elapsedMinutes: (n: number) => string; durationHours: (n: number) => string;
+      checkedAgo: (t: string) => string; resetsIn: (t: string) => string;
+      limitReached: string; payAsYouGo: string; thisMonth: string;
+      refreshFailedStale: (t: string) => string; estimated: string;
       chatgptProvider: string;
       thisChat: string;
       conversationPart: string;
@@ -1075,14 +1084,12 @@ export interface AppCopy {
       similar: string;
       emptyRange: string;
       noRecords: string;
-      recent: (range: string) => string;
       tinyCost: string;
       tinyShare: string;
       noMatches: string;
       pickerFooter: (range: string) => string;
       viewAll: (count: number) => string;
       bucketHours: (start: number, end: number, single: boolean) => string;
-      checked: (time: string) => string;
       failures: (count: string) => string;
       details: string;
       cached: string;

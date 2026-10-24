@@ -1,8 +1,11 @@
 // test-category: race
 // Product usage surfaces in VisualHarness, offline gateway, no model calls.
 import assert from "node:assert/strict";
-import { readFileSync, existsSync, mkdirSync } from "node:fs";
-import { join, extname, normalize, sep } from "node:path";
+import { readFileSync, existsSync, mkdirSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { historyFixture } from "../support/usage-insights-fixtures";
+import { runUsageInsightsSmoke } from "../support/usage-insights-smoke";
+import { join, extname, normalize, resolve, sep } from "node:path";
 import { probeFocusRing } from "../support/focus-ring-clipping";
 import { launchSmokeBrowser } from "../support/smoke-browser";
 import { createNativeAppServer } from "../support/native-app-server";
@@ -13,7 +16,8 @@ import { usageView, quota, delegatedUsageView, chatGptUsageFixtures } from "../.
 import type { UsageMonitorView } from "../../packages/butler-app/client/ui/src/app/types";
 
 const dist = join(process.cwd(), "packages/butler-app/client/ui/dist");
-const shots = process.env.BUTLER_USAGE_SHOTS;
+const shots = resolve(process.env.BUTLER_USAGE_SHOTS ?? mkdtempSync(join(tmpdir(), "butler-usage-insights-")));
+assert(shots !== process.cwd() && !shots.startsWith(process.cwd() + sep), "Usage screenshots must stay outside the repository");
 if (shots) mkdirSync(shots, { recursive: true });
 const auth = process.env.BUTLER_USAGE_AUTH ?? "api_key";
 const planState = process.env.BUTLER_USAGE_PLAN_STATE ?? "headers";
@@ -170,6 +174,11 @@ async function delegatedSettings(page: Page, locale: string, cell: string) {
 }
 
 try {
+  if (process.env.BUTLER_USAGE_CASE === "insights") {
+    await runUsageInsightsSmoke(browser, dist, shots);
+  } else if (process.env.BUTLER_USAGE_CASE === "fallback") {
+    await assertPlanFallbackStream();
+  } else {
   const page = await browser.newPage({ locale: "ko-KR", timezoneId: "Asia/Seoul", reducedMotion: "reduce" });
   await page.addInitScript(recordChartTransforms);
   const errors: string[] = [];
@@ -186,6 +195,7 @@ try {
       if (state === "loading") await new Promise<void>(resolve => releaseLoading.push(resolve));
       return route.fulfill({ json: { ok: true, data: monitor(url) } });
     }
+    if (url.pathname === "/usage-history") return route.fulfill({ json: { ok: true, data: historyFixture(state === "empty") } });
     if (url.pathname === "/provider-quota") return route.fulfill({ json: { ok: true, data: planQuota() } });
     if (url.pathname === "/session-queue") return route.fulfill({ json: { ok: true, data: { queued_messages: [] } } });
     if (/^\/sessions\/[^/]+\/controls$/u.test(url.pathname)) return route.fulfill({ json: { ok: true, data: { session_id: "butler-client", revision: 0,
@@ -312,7 +322,7 @@ try {
     }
     await popover.getByRole("button", { name: "자세히", exact: true }).click();
     await page.locator('[data-settings-section-id="usage-overview"]').waitFor();
-    if (auth === "subscription" && planState === "limit" && scenario !== "loading") await assertLimitAction(page.locator('[data-test-class="chatgpt-plan-usage"]'));
+    if (auth === "subscription" && planState === "limit" && scenario !== "loading") await page.locator('[data-test-class="usage-provider"]').getByText("한도 도달", { exact: false }).waitFor();
     await page.waitForTimeout(400);
     if (shots) await page.screenshot({ path: join(shots, `${before ? "before" : "after"}${auth === "subscription" ? "-subscription" : ""}-usage-${theme}-${width}-${scenario}.png`) });
     if (!before && scenario === "loading") {
@@ -410,13 +420,16 @@ try {
     }
   }
   await assertPlanFallbackStream();
+  await runUsageInsightsSmoke(browser, dist, shots);
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ ok: true, cells, reads, allReads, before, heightDeltas, alignmentDeltas, popoverHeights, splitHeightDeltas, maxGapDelta, maxShareDelta }));
+  console.log(JSON.stringify({ ok: true, cells, reads, allReads, before, heightDeltas, alignmentDeltas, popoverHeights, splitHeightDeltas, maxGapDelta, maxShareDelta, screenshotDirectory: shots }));
+  }
 } finally {
   // The last loading cell deliberately holds a route. Settle it before teardown.
   releaseLoading.forEach(resolve => resolve());
   await Promise.all(browser.contexts().flatMap(context => context.pages().map(page => page.unrouteAll({ behavior: "wait" }))));
   await browser.close();
+  console.log(`Usage screenshots: ${shots}`);
 }
 
 /** Real App bootstrap/cursor and SSE, rather than the VisualHarness's static data. */
