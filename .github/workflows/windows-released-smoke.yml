@@ -93,7 +93,7 @@ jobs:
           } finally { Remove-Item -Recurse -Force $profile }
 
   real-chat:
-    name: Released Windows real folder chat (gpt-6-luna)
+    name: Released Windows real folder chat (live model)
     runs-on: windows-latest
     environment: live-e2e
     timeout-minutes: 20
@@ -109,14 +109,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
           API_KEY_SECRET: ${{ secrets.BUTLER_E2E_API_KEY }}
+          BUTLER_E2E_PROVIDER: ${{ vars.BUTLER_E2E_LIVE_PROVIDER }}
+          BUTLER_E2E_MODEL: ${{ vars.BUTLER_E2E_LIVE_MODEL }}
         run: |
           $ErrorActionPreference = 'Stop'
           if ($env:RELEASE_TAG -notmatch '^v0\.1\.0-preview\.\d+$') { throw 'Expected a preview tag' }
+          if (!$env:BUTLER_E2E_PROVIDER) { throw 'Set the live-e2e variable BUTLER_E2E_LIVE_PROVIDER' }
+          if (!$env:BUTLER_E2E_MODEL) { throw 'Set the live-e2e variable BUTLER_E2E_LIVE_MODEL' }
+          $subscription = $env:BUTLER_E2E_PROVIDER -eq 'openai-subscription'
           $authDir = Join-Path $HOME '.butler-e2e-auth/auth'
-          $profile = Join-Path $authDir 'chatgpt.json'
-          if (!(Test-Path -LiteralPath $profile -PathType Leaf) -and !$env:API_KEY_SECRET) {
-            throw 'One-time setup: butler auth login --data "$HOME\.butler-e2e-auth"'
+          if ($subscription -and !(Test-Path -LiteralPath (Join-Path $authDir 'chatgpt.json') -PathType Leaf)) {
+            throw 'openai-subscription needs a one-time setup: butler auth login --data "$HOME\.butler-e2e-auth"'
           }
+          if (!$subscription -and !$env:API_KEY_SECRET) { throw 'Set the live-e2e secret BUTLER_E2E_API_KEY' }
+          Write-Output "Live provider: $env:BUTLER_E2E_PROVIDER, model: $env:BUTLER_E2E_MODEL"
           $root = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
           New-Item -ItemType Directory $root | Out-Null
           try {
@@ -133,15 +139,12 @@ jobs:
             $env:BUTLER_E2E_BIN = $binary[0].FullName
             $env:BUTLER_E2E_SKIP_BUILD = '1'
             $env:BUTLER_E2E_TIER = 'live'
-            $env:BUTLER_E2E_MODEL = 'openai/gpt-6-luna@low'
             $env:BUTLER_E2E_LIVE_MAX_TURNS = '1'
             $env:BUTLER_E2E_RELEASED_VERSION = $env:RELEASE_TAG.Substring(1)
-            if (Test-Path -LiteralPath $profile -PathType Leaf) {
+            if ($subscription) {
               $env:BUTLER_E2E_CHATGPT_AUTH_DIR = $authDir
-              $env:BUTLER_E2E_PROVIDER = 'openai-subscription'
             } else {
               $env:BUTLER_E2E_API_KEY_ENV = 'API_KEY_SECRET'
-              $env:BUTLER_E2E_PROVIDER = 'openai'
             }
             $env:BUTLER_SECRET_STORE = 'file'
             $env:BUTLER_PLATFORM_SYSTEM_SECRETS = '0'

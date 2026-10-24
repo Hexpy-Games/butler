@@ -64,7 +64,6 @@ async fn run(
     downloads: &Path,
 ) -> Result<bool, HarnessError> {
     let provider = live::gate("DOWNLOADS-LIVE")?.expect("live credentials required");
-    assert_eq!(provider.choice.model, "openai/gpt-6-luna");
     let before = snapshot(downloads)?;
     let mut extensions = BTreeMap::<String, usize>::new();
     for (path, metadata) in &before {

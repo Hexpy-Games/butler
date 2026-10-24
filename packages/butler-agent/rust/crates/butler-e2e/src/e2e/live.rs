@@ -20,8 +20,14 @@ pub fn gate(scenario: &str) -> Result<Option<LiveProvider>, HarnessError> {
         return Ok(None);
     }
     let provider = LiveProvider::from_env();
-    if provider.credential.is_none() {
-        let reason = format!("no credentials: {}", provider.provider);
+    let missing = match &provider {
+        Err(unset) => Some(unset.clone()),
+        Ok(provider) if provider.credential.is_none() => {
+            Some(format!("no credentials: {}", provider.provider))
+        }
+        Ok(_) => None,
+    };
+    if let Some(reason) = missing {
         if tier == Tier::Live {
             report(scenario, &format!("FAILED ({reason})"));
             return Err(harness_error(format!(
@@ -31,7 +37,7 @@ pub fn gate(scenario: &str) -> Result<Option<LiveProvider>, HarnessError> {
         report(scenario, &format!("SKIPPED ({reason})"));
         return Ok(None);
     }
-    Ok(Some(provider))
+    Ok(provider.ok())
 }
 
 /// Counts one live model turn against `BUTLER_E2E_LIVE_MAX_TURNS`.
