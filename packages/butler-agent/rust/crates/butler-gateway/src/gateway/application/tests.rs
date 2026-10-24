@@ -158,14 +158,18 @@ async fn delivered_transcript_final_projects_and_settles_exact_queue_claim() {
     .unwrap();
     app.start_dispatch().await.unwrap();
     // Publishing repeated changes must not wait behind a dispatcher held at readiness.
+    // The wakes name another chat: a released cycle for this chat could claim
+    // the ordinary admission below before it claims its own row.
     tokio::time::timeout(std::time::Duration::from_secs(3), async {
         for _ in 0..128 {
-            app.queue_wake.chat("general".into()).await.unwrap();
+            app.queue_wake.chat("other".into()).await.unwrap();
         }
     })
     .await
     .expect("coalesced queue wakes must not block event publication");
     release.send(true).unwrap();
+    // Commands run in order, so this reply follows the startup drain of every chat.
+    app.queue_wake.drain_chat("general".into()).await.unwrap();
     let mut plan_request = command("projection-id", "question");
     plan_request.request.plan_mode = Some(json!(true));
     let accepted = app.send_message(plan_request).await.unwrap();
