@@ -1,13 +1,11 @@
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
 import { Button } from "../Button";
 import { Grid } from "../Grid";
-import { ICON_SIZE, MessageSquare } from "../Icons";
-import { IconSlot } from "../IconSlot";
-import { LoadingIndicator } from "../LoadingIndicator";
-import { Tag } from "../Tag";
+import { MessageSquare } from "../Icons";
 import { Stack } from "../Stack";
 import { Typo } from "../Typo";
 import { Card } from "./Card";
+import { RadiusStory, TaskCard } from "./Card.showcaseParts";
 
 export const meta: ShowcaseMeta = {
   title: "Card",
@@ -73,27 +71,6 @@ function BoardCard({ item, selected }: { item: { title: string; progress: string
   );
 }
 
-/** Task graph card: a running task carries activity="running"; a finished one does not. */
-function TaskCard({ item, running, selected }: { item: { title: string; meta: string; status: string; time: string }; running?: boolean; selected?: boolean }) {
-  return (
-    <Card interactive padding="sm" selected={selected} activity={running ? "running" : undefined} aria-label={item.title} onClick={() => undefined}>
-      <Stack gap="xs">
-        <Stack align="row" gap="sm" cross="start">
-          <IconSlot size="md" minHeight="line" tone="tertiary">
-            <LoadingIndicator state={running ? "loading" : "done"} size={ICON_SIZE.md} />
-          </IconSlot>
-          <Typo.Body lineClamp={2} grow minWidth="0">{item.title}</Typo.Body>
-        </Stack>
-        <Typo.Caption tone="tertiary" truncate>{item.meta}</Typo.Caption>
-        <Stack align="row" justify="between" cross="center" gap="sm">
-          <Tag size="sm" tone={running ? "accent" : "neutral"}>{item.status}</Tag>
-          <Typo.Caption tone="tertiary" numeric="tabular">{item.time}</Typo.Caption>
-        </Stack>
-      </Stack>
-    </Card>
-  );
-}
-
 export const stories: ShowcaseStory[] = [
   {
     name: "Project board",
@@ -137,6 +114,8 @@ export const stories: ShowcaseStory[] = [
       </Grid>
     ),
   },
+  // radius="lg": a card as wide as the conversation column (an epic draft Butler proposes).
+  { name: "Radius lg · conversation column", widths: ["375", "app"], render: (context) => <RadiusStory {...context} /> },
   {
     name: "Padding",
     render: (context) => (

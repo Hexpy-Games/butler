@@ -16,6 +16,19 @@ function WorkCard() {
 }
 // #endregion
 
+// #region recipe: Column-wide card
+function ColumnCard() {
+  return (
+    <Card radius="lg">
+      <Stack gap="sm">
+        <Typo.Caption tone="secondary">Epic draft · Butler</Typo.Caption>
+        <Typo.PanelTitle as="h3" wrap="anywhere">Fix the shortcut clash in the composer</Typo.PanelTitle>
+      </Stack>
+    </Card>
+  );
+}
+// #endregion
+
 // #region recipe: Running task card
 function RunningTaskCard() {
   return (
@@ -35,6 +48,7 @@ export const guidance: ShowcaseGuidance = {
     "An item in a dashboard grid",
     "A suggestion or briefing entry with its own action",
     "A running task in a task graph (activity=\"running\")",
+    "A card as wide as the conversation column (radius=\"lg\")",
   ],
   whenNotToUse: [
     { when: "Only padding or a background", use: "Box" },
@@ -43,6 +57,7 @@ export const guidance: ShowcaseGuidance = {
   ],
   recipes: [
     { name: "Interactive work card", description: "interactive + onClick makes the card a keyboard-operable button.", render: () => <WorkCard /> },
+    { name: "Column-wide card", description: "radius=\"lg\" takes the 12px popover tier; a frame directly inside follows the card's corners.", render: () => <ColumnCard /> },
     { name: "Running task card", description: "activity=\"running\" adds the worker-active border and a pulse ring that rests under reduced motion.", render: () => <RunningTaskCard /> },
   ],
   doDont: [
@@ -55,10 +70,13 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Running is not a highlight for selection or errors; use selected or a Notice.", render: () => <Card activity="running"><Typo.Body>Selected item</Typo.Body></Card> },
     },
   ],
-  content: ["Title in two lines at most (lineClamp=2); secondary facts go in a caption."],
+  content: [
+    "Title in two lines at most (lineClamp=2); secondary facts go in a caption.",
+    "Keep the default radius for items in a grid or list; radius=\"lg\" only for a card as wide as the conversation column.",
+  ],
   accessibility: [
     "Interactive cards need aria-label; nested buttons stop propagation.",
     "activity=\"running\" is visual only: say the state in text (a status Tag) and in aria-label.",
   ],
-  tokens: ["--surface-raised", "--radius-panel", "--shadow-card", "--selection", "--focus-ring", "--worker-active", "--pulse-duration", "--motion-loop-count"],
+  tokens: ["--surface-raised", "--radius-control", "--radius-popover", "--radius-panel", "--shadow-card", "--selection", "--focus-ring", "--worker-active", "--pulse-duration", "--motion-loop-count"],
 };

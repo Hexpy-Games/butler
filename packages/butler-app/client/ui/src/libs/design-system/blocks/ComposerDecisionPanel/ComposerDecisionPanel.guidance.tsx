@@ -49,9 +49,25 @@ function BrowserApproval() {
 }
 // #endregion
 
+// #region recipe: Approval in the conversation
+function ConversationApproval() {
+  return (
+    <ComposerDecisionPanel placement="conversation" icon={<Folder aria-hidden="true" size="lg" />} eyebrow="Permission" title="Edit 24 files in 'Desktop'?" onOpen={() => undefined}
+      details={["Screenshot 10.02.14.png", "+23 more"]} aside={<Tag tone="warning">Medium risk</Tag>}
+      actions={<ButtonContainer size="sm" justify="end">
+        <Button size="sm" variant="secondary">Deny</Button>
+        <Button size="sm">Allow once</Button>
+      </ButtonContainer>} />
+  );
+}
+// #endregion
+
 export const guidance: ShowcaseGuidance = {
   purpose: "The composer's decision state: what is being decided, optional detail lines, an optional failure, and the decision buttons in the composer radius.",
-  whenToUse: ["A plan waiting for acceptance or an authority request that replaces the composer input"],
+  whenToUse: [
+    "A plan waiting for acceptance or an authority request that replaces the composer input",
+    "The same decision in the transcript, where it was asked (placement=\"conversation\")",
+  ],
   whenNotToUse: [
     { when: "A notice inside the conversation", use: "Notice" },
     { when: "A modal confirmation", use: "Dialog" },
@@ -59,6 +75,7 @@ export const guidance: ShowcaseGuidance = {
   recipes: [
     { name: "Plan waiting for acceptance", description: "Icon, clickable title, then a ButtonContainer justify=\"end\" of decisions.", render: () => <PlanDecision /> },
     { name: "Approval request with examples and risk", description: "A one-sentence question, up to three examples and a \"+N more\" line as details, a risk Tag in the aside.", render: () => <ApprovalRequest /> },
+    { name: "Approval in the conversation", description: "placement=\"conversation\": its own flat Card radius=\"lg\", a 12px inset and control-radius buttons; no ComposerCard.", render: () => <ConversationApproval /> },
     { name: "Browser approval with the page", description: "media: the tab's 16:10 frame at the subject row's end; under 420px it spans the text column, cropped from the page's top to 140px. Clicking it opens the tab.", render: () => <BrowserApproval /> },
   ],
   doDont: [
@@ -80,5 +97,5 @@ export const guidance: ShowcaseGuidance = {
     "media label names the target page (Open tab · Pine Grove Campground); a browser hand-off's primary action is 열어서 확인 / Open to check (butler-i18n browser.rail.openToCheck).",
   ],
   accessibility: ["The icon is decorative (aria-hidden); the title is a button that opens the source; details are plain text and the Show more button carries aria-expanded and aria-controls; errors are announced with role=\"alert\"."],
-  tokens: ["--adaptive-composer-radius", "--space-xs", "--space-sm", "--space-md", "--space-lg", "--icon-size-sm", "--text-secondary", "--decision-media-narrow-height"],
+  tokens: ["--adaptive-composer-radius", "--radius-control", "--radius-popover", "--space-xs", "--space-sm", "--space-md", "--space-lg", "--icon-size-sm", "--text-secondary", "--decision-media-narrow-height"],
 };
