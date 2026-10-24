@@ -11,6 +11,7 @@ use url::Url;
 mod fetch;
 mod headless;
 pub(super) mod lightpanda;
+mod tab;
 
 impl super::service::WebAccess {
     pub async fn read_cli(
@@ -136,6 +137,12 @@ impl WebSession {
             },
         };
         let observation_key = format!("{cache_key}:{start_chunk}:{max_chars}:{max_chunks}");
+        if let Some(live) = live {
+            let window = (max_chars, max_chunks, start_chunk);
+            return self
+                .read_tab(live, (&parsed, &requested_url), window, observation_key)
+                .await;
+        }
         if let Some(mut cached) = self.cached_observation(&observation_key) {
             cached["cache_hit"] = Value::Bool(true);
             cached["duplicate_observation"] = Value::Bool(true);
@@ -145,17 +152,13 @@ impl WebSession {
         let escalate = browsing && live.is_none();
         let gate = self.read_gate(&cache_key);
         let _reading = gate.lock().await;
-        let (page, cache_hit) = match (self.cached_page(&cache_key).await?, live) {
-            (Some(page), _) => (page, true),
-            (None, live) => {
-                let page = match live {
-                    Some(live) => live_page(live, &requested_url).await?,
-                    None => {
-                        self.access
-                            .read_page(parsed.clone(), &requested_url, &backend, cancellation)
-                            .await?
-                    }
-                };
+        let (page, cache_hit) = match self.cached_page(&cache_key).await? {
+            Some(page) => (page, true),
+            None => {
+                let page = self
+                    .access
+                    .read_page(parsed.clone(), &requested_url, &backend, cancellation)
+                    .await?;
                 self.remember_page(cache_key.clone(), &page).await?;
                 (page, false)
             }

@@ -93,6 +93,7 @@ tool_names! {
     ReadSkillFile = "read_skill_file",
     ReadMcpResource = "read_mcp_resource",
     ReadOperationResults = "read_operation_results",
+    ReadPriorDelegation = "read_prior_delegation",
     ProjectArtifacts = "project_artifacts",
     ReadProjectSource = "read_project_source",
     ReadToolEvidenceArtifact = "read_tool_evidence_artifact",

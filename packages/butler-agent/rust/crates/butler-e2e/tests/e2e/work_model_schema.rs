@@ -72,7 +72,26 @@ async fn cb_12_dev_upgrade_preserves_canon_and_second_start_is_identical()
     let db = Connection::open(&path)?;
     no_legacy(&db)?;
     let fresh = snapshot(&db)?;
-    assert_eq!(fresh.len(), 13);
+    assert_eq!(
+        fresh.keys().map(String::as_str).collect::<Vec<_>>(),
+        vec![
+            "canon_audit",
+            "canon_counters",
+            "canon_cursors",
+            "canon_epic_tags",
+            "canon_epic_work_links",
+            "canon_epics",
+            "canon_events",
+            "canon_intents",
+            "canon_plans",
+            "canon_session_epics",
+            "canon_spec_bodies",
+            "canon_spec_criteria",
+            "canon_spec_nodes",
+            "canon_spec_revisions",
+            "canon_tags",
+        ]
+    );
     assert!(fresh.values().all(Vec::is_empty));
     seed(&db)?;
     db.execute_batch(include_str!(

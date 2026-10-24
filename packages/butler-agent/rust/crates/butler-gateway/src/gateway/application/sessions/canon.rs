@@ -1,4 +1,5 @@
 //! Uses the same chat creation writer and events as POST /sessions.
+use super::super::AppTurn;
 use super::*;
 use rusqlite::params;
 
@@ -75,6 +76,20 @@ pub(in crate::gateway::application) fn project(
 }
 
 impl AppApplication {
+    pub(in crate::gateway::application) async fn with_canon_epics(
+        &self,
+        mut turn: AppTurn,
+    ) -> Result<AppTurn, GatewayApplicationError> {
+        let epics = self
+            .dependencies
+            .canon
+            .session_epics(vec![turn.session_id.clone()])
+            .await?;
+        turn.app_turn_context["session"]["epicIds"] =
+            serde_json::json!(epics.into_iter().next().unwrap_or_default());
+        Ok(turn)
+    }
+
     pub(super) async fn load_session_epics(
         &self,
         sessions: &mut [AppSessionSummary],

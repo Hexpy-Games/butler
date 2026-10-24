@@ -133,6 +133,8 @@ struct State {
     output_images: u8,
     journal_by_provider: HashMap<String, String>,
     described_ids: HashSet<String>,
+    /// Per tab, the observation view the model holds (observation text v2).
+    browser_views: HashMap<String, browser::TabView>,
 }
 
 pub(crate) struct GuidedTools {
@@ -332,6 +334,7 @@ impl GuidedTools {
                     | ToolName::SteerWorker
                     | ToolName::CancelSteward
                     | ToolName::WaitForWorker
+                    | ToolName::ReadPriorDelegation
                     | ToolName::UpdateTodoList
                     | ToolName::ListTodoList
                     | ToolName::GetContextMonitor

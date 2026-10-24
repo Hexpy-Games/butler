@@ -1,8 +1,15 @@
 //! Canon port. SQL runs only on the BTCC writer/read lanes.
-use super::{BtccStorage, StorageError, StorageResult};
+use super::{BtccRepositories, BtccStorage, StorageError, StorageResult};
 use butler_canon::store;
 use rusqlite::{Connection, TransactionBehavior};
 use store::Transaction;
+
+impl BtccRepositories {
+    /// Composition adapter over the same SQL lanes, outside Work transactions.
+    pub fn canon_storage(&self) -> BtccStorage {
+        self.storage.clone()
+    }
+}
 
 impl BtccStorage {
     /// One domain operation (or batch), one IMMEDIATE transaction. Dropping the

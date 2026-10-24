@@ -41,6 +41,7 @@ mod browser_jspaint;
 mod browser_library;
 mod browser_long;
 mod browser_naver;
+mod browser_observation_v2;
 mod browser_outputs;
 mod browser_parallel;
 mod browser_prefix;
@@ -281,3 +282,5 @@ mod work_model_api;
 mod work_model_schema;
 
 mod worker_cap;
+
+mod canon_link;

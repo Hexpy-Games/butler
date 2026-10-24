@@ -41,7 +41,7 @@ try {
   try {
     await server.signIn(context);
     await page.addInitScript(() => localStorage.setItem("butler:app-ui-state:v1", JSON.stringify({
-      schema: "butler.app-ui-state.v1", cached_at: new Date().toISOString(), left_open: true, right_open: false,
+      schema: "butler.app-ui-state.v1", cached_at: new Date().toISOString(), left_open: true, right_open: false, right_panel_width: 376,
     })));
     await page.goto(server.url, { waitUntil: "load" });
     await openCanonBoard(page);

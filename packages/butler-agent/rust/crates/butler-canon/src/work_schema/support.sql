@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS canon_epic_work_links (
   btcc_work_id TEXT NOT NULL UNIQUE,
   session_id TEXT NOT NULL,
   linked_at INTEGER NOT NULL,
+  reported_applied INTEGER NOT NULL DEFAULT 0 CHECK (reported_applied IN (0,1)),
   linked_by TEXT NOT NULL CHECK (json_valid(linked_by)),
   PRIMARY KEY (epic_id,btcc_work_id)
 );
