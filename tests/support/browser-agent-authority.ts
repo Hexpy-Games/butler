@@ -4,14 +4,21 @@ import {writeFileSync} from "node:fs";
 import {join} from "node:path";
 import type { browserAgentApp } from "./browser-agent-app";
 import { waitBrowser } from "./browser-agent-app";
-import { describeBrowser, bridgeBrowser, actConfirm, type browserStub } from "./browser-agent-stub";
+import { describeBrowser, bridgeBrowser, latestBrowser, type browserStub } from "./browser-agent-stub";
 
 type App = Awaited<ReturnType<typeof browserAgentApp>>;
 type Request = { request_ref: string; approval: { operation: { allow_conversation: boolean; targets: string[] } } };
 export async function browserAuthorityChecks(app: App, stub: ReturnType<typeof browserStub>, tab: string, send: (text: string) => Promise<void>, delivered: () => Promise<void>, evidence:string) {
   const requests = () => app.gateway.api<{requests: Request[]}>("/authority-requests?session_id=general");
-  const act = async (text: string) => {
-    stub.set([describeBrowser, () => bridgeBrowser("browser_observe", {tab}), actConfirm]);
+  const act = async (text: string, name = "Confirm") => {
+    stub.set([describeBrowser, () => bridgeBrowser("browser_observe", {tab}), request => {
+      const observation = latestBrowser(request, "obs");
+      const content = (observation.untrusted_content as { text: string }).text;
+      const line = content.split("\n").find(line => line.startsWith(`button "${name}" [`));
+      const ref = line && /\[([^\]]+)\]/u.exec(line)?.[1];
+      assert.ok(ref, `missing ${name} button`);
+      return bridgeBrowser("browser_act", { tab, observation: observation.obs, steps: [{ action: "click", ref, commits: true }] });
+    }]);
     await send(text);
   };
   const pending = async () => {
@@ -43,14 +50,14 @@ export async function browserAuthorityChecks(app: App, stub: ReturnType<typeof b
   await act("Use the same site's conversation grant."); await delivered();
   assert.equal((await requests()).requests.length,0);
   await app.gateway.api("/settings",{method:"PATCH",body:JSON.stringify({access_mode:"full_access"})});
-  await app.main(`${contents}.executeJavaScript("document.body.insertAdjacentHTML('beforeend','<input id=payment-field type=hidden autocomplete=cc-number>')")`);
-  await act("Confirm the payment-like submit, even in full access.");
+  await app.main(`${contents}.executeJavaScript("document.getElementById('confirm').textContent='Confirm payment';document.body.insertAdjacentHTML('beforeend','<input id=payment-field aria-label=Card&#32;number autocomplete=cc-number>')")`);
+  await act("Confirm the payment-like submit, even in full access.", "Confirm payment");
   const payment = await pending(); assert.equal(payment.approval.operation.allow_conversation,false);
   const response = await fetch(`${app.gateway.url}/authority-requests/${payment.request_ref}/allow?session_id=general`,{method:"POST",headers:{...app.gateway.authHeaders,"content-type":"application/json"},body:JSON.stringify({scope:"conversation"})});
   assert.equal(response.status,400); assert.match(await response.text(),/browser_confirm_once_required/u);
   await allow(payment.request_ref,"once"); await delivered();
-  await app.main(`${contents}.executeJavaScript("document.getElementById('payment-field').remove();window.dialogClicks=0;document.getElementById('confirm').onclick=()=>{window.dialogClicks++;if(confirm('Continue?'))document.getElementById('result').textContent='Confirmed'};void 0")`);
-  await act("Ask before answering the page's confirmation dialog.");
+  await app.main(`${contents}.executeJavaScript("document.getElementById('payment-field').remove();document.getElementById('confirm').textContent='Confirm dialog';window.dialogClicks=0;document.getElementById('confirm').onclick=()=>{window.dialogClicks++;if(confirm('Continue?'))document.getElementById('result').textContent='Confirmed'};void 0")`);
+  await act("Ask before answering the page's confirmation dialog.", "Confirm dialog");
   const dialog = await pending(); assert.equal(dialog.approval.operation.allow_conversation,false);
   assert.ok(dialog.approval.operation.targets.some(target=>target.includes("Continue?")));
   await allow(dialog.request_ref,"once"); await delivered();

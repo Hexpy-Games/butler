@@ -8,21 +8,25 @@ import type { browserAgentApp } from "./browser-agent-app";
 
 /** Provider context folds old observations; durable tool results stay complete. */
 export async function browserContextCheck(app:Awaited<ReturnType<typeof browserAgentApp>>,evidence:string) {
-  const request=app.gateway.stubModelCalls.filter(call=>call.stream).at(-1)!;
+  // Provider calls reach the offline vision carrier when the App runs one, else the gateway stub.
+  const calls=app.visionRequests ?? app.gateway.stubModelCalls;
+  // The turn's last round; title and grouping calls run beside it without tool results.
+  const request=calls.filter(call=>call.stream && call.messages.some(message=>(message as {role?:string}).role==='tool')).at(-1)!;
   const messages=request.messages.filter(message=>(message as {role?:string}).role==='tool') as Array<{content:string}>;
   const full=messages.map(message=>JSON.parse(message.content)).filter(value=>value.output?.schema==='butler.browser-observation.v1' && value.output?.status!=='superseded');
   const old=messages.map(message=>JSON.parse(message.content)).filter(value=>value.output?.status==='superseded');
   assert.ok(!JSON.stringify(messages.map(message=>JSON.parse(message.content))).includes('still_file'),'desktop still metadata never reaches model context');
   assert.equal(full.length+old.length,3,"all observations remain represented");
   assert.ok(full.at(-1).output.untrusted_content.text.includes('Confirm'));
-  assertBrowserBodies(app.gateway.stubModelCalls);
+  assertBrowserBodies(calls);
   const view=await app.gateway.api<{latest_turn:{id:string}}>("/session-view?session_id=general");
   const db=new Database(join(app.gateway.butlerData,"agent-runtime/btcc.sqlite"),{readonly:true});
   try {
     const records=db.query("SELECT result_json FROM btcc_guided_tool_calls WHERE turn_id=?1 AND tool_name='browser_observe'").all(view.latest_turn.id) as Array<{result_json:string}>;
     assert.equal(records.length,3);
     const acts=db.query("SELECT result_json FROM btcc_guided_tool_calls WHERE turn_id=?1 AND tool_name='browser_act'").all(view.latest_turn.id) as Array<{result_json:string}>;
-    assert.ok(acts.length && acts.every(record=>record.result_json.includes('still_file')),'durable desktop still metadata is retained');
+    // c418a4c42: stills arrive after the act; the journaled act keeps the durable still receipt.
+    assert.ok(acts.length && acts.every(record=>record.result_json.includes('still_pending')),'durable desktop still receipt is retained');
     assert.ok(records.every(record=>record.result_json.includes('butler.browser-observation.v1') && record.result_json.includes('Confirm')),"journaled observations remain immutable and complete");
     writeFileSync(join(evidence,"context-newest-full.json"),JSON.stringify({full:full.length,superseded:old.length,journalFull:records.length,images:request.body.messages && JSON.stringify(request.body.messages).includes('image_url')},null,2));
   }finally{db.close()}

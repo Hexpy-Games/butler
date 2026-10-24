@@ -20,8 +20,12 @@ const FINAL = { ko: "결제 정보를 확인했습니다.", en: "Checked the pay
 let armed = false, round = 0, language: "ko" | "en" = "ko";
 const toolResults: string[] = [];
 const decisions = new WeakMap<StubModelRequest, { text: string; tool: { name: string; arguments: Record<string, unknown> } | null }>();
+// Only the turn's rounds carry tools; title and grouping calls may run beside them.
+const turnRound = (request: StubModelRequest) => request.stream && Array.isArray(request.body.tools) && request.body.tools.length > 0;
 function decide(request: StubModelRequest) {
   if (!request.stream) return { text: "{}", tool: null };
+  // No title: the conversation keeps the asked text as its name.
+  if (!turnRound(request)) return { text: "", tool: null };
   let decision = decisions.get(request);
   if (decision) return decision;
   if (armed && round === 0) decision = { text: "", tool: { name: "tool_describe", arguments: { ids: ["native:browser_wait_for_user"] } } };
@@ -35,7 +39,7 @@ function decide(request: StubModelRequest) {
 const server = await createNativeAppServer({ uiRoot: resolve(process.env.BUTLER_SMOKE_RENDERER_DIST ?? "packages/butler-app/client/ui/dist"),
   stubReply: async request => {
     // The conversation exists once the App sent the message: its tab (held by the user) precedes the call.
-    if (request.stream && armed && round === 0 && !decisions.has(request)) await prepareSession();
+    if (turnRound(request) && armed && round === 0 && !decisions.has(request)) await prepareSession();
     return decide(request).text;
   },
   stubToolCall: request => decide(request).tool });
@@ -125,7 +129,12 @@ async function prepareSession() {
   Object.assign(tab, { holder: "user", waiting: false, epoch: tab.epoch + 1 }); await publish(); await pushUi();
 }
 const card = (page: Page) => page.locator('[data-test-class="composer-browser-handoff"]');
-async function settle(page: Page) { await page.evaluate(() => document.fonts.ready); await page.waitForTimeout(150); }
+async function settle(page: Page) {
+  await page.evaluate(() => document.fonts.ready);
+  await page.waitForFunction(() => document.getAnimations().every(animation =>
+    // Scroll-driven animations follow scroll position, not time, and never finish.
+    animation.timeline !== document.timeline || animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
+}
 async function shoot(page: Page, name: string) { await settle(page); const path = join(evidence!, `${name}.png`); await page.screenshot({ path }); shots.push(path); }
 const copy = {
   ko: { title: "직접 입력 필요", detail: "fixture-shop.test", inTab: "탭에서 마친 뒤 버틀러에게 돌려주세요", onDesktop: "PC의 버틀러에서 확인해 주세요", open: "열어서 확인", stop: "작업 중지", giveBack: "버틀러에게 돌려주기", status: "탭에서 마치기를 기다리고 있습니다.", band: "버틀러가 기다리는 중" },
@@ -202,7 +211,12 @@ try {
   await checkCard(desk, "ko", true);
   await card(desk).getByRole("button", { name: copy.ko.stop, exact: true }).click();
   await card(desk).waitFor({ state: "detached", timeout: 30_000 });
-  const view = await server.api<{ latest_turn?: { state?: string } }>(`/session-view?session_id=${encodeURIComponent(session)}`);
+  // Stop asks the running call to end; the turn settles once it has (cancelling → cancelled).
+  let view = await server.api<{ latest_turn?: { state?: string } }>(`/session-view?session_id=${encodeURIComponent(session)}`);
+  for (const deadline = Date.now() + 30_000; view.latest_turn?.state === "cancelling" && Date.now() < deadline;) {
+    await new Promise(done => setTimeout(done, 100));
+    view = await server.api<{ latest_turn?: { state?: string } }>(`/session-view?session_id=${encodeURIComponent(session)}`);
+  }
   assert.equal(view.latest_turn?.state, "cancelled", JSON.stringify(view.latest_turn));
   await shoot(desk, "wait-stopped-ko-light-1440");
   await desk.keyboard.press("ControlOrMeta+k");

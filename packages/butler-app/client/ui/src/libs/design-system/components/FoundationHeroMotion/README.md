@@ -61,9 +61,6 @@ scenes, its prelude choreography and its builds.
   (`data-hero-state="paused"`).
 - Reduced motion (OS setting or the DS `data-motion="reduced"` scope) shows
   the still poster with no animation (`data-hero-state="still"`).
-- `bun run app:motion:trace -- --only=heroes` measures every hero (frame
-  rate, main-thread cost per frame, long tasks, paused and still states);
-  add `--video` for one recorded loop of each hero in light and dark.
 
 ## Where and why
 
