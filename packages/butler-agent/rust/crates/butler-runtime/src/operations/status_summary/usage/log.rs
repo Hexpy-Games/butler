@@ -73,6 +73,7 @@ struct SelectedBuckets {
 pub(crate) struct UsageLogIndex {
     pub(super) owners: Arc<crate::operations::UsageOwners>,
     tail: LogTail,
+    history: super::history::History,
     pub(super) plan: super::plan::PlanUsageIndex,
     names: Names,
     slots: BTreeMap<i64, Slot>,
@@ -98,6 +99,7 @@ impl UsageLogIndex {
             self,
             |index| {
                 index.rows.clear();
+                index.history = Default::default();
                 index.plan = Default::default();
                 index.slots.clear();
                 index.by_scope.clear();
@@ -129,6 +131,7 @@ impl UsageLogIndex {
         self.scope_names.insert(row.scope.clone());
         self.plan.push(&row, chrono::Utc::now().timestamp_millis());
         let start = slot_start(row.ts);
+        self.history.push(start, &row);
         self.session_totals = None;
         self.selected = None;
         if let Some(all) = &mut self.all {
@@ -149,6 +152,44 @@ impl UsageLogIndex {
             .add(&row, pricing, &self.names);
         global.rows.push(index);
         self.rows.push(row);
+    }
+    fn sync_history_zone(&mut self) -> std::io::Result<()> {
+        self.history
+            .sync_zone(self.slots.iter().map(|(&start, slot)| {
+                (
+                    start,
+                    slot.buckets
+                        .as_ref()
+                        .into_iter()
+                        .flat_map(Buckets::provider_totals)
+                        .map(|(id, total)| (id.to_owned(), total))
+                        .collect(),
+                )
+            }))
+    }
+    pub(super) fn attach_provider_usage(
+        &mut self,
+        providers: &mut Value,
+        sources: Option<&super::UsageMonitorSources<'_>>,
+        now: f64,
+    ) {
+        super::plan::attach(providers, self, sources, now);
+        let now = butler_core::json::saturating_i64(now);
+        if self.sync_history_zone().is_err() {
+            return;
+        }
+        if let Some(items) = providers["providers"].as_array_mut() {
+            for item in items {
+                let total = item["providerId"]
+                    .as_str()
+                    .and_then(|id| self.history.month_tokens(now, id));
+                item["monthTokens"] = json!(total);
+            }
+        }
+    }
+    pub(super) fn history(&mut self) -> std::io::Result<Value> {
+        self.sync_history_zone()?;
+        self.history.view(chrono::Utc::now().timestamp_millis())
     }
     pub(super) fn plan_usage(&self, account: &str, now: i64) -> Value {
         self.plan.view(account, now, |start, end| {

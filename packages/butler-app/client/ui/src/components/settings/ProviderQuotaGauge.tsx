@@ -1,7 +1,9 @@
+import { useEffect, useState } from "react";
+import { durationMinutes } from "../usage/usageHistoryModel";
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { ProviderQuotaResultView } from "@/app/types.ts";
-import { ProgressMeter, Stack, Tag, Tooltip, Typo } from "@/butler-ds";
+import { KeyValueRow, ProgressMeter, Stack, Tag, Tooltip, Typo, prefersReducedMotion } from "@/butler-ds";
 import {
   formatQuotaTimestamp,
   formatRemaining,
@@ -32,7 +34,32 @@ function secondaryLabel(window: ProviderQuotaWindow): string | null {
   return details.length > 0 ? details.join(" · ") : null;
 }
 
-export function ProviderQuotaGauge({ window, estimated = false, estimateTooltip = false }: { window: ProviderQuotaWindow; estimated?: boolean; estimateTooltip?: boolean }) {
+function PageQuotaGauge({ window, stale }: { window: ProviderQuotaWindow; stale: boolean }) {
+  const locale = useAppLocale(), copy = appCopy.composer.usage;
+  const remaining = clampRemaining(window.remainingPercent);
+  const [entered, setEntered] = useState(prefersReducedMotion);
+  useEffect(() => {
+    let frame = requestAnimationFrame(() => { frame = requestAnimationFrame(() => setEntered(true)); });
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  const reset = window.resetsAt ?? window.expiresAt;
+  const resetMs = reset ? Date.parse(reset) : NaN;
+  const relative = Number.isFinite(resetMs) ? durationMinutes(Math.max(0, Math.ceil((resetMs - Date.now()) / 60000)), copy) : null;
+  const resets = relative ? copy.resetsIn(relative) : null;
+  const caption = remaining === 0 ? relative ? copy.limitResetsIn(relative) : copy.limitReached : resets;
+  return <Stack gap="xs">
+    {remaining === null ? <KeyValueRow label={windowLabel(window)} value={formatRemaining(null)} valueTextSize="caption" />
+      : <ProgressMeter label={<Typo.Caption tone={stale ? "disabled" : "tertiary"}>{windowLabel(window)}</Typo.Caption>} value={entered ? remaining : 0}
+        meta={<Typo.Caption tone={stale ? "disabled" : "tertiary"}>{formatRemaining(remaining)}</Typo.Caption>}
+        ariaLabel={`${windowLabel(window)}: ${formatRemaining(remaining)}`}
+        tone={remaining === 0 ? "danger" : remaining <= 20 ? "warning" : "default"} />}
+    {caption ? <Tooltip label={reset && Number.isFinite(resetMs) ? new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(resetMs) : undefined}>
+      <Typo.Caption tone={stale ? "disabled" : remaining === 0 ? "danger" : "secondary"}>{caption}</Typo.Caption>
+    </Tooltip> : null}
+  </Stack>;
+}
+
+export function ProviderQuotaGauge({ window, estimated = false, estimateTooltip = false, layout = "default", stale = false }: { window: ProviderQuotaWindow; estimated?: boolean; estimateTooltip?: boolean; layout?: "default" | "usage"; stale?: boolean }) {
   useAppLocale();
   const remaining = clampRemaining(window.remainingPercent);
   const text = windowLabel(window);
@@ -42,6 +69,7 @@ export function ProviderQuotaGauge({ window, estimated = false, estimateTooltip 
   const ariaLabel = `${text}: ${valueLabel}`;
   const secondary = secondaryLabel(window);
 
+  if (layout === "usage") return <PageQuotaGauge window={window} stale={stale} />;
   return (
     <Stack gap="xs">
       {remaining === null ? (
