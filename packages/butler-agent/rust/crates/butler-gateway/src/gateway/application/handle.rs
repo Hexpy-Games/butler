@@ -28,6 +28,7 @@ impl AppApplication {
             wallpapers: self.wallpapers.clone(),
             asset_cache: self.asset_cache.clone(),
             settings_update_lock: self.settings_update_lock.clone(),
+            canon_projection_lock: self.canon_projection_lock.clone(),
             plan_decision_locks: self.plan_decision_locks.clone(),
             // Only the dispatching application relays readiness events.
             setup_readiness: super::setup::ReadinessRelay::default(),
