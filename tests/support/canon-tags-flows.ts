@@ -16,6 +16,18 @@ export async function tagRequest(page: Page, method: string, path: string, trigg
   assert.equal(completed.status(), status, `${method} ${path}`);
   return completed;
 }
+/** An attached tag's pencil: it sits inside the tag pill, before its remove button. */
+export function chipMenu(page: Page, name: string) {
+  return page.locator(`${fieldSelector} [data-editable="true"]`).getByRole("button", { name: `${name} 태그 메뉴`, exact: true });
+}
+/** No tag menu trigger is left outside a tag pill (the former ⋯ buttons). */
+export async function assertNoLooseTagMenus(page: Page) {
+  const field = page.locator(fieldSelector);
+  const menus = 'button[aria-label$=" 태그 메뉴"]';
+  await field.locator(`[data-editable="true"] ${menus}`).first().waitFor();
+  assert.equal(await field.locator(menus).count(), await field.locator(`[data-editable="true"] ${menus}`).count(),
+    "Every tag menu trigger is the chip's own pencil; no ⋯ trigger beside the chip");
+}
 export async function chooseTag(page: Page, name: string) {
   await page.locator(fieldSelector).getByRole("combobox", { name: "태그", exact: true }).click();
   const popover = page.locator('[data-slot="filtered-select-popover"]');
@@ -76,12 +88,13 @@ async function manageFlow(page: Page, server: NativeAppServerHandle, epic: EpicD
   await editEpic(page, epic.title);
   const field = page.locator(fieldSelector);
   const tag = (await server.api<EpicDetail>(`/canon/epics/${epic.id}`)).tags.find(tag => tag.name === "새 태그")!;
-  await field.getByRole("button", { name: "새 태그 태그 메뉴", exact: true }).click();
+  await assertNoLooseTagMenus(page);
+  await chipMenu(page, "새 태그").click();
   await page.getByRole("menuitem", { name: "이름 바꾸기", exact: true }).click();
   let dialog = page.getByRole("dialog", { name: "이름 바꾸기", exact: true });
   await dialog.getByLabel("태그 이름", { exact: true }).fill("고친 태그");
   await tagRequest(page, "PATCH", `/canon/tags/${tag.id}`, () => dialog.getByRole("button", { name: "저장", exact: true }).click());
-  await field.getByRole("button", { name: "고친 태그 태그 메뉴", exact: true }).click();
+  await chipMenu(page, "고친 태그").click();
   await page.getByRole("menuitem", { name: "색 바꾸기", exact: true }).click();
   dialog = page.getByRole("dialog", { name: "색 바꾸기", exact: true });
   await dialog.getByRole("radio", { name: "청록", exact: true }).click();
@@ -89,6 +102,46 @@ async function manageFlow(page: Page, server: NativeAppServerHandle, epic: EpicD
   const saved = await server.api<EpicDetail>(`/canon/epics/${epic.id}`);
   assert(saved.tags.some(tag => tag.name === "고친 태그" && tag.color === "teal"));
   await page.locator(boardSelector).locator(`[data-kanban-item="${epic.id}"] [data-tone="teal"]`).getByText("고친 태그", { exact: true }).waitFor();
+  await closeCanonInspector(page);
+}
+const actionsOpacity = (row: ReturnType<Page["locator"]>) =>
+  row.locator('[data-slot="filtered-select-item-actions"]').evaluate(element => getComputedStyle(element).opacity);
+/** A tag on no 과제 is managed from its picker row: the pencil shows on hover, keyboard focus and while its menu is open. */
+async function unattachedFlow(page: Page, server: NativeAppServerHandle, projectId: string) {
+  const loose = await server.api<CanonTag>(`/projects/${projectId}/canon/tags`, post({ name: "외톨이", color: "orange" }));
+  const epic = await server.api<EpicDetail>(`/projects/${projectId}/canon/epics`, post({ title: "태그 없는 과제" }));
+  await page.locator(boardSelector).locator(`[data-kanban-item="${epic.id}"]`).waitFor();
+  await editEpic(page, epic.title);
+  const popover = page.locator('[data-slot="filtered-select-popover"]');
+  const openPicker = async (name: string) => {
+    await page.locator(fieldSelector).getByRole("combobox", { name: "태그", exact: true }).click();
+    await popover.getByRole("textbox", { name: "태그 검색", exact: true }).fill(name);
+    return popover.locator('[data-slot="filtered-select-row"]').filter({ hasText: name });
+  };
+  let row = await openPicker("외톨이");
+  assert.equal(await actionsOpacity(row), "0", "Row actions rest hidden");
+  await row.hover();
+  assert.equal(await actionsOpacity(row), "1", "Row hover shows the pencil");
+  await row.getByRole("button", { name: "외톨이 태그 메뉴", exact: true }).click();
+  await page.mouse.move(0, 0);
+  assert.equal(await actionsOpacity(row), "1", "The pencil stays while its menu is open");
+  await page.getByRole("menuitem", { name: "이름 바꾸기", exact: true }).click();
+  const rename = page.getByRole("dialog", { name: "이름 바꾸기", exact: true });
+  await rename.getByLabel("태그 이름", { exact: true }).fill("외톨이 고침");
+  await tagRequest(page, "PATCH", `/canon/tags/${loose.id}`, () => rename.getByRole("button", { name: "저장", exact: true }).click());
+  assert((await server.api<CanonTag[]>(`/projects/${projectId}/canon/tags`)).some(tag => tag.id === loose.id && tag.name === "외톨이 고침"));
+  assert(!(await server.api<EpicDetail>(`/canon/epics/${epic.id}`)).tags.some(tag => tag.id === loose.id), "Managing a tag never attaches it");
+  row = await openPicker("외톨이 고침");
+  await page.mouse.move(0, 0);
+  for (let step = 0; step < 4 && !await page.evaluate(() => Boolean(document.activeElement?.closest('[data-slot="filtered-select-row"]'))); step++) await page.keyboard.press("Tab");
+  assert.equal(await actionsOpacity(row), "1", "Keyboard focus in the row shows the pencil");
+  await page.keyboard.press("Tab");
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("aria-label")), "외톨이 고침 태그 메뉴", "The pencil follows the row in keyboard order");
+  await page.keyboard.press("Enter");
+  await page.getByRole("menuitem", { name: "삭제", exact: true }).click();
+  const remove = page.getByRole("dialog", { name: "‘외톨이 고침’ 태그를 지울까요?", exact: true });
+  await tagRequest(page, "DELETE", `/canon/tags/${loose.id}`, () => remove.getByRole("button", { name: "삭제", exact: true }).click());
+  assert(!(await server.api<CanonTag[]>(`/projects/${projectId}/canon/tags`)).some(tag => tag.id === loose.id));
   await closeCanonInspector(page);
 }
 async function duplicateFlow(page: Page, server: NativeAppServerHandle, projectId: string) {
@@ -103,7 +156,7 @@ async function duplicateFlow(page: Page, server: NativeAppServerHandle, projectI
     () => popover.getByRole("button", { name: "‘Bug’ 만들기", exact: true }).click(), 409);
   assert.equal((await response.json()).error.code, "tag_exists");
   // The existing tag is selected as it is; no color edit opens for it.
-  await dialog.locator(fieldSelector).getByRole("button", { name: "bug 태그 메뉴", exact: true }).waitFor();
+  await chipMenu(page, "bug").waitFor();
   assert.equal(await page.getByRole("dialog", { name: "색 바꾸기", exact: true }).count(), 0);
   const created = await tagRequest(page, "POST", `/projects/${projectId}/canon/epics`,
     () => dialog.getByRole("button", { name: "만들기", exact: true }).click(), 201);
@@ -117,7 +170,7 @@ async function deleteFlow(page: Page, server: NativeAppServerHandle, projectId: 
   for (let index = 0; index < 3; index++) epics.push(await server.api<EpicDetail>(`/projects/${projectId}/canon/epics`, post({ title: `공유 ${index}`, tags: [tag.id] })));
   await page.locator(boardSelector).locator(`[data-kanban-item="${epics[0]!.id}"]`).waitFor();
   await editEpic(page, "공유 0");
-  await page.locator(fieldSelector).getByRole("button", { name: "공유 태그 태그 메뉴", exact: true }).click();
+  await chipMenu(page, "공유 태그").click();
   await page.getByRole("menuitem", { name: "삭제", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "‘공유 태그’ 태그를 지울까요?", exact: true });
   await dialog.getByText("과제 3개에서 빠집니다", { exact: true }).waitFor();
@@ -137,6 +190,8 @@ async function filterFlow(page: Page, server: NativeAppServerHandle, projectId: 
     const board = page.locator(boardSelector);
     await board.getByRole("combobox", { name: "태그 필터", exact: true }).click();
     const popover = page.locator('[data-slot="filtered-select-popover"]');
+    await popover.getByRole("button", { name: tags[0]!.name, exact: true }).waitFor();
+    assert.equal(await popover.locator('[data-slot="filtered-select-item-actions"]').count(), 0, "The board filter has no tag management");
     for (const tag of tags.slice(0, 2)) await popover.getByRole("button", { name: tag.name, exact: true }).click();
     await page.keyboard.press("Escape");
     const expected = all.filter(epic => epic.tags.some(tag => tags.slice(0, 2).some(selected => selected.id === tag.id)));
@@ -170,6 +225,7 @@ export async function verifyTagFlows(page: Page, server: NativeAppServerHandle, 
   const epic = await createTaggedEpic(page, server, projectId);
   await assignmentFlow(page, server, epic, tags[0]!);
   await manageFlow(page, server, epic);
+  await unattachedFlow(page, server, projectId);
   await duplicateFlow(page, server, projectId);
   await deleteFlow(page, server, projectId);
   await filterFlow(page, server, projectId, tags, "프리뷰 14");

@@ -50,7 +50,7 @@ try {
     if (!before && cell === "1440-light-plain") await verifyTagFlows(page, server, projectId, tags);
     assert.deepEqual(errors, [], "No renderer errors");
     assert.equal(server.stubModelCalls.length, 0);
-    console.log(JSON.stringify({ result: "ASSERTIONS_PASS", case: cell, coverage: before ? "baseline" : "TG-07", flows: !before && cell === "1440-light-plain" ? "TG-01,TG-02,TG-03,TG-04,TG-05,CAS,deleted-tag" : "visual", screenshots: 13, directory: shots }));
+    console.log(JSON.stringify({ result: "ASSERTIONS_PASS", case: cell, coverage: before ? "baseline" : "TG-07", flows: !before && cell === "1440-light-plain" ? "TG-01,TG-02,TG-03,TG-04,TG-05,CAS,deleted-tag,picker-row-manage" : "visual", screenshots: before ? 16 : 17, directory: shots }));
   } catch (error) {
     console.log("CASE_FAILURE", await page.locator("body").innerText());
     await page.screenshot({ path: join(shots, `${before ? "before" : "after"}-${cell}-failure.png`) });

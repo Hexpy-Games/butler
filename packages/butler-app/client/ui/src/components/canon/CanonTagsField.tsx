@@ -2,7 +2,7 @@ import { useState } from "react";
 import { createCanonTag, type CanonTag, type CanonTagExists, type EpicTag } from "@/app/canonApi.ts";
 import { apiErrorCode } from "@/app/api.ts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { Field, FieldLabel, OverflowActionMenu, Stack, Tag } from "@/butler-ds";
+import { DropdownMenuItem, Field, FieldLabel, Stack, Tag } from "@/butler-ds";
 import { useCanonTags } from "./useCanonTags.ts";
 import { CanonTagChooser } from "./CanonTagChooser.tsx";
 import { CanonTagManageDialog, type TagAction } from "./CanonTagManageDialog.tsx";
@@ -37,19 +37,19 @@ export function CanonTagsField({ projectId, value, onChange, disabled }: {
   return <Field data-test-class="canon-tags-field">
     <FieldLabel>{copy.label}</FieldLabel>
     <Stack align="row" gap="xs" wrap>
-      {selected.map(tag => <Stack key={tag.id} align="row" cross="center" gap="none">
-        <Tag tone={tag.color} size="sm" onRemove={disabled || busy ? undefined : () => onChange(selected.filter(item => item.id !== tag.id))}
-          removeLabel={copy.removeTag(tag.name)}>{tag.name}</Tag>
-        {!disabled && !busy && tags.some(item => item.id === tag.id) && <OverflowActionMenu label={copy.menu(tag.name)} items={[
-          { label: copy.rename, onSelect: () => setManage({ tag: tags.find(item => item.id === tag.id)!, action: "rename" }) },
-          { label: copy.recolor, onSelect: () => setManage({ tag: tags.find(item => item.id === tag.id)!, action: "color" }) },
-          { label: copy.remove, variant: "destructive", onSelect: () => setManage({ tag: tags.find(item => item.id === tag.id)!, action: "delete" }) },
-        ]} />}
-      </Stack>)}
+      {selected.map(tag => {
+        const known = tags.find(item => item.id === tag.id);
+        return <Tag key={tag.id} tone={tag.color} size="sm" onRemove={disabled || busy ? undefined : () => onChange(selected.filter(item => item.id !== tag.id))}
+          removeLabel={copy.removeTag(tag.name)} editLabel={copy.menu(tag.name)} editMenu={!disabled && !busy && known ? <>
+            <DropdownMenuItem onSelect={() => setManage({ tag: known, action: "rename" })}>{copy.rename}</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setManage({ tag: known, action: "color" })}>{copy.recolor}</DropdownMenuItem>
+            <DropdownMenuItem variant="destructive" onSelect={() => setManage({ tag: known, action: "delete" })}>{copy.remove}</DropdownMenuItem>
+          </> : undefined}>{tag.name}</Tag>;
+      })}
     </Stack>
     <CanonTagChooser tags={tags} value={selected.map(tag => tag.id)} disabled={disabled || busy}
       onChange={ids => onChange(ids.map(id => tags.find(tag => tag.id === id) ?? selected.find(tag => tag.id === id)!))}
-      onCreate={name => void create(name)} />
+      onCreate={name => void create(name)} onManage={(tag, action) => setManage({ tag, action })} />
     {manage && <CanonTagManageDialog key={`${manage.tag.id}-${manage.action}`} {...manage} onClose={() => setManage(null)} onRefresh={refresh}
       onDeleted={() => onChange(selected.filter(tag => tag.id !== manage.tag.id))} />}
   </Field>;
