@@ -141,3 +141,4 @@ worker_delegation_plan_mode_required
 worker_plan_action_dependency_incomplete
 worker_plan_action_missing
 worker_plan_action_not_executable
+worker_start_failed

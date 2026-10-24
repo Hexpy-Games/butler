@@ -10,6 +10,7 @@ mod selection;
 #[cfg(test)]
 pub(crate) mod tests;
 mod worker;
+mod worker_continuation;
 
 pub use control::{SubsessionCancelRequest, SubsessionDirectionRequest, SubsessionResumeRequest};
 
@@ -76,6 +77,10 @@ pub struct WorkerProfile {
 
 /// Reads configured worker profiles.
 pub trait WorkerProfileReader: Send + Sync {
+    /// The configured per-parent Worker concurrency limit.
+    fn max_simultaneous_workers(&self) -> PortFuture<'_, u64> {
+        Box::pin(async { Ok(10) })
+    }
     /// Every configured profile.
     fn list(&self) -> PortFuture<'_, Vec<WorkerProfile>>;
     /// The profile with `profile_id`, or the default profile.
@@ -125,6 +130,8 @@ pub struct SubsessionService {
     profiles: Arc<dyn WorkerProfileReader>,
     work: Arc<DurableWorkService>,
     now: Arc<dyn Fn() -> String + Send + Sync>,
+    worker_cap: Arc<std::sync::atomic::AtomicU64>,
+    worker_cap_error_logged: Arc<std::sync::atomic::AtomicBool>,
     changes: tokio::sync::broadcast::Sender<(String, String)>,
 }
 
@@ -145,6 +152,8 @@ impl SubsessionService {
             profiles,
             work,
             now,
+            worker_cap: Arc::new(std::sync::atomic::AtomicU64::new(10)),
+            worker_cap_error_logged: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             changes: tokio::sync::broadcast::channel(256).0,
         }
     }
@@ -297,8 +306,15 @@ impl SubsessionService {
         else {
             return Ok(None);
         };
-        self.ensure_child_binding(&existing).await?;
+        self.prepare_child_binding(&existing).await?;
         self.replay(&existing).await?;
+        if existing.packet.child_role == ChildRole::Worker {
+            return self
+                .repository
+                .by_delegation(delegation_id.to_owned())
+                .await
+                .map_err(BtccError::from);
+        }
         Ok(Some(existing))
     }
 
@@ -318,8 +334,18 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?
             .ok_or_else(|| error(BtccCode::SubsessionPersistFailed))?;
-        self.ensure_child_binding(&stored).await?;
+        self.prepare_child_binding(&stored).await?;
         self.replay(&stored).await?;
+        if stored.packet.child_role == ChildRole::Worker {
+            self.notify_execution_changed(&stored.child_session_id)
+                .await?;
+            return self
+                .repository
+                .by_delegation(stored.delegation_id)
+                .await
+                .map_err(BtccError::from)?
+                .ok_or_else(|| error(BtccCode::SubsessionPersistFailed));
+        }
         Ok(stored)
     }
 
@@ -402,6 +428,9 @@ impl SubsessionService {
         &self,
         stored: &crate::btcc::StoredSubsessionDelegation,
     ) -> Result<(), BtccError> {
+        if stored.packet.child_role == ChildRole::Worker {
+            return Box::pin(self.admit_waiting(&stored.parent_session_id)).await;
+        }
         let intent = stored
             .dispatch_intent
             .as_ref()

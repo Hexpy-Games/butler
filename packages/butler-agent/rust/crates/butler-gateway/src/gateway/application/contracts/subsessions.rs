@@ -8,6 +8,11 @@ pub struct AppWorkerActivitySourcePage {
 }
 
 pub trait AppSubsessionPort: Send + Sync {
+    /// Revisit waiting Worker dispatches after a settings mutation.
+    fn worker_settings_changed(&self) -> ApplicationFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
+
     /// Parent/child identities whose durable execution projection changed.
     fn changes(&self) -> Option<tokio::sync::broadcast::Receiver<(String, String)>> {
         None

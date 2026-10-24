@@ -432,6 +432,7 @@ export const enUsCopy: AppCopy = {
   },
   guided: {
     workerStatus: {
+      waiting: "Waiting",
       orienting: "Thinking", planning: "Planning", verifying: "Reviewing", reporting: "Reporting",
       complete: "Complete", blocked: "Blocked", failed: "Failed", cancelled: "Cancelled",
       recoverable: "Ready to resume", executing: "Working", approval: "Awaiting approval",
@@ -1609,7 +1610,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     workerProfilesPanel: {
       add: "Add Worker profile",
       addLimitReached: "You can register up to 12 worker profiles.",
-      maxSimultaneousWorkers: "Max simultaneous Workers",
+      maxSimultaneousWorkers: "Max workers per task",
     },
     wallpaper: {
       moduleInvalid: "That wallpaper file isn't valid.", imageUnsupported: "JPG, PNG or WebP only.", imageTooLarge: "That image is too large.",

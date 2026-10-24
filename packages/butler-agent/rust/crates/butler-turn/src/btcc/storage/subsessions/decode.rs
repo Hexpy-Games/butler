@@ -19,6 +19,7 @@ struct RawDelegation {
     root_work_id: String,
     packet_json: String,
     dispatch_intent_json: Option<String>,
+    dispatch_state: Option<String>,
     anchor_message_id: String,
     ordinal: i64,
     safe_title: String,
@@ -41,6 +42,7 @@ fn raw_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RawDelegation> {
         ordinal: row.get(11)?,
         safe_title: row.get(12)?,
         created_at: row.get(13)?,
+        dispatch_state: row.get(14)?,
     })
 }
 
@@ -63,6 +65,11 @@ fn decode(raw: &RawDelegation) -> Result<StoredSubsessionDelegation, serde_json:
         root_work_id: raw.root_work_id.clone(),
         packet: serde_json::from_value::<SubsessionPacket>(packet)?,
         dispatch_intent,
+        dispatch_state: match raw.dispatch_state.as_deref() {
+            Some("pending") => super::SubsessionDispatchState::Pending,
+            Some("enqueued") => super::SubsessionDispatchState::Enqueued,
+            _ => super::SubsessionDispatchState::Inactive,
+        },
         anchor_message_id: raw.anchor_message_id.clone(),
         ordinal: raw.ordinal,
         safe_title: raw.safe_title.clone(),
@@ -161,36 +168,84 @@ pub(super) fn list(
 pub(super) fn pending(
     db: &mut rusqlite::Connection,
 ) -> Result<Vec<StoredSubsessionDelegation>, StorageError> {
-    let mut pending = Vec::new();
-    for raw in query_raw(
+    dispatch_candidates(
         db,
-        "WHERE d.dispatch_state='pending' ORDER BY r.created_at",
-        [],
-    )? {
+        "WHERE d.dispatch_state='pending' ORDER BY d.created_at,d.rowid",
+    )
+}
+
+pub(super) fn dispatch_candidates(
+    db: &mut rusqlite::Connection,
+    filter: &str,
+) -> Result<Vec<StoredSubsessionDelegation>, StorageError> {
+    let mut pending = Vec::new();
+    for raw in query_raw(db, filter, [])? {
         match decode_or_report(&raw) {
-            Some(stored) => pending.push(stored),
-            None => close_undecodable(db, &raw)?,
+            Some(stored)
+                if stored.packet.child_role != crate::btcc::ChildRole::Worker
+                    || dispatchable(db, &stored)? =>
+            {
+                pending.push(stored);
+            }
+            _ => {
+                let tx = db.transaction().map_err(StorageError::sqlite)?;
+                close_undecodable(&tx, &raw)?;
+                tx.commit().map_err(StorageError::sqlite)?;
+            }
         }
     }
     Ok(pending)
 }
 
-fn close_undecodable(
-    db: &mut rusqlite::Connection,
-    raw: &RawDelegation,
-) -> Result<(), StorageError> {
-    let tx = db.transaction().map_err(StorageError::sqlite)?;
-    tx.execute(
+/// Validate inside admission's transaction so a damaged FIFO head cannot block peers.
+pub(super) fn admission_candidate(
+    db: &rusqlite::Connection,
+    relation: &str,
+) -> Result<Option<StoredSubsessionDelegation>, StorageError> {
+    let raw = db
+        .query_row(
+            &format!("{SELECT} WHERE r.relation_id=?1"),
+            [relation],
+            raw_row,
+        )
+        .map_err(StorageError::sqlite)?;
+    if let Some(stored) = decode_or_report(&raw)
+        && dispatchable(db, &stored)?
+    {
+        return Ok(Some(stored));
+    }
+    close_undecodable(db, &raw)?;
+    Ok(None)
+}
+
+fn dispatchable(
+    db: &rusqlite::Connection,
+    stored: &StoredSubsessionDelegation,
+) -> Result<bool, StorageError> {
+    if stored.dispatch_intent.is_some() {
+        return Ok(true);
+    }
+    db.query_row(
+        super::worker_admission::FIRST_ENDED,
+        [&stored.relation_id],
+        |r| r.get(0),
+    )
+    .map_err(StorageError::sqlite)
+}
+
+fn close_undecodable(db: &rusqlite::Connection, raw: &RawDelegation) -> Result<(), StorageError> {
+    db.execute(
         "INSERT OR IGNORE INTO btcc_steward_results (result_id,relation_id,task_id,child_session_id,child_turn_id,status,code,summary,acceptance_evidence_json,changed_artifacts_json,created_at) VALUES (?1,?2,?3,?4,?5,'failed','delegation_context_incomplete','The delegation record is unreadable.','[]','[]',strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
         params![format!("result-unreadable-{}", raw.relation_id), raw.relation_id, raw.task_id, raw.child_session_id, raw.child_turn_id],
     )
     .map_err(StorageError::sqlite)?;
-    tx.execute(
+    db.execute(
         "UPDATE btcc_subsession_delegations SET dispatch_state=NULL WHERE delegation_id=?1",
         [&raw.delegation_id],
     )
     .map_err(StorageError::sqlite)?;
-    tx.commit().map_err(StorageError::sqlite)
+    db.execute("UPDATE btcc_subsession_directions SET status='applied',applied_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE relation_id=?1 AND status='pending' AND EXISTS (SELECT 1 FROM btcc_session_relations WHERE relation_id=?1 AND activity_role='worker')", [&raw.relation_id]).map_err(StorageError::sqlite)?;
+    Ok(())
 }
 
 /// The decoded row, or `None` after a diagnostic.
