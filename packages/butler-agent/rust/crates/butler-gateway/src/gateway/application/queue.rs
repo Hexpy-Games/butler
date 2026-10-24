@@ -158,15 +158,27 @@ pub(super) fn reserve(
 /// Whether a claim waits for the messages queued before it.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum ClaimOrder {
-    /// First in, first out: a message sent to a paused queue runs after the
-    /// messages queued before it.
+    /// Results first, FIFO within each kind. New user input resumes a paused
+    /// queue after its earlier user messages.
     Fifo,
     /// A retry runs its earlier turn again now.
     Immediate,
 }
 
+pub(super) const CLAIM_SQL: &str =
+    "UPDATE session_queued_messages SET state='dispatching', claim_id=?1, \
+               claim_owner=?2, claimed_at=?3, lease_expires_at=?4, updated_at=?3 \
+             WHERE id=?5 AND chat_id=?6 AND state='queued'
+               AND NOT EXISTS (SELECT 1 FROM session_queued_messages active
+                 WHERE active.chat_id=?6 AND active.state='dispatching')
+               AND (?7=0 OR id=(SELECT next.id FROM session_queued_messages next
+                 WHERE next.chat_id=?6 AND next.state='queued'
+                 ORDER BY CASE WHEN json_valid(next.control_resolution_json)
+                   THEN json_type(next.control_resolution_json,'$.subsession_result') IS 'object'
+                   ELSE 0 END DESC,next.rowid LIMIT 1))";
+
 /// Claims a queued message for dispatch when nothing in its session is
-/// dispatching and, for a FIFO claim, no older message waits.
+/// dispatching and, for a FIFO claim, no result or older peer waits.
 pub(super) fn claim(
     connection: &Connection,
     claim: &QueueClaim,
@@ -176,12 +188,7 @@ pub(super) fn claim(
 ) -> Result<Option<QueueClaim>, AppStorageError> {
     let changed = connection
         .execute_cached(
-            "UPDATE session_queued_messages SET state='dispatching', claim_id=?1, \
-               claim_owner=?2, claimed_at=?3, lease_expires_at=?4, updated_at=?3 \
-             WHERE id=?5 AND chat_id=?6 AND state='queued' AND NOT EXISTS (\
-               SELECT 1 FROM session_queued_messages active \
-               WHERE active.chat_id=?6 AND (active.state='dispatching' OR (?7 \
-                 AND active.state='queued' AND active.rowid < session_queued_messages.rowid)))",
+            CLAIM_SQL,
             params![
                 claim.claim_id,
                 claim.claim_owner,

@@ -10,8 +10,8 @@ use crate::gateway::application::{
     monitoring::usage::SCHEDULE_TURN_SQL,
     progress_view::LIVE_ROWS_SQL,
     projection::HAS_KIND_SQL,
-    queue::RESTORE_CLAIM_SQL,
-    queue_dispatcher::{LEASE_DEADLINE_SQL, QUEUED_CHATS_SQL},
+    queue::{CLAIM_SQL, RESTORE_CLAIM_SQL},
+    queue_dispatcher::{LEASE_DEADLINE_SQL, QUEUED_CHATS_SQL, QUEUED_ROWS_SQL},
     recovery::DISPATCHING_SQL,
     retry::RUNTIME_FAULT_SQL,
     turn_cancellation::SENT_CANCELS_SQL,
@@ -73,6 +73,7 @@ pub(super) fn hot_queries_use_their_indexes() {
     for sql in [QUEUED_CHATS_SQL, LEASE_DEADLINE_SQL, DISPATCHING_SQL] {
         assert_uses(&connection, sql, QUEUE_INDEX);
     }
+    result_order_uses_index(&connection);
     assert_uses(&connection, &queued_sql(), "app_automation_runs_queued_idx");
     assert_uses(
         &connection,
@@ -146,4 +147,42 @@ fn assert_schedule_matches(db: &Connection) {
         let actual: bool = statement.query_row([turn], |r| r.get(0)).unwrap();
         assert_eq!(actual, expected, "{turn}");
     }
+}
+
+/// Retained user rows cannot fill the dispatch window ahead of newer results.
+fn result_order_uses_index(db: &Connection) {
+    let claimed = plan(db, CLAIM_SQL);
+    assert!(
+        claimed.contains("session_queued_messages_result_order_idx"),
+        "{claimed}"
+    );
+    assert!(!claimed.contains("TEMP B-TREE"), "{claimed}");
+    let ordered = plan(db, QUEUED_ROWS_SQL);
+    assert!(
+        ordered.contains("session_queued_messages_result_order_idx"),
+        "{ordered}"
+    );
+    assert!(!ordered.contains("TEMP B-TREE"), "{ordered}");
+    db.execute_batch(r#"INSERT INTO chats(id,title,kind,created_at,updated_at) VALUES('parent','Parent','chat','now','now');
+        WITH RECURSIVE n(i) AS (VALUES(0) UNION ALL SELECT i+1 FROM n WHERE i<24)
+        INSERT INTO session_queued_messages(id,chat_id,text,attachments_json,controls_json,control_resolution_json,state,created_at,updated_at)
+        SELECT 'user-'||i,'parent','Request','[]','{}','{}','queued','now','now' FROM n;
+        INSERT INTO session_queued_messages(id,chat_id,text,attachments_json,controls_json,control_resolution_json,state,created_at,updated_at)
+        VALUES('result-1','parent','Result','[]','{}','{"subsession_result":{}}','queued','now','now'),
+              ('result-2','parent','Result','[]','{}','{"subsession_result":{}}','queued','now','now');"#)
+        .unwrap();
+    let rows = db
+        .prepare(QUEUED_ROWS_SQL)
+        .unwrap()
+        .query_map(rusqlite::params!["parent", 20], |row| {
+            row.get::<_, String>(0)
+        })
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let expected: Vec<_> = ["result-1".to_owned(), "result-2".to_owned()]
+        .into_iter()
+        .chain((0..18).map(|i| format!("user-{i}")))
+        .collect();
+    assert_eq!(rows, expected);
 }

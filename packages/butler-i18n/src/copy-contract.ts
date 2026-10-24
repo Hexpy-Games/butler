@@ -291,6 +291,8 @@ interface ConversationCopy {
   work: ConversationWorkCopy;
   stoppedStatus: string;
   attachmentUnavailable: string;
+  /** File-type label on an attachment tile whose extension is unknown. */
+  attachmentFileType: string;
   fileChanges: {
     regionLabel: string;
     title: string;
@@ -325,6 +327,7 @@ export interface BrowserCopy {
     openInNewTab: string; openInButler: string; openInBrowser: (name: string) => string; copyLink: string;
     copy: string; selectAll: string; paste: string;
   };
+  siteData: { title: string; label: string; description: string; clear: string; confirmTitle: string; confirmMessage: string; items: string; itemList: string; kept: string; cleared: string; failed: string; desktopOnly: string };
   history: { erase: string; title: string; search: string; clear: string; butlerOnly: string; empty: string; hour: string; today: string; week: string; all: string; suggestions: string; };
   tabCount: string; tabMoved: string; agentControl: string; handBack: string; stills: string; still: string; stillPending: string; stillUnavailable: string; stillFailure: Record<string, string>;
   title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string;
@@ -441,7 +444,7 @@ export interface AppCopy {
     missingSource: string;
     loaded: (loaded: number, total: number) => string;
     results: string; noResults: string;
-    overview: string; work: string; materials: string; history: string; statistics: string;
+    overview: string; work: string; board: string; materials: string; history: string; statistics: string;
     position: string; remaining: string; completed: string; open: string; blocked: string;
     abandoned: string; unknown: string; registered: string;
     unbound: string;
@@ -1181,6 +1184,9 @@ export interface AppCopy {
     save: string;
     saved: string;
     saveFailed: string;
+    openInApp: string;
+    openInAppBlocked: string;
+    openInAppFailed: string;
     loading: string;
     unsupported: string;
     loadFailed: string;

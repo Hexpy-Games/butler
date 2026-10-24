@@ -27,6 +27,15 @@ The scroller opts into the shared scroll-fade primitive (`useScrollEdges` plus
 at a resting edge and none when content fits. Pass `orientation="x"` for a
 horizontal scroller; the fade follows the scrolling axis.
 
+## Scrollbar Lane
+
+The frame bleeds a scrollbar lane past the content's inline end. An overlay
+scrollbar takes no layout width, so the content gives the lane back and the
+scrollbar floats in it; a classic (always-shown) scrollbar is its own lane, so
+nothing more is reserved. The first ScrollArea in a document measures the thin
+scrollbar once and publishes it as `--scrollbar-width` on the root (`0px` for
+overlay scrollbars); nothing runs while idle or on scroll.
+
 ## Focus Rings
 
 The frame keeps `--focus-ring-room` of paint room on every edge (it bleeds past

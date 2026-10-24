@@ -3,6 +3,7 @@ import { browserRandomId } from "./id.ts";
 
 interface DashboardViewState {
   tab?: string;
+  activationRevision?: number;
   refreshRevision?: number;
   scrollPositions?: Record<string, number>;
   loadedCounts?: Record<string, number>;

@@ -18,6 +18,8 @@ mod startup;
 mod stop_signal;
 mod structured_logs;
 pub(crate) use startup::STARTUP_TIMEOUT;
+#[cfg(feature = "e2e-fixtures")]
+mod result_hold;
 mod storage_health;
 mod support;
 use crate::host::{AgentRuntime, ResolvedInstallation, ServiceConfiguration, SystemIdentity};
@@ -248,7 +250,7 @@ async fn serve(
                 queue: queue.clone(),
                 progress: progress.clone(),
                 config,
-                subsessions: &runtime.subsessions.repository(),
+                subsessions: &runtime.subsessions,
                 parent_client: &parent_client,
                 app_endpoint: &app_endpoint,
                 readiness: &readiness,

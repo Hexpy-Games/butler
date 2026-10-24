@@ -77,11 +77,11 @@ def external_path(root, rust, base, value):
 
 
 @lru_cache(maxsize=None)
-def external_inputs(repository):
+def external_inputs(repository, crates=(RUST,)):
     root = Path(repository).resolve()
     rust = root / RUST
     inputs = set()
-    for source in rust.rglob('*.rs'):
+    for source in (path for crate in crates for path in (root / crate).rglob('*.rs')):
         text = source.read_text(encoding='utf-8')
         for argument in include_arguments(text, source):
             resolved = include_path(argument, source, root)
@@ -109,6 +109,7 @@ def external_inputs(repository):
     return frozenset(inputs)
 
 
-def consumes(path, repository):
+def consumes(path, repository, crates=(RUST,)):
+    """Whether Rust sources under `crates` read this path outside the workspace."""
     return any(path == item or path.startswith(item + '/')
-               for item in external_inputs(str(repository)))
+               for item in external_inputs(str(repository), tuple(crates)))

@@ -16,13 +16,19 @@ pub(super) fn anthropic(
     body.insert("model".into(), config.wire_model.clone().into());
     body.insert(
         "max_tokens".into(),
-        request
-            .usage_attribution
-            .and_then(|value| value.requested_output_tokens)
-            .and_then(|value| value.to_string().parse::<u64>().ok())
-            .filter(|value| *value > 0)
-            .unwrap_or(4096)
-            .into(),
+        // Messages requires a limit; without a requested one, the catalog's.
+        [
+            request
+                .usage_attribution
+                .and_then(|value| value.requested_output_tokens),
+            config.metadata.max_output_tokens,
+        ]
+        .into_iter()
+        .flatten()
+        .filter_map(|value| value.to_string().parse::<u64>().ok())
+        .find(|value| *value > 0)
+        .unwrap_or(4096)
+        .into(),
     );
     if let Some(instructions) = request
         .instructions

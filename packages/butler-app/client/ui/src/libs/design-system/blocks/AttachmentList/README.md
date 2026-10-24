@@ -1,7 +1,8 @@
 # AttachmentList
 
 ## What is this component
-A responsive list of file attachments.
+A responsive list of file attachments: square tiles (`variant="tiles"`), a
+list with sizes, or removable chips.
 
 ## When to use this component
 Use it when a composer, message, or form needs to show attached files.
@@ -23,11 +24,35 @@ Set `blockedReason` on an item the current context cannot send (an image after
 switching to a text-only model, or one whose image support is unknown). The chip stays and stays removable; it dims
 and its name tooltip shows the few-word reason.
 
+## Tiles
+`variant="tiles"` shows each file as a square face: a picture's cover
+thumbnail (`thumbnail.src`, lazy and async decoded, fading in once loaded), a
+video's first frame (`video.src`, metadata only, muted, never playing in the
+tile) with a play badge and its length, or the file's glyph, `extension`
+label, name and (on `wrap`) size. A picture that fails to load shows the file
+face.
+
+- `tileLayout="row"` (composer): 64px tiles in one row that scrolls sideways
+  under the shared edge fade, keeping `--focus-ring-room`. A new tile grows
+  in; a removed one shrinks out and the rest slide into the gap (reduced
+  motion: fades only). The ✕ shows on hover and focus, always on touch.
+- `tileLayout="wrap"` (a sent message): 96px tiles, end-aligned and wrapping.
+  Every file shows; the list is never truncated.
+
+`blockedReason` greys a tile and names the reason in its tooltip.
+
+## Opening a file
+`onOpen(item)` opens a file inside the app (the image viewer over the
+conversation, or the inspector). With it the tile (or the list/chip name) is a
+button and `href` is not used; without it a `href` stays a link. Product
+attachments always pass `onOpen`: a link would leave the conversation.
+
 ## Who can use this component
 Any product container that owns attachment data.
 
 ## Best practice
-Format file sizes and download URLs outside the design system.
+Format file sizes and download URLs outside the design system. The container
+also maps the extension label (a localized word for an unknown type).
 Capability feedback copy is terse and non-intrusive: the disabled state plus a
 few-word tooltip, and at most a brief transient toast for a refused drop or
 paste. No banners, inline paragraphs, persistent notices, or why/how
@@ -43,4 +68,4 @@ They lead the list in one wrapping row, removable when `onRemove` is set
 (`removeLabel` names the button) and read-only in sent messages.
 
 ## Tags
-attachment, file, composer, message
+attachment, file, composer, message, tile, thumbnail, video

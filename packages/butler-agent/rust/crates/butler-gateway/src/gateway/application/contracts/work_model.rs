@@ -52,7 +52,19 @@ pub enum AppWorkModelScope {
     Session(String),
 }
 
+pub const APP_PERSON_ID: &str = "app-user";
+
+#[derive(Clone, Debug)]
+pub enum AppCanonOperation {
+    Link { work_id: String, session_id: String },
+    Pending { after: String },
+    Applied { op_id: String, revision: i64 },
+}
+
 pub trait AppWorkModelPort: Send + Sync + 'static {
+    fn canon_operation(&self, _operation: AppCanonOperation) -> ApplicationFuture<Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn execute(&self, _request: AppWorkModelRequest) -> ApplicationFuture<Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }

@@ -147,6 +147,8 @@ pub trait AppBranchConversationReader: Send + Sync + 'static {
 pub struct AppBranchSummaryInput {
     pub text: String,
     pub model_ref: String,
+    /// Runtime session of the source chat the summary is made for.
+    pub usage_session_id: String,
 }
 
 #[derive(Clone, Debug)]
@@ -342,6 +344,7 @@ pub struct AppApplicationDependencies {
     pub work_model: Arc<dyn AppWorkModelPort>,
     pub branch_conversations: Arc<dyn AppBranchConversationReader>,
     pub session_title_generator: Arc<dyn AppSessionTitleGenerator>,
+    pub session_topic_classifier: Arc<dyn AppSessionTopicClassifier>,
     pub branch_summarizer: Arc<dyn AppBranchSummarizer>,
     pub setup: Arc<dyn super::AppSetupPort>,
 }
@@ -395,6 +398,10 @@ pub trait AppContextReadPort: Send + Sync {
 
 mod session_titles;
 pub use session_titles::{AppSessionTitleGenerator, AppSessionTitleInput};
+mod session_topics;
+pub use session_topics::{AppSessionTopicClassifier, AppSessionTopicInput};
+mod smart_group_prompt;
+pub use smart_group_prompt::SMART_GROUP_INSTRUCTIONS;
 mod subsessions;
 pub use subsessions::{
     AppSessionViewPage, AppSubsessionPort, AppTaskGraphQuery, AppWorkerActivitySourcePage,

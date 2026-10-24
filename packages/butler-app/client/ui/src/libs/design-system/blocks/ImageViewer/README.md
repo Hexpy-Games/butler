@@ -2,7 +2,9 @@
 
 ## What is this block
 `ImageViewer` is the app's one lightbox: a modal that shows one picture of a
-set large on a dimmed scrim (`--image-viewer-overlay-bg`, dark in both themes).
+set large on a scrim in the theme's surface tone (`--image-viewer-overlay-bg`,
+light or dark with the theme) that blurs the app behind it
+(`--image-viewer-overlay-filter`); the picture lifts off it on `--shadow-card`.
 
 - a bar: the position (“2 / 5”) on the start side; the container's `actions`
   (IconButtons) and Close on the end side, on tinted-glass capsules
@@ -11,12 +13,16 @@ set large on a dimmed scrim (`--image-viewer-overlay-bg`, dark in both themes).
 - the caption: the visible line and the source line (favicon, “site · read
   time”)
 
+An item with `kind: "video"` plays on the stage instead: a native `<video>`
+with controls, `preload="metadata"`, never autoplaying; its focused controls
+keep the arrow keys.
+
 `ImageViewerSurface` is the same layout without the modal; previews render it
 `contained` (its own scrim, a fixed height).
 
 ## When to use this block
 Any picture the user wants to see large: answer card pictures, gallery items,
-message images and activity screenshots. Pass the pictures of the same message
+message images and attachments (pictures and videos), and activity screenshots. Pass the pictures of the same message
 or block as `images`, so previous/next walks that set.
 
 ## Container vs Presenter

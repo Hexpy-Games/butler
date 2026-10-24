@@ -86,6 +86,8 @@ async fn canonical_write_query_read_args_reopens_original_scalar() {
         runtime_session_id: "runtime-1".into(),
         turn_id: "ct_exact".into(),
         project_id: Some("project-1".into()),
+        usage_root: None,
+        usage_role: None,
     };
     let query = ExactMemoryQuery::new(&root.clone(), 2);
     let memory = Arc::new(MemorySourceReader::new(

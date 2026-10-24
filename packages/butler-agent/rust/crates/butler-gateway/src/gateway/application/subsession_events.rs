@@ -6,6 +6,7 @@ use tokio::sync::broadcast::error::RecvError;
 use super::{AppApplication, events, service};
 
 pub(super) fn start(application: &AppApplication) {
+    super::canon_sidebar::start(application);
     super::task_graphs::start_events(application);
     super::work_model::start(application);
     let Some(mut changes) = application.dependencies.subsessions.changes() else {
@@ -13,6 +14,7 @@ pub(super) fn start(application: &AppApplication) {
     };
     let storage = application.storage.clone();
     let subscribers = application.subscribers.clone();
+    let queue_wake = application.queue_wake.clone();
     let clock = application.dependencies.identity_clock.clone();
     let shutdown = application.dependencies.service_shutdown.clone();
     tokio::spawn(async move {
@@ -21,6 +23,8 @@ pub(super) fn start(application: &AppApplication) {
                 () = shutdown.cancelled() => return,
                 change = changes.recv() => change,
             };
+            let lagged = matches!(&change, Err(RecvError::Lagged(_)));
+            let parent = change.as_ref().ok().map(|(parent, _)| parent.clone());
             let (kind, payload) = match change {
                 Ok((parent, child)) => (
                     "subsession.changed",
@@ -31,6 +35,18 @@ pub(super) fn start(application: &AppApplication) {
                 Err(RecvError::Lagged(_)) => ("stream.reconcile_required", json!({})),
                 Err(RecvError::Closed) => return,
             };
+            let chat = match parent {
+                Some(parent) => storage
+                    .read(move |db| super::sessions::identity::resolve_owner(db, &parent))
+                    .await
+                    .unwrap_or(None),
+                None => None,
+            };
+            if (chat.is_some() || lagged)
+                && let Err(error) = queue_wake.wake(chat).await
+            {
+                butler_core::diagnostic!("[gateway] subsession queue wake failed: {error}");
+            }
             let subscribers = subscribers.clone();
             let now = clock.now_iso();
             if let Err(error) = storage

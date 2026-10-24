@@ -14,6 +14,66 @@
   padding-bottom: var(--space-md);
 }
 
+/* Pointer devices: the scrollbar shows only while the pointer is over the
+   board or focus is inside it, and only when the lanes overflow. It is a
+   classic (non-overlay) bar so it can show without scrolling; its lane is
+   always reserved under the lanes (overflow-x: scroll, padding plus lane =
+   --space-md as before), so it never covers a card and revealing it moves
+   nothing. The mask gutter keeps the edge fades off it. Touch devices keep
+   the native scrollbar. */
+@media (hover: hover) and (pointer: fine) {
+  .board[data-scroll="true"] {
+    --kanban-scrollbar-size: 8px;
+    --scroll-fade-gutter: var(--kanban-scrollbar-size);
+
+    overflow-x: scroll;
+    padding-bottom: calc(var(--space-md) - var(--kanban-scrollbar-size));
+    /* Standard scrollbar properties (also inherited ones) turn the styled
+       bar below off. */
+    scrollbar-color: auto;
+    scrollbar-width: auto;
+    transition: --kanban-scrollbar-alpha var(--motion-fast)
+      var(--motion-ease-standard);
+  }
+
+  .board[data-scroll="true"][data-overflowing="true"]:is(
+      :hover,
+      :focus-within
+    ) {
+    --kanban-scrollbar-alpha: 40%;
+  }
+
+  .board[data-scroll="true"]::-webkit-scrollbar {
+    width: var(--kanban-scrollbar-size);
+    height: var(--kanban-scrollbar-size);
+  }
+
+  .board[data-scroll="true"]::-webkit-scrollbar-track,
+  .board[data-scroll="true"]::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  .board[data-scroll="true"]::-webkit-scrollbar-thumb {
+    --kanban-scrollbar-alpha: inherit;
+
+    border: 2px solid transparent;
+    border-radius: var(--radius-pill);
+    background: color-mix(
+        in srgb,
+        var(--text-tertiary) var(--kanban-scrollbar-alpha),
+        transparent
+      )
+      content-box;
+  }
+}
+
+/* The thumb's strength; registered so it fades. */
+@property --kanban-scrollbar-alpha {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
+}
+
 .lane {
   min-width: 0;
   transition:
@@ -219,7 +279,8 @@
 @media (prefers-reduced-motion: reduce) {
   .lane,
   .item,
-  .item > .card {
+  .item > .card,
+  .board[data-scroll="true"] {
     transition: none;
   }
 
