@@ -23,10 +23,14 @@ export function liveDelegationStub(): { options: NativeAppServerOptions; whenHel
     options: {
       config: { user: { name: "Smoke", language: "en" } },
       stubReply: async request => {
-        const input = JSON.stringify([...request.messages].reverse().find(message =>
-          typeof message === "object" && message !== null && (message as { role?: string }).role === "user"));
-        const isChild = input.includes("role: steward");
-        if (!request.stream || (!isChild && !input.includes(objective))) return "{}";
+        const users = request.messages.filter(message =>
+          typeof message === "object" && message !== null && (message as { role?: string }).role === "user").map(message => JSON.stringify(message));
+        const input = users.at(-1) ?? "";
+        // The steward's scope opens its Turn; later continuation prompts in that Turn do not repeat it.
+        const isChild = users.some(message => message.includes("role: steward"));
+        // Background rounds (title, smart group) stream the same text but offer no tools; only turns do.
+        const turn = Array.isArray(request.body.tools) && request.body.tools.length > 0;
+        if (!request.stream || !turn || (!isChild && !input.includes(objective))) return "{}";
         const step = isChild ? child++ : parent++;
         steps.set(request, { child: isChild, step });
         if (isChild && step >= 2 && !released) await new Promise<void>(done => {

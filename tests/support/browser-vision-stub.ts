@@ -22,7 +22,8 @@ export async function browserVisionStub(root: string, handler: NonNullable<Nativ
     const input = body.input as Array<Record<string, unknown>>;
     const messages = input.map(item => item.type === "function_call_output"
       ? { role: "tool", content: item.output, tool_call_id: item.call_id }
-      : item.type === "function_call" ? { role: "assistant", tool_calls: [item] } : item);
+      // Chat-shaped like the gateway stub's requests, so the same context checks read both.
+      : item.type === "function_call" ? { role: "assistant", tool_calls: [{ id: item.call_id, type: "function", function: { name: item.name, arguments: item.arguments } }] } : item);
     const call = { stream: body.stream === true, messages, body }; requests.push(call);
     const tool = Array.isArray(body.tools) && body.tools.length ? handler(call) : null;
     const id = `stub-${requests.length}`;
