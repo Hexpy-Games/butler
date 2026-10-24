@@ -1,5 +1,6 @@
 //! Source Work tool calls over the one bound durable Work service.
 
+mod canon;
 mod decode;
 mod view;
 
@@ -16,14 +17,20 @@ pub(crate) struct GuidedWorkTools {
     service: Arc<DurableWorkService>,
     scope: WorkTurnScope,
     child_tools: Option<Vec<String>>,
+    canon: butler_turn::btcc::BtccStorage,
 }
 
 impl GuidedWorkTools {
-    pub(crate) fn new(service: Arc<DurableWorkService>, scope: WorkTurnScope) -> Self {
+    pub(crate) fn new(
+        service: Arc<DurableWorkService>,
+        scope: WorkTurnScope,
+        canon: butler_turn::btcc::BtccStorage,
+    ) -> Self {
         Self {
             service,
             scope,
             child_tools: None,
+            canon,
         }
     }
 
@@ -164,7 +171,7 @@ impl GuidedWorkTools {
         match command {
             Command::Start(input) => self.service.start_work(input).await,
             Command::Continue(input) => self.service.continue_work(input).await,
-            Command::Replace(input) => self.service.replace_plan(input).await,
+            Command::Replace(input) => self.replace_canon_plan(input).await,
             Command::Checkpoint(input) => self.service.record_checkpoint(input).await,
             Command::Review(input) => self.service.record_review(input).await,
             Command::Disposition(input) => self.service.record_disposition(input).await,
@@ -173,6 +180,12 @@ impl GuidedWorkTools {
 }
 
 fn source_error(error: &BtccError) -> Value {
+    if matches!(
+        error.code(),
+        "canon_epic_refs_multiple" | "canon_epic_not_bound" | "canon_epic_link_conflict"
+    ) {
+        return json!({"code":error.code(),"message":error.message()});
+    }
     if error.code() == "work_transition_guard_unmet"
         && let Some(rest) = error.message().strip_prefix("Work cannot ")
         && let Some((requested, rest)) = rest.split_once(" from ")

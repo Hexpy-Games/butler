@@ -20,5 +20,8 @@ pub(super) fn create(
         runtime.clone(),
         runtime,
     ));
-    (project, Arc::new(AppCanon::new(storage.clone())))
+    (
+        project,
+        Arc::new(AppCanon::new(storage.clone(), ledger.clone())),
+    )
 }

@@ -351,10 +351,14 @@ impl GuidedTurnFactoryAdapter {
             turn.original_message.clone(),
         )?
         .with_capability_recovery(&phase.authorized_names, self.preparation.journal.clone());
-        let tools = GuidedWorkTools::new(self.preparation.work.clone(), scope.clone())
-            .with_child_tools(
-                (policy.role.as_str() != "butler").then(|| phase.authorized_names.clone()),
-            );
+        let tools = GuidedWorkTools::new(
+            self.preparation.work.clone(),
+            scope.clone(),
+            self.documents.canon_storage(),
+        )
+        .with_child_tools(
+            (policy.role.as_str() != "butler").then(|| phase.authorized_names.clone()),
+        );
         Ok((Arc::new(work), tools))
     }
 }

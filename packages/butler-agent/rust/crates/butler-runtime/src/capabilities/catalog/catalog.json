@@ -4999,7 +4999,7 @@
                 "minLength": 1
               },
               "default": [],
-              "description": "A small list of existing governing specification or document references. Use workspace-relative paths or stable document ids; do not invent references."
+              "description": "A small list of existing governing specification or document references. Use workspace-relative paths or stable document ids; do not invent references. For Work on a canon epic bound to this conversation, include exactly that epic's canon:epic/<epic_id> and keep it in every revision; canon:spec/<node_id>@<revision> refs are optional context. A Work serves at most one epic."
             },
             "execution_mode": {
               "type": "string",
@@ -7544,7 +7544,7 @@
               "minLength": 1
             },
             "default": [],
-            "description": "A small list of existing governing specification or document references. Use workspace-relative paths or stable document ids; do not invent references."
+            "description": "A small list of existing governing specification or document references. Use workspace-relative paths or stable document ids; do not invent references. For Work on a canon epic bound to this conversation, include exactly that epic's canon:epic/<epic_id> and keep it in every revision; canon:spec/<node_id>@<revision> refs are optional context. A Work serves at most one epic."
           },
           "execution_mode": {
             "type": "string",

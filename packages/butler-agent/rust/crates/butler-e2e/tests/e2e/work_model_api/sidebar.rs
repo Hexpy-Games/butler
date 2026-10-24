@@ -316,3 +316,148 @@ async fn wma_sidebar_personal_order_preserves_canon() -> Result<(), HarnessError
     assert_eq!(malformed.status, 400);
     s.finish().await
 }
+
+#[tokio::test]
+async fn wma_sidebar_links_wait_for_creation_hook() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = Setup::new("WMA-SIDEBAR-HOOK-WAIT")?;
+    let (held, release) = hold_creation_hook(&setup)?;
+    let s = setup.start().await?;
+    // Release before the scenario shuts down, including assertion failures.
+    let release = HookRelease(release);
+    let project = project(&s).await?;
+    let work = create_epic(&s, &project, "Creation hook admission").await?;
+    {
+        let first = link(&s, &work["id"]);
+        tokio::pin!(first);
+        let held_wait = async {
+            while !held.exists() {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        };
+        tokio::select! {
+            result = &mut first => panic!("link returned before its creation hook completed: {result:?}"),
+            result = tokio::time::timeout(Duration::from_secs(20), held_wait) => {
+                result.map_err(|_| HarnessError("creation hook did not start".into()))?;
+            }
+        }
+        let second = link(&s, &work["id"]);
+        tokio::pin!(second);
+        let early = tokio::time::timeout(Duration::from_secs(1), async {
+            tokio::select! {
+                result = &mut first => result,
+                result = &mut second => result,
+            }
+        })
+        .await;
+        assert!(
+            early.is_err(),
+            "link returned while its creation hook was held: {early:?}"
+        );
+        std::fs::write(&release.0, b"")?;
+        let (first, second) = tokio::join!(first, second);
+        assert_eq!(first?["session_id"], second?["session_id"]);
+    }
+    drop(release);
+    s.finish().await
+}
+
+struct HookRelease(std::path::PathBuf);
+impl Drop for HookRelease {
+    fn drop(&mut self) {
+        let _ = std::fs::write(&self.0, b"");
+    }
+}
+
+fn hold_creation_hook(
+    setup: &Setup,
+) -> Result<(std::path::PathBuf, std::path::PathBuf), HarnessError> {
+    let held = setup.sandbox.home.join("hook-held");
+    let release = setup.sandbox.home.join("hook-release");
+    let extension = if butler_platform::command_sandbox::POSIX_SHELL {
+        "sh"
+    } else {
+        "cmd"
+    };
+    let fixture =
+        butler_e2e::e2e::binary::crate_root().join(format!("tests/e2e/hooks/hold.{extension}"));
+    let args = if extension == "sh" {
+        vec!["sh".to_owned(), fixture.to_string_lossy().into_owned()]
+    } else {
+        vec![
+            "cmd.exe".into(),
+            "/d".into(),
+            "/s".into(),
+            "/c".into(),
+            fixture.to_string_lossy().into_owned(),
+        ]
+    };
+    std::fs::write(
+        setup.sandbox.data.join("hooks.json"),
+        json!({
+            "version":1,"hooks":[{"id":"hold-session","event":"SessionStart",
+            "type":"command","args":args,"timeout_ms":60000,
+            "env":{"HOOK_HELD":held,"HOOK_RELEASE":release}}]
+        })
+        .to_string(),
+    )?;
+    Ok((held, release))
+}
+
+#[tokio::test]
+async fn wma_sidebar_different_intents_do_not_wait_for_creation_hook() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = Setup::new("WMA-SIDEBAR-INDEPENDENT-HOOK")?;
+    let (held, release) = hold_creation_hook(&setup)?;
+    // Admit an existing project session before holding A's creation hook.
+    std::fs::write(&release, b"")?;
+    let s = setup.start().await?;
+    let release = HookRelease(release);
+    let project = project(&s).await?;
+    let session = data(
+        s.gw.post("/sessions", json!({"kind":"project","project_id":project}))
+            .await?,
+        201,
+    );
+    let chat = &session["session"]["id"];
+    std::fs::remove_file(&held)?;
+    std::fs::remove_file(&release.0)?;
+    let a = create_epic(&s, &project, "Held creation").await?;
+    let b = create_epic(&s, &project, "Independent link").await?;
+    {
+        let first = link(&s, &a["id"]);
+        tokio::pin!(first);
+        let independent = async {
+            while !held.exists() {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            let linked = data(
+                s.gw.post(
+                    &format!("/canon/epics/{}/conversation", b["id"].as_str().unwrap()),
+                    json!({"session_id":chat}),
+                )
+                .await?,
+                200,
+            );
+            assert_eq!(linked["session_id"], *chat);
+            assert_eq!(linked["work"]["sessions"][0]["session_id"], *chat);
+            assert!(!release.0.exists());
+            Ok::<_, HarnessError>(())
+        };
+        tokio::select! {
+            result = &mut first => panic!("A returned while its hook was held: {result:?}"),
+            result = tokio::time::timeout(Duration::from_secs(20), independent) => {
+                result.map_err(|_| HarnessError("B waited for A's creation hook".into()))??;
+            }
+        }
+        std::fs::write(&release.0, b"")?;
+        let linked = first.await?;
+        assert_ne!(linked["session_id"], *chat);
+        assert_eq!(
+            linked["work"]["sessions"][0]["session_id"],
+            linked["session_id"]
+        );
+    }
+    drop(release);
+    s.finish().await
+}
