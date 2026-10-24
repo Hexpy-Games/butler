@@ -19,6 +19,7 @@ impl AppApplication {
         if input.bytes.len() > 24 * 1024 || input.mime_type.as_deref() != Some("image/jpeg") {
             return Err(GatewayApplicationError::internal());
         }
+        let dimensions = super::image_dimensions::read(&input.bytes);
         let name = format!("browser-step-{tab}.jpg");
         let query_tab = tab.clone();
         let prior = self
@@ -54,8 +55,8 @@ impl AppApplication {
                     .map_err(AppStorageError::sqlite)?;
                 let row = if exists > 0 {
                     db.execute(
-                        "UPDATE message_files SET safe_name=?2,size_bytes=?3,sha256=?4 WHERE id=?1",
-                        params![file.id, file.safe_name, file.size_bytes, file.sha256],
+                        "UPDATE message_files SET safe_name=?2,size_bytes=?3,sha256=?4,width=?5,height=?6 WHERE id=?1",
+                        params![file.id, file.safe_name, file.size_bytes, file.sha256, dimensions.map(|s| s.0), dimensions.map(|s| s.1)],
                     )
                     .map_err(AppStorageError::sqlite)?;
                     db.execute("UPDATE browser_stills SET tab_id=?2 WHERE file_id=?1", params![file.id, tab]).map_err(AppStorageError::sqlite)?;
@@ -66,7 +67,7 @@ impl AppApplication {
                         )
                     })
                 } else {
-                    let row = super::message_files::insert_uploaded(db, Some(&owner), &file)?;
+                    let row = super::message_files::insert_uploaded(db, Some(&owner), &file, dimensions)?;
                     db.execute("INSERT INTO browser_stills(file_id,owner_session_id,tab_id,created_at) SELECT id,owner_session_id,?2,created_at FROM message_files WHERE id=?1", params![file.id, tab]).map_err(AppStorageError::sqlite)?;
                     Ok(row)
                 }?;
