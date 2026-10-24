@@ -1,5 +1,5 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { Button, RefreshCcw, Stack } from "@/butler-ds";
+import { Button, RefreshCcw } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { LocalModelDiscoveryRequest } from "@/app/types.ts";
 import { LocalModelConfigForm } from "./LocalModelConfigForm";
@@ -39,7 +39,6 @@ export function LocalModelApiSection({
 
   return (
     <SettingsSection id="local-model-api" kind="form" title={copy.apiInfoTitle} description={copy.description}>
-      <Stack gap="md">
         <LocalModelConfigForm
           apiKey={apiKey}
           setApiKey={setApiKey}
@@ -60,7 +59,6 @@ export function LocalModelApiSection({
           <RefreshCcw size="md" />{" "}
           {discovering ? copy.discovering : copy.discoverModels}
         </Button>
-      </Stack>
     </SettingsSection>
   );
 }

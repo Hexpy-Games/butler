@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { appCopy } from "@/app/copy";
-import { Button, ButtonContainer, SettingsSection } from "@/butler-ds";
+import { Button, ButtonContainer, SettingsActionField, SettingsSection } from "@/butler-ds";
 import { openHistory } from "../browser/historyApi";
 import { HistoryClearDialog } from "../browser/HistoryClearDialog";
 export function BrowserHistorySection() {
   const [clear, setClear] = useState(false);
   return <SettingsSection id="browser-history" kind="form" title={appCopy.browser.history.title}>
-    <ButtonContainer size="sm" justify="end" data-setting-id="browser-history">
-      <Button size="sm" variant="ghost" onClick={() => openHistory("settings")}>{appCopy.browser.view}</Button>
-      <Button size="sm" variant="ghost" onClick={() => setClear(true)}>{appCopy.browser.history.erase}</Button>
-    </ButtonContainer>{clear && <HistoryClearDialog onClose={() => setClear(false)} />}
+    <SettingsActionField settingId="browser-history" label={appCopy.browser.history.pageLabel} description={appCopy.browser.history.pageDescription}
+      action={<ButtonContainer size="sm">
+        <Button size="sm" variant="outline" onClick={() => openHistory("settings")}>{appCopy.browser.view}</Button>
+        <Button size="sm" variant="outline" onClick={() => setClear(true)}>{appCopy.browser.history.erase}</Button>
+      </ButtonContainer>} />
+    {clear && <HistoryClearDialog onClose={() => setClear(false)} />}
   </SettingsSection>;
 }

@@ -117,7 +117,7 @@ impl GenerationVectorAdapter {
                 started.elapsed().as_secs_f64() * 1000.0
             );
         }
-        // Warming a fresh generation lets the consumer bind its first vector identity.
+        // Only a generation with a bound vector identity is searched.
         let expected = expected.ok_or_else(|| error(CognitionCode::VectorUnavailable))?;
         compatibility::query_identity(expected, &response.metadata)?;
         let mut matches =
@@ -164,11 +164,19 @@ impl RecallVectorPort for GenerationVectorAdapter {
 
     fn warm<'a>(
         &'a self,
-        generation: &'a MemoryGenerationHandle,
-        request: &'a RecallRequest,
+        _generation: &'a MemoryGenerationHandle,
+        _request: &'a RecallRequest,
         deadline_at: i64,
     ) -> RecallVectorFuture<'a> {
-        Box::pin(self.query(generation, request, deadline_at))
+        // A fresh generation has no vectors to search with a query embedding.
+        // Start the on-demand load and let the text lanes run without waiting.
+        if self.embedding.enabled() {
+            let embedding = self.embedding.clone();
+            tokio::spawn(async move {
+                let _ = embedding.ready(deadline_at).await;
+            });
+        }
+        Box::pin(async { Ok(RecallVectorMatches::default()) })
     }
 
     fn search<'a>(

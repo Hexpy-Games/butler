@@ -63,10 +63,14 @@
   background: var(--settings-panel-bg);
 }
 
-/* Lists, status and info rows sit closer than stacked form fields. */
+/* Lists, status and info rows sit closer than stacked form fields. A card
+   that holds a settings field keeps the field gap whatever its kind: fields
+   are always 24px apart, so a status card with an action row (or an info
+   card with a setting) separates them like a form. List rows add a hairline
+   and its padding, which separates a field in a list card as well. */
 .card[data-kind="list"],
-.card[data-kind="status"],
-.card[data-kind="info"] {
+.card[data-kind="status"]:not(:has(> [data-settings-field])),
+.card[data-kind="info"]:not(:has(> [data-settings-field])) {
   gap: var(--space-md);
 }
 

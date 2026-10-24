@@ -15,6 +15,9 @@ export interface SettingsFieldProps extends DsPrivateStyleProps, DsBaseProps<HTM
   control: ReactNode;
   /** Localized validation message under the control; the control becomes aria-invalid and is described by it. */
   error?: ReactNode;
+  /** Directly under the control: its live state (progress, a result line) or a small action on its value (Cancel, Remove key). */
+  afterControl?: ReactNode;
+  /** Facts about the setting (sizes, counts, last change), last in the control column. */
   meta?: ReactNode;
   descriptionId?: string;
   controlWidth?: "default" | "full";
@@ -29,6 +32,7 @@ export function SettingsField({
   descriptionId,
   control,
   error,
+  afterControl,
   meta,
   controlWidth = "default",
   settingId,
@@ -70,9 +74,10 @@ export function SettingsField({
       </div>
       <div className={styles.control}>
         {describedControl}
+        {afterControl}
         {error ? <FieldError id={errorId}>{error}</FieldError> : null}
         {meta ? (
-          <Typo.Caption className={dsClass(styles.meta)}>{meta}</Typo.Caption>
+          <Typo.Caption as="div" className={dsClass(styles.meta)}>{meta}</Typo.Caption>
         ) : null}
       </div>
     </Field>
@@ -93,4 +98,13 @@ function describeControl(control: ReactNode, ids: (string | undefined)[], invali
     "aria-describedby": describedBy,
     "aria-invalid": invalid ? true : control.props["aria-invalid"],
   });
+}
+
+/**
+ * Fields that show or hide together and need their own element (an id for
+ * `aria-controls`, a disclosure panel). It spaces them by the field gap, like
+ * the section card does for fields placed directly in it.
+ */
+export function SettingsFieldGroup({ className, ...props }: DsPrivateStyleProps & DsBaseProps<HTMLAttributes<HTMLDivElement>>) {
+  return <div className={dsClass(styles.group, className)} data-slot="settings-field-group" {...props} />;
 }
