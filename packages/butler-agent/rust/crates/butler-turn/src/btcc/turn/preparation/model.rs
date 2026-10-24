@@ -111,6 +111,8 @@ pub(super) fn admit(
             controls: admitted_controls,
             controls_hash,
             context_window_tokens: Some(context_window),
+            cached_input_price_ratio: metadata(catalog, trim_js_whitespace(primary))
+                .and_then(|value| value.cached_input_price_ratio),
             extensions: Map::new(),
         },
         model_route: Some(route),

@@ -71,7 +71,7 @@ pub(super) async fn execute(
     if mcp::supports(&call.name) {
         return Box::pin(mcp::execute(owner, invocation, call)).await;
     }
-    if call.name == ToolName::DelegateToSteward {
+    if call.name == ToolName::DelegateToSteward || call.name == ToolName::ReadPriorDelegation {
         return Box::pin(steward::execute(owner, invocation, call)).await;
     }
     if call.name == ToolName::ListAutomations {
