@@ -167,6 +167,7 @@ mod schedule_sleep_wake;
 mod schedule_store;
 mod schedules;
 mod search_browser;
+mod security_oauth;
 mod security_review;
 mod service_diagnostics;
 mod service_stop;
