@@ -34,7 +34,7 @@ const tempDir = mkdtempSync(join(tmpdir(), "butler-app-layout-smoke-"));
 const uiRoot = resolve(root, process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist");
 const screenshotDir = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? join(root, ".tmp", "app-layout-smoke"));
 mkdirSync(screenshotDir, { recursive: true });
-const rightPanelToggleSelector = `[aria-label="${appCopy.titlebar.showRightPanel}"], [aria-label="${appCopy.titlebar.hideRightPanel}"]`;
+const sessionInfoToggleSelector = '[data-test-class~="session-info-toggle"]';
 const turnActivityTimeoutMs = 5_000;
 // #924 (dcbd58d68): suggestion cards hug their ordinal and copy (no empty art
 // slot); the height of this smoke's first card at the 1440px desktop width.
@@ -719,33 +719,22 @@ try {
     0,
     "composer should not render idle ready status",
   );
-  const summaryProgressState = await page
-    .locator(testClass("summary-progress-panel"))
-    .evaluate((panel) => {
-      const inspector = panel.closest<HTMLElement>(
-        "[data-test-class~='right-inspector']",
-      );
-      const panelBox = panel.getBoundingClientRect();
-      const inspectorBox = inspector?.getBoundingClientRect();
-      return {
-        inspectorClientWidth: inspector?.clientWidth ?? 0,
-        inspectorRight: inspectorBox?.right ?? Number.NaN,
-        inspectorScrollWidth: inspector?.scrollWidth ?? 0,
-        panelClientWidth: panel.clientWidth,
-        panelLeft: panelBox.left,
-        panelRight: panelBox.right,
-        panelScrollWidth: panel.scrollWidth,
-      };
-    });
-  assert(
-    summaryProgressState.panelRight <=
-      summaryProgressState.inspectorRight - 0.5 &&
-      summaryProgressState.panelScrollWidth <=
-        summaryProgressState.panelClientWidth + 1 &&
-      summaryProgressState.inspectorScrollWidth <=
-        summaryProgressState.inspectorClientWidth + 1,
-    `summary Progress panel should stay inside inspector bounds: ${JSON.stringify(summaryProgressState)}`,
-  );
+  const sessionInfoToggle = page.locator(testClass("session-info-toggle"));
+  await sessionInfoToggle.click();
+  const sessionAside = page.getByRole("complementary", { name: appCopy.sessionInfo.title, exact: true })
+    .and(page.locator('[data-state="open"]'));
+  await sessionAside.waitFor();
+  const marginBounds = await sessionAside.evaluate(panel => {
+    const sections = panel.querySelector<HTMLElement>('[data-test-class="session-sections"]')!;
+    const panelBox = panel.getBoundingClientRect();
+    const contentBox = sections.getBoundingClientRect();
+    return { left: contentBox.left, right: contentBox.right, panelLeft: panelBox.left, panelRight: panelBox.right,
+      clientWidth: sections.clientWidth, scrollWidth: sections.scrollWidth };
+  });
+  assert(marginBounds.left >= marginBounds.panelLeft && marginBounds.right <= marginBounds.panelRight
+    && marginBounds.scrollWidth <= marginBounds.clientWidth + 1,
+  `session info content should stay inside the margin: ${JSON.stringify(marginBounds)}`);
+  await page.locator('[data-slot="composer-compact-preview"]').click();
   await page
     .getByRole("button", { name: appCopy.composer.contextDetails })
     .hover();
@@ -792,22 +781,14 @@ try {
   );
   await page.keyboard.press("Escape");
   await page.locator(testClass("context-popover")).waitFor({ state: "hidden" });
-  await page
-    .getByRole("button", { name: appCopy.inspector.tabs.context, exact: true })
-    .first()
-    .click();
-  await page
-    .getByRole("heading", { name: "Context details" })
-    .waitFor({ state: "visible" });
-  await page
-    .getByRole("img", { name: /Context window/u })
-    .waitFor({ state: "visible" });
+  await sessionAside.locator(testClass("session-context")).getByRole("button").first().click();
+  await sessionAside.getByRole("heading", { name: "Context details" }).waitFor({ state: "visible" });
+  await sessionAside.getByRole("img", { name: /Context window/u }).waitFor({ state: "visible" });
   await page.setViewportSize({ width: 900, height: 520 });
-  await page.waitForTimeout(320);
-  await page
-    .getByRole("button", { name: appCopy.titlebar.showRightPanel })
-    .click();
-  await page.waitForTimeout(240);
+  await page.waitForFunction(() => document.querySelector('[data-slot="conversation-aside"]')?.getAttribute("data-layout") === "floating");
+  // The floating layout remounts the disclosure with its default collapsed state.
+  const floatingContext = sessionAside.locator(testClass("session-context")).getByRole("button").first();
+  if (await floatingContext.getAttribute("aria-expanded") === "false") await floatingContext.click();
   await page
     .locator(testClass("context-legend-scroll"))
     .waitFor({ state: "visible" });
@@ -847,8 +828,9 @@ try {
         '[aria-label="Context window usage chart"]',
       );
       const inspector = scroll.closest<HTMLElement>(
-        "[data-test-class~='right-inspector']",
+        '[data-slot="conversation-aside"]',
       );
+      const marginScroll = scroll.closest<HTMLElement>('[data-slot="conversation-aside-scroll"]')!;
       const scrollBox = scroll.getBoundingClientRect();
       const rowBox = firstRow?.getBoundingClientRect();
       const chartBox = chart?.getBoundingClientRect();
@@ -862,6 +844,9 @@ try {
       const labelStyle = label ? getComputedStyle(label) : null;
       const valueStyle = value ? getComputedStyle(value) : null;
       return {
+        marginClientHeight: marginScroll.clientHeight,
+        marginScrollHeight: marginScroll.scrollHeight,
+        marginScrollbarWidth: getComputedStyle(marginScroll).scrollbarWidth,
         clientHeight: scroll.clientHeight,
         clientWidth: scroll.clientWidth,
         chartRight: chartBox?.right ?? Number.NaN,
@@ -916,11 +901,11 @@ try {
     `working context compaction copy should stack vertically: ${JSON.stringify(contextLegendState)}`,
   );
   assert(
-    contextLegendState.scrollHeight > contextLegendState.clientHeight + 8,
-    `context legend should own overflow scrolling: ${JSON.stringify(contextLegendState)}`,
+    contextLegendState.marginScrollHeight > contextLegendState.marginClientHeight + 8,
+    `session margin should own context overflow scrolling: ${JSON.stringify(contextLegendState)}`,
   );
   assert(
-    contextLegendState.scrollbarWidth === "thin" &&
+    contextLegendState.marginScrollbarWidth === "thin" &&
       contextLegendState.rowRight <= contextLegendState.scrollRight - 10,
     `context legend scrollbar should sit outside content: ${JSON.stringify(contextLegendState)}`,
   );
@@ -934,6 +919,8 @@ try {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.waitForTimeout(320);
   screenshots.push(await screenshot(page, "context-details-chart.png"));
+  await sessionInfoToggle.click();
+  await sessionAside.waitFor({ state: "hidden" });
   await page.mouse.move(260, 120);
   await page.locator(testClass("context-popover")).waitFor({ state: "hidden" });
 
@@ -1231,248 +1218,36 @@ try {
     `left-panel-resizes failed: ${sidebarWidthBeforeResize} -> ${sidebarWidthAfterResize}`,
   );
 
-  const rightResize = page.locator(testClass("right-panel-resize-handle"));
-  const rightPanelSlot = page.locator(testClass("right-panel-slot"));
-  const inspectorWidthBeforeResize =
-    (await rightPanelSlot.boundingBox())?.width ?? 0;
-  const rightResizeBox = await rightResize.boundingBox();
-  assert(rightResizeBox, "right panel resize handle is missing");
-  assert(
-    (await rightResize.getAttribute("role")) === "separator",
-    "right resize handle should expose separator role",
-  );
-  assert(
-    (await rightResize.getAttribute("aria-controls")) ===
-      "butler-right-inspector",
-    "right resize handle should control the inspector",
-  );
-  assert(
-    await rightResize.getAttribute("aria-valuenow"),
-    "right resize handle should expose aria-valuenow",
-  );
-  await page.mouse.move(
-    rightResizeBox.x + rightResizeBox.width / 2,
-    rightResizeBox.y + 96,
-  );
-  await page.mouse.down();
-  await page.mouse.move(
-    rightResizeBox.x + rightResizeBox.width / 2 - 56,
-    rightResizeBox.y + 96,
-  );
-  await page.mouse.up();
-  await page.waitForTimeout(180);
-  const inspectorWidthAfterResize =
-    (await rightPanelSlot.boundingBox())?.width ?? 0;
-  assert(
-    inspectorWidthAfterResize >= inspectorWidthBeforeResize + 44,
-    `right-panel-resizes failed: ${inspectorWidthBeforeResize} -> ${inspectorWidthAfterResize}`,
-  );
-  const openRightPanelToggleState = await page
-    .getByRole("button", { name: appCopy.titlebar.hideRightPanel })
-    .evaluate((element) => ({
-      background: getComputedStyle(element).backgroundColor,
-    }));
-  assert(
-    openRightPanelToggleState.background === "rgba(0, 0, 0, 0)",
-    `right panel toggle should not show selected ghosting while open: ${JSON.stringify(openRightPanelToggleState)}`,
-  );
-  await armPanelSlideCapture(rightPanelSlot);
-  await page
-    .getByRole("button", { name: appCopy.titlebar.hideRightPanel })
-    .click();
-  // The docked inspector keeps its width and slides out on the compositor
-  // (useInspectorTrackMotion): mid-close it is partly off the right edge.
-  const rightSlide = await readPanelSlideCapture(
-    rightPanelSlot,
-    [0.25, 0.5],
-    testClass("right-inspector"),
-  );
-  const rightEdge = page.viewportSize()?.width ?? 0;
-  assertPanelSlide(
-    "right panel slot",
-    rightSlide,
-    inspectorWidthAfterResize,
-    (box) => Math.max(0, rightEdge - box.x),
-  );
-  for (const { content } of rightSlide.samples) {
-    assert(
-      content &&
-        content.width >= inspectorWidthAfterResize - 2 &&
-        content.opacity === "1" &&
-        content.transform === "none",
-      `right panel content should keep stable width while the slot clips it: ${JSON.stringify(rightSlide.samples)}`,
-    );
-  }
-  await page.waitForTimeout(260);
-  const closedInspectorCount = await page
-    .locator(testClass("right-inspector"))
-    .count();
-  const closedSlotBox = await rightPanelSlot.boundingBox();
-  assert(
-    closedInspectorCount === 1 && (!closedSlotBox || closedSlotBox.x >= rightEdge - 2),
-    `right panel should stay mounted, slid off the right edge: count=${closedInspectorCount} slot=${JSON.stringify(closedSlotBox)}`,
-  );
-  const closedRightPanelToggle = page.getByRole("button", {
-    name: appCopy.titlebar.showRightPanel,
-  });
-  await closedRightPanelToggle.hover();
-  await page
-    .getByRole("tooltip", { name: appCopy.titlebar.showRightPanel })
-    .waitFor({ state: "visible" });
-  await waitForMotionToSettle(page);
-  const closedRightPanelTooltipState = await page
-    .getByRole("tooltip", { name: appCopy.titlebar.showRightPanel })
-    .evaluate((element) => {
-      const rect = element.getBoundingClientRect();
-      return {
-        height: rect.height,
-        text: element.textContent?.trim() ?? "",
-        whiteSpace: getComputedStyle(element).whiteSpace,
-        width: rect.width,
-      };
-    });
-  assert(
-    closedRightPanelTooltipState.whiteSpace === "nowrap" &&
-      closedRightPanelTooltipState.width >
-        closedRightPanelTooltipState.height * 2,
-    `right panel toggle tooltip should stay horizontal when closed: ${JSON.stringify(closedRightPanelTooltipState)}`,
-  );
-  await page.mouse.move(720, 520);
-  await page
-    .getByRole("tooltip", { name: appCopy.titlebar.showRightPanel })
-    .waitFor({ state: "hidden" });
-  await page.evaluate((label) => {
-    window.dispatchEvent(new Event("focus"));
-    const button = Array.from(document.querySelectorAll("button")).find(
-      (item) => item.getAttribute("aria-label") === label,
-    );
-    button?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
-  }, appCopy.titlebar.showRightPanel);
-  await page.waitForTimeout(120);
-  await expectLocatorCount(
-    page,
-    '[role="tooltip"]',
-    0,
-    "titlebar toggle tooltip should stay hidden after window focus restoration",
-  );
-  await page
-    .getByRole("button", { name: appCopy.titlebar.showRightPanel })
-    .click();
-  await page.waitForTimeout(320);
-  const reopenedInspectorBox = await page
-    .locator(testClass("right-panel-slot"))
-    .boundingBox();
-  assert(
-    reopenedInspectorBox &&
-      reopenedInspectorBox.width >= inspectorWidthAfterResize - 2,
-    `right panel should slide open again: ${reopenedInspectorBox?.width}`,
-  );
+  // Session details now belong to the conversation margin, which has a fixed
+  // docked width and floats over narrow conversations rather than resizing them.
+  await sessionInfoToggle.click();
+  await sessionAside.waitFor();
+  await sessionInfoToggle.click();
+  await sessionAside.waitFor({ state: "hidden" });
+  await sessionInfoToggle.hover();
+  const infoTooltip = page.getByRole("tooltip", { name: appCopy.sessionInfo.title, exact: true });
+  await infoTooltip.waitFor();
+  assert(await infoTooltip.evaluate(element => getComputedStyle(element).whiteSpace === "nowrap"),
+    "session info toggle tooltip should stay horizontal");
+  await page.mouse.move(260, 120);
+  await sessionInfoToggle.click();
+  await sessionAside.waitFor();
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForTimeout(320);
-  await page
-    .getByRole("button", { name: appCopy.titlebar.showRightPanel })
-    .click();
-  await page.waitForTimeout(240);
-  const narrowInspectorBox = await page
-    .locator(testClass("right-inspector"))
-    .boundingBox();
-  const narrowWorkspaceBox = await page
-    .locator(testClass("workspace"))
-    .boundingBox();
-  assert(
-    narrowInspectorBox &&
-      narrowInspectorBox.x >= -1 &&
-      narrowInspectorBox.width >= 389 &&
-      narrowInspectorBox.x + narrowInspectorBox.width <= 391,
-    `narrow right panel should stay visible: ${JSON.stringify(narrowInspectorBox)}`,
-  );
-  assert(
-    narrowWorkspaceBox && narrowWorkspaceBox.width >= 389,
-    `narrow right panel must overlay without shrinking the workspace: ${JSON.stringify(narrowWorkspaceBox)}`,
-  );
-  const narrowOverlayState = await page
-    .locator(testClass("mac-window"))
-    .evaluate((root) => {
-      const inspector = root.querySelector<HTMLElement>(
-        "[data-test-class~='right-inspector']",
-      );
-      const firstTab = inspector?.querySelector<HTMLElement>("button");
-      const overlay = root.querySelector<HTMLElement>(
-        "[data-test-class~='right-panel-overlay-titlebar']",
-      );
-      const closeButton = root.querySelector<HTMLElement>(
-        "[data-test-class~='right-panel-overlay-close']",
-      );
-      const leftToggleLayer = root.querySelector<HTMLElement>(
-        "[data-test-class~='chrome-floating-toggle-layer']",
-      );
-      const titlebarHeight = parseFloat(
-        getComputedStyle(root).getPropertyValue("--titlebar-height"),
-      );
-      const tabBox = firstTab?.getBoundingClientRect();
-      const overlayBox = overlay?.getBoundingClientRect();
-      const closeBox = closeButton?.getBoundingClientRect();
-      const leftLayerBox = leftToggleLayer?.getBoundingClientRect();
-      const overlayStyle = overlay ? getComputedStyle(overlay) : null;
-      const closeStyle = closeButton ? getComputedStyle(closeButton) : null;
-      return {
-        leftOpen: root.getAttribute("data-left-open"),
-        closeRight: closeBox?.right ?? Number.NaN,
-        closeTop: closeBox?.top ?? Number.NaN,
-        closeVisible:
-          Boolean(closeBox) &&
-          getComputedStyle(closeButton!).display !== "none" &&
-          getComputedStyle(closeButton!).visibility !== "hidden",
-        leftToggleDisplay: leftToggleLayer
-          ? getComputedStyle(leftToggleLayer).display
-          : "",
-        leftToggleWidth: leftLayerBox?.width ?? 0,
-        overlayDisplay: overlay ? getComputedStyle(overlay).display : "",
-        overlayDragRegion:
-          overlayStyle?.getPropertyValue("-webkit-app-region") ?? "",
-        overlayHeight: overlayBox?.height ?? Number.NaN,
-        closeDragRegion:
-          closeStyle?.getPropertyValue("-webkit-app-region") ?? "",
-        tabTop: tabBox?.top ?? Number.NaN,
-        titlebarHeight,
-        viewportWidth: window.innerWidth,
-      };
-    });
-  assert(
-    narrowOverlayState.tabTop >= narrowOverlayState.titlebarHeight - 1,
-    `narrow right panel tabs should sit below titlebar reserve: ${JSON.stringify(narrowOverlayState)}`,
-  );
-  assert(
-    narrowOverlayState.overlayDisplay === "flex" &&
-      Math.abs(
-        narrowOverlayState.overlayHeight - narrowOverlayState.titlebarHeight,
-      ) <= 1,
-    `narrow right panel should expose a titlebar close lane: ${JSON.stringify(narrowOverlayState)}`,
-  );
-  assert(
-    narrowOverlayState.closeVisible &&
-      narrowOverlayState.closeRight <= narrowOverlayState.viewportWidth &&
-      narrowOverlayState.closeTop >= 0 &&
-      narrowOverlayState.closeTop < narrowOverlayState.titlebarHeight,
-    `narrow right panel close button should stay in the titlebar right edge: ${JSON.stringify(narrowOverlayState)}`,
-  );
-  assert(
-    narrowOverlayState.overlayDragRegion === "drag" &&
-      narrowOverlayState.closeDragRegion === "no-drag",
-    `narrow right panel titlebar lane should remain draggable while close button stays interactive: ${JSON.stringify(narrowOverlayState)}`,
-  );
-  assert(
-    narrowOverlayState.leftToggleDisplay === "none" ||
-      narrowOverlayState.leftToggleWidth === 0,
-    `narrow right panel overlay should hide the left sidebar toggle: ${JSON.stringify(narrowOverlayState)}`,
-  );
-  assert(
-    narrowOverlayState.leftOpen === "false",
-    `narrow right panel should auto-collapse the left sidebar state: ${JSON.stringify(narrowOverlayState)}`,
-  );
-  screenshots.push(await screenshot(page, "narrow-right-panel-visible.png"));
-  await page.locator(testClass("right-panel-overlay-close")).click();
-  await page.waitForTimeout(320);
+  await page.waitForFunction(() => document.querySelector('[data-slot="conversation-aside"]')?.getAttribute("data-layout") === "floating");
+  // On phones the open navigation drawer covers the conversation. Close it
+  // before measuring the floating aside over the visible conversation.
+  const hideNavigation = page.getByRole("button", { name: "Hide sidebar", exact: true });
+  if (await hideNavigation.isVisible()) await hideNavigation.click();
+  await page.waitForFunction(() => (document.querySelector('[data-test-class~="workspace"]')?.clientWidth ?? 0) >= 389);
+  const narrowAside = await sessionAside.boundingBox();
+  const narrowWorkspace = await page.locator(testClass("workspace")).boundingBox();
+  assert(narrowAside && narrowAside.x >= 0 && narrowAside.x + narrowAside.width <= 390,
+    `narrow session info stays within the viewport: ${JSON.stringify(narrowAside)}`);
+  assert(narrowWorkspace && narrowWorkspace.width >= 389,
+    `floating session info does not shrink the workspace: ${JSON.stringify(narrowWorkspace)}`);
+  screenshots.push(await screenshot(page, "narrow-session-info-visible.png"));
+  await sessionInfoToggle.click();
+  await sessionAside.waitFor({ state: "hidden" });
   const narrowTitlebarChromeState = await page
     .locator(testClass("mac-window"))
     .evaluate((root) => {
@@ -1486,7 +1261,7 @@ try {
         .find((element) => element.getAttribute("aria-label") === "Show sidebar");
       const toggleIcon = toggle?.querySelector<HTMLElement>("svg");
       const rightToggle = root.querySelector<HTMLElement>(
-        "[data-test-class~='titlebar-right-panel-toggle']",
+        "[data-test-class~='session-info-toggle']",
       );
       const rightToggleIcon = rightToggle?.querySelector<HTMLElement>("svg");
       const buttonBox = button?.getBoundingClientRect();
@@ -2359,16 +2134,8 @@ try {
   }
   screenshots.push(await screenshot(page, "composer-controls.png"));
 
-  const showRightPanelForArtifacts = page.getByRole("button", {
-    name: appCopy.titlebar.showRightPanel,
-  });
-  if (await showRightPanelForArtifacts.isVisible()) {
-    await showRightPanelForArtifacts.click();
-    await page.waitForTimeout(320);
-  }
-  await page
-    .getByRole("button", { name: appCopy.inspector.tabs.artifacts })
-    .click();
+  if (await sessionInfoToggle.getAttribute("aria-pressed") !== "true") await sessionInfoToggle.click();
+  await sessionAside.waitFor();
   const artifactTile = page
     .locator("[data-slot='document-tile'][role='button']")
     .first();
@@ -2378,7 +2145,7 @@ try {
       .locator(testClass("artifact-viewer"))
       .waitFor({ state: "visible" });
   } else {
-    await page.getByText(appCopy.artifacts.empty).waitFor({ state: "visible" });
+    assert(await sessionAside.locator('[data-session-section="artifacts"]').count() === 0, "Empty results section is hidden");
   }
   screenshots.push(await screenshot(page, "artifact-detail.png"));
 
@@ -2506,9 +2273,9 @@ try {
   );
   await expectLocatorCount(
     page,
-    rightPanelToggleSelector,
+    sessionInfoToggleSelector,
     0,
-    "right panel toggle should be hidden on settings",
+    "session info toggle should be hidden on settings",
   );
   const settingsTitleColor = await page
     .locator(testClass("settings-detail-title"))
@@ -2877,7 +2644,7 @@ try {
       composer: testClass("composer-card"),
       conversation: testClass("conversation"),
       root: testClass("mac-window"),
-      titlebarControl: `${testClass("project-controls")} button`,
+      titlebarControl: testClass("session-info-toggle"),
       titlebarTitle: testClass("titlebar-title"),
       userBubble: `${testClasses("message", "user")} ${testClass("message-body")}`,
       workerPanel: testClass("worker-composer-panel"),
@@ -3547,9 +3314,9 @@ try {
   await page.waitForTimeout(240);
   await expectLocatorCount(
     page,
-    rightPanelToggleSelector,
-    0,
-    "right panel toggle should be hidden on draft new chat",
+    sessionInfoToggleSelector,
+    1,
+    "session info remains available on draft new chat",
   );
   await patchSettings({ main_screen_theme: "silk",
     wallpaper: { source: { kind: "live", module: "butler.silk" }, motion: "auto", pauseOnBattery: false } });
@@ -3881,7 +3648,7 @@ try {
   screenshots.push(await screenshot(page, "project-rename-real-app.png"));
 
   await page
-    .locator(`${testClass("custom-titlebar")} ${testClass("project-controls")}`)
+    .locator(testClass("custom-titlebar"))
     .getByRole("button", { name: appCopy.sessionActions.menuLabel })
     .click();
   await page
@@ -3975,6 +3742,10 @@ try {
         "composer-ready-status-absent",
         "context-hover-popover-visible",
         "context-popover-titlebar-safe",
+        "session-info-margin-bounded",
+        "session-info-toggle-closes-and-reopens",
+        "session-info-toggle-tooltip-horizontal",
+        "narrow-session-info-floating-bounded",
         "context-detail-chart-visible",
         "context-legend-swatch-label-aligned",
         "context-legend-swatch-structural-alignment",
@@ -3982,10 +3753,9 @@ try {
         "context-legend-meta-top-aligned",
         "context-legend-horizontal-scroll-absent",
         "context-working-copy-stacked",
-        "context-legend-scrolls",
+        "session-margin-scrolls-context",
         "context-legend-scrollbar-gutter",
         "context-legend-content-aligns-overview",
-        "summary-progress-inspector-bounded",
         "fresh-left-sidebar-collapsed",
         "left-toggle-titlebar-positioned",
         "browser-chrome-traffic-reserve-zero",
@@ -4001,20 +3771,7 @@ try {
         "project-dashboard-ledger-document-modal",
         "left-panel-resizes",
         "left-panel-keyboard-resizes",
-        "right-panel-resizes",
-        "right-panel-column-animates-on-close",
-        "right-panel-closes-with-slide",
-        "right-panel-content-width-stable-while-closing",
-        "right-panel-remains-mounted-closed",
-        "right-panel-toggle-open-ghostless",
-        "right-panel-toggle-tooltip-horizontal",
         "titlebar-tooltip-focus-restore-suppressed",
-        "narrow-right-panel-visible",
-        "narrow-right-panel-tabs-below-titlebar",
-        "narrow-right-panel-titlebar-close-visible",
-        "narrow-right-panel-titlebar-draggable",
-        "narrow-right-panel-left-toggle-hidden",
-        "narrow-right-panel-auto-collapses-left-state",
         "narrow-titlebar-new-chat-absent",
         "narrow-shell-toggle-comfortable",
         "narrow-titlebar-controls-aligned",
@@ -4101,8 +3858,7 @@ try {
         "narrow-new-chat-full-width-copy",
         "narrow-readable-type-scale",
         "new-chat-left-radius-preserved",
-        "right-toggle-hidden-when-empty",
-        "right-toggle-hidden-on-draft-new-chat",
+        "session-info-available-on-draft-new-chat",
         "composer-card-click-focuses-textarea",
         "composer-draft-session-isolation",
         "composer-draft-renderer-reload-recovery",

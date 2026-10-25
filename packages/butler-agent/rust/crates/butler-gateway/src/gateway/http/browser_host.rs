@@ -189,6 +189,16 @@ pub(super) async fn route(
         (&Method::POST, "/internal/browser-host/downloads") => {
             downloads::handle(state, read_json(request).await?).await
         }
+        (&Method::POST, "/internal/images/calls") => {
+            let frame = read_json(request).await?;
+            if !matches!(
+                frame["op"].as_str(),
+                Some("images.resolve" | "images.store" | "images.usage")
+            ) {
+                return Err(error(400, "invalid_image_op"));
+            }
+            agent_calls::call(state, frame).await
+        }
         (&Method::POST, "/internal/browser/calls") => call(state, request).await,
         (&Method::POST, "/internal/browser-host/stills") => {
             agent_calls::still(state, read_json(request).await?).await
@@ -382,7 +392,9 @@ fn checked(value: &Value, args: &Value) -> Value {
 async fn read_json(request: Request<Body>) -> Result<Value, HttpError> {
     let path = request.uri().path();
     // Rendered pages and collected pixels: up to 8 MiB, base64 in JSON.
-    let limit = if path.starts_with("/internal/browser-host/renders/")
+    let limit = if path == "/internal/images/calls" {
+        70 * 1024 * 1024
+    } else if path.starts_with("/internal/browser-host/renders/")
         || path.starts_with("/internal/browser-host/images/")
     {
         12 * 1024 * 1024

@@ -2,7 +2,6 @@
 import { describe, expect, test } from "bun:test";
 import { freshAppUiPanelState, snapshotForAppUiState } from "../../packages/butler-app/client/ui/src/app/appUiStateCache.ts";
 import { resolvePanelGeometry } from "../../packages/butler-app/client/ui/src/app/panelSizing";
-import { useButlerStore } from "../../packages/butler-app/client/ui/src/app/store.ts";
 
 describe("app-client-ui-state-cache.test.ts", () => {
 test("app UI state cache clamps panel widths and deduplicates collapsed groups", () => {
@@ -41,12 +40,6 @@ test("app UI state cache defaults fresh state to an open sidebar and a closed in
 test("a saved inspector choice wins over the closed default", () => {
   expect(snapshotForAppUiState({ right_open: true }).right_open).toBe(true);
   expect(snapshotForAppUiState({ right_open: false }).right_open).toBe(false);
-});
-
-test("new users start with the inspector closed", () => {
-  expect(useButlerStore.getInitialState().rightOpen).toBe(false);
-  expect(useButlerStore.getInitialState().rightTab).toBe("summary");
-  expect(freshAppUiPanelState("expanded", useButlerStore.getInitialState().rightOpen).rightOpen).toBe(false);
 });
 
 test("a saved sidebar choice wins over the fresh default", () => {

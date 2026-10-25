@@ -40,6 +40,14 @@ impl ToolJournalRepository {
             .await
     }
 
+    /// Mark an approved call as dispatched before the external effect starts.
+    pub async fn dispatching(&self, turn_id: String, call_id: String) -> StorageResult<()> {
+        self.storage.execute(move |db| {
+            db.execute("UPDATE btcc_guided_tool_calls SET status='started' WHERE turn_id=?1 AND call_id=?2 AND status IN ('started','awaiting_authority')", rusqlite::params![turn_id,call_id]).map_err(crate::btcc::storage::StorageError::sqlite)?;
+            Ok(())
+        }).await
+    }
+
     /// Journals a call's result.
     pub async fn finish(&self, input: ToolJournalFinish) -> StorageResult<()> {
         let clock = self.clock.clone();

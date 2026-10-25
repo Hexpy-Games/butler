@@ -74,7 +74,23 @@ fn strict_create(value: &Value) -> Result<MessageSendRequest, HttpError> {
         .as_object()
         .ok_or_else(|| invalid_request("Queued message text is required."))?;
     let text = optional_string_value(object, "text", "Queued message request is invalid.")?;
-    let content_parts = object.get("content_parts").map(parse_content).transpose()?;
+    let mut content_parts = object.get("content_parts").map(parse_content).transpose()?;
+    if let Some(edit) = object.get("image_edit") {
+        let edit: crate::gateway::ImageEditRequest = serde_json::from_value(edit.clone())
+            .map_err(|_| invalid_request("Invalid image edit."))?;
+        let content = content_parts.get_or_insert_with(|| MessageContent {
+            version: 1,
+            parts: vec![MessageContentPart::Text {
+                text: text.as_ref().and_then(Value::as_str).unwrap_or("").into(),
+                extra: Map::new(),
+            }],
+            extra: Map::new(),
+        });
+        content.extra.insert(
+            "image_edit".into(),
+            serde_json::to_value(edit).map_err(|_| HttpError::invalid_json())?,
+        );
+    }
     let attachments = strict_attachments(object.get("attachments"))?;
     let has_text = content_parts
         .as_ref()
@@ -87,6 +103,7 @@ fn strict_create(value: &Value) -> Result<MessageSendRequest, HttpError> {
         return Err(invalid_request("Queued message text is required."));
     }
     Ok(MessageSendRequest {
+        image_edit: None,
         subsession_result: None,
         schedule_run: None,
         expected_project_id: None,

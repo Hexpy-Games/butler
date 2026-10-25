@@ -97,7 +97,7 @@ export function TabRail({ tabs, labels, onMore, mode: forced = "auto", max = TAB
         <section className={styles.rail} data-mode={mode} aria-label={labels.region}>
           {mode === "shelf" ? (
             <TintedGlass className={dsClass(styles.shelf)} radius="popover" padding="none">
-              <ScrollArea className={dsClass(styles.shelfScroll)} contentClassName={dsClass(styles.shelfRow)} orientation="x">{cards}</ScrollArea>
+              <ScrollArea className={dsClass(styles.shelfScroll)} contentClassName={dsClass(styles.shelfRow)} dataSlot="tab-rail-shelf-scroll" orientation="x">{cards}</ScrollArea>
               <MorePill hidden={hidden} labels={labels} onMore={onMore} plain />
             </TintedGlass>
           ) : (

@@ -1,10 +1,12 @@
 //! Existing App schema migration in its source-defined order.
 
+mod asset_versions;
 mod assets;
 pub(in crate::gateway::application) mod canon;
 pub(in crate::gateway::application) mod canon_files;
 mod canon_sidebar;
 mod core;
+mod documents;
 mod library;
 mod message_ownership;
 mod migration;
@@ -60,6 +62,8 @@ pub(super) fn migrate(
     record_default_model_policy(connection, !turns_new)?;
     migration::add_current_columns(connection)?;
     assets::create(connection)?;
+    super::super::image_usage::create(connection)?;
+    documents::create(connection)?;
     connection.execute_batch(
         "CREATE INDEX IF NOT EXISTS chats_archived_idx ON chats(archived);
          CREATE INDEX IF NOT EXISTS projects_archived_idx ON projects(archived);
@@ -91,16 +95,7 @@ pub(super) fn migrate(
     migration::create_post_backfill_indexes(connection)?;
     run_backfills_once(connection)?;
     migration::settle_ended_turn_messages(connection)?;
-    project_ledger_bindings::initialize(connection, butler_data)?;
-    space::migrate(connection)?;
-    wallpapers::create(connection)?;
-    signins::create(connection)?;
-    vault::create(connection)?;
-    message_ownership::migrate(connection)?;
-    session_reads::create(connection)?;
-    monitoring::migrate(connection)?;
-    pending_asks::create(connection)?;
-    library::recover(connection, butler_data)?;
+    migrate_app_features(connection, butler_data)?;
     Ok(())
 }
 
@@ -182,3 +177,20 @@ mod plans;
 mod tests;
 
 pub(in crate::gateway::application) use core::create_settings_table;
+
+fn migrate_app_features(
+    connection: &mut Connection,
+    butler_data: Option<&Path>,
+) -> Result<(), AppStorageError> {
+    project_ledger_bindings::initialize(connection, butler_data)?;
+    space::migrate(connection)?;
+    wallpapers::create(connection)?;
+    signins::create(connection)?;
+    vault::create(connection)?;
+    message_ownership::migrate(connection)?;
+    session_reads::create(connection)?;
+    monitoring::migrate(connection)?;
+    pending_asks::create(connection)?;
+    library::recover(connection, butler_data)?;
+    Ok(())
+}

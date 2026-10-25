@@ -12,6 +12,7 @@ pub(super) async fn send(
     app.send_message(SendMessageCommand {
         chat_id: session.into(),
         request: MessageSendRequest {
+            image_edit: None,
             expected_project_id: None,
             content_parts: None,
             chat_id: Some(json!(session)),

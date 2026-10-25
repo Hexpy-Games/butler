@@ -27,7 +27,8 @@ export interface BrowserTab {
   saveOffer?: { username: string; host: string };
 }
 export interface BrowserSnapshot {
-  enabled: boolean; blocked: boolean; activeId: string | null; nativeCovered: boolean; focusRequest?: string; tabs: BrowserTab[];
+  /** Saved tabs have finished loading; an empty list is authoritative only then. */
+  restored: boolean; enabled: boolean; blocked: boolean; activeId: string | null; nativeCovered: boolean; focusRequest?: string; tabs: BrowserTab[];
 }
 export interface BrowserFrame { tab: string; seq: number; bytes: Uint8Array; masked: boolean }
 interface BrowserBridge {
@@ -44,7 +45,7 @@ interface BrowserBridge {
 }
 declare global { interface Window { butlerBrowser?: BrowserBridge } }
 export const useBrowserState = create<BrowserSnapshot>(() => ({
-  enabled: false, blocked: false, activeId: null, nativeCovered: false, tabs: [],
+  restored: false, enabled: false, blocked: false, activeId: null, nativeCovered: false, tabs: [],
 }));
 let unsubscribe: (() => void) | undefined;
 let downloadUnsubscribe: (() => void) | undefined;
@@ -84,7 +85,6 @@ export function connectBrowser() {
       if (requested && session && current.view.kind === "session" && current.activeChatId === session) {
         useBrowserShellState.getState().setOpen(session, true);
         useBrowserShellState.getState().rememberTab(session, requested.id);
-        current.setRightOpen(false);
         void browserCall("activate", { id: requested.id });
       }
     }
@@ -111,7 +111,6 @@ export async function openConversationBrowser(session: string, requestedTab?: st
   if (!window.butlerBrowser || !publicBrowserOwner(`conversation:${session}`, useButlerStore.getState().navigation)) return;
   connectBrowser();
   const store = useButlerStore.getState();
-  store.setRightOpen(false);
   // A link from the open conversation keeps its view; only another conversation is opened.
   if (store.activeChatId !== session || store.view.kind !== "session") store.openSession(session);
   const shell = useBrowserShellState.getState();

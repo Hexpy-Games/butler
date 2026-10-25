@@ -93,18 +93,40 @@ pub(super) fn prepare<'a>(
 }
 
 /// Whether a fresh batch may run concurrently: more than one call, all valid,
-/// and each either declared concurrency-safe or a browser call on its own tab
-/// (calls on one tab keep their order). Resumed batches always run in order.
+/// and each either declared concurrency-safe or a tab-scoped browser call.
+/// Browser calls claim their tab exclusively; concurrency-safe calls naming a
+/// tab claim it shared. Any overlap with an exclusive claim keeps the entire
+/// batch in call order. Shared reads and different tabs may run concurrently.
+/// Resumed batches always run in order.
 pub(super) fn concurrent(calls: &[PreparedCall<'_>]) -> bool {
-    let mut tabs = std::collections::HashSet::new();
+    let mut tabs = std::collections::HashMap::new();
     calls.len() > 1
         && calls.iter().all(|prepared| {
-            prepared.validation.is_none()
-                && (prepared
+            if prepared.validation.is_some() {
+                return false;
+            }
+            let (tab, exclusive) = match browser_tab(&prepared.call) {
+                Some(tab) => (tab, true),
+                None if prepared
                     .tool
-                    .is_some_and(|tool| tool.concurrency_safe == Some(true))
-                    || browser_tab(&prepared.call)
-                        .is_some_and(|tab| tab.is_none_or(|tab| tabs.insert(tab))))
+                    .is_some_and(|tool| tool.concurrency_safe == Some(true)) =>
+                {
+                    (
+                        prepared
+                            .call
+                            .arguments
+                            .get("tab")
+                            .and_then(Value::as_str)
+                            .map(str::to_owned),
+                        false,
+                    )
+                }
+                None => return false,
+            };
+            tab.is_none_or(|tab| {
+                tabs.insert(tab, exclusive)
+                    .is_none_or(|previous| !previous && !exclusive)
+            })
         })
 }
 

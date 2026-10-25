@@ -15,8 +15,10 @@ fn invalid(message: &str) -> HttpError {
 /// One of the Library kinds; listings default to scraps.
 pub(super) fn kind(value: Option<&String>) -> Result<String, HttpError> {
     match value.map(String::as_str).unwrap_or("scrap") {
-        kind @ ("scrap" | "document" | "bookmark" | "output") => Ok(kind.to_owned()),
-        _ => Err(invalid("kind must be scrap, document, bookmark or output.")),
+        kind @ ("scrap" | "document" | "doc" | "bookmark" | "output") => Ok(kind.to_owned()),
+        _ => Err(invalid(
+            "kind must be scrap, document, doc, bookmark or output.",
+        )),
     }
 }
 /// A kind with groups: scrap or bookmark.
@@ -194,24 +196,36 @@ fn valid(value: &Value) -> bool {
         && value["id"]
             .as_str()
             .is_some_and(|s| !s.is_empty() && s.len() <= 128)
-        && value["title"].as_str().is_some_and(|s| s.len() <= 2000)
-        && value["url"].as_str().is_some_and(|s| {
-            url::Url::parse(s).is_ok_and(|u| {
-                matches!(u.scheme(), "http" | "https")
-                    && u.username().is_empty()
-                    && u.password().is_none()
-            })
-        });
+        && value["title"].as_str().is_some_and(|s| s.len() <= 2000);
+    let web_url = value["url"].as_str().is_some_and(|s| {
+        url::Url::parse(s).is_ok_and(|u| {
+            matches!(u.scheme(), "http" | "https")
+                && u.username().is_empty()
+                && u.password().is_none()
+        })
+    });
     base && match value["kind"].as_str() {
         Some("scrap") => {
             value["text"].is_string()
-                && value["crop"]
-                    .as_str()
-                    .is_some_and(|s| s.starts_with("data:image/jpeg;base64,"))
+                && match (value.get("crop"), value.get("asset")) {
+                    (Some(crop), None) => {
+                        web_url
+                            && crop
+                                .as_str()
+                                .is_some_and(|s| s.starts_with("data:image/jpeg;base64,"))
+                    }
+                    (None, Some(asset)) => {
+                        asset.as_str().is_some_and(super::super::assets::valid_id)
+                            && (web_url || value["url"] == "")
+                    }
+                    _ => false,
+                }
                 && valid_snapshot(&value["snapshot"])
         }
         Some("bookmark") => {
-            value["folder"].is_null() || value["folder"].as_str().is_some_and(|s| s.len() <= 200)
+            web_url
+                && (value["folder"].is_null()
+                    || value["folder"].as_str().is_some_and(|s| s.len() <= 200))
         }
         _ => false,
     }

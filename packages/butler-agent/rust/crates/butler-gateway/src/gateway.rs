@@ -48,9 +48,10 @@ pub use application::settings::{
     producer_log_config, startup_log_config, stored_ui_language_readonly,
 };
 pub use application::{
-    APP_PERSON_ID, AppAssetCommand, AppCanonOperation, AppCardInput, AppProfileInput,
-    AppSessionTopicClassifier, AppSessionTopicInput, AppSignInCommand, AppSignInUpsert,
-    AppVaultCommand, GatewaySignIns,
+    APP_PERSON_ID, AppAssetCommand, AppCanonOperation, AppCardInput, AppImageUsageCommand,
+    AppProfileInput, AppSessionTopicClassifier, AppSessionTopicInput, AppSignInCommand,
+    AppSignInUpsert, AppVaultCommand, GatewaySignIns, GeneratedAssetKind, ImageUsageOperation,
+    ImageUsageRecord, composite, mask_bounds,
 };
 pub use application::{
     AppAdmissionAuthority, AppApplication, AppApplicationConfig, AppApplicationDependencies,
@@ -61,21 +62,22 @@ pub use application::{
     AppCanonRequest, AppCanonResource, AppCanonTagExists, AppChatKind, AppChatSummary,
     AppContextBudgetFacts, AppContextConfigurationFacts, AppContextReadFacts, AppContextReadPort,
     AppContextReadQuery, AppContextUsage, AppCreateProjectRequest, AppCreateProjectResult,
-    AppCreateSessionInput, AppCreateSessionRequest, AppCreateSessionResult, AppExecutorReadiness,
-    AppFileDownload, AppFileUpload, AppFileWrite, AppGrantRef, AppGrantView, AppIdentityClock,
-    AppLedgerSourceRequest, AppLibraryChange, AppLibraryCommand, AppLibraryQuery, AppMemoryCommand,
-    AppMemoryPort, AppMessageFileSnapshot, AppMessageFileStorage, AppModelCatalogCommand,
-    AppModelCatalogPort, AppModelFallbackFacts, AppModelMetadata, AppMonitorPage,
-    AppMonitoringPort, AppNativeAssetResolver, AppNativeIngress, AppPersonalizationCommand,
-    AppPersonalizationEvent, AppPersonalizationPort, AppPersonalizationResult,
-    AppPlanDecisionAction, AppPlanDecisionLedgerError, AppPlanDecisionLedgerFuture,
-    AppPlanDecisionLedgerPort, AppPlanDecisionPlan, AppPlanDecisionRequest, AppPlanDecisionResult,
-    AppPlanDecisionStatus, AppProjectActionResult, AppProjectDashboardActionProgress,
-    AppProjectDashboardBriefingPort, AppProjectDashboardBriefingPrompt,
-    AppProjectDashboardBriefingRequest, AppProjectDashboardCheckpoint,
-    AppProjectDashboardDisposition, AppProjectDashboardLedgerError, AppProjectDashboardLedgerEvent,
-    AppProjectDashboardLedgerFuture, AppProjectDashboardLedgerHistory,
-    AppProjectDashboardLedgerPort, AppProjectDashboardLedgerRecord, AppProjectDashboardManagedPlan,
+    AppCreateSessionInput, AppCreateSessionRequest, AppCreateSessionResult, AppDocumentCommand,
+    AppExecutorReadiness, AppFileDownload, AppFileUpload, AppFileWrite, AppGrantRef, AppGrantView,
+    AppIdentityClock, AppLedgerSourceRequest, AppLibraryChange, AppLibraryCommand, AppLibraryQuery,
+    AppMemoryCommand, AppMemoryPort, AppMessageFileSnapshot, AppMessageFileStorage,
+    AppModelCatalogCommand, AppModelCatalogPort, AppModelFallbackFacts, AppModelMetadata,
+    AppMonitorPage, AppMonitoringPort, AppNativeAssetResolver, AppNativeIngress,
+    AppPersonalizationCommand, AppPersonalizationEvent, AppPersonalizationPort,
+    AppPersonalizationResult, AppPlanDecisionAction, AppPlanDecisionLedgerError,
+    AppPlanDecisionLedgerFuture, AppPlanDecisionLedgerPort, AppPlanDecisionPlan,
+    AppPlanDecisionRequest, AppPlanDecisionResult, AppPlanDecisionStatus, AppProjectActionResult,
+    AppProjectDashboardActionProgress, AppProjectDashboardBriefingPort,
+    AppProjectDashboardBriefingPrompt, AppProjectDashboardBriefingRequest,
+    AppProjectDashboardCheckpoint, AppProjectDashboardDisposition, AppProjectDashboardLedgerError,
+    AppProjectDashboardLedgerEvent, AppProjectDashboardLedgerFuture,
+    AppProjectDashboardLedgerHistory, AppProjectDashboardLedgerPort,
+    AppProjectDashboardLedgerRecord, AppProjectDashboardManagedPlan,
     AppProjectDashboardManagedWork, AppProjectDashboardPageQuery, AppProjectDashboardPinRef,
     AppProjectDashboardPreferencesUpdate, AppProjectDashboardRecordsQuery,
     AppProjectDashboardReview, AppProjectDashboardSnapshot, AppProjectDashboardSource,
@@ -183,3 +185,5 @@ pub fn http_route_templates() -> Vec<&'static str> {
 }
 
 pub use http::reset_browser_secret_keys;
+
+pub use protocol::ImageEditRequest;

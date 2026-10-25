@@ -24,6 +24,7 @@ pub(super) fn learn_echo_ids(state: &State, request: &str) {
     let patterns = PATTERNS.get_or_init(|| {
         [
             (r"guided-work-[0-9a-f]{64}".to_owned(), "ECHO_"),
+            (r"doc_[0-9a-f]{16}".to_owned(), "DOC_ECHO_"),
             (r"guided-plan-[0-9a-f]{64}".to_owned(), "PLAN_ECHO_"),
             (r"memory-detail:v1:[0-9a-f]{64}".to_owned(), "DETAIL_ECHO_"),
             // A streamed answer keeps its provisional id, `message-stream-<turn>`.
