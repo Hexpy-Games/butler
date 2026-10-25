@@ -23,7 +23,7 @@ export function EpicFieldInput({ epic, field, value, busy, valid, current, base,
     onKeyDown: (event: React.KeyboardEvent) => {
       if (event.nativeEvent.isComposing) return;
       if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (!saving) onCancel(); }
-      if (event.key === "Enter" && !multiline) { event.preventDefault(); void save(); }
+      if (event.key === "Enter" && (!multiline || event.metaKey || event.ctrlKey)) { event.preventDefault(); void save(); }
     } };
   const actions = <ButtonContainer size="icon-sm" justify="end">
     <Tooltip label={copy.cancel}><Button size="icon-sm" variant="outline" aria-label={copy.cancel} disabled={saving} onClick={onCancel}><X size="sm" /></Button></Tooltip>
