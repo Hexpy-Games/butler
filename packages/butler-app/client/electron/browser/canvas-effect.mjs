@@ -2,6 +2,7 @@
 // outside that path disappear instead, the drag edited or moved something that
 // already existed (often the selected object). Pixels decide; nothing here knows
 // the page. The result is a neutral note the model can act on.
+import { capturePage } from "./view-capture.mjs";
 const WIDTH = 480, MARGIN = 10, SETTLE_MS = 150;
 
 function viewportRect(tab, rect) {
@@ -13,7 +14,7 @@ function viewportRect(tab, rect) {
 }
 
 async function capture(tab, rect) {
-  const image = await tab.view.webContents.capturePage(rect, { stayHidden: true }).catch(() => null);
+  const image = await capturePage(tab, rect).catch(() => null);
   return image && !image.isEmpty() ? image : null;
 }
 
