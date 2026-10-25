@@ -23,6 +23,8 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
   useEffect(() => { void browserCall("presentation", { locale, reducedMotion }); }, [locale, reducedMotion]);
   const state = useBrowserState();
   const navigation = useButlerStore((store) => store.navigation);
+  // The hub shows conversation tabs by navigation; before it loads they are unknown, not absent.
+  const tabsKnown = useButlerStore((store) => Boolean(sessionId) || store.navigationLoaded);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [dialogContainer, setDialogContainer] = useState<HTMLDivElement | null>(null);
   const creating = useRef(false);
@@ -35,8 +37,8 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
   const copy = appCopy.browser;
   const { stillSrc, covered } = useBrowserPage(tab);
   useEffect(() => {
-    if (tab && tab.id !== state.activeId) void browserCall("activate", { id: tab.id });
-  }, [tab?.id, state.activeId]);
+    if (tabsKnown && tab && tab.id !== state.activeId) void browserCall("activate", { id: tab.id });
+  }, [tabsKnown, tab?.id, state.activeId]);
   useEffect(() => {
     void browserCall("scope", { value: false, owner: sessionId ? `conversation:${sessionId}` : "mine" });
   }, [sessionId]);
@@ -45,10 +47,10 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
   // Opened with no tabs, the pane opens a new tab at once (its in-app new-tab page, address focused).
   // It is a placeholder: a page that opens in or moves into the group (Butler's, a link's) takes its place.
   useEffect(() => {
-    if (!state.restored || !state.enabled || tabs.length || creating.current) return;
+    if (!state.restored || !state.enabled || !tabsKnown || tabs.length || creating.current) return;
     creating.current = true;
     void create(true).finally(() => { creating.current = false; });
-  }, [sessionId, state.restored, state.enabled, tabs.length]);
+  }, [sessionId, state.restored, state.enabled, tabsKnown, tabs.length]);
   const groups: TabStripGroup[] = [];
   for (const item of tabs) {
     let group = groups.find((entry) => entry.id === item.owner);

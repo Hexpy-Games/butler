@@ -25,7 +25,7 @@ export async function verifyPaneExits(page: Page, server: NativeAppServerHandle,
       await dialog(page).waitFor();
       let streamed: import("playwright").Locator | undefined;
       if (exit === "close" && choice === "계속 편집" || exit === "conversation" && choice === "저장") {
-        streamed = await streamWhileGuardOpen(page, server, `${exit}-${choice}`);
+        streamed = await streamWhileGuardOpen(page, server, id, `${exit}-${choice}`);
         if (exit === "close") await inlineShot(page, shots, "pane-unsaved-dialog");
       }
       const saved = choice === "저장" ? patch(page, id) : null;
@@ -168,8 +168,11 @@ async function verifyDialogFocus(page: Page) {
   }
 }
 
-async function streamWhileGuardOpen(page: Page, server: NativeAppServerHandle, suffix: string) {
-  const view = await server.api<import("../../packages/butler-app/client/ui/src/app/types.ts").SessionView>(`/session-view?session_id=${await page.evaluate(() => JSON.parse(localStorage.getItem("butler:app-ui-state:v1")!).active_session_id)}`);
+async function streamWhileGuardOpen(page: Page, server: NativeAppServerHandle, epicId: string, suffix: string) {
+  // Match openEpicConversation; the persisted UI state can lag behind navigation.
+  const epic = await server.api<EpicDetail>(`/canon/epics/${epicId}`);
+  assert(epic.home_session_id, "The open epic has a linked conversation");
+  const view = await server.api<import("../../packages/butler-app/client/ui/src/app/types.ts").SessionView>(`/session-view?session_id=${epic.home_session_id}`);
   const message = { id: `guard-stream-${suffix}`, chat_id: view.session_id, role: "assistant" as const,
     text: suffix.startsWith("close") ? "검토 자료가 도착했습니다." : "검색 흐름 검토 결과가 도착했습니다.", created_at: new Date().toISOString(), cursor: 1 };
   await page.route("**/session-view?**", async route => {

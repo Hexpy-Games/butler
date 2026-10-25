@@ -204,6 +204,9 @@ class UserBrowser {
     if (!this.enabled()) throw new Error("browsing_disabled");
     const owner = input.owner ?? "mine";
     if (owner !== "mine" && !/^conversation:[a-zA-Z0-9_-]{1,128}$/u.test(owner)) throw new Error("invalid_owner");
+    // A placeholder only fills an empty group. A pane asks for one from the state it was last sent, so a
+    // request that arrives after a tab has opened in or moved back into the group is stale.
+    if (input.placeholder === true && !input.url && !popupSource && [...this.tabs.values()].some(tab => tab.owner === owner)) return null;
     if(this.tabs.size>=MAX_TABS) throw new Error("tab_budget_exhausted");
     const url = input.url ? webUrl(input.url) : "";
     if (input.url && !url) throw new Error("blocked_protocol");

@@ -200,7 +200,7 @@ fn order(decision: AccessDecision) -> u8 {
 // test-category: security
 #[test]
 fn access_boundary_matches_the_owner_table() {
-    contained_read_rechecks_swapped_secret();
+    classification::contained_read_rechecks_swapped_secret();
     web::boundaries();
     assert_eq!(
         AccessMode::ALL.map(|mode| mode.as_str()),
@@ -292,8 +292,85 @@ fn access_boundary_matches_the_owner_table() {
         "cat .en?",
         "cat [.]env",
         "ls *.rs",
+        "cd /var && cat file",
+        "chdir /var",
+        "(cd /var && cat file)",
+        "if true; then command cd /var; fi",
+        "builtin cd /var",
+        "command -p cd /var",
+        "A=b cd /var",
+        "cd /var | true; cat file",
+        "cd /absent; cat file",
+        "pushd /var",
+        "Set-Location C:\\Users",
+        "sl C:/Users",
+        "Push-Location C:/Users",
+        "Pop-Location",
+        "CD..",
+        "cd\\",
+        "cd/",
+        "cat \"/var\"/file",
+        "cat \"/var\"\"/file\"",
+        "cat /v'a'r/file",
+        "cat a/../b",
+        "cat ..",
+        "cat C:\\a\\..\\b",
+        "cat \"a b/../c\"",
+        "cat --opt=\"/var\"/auth/x",
+        "cat --opt=\"a\"\"b\"",
+        "cat \"a\"\"b\"",
+        "bash -c \"cd /var && cat auth/probe.txt\"",
+        "sh -c 'cd /var && cat auth/probe.txt'",
+        "eval \"cd /var; cat auth/probe.txt\"",
+        "cmd /c \"cd /var && cat auth/probe.txt\"",
+        "pwsh -Command \"Set-Location /var\"",
+        "iex \"cd /var; cat auth/probe.txt\"",
+        "echo 'cd /var'",
+        "echo 'cat a/../b'",
+        "bash -c \"sh -c 'cd /var'\"",
+        "eval cd /var",
+        "time cd /var",
+        "exec cd /var",
+        "coproc cd /var",
+        "noglob cd /var",
+        "nocorrect cd /var",
+        "call cd /var",
     ] {
         assert!(command_scope_unresolved(command), "{command}");
+    }
+    for command in [
+        "cat notes.txt",
+        "ls",
+        "git status",
+        "echo hi > out.txt",
+        "cat 'ordinary file'",
+        "cat \"ordinary file\"",
+        "echo cd /var",
+        "if true; then cat ordinary; fi",
+        "command cat ordinary",
+        "cat a/.../b",
+        r"cat 'a\b'",
+        "cat --opt=\"ordinary file\"",
+        "KEY=\"ordinary value\" cat notes.txt",
+        "cat --opt='ordinary file'",
+        "KEY='ordinary value' cat notes.txt",
+    ] {
+        assert!(!command_scope_unresolved(command), "{command}");
+    }
+    if butler_platform::command_sandbox::POSIX_SHELL {
+        for command in [r"cat /d/au\th/x", r"cat My\ Dir/x"] {
+            assert!(command_scope_unresolved(command), "{command}");
+        }
+    }
+    if !butler_platform::command_sandbox::POSIX_SHELL {
+        for command in [
+            "cmd /c cd",
+            "cmd /c cd C:/Users",
+            "powershell -Command \"pushd C:/Users\"",
+            "powershell.exe -Command \"ls ~\"",
+        ] {
+            assert!(command_scope_unresolved(command), "{command}");
+        }
     }
     for name in [
         "run_command",
@@ -388,53 +465,4 @@ fn access_boundary_matches_the_owner_table() {
             assert!(mode.clone().narrower(other.clone()).rank() <= other.rank());
         }
     }
-}
-
-// A1: pin the open-time boundary after an ordinary target was classified.
-fn contained_read_rechecks_swapped_secret() {
-    use crate::workspace::{PathForm, ReadFileInput, ScopeRoots, WorkspaceFiles, classify_targets};
-    if !butler_platform::command_sandbox::POSIX_SHELL {
-        return;
-    }
-    let root = std::env::temp_dir().join(format!("butler-access-a1-{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&root).unwrap();
-    std::fs::write(root.join("a.txt"), "ordinary").unwrap();
-    std::fs::write(root.join(".env"), "SECRET_IN_ENV").unwrap();
-    let data = root.with_extension("data");
-    let roots = ScopeRoots {
-        attachments: &[],
-        project: Some(&root),
-        butler_data: &data,
-        protected_ledger_roots: &[],
-        installation_root: None,
-    };
-    assert_eq!(classify_targets(&roots, &root, &["a.txt"]), ProjectFolder);
-    std::fs::remove_file(root.join("a.txt")).unwrap();
-    butler_platform::secure_fs::symlink(&root.join(".env"), &root.join("a.txt")).unwrap();
-    tokio::runtime::Runtime::new().unwrap().block_on(async {
-        let files = WorkspaceFiles::new(1);
-        let result = files
-            .read_one(ReadFileInput {
-                butler_data: data.clone(),
-                root: root.clone(),
-                path: "a.txt".into(),
-                path_form: PathForm::Contained,
-                protected_roots: vec![],
-                start_line: None,
-                limit_lines: None,
-                max_bytes: 2048,
-                offset_bytes: None,
-            })
-            .await
-            .unwrap()
-            .unwrap()
-            .result;
-        files.close().await;
-        assert!(
-            result.to_string().contains("sensitive_path_blocked"),
-            "{result}"
-        );
-        assert!(!result.to_string().contains("SECRET_IN_ENV"));
-    });
-    std::fs::remove_dir_all(root).unwrap();
 }
