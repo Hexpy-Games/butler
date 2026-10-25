@@ -151,6 +151,8 @@ interface ButlerStore {
   activeChatId: string;
   activeChatTitle?: string;
   navigation: NavigationView;
+  /** False until the first navigation response (or its unavailable fallback) is applied. */
+  navigationLoaded: boolean;
   navigationGeneration: number;
   messages: MessageRecord[];
   sessionView: SessionView | null;
@@ -954,6 +956,7 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
   settingsReturnView: { kind: "session" },
   activeChatId: "draft:chat",
   navigation: EMPTY_NAVIGATION,
+  navigationLoaded: false,
   navigationGeneration: 0,
   messages: [],
   sessionView: null,
@@ -1083,9 +1086,8 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
         !findSessionSummary(nextNavigation, state.activeChatId)
           ? navigationWithSessionSummary(nextNavigation, activeLocalSession)
           : nextNavigation;
-      return structurallyEqual(state.navigation, displayedNavigation)
-        ? state
-        : { navigation: displayedNavigation };
+      if (structurallyEqual(state.navigation, displayedNavigation)) return state.navigationLoaded ? state : { navigationLoaded: true };
+      return { navigation: displayedNavigation, navigationLoaded: true };
     }),
   setMessages: (messages) =>
     set((state) => {
