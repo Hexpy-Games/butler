@@ -127,7 +127,10 @@
 
   position: relative;
   isolation: isolate;
-  overflow: hidden;
+  /* Clip, not hidden: the card clips a ScrollArea's scrollbar lane that
+     bleeds past its edge, and a hidden box would still scroll to reveal it
+     (focus, scrollIntoView), shifting everything inside sideways. */
+  overflow: clip;
   contain: paint;
   border: var(--border-hairline) solid var(--shell-card-edge);
   border-radius: var(--shell-card-radius);
