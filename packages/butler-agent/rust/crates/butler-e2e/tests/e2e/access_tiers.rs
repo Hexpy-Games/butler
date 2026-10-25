@@ -7,6 +7,7 @@ pub(super) use authority::{approve, assert_counts, delivered, paused};
 mod sandbox_data_reads;
 mod secret_reads;
 pub(super) mod stub;
+mod unsandboxed_scope;
 mod web_found;
 mod web_guard;
 use butler_e2e::e2e::{
