@@ -1,3 +1,5 @@
+import { openDocument } from "../documents/documentApi";
+import { documentKind } from "../library/documentKinds";
 import { api } from "@/app/api";
 import { appCopy } from "@/app/copy";
 import { useButlerStore } from "@/app/store";
@@ -11,10 +13,13 @@ import { storedFileArtifactKind } from "../artifacts/artifactDisplay";
 export async function openLibraryItem(item: LibraryItem, source = false) {
   try {
     if (item.block && item.origin) {
-      if (source) useButlerStore.getState().openSession(item.origin.session);
+      if (source && item.origin.document) openDocument({ id: item.origin.document, title: item.title });
+      else if (source) useButlerStore.getState().openSession(item.origin.session);
       else openDetail(item, { kind: "library", section: "scrap" });
       return;
     }
+    const document = documentKind(item);
+    if (document) { if (source) await document.source(item); else await document.open(item); return; }
     if (!source && item.kind === "scrap" && item.snapshot) { openScrap(item); return; }
     if (item.file) {
       if (item.session) useButlerStore.getState().openSession(item.session);

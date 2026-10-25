@@ -11,8 +11,13 @@
   },
   "dependencies": {
     "lexical": "0.50.0",
+    "diff": "9.0.0",
     "@lexical/react": "0.50.0",
     "@lexical/plain-text": "0.50.0",
+    "@lexical/rich-text": "0.50.0",
+    "@lexical/list": "0.50.0",
+    "@lexical/markdown": "0.50.0",
+    "@lexical/link": "0.50.0",
     "@lexical/history": "0.50.0",
     "@lexical/clipboard": "0.50.0",
     "@dnd-kit/core": "^6.3.1",
