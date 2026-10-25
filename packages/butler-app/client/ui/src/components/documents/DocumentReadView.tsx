@@ -1,7 +1,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { fromMarkdown } from "mdast-util-from-markdown";
-import { MarkdownContent, MarkdownLink, MarkdownTable, Typo, Stack } from "@/butler-ds";
+import { MediaFrame, MarkdownContent, MarkdownLink, MarkdownTable, Typo, Stack } from "@/butler-ds";
 import { AnswerBlocks } from "../conversation/AnswerBlocks";
 import { gatewayImageSource } from "@/app/messageFileUrls";
 import type { AnswerBlocksView, AnswerBlockView } from "../../../../shared/answer-blocks-view";
@@ -24,7 +24,7 @@ export function DocumentReadView({ doc, print = false }: { doc: EditableDocument
         const spec = JSON.parse(node.value, (_key, value) => {
           if (value && typeof value === "object" && typeof value.img === "string") {
             const asset = doc.assets?.find(asset => asset.id === value.img);
-            return { ...value, image_url: asset?.signed_url ?? asset?.url };
+            return { ...value, image_url: asset?.signed_url ?? asset?.url, image_width: asset?.image_width, image_height: asset?.image_height };
           }
           return value;
         }) as AnswerBlocksView;
@@ -36,7 +36,13 @@ export function DocumentReadView({ doc, print = false }: { doc: EditableDocument
       } catch { /* Unknown fences remain visible. */ }
     }
     return <MarkdownContent key={index}><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: MarkdownLink, table: MarkdownTable,
-      img: ({ src, alt }) => { const asset = doc.assets?.find(asset => asset.id === src); return <img src={gatewayImageSource(asset?.signed_url ?? asset?.url ?? src)} alt={alt} />; },
+      img: ({ src, alt }) => {
+        const asset = doc.assets?.find(asset => asset.id === src);
+        const url = gatewayImageSource(asset?.signed_url ?? asset?.url ?? src);
+        return asset?.image_width && asset?.image_height
+          ? <MediaFrame src={url} natural={{ width: asset.image_width, height: asset.image_height }} alt={alt} />
+          : <img src={url} alt={alt} />;
+      },
     }}>{raw}</ReactMarkdown></MarkdownContent>;
   })}</Stack></div>;
 }

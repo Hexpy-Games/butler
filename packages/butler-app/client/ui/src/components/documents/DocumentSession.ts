@@ -5,7 +5,7 @@ import { notifyStatus } from "@/app/notifications";
 import { documentPath, readDocument, restoreDocument, type EditableDocument } from "./documentApi";
 import { mergeDocument } from "./documentMerge";
 import type { DocumentUpdate } from "@/app/documentEvents";
-export interface DocumentState { head?: EditableDocument; loadId: number; body: string; saved: boolean; editing: boolean; changed: DocumentUpdate["changed"]; failed: boolean }
+export interface DocumentState { head?: EditableDocument; loadId: number; body: string; saved: boolean; editing: boolean; changed: DocumentUpdate["changed"]; failed: boolean; undoRev?: number }
 /** One owner for lazy drafts and serialized server operations, including saves that finish after close. */
 export class DocumentSession {
   state: DocumentState = { loadId: 0, body: "", saved: false, editing: false, changed: [], failed: false };
@@ -15,9 +15,10 @@ export class DocumentSession {
   private finishTimer?: ReturnType<typeof setTimeout>;
   private undoRev?: number;
   private running = false;
+  private closed = false;
   private draft?: () => string;
   private dirty = false;
-  constructor(readonly id: string) {}
+  constructor(readonly id: string, private readonly inDialog = false) {}
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   snapshot = () => this.state;
   private update(patch: Partial<DocumentState>) { this.state = { ...this.state, ...patch }; this.listeners.forEach(listener => listener()); }
@@ -38,7 +39,7 @@ export class DocumentSession {
     });
     return this.pending;
   }
-  load() { return this.enqueue(async () => this.accept(await readDocument(this.id))); }
+  load() { this.closed = false; return this.enqueue(async () => this.accept(await readDocument(this.id))); }
   private accept(head: EditableDocument) {
     const old = this.state.head, ours = this.captureDraft();
     const body = old ? mergeDocument(old.body, ours, head.body) : head.body;
@@ -87,15 +88,25 @@ export class DocumentSession {
   private finishEditing() {
     clearTimeout(this.finishTimer);
     const rev = this.undoRev; this.undoRev = undefined;
-    this.update({ editing: false, changed: [] });
-    if (rev) notifyStatus(appCopy.documents.edited, { action: { label: appCopy.settings.wallpaper.undo, onClick: () => { void this.restore(rev); } } });
+    this.update({ editing: false, changed: [], undoRev: this.inDialog && !this.closed ? rev : undefined });
+    if (rev && (!this.inDialog || this.closed)) this.notifyEdited(rev);
+  }
+  private notifyEdited(rev: number) {
+    notifyStatus(appCopy.documents.edited, { action: { label: appCopy.library.undo, onClick: () => { void this.restore(rev); } } });
   }
   restore(rev: number) {
     return this.enqueue(async () => {
       await this.save();
       this.accept(await restoreDocument(this.id, rev));
+      this.update({ undoRev: undefined });
       if (this.state.body !== this.state.head?.body) await this.save();
     });
   }
-  close() { clearTimeout(this.finishTimer); return this.flush(); }
+  close() {
+    clearTimeout(this.finishTimer);
+    this.closed = true;
+    if (this.state.editing) this.finishEditing();
+    else if (this.state.undoRev) { this.notifyEdited(this.state.undoRev); this.update({ undoRev: undefined }); }
+    return this.flush();
+  }
 }

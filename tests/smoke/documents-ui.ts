@@ -1,5 +1,7 @@
 // UI behavior smoke: offline gateway fixtures, real Lexical editor and product screens.
+import { checkDocumentDialog, checkDocumentImage } from "./document-dialog-checks";
 import assert from "node:assert/strict";
+import { getAppCopy } from "../../packages/butler-i18n/src/index";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -9,13 +11,16 @@ import { launchSmokeBrowser } from "../support/smoke-browser";
 import { documentProfilePlugin } from "../support/document-profile";
 const root = process.cwd(), stage = process.env.BUTLER_DOCUMENT_STAGE ?? "after";
 const evidence = process.env.BUTLER_SMOKE_EVIDENCE ?? resolve(process.env.TMPDIR ?? "/tmp", "bd3/shots"); mkdirSync(evidence, { recursive: true });
+const image = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 300 200"><rect width="300" height="200" fill="#8ca5ab"/><circle cx="210" cy="65" r="26" fill="#efd79c"/><path d="M0 200V150L90 60L220 200M120 200L220 110L300 180V200" fill="#55766d"/></svg>');
+const imageData = `data:image/svg+xml;base64,${image.toString("base64")}`;
 const spec = { v: 2, blocks: [{ type: "metrics", title: "Budget", items: [{ label: "Total", value: 120 }] }] };
 const initial = `# Report\n\nAn **important** paragraph with *emphasis*.\n\n- first\n- second\n\n1. one\n2. two\n\n\`\`\`blocks\n${JSON.stringify(spec)}\n\`\`\`\n\n![image](img_abcdefghij)\n\n> Preserve unknown Markdown\n`;
 const artifact = { id: "doc_report", title: "Report", kind: "doc", session_id: "butler-client", message_id: "answer", created_at: "2026-10-25T08:00:00Z", deliverable: true };
 const message = { id: "answer", chat_id: "butler-client", role: "assistant", status: "delivered", text: "Here is your report.", created_at: artifact.created_at, artifacts: [artifact] };
 let head = { id: artifact.id, title: "Report", body: initial, rev: 1, author: "butler", chat_id: "butler-client", message_id: "answer", created_at: artifact.created_at, updated_at: artifact.created_at,
-  assets: [{ id: "img_abcdefghij", url: "/message-assets/img_abcdefghij", signed_url: "/message-assets/img_abcdefghij?signed=fixture" }] };
-let history = [structuredClone(head)], conflict = false;
+  assets: [{ id: "img_abcdefghij", url: "/message-assets/img_abcdefghij", signed_url: "/message-assets/img_abcdefghij?expires=9999999999&signature=fixture", image_width: 600, image_height: 400 }] };
+let history = [structuredClone(head)], conflict = false, projectImageSize = true;
+const projected = (doc: typeof head) => projectImageSize ? doc : { ...doc, assets: doc.assets.map(({ image_width, image_height, ...asset }) => asset) };
 const puts: Record<string, unknown>[] = [], restores: Record<string, unknown>[] = [], exports: Record<string, string>[] = [], queries: string[] = [], errors: string[] = [];
 const file = { file_id: "mf_abcdefghij", safe_name: "report.md", size_bytes: 16, mime_type: "text/markdown", kind: "text", url: "/message-files/mf_abcdefghij", created_at: artifact.created_at };
 const fileItem = { id: "file-report", kind: "document", title: "File report", session: "butler-client", url: file.url, file, capturedAt: artifact.created_at,
@@ -55,10 +60,10 @@ async function setup(page: Page) {
         if (conflict) { conflict = false; head = { ...head, body: head.body.replace("Preserve unknown", "Remote unknown"), rev: head.rev + 1 }; history.unshift(structuredClone(head)); return route.fulfill({ status: 409, json: { error: { code: "revision_conflict", message: "Conflict" } } }); }
         assert.equal(body.expected_rev, head.rev); head = { ...head, body: body.body, author: "user", rev: head.rev + 1 }; history.unshift(structuredClone(head));
       }
-      return answer(head);
+      return answer(projected(head));
     }
     if (path.endsWith("/revisions")) return answer(history);
-    if (path.includes("/revisions/")) return answer(history.find(row => row.rev === Number(path.split("/").at(-1))));
+    if (path.includes("/revisions/")) return answer(projected(history.find(row => row.rev === Number(path.split("/").at(-1)))!));
     if (path.endsWith("/restore")) {
       const body = request.postDataJSON(); restores.push(body);
       const old = history.find(row => row.rev === body.rev)!;
@@ -68,7 +73,7 @@ async function setup(page: Page) {
     if (path === "/library/groups") return answer({ groups: [], ungrouped: 1, total: 1 });
     if (path === "/library/facets") return answer({ total: 2, tags: [], sites: [] });
     if (path === "/library/tags") return answer({ tags: [] });
-    if (path.startsWith("/message-assets/")) return route.fulfill({ contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl9sAAAAASUVORK5CYII=", "base64") });
+    if (path.startsWith("/message-assets/")) return route.fulfill({ contentType: "image/svg+xml", body: image });
     if (path.startsWith("/message-files/")) return route.fulfill({ contentType: "text/markdown", body: "# File report\n" });
     if (path.endsWith("/controls")) return answer({ session_id: "butler-client", revision: 0, catalog_generation: "harness-model-catalog-v1", controls: { model: "openai/gpt-5.6-sol", reasoning_effort: "none", access_mode: "full_access", plan_mode: false } });
     if (path === "/session-queue") return answer({ queued_messages: [] });
@@ -91,13 +96,14 @@ async function open(page: Page, width = 1440, theme = "light") {
     await dialog.evaluate(async node => { await Promise.all(node.getAnimations().map(animation => animation.finished)); });
     assert.equal(await dialog.getAttribute("data-layout"), "scroll-body");
     if (stage !== "before") {
+      await checkDocumentDialog(page, width, evidence);
+      if (projectImageSize) await checkDocumentImage(page, width, evidence);
       assert.equal(await dialog.getAttribute("data-size"), "xl");
       const bounds = await dialog.boundingBox(); assert.ok(bounds);
-      assert.equal(Math.round(bounds.width), Math.min(880, width - 32));
+      assert.ok(bounds.width <= 880);
       await dialog.getByRole("button", { name: "닫기", exact: true }).waitFor();
       assert.equal(await dialog.getByRole("button", { name: "아티팩트 목록", exact: true }).count(), 0);
     }
-    assert.equal(await dialog.evaluate(node => Math.round(node.getBoundingClientRect().height)), await dialog.evaluate(node => Math.round(parseFloat(getComputedStyle(node).maxHeight))));
     assert.equal(await dialog.getAttribute("aria-labelledby").then(id => page.locator(`[id="${id}"]`).innerText()), "Report");
     assert.equal(await page.locator('[data-session-section="artifacts"] [data-document-id]').count(), 0);
     await page.locator('[data-session-section="artifacts"]').getByText("Report", { exact: true }).waitFor();
@@ -140,9 +146,12 @@ async function interactions(page: Page, width = 1440) {
   await page.getByRole("dialog", { name: "블록 추가", exact: true }).waitFor({ state: "hidden" });
   assert.equal(await editor(page).locator('[data-test-class="answer-blocks"]').count(), 2, "two block embeds");
   await page.getByText("저장됨", { exact: true }).waitFor();
-  const undo = await live(page); await page.getByText("버틀러가 수정했어요", { exact: true }).waitFor();
+  const undo = await live(page);
+  const dialog = page.getByRole("dialog", { name: head.title, exact: true });
+  await dialog.getByText("버틀러가 수정했어요", { exact: true }).waitFor();
+  assert.equal(await page.locator('[data-sonner-toast]').filter({ hasText: "버틀러가 수정했어요" }).count(), 0, "dialog edits offer inline undo without a toast");
   const restored = page.waitForResponse(response => response.url().endsWith("/restore"));
-  await page.locator('[data-sonner-toast]').getByRole("button", { name: "되돌리기" }).click();
+  await dialog.getByRole("button", { name: getAppCopy("ko-KR").library.undo, exact: true }).click();
   await restored;
   await page.waitForFunction(() => !document.querySelector('[data-butler-editing="true"]'));
   assert.equal(restores.at(-1)?.rev, undo);
@@ -152,14 +161,17 @@ async function interactions(page: Page, width = 1440) {
   assert.ok(head.body.includes("typed through conflict")); assert.ok(head.body.includes("Remote unknown"));
   await page.getByRole("button", { name: "버전 기록", exact: true }).click();
   await page.getByRole("listbox", { name: "버전 기록" }).getByText("버틀러", { exact: true }).first().waitFor();
-  await page.getByRole("option").last().click(); await page.locator('[data-slot="version-history"]').getByRole("button", { name: "되돌리기" }).click();
+  await page.getByRole("option").last().click();
+  await page.locator("[data-document-read-only]").waitFor();
+  await checkDocumentImage(page, width, evidence, "[data-document-read-only]");
+  await page.locator('[data-slot="version-history"]').getByRole("button", { name: "되돌리기" }).click();
   await editor(page).waitFor();
   await page.evaluate(() => {
     (window as unknown as { butlerApp: unknown }).butlerApp = { exportDocument: (window as unknown as { captureExport: (value: unknown) => void }).captureExport };
   });
   await page.getByRole("button", { name: "내보내기", exact: true }).click(); await page.getByRole("menuitem", { name: "Markdown", exact: true }).click();
-  await page.waitForTimeout(200); assert.equal(exports.at(-1)?.format, "markdown"); assert.ok(!exports.at(-1)!.content.includes("```blocks")); assert.ok(exports.at(-1)!.content.includes("data:image/png;base64,"));
-  const expected = initial.replace(/```blocks\n[^]*?\n```/u, "### Budget\n\n- Total: 120").replace("(img_abcdefghij)", "(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl9sAAAAASUVORK5CYII=)");
+  await page.waitForTimeout(200); assert.equal(exports.at(-1)?.format, "markdown"); assert.ok(!exports.at(-1)!.content.includes("```blocks")); assert.ok(exports.at(-1)!.content.includes("data:image/svg+xml;base64,"));
+  const expected = initial.replace(/```blocks\n[^]*?\n```/u, "### Budget\n\n- Total: 120").replace("(img_abcdefghij)", `(${imageData})`);
   assert.equal(exports.at(-1)!.content, expected);
   await page.getByRole("button", { name: "내보내기", exact: true }).click(); await page.getByRole("menuitem", { name: "PDF", exact: true }).click();
   await page.waitForTimeout(200); assert.equal(exports.at(-1)?.format, "pdf"); assert.ok(exports.at(-1)!.content.includes("data-document-read-only")); assert.ok(!exports.at(-1)!.content.includes("contenteditable=\"true\""));
@@ -184,6 +196,27 @@ async function closeAndFlush(page: Page) {
 async function drawer(page: Page) {
   await page.evaluate(async () => { const path = "/src/components/library/libraryNav.ts"; (await import(/* @vite-ignore */ path)).openLibrary({ section: "document" }); });
   await page.locator('[data-library-item="doc_report"]').waitFor(); await page.locator('[data-library-item="file-report"]').waitFor();
+}
+async function outsideDialogUndo(page: Page) {
+  head = { ...head, body: initial }; history = [structuredClone(head)];
+  await open(page);
+  const dialog = page.getByRole("dialog", { name: head.title, exact: true });
+  const closedRev = await live(page);
+  await dialog.getByText("버틀러가 수정했어요", { exact: true }).waitFor();
+  await dialog.getByRole("button", { name: "닫기", exact: true }).click();
+  await dialog.waitFor({ state: "hidden" });
+  const toast = page.locator('[data-sonner-toast]').filter({ hasText: "버틀러가 수정했어요" });
+  const closedRestore = page.waitForResponse(response => response.url().endsWith("/restore"));
+  await toast.getByRole("button", { name: getAppCopy("ko-KR").library.undo, exact: true }).click();
+  await closedRestore; assert.equal(restores.at(-1)?.rev, closedRev);
+  await toast.waitFor({ state: "hidden" });
+  await drawer(page);
+  await page.locator('[data-library-item="doc_report"]').getByText("Report", { exact: true }).click();
+  await editor(page).waitFor();
+  const pageRev = await live(page);
+  const pageRestore = page.waitForResponse(response => response.url().endsWith("/restore"));
+  await toast.getByRole("button", { name: getAppCopy("ko-KR").library.undo, exact: true }).click();
+  await pageRestore; assert.equal(restores.at(-1)?.rev, pageRev);
 }
 async function navigation(page: Page) {
   await open(page, 900);
@@ -293,6 +326,39 @@ async function measure(page: Page) {
   const result = { bytes: Buffer.byteLength(original), blocks: 10, images: 1, openMs, firstPaintMs, keystrokeToPaintMs: paintMs, steps };
   writeFileSync(join(evidence, process.env.BUTLER_DOCUMENT_MEASUREMENT === "before" ? "before-performance.json" : "performance.json"), JSON.stringify(result, null, 2)); console.log(JSON.stringify(result));
 }
+async function unknownImage(page: Page) {
+  projectImageSize = false;
+  head = { ...head, body: initial }; history = [structuredClone(head), { ...head, rev: head.rev - 1 }];
+  try {
+    await open(page);
+    const image = editor(page).locator('[data-slot="media-frame"]');
+    assert.equal(await image.getAttribute("data-natural"), null);
+    assert.equal(await image.getAttribute("data-aspect"), "16:10", "unknown editor images retain their existing frame");
+    await page.getByRole("button", { name: "버전 기록", exact: true }).click();
+    await page.getByRole("option").last().click();
+    const preview = page.locator('[data-document-read-only]');
+    await preview.locator("img").waitFor();
+    assert.equal(await preview.locator('[data-slot="media-frame"]').count(), 0, "unknown revision images retain their existing Markdown rendering");
+  } finally { projectImageSize = true; }
+}
+async function imageEmbeds(page: Page) {
+  const body = head.body;
+  const imageSpec = { v: 2, blocks: [{ type: "image", img: "img_abcdefghij", alt: "Mountain" }] };
+  head = { ...head, body: `![Mountain](img_abcdefghij)\n\n\`\`\`blocks\n${JSON.stringify(imageSpec)}\n\`\`\`\n` };
+  for (const width of [1440, 390]) {
+    await open(page, width);
+    assert.equal(await editor(page).locator('[data-slot="media-frame"][data-natural]').count(), 2);
+    await checkDocumentImage(page, width, evidence);
+    await page.getByRole("button", { name: "버전 기록", exact: true }).click();
+    await page.getByRole("listbox").waitFor();
+    await page.keyboard.press("Escape");
+    await page.getByRole("listbox").waitFor({ state: "hidden" });
+    await page.getByRole("dialog", { name: head.title, exact: true }).waitFor();
+    await page.keyboard.press("Escape");
+    await page.getByRole("dialog", { name: head.title, exact: true }).waitFor({ state: "hidden" });
+  }
+  head = { ...head, body }; history = [structuredClone(head)];
+}
 async function keyboardUnits(page: Page) {
   await open(page);
   const unit = editor(page).locator('[data-test-class="answer-blocks"]').first();
@@ -339,13 +405,18 @@ try {
   else if (stage === "before") { await matrix(page); await measure(page); }
   else {
     const phase = process.env.BUTLER_DOCUMENT_PHASE;
-    if (!phase || phase === "interactions" || phase === "desktop") await interactions(page);
-    if (!phase || phase === "interactions" || phase === "phone") await interactions(page, 390);
-    if (!phase || phase === "interactions" || phase === "keyboard") await keyboardUnits(page);
-    if (!phase || phase === "navigation") await navigation(page);
-    if (!phase || phase === "matrix") await matrix(page);
-    if (!phase || phase === "measure") await measure(page);
-    if (!phase || phase === "matrix") assert.ok(queries.some(query => query.includes("kinds=doc%2Cdocument")));
+    const phases = phase?.split(",");
+    const runs = (...names: string[]) => !phases || names.some(name => phases.includes(name));
+    if (!phase) await imageEmbeds(page);
+    if (runs("interactions", "desktop")) await interactions(page);
+    if (runs("interactions", "phone")) await interactions(page, 390);
+    if (runs("interactions", "keyboard")) await keyboardUnits(page);
+    if (runs("navigation")) await navigation(page);
+    if (runs("outside-undo")) await outsideDialogUndo(page);
+    if (runs("unknown-image")) await unknownImage(page);
+    if (runs("matrix")) await matrix(page);
+    if (runs("measure")) await measure(page);
+    if (runs("matrix")) assert.ok(queries.some(query => query.includes("kinds=doc%2Cdocument")));
   }
   assert.deepEqual(errors, []);
   writeFileSync(join(evidence, `${stage}-result.json`), JSON.stringify({ ok: true, puts: puts.length, restores: restores.length, exports: exports.map(item => item.format), modelCalls: 0 }, null, 2));

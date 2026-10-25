@@ -17,6 +17,7 @@ editor's selection.
 ## Accessibility
 - `role="toolbar"`, named by `label`; buttons carry `aria-pressed` for formats that are on.
 - Mouse-down never moves focus out of the text.
+- It stays clickable over a modal Dialog (the editor in a document dialog): the bar takes pointer events back itself.
 
 ## Tags
 document, editor, toolbar, format
