@@ -85,14 +85,26 @@ async function setup(page: Page) {
   });
   await page.exposeFunction("captureExport", (value: Record<string, string>) => exports.push(value));
 }
-async function open(page: Page, width = 1440, theme = "light") {
+async function open(page: Page, width = 1440, theme = "light", fullPage = false) {
   await page.setViewportSize({ width, height: 1000 });
   await page.goto(`${base}?visual=components&theme=${theme}&locale=ko`);
-  await page.locator('[data-test-class="message-artifact-list"]').getByText("Report", { exact: true }).click();
+  if (fullPage) {
+    await drawer(page);
+    await page.locator('[data-library-item="doc_report"]').getByText(head.title, { exact: true }).click();
+  } else await page.locator('[data-test-class="message-artifact-list"]').getByText("Report", { exact: true }).click();
   await page.getByRole("textbox", { name: "문서", exact: true }).waitFor();
   await page.evaluate(() => document.fonts.ready);
   assert.equal(await page.getByRole("dialog").count(), 0);
-  assert.equal(new URL(page.url()).searchParams.get("doc"), head.id);
+  assert.equal(new URL(page.url()).searchParams.get("doc"), fullPage ? head.id : null);
+  assert.equal(await page.locator('[data-test-class="file-viewer"]').count(), fullPage ? 0 : 1);
+  if (!fullPage) {
+    const pane = page.locator('[data-test-class="file-viewer"]');
+    for (const name of ["버전 기록", "원래 대화", "내보내기"]) await pane.getByRole("button", { name, exact: true }).waitFor();
+    if (width === 1440) {
+      const chat = await page.locator('[data-test-class~="conversation-scroll"]').boundingBox(), viewer = await pane.boundingBox();
+      assert(chat && viewer && viewer.x >= chat.x + chat.width, "document occupies the right slot beside the chat");
+    }
+  }
   await page.getByRole("button", { name: "버전 기록", exact: true }).waitFor();
 }
 const editor = (page: Page) => page.getByRole("textbox", { name: "문서", exact: true });
@@ -172,7 +184,7 @@ async function closeAndFlush(page: Page) {
   await editor(page).focus(); await page.keyboard.press("ControlOrMeta+End");
   const saved = page.waitForResponse(response => response.request().method() === "PUT" && response.url().endsWith(`/documents/${head.id}`));
   await page.keyboard.type(" flushed on navigation");
-  await page.getByRole("button", { name: "원래 대화", exact: true }).click();
+  await page.locator('[data-test-class="file-viewer-close"]').click();
   await editor(page).waitFor({ state: "hidden" });
   await saved; assert.ok(head.body.includes(" flushed on navigation"));
   assert.equal(new URL(page.url()).searchParams.get("doc"), null);
@@ -185,7 +197,8 @@ async function outsideUndo(page: Page) {
   head = { ...head, body: initial }; history = [structuredClone(head)];
   await open(page);
   const rev = await live(page);
-  await page.getByRole("button", { name: "원래 대화", exact: true }).click();
+  await page.locator('[data-test-class="file-viewer-close"]').click();
+  await editor(page).waitFor({ state: "hidden" });
   const toast = page.locator('[data-sonner-toast]').filter({ hasText: "버틀러가 수정했어요" });
   const restored = page.waitForResponse(response => response.url().endsWith("/restore"));
   await toast.getByRole("button", { name: getAppCopy("ko-KR").library.undo, exact: true }).click();
@@ -194,10 +207,11 @@ async function outsideUndo(page: Page) {
 async function navigation(page: Page) {
   await open(page, 900);
   await page.getByRole("button", { name: "원래 대화", exact: true }).click();
+  await page.locator('[data-test-class="file-viewer-close"]').click();
   await page.locator('[data-test-class="session-info-toggle"]').click();
   await page.locator('[data-session-section="artifacts"]').getByText("Report", { exact: true }).click();
   await editor(page).waitFor();
-  assert.equal(new URL(page.url()).searchParams.get("doc"), head.id);
+  assert.equal(new URL(page.url()).searchParams.get("doc"), null);
   await drawer(page);
   await page.locator('[data-library-item="doc_report"]').getByText("Report", { exact: true }).click();
   await editor(page).waitFor();
@@ -213,9 +227,48 @@ async function navigation(page: Page) {
   await block.hover(); await block.getByRole("button", { name: "더 보기", exact: true }).click();
   await page.getByRole("menuitem", { name: "문서로 만들기", exact: true }).click();
   await editor(page).getByText("Editable reply", { exact: true }).waitFor();
-  assert.equal(new URL(page.url()).searchParams.get("doc"), head.id);
+  assert.equal(new URL(page.url()).searchParams.get("doc"), null);
+  await page.locator('[data-test-class="file-viewer"] [data-test-class="editable-document"]').waitFor();
   assert.equal(await page.getByRole("dialog").count(), 0);
   head = { ...head, id: artifact.id, title: "Report", body: initial }; history = [structuredClone(head)];
+}
+async function slotSharing(page: Page) {
+  await open(page);
+  await page.evaluate(async () => {
+    const bridgePath = "/src/components/browser/browserBridge.ts", shellPath = "/src/components/browser/browserShellState.ts";
+    (window as Window & { butlerBrowser?: unknown }).butlerBrowser = {
+      call: async () => null, subscribe: () => () => {}, onFrame: () => () => {}, onPointer: () => () => {},
+      onElementDrag: () => () => {}, onSelectionAction: () => () => {}, onAddress: () => () => {},
+    };
+    (await import(/* @vite-ignore */ bridgePath)).useBrowserState.setState({ enabled: true, restored: false });
+    (await import(/* @vite-ignore */ shellPath)).useBrowserShellState.getState().setOpen("butler-client", true);
+  });
+  await editor(page).waitFor({ state: "hidden" });
+  await page.locator('[data-test-class="browser-area"]').waitFor();
+  await page.evaluate(async doc => {
+    const path = "/src/components/documents/documentApi.ts";
+    (await import(/* @vite-ignore */ path)).openDocument(doc);
+  }, { id: head.id, title: head.title, chat_id: head.chat_id });
+  await page.locator('[data-test-class="file-viewer"] [data-test-class="editable-document"]').waitFor();
+  await page.evaluate(async () => {
+    const path = "/src/components/browser/browserShellState.ts";
+    (await import(/* @vite-ignore */ path)).useBrowserShellState.getState().setOpen("butler-client", true);
+  });
+  await editor(page).waitFor({ state: "hidden" });
+  await page.locator('[data-test-class="browser-area"]').waitFor();
+  await page.evaluate(async () => {
+    const path = "/src/app/fileViewerState.ts";
+    (await import(/* @vite-ignore */ path)).useFileViewerState.getState().setShown("butler-client", true);
+  });
+  await editor(page).waitFor();
+  assert.equal(await editor(page).locator("h1").innerText(), "Report");
+  await page.evaluate(async doc => {
+    const path = "/src/components/documents/documentApi.ts";
+    (await import(/* @vite-ignore */ path)).openDocument(doc);
+  }, { id: head.id, title: head.title });
+  await editor(page).waitFor();
+  assert.equal(new URL(page.url()).searchParams.get("doc"), head.id);
+  assert.equal(await page.locator('[data-test-class="file-viewer"]').count(), 0);
 }
 async function measure(page: Page) {
   const embeds = Array.from({ length: 10 }, () => `\`\`\`blocks\n${JSON.stringify(spec)}\n\`\`\`\n\n`).join("");
@@ -339,7 +392,9 @@ async function keyboardUnits(page: Page) {
 async function matrix(page: Page) {
   for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (background of ["plain", "wallpaper"]) {
     head = { ...head, title: "Report — document layout, revisions and export", body: initial }; history = [structuredClone(head), { ...head, rev: head.rev - 1, author: "user" }];
-    await open(page, width, theme); await shot(page, "drawer-document", width, theme);
+    await open(page, width, theme); await shot(page, "pane-document", width, theme);
+    await live(page); await shot(page, "pane-butler-editing", width, theme);
+    await open(page, width, theme, true); await shot(page, "drawer-document", width, theme);
     const layout = await measureDocumentLayout(page);
     layouts.push({ width, theme, background, state: "document", layout });
     assertDocumentLayout(layout, width);
@@ -373,7 +428,7 @@ try {
     if (runs("interactions", "desktop")) await interactions(page);
     if (runs("interactions", "phone")) await interactions(page, 390);
     if (runs("interactions", "keyboard")) await keyboardUnits(page);
-    if (runs("navigation")) await navigation(page);
+    if (runs("navigation")) { await slotSharing(page); await navigation(page); }
     if (runs("outside-undo")) await outsideUndo(page);
     if (runs("unknown-image")) await unknownImage(page);
     if (runs("matrix")) await matrix(page);
