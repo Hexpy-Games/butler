@@ -22,7 +22,8 @@ function DismissibleHint() {
 
 export const guidance: ShowcaseGuidance = {
   purpose: "Keeps a child mounted through its exit animation and exposes data-state open/closed.",
-  whenToUse: ["Mount and unmount a small element with a fade or rise", "Build a DS component that needs an exit animation"],
+  whenToUse: ["Mount and unmount a small element with a fade or rise", "Build a DS component that needs an exit animation",
+    "Hold back what takes the element's place until its exit has ended (onExitComplete)"],
   whenNotToUse: [
     { when: "Revealing content with a height change", use: "Collapsible" },
     { when: "Swapping one line of status text", use: "RollingSwap" },

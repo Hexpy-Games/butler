@@ -96,7 +96,7 @@ export const guidance: ShowcaseGuidance = {
     "The jump button says what is below (New messages) or where it goes (Jump to latest).",
     "rail takes a TabRail and railView the conversation id: the column moves left only as far as needed, once per view.",
     "aside holds session details, not actions on a message: a few short sections (NavSection rows), empty ones hidden. Name it with asideLabel.",
-    "A docked aside and a TabRail share the right margin: show one at a time.",
+    "A docked aside and a TabRail share the right margin: show one at a time. The shell holds a rail back until a leaving aside has gone, then fades it in.",
   ],
   accessibility: [
     "Auto-scroll only when already at the bottom or while sending; the jump button is keyboard reachable.",

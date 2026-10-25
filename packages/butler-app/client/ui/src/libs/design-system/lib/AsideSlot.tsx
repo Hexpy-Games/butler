@@ -32,6 +32,8 @@ interface AsideSlotProps {
   label?: string;
   className: string;
   glassClassName: string;
+  /** A layout's exit has ended and its aside unmounted. */
+  onExitComplete?: () => void;
 }
 
 /**
@@ -41,7 +43,7 @@ interface AsideSlotProps {
  * cross-fade on motion tokens (none under reduced motion). The last content stays for the exit after
  * the block stops passing it.
  */
-export function AsideSlot({ aside, layout, floatOpen, slot, label, className, glassClassName }: AsideSlotProps) {
+export function AsideSlot({ aside, layout, floatOpen, slot, label, className, glassClassName, onExitComplete }: AsideSlotProps) {
   const kept = useRef<AsideContent>(aside);
   if (hasAsideContent(aside)) kept.current = aside;
   const present = hasAsideContent(aside);
@@ -50,10 +52,10 @@ export function AsideSlot({ aside, layout, floatOpen, slot, label, className, gl
   );
   return (
     <>
-      <Presence present={present && layout === "docked"} motion="fade">
+      <Presence present={present && layout === "docked"} motion="fade" onExitComplete={onExitComplete}>
         <aside className={className} data-slot={slot} data-layout="docked" aria-label={label}>{render("docked")}</aside>
       </Presence>
-      <Presence present={present && layout === "floating" && floatOpen} motion="fade">
+      <Presence present={present && layout === "floating" && floatOpen} motion="fade" onExitComplete={onExitComplete}>
         <aside className={className} data-slot={slot} data-layout="floating" aria-label={label}>
           <TintedGlass className={dsClass(glassClassName)} radius="popover" padding="none">{render("floating")}</TintedGlass>
         </aside>
