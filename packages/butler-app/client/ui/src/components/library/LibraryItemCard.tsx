@@ -1,3 +1,4 @@
+import { documentKind } from "./documentKinds";
 import { BlockScrap } from "./BlockScrap";
 import { useRef, useState, type MouseEvent } from "react";
 import { appCopy } from "@/app/copy";
@@ -12,7 +13,7 @@ import { startCardDrag, useCardDrag } from "./libraryCardDrag";
 import { useLibraryDialogs } from "./libraryDialogs";
 import { openDetail } from "./libraryNav";
 
-const KIND_TAG = () => ({ scrap: appCopy.browser.element, document: appCopy.browser.document, bookmark: appCopy.browser.bookmarks, output: appCopy.browser.output });
+const KIND_TAG = () => ({ scrap: appCopy.browser.element, document: appCopy.browser.document, doc: appCopy.browser.document, bookmark: appCopy.browser.bookmarks, output: appCopy.browser.output });
 
 export interface CardSelection {
   mode: boolean;
@@ -44,7 +45,7 @@ export function LibraryItemCard({ item, view, selection, onAttach }: { item: Lib
   ];
   return (
     <Box data-library-item={item.id} data-butler-link={item.url}><LibraryCard title={item.title} tag={item.block ? appCopy.conversation.answerBlocks.block : KIND_TAG()[kind]} meta={itemMeta(item)} tags={item.tags ?? []}
-      media={item.block ? { kind: "block", content: <BlockScrap item={item} preview /> } : item.crop ? { kind: "image", src: item.crop } : kind === "bookmark" ? { kind: "quote", text: itemMeta(item).split(" · ")[0] ?? item.url } : { kind: "document" }}
+      media={documentKind(item)?.media ?? (item.block ? { kind: "block", content: <BlockScrap item={item} preview /> } : item.crop ? { kind: "image", src: item.crop } : kind === "bookmark" ? { kind: "quote", text: itemMeta(item).split(" · ")[0] ?? item.url } : { kind: "document" })}
       onOpen={open} selected={selection?.selected} selectionMode={selection?.mode} selectLabel={selection ? copy.select : undefined}
       onSelectedChange={selection?.onSelect} dragging={dragging}
       onDragPointerDown={(event) => startCardDrag(event, () => selection?.selected ? selection.dragItems() : [item])}

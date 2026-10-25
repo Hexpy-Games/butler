@@ -134,6 +134,7 @@ fn claimed_snapshot(
                 let ledger_project_id: Option<String> = row.get(13)?;
                 let resolution = parse_value(resolution_json.as_deref().unwrap_or("{}"), 9)?;
                 Ok(ClaimedNativeSnapshot {
+                    message_origin: string_field(&resolution, "message_origin"),
                     session_id: row
                         .get::<_, Option<String>>(16)?
                         .unwrap_or_else(|| session_hint(&chat_id)),
@@ -191,6 +192,9 @@ fn rebuilt_turn(
 ) -> AppTurn {
     let mut context = Map::new();
     context.insert("version".into(), Value::from(1));
+    if let Some(origin) = &snapshot.message_origin {
+        context.insert("messageOrigin".into(), origin.clone().into());
+    }
     context.insert("defaultProjectFolder".into(), default_project_folder.into());
     if let Some(seed) = snapshot.branch_seed.clone() {
         context.insert("branchSeed".into(), seed);

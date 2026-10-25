@@ -1,3 +1,4 @@
+import { registerDocumentExport } from "./document-export.mjs";
 import { watchAppLogging, refreshBeforeWindow } from "./log/events.mjs";
 import { installAppLogging, appLog } from "./log/runtime.mjs";
 import { shellRegistrationAllowed as profileAllowsShellRegistration } from "./shell-registration.mjs";
@@ -2597,6 +2598,8 @@ registerLogsExport({
   isTrustedSender: (event) => event.sender === mainWindow?.webContents,
   saveLabel: async () => getDesktopCopy(await readDesktopLanguage()).save,
 });
+
+registerDocumentExport({ ipcMain, dialog, BrowserWindow, isTrustedSender: event => event.sender === mainWindow?.webContents });
 
 registerOpenMessageFile({
   ipcMain,
