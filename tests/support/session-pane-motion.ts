@@ -88,7 +88,17 @@ export async function verifySessionPaneMotion(browser: Browser, server: NativeAp
     await page.goto(server.url);
     await page.locator(LIST).waitFor();
     await page.waitForFunction((scroll) => document.querySelector(scroll)!.scrollHeight > document.querySelector(scroll)!.clientHeight + 600, SCROLL);
-    await page.evaluate((scroll) => { const node = document.querySelector(scroll)!; node.scrollTop = node.scrollHeight - node.clientHeight - 600; }, SCROLL);
+    // Scroll up only once the transcript has settled (the first load pins it to the bottom), and hold there.
+    let held = false;
+    for (let attempt = 0; attempt < 20 && !held; attempt += 1) {
+      held = await page.evaluate((scroll) => new Promise<boolean>((resolve) => {
+        const node = document.querySelector(scroll)!;
+        const target = Math.round(node.scrollHeight - node.clientHeight - 600);
+        node.scrollTop = target;
+        setTimeout(() => resolve(Math.abs(node.scrollTop - target) <= 1), 500);
+      }), SCROLL);
+    }
+    assert(held, "The transcript holds a scroll position above the bottom");
     const toggle = page.locator(TOGGLE);
     assert.equal(await toggle.getAttribute("aria-pressed"), "false");
     assert.equal(await toggle.getAttribute("data-tone"), null, "Closed: the toggle keeps the default tone");
