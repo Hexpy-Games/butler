@@ -39,7 +39,9 @@ const send = async (text: string) => {
 };
 const delivered = () => waitBrowser(async () => (await app.gateway.api<any>("/session-view?session_id=general")).latest_turn?.state === "delivered", "stub delivered");
 async function nativeClick(id: string, selector: string) {
+  // A just-navigated document drops input until it has presented a frame; wait for two before sending input.
   await app.main(`(async()=>{const t=globalThis.browserAgentSubject.tabs.get(${JSON.stringify(id)});const w=t.view.webContents;
+    await w.executeJavaScript("new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done())))");
     const point=await w.executeJavaScript(${JSON.stringify(`(()=>{const n=document.querySelector(${JSON.stringify(selector)});n.scrollIntoView({block:'center'});const b=n.getBoundingClientRect();if(!n.contains(document.elementFromPoint(b.x+b.width/2,b.y+b.height/2)))throw Error('target not hit-testable');return{x:Math.round(b.x+b.width/2),y:Math.round(b.y+b.height/2)}})()`)});
     (t.popupWindow ?? ${app.win}).focus();w.focus();w.sendInputEvent({type:'mouseDown',...point,button:'left',clickCount:1});w.sendInputEvent({type:'mouseUp',...point,button:'left',clickCount:1});
   })()`);
