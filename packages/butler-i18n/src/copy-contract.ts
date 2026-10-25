@@ -263,6 +263,10 @@ interface ConversationCopy {
     copy: string;
     copied: string;
     savedToLibrary: string;
+    makeDocument: string;
+    documentCreated: string;
+    openOriginChat: string;
+    block: string;
     actionFailed: string;
     openImage: string;
     image: string;
