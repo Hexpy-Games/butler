@@ -1,0 +1,57 @@
+/* VersionHistory: dense rows (mark, author, current word, time at the end)
+   over a footer with the restore action. */
+.history {
+  display: grid;
+  min-width: min(20rem, 100%);
+  gap: var(--space-sm);
+}
+
+.list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: auto auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border-radius: var(--radius-control);
+  text-align: start;
+}
+
+.row[data-selected="true"] {
+  background: var(--selection);
+}
+
+/* Who made the version: a neutral dot for the person, the Butler inks for Butler. */
+.mark {
+  width: var(--space-sm);
+  height: var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--text-tertiary);
+}
+
+.mark[data-author="butler"] {
+  background: linear-gradient(
+    135deg,
+    var(--butler-ink-blue),
+    var(--butler-ink-purple) 55%,
+    var(--butler-ink-pink)
+  );
+}
+
+.time {
+  justify-self: end;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-inline: var(--space-sm);
+}

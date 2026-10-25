@@ -1,3 +1,4 @@
+import type { AnswerBlocksView } from "../../../../shared/answer-blocks-view";
 import { useCallback, useEffect, useState } from "react";
 import { libraryChanged, useLibraryVersion } from "@/app/libraryEvents";
 import { api, uploadMessageFile } from "@/app/api";
@@ -12,7 +13,7 @@ export type { LibraryKind } from "@/app/types";
 /** The structured fields of a scrap saved from an answer (a card, a gallery item), kept beside its copy. */
 export interface ScrapFields { title?: string; sub?: string; label?: string; value?: unknown; facts?: string[]; text?: string; source?: string; checked?: string }
 /** A saved item. `group` is its scrap group or bookmark folder id; `tags` are shared across kinds; `autoTitle` is the name it had before a rename. */
-export type LibraryItem = Partial<PickedElement> & { id: string; kind: LibraryKind; title: string; url: string; capturedAt: string; file?: ElementFileRef; output?: string; folder?: string; session?: string; snapshot?: ScrapSnapshot; group?: string | null; tags?: string[]; autoTitle?: string; fields?: ScrapFields; revisions?: ArtifactRevision[] };
+export type LibraryItem = Partial<PickedElement> & { id: string; kind: LibraryKind | "doc"; author?: "user" | "butler"; updatedAt?: string; rev?: number; title: string; url: string; capturedAt: string; file?: ElementFileRef; output?: string; folder?: string; session?: string; snapshot?: ScrapSnapshot; group?: string | null; tags?: string[]; autoTitle?: string; fields?: ScrapFields; block?: AnswerBlocksView; origin?: { document?: string; session: string; message: string; path: string; id?: string }; revisions?: ArtifactRevision[] };
 type Page = { items: LibraryItem[]; next_cursor?: string | null };
 export async function saveLibrary(item: LibraryItem) {
   const saved = await api<LibraryItem>("/library", { method: "POST", body: JSON.stringify(item) }); libraryChanged(); return saved;
@@ -50,7 +51,7 @@ export function useBookmark(url?: string) {
   return bookmark;
 }
 export async function attachLibrary(session: string, item: LibraryItem) {
-  if (item.kind === "scrap") await attachElements(session, [item as PickedElement]);
+  if (item.kind === "scrap" && !item.block) await attachElements(session, [item as PickedElement]);
   else {
     let data: Blob, name: string;
     if (item.file) {

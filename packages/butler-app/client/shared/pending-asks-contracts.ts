@@ -1,4 +1,4 @@
-/** Read projection over authority, questions, and App plan decisions. */
+/** Read projection over authority approvals and questions; canon proposals can join later. */
 export type PendingAskKind = "approval" | "question" | "canon_proposal";
 export type PendingAskState = "open" | "answered" | "resolved_in_chat" | "dismissed" | "superseded" | "closed";
 export interface PendingAsk {

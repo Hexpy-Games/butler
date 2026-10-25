@@ -38,6 +38,7 @@ const shots = process.env.BUTLER_FOCUS_RING_SHOTS;
 if (shots) mkdirSync(shots, { recursive: true });
 const mock = JSON.parse(readFileSync(join(root, "tests/smoke/answer-blocks-mock.json"), "utf8")) as AnswerBlocks;
 const answer: MessageRecord = { id: "answer", chat_id: "butler-client", role: "assistant", status: "delivered",
+  artifacts: [{ id: "doc-focus", title: "Focus document", kind: "doc", session_id: "butler-client", message_id: "answer", created_at: "2026-10-25T00:00:00Z" }],
   text: "조건에 맞는 후보를 비교했습니다.", created_at: "2026-10-12T08:51:00Z", answer_blocks: [{ call_id: "blocks", set_ids: [], spec: mock }] };
 const myTabs = ["https://news.ycombinator.com/", "https://developer.mozilla.org/"].map((url, index) => ({
   id: `m${index + 1}`, owner: "mine", url, title: `My tab ${index + 1}`, favicon: "", status: "idle", canBack: false, canForward: false,
@@ -237,6 +238,10 @@ async function auditCell(page: Page, cell: Cell) {
   // Conversation: answer cards' buttons, the agent tab rail and the composer.
   if (cell.width < 768) await page.keyboard.press("Escape");
   await auditScope(page, cell, "conversation", '[data-test-class~="conversation"]', 160);
+  await page.locator('[data-test-class="message-artifact-list"]').getByText("Focus document", { exact: true }).click();
+  await page.getByRole("textbox", { name: copy.documents.title, exact: true }).waitFor();
+  await auditScope(page, cell, "document-page", '[data-test-class="editable-document"]', 30);
+  await open(page, cell);
   // A menu: a sidebar row's menu walked with arrow keys.
   await openSidebar(page);
   await page.locator('[data-test-class="app-sidebar"] [data-slot="dropdown-menu-trigger"]').first().focus();
@@ -341,6 +346,10 @@ try {
     // The gateway: just what the harness reads, offline.
     if (/^\/sessions\/[^/]+\/controls$/u.test(url.pathname)) return route.fulfill({ json: { ok: true, data: { session_id: "butler-client",
       revision: 0, catalog_generation: "harness-model-catalog-v1", controls: { model: "openai/gpt-6-luna", reasoning_effort: "none", access_mode: "full_access", plan_mode: false } } } });
+    if (url.pathname === "/documents/doc-focus") return route.fulfill({ json: { ok: true, data: {
+      id: "doc-focus", title: "Focus document", body: "# Focus document\n\nEditable paragraph.\n", rev: 1, author: "user",
+      created_at: "2026-10-25T00:00:00Z", updated_at: "2026-10-25T00:00:00Z",
+    } } });
     if (url.pathname === "/project-folders") return route.fulfill({ json: { ok: true, data: {
       root_name: "Workspace", path: url.searchParams.get("path") ?? "",
       folders: Array.from({ length: 40 }, (_, index) => ({ name: `Folder ${index + 1}` })), next_after: null,

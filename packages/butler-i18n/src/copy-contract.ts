@@ -263,6 +263,10 @@ interface ConversationCopy {
     copy: string;
     copied: string;
     savedToLibrary: string;
+    makeDocument: string;
+    documentCreated: string;
+    openOriginChat: string;
+    block: string;
     actionFailed: string;
     openImage: string;
     image: string;
@@ -461,6 +465,9 @@ export interface AppCopy {
   lifecycle: LifecycleCopy;
   browser: BrowserCopy;
   library: LibraryCopy;
+  documents: { title: string; saved: string; editing: string; edited: string; restore: string;
+    versions: string; current: string; me: string; butler: string; export: string; markdown: string; pdf: string;
+    bold: string; heading: string; list: string; addBlock: string; format: string; originalChat: string };
   projectSignpost: {
     evidenceCount: (count: number) => string;
     importantMaterials: string; projectDocuments: string; selectedDay: string; calculation: string;

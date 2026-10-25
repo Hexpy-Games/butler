@@ -408,6 +408,7 @@ export const enUsCopy: AppCopy = {
       delivered: "Reply completed", failed: "Failed", cancelled: "Stopped", under30s: "Under 30 sec", under2m: "30 sec–2 min",
       under10m: "2–10 min", over10m: "10 min or more", recent: "0–7 days", older: "8–30 days", oldest: "31+ days", unknown: "Date unknown" },
   },
+  documents: { title: "Document", saved: "Saved", editing: "Butler is editing", edited: "Butler edited this", restore: "Restore", versions: "Versions", current: "Current", me: "Me", butler: "Butler", export: "Export", markdown: "Markdown", pdf: "PDF", bold: "Bold", heading: "Heading", list: "List", addBlock: "Add block", format: "Format", originalChat: "Original chat" },
   library: {
     title: "Library", search: "Search the library", kinds: { all: "All", scrap: "Scraps", document: "Documents", bookmark: "Bookmarks", output: "Outputs" },
     kindLabel: "Kind", viewAll: "View all", groups: { scrap: libraryGroupEn("group", "scrap"), bookmark: libraryGroupEn("folder", "bookmark") },
@@ -951,6 +952,10 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       copy: "Copy",
       copied: "Copied",
       savedToLibrary: "Saved to library",
+      makeDocument: "Make a document",
+      documentCreated: "Document created",
+      block: "Block",
+      openOriginChat: "Open origin chat",
       actionFailed: "Action failed",
       openImage: "Open image",
       image: "Image",

@@ -1,5 +1,7 @@
 //! Indexed read projection invalidations; authority remains the owner.
 pub(in crate::btcc::storage) const SCHEMA: &str = r"
+CREATE INDEX IF NOT EXISTS idx_btcc_questions_settled ON btcc_authority_requests(owner_session_id,updated_at)
+WHERE capability='ask_user' AND outcome_receipt_json IS NOT NULL;
 DROP INDEX IF EXISTS idx_btcc_authority_open;
 CREATE INDEX IF NOT EXISTS idx_btcc_authority_open_v2 ON btcc_authority_requests(created_at)
 WHERE close_reason IS NULL AND (decision='pending' OR

@@ -1473,6 +1473,7 @@ const butlerApp = Object.freeze({
     }
     return requestBridgeResult(`/session-view?${params.toString()}`);
   },
+  exportDocument: (input) => ipcRenderer.invoke("butler:export-document", input),
   saveMessageFile: ({ fileId, suggestedName } = {}) =>
     ipcRenderer.invoke("butler:save-message-file", { fileId, suggestedName }),
   openMessageFile: ({ fileId } = {}) =>

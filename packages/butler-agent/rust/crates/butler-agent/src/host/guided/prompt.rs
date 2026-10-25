@@ -9,6 +9,7 @@ mod helpers;
 use helpers::{default_project_folder, js_truthy, json, nonempty_array};
 mod documents;
 mod excerpts;
+pub(in crate::host::guided) mod open_asks;
 mod phase_memory;
 mod prior_tool;
 pub(in crate::host) mod work_context;
@@ -26,6 +27,7 @@ use butler_turn::btcc::{
 
 pub(crate) struct GuidedTextState {
     pub skill_catalog: String,
+    pub(super) open_asks: Arc<parking_lot::Mutex<open_asks::Reminders>>,
     pub phase: GuidedPhaseSelection,
     pub work: GuidedWork,
     pub work_service: Arc<butler_turn::btcc::DurableWorkService>,
@@ -127,6 +129,9 @@ fn source_prompt(
     }
     if !material.prior_tools.is_empty() {
         entries.push("prior-tools", material.prior_tools.clone());
+    }
+    if let Some(text) = state.open_asks.lock().render()? {
+        entries.push("open-asks", text);
     }
     entries.current_request(turn);
     Ok(entries.finish())

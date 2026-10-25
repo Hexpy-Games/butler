@@ -192,7 +192,7 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
             serde_json::to_vec_pretty(&reopened)?,
         )?;
     }
-    verify_asset_sweep(&s, &session, &reopened).await?;
+    super::super::browser_library::blocks::asset_lifetime(&s, &session, &reopened).await?;
     s.finish().await?;
     server.abort();
     Ok(())
@@ -426,44 +426,5 @@ fn assert_remaining_capture_source(
         .expect("parent final payload artifacts");
     assert_eq!(artifacts.len(), 1, "only the unpictured page capture stays");
     assert_eq!(artifacts[0]["sourceUrl"], "https://example.org/");
-    Ok(())
-}
-
-async fn verify_asset_sweep(
-    s: &butler_e2e::e2e::scenario::Scenario,
-    session: &str,
-    message: &Value,
-) -> Result<(), HarnessError> {
-    let items = message["answer_blocks"][0]["spec"]["blocks"][0]["items"]
-        .as_array()
-        .unwrap();
-    for item in items {
-        let response = reqwest::get(format!(
-            "{}{}",
-            s.gw.base,
-            item["image_url"].as_str().unwrap()
-        ))
-        .await?;
-        assert_eq!(response.status(), 200, "Reopened image remains loadable");
-    }
-    assert_eq!(
-        s.gw.delete(&format!("/sessions/{session}?permanent=true"))
-            .await?
-            .status,
-        200
-    );
-    for item in items {
-        let response = reqwest::get(format!(
-            "{}{}",
-            s.gw.base,
-            item["image_url"].as_str().unwrap()
-        ))
-        .await?;
-        assert_eq!(
-            response.status(),
-            404,
-            "Deleted chat sweeps its collected image"
-        );
-    }
     Ok(())
 }

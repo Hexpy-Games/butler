@@ -27,6 +27,7 @@ export function ArtifactsPanel({
   const allArtifacts = dedupeArtifacts([...artifacts, ...messageArtifacts]);
 
   return (
+    <>
     <InspectorInset>
       <Section
         title={compact ? undefined : appCopy.artifacts.title}
@@ -54,6 +55,7 @@ export function ArtifactsPanel({
         )}
       </Section>
     </InspectorInset>
+    </>
   );
 }
 

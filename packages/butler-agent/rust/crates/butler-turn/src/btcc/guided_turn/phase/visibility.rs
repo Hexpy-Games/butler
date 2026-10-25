@@ -58,7 +58,6 @@ pub(super) fn legacy_authorized<'a>(
     authorize_schedules(&mut names, policy, scope);
     apply_access_mode(&mut names, catalog, policy, scope);
     browser::authorize(&mut names, catalog, policy, scope.worker);
-    apply_role(&mut names, policy);
     image_calls(&mut names, policy);
     names.retain(|name| {
         !catalog.project_mutations.contains(name)
@@ -95,6 +94,7 @@ pub(super) fn legacy_authorized<'a>(
                 .map(|tool| tool.name.clone()),
         );
     }
+    apply_role(&mut names, policy);
     catalog
         .tools
         .iter()
@@ -235,6 +235,7 @@ fn apply_access_mode(
 fn apply_role(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
     if matches!(policy.role, PolicyRole::Steward | PolicyRole::Worker) {
         names.remove("answer_blocks");
+        names.remove("resolve_ask");
     }
     for (role, tools) in [("butler", STEWARD_PARENT), ("steward", WORKER_DELEGATION)] {
         if policy.role.as_str() == role {
