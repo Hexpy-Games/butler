@@ -102,6 +102,29 @@
     0 0;
 }
 
+/* The rail slot has no box of its own. While an aside shows or is still
+   leaving (they share the right margin) the rail is held: hidden and out of
+   the tab order. Released, it fades in, so it never shows under the leaving
+   aside. Reduced motion keeps the fade (tokens.css). */
+.railSlot {
+  display: contents;
+}
+
+.railSlot[data-hold="held"] {
+  visibility: hidden;
+}
+
+.railSlot[data-hold="released"] > * {
+  animation: conversation-rail-release var(--motion-base)
+    var(--motion-ease-decelerate) both;
+}
+
+@keyframes conversation-rail-release {
+  from {
+    opacity: 0;
+  }
+}
+
 /* Room for a TabRail in the rail slot. The breakpoints are the rail's modes
    (TabRail tabRailLayout.ts). Beside a full (960+) or compact (720+) rail the
    column and the composer keep their width and centring and move left only
