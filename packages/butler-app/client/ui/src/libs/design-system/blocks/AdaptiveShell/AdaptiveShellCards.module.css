@@ -60,6 +60,17 @@
   padding-left: calc(var(--shell-card-inset) - var(--border-hairline));
 }
 
+/* The docked sidebar column keeps the same top frame as the workspace (its
+   transparent 1px edge), so the sidebar's title row and first row sit level
+   with the workspace's title row and the cards' top edge. A peeked sidebar
+   is its own card and keeps its own inset. */
+.root[data-frame="cards"][data-panel-layout="docked"]:not(
+    [data-left-peek="true"]
+  )
+  > [data-slot="adaptive-shell-sidebar"] {
+  padding-top: var(--border-hairline);
+}
+
 /* Title row slot (both frames): pinned over the workspace's first row. */
 [data-slot="adaptive-shell-workspace"]
   > .title[data-slot="adaptive-shell-title"] {
@@ -116,7 +127,10 @@
 
   position: relative;
   isolation: isolate;
-  overflow: hidden;
+  /* Clip, not hidden: the card clips a ScrollArea's scrollbar lane that
+     bleeds past its edge, and a hidden box would still scroll to reveal it
+     (focus, scrollIntoView), shifting everything inside sideways. */
+  overflow: clip;
   contain: paint;
   border: var(--border-hairline) solid var(--shell-card-edge);
   border-radius: var(--shell-card-radius);
