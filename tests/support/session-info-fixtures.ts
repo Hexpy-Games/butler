@@ -53,12 +53,36 @@ export async function failPendingAsksRead(page: Page) {
 /** A browser bridge stub; `tabs` are the open tabs (e.g. a conversation's agent tabs for the rail). */
 export async function installSessionBrowser(page: Page, tabs: Record<string, unknown>[] = []) {
   await page.addInitScript((tabs) => {
-    const state = { enabled: true, blocked: false, activeId: null, nativeCovered: false, tabs };
+    const state = { enabled: true, blocked: false, activeId: null as string | null, restored: true, nativeCovered: false, tabs };
     const off = () => () => {};
-    Object.assign(window, { butlerBrowser: {
-      call: async (method: string) => method === "state" || method === "open" ? state : null,
-      subscribe: (handler: (value: typeof state) => void) => { queueMicrotask(() => handler(state)); return () => {}; },
-      onFrame: off, onPointer: off, onElementDrag: off, onSelectionAction: off, onDownload: off, onHistory: off, onAddress: off,
+    const subscriptions = new Map<string, number>();
+    const calls: { method: string; input?: { id?: string } }[] = [];
+    const handlers = new Set<(value: typeof state) => void>();
+    const canvas = document.createElement("canvas");
+    canvas.width = 16; canvas.height = 10;
+    const context = canvas.getContext("2d")!;
+    context.fillStyle = "#a4b5c6"; context.fillRect(0, 0, 16, 10);
+    const bytes = Uint8Array.from(atob(canvas.toDataURL("image/jpeg").split(",")[1]!), char => char.charCodeAt(0));
+    Object.assign(window, { __liveFrameSubs: subscriptions, __browserCalls: calls, __browserState: state, butlerBrowser: {
+      call: async (method: string, input?: { id?: string }) => {
+        calls.push({ method, input });
+        if (method === "activate" && input?.id) {
+          state.activeId = input.id;
+          for (const handler of handlers) handler({ ...state });
+        }
+        return method === "state" || method === "open" ? state : null;
+      },
+      subscribe: (handler: (value: typeof state) => void) => {
+        handlers.add(handler); queueMicrotask(() => handler(state)); return () => handlers.delete(handler);
+      },
+      onFrame: (id: string, handler: (frame: { tab: string; seq: number; bytes: Uint8Array; masked: boolean }) => void) => {
+        subscriptions.set(id, (subscriptions.get(id) ?? 0) + 1);
+        queueMicrotask(() => handler({ tab: id, seq: 1, bytes, masked: false }));
+        return () => {
+          const remaining = (subscriptions.get(id) ?? 1) - 1;
+          if (remaining) subscriptions.set(id, remaining); else subscriptions.delete(id);
+        };
+      }, onPointer: off, onElementDrag: off, onSelectionAction: off, onDownload: off, onHistory: off, onAddress: off,
     } });
   }, tabs);
 }
