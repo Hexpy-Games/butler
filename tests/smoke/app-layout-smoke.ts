@@ -3197,9 +3197,10 @@ try {
   await expectLocatorCount(
     page,
     sessionInfoToggleSelector,
-    1,
-    "session info remains available on draft new chat",
+    0,
+    "session info stays hidden on empty draft new chat",
   );
+  await expectLocatorCount(page, '[data-slot="conversation-aside"]', 0, "empty draft has no session info pane");
   await patchSettings({ main_screen_theme: "silk",
     wallpaper: { source: { kind: "live", module: "butler.silk" }, motion: "auto", pauseOnBattery: false } });
   // The live app keeps an event stream open, so "networkidle" never settles.
@@ -3737,7 +3738,7 @@ try {
         "narrow-new-chat-full-width-copy",
         "narrow-readable-type-scale",
         "new-chat-left-radius-preserved",
-        "session-info-available-on-draft-new-chat",
+        "session-info-hidden-on-empty-draft-new-chat",
         "composer-card-click-focuses-textarea",
         "composer-draft-session-isolation",
         "composer-draft-renderer-reload-recovery",
