@@ -138,9 +138,10 @@ rectangular shell.
   keeps both faint (1%, a tight shadow), so the sheet lifts off the shell like
   the chat card and the 8px gap reads as 8px; dark keeps 2.5% and the page
   card's usual shadow.
-- The inspector is the side card under the title row; `InspectorShell` reads
-  the frame and draws the card. `SettingsShell` puts its navigation on the
-  shell and its detail pane in a card. Blocks read the frame through
+- Session details sit in the `ConversationShell` aside and a page's detail
+  in the `ManagementPage` aside, both inside the content card.
+  `SettingsShell` puts its navigation on the shell and its detail pane in a
+  card. Blocks read the frame through
   `useShellFrame()`.
 - A wallpaper inside a card resolves against it and is clipped to its corners;
   no title bar overlaps a card, so the message list's top reserve drops to a

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import styles from "./InspectorShell.module.css";
+import styles from "./InspectorPanel.module.css";
 
 /**
  * Insets full-width inspector content (sections, activity feeds) by the
