@@ -179,6 +179,7 @@ jobs:
               smoke app-delegated-work-smoke
               smoke answer-blocks-ui
               smoke block-scraps-ui
+              smoke documents-ui
               smoke composer-fold-smoke
               ;;
             ui-work)
