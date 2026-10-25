@@ -1,4 +1,5 @@
 import { SESSION_INFO_COPY } from "./session-info.ts";
+import { FILE_VIEWER_COPY } from "./file-viewer.ts";
 import { CANON_COPY } from "./canon.ts";
 import { TASK_GRAPH_COPY } from "./task-graph.ts";
 import { lifecycleCopy } from "../lifecycle.ts";
@@ -343,6 +344,7 @@ export const koKrCopy: AppCopy = {
   shell: { footerNav: "업데이트와 설정", update: { downloading: "업데이트 받는 중", working: "업데이트 준비 중", ready: "업데이트 준비됨", failed: "업데이트 실패", restart: "다시 시작" } },
   canon: CANON_COPY["ko-KR"],
   sessionInfo: SESSION_INFO_COPY["ko-KR"],
+  fileViewer: FILE_VIEWER_COPY["ko-KR"],
   taskGraph: TASK_GRAPH_COPY["ko-KR"],
   lifecycle: lifecycleCopy.ko,
   browser: {
@@ -351,7 +353,7 @@ export const koKrCopy: AppCopy = {
     history: { erase: "지우기", title: "방문 기록", search: "방문 기록 검색", clear: "방문 기록 지우기", butlerOnly: "버틀러가 방문", empty: "방문 기록 없음", hour: "지난 1시간", today: "오늘", week: "지난 7일", all: "전체", suggestions: "주소 추천", pageLabel: "방문한 페이지", pageDescription: "버틀러 브라우저에서 연 페이지 기록을 보거나 지웁니다." },
     tabCount: "탭 {count}개", tabMoved: "{title}: {group}, {position}번째", agentControl: "버틀러가 사용 중", handBack: "버틀러에게 돌려주기", stills: "단계 이미지", still: "브라우저 단계", stillFailure: {"dialog_pending": "대화상자 열림", "dispatch_interrupted": "입력 중단", "timeout": "입력 시간 초과", "stills_disabled": "단계 이미지 꺼짐", "document_changed": "페이지 변경", "capture_unavailable": "캡처 불가", "capture_failed": "캡처 실패", "pixels_not_captured": "캡처되지 않음", "file_deleted": "이미지 삭제됨", "control_changed": "제어권 변경", "browser_host_lost": "브라우저 연결 끊김", "gateway_restarted": "버틀러 재시작"}, stillPending: "이미지 저장 중", stillUnavailable: "이미지 없음",
     title: "브라우저", myTabs: "내 탭", newTab: "새 탭", closeTab: "탭 닫기", address: "주소", addressPlaceholder: "검색 또는 URL 입력", back: "뒤로", forward: "앞으로",
-    reload: "새로고침", stop: "중지", loading: "로딩 중", crashed: "탭이 중단됨", empty: "새 탭을 열어보세요", conversationEmpty: "버틀러가 여는 페이지가 여기에 보입니다", updateRequired: "버틀러 업데이트 필요", restartRequired: "버틀러 재시작 필요",
+    reload: "새로고침", stop: "중지", loading: "로딩 중", crashed: "탭이 중단됨", empty: "새 탭을 열어보세요", updateRequired: "버틀러 업데이트 필요", restartRequired: "버틀러 재시작 필요",
     failed: "페이지를 열지 못함", openOutput: "브라우저에서 열기", output: "출력물", show: "브라우저 열기", hide: "브라우저 닫기", active: "버틀러가 브라우저 사용 중",
     openConversation: "대화 열기", moveToConversation: "대화로 가져가기", newConversation: "새 대화", bringTab: "내 탭 가져오기", resizeChat: "대화 너비 조절", pick: "요소 선택",
     scrap: "스크랩", bookmarks: "북마크", bookmarkAdd: "북마크 추가", bookmarked: "북마크됨", manageBookmarks: "북마크 관리", downloads: "다운로드", downloading: "받는 중",
@@ -1324,7 +1326,6 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     contentHostRequired: "보안 설정에서 결과물 호스트를 지정해 주세요.",
     title: "아티팩트",
     empty: "아직 아티팩트가 없습니다",
-    backToList: "아티팩트 목록",
     open: "열기",
     save: "저장하기",
     saved: "아티팩트를 저장했습니다",

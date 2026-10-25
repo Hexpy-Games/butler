@@ -70,16 +70,18 @@
   flex: 1 1 auto;
 }
 
+/* --space-xs above the row clears the tabs: the address field sits as far
+   below the tabs as the tabs sit below the sheet's top edge. */
 .toolbar {
   container-name: browser-toolbar;
   container-type: inline-size;
   display: flex;
   min-width: 0;
-  height: var(--browser-band-height);
+  height: calc(var(--browser-band-height) + var(--space-xs));
   flex: none;
   align-items: center;
   gap: var(--space-sm);
-  padding: 0 var(--browser-card-inset) var(--space-xs);
+  padding: var(--space-xs) var(--browser-card-inset) var(--space-xs);
 }
 
 .group {

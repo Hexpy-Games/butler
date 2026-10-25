@@ -1,4 +1,5 @@
 import { SESSION_INFO_COPY } from "./session-info.ts";
+import { FILE_VIEWER_COPY } from "./file-viewer.ts";
 import { CANON_COPY } from "./canon.ts";
 import { TASK_GRAPH_COPY } from "./task-graph.ts";
 import { lifecycleCopy } from "../lifecycle.ts";
@@ -339,6 +340,7 @@ export const enUsCopy: AppCopy = {
   shell: { footerNav: "Updates and settings", update: { downloading: "Downloading update", working: "Preparing update", ready: "Update ready", failed: "Update failed", restart: "Restart" } },
   canon: CANON_COPY["en-US"],
   sessionInfo: SESSION_INFO_COPY["en-US"],
+  fileViewer: FILE_VIEWER_COPY["en-US"],
   taskGraph: TASK_GRAPH_COPY["en-US"],
   lifecycle: lifecycleCopy.en,
   browser: {
@@ -347,7 +349,7 @@ export const enUsCopy: AppCopy = {
     history: { erase: "Clear", title: "History", search: "Search history", clear: "Clear browsing history", butlerOnly: "Visited by Butler", empty: "No visits", hour: "Last hour", today: "Today", week: "Last 7 days", all: "All time", suggestions: "Address suggestions", pageLabel: "Visited pages", pageDescription: "View or clear the pages opened in Butler's browser." },
     tabCount: "Tabs: {count}", tabMoved: "{title}: {group}, position {position}", agentControl: "Butler is browsing", handBack: "Give back to Butler", stills: "Step images", still: "Browser step", stillFailure: {"dialog_pending": "Dialog open", "dispatch_interrupted": "Input interrupted", "timeout": "Input timed out", "stills_disabled": "Step images off", "document_changed": "Page changed", "capture_unavailable": "Capture unavailable", "capture_failed": "Capture failed", "pixels_not_captured": "Image not captured", "file_deleted": "Image removed", "control_changed": "Control changed", "browser_host_lost": "Browser disconnected", "gateway_restarted": "Butler restarted"}, stillPending: "Saving image", stillUnavailable: "Image unavailable",
     title: "Browser", myTabs: "My tabs", newTab: "New tab", closeTab: "Close tab", address: "Address", addressPlaceholder: "Search or enter URL",
-    back: "Back", forward: "Forward", reload: "Reload", stop: "Stop", loading: "Loading", crashed: "Tab crashed", empty: "Open a new tab", conversationEmpty: "Pages Butler opens show here",
+    back: "Back", forward: "Forward", reload: "Reload", stop: "Stop", loading: "Loading", crashed: "Tab crashed", empty: "Open a new tab",
     updateRequired: "Update Butler", restartRequired: "Restart Butler", failed: "Could not open page", openOutput: "Open in Browser",
     output: "Output", show: "Show browser", hide: "Hide browser", active: "Butler is browsing", openConversation: "Open conversation",
     moveToConversation: "Move to a conversation", newConversation: "New chat", bringTab: "Bring in a tab", resizeChat: "Resize conversation",
@@ -1319,7 +1321,6 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     contentHostRequired: "Set an output host in Security settings.",
     title: "Artifacts",
     empty: "No artifacts yet",
-    backToList: "Artifact list",
     open: "Open",
     save: "Save",
     saved: "Artifact saved",

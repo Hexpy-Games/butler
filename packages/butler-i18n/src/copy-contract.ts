@@ -328,7 +328,7 @@ export interface BrowserCopy {
   history: { erase: string; title: string; search: string; clear: string; butlerOnly: string; empty: string; hour: string; today: string; week: string; all: string; suggestions: string; pageLabel: string; pageDescription: string; };
   tabCount: string; tabMoved: string; agentControl: string; handBack: string; stills: string; still: string; stillPending: string; stillUnavailable: string; stillFailure: Record<string, string>;
   title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string;
-  reload: string; stop: string; loading: string; crashed: string; empty: string; conversationEmpty: string; updateRequired: string; restartRequired: string; failed: string;
+  reload: string; stop: string; loading: string; crashed: string; empty: string; updateRequired: string; restartRequired: string; failed: string;
   openOutput: string; output: string; show: string; hide: string; active: string; openConversation: string; moveToConversation: string;
   newConversation: string; bringTab: string; resizeChat: string; pick: string; scrap: string; bookmarks: string; bookmarkAdd: string;
   bookmarked: string; manageBookmarks: string; downloads: string; downloading: string; showInFolder: string; more: string; findInPage: string;
@@ -456,6 +456,7 @@ export interface AppCopy {
   };
   shell: { footerNav: string; update: { downloading: string; working: string; ready: string; failed: string; restart: string } };
   sessionInfo: typeof import("./locales/session-info.ts").SESSION_INFO_COPY["en-US"];
+  fileViewer: typeof import("./locales/file-viewer.ts").FILE_VIEWER_COPY["en-US"];
   taskGraph: TaskGraphCopy;
   lifecycle: LifecycleCopy;
   browser: BrowserCopy;
@@ -1217,7 +1218,6 @@ export interface AppCopy {
     contentHostRequired: string;
     title: string;
     empty: string;
-    backToList: string;
     open: string;
     save: string;
     saved: string;

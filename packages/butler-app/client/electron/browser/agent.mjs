@@ -99,7 +99,7 @@ export function emulation(tab) {
 }
 export function backgroundTab(browser, tab) {
   if (tab.agent) viewedTab(browser, tab, false);
-  if (!tab.agent && !tab.driven || !tab.view || tab.attached || tab.status === "crashed") return;
+  if (!tab.agent && !tab.driven || !tab.view || tab.attached || tab.status === "crashed" || browser.attachAfterCaptures(tab)) return;
   if (!browser.agentWindow || browser.agentWindow.isDestroyed()) {
     browser.agentWindow = new BrowserWindow({ show: false, width: 1280, height: 800, webPreferences: { sandbox: true, nodeIntegration: false, contextIsolation: true } });
   }

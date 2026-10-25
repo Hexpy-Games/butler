@@ -71,6 +71,12 @@ export async function assertNewTabContent(page: ElectronPage, locale: string, po
   await waitBrowser(async () => JSON.stringify(await read()) === JSON.stringify(expected), "new-tab library sections loaded completely");
   assert.deepEqual(await read(), expected, "new tab has bookmark/folder grids, recent scraps and per-section empty states");
   assert.equal(await page.expression("!document.querySelector('[data-slot=native-view-slot]:not([data-hidden=true])')"), true, "new tab stays in the DOM rather than displaying a native document");
+  const sideways = await page.expression<Array<{ scroll: number; client: number }>>(`(() => {
+    const content = document.querySelector('[data-slot=page-card-content]');
+    return [...(content?.querySelectorAll('*') ?? [])].filter(node => ['auto', 'scroll'].includes(getComputedStyle(node).overflowX) && node.scrollWidth > node.clientWidth)
+      .map(node => ({ scroll: node.scrollWidth, client: node.clientWidth }));
+  })()`);
+  assert.deepEqual(sideways, [], "new-tab page fits its card: no scroller inside it overflows sideways");
 }
 
 /** Seed through the real Library API, then restore the empty isolated library. */
