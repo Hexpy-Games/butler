@@ -2,8 +2,10 @@ mod browsing;
 mod defaults;
 mod facts;
 mod generation;
+mod image_output;
 mod local;
 mod local_image;
+pub use image_output::*;
 mod lookup;
 mod presets;
 mod pricing;
@@ -97,6 +99,10 @@ pub enum TokenEstimatorKind {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ModelProviderMetadata {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_modalities: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_output: Option<ImageOutputCapability>,
     pub provider_id: String,
     pub provider_label: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -310,7 +316,8 @@ impl ModelCatalogSnapshot {
                 .models
                 .iter()
                 .chain(configured_local.iter())
-                .chain(extra_models.iter()),
+                .chain(extra_models.iter())
+                .filter(|model| !model.is_image_output()),
         )
         .into();
         let browsing_auto = Arc::new(browsing::auto_resolutions(&view));
@@ -335,6 +342,14 @@ impl ModelCatalogSnapshot {
     /// Indexed auto choices, rebuilt only when catalog construction facts change.
     pub fn browsing_auto(&self) -> &Map<String, Value> {
         &self.browsing_auto
+    }
+    pub fn image_output_models(&self) -> Vec<ModelProviderMetadata> {
+        self.static_catalog
+            .models
+            .iter()
+            .filter(|model| model.is_image_output())
+            .cloned()
+            .collect()
     }
     pub fn view(&self) -> &ModelCatalogView {
         &self.view

@@ -20,6 +20,8 @@ const labels = {
     args: "Arguments", argsHint: "One per line", argsValue: "--stdio\n--read-only",
     description: "Project description", descriptionValue: "Butler desktop app: Electron shell, React UI and the Rust agent gateway.",
     cancel: "Cancel", save: "Save", prompt: "Migration prompt",
+    brief: "Task brief", briefHint: "Grows as you type, up to 12 lines",
+    briefValue: Array.from({ length: 16 }, (_, index) => `${index + 1}. Check the release notes and the changed screens.`).join("\n"),
   },
   "ko-KR": {
     persona: "페르소나",
@@ -28,6 +30,8 @@ const labels = {
     args: "인자", argsHint: "한 줄에 하나씩 입력", argsValue: "--stdio\n--read-only",
     description: "프로젝트 설명", descriptionValue: "버틀러 데스크톱 앱: Electron 셸, React UI, Rust 에이전트 게이트웨이.",
     cancel: "취소", save: "저장", prompt: "마이그레이션 프롬프트",
+    brief: "과제 설명", briefHint: "입력하는 만큼 12줄까지 늘어납니다",
+    briefValue: Array.from({ length: 16 }, (_, index) => `${index + 1}. 릴리스 노트와 바뀐 화면을 확인합니다.`).join("\n"),
   },
 } as const;
 
@@ -75,6 +79,21 @@ export const stories: ShowcaseStory[] = [
       <Stack gap="sm">
         <Textarea aria-label={text(context).prompt} rows={4} readOnly value={text(context).argsValue} />
         <Textarea aria-label={text(context).persona} disabled value={text(context).personaValue} />
+      </Stack>
+    ),
+  },
+  {
+    // autoGrow: from the min height up to --textarea-grow-max-lines, then it scrolls (the second one is past the cap).
+    name: "Auto-grow (default variant)",
+    widths: ["375", "app"],
+    render: (context) => (
+      <Stack gap="md">
+        <Field>
+          <FieldLabel htmlFor="ds-textarea-brief">{text(context).brief}</FieldLabel>
+          <Textarea id="ds-textarea-brief" autoGrow defaultValue={text(context).personaValue} />
+          <FieldDescription>{text(context).briefHint}</FieldDescription>
+        </Field>
+        <Textarea aria-label={text(context).brief} autoGrow defaultValue={text(context).briefValue} />
       </Stack>
     ),
   },

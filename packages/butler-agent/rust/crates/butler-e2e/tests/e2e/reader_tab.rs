@@ -104,10 +104,7 @@ async fn flow(wire: Wire) -> Result<(), HarnessError> {
         first["system"]
     );
     let description = |name: &str| {
-        first["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
+        butler_e2e::e2e::chatgpt_wire::tools(&first)
             .find(|tool| tool["name"] == name)
             .unwrap_or_else(|| panic!("{name} offered"))["description"]
             .as_str()

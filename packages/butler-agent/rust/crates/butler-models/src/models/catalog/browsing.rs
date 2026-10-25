@@ -53,6 +53,7 @@ pub fn resolve_browsing_model(
             && model.registered == Some(true)
             && model.enabled != Some(false)
             && model.runtime_supported
+            && !model.is_image_output()
     };
     let family = model_family(&conversation.model_id);
     if multi_vendor

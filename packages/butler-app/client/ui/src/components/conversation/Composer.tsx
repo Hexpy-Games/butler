@@ -1,3 +1,4 @@
+import { ConversationRequestPortal, useConversationDecision } from "./ConversationRequestContext.tsx";
 import { useRef, useState } from "react";
 import { ComposerAdjunctPanels, composerHasAdjunct } from "./ComposerAdjunctPanels";
 import { ComposerInputSurface } from "./ComposerInputSurface";
@@ -20,7 +21,6 @@ import { useReserveHeight } from "./hooks/useReserveHeight";
 import { ComposerCard, type WallpaperContentRect } from "@/butler-ds";
 import { ComposerNotices } from "./ComposerNotices.tsx";
 import { useComposerDecoration } from "./hooks/useComposerDecoration";
-import { useComposerDecision } from "./hooks/useComposerDecision";
 interface ComposerProps {
   onWallpaperRect?: (rect: WallpaperContentRect) => void;
   scope?: ComposerDraftScope;
@@ -101,7 +101,7 @@ export function Composer({ large, onReserveChange, scope, onWallpaperRect }: Com
     activeChatId: session.activeChatId,
     summary: session.summary,
   });
-  const decision = useComposerDecision(isComposing, !scope);
+  const { decision, requestSlot, surface } = useConversationDecision(isComposing, !scope);
   const decoration = useComposerDecoration(decision);
   useReserveHeight(wrapRef, onReserveChange, onWallpaperRect);
   useComposerStoreBridge({
@@ -128,6 +128,8 @@ export function Composer({ large, onReserveChange, scope, onWallpaperRect }: Com
     protectedExpanded: referenceDragging || modelMenuOpen || accessMenuOpen || contextPopoverOpen,
   });
   return (
+    <>
+    {requestSlot && <ConversationRequestPortal decision={decision} />}
     <ComposerCard
       {...fileDrop}
       {...decoration}
@@ -146,15 +148,13 @@ export function Composer({ large, onReserveChange, scope, onWallpaperRect }: Com
       onPointerDownCapture={presentation.onPointerDownCapture}
       onFocusCapture={presentation.onFocusCapture}
       onBlurCapture={presentation.onBlurCapture}
-      onSubmit={decision.onSubmit}
+      onSubmit={requestSlot && !decision.plan?.editingInstruction ? handlers.submit : decision.onSubmit}
     >
       <ComposerInputSurface
         fileInputRef={fileInputRef}
         onFiles={(nextFiles) => void files.addFiles(nextFiles)}
-        planDecision={decision.plan}
-        authorityDecision={decision.authority}
-        question={decision.question}
+        {...surface}
       />
-    </ComposerCard>
+    </ComposerCard></>
   );
 }

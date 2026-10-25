@@ -1,32 +1,18 @@
+import { TitlebarSessionMenu } from "./TitlebarSessionMenu.tsx";
+import { SessionInfoActions } from "../session-info/SessionInfoActions.tsx";
 import { useAppLocale } from "@/app/copy.ts";
 import { useMemo, useState } from "react";
-import {
-  Archive,
-  ButtonContainer,
-  MoreHorizontal,
-  PanelRight,
-  PencilLine,
-} from "@/butler-ds";
-import { IconButton } from "@/butler-ds";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  TITLEBAR_MENU_SIDE_OFFSET_PX,
-} from "@/butler-ds";
+import { ButtonContainer } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { isServerBackedSessionId } from "@/app/sessionIds.ts";
-import { selectRightAvailable, useButlerStore } from "@/app/store.ts";
+import { useButlerStore } from "@/app/store.ts";
 import {
   activeChatFromNavigation,
   activeTitleForView,
   sessionFromNavigation,
 } from "@/app/utils.ts";
-import type { ActiveChatView, SessionSummary } from "@/app/types.ts";
+import type { ActiveChatView } from "@/app/types.ts";
 import { TitlebarShell } from "@/butler-ds";
-import { SessionFolderMenu } from "./SessionFolderMenu";
 import { TitlebarWorkspaceSubtitle } from "./TitlebarWorkspaceSubtitle";
 import { WindowControls } from "./WindowControls";
 import { BrowserToggle } from "../browser/BrowserToggle";
@@ -34,7 +20,7 @@ import { HubConversationButton } from "../browser/HubConversationButton";
 import { libraryTitle, useLibraryNames } from "../library/libraryNav";
 import { useTitlebarBack } from "@/app/navigationBack";
 
-export function Titlebar({ sidebarOpen }: { sidebarOpen?: boolean }) {
+export function Titlebar({ sidebarOpen, splitChatWidth }: { sidebarOpen?: boolean; splitChatWidth?: number }) {
   useAppLocale();
   const [sessionMenuOpen, setSessionMenuOpen] = useState(false);
   const storeView = useButlerStore((state) => state.view);
@@ -42,9 +28,6 @@ export function Titlebar({ sidebarOpen }: { sidebarOpen?: boolean }) {
   const storeActiveChatId = useButlerStore((state) => state.activeChatId);
   const storeActiveChatTitle = useButlerStore((state) => state.activeChatTitle);
   const leftOpen = useButlerStore((state) => state.leftOpen);
-  const rightOpen = useButlerStore((state) => state.rightOpen);
-  const rightAvailable = useButlerStore(selectRightAvailable);
-  const setRightOpen = useButlerStore((state) => state.setRightOpen);
   const back = useTitlebarBack();
   useLibraryNames();
   const { title, subtitle } = useMemo(
@@ -89,72 +72,15 @@ export function Titlebar({ sidebarOpen }: { sidebarOpen?: boolean }) {
       dragRegion
       dataTestClass="custom-titlebar"
       windowControls={<WindowControls />}
+      splitChatWidth={splitChatWidth}
+      titleActions={activeSession ? <TitlebarSessionMenu activeSession={activeSession} canOpenSessionFolder={canOpenSessionFolder}
+        sessionMenuOpen={sessionMenuOpen} setSessionMenuOpen={setSessionMenuOpen} /> : undefined}
+      chatTrailing={storeView.kind === "session" ? <SessionInfoActions /> : undefined}
       trailing={
         <ButtonContainer size="icon-sm" data-test-class="project-controls">
-          {activeSession && <TitlebarSessionMenu activeSession={activeSession} canOpenSessionFolder={canOpenSessionFolder}
-            sessionMenuOpen={sessionMenuOpen} setSessionMenuOpen={setSessionMenuOpen} />}
           {storeView.kind === "session" && isServerBackedSessionId(storeActiveChatId) && <BrowserToggle />}
-          {rightAvailable && (
-            <IconButton
-              data-test-class="titlebar-right-panel-toggle"
-              label={
-                rightOpen
-                  ? appCopy.titlebar.hideRightPanel
-                  : appCopy.titlebar.showRightPanel
-              }
-              pressed={rightOpen}
-              tone={rightOpen ? "butler" : "default"}
-              onClick={() => setRightOpen((value) => !value)}
-            >
-              <PanelRight size="md" />
-            </IconButton>
-          )}
         </ButtonContainer>
       }
     />
-  );
-}
-
-function TitlebarSessionMenu({ activeSession, canOpenSessionFolder, sessionMenuOpen, setSessionMenuOpen }: {
-  activeSession: SessionSummary; canOpenSessionFolder: boolean;
-  sessionMenuOpen: boolean; setSessionMenuOpen: (open: boolean) => void;
-}) {
-  const runSessionAction = useButlerStore((state) => state.runSessionAction);
-  return (
-  <DropdownMenu
-    open={sessionMenuOpen}
-    onOpenChange={setSessionMenuOpen}
-  >
-    <DropdownMenuTrigger asChild>
-      <IconButton
-        label={appCopy.sessionActions.menuLabel}
-        selected={sessionMenuOpen}
-      >
-        <MoreHorizontal size="md" />
-      </IconButton>
-    </DropdownMenuTrigger>
-    <DropdownMenuContent
-      align="end"
-      onInteractOutside={() => setSessionMenuOpen(false)}
-      sideOffset={TITLEBAR_MENU_SIDE_OFFSET_PX}
-    >
-      <DropdownMenuGroup>
-        <DropdownMenuItem
-          onSelect={() => runSessionAction(activeSession, "rename")}
-        >
-          <PencilLine size="sm" /> {appCopy.sessionActions.rename}
-        </DropdownMenuItem>
-        <SessionFolderMenu
-          disabled={!canOpenSessionFolder}
-          sessionId={activeSession.id}
-        />
-        <DropdownMenuItem
-          onSelect={() => runSessionAction(activeSession, "archive")}
-        >
-          <Archive size="sm" /> {appCopy.sessionActions.archive}
-        </DropdownMenuItem>
-      </DropdownMenuGroup>
-    </DropdownMenuContent>
-  </DropdownMenu>
   );
 }

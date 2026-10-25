@@ -7,6 +7,8 @@ use crate::gateway::ApplicationFuture;
 
 pub enum AppModelCatalogCommand {
     Read,
+    ReadImageModel,
+    SetImageModel(Value),
     UpsertCredential(Value),
     RegisterHosted(Value),
     DeleteHosted(String),

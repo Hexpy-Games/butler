@@ -1,3 +1,4 @@
+import { SESSION_INFO_COPY } from "./session-info.ts";
 import { CANON_COPY } from "./canon.ts";
 import { TASK_GRAPH_COPY } from "./task-graph.ts";
 import { lifecycleCopy } from "../lifecycle.ts";
@@ -337,6 +338,7 @@ export const enUsCopy: AppCopy = {
   },
   shell: { footerNav: "Updates and settings", update: { downloading: "Downloading update", working: "Preparing update", ready: "Update ready", failed: "Update failed", restart: "Restart" } },
   canon: CANON_COPY["en-US"],
+  sessionInfo: SESSION_INFO_COPY["en-US"],
   taskGraph: TASK_GRAPH_COPY["en-US"],
   lifecycle: lifecycleCopy.en,
   browser: {
@@ -554,14 +556,11 @@ export const enUsCopy: AppCopy = {
     contextChart: "Context window usage chart",
     contextUnavailable: "Context is unavailable",
     noProgress: "No session progress yet",
-    branchDetails: "Branch details",
     gitBranch: "Git branch",
-    noVisibleSkills: "No app-visible skills",
     detachedHead: "Detached HEAD",
     notGit: "Not a Git workspace",
     noWorkspace: "No project workspace",
     noGit: "Git is not installed",
-    unavailableWorktree: "Session worktree unavailable",
     worktree: "Worktree",
     projectFolder: "Project folder",
     projectWorkspace: "Project workspace",
@@ -569,7 +568,6 @@ export const enUsCopy: AppCopy = {
     unavailable: "Unavailable",
     dirty: "Dirty",
     clean: "Clean",
-    noWorkers: "No worker history yet",
     recentActivity: "Recent activity",
     noRecentActivity: "No recent activity yet",
     activeSessions: "Active sessions",
@@ -1343,7 +1341,6 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       workers: "Workers",
     },
     workers: {
-      showDetails: "Details",
       hideDetails: "Close",
     },
   },

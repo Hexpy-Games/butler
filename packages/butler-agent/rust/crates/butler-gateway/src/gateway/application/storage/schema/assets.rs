@@ -1,9 +1,9 @@
-//! Asset identity and indexed lifetime bindings; deletes enqueue files once.
+//! Kinds: collected, original, generated and mask. Asset identity and indexed lifetime bindings; deletes enqueue files once.
 use super::AppStorageError;
 use rusqlite::Connection;
 pub(super) fn create(db: &Connection) -> Result<(), AppStorageError> {
     db.execute_batch("CREATE TABLE IF NOT EXISTS app_assets(
-      id TEXT PRIMARY KEY,sha256 TEXT NOT NULL UNIQUE,mime TEXT NOT NULL,width INTEGER NOT NULL,
+      id TEXT PRIMARY KEY,sha256 TEXT NOT NULL,mime TEXT NOT NULL,width INTEGER NOT NULL,
       height INTEGER NOT NULL,bytes INTEGER NOT NULL,alt TEXT NOT NULL,source_url TEXT NOT NULL,created_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS app_asset_refs(asset_id TEXT NOT NULL REFERENCES app_assets(id) ON DELETE CASCADE,
       owner_kind TEXT NOT NULL,owner_id TEXT NOT NULL,PRIMARY KEY(asset_id,owner_kind,owner_id));
@@ -33,6 +33,8 @@ pub(super) fn create(db: &Connection) -> Result<(), AppStorageError> {
         DELETE FROM app_asset_refs WHERE owner_kind='library' AND owner_id=NEW.id
         AND asset_id NOT IN(SELECT value FROM json_tree(NEW.payload) WHERE type='text');
       END;").map_err(AppStorageError::sqlite)?;
+    super::asset_versions::migrate(db)?;
+    generated_columns(db)?;
     message_bindings(db)
 }
 
@@ -61,4 +63,22 @@ fn message_bindings(db: &Connection) -> Result<(), AppStorageError> {
       DELETE FROM app_asset_refs WHERE owner_kind='message' AND owner_id=NEW.id
       AND asset_id NOT IN(SELECT value FROM json_tree(COALESCE(NEW.blocks_json,'[]')) WHERE type='text');
       END;") .map_err(AppStorageError::sqlite)
+}
+
+fn generated_columns(db: &Connection) -> Result<(), AppStorageError> {
+    for (name, declaration) in [
+        ("kind", "TEXT NOT NULL DEFAULT 'collected'"),
+        ("parent_id", "TEXT"),
+        ("model_ref", "TEXT"),
+    ] {
+        super::migration::ensure_column(db, "app_assets", name, declaration)?;
+    }
+    db.execute_batch(
+        "CREATE INDEX IF NOT EXISTS app_assets_sha ON app_assets(sha256);
+      CREATE INDEX IF NOT EXISTS app_assets_parent ON app_assets(parent_id);
+      CREATE TRIGGER IF NOT EXISTS asset_version_delete AFTER DELETE ON app_assets BEGIN
+        DELETE FROM app_asset_refs WHERE owner_kind='asset' AND owner_id=OLD.id;
+      END;",
+    )
+    .map_err(AppStorageError::sqlite)
 }

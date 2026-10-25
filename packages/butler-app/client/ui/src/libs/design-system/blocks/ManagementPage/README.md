@@ -84,6 +84,26 @@ with `asideLabel`. Without `aside` the page renders exactly as before.
 </ManagementPage>
 ```
 
+### Wallpaper keep-out
+
+`onColumnRect` reports the content column's left and right edges and the
+page's top in client CSS px, the same rect ConversationShell's
+`MessageListSurface onColumnRect` gives. While the aside is docked, `right`
+reaches the aside's far edge, so a wallpaper's dots stay out from behind it as
+well as the content. It reports on mount and on every resize (column, page,
+window, the aside docking or leaving), never on scroll; equal values are not
+reported twice. With no aside docked it is the column alone. Pass it to the
+background's `columnRect`; the page never needs to read the DOM itself.
+
+```tsx
+const [column, setColumn] = useState<ManagementPageColumnRect>();
+const columnRect = column && { x: column.left, y: column.top, width: column.right - column.left, height: 0 };
+<ManagementPage onColumnRect={setColumn} aside={detail}
+  background={<Wallpaper scope="container" source={source} columnRect={columnRect} />}>
+  {board}
+</ManagementPage>
+```
+
 ## Who can use this component
 
 Domain containers can wrap their presenter content with this block.

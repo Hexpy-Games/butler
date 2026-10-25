@@ -83,6 +83,9 @@ export const additionalToolLabels = {
   preview_start: "미리보기 시작",
   preview_stop: "미리보기 중지",
   library_search: "서랍 검색",
+  document_create: "문서 만들기",
+  document_read: "문서 읽기",
+  document_edit: "문서 수정",
   library_organize: "서랍 정리",
   deliver_files: "파일 전달",
 };
