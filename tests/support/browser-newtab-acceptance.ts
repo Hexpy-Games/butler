@@ -19,7 +19,7 @@ export async function newTabHub(app: Awaited<ReturnType<typeof browserAgentApp>>
     assert.equal(await app.page.expression("getComputedStyle(document.querySelector('[data-slot=browser-pane]')).outlineStyle"), "none");
     assert.equal(await app.page.expression("document.querySelector('[data-slot=page-card]').getAttribute('data-holder')"), "none");
     await newTabShot(app, `${locale}-${theme}-1440-newtab`);
-    await app.click(locale === "ko" ? "탭 닫기" : "Close tab");
+    await closeHoveredTab(app, locale === "ko" ? "탭 닫기" : "Close tab");
     await waitBrowser(async () => {
       const state = await app.call<{ tabs: Array<{ id: string; url: string }> }>("state");
       return state.tabs.length === 1 && state.tabs[0]!.id !== before.tabs[0]!.id && state.tabs[0]!.url === "";
@@ -29,6 +29,29 @@ export async function newTabHub(app: Awaited<ReturnType<typeof browserAgentApp>>
     await newTabShot(app, `${locale}-${theme}-1440-last-tab-closed`);
   }
   await populatedNewTab(app.page, app.gateway, () => newTabShot(app, "en-dark-newtab-populated"));
+}
+
+/**
+ * The close button shows only while its tab is hovered (TabStrip), as a user sees it. Keep the pointer on the tab
+ * until the button shows, then move and click in one sequence: the desktop's own pointer events reach the window
+ * too and can take the hover away in between.
+ */
+async function closeHoveredTab(app: Awaited<ReturnType<typeof browserAgentApp>>, label: string) {
+  const close = `[...document.querySelectorAll('button,[role="button"]')].find(e=>e.getAttribute('aria-label')===${JSON.stringify(label)})`;
+  const point = await app.page.expression<{ x: number; y: number }>(`(() => {
+    const box=${close}.getBoundingClientRect();return {x:box.x+box.width/2,y:box.y+box.height/2};
+  })()`);
+  await waitBrowser(async () => {
+    await app.page.movePointer(point.x, point.y);
+    return app.page.expression<boolean>(`(() => {
+      const node=${close};
+      for (let parent=node;parent;parent=parent.parentElement) if (parent.getAnimations().some(a=>a.playState==='running' && a.effect?.getComputedTiming().iterations!==Infinity)) return false;
+      return node.contains(document.elementFromPoint(${point.x},${point.y}));
+    })()`);
+  }, "close button shown on hover");
+  await app.page.movePointer(point.x, point.y);
+  await app.page.pointerDown(point.x, point.y);
+  await app.page.pointerUp(point.x, point.y);
 }
 
 async function newTabShot(app: Awaited<ReturnType<typeof browserAgentApp>>, name: string) {
