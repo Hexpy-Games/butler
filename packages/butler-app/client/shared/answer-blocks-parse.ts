@@ -63,6 +63,9 @@ function parse(value: unknown, rule: Rule): unknown {
       && value.image_url.startsWith(`/message-assets/${encodeURIComponent(result.img)}?`)
       && /^\/message-assets\/img_[a-z0-9]{10,12}\?expires=\d+&signature=[a-zA-Z0-9_-]+$/u.test(value.image_url)) {
       result.image_url = value.image_url;
+      for (const key of ["image_width", "image_height"]) {
+        if (typeof value[key] === "number" && Number.isFinite(value[key]) && value[key] > 0) result[key] = value[key];
+      }
     }
     return rule.required?.some(key => !(key in result)) ? invalid : result;
   }

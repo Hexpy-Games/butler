@@ -1,3 +1,4 @@
+import { useDrawerSidebarState } from "@/hooks/useDrawerSidebarState.ts";
 import { useSessionAttentionNotifications } from "@/hooks/live-session/useSessionAttentionNotifications";
 import { useEffect, useMemo } from "react";
 import { stewardHarnessSummary } from "./stewardHarnessSummary.ts";
@@ -6,19 +7,16 @@ import {
   AdaptivePanelResizeHandle,
   AdaptiveShell,
   AdaptiveShellChrome,
-  AdaptiveShellInspector,
   AdaptiveShellScrim,
   AdaptiveShellSidebar,
   AdaptiveShellWorkspace,
   Stack,
 } from "@/butler-ds";
 import { WindowChromeLayer } from "@/components/layout/Chrome.tsx";
-import { RightPanelOverlayTitlebar } from "@/components/layout/RightPanelOverlayTitlebar.tsx";
 import { Sidebar } from "@/components/layout/Sidebar.tsx";
 import { Titlebar } from "@/components/layout/Titlebar.tsx";
 import { LibraryPage } from "@/components/browser/LibraryPage";
 import { Conversation } from "@/components/conversation/Conversation.tsx";
-import { Inspector } from "@/components/inspector/Inspector.tsx";
 import { PlanOverview } from "@/components/canon/PlanOverview.tsx";
 import { ProjectDashboardView } from "@/components/management/ProjectDashboardView.tsx";
 import { AppToaster } from "@/components/common/AppToaster.tsx";
@@ -50,7 +48,6 @@ import {
   LEFT_PANEL_MIN_WIDTH,
   usePanelResize,
 } from "@/hooks/usePanelResize.ts";
-import { useNarrowRightPanelAutoCollapse } from "@/hooks/useNarrowRightPanelAutoCollapse.ts";
 import { usePortalThemeClasses } from "@/hooks/usePortalThemeClasses.ts";
 import { useSystemThemePreference } from "@/hooks/useSystemThemePreference.ts";
 
@@ -74,14 +71,11 @@ export function VisualHarness() {
   const fixture = (window as Window & { butlerConversationFixture?: { messages: import("@/app/types").MessageRecord[]; background?: string; sessionView?: import("@/app/types").SessionView; navigation?: import("@/app/types").NavigationView; modelCatalog?: ModelCatalogView; settings?: Partial<import("@/app/types").SettingsView> } }).butlerConversationFixture;
   const leftOpen = useButlerStore((state) => state.leftOpen);
   const setLeftOpen = useButlerStore((state) => state.setLeftOpen);
-  const rightOpen = useButlerStore((state) => state.rightOpen);
-  const setRightOpen = useButlerStore((state) => state.setRightOpen);
   const view = useButlerStore((state) => state.view);
   const commandOpen = useButlerStore((state) => state.commandOpen);
   const setView = useButlerStore((state) => state.setView);
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const setActiveChatId = useButlerStore((state) => state.setActiveChatId);
-  const setRightTab = useButlerStore((state) => state.setRightTab);
   const setNavigation = useButlerStore((state) => state.setNavigation);
   const setMessages = useButlerStore((state) => state.setMessages);
   const setSettings = useButlerStore((state) => state.setSettings);
@@ -160,41 +154,27 @@ export function VisualHarness() {
   }, [developerMode, visualTheme]);
   const systemPrefersDark = useSystemThemePreference();
   usePortalThemeClasses(harnessSettings, systemPrefersDark);
-  const rightAvailable =
-    view.kind === "session" && !isDraftChatId(activeChatId);
-  const effectiveRightOpen = rightOpen && rightAvailable;
   const isSettingsView = view.kind === "settings";
   const newChatActive =
     view.kind === "session" && isDraftChatId(activeChatId);
   const {
     shellRef,
-    rightMin,
-    rightMax,
     beginPanelResize,
     handlePanelResizeKeyDown,
     leftPanelWidth,
     panelStyle,
-    rightPanelWidth,
     resizingPanel,
   } = usePanelResize({
     leftOpen,
     setLeftOpen,
   });
-  useNarrowRightPanelAutoCollapse({
-    effectiveRightOpen,
-    leftOpen,
-    rightOpen,
-    setLeftOpen,
-    setRightOpen,
-  });
+  useDrawerSidebarState({ leftOpen, setLeftOpen });
   useEffect(() => {
     if (ss03Surface) {
       setLeftOpen(true);
     } else {
       setLeftOpen(false);
     }
-    setRightOpen(!fixture);
-    setRightTab("summary");
     setView({ kind: "session" });
     setActiveChatId("butler-client");
     setNavigation(harnessNavigation);
@@ -226,8 +206,6 @@ export function VisualHarness() {
     setModelCatalog,
     setMessages,
     setNavigation,
-    setRightOpen,
-    setRightTab,
     setSettings,
     setStatus,
     setSessionView,
@@ -260,7 +238,7 @@ export function VisualHarness() {
       leftOpen={leftOpen}
       platform={nativePlatform()}
       resizing={Boolean(resizingPanel)}
-      rightOpen={effectiveRightOpen}
+      rightOpen={false}
       settingsActive={isSettingsView}
       UNSAFE_style={panelStyle}
       transparentWorkspace={newChatActive}
@@ -273,7 +251,6 @@ export function VisualHarness() {
           />
         </AdaptiveShellChrome>
       )}
-      {!isSettingsView && effectiveRightOpen && <RightPanelOverlayTitlebar />}
       {isSettingsView ? (
         <SettingsView
           initialSection="general"
@@ -332,37 +309,11 @@ export function VisualHarness() {
           onPointerDown={(event) => beginPanelResize("left", event)}
         />
       )}
-      {!isSettingsView && rightAvailable && (
-        <AdaptiveShellInspector
-          data-test-class="right-panel-slot"
-          open={effectiveRightOpen}
-        >
-          <Inspector id="butler-right-inspector" />
-        </AdaptiveShellInspector>
-      )}
-      {!isSettingsView && effectiveRightOpen && (
-        <AdaptivePanelResizeHandle
-          aria-label="Resize right panel"
-          aria-orientation="vertical"
-          aria-controls="butler-right-inspector"
-          aria-valuemax={rightMax}
-          aria-valuemin={rightMin}
-          aria-valuenow={rightPanelWidth}
-          data-test-class="panel-resize-handle right-panel-resize-handle"
-          side="right"
-          onKeyDown={(event) => handlePanelResizeKeyDown("right", event)}
-          onPointerDown={(event) => beginPanelResize("right", event)}
-        />
-      )}
       {!isSettingsView && (
         <AdaptiveShellScrim
-          label={
-            effectiveRightOpen ? appCopy.titlebar.hideRightPanel : "Hide sidebar"
-          }
-          open={!ss03Surface && (leftOpen || effectiveRightOpen)}
-          onDismiss={() =>
-            effectiveRightOpen ? setRightOpen(false) : setLeftOpen(false)
-          }
+          label="Hide sidebar"
+          open={!ss03Surface && leftOpen}
+          onDismiss={() => setLeftOpen(false)}
         />
       )}
       {(isSettingsView || fixture) && <AppToaster />}

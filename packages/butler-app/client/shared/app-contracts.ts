@@ -231,7 +231,6 @@ export type ImageBlock = {
   title?: AnswerBlockTitle;
   img: AssetId;
   caption?: string;
-  media?: AnswerMedia;
   source?: AnswerSource;
 };
 

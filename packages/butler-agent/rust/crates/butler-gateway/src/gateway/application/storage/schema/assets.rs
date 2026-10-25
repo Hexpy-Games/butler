@@ -67,6 +67,7 @@ fn message_bindings(db: &Connection) -> Result<(), AppStorageError> {
 
 fn generated_columns(db: &Connection) -> Result<(), AppStorageError> {
     for (name, declaration) in [
+        ("pixel_ratio", "REAL NOT NULL DEFAULT 1"),
         ("kind", "TEXT NOT NULL DEFAULT 'collected'"),
         ("parent_id", "TEXT"),
         ("model_ref", "TEXT"),

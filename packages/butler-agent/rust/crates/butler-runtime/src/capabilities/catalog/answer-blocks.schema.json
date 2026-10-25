@@ -331,7 +331,6 @@
         "title": {"$ref": "#/$defs/title"},
         "img": {"$ref": "#/$defs/img"},
         "caption": {"type": "string", "maxLength": 120},
-        "media": {"$ref": "#/$defs/media"},
         "source": {"$ref": "#/$defs/source"}
       }
     },

@@ -1,4 +1,5 @@
 // UI behavior E2E: product conversation, offline HTTP/desktop bridge stubs, no model calls.
+import { checkImageSizing, sizingAsset } from "./answer-image-sizing";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -12,6 +13,8 @@ import { fixtureItems } from "../../packages/butler-app/client/ui/src/libs/desig
 import { toMarkdown } from "../../packages/butler-app/client/shared/answer-blocks-markdown";
 
 const root = process.cwd();
+const only = process.env.BUTLER_ANSWER_ONLY;
+const sizingOnly = only === "image-sizing";
 const stage = process.env.BUTLER_ANSWER_STAGE ?? "after";
 const locale = process.env.BUTLER_ANSWER_LOCALE === "en" ? "en" : "ko";
 const labels = locale === "en" ? {
@@ -35,7 +38,7 @@ const baseline = process.env.BUTLER_ANSWER_BASELINE;
 const baselineSources = new Map<string, string>();
 if (baseline) {
   assert.equal(stage, "before", "baseline mode is for before captures only");
-  for (const name of ["AnswerBlocks", "AnswerContainers", "AnswerCards", "AnswerDataBlocks"]) {
+  for (const name of ["AnswerBlocks", "AnswerContainers", "AnswerCards", "AnswerDataBlocks", "AnswerLeafBlocks"]) {
     const file = `packages/butler-app/client/ui/src/components/conversation/${name}.tsx`;
     baselineSources.set(resolve(root, file), execFileSync("git", ["show", `${baseline}:${file}`], { cwd: root, encoding: "utf8" }));
   }
@@ -390,6 +393,7 @@ try {
       const data = url.pathname === "/library" ? body : { accepted: { ...message(null), role: "user", text: body.text, id: body.client_message_id }, replies: [] };
       return route.fulfill({ json: { ok: true, data } });
     }
+    if (url.pathname.startsWith("/message-assets/img_small") || url.pathname.startsWith("/message-assets/img_large")) return sizingAsset(route);
     if (servePhotos && url.pathname.startsWith("/message-assets/")) {
       const ids = mock.blocks[0].type === "cards" ? mock.blocks[0].items.map(item => item.img) : [];
       const index = Math.max(0, ids.indexOf(decodeURIComponent(url.pathname.split("/").at(-1)!)));
@@ -406,9 +410,12 @@ try {
     if (["/session-view", "/summary", "/navigation", "/events/live", "/health"].includes(url.pathname)) return route.fulfill({ json: { ok: true, data: {} } });
     return route.continue();
   });
-  for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (const background of ["plain", "wallpaper"]) await checkMock(page, width, theme, background);
-  for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (const background of ["plain", "wallpaper"]) await checkV2(page, width, theme, background);
-  if (stage === "after") {
+  if (!only || only === "existing") for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (const background of ["plain", "wallpaper"]) await checkMock(page, width, theme, background);
+  if (!only || only === "existing") for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (const background of ["plain", "wallpaper"]) await checkV2(page, width, theme, background);
+  if (!only || sizingOnly) for (const width of [1440, 390]) for (const theme of ["light", "dark"]) {
+    geometry.push(await checkImageSizing(page, open, width, theme, stage, locale, evidence, viewerLabels));
+  }
+  if (stage === "after" && !sizingOnly) {
     await checkInteractions(page);
     await checkCardTargetsAndViewer(page, 1440, "light");
     await checkCardTargetsAndViewer(page, 390, "dark");

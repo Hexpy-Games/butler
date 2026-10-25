@@ -1,4 +1,4 @@
-import { closeCanonInspector } from "./canon-board-inspector.ts";
+import { closeCanonAside } from "./canon-board-aside.ts";
 import { selectBoardPlan } from "./canon-board-selector.ts";
 import { strict as assert } from "node:assert";
 import type { Page } from "playwright";
@@ -31,7 +31,7 @@ export async function seedCanonBoard(server: NativeAppServerHandle): Promise<{ p
 export async function openCanonBoard(page: Page): Promise<void> {
   // The shared inspector is a modal drawer on phones; dismiss it before sidebar navigation.
   if (page.viewportSize()!.width === 390 && await page.locator('[data-test-class="right-panel-overlay-close"]').isVisible()) {
-    await closeCanonInspector(page);
+    await closeCanonAside(page);
   }
   const dashboard = page.getByRole("button", { name: "캐논 보드 프로젝트 대시보드", exact: true });
   await page.locator('[data-test-class~="mac-window"]').waitFor();
@@ -77,7 +77,7 @@ export async function verifyCanonFlows(page: Page, server: NativeAppServerHandle
   const saved = await server.api<EpicDetail>(`/canon/epics/${created.id}`);
   assert.equal(saved.plan_id, planId); assert.equal(saved.canon_status, "in_review");
   await verifyCanonConflict(page, server, created.id);
-  await closeCanonInspector(page);
+  await closeCanonAside(page);
   await board.getByRole("button", { name: "새 계획", exact: true }).click();
   await dialog.getByLabel("제목", { exact: true }).fill("다음 계획");
   await dialog.getByRole("button", { name: "만들기", exact: true }).click();

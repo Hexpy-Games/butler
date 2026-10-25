@@ -2,14 +2,10 @@ import { TitlebarSessionMenu } from "./TitlebarSessionMenu.tsx";
 import { SessionInfoActions } from "../session-info/SessionInfoActions.tsx";
 import { useAppLocale } from "@/app/copy.ts";
 import { useMemo, useState } from "react";
-import {
-  ButtonContainer,
-  PanelRight,
-} from "@/butler-ds";
-import { IconButton } from "@/butler-ds";
+import { ButtonContainer } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { isServerBackedSessionId } from "@/app/sessionIds.ts";
-import { selectRightAvailable, useButlerStore } from "@/app/store.ts";
+import { useButlerStore } from "@/app/store.ts";
 import {
   activeChatFromNavigation,
   activeTitleForView,
@@ -32,9 +28,6 @@ export function Titlebar({ sidebarOpen, splitChatWidth }: { sidebarOpen?: boolea
   const storeActiveChatId = useButlerStore((state) => state.activeChatId);
   const storeActiveChatTitle = useButlerStore((state) => state.activeChatTitle);
   const leftOpen = useButlerStore((state) => state.leftOpen);
-  const rightOpen = useButlerStore((state) => state.rightOpen);
-  const rightAvailable = useButlerStore(selectRightAvailable);
-  const setRightOpen = useButlerStore((state) => state.setRightOpen);
   const back = useTitlebarBack();
   useLibraryNames();
   const { title, subtitle } = useMemo(
@@ -86,21 +79,6 @@ export function Titlebar({ sidebarOpen, splitChatWidth }: { sidebarOpen?: boolea
       trailing={
         <ButtonContainer size="icon-sm" data-test-class="project-controls">
           {storeView.kind === "session" && isServerBackedSessionId(storeActiveChatId) && <BrowserToggle />}
-          {rightAvailable && (
-            <IconButton
-              data-test-class="titlebar-right-panel-toggle"
-              label={
-                rightOpen
-                  ? appCopy.titlebar.hideRightPanel
-                  : appCopy.titlebar.showRightPanel
-              }
-              pressed={rightOpen}
-              tone={rightOpen ? "butler" : "default"}
-              onClick={() => setRightOpen((value) => !value)}
-            >
-              <PanelRight size="md" />
-            </IconButton>
-          )}
         </ButtonContainer>
       }
     />
