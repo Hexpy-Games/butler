@@ -127,8 +127,43 @@
   flex: 1 1 auto;
 }
 
-.close {
+/* The close button shows on hover or keyboard focus only, active tab included.
+   It keeps its slot, so the title never reflows; while hidden it takes no
+   clicks. Middle-click, Delete and Cmd/Ctrl+W still close. */
+.slot .close {
   flex: none;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--motion-fast) var(--motion-ease-standard),
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    color var(--motion-fast) var(--motion-ease-standard),
+    scale var(--motion-fast) var(--motion-ease-standard);
+}
+
+.slot:hover .close,
+.slot > .tab:focus-visible .close,
+.slot .close:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Touch has no hover: only the selected tab shows its close button. */
+@media (hover: none) {
+  .slot[data-active] .close {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+/* Reduced motion: the close button appears at once. */
+@media (prefers-reduced-motion: reduce) {
+  .slot .close {
+    transition:
+      background-color var(--motion-fast) var(--motion-ease-standard),
+      color var(--motion-fast) var(--motion-ease-standard),
+      scale var(--motion-fast) var(--motion-ease-standard);
+  }
 }
 
 /* Near the minimum, unselected tabs drop the close button so the title keeps
