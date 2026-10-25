@@ -1,4 +1,5 @@
 // UI behavior smoke: offline gateway fixtures, real Lexical editor and product screens.
+import { compareDocumentBackdrop } from "./document-dialog-opacity";
 import { checkDocumentDialog, checkDocumentImage } from "./document-dialog-checks";
 import assert from "node:assert/strict";
 import { getAppCopy } from "../../packages/butler-i18n/src/index";
@@ -379,9 +380,11 @@ async function keyboardUnits(page: Page) {
   await page.getByText("저장됨", { exact: true }).waitFor(); assert.ok(head.body.includes("ordered"));
 }
 async function matrix(page: Page) {
+  const comparisons: Awaited<ReturnType<typeof compareDocumentBackdrop>>[] = [];
   for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (background of ["plain", "wallpaper"]) {
     head = { ...head, body: initial }; history = [structuredClone(head), { ...head, rev: head.rev - 1, author: "user" }];
     await open(page, width, theme); await shot(page, "chat-document", width, theme);
+    if (stage === "after" && width === 1440) comparisons.push(await compareDocumentBackdrop(page, `${theme}-${background}`, evidence));
     await selectText(page); await shot(page, "format", width, theme); await page.keyboard.press("ArrowRight");
     await live(page); await shot(page, "butler-editing", width, theme);
     await page.getByRole("button", { name: "버전 기록", exact: true }).click(); await page.getByRole("listbox").waitFor(); await shot(page, "versions", width, theme); await page.keyboard.press("Escape"); await page.getByRole("listbox").waitFor({ state: "hidden" });
@@ -398,6 +401,7 @@ async function matrix(page: Page) {
     await page.getByRole("combobox", { name: "버전", exact: true }).waitFor(); await page.locator('[data-test-class="artifact-viewer"]').waitFor();
     await shot(page, "file-viewer", width, theme);
   }
+  assert(comparisons.every(result => result.changedFraction <= 0.005), JSON.stringify(comparisons));
 }
 try {
   const page = await browser.newPage(); await setup(page);

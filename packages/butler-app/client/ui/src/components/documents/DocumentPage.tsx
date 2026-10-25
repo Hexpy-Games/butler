@@ -1,6 +1,6 @@
 import { relativeAge } from "@/app/utils";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { DocumentEditor, DialogHeader, DialogTitle, DialogClose, X, DialogFooter, ScrollArea, Button, History, IconButton, Inline, Popover, PopoverContent, PopoverTrigger, VersionHistory, Typo, Stack } from "@/butler-ds";
+import { DocumentEditor, DialogHeader, DialogTitle, DialogClose, X, Box, Section, ScrollArea, Button, History, IconButton, Inline, Popover, PopoverContent, PopoverTrigger, VersionHistory, Typo, Stack } from "@/butler-ds";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { useButlerStore } from "@/app/store";
 import { subscribeDocumentUpdates } from "@/app/documentEvents";
@@ -57,7 +57,8 @@ function DocumentLayout({ dialogTitle, title, actions, note, children }: {
   if (dialogTitle === undefined) return <DocumentEditor title={<Typo.H2>{title}</Typo.H2>} actions={actions} note={note} data-test-class="editable-document">{children}</DocumentEditor>;
   return <>
     <DialogHeader><Inline justify="between" wrap={false}><Stack.Item shrink><DialogTitle>{title}</DialogTitle></Stack.Item><Inline gap="xs" wrap={false}>{actions}<DialogClose asChild><IconButton label={appCopy.common.close}><X size="sm" /></IconButton></DialogClose></Inline></Inline></DialogHeader>
-    <ScrollArea fill><DocumentEditor title={null} note={note} data-test-class="editable-document">{children}</DocumentEditor></ScrollArea>
-    <DialogFooter />
+    <Box surface="raised-opaque" data-slot="document-dialog-body"><Section fill contentFill gap="none">
+      <ScrollArea fill><DocumentEditor title={null} note={note} data-test-class="editable-document">{children}</DocumentEditor></ScrollArea>
+    </Section></Box>
   </>;
 }
