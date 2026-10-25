@@ -1,3 +1,4 @@
+import { openDocument } from "../components/documents/documentApi";
 import { initialDocumentView, persistDocumentView } from "./documentRoute";
 import { reconcileAnswerDrafts } from "./answerDrafts";
 import { retainAnswerBlocks } from "./stableAnswerBlocks";
@@ -991,11 +992,14 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
   setLeftOpen: (value) => set(state => ({ leftOpen: resolveUpdate(value, state.leftOpen) })),
   setSelectedArtifactId: (artifactId) =>
     set({ selectedArtifactId: artifactId, selectedArtifact: null }),
-  openArtifact: (artifactId, artifact) => set(state => ({
-    ...(state.view.kind === "session" ? { sessionInfoOpen: true } : {}),
-    selectedArtifactId: artifactId,
-    selectedArtifact: artifact ?? null,
-  })),
+  openArtifact: (artifactId, artifact) => {
+    if (artifact?.kind === "doc") { openDocument({ ...artifact, chat_id: artifact.session_id }); return; }
+    set(state => ({
+      ...(state.view.kind === "session" ? { sessionInfoOpen: true } : {}),
+      selectedArtifactId: artifactId,
+      selectedArtifact: artifact ?? null,
+    }));
+  },
   setLeftPanelWidth: (leftPanelWidth) => set({ leftPanelWidth }),
   setSidebarChatsCollapsed: (value) =>
     set((state) => ({

@@ -240,9 +240,8 @@ async function auditCell(page: Page, cell: Cell) {
   await auditScope(page, cell, "conversation", '[data-test-class~="conversation"]', 160);
   await page.locator('[data-test-class="message-artifact-list"]').getByText("Focus document", { exact: true }).click();
   await page.getByRole("textbox", { name: copy.documents.title, exact: true }).waitFor();
-  await auditScope(page, cell, "document-dialog", '[role="dialog"][data-height="full"]', 30);
-  await page.keyboard.press("Escape");
-  await page.getByRole("dialog", { name: "Focus document", exact: true }).waitFor({ state: "hidden" });
+  await auditScope(page, cell, "document-page", '[data-test-class="editable-document"]', 30);
+  await open(page, cell);
   // A menu: a sidebar row's menu walked with arrow keys.
   await openSidebar(page);
   await page.locator('[data-test-class="app-sidebar"] [data-slot="dropdown-menu-trigger"]').first().focus();

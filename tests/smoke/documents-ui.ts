@@ -1,6 +1,5 @@
 // UI behavior smoke: offline gateway fixtures, real Lexical editor and product screens.
-import { compareDocumentBackdrop } from "./document-dialog-opacity";
-import { assertDocumentLayout, measureDocumentLayout, measureStandardDialogSpacing, checkDocumentDialog, checkDocumentImage } from "./document-dialog-checks";
+import { assertDocumentLayout, measureDocumentLayout, checkDocumentImage, checkTrailing, documentHarnessPlugin } from "./document-page-checks";
 import assert from "node:assert/strict";
 import { getAppCopy } from "../../packages/butler-i18n/src/index";
 import { execFileSync } from "node:child_process";
@@ -12,13 +11,13 @@ import { launchSmokeBrowser } from "../support/smoke-browser";
 import { documentProfilePlugin } from "../support/document-profile";
 const layouts: { width: number; theme: string; background: string; state: string; layout: Awaited<ReturnType<typeof measureDocumentLayout>> }[] = [];
 const root = process.cwd(), stage = process.env.BUTLER_DOCUMENT_STAGE ?? "after";
-const evidence = process.env.BUTLER_SMOKE_EVIDENCE ?? resolve(process.env.TMPDIR ?? "/tmp", "bd3/shots"); mkdirSync(evidence, { recursive: true });
+const evidence = process.env.BUTLER_SMOKE_EVIDENCE ?? resolve(process.env.TMPDIR ?? "/tmp", "bd8/shots"); mkdirSync(evidence, { recursive: true });
 const image = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 300 200"><rect width="300" height="200" fill="#8ca5ab"/><circle cx="210" cy="65" r="26" fill="#efd79c"/><path d="M0 200V150L90 60L220 200M120 200L220 110L300 180V200" fill="#55766d"/></svg>');
 const imageData = `data:image/svg+xml;base64,${image.toString("base64")}`;
 const spec = { v: 2, blocks: [{ type: "metrics", title: "Budget", items: [{ label: "Total", value: 120 }] }] };
 const initial = `# Report\n\nAn **important** paragraph with *emphasis*.\n\n- first\n- second\n\n1. one\n2. two\n\n\`\`\`blocks\n${JSON.stringify(spec)}\n\`\`\`\n\n![image](img_abcdefghij)\n\n> Preserve unknown Markdown\n`;
 const artifact = { id: "doc_report", title: "Report", kind: "doc", session_id: "butler-client", message_id: "answer", created_at: "2026-10-25T08:00:00Z", deliverable: true };
-const message = { id: "answer", chat_id: "butler-client", role: "assistant", status: "delivered", text: "Here is your report.", created_at: artifact.created_at, artifacts: [artifact] };
+const message = { id: "answer", cursor: 1, chat_id: "butler-client", role: "assistant", status: "delivered", text: "Here is your report.", created_at: artifact.created_at, artifacts: [artifact] };
 let head = { id: artifact.id, title: "Report", body: initial, rev: 1, author: "butler", chat_id: "butler-client", message_id: "answer", created_at: artifact.created_at, updated_at: artifact.created_at,
   assets: [{ id: "img_abcdefghij", url: "/message-assets/img_abcdefghij", signed_url: "/message-assets/img_abcdefghij?expires=9999999999&signature=fixture", image_width: 600, image_height: 400 }] };
 let history = [structuredClone(head)], conflict = false, projectImageSize = true;
@@ -37,7 +36,7 @@ if (stage === "before") for (const file of execFileSync("git", ["diff", "--name-
   baseline.set(resolve(root, file), execFileSync("git", ["show", `${baselineRef}:${file}`], { cwd: root, encoding: "utf8" }));
 }
 process.chdir(join(root, "packages/butler-app/client/ui"));
-const vite = await createServer({ plugins: [documentProfilePlugin(), { name: "documents-baseline", enforce: "pre", load(id) { return baseline.get(id.split("?")[0]!); } }], server: { host: "127.0.0.1", port: 0 }, logLevel: "error" }); await vite.listen();
+const vite = await createServer({ plugins: [documentHarnessPlugin, documentProfilePlugin(), { name: "documents-baseline", enforce: "pre", load(id) { return baseline.get(id.split("?")[0]!); } }], server: { host: "127.0.0.1", port: 0 }, logLevel: "error" }); await vite.listen();
 const base = vite.resolvedUrls!.local[0]!, browser = await launchSmokeBrowser();
 let background = "plain";
 async function setup(page: Page) {
@@ -92,24 +91,9 @@ async function open(page: Page, width = 1440, theme = "light") {
   await page.locator('[data-test-class="message-artifact-list"]').getByText("Report", { exact: true }).click();
   await page.getByRole("textbox", { name: "문서", exact: true }).waitFor();
   await page.evaluate(() => document.fonts.ready);
-  if (await page.locator('[role="dialog"][data-height="full"]').count()) {
-    const dialog = page.locator('[role="dialog"][data-height="full"]');
-    await dialog.waitFor();
-    await dialog.evaluate(async node => { await Promise.all(node.getAnimations().map(animation => animation.finished)); });
-    assert.equal(await dialog.getAttribute("data-layout"), "scroll-body");
-    if (stage !== "before") {
-      await checkDocumentDialog(page, width, evidence);
-      if (projectImageSize) await checkDocumentImage(page, width, evidence);
-      assert.equal(await dialog.getAttribute("data-size"), "xl");
-      const bounds = await dialog.boundingBox(); assert.ok(bounds);
-      assert.ok(bounds.width <= 880);
-      await dialog.getByRole("button", { name: "닫기", exact: true }).waitFor();
-      assert.equal(await dialog.getByRole("button", { name: "아티팩트 목록", exact: true }).count(), 0);
-    }
-    assert.equal(await dialog.getAttribute("aria-labelledby").then(id => page.locator(`[id="${id}"]`).innerText()), head.title);
-    assert.equal(await page.locator('[data-session-section="artifacts"] [data-document-id]').count(), 0);
-    await page.locator('[data-session-section="artifacts"]').getByText("Report", { exact: true }).waitFor();
-  } else await page.locator('[data-slot="conversation-aside"] [data-session-section="artifacts"] [data-document-id]').waitFor();
+  assert.equal(await page.getByRole("dialog").count(), 0);
+  assert.equal(new URL(page.url()).searchParams.get("doc"), head.id);
+  await page.getByRole("button", { name: "버전 기록", exact: true }).waitFor();
 }
 const editor = (page: Page) => page.getByRole("textbox", { name: "문서", exact: true });
 async function selectText(page: Page) {
@@ -149,11 +133,10 @@ async function interactions(page: Page, width = 1440) {
   assert.equal(await editor(page).locator('[data-test-class="answer-blocks"]').count(), 2, "two block embeds");
   await page.getByText("저장됨", { exact: true }).waitFor();
   const undo = await live(page);
-  const dialog = page.getByRole("dialog", { name: head.title, exact: true });
-  await dialog.getByText("버틀러가 수정했어요", { exact: true }).waitFor();
-  assert.equal(await page.locator('[data-sonner-toast]').filter({ hasText: "버틀러가 수정했어요" }).count(), 0, "dialog edits offer inline undo without a toast");
+  const toast = page.locator('[data-sonner-toast]').filter({ hasText: "버틀러가 수정했어요" });
+  await toast.waitFor();
   const restored = page.waitForResponse(response => response.url().endsWith("/restore"));
-  await dialog.getByRole("button", { name: getAppCopy("ko-KR").library.undo, exact: true }).click();
+  await toast.getByRole("button", { name: getAppCopy("ko-KR").library.undo, exact: true }).click();
   await restored;
   await page.waitForFunction(() => !document.querySelector('[data-butler-editing="true"]'));
   assert.equal(restores.at(-1)?.rev, undo);
@@ -184,72 +167,44 @@ async function closeAndFlush(page: Page) {
   await editor(page).locator("h1").click(); await selectText(page);
   await page.keyboard.press("Escape");
   await page.getByRole("toolbar", { name: "서식" }).waitFor({ state: "hidden" });
-  await page.getByRole("dialog", { name: "Report", exact: true }).waitFor();
+  assert.ok(await editor(page).evaluate(node => node.contains(document.activeElement)), "Escape keeps editor focus");
+  await page.keyboard.press("Escape"); await editor(page).waitFor();
   await editor(page).focus(); await page.keyboard.press("ControlOrMeta+End");
   const saved = page.waitForResponse(response => response.request().method() === "PUT" && response.url().endsWith(`/documents/${head.id}`));
-  await page.keyboard.type(" flushed on close");
-  await page.keyboard.press("Escape");
-  await page.getByRole("dialog", { name: "Report", exact: true }).waitFor({ state: "hidden" });
-  await saved; assert.ok(head.body.includes(" flushed on close"));
-  const trigger = page.locator('[data-test-class="message-artifact-list"]').getByText("Report", { exact: true });
-  await page.waitForFunction(() => Boolean(document.activeElement?.closest('[data-test-class="message-artifact-list"]')));
-  assert.ok(await trigger.evaluate(node => node.contains(document.activeElement) || document.activeElement?.contains(node)), "focus returns to the opening trigger");
+  await page.keyboard.type(" flushed on navigation");
+  await page.getByRole("button", { name: "원래 대화", exact: true }).click();
+  await editor(page).waitFor({ state: "hidden" });
+  await saved; assert.ok(head.body.includes(" flushed on navigation"));
+  assert.equal(new URL(page.url()).searchParams.get("doc"), null);
 }
 async function drawer(page: Page) {
   await page.evaluate(async () => { const path = "/src/components/library/libraryNav.ts"; (await import(/* @vite-ignore */ path)).openLibrary({ section: "document" }); });
   await page.locator('[data-library-item="doc_report"]').waitFor(); await page.locator('[data-library-item="file-report"]').waitFor();
 }
-async function outsideDialogUndo(page: Page) {
+async function outsideUndo(page: Page) {
   head = { ...head, body: initial }; history = [structuredClone(head)];
   await open(page);
-  const dialog = page.getByRole("dialog", { name: head.title, exact: true });
-  const closedRev = await live(page);
-  await dialog.getByText("버틀러가 수정했어요", { exact: true }).waitFor();
-  await dialog.getByRole("button", { name: "닫기", exact: true }).click();
-  await dialog.waitFor({ state: "hidden" });
+  const rev = await live(page);
+  await page.getByRole("button", { name: "원래 대화", exact: true }).click();
   const toast = page.locator('[data-sonner-toast]').filter({ hasText: "버틀러가 수정했어요" });
-  const closedRestore = page.waitForResponse(response => response.url().endsWith("/restore"));
+  const restored = page.waitForResponse(response => response.url().endsWith("/restore"));
   await toast.getByRole("button", { name: getAppCopy("ko-KR").library.undo, exact: true }).click();
-  await closedRestore; assert.equal(restores.at(-1)?.rev, closedRev);
-  await toast.waitFor({ state: "hidden" });
-  await drawer(page);
-  await page.locator('[data-library-item="doc_report"]').getByText("Report", { exact: true }).click();
-  await editor(page).waitFor();
-  const pageRev = await live(page);
-  const pageRestore = page.waitForResponse(response => response.url().endsWith("/restore"));
-  await toast.getByRole("button", { name: getAppCopy("ko-KR").library.undo, exact: true }).click();
-  await pageRestore; assert.equal(restores.at(-1)?.rev, pageRev);
+  await restored; assert.equal(restores.at(-1)?.rev, rev);
 }
 async function navigation(page: Page) {
   await open(page, 900);
-  assert.equal(await page.locator('[data-slot="conversation-aside"]').getAttribute("data-layout"), "floating");
-  await page.getByRole("dialog", { name: "Report", exact: true }).waitFor();
-  await page.getByRole("dialog", { name: "Report", exact: true }).getByRole("button", { name: "닫기", exact: true }).click();
-  await editor(page).waitFor({ state: "hidden" });
-  await page.waitForFunction(() => Boolean(document.activeElement?.closest('[data-test-class="message-artifact-list"]')));
-  const paneTrigger = page.locator('[data-session-section="artifacts"]').getByText("Report", { exact: true });
+  await page.getByRole("button", { name: "원래 대화", exact: true }).click();
+  await page.locator('[data-test-class="session-info-toggle"]').click();
   await page.locator('[data-session-section="artifacts"]').getByText("Report", { exact: true }).click();
   await editor(page).waitFor();
-  await page.keyboard.press("Escape");
-  await page.getByRole("dialog", { name: "Report", exact: true }).waitFor({ state: "hidden" });
-  await page.waitForFunction(() => Boolean(document.activeElement?.closest('[data-session-section="artifacts"]')));
-  assert.ok(await paneTrigger.evaluate(node => document.activeElement?.contains(node)), "focus returns to the pane trigger");
+  assert.equal(new URL(page.url()).searchParams.get("doc"), head.id);
   await drawer(page);
   await page.locator('[data-library-item="doc_report"]').getByText("Report", { exact: true }).click();
   await editor(page).waitFor();
+  await page.reload(); await editor(page).waitFor();
   await page.getByRole("button", { name: "원래 대화", exact: true }).click();
-  await page.getByRole("dialog", { name: head.title, exact: true }).waitFor();
   assert.equal(new URL(page.url()).searchParams.get("doc"), null);
-  await page.keyboard.press("Escape");
-  await page.getByRole("dialog", { name: head.title, exact: true }).waitFor({ state: "hidden" });
-  await drawer(page);
-  await page.locator('[data-library-item="doc_report"]').getByRole("button", { name: "더 보기", exact: true }).click();
-  await page.getByRole("menuitem", { name: "원본 열기", exact: true }).click();
-  await page.getByRole("dialog", { name: head.title, exact: true }).waitFor();
-  await page.keyboard.press("Escape");
-  await page.getByRole("dialog", { name: head.title, exact: true }).waitFor({ state: "hidden" });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.locator('[data-slot="conversation-aside"][data-layout="docked"]').waitFor();
   await page.evaluate(async fixture => {
     const path = "/src/app/store.ts", { useButlerStore } = await import(/* @vite-ignore */ path);
     useButlerStore.setState({ messages: [{ ...fixture, answer_blocks: [{ call_id: "reply-blocks", set_ids: [], spec: { v: 2, blocks: [{ type: "text", text: "Editable reply", title: "Reply document" }] } }] }] });
@@ -257,8 +212,9 @@ async function navigation(page: Page) {
   const block = page.locator('[data-answer-block="text"]').filter({ hasText: "Editable reply" });
   await block.hover(); await block.getByRole("button", { name: "더 보기", exact: true }).click();
   await page.getByRole("menuitem", { name: "문서로 만들기", exact: true }).click();
-  await page.getByRole("dialog", { name: head.title, exact: true }).waitFor();
   await editor(page).getByText("Editable reply", { exact: true }).waitFor();
+  assert.equal(new URL(page.url()).searchParams.get("doc"), head.id);
+  assert.equal(await page.getByRole("dialog").count(), 0);
   head = { ...head, id: artifact.id, title: "Report", body: initial }; history = [structuredClone(head)];
 }
 async function measure(page: Page) {
@@ -355,9 +311,9 @@ async function imageEmbeds(page: Page) {
     await page.getByRole("listbox").waitFor();
     await page.keyboard.press("Escape");
     await page.getByRole("listbox").waitFor({ state: "hidden" });
-    await page.getByRole("dialog", { name: head.title, exact: true }).waitFor();
+    await editor(page).waitFor();
     await page.keyboard.press("Escape");
-    await page.getByRole("dialog", { name: head.title, exact: true }).waitFor({ state: "hidden" });
+    await editor(page).waitFor();
   }
   head = { ...head, body }; history = [structuredClone(head)];
 }
@@ -381,40 +337,28 @@ async function keyboardUnits(page: Page) {
   await page.getByText("저장됨", { exact: true }).waitFor(); assert.ok(head.body.includes("ordered"));
 }
 async function matrix(page: Page) {
-  const comparisons: Awaited<ReturnType<typeof compareDocumentBackdrop>>[] = [];
-  const standards: Awaited<ReturnType<typeof measureStandardDialogSpacing>>[] = [];
   for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (background of ["plain", "wallpaper"]) {
     head = { ...head, title: "Report — document layout, revisions and export", body: initial }; history = [structuredClone(head), { ...head, rev: head.rev - 1, author: "user" }];
-    if (!standards.some(standard => standard.width === width)) {
-      standards.push(await measureStandardDialogSpacing(page, base, width, evidence));
-      writeFileSync(join(evidence, "ds-dialog-spacing.json"), JSON.stringify(standards, null, 2));
-    }
-    const expectedSpacing = standards.find(standard => standard.width === width)!.distance;
-    await open(page, width, theme); await shot(page, "chat-document", width, theme);
-    const layout = await measureDocumentLayout(page, expectedSpacing);
+    await open(page, width, theme); await shot(page, "drawer-document", width, theme);
+    const layout = await measureDocumentLayout(page);
     layouts.push({ width, theme, background, state: "document", layout });
-    if (stage === "after") assertDocumentLayout(layout, width);
-    if (stage === "after" && width === 1440) comparisons.push(await compareDocumentBackdrop(page, `${theme}-${background}`, evidence));
+    assertDocumentLayout(layout, width);
+    await checkDocumentImage(page, width, evidence);
     await selectText(page); await shot(page, "format", width, theme); await page.keyboard.press("ArrowRight");
     await live(page); await shot(page, "butler-editing", width, theme);
-    const editingLayout = await measureDocumentLayout(page, expectedSpacing);
+    const editingLayout = await measureDocumentLayout(page);
     layouts.push({ width, theme, background, state: "editing", layout: editingLayout });
-    if (stage === "after") assertDocumentLayout(editingLayout, width);
+    assertDocumentLayout(editingLayout, width);
     await page.getByRole("button", { name: "버전 기록", exact: true }).click(); await page.getByRole("listbox").waitFor(); await shot(page, "versions", width, theme); await page.keyboard.press("Escape"); await page.getByRole("listbox").waitFor({ state: "hidden" });
     await page.getByRole("button", { name: "내보내기", exact: true }).click(); await page.getByRole("menuitem", { name: "PDF", exact: true }).waitFor(); await shot(page, "export", width, theme); await page.keyboard.press("Escape"); await page.getByRole("menu").waitFor({ state: "hidden" });
-    if (await page.locator('[role="dialog"][data-height="full"]').count()) {
-      await page.keyboard.press("Escape");
-      await page.getByRole("dialog", { name: head.title, exact: true }).waitFor({ state: "hidden" });
-    }
     await drawer(page); await shot(page, "drawer", width, theme);
-    await page.locator('[data-library-item="doc_report"]').getByText(head.title, { exact: true }).click(); await editor(page).waitFor(); await shot(page, "drawer-document", width, theme);
+    await page.locator('[data-library-item="doc_report"]').getByText(head.title, { exact: true }).click(); await editor(page).waitFor(); await shot(page, "drawer-reopened", width, theme);
     assert.equal(new URL(page.url()).searchParams.get("doc"), head.id);
     await page.reload(); await editor(page).waitFor();
     await drawer(page); await page.locator('[data-library-item="file-report"]').getByText("File report", { exact: true }).click();
     await page.getByRole("combobox", { name: "버전", exact: true }).waitFor(); await page.locator('[data-test-class="artifact-viewer"]').waitFor();
     await shot(page, "file-viewer", width, theme);
   }
-  assert(comparisons.every(result => result.changedFraction <= 0.005), JSON.stringify(comparisons));
 }
 try {
   const page = await browser.newPage(); await setup(page);
@@ -424,21 +368,23 @@ try {
     const phase = process.env.BUTLER_DOCUMENT_PHASE;
     const phases = phase?.split(",");
     const runs = (...names: string[]) => !phases || names.some(name => phases.includes(name));
-    if (!phase) await imageEmbeds(page);
+    if (runs("images")) await imageEmbeds(page);
+    if (runs("trailing")) await checkTrailing(page, base, head.id);
     if (runs("interactions", "desktop")) await interactions(page);
     if (runs("interactions", "phone")) await interactions(page, 390);
     if (runs("interactions", "keyboard")) await keyboardUnits(page);
     if (runs("navigation")) await navigation(page);
-    if (runs("outside-undo")) await outsideDialogUndo(page);
+    if (runs("outside-undo")) await outsideUndo(page);
     if (runs("unknown-image")) await unknownImage(page);
     if (runs("matrix")) await matrix(page);
+    if (phases?.includes("reading-captures")) for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (background of ["plain", "wallpaper"]) {
+      head = { ...head, body: initial };
+      await open(page, width, theme); await shot(page, "drawer-document", width, theme);
+    }
     if (runs("measure")) await measure(page);
     if (runs("matrix")) assert.ok(queries.some(query => query.includes("kinds=doc%2Cdocument")));
   }
   writeFileSync(join(evidence, `${stage}-layout.json`), JSON.stringify(layouts, null, 2));
-  if (stage === "after") for (const { layout, state } of layouts) {
-    if (state === "document") assert(Math.abs(layout.headerToHeading - layout.expectedSpacing) <= 2, `Header spacing: ${JSON.stringify(layout)}`);
-  }
   assert.deepEqual(errors, []);
   writeFileSync(join(evidence, `${stage}-result.json`), JSON.stringify({ ok: true, puts: puts.length, restores: restores.length, exports: exports.map(item => item.format), modelCalls: 0 }, null, 2));
   console.log("documents-ui: passed");

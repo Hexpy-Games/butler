@@ -1,4 +1,4 @@
-import { DocumentArtifact } from "../documents/DocumentArtifact";
+import { openDocument } from "../documents/documentApi";
 import { SessionSectionHeader } from "../session-info/SessionSection.tsx";
 import { useAppLocale } from "@/app/copy.ts";
 import { useCallback } from "react";
@@ -56,7 +56,6 @@ export function ArtifactsPanel({
 
   return (
     <>
-    {selectedArtifact?.kind === "doc" && <DocumentArtifact key={selectedArtifact.id} id={selectedArtifact.id} title={selectedArtifact.title} onBack={() => setSelectedArtifactId(null)} />}
     <InspectorInset>
       <Section
         title={compact ? undefined : appCopy.artifacts.title}
@@ -81,7 +80,7 @@ export function ArtifactsPanel({
                 key={artifact.id}
                 meta={artifactMeta(artifact)}
                 title={artifact.title}
-                onOpen={() => setSelectedArtifactId(artifact.id)}
+                onOpen={() => artifact.kind === "doc" ? openDocument({ ...artifact, chat_id: artifact.session_id }) : setSelectedArtifactId(artifact.id)}
               />
             ))}
           </Stack>

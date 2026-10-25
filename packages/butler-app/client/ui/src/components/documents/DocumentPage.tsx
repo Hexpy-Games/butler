@@ -1,6 +1,7 @@
+import { ADAPTIVE_MEDIA, useMediaMatch } from "@/libs/design-system/responsive";
 import { relativeAge } from "@/app/utils";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { DocumentEditor, DialogHeader, DialogTitle, DialogClose, X, Box, Section, ScrollArea, Button, MessageSquare, History, IconButton, Inline, Popover, PopoverContent, PopoverTrigger, VersionHistory, Typo, Stack } from "@/butler-ds";
+import { DocumentEditor, PageContainer, Box, Button, MessageSquare, History, IconButton, Inline, Popover, PopoverContent, PopoverTrigger, VersionHistory, Typo, Stack } from "@/butler-ds";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { useButlerStore } from "@/app/store";
 import { subscribeDocumentUpdates } from "@/app/documentEvents";
@@ -9,10 +10,10 @@ import { DocumentSession } from "./DocumentSession";
 import { DocumentBody } from "./DocumentBody";
 import { DocumentReadView } from "./DocumentReadView";
 import { DocumentExportMenu } from "./DocumentExportMenu";
-import { openDocument, readDocument, revisions, type DocumentRevision, type EditableDocument } from "./documentApi";
-export function DocumentPage({ id, dialogTitle }: { id: string; dialogTitle?: string }) {
+import { readDocument, revisions, type DocumentRevision, type EditableDocument } from "./documentApi";
+export function DocumentPage({ id, trailing }: { id: string; trailing?: ReactNode }) {
   useAppLocale();
-  const session = useMemo(() => new DocumentSession(id, dialogTitle !== undefined), [id, dialogTitle]);
+  const session = useMemo(() => new DocumentSession(id), [id]);
   const state = useSyncExternalStore(session.subscribe, session.snapshot);
   const [preview, setPreview] = useState<EditableDocument>();
   const previewRequest = useRef(0);
@@ -32,39 +33,28 @@ export function DocumentPage({ id, dialogTitle }: { id: string; dialogTitle?: st
     return () => { active = false; };
   }, [historyOpen, id, session, state.head?.rev]);
   const copy = appCopy.documents, doc = state.head;
-  if (!doc) return <DocumentLayout dialogTitle={dialogTitle} title={dialogTitle ?? ""}><Typo.Caption>{state.failed ? appCopy.library.failed : appCopy.artifacts.loading}</Typo.Caption></DocumentLayout>;
+  if (!doc) return <DocumentLayout title="" actions={trailing}><Typo.Caption>{state.failed ? appCopy.library.failed : appCopy.artifacts.loading}</Typo.Caption></DocumentLayout>;
   const select = (rev: number) => {
     const request = ++previewRequest.current;
     if (rev === session.state.head?.rev) { setPreview(undefined); return; }
     void readDocument(id, rev).then(doc => { if (request === previewRequest.current) setPreview(doc); }, () => notifyStatus(appCopy.library.failed, { tone: "error" }));
   };
   const restore = async () => { if (!preview) return; await session.restore(preview.rev); setPreview(undefined); setHistoryOpen(false); };
-  return <DocumentLayout dialogTitle={dialogTitle} title={doc.title} note={state.editing ? copy.editing : state.undoRev ? <Inline gap="xs"><span>{copy.edited}</span><Button size="xs" variant="borderless" onClick={() => { void session.restore(state.undoRev!); }}>{appCopy.library.undo}</Button></Inline> : state.saved ? copy.saved : undefined}
+  return <DocumentLayout title={doc.title} note={state.editing ? copy.editing : state.saved ? copy.saved : undefined}
     actions={<Inline gap="xs" wrap={false}><Popover open={historyOpen} onOpenChange={setHistoryOpen}><PopoverTrigger asChild><IconButton label={copy.versions}><History size="sm" /></IconButton></PopoverTrigger>
       <PopoverContent align="end"><VersionHistory label={copy.versions} currentLabel={copy.current} selectedId={String(preview?.rev ?? doc.rev)}
         entries={history.map(row => ({ id: String(row.rev), author: row.author, authorLabel: row.author === "butler" ? copy.butler : copy.me, time: relativeAge(row.updated_at), dateTime: row.updated_at }))}
         onSelect={rev => select(Number(rev))} action={preview ? <Button size="sm" onClick={() => { void restore(); }}>{copy.restore}</Button> : undefined} /></PopoverContent>
-    </Popover>{doc.chat_id ? <IconButton label={copy.originalChat} onClick={() => openDocument(doc, true)}><MessageSquare size="sm" /></IconButton> : null}<DocumentExportMenu prepare={async () => { await session.flush(); return preview ?? { ...session.state.head!, body: session.state.body }; }} /></Inline>}>
+    </Popover>{doc.chat_id ? <IconButton label={copy.originalChat} onClick={() => { if (doc.chat_id) useButlerStore.getState().openSession(doc.chat_id); }}><MessageSquare size="sm" /></IconButton> : null}<DocumentExportMenu prepare={async () => { await session.flush(); return preview ?? { ...session.state.head!, body: session.state.body }; }} />{trailing}</Inline>}>
     <Stack gap="md">
       {preview ? <DocumentReadView doc={preview} /> : <DocumentBody key={id} doc={doc} body={state.body} loadId={state.loadId} changed={state.changed} editing={state.editing} flush={session.flush} registerDraft={session.registerDraft} onDirty={session.draftChanged} onBlur={session.flush} />}
     </Stack>
   </DocumentLayout>;
 }
 
-function DocumentLayout({ dialogTitle, title, actions, note, children }: {
-  dialogTitle?: string; title: string; actions?: ReactNode; note?: ReactNode; children: ReactNode;
+function DocumentLayout({ title, actions, note, children }: {
+  title: string; actions?: ReactNode; note?: ReactNode; children: ReactNode;
 }) {
-  if (dialogTitle === undefined) return <DocumentEditor title={<Typo.H2>{title}</Typo.H2>} actions={actions} note={note} data-test-class="editable-document">{children}</DocumentEditor>;
-  return <>
-    <Box surface="raised-opaque" paddingY="md"><Stack gap="xs">
-      <Inline justify="between" wrap={false} data-slot="document-dialog-header-row">
-        <Stack.Item grow minWidth="0"><DialogHeader><DialogTitle asChild><Typo.PanelTitle as="h2" truncate>{title}</Typo.PanelTitle></DialogTitle></DialogHeader></Stack.Item>
-        <Inline gap="xs" wrap={false} shrink={false}>{actions}<DialogClose asChild><IconButton label={appCopy.common.close}><X size="sm" /></IconButton></DialogClose></Inline>
-      </Inline>
-      {note ? <Typo.Caption tone="secondary" data-slot="document-dialog-note">{note}</Typo.Caption> : null}
-    </Stack></Box>
-    <Box surface="raised-opaque" data-slot="document-dialog-body"><Section fill contentFill gap="none">
-      <ScrollArea fill><DocumentEditor title={null} data-test-class="editable-document">{children}</DocumentEditor></ScrollArea>
-    </Section></Box>
-  </>;
+  const compact = useMediaMatch(ADAPTIVE_MEDIA.compact);
+  return <Box paddingX={compact ? "xl" : "2xl"}><Box paddingX={compact ? "none" : "2xl"}><PageContainer width="narrow" gutter="none"><DocumentEditor title={<Typo.PanelTitle as="h2" truncate>{title}</Typo.PanelTitle>} actions={actions} note={note} data-test-class="editable-document">{children}</DocumentEditor></PageContainer></Box></Box>;
 }

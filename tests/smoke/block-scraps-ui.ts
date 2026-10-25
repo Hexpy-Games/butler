@@ -189,8 +189,8 @@ async function interactions(page: Page, reduced: boolean) {
   assert.deepEqual((await page.getByRole("menuitem").allTextContents()).map(text => text.trim()), ["문서로 만들기", "복사"]);
   await page.getByRole("menuitem", { name: "문서로 만들기", exact: true }).click();
   await page.getByRole("textbox", { name: "문서", exact: true }).waitFor();
-  assert.equal(new URL(page.url()).searchParams.get("doc"), null);
-  await page.getByRole("dialog", { name: "전시 안내", exact: true }).locator('[data-document-id="doc_created"]').waitFor();
+  assert.equal(new URL(page.url()).searchParams.get("doc"), "doc_created");
+  await page.locator('[data-document-id="doc_created"]').waitFor();
   assert.equal(await page.locator('[data-session-section="artifacts"] [data-document-id]').count(), 0);
   assert.equal(calls.at(-1)?.path, "/documents");
   const body = calls.at(-1)!.body;

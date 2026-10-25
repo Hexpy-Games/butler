@@ -14,7 +14,7 @@ export function LibraryPage() {
   const view = useButlerStore((state) => state.view);
   const [attachment, setAttachment] = useState<LibraryItem>();
   if (view.kind !== "library") return null;
-  if (view.doc) return <ScrollArea fill><PageContainer width="full" gutter="xl"><Box paddingY="xl"><DocumentPage key={view.doc} id={view.doc} /></Box></PageContainer></ScrollArea>;
+  if (view.doc) return <ScrollArea fill><Box paddingY="xl"><DocumentPage key={view.doc} id={view.doc} /></Box></ScrollArea>;
   if (view.item) return <><LibraryDetail view={view} onAttach={setAttachment} /><LibraryAttachDialog item={attachment} onClose={() => setAttachment(undefined)} /></>;
   return <ScrollArea fill dataTestClass="library-page"><PageContainer width="full" gutter="xl"><Box paddingY="xl"><Stack gap="xl">
     <LibraryToolbar view={view} />
