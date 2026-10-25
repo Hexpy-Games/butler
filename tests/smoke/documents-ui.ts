@@ -433,27 +433,24 @@ async function matrix(page: Page) {
 }
 try {
   const page = await browser.newPage(); await setup(page);
-  if (process.env.BUTLER_DOCUMENT_MEASURE_ONLY === "1") await measure(page);
-  else if (stage === "before") { await matrix(page); await measure(page); }
+  if (stage === "before") { await matrix(page); await measure(page); }
   else {
-    const phase = process.env.BUTLER_DOCUMENT_PHASE;
-    const phases = phase?.split(",");
-    const runs = (...names: string[]) => !phases || names.some(name => phases.includes(name));
-    if (runs("images")) await imageEmbeds(page);
-    if (runs("trailing")) await checkTrailing(page, base, head.id);
-    if (runs("interactions", "desktop")) await interactions(page);
-    if (runs("interactions", "phone")) await interactions(page, 390);
-    if (runs("interactions", "keyboard")) await keyboardUnits(page);
-    if (runs("navigation")) { await slotSharing(page); await navigation(page); }
-    if (runs("outside-undo")) await outsideUndo(page);
-    if (runs("unknown-image")) await unknownImage(page);
-    if (runs("matrix")) await matrix(page);
-    if (phases?.includes("reading-captures")) for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (background of ["plain", "wallpaper"]) {
+    await imageEmbeds(page);
+    await checkTrailing(page, base, head.id);
+    await interactions(page);
+    await interactions(page, 390);
+    await keyboardUnits(page);
+    await slotSharing(page);
+    await navigation(page);
+    await outsideUndo(page);
+    await unknownImage(page);
+    await matrix(page);
+    for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (background of ["plain", "wallpaper"]) {
       head = { ...head, body: initial };
       await open(page, width, theme); await shot(page, "drawer-document", width, theme);
     }
-    if (runs("measure")) await measure(page);
-    if (runs("matrix")) assert.ok(queries.some(query => query.includes("kinds=doc%2Cdocument")));
+    await measure(page);
+    assert.ok(queries.some(query => query.includes("kinds=doc%2Cdocument")));
   }
   writeFileSync(join(evidence, `${stage}-layout.json`), JSON.stringify(layouts, null, 2));
   assert.deepEqual(errors, []);
