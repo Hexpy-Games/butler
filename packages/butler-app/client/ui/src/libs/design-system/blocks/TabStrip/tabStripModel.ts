@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 /** Per-tab activity shown in the favicon slot. */
 export type TabStripTabState = "loading" | "working" | "crashed";
 /** Group-level attention shown on the group chip. */
@@ -11,6 +13,8 @@ export interface TabStripTab {
   title: string;
   /** Site icon URL; falls back to a globe when missing or broken. */
   faviconSrc?: string;
+  /** A tab's own glyph in place of the favicon (a file type icon, `size="md"`); activity still replaces it. */
+  icon?: ReactNode;
   state?: TabStripTabState;
   /** Defaults to true. */
   closable?: boolean;

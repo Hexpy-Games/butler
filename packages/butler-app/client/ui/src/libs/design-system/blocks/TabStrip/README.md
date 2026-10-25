@@ -42,5 +42,16 @@ conversation's browser pane; the title bar names it) and shows its tabs at
 full strength. `trailing` holds row-end controls (Bring in a tab); they stay
 out of the tab focus order. Keyboard moves and drag work as before.
 
+## Tabs that are not web pages
+A tab can pass its own `icon` (a ReactNode, such as `<FileText size="md" />`
+or `<ImageIcon size="md" />` for a file in a docked viewer). It takes the
+favicon slot instead of the globe; tab state (`loading`, `working`,
+`crashed`) still replaces it. The tab keeps the same pill.
+
+```tsx
+<TabStrip hideChip panelId="file-viewer-page" activeTabId={activeId} labels={labels} onActivate={activate} onClose={close}
+  groups={[{ id: "files", kind: "mine", tabs: files.map((file) => ({ id: file.id, title: file.title, icon: fileIcon(file) })) }]} />
+```
+
 ## Tags
 browser, tabs, tablist, groups, drag, reorder, conversation

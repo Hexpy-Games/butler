@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
 import { TabStrip } from "./TabStrip";
 import { IconButton } from "../../components/IconButton";
-import { TabIn } from "../../components/Icons";
+import { FileText, ImageIcon, TabIn } from "../../components/Icons";
 import { conversationGroup, crowdedGroups, demoGroups, demoLabels, ICONS, TabStripDemo } from "./TabStrip.demo";
 import type { TabStripGroup } from "./tabStripModel";
 
@@ -26,6 +26,20 @@ function matrixGroups(variant: string, selected: boolean, { locale }: ShowcaseRe
   const tabs = [{ id: "t", title: copy.conversation, faviconSrc: ICONS.shop }];
   if (variant === "Conversation tab") return [{ id: "c", kind: "conversation", label: copy.group, tabs }];
   return [{ id: "c", kind: "conversation", label: copy.group, state: "working", collapsed: selected, tabs }];
+}
+
+const FILE_TITLES = {
+  "en-US": ["release-notes.md", "ime-guard.ts", "shortcut-clash.png"],
+  "ko-KR": ["릴리스-노트.md", "ime-guard.ts", "단축키-충돌.png"],
+} as const;
+
+function fileGroups(locale: ShowcaseRenderContext["locale"]): TabStripGroup[] {
+  const [doc, code, image] = FILE_TITLES[locale];
+  return [{ id: "files", kind: "mine", tabs: [
+    { id: "f1", title: doc, icon: <FileText size="md" /> },
+    { id: "f2", title: code, icon: <FileText size="md" /> },
+    { id: "f3", title: image, icon: <ImageIcon size="md" /> },
+  ] }];
 }
 
 /** Forces the cell's state on the tab itself, not on the group chip in front of it. */
@@ -73,6 +87,13 @@ export const stories: ShowcaseStory[] = [
     name: "Locked order, no new-tab button",
     render: ({ locale }) => (
       <TabStrip groups={demoGroups(locale).slice(0, 2)} activeTabId="s2" labels={demoLabels(locale)} onActivate={noop} onClose={noop} />
+    ),
+  },
+  {
+    // A docked file viewer's tabs: each tab's `icon` (its file type) takes the favicon slot instead of the globe.
+    name: "File tabs: a file-type icon per tab",
+    render: ({ locale }) => (
+      <TabStrip hideChip groups={fileGroups(locale)} activeTabId="f1" labels={demoLabels(locale)} onActivate={noop} onClose={noop} />
     ),
   },
 ];

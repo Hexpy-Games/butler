@@ -9,6 +9,7 @@ import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { ConversationFrameDemo } from "../BrowserPane/fixtures/ConversationFrame";
 import { cardsStories } from "./fixtures/cardsStories";
+import { ShellFrameDemo } from "./fixtures/ShellFrameDemo";
 import {
   AdaptivePanelResizeHandle,
   AdaptivePanelTitlebar,
@@ -136,4 +137,10 @@ export const stories: ShowcaseStory[] = [
     ),
   },
   ...cardsStories,
+  {
+    // Whatever the split's right slot holds fills its height: a one-line file keeps the viewer card full height.
+    name: "Split right slot: short content fills the pane",
+    widths: ["app", "wide"],
+    render: ({ locale }) => <ShellFrameDemo locale={locale} frame="cards" view="file" file="short" width={1440} height={900} />,
+  },
 ];
