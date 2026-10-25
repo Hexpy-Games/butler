@@ -92,7 +92,7 @@ async fn cookie_browser_lists_pages_and_creates_nested_project() -> Result<(), H
     assert_eq!(listing["data"]["path"], "");
     assert_eq!(
         listing["data"]["folders"],
-        json!([{"name":"many"},{"name":"outer"}])
+        json!([{"name":"a"},{"name":"many"},{"name":"outer"}])
     );
     assert_eq!(listing["data"]["next_after"], Value::Null);
     assert_pages(&browser).await?;
@@ -102,7 +102,8 @@ async fn cookie_browser_lists_pages_and_creates_nested_project() -> Result<(), H
     let (status, leaf) = browser.list("outer/inner", None).await?;
     assert_eq!(status, 200);
     assert_eq!(leaf["data"]["folders"], json!([]));
-    let (status, created) = browser.create(json!("outer/inner")).await?;
+    assert_ancestor_pages(&browser).await?;
+    let (status, created) = browser.create(json!("a/b/c")).await?;
     assert_eq!(status, 201, "{created}");
     let id = created["data"]["project"]["id"]
         .as_str()
@@ -118,9 +119,9 @@ async fn cookie_browser_lists_pages_and_creates_nested_project() -> Result<(), H
     )?;
     assert_eq!(
         Path::new(&stored),
-        secure_fs::canonicalize(root.join("outer/inner"))?
+        secure_fs::canonicalize(root.join("a/b/c"))?
     );
-    let (status, reused) = browser.create(json!("outer/inner")).await?;
+    let (status, reused) = browser.create(json!("a/b/c")).await?;
     assert_eq!(status, 201);
     assert_eq!(reused["data"]["project"]["id"], id);
     assert_refusals(&browser).await?;
@@ -142,6 +143,9 @@ async fn cookie_browser_lists_pages_and_creates_nested_project() -> Result<(), H
 
 fn seed(root: &Path, outside: &Path) -> Result<(), HarnessError> {
     fs::create_dir_all(root.join("outer/inner"))?;
+    for path in ["a/b/c", "a/b/d", "a/sibling"] {
+        fs::create_dir_all(root.join(path))?;
+    }
     fs::create_dir(root.join(".git"))?;
     fs::create_dir(root.join("many"))?;
     fs::write(root.join("file.txt"), "plain file")?;
@@ -152,6 +156,45 @@ fn seed(root: &Path, outside: &Path) -> Result<(), HarnessError> {
     }
     for name in ["alpha", "Alpha-other", "Beta", "zebra"] {
         fs::create_dir(root.join("many").join(name))?;
+    }
+    Ok(())
+}
+
+async fn assert_ancestor_pages(browser: &Browser) -> Result<(), HarnessError> {
+    for path in ["a", "a/b", "a/b/c"] {
+        let (status, page) = browser.list(path, None).await?;
+        assert_eq!(status, 200, "{page}");
+        assert_eq!(page["data"]["path"], path);
+        assert_eq!(page["data"]["next_after"], Value::Null);
+    }
+    for (parent, child, expected) in [
+        ("a/b", "c", json!([{"name":"c"}, {"name":"d"}])),
+        ("a", "b", json!([{"name":"b"}, {"name":"sibling"}])),
+        (
+            "",
+            "a",
+            json!([{"name":"a"}, {"name":"many"}, {"name":"outer"}]),
+        ),
+    ] {
+        let (status, page) = browser.list(parent, None).await?;
+        assert_eq!(status, 200, "{page}");
+        assert_eq!(page["data"]["path"], parent);
+        assert_eq!(page["data"]["folders"], expected);
+        assert!(
+            page["data"]["folders"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|f| f["name"] == child)
+        );
+        assert_eq!(page["data"]["next_after"], Value::Null);
+        let (status, tail) = browser.list(parent, Some(child)).await?;
+        assert_eq!(status, 200, "{tail}");
+        assert_eq!(
+            tail["data"]["folders"],
+            json!(expected.as_array().unwrap()[1..])
+        );
+        assert_eq!(tail["data"]["next_after"], Value::Null);
     }
     Ok(())
 }

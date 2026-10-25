@@ -1085,6 +1085,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     openSubfolderFirst: "Open a subfolder first",
     noSubfolders: "No subfolders",
     showMoreFolders: "Show more",
+    parentFolder: "Up one level",
     folderPathLabel: "Folder path",
     subfoldersLabel: "Subfolders",
     foldersLoadFailed: "Couldn't load folders",

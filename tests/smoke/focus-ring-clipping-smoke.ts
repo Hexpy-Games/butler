@@ -247,6 +247,9 @@ async function auditCell(page: Page, cell: Cell) {
   await page.getByRole("menuitem", { name: copy.sidebar.newProject, exact: true }).click();
   await page.getByRole("button", { name: copy.sidebar.chooseProjectFolder, exact: true }).click();
   await page.locator('[data-test-class="project-folder-row"]').first().waitFor();
+  await page.keyboard.press("Enter");
+  await page.locator('[data-test-class="project-folder-up"]').waitFor();
+  await auditArrows(page, cell, "project-folder-browser-arrows", 6);
   await auditScope(page, cell, "project-folder-browser", '[role="dialog"]', 80);
   await page.keyboard.press("Escape");
   await page.getByLabel(copy.sidebar.projectName, { exact: true }).waitFor();

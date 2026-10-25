@@ -973,6 +973,7 @@ export interface AppCopy {
     openSubfolderFirst: string;
     noSubfolders: string;
     showMoreFolders: string;
+    parentFolder: string;
     folderPathLabel: string;
     subfoldersLabel: string;
     foldersLoadFailed: string;

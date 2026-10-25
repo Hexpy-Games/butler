@@ -3,8 +3,8 @@ import { appCopy } from "@/app/copy";
 import type { ProjectFolderSelection } from "@/app/api";
 import {
   Breadcrumb, BreadcrumbButton, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator,
-  Button, ButtonContainer, ChevronRight, DialogForm, EmptyLine, FieldError, Folder,
-  LoadingIndicator, NavRow, ScrollArea, Stack, Tooltip,
+  Button, ButtonContainer, DialogForm, EmptyLine, FieldError, Folder,
+  LoadingIndicator, NavRow, Reply, ScrollArea, Stack, Tooltip,
 } from "@/butler-ds";
 import { useProjectFolderBrowser } from "./useProjectFolderBrowser";
 
@@ -20,10 +20,10 @@ export function ProjectFolderBrowser({ initialPath, onBack, onSelect }: Props) {
       display_name: segments.at(-1) });
   };
   function onKeyDown(event: KeyboardEvent<HTMLElement>) {
-    const rows = [...event.currentTarget.querySelectorAll<HTMLElement>('[data-test-class="project-folder-row"]')];
+    const rows = [...event.currentTarget.querySelectorAll<HTMLElement>('[data-test-class="project-folder-up"], [data-test-class="project-folder-row"]')];
     const index = rows.indexOf(event.target as HTMLElement);
     if (index < 0) return;
-    if (event.key === "Backspace") { event.preventDefault(); browser.parent(); return; }
+    if (event.key === "Backspace" || (event.altKey && event.key === "ArrowUp")) { event.preventDefault(); browser.parent(); return; }
     const next = { ArrowUp: Math.max(0, index - 1), ArrowDown: Math.min(rows.length - 1, index + 1),
       Home: 0, End: rows.length - 1 }[event.key];
     if (next !== undefined) { event.preventDefault(); rows[next]?.focus(); }
@@ -53,9 +53,11 @@ export function ProjectFolderBrowser({ initialPath, onBack, onSelect }: Props) {
       {error && <FieldError>{appCopy.sidebar.foldersLoadFailed}</FieldError>}
       <ScrollArea scrollRef={browser.scrollRef} maxHeight="sm" minHeight="xs" dataTestClass="project-folder-scroll">
         <Stack gap="none" role="group" aria-label={appCopy.sidebar.subfoldersLabel} onKeyDown={onKeyDown}>
+          {!error && page?.path && <NavRow icon={<Reply />} label={appCopy.sidebar.parentFolder}
+            disabled={loading} dataTestClass="project-folder-up" onClick={browser.parent} />}
           {!error && !loading && page?.folders.length === 0 && <Stack tabIndex={-1} data-test-class="project-folder-empty"><EmptyLine icon={<Folder />} message={appCopy.sidebar.noSubfolders} /></Stack>}
           {!error && page?.folders.map(({ name }) => <NavRow key={name} icon={<Folder />} label={name}
-            disabled={loading} dataTestClass="project-folder-row" actions={<ChevronRight />}
+            disabled={loading} dataTestClass="project-folder-row"
             onClick={() => void browser.navigate([...segments, name].join("/"))} />)}
           {page?.next_after && <Button type="button" variant="ghost" disabled={loading}
             onClick={() => void browser.navigate(page.path, page)}>{appCopy.sidebar.showMoreFolders}</Button>}

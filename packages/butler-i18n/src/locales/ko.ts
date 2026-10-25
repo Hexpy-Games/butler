@@ -1090,6 +1090,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     openSubfolderFirst: "하위 폴더를 여세요",
     noSubfolders: "하위 폴더 없음",
     showMoreFolders: "더 보기",
+    parentFolder: "상위 폴더",
     folderPathLabel: "폴더 경로",
     subfoldersLabel: "하위 폴더",
     foldersLoadFailed: "폴더를 불러오지 못했습니다",
