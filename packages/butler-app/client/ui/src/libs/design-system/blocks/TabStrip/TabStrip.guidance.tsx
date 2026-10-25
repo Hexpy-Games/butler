@@ -22,7 +22,7 @@ function ReadOnlyTabs() {
 // #endregion
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "The Browser area's tab row: closable, reorderable tabs grouped as my tabs plus one muted, foldable group per conversation.",
+  purpose: "The Browser area's tab row: closable, reorderable tabs grouped as my tabs plus one muted, foldable group per conversation. A tab's close button shows on hover or keyboard focus.",
   whenToUse: [
     "Browser tabs over a page area (pair with NativeViewSlot)",
     "Tabs the user and conversations open, grouped by owner",
@@ -57,9 +57,11 @@ export const guidance: ShowcaseGuidance = {
     "One tab stop: arrows move across chips and tabs (wrapping), Home/End jump, Enter/Space activate, Delete/Backspace close.",
     "Cmd/Ctrl+Shift+Left/Right moves the focused tab, also into the neighbor group; moves are announced politely.",
     "Group chips are buttons with aria-expanded; their names include the tab count and the group state. The tooltip shows the full, untruncated label.",
+    "The close button shows only while its tab is hovered or has keyboard focus, the selected tab included. It keeps its slot (titles never reflow), fades on --motion-fast and appears at once under reduced motion.",
+    "Touch layouts (hover: none) show the close button on the selected tab only. Middle-click, Delete/Backspace and Cmd/Ctrl+W close any tab.",
   ],
   tokens: [
     "--tab-strip-tab-min-width", "--tab-strip-tab-max-width", "--tab-strip-chip-max-width", "--selection-strong",
-    "--control-height-md", "--scroll-fade-size", "--motion-base", "--color-warning-text", "--color-danger-text",
+    "--control-height-md", "--scroll-fade-size", "--motion-base", "--motion-fast", "--color-warning-text", "--color-danger-text",
   ],
 };
