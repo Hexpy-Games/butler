@@ -2094,6 +2094,8 @@ try {
     compactSettingsDetail && compactSettingsDetail.width >= 389,
     `compact settings detail should replace the master list: ${JSON.stringify(compactSettingsDetail)}`,
   );
+  // The detail slides in from the end; capture it at rest, not in its first frames.
+  await waitForMotionToSettle(page);
   screenshots.push(await screenshot(page, "narrow-settings-detail.png"));
   await page.getByRole("button", { name: appCopy.settings.back, exact: true }).click();
   await page.setViewportSize({ width: 1440, height: 900 });

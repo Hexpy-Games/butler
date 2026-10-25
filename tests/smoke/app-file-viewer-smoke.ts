@@ -178,7 +178,7 @@ try {
   // so its toggle leaves; the back button returns to the chat with the files still open behind '파일 보기'.
   await page.setViewportSize({ width: 390, height: 844 });
   const phoneViewer = page.locator('[data-test-class="file-viewer"]');
-  await page.locator('[data-test-class="message-image-open"]').scrollIntoViewIfNeeded();
+  // click() scrolls the (virtualized) transcript row into view and re-resolves it if the row remounts on the way.
   await page.locator('[data-test-class="message-image-open"]').click();
   await phoneViewer.locator('[data-test-class="artifact-viewer"] img').waitFor();
   assert.equal(await page.locator('[data-test-class~="conversation"]').count(), 0, "the viewer replaces the chat on a phone");
