@@ -1,3 +1,6 @@
+import { BrowserSection } from "./BrowserSection.tsx";
+import { canOpenHandoffTab } from "../browser/browserHandoff.ts";
+import { useConversationAgentTabs } from "../browser/useConversationAgentTabs.ts";
 import { ACTIVE_TURN_STATES } from "@/app/constants.ts";
 import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
@@ -17,6 +20,7 @@ import { usePendingAsks } from "./usePendingAsks.ts";
 export function SessionSections({ layout }: { layout: AsideLayout }) {
   useAppLocale();
   const sessionId = useButlerStore(state => state.activeChatId);
+  const browserTabs = useConversationAgentTabs(sessionId);
   const summary = useButlerStore(state => state.summary?.session_id === sessionId ? state.summary : null);
   const messages = useButlerStore(state => state.messages);
   const queue = useButlerStore(state => state.sessionQueue);
@@ -37,6 +41,8 @@ export function SessionSections({ layout }: { layout: AsideLayout }) {
     {asks && asks.open_count > 0 && <SessionSection id="asks" layout={layout} title={c.asks} count={asks.open_count}>
       <PendingAskRows asks={asks.asks} />
     </SessionSection>}
+    {/* Filter here so a hidden browser section leaves no floating separator. */}
+    {browserTabs.length > 0 && canOpenHandoffTab() && <BrowserSection key="browser" layout={layout} session={sessionId} tabs={browserTabs} />}
     {(folder || branch?.branch_name) && <SessionSection id="environment" layout={layout} title={c.environment}>
       {folder && <KeyValueRow label={c.folder} value={folder} valueTextSize="caption" />}
       {branch?.branch_name && <KeyValueRow label={c.branch} value={branch.branch_name} valueTextSize="caption" />}

@@ -2,6 +2,7 @@ import { verifyTaskOrder, verifyCompactContext, verifyDashboardTask } from "../s
 import { verifyInlineTriggerRings } from "../support/session-pane-focus.ts";
 import { verifySessionPaneMotion, verifyTitleActionsAfterSubtitle } from "../support/session-pane-motion.ts";
 import { verifyPaneToggleFill } from "../support/pane-toggle-fill.ts";
+import { verifySessionInfoBrowser } from "../support/session-info-browser.ts";
 import { verifyRailBesidePane } from "../support/session-pane-rail.ts";
 // Stub/replay UI smoke through the real native App, isolated from the owner's data.
 import { sessionInfoStub, verifyNativePendingAsks, labelSessionInfoModel } from "../support/session-info-pending-asks.ts";
@@ -38,6 +39,7 @@ try {
   if (!before) await verifyNativePendingAsks(browser, server, theme);
   if (!before) await verifySessionPaneMotion(browser, server, view);
   if (!before) await verifyRailBesidePane(browser, server, view);
+  if (!before) await verifySessionInfoBrowser(browser, server, view, shots, theme);
   const page = await browser.newPage({ viewport: { width: 1440, height: 1050 }, reducedMotion: "reduce" });
   const errors: string[] = [];
   let buttonRadii: { label: string; radius: string }[] = [];
