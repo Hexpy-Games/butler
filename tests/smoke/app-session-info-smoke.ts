@@ -1,3 +1,4 @@
+import { verifySessionInlineEdit } from "../support/session-inline-edit.ts";
 import { verifyNewChatSessionInfo } from "../support/session-info-new-chat.ts";
 import { verifyTaskOrder, verifyCompactContext, verifyDashboardTask } from "../support/session-pane-followups.ts";
 import { verifyInlineTriggerRings } from "../support/session-pane-focus.ts";
@@ -43,7 +44,7 @@ try {
   if (!before) await verifySessionPaneMotion(browser, server, view);
   if (!before) await verifyRailBesidePane(browser, server, view);
   if (!before) await verifySessionInfoBrowser(browser, server, view, shots, theme);
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1050 }, reducedMotion: "reduce" });
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1050 }, deviceScaleFactor: 2, reducedMotion: "reduce" });
   const errors: string[] = [];
   let buttonRadii: { label: string; radius: string }[] = [];
   page.on("pageerror", error => errors.push(error.message));
@@ -91,6 +92,7 @@ try {
     await aside.getByText("질문 · 지금", { exact: true }).waitFor();
     await verifyTaskOrder(aside.locator('[data-test-class="canon-epic-detail"]'));
     await verifyInlineTriggerRings(aside);
+    await verifySessionInlineEdit(page, server, epic.id, theme);
     await capture("pane-task-order");
     await aside.getByText("작업 대기열", { exact: true }).scrollIntoViewIfNeeded();
     await capture("available-sections-bottom");
@@ -110,7 +112,7 @@ try {
     assert.deepEqual(focus.clips, []);
     console.log(JSON.stringify({ sessionInfoFocusStops: focus.stops, clipped: focus.clips.length }));
     await context.getByRole("button").first().click();
-    await verifyDashboardTask(page, epic.id, capture);
+    await verifyDashboardTask(page, epic.id, capture, server);
     await toggle.click();
     await aside.waitFor({ state: "hidden" });
     await toggle.click();
