@@ -134,7 +134,10 @@ reduced motion everything moves at once, with no fade. Both layouts keep one ins
 the start and the end, whatever the scrollbar (overlay, classic or hidden). Name
 the landmark with `asideLabel`. Without `aside` the shell renders exactly as
 before. A docked aside and a `TabRail` share the right margin: show one at a
-time.
+time. The shell enforces the order: while the aside shows or is still leaving,
+a rail is held (hidden and inert), and once the aside's exit has ended the
+rail fades in, so its cards never show under the leaving pane. The column
+makes room for the rail as the aside leaves, in one move.
 
 ```tsx
 <ConversationShell composerReserve={reserve} asideLabel={copy.sessionDetails} asideFloatOpen={detailsOpen}

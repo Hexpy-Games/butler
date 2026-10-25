@@ -7,7 +7,7 @@ import { useAsideLayout } from "../../lib/asideLayout";
 import styles from "./ConversationShell.module.css";
 import { ConversationShellElementContext, useConversationColumnRect, type ConversationColumnRect } from "./conversationColumn";
 import { ConversationAsideDockedContext, CONVERSATION_ASIDE_DOCK_MIN, shownAside } from "./conversationAside";
-import { ConversationRailContext, useRailReserve } from "./conversationRail";
+import { ConversationRailSlot, useShellRail } from "./conversationRail";
 import { ConversationColumnGlide } from "./ConversationColumnGlide";
 
 export type { ConversationColumnRect } from "./conversationColumn";
@@ -59,9 +59,9 @@ export function ConversationShell({
 }: ConversationShellProps) {
   const [element, setElement] = useState<HTMLElement | null>(null);
   const hasRail = rail !== undefined && rail !== null && rail !== false;
-  const { reserved, report } = useRailReserve(hasRail, railView);
   const asideLayout = useAsideLayout(element, hasAsideContent(aside), CONVERSATION_ASIDE_DOCK_MIN);
   const asideState = shownAside(hasAsideContent(aside), asideLayout, asideFloatOpen);
+  const { hold: railHold, asideExited, reserved, report } = useShellRail(hasRail, railView, asideState !== undefined);
   const style = {
     "--composer-reserve": `${composerReserve}px`,
     ...(titleIconSize ? { "--new-chat-title-icon-size": titleIconSize } : {}),
@@ -92,9 +92,9 @@ export function ConversationShell({
           ) : null}
           {children}
           <ConversationColumnGlide shell={element} docked={asideState === "docked"} railed={reserved} />
-          {hasRail ? <ConversationRailContext.Provider value={report}>{rail}</ConversationRailContext.Provider> : null}
+          {hasRail ? <ConversationRailSlot hold={railHold} report={report}>{rail}</ConversationRailSlot> : null}
           <AsideSlot aside={aside} layout={asideLayout} floatOpen={asideFloatOpen} slot="conversation-aside" label={asideLabel}
-            className={styles.aside} glassClassName={styles.asideGlass} />
+            className={styles.aside} glassClassName={styles.asideGlass} onExitComplete={asideExited} />
         </section>
       </ConversationAsideDockedContext.Provider>
     </ConversationShellElementContext.Provider>

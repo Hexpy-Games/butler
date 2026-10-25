@@ -439,6 +439,7 @@
 | Grouped menus, submenus or radio items | `DropdownMenu` | `OverflowActionMenu` |
 | Groups at the top of a kind section on the Library main screen | `GroupTile` |  |
 | History of what Butler did (step stills) | `WorkActivityBlock` | `LiveTabCard` |
+| Hold back what takes the element's place until its exit has ended (onExitComplete) | `Presence` |  |
 | Icon actions trailing a list row | `ListRow` | `ButtonContainer` |
 | In-place wrapping entry: variant=underline, textSize=label beside Typo.Label | `Textarea` |  |
 | Inline help under a field | `FieldDescription` | `Tooltip` |
@@ -589,6 +590,7 @@
 | Several lines of text | `Textarea` | `Input` |
 | Show a conversation's tokens and cost for an API-key model | `UsageSummaryRows` |  |
 | Show a delegated worker's progress (inspector, composer panel) | `WorkerActivityRow` |  |
+| Show a file as a reading page in a docked viewer (surface="page") | `ArtifactPreview` |  |
 | Show a known fraction: budget used, steps done | `ProgressMeter` |  |
 | Show a masked or read-only value that people can select | `Input` |  |
 | Show a status or category next to a title | `Tag` |  |
@@ -1261,6 +1263,7 @@ Keeps a child mounted through its exit animation and exposes data-state open/clo
 
 - Use for: Mount and unmount a small element with a fade or rise
 - Use for: Build a DS component that needs an exit animation
+- Use for: Hold back what takes the element's place until its exit has ended (onExitComplete)
 - Not for: Revealing content with a height change → `Collapsible`
 - Not for: Swapping one line of status text → `RollingSwap`
 - Tokens: `--motion-base`, `--motion-exit-base`, `--motion-distance-sm`
@@ -2763,6 +2766,7 @@ Files Butler produced in an answer: open the artifact, save it, or run another a
 The artifact viewer body: exactly one of text, image or frame (PDF/HTML), or a loading/failed caption.
 
 - Use for: Preview an artifact in the artifact viewer or a document dialog
+- Use for: Show a file as a reading page in a docked viewer (surface="page")
 - Not for: Rendered markdown documents → `MarkdownContent`
 - Not for: Reading a spec with facts → `DocumentReader`
 - Tokens: `--surface`, `--radius-panel`, `--typo-code-size`
