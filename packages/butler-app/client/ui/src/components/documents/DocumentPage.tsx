@@ -1,6 +1,6 @@
 import { relativeAge } from "@/app/utils";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { DocumentEditor, DialogHeader, DialogTitle, DialogClose, X, Box, Section, ScrollArea, Button, History, IconButton, Inline, Popover, PopoverContent, PopoverTrigger, VersionHistory, Typo, Stack } from "@/butler-ds";
+import { DocumentEditor, DialogHeader, DialogTitle, DialogClose, X, Box, Section, ScrollArea, Button, MessageSquare, History, IconButton, Inline, Popover, PopoverContent, PopoverTrigger, VersionHistory, Typo, Stack } from "@/butler-ds";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { useButlerStore } from "@/app/store";
 import { subscribeDocumentUpdates } from "@/app/documentEvents";
@@ -44,7 +44,7 @@ export function DocumentPage({ id, dialogTitle }: { id: string; dialogTitle?: st
       <PopoverContent align="end"><VersionHistory label={copy.versions} currentLabel={copy.current} selectedId={String(preview?.rev ?? doc.rev)}
         entries={history.map(row => ({ id: String(row.rev), author: row.author, authorLabel: row.author === "butler" ? copy.butler : copy.me, time: relativeAge(row.updated_at), dateTime: row.updated_at }))}
         onSelect={rev => select(Number(rev))} action={preview ? <Button size="sm" onClick={() => { void restore(); }}>{copy.restore}</Button> : undefined} /></PopoverContent>
-    </Popover>{doc.chat_id ? <Button size="xs" variant="ghost" onClick={() => openDocument(doc, true)}>{copy.originalChat}</Button> : null}<DocumentExportMenu prepare={async () => { await session.flush(); return preview ?? { ...session.state.head!, body: session.state.body }; }} /></Inline>}>
+    </Popover>{doc.chat_id ? <IconButton label={copy.originalChat} onClick={() => openDocument(doc, true)}><MessageSquare size="sm" /></IconButton> : null}<DocumentExportMenu prepare={async () => { await session.flush(); return preview ?? { ...session.state.head!, body: session.state.body }; }} /></Inline>}>
     <Stack gap="md">
       {preview ? <DocumentReadView doc={preview} /> : <DocumentBody key={id} doc={doc} body={state.body} loadId={state.loadId} changed={state.changed} editing={state.editing} flush={session.flush} registerDraft={session.registerDraft} onDirty={session.draftChanged} onBlur={session.flush} />}
     </Stack>
@@ -56,9 +56,15 @@ function DocumentLayout({ dialogTitle, title, actions, note, children }: {
 }) {
   if (dialogTitle === undefined) return <DocumentEditor title={<Typo.H2>{title}</Typo.H2>} actions={actions} note={note} data-test-class="editable-document">{children}</DocumentEditor>;
   return <>
-    <DialogHeader><Inline justify="between" wrap={false}><Stack.Item shrink><DialogTitle>{title}</DialogTitle></Stack.Item><Inline gap="xs" wrap={false}>{actions}<DialogClose asChild><IconButton label={appCopy.common.close}><X size="sm" /></IconButton></DialogClose></Inline></Inline></DialogHeader>
+    <Box surface="raised-opaque" paddingY="md"><Stack gap="xs">
+      <Inline justify="between" wrap={false} data-slot="document-dialog-header-row">
+        <Stack.Item grow minWidth="0"><DialogHeader><DialogTitle asChild><Typo.PanelTitle as="h2" truncate>{title}</Typo.PanelTitle></DialogTitle></DialogHeader></Stack.Item>
+        <Inline gap="xs" wrap={false} shrink={false}>{actions}<DialogClose asChild><IconButton label={appCopy.common.close}><X size="sm" /></IconButton></DialogClose></Inline>
+      </Inline>
+      {note ? <Typo.Caption tone="secondary" data-slot="document-dialog-note">{note}</Typo.Caption> : null}
+    </Stack></Box>
     <Box surface="raised-opaque" data-slot="document-dialog-body"><Section fill contentFill gap="none">
-      <ScrollArea fill><DocumentEditor title={null} note={note} data-test-class="editable-document">{children}</DocumentEditor></ScrollArea>
+      <ScrollArea fill><DocumentEditor title={null} data-test-class="editable-document">{children}</DocumentEditor></ScrollArea>
     </Section></Box>
   </>;
 }

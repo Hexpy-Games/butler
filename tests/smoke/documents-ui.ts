@@ -1,6 +1,6 @@
 // UI behavior smoke: offline gateway fixtures, real Lexical editor and product screens.
 import { compareDocumentBackdrop } from "./document-dialog-opacity";
-import { checkDocumentDialog, checkDocumentImage } from "./document-dialog-checks";
+import { assertDocumentLayout, measureDocumentLayout, checkDocumentDialog, checkDocumentImage } from "./document-dialog-checks";
 import assert from "node:assert/strict";
 import { getAppCopy } from "../../packages/butler-i18n/src/index";
 import { execFileSync } from "node:child_process";
@@ -10,6 +10,7 @@ import type { Page } from "playwright";
 import { createServer } from "../../packages/butler-app/client/ui/node_modules/vite/dist/node/index.js";
 import { launchSmokeBrowser } from "../support/smoke-browser";
 import { documentProfilePlugin } from "../support/document-profile";
+const layouts: { width: number; theme: string; background: string; state: string; layout: Awaited<ReturnType<typeof measureDocumentLayout>> }[] = [];
 const root = process.cwd(), stage = process.env.BUTLER_DOCUMENT_STAGE ?? "after";
 const evidence = process.env.BUTLER_SMOKE_EVIDENCE ?? resolve(process.env.TMPDIR ?? "/tmp", "bd3/shots"); mkdirSync(evidence, { recursive: true });
 const image = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 300 200"><rect width="300" height="200" fill="#8ca5ab"/><circle cx="210" cy="65" r="26" fill="#efd79c"/><path d="M0 200V150L90 60L220 200M120 200L220 110L300 180V200" fill="#55766d"/></svg>');
@@ -91,7 +92,7 @@ async function open(page: Page, width = 1440, theme = "light") {
   await page.locator('[data-test-class="message-artifact-list"]').getByText("Report", { exact: true }).click();
   await page.getByRole("textbox", { name: "문서", exact: true }).waitFor();
   await page.evaluate(() => document.fonts.ready);
-  if (stage !== "before" || width === 390) {
+  if (await page.locator('[role="dialog"][data-height="full"]').count()) {
     const dialog = page.locator('[role="dialog"][data-height="full"]');
     await dialog.waitFor();
     await dialog.evaluate(async node => { await Promise.all(node.getAnimations().map(animation => animation.finished)); });
@@ -105,7 +106,7 @@ async function open(page: Page, width = 1440, theme = "light") {
       await dialog.getByRole("button", { name: "닫기", exact: true }).waitFor();
       assert.equal(await dialog.getByRole("button", { name: "아티팩트 목록", exact: true }).count(), 0);
     }
-    assert.equal(await dialog.getAttribute("aria-labelledby").then(id => page.locator(`[id="${id}"]`).innerText()), "Report");
+    assert.equal(await dialog.getAttribute("aria-labelledby").then(id => page.locator(`[id="${id}"]`).innerText()), head.title);
     assert.equal(await page.locator('[data-session-section="artifacts"] [data-document-id]').count(), 0);
     await page.locator('[data-session-section="artifacts"]').getByText("Report", { exact: true }).waitFor();
   } else await page.locator('[data-slot="conversation-aside"] [data-session-section="artifacts"] [data-document-id]').waitFor();
@@ -382,19 +383,25 @@ async function keyboardUnits(page: Page) {
 async function matrix(page: Page) {
   const comparisons: Awaited<ReturnType<typeof compareDocumentBackdrop>>[] = [];
   for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (background of ["plain", "wallpaper"]) {
-    head = { ...head, body: initial }; history = [structuredClone(head), { ...head, rev: head.rev - 1, author: "user" }];
+    head = { ...head, title: "Report — document layout, revisions and export", body: initial }; history = [structuredClone(head), { ...head, rev: head.rev - 1, author: "user" }];
     await open(page, width, theme); await shot(page, "chat-document", width, theme);
+    const layout = await measureDocumentLayout(page);
+    layouts.push({ width, theme, background, state: "document", layout });
+    if (stage === "after") assertDocumentLayout(layout, width);
     if (stage === "after" && width === 1440) comparisons.push(await compareDocumentBackdrop(page, `${theme}-${background}`, evidence));
     await selectText(page); await shot(page, "format", width, theme); await page.keyboard.press("ArrowRight");
     await live(page); await shot(page, "butler-editing", width, theme);
+    const editingLayout = await measureDocumentLayout(page);
+    layouts.push({ width, theme, background, state: "editing", layout: editingLayout });
+    if (stage === "after") assertDocumentLayout(editingLayout, width);
     await page.getByRole("button", { name: "버전 기록", exact: true }).click(); await page.getByRole("listbox").waitFor(); await shot(page, "versions", width, theme); await page.keyboard.press("Escape"); await page.getByRole("listbox").waitFor({ state: "hidden" });
     await page.getByRole("button", { name: "내보내기", exact: true }).click(); await page.getByRole("menuitem", { name: "PDF", exact: true }).waitFor(); await shot(page, "export", width, theme); await page.keyboard.press("Escape"); await page.getByRole("menu").waitFor({ state: "hidden" });
-    if (stage !== "before" || width === 390) {
+    if (await page.locator('[role="dialog"][data-height="full"]').count()) {
       await page.keyboard.press("Escape");
       await page.getByRole("dialog", { name: head.title, exact: true }).waitFor({ state: "hidden" });
     }
     await drawer(page); await shot(page, "drawer", width, theme);
-    await page.locator('[data-library-item="doc_report"]').getByText("Report", { exact: true }).click(); await editor(page).waitFor(); await shot(page, "drawer-document", width, theme);
+    await page.locator('[data-library-item="doc_report"]').getByText(head.title, { exact: true }).click(); await editor(page).waitFor(); await shot(page, "drawer-document", width, theme);
     assert.equal(new URL(page.url()).searchParams.get("doc"), head.id);
     await page.reload(); await editor(page).waitFor();
     await drawer(page); await page.locator('[data-library-item="file-report"]').getByText("File report", { exact: true }).click();
@@ -422,10 +429,15 @@ try {
     if (runs("measure")) await measure(page);
     if (runs("matrix")) assert.ok(queries.some(query => query.includes("kinds=doc%2Cdocument")));
   }
+  writeFileSync(join(evidence, `${stage}-layout.json`), JSON.stringify(layouts, null, 2));
+  if (stage === "after") for (const { layout, state } of layouts) {
+    if (state === "document") assert(Math.abs(layout.headerToHeading - layout.expectedSpacing) <= 2, `Header spacing: ${JSON.stringify(layout)}`);
+  }
   assert.deepEqual(errors, []);
   writeFileSync(join(evidence, `${stage}-result.json`), JSON.stringify({ ok: true, puts: puts.length, restores: restores.length, exports: exports.map(item => item.format), modelCalls: 0 }, null, 2));
   console.log("documents-ui: passed");
 } catch (error) {
+  writeFileSync(join(evidence, `${stage}-layout.json`), JSON.stringify(layouts, null, 2));
   const page = browser.contexts()[0]?.pages()[0];
   if (page) { await page.screenshot({ path: join(evidence, `${stage}-failure.png`) }); writeFileSync(join(evidence, `${stage}-failure.txt`), JSON.stringify({ error: String(error), errors, body: await page.locator("body").innerText(), head, puts, restores })); }
   throw error;

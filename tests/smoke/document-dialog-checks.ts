@@ -53,3 +53,51 @@ export async function checkDocumentImage(page: Page, width: number, evidence: st
   await frames.locator("img").evaluateAll(nodes => Promise.all(nodes.map(node => (node as HTMLImageElement).decode())));
   writeFileSync(join(evidence, `document-images-${width}.json`), JSON.stringify(boxes, null, 2));
 }
+
+export async function measureDocumentLayout(page: Page) {
+  const geometry = await page.locator('[role="dialog"][data-height="full"]').evaluate(dialog => {
+    const rect = (node: Element) => {
+      const r = node.getBoundingClientRect();
+      return { x: r.x, y: r.y, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
+    };
+    const body = dialog.querySelector('[data-slot="document-dialog-body"]')!;
+    const row = dialog.querySelector('[data-slot="document-dialog-header-row"]') ?? dialog.querySelector('[data-slot="dialog-header"]')!.firstElementChild!;
+    const title = dialog.querySelector('[data-slot="dialog-title"]')!;
+    const text = title.firstElementChild ?? title;
+    const actions = [...row.querySelectorAll('button')].map(rect);
+    const heading = dialog.querySelector('[data-document-id] h1')!;
+    const note = dialog.querySelector('[data-slot="document-dialog-note"]');
+    const styles = getComputedStyle(dialog);
+    const token = document.createElement('div'); token.style.width = 'var(--space-3)'; dialog.append(token);
+    const expectedSpacing = token.getBoundingClientRect().width; token.remove();
+    return { dialog: rect(dialog), row: rect(row), body: rect(body), heading: rect(heading), actions,
+      title: { ...rect(text), scrollWidth: text.scrollWidth, clientWidth: text.clientWidth, overflow: getComputedStyle(text).textOverflow, whiteSpace: getComputedStyle(text).whiteSpace },
+      headerToHeading: rect(heading).y - rect(row).bottom,
+      noteGap: note ? rect(note).y - rect(row).bottom : null,
+      gaps: actions.slice(1).map((action, index) => action.x - actions[index]!.right),
+      bodyRight: rect(dialog.querySelector('[data-document-id]')!).right,
+      expectedSpacing, dialogPadding: parseFloat(styles.paddingRight),
+      samples: { header: { x: rect(body).x + 2, y: rect(row).y + 2 }, body: { x: rect(body).x + 2, y: rect(body).y + 2 } } };
+  });
+  const png = await page.screenshot({ animations: "disabled", caret: "hide" });
+  const colors = await page.evaluate(async ({ png, samples }) => {
+    const img = new Image(); img.src = `data:image/png;base64,${png}`; await img.decode();
+    const canvas = document.createElement("canvas"); canvas.width = img.width; canvas.height = img.height;
+    const ctx = canvas.getContext("2d")!; ctx.drawImage(img, 0, 0);
+    const sample = ({ x, y }: { x: number; y: number }) => [...ctx.getImageData(Math.round(x * img.width / innerWidth), Math.round(y * img.height / innerHeight), 1, 1).data].slice(0, 3);
+    return { header: sample(samples.header), body: sample(samples.body) };
+  }, { png: png.toString("base64"), samples: geometry.samples });
+  return { ...geometry, colors };
+}
+
+export function assertDocumentLayout(layout: Awaited<ReturnType<typeof measureDocumentLayout>>, width: number) {
+  const close = layout.actions.at(-1)!;
+  assert(Math.abs(close.right - layout.bodyRight) <= 2, JSON.stringify(layout));
+  assert(layout.colors.header.every((value, i) => Math.abs(value - layout.colors.body[i]!) <= 3), JSON.stringify(layout));
+  if (width === 390) {
+    assert(layout.title.scrollWidth > layout.title.clientWidth && layout.title.overflow === "ellipsis" && layout.title.whiteSpace === "nowrap", JSON.stringify(layout));
+    assert(Math.max(...layout.gaps) - Math.min(...layout.gaps) <= 1 && layout.gaps.every(gap => gap >= 0), JSON.stringify(layout));
+    assert(Math.abs(layout.dialog.right - close.right - layout.dialogPadding) <= 2, JSON.stringify(layout));
+  }
+  if (layout.noteGap !== null) assert(layout.noteGap >= 0 && layout.noteGap <= 6, JSON.stringify(layout));
+}
