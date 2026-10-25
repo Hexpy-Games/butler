@@ -831,7 +831,7 @@ An icon-only action with a required label that doubles as its tooltip.
 - Not for: Copying text with confirmation → `CopyButton`
 - Not for: Saving or another one-shot action that confirms on the button → `DoneIconButton`
 - Not for: A rounded chip with an icon and text → `PillButton`
-- Tokens: `--control-height-md`, `--selection`, `--radius-pill`, `--focus-ring`, `--control-hit-target`, `--butler-ink-blue`, `--butler-ink-pink`
+- Tokens: `--control-height-md`, `--selection`, `--radius-pill`, `--focus-ring`, `--control-hit-target`, `--butler-ink-blue`, `--butler-ink-pink`, `--tinted-glass-tint`, `--browser-pane-bg`, `--shell-card-bg`
 
 ### PillButton
 
@@ -1696,7 +1696,7 @@ The window titlebar: leading toggle, title, its actions and subtitle, chat-card 
 - Use for: The top bar of the app window
 - Not for: A panel header → `PanelHeader`
 - Not for: A page title → `DashboardHeader`
-- Tokens: `--titlebar-height`, `--titlebar-bg`, `--chrome-floating-toggle-size`, `--shell-card-inset`
+- Tokens: `--titlebar-height`, `--titlebar-bg`, `--chrome-floating-toggle-size`, `--shell-card-inset`, `--tinted-glass-tint`, `--browser-pane-bg`, `--shell-card-bg`
 
 ### Wallpaper
 
@@ -2013,14 +2013,14 @@ The More (…) button and menu for a row's actions, from a simple items array.
 
 `import { TabStrip } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=blocks/TabStrip`
 
-The Browser area's tab row: closable, reorderable tabs grouped as my tabs plus one muted, foldable group per conversation.
+The Browser area's tab row: closable, reorderable tabs grouped as my tabs plus one muted, foldable group per conversation. A tab's close button shows on hover or keyboard focus.
 
 - Use for: Browser tabs over a page area (pair with NativeViewSlot)
 - Use for: Tabs the user and conversations open, grouped by owner
 - Not for: Switching peer views inside one panel → `Tabs`
 - Not for: Sidebar navigation between conversations → `NavRow`
 - Not for: Reordering settings cards → `SortableCardList`
-- Tokens: `--tab-strip-tab-min-width`, `--tab-strip-tab-max-width`, `--tab-strip-chip-max-width`, `--selection-strong`, `--control-height-md`, `--scroll-fade-size`, `--motion-base`, `--color-warning-text`, `--color-danger-text`
+- Tokens: `--tab-strip-tab-min-width`, `--tab-strip-tab-max-width`, `--tab-strip-chip-max-width`, `--selection-strong`, `--control-height-md`, `--scroll-fade-size`, `--motion-base`, `--motion-fast`, `--color-warning-text`, `--color-danger-text`
 
 ## Blocks · Composer
 
