@@ -8,6 +8,7 @@ mod mutations;
 mod owner;
 pub(super) mod rows;
 pub(super) mod token;
+pub(super) mod workspace_folder;
 
 use crate::gateway::application::storage::AppStorageCode;
 pub(crate) use contracts::AppProjectSummary;
@@ -155,34 +156,9 @@ impl AppApplication {
         secret: Option<String>,
     ) -> Result<AppCreateProjectResult, GatewayApplicationError> {
         let source = request.source;
-        let display_name = request.display_name;
-        let token = request.folder_selection_token;
         let prepared = tokio::task::spawn_blocking({
             let root = root.clone();
-            move || match source {
-                AppProjectSource::Scratch => {
-                    let name = folder::validate_name(display_name.as_deref())?;
-                    let scratch = folder::create_scratch(&root, &name)?;
-                    Ok((scratch.path.clone(), Some(scratch), Some(name)))
-                }
-                AppProjectSource::ExistingFolder => {
-                    let token = token
-                        .as_deref()
-                        .filter(|value| {
-                            !butler_core::public_text::trim_js_whitespace(value).is_empty()
-                        })
-                        .ok_or_else(|| {
-                            error(
-                                400,
-                                "folder_selection_required",
-                                "Project folder selection is required.",
-                            )
-                        })?;
-                    let path = token::selected_path(token, secret.as_deref())?;
-                    folder::validate_existing(Path::new(&path))
-                        .map(|path| (path, None, display_name))
-                }
-            }
+            move || prepare_project(request, &root, secret.as_deref())
         })
         .await
         .map_err(GatewayApplicationError::internal_from)??;
@@ -266,6 +242,40 @@ impl AppApplication {
             })
             .collect();
         Ok(AppProjectList { projects })
+    }
+}
+
+fn prepare_project(
+    request: AppCreateProjectRequest,
+    root: &Path,
+    secret: Option<&str>,
+) -> Result<(PathBuf, Option<ScratchFolder>, Option<String>), GatewayApplicationError> {
+    let name = request.display_name;
+    match request.source {
+        AppProjectSource::Scratch => {
+            let name = folder::validate_name(name.as_deref())?;
+            let scratch = folder::create_scratch(root, &name)?;
+            Ok((scratch.path.clone(), Some(scratch), Some(name)))
+        }
+        AppProjectSource::ExistingFolder => {
+            let token = request
+                .folder_selection_token
+                .as_deref()
+                .filter(|value| !butler_core::public_text::trim_js_whitespace(value).is_empty())
+                .ok_or_else(|| {
+                    error(
+                        400,
+                        "folder_selection_required",
+                        "Project folder selection is required.",
+                    )
+                })?;
+            let path = token::selected_path(token, secret)?;
+            folder::validate_existing(Path::new(&path)).map(|path| (path, None, name))
+        }
+        AppProjectSource::WorkspaceFolder => {
+            workspace_folder::selected(root, request.workspace_path.as_deref())
+                .map(|path| (path, None, name))
+        }
     }
 }
 

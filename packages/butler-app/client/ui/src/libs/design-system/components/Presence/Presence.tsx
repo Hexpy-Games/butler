@@ -87,12 +87,14 @@ export type PresenceMotion = "none" | "fade" | "rise";
 export interface PresenceProps {
   present: boolean;
   motion?: PresenceMotion;
+  /** Called once the exit has finished and the element has unmounted (at once when there is no exit motion). */
+  onExitComplete?: () => void;
   /** One element that styles `[data-state="open|closed"]` enter/exit keyframes. */
   children: ReactElement<{ "data-state"?: PresenceState; className?: string; ref?: Ref<HTMLElement> }>;
 }
 
-export function Presence({ present, motion = "none", children }: PresenceProps) {
-  const { mounted, state, ref } = usePresence(present);
+export function Presence({ present, motion = "none", onExitComplete, children }: PresenceProps) {
+  const { mounted, state, ref } = usePresence(present, { onExitComplete });
   const childRef = isValidElement(children)
     ? (children.props as { ref?: Ref<HTMLElement> }).ref
     : undefined;

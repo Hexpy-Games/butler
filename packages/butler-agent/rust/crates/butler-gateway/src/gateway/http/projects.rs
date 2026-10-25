@@ -52,9 +52,15 @@ fn parse_request(value: &Value) -> Option<AppCreateProjectRequest> {
     let source = match object.get("source")?.as_str()? {
         "scratch" => AppProjectSource::Scratch,
         "existing_folder" => AppProjectSource::ExistingFolder,
+        "workspace_folder" => AppProjectSource::WorkspaceFolder,
         _ => return None,
     };
-    for key in ["display_name", "folder_selection_token", "idempotency_key"] {
+    for key in [
+        "display_name",
+        "folder_selection_token",
+        "idempotency_key",
+        "workspace_path",
+    ] {
         if object.get(key).is_some_and(|value| !value.is_string()) {
             return None;
         }
@@ -70,12 +76,42 @@ fn parse_request(value: &Value) -> Option<AppCreateProjectRequest> {
     {
         return None;
     }
+    if source == AppProjectSource::WorkspaceFolder
+        && object
+            .get("workspace_path")
+            .and_then(Value::as_str)
+            .is_none_or(str::is_empty)
+    {
+        return None;
+    }
     Some(AppCreateProjectRequest {
         source,
         display_name,
+        workspace_path: object
+            .get("workspace_path")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
         folder_selection_token: object
             .get("folder_selection_token")
             .and_then(Value::as_str)
             .map(str::to_owned),
     })
+}
+
+pub(super) async fn folders(state: Arc<HttpState>, uri: &Uri) -> Result<Response, HttpError> {
+    let query = query(uri);
+    let data = state
+        .application
+        .list_project_folders(
+            query.get("path").cloned().unwrap_or_default(),
+            query.get("after").cloned(),
+        )
+        .await?;
+    json(
+        StatusCode::OK,
+        ApiEnvelope {
+            protocol_version: APP_PROTOCOL_VERSION,
+            data,
+        },
+    )
 }

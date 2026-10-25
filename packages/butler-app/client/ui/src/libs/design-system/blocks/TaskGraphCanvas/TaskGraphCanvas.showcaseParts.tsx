@@ -2,9 +2,6 @@ import { useState } from "react";
 import type { ShowcaseRenderContext } from "../../showcase";
 import { rollupTaskGraphStatus } from "../../lib/taskGraphLayout";
 import { Blocks } from "../../components/Icons";
-import { dsClass } from "../../lib/internal";
-import { InspectorShell } from "../InspectorShell";
-import shellStyles from "../InspectorShell/InspectorShell.module.css";
 import { TaskGraphCard, TaskGraphStepLine } from "../TaskGraphCard";
 import { TaskGraphDetail } from "../TaskGraphDetail";
 import { TaskGraphPanel, TaskGraphSection } from "../TaskGraphSection";
@@ -18,8 +15,8 @@ type Locale = ShowcaseRenderContext["locale"];
 export type DemoGraphId = keyof typeof GRAPHS;
 
 const COPY = {
-  "en-US": { tab: "Tasks", worker: (n: number) => `Worker ${n}`, unassigned: "Not assigned", panel: "Task graph", empty: "No tasks yet", graphs: (n: number, r: number) => `${n} graphs${r ? ` · ${r} running` : ""}`, done: (d: number, n: number) => `${d}/${n} done`, assignee: "Assignee", model: "Model", time: "Time", now: "Now", after: "After", next: "Next", none: "None", doc: "Task document", open: "Open", talk: "View conversation", blocked: "An earlier task failed" },
-  "ko-KR": { tab: "작업", worker: (n: number) => `작업자 ${n}`, unassigned: "배정 전", panel: "작업 그래프", empty: "아직 작업이 없습니다", graphs: (n: number, r: number) => `그래프 ${n}개${r ? ` · 진행 중 ${r}` : ""}`, done: (d: number, n: number) => `${d}/${n} 완료`, assignee: "담당", model: "모델", time: "걸린 시간", now: "지금 하는 일", after: "앞선 작업", next: "다음 작업", none: "없음", doc: "작업 문서", open: "열기", talk: "대화 보기", blocked: "앞선 작업이 실패했습니다" },
+  "en-US": { worker: (n: number) => `Worker ${n}`, unassigned: "Not assigned", panel: "Task graph", empty: "No tasks yet", graphs: (n: number, r: number) => `${n} graphs${r ? ` · ${r} running` : ""}`, done: (d: number, n: number) => `${d}/${n} done`, assignee: "Assignee", model: "Model", time: "Time", now: "Now", after: "After", next: "Next", none: "None", doc: "Task document", open: "Open", talk: "View conversation", blocked: "An earlier task failed" },
+  "ko-KR": { worker: (n: number) => `작업자 ${n}`, unassigned: "배정 전", panel: "작업 그래프", empty: "아직 작업이 없습니다", graphs: (n: number, r: number) => `그래프 ${n}개${r ? ` · 진행 중 ${r}` : ""}`, done: (d: number, n: number) => `${d}/${n} 완료`, assignee: "담당", model: "모델", time: "걸린 시간", now: "지금 하는 일", after: "앞선 작업", next: "다음 작업", none: "없음", doc: "작업 문서", open: "열기", talk: "대화 보기", blocked: "앞선 작업이 실패했습니다" },
 } as const;
 
 export const demoCopy = (locale: Locale) => COPY[locale];
@@ -92,10 +89,7 @@ export function DemoPanel({ graphIds, locale, orientation = "auto" }: { graphIds
     .sort((a, b) => ORDER.indexOf(a.status) - ORDER.indexOf(b.status));
   const [open, setOpen] = useState(() => new Set(graphs.filter(({ status }) => status === "running" || status === "failed").map(({ graph }) => graph.id)));
   const single = graphs.length === 1 ? graphs[0]!.graph : undefined;
-  // Inside the real inspector frame, so insets resolve as in the app (--inspector-inline-padding).
   return (
-    <InspectorShell activeTab="tasks" tabs={[{ id: "tasks", label: copy.tab, icon: <Blocks size="md" /> }]} onTabChange={() => undefined}
-      className={dsClass(shellStyles.fixture)}>
     <TaskGraphPanel title={copy.panel} icon={<Blocks size="md" />} emptyLabel={copy.empty} empty={graphs.length === 0}
       description={single?.title[locale]}
       headerMeta={single ? demoCounts(single, locale) : graphs.length ? copy.graphs(graphs.length, graphs.filter(({ status }) => status === "running").length) : undefined}>
@@ -107,6 +101,5 @@ export function DemoPanel({ graphIds, locale, orientation = "auto" }: { graphIds
         </TaskGraphSection>
       ))}
     </TaskGraphPanel>
-    </InspectorShell>
   );
 }

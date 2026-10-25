@@ -155,6 +155,36 @@ async fn set_02_unavailable_and_malformed_settings_are_rejected() -> Result<(), 
 /// SET-02: unknown fields, wrong types, invalid JSON and an oversize body
 /// are rejected with their public error codes.
 async fn assert_malformed_settings_rejected(gw: &Gateway) -> Result<(), HarnessError> {
+    for value in [
+        json!(null),
+        json!(true),
+        json!(400),
+        json!([]),
+        json!({}),
+        json!(""),
+        json!("4:00"),
+        json!("24:00"),
+        json!("04:60"),
+        json!("04:0"),
+        json!(" 04:00"),
+        json!("04:00 "),
+        json!("04:00:00"),
+        json!("０４:００"),
+        json!("-1:00"),
+    ] {
+        let reply = gw
+            .patch(
+                "/settings",
+                json!({"consolidation_time":value,"language":"ko"}),
+            )
+            .await?;
+        assert_eq!(
+            (reply.status, reply.error_code()),
+            (400, Some("invalid_settings_request")),
+            "{}",
+            reply.text
+        );
+    }
     let reply = gw
         .patch("/settings", json!({"no_such_setting": true}))
         .await?;

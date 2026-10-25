@@ -111,6 +111,7 @@ impl GatewayMutationCommands for TestApplication {
     }
 }
 
+impl project_folder::GatewayProjectFolders for TestApplication {}
 impl crate::gateway::GatewayPendingAsks for TestApplication {}
 
 impl GatewayApplication for TestApplication {

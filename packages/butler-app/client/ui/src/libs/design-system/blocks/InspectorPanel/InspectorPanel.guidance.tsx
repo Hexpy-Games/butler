@@ -16,11 +16,12 @@ function BranchDetails() {
 // #endregion
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "A titled group inside an inspector tab with the inspector's inset and tight list rhythm.",
-  whenToUse: ["Group facts or lists inside the right-panel inspector"],
+  purpose: "A titled group in a side panel with a tight list rhythm; InspectorInset aligns full-width content beside it.",
+  whenToUse: ["Group facts or lists in a side panel (a ConversationShell or ManagementPage aside)"],
   whenNotToUse: [
     { when: "A titled region elsewhere", use: "Section" },
-    { when: "The tabbed inspector frame", use: "InspectorShell" },
+    { when: "The side panel beside the conversation (its aside)", use: "ConversationShell" },
+    { when: "The detail beside a management page (its aside)", use: "ManagementPage" },
   ],
   recipes: [{ name: "Branch details panel", description: "KeyValueRows inside; title uses the compact panel role.", render: () => <BranchDetails /> }],
   doDont: [

@@ -4,7 +4,8 @@
 // chat, browser, command palette, menus, Settings, plus the drag-enabled
 // KanbanBoard, editable Tag and FilteredSelectPopover row-actions stories of
 // the DS viewer) over an offline gateway
-// stub; no model calls, no native agent. Run `npm --prefix
+// stub, plus real session/dashboard inline-edit panes through an isolated
+// native App; no model calls. Run `npm --prefix
 // packages/butler-app/client/ui run build` first (`bun run app:focus-ring:smoke`).
 //
 // Every screen is walked with the keyboard (Tab, and arrow keys inside menus
@@ -19,6 +20,7 @@
 // BUTLER_FOCUS_RING_SHOTS=<dir> saves a capture of each clipped stop.
 import { historyFixture } from "../support/usage-insights-fixtures";
 import { canonFocusResponse } from "../support/canon-sidebar-fixture.ts";
+import { auditInlinePanes } from "../support/session-pane-focus.ts";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, normalize, sep } from "node:path";
@@ -248,6 +250,18 @@ async function auditCell(page: Page, cell: Cell) {
   await page.locator('[role="menu"]').first().waitFor();
   await auditArrows(page, cell, "menu", 6);
   await page.keyboard.press("Escape");
+  // Browser project folder navigation uses the existing scroll-area focus room.
+  await page.getByRole("button", { name: copy.space.menu, exact: true }).click();
+  await page.getByRole("menuitem", { name: copy.sidebar.newProject, exact: true }).click();
+  await page.getByRole("button", { name: copy.sidebar.chooseProjectFolder, exact: true }).click();
+  await page.locator('[data-test-class="project-folder-row"]').first().waitFor();
+  await page.keyboard.press("Enter");
+  await page.locator('[data-test-class="project-folder-up"]').waitFor();
+  await auditArrows(page, cell, "project-folder-browser-arrows", 6);
+  await auditScope(page, cell, "project-folder-browser", '[role="dialog"]', 80);
+  await page.keyboard.press("Escape");
+  await page.getByLabel(copy.sidebar.projectName, { exact: true }).waitFor();
+  await page.keyboard.press("Escape");
   // Command palette (search) walked with arrow keys.
   await openSidebar(page);
   await page.getByRole("button", { name: copy.sidebar.search }).first().click();
@@ -337,6 +351,10 @@ try {
       id: "doc-focus", title: "Focus document", body: "# Focus document\n\nEditable paragraph.\n", rev: 1, author: "user",
       created_at: "2026-10-25T00:00:00Z", updated_at: "2026-10-25T00:00:00Z",
     } } });
+    if (url.pathname === "/project-folders") return route.fulfill({ json: { ok: true, data: {
+      root_name: "Workspace", path: url.searchParams.get("path") ?? "",
+      folders: Array.from({ length: 40 }, (_, index) => ({ name: `Folder ${index + 1}` })), next_after: null,
+    } } });
     if (url.pathname === "/session-queue") return route.fulfill({ json: { ok: true, data: { queued_messages: [] } } });
     if (["/session-view", "/summary", "/navigation", "/events/live", "/health"].includes(url.pathname)) return route.fulfill({ json: { ok: true, data: {} } });
     if (url.pathname === "/usage-history") return route.fulfill({ json: { ok: true, data: historyFixture() } });
@@ -352,6 +370,7 @@ try {
       }
     }
   }
+  console.log(JSON.stringify({ inlinePanes: await auditInlinePanes(browser) }));
   console.log(JSON.stringify({ stops: checked, scrolledStops, clippedScreens: failures.length, rendererErrors: errors.length }));
   assert(scrolledStops > 0, "no scrolled scroller with keyboard stops was audited");
   assert.deepEqual(failures, [], `focus rings are clipped:\n${failures.join("\n")}`);

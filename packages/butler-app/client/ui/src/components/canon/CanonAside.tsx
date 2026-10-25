@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { appCopy } from "@/app/copy.ts";
-import { Card, IconButton, Stack, Typo, X, type AsideLayout } from "@/butler-ds";
+import { Box, Card, IconButton, Stack, Typo, X, type AsideLayout } from "@/butler-ds";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
 import { EpicInspector } from "./EpicInspector.tsx";
 import { useCanonSelection } from "./useCanonSelection.ts";
@@ -20,12 +20,12 @@ export function CanonAside({ projectId, epicId, layout }: { projectId: string; e
     document.addEventListener("keydown", escape);
     return () => document.removeEventListener("keydown", escape);
   }, [select]);
-  const content = <Stack gap="lg">
+  const content = <Box padding="md"><Stack gap="lg">
     <Stack align="row" cross="center" justify="between" gap="sm">
       <Typo.PanelTitle>{appCopy.canon.epic}</Typo.PanelTitle>
       <IconButton label={appCopy.canon.close} data-test-class="canon-aside-close" onClick={() => void select(null)}><X size="sm" /></IconButton>
     </Stack>
     <ErrorBoundary key={epicId} scope="canon-aside"><EpicInspector focusTitle projectId={projectId} epicId={epicId} /></ErrorBoundary>
-  </Stack>;
-  return layout === "docked" ? <Card>{content}</Card> : content;
+  </Stack></Box>;
+  return layout === "docked" ? <Card padding="none">{content}</Card> : content;
 }

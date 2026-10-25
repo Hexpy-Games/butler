@@ -11,6 +11,18 @@
   background: var(--surface-raised);
 }
 
+/* surface="page": the host is the reading surface and scrolls it. No box,
+   no inner scroll and no height bounds; an image keeps its own radius. */
+.viewer[data-surface="page"] {
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
 .pre {
   margin: 0;
   color: var(--text-primary);

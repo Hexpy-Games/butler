@@ -90,6 +90,10 @@ block. Do not use it as a generic card or nested panel.
   `leftOpen={open && !collapsed}`.
 - The pane enters with a transform; NativeViewSlot's tracker follows
   ancestors that move, so the native view tracks the page card.
+- Whatever the pane holds fills the slot's height, as the chat column's child
+  does: the browser sheet, or a docked file viewer in an `AdaptiveShellCard`
+  (cards frame: the viewer is the second card) stays full height however
+  short its content. Scroll inside it with `ScrollArea fill`.
 
 ## Cards frame (`frame="cards"`)
 
@@ -138,9 +142,10 @@ rectangular shell.
   keeps both faint (1%, a tight shadow), so the sheet lifts off the shell like
   the chat card and the 8px gap reads as 8px; dark keeps 2.5% and the page
   card's usual shadow.
-- The inspector is the side card under the title row; `InspectorShell` reads
-  the frame and draws the card. `SettingsShell` puts its navigation on the
-  shell and its detail pane in a card. Blocks read the frame through
+- Session details sit in the `ConversationShell` aside and a page's detail
+  in the `ManagementPage` aside, both inside the content card.
+  `SettingsShell` puts its navigation on the shell and its detail pane in a
+  card. Blocks read the frame through
   `useShellFrame()`.
 - A wallpaper inside a card resolves against it and is clipped to its corners;
   no title bar overlaps a card, so the message list's top reserve drops to a

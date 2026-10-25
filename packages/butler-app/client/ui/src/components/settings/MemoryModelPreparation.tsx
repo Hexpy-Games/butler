@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
-import { SettingsSection, Typo } from "@/butler-ds";
+import { SettingsField, Switch, Typo } from "@/butler-ds";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { chooseMemoryModel, fetchSetupReadiness, retrySetupReadiness } from "@/app/setupConnection.ts";
 import { memoryModelChoice, memoryModelSettled, type SetupReadinessView } from "@/app/setupReadiness.ts";
 import { MemoryModelStatus } from "../first-run/MemoryModelStatus";
-import { SettingsSwitch } from "./SettingsSwitch";
 
 /** Settings → Memory: the same memory-model choice as the first run, with its download status. */
 export function MemoryModelPreparation() {
@@ -34,15 +33,13 @@ export function MemoryModelPreparation() {
       .finally(() => setSaving(false));
   };
   return (
-    <SettingsSection id="memory-model" kind="form" title={copy.memoryModel.label}>
-      <SettingsSwitch settingId="memory-model" label={copy.memoryChoice.on} description={copy.memoryModel.description(sizeMB)}
-        checked={memoryModelChoice(model) === "on"} disabled={!model || saving} onChange={choose}
-        afterControl={<>
-          {model?.state === "ready" ? <Typo.Caption role="status" tone="success">{copy.memoryModel.ready}</Typo.Caption> : null}
-          <MemoryModelStatus model={model} language={language} retry={() => {
-            void retrySetupReadiness(true).then(setView).catch(() => setView(null));
-          }} />
-        </>} />
-    </SettingsSection>
+    <SettingsField settingId="memory-model" label={copy.memoryChoice.on} description={copy.memoryModel.description(sizeMB)}
+      control={<Switch aria-label={copy.memoryChoice.on} checked={memoryModelChoice(model) === "on"} disabled={!model || saving} onCheckedChange={choose} />}
+      meta={<>
+        {model?.state === "ready" ? <Typo.Caption role="status" tone="success">{copy.memoryModel.ready}</Typo.Caption> : null}
+        <MemoryModelStatus model={model} language={language} retry={() => {
+          void retrySetupReadiness(true).then(setView).catch(() => setView(null));
+        }} />
+      </>} />
   );
 }

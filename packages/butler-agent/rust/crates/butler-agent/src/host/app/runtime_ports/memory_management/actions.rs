@@ -1,5 +1,20 @@
 use super::*;
 impl AppMemoryManagement {
+    pub(super) async fn cleanup_status(
+        &self,
+        id: String,
+    ) -> Result<Value, GatewayApplicationError> {
+        encode(
+            self.owner
+                .cleanup_status(id)
+                .await
+                .map_err(error)?
+                .ok_or_else(|| {
+                    public_error(404, "memory_operation_not_found", "Operation not found.")
+                })?,
+        )
+    }
+
     pub(super) async fn project(
         &self,
         project_id: String,
@@ -28,6 +43,11 @@ impl AppMemoryManagement {
         inventory_revision: u64,
         sink: MemoryEventSink,
     ) -> Result<Value, GatewayApplicationError> {
+        let gate = self.daily.gate.clone();
+        let admission = gate.admission.lock().await;
+        if gate.active().is_some() {
+            return Err(error(std::io::Error::other("Memory is in use")));
+        }
         let receipt = self
             .owner
             .begin_cleanup(operation_id.clone(), inventory_revision)
@@ -47,6 +67,7 @@ impl AppMemoryManagement {
             }
             jobs.insert(operation_id.clone(), token.clone());
         }
+        drop(admission);
         tokio::spawn(self.drive(operation_id, inventory_revision, token, sink));
         encode(receipt)
     }

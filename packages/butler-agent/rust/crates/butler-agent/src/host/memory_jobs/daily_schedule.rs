@@ -107,7 +107,10 @@ fn prepare_run(
     Ok(Some(state))
 }
 
-fn read_state(data_root: &Path, id: &str) -> Result<Option<Value>, crate::host::HostError> {
+pub(super) fn read_state(
+    data_root: &Path,
+    id: &str,
+) -> Result<Option<Value>, crate::host::HostError> {
     let path = state_path(data_root, id);
     ensure_data_authority(data_root, &[&path]).map_err(|error| error.code().to_owned())?;
     Ok(fs::read(&path)
@@ -115,7 +118,11 @@ fn read_state(data_root: &Path, id: &str) -> Result<Option<Value>, crate::host::
         .and_then(|bytes| serde_json::from_slice(&bytes).ok()))
 }
 
-fn write_state(data_root: &Path, id: &str, state: &Value) -> Result<(), crate::host::HostError> {
+pub(super) fn write_state(
+    data_root: &Path,
+    id: &str,
+    state: &Value,
+) -> Result<(), crate::host::HostError> {
     let path = state_path(data_root, id);
     let parent = path.parent().ok_or("scheduler_state_path_invalid")?;
     ensure_data_authority(data_root, &[parent, &path]).map_err(|error| error.code().to_owned())?;
@@ -135,7 +142,7 @@ fn write_state(data_root: &Path, id: &str, state: &Value) -> Result<(), crate::h
     )
 }
 
-fn iso_at(now_ms: i64) -> String {
+pub(super) fn iso_at(now_ms: i64) -> String {
     chrono::DateTime::from_timestamp_millis(now_ms).map_or_else(
         || "1970-01-01T00:00:00.000Z".to_owned(),
         |date| date.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
