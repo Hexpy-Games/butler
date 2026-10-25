@@ -1,5 +1,6 @@
 import { CanonInlineDraftProvider } from "../canon/CanonInlineDraft.tsx";
 import { ConversationRequestProvider } from "./ConversationRequestContext.tsx";
+import { useSessionInfoHasContent } from "../session-info/useSessionSectionsModel.ts";
 import { SessionSections } from "../session-info/SessionSections.tsx";
 import { ComposerCrashFallback } from "./ComposerCrashFallback.tsx";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
@@ -35,6 +36,8 @@ export function Conversation() {
   const locale = useAppLocale();
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const infoOpen = useButlerStore(state => state.sessionInfoOpen);
+  const hasContent = useSessionInfoHasContent();
+  const infoShown = infoOpen && hasContent;
   const browserOpen = useBrowserShellState(state => Boolean(state.conversations[activeChatId]?.open));
   const viewerShown = useRightSlot(activeChatId) === "viewer";
   const branchProjectId = useButlerStore((state) => {
@@ -108,10 +111,10 @@ export function Conversation() {
   return (
     <ConversationRequestProvider key={activeChatId}><CanonInlineDraftProvider><ConversationShell
       asideLabel={appCopy.sessionInfo.title}
-      asideFloatOpen={infoOpen}
-      aside={infoOpen ? layout => <SessionSections key={activeChatId} layout={layout} /> : undefined}
+      asideFloatOpen={infoShown}
+      aside={infoShown ? layout => <SessionSections key={activeChatId} layout={layout} /> : undefined}
       railView={activeChatId}
-      rail={window.butlerBrowser && !browserOpen && !viewerShown && !infoOpen ? <AgentTabRail session={activeChatId} /> : undefined}
+      rail={window.butlerBrowser && !browserOpen && !viewerShown && !infoShown ? <AgentTabRail session={activeChatId} /> : undefined}
       background={wallpaper.background}
       composerReserve={composerReserve}
       contentGutter={newChatTitleIconGutter}
