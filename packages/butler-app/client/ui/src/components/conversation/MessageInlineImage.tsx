@@ -22,7 +22,7 @@ export interface MessageInlineImageProps
  * A markdown image. Message files load through their signed URL; a failed
  * load (expired or revoked signature) refreshes the session once. The picture
  * opens the image viewer on the message's pictures; Open shows a message file
- * in the artifact viewer. A relative path that names no message file cannot
+ * in the file viewer. A relative path that names no message file cannot
  * load, so it shows nothing.
  */
 export function MessageInlineImage({
@@ -48,7 +48,7 @@ export function MessageInlineImage({
     signed_url: attachment.signed_url, created_at: attachment.created_at,
   } : undefined);
   const save = artifact ? artifactCardActions(artifact)[0] : undefined;
-  const open = artifact ? () => openArtifact(artifact.id, artifact) : undefined;
+  const open = artifact ? () => openArtifact(artifact) : undefined;
   return (
     <Stack as="span" gap="xs" cross="start" data-test-class="message-image">
     <ArtifactPreviewImage

@@ -34,7 +34,10 @@ export async function htmlArtifactSmoke(server: NativeAppServerHandle, browser: 
     await page.locator('[data-test-class="app-sidebar"]').getByText(sessionTitle, { exact: true }).click();
     await page.locator('[data-test-class="message-artifact-list"]').getByText("standalone.HTML", { exact: true }).click();
     await verify(page, "file-card");
-    await page.getByRole("button", { name: appCopy.artifacts.backToList, exact: true }).click();
+    // The file viewer holds the right slot; close it and open the same file from 세션 정보's results.
+    await page.locator('[data-test-class="file-viewer-close"]').click();
+    await page.locator('[data-test-class="file-viewer"]').waitFor({ state: "detached" });
+    if (await page.locator('[data-test-class="session-info-toggle"]').getAttribute("aria-pressed") !== "true") await page.locator('[data-test-class="session-info-toggle"]').click();
     await page.locator('[data-slot="document-tile"]').getByText("standalone.HTML", { exact: true }).click();
     await verify(page, "preview-panel");
     await page.getByRole("button", { name: appCopy.library.title, exact: true }).click();

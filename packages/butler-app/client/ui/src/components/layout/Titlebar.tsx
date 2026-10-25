@@ -16,6 +16,7 @@ import { TitlebarShell } from "@/butler-ds";
 import { TitlebarWorkspaceSubtitle } from "./TitlebarWorkspaceSubtitle";
 import { WindowControls } from "./WindowControls";
 import { BrowserToggle } from "../browser/BrowserToggle";
+import { FileViewerToggle } from "../file-viewer/FileViewerToggle";
 import { HubConversationButton } from "../browser/HubConversationButton";
 import { libraryTitle, useLibraryNames } from "../library/libraryNav";
 import { useTitlebarBack } from "@/app/navigationBack";
@@ -78,6 +79,7 @@ export function Titlebar({ sidebarOpen, splitChatWidth }: { sidebarOpen?: boolea
       chatTrailing={storeView.kind === "session" ? <SessionInfoActions /> : undefined}
       trailing={
         <ButtonContainer size="icon-sm" data-test-class="project-controls">
+          {storeView.kind === "session" && <FileViewerToggle />}
           {storeView.kind === "session" && isServerBackedSessionId(storeActiveChatId) && <BrowserToggle />}
         </ButtonContainer>
       }
