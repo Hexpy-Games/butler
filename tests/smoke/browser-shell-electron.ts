@@ -5,7 +5,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
 import { nativeAligned, nativePeekDismiss, pane, shellGeometry, shellReady, toggle, togglePane, toggleState } from "../support/browser-shell-acceptance";
-import { newTabHub } from "../support/browser-newtab-acceptance";
+import { assertNewTabContent, newTabHub } from "../support/browser-newtab-acceptance";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE;
 assert.ok(evidence);
@@ -82,6 +82,8 @@ try {
   const other = (await app.call<{ activeId: string }>("state")).activeId;
   assert.notEqual(other, second);
   assert.equal((await ownTabs()).length, 1);
+  await waitBrowser(() => app.page.expression("document.activeElement?.closest('[data-slot=address-field]') !== null"), "conversation new-tab address focus");
+  await assertNewTabContent(app.page, "en");
   await app.click(getAppCopy("en-US").space.general); await nativeAligned(app);
   assert.equal((await app.call<{ activeId: string }>("state")).activeId, second);
   await app.click("Show right panel");

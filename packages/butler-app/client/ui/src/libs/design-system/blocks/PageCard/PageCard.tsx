@@ -45,7 +45,7 @@ export interface PageCardProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivEl
   occluderSelector?: string;
   /** DS content under the native view: empty and crashed states (or a stand-in page in previews). */
   children?: ReactNode;
-  /** A Butler page drawn as DOM instead of a native view (new tab, library). */
+  /** A Butler page drawn as DOM instead of a native view (new tab, library). The slot is its scroller: pass the page without a ScrollArea of its own. */
   internal?: ReactNode;
   /** DOM layers over the page area, e.g. a SelectionBar. */
   overlay?: ReactNode;
