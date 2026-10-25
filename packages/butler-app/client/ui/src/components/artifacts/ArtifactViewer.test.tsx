@@ -38,7 +38,6 @@ test("text artifacts fetch the signed URL and refetch once after a refused load"
   await act(async () => root.render(
     <ArtifactViewer
       artifact={textArtifact()}
-      onBack={() => {}}
       refreshFileUrls={async () => {
         refreshes += 1;
         rememberSignedFileUrls([{ url: PATH, signed_url: FRESH }]);
@@ -62,7 +61,6 @@ test("a refresh that brings no new URL ends in the failed state without looping"
   await act(async () => root.render(
     <ArtifactViewer
       artifact={textArtifact()}
-      onBack={() => {}}
       refreshFileUrls={async () => { refreshes += 1; }}
     />,
   ));
@@ -82,7 +80,6 @@ test("image artifacts swap to a refreshed signed URL after an error", async () =
   await act(async () => root.render(
     <ArtifactViewer
       artifact={{ ...textArtifact(), title: "chart.png", kind: "image" }}
-      onBack={() => {}}
       refreshFileUrls={async () => {
         refreshes += 1;
         rememberSignedFileUrls([{ url: PATH, signed_url: FRESH }]);
@@ -107,7 +104,6 @@ test("a PDF frame refreshes an expired signed URL once before loading", async ()
   const render = () => root.render(
     <ArtifactViewer
       artifact={{ ...textArtifact(), title: "report.pdf", kind: "report", signed_url: expired }}
-      onBack={() => {}}
       refreshFileUrls={async () => {
         refreshes += 1;
         rememberSignedFileUrls([{ url: PATH, signed_url: FRESH }]);

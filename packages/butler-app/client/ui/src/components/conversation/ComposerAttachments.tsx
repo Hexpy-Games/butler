@@ -7,7 +7,7 @@ import { useComposerStore } from "./composerStore";
 import type { ComposerAttachment } from "./hooks/useFileAttachments";
 import { messageFileUrl } from "./messageMedia";
 import { attachmentViewerKind } from "./messageImages";
-import { attachmentTile, openAttachmentInInspector } from "./attachmentTiles";
+import { attachmentTile, openAttachmentInViewer } from "./attachmentTiles";
 import { imageRefusalLabel } from "./composerImagePolicy";
 
 export function ComposerAttachments() {
@@ -23,7 +23,7 @@ export function ComposerAttachments() {
     const attachment = attachments.find((item) => item.id === id);
     if (!attachment) return;
     const viewable = attachments.filter((item) => attachmentViewerKind(item.file));
-    if (!attachmentViewerKind(attachment.file)) { openAttachmentInInspector(attachment.file, sessionId); return; }
+    if (!attachmentViewerKind(attachment.file)) { openAttachmentInViewer(attachment.file, sessionId); return; }
     const images: ViewerImage[] = viewable.map((item) => ({
       src: messageFileUrl(item.file), alt: item.file.safe_name, kind: attachmentViewerKind(item.file), sessionId,
     }));

@@ -18,7 +18,7 @@ export function WorkingFileMenu({ file, title }: { file: MessageFileRef; title: 
         <IconButton label={`${appCopy.browser.more}: ${title}`} data-test-class="working-file-menu"><MoreHorizontal size="sm" /></IconButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onSelect={() => openArtifact(artifact.id, artifact)}><Popup size="sm" />{appCopy.artifacts.open}</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => openArtifact(artifact)}><Popup size="sm" />{appCopy.artifacts.open}</DropdownMenuItem>
         {save && (
           <DropdownMenuItem onSelect={() => save.href ? download(save.href, save.download) : save.onClick?.()}><Save size="sm" />{save.label}</DropdownMenuItem>
         )}

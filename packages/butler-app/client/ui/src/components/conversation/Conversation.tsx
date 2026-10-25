@@ -27,6 +27,7 @@ import { useSessionViewSubscription } from
 
 import { AgentTabRail } from "../browser/AgentTabRail";
 import { useBrowserShellState } from "../browser/browserShellState";
+import { useRightSlot } from "../file-viewer/useRightSlot";
 
 void appCopy;
 
@@ -35,6 +36,7 @@ export function Conversation() {
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const infoOpen = useButlerStore(state => state.sessionInfoOpen);
   const browserOpen = useBrowserShellState(state => Boolean(state.conversations[activeChatId]?.open));
+  const viewerShown = useRightSlot(activeChatId) === "viewer";
   const branchProjectId = useButlerStore((state) => {
     if (activeChatId === "general") return null;
     const view = state.sessionViews[activeChatId] ??
@@ -109,7 +111,7 @@ export function Conversation() {
       asideFloatOpen={infoOpen}
       aside={infoOpen ? layout => <SessionSections key={activeChatId} layout={layout} /> : undefined}
       railView={activeChatId}
-      rail={window.butlerBrowser && !browserOpen && !infoOpen ? <AgentTabRail session={activeChatId} /> : undefined}
+      rail={window.butlerBrowser && !browserOpen && !viewerShown && !infoOpen ? <AgentTabRail session={activeChatId} /> : undefined}
       background={wallpaper.background}
       composerReserve={composerReserve}
       contentGutter={newChatTitleIconGutter}
