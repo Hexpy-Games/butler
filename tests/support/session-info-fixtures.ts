@@ -50,16 +50,17 @@ export async function failPendingAsksRead(page: Page) {
   return () => page.unroute("**/sessions/*/pending-asks", fail);
 }
 
-export async function installSessionBrowser(page: Page) {
-  await page.addInitScript(() => {
-    const state = { enabled: true, blocked: false, activeId: null, nativeCovered: false, tabs: [] };
+/** A browser bridge stub; `tabs` are the open tabs (e.g. a conversation's agent tabs for the rail). */
+export async function installSessionBrowser(page: Page, tabs: Record<string, unknown>[] = []) {
+  await page.addInitScript((tabs) => {
+    const state = { enabled: true, blocked: false, activeId: null, nativeCovered: false, tabs };
     const off = () => () => {};
     Object.assign(window, { butlerBrowser: {
       call: async (method: string) => method === "state" || method === "open" ? state : null,
       subscribe: (handler: (value: typeof state) => void) => { queueMicrotask(() => handler(state)); return () => {}; },
       onFrame: off, onPointer: off, onElementDrag: off, onSelectionAction: off, onDownload: off, onHistory: off, onAddress: off,
     } });
-  });
+  }, tabs);
 }
 
 export function sessionQuestion(sessionId: string): NonNullable<SessionView["pending_questions"]>[number] {
