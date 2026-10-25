@@ -1,4 +1,5 @@
 import { verifyTaskOrder, verifyCompactContext, verifyDashboardTask } from "../support/session-pane-followups.ts";
+import { verifyInlineTriggerRings } from "../support/session-pane-focus.ts";
 // Stub/replay UI smoke through the real native App, isolated from the owner's data.
 import { sessionInfoStub, verifyNativePendingAsks, labelSessionInfoModel } from "../support/session-info-pending-asks.ts";
 import { strict as assert } from "node:assert";
@@ -76,6 +77,7 @@ try {
     assert.equal(await aside.locator('[data-session-section="asks"]').getByText("3", { exact: true }).count(), 1);
     await aside.getByText("질문 · 지금", { exact: true }).waitFor();
     await verifyTaskOrder(aside.locator('[data-test-class="canon-epic-detail"]'));
+    await verifyInlineTriggerRings(aside);
     await capture("pane-task-order");
     await aside.getByText("작업 대기열", { exact: true }).scrollIntoViewIfNeeded();
     await capture("available-sections-bottom");
@@ -102,6 +104,7 @@ try {
     await aside.waitFor();
     await page.setViewportSize({ width: 1024, height: 900 });
     await page.waitForFunction(() => document.querySelector('[data-slot="conversation-aside"]')?.getAttribute("data-layout") === "floating");
+    await verifyInlineTriggerRings(aside);
     assert.equal(await aside.locator('[data-slot="separator"]').count(), 7);
     await capture("floating");
     await page.setViewportSize({ width: 1440, height: 1050 });
