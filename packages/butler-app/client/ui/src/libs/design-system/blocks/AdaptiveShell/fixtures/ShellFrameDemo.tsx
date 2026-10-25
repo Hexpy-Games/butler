@@ -15,35 +15,32 @@ import { SettingsNav } from "../../SettingsNav";
 import { SettingsShell } from "../../SettingsShell";
 import { TitlebarShell } from "../../TitlebarShell";
 import {
-  AdaptivePanelResizeHandle, AdaptiveShell, AdaptiveShellCard, AdaptiveShellInspector, AdaptiveShellSidebar, AdaptiveShellSplit,
+  AdaptiveShell, AdaptiveShellCard, AdaptiveShellSidebar, AdaptiveShellSplit,
   AdaptiveShellTitle, AdaptiveShellWorkspace, adaptivePanelStyle, type ShellFrame,
 } from "../index";
-import { DemoConversation, DemoInspector, type ShellContent } from "./ShellContentDemo";
+import { DemoConversation, type ShellContent } from "./ShellContentDemo";
 
 type Locale = "en-US" | "ko-KR";
-export type ShellFrameView = "chat" | "browser" | "inspector" | "settings" | "hub";
+export type ShellFrameView = "chat" | "browser" | "settings" | "hub";
 
 const COPY = {
   "en-US": {
     actions: "Conversation actions", showBrowser: "Show browser", hideBrowser: "Hide browser", showInspector: "Show inspector",
-    hideInspector: "Hide inspector", showSidebar: "Show sidebar", appearance: "Appearance", general: "General",
+    showSidebar: "Show sidebar", appearance: "Appearance", general: "General",
     appearanceDescription: "Theme and how the app looks.", translucent: "Translucent sidebar", smartGroups: "Smart groups",
-    resizeInspector: "Resize inspector", dragToResize: "Drag to resize",
   },
   "ko-KR": {
     actions: "대화 작업", showBrowser: "브라우저 열기", hideBrowser: "브라우저 닫기", showInspector: "인스펙터 보기",
-    hideInspector: "인스펙터 숨기기", showSidebar: "사이드바 보기", appearance: "모양", general: "일반",
+    showSidebar: "사이드바 보기", appearance: "모양", general: "일반",
     appearanceDescription: "앱의 테마와 화면 표시 방식을 설정합니다.", translucent: "투명 사이드바", smartGroups: "스마트 그룹",
-    resizeInspector: "인스펙터 너비 조절", dragToResize: "드래그하여 크기 조절",
   },
 } as const;
 
-/** The conversation title row: ⋯, the browser toggle and the inspector toggle (on = icon colour, never a fill). */
+/** The conversation title row: ⋯, the browser toggle (on = icon colour, never a fill) and the inspector toggle. */
 function DemoTitle({ locale, view, leftOpen }: { locale: Locale; view: ShellFrameView; leftOpen: boolean }) {
   const copy = COPY[locale];
   const demo = BROWSER_DEMO_COPY[locale];
   const browserOn = view === "browser";
-  const inspectorOn = view === "inspector";
   if (view === "hub") {
     return (
       <AdaptiveShellTitle>
@@ -61,7 +58,7 @@ function DemoTitle({ locale, view, leftOpen }: { locale: Locale; view: ShellFram
             <IconButton label={browserOn ? copy.hideBrowser : copy.showBrowser} pressed={browserOn} tone={browserOn ? "butler" : "default"}>
               <Globe2 size="md" />
             </IconButton>
-            <IconButton label={inspectorOn ? copy.hideInspector : copy.showInspector} pressed={inspectorOn} tone={inspectorOn ? "butler" : "default"}>
+            <IconButton label={copy.showInspector}>
               <PanelRight size="md" />
             </IconButton>
           </ButtonContainer>
@@ -97,7 +94,7 @@ export interface ShellFrameDemoProps {
   sidebar?: "open" | "collapsed" | "peek";
   /** The new-chat wallpaper: it lives inside the content card in the cards frame. */
   wallpaper?: boolean;
-  /** Content card body; `long` also fills the inspector past the window height. */
+  /** Content card body. */
   content?: ShellContent;
   /** The Electron platform whose shell material (and sidebar row fills) the root picks; omitted is the browser. */
   platform?: "darwin" | "win32";
@@ -119,7 +116,7 @@ export function ShellFrameDemo({ locale, frame, width, height, view = "chat", si
   const leftOpen = sidebar === "open";
   return (
     <ScaledFrame width={width} height={height}>
-      <AdaptiveShell frame={frame} leftOpen={leftOpen} rightOpen={view === "inspector"} splitOpen={view === "browser"}
+      <AdaptiveShell frame={frame} leftOpen={leftOpen} rightOpen={false} splitOpen={view === "browser"}
         leftPeek={sidebar === "peek"} transparentWorkspace={wallpaper} UNSAFE_style={geometry} {...chrome}>
         {leftOpen ? null : (
           <ChromeFloatingToggleLayer>
@@ -138,11 +135,6 @@ export function ShellFrameDemo({ locale, frame, width, height, view = "chat", si
             <AdaptiveShellCard><DemoConversation locale={locale} content={content} wallpaper={wallpaper} /></AdaptiveShellCard>
           )}
         </AdaptiveShellWorkspace>
-        <AdaptiveShellInspector open={view === "inspector"}><DemoInspector locale={locale} tall={content === "long"} /></AdaptiveShellInspector>
-        {view === "inspector" ? (
-          <AdaptivePanelResizeHandle side="right" aria-label={COPY[locale].resizeInspector} hint={COPY[locale].dragToResize}
-            aria-orientation="vertical" onKeyDown={() => undefined} onPointerDown={() => undefined} />
-        ) : null}
       </AdaptiveShell>
     </ScaledFrame>
   );

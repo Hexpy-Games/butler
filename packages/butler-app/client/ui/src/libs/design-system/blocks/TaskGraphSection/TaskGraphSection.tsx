@@ -5,7 +5,7 @@ import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { DisclosureRow } from "../DisclosureRow";
 import { EmptyLine } from "../EmptyLine";
-import { InspectorInset } from "../InspectorShell";
+import { InspectorInset } from "../InspectorPanel";
 import { Section } from "../../components/Section";
 import { TaskGraphStatusIcon } from "../TaskGraphCard";
 
