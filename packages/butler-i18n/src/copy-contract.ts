@@ -960,7 +960,6 @@ export interface AppCopy {
     expandChats: string;
     collapseChats: string;
     newProject: string;
-    availableInDesktop: string;
     projectDashboard: string;
     newProjectChat: string;
     projectMenu: string;
@@ -970,6 +969,14 @@ export interface AppCopy {
     projectFolder: string;
     projectFolderAuto: string;
     chooseProjectFolder: string;
+    useThisFolder: string;
+    openSubfolderFirst: string;
+    noSubfolders: string;
+    showMoreFolders: string;
+    parentFolder: string;
+    folderPathLabel: string;
+    subfoldersLabel: string;
+    foldersLoadFailed: string;
     changeProjectFolder: string;
     resetProjectFolder: string;
     pin: string;

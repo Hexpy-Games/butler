@@ -244,6 +244,18 @@ async function auditCell(page: Page, cell: Cell) {
   await page.locator('[role="menu"]').first().waitFor();
   await auditArrows(page, cell, "menu", 6);
   await page.keyboard.press("Escape");
+  // Browser project folder navigation uses the existing scroll-area focus room.
+  await page.getByRole("button", { name: copy.space.menu, exact: true }).click();
+  await page.getByRole("menuitem", { name: copy.sidebar.newProject, exact: true }).click();
+  await page.getByRole("button", { name: copy.sidebar.chooseProjectFolder, exact: true }).click();
+  await page.locator('[data-test-class="project-folder-row"]').first().waitFor();
+  await page.keyboard.press("Enter");
+  await page.locator('[data-test-class="project-folder-up"]').waitFor();
+  await auditArrows(page, cell, "project-folder-browser-arrows", 6);
+  await auditScope(page, cell, "project-folder-browser", '[role="dialog"]', 80);
+  await page.keyboard.press("Escape");
+  await page.getByLabel(copy.sidebar.projectName, { exact: true }).waitFor();
+  await page.keyboard.press("Escape");
   // Command palette (search) walked with arrow keys.
   await openSidebar(page);
   await page.getByRole("button", { name: copy.sidebar.search }).first().click();
@@ -329,6 +341,10 @@ try {
     // The gateway: just what the harness reads, offline.
     if (/^\/sessions\/[^/]+\/controls$/u.test(url.pathname)) return route.fulfill({ json: { ok: true, data: { session_id: "butler-client",
       revision: 0, catalog_generation: "harness-model-catalog-v1", controls: { model: "openai/gpt-6-luna", reasoning_effort: "none", access_mode: "full_access", plan_mode: false } } } });
+    if (url.pathname === "/project-folders") return route.fulfill({ json: { ok: true, data: {
+      root_name: "Workspace", path: url.searchParams.get("path") ?? "",
+      folders: Array.from({ length: 40 }, (_, index) => ({ name: `Folder ${index + 1}` })), next_after: null,
+    } } });
     if (url.pathname === "/session-queue") return route.fulfill({ json: { ok: true, data: { queued_messages: [] } } });
     if (["/session-view", "/summary", "/navigation", "/events/live", "/health"].includes(url.pathname)) return route.fulfill({ json: { ok: true, data: {} } });
     if (url.pathname === "/usage-history") return route.fulfill({ json: { ok: true, data: historyFixture() } });
