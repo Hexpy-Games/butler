@@ -1,7 +1,8 @@
 //! Chat settlements reuse the deferred-answer receipt lane; approvals stay click-only.
 use super::contracts::{AuthorityError, AuthorityResult, PrincipalAuthority, RequestDecision};
 use super::questions::{UserQuestionAnswer, UserQuestionResponse, UserQuestions};
-use crate::btcc::TurnRecord;
+use crate::btcc::guided_turn::GuidedExecutionPolicy;
+use crate::btcc::{PolicyRole, TurnRecord};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -62,7 +63,11 @@ impl PrincipalAuthority {
 }
 
 fn guard(turn: &TurnRecord, has_other_tool_result: bool, input: &ResolveAsk) -> Option<Value> {
-    if turn.wake_identity.is_some()
+    let delegated = GuidedExecutionPolicy::from_turn(turn, "")
+        .map(|policy| policy.role != PolicyRole::Butler || policy.subsession.is_some())
+        .unwrap_or(true);
+    if delegated
+        || turn.wake_identity.is_some()
         || turn.context.get("scheduleRun").is_some()
         || turn.context.get("subsessionResult").is_some()
         || turn.context.get("messageOrigin").and_then(Value::as_str) == Some("question_followup")
@@ -103,7 +108,7 @@ fn guard(turn: &TurnRecord, has_other_tool_result: bool, input: &ResolveAsk) -> 
     ) {
         return Some(refusal(
             "invalid_outcome",
-            "Use answered with an answer for a question, or dropped. accepted and declined are for drafts.",
+            "Use answered with an answer, or dropped without one.",
         ));
     }
     None

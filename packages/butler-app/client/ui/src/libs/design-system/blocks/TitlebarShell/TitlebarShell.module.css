@@ -159,16 +159,13 @@
     );
 }
 
-/* Title actions: right after the title, on its line. They come after the
-   subtitle in the DOM (title and subtitle read as one unit), so the subtitle
-   is ordered after them. Centred on the title line and no taller than it, so
-   the line keeps its height and baseline; the bar does not clip them. */
+/* Title actions: after the whole title line (title, then subtitle), on its
+   line. A truncated subtitle ends in its ellipsis and the actions follow it;
+   they never shrink, so they stay visible and never overlap the text. Centred
+   on the title line and no taller than it, so the line keeps its height and
+   baseline; the bar does not clip them. */
 .copy[data-title-actions] {
   overflow: visible;
-}
-
-.copy[data-title-actions] > .subtitle {
-  order: 1;
 }
 
 .titleActions {
@@ -201,6 +198,17 @@
   position: relative;
   right: auto;
   left: auto;
+}
+
+/* Viewer fixture of the cards frame's title row: the bar sits on the shell
+   surface (AdaptiveShell frame="cards" clears --titlebar-bg). */
+.fixture[data-surface="shell"] {
+  background: var(--shell-bg);
+}
+
+/* Viewer fixture of a card pane (the file viewer) filling the split's pane. */
+.fixturePane {
+  flex: 1 1 auto;
 }
 
 /* Viewer fixture of a collapsed sidebar: the inset AdaptiveShell provides

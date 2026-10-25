@@ -55,6 +55,7 @@ pub(crate) struct AgentRuntime {
     pub work_streams: Arc<WorkStreams>,
     pub skills: Arc<Skills>,
     pub mcp_client: Arc<butler_models::mcp_client::McpClient>,
+    pub(in crate::host) daily_cognition: Arc<crate::host::memory_jobs::daily::DailyCognitionJobs>,
     pub context_maintenance: Arc<ContextMaintenance>,
     pub memory_writes: Arc<butler_memory::cognition::RememberedRuleOwner>,
     pub memory_management: Arc<butler_memory::management::MemoryManagement>,

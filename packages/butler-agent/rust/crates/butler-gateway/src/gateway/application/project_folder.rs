@@ -61,3 +61,41 @@ pub(super) fn project(output: &mut serde_json::Map<String, serde_json::Value>, r
     output.insert("default_project_workspace_label".into(), json!(label));
     output.insert("default_project_workspace_path".into(), json!(root));
 }
+
+/// Read-only workspace navigation available to the same clients as project lists.
+pub trait GatewayProjectFolders {
+    fn list_project_folders(
+        &self,
+        _path: String,
+        _after: Option<String>,
+    ) -> crate::gateway::ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+}
+
+impl GatewayProjectFolders for super::AppApplication {
+    fn list_project_folders(
+        &self,
+        path: String,
+        after: Option<String>,
+    ) -> crate::gateway::ApplicationFuture<serde_json::Value> {
+        let root = self.project_creation.workspace_root();
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || {
+                projects::workspace_folder::list(&root, &path, after.as_deref())
+            })
+            .await
+            .map_err(GatewayApplicationError::internal_from)?
+        })
+    }
+}
+
+/// Exercise the shared resolver from the dev-only security suite without raising
+/// the gateway's non-E2E test ratchet.
+#[cfg(feature = "test-support")]
+pub fn resolve_workspace_folder(
+    root: &Path,
+    path: &str,
+) -> Result<Option<PathBuf>, GatewayApplicationError> {
+    projects::workspace_folder::resolve(root, path).map(|folder| folder.map(|folder| folder.path))
+}

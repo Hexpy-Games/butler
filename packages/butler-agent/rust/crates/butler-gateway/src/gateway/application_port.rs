@@ -3,6 +3,7 @@ use super::*;
 
 pub trait GatewayApplication:
     GatewayMutationCommands
+    + project_folder::GatewayProjectFolders
     + GatewayPendingAsks
     + GatewayProjectDashboard
     + GatewaySessionControls
@@ -163,6 +164,12 @@ pub trait GatewayApplication:
     fn run_automation(&self, id: String) -> ApplicationFuture<AutomationRunResult>;
     fn dispatch_due_automations(&self) -> ApplicationFuture<AutomationRunListView>;
     fn list_automation_runs(&self, id: String) -> ApplicationFuture<AutomationRunListView>;
+    fn image_usage(
+        &self,
+        _command: super::AppImageUsageCommand,
+    ) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn assets(&self, _command: AppAssetCommand) -> ApplicationFuture<serde_json::Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }

@@ -2,7 +2,8 @@
 use super::GuidedTurnFactoryAdapter;
 use crate::host::guided::prompt::{GuidedTextState, open_asks::Reminders};
 use butler_turn::btcc::{
-    BtccError, GuidedPhaseSelection, GuidedWork, ProjectLedgerPlan, TurnRecord, WorkTurnScope,
+    BtccError, GuidedPhaseSelection, GuidedWork, PolicyRole, ProjectLedgerPlan, TurnRecord,
+    WorkTurnScope,
 };
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -19,7 +20,11 @@ pub(super) struct Inputs {
 pub(super) async fn reminders(
     factory: &GuidedTurnFactoryAdapter,
     turn: &TurnRecord,
+    role: &PolicyRole,
 ) -> Result<Arc<Mutex<Reminders>>, BtccError> {
+    if matches!(role, PolicyRole::Steward | PolicyRole::Worker) {
+        return Ok(Arc::new(Mutex::new(Reminders::new(Vec::new()))));
+    }
     let entries = factory
         .preparation
         .authority

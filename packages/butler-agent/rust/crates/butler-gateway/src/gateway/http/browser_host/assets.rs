@@ -21,39 +21,8 @@ pub(super) async fn finish(
         .or_else(|| result["url"].as_str())
         .unwrap_or("")
         .to_owned();
-    let pixels = result.as_object_mut().and_then(|o| o.remove("image"));
-    let rendered = pixels.map(|pixels| {
-        pixels["data"]
-            .as_str()
-            .filter(|raw| raw.len() <= 12 * 1024 * 1024)
-            .and_then(|raw| STANDARD.decode(raw).ok())
-            .ok_or("invalid_image")
-    });
-    let original = || {
-        butler_runtime::browser::fetch_image(
-            &source_url,
-            result["referer"].as_str().unwrap_or(""),
-            result["user_agent"].as_str().unwrap_or(""),
-        )
-    };
-    let bytes = match rendered {
-        // A photo whose pixels the page withholds is collected from its own file
-        // (full size, whatever covers it); its rendered crop is the fallback.
-        Some(rendered) if result["fetch_source"] == true => match original().await {
-            Ok(bytes) => match tokio::task::spawn_blocking(move || {
-                butler_runtime::browser::normalize_image(&bytes).map(|_| bytes)
-            })
-            .await
-            {
-                Ok(Ok(bytes)) => Ok(bytes),
-                _ => rendered,
-            },
-            Err(reason) => rendered.or(Err(reason)),
-        },
-        Some(rendered) => rendered,
-        None => original().await,
-    };
-    let bytes = match bytes {
+    let bytes = collected_source(result, &source_url).await;
+    let (bytes, pixel_ratio) = match bytes {
         Ok(bytes) => bytes,
         Err(reason) => {
             *result = json!({"status":"refused","reason":reason});
@@ -64,6 +33,7 @@ pub(super) async fn finish(
     let command = AppAssetCommand::Collect {
         session: session.into(),
         bytes,
+        pixel_ratio,
         alt: result["alt"].as_str().unwrap_or("").into(),
         nearby_text: result["nearby_text"].as_str().unwrap_or("").into(),
         source_url,
@@ -78,6 +48,49 @@ pub(super) async fn finish(
     explain_refusal(result);
     Ok(())
 }
+async fn collected_source(
+    result: &mut Value,
+    source_url: &str,
+) -> Result<(Vec<u8>, f64), &'static str> {
+    let pixels = result.as_object_mut().and_then(|o| o.remove("image"));
+    let rendered = pixels.map(|pixels| {
+        pixels["data"]
+            .as_str()
+            .filter(|raw| raw.len() <= 12 * 1024 * 1024)
+            .and_then(|raw| STANDARD.decode(raw).ok())
+            .ok_or("invalid_image")
+    });
+    let original = || {
+        butler_runtime::browser::fetch_image(
+            source_url,
+            result["referer"].as_str().unwrap_or(""),
+            result["user_agent"].as_str().unwrap_or(""),
+        )
+    };
+    let capture_ratio = result["pixel_ratio"]
+        .as_f64()
+        .filter(|r| r.is_finite() && *r > 0.0)
+        .unwrap_or(1.0);
+    let rendered = rendered.map(|bytes| bytes.map(|bytes| (bytes, capture_ratio)));
+    match rendered {
+        // A photo whose pixels the page withholds is collected from its own file
+        // (full size, whatever covers it); its rendered crop is the fallback.
+        Some(rendered) if result["fetch_source"] == true => match original().await {
+            Ok(bytes) => match tokio::task::spawn_blocking(move || {
+                butler_runtime::browser::normalize_image(&bytes).map(|_| bytes)
+            })
+            .await
+            {
+                Ok(Ok(bytes)) => Ok((bytes, 1.0)),
+                _ => rendered,
+            },
+            Err(reason) => rendered.or(Err(reason)),
+        },
+        Some(rendered) => rendered,
+        None => original().await.map(|bytes| (bytes, 1.0)),
+    }
+}
+
 pub(super) async fn lookup(state: &HttpState, args: &Value) -> Result<Value, HttpError> {
     let ids = args["ids"]
         .as_array()
@@ -148,4 +161,56 @@ fn explain_refusal(result: &mut Value) {
         _ => return,
     };
     result["recovery"] = json!(recovery);
+}
+
+/// Internal image asset operations are authenticated with the same local admin boundary.
+pub(super) async fn image(
+    state: &HttpState,
+    session: &str,
+    op: &str,
+    args: &Value,
+) -> Result<Value, HttpError> {
+    use crate::gateway::{AppImageUsageCommand, GeneratedAssetKind};
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    let mut data = match op {
+        "images.resolve" => {
+            state
+                .application
+                .assets(AppAssetCommand::ResolveInput {
+                    session: session.into(),
+                    id: args["id"].as_str().ok_or(HttpError::Internal)?.into(),
+                    mask_for: args["mask_for"].as_str().map(str::to_owned),
+                })
+                .await?
+        }
+        "images.store" => {
+            state
+                .application
+                .assets(AppAssetCommand::PutGenerated {
+                    session: session.into(),
+                    bytes: STANDARD
+                        .decode(args["data"].as_str().ok_or(HttpError::Internal)?)
+                        .map_err(|_| HttpError::invalid_json())?,
+                    kind: GeneratedAssetKind::Generated,
+                    parent_id: args["parent_id"].as_str().map(str::to_owned),
+                    model_ref: args["model_ref"].as_str().map(str::to_owned),
+                })
+                .await?
+        }
+        "images.usage" => {
+            state
+                .application
+                .image_usage(AppImageUsageCommand::Record(
+                    serde_json::from_value(args.clone()).map_err(|_| HttpError::invalid_json())?,
+                ))
+                .await?
+        }
+        _ => return Err(HttpError::Internal),
+    };
+    if op == "images.store"
+        && let Some(id) = data["id"].as_str().map(str::to_owned)
+    {
+        data["url"] = json!(format!("/message-assets/{id}"));
+    }
+    Ok(data)
 }

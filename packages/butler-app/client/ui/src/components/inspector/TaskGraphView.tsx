@@ -5,15 +5,15 @@ import { graphAssignee, graphMeta, graphElapsed, graphTaskStatus, graphStatusLab
 import { TaskNodeDetail } from "./TaskNodeDetail.tsx";
 import { useTaskGraphClock } from "./useTaskGraphClock.ts";
 
-export function TaskGraphView({ graph, selected, open, single, visible, onToggle, onSelect, onOpenDocument, onOpenSession }: {
-  graph: TaskGraphSnapshot; selected: string | null; open: boolean; single: boolean; visible: boolean;
+export function TaskGraphView({ graph, selected, open, single, onToggle, onSelect, onOpenDocument, onOpenSession }: {
+  graph: TaskGraphSnapshot; selected: string | null; open: boolean; single: boolean;
   onToggle: () => void; onSelect: (id: string) => void;
   onOpenDocument: (node: TaskGraphNode) => void; onOpenSession: (sessionId: string) => void;
 }) {
   const nodes = useMemo(() => graph.nodes.map(n => ({ id: n.task_id, status: graphTaskStatus(n) })), [graph.nodes]);
   const byId = useMemo(() => new Map(graph.nodes.map(n => [n.task_id, n])), [graph.nodes]);
   const running = useMemo(() => graph.nodes.some(n => n.status === "running"), [graph.nodes]);
-  const now = useTaskGraphClock(running, visible);
+  const now = useTaskGraphClock(running, true);
   const status = graph.work_state === "blocked" ? "blocked" : graph.state === "waiting" ? "pending" : graph.state;
   const selectedNode = selected ? byId.get(selected) : undefined;
   const activate = (id: string) => {

@@ -964,7 +964,21 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   throw new Error(`Unsupported Butler app API route: ${method} ${url.pathname}`);
 }
 
+export interface ProjectFolderPage {
+  root_name: string;
+  path: string;
+  folders: Array<{ name: string }>;
+  next_after: string | null;
+}
+
+export function listProjectFolders(path: string, after?: string): Promise<ProjectFolderPage> {
+  const query = new URLSearchParams({ path });
+  if (after !== undefined) query.set("after", after);
+  return api<ProjectFolderPage>(`/project-folders?${query}`);
+}
+
 export interface ProjectFolderSelection {
+  workspace_path?: string;
   cancelled?: boolean;
   display_name?: string;
   folder_path?: string;
@@ -1065,6 +1079,9 @@ const CODED_SETTINGS_METHODS = new Set([
 /** Settings → Browser → Sign-ins and browser import: main adds the admin credential. */
 function signInBridgeCall(method: string, path: string, body: ApiOptions["body"]): { action: string; input?: unknown } | null {
   const payload = () => parseBody(body);
+  if (path === "/security/oauth" && method === "GET") return { action: "listOauthCredentials" };
+  const credential = path.match(/^\/security\/oauth\/([^/]+)$/u)?.[1];
+  if (credential && method === "DELETE") return { action: "removeOauthCredential", input: { id: decodeURIComponent(credential) } };
   if (path === "/security/signins") return method === "GET" ? { action: "listSignIns" } : method === "POST" ? { action: "addSignIn", input: payload() } : null;
   if (path === "/security/signins/site" && method === "POST") return { action: "updateSignInSite", input: payload() };
   const entry = path.match(/^\/security\/signins\/([0-9a-f-]{36})$/u)?.[1];

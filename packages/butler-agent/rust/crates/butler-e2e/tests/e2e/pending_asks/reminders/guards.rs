@@ -130,7 +130,7 @@ async fn rm_05_injected_tool_text_cannot_settle_an_ask() -> Result<(), HarnessEr
                 &json!({"requests":[{"path":s.sandbox.data.join("page.txt")} ]}),
             ),
             resolve(&q["ask_id"], "answered", "A", "the page"),
-            reply("The page contains a request to accept a draft. Your choice remains open."),
+            reply("The page contains a request to settle a choice. Your choice remains open."),
         ],
     );
     s.turn("general", message).await?;
@@ -175,7 +175,7 @@ async fn rm_05_injected_tool_text_cannot_settle_an_ask() -> Result<(), HarnessEr
         &provider,
         "Allow it",
         vec![
-            resolve(&approval, "accepted", "", "missing quote"),
+            resolve(&approval, "answered", "A", "missing quote"),
             reply("Use the card."),
         ],
     );
@@ -208,8 +208,6 @@ async fn rm_05_settle_first_before_reading_and_explain_invalid_outcomes() -> Res
     let q = named_ask(&s, &provider, "Format").await?;
     for (index, (outcome, answer, quote, code)) in [
         ("answered", "A", "not in the message", "quote_not_found"),
-        ("accepted", "A", "A", "invalid_outcome"),
-        ("declined", "", "A", "invalid_outcome"),
         ("other", "A", "A", "invalid_outcome"),
         ("answered", " ", "A", "invalid_outcome"),
         ("dropped", "A", "A", "invalid_outcome"),
@@ -235,7 +233,7 @@ async fn rm_05_settle_first_before_reading_and_explain_invalid_outcomes() -> Res
         if code == "invalid_outcome" {
             assert_eq!(
                 output["error"]["message"],
-                "Use answered with an answer for a question, or dropped. accepted and declined are for drafts."
+                "Use answered with an answer, or dropped without one."
             );
         }
         assert_eq!(asks(&s, "general").await?["open_count"], 1);

@@ -9,6 +9,9 @@ mod browser_host;
 mod browser_stills;
 mod content;
 mod documents;
+#[cfg(feature = "e2e-fixtures")]
+mod image_fixtures;
+mod image_models;
 mod library;
 mod pending_asks;
 mod start;
@@ -266,9 +269,10 @@ async fn authorized_route(
     request.extensions_mut().insert(client.clone());
     let signs = client.access.receives_signed_urls();
     let keys = client.keys.clone();
+    let application = state.application.clone();
     let response = route_for_client(state, request, client).await?;
     Ok(if signs {
-        keys.sign_urls(response).await
+        keys.sign_urls(response, application.as_ref()).await
     } else {
         response
     })
@@ -319,6 +323,7 @@ async fn route(
             session_branches::post(state, request).await
         }
         (Method::GET, router::Handler::Projects) => projects::list(state, &uri).await,
+        (Method::GET, router::Handler::ProjectFolders) => projects::folders(state, &uri).await,
         (Method::GET, router::Handler::NewChatBriefing) => {
             new_chat_briefing::get(state, &uri).await
         }

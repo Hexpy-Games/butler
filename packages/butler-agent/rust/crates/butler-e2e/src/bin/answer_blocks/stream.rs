@@ -85,6 +85,7 @@ pub(super) fn perf(context: &AnswerBlocksContext<'_>) -> Value {
     assert!(answer_blocks::validate_answer_blocks(&spec, context).is_ok());
     let bytes = serde_json::to_vec(&spec).unwrap();
     assert_eq!(bytes.len(), 24 * 1024);
+    let validation = v2_perf(context);
     let start = Instant::now();
     let ops = parse(&bytes.chunks(64).collect::<Vec<_>>(), context);
     let elapsed = start.elapsed();
@@ -100,7 +101,7 @@ pub(super) fn perf(context: &AnswerBlocksContext<'_>) -> Value {
     answer_blocks::normalize(&mut normalized);
     assert_eq!(reconstruct(&ops), normalized["blocks"]);
     // Normal 0.604 ms (PR #1358): even 10x is below visible tool/stream latency.
-    json!({"bytes":bytes.len(),"micros":elapsed.as_micros(),"items":48,"ops":ops.len()})
+    json!({"bytes":bytes.len(),"micros":elapsed.as_micros(),"items":48,"ops":ops.len(),"v2":validation})
 }
 
 fn reconstruct(ops: &[AnswerBlocksDraftOp]) -> Value {
@@ -117,15 +118,43 @@ fn reconstruct(ops: &[AnswerBlocksDraftOp]) -> Value {
             "field" => {
                 blocks[bi][op.value["field"].as_str().unwrap()] = op.value["value"].clone();
             }
+            "tab" | "child" => {
+                let ti = usize::try_from(
+                    op.value
+                        .get("tab")
+                        .unwrap_or(&op.value["index"])
+                        .as_u64()
+                        .unwrap(),
+                )
+                .unwrap();
+                if blocks[bi].get("tabs").is_none() {
+                    blocks[bi]["tabs"] = json!([]);
+                }
+                let tabs = blocks[bi]["tabs"].as_array_mut().unwrap();
+                while tabs.len() <= ti {
+                    tabs.push(json!({"label":"", "blocks":[]}));
+                }
+                if op.value["op"] == "tab" {
+                    tabs[ti]["label"] = op.value["label"].clone();
+                } else {
+                    tabs[ti]["blocks"]
+                        .as_array_mut()
+                        .unwrap()
+                        .push(op.value["value"].clone());
+                }
+            }
             "item" => {
                 let list = op.value["list"].as_str().unwrap();
                 if blocks[bi].get(list).is_none() {
                     blocks[bi][list] = json!([]);
                 }
-                blocks[bi][list]
-                    .as_array_mut()
-                    .unwrap()
-                    .push(op.value["value"].clone());
+                let index = usize::try_from(op.value["index"].as_u64().unwrap()).unwrap();
+                let items = blocks[bi][list].as_array_mut().unwrap();
+                if index < items.len() {
+                    items[index] = op.value["value"].clone();
+                } else {
+                    items.push(op.value["value"].clone());
+                }
             }
             _ => {}
         }
@@ -154,4 +183,42 @@ fn fill_spec(spec: &mut Value) {
         }
     }
     assert_eq!(remaining, 0);
+}
+
+fn v2_perf(context: &AnswerBlocksContext<'_>) -> Value {
+    let items: Vec<_> = (0..24).map(|i| json!({"title":format!("Record {i}"), "text":"x".repeat(200), "sub":"s".repeat(60), "facts":["f".repeat(40)]})).collect();
+    let mut spec = json!({"v":2,"blocks":[
+        {"type":"columns","blocks":[{"type":"cards","items":items},{"type":"cards","items":items}]},
+        {"type":"tabs","tabs":[{"label":"First","blocks":[{"type":"cards","items":items}]},{"label":"Second","blocks":[{"type":"cards","items":[]}]}]}
+    ]});
+    let target = 32 * 1024;
+    let prefix = "https://example.org/";
+    spec["blocks"][1]["tabs"][1]["blocks"][0]["items"] = json!([{"title":"x","source":prefix}]);
+    // Fill using bounded text and source fields; assert the exact serialized cap.
+    for block in [
+        "/blocks/0/blocks/0",
+        "/blocks/0/blocks/1",
+        "/blocks/1/tabs/0/blocks/0",
+    ] {
+        for i in 0..24 {
+            let remaining = target - serde_json::to_vec(&spec).unwrap().len();
+            if remaining == 0 {
+                break;
+            }
+            let overhead = 12 + prefix.len();
+            if remaining < overhead {
+                continue;
+            }
+            spec.pointer_mut(block).unwrap()["items"][i]["source"] = json!(format!(
+                "{prefix}{}",
+                "x".repeat((remaining - overhead).min(2048 - prefix.len()))
+            ));
+        }
+    }
+    assert_eq!(serde_json::to_vec(&spec).unwrap().len(), target);
+    let start = Instant::now();
+    assert!(answer_blocks::validate_answer_blocks(&spec, context).is_ok());
+    let elapsed = start.elapsed();
+    assert_eq!(spec["blocks"].as_array().unwrap().len(), 2);
+    json!({"bytes":serde_json::to_vec(&spec).unwrap().len(),"validator_micros":elapsed.as_micros()})
 }

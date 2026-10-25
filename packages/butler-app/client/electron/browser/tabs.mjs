@@ -24,6 +24,7 @@ import { resolveDialog, requestClose } from "./dialogs.mjs";
 import { protectPartition, wireTab } from "./tab-events.mjs";
 import { clearOffer } from "./signin-offer.mjs";
 import { drainStills } from "./still-delivery.mjs";
+import { capturePage, capturesSettled } from "./view-capture.mjs";
 
 /** One registry per App; no web view before Browser activation. */
 class UserBrowser {
@@ -110,18 +111,29 @@ class UserBrowser {
     // Occlusion can clear while the floating preview moves. Reattaching the page
     // above the overlay also cancels its native capture; wait for the real release.
     if (this.pointer.captures(tab.id) && this.pointer.attached === win && tab.attached !== win) return;
-    if (tab.attached !== win) { this.detach(tab); win.contentView.addChildView(tab.view); tab.attached = win; }
+    if (tab.attached !== win) {
+      this.detach(tab);
+      if (this.attachAfterCaptures(tab)) return;
+      win.contentView.addChildView(tab.view); tab.attached = win;
+    }
     tab.bounds = tab.slot;
     const { x, y, width, height } = tab.bounds;
     tab.view.setBounds({ x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
     tab.view.setBorderRadius(Math.max(0, Math.round(tab.bounds.radius ?? 0)));
     emulation(tab); this.pointer.sync(tab);
   }
+  /** True while the tab's captures are in flight (view-capture.mjs); the view attaches once they settle. */
+  attachAfterCaptures(tab) {
+    const settled = capturesSettled(tab);
+    if (!settled) return false;
+    tab.attachWait ??= settled.then(() => { tab.attachWait = null; if (this.tabs.get(tab.id) === tab) this.sync(tab); });
+    return true;
+  }
   async capture(tab) {
     if (tab.dialog) return tab.still;
     if (!tab.view?.webContents || tab.view.webContents.isDestroyed() || tab.status === "crashed") return tab.still;
     if (tab.capture) return tab.capture;
-    tab.capture = tab.view.webContents.capturePage(undefined, { stayHidden: true }).then((image) => {
+    tab.capture = capturePage(tab).then((image) => {
       if (!image.isEmpty()) tab.still = `data:image/jpeg;base64,${image.toJPEG(75).toString("base64")}`;
       return tab.still;
     }).catch(() => tab.still).finally(() => { tab.capture = null; });
@@ -203,14 +215,23 @@ class UserBrowser {
     if (profile === "signed_out" && !this.conversationPartitions.has(partitionOwner)) this.conversationPartitions.set(partitionOwner, `butler-conv-${randomUUID()}`);
     const tab = { id: shortId("t", id => this.tabs.has(id)), owner, profile, popup: Boolean(popupSource), opener: popupSource?.id, popupParentUrl: popupSource?.url, stills: this.stillPreferences.get(owner) !== false, partition: input.partition ?? (profile === "signed_in" ? "persist:butler-web" : this.conversationPartitions.get(partitionOwner)),
       preview: input.preview_id ?? (url && new URL(url).pathname.startsWith("/__p/") ? new URL(url).pathname.slice(5) : undefined),
-      agent: input.agent === true, muted: input.agent === true, policy: input.policy ?? {}, epoch: 1, holder: owner === "mine" ? "user" : "agent", sticky: false, waiting: false, busy: false, observation: null, url, title: "", favicon: "", status: "idle", canBack: false, canForward: false,
+      agent: input.agent === true, muted: input.agent === true, placeholder: input.placeholder === true && !url && !popupSource, policy: input.policy ?? {}, epoch: 1, holder: owner === "mine" ? "user" : "agent", sticky: false, waiting: false, busy: false, observation: null, url, title: "", favicon: "", status: "idle", canBack: false, canForward: false,
       still: "", view: null, attached: null, slot: null, bounds: null, covered: false, capture: null };
     tab.onStillChanged = () => this.publish();
     this.tabs.set(tab.id, tab);
     if (owner === "mine") this.restore.changed();
     if (activateTab) this.activate(tab.id);
+    if (url) this.dropPlaceholders(owner);
     this.publish();
     return tab.id;
+  }
+  /** A page that opens in or moves into a group takes the place of the empty tab its pane opened on its own; the pane then shows that page. */
+  dropPlaceholders(owner) {
+    for (const tab of [...this.tabs.values()]) {
+      if (!tab.placeholder || tab.owner !== owner || tab.url) continue;
+      if (this.activeId === tab.id) this.activeId = null;
+      this.close(tab.id);
+    }
   }
   activate(id) {
     const tab = this.tabs.get(id);
@@ -302,7 +323,7 @@ class UserBrowser {
     if (!this.enabled()) throw new Error("browsing_disabled");
     if (tab.holder === "agent" && (tab.busy || tabInUse(this, tab))) throw new Error("agent_control");
     this.materialize(tab);
-    if (op === "navigate") { value = addressUrl(value); if (!value) return; }
+    if (op === "navigate") { value = addressUrl(value); if (!value) return; tab.placeholder = false; }
     if (!approved && !tab.agent && !tab.driven && ["navigate", "reload", "back", "forward"].includes(op)) { prepareUserNavigation(this, tab, op, value); return; }
     const contents = tab.view.webContents;
     if (["navigate", "reload", "back", "forward"].includes(op)) tab.navigationIntent = { op, value };
@@ -350,6 +371,7 @@ class UserBrowser {
     const before = peers[Math.max(0, index)];
     ordered.splice(before ? ordered.indexOf(before) : ordered.length, 0, tab);
     this.tabs.clear(); for (const item of ordered) this.tabs.set(item.id, item);
+    if (tab.owner !== previousOwner && tab.url) this.dropPlaceholders(tab.owner);
     if (tab.owner === "mine" || previousOwner === "mine") this.restore.changed(); this.publish();
     return tabId;
   }

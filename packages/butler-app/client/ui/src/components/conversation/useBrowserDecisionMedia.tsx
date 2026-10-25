@@ -5,16 +5,17 @@ import type { AuthorityApprovalCard } from "@/app/types";
 import { LiveTabFrame, type ComposerDecisionMedia } from "@/butler-ds";
 import { openConversationBrowser, useBrowserState } from "../browser/browserBridge";
 import { familyAgentTabs } from "../browser/conversationAgentTabs";
-import { useBrowserShellState } from "../browser/browserShellState";
+import { useRightSlot } from "../file-viewer/useRightSlot";
 import { useConversationFamily } from "../browser/useConversationAgentTabs";
 import { useDocumentVisible, useLiveFrames } from "../browser/useLiveFrames";
 
 /** The thumbnail owns its frame stream, so frames re-render only this leaf, never the composer. */
 function DecisionTabFrame({ session, tab, favicon }: { session: string; tab: string; favicon: string }) {
-  const open = useBrowserShellState(state => Boolean(state.conversations[session]?.open));
+  // Paused only while the browser itself shows the tab: open behind the file viewer, it is not on screen.
+  const browserShown = useRightSlot(session) === "browser";
   const visible = useDocumentVisible();
   // Full width: under 420px the DS shows the thumbnail as wide as the text column.
-  const frames = useLiveFrames([tab], 416, open || !visible);
+  const frames = useLiveFrames([tab], 416, browserShown || !visible);
   return <LiveTabFrame frame={frames[tab]} favicon={favicon} />;
 }
 

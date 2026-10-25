@@ -35,7 +35,6 @@
     "load_skill",
     "read_skill_file",
     "ask_user",
-    "resolve_ask",
     "project_artifacts",
     "output_publish",
     "preview_start",
@@ -51,7 +50,7 @@
       "definition": {
         "type": "function",
         "name": "answer_blocks",
-        "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use it unasked, with or without a Plan, whenever the answer compares options, presents several candidates or gives key numbers, and as a Plan's Presentation line decided: cards for the items (img ids from image_collect when they are visual) and a table comparing them. The blocks are the only copy of what they show: the reply never repeats their rows, cards or values as a table or list; its prose adds only what they don't say. Other blocks: gallery, facts, metrics, chart, callout or actions. A value requires source and checked from a page this chat read with web_read (url or tab) or opened in the browser. Text is plain; the app chooses layout. For other layouts or interactions, use output_publish.",
+        "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use it unasked, with or without a Plan, whenever the answer compares options, presents several candidates or gives key numbers, and as a Plan's Presentation line decided: cards for the items (img ids from image_collect when they are visual) and a table comparing them. The blocks are the only copy of what they show: the reply never repeats their rows, cards or values as a table or list; its prose adds only what they don't say. Other blocks: gallery, facts, metrics, chart, callout, actions, timeline, checklist, progress, image, quote and short Markdown text. Set v to 2. To arrange blocks, put leaf blocks side by side in columns, in tabs, or under one title in a group; containers never nest. A metric's direction says whether a rise is good or bad. A value requires source and checked from a page this chat read with web_read (url or tab) or opened in the browser. Text is plain except in text blocks. For other layouts or interactions, use output_publish.",
         "parameters": {
           "$ref": "answer-blocks.schema.json"
         },
@@ -5725,7 +5724,7 @@
       "definition": {
         "type": "function",
         "name": "resolve_ask",
-        "description": "Settle an open ask from the user's reply in chat. Call it when the current user message answers, accepts, declines or drops an ask listed under Open asks, before acting on it. quote must be the user's own words from the current message that settle it; the runtime checks it. If the reply is ambiguous, ask instead of guessing. Approvals waiting on a card cannot be settled here.",
+        "description": "Settle an open ask from the user's reply in chat. Call it when the current user message answers or drops a question listed under Open asks, before acting on the reply. quote must be the user's own words from the current message; the runtime checks it. If the reply is ambiguous, ask instead of guessing. Approvals waiting on a card cannot be settled here.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -5738,11 +5737,9 @@
               "type": "string",
               "enum": [
                 "answered",
-                "accepted",
-                "declined",
                 "dropped"
               ],
-              "description": "answered for a question; accepted or declined for a canon draft; dropped when the user no longer wants it."
+              "description": "answered when the user answered the question; dropped when they no longer want it."
             },
             "answer": {
               "type": "string",
@@ -7191,10 +7188,114 @@
         "edit"
       ],
       "durable": false
+    },
+    {
+      "name": "generate_image",
+      "definition": {
+        "type": "function",
+        "name": "generate_image",
+        "description": "Create a new picture with the image model chosen in Settings. Use it when the user asks for an image, illustration, icon, photo or other visual that does not exist yet. prompt is a complete visual description: subject, composition, style, lighting, colours and any text the picture must show. To build on pictures from this chat, pass their ids in images. The picture appears in the chat by itself, so the reply does not describe it again. Every call is billed by the provider: make one picture per call and do not call again to vary it unless the user asks.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "prompt": {
+              "type": "string",
+              "description": "Complete visual description of the picture."
+            },
+            "size": {
+              "type": "string",
+              "description": "One of the image model's sizes (pixels such as 1536x1024, or an aspect ratio such as 16:9). Omit for the model's default."
+            },
+            "quality": {
+              "type": "string",
+              "description": "One of the image model's qualities. Omit for the default set in Settings."
+            },
+            "images": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Ids of pictures to build on: img_… from this chat or file ids of attached images."
+            },
+            "background": {
+              "type": "string",
+              "enum": [
+                "transparent",
+                "opaque"
+              ],
+              "description": "transparent only when the user wants a cut-out picture and the model supports it."
+            }
+          },
+          "required": [
+            "prompt"
+          ]
+        },
+        "effectBoundary": "external",
+        "concurrencySafe": false,
+        "interruptBehavior": "cancel",
+        "transcriptVisibility": "visible"
+      },
+      "category": "media",
+      "effectBoundary": "external",
+      "tags": [
+        "image"
+      ],
+      "durable": false
+    },
+    {
+      "name": "edit_image",
+      "definition": {
+        "type": "function",
+        "name": "edit_image",
+        "description": "Change an existing picture with the image model chosen in Settings. image is the id of a picture in this chat (img_…) or of an attached image. When the user sent a marked region from the image editor, pass that message's image and mask ids exactly: only the marked region changes. Without a mask the whole picture may change. prompt says what to change and, when it matters, what must stay. Each edit makes a new version of the picture; follow-ups edit the latest version unless the user picks another.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "prompt": {
+              "type": "string",
+              "description": "What to change."
+            },
+            "size": {
+              "type": "string",
+              "description": "One of the image model's sizes (pixels such as 1536x1024, or an aspect ratio such as 16:9). Omit for the model's default."
+            },
+            "quality": {
+              "type": "string",
+              "description": "One of the image model's qualities. Omit for the default set in Settings."
+            },
+            "image": {
+              "type": "string",
+              "description": "Id of the picture to change."
+            },
+            "mask": {
+              "type": "string",
+              "description": "Mask id from the image editor message; only that region changes."
+            }
+          },
+          "required": [
+            "image",
+            "prompt"
+          ]
+        },
+        "effectBoundary": "external",
+        "concurrencySafe": false,
+        "interruptBehavior": "cancel",
+        "transcriptVisibility": "visible"
+      },
+      "category": "media",
+      "effectBoundary": "external",
+      "tags": [
+        "image"
+      ],
+      "durable": false
     }
   ],
   "workerForbidden": [
-    "complete_project_work"
+    "complete_project_work",
+    "generate_image",
+    "edit_image"
   ],
   "workTracking": [
     "update_todo_list",
@@ -7220,7 +7321,7 @@
     "answer_blocks": {
       "type": "function",
       "name": "answer_blocks",
-      "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use it unasked, with or without a Plan, whenever the answer compares options, presents several candidates or gives key numbers, and as a Plan's Presentation line decided: cards for the items (img ids from image_collect when they are visual) and a table comparing them. The blocks are the only copy of what they show: the reply never repeats their rows, cards or values as a table or list; its prose adds only what they don't say. Other blocks: gallery, facts, metrics, chart, callout or actions. A value requires source and checked from a page this chat read with web_read (url or tab) or opened in the browser. Text is plain; the app chooses layout. For other layouts or interactions, use output_publish.",
+      "description": "Show structured blocks below your reply for comparisons, images, facts or numbers. Use it unasked, with or without a Plan, whenever the answer compares options, presents several candidates or gives key numbers, and as a Plan's Presentation line decided: cards for the items (img ids from image_collect when they are visual) and a table comparing them. The blocks are the only copy of what they show: the reply never repeats their rows, cards or values as a table or list; its prose adds only what they don't say. Other blocks: gallery, facts, metrics, chart, callout, actions, timeline, checklist, progress, image, quote and short Markdown text. Set v to 2. To arrange blocks, put leaf blocks side by side in columns, in tabs, or under one title in a group; containers never nest. A metric's direction says whether a rise is good or bad. A value requires source and checked from a page this chat read with web_read (url or tab) or opened in the browser. Text is plain except in text blocks. For other layouts or interactions, use output_publish.",
       "parameters": {
         "$ref": "answer-blocks.schema.json"
       },
@@ -12739,10 +12840,94 @@
       "interruptBehavior": "continue",
       "transcriptVisibility": "visible"
     },
+    "generate_image": {
+      "type": "function",
+      "name": "generate_image",
+      "description": "Create a new picture with the image model chosen in Settings. Use it when the user asks for an image, illustration, icon, photo or other visual that does not exist yet. prompt is a complete visual description: subject, composition, style, lighting, colours and any text the picture must show. To build on pictures from this chat, pass their ids in images. The picture appears in the chat by itself, so the reply does not describe it again. Every call is billed by the provider: make one picture per call and do not call again to vary it unless the user asks.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "description": "Complete visual description of the picture."
+          },
+          "size": {
+            "type": "string",
+            "description": "One of the image model's sizes (pixels such as 1536x1024, or an aspect ratio such as 16:9). Omit for the model's default."
+          },
+          "quality": {
+            "type": "string",
+            "description": "One of the image model's qualities. Omit for the default set in Settings."
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ids of pictures to build on: img_… from this chat or file ids of attached images."
+          },
+          "background": {
+            "type": "string",
+            "enum": [
+              "transparent",
+              "opaque"
+            ],
+            "description": "transparent only when the user wants a cut-out picture and the model supports it."
+          }
+        },
+        "required": [
+          "prompt"
+        ]
+      },
+      "effectBoundary": "external",
+      "concurrencySafe": false,
+      "interruptBehavior": "cancel",
+      "transcriptVisibility": "visible"
+    },
+    "edit_image": {
+      "type": "function",
+      "name": "edit_image",
+      "description": "Change an existing picture with the image model chosen in Settings. image is the id of a picture in this chat (img_…) or of an attached image. When the user sent a marked region from the image editor, pass that message's image and mask ids exactly: only the marked region changes. Without a mask the whole picture may change. prompt says what to change and, when it matters, what must stay. Each edit makes a new version of the picture; follow-ups edit the latest version unless the user picks another.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "description": "What to change."
+          },
+          "size": {
+            "type": "string",
+            "description": "One of the image model's sizes (pixels such as 1536x1024, or an aspect ratio such as 16:9). Omit for the model's default."
+          },
+          "quality": {
+            "type": "string",
+            "description": "One of the image model's qualities. Omit for the default set in Settings."
+          },
+          "image": {
+            "type": "string",
+            "description": "Id of the picture to change."
+          },
+          "mask": {
+            "type": "string",
+            "description": "Mask id from the image editor message; only that region changes."
+          }
+        },
+        "required": [
+          "image",
+          "prompt"
+        ]
+      },
+      "effectBoundary": "external",
+      "concurrencySafe": false,
+      "interruptBehavior": "cancel",
+      "transcriptVisibility": "visible"
+    },
     "resolve_ask": {
       "type": "function",
       "name": "resolve_ask",
-      "description": "Settle an open ask from the user's reply in chat. Call it when the current user message answers, accepts, declines or drops an ask listed under Open asks, before acting on it. quote must be the user's own words from the current message that settle it; the runtime checks it. If the reply is ambiguous, ask instead of guessing. Approvals waiting on a card cannot be settled here.",
+      "description": "Settle an open ask from the user's reply in chat. Call it when the current user message answers or drops a question listed under Open asks, before acting on the reply. quote must be the user's own words from the current message; the runtime checks it. If the reply is ambiguous, ask instead of guessing. Approvals waiting on a card cannot be settled here.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -12755,11 +12940,9 @@
             "type": "string",
             "enum": [
               "answered",
-              "accepted",
-              "declined",
               "dropped"
             ],
-            "description": "answered for a question; accepted or declined for a canon draft; dropped when the user no longer wants it."
+            "description": "answered when the user answered the question; dropped when they no longer want it."
           },
           "answer": {
             "type": "string",

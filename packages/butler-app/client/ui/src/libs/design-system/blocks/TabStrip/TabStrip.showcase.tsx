@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
 import { TabStrip } from "./TabStrip";
 import { IconButton } from "../../components/IconButton";
-import { TabIn } from "../../components/Icons";
+import { FileText, ImageIcon, TabIn } from "../../components/Icons";
 import { conversationGroup, crowdedGroups, demoGroups, demoLabels, ICONS, TabStripDemo } from "./TabStrip.demo";
 import type { TabStripGroup } from "./tabStripModel";
 
@@ -22,16 +22,34 @@ const MATRIX_COPY = {
 
 function matrixGroups(variant: string, selected: boolean, { locale }: ShowcaseRenderContext): TabStripGroup[] {
   const copy = MATRIX_COPY[locale];
-  if (variant === "My tab") return [{ id: "mine", kind: "mine", tabs: [{ id: "t", title: copy.mine, faviconSrc: ICONS.docs }] }];
+  if (variant === "My tab" || variant === "Selected tab") return [{ id: "mine", kind: "mine", tabs: [{ id: "t", title: copy.mine, faviconSrc: ICONS.docs }] }];
   const tabs = [{ id: "t", title: copy.conversation, faviconSrc: ICONS.shop }];
   if (variant === "Conversation tab") return [{ id: "c", kind: "conversation", label: copy.group, tabs }];
   return [{ id: "c", kind: "conversation", label: copy.group, state: "working", collapsed: selected, tabs }];
 }
 
-/** Forces the cell's state on the tab itself, not on the group chip in front of it. */
+const FILE_TITLES = {
+  "en-US": ["release-notes.md", "ime-guard.ts", "shortcut-clash.png"],
+  "ko-KR": ["릴리스-노트.md", "ime-guard.ts", "단축키-충돌.png"],
+} as const;
+
+function fileGroups(locale: ShowcaseRenderContext["locale"]): TabStripGroup[] {
+  const [doc, code, image] = FILE_TITLES[locale];
+  return [{ id: "files", kind: "mine", tabs: [
+    { id: "f1", title: doc, icon: <FileText size="md" /> },
+    { id: "f2", title: code, icon: <FileText size="md" /> },
+    { id: "f3", title: image, icon: <ImageIcon size="md" /> },
+  ] }];
+}
+
+/**
+ * Forces the cell's state on the tab itself, not on the group chip in front of it. The close
+ * button shows only in the hover and focus-visible columns; "Selected tab" shows that the
+ * active tab follows the same rule.
+ */
 function MatrixCell({ context }: { context: ShowcaseStateContext }) {
   const cell = useRef<HTMLDivElement>(null);
-  const selected = context.state === "selected";
+  const selected = context.state === "selected" || context.variant === "Selected tab";
   useLayoutEffect(() => {
     if (context.variant !== "Group chip") cell.current?.querySelector('[role="tab"]')?.setAttribute("data-ds-force-target", "");
   }, [context.variant]);
@@ -75,10 +93,17 @@ export const stories: ShowcaseStory[] = [
       <TabStrip groups={demoGroups(locale).slice(0, 2)} activeTabId="s2" labels={demoLabels(locale)} onActivate={noop} onClose={noop} />
     ),
   },
+  {
+    // A docked file viewer's tabs: each tab's `icon` (its file type) takes the favicon slot instead of the globe.
+    name: "File tabs: a file-type icon per tab",
+    render: ({ locale }) => (
+      <TabStrip hideChip groups={fileGroups(locale)} activeTabId="f1" labels={demoLabels(locale)} onActivate={noop} onClose={noop} />
+    ),
+  },
 ];
 
 export const stateMatrix: ShowcaseStateMatrix = {
   states: ["default", "hover", "focus-visible", "active", "selected"],
-  variants: ["My tab", "Conversation tab", "Group chip"],
+  variants: ["My tab", "Selected tab", "Conversation tab", "Group chip"],
   render: (context) => <MatrixCell context={context} />,
 };

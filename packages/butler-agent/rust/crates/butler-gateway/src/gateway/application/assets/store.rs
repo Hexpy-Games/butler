@@ -10,16 +10,18 @@ use std::{
     path::{Path, PathBuf},
 };
 
-fn failed(error: impl std::fmt::Display) -> AppStorageError {
+pub(super) fn failed(error: impl std::fmt::Display) -> AppStorageError {
     AppStorageError::new(AppStorageCode::MessageFileNotFound, error.to_string())
 }
-fn file(root: &Path, hash: &str) -> Result<PathBuf, AppStorageError> {
+pub(super) fn file(root: &Path, hash: &str, mime: &str) -> Result<PathBuf, AppStorageError> {
     if hash.len() != 64 || !hash.bytes().all(|c| c.is_ascii_hexdigit()) {
         return Err(failed("invalid_asset_hash"));
     }
-    Ok(root.join(&hash[..2]).join(format!("{hash}.jpg")))
+    Ok(root
+        .join(&hash[..2])
+        .join(format!("{hash}.{}", extension(mime)?)))
 }
-fn asset_id(digest: &[u8], length: usize) -> String {
+pub(super) fn asset_id(digest: &[u8], length: usize) -> String {
     let mut number = digest.to_vec();
     let mut digits = Vec::new();
     while number.iter().any(|b| *b != 0) {
@@ -54,39 +56,7 @@ pub(super) fn collect(
     if exists.is_none() {
         return Err(failed("unknown_chat"));
     }
-    let digest = Sha256::digest(&image.bytes);
-    let hash = format!("{digest:x}");
-    let existing = tx
-        .query_row("SELECT id FROM app_assets WHERE sha256=?1", [&hash], |r| {
-            r.get::<_, String>(0)
-        })
-        .optional()
-        .map_err(AppStorageError::sqlite)?;
-    let id = if let Some(id) = existing {
-        id
-    } else {
-        let mut id = asset_id(&digest, 10);
-        if tx
-            .query_row("SELECT 1 FROM app_assets WHERE id=?1", [&id], |_| Ok(()))
-            .optional()
-            .map_err(AppStorageError::sqlite)?
-            .is_some()
-        {
-            id = asset_id(&digest, 12);
-        }
-        let target = file(root, &hash)?;
-        secure_fs::create_private_dir_all(
-            target
-                .parent()
-                .ok_or_else(|| failed("invalid_asset_path"))?,
-        )
-        .map_err(failed)?;
-        secure_fs::replace_private(&target, |f| f.write_all(&image.bytes), |e| e)
-            .map_err(failed)?;
-        tx.execute("INSERT INTO app_assets VALUES(?1,?2,'image/jpeg',?3,?4,?5,?6,?7,strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
-            params![id,hash,image.width,image.height,image.bytes.len(),alt,url]).map_err(AppStorageError::sqlite)?;
-        id
-    };
+    let id = insert_collected(&tx, root, image, alt, url)?;
     let bound = tx
         .query_row(
             "SELECT 1 FROM app_asset_refs WHERE asset_id=?1 AND owner_kind='chat' AND owner_id=?2",
@@ -108,6 +78,54 @@ pub(super) fn collect(
     )
 }
 
+fn insert_collected(
+    db: &Connection,
+    root: &Path,
+    image: &NormalizedImage,
+    alt: &str,
+    url: &str,
+) -> Result<String, AppStorageError> {
+    let hash = format!("{:x}", Sha256::digest(&image.bytes));
+    let mut identity = Sha256::new();
+    identity.update(&image.bytes);
+    identity.update(image.pixel_ratio.to_le_bytes());
+    let digest = identity.finalize();
+    let existing = db
+        .query_row(
+            "SELECT id FROM app_assets WHERE sha256=?1 AND pixel_ratio=?2",
+            params![hash, image.pixel_ratio],
+            |r| r.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(AppStorageError::sqlite)?;
+    let id = if let Some(id) = existing {
+        id
+    } else {
+        let mut id = asset_id(&digest, 10);
+        if db
+            .query_row("SELECT 1 FROM app_assets WHERE id=?1", [&id], |_| Ok(()))
+            .optional()
+            .map_err(AppStorageError::sqlite)?
+            .is_some()
+        {
+            id = asset_id(&digest, 12);
+        }
+        let target = file(root, &hash, "image/jpeg")?;
+        secure_fs::create_private_dir_all(
+            target
+                .parent()
+                .ok_or_else(|| failed("invalid_asset_path"))?,
+        )
+        .map_err(failed)?;
+        secure_fs::replace_private(&target, |f| f.write_all(&image.bytes), |e| e)
+            .map_err(failed)?;
+        db.execute("INSERT INTO app_assets(id,sha256,mime,width,height,bytes,alt,source_url,pixel_ratio,created_at) VALUES(?1,?2,'image/jpeg',?3,?4,?5,?6,?7,?8,strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
+            params![id,hash,image.width,image.height,image.bytes.len(),alt,url,image.pixel_ratio]).map_err(AppStorageError::sqlite)?;
+        id
+    };
+    Ok(id)
+}
+
 pub(super) fn lookup(db: &Connection, ids: &[String]) -> Result<Value, AppStorageError> {
     let mut query = db
         .prepare_cached("SELECT id FROM app_assets WHERE id=?1")
@@ -125,17 +143,19 @@ pub(super) fn lookup(db: &Connection, ids: &[String]) -> Result<Value, AppStorag
     }
     Ok(json!({"ids":found}))
 }
-pub(super) fn hash(db: &Connection, id: &str) -> Result<String, AppStorageError> {
-    db.query_row("SELECT sha256 FROM app_assets WHERE id=?1", [id], |r| {
-        r.get(0)
-    })
+pub(super) fn identity(db: &Connection, id: &str) -> Result<(String, String), AppStorageError> {
+    db.query_row(
+        "SELECT sha256,mime FROM app_assets WHERE id=?1",
+        [id],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )
     .optional()
     .map_err(AppStorageError::sqlite)?
     .ok_or_else(|| failed("asset_not_found"))
 }
-pub(super) fn read(root: &Path, hash: &str) -> Result<Vec<u8>, AppStorageError> {
+pub(super) fn read(root: &Path, hash: &str, mime: &str) -> Result<Vec<u8>, AppStorageError> {
     let mut bytes = Vec::new();
-    secure_fs::open_read_no_follow(&file(root, hash)?)
+    secure_fs::open_read_no_follow(&file(root, hash, mime)?)
         .map_err(failed)?
         .read_to_end(&mut bytes)
         .map_err(failed)?;
@@ -153,9 +173,15 @@ pub(super) fn resize(bytes: Vec<u8>, width: Option<u32>) -> Result<Vec<u8>, AppS
         (u64::from(image.height()) * u64::from(width) / u64::from(image.width())).max(1),
     )
     .map_err(failed)?;
-    let image = image
-        .resize_exact(width, height, image::imageops::FilterType::Lanczos3)
-        .to_rgb8();
+    let image = image.resize_exact(width, height, image::imageops::FilterType::Lanczos3);
+    if image.color().has_alpha() {
+        let mut output = std::io::Cursor::new(Vec::new());
+        image
+            .write_to(&mut output, image::ImageFormat::Png)
+            .map_err(failed)?;
+        return Ok(output.into_inner());
+    }
+    let image = image.to_rgb8();
     let mut bytes = Vec::new();
     image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, 75)
         .encode_image(&image)
@@ -179,14 +205,26 @@ pub(super) fn sweep(db: &Connection, root: &Path) -> Result<(), AppStorageError>
             .optional()
             .map_err(AppStorageError::sqlite)?
             .is_some();
-        if !live
-            && let Err(error) = std::fs::remove_file(file(root, &hash)?)
-            && error.kind() != std::io::ErrorKind::NotFound
-        {
-            return Err(failed(error));
+        if !live {
+            for mime in ["image/jpeg", "image/png", "image/webp"] {
+                if let Err(error) = std::fs::remove_file(file(root, &hash, mime)?)
+                    && error.kind() != std::io::ErrorKind::NotFound
+                {
+                    return Err(failed(error));
+                }
+            }
         }
         db.execute("DELETE FROM app_asset_sweep WHERE sha256=?1", [&hash])
             .map_err(AppStorageError::sqlite)?;
     }
     Ok(())
+}
+
+pub(super) fn extension(mime: &str) -> Result<&'static str, AppStorageError> {
+    match mime {
+        "image/jpeg" => Ok("jpg"),
+        "image/png" => Ok("png"),
+        "image/webp" => Ok("webp"),
+        _ => Err(failed("invalid_asset_mime")),
+    }
 }

@@ -26,6 +26,14 @@
   aspect-ratio: 16 / 9;
 }
 
+/* The picture's own shape and display width (natural): never wider than the
+   picture itself, never wider than the container. It starts at the inline
+   start like text. */
+.frame[data-natural] {
+  width: min(100%, var(--media-natural-width));
+  aspect-ratio: var(--media-natural-ratio);
+}
+
 /* A typical picture spans the frame and is contained in it, letterboxed on
    the matte. An extreme one (a heading strip, a tall column) would become a
    full-width band of its own page colour, flush with the frame's edges and

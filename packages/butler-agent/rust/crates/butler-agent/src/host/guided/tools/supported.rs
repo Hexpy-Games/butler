@@ -1,5 +1,5 @@
 //! Native executor registration, including specialized tool registries.
-use super::{GuidedTools, browser, documents};
+use super::{GuidedTools, browser, documents, image_gen};
 use crate::host::GuidedWorkTools;
 use butler_core::tool_protocol::ToolName;
 
@@ -8,6 +8,7 @@ impl GuidedTools {
         builtin(name)
             || documents::supports(name)
             || browser::supports(name)
+            || image_gen::supports(name)
             || GuidedWorkTools::is_work_tool(name)
             || crate::host::guided::project_tools::GuidedProjectTools::supports(name)
     }

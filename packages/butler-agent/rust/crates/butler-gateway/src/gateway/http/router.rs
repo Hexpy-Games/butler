@@ -9,6 +9,9 @@ use std::sync::Arc;
 #[derive(Clone, Copy)]
 pub(super) enum Handler {
     NotFound,
+    ImageModels,
+    #[cfg(feature = "e2e-fixtures")]
+    ImageFixtures,
     DataReset,
     Authority,
     PendingAsks,
@@ -29,6 +32,7 @@ pub(super) enum Handler {
     NewChatBriefing,
     ProjectSessions,
     Projects,
+    ProjectFolders,
     ProviderQuota,
     RuntimeReadiness,
     SessionQueue,
@@ -196,6 +200,7 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/mcp-servers", Handler::Mcp),
     ("/mcp-servers/{id}", Handler::Mcp),
     ("/mcp-servers/{id}/probe", Handler::Mcp),
+    ("/memory/consolidation", Handler::Personalization),
     ("/memory/cleanup", Handler::Personalization),
     ("/memory/cleanup/{id}", Handler::Personalization),
     ("/memory/instructions", Handler::Personalization),
@@ -208,6 +213,12 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/memory/reset/projects/{id}", Handler::Personalization),
     ("/memory/reset/{id}", Handler::Personalization),
     ("/message-assets/{id}", Handler::MessageFiles),
+    ("/message-assets/{id}/meta", Handler::MessageFiles),
+    ("/message-assets/{id}/versions", Handler::MessageFiles),
+    ("/internal/images/calls", Handler::Browser),
+    ("/message-assets/masks", Handler::ImageModels),
+    ("/settings/image-model", Handler::ImageModels),
+    ("/usage/images", Handler::ImageModels),
     ("/message-files", Handler::MessageUpload),
     ("/message-files/{id}", Handler::MessageFiles),
     ("/message-files/{id}/view", Handler::MessageFiles),
@@ -241,6 +252,7 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/previews/{*path}", Handler::Preview),
     ("/project-sessions", Handler::ProjectSessions),
     ("/projects", Handler::Projects),
+    ("/project-folders", Handler::ProjectFolders),
     ("/projects/{id}", Handler::ProjectSession),
     ("/projects/{id}/archive", Handler::ProjectSession),
     ("/projects/{id}/dashboard", Handler::Dashboard),
@@ -265,6 +277,8 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/security/browser-import/start", Handler::Security),
     ("/security/browser-import/undo", Handler::Security),
     ("/security/connection-code/rotate", Handler::Security),
+    ("/security/oauth", Handler::Security),
+    ("/security/oauth/{id}", Handler::Security),
     ("/security/devices", Handler::Security),
     ("/security/devices/{id}", Handler::Security),
     ("/security/pairing", Handler::Security),
@@ -373,6 +387,7 @@ fn table() -> impl Iterator<Item = (&'static str, Handler)> {
 #[cfg(feature = "e2e-fixtures")]
 const FIXTURE_ROUTES: &[(&str, Handler)] = &[
     ("/internal/e2e/logs/expire", Handler::Expire),
+    ("/internal/e2e/images/{action}", Handler::ImageFixtures),
     ("/internal/e2e/logs/writer/{action}", Handler::LogWriter),
     (
         "/automations/_test/scheduler-next-due-reads",

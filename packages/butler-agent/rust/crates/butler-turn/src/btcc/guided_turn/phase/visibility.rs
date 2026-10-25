@@ -58,7 +58,7 @@ pub(super) fn legacy_authorized<'a>(
     authorize_schedules(&mut names, policy, scope);
     apply_access_mode(&mut names, catalog, policy, scope);
     browser::authorize(&mut names, catalog, policy, scope.worker);
-    apply_role(&mut names, policy);
+    image_calls(&mut names, policy);
     names.retain(|name| {
         !catalog.project_mutations.contains(name)
             && (!catalog.work_tracking.contains(name)
@@ -94,6 +94,7 @@ pub(super) fn legacy_authorized<'a>(
                 .map(|tool| tool.name.clone()),
         );
     }
+    apply_role(&mut names, policy);
     catalog
         .tools
         .iter()
@@ -234,6 +235,7 @@ fn apply_access_mode(
 fn apply_role(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
     if matches!(policy.role, PolicyRole::Steward | PolicyRole::Worker) {
         names.remove("answer_blocks");
+        names.remove("resolve_ask");
     }
     for (role, tools) in [("butler", STEWARD_PARENT), ("steward", WORKER_DELEGATION)] {
         if policy.role.as_str() == role {
@@ -314,6 +316,7 @@ pub(super) fn legacy_visible<'a>(
             }
         }
     }
+    names.extend(["generate_image", "edit_image"]);
     if names.contains("run_command") {
         names.insert("switch_folder");
     }
@@ -330,6 +333,9 @@ pub(super) fn phase_allows(phase: GuidedPhase, tool: &GuidedCatalogTool) -> bool
     }
     if tool.durable {
         return false;
+    }
+    if matches!(tool.name.as_str(), "generate_image" | "edit_image") {
+        return true;
     }
     if matches!(
         tool.name.as_str(),
@@ -397,4 +403,16 @@ pub(super) fn turn_admits_zai_image_tool(policy: &GuidedExecutionPolicy) -> bool
             .required_tools
             .iter()
             .any(|name| name == ToolName::AnalyzeAttachedImage)
+}
+
+fn image_calls(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
+    if policy.role == PolicyRole::Butler
+        && policy.subsession.is_none()
+        && policy.access_mode != AccessMode::ReadOnly
+    {
+        names.extend(["generate_image".into(), "edit_image".into()]);
+    } else {
+        names.remove("generate_image");
+        names.remove("edit_image");
+    }
 }

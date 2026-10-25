@@ -1,16 +1,10 @@
-//! Volatile reminders. Canon can contribute entries without sharing lifecycle authority.
+//! Volatile reminders for the user's open questions.
 mod budget;
 
 use butler_turn::btcc::BtccError;
 use serde_json::{Value, json};
 
-const SECTION: &str = "## Open asks
-What you asked the user that still waits for an answer, newest first, as JSON below. Each stays open until the user answers on its card or in chat, or drops it.
-- If the user's message answers, accepts, declines or drops one, call resolve_ask for it first, quoting the user's words.
-- If the message changes what an open canon draft should contain, call canon_propose again; the new draft replaces it.
-- Otherwise, if any remain open after your reply, end the reply with one short line naming up to three by title. Never repeat a question in full, never ask it again, and never mention one the user just dropped.
-- `settled` lists asks the user answered on a card since your last reply; act on them if needed, without restating them.
-- Approvals waiting on a card are not listed; only the user's click settles them.";
+const SECTION: &str = "## Open asks\nQuestions you asked the user that are still waiting for an answer, newest first, as JSON below. Each stays open until the user answers it on its card or in chat, or drops it.\n- If the user's message answers or drops one, call resolve_ask for it before anything else, quoting the user's own words.\n- Otherwise, if any are still open when you finish, end the reply with one short line naming up to three by title. Never repeat a question in full or ask it again, and never mention one the user just dropped.\n- `settled` lists asks the user answered on a card since your last reply. Act on them if needed, without restating them.\n- Approvals waiting on a card are not listed here; only the user's click settles them.";
 
 pub(in crate::host::guided) struct Reminders {
     entries: Vec<Value>,

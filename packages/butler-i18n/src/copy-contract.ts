@@ -328,7 +328,7 @@ export interface BrowserCopy {
   history: { erase: string; title: string; search: string; clear: string; butlerOnly: string; empty: string; hour: string; today: string; week: string; all: string; suggestions: string; pageLabel: string; pageDescription: string; };
   tabCount: string; tabMoved: string; agentControl: string; handBack: string; stills: string; still: string; stillPending: string; stillUnavailable: string; stillFailure: Record<string, string>;
   title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string;
-  reload: string; stop: string; loading: string; crashed: string; empty: string; conversationEmpty: string; updateRequired: string; restartRequired: string; failed: string;
+  reload: string; stop: string; loading: string; crashed: string; empty: string; updateRequired: string; restartRequired: string; failed: string;
   openOutput: string; output: string; show: string; hide: string; active: string; openConversation: string; moveToConversation: string;
   newConversation: string; bringTab: string; resizeChat: string; pick: string; scrap: string; bookmarks: string; bookmarkAdd: string;
   bookmarked: string; manageBookmarks: string; downloads: string; downloading: string; showInFolder: string; more: string; findInPage: string;
@@ -455,6 +455,8 @@ export interface AppCopy {
     revokeUnconfirmed: string;
   };
   shell: { footerNav: string; update: { downloading: string; working: string; ready: string; failed: string; restart: string } };
+  sessionInfo: typeof import("./locales/session-info.ts").SESSION_INFO_COPY["en-US"];
+  fileViewer: typeof import("./locales/file-viewer.ts").FILE_VIEWER_COPY["en-US"];
   taskGraph: TaskGraphCopy;
   lifecycle: LifecycleCopy;
   browser: BrowserCopy;
@@ -580,14 +582,11 @@ export interface AppCopy {
     contextChart: string;
     contextUnavailable: string;
     noProgress: string;
-    branchDetails: string;
     gitBranch: string;
-    noVisibleSkills: string;
     detachedHead: string;
     notGit: string;
     noWorkspace: string;
     noGit: string;
-    unavailableWorktree: string;
     worktree: string;
     projectFolder: string;
     projectWorkspace: string;
@@ -595,7 +594,6 @@ export interface AppCopy {
     unavailable: string;
     dirty: string;
     clean: string;
-    noWorkers: string;
     recentActivity: string;
     noRecentActivity: string;
     activeSessions: string;
@@ -963,7 +961,6 @@ export interface AppCopy {
     expandChats: string;
     collapseChats: string;
     newProject: string;
-    availableInDesktop: string;
     projectDashboard: string;
     newProjectChat: string;
     projectMenu: string;
@@ -973,6 +970,14 @@ export interface AppCopy {
     projectFolder: string;
     projectFolderAuto: string;
     chooseProjectFolder: string;
+    useThisFolder: string;
+    openSubfolderFirst: string;
+    noSubfolders: string;
+    showMoreFolders: string;
+    parentFolder: string;
+    folderPathLabel: string;
+    subfoldersLabel: string;
+    foldersLoadFailed: string;
     changeProjectFolder: string;
     resetProjectFolder: string;
     pin: string;
@@ -1213,7 +1218,6 @@ export interface AppCopy {
     contentHostRequired: string;
     title: string;
     empty: string;
-    backToList: string;
     open: string;
     save: string;
     saved: string;
@@ -1236,7 +1240,6 @@ export interface AppCopy {
       workers: string;
     };
     workers: {
-      showDetails: string;
       hideDetails: string;
     };
   };
@@ -1361,8 +1364,8 @@ export interface AppCopy {
       downloadMeta: string; downloadedBytes: string; cancelled: string;
     };
     updateErrors: Record<"download" | "damaged" | "incompatible" | "storage" | "apply" | "generic", string>;
-    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "fullReset" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "agentImport" | "paymentMethods" | "profiles" | "purchaseSites", string>;
-    pageSectionDescriptions: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "learning" | "grants", string>;
+    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "fullReset" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "connectedAccounts" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "agentImport" | "paymentMethods" | "profiles" | "purchaseSites", string>;
+    pageSectionDescriptions: Record<"instructions" | "chatMemory" | "memoryCleanup" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "learning" | "grants", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     grants: {
       kind: Record<"command" | "fileWrite" | "network" | "tool" | "other", string>;
@@ -1394,6 +1397,10 @@ export interface AppCopy {
       storageLabel: string; freeSpaceDescription: string;
       resetChatLabel: string; resetChatDescription: string; resetProfileLabel: string; resetProfileDescription: string;
       resetProjectLabel: string; resetProjectDescription: string;
+      pickTime: string; runNowLabel: string; runNowDescription: string; runNow: string; running: string;
+      consolidationDone: string; consolidationFailed: string;
+      lastRun: (when: string) => string; lastRunFailed: (when: string) => string; neverRun: string;
+      today: string; yesterday: string;
       ago: (age: string) => string;
       freeing: (bytes: string) => string; freed: (bytes: string) => string;
       freeStopped: (bytes: string) => string; freeCancelled: (bytes: string) => string;
@@ -1506,6 +1513,7 @@ export interface AppCopy {
       butlerModel: string;
       butlerReasoning: string;
       consolidationModel: string;
+      consolidationTime: string;
       localReasoningBudget: string;
       contextLimit: string;
       /** Settings → General → Default permission: the new-chat field. */
@@ -1618,6 +1626,7 @@ export interface AppCopy {
       language: string;
       timezone: string;
       consolidationModel: string;
+      consolidationTime: string;
       consolidationModelDefault: string;
       localReasoningBudget: string;
       wallpaper: string;
@@ -1970,6 +1979,19 @@ export interface AppCopy {
       };
     };
     /** Settings > Models saved API keys (#217). */
+    connectedAccounts: {
+      empty: string;
+      provider: string;
+      kind: Record<"sign_in" | "legacy_sign_in", string>;
+      obtained: (date: string) => string;
+      expires: (date: string) => string;
+      signOut: string;
+      signOutOf: (name: string) => string;
+      confirm: (name: string) => string;
+      done: string;
+      revokeUnconfirmed: string;
+      error: string;
+    };
     savedKeys: {
       empty: string;
       /** Registered models that use the key; 0 reads as not in use. */

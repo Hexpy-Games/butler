@@ -1,5 +1,6 @@
 //! RM-01–RM-05 drive the real tool executor and cards with a scripted provider.
 use super::*;
+mod delegated;
 mod guards;
 mod ordering;
 mod projection;
@@ -107,7 +108,7 @@ async fn rm_01_unrelated_reply_uses_one_closing_line_without_reasking() -> Resul
     let prompt = source(&requests[0]);
     assert!(prompt.find("## Current turn context").unwrap() < prompt.find("## Open asks").unwrap());
     assert!(prompt.find("## Open asks").unwrap() < prompt.find("## Current request").unwrap());
-    assert!(prompt.contains("end the reply with one short line naming up to three by title. Never repeat a question in full, never ask it again"));
+    assert!(prompt.contains("end the reply with one short line naming up to three by title. Never repeat a question in full or ask it again"));
     assert_eq!(
         reminder(&requests[0])["open"][0]["ask_id"],
         second["ask_id"]

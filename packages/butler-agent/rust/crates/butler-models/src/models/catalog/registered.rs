@@ -56,7 +56,10 @@ pub fn registered_hosted_model_metadata(
         .iter()
         .filter_map(|config| {
             let mut base = catalog.find_static_model_metadata(Some(&config.model_ref))?;
-            if base.provider_id != config.provider_id || !base.runtime_supported {
+            if base.provider_id != config.provider_id
+                || !base.runtime_supported
+                || base.is_image_output()
+            {
                 return None;
             }
             let credential = config
@@ -172,7 +175,7 @@ pub fn normalize_registered_hosted_model(
         format!("{provider_id}/{requested}")
     };
     let base = catalog.find_static_model_metadata(Some(&requested))?;
-    if base.provider_id != provider_id || !base.runtime_supported {
+    if base.provider_id != provider_id || !base.runtime_supported || base.is_image_output() {
         return None;
     }
     let credential_id = text(input.get("credential_id"));

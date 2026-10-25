@@ -15,6 +15,7 @@ mod feedback;
 mod folder;
 mod hooks;
 mod image;
+mod image_gen;
 mod library;
 mod memory_write;
 pub(crate) use memory_write::MemoryWriteServices;

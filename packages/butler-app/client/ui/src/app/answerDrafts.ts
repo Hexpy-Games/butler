@@ -29,6 +29,17 @@ function unit(call: AnswerDraftCall, op: Unit): AnswerDraftCall {
     block = block.type === value.type ? { ...block, ...value } : value;
     open[bi] = true;
   }
+  if (op.op === "tab" || op.op === "child") {
+    const tabs = [...(Array.isArray(block.tabs) ? block.tabs as Unit[] : [])];
+    const ti = Number(op.op === "tab" ? op.index : op.tab);
+    if (!Number.isInteger(ti) || ti < 0 || ti >= 5) return call;
+    const tab = { ...(tabs[ti] ?? { label: "", blocks: [] }) };
+    if (op.op === "tab") tab.label = op.label;
+    else {
+      const children = [...(tab.blocks as unknown[])]; children[Number(op.index)] = op.value; tab.blocks = children;
+    }
+    tabs[ti] = tab; block = { ...block, tabs };
+  }
   if (op.op === "field") block = { ...block, [String(op.field)]: op.value };
   if (op.op === "item") {
     const list = String(op.list);
@@ -51,7 +62,10 @@ function unit(call: AnswerDraftCall, op: Unit): AnswerDraftCall {
   const ready = Array.isArray(block.items) ? block.items.length > 0
     : block.type === "table" ? Array.isArray(block.columns) && block.columns.length > 0
     : block.type === "chart" ? Array.isArray(block.x) && Array.isArray(block.series) && typeof block.source === "string" && typeof block.checked === "string"
-    : block.type === "callout" && typeof block.text === "string";
+    : block.type === "columns" || block.type === "group" ? Array.isArray(block.blocks) && block.blocks.length > 0
+    : block.type === "tabs" ? Array.isArray(block.tabs) && block.tabs.some(tab => (tab as Unit)?.label && ((tab as Unit)?.blocks as unknown[])?.length)
+    : block.type === "image" ? typeof block.img === "string"
+    : ["callout", "text", "quote"].includes(String(block.type)) && typeof block.text === "string";
   if (block.type === "table" && !Array.isArray(block.rows)) block = { ...block, rows: [] };
   blocks[bi] = ready ? block as unknown as AnswerBlockView : null;
   return { ...call, seq, raw, blocks, open, incoming, lastBlock: Math.max(call.lastBlock, bi) };

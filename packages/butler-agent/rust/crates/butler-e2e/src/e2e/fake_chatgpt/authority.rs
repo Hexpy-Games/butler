@@ -135,5 +135,10 @@ async fn revoke(
     Form(params): Form<BTreeMap<String, String>>,
 ) -> StatusCode {
     state.record("revoke", &params, &headers);
+    let delay = *state
+        .revoke_delay
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    tokio::time::sleep(delay).await;
     StatusCode::OK
 }

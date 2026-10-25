@@ -2,16 +2,17 @@ import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { MessageFileRef } from "@/app/types.ts";
 import { AttachmentList } from "@/butler-ds";
-import { attachmentTile, openAttachmentInInspector } from "./attachmentTiles";
+import { attachmentTile, openAttachmentInViewer } from "./attachmentTiles";
 import { attachmentViewerKind, useOpenMessageImage } from "./messageImages";
 
-/** A sent message's files as tiles: pictures and videos open the viewer over the session, other files its inspector. */
+/** A sent message's files as tiles: pictures and videos open the image viewer over the session, other files the file viewer. */
 export function MessageAttachments({
   attachments,
-  sessionId,
+  sessionId, tileAlign,
 }: {
   attachments: MessageFileRef[];
   sessionId: string;
+  tileAlign?: "start" | "end";
 }) {
   useAppLocale();
   const openImage = useOpenMessageImage();
@@ -25,12 +26,13 @@ export function MessageAttachments({
       <AttachmentList
         variant="tiles"
         tileLayout="wrap"
+        tileAlign={tileAlign}
         items={attachments.map((file) => ({ id: file.file_id, ...attachmentTile(file) }))}
         onOpen={(item) => {
           const file = files.get(item.id);
           if (!file) return;
           if (attachmentViewerKind(file) && openImage) openImage(file.url);
-          else openAttachmentInInspector(file, sessionId);
+          else openAttachmentInViewer(file, sessionId);
         }}
       />
     </div>

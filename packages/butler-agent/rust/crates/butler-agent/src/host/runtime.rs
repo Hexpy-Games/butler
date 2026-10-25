@@ -169,28 +169,27 @@ impl AgentRuntime {
             context_budget.clone(),
             metric_files.clone(),
         );
-        let daily_cognition = Arc::new(DailyCognitionJobs::new(DailyCognitionOwners {
-            data_root: paths.data_root.clone(),
-            paths: environment.cognition_paths.clone(),
-            coordinator: coordinator.clone(),
-            metrics: metric_files.clone(),
-            consumer: memory_sync.consumer(),
-            capsules: capsule_service,
-            provider: models.provider.clone(),
-            configuration: models.configuration.clone(),
-            profile: profile.clone(),
-            ledger: project_ledger.clone(),
-            date_parser: date_parser.clone(),
-            bindings: stores.bindings.clone(),
-            embedding: embedding.clone(),
-        }));
-        let context_maintenance = ContextMaintenance::for_cognition(
-            &paths.data_root,
-            &tool_output,
-            &metric_files,
-            &date_parser,
-            &daily_cognition,
+        let daily_cognition = Arc::new(
+            DailyCognitionJobs::open(DailyCognitionOwners {
+                data_root: paths.data_root.clone(),
+                paths: environment.cognition_paths.clone(),
+                coordinator: coordinator.clone(),
+                metrics: metric_files.clone(),
+                consumer: memory_sync.consumer(),
+                capsules: capsule_service,
+                provider: models.provider.clone(),
+                configuration: models.configuration.clone(),
+                profile: profile.clone(),
+                ledger: project_ledger.clone(),
+                date_parser: date_parser.clone(),
+                bindings: stores.bindings.clone(),
+                embedding: embedding.clone(),
+            })
+            .await
+            .map_err(setup)?,
         );
+        let context_maintenance =
+            daily_cognition.context_maintenance(&tool_output, &metric_files, &date_parser);
         let command = Arc::new(crate::host::guided::command::GuidedCommand::new(
             commands.clone(),
             tool_output.clone(),
@@ -420,6 +419,7 @@ impl AgentRuntime {
             skills: skills.clone(),
             mcp_client,
             context_maintenance,
+            daily_cognition,
             profile,
         })
     }

@@ -27,7 +27,10 @@ export function syncPopup(browser, tab) {
   if (tab.covered || tab.dialog || !tab.slot?.visible) {
     if (tab.attached === win) { win.contentView.removeChildView(tab.view); tab.attached = null; }
   } else {
-    if (tab.attached !== win) { win.contentView.addChildView(tab.view); tab.attached = win; }
+    if (tab.attached !== win) {
+      if (browser.attachAfterCaptures(tab)) { publishPopup(tab); return; }
+      win.contentView.addChildView(tab.view); tab.attached = win;
+    }
     tab.bounds = tab.slot;
     const { x, y, width, height } = tab.bounds;
     tab.view.setBounds({ x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });

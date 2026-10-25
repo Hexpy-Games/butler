@@ -4,7 +4,10 @@
 `BrowserPane` is the browser sheet: a tinted pane (`--browser-pane-bg`) whose two
 top corners use the page card radius (`--browser-pane-radius`, 12px). It holds the
 tab row, the toolbar row and the page card, inset by `--browser-card-inset`.
-`BrowserToolbar` lays out navigation · address · page actions on that row.
+`BrowserToolbar` lays out navigation · address · page actions on that row. The
+row keeps `--space-xs` above it (on top of `--browser-band-height`), so the
+address field sits about as far below the tabs (9px) as the tabs sit below the
+sheet's top edge.
 
 ## When to use this block
 - Beside a conversation: `placement="conversation"` inside the `AdaptiveShellSplit`

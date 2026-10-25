@@ -40,14 +40,28 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 
 ## Tone, indicator, badge and pressed
 - `tone`: `default`, `butler` (the icon in `--butler-ink-blue`) or `riso` (the
-  icon stroked with the riso ink gradient). Colour only: no fill, so a toggle
-  that is on never looks pressed. The focus ring is the same in every tone.
+  icon stroked with the riso ink gradient). Colour only: a tone never paints a
+  fill. The focus ring is the same in every tone.
 - `indicator`: a riso dot at the top-end corner (Butler is acting on what the
   button shows, e.g. browsing while the pane is closed).
 - `badge`: a count at the top-end corner (hidden at 0, `99+` above 99). Put
   the count in `label` as well.
-- `pressed`: sets `aria-pressed` for toggles (the conversation's browser
-  toggle) without the `selected` fill.
+- `pressed`: sets `aria-pressed` for toggles. Alone it paints no fill.
+- `pane`: the pane a title-bar toggle opens. While `pressed`, the button fills
+  with that pane's own surface, made opaque (`rgb(from <token> r g b / 1)`),
+  so the toggle reads as joined to the pane it opened:
+
+  | `pane` | Pane | Surface token |
+  | --- | --- | --- |
+  | `aside` | 세션 정보 (ConversationShell aside) | `--tinted-glass-tint`, the floating glass's solid body; the docked aside sits on the chat card of nearly the same tone |
+  | `browser` | BrowserPane | `--browser-pane-bg` (the cards frame's override applies) |
+  | `viewer` | A card pane in the split, such as the file viewer | `--shell-card-bg` (AdaptiveShellCard) |
+
+  The token resolves where the button sits, so the shell's overrides apply.
+  Hover lays `--selection` over the fill; the indicator's ring takes the fill.
+  Product code only declares the pane:
+  `<IconButton pane="browser" pressed={open} tone={open ? "butler" : "default"} …>`.
+  A toggle that opens a dialog or a menu (the task graph, ⋯) declares no pane.
 
 ## Tags
 action, icon-only, tooltip
