@@ -265,6 +265,7 @@ fn origin_allowlist_compares_raw_strings() {
 
 type Headers = &'static [(&'static str, &'static str)];
 
+// test-category: security
 #[test]
 fn json_content_type_is_required_only_for_json_bodies() {
     const JSON: Headers = &[
@@ -275,12 +276,14 @@ fn json_content_type_is_required_only_for_json_bodies() {
     const CHUNKED: Headers = &[("transfer-encoding", "chunked")];
     const EMPTY: Headers = &[("content-length", "0")];
     // Method, path, request headers, whether the body rule admits it.
-    let cases: [(Method, &str, Headers, bool); 7] = [
+    let cases: [(Method, &str, Headers, bool); 9] = [
         (Method::POST, "/messages", JSON, true),
         (Method::POST, "/messages", TEXT, false),
         (Method::PATCH, "/settings", CHUNKED, false),
         (Method::POST, "/turns/t/cancel", EMPTY, true),
         (Method::DELETE, "/session-queue/q", &[], true),
+        (Method::POST, "/session-queue/q/send-now", JSON, true),
+        (Method::POST, "/session-queue/q/send-now", TEXT, false),
         (Method::POST, "/message-files", TEXT, true),
         (Method::GET, "/settings", TEXT, true),
     ];

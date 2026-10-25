@@ -255,6 +255,10 @@ pub trait GatewayApplication:
         queued_message_id: String,
         request: SessionQueueUpdateRequest,
     ) -> ApplicationFuture<SessionQueueView>;
+    fn send_session_queue_now(
+        &self,
+        queued_message_id: String,
+    ) -> ApplicationFuture<SessionQueueView>;
     fn delete_session_queue(
         &self,
         queued_message_id: String,

@@ -145,7 +145,12 @@ fn mutations(request: &Request<Body>) -> Option<Handler> {
             matches!(*request.method(), Method::PATCH | Method::DELETE)
                 && path
                     .strip_prefix("/session-queue/")
-                    .is_some_and(|id| !id.is_empty() && !id.contains('/')),
+                    .is_some_and(|id| !id.is_empty() && !id.contains('/'))
+                || *request.method() == Method::POST
+                    && path
+                        .strip_prefix("/session-queue/")
+                        .and_then(|tail| tail.strip_suffix("/send-now"))
+                        .is_some_and(|id| !id.is_empty() && !id.contains('/')),
             Handler::Queue,
         ),
         (

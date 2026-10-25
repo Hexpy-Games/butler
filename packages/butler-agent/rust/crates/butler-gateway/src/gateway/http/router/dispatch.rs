@@ -98,7 +98,12 @@ async fn commands(
             message_files::route(state, request).await
         }
         Handler::Wallpapers => wallpapers::route(state, request).await,
-        Handler::Queue if matches!(*request.method(), Method::PATCH | Method::DELETE) => {
+        Handler::Queue
+            if matches!(
+                *request.method(),
+                Method::POST | Method::PATCH | Method::DELETE
+            ) =>
+        {
             session_queue::route(state, request, uri).await
         }
         Handler::Mcp => mcp_servers::route(state, request, uri).await,

@@ -154,6 +154,7 @@ mod queue_admission_shutdown;
 mod queue_claim_crash;
 mod queue_notifications;
 mod queue_pause;
+mod queue_send_now;
 mod queue_shutdown;
 mod quota;
 mod quota_gating;

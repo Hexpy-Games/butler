@@ -308,7 +308,23 @@ pub(super) fn terminal_turn(db: &Connection, turn: &str) -> Result<bool, AppStor
     ))
 }
 
-pub(super) fn btcc_retains_authority(db: &Connection, turn: &str) -> Result<bool, AppStorageError> {
+pub(super) fn terminal_authority_pending(
+    db: &Connection,
+    turn: &str,
+) -> Result<bool, AppStorageError> {
+    // Crash recovery can report an interrupted run before the durable Stop
+    // finishes. That report cannot replace the owner's pending cancellation.
+    let stopping: bool = db
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM turns t JOIN app_turn_cancel_outbox c ON c.turn_id=t.id \
+         WHERE t.id=?1 AND t.state='cancelling' AND c.state IN ('pending','accepted'))",
+            [turn],
+            |row| row.get(0),
+        )
+        .map_err(AppStorageError::sqlite)?;
+    if stopping {
+        return Ok(true);
+    }
     let exists = db
         .query_row(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='btcc_turns'",
