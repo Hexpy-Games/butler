@@ -4,12 +4,12 @@ import { useFileViewerState, useSessionFiles, type FileViewerEntry } from "@/app
 import { AdaptiveShellCard, Box, FileText, ImageIcon, Presence, Stack, TabStrip } from "@/butler-ds";
 import { artifactPreviewMode } from "../artifacts/artifactDisplay";
 import { FileViewerArtifact } from "./FileViewerArtifact";
-import { FileViewerDocument } from "./FileViewerDocument";
+import { FileViewerDocument, type DocumentPageRenderer } from "./FileViewerDocument";
 import { FILE_VIEWER_PAGE_ID } from "./FileViewerFrame";
 
 /**
- * The file viewer in the conversation's right slot: one tab per open file (from two files on), the file's
- * header and the file as a reading page. Closing the last file empties the viewer, which frees the slot.
+ * The file viewer in the conversation's right slot: one tab per open file (from two files on), then the file
+ * with one title row that carries back and close. Closing the last file empties the viewer, which frees the slot.
  */
 export function FileViewerPane({ sessionId, notice, onBack, documentPage }: {
   sessionId: string;
@@ -17,8 +17,8 @@ export function FileViewerPane({ sessionId, notice, onBack, documentPage }: {
   notice?: ReactNode;
   /** Back to the chat, when the viewer takes the whole workspace (a phone). */
   onBack?: () => void;
-  /** Renders an editable document (its own header actions and body); the documents feature supplies it. */
-  documentPage?: (id: string) => ReactNode;
+  /** Renders an editable document (its title row with the viewer's controls, and body); the documents feature supplies it. */
+  documentPage: DocumentPageRenderer;
 }) {
   useAppLocale();
   const files = useSessionFiles(sessionId);
@@ -39,7 +39,7 @@ export function FileViewerPane({ sessionId, notice, onBack, documentPage }: {
         </Box>}
         {active.kind === "artifact"
           ? <FileViewerArtifact key={active.id} sessionId={sessionId} artifact={active.artifact} onClose={close} onBack={onBack} />
-          : <FileViewerDocument key={active.id} title={active.title} onClose={close} onBack={onBack}>{documentPage?.(active.id)}</FileViewerDocument>}
+          : <FileViewerDocument key={active.id} id={active.id} onClose={close} onBack={onBack} documentPage={documentPage} />}
       </Stack></Presence>
     </AdaptiveShellCard>
   );
