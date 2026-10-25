@@ -47,6 +47,12 @@
   outline: none;
 }
 
+/* The page starts at its first line: the first block (often a heading)
+   drops its top margin, as MarkdownContent's direct children do. */
+.root > :first-child {
+  margin-block-start: 0;
+}
+
 .bold {
   font-weight: var(--font-weight-semibold);
 }

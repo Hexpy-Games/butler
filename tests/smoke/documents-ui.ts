@@ -1,6 +1,6 @@
 // UI behavior smoke: offline gateway fixtures, real Lexical editor and product screens.
 import { compareDocumentBackdrop } from "./document-dialog-opacity";
-import { assertDocumentLayout, measureDocumentLayout, checkDocumentDialog, checkDocumentImage } from "./document-dialog-checks";
+import { assertDocumentLayout, measureDocumentLayout, measureStandardDialogSpacing, checkDocumentDialog, checkDocumentImage } from "./document-dialog-checks";
 import assert from "node:assert/strict";
 import { getAppCopy } from "../../packages/butler-i18n/src/index";
 import { execFileSync } from "node:child_process";
@@ -382,16 +382,22 @@ async function keyboardUnits(page: Page) {
 }
 async function matrix(page: Page) {
   const comparisons: Awaited<ReturnType<typeof compareDocumentBackdrop>>[] = [];
+  const standards: Awaited<ReturnType<typeof measureStandardDialogSpacing>>[] = [];
   for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (background of ["plain", "wallpaper"]) {
     head = { ...head, title: "Report — document layout, revisions and export", body: initial }; history = [structuredClone(head), { ...head, rev: head.rev - 1, author: "user" }];
+    if (!standards.some(standard => standard.width === width)) {
+      standards.push(await measureStandardDialogSpacing(page, base, width, evidence));
+      writeFileSync(join(evidence, "ds-dialog-spacing.json"), JSON.stringify(standards, null, 2));
+    }
+    const expectedSpacing = standards.find(standard => standard.width === width)!.distance;
     await open(page, width, theme); await shot(page, "chat-document", width, theme);
-    const layout = await measureDocumentLayout(page);
+    const layout = await measureDocumentLayout(page, expectedSpacing);
     layouts.push({ width, theme, background, state: "document", layout });
     if (stage === "after") assertDocumentLayout(layout, width);
     if (stage === "after" && width === 1440) comparisons.push(await compareDocumentBackdrop(page, `${theme}-${background}`, evidence));
     await selectText(page); await shot(page, "format", width, theme); await page.keyboard.press("ArrowRight");
     await live(page); await shot(page, "butler-editing", width, theme);
-    const editingLayout = await measureDocumentLayout(page);
+    const editingLayout = await measureDocumentLayout(page, expectedSpacing);
     layouts.push({ width, theme, background, state: "editing", layout: editingLayout });
     if (stage === "after") assertDocumentLayout(editingLayout, width);
     await page.getByRole("button", { name: "버전 기록", exact: true }).click(); await page.getByRole("listbox").waitFor(); await shot(page, "versions", width, theme); await page.keyboard.press("Escape"); await page.getByRole("listbox").waitFor({ state: "hidden" });

@@ -8,9 +8,15 @@ editor engine (Lexical in the app) and renders it into the page.
 
 | Export | Props |
 | --- | --- |
-| `DocumentEditor` | `title`, `note` (the status line), `actions`, `children` (the editable root), `formatBar` |
+| `DocumentEditor` | `title` (null inside a Dialog whose header shows it: no empty title row), `note` (the status line), `actions`, `children` (the editable root), `formatBar` |
 | `documentEditorClasses` | Class names for the engine's nodes: `root`, `bold`, `italic`, `blockEmbed` |
 | `DocumentBlockEmbed` | A block in the text (`selected` outlines it): not editable as text, one unit |
+
+## In a dialog
+Inside a Dialog whose header already shows the title and actions, pass
+`title={null}` and no `actions`: the editor renders no title row (only the
+note, when there is one), and the page's first block drops its top margin, so
+the body starts at the dialog's body spacing.
 
 ## Butler editing
 A paragraph Butler is changing takes `data-butler-editing="true"`: a wash of

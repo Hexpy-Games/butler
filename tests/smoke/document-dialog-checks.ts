@@ -54,7 +54,7 @@ export async function checkDocumentImage(page: Page, width: number, evidence: st
   writeFileSync(join(evidence, `document-images-${width}.json`), JSON.stringify(boxes, null, 2));
 }
 
-export async function measureDocumentLayout(page: Page) {
+export async function measureDocumentLayout(page: Page, expectedSpacing: number) {
   const geometry = await page.locator('[role="dialog"][data-height="full"]').evaluate(dialog => {
     const rect = (node: Element) => {
       const r = node.getBoundingClientRect();
@@ -68,15 +68,13 @@ export async function measureDocumentLayout(page: Page) {
     const heading = dialog.querySelector('[data-document-id] h1')!;
     const note = dialog.querySelector('[data-slot="document-dialog-note"]');
     const styles = getComputedStyle(dialog);
-    const token = document.createElement('div'); token.style.width = 'var(--space-3)'; dialog.append(token);
-    const expectedSpacing = token.getBoundingClientRect().width; token.remove();
     return { dialog: rect(dialog), row: rect(row), body: rect(body), heading: rect(heading), actions,
       title: { ...rect(text), scrollWidth: text.scrollWidth, clientWidth: text.clientWidth, overflow: getComputedStyle(text).textOverflow, whiteSpace: getComputedStyle(text).whiteSpace },
       headerToHeading: rect(heading).y - rect(row).bottom,
       noteGap: note ? rect(note).y - rect(row).bottom : null,
       gaps: actions.slice(1).map((action, index) => action.x - actions[index]!.right),
       bodyRight: rect(dialog.querySelector('[data-document-id]')!).right,
-      expectedSpacing, dialogPadding: parseFloat(styles.paddingRight),
+      dialogPadding: parseFloat(styles.paddingRight),
       samples: { header: { x: rect(body).x + 2, y: rect(row).y + 2 }, body: { x: rect(body).x + 2, y: rect(body).y + 2 } } };
   });
   const png = await page.screenshot({ animations: "disabled", caret: "hide" });
@@ -87,7 +85,7 @@ export async function measureDocumentLayout(page: Page) {
     const sample = ({ x, y }: { x: number; y: number }) => [...ctx.getImageData(Math.round(x * img.width / innerWidth), Math.round(y * img.height / innerHeight), 1, 1).data].slice(0, 3);
     return { header: sample(samples.header), body: sample(samples.body) };
   }, { png: png.toString("base64"), samples: geometry.samples });
-  return { ...geometry, colors };
+  return { ...geometry, colors, expectedSpacing };
 }
 
 export function assertDocumentLayout(layout: Awaited<ReturnType<typeof measureDocumentLayout>>, width: number) {
@@ -100,4 +98,28 @@ export function assertDocumentLayout(layout: Awaited<ReturnType<typeof measureDo
     assert(Math.abs(layout.dialog.right - close.right - layout.dialogPadding) <= 2, JSON.stringify(layout));
   }
   if (layout.noteGap !== null) assert(layout.noteGap >= 0 && layout.noteGap <= 6, JSON.stringify(layout));
+}
+
+
+/** Compare against the existing DS reader, including its ScrollArea body inset. */
+export async function measureStandardDialogSpacing(page: Page, base: string, width: number, evidence: string) {
+  await page.setViewportSize({ width, height: 1000 });
+  await page.goto(`${base}?visual=design-system&page=components/Dialog&theme=light&locale=en&width=app`);
+  const story = page.locator('[data-ds-story="Wide reader (size xl, scroll-body, maxHeight 3/5)"]');
+  await story.getByRole("button", { name: "Project description", exact: true }).first().dispatchEvent("click");
+  const dialog = page.getByRole("dialog", { name: "Project description", exact: true });
+  await dialog.waitFor();
+  await page.evaluate(() => document.fonts.ready);
+  await dialog.evaluate(async node => { await Promise.all(node.getAnimations().map(animation => animation.finished)); });
+  const spacing = await dialog.evaluate(node => {
+    const header = node.querySelector('[data-slot="dialog-header"]')!;
+    const headerLine = header.lastElementChild!.getBoundingClientRect();
+    const firstBodyLine = header.nextElementSibling!.querySelector("p")!.getBoundingClientRect();
+    return { distance: firstBodyLine.y - headerLine.bottom,
+      headerPadding: parseFloat(getComputedStyle(header).paddingBottom),
+      bodyInset: firstBodyLine.y - header.getBoundingClientRect().bottom };
+  });
+  assert(spacing.distance > 0 && spacing.bodyInset > 0, JSON.stringify(spacing));
+  await page.screenshot({ path: join(evidence, `ds-reader-spacing-${width}.png`), animations: "disabled" });
+  return { width, story: "Wide reader (size xl, scroll-body, maxHeight 3/5)", ...spacing };
 }

@@ -6,7 +6,7 @@ import markdown from "../MarkdownContent/MarkdownContent.module.css";
 import styles from "./DocumentEditor.module.css";
 
 export interface DocumentEditorProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivElement>>, "title"> {
-  /** The document's title (a name field or a heading). */
+  /** The document's title (a name field or a heading). Null when a surrounding Dialog header already shows it. */
   title: ReactNode;
   /** One status line under the title: "버틀러가 수정 중", saved time. */
   note?: ReactNode;
@@ -28,10 +28,12 @@ export interface DocumentEditorProps extends Omit<DsBaseProps<HTMLAttributes<HTM
 export function DocumentEditor({ title, note, actions, children, formatBar, className, ...props }: DocumentEditorProps) {
   return (
     <div {...props} className={dsClass(styles.editor, className)} data-slot="document-editor">
-      <div className={styles.header}>
-        <div className={styles.heading}>{title}{note ? <div className={styles.status}>{note}</div> : null}</div>
-        {actions ? <div className={styles.actions}>{actions}</div> : null}
-      </div>
+      {title || actions ? (
+        <div className={styles.header}>
+          <div className={styles.heading}>{title}{note ? <div className={styles.status}>{note}</div> : null}</div>
+          {actions ? <div className={styles.actions}>{actions}</div> : null}
+        </div>
+      ) : note ? <div className={styles.status}>{note}</div> : null}
       <div className={cn(markdown.markdown, styles.page)} data-slot="document-editor-page">{children}</div>
       {formatBar}
     </div>
