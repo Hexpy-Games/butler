@@ -90,6 +90,13 @@ async function open(page: Page, width = 1440, theme = "light") {
     await dialog.waitFor();
     await dialog.evaluate(async node => { await Promise.all(node.getAnimations().map(animation => animation.finished)); });
     assert.equal(await dialog.getAttribute("data-layout"), "scroll-body");
+    if (stage !== "before") {
+      assert.equal(await dialog.getAttribute("data-size"), "xl");
+      const bounds = await dialog.boundingBox(); assert.ok(bounds);
+      assert.equal(Math.round(bounds.width), Math.min(880, width - 32));
+      await dialog.getByRole("button", { name: "닫기", exact: true }).waitFor();
+      assert.equal(await dialog.getByRole("button", { name: "아티팩트 목록", exact: true }).count(), 0);
+    }
     assert.equal(await dialog.evaluate(node => Math.round(node.getBoundingClientRect().height)), await dialog.evaluate(node => Math.round(parseFloat(getComputedStyle(node).maxHeight))));
     assert.equal(await dialog.getAttribute("aria-labelledby").then(id => page.locator(`[id="${id}"]`).innerText()), "Report");
     assert.equal(await page.locator('[data-session-section="artifacts"] [data-document-id]').count(), 0);
@@ -182,8 +189,9 @@ async function navigation(page: Page) {
   await open(page, 900);
   assert.equal(await page.locator('[data-slot="conversation-aside"]').getAttribute("data-layout"), "floating");
   await page.getByRole("dialog", { name: "Report", exact: true }).waitFor();
-  await page.getByRole("button", { name: "아티팩트 목록", exact: true }).click();
+  await page.getByRole("dialog", { name: "Report", exact: true }).getByRole("button", { name: "닫기", exact: true }).click();
   await editor(page).waitFor({ state: "hidden" });
+  await page.waitForFunction(() => Boolean(document.activeElement?.closest('[data-test-class="message-artifact-list"]')));
   const paneTrigger = page.locator('[data-session-section="artifacts"]').getByText("Report", { exact: true });
   await page.locator('[data-session-section="artifacts"]').getByText("Report", { exact: true }).click();
   await editor(page).waitFor();
