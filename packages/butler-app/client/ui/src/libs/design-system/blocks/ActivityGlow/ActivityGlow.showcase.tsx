@@ -30,7 +30,7 @@ function toggleLabel(locale: ShowcaseRenderContext["locale"], state: ActivityGlo
 function Toggle({ locale, state, open = false, reducedMotion }: { locale: ShowcaseRenderContext["locale"]; state: ActivityGlowState; open?: boolean; reducedMotion?: boolean }) {
   return (
     <ActivityGlow state={open ? "idle" : state} reducedMotion={reducedMotion}>
-      <IconButton label={toggleLabel(locale, state, open)} tone={activityGlowTone(state, open)} pressed={open}>
+      <IconButton label={toggleLabel(locale, state, open)} tone={activityGlowTone(state, open)} pane="browser" pressed={open}>
         <Globe2 size="md" />
       </IconButton>
     </ActivityGlow>

@@ -7,6 +7,7 @@ import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { TitlebarShell } from "./TitlebarShell";
 import { GroupedTitlebar, SplitWindowDemo } from "./fixtures/SplitTitlebarDemo";
+import { PaneToggles } from "./fixtures/PaneTogglesDemo";
 import styles from "./TitlebarShell.module.css";
 import { dsClass } from "../../lib/internal";
 
@@ -129,6 +130,10 @@ export const stories: ShowcaseStory[] = [
     render: (context) => <GroupedTitlebars context={context} /> },
   { name: "Session info open: the pressed toggle without and with the dot", states: ["pressed"], widths: ["375", "app", "wide"],
     render: (context) => <GroupedTitlebars context={context} open /> },
+  { name: "Pane toggles: closed, then 세션 정보, the file viewer and the browser open (each fills with its pane's surface)",
+    states: ["pressed"], widths: ["375", "app", "wide"], render: ({ locale }) => <PaneToggles locale={locale} /> },
+  { name: "File viewer open: its toggle fills with the viewer card's surface", states: ["pressed"], widths: ["app", "wide"],
+    render: ({ locale }) => <SplitWindowDemo locale={locale} paneOpen pane="viewer" /> },
   { name: "Browser split closed: chat trailing before the browser toggle", widths: ["app", "wide"],
     render: ({ locale }) => <SplitWindowDemo locale={locale} paneOpen={false} /> },
   { name: "Browser split open: the chat group spans the chat card (drag the divider)", widths: ["app", "wide"],

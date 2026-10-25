@@ -1,26 +1,13 @@
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
 import { ButtonContainer } from "../ButtonContainer";
 import {
-  ArrowLeft,
-  Eye,
-  FolderPlus,
-  Globe2,
-  Pick,
-  LayoutDashboard,
-  MessageSquarePlus,
-  Minus,
-  MoreHorizontal,
-  PanelLeft,
-  PanelRightClose,
-  Pencil,
-  Pin,
-  Square,
-  Trash2,
-  X,
+  ArrowLeft, Eye, FolderPlus, Globe2, Pick, LayoutDashboard, MessageSquarePlus, Minus, MoreHorizontal, PanelLeft, PanelRightClose,
+  Pencil, Pin, Square, Trash2, X,
 } from "../Icons";
 import { Stack } from "../Stack";
 import { Typo } from "../Typo";
 import { IconButton } from "./IconButton";
+import { PaneToggles } from "./IconButton.paneDemo";
 
 export const meta: ShowcaseMeta = {
   title: "IconButton",
@@ -37,7 +24,7 @@ const labels = {
     note: "Hover or focus a button: the label shows as a tooltip unless it opens a menu.",
     browserShow: "Show browser", browserHide: "Hide browser", browserActive: "Butler is browsing", pick: "Pick elements",
     picked: (count: number) => `Pick elements, ${count} selected`,
-    toneNote: "Tones colour the icon only; the toggle state is aria-pressed, never a pressed fill.",
+    toneNote: "Tones colour the icon only. An open pane's toggle (pane) also fills with that pane's surface.",
   },
   "ko-KR": {
     back: "뒤로", hideLeft: "왼쪽 패널 숨기기", hideRight: "오른쪽 패널 숨기기", minimize: "창 최소화",
@@ -46,7 +33,7 @@ const labels = {
     note: "버튼에 마우스를 올리거나 포커스하면 라벨이 툴팁으로 보입니다. 메뉴를 여는 버튼은 제외입니다.",
     browserShow: "브라우저 열기", browserHide: "브라우저 닫기", browserActive: "버틀러가 브라우저 사용 중", pick: "요소 선택",
     picked: (count: number) => `요소 선택, ${count}개 선택됨`,
-    toneNote: "톤은 아이콘 색만 바꿉니다. 켜짐 상태는 aria-pressed로 전하고, 눌린 배경은 쓰지 않습니다.",
+    toneNote: "톤은 아이콘 색만 바꿉니다. 창을 여는 토글(pane)은 열린 동안 그 창의 바탕색으로 채웁니다.",
   },
 } as const;
 
@@ -61,9 +48,9 @@ function BrowserToggles(context: ShowcaseRenderContext) {
     <Stack gap="sm">
       <ButtonContainer size="icon-sm">
         <IconButton label={copy.browserShow} pressed={false}><Globe2 size="md" /></IconButton>
-        <IconButton label={copy.browserHide} pressed tone="butler"><Globe2 size="md" /></IconButton>
+        <IconButton label={copy.browserHide} pane="browser" pressed tone="butler"><Globe2 size="md" /></IconButton>
         <IconButton label={copy.browserActive} pressed={false} tone="riso" indicator><Globe2 size="md" /></IconButton>
-        <IconButton label={copy.browserHide} pressed tone="riso"><Globe2 size="md" /></IconButton>
+        <IconButton label={copy.browserHide} pane="browser" pressed tone="riso"><Globe2 size="md" /></IconButton>
         <IconButton label={copy.picked(3)} badge={3}><Pick size="md" /></IconButton>
         <IconButton label={copy.picked(12)} badge={12}><Pick size="md" /></IconButton>
       </ButtonContainer>
@@ -74,6 +61,7 @@ function BrowserToggles(context: ShowcaseRenderContext) {
 
 export const stories: ShowcaseStory[] = [
   { name: "Tones, indicator and badge (browser toggle)", states: ["selected"], render: (context) => <BrowserToggles {...context} /> },
+  { name: "Pane toggles: closed, then open (fill = the pane's surface)", states: ["pressed"], render: (context) => <PaneToggles {...context} /> },
   {
     name: "Titlebar and window controls",
     render: (context) => {
@@ -137,19 +125,21 @@ export const stories: ShowcaseStory[] = [
 
 export const stateMatrix: ShowcaseStateMatrix = {
   states: ["default", "hover", "focus-visible", "active", "selected", "disabled"],
-  variants: ["Default tone", "Butler tone", "Riso tone + indicator", "Badge"],
+  variants: ["Default tone", "Butler tone", "Riso tone + indicator", "Badge", "Pane toggle (open)"],
   render: (context) => {
     const copy = text(context);
     const variant = context.variant;
     const browser = variant !== "Default tone";
+    const pane = variant === "Pane toggle (open)";
     return (
       <IconButton
         aria-haspopup={context.state === "selected" ? "menu" : undefined}
         disabled={context.state === "disabled"}
         label={variant === "Badge" ? copy.picked(2) : browser ? copy.browserHide : copy.newProject}
         selected={context.state === "selected"}
-        pressed={variant === "Butler tone" || variant === "Riso tone + indicator" ? true : undefined}
-        tone={variant === "Butler tone" ? "butler" : variant === "Riso tone + indicator" ? "riso" : "default"}
+        pressed={variant === "Butler tone" || variant === "Riso tone + indicator" || pane ? true : undefined}
+        pane={pane ? "browser" : undefined}
+        tone={variant === "Butler tone" || pane ? "butler" : variant === "Riso tone + indicator" ? "riso" : "default"}
         indicator={variant === "Riso tone + indicator"}
         badge={variant === "Badge" ? 2 : undefined}
       >
