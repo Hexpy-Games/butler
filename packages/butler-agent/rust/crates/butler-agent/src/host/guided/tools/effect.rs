@@ -90,9 +90,6 @@ async fn execute_effect(
         installation_root: owner.binding.installation_root.as_deref(),
         deny_secret_reads: owner.binding.access_mode != AccessMode::FullAccess,
     };
-    if let Some(result) = credential_preflight(owner, call, &scope).await? {
-        return Ok(result);
-    }
     if let Some(result) = observation::execute(owner, call, occurrence, &scope).await? {
         return Ok(result);
     }
@@ -128,24 +125,6 @@ async fn execute_effect(
         (target, input, adapter),
     ))
     .await
-}
-
-/// Without kernel denial, refuse known credential paths before asking for
-/// consent. The execution guard still rechecks paths when using the approval.
-async fn credential_preflight(
-    owner: &GuidedTools,
-    call: &ModelRoundToolCall,
-    scope: &CommandScope<'_>,
-) -> Result<Option<JsonDocument>, ToolExecutionError> {
-    if call.name != ToolName::RunCommand
-        || butler_platform::command_sandbox::secret_reads_deniable()
-    {
-        return Ok(None);
-    }
-    match owner.command.check_paths(&call.arguments, scope).await {
-        Ok(result) => Ok(result),
-        Err(error) => ordinary(error.code(), error.message(), None).map(Some),
-    }
 }
 
 /// How an approval-free call outside full access runs: file effects re-check

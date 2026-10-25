@@ -17,48 +17,70 @@ struct Form {
     name: &'static str,
     command: String,
     cwd: String,
+    protected: bool,
 }
 
 fn forms(data: &Path, home: &Path) -> Vec<Form> {
     let d = data.display();
     let h = home.display();
     [
-        ("cd", format!("cd '{d}' && cat auth/probe.txt"), false),
+        (
+            "cd",
+            format!("cd '{d}' && cat auth/probe.txt"),
+            false,
+            false,
+        ),
         (
             "shell-text",
             format!("bash -c \"cd {d} && cat auth/probe.txt\""),
             false,
+            false,
         ),
-        ("escape", format!(r"cat {d}/au\th/probe.txt"), false),
-        ("split", format!("cat \"{d}\"/auth/probe.txt"), false),
-        ("concat", format!("cat \"{d}\"\"/auth/probe.txt\""), false),
+        ("escape", format!(r"cat {d}/au\th/probe.txt"), false, false),
+        ("split", format!("cat \"{d}\"/auth/probe.txt"), false, false),
+        (
+            "concat",
+            format!("cat \"{d}\"\"/auth/probe.txt\""),
+            false,
+            false,
+        ),
         (
             "subshell",
             format!("(cd '{d}' && cat auth/probe.txt)"),
+            false,
             false,
         ),
         (
             "conditional",
             format!("if true; then cat {d}/auth/probe.txt; fi"),
             false,
+            true,
         ),
-        ("wrapper", format!("command cat {d}/auth/probe.txt"), false),
-        ("parent", "cat d/../.aws/credentials".into(), false),
+        (
+            "wrapper",
+            format!("command cat {d}/auth/probe.txt"),
+            false,
+            true,
+        ),
+        ("parent", "cat d/../.aws/credentials".into(), false, false),
         (
             "pipeline",
             format!("cd '{h}/Documents' | true; cat auth/probe.txt"),
             true,
+            false,
         ),
         (
             "failed-cd",
             format!("cd '{h}/nonexistent'; cat auth/probe.txt"),
             true,
+            false,
         ),
-        ("absolute", format!("cat {d}/auth/probe.txt"), false),
-        ("relative", "cat auth/probe.txt".into(), true),
+        ("absolute", format!("cat {d}/auth/probe.txt"), false, true),
+        ("relative", "cat auth/probe.txt".into(), true, true),
     ]
     .into_iter()
-    .map(|(name, command, in_data)| Form {
+    .map(|(name, command, in_data, protected)| Form {
+        protected,
         name,
         command,
         cwd: if in_data { d.to_string() } else { ".".into() },
@@ -127,63 +149,38 @@ fn dispatches(s: &Scenario) -> Result<u64, HarnessError> {
 
 async fn matrix(effect: &str) -> Result<(), HarnessError> {
     let (s, chat, script, server) = setup(Access::AskExceptReads).await?;
-    let mut failures = Vec::new();
     for form in forms(&s.sandbox.data, &s.sandbox.home) {
         let before = dispatches(&s)?;
         let prompt = format!("{effect}-{}", form.name);
-        let mut informed = false;
         let (turn, state) = submit(&s, &chat, &script, &prompt, &form, effect).await?;
-        if state["state"] == "waiting_for_form" {
-            assert_eq!(dispatches(&s)?, before, "ran before consent: {}", form.name);
-            // No command result has reached the model before the decision.
-            assert_eq!(script.requests_for(&prompt).len(), 1);
-            let cards = s.gw.approval_requests(&chat).await?;
-            assert_eq!(cards.len(), 1, "{cards:?}");
-            assert_eq!(cards[0]["approval"]["operation"]["command"], form.command);
-            informed = cards[0]["reason"] == REASON;
-            if !informed {
-                failures.push(format!(
-                    "{}: plain card ({})",
-                    form.name, cards[0]["reason"]
-                ));
-            }
-            // Literal controls also prove that a plain approval leaks on the old guard.
-            let action = if matches!(form.name, "absolute" | "relative") {
-                "allow"
-            } else {
-                "deny"
-            };
-            approve(&s, &chat, action).await?;
+        assert_eq!(state["state"], "waiting_for_form", "{}: {state}", form.name);
+        assert_eq!(dispatches(&s)?, before, "ran before consent: {}", form.name);
+        // No command result has reached the model before the decision.
+        assert_eq!(script.requests_for(&prompt).len(), 1);
+        let cards = s.gw.approval_requests(&chat).await?;
+        assert_eq!(cards.len(), 1, "{cards:?}");
+        assert_eq!(cards[0]["approval"]["operation"]["command"], form.command);
+        if form.protected {
+            // Literal credential paths must still be refused after Allow.
+            approve(&s, &chat, "allow").await?;
         } else {
-            let output = outputs(&s, &chat, &turn, &script, &prompt)
-                .await?
-                .join("\n");
-            if !output.contains("protected_path") {
-                failures.push(format!("{}: ran without decision: {output}", form.name));
-            }
+            assert_eq!(cards[0]["reason"], REASON, "{}: {cards:?}", form.name);
+            approve(&s, &chat, "deny").await?;
         }
         delivered(&s, &chat, &turn).await?;
         let output = outputs(&s, &chat, &turn, &script, &prompt)
             .await?
             .join("\n");
-        if !informed && output.contains(SECRET) {
-            failures.push(format!(
-                "{}: secret returned after a plain approval",
-                form.name
-            ));
+        assert!(!output.contains(SECRET), "{}: {output}", form.name);
+        if form.protected {
+            assert!(output.contains("protected_path"), "{}: {output}", form.name);
+        } else {
+            assert_eq!(dispatches(&s)?, before, "ran after denial: {}", form.name);
         }
-        eprintln!(
-            "UNSANDBOXED-SCOPE {effect} {}: {}",
-            form.name,
-            failures
-                .last()
-                .filter(|f| f.starts_with(form.name))
-                .map_or("protected", String::as_str)
-        );
+        eprintln!("UNSANDBOXED-SCOPE {effect} {}: protected", form.name);
     }
     s.finish().await?;
     server.abort();
-    assert!(failures.is_empty(), "{effect}:\n{}", failures.join("\n"));
     Ok(())
 }
 
@@ -221,6 +218,7 @@ async fn standing_grants_never_cover_an_unresolved_scope() -> Result<(), Harness
         ("second", "command cd . && echo second > second.txt", "deny"),
     ] {
         let form = Form {
+            protected: false,
             name: prompt,
             command: command.into(),
             cwd: ".".into(),
@@ -277,6 +275,7 @@ async fn resolved_project_commands_keep_plain_behavior() -> Result<(), HarnessEr
         ("echo hi > out.txt", "mutation"),
     ] {
         let form = Form {
+            protected: false,
             name: "control",
             command: command.into(),
             cwd: ".".into(),
@@ -324,6 +323,7 @@ async fn full_access_keeps_non_butler_inventory_reads() -> Result<(), HarnessErr
     let path = s.sandbox.home.join(".aws/config");
     std::fs::write(&path, "ordinary-cloud-config")?;
     let form = Form {
+        protected: false,
         name: "full-access",
         command: format!("cat '{}'", path.display()),
         cwd: ".".into(),
