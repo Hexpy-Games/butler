@@ -12,6 +12,15 @@ editor engine (Lexical in the app) and renders it into the page.
 | `documentEditorClasses` | Class names for the engine's nodes: `root`, `bold`, `italic`, `blockEmbed` |
 | `DocumentBlockEmbed` | A block in the text (`selected` outlines it): not editable as text, one unit |
 
+## Title line
+The title and the actions share one line, one control tall:
+`--control-height-md`, rising to `--control-hit-target` wherever controls grow
+to the touch target (a phone width or a coarse pointer, as IconButton does).
+The title is centred on that line with the actions, at every width; a title
+role taller than a control grows the line and the actions stay centred on it.
+The status line (`note`) is a second row under the title, so showing or
+hiding it never moves the title or the actions.
+
 ## In a dialog
 Inside a Dialog whose header already shows the title and actions, pass
 `title={null}` and no `actions`: the editor renders no title row (only the

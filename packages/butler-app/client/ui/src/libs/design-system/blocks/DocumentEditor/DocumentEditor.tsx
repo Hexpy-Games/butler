@@ -6,11 +6,11 @@ import markdown from "../MarkdownContent/MarkdownContent.module.css";
 import styles from "./DocumentEditor.module.css";
 
 export interface DocumentEditorProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivElement>>, "title"> {
-  /** The document's title (a name field or a heading). Null when a surrounding Dialog header already shows it. */
+  /** The document's title (a name field or a heading), centred on the control line it shares with `actions`. Null when a surrounding Dialog header already shows it. */
   title: ReactNode;
   /** One status line under the title: "버틀러가 수정 중", saved time. */
   note?: ReactNode;
-  /** Header actions at the end of the title row (versions, export, ⋯). */
+  /** Header actions at the end of the title row (versions, export, close). */
   actions?: ReactNode;
   /** The editable body (a contenteditable root); it gets the document typography of MarkdownContent. */
   children: ReactNode;
@@ -19,7 +19,7 @@ export interface DocumentEditorProps extends Omit<DsBaseProps<HTMLAttributes<HTM
 }
 
 /**
- * A document being written: title row, status and the editable page in MarkdownContent's document
+ * A document being written: title line, status and the editable page in MarkdownContent's document
  * typography, so a document reads the same while edited as when read. The caller owns the editor engine;
  * `documentEditorClasses` names the classes its nodes take (headings, lists and block embeds need none
  * beyond their elements). Paragraphs Butler is changing take `data-butler-editing="true"`: a Butler-ink
@@ -30,8 +30,9 @@ export function DocumentEditor({ title, note, actions, children, formatBar, clas
     <div {...props} className={dsClass(styles.editor, className)} data-slot="document-editor">
       {title || actions ? (
         <div className={styles.header}>
-          <div className={styles.heading}>{title}{note ? <div className={styles.status}>{note}</div> : null}</div>
+          <div className={styles.title}>{title}</div>
           {actions ? <div className={styles.actions}>{actions}</div> : null}
+          {note ? <div className={styles.status}>{note}</div> : null}
         </div>
       ) : note ? <div className={styles.status}>{note}</div> : null}
       <div className={cn(markdown.markdown, styles.page)} data-slot="document-editor-page">{children}</div>

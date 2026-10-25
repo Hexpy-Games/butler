@@ -115,3 +115,41 @@ export async function checkDocumentImage(page: Page, width: number, evidence: st
   // Record the DS natural mode's retained background/radius for the owner; product does not override DS.
   writeFileSync(join(evidence, `document-images-${width}.json`), JSON.stringify(boxes, null, 2));
 }
+
+/** Compare the real title and every action on the shared title line. */
+export async function checkTitleLine(page: Page, options: {
+  width: number; theme: string; stage: string; evidence: string; fullPage: boolean;
+}) {
+  const { width, theme, stage, evidence, fullPage } = options;
+  const surface = fullPage ? "drawer" : "fv";
+  const host = fullPage ? '[data-test-class="document-reading-page"]' : '[data-test-class="file-viewer"]';
+  const document = page.locator(`${host} [data-test-class="editable-document"]`);
+  await document.waitFor();
+  await page.waitForFunction(selector => {
+    const node = window.document.querySelector(selector);
+    return node && window.document.getAnimations().every(animation => {
+      const target = (animation.effect as KeyframeEffect | null)?.target;
+      return !(target instanceof Element && target.contains(node))
+        || (!animation.pending && ["finished", "idle"].includes(animation.playState));
+    });
+  }, `${host} [data-test-class="editable-document"]`);
+  const geometry = await document.locator(":scope > :first-child").evaluate(row => {
+    const center = (node: Element) => { const rect = node.getBoundingClientRect(); return rect.y + rect.height / 2; };
+    const title = row.querySelector("h2")!;
+    return { title: center(title), buttons: [...row.querySelectorAll("button")].map(button => ({
+      label: button.getAttribute("aria-label") ?? button.textContent, center: center(button),
+    })) };
+  });
+  assert(geometry.buttons.length > 0, "the document title line has actions");
+  const result = { check: "document-title-line", stage, surface, width, theme, ...geometry };
+  console.log(JSON.stringify(result));
+  const clip = await document.evaluate(node => {
+    const row = node.firstElementChild!.getBoundingClientRect();
+    const body = node.querySelector('[data-slot="document-editor-page"]')!.getBoundingClientRect();
+    const x = Math.max(0, row.left - 16), y = Math.max(0, row.top - 16);
+    return { x, y, width: Math.min(window.innerWidth, row.right + 16) - x,
+      height: Math.min(window.innerHeight, body.y + 48) - y };
+  });
+  await page.screenshot({ path: join(evidence, `${surface}-${width}-${theme}-${stage}.jpg`), type: "jpeg", quality: 80, clip, animations: "disabled" });
+  return result;
+}

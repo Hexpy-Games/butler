@@ -1,5 +1,5 @@
 // UI behavior smoke: offline gateway fixtures, real Lexical editor and product screens.
-import { assertDocumentOverflow, assertDocumentLayout, measureDocumentLayout, checkDocumentImage, checkTrailing, documentHarnessPlugin } from "./document-page-checks";
+import { assertDocumentOverflow, assertDocumentLayout, measureDocumentLayout, checkDocumentImage, checkTrailing, checkTitleLine, documentHarnessPlugin } from "./document-page-checks";
 import assert from "node:assert/strict";
 import { getAppCopy } from "../../packages/butler-i18n/src/index";
 import { execFileSync } from "node:child_process";
@@ -399,6 +399,17 @@ async function keyboardUnits(page: Page) {
 const wideContent = "\n\n> " + "Unknown raw Markdown ".repeat(30)
   + "\n\n```typescript\nconst values = [" + "1234567890, ".repeat(40) + "];\n```"
   + "\n\n| First column | Second column |\n| --- | --- |\n| " + "wide-cell-".repeat(50) + " | preserved |\n";
+async function titleLines() {
+  const page = await browser.newPage({ deviceScaleFactor: 2 }), results = [];
+  try {
+    await setup(page);
+    for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (const fullPage of [false, true]) {
+      await open(page, width, theme, fullPage);
+      results.push(await checkTitleLine(page, { width, theme, stage, evidence, fullPage }));
+    }
+    assert(results.every(result => result.buttons.every(button => Math.abs(button.center - result.title) <= 0.5)), JSON.stringify(results));
+  } finally { await page.close(); }
+}
 async function matrix(page: Page) {
   for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (background of ["plain", "wallpaper"]) {
     head = { ...head, title: "Report — document layout, revisions and export", body: initial + wideContent }; history = [structuredClone(head), { ...head, rev: head.rev - 1, author: "user" }];
@@ -439,6 +450,7 @@ async function matrix(page: Page) {
 }
 try {
   const page = await browser.newPage(); await setup(page);
+  await titleLines();
   if (stage === "before") { await matrix(page); await measure(page); }
   else {
     await imageEmbeds(page);
