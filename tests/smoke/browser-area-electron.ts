@@ -12,7 +12,7 @@ import { createNativeAppServer, freePort } from "../support/native-app-server";
 import { alignment, publicationStub } from "../support/browser-area-acceptance";
 import { appCopy, setAppCopyLanguage } from "../../packages/butler-app/client/ui/src/app/copy";
 import { electronMain } from "../support/electron-main-cdp";
-import { assertNewTabContent, populatedNewTab } from "../support/browser-newtab-acceptance";
+import { assertNewTabContent, clickSettled, populatedNewTab } from "../support/browser-newtab-acceptance";
 import { smokeElectronArgs } from "../support/smoke-browser";
 
 const root = process.cwd();
@@ -148,9 +148,7 @@ async function launch({ holdRestore = false } = {}): Promise<Page> {
 async function openDuringRestore(page: Page) {
   try {
     // The App reopens the last view, which may be a conversation with its own browser pane; open the hub itself.
-    // The workspace mounts before the saved layout loads, so the sidebar slides in once it is restored.
-    await waitClickable(page, `document.querySelector('[data-test-class="browser-entry"]')`, "browser entry ready");
-    await page.clickSelector('[data-test-class="browser-entry"]');
+    await clickSettled(page, '[data-test-class="browser-entry"]');
     await page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="browser-area"][data-placement="standalone"]')));
     await waitUntil(() => main<boolean>("Boolean(globalThis.releaseBrowserRestore)"), "restore read held");
     await waitUntil(() => main<boolean>("globalThis.browserTrace.some(e=>e.op==='scope' && e.value===false && e.owner==='mine')"), "browser mount effects");
@@ -174,23 +172,20 @@ async function waitUntil(read: () => Promise<boolean>, label: string) {
   }
   throw new Error(`Timed out: ${label}`);
 }
-/** Wait until `node` (an expression) is enabled, inside the viewport and not moved by a finite animation. */
-async function waitClickable(page: Page, node: string, label: string) {
+async function click(page: Page, name: string) {
+  const selector = `Array.from(document.querySelectorAll('button,[role="button"]')).find(e =>
+    (e.getAttribute('aria-label') || e.textContent).trim() === ${JSON.stringify(name)})`;
   await main(`${win}.webContents.focus()`);
   await waitUntil(() => page.expression(`(() => {
-    const node=${node};
+    const node=${selector};
     if (!node || node.disabled || node.getAttribute('aria-disabled')==='true') return false;
     const rect=node.getBoundingClientRect();
-    if (rect.width<=0 || rect.x<0 || rect.y<0 || rect.right>innerWidth || rect.bottom>innerHeight) return false;
+    if (rect.width<=0 || rect.y<0 || rect.bottom>innerHeight) return false;
     for(let parent=node;parent;parent=parent.parentElement) {
       if(parent.getAnimations().some(animation=>animation.playState==='running' && animation.timeline instanceof DocumentTimeline && animation.effect?.getComputedTiming().iterations!==Infinity)) return false;
     }
     return true;
-  })()`), label);
-}
-async function click(page: Page, name: string) {
-  await waitClickable(page, `Array.from(document.querySelectorAll('button,[role="button"]')).find(e =>
-    (e.getAttribute('aria-label') || e.textContent).trim() === ${JSON.stringify(name)})`, `button ${name} ready`);
+  })()`), `button ${name} ready`);
   await page.clickText(name, 'button,[role="button"]');
   if (name === "Browser" || name === "브라우저") await page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="browser-area"]')));
 }
