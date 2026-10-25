@@ -4,7 +4,8 @@
 // chat, browser, command palette, menus, Settings, plus the drag-enabled
 // KanbanBoard, editable Tag and FilteredSelectPopover row-actions stories of
 // the DS viewer) over an offline gateway
-// stub; no model calls, no native agent. Run `npm --prefix
+// stub, plus real session/dashboard inline-edit panes through an isolated
+// native App; no model calls. Run `npm --prefix
 // packages/butler-app/client/ui run build` first (`bun run app:focus-ring:smoke`).
 //
 // Every screen is walked with the keyboard (Tab, and arrow keys inside menus
@@ -19,6 +20,7 @@
 // BUTLER_FOCUS_RING_SHOTS=<dir> saves a capture of each clipped stop.
 import { historyFixture } from "../support/usage-insights-fixtures";
 import { canonFocusResponse } from "../support/canon-sidebar-fixture.ts";
+import { auditInlinePanes } from "../support/session-pane-focus.ts";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, normalize, sep } from "node:path";
@@ -342,6 +344,7 @@ try {
       }
     }
   }
+  console.log(JSON.stringify({ inlinePanes: await auditInlinePanes(browser) }));
   console.log(JSON.stringify({ stops: checked, scrolledStops, clippedScreens: failures.length, rendererErrors: errors.length }));
   assert(scrolledStops > 0, "no scrolled scroller with keyboard stops was audited");
   assert.deepEqual(failures, [], `focus rings are clipped:\n${failures.join("\n")}`);

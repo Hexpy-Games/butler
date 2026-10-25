@@ -5,7 +5,7 @@ import { useButlerStore } from "@/app/store.ts";
 import { DisclosureRow, KeyValueRow, Typo, type AsideLayout } from "@/butler-ds";
 import { useActiveCanonEpic } from "../canon/useActiveCanonEpic.ts";
 import { EpicInspector } from "../canon/EpicInspector.tsx";
-import { ContextPanel } from "../inspector/ContextPanel.tsx";
+import { ContextCompact } from "./ContextCompact.tsx";
 import { ArtifactsPanel } from "../inspector/ArtifactsPanel.tsx";
 import { AutomationTargetsPanel } from "../inspector/AutomationTargetsPanel.tsx";
 import { MessageAttachments } from "../conversation/MessageAttachments.tsx";
@@ -48,7 +48,7 @@ export function SessionSections({ layout }: { layout: AsideLayout }) {
     {summary?.context_details && <SessionSection id="context" layout={layout}>
       <DisclosureRow surface="plain" title={<Typo.Caption tone="secondary" weight="medium">{c.context}</Typo.Caption>} meta={`${Math.round(summary.context_details.ratio * 100)}%`}
         open={contextOpen} onToggle={() => setContextOpen(value => !value)} data-test-class="session-context">
-        <ContextPanel context={summary.context_details} />
+        <ContextCompact context={summary.context_details} />
       </DisclosureRow>
     </SessionSection>}
     {(hasArtifacts || selectedArtifact) && <SessionSection id="artifacts" layout={layout}>
