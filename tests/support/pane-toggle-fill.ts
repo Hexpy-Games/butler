@@ -5,26 +5,31 @@ import type { Page } from "playwright";
 export const paneToggles = {
   aside: '[data-test-class="session-info-toggle"]',
   browser: '[data-test-class="titlebar-browser-toggle"]',
+  viewer: '[data-test-class="titlebar-file-viewer-toggle"]',
+} as const;
+
+/** Each pane's surface: the browser sheet and the viewer card by their painted background, the aside by its glass tint. */
+const paneSurfaces = {
+  aside: '[data-slot="conversation-aside"] [data-slot="tinted-glass"], [data-slot="conversation-aside"]',
+  browser: '[data-slot="browser-pane"]',
+  viewer: '[data-slot="adaptive-shell-split-pane"] [data-test-class="file-viewer"]',
 } as const;
 
 /** The toggle's fill and the pane surface it must match, both resolved by the engine (alpha dropped from the surface). */
 async function readFill(page: Page, pane: keyof typeof paneToggles) {
-  return page.evaluate(({ pane, selector }) => {
+  return page.evaluate(({ pane, selector, surfaceSelector }) => {
     const button = document.querySelector<HTMLElement>(selector);
     if (!button) throw new Error(`${pane} toggle is missing`);
-    const surfaceElement = pane === "browser"
-      ? document.querySelector<HTMLElement>('[data-slot="browser-pane"]')
-      : document.querySelector<HTMLElement>('[data-slot="conversation-aside"] [data-slot="tinted-glass"]')
-        ?? document.querySelector<HTMLElement>('[data-slot="conversation-aside"]');
-    const surface = !surfaceElement ? null : pane === "browser" ? getComputedStyle(surfaceElement).backgroundColor
-      : getComputedStyle(surfaceElement).getPropertyValue("--tinted-glass-tint").trim();
+    const surfaceElement = document.querySelector<HTMLElement>(surfaceSelector);
+    const surface = !surfaceElement ? null : pane === "aside" ? getComputedStyle(surfaceElement).getPropertyValue("--tinted-glass-tint").trim()
+      : getComputedStyle(surfaceElement).backgroundColor;
     const probe = document.createElement("span");
     if (surface) probe.style.backgroundColor = `rgb(from ${surface} r g b / 1)`;
     document.body.append(probe);
     const expected = surface ? getComputedStyle(probe).backgroundColor : null;
     probe.remove();
     return { pane: button.getAttribute("data-pane"), pressed: button.getAttribute("aria-pressed"), fill: getComputedStyle(button).backgroundColor, surface, expected };
-  }, { pane, selector: paneToggles[pane] });
+  }, { pane, selector: paneToggles[pane], surfaceSelector: paneSurfaces[pane] });
 }
 
 /** Closed: no fill (pointer parked off the toggle). Open: the fill equals the open pane's surface made opaque. */
