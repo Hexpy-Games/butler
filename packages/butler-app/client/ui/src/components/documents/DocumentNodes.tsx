@@ -20,7 +20,7 @@ function decorateImages(spec: AnswerBlocksView, assets: DocumentAsset[]): Answer
   return JSON.parse(JSON.stringify(spec), (_key, value) => {
     if (value && typeof value === "object" && typeof value.img === "string") {
       const asset = assets.find(asset => asset.id === value.img);
-      if (asset) return { ...value, image_url: asset.signed_url ?? asset.url };
+      if (asset) return { ...value, image_url: asset.signed_url ?? asset.url, image_width: asset.image_width, image_height: asset.image_height };
     }
     return value;
   });
@@ -49,7 +49,7 @@ function Unit({ nodeKey, raw, type }: { nodeKey: NodeKey; raw: string; type: str
     const paragraph = fromMarkdown(raw).children[0];
     const image = paragraph?.type === "paragraph" ? paragraph.children[0] : undefined;
     const asset = assets.find(asset => image?.type === "image" && asset.id === image.url);
-    content = <MediaFrame src={gatewayImageSource(asset?.signed_url ?? asset?.url)} alt={image?.type === "image" ? image.alt ?? "" : ""} />;
+    content = <MediaFrame src={gatewayImageSource(asset?.signed_url ?? asset?.url)} natural={asset?.image_width && asset?.image_height ? { width: asset.image_width, height: asset.image_height } : undefined} alt={image?.type === "image" ? image.alt ?? "" : ""} />;
   } else content = <pre>{raw}</pre>;
   return <div onMouseDown={event => { if (!(event.target as Element).closest("button,a,input")) event.preventDefault(); }}
     onClick={event => { if ((event.target as Element).closest("button,a,input")) return; event.stopPropagation(); editor.getRootElement()?.focus({ preventScroll: true });

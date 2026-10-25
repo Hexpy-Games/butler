@@ -143,6 +143,20 @@ async fn collected_child_images_reopen_as_parent_answer() -> Result<(), HarnessE
         .unwrap();
     let mut expected = with_v2_children(json!({"v":2,"blocks":[]}), image);
     butler_runtime::capabilities::answer_blocks::normalize(&mut expected);
+    let picture = &mut expected["blocks"][1]["tabs"][1]["blocks"][0];
+    let db = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
+    let (width, height, ratio): (f64, f64, f64) = db.query_row(
+        "SELECT width,height,pixel_ratio FROM app_assets WHERE id=?1",
+        [image],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    )?;
+    assert_eq!(
+        ratio, 2.0,
+        "the browser capture ratio reaches durable storage"
+    );
+    picture["image_width"] = json!((width / ratio).round());
+    picture["image_height"] = json!((height / ratio).round());
+    drop(db);
     let mut actual = sets[0]["spec"].clone();
     strip_signatures(&mut actual);
     assert_eq!(

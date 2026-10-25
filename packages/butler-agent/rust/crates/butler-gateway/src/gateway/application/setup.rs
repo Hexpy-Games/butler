@@ -238,6 +238,13 @@ pub trait AppSetupPort: Send + Sync + 'static {
         &self,
         input: ChatGptNoticeInput,
     ) -> ApplicationFuture<butler_models::models::chatgpt::ChatGptAccountState>;
+    fn oauth_credentials(
+        &self,
+    ) -> ApplicationFuture<butler_models::models::chatgpt::credentials::OauthCredentials>;
+    fn remove_oauth_credential(
+        &self,
+        id: String,
+    ) -> ApplicationFuture<butler_models::models::chatgpt::credentials::RemovedOauthCredential>;
     fn chatgpt_sign_out(&self) -> ApplicationFuture<ChatGptSignOutView>;
     fn start_oauth(&self, input: AppOauthStartInput) -> ApplicationFuture<OauthFlowView>;
     fn oauth_flow(&self, flow_id: String) -> ApplicationFuture<OauthFlowView>;
@@ -371,6 +378,19 @@ pub(crate) fn test_setup_port() -> Arc<dyn AppSetupPort> {
             &self,
             _: ChatGptNoticeInput,
         ) -> ApplicationFuture<butler_models::models::chatgpt::ChatGptAccountState> {
+            unsupported()
+        }
+        fn oauth_credentials(
+            &self,
+        ) -> ApplicationFuture<butler_models::models::chatgpt::credentials::OauthCredentials>
+        {
+            unsupported()
+        }
+        fn remove_oauth_credential(
+            &self,
+            _: String,
+        ) -> ApplicationFuture<butler_models::models::chatgpt::credentials::RemovedOauthCredential>
+        {
             unsupported()
         }
         fn chatgpt_sign_out(&self) -> ApplicationFuture<ChatGptSignOutView> {

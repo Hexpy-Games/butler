@@ -1,7 +1,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { AnswerLeafView, AnswerImageView } from "../../../../shared/answer-blocks-view";
-import { Clickable, EventTimeline, EventTimelineItem, Circle, MarkdownContent, MarkdownLink, MarkdownTable, MediaFrame, ProgressMeter, Stack, StatusChecklist, Typo } from "@/butler-ds";
+import { EventTimeline, EventTimelineItem, Circle, MarkdownContent, MarkdownLink, MarkdownTable, MediaFrame, ProgressMeter, Stack, StatusChecklist, Typo } from "@/butler-ds";
 import { appCopy } from "@/app/copy";
 import { AnswerSourceLine } from "./AnswerDataBlocks";
 import { answerImages, useAnswerSession } from "./answerBlockActions";
@@ -9,12 +9,15 @@ import { openImageViewer } from "../media/imageViewerState";
 
 function AnswerImage({ block }: { block: AnswerImageView }) {
   const images = answerImages([block], useAnswerSession(), appCopy.conversation.answerBlocks.image);
+  const view = () => { if (images[0]?.src) openImageViewer(images, 0); };
   return <Stack gap="xs">
-    <Clickable stretch variant="text" disabled={!images[0]?.src}
+    <MediaFrame src={images[0]?.src || undefined} aspect="1:1" role="button"
+      natural={block.image_width && block.image_height ? { width: block.image_width, height: block.image_height } : undefined}
+      aria-disabled={!images[0]?.src || undefined} tabIndex={images[0]?.src ? 0 : undefined}
       aria-label={appCopy.conversation.imageViewer.viewImage(block.caption ?? appCopy.conversation.answerBlocks.image)}
-      onClick={() => openImageViewer(images, 0)}>
-      <Stack grow gap="none"><MediaFrame src={images[0]?.src || undefined} aspect={block.media ?? "1:1"} alt={block.caption} placeholder /></Stack>
-    </Clickable>
+      onClick={view} onKeyDown={event => {
+        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); view(); }
+      }} alt={block.caption} placeholder />
     {block.caption ? <Typo.Caption>{block.caption}</Typo.Caption> : null}
     <AnswerSourceLine item={block} />
   </Stack>;

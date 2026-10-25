@@ -9,7 +9,6 @@ import { mergeSessionViewWindow } from "./sessionViewWindow.ts";
 import { chromeEnvironment } from "./chromeEnvironment.ts";
 import {
   currentAdaptiveMode,
-  normalizeAdaptivePanelState,
   restoreAdaptivePanelState,
 } from "../libs/design-system/responsive.ts";
 import {
@@ -66,7 +65,6 @@ import {
 } from "./projectWorkspaceKinds.ts";
 import {
   DEFAULT_LEFT_PANEL_WIDTH,
-  DEFAULT_RIGHT_PANEL_WIDTH,
 } from "./panelSizing.ts";
 import type {
   AppView,
@@ -140,14 +138,11 @@ export interface NavigationSetOptions {
 
 interface ButlerStore {
   leftOpen: boolean;
-  rightOpen: boolean;
   sessionInfoOpen: boolean;
   taskGraphEnabled: boolean;
-  rightTab: string;
   selectedArtifactId: string | null;
   selectedArtifact: SessionArtifactSummary | null;
   leftPanelWidth: number;
-  rightPanelWidth: number;
   sidebarChatsCollapsed: boolean;
   sidebarProjectsCollapsed: boolean;
   sidebarCollapsedProjectIds: string[];
@@ -195,12 +190,9 @@ interface ButlerStore {
   renameProject: ProjectSummary | null;
   renameSession: SessionSummary | null;
   setLeftOpen: (value: Updater<boolean>) => void;
-  setRightOpen: (value: Updater<boolean>) => void;
-  setRightTab: (rightTab: string) => void;
   setSelectedArtifactId: (artifactId: string | null) => void;
   openArtifact: (artifactId: string, artifact?: SessionArtifactSummary) => void;
   setLeftPanelWidth: (leftPanelWidth: number) => void;
-  setRightPanelWidth: (rightPanelWidth: number) => void;
   setSidebarChatsCollapsed: (value: Updater<boolean>) => void;
   setSidebarProjectsCollapsed: (value: Updater<boolean>) => void;
   setSidebarCollapsedProjectIds: (projectIds: Updater<string[]>) => void;
@@ -951,15 +943,11 @@ setAppCopyLanguage(initialSettings.language);
 
 export const useButlerStore = create<ButlerStore>()((set, get) => ({
   leftOpen: false,
-  // New users start without the inspector; a saved UI state restores it.
-  rightOpen: false,
   sessionInfoOpen: false,
   taskGraphEnabled: false,
-  rightTab: "summary",
   selectedArtifactId: null,
   selectedArtifact: null,
   leftPanelWidth: DEFAULT_LEFT_PANEL_WIDTH,
-  rightPanelWidth: DEFAULT_RIGHT_PANEL_WIDTH,
   sidebarChatsCollapsed: false,
   sidebarProjectsCollapsed: false,
   sidebarCollapsedProjectIds: [],
@@ -1000,53 +988,15 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
   renameProject: null,
   renameSession: null,
 
-  setLeftOpen: (value) =>
-    set((state) => {
-      const leftOpen = resolveUpdate(value, state.leftOpen);
-      const panels = leftOpen
-        ? normalizeAdaptivePanelState({
-            mode: currentAdaptiveMode(chromeEnvironment()),
-            requested: "left",
-            leftOpen,
-            rightOpen: state.rightOpen,
-          })
-        : { leftOpen: false, rightOpen: state.rightOpen };
-      return { ...panels, ...(panels.rightOpen === false && state.view.kind === "project-dashboard"
-        ? { view: { kind: "project-dashboard" as const, projectId: state.view.projectId } } : {}) };
-    }),
-  setRightOpen: async (value) => {
-    const leave = leaveCanonEditor();
-    if (leave !== true && !await leave) return;
-    set((state) => {
-      const rightOpen = resolveUpdate(value, state.rightOpen);
-      return rightOpen
-        ? normalizeAdaptivePanelState({
-            mode: currentAdaptiveMode(chromeEnvironment()),
-            requested: "right",
-            leftOpen: state.leftOpen,
-            rightOpen,
-          })
-        : { rightOpen: false, ...(state.view.kind === "project-dashboard"
-          ? { view: { kind: "project-dashboard" as const, projectId: state.view.projectId } } : {}) };
-    });
-  },
-  setRightTab: (rightTab) => set({ rightTab }),
+  setLeftOpen: (value) => set(state => ({ leftOpen: resolveUpdate(value, state.leftOpen) })),
   setSelectedArtifactId: (artifactId) =>
     set({ selectedArtifactId: artifactId, selectedArtifact: null }),
-  openArtifact: (artifactId, artifact) =>
-    set((state) => ({
-      ...(state.view.kind === "session" ? { sessionInfoOpen: true } : normalizeAdaptivePanelState({
-        mode: currentAdaptiveMode(chromeEnvironment()),
-        requested: "right",
-        leftOpen: state.leftOpen,
-        rightOpen: true,
-      })),
-      rightTab: "artifacts",
-      selectedArtifactId: artifactId,
-      selectedArtifact: artifact ?? null,
-    })),
+  openArtifact: (artifactId, artifact) => set(state => ({
+    ...(state.view.kind === "session" ? { sessionInfoOpen: true } : {}),
+    selectedArtifactId: artifactId,
+    selectedArtifact: artifact ?? null,
+  })),
   setLeftPanelWidth: (leftPanelWidth) => set({ leftPanelWidth }),
-  setRightPanelWidth: (rightPanelWidth) => set({ rightPanelWidth }),
   setSidebarChatsCollapsed: (value) =>
     set((state) => ({
       sidebarChatsCollapsed: resolveUpdate(value, state.sidebarChatsCollapsed),
@@ -1066,27 +1016,20 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
       ),
     })),
   hydrateFreshUiState: () =>
-    set((state) =>
-      freshAppUiPanelState(
-        currentAdaptiveMode(chromeEnvironment()),
-        state.rightOpen,
-      ),
-    ),
+    set({ leftOpen: freshAppUiPanelState(currentAdaptiveMode(chromeEnvironment()), false).leftOpen }),
   hydrateUiState: (uiState) => {
     const panels = restoreAdaptivePanelState({
       mode: currentAdaptiveMode(chromeEnvironment()),
       leftOpen: uiState.left_open,
-      rightOpen: uiState.right_open,
+      rightOpen: false,
     });
     set({
       activeChatId: uiState.active_session_id,
       view: initialDocumentView(),
-      ...panels,
-      rightTab: uiState.right_tab,
+      leftOpen: panels.leftOpen,
       sessionInfoOpen: uiState.session_info_open === true,
       taskGraphEnabled: uiState.task_graph_enabled === true,
       leftPanelWidth: uiState.left_panel_width,
-      rightPanelWidth: uiState.right_panel_width,
       sidebarChatsCollapsed: uiState.sidebar_chats_collapsed,
       sidebarProjectsCollapsed: uiState.sidebar_projects_collapsed,
       sidebarCollapsedProjectIds: uiState.sidebar_collapsed_project_ids,
@@ -2528,10 +2471,6 @@ export const selectActiveChat = (state: ButlerStore) =>
   activeChatFromNavigation(state.navigation, state.activeChatId);
 export const selectActiveSessionView = (state: ButlerStore) =>
   state.view.kind === "session";
-export const selectRightAvailable = (state: ButlerStore) =>
-  (state.view.kind === "project-dashboard" && Boolean(state.view.epicId));
-export const selectEffectiveRightOpen = (state: ButlerStore) =>
-  state.rightOpen && selectRightAvailable(state);
 export const selectViewTitle = (state: ButlerStore) =>
   activeTitleForView(state.view, selectActiveChat(state));
 export const selectIsSettingsView = (state: ButlerStore) =>

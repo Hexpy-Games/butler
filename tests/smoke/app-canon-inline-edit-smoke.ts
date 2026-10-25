@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
 import { openCanonBoard, seedCanonBoard } from "../support/canon-board-scenarios.ts";
+import { verifyAsideCloseGuards } from "../support/canon-aside-exits.ts";
 import { verifyInlineFields, verifyInlineExits, inlineShot } from "../support/canon-inline-edit-flows.ts";
 import { verifyPaneExits, verifyInlineAttachment, verifyEmptyDescription } from "../support/canon-inline-pane-flows.ts";
 import { installPendingAskEvents } from "../support/session-info-fixtures.ts";
@@ -50,15 +51,29 @@ try {
   await verifyEmptyDescription(page, epic.id);
   await verifyInlineAttachment(page, epic.id);
   await verifyPaneExits(page, server, epic.id, shots, other.id);
-  await openCanonBoard(page);
-  await page.locator(`[data-kanban-item="${epic.id}"]`).getByRole("button").first().click();
-  const dashboardShots = join(shots, "dashboard"); mkdirSync(dashboardShots, { recursive: true });
-  await verifyInlineFields(page, server, epic.id, dashboardShots);
-  await page.locator('[data-test-class="canon-epic-detail"]').getByRole("button", { name: "제목 수정", exact: true }).click();
-  await page.locator('[data-test-class="canon-epic-detail"]').getByLabel("제목", { exact: true }).fill("문서 화면과 검색 흐름 검토");
-  await inlineShot(page, shots, "dashboard-editing");
-  await page.locator('[data-test-class="canon-epic-detail"]').getByLabel("제목", { exact: true }).press("Escape");
-  await verifyInlineExits(page, server, epic.id, dashboardShots);
+  for (const width of [1440, 1024]) {
+    await page.setViewportSize({ width, height: 900 });
+    await openCanonBoard(page);
+    await page.locator('[data-kanban-item="' + epic.id + '"]').getByRole("button").first().click();
+    const aside = page.locator('[data-slot="management-page-aside"]');
+    await aside.waitFor();
+    assert.equal(await aside.getAttribute("data-layout"), width === 1440 ? "docked" : "floating");
+    const dashboardShots = join(shots, "dashboard-" + width); mkdirSync(dashboardShots, { recursive: true });
+    const current = await server.api<import("../../packages/butler-app/client/shared/canon-contracts.ts").EpicDetail>("/canon/epics/" + epic.id);
+    const initialDescription = "문서 화면의 구성과 검색 흐름을 검토합니다.";
+    await server.api("/canon/epics/" + epic.id, { method: "PATCH", body: JSON.stringify({
+      expected_revision: current.revision, description: initialDescription,
+    }) });
+    await aside.getByText(initialDescription, { exact: true }).waitFor();
+    await verifyInlineFields(page, server, epic.id, dashboardShots);
+    await page.locator('[data-test-class="canon-epic-detail"]').getByRole("button", { name: "제목 수정", exact: true }).click();
+    await page.locator('[data-test-class="canon-epic-detail"]').getByLabel("제목", { exact: true }).fill("문서 화면과 검색 흐름 검토");
+    await inlineShot(page, dashboardShots, "dashboard-editing");
+    await page.locator('[data-test-class="canon-epic-detail"]').getByLabel("제목", { exact: true }).press("Escape");
+    await verifyAsideCloseGuards(page, server, epic.id);
+    await verifyInlineExits(page, server, epic.id, dashboardShots);
+    await page.getByRole("button", { name: "돌아가기", exact: true }).click();
+  }
   assert.deepEqual(errors, []);
   assert.equal(server.stubModelCalls.length, 0);
   console.log(JSON.stringify({ result: "ASSERTIONS_PASS", screenshots: shots, stubModelCalls: 0 }));

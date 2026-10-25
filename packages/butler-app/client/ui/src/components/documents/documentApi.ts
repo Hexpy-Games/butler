@@ -1,7 +1,7 @@
 import { api } from "@/app/api";
 import { libraryChanged } from "@/app/libraryEvents";
 import { useButlerStore } from "@/app/store";
-export interface DocumentAsset { id: string; url: string; signed_url?: string }
+export interface DocumentAsset { id: string; url: string; signed_url?: string; image_width?: number; image_height?: number }
 export interface DocumentRevision { rev: number; author: "user" | "butler"; created_at: string; updated_at: string }
 export interface EditableDocument extends DocumentRevision {
   id: string; title: string; body: string; chat_id?: string; message_id?: string; assets?: DocumentAsset[];

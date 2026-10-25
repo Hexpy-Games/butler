@@ -5,7 +5,7 @@ import { createNativeAppServer } from "../support/native-app-server.ts";
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
 import { openCanonBoard, seedCanonBoard, waitToast } from "../support/canon-board-scenarios.ts";
 import { selectBoardPlan } from "../support/canon-board-selector.ts";
-import { closeCanonInspector } from "../support/canon-board-inspector.ts";
+import { closeCanonAside } from "../support/canon-board-aside.ts";
 import { probeFocusRing } from "../support/focus-ring-clipping.ts";
 import type { EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 
@@ -43,7 +43,7 @@ try {
     await capture("edit");
     if (!before) await attachmentRing(page, detail);
     await detail.getByRole("button", { name: "취소", exact: true }).click();
-    await closeCanonInspector(page);
+    await closeCanonAside(page);
     await selectBoardPlan(page, "백로그");
     await board.locator('[data-canon-backlog]').getByRole("button", { name: "새 과제", exact: true }).click();
     const create = page.getByRole("dialog");

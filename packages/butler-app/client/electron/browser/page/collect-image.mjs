@@ -56,6 +56,7 @@ export async function imageSource({ ref, obs, epoch, url }) {
     canvas.width = Math.max(1, Math.round(pixels.naturalWidth * ratio));
     canvas.height = Math.max(1, Math.round(pixels.naturalHeight * ratio));
     canvas.getContext("2d").drawImage(pixels, 0, 0, canvas.width, canvas.height);
+    result.pixel_ratio = 1;
     result.image = { data: canvas.toDataURL("image/png").split(",")[1] };
     if (/^(data|blob):/u.test(result.source_url)) result.source_url = location.href;
   } catch {
