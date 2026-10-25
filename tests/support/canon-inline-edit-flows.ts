@@ -28,7 +28,10 @@ export async function inlineShot(page: Page, dir: string, name: string) {
   else await page.waitForFunction(() => document.querySelectorAll("[data-sonner-toast]").length === 0);
   if (!name.endsWith("-hover")) {
     await page.mouse.move(5, 895); // Park the pointer so no hover tooltip overlaps the capture.
-    await page.waitForFunction(() => document.querySelectorAll('[role="tooltip"]:not([data-slot="resize-hint"])').length === 0);
+    await page.waitForFunction(() => document.querySelectorAll('[role="tooltip"]:not([data-slot="resize-hint"])').length === 0).catch(async error => {
+      const open = await page.evaluate(() => [...document.querySelectorAll('[role="tooltip"]:not([data-slot="resize-hint"])')].map(tip => tip.textContent));
+      throw new Error(`${name}: tooltip still open ${JSON.stringify(open)} (focus: ${await page.evaluate(() => document.activeElement?.outerHTML.slice(0, 160))})`, { cause: error });
+    });
   }
   await page.screenshot({ path: join(dir, `${name}.png`) });
 }

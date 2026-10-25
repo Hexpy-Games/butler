@@ -21,10 +21,11 @@ export function SessionSectionList({ layout, children }: { layout: AsideLayout; 
 export function SessionSection({ id, layout, title, count, children }: {
   id: string; layout: AsideLayout; title?: string; count?: number; children: ReactNode;
 }) {
-  const content = <Box padding="sm"><Stack gap="sm">
+  // Floating sections have no card edge, so they keep the larger inset the inline-edit hover bleed and ring need.
+  const content = <Box padding={layout === "docked" ? "sm" : "md"}><Stack gap="sm">
     {title && <SessionSectionHeader title={title} count={count} />}
     {children}
   </Stack></Box>;
-  return layout === "docked" ? <Card radius="lg" padding="none" data-session-section={id}>{content}</Card>
+  return layout === "docked" ? <Card padding="none" data-session-section={id}>{content}</Card>
     : <Stack gap="sm" data-session-section={id}>{content}</Stack>;
 }
