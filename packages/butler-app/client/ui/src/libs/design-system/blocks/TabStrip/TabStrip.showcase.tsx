@@ -22,7 +22,7 @@ const MATRIX_COPY = {
 
 function matrixGroups(variant: string, selected: boolean, { locale }: ShowcaseRenderContext): TabStripGroup[] {
   const copy = MATRIX_COPY[locale];
-  if (variant === "My tab") return [{ id: "mine", kind: "mine", tabs: [{ id: "t", title: copy.mine, faviconSrc: ICONS.docs }] }];
+  if (variant === "My tab" || variant === "Selected tab") return [{ id: "mine", kind: "mine", tabs: [{ id: "t", title: copy.mine, faviconSrc: ICONS.docs }] }];
   const tabs = [{ id: "t", title: copy.conversation, faviconSrc: ICONS.shop }];
   if (variant === "Conversation tab") return [{ id: "c", kind: "conversation", label: copy.group, tabs }];
   return [{ id: "c", kind: "conversation", label: copy.group, state: "working", collapsed: selected, tabs }];
@@ -42,10 +42,14 @@ function fileGroups(locale: ShowcaseRenderContext["locale"]): TabStripGroup[] {
   ] }];
 }
 
-/** Forces the cell's state on the tab itself, not on the group chip in front of it. */
+/**
+ * Forces the cell's state on the tab itself, not on the group chip in front of it. The close
+ * button shows only in the hover and focus-visible columns; "Selected tab" shows that the
+ * active tab follows the same rule.
+ */
 function MatrixCell({ context }: { context: ShowcaseStateContext }) {
   const cell = useRef<HTMLDivElement>(null);
-  const selected = context.state === "selected";
+  const selected = context.state === "selected" || context.variant === "Selected tab";
   useLayoutEffect(() => {
     if (context.variant !== "Group chip") cell.current?.querySelector('[role="tab"]')?.setAttribute("data-ds-force-target", "");
   }, [context.variant]);
@@ -100,6 +104,6 @@ export const stories: ShowcaseStory[] = [
 
 export const stateMatrix: ShowcaseStateMatrix = {
   states: ["default", "hover", "focus-visible", "active", "selected"],
-  variants: ["My tab", "Conversation tab", "Group chip"],
+  variants: ["My tab", "Selected tab", "Conversation tab", "Group chip"],
   render: (context) => <MatrixCell context={context} />,
 };

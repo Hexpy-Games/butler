@@ -200,6 +200,17 @@
   left: auto;
 }
 
+/* Viewer fixture of the cards frame's title row: the bar sits on the shell
+   surface (AdaptiveShell frame="cards" clears --titlebar-bg). */
+.fixture[data-surface="shell"] {
+  background: var(--shell-bg);
+}
+
+/* Viewer fixture of a card pane (the file viewer) filling the split's pane. */
+.fixturePane {
+  flex: 1 1 auto;
+}
+
 /* Viewer fixture of a collapsed sidebar: the inset AdaptiveShell provides
    (traffic lights, the floating sidebar toggle, then the title). */
 .fixtureCollapsed {

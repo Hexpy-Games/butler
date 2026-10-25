@@ -12,6 +12,7 @@ import type { Locator, Page } from "playwright";
 import type { SessionView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 import { FILES, IMAGE_SIZE, headerLayout, seedFileSession, viewerGeometry, withResults } from "../support/file-viewer-fixtures.ts";
 import { createNativeAppServer } from "../support/native-app-server.ts";
+import { verifyPaneToggleFill } from "../support/pane-toggle-fill.ts";
 import { auditSessionInfoFocus, installSessionBrowser } from "../support/session-info-fixtures.ts";
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
 
@@ -85,6 +86,8 @@ try {
   await verifyGeometry(viewer, "markdown");
   await infoToggle.click();
   await aside.waitFor({ state: "hidden" });
+  // '파일 보기' fills with the viewer card's surface while the viewer holds the slot (IconButton pane="viewer").
+  const fills = [await verifyPaneToggleFill(page, "viewer", true), await verifyPaneToggleFill(page, "browser", false)];
   await capture("markdown");
 
   // A second file adds file tabs; code reads in monospace.
@@ -111,6 +114,8 @@ try {
   await viewer.waitFor({ state: "detached" });
   assert.equal(await browserToggle.getAttribute("aria-pressed"), "true");
   assert.equal(await fileToggle.getAttribute("aria-pressed"), "false", "the files stay open behind the browser");
+  fills.push(await verifyPaneToggleFill(page, "browser", true), await verifyPaneToggleFill(page, "viewer", false));
+  console.log(JSON.stringify({ paneToggleFills: fills.map(({ pane, pressed, fill }) => ({ pane, pressed, fill })) }));
   await capture("switch-browser");
   await fileToggle.click();
   await viewer.locator("h1").getByText("릴리스 노트", { exact: true }).waitFor();

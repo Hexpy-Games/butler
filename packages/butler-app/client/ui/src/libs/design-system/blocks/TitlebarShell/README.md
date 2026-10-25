@@ -55,8 +55,18 @@ frame (`--titlebar-card-start`, `--titlebar-card-end`). Without the new props
 the bar renders exactly as before.
 
 The 세션 정보 toggle is an `IconButton` with `AppleReminder`. While the pane is
-open it passes `pressed` and `tone="butler"`, as the browser toggle does: the
-blue icon is the visible state and `aria-pressed` the announced one. When a
+open it passes `pressed` and `tone="butler"`, as the browser toggle does.
+
+## Pane toggles fill with their pane's surface
+Every title-bar toggle that opens a pane declares it with `IconButton pane`:
+`pane="aside"` (세션 정보), `pane="browser"` (the browser toggle) and
+`pane="viewer"` (the file viewer's toggle, a card pane in the split). While
+the pane is open (`pressed`), the button fills with that pane's own surface,
+opaque, so it reads as joined to the pane: `--tinted-glass-tint` for the
+aside, `--browser-pane-bg` for the browser, `--shell-card-bg` for a card
+pane. The blue icon (`tone="butler"`) stays; `aria-pressed` is the announced
+state. The task graph opens a full-window dialog, not a pane, so its toggle
+declares no pane and stays unfilled; so does ⋯ (a menu). When a
 request waits for an answer, pass `indicator` and say so in the label (“세션 정보
 · 답을 기다리는 요청 있음”), since the dot itself is hidden from assistive tech;
 the dot reads the same over either tone.

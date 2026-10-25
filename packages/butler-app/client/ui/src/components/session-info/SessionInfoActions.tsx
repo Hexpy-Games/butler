@@ -23,8 +23,8 @@ export function SessionInfoActions() {
         <ScrollArea fill>{graphOpen && <TasksPanel key={sessionId} hideHeading />}</ScrollArea>
       </DialogContent>
     </Dialog>}
-    <IconButton label={c.title} aria-label={indicator ? c.waitingLabel : c.title} pressed={open} tone={open ? "butler" : "default"}
-      indicator={indicator} data-test-class="session-info-toggle" onClick={async () => {
+    <IconButton label={c.title} aria-label={indicator ? c.waitingLabel : c.title} pane="aside" pressed={open}
+      tone={open ? "butler" : "default"} indicator={indicator} data-test-class="session-info-toggle" onClick={async () => {
         if (await leaveCanonEditor()) useButlerStore.setState(state => ({ sessionInfoOpen: !state.sessionInfoOpen }));
       }}>
       <AppleReminder size="md" />
