@@ -44,7 +44,7 @@ export const guidance: ShowcaseGuidance = {
   ],
   recipes: [
     { name: "Conversation titlebar", description: "The leading control aligns with the title line; the bar is a drag region.", render: () => <ConversationTitlebar /> },
-    { name: "Conversation titlebar beside the browser", description: "⋯ right after the title, 세션 정보 at the chat card's end, the browser toggle over the pane. Pass the split's chatWidth as splitChatWidth while the pane is open.", render: () => <SplitTitlebar paneOpen={false} chatWidth={400} /> },
+    { name: "Conversation titlebar beside the browser", description: "⋯ after the title line (title, then subtitle), 세션 정보 at the chat card's end, the browser toggle over the pane. Pass the split's chatWidth as splitChatWidth while the pane is open.", render: () => <SplitTitlebar paneOpen={false} chatWidth={400} /> },
     { name: "Nested screen with back", description: "Nested screens pass back; it goes up one level (⌘[ / Alt+←). Top-level screens pass nothing.", render: () => <NestedTitlebar /> },
   ],
   doDont: [
@@ -55,9 +55,9 @@ export const guidance: ShowcaseGuidance = {
   ],
   content: [
     "The title is the conversation title; the subtitle is project · branch.",
-    "titleActions sit right after the title (the conversation's ⋯); chatTrailing holds the chat card's own controls (세션 정보); trailing holds what belongs to the window or the pane (the browser toggle).",
+    "titleActions sit after the whole title line, title then subtitle (the conversation's ⋯); a truncated subtitle ends in its ellipsis and ⋯ follows it; chatTrailing holds the chat card's own controls (세션 정보); trailing holds what belongs to the window or the pane (the browser toggle).",
     "leadingSize=\"auto\" lets the leading slot hold a control at its own size (the standalone Browser's conversation button); the collapsed-sidebar inset is unchanged.",
   ],
-  accessibility: ["titleActions come after the subtitle in reading order, so the title and subtitle read as one unit; focus order matches the screen (nothing focusable in the subtitle).", "The indicator dot is hidden from assistive tech: say what it means in the label (“세션 정보 · 답을 기다리는 요청 있음”).", "dragRegion makes the bar a window drag region; controls inside it stay clickable (no-drag); window controls have labels.", "The back button is named by its label (“Back to Scraps”) and has the same action as ⌘[ / Alt+←."],
+  accessibility: ["titleActions come after the subtitle on screen and in reading order, so the title and subtitle read as one unit; focus order matches the screen (nothing focusable in the subtitle).", "A panel toggle (세션 정보, the browser) passes pressed and tone=\"butler\" while its panel is open: the blue icon is the visible state, aria-pressed the announced one. The indicator dot stays on top of either tone.", "The indicator dot is hidden from assistive tech: say what it means in the label (“세션 정보 · 답을 기다리는 요청 있음”).", "dragRegion makes the bar a window drag region; controls inside it stay clickable (no-drag); window controls have labels.", "The back button is named by its label (“Back to Scraps”) and has the same action as ⌘[ / Alt+←."],
   tokens: ["--titlebar-height", "--titlebar-bg", "--chrome-floating-toggle-size", "--shell-card-inset"],
 };

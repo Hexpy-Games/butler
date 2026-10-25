@@ -2169,7 +2169,7 @@ The conversation column: scroll container, readable message width, composer rese
 - Not for: One message → `MessageRow`
 - Not for: A wallpaper behind the new chat only (its wallpaper prop) → `PromptSuggestionList`
 - Not for: Live previews of Butler's tabs (pass it as the rail slot) → `TabRail`
-- Tokens: `--composer-reserve`, `--page-max-width-reading`, `--conversation-bg`, `--tab-rail-clearance`, `--tab-rail-shelf-height`
+- Tokens: `--composer-reserve`, `--page-max-width-reading`, `--conversation-bg`, `--tab-rail-clearance`, `--tab-rail-shelf-height`, `--motion-slow`, `--motion-ease-emphasized`
 
 ### DisclosureRow
 
