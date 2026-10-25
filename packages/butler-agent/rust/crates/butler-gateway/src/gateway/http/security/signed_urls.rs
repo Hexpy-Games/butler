@@ -77,6 +77,7 @@ impl ResourceSigner {
         &self,
         response: Response,
         now: u64,
+        application: &dyn crate::gateway::GatewayApplication,
     ) -> Response {
         let is_json = response
             .headers()
@@ -93,6 +94,9 @@ impl ResourceSigner {
         };
         let Some(decorated) = self.decorate_bytes(&bytes, now) else {
             return Response::from_parts(parts, Body::from(bytes));
+        };
+        let Ok(decorated) = project_bytes(application, &decorated).await else {
+            return error_response(&HttpError::Internal);
         };
         parts.headers.remove(header::CONTENT_LENGTH);
         Response::from_parts(parts, Body::from(decorated))
@@ -159,6 +163,41 @@ impl ResourceSigner {
             _ => {}
         }
     }
+}
+
+pub(super) async fn project_bytes(
+    application: &dyn crate::gateway::GatewayApplication,
+    bytes: &[u8],
+) -> Result<Vec<u8>, HttpError> {
+    if !bytes.windows(5).any(|w| w == b"\"img\"")
+        && !bytes.windows(16).any(|w| w == b"/message-assets/")
+    {
+        return Ok(bytes.to_vec());
+    }
+    let value = serde_json::from_slice(bytes).map_err(|_| HttpError::Internal)?;
+    let value = application
+        .assets(crate::gateway::AppAssetCommand::Project { value })
+        .await?;
+    serde_json::to_vec(&value).map_err(|_| HttpError::Internal)
+}
+
+pub(super) async fn project_chunk(
+    application: &dyn crate::gateway::GatewayApplication,
+    chunk: Bytes,
+) -> Result<Bytes, HttpError> {
+    let Some((head, json)) = split_event_chunk(&chunk) else {
+        return Ok(chunk);
+    };
+    if !json.windows(5).any(|w| w == b"\"img\"")
+        && !json.windows(16).any(|w| w == b"/message-assets/")
+    {
+        return Ok(chunk);
+    }
+    let json = project_bytes(application, json).await?;
+    let mut output = head.to_vec();
+    output.extend(json);
+    output.extend(b"\n\n");
+    Ok(Bytes::from(output))
 }
 
 /// Whether `path` names one message file or collected image.
