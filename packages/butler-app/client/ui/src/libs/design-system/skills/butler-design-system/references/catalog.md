@@ -600,6 +600,7 @@
 | Several lines of text | `Textarea` | `Input` |
 | Show a conversation's tokens and cost for an API-key model | `UsageSummaryRows` |  |
 | Show a delegated worker's progress (inspector, composer panel) | `WorkerActivityRow` |  |
+| Show a file as a reading page in a docked viewer (surface="page") | `ArtifactPreview` |  |
 | Show a known fraction: budget used, steps done | `ProgressMeter` |  |
 | Show a masked or read-only value that people can select | `Input` |  |
 | Show a status or category next to a title | `Tag` |  |
@@ -2815,6 +2816,7 @@ Files Butler produced in an answer: open the artifact, save it, or run another a
 The artifact viewer body: exactly one of text, image or frame (PDF/HTML), or a loading/failed caption.
 
 - Use for: Preview an artifact in the artifact viewer or a document dialog
+- Use for: Show a file as a reading page in a docked viewer (surface="page")
 - Not for: Rendered markdown documents → `MarkdownContent`
 - Not for: Reading a spec with facts → `DocumentReader`
 - Tokens: `--surface`, `--radius-panel`, `--typo-code-size`

@@ -23,6 +23,7 @@ function TabFavicon({ tab }: { tab: TabStripTab }) {
   if (tab.state === "loading") mark = <Spinner size={14} />;
   else if (tab.state === "working") mark = <ButlerThinkingMark size="sm" state="working" />;
   else if (tab.state === "crashed") mark = <AlertCircle size="md" />;
+  else if (tab.icon) mark = tab.icon;
   else if (tab.faviconSrc && brokenSrc !== tab.faviconSrc) {
     mark = <img src={tab.faviconSrc} alt="" width={16} height={16} draggable={false} onError={() => setBrokenSrc(tab.faviconSrc ?? null)} />;
   } else mark = <Globe2 size="md" />;
