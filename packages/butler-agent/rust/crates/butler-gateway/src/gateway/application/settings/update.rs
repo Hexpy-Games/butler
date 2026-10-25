@@ -108,6 +108,7 @@ pub(super) fn event_payload(projection: &Value) -> Map<String, Value> {
         "recall_mode",
         "recall_judge_model",
         "consolidation_model",
+        "consolidation_time",
         "consolidation_reasoning_effort",
         "effective_consolidation_model",
         "context_window_tokens",

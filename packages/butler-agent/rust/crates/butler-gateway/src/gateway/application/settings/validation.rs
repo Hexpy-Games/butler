@@ -10,6 +10,7 @@ const UPDATE_KEYS: &[&str] = &[
     "recall_mode",
     "recall_judge_model",
     "consolidation_model",
+    "consolidation_time",
     "consolidation_reasoning_effort",
     "context_window_tokens",
     "worker_profiles",
@@ -55,8 +56,11 @@ pub(super) fn is_request(value: &Value) -> bool {
         return false;
     }
     if input
-        .get("update_previews")
-        .is_some_and(|value| !value.is_boolean())
+        .get("consolidation_time")
+        .is_some_and(|v| !v.as_str().is_some_and(valid_time_of_day))
+        || input
+            .get("update_previews")
+            .is_some_and(|value| !value.is_boolean())
     {
         return false;
     }
@@ -303,4 +307,14 @@ fn bounded_text(value: &str, limit: usize) -> bool {
 
 fn utf16_len(value: &str) -> usize {
     value.encode_utf16().count()
+}
+
+fn valid_time_of_day(value: &str) -> bool {
+    let b = value.as_bytes();
+    b.len() == 5
+        && b[2] == b':'
+        && b[0..2].iter().all(u8::is_ascii_digit)
+        && b[3..5].iter().all(u8::is_ascii_digit)
+        && &b[0..2] <= b"23".as_slice()
+        && &b[3..5] <= b"59".as_slice()
 }

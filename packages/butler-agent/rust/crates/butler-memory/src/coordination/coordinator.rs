@@ -169,6 +169,15 @@ impl CognitionWriteCoordinator {
         }
     }
 
+    /// Inspect writer availability without acquiring or waiting for a lease.
+    pub fn writer_available(&self, lock_path: &Path) -> CoordinationResult<bool> {
+        use super::types::ConsolidationLockState::{Free, InitializationAvailable};
+        Ok(matches!(
+            self.inner.inspect(lock_path)?.state,
+            Free | InitializationAvailable
+        ))
+    }
+
     pub(crate) fn inspect(
         &self,
         lock_path: &Path,

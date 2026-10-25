@@ -1,26 +1,22 @@
-import { Button, DisclosureRow, Spinner, Stack, Tooltip, Typo } from "@/butler-ds";
+import { ExpandableText, IconButton, Spinner, Stack, Trash2 } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { Instruction } from "./memoryTypes";
 import { instructionDuration, instructionScope } from "./hooks/useInstructions";
-/** One compact disclosure card: first line collapsed, full text and Delete when open. */
-export function InstructionRow({ item, open, onToggle, deleting, locked, lockReason, onDelete }: {
-  item: Instruction; open: boolean; onToggle: () => void; deleting: boolean; locked: boolean; lockReason?: string; onDelete: () => void;
+
+/** The text grows in place while its delete action stays at the top. */
+export function InstructionRow({ item, deleting, locked, lockReason, onDelete }: {
+  item: Instruction; deleting: boolean; locked: boolean; lockReason?: string; onDelete: () => void;
 }) {
   const id = `instruction-text-${item.handle}`;
-  const panelId = `instruction-panel-${item.handle}`;
   const duration = instructionDuration(item);
-  const meta = item.duration === "this chat" ? duration : [instructionScope(item), duration].filter(Boolean).join(" · ");
-  const firstLine = item.text.split("\n").find((line) => line.trim()) ?? item.text;
-  return <DisclosureRow id={`instruction-${item.handle}`} data-test-class="instruction-row" title={firstLine} meta={meta}
-    controlsId={panelId} open={open} onToggle={onToggle}>
-    <Stack id={panelId} gap="sm" cross="start">
-      <Typo.Body as="div" id={id} wrap="pre">{item.text}</Typo.Body>
-      <Tooltip label={locked ? lockReason ?? appCopy.settings.memory.deleting : undefined}>
-        <Button id={`instruction-delete-${item.handle}`} type="button" variant="outline" disabled={locked} aria-busy={deleting || undefined}
-          aria-label={locked ? `${appCopy.common.delete}. ${lockReason ?? appCopy.settings.memory.deleting}` : undefined}
-          aria-describedby={id} iconStart={deleting ? <Spinner size={14} /> : undefined}
-          text={appCopy.common.delete} onClick={onDelete} />
-      </Tooltip>
-    </Stack>
-  </DisclosureRow>;
+  const meta = item.scope.kind === "session" && item.duration === "this chat" ? duration
+    : [instructionScope(item), item.duration === "always" ? "" : duration].filter(Boolean).join(" · ");
+  const reason = lockReason ?? appCopy.settings.memory.deleting;
+  return <Stack id={`instruction-${item.handle}`} data-test-class="instruction-row" align="row" cross="start" gap="md">
+    <Stack.Item grow minWidth="0"><ExpandableText id={id} collapsedLines={1} meta={meta}>{item.text}</ExpandableText></Stack.Item>
+    <IconButton id={`instruction-delete-${item.handle}`} label={locked ? `${appCopy.common.delete} · ${reason}` : appCopy.common.delete}
+      disabled={locked} aria-busy={deleting || undefined} aria-describedby={id} onClick={onDelete}>
+      {deleting ? <Spinner size={14} /> : <Trash2 size="md" />}
+    </IconButton>
+  </Stack>;
 }

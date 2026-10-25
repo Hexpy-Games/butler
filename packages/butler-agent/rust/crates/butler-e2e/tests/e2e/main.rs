@@ -238,6 +238,7 @@ mod delegate_host_lost;
 mod delegated_batching;
 mod deliverables;
 mod mac_app_update;
+mod memory_consolidation;
 mod memory_instructions;
 mod memory_management;
 mod memory_profile_reset;

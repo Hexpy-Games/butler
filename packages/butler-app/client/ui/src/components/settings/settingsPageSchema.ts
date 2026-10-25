@@ -22,11 +22,12 @@ const WORKER_PROFILE_FIELDS = [
  */
 export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSectionSchema[]> = {
   memory: [
-    { id: "instructions", kind: "list", fields: [] },
-    { id: "chat-memory", kind: "form", fields: ["recall-mode", "recall-judge-model", "memory-free-space", "memory-reset-chat"] },
+    { id: "instructions", kind: "form", fields: [] },
+    { id: "chat-memory", kind: "form", fields: ["recall-mode", "recall-judge-model", "free-space", "reset-chat-memory"] },
+    { id: "memory-cleanup", kind: "form", fields: ["consolidation-time", "consolidation-run", "consolidation-model", "consolidation-reasoning"] },
     { id: "memory-model", kind: "form", fields: ["memory-model"] },
-    { id: "profile-memory", kind: "form", fields: ["memory-reset-profile"] },
-    { id: "project-memory", kind: "form", fields: ["memory-project", "memory-reset-project"] },
+    { id: "profile-memory", kind: "form", fields: ["reset-profile"] },
+    { id: "project-memory", kind: "form", fields: ["memory-project", "reset-project-memory"] },
   ],
   general: [
     { id: "language-region", kind: "form", fields: ["language", "timezone"] },
@@ -53,12 +54,11 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "learning", kind: "form", fields: ["profiling-mode", "profiling-model", "profiling-reasoning", "memory-link"] },
     { id: "agent-import", kind: "list", fields: ["profile-migration", "profile-migration-prompt", "profile-migration-dump"] },
   ],
-  // Memory cleanup and worker profiles show when the Advanced disclosure is open.
+  // Worker profiles show when the Advanced disclosure is open.
   models: [
     { id: "butler-model", kind: "form", fields: ["primary-model", "reasoning", "context-limit", "local-reasoning-budget"] },
     { id: "backup-models", kind: "form", fields: ["backup-models-summary", "backup-models-enabled", "backup-models"] },
     { id: "advanced-models", kind: "form", fields: [] },
-    { id: "memory-cleanup", kind: "form", fields: ["consolidation-model", "consolidation-reasoning"], optional: true },
     { id: "worker-profiles", kind: "list", fields: WORKER_PROFILE_FIELDS, optional: true },
   ],
   hooks: [
