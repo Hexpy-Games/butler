@@ -92,52 +92,6 @@
   box-shadow: var(--shadow-drag-lift);
 }
 
-/* Folder (variant="folder"): the selected tab is a folder tab. It takes the
-   sheet's surface (--browser-pane-bg, the BrowserPane toolbar's), rounds only
-   its top corners and sits flush on the strip's bottom edge, so it runs into
-   the toolbar below with no gap or line. Unselected tabs stay recessed on the
-   band. Rings sit inside the tab: nothing below the strip has room for them. */
-.root[data-variant="folder"] .scroller {
-  align-items: flex-end;
-  padding-bottom: 0;
-}
-
-.root[data-variant="folder"] .slot > .tab[data-slot="clickable"] {
-  min-height: var(--menu-item-height);
-  border-radius: var(--radius-control) var(--radius-control) 0 0;
-}
-
-/* Hover stays a step below the selected tab, so only one tab reads as open. */
-.root[data-variant="folder"]
-  .slot
-  > .tab[data-slot="clickable"]:hover:not([aria-selected="true"]) {
-  background: color-mix(in srgb, var(--selection) 40%, transparent);
-}
-
-.root[data-variant="folder"] .slot > .tab[data-slot="clickable"]:focus-visible {
-  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
-}
-
-.root[data-variant="folder"]
-  .slot
-  > .tab[data-slot="clickable"][aria-selected="true"],
-.root[data-variant="folder"]
-  .slot[data-dragging]
-  > .tab[data-slot="clickable"] {
-  background: var(--browser-pane-bg);
-}
-
-/* Chips stay centred on the tabs beside them; their edge reads on the band. */
-.root[data-variant="folder"] .chipSlot {
-  align-self: center;
-}
-
-.root[data-variant="folder"]
-  .chipSlot
-  .chip[data-slot="clickable"]:not([data-over]) {
-  border-color: var(--line-strong);
-}
-
 .slot > .tab[data-entering] {
   animation: tab-strip-enter var(--motion-base) var(--motion-ease-enter);
 }

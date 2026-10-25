@@ -1756,7 +1756,7 @@ The browser sheet: tab row, toolbar and the page card, inset on a tinted pane wh
 - Use for: The standalone Browser view under its title bar
 - Not for: A preview of a Butler output inside the chat → `ArtifactPreview`
 - Not for: A page frame inside a dashboard or settings → `SurfacePanel`
-- Tokens: `--browser-pane-bg`, `--browser-tab-row-shade`, `--browser-pane-radius`, `--browser-card-inset`, `--browser-band-height`, `--menu-item-height`
+- Tokens: `--browser-pane-bg`, `--browser-pane-radius`, `--browser-card-inset`, `--browser-band-height`, `--menu-item-height`
 
 ### DragPreview
 
@@ -2003,7 +2003,7 @@ The Browser area's tab row: closable, reorderable tabs grouped as my tabs plus o
 - Not for: Switching peer views inside one panel → `Tabs`
 - Not for: Sidebar navigation between conversations → `NavRow`
 - Not for: Reordering settings cards → `SortableCardList`
-- Tokens: `--tab-strip-tab-min-width`, `--tab-strip-tab-max-width`, `--tab-strip-chip-max-width`, `--selection-strong`, `--control-height-md`, `--scroll-fade-size`, `--motion-base`, `--color-warning-text`, `--color-danger-text`, `--browser-pane-bg`, `--menu-item-height`, `--line-strong`
+- Tokens: `--tab-strip-tab-min-width`, `--tab-strip-tab-max-width`, `--tab-strip-chip-max-width`, `--selection-strong`, `--control-height-md`, `--scroll-fade-size`, `--motion-base`, `--color-warning-text`, `--color-danger-text`
 
 ## Blocks · Composer
 

@@ -68,7 +68,7 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
     onFocusCapture={() => void browserCall("scope", { value: true })}
     onBlurCapture={(event) => {
       if (!event.currentTarget.contains(event.relatedTarget as Node | null)) void browserCall("scope", { value: false });
-    }} tabs={<TabStrip variant="folder" groups={groups} activeTabId={tab?.id ?? null} panelId="browser-page" hideChip={Boolean(sessionId)}
+    }} tabs={<TabStrip groups={groups} activeTabId={tab?.id ?? null} panelId="browser-page" hideChip={Boolean(sessionId)}
       onPointerDownCapture={drag} onKeyDownCapture={() => {
         // Modifier keys during a pointer drag must retain the outside-drop guard.
         if (!useBrowserTabDrag.getState().tabId) useBrowserTabDrag.setState({ outside: false });

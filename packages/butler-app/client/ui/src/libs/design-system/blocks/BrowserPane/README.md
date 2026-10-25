@@ -16,22 +16,14 @@ tab row, the toolbar row and the page card, inset by `--browser-card-inset`.
 
 ## Container vs Presenter
 The App owns tabs, navigation, pages, bookmarks and downloads, and passes
-DS blocks into the slots: `TabStrip` (with `variant="folder"`, `hideChip` and
-`trailing`), `BrowserToolbar` with `AddressField` and `IconButton`s, and `PageCard`.
-
-## Folder tabs
-With a `TabStrip variant="folder"` in the tab row, the pane draws the row as a
-recessed band (`--browser-tab-row-shade` over the sheet) from its top edge,
-with the tabs flush on the band's bottom. The selected tab keeps the sheet's
-surface, so it runs straight into the toolbar like a folder tab. The toolbar
-then gives the address field `--space-sm` above and below: it clears the tabs
-and lines up with the page card's inset. A pill strip keeps the plain rows.
+DS blocks into the slots: `TabStrip` (with `hideChip` and `trailing`),
+`BrowserToolbar` with `AddressField` and `IconButton`s, and `PageCard`.
 
 ## Usage
 
 ```tsx
 <BrowserPane label={copy.browser.title} placement="conversation"
-  tabs={<TabStrip variant="folder" hideChip groups={groups} activeTabId={active} panelId="page" trailing={bringIn} … />}
+  tabs={<TabStrip hideChip groups={groups} activeTabId={active} panelId="page" trailing={bringIn} … />}
   toolbar={<BrowserToolbar navigation={nav} address={<AddressField url={url} onSubmit={open} />} actions={actions} />}>
   <PageCard panelId="page" holder={holder} band={band} onBoundsChange={placeNativeView} />
 </BrowserPane>

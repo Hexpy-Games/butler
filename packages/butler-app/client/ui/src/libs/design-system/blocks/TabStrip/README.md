@@ -42,15 +42,5 @@ conversation's browser pane; the title bar names it) and shows its tabs at
 full strength. `trailing` holds row-end controls (Bring in a tab); they stay
 out of the tab focus order. Keyboard moves and drag work as before.
 
-## Folder variant
-`variant="folder"` is the Browser's strip inside a `BrowserPane`. The selected
-tab is a folder tab: it takes the sheet's surface (`--browser-pane-bg`, the
-toolbar's), rounds only its top corners and sits flush on the strip's bottom
-edge, so it runs into the toolbar with no gap or line. The pane draws the tab
-row as a recessed band (`--browser-tab-row-shade`). Unselected tabs stay on the
-band; hover is a step below the selected tab; chips keep a `--line-strong` edge.
-The focus ring sits inside the tab, since nothing below the strip has room for
-it. The default `variant="pill"` (a flat rounded fill) is unchanged.
-
 ## Tags
 browser, tabs, tablist, groups, drag, reorder, conversation

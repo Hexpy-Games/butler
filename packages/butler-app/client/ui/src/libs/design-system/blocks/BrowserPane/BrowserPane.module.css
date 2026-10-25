@@ -70,34 +70,6 @@
   flex: 1 1 auto;
 }
 
-/* Folder tabs (a TabStrip with variant="folder"): the tab row becomes a
-   recessed band from the sheet's top edge, its tabs flush on the band's
-   bottom, and the selected tab (the sheet's surface) runs straight into the
-   toolbar. The toolbar then gives the address field --space-sm above and
-   below, so the field clears the tabs and lines up with the page card's
-   inset. The band's top keeps the first tab --space-sm off the edge (the
-   strip pads itself by the focus ring's width). */
-.pane:has(> .tabRow > [data-slot="tab-strip"][data-variant="folder"]) {
-  padding-top: 0;
-}
-
-.pane > .tabRow:has(> [data-slot="tab-strip"][data-variant="folder"]),
-[data-panel-layout="docked"]
-  .pane[data-frame="cards"]
-  > .tabRow:has(> [data-slot="tab-strip"][data-variant="folder"]) {
-  align-items: flex-end;
-  padding-top: calc(var(--space-sm) - var(--focus-ring-width));
-  padding-bottom: 0;
-  background: var(--browser-tab-row-shade);
-}
-
-.pane:has(> .tabRow > [data-slot="tab-strip"][data-variant="folder"])
-  > .toolbar {
-  height: auto;
-  min-height: var(--browser-band-height);
-  padding-block: var(--space-sm);
-}
-
 .toolbar {
   container-name: browser-toolbar;
   container-type: inline-size;
