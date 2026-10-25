@@ -128,7 +128,10 @@ rectangular shell.
   `--shell-card-inset` (8) from the window and `--shell-card-gap` (8) from
   each other; the gap is the resize handle's lane. The workspace keeps a
   transparent 1px frame, so the title row stays on its flat-frame pixels and
-  the cards start 1px under the 48px title row.
+  the cards start 1px under the 48px title row. The docked sidebar column
+  keeps the same 1px top frame, so its title row and first row fill line up
+  with the workspace's title row and the cards' top edge (a peeked sidebar is
+  its own card and keeps its inset).
 - `AdaptiveShellTitle` (first child of the workspace) holds the TitlebarShell.
   In cards it spans the inspector's column too: opening or sliding the
   inspector never moves the trailing icons. The inspector slide clips the
