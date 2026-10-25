@@ -26,7 +26,7 @@ export interface TabStripGroup {
   /** Conversation title; the `mine` group reads `labels.myTabs` when omitted. */
   label?: string;
   tabs: TabStripTab[];
-  /** Folded groups show only their chip. */
+  /** A folded group shows only its title, a few favicons and the count of the rest. */
   collapsed?: boolean;
   state?: TabStripGroupState;
 }
@@ -39,13 +39,15 @@ export interface TabStripMove {
   index: number;
 }
 
-/** One focusable stop of the strip, in visual order. */
+/** One focusable stop of the strip, in visual order: a group's chip, its tabs, then its own new-tab button. */
 export type TabStripItem =
   | { key: string; kind: "chip"; groupId: string }
-  | { key: string; kind: "tab"; groupId: string; tabId: string };
+  | { key: string; kind: "tab"; groupId: string; tabId: string }
+  | { key: string; kind: "new"; groupId: string };
 
 export const tabKey = (tabId: string) => `tab:${tabId}`;
 export const chipKey = (groupId: string) => `chip:${groupId}`;
+export const newTabKey = (groupId: string) => `new:${groupId}`;
 
 /**
  * The `mine` group shows its chip only beside other groups. `hideChip` drops the chip of a lone group
@@ -56,11 +58,20 @@ export function showsChip(group: TabStripGroup, groups: readonly TabStripGroup[]
   return group.kind !== "mine" || groups.length > 1;
 }
 
-export function stripItems(groups: readonly TabStripGroup[], hideChip = false): TabStripItem[] {
-  return groups.flatMap((group): TabStripItem[] => [
-    ...(showsChip(group, groups, hideChip) ? [{ key: chipKey(group.id), kind: "chip" as const, groupId: group.id }] : []),
-    ...(group.collapsed ? [] : group.tabs.map((tab) => ({ key: tabKey(tab.id), kind: "tab" as const, groupId: group.id, tabId: tab.id }))),
-  ]);
+/**
+ * The strip's focus stops. With `groupNewTab`, every titled group that is open ends in its own
+ * new-tab button; a folded group hides it with its tabs.
+ */
+export function stripItems(groups: readonly TabStripGroup[], hideChip = false, groupNewTab = false): TabStripItem[] {
+  return groups.flatMap((group): TabStripItem[] => {
+    const titled = showsChip(group, groups, hideChip);
+    if (group.collapsed) return titled ? [{ key: chipKey(group.id), kind: "chip", groupId: group.id }] : [];
+    return [
+      ...(titled ? [{ key: chipKey(group.id), kind: "chip" as const, groupId: group.id }] : []),
+      ...group.tabs.map((tab) => ({ key: tabKey(tab.id), kind: "tab" as const, groupId: group.id, tabId: tab.id })),
+      ...(titled && groupNewTab ? [{ key: newTabKey(group.id), kind: "new" as const, groupId: group.id }] : []),
+    ];
+  });
 }
 
 export type TabStripNavKey = "ArrowLeft" | "ArrowRight" | "Home" | "End";

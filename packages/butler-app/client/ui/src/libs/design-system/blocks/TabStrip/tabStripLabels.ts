@@ -12,6 +12,10 @@ export interface TabStripLabels {
   waiting: string;
   crashed: string;
   tabCount: (count: number) => string;
+  /** A group's own new-tab button ("New tab in {group}"). */
+  newTabIn: (group: string) => string;
+  /** A folded group's count of tabs beyond its favicons ("+2"). */
+  moreTabs: (count: number) => string;
   moved: (title: string, group: string, position: number) => string;
 }
 
@@ -27,6 +31,8 @@ export const TAB_STRIP_LABELS: TabStripLabels = {
   waiting: "Waiting for approval",
   crashed: "Page stopped",
   tabCount: (count) => (count === 1 ? "1 tab" : `${count} tabs`),
+  newTabIn: (group) => `New tab in ${group}`,
+  moreTabs: (count) => `+${count}`,
   moved: (title, group, position) => `${title}: ${group}, position ${position}`,
 };
 

@@ -40,14 +40,16 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
   useEffect(() => {
     void browserCall("scope", { value: false, owner: sessionId ? `conversation:${sessionId}` : "mine" });
   }, [sessionId]);
-  const create = (placeholder = false) => browserCall("create", sessionId
-    ? { owner: `conversation:${sessionId}`, profile: "signed_out", placeholder } : { placeholder });
+  const paneOwner = sessionId ? `conversation:${sessionId}` : "mine";
+  // Groups are keyed by their tabs' owner, so a group's + opens its tab with that owner.
+  const create = (owner: string, placeholder = false) => browserCall("create", owner === "mine"
+    ? { placeholder } : { owner, profile: "signed_out", placeholder });
   // Opened with no tabs, the pane opens a new tab at once (its in-app new-tab page, address focused).
   // It is a placeholder: a page that opens in or moves into the group (Butler's, a link's) takes its place.
   useEffect(() => {
     if (!state.restored || !state.enabled || tabs.length || creating.current) return;
     creating.current = true;
-    void create(true).finally(() => { creating.current = false; });
+    void create(paneOwner, true).finally(() => { creating.current = false; });
   }, [sessionId, state.restored, state.enabled, tabs.length]);
   const groups: TabStripGroup[] = [];
   for (const item of tabs) {
@@ -76,10 +78,12 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
       labels={{ tabs: copy.title, myTabs: copy.myTabs, newTab: copy.newTab, closeTab: copy.closeTab,
         untitled: copy.newTab, loading: copy.loading, working: copy.agentControl, waiting: copy.waiting, crashed: copy.crashed,
         tabCount: (count) => copy.tabCount.replace("{count}", String(count)),
+        newTabIn: (group) => copy.newTabIn.replace("{group}", group), moreTabs: (count) => copy.moreTabs.replace("{count}", String(count)),
         moved: (title, group, position) => copy.tabMoved.replace("{title}", title).replace("{group}", group).replace("{position}", String(position)) }}
       onActivate={(id) => void browserCall("activate", { id })} onClose={(id) => void browserCall("close", { id })}
       onToggleGroup={(id, value) => setCollapsed((current) => ({ ...current, [id]: value }))}
-      onNewTab={state.enabled ? () => void create() : undefined}
+      onNewTab={state.enabled ? () => void create(paneOwner) : undefined}
+      onNewTabInGroup={!sessionId && state.enabled ? (groupId) => void create(groupId) : undefined}
       onMove={(move) => { if (!useBrowserTabDrag.getState().outside) void browserCall("move", move); }} />}
     toolbar={<AddressRow tab={tab} enabled={state.enabled} />}>
     <PageCard key={tab?.id ?? "empty"} panelId="browser-page" holder={browserHolder(tab)} hidden={empty || crashed || disabled}

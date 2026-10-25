@@ -19,7 +19,8 @@ sheet's top edge.
 
 ## Container vs Presenter
 The App owns tabs, navigation, pages, bookmarks and downloads, and passes
-DS blocks into the slots: `TabStrip` (with `hideChip` and `trailing`),
+DS blocks into the slots: `TabStrip` (beside a conversation with `hideChip`
+and `trailing`; standalone with `onNewTabInGroup`, so each group pill has its own +),
 `BrowserToolbar` with `AddressField` and `IconButton`s, and `PageCard`.
 
 ## Usage
