@@ -37,6 +37,10 @@ try {
         b.commandTab('bounds',t.id,base);
         if(t.attachWait) deferred++;
         await settles('still capture',b.capture(t));
+        while(t.attachWait) await settles('re-attach',t.attachWait);
+        if(t.attached!==${app.win}) throw new Error('page did not return to the window');
+        // The shell screenshot helper's own capture of the attached page, once it has painted.
+        await settles('page paint',t.view.webContents.executeJavaScript("new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done(true))))"));
         await settles('page capture',t.view.webContents.capturePage(undefined,{stayHidden:true}));
         await wait(50);
       }
