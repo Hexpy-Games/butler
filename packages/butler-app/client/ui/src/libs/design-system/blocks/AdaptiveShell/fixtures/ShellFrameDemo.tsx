@@ -18,10 +18,11 @@ import {
   AdaptiveShell, AdaptiveShellCard, AdaptiveShellSidebar, AdaptiveShellSplit,
   AdaptiveShellTitle, AdaptiveShellWorkspace, adaptivePanelStyle, type ShellFrame,
 } from "../index";
+import { FileViewerDemo, type FileViewerKind } from "./FileViewerDemo";
 import { DemoConversation, type ShellContent } from "./ShellContentDemo";
 
 type Locale = "en-US" | "ko-KR";
-export type ShellFrameView = "chat" | "browser" | "settings" | "hub";
+export type ShellFrameView = "chat" | "browser" | "settings" | "hub" | "file";
 
 const COPY = {
   "en-US": {
@@ -98,10 +99,13 @@ export interface ShellFrameDemoProps {
   content?: ShellContent;
   /** The Electron platform whose shell material (and sidebar row fills) the root picks; omitted is the browser. */
   platform?: "darwin" | "win32";
+  /** view="file": the file in the split's right slot, and whether the viewer shows its file tabs. */
+  file?: FileViewerKind;
+  fileTabs?: boolean;
 }
 
 /** A whole window in either frame: the App's shell composition with viewer stand-ins for its content. */
-export function ShellFrameDemo({ locale, frame, width, height, view = "chat", sidebar = "open", wallpaper = false, content = "chat", platform }: ShellFrameDemoProps) {
+export function ShellFrameDemo({ locale, frame, width, height, view = "chat", sidebar = "open", wallpaper = false, content = "chat", platform, file = "markdown", fileTabs = false }: ShellFrameDemoProps) {
   const geometry = { height: "100%", ...adaptivePanelStyle({ leftWidth: 304, rightWidth: 376 }) };
   const chrome = platform ? { chromeEnvironment: "electron" as const, platform } : {};
   if (view === "settings") {
@@ -116,7 +120,7 @@ export function ShellFrameDemo({ locale, frame, width, height, view = "chat", si
   const leftOpen = sidebar === "open";
   return (
     <ScaledFrame width={width} height={height}>
-      <AdaptiveShell frame={frame} leftOpen={leftOpen} rightOpen={false} splitOpen={view === "browser"}
+      <AdaptiveShell frame={frame} leftOpen={leftOpen} rightOpen={false} splitOpen={view === "browser" || view === "file"}
         leftPeek={sidebar === "peek"} transparentWorkspace={wallpaper} UNSAFE_style={geometry} {...chrome}>
         {leftOpen ? null : (
           <ChromeFloatingToggleLayer>
@@ -129,6 +133,8 @@ export function ShellFrameDemo({ locale, frame, width, height, view = "chat", si
           {view === "browser" ? (
             <AdaptiveShellSplit paneOpen chatWidth={400} chat={<DemoChat locale={locale} />}
               pane={<BrowserDemo locale={locale} placement="conversation" holder="user" band={null} pointer={false} agent={false} />} />
+          ) : view === "file" ? (
+            <AdaptiveShellSplit paneOpen chatWidth={400} chat={<DemoChat locale={locale} />} pane={<FileViewerDemo locale={locale} kind={file} tabs={fileTabs} />} />
           ) : view === "hub" ? (
             <BrowserDemo locale={locale} placement="standalone" holder="none" band={null} pointer={false} agent={false} />
           ) : (
