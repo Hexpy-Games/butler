@@ -26,6 +26,9 @@ import { SessionObserverDialog } from "@/components/layout/SessionObserverDialog
 import { ProjectCreateDialog } from "@/components/layout/ProjectCreateDialog.tsx";
 import { CommandPalette } from "@/components/command/CommandPalette.tsx";
 import { BrowserArea } from "@/components/browser/BrowserArea";
+import { ConversationBrowserFrame } from "@/components/browser/ConversationBrowserFrame";
+import { useBrowserShellState } from "@/components/browser/browserShellState";
+import { useRightSlot } from "@/components/file-viewer/useRightSlot";
 import { connectBrowser } from "@/components/browser/browserBridge";
 import { useComposerStore } from "@/components/conversation/composerStore.ts";
 import { chromeEnvironment } from "@/app/chromeEnvironment.ts";
@@ -291,7 +294,7 @@ export function VisualHarness() {
                 }}
               />
             ) : (
-              <Conversation />
+              <HarnessConversation />
             )}
           </AdaptiveShellWorkspace>
         </>
@@ -324,4 +327,12 @@ export function VisualHarness() {
       <ProjectCreateDialog />
     </AdaptiveShell>
   );
+}
+
+/** As in the App: the conversation alone, or beside the right slot's pane (browser or file viewer). */
+function HarnessConversation() {
+  const session = useButlerStore((state) => state.activeChatId);
+  const pane = useRightSlot(session);
+  const chatWidth = useBrowserShellState((state) => state.chatWidth);
+  return pane ? <ConversationBrowserFrame sessionId={session} pane={pane} chatWidth={chatWidth} /> : <Conversation />;
 }

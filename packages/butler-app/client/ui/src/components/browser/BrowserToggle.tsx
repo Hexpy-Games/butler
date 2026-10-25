@@ -4,11 +4,13 @@ import { useButlerStore } from "@/app/store";
 import { ActivityGlow, activityGlowTone, Globe2, IconButton } from "@/butler-ds";
 import { openConversationBrowser, useBrowserState } from "./browserBridge";
 import { useBrowserShellState } from "./browserShellState";
+import { useRightSlot } from "../file-viewer/useRightSlot";
 
 export function BrowserToggle() {
   useAppLocale();
   const session = useButlerStore((state) => state.activeChatId);
-  const open = useBrowserShellState((state) => Boolean(state.conversations[session]?.open));
+  // Pressed while the browser holds the right slot; open behind the file viewer, a press brings it forward.
+  const open = useRightSlot(session) === "browser";
   const enabled = useBrowserState((state) => state.enabled);
   const agentTabs = useConversationAgentTabs(session);
   const attention = agentTabs.find(tab => agentTabState(tab) === "attention");
