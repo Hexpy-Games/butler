@@ -14,7 +14,7 @@ export function FileViewerToggle() {
   const files = useSessionFiles(session);
   const shown = useRightSlot(session) === "viewer";
   if (files.entries.length === 0) return null;
-  // Adopt the DS pane-coloured pressed fill (IconButton pane="viewer") once it is on main.
-  return <IconButton data-test-class="titlebar-file-viewer-toggle" label={appCopy.fileViewer.title} pressed={shown} tone={shown ? "butler" : "default"}
+  return <IconButton data-test-class="titlebar-file-viewer-toggle" label={appCopy.fileViewer.title} pane="viewer" pressed={shown}
+    tone={shown ? "butler" : "default"}
     onClick={() => useFileViewerState.getState().setShown(session, !shown)}><FileText size="md" /></IconButton>;
 }

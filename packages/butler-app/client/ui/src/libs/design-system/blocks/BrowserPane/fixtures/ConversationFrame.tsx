@@ -117,7 +117,7 @@ export function ConversationFrameDemo({ width, height, sidebar = "open", paneOpe
             trailing={(
               <ButtonContainer size="icon-sm">
                 <IconButton label={copy.actions} aria-haspopup="menu"><MoreHorizontal size="md" /></IconButton>
-                <IconButton label={paneOpen ? copy.hide : demo.browser} pressed={paneOpen} tone={browsing ? "riso" : paneOpen ? "butler" : "default"}
+                <IconButton label={paneOpen ? copy.hide : demo.browser} pane="browser" pressed={paneOpen} tone={browsing ? "riso" : paneOpen ? "butler" : "default"}
                   indicator={browsing && !paneOpen}><Globe2 size="md" /></IconButton>
                 <IconButton label={copy.inspector}><PanelRight size="md" /></IconButton>
               </ButtonContainer>
