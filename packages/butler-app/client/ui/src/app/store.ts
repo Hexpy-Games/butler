@@ -4,6 +4,7 @@ import { generalChatCleared } from "./generalChatEvents";
 import { create } from "zustand";
 import { leaveCanonEditor } from "./canonEditGuard.ts";
 import { useProjectDashboardState } from "./projectDashboardState.ts";
+import { useFileViewerState } from "./fileViewerState.ts";
 import { mergeSessionViewWindow } from "./sessionViewWindow.ts";
 import { chromeEnvironment } from "./chromeEnvironment.ts";
 import {
@@ -139,8 +140,6 @@ interface ButlerStore {
   leftOpen: boolean;
   sessionInfoOpen: boolean;
   taskGraphEnabled: boolean;
-  selectedArtifactId: string | null;
-  selectedArtifact: SessionArtifactSummary | null;
   leftPanelWidth: number;
   sidebarChatsCollapsed: boolean;
   sidebarProjectsCollapsed: boolean;
@@ -189,8 +188,8 @@ interface ButlerStore {
   renameProject: ProjectSummary | null;
   renameSession: SessionSummary | null;
   setLeftOpen: (value: Updater<boolean>) => void;
-  setSelectedArtifactId: (artifactId: string | null) => void;
-  openArtifact: (artifactId: string, artifact?: SessionArtifactSummary) => void;
+  /** Opens a file in a conversation's file viewer (the right slot): the active one unless `session` names another. */
+  openArtifact: (artifact: SessionArtifactSummary, session?: string) => void;
   setLeftPanelWidth: (leftPanelWidth: number) => void;
   setSidebarChatsCollapsed: (value: Updater<boolean>) => void;
   setSidebarProjectsCollapsed: (value: Updater<boolean>) => void;
@@ -944,8 +943,6 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
   leftOpen: false,
   sessionInfoOpen: false,
   taskGraphEnabled: false,
-  selectedArtifactId: null,
-  selectedArtifact: null,
   leftPanelWidth: DEFAULT_LEFT_PANEL_WIDTH,
   sidebarChatsCollapsed: false,
   sidebarProjectsCollapsed: false,
@@ -988,13 +985,11 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
   renameSession: null,
 
   setLeftOpen: (value) => set(state => ({ leftOpen: resolveUpdate(value, state.leftOpen) })),
-  setSelectedArtifactId: (artifactId) =>
-    set({ selectedArtifactId: artifactId, selectedArtifact: null }),
-  openArtifact: (artifactId, artifact) => set(state => ({
-    ...(state.view.kind === "session" ? { sessionInfoOpen: true } : {}),
-    selectedArtifactId: artifactId,
-    selectedArtifact: artifact ?? null,
-  })),
+  openArtifact: (artifact, session) => {
+    const state = get();
+    useFileViewerState.getState().open(session || state.activeChatId, { kind: "artifact", id: artifact.id, artifact });
+    if (state.view.kind !== "session") void state.setView({ kind: "session" });
+  },
   setLeftPanelWidth: (leftPanelWidth) => set({ leftPanelWidth }),
   setSidebarChatsCollapsed: (value) =>
     set((state) => ({
@@ -1058,8 +1053,6 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
       observerSessionId: null,
       observerTargetTurnId: null,
       observerHistory: [],
-      selectedArtifactId: null,
-      selectedArtifact: null,
     }),
   noteNavigationEvent: () =>
     set((state) => ({ navigationGeneration: state.navigationGeneration + 1 })),
@@ -1272,8 +1265,6 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
         observerTargetTurnId: null,
         observerHistory: [],
         view: { kind: "session" },
-        selectedArtifactId: null,
-        selectedArtifact: null,
         summary: storedSessionView
           ? summaryFromSessionView(storedSessionView)
           : null,
@@ -1310,8 +1301,6 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
     set((state) => ({
       view: { kind: "project-dashboard", projectId },
       leftOpen: currentAdaptiveMode(chromeEnvironment()) === "expanded" ? state.leftOpen : false,
-      selectedArtifactId: null,
-      selectedArtifact: null,
     }));
   },
 
@@ -1771,8 +1760,6 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
       },
       activeChatId: optimisticStart?.id ?? state.activeChatId,
       view: optimisticStart && !dashboardTarget ? { kind: "session" } : state.view,
-      selectedArtifactId: optimisticStart ? null : state.selectedArtifactId,
-      selectedArtifact: optimisticStart ? null : state.selectedArtifact,
       navigation: optimisticStart
         ? navigationWithOptimisticSession(state.navigation, optimisticStart)
         : state.navigation,
@@ -1874,8 +1861,6 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
             [sendOperationId]: targetChatId,
           },
           view: dashboardTarget ? state.view : { kind: "session" },
-          selectedArtifactId: null,
-          selectedArtifact: null,
           navigation: navigationReplacingOptimisticSession(
             state.navigation,
             previousChatId,

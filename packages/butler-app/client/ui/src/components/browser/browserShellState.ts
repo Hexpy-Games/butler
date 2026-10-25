@@ -2,10 +2,13 @@ import { persistedBrowserShell } from "./browserShellPersistence";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { BROWSER_CHAT_WIDTH, clampBrowserChatWidth } from "@/butler-ds";
+import { raiseRightSlot } from "@/app/fileViewerState";
 
 interface ConversationBrowser {
   open: boolean;
   lastTab?: string;
+  /** When the browser last took the right slot (not persisted); the file viewer may hold it after. */
+  raised?: number;
 }
 interface BrowserShellState {
   conversations: Record<string, ConversationBrowser>;
@@ -20,7 +23,7 @@ export const useBrowserShellState = create<BrowserShellState>()(persist((set) =>
   conversations: {},
   chatWidth: BROWSER_CHAT_WIDTH.default,
   setOpen: (session, open) => set((state) => ({
-    conversations: { ...state.conversations, [session]: { ...state.conversations[session], open } },
+    conversations: { ...state.conversations, [session]: { ...state.conversations[session], open, ...(open ? { raised: raiseRightSlot() } : {}) } },
   })),
   rememberTab: (session, lastTab) => set((state) => ({
     conversations: { ...state.conversations, [session]: { ...state.conversations[session], open: state.conversations[session]?.open ?? false, lastTab } },

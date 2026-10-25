@@ -60,7 +60,7 @@ export function MessageArtifacts({
           description: artifactDescription(artifact),
           icon: <FileText size="lg" />,
           actions: artifactCardActions(artifact),
-          onOpen: () => openArtifact(artifact.id, artifact),
+          onOpen: () => openArtifact(artifact),
         }))}
       />}
       </Stack>

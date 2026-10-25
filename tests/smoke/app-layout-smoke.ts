@@ -2020,10 +2020,14 @@ try {
     await page
       .locator(testClass("artifact-viewer"))
       .waitFor({ state: "visible" });
+    screenshots.push(await screenshot(page, "artifact-detail.png"));
+    // The file opens in the viewer beside the chat; close it so the later layouts start from the chat alone.
+    await page.locator(testClass("file-viewer-close")).click();
+    await page.locator(testClass("file-viewer")).waitFor({ state: "detached" });
   } else {
     assert(await sessionAside.locator('[data-session-section="artifacts"]').count() === 0, "Empty results section is hidden");
+    screenshots.push(await screenshot(page, "artifact-detail.png"));
   }
-  screenshots.push(await screenshot(page, "artifact-detail.png"));
 
   await page.getByRole("button", { name: appCopy.sidebar.settings }).click();
   await page.locator(testClass("settings-view")).waitFor({ state: "visible" });
@@ -2090,6 +2094,8 @@ try {
     compactSettingsDetail && compactSettingsDetail.width >= 389,
     `compact settings detail should replace the master list: ${JSON.stringify(compactSettingsDetail)}`,
   );
+  // The detail slides in from the end; capture it at rest, not in its first frames.
+  await waitForMotionToSettle(page);
   screenshots.push(await screenshot(page, "narrow-settings-detail.png"));
   await page.getByRole("button", { name: appCopy.settings.back, exact: true }).click();
   await page.setViewportSize({ width: 1440, height: 900 });
