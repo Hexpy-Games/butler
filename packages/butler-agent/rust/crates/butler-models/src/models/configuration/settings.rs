@@ -222,6 +222,16 @@ impl ModelConfiguration {
             ));
         }
 
+        if self
+            .registration_catalog
+            .image_output_models()
+            .iter()
+            .any(|entry| entry.model_ref == model.canonical_ref)
+        {
+            return Err(SettingsError::Rejected(
+                "An image model cannot be the chat model.",
+            ));
+        }
         let _write = self.configuration_writes.acquire().await;
         let path = self.data_root.join("butler.config.json");
         let _change = configuration::lock_file_async(&path).await?;

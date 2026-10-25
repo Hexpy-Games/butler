@@ -69,17 +69,19 @@ pub use catalog::{
     OPENAI_EXPLICIT_CACHE_MODELS, OPENCODE_THINKING_MODEL, ZAI_IMAGE_MODEL, ZAI_THINKING_REFS,
 };
 pub use catalog::{
-    ApiKeyBilling, CredentialStorage, CredentialView, DEFAULT_PROVIDER, HostedApiShape,
-    ImageLimitField, ImageLimitSources, ImageProbeEvidence, LEGACY_DEFAULT_MODEL,
-    LocalImageDiscovery, LocalModelConfig, LocalModelPlatform, LocalModelSource,
-    ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelPreset, ModelPricing,
+    ApiKeyBilling, BrowsingResolution, BrowsingRule, CredentialStorage, CredentialView,
+    DEFAULT_PROVIDER, HostedApiShape, ImageLimitField, ImageLimitSources, ImageMask,
+    ImageOutputCapability, ImageOutputEndpoint, ImageOutputPricing, ImageProbeEvidence,
+    ImageSizeKind, LEGACY_DEFAULT_MODEL, LocalImageDiscovery, LocalModelConfig, LocalModelPlatform,
+    LocalModelSource, ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelPreset, ModelPricing,
     ModelProviderMetadata, ModelTier, NextPrices, ParsedModelRef, ParsedModelRefSource,
     PromptPriceTier, ProviderAuthMethod, ProviderPresets, ReasoningEffort,
     RegisteredHostedModelConfig, RequestTokens, TokenEstimate, TokenEstimateInput,
     TokenEstimatorKind, TokenPrices, configured_default_model,
-    default_hosted_provider_api_base_url, default_model_at, normalize_hosted_api_base_url,
-    normalize_local_model_config, normalize_registered_hosted_model, parse_model_ref,
-    registered_hosted_model_metadata, upgrade_routine_preset,
+    default_hosted_provider_api_base_url, default_model_at, model_family,
+    normalize_hosted_api_base_url, normalize_local_model_config, normalize_registered_hosted_model,
+    parse_model_ref, registered_hosted_model_metadata, resolve_browsing_model,
+    upgrade_routine_preset,
 };
 
 use std::borrow::Cow;
@@ -100,11 +102,11 @@ pub use configuration::{
     credential_store_policy, reset_secret_keys,
 };
 pub use configuration::{
-    DiscoveredLocalModel, HostedModelMutation, LocalModelMutation, McpModelTarget,
-    ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,
-    ModelConfigurationRead, ModelContextMetadataRead, ProviderCredentialMutation, ProviderKeyCheck,
-    ProviderKeyCheckError, ProviderKeySaveError, SavedProviderKey, SettingsError,
-    generate_pkce_verifier, pkce_challenge,
+    DiscoveredLocalModel, HostedModelMutation, ImageModelError, ImageModelSelection,
+    LocalModelMutation, McpModelTarget, ModelConfiguration, ModelConfigurationClock,
+    ModelConfigurationEnvironment, ModelConfigurationRead, ModelContextMetadataRead,
+    ProviderCredentialMutation, ProviderKeyCheck, ProviderKeyCheckError, ProviderKeySaveError,
+    ResolvedImageModel, SavedProviderKey, SettingsError, generate_pkce_verifier, pkce_challenge,
 };
 pub use status::{StatusModels, auth_status_with_environment, open_status_models};
 
@@ -211,3 +213,9 @@ impl ModelCatalogError {
 
 #[cfg(test)]
 mod tests;
+
+mod image_gen;
+pub use image_gen::{
+    Background, ImageGenError, ImageGenRequest, ImageGenResult, ImageUsage, InputImage,
+    NormalizedRect, effective_size as image_effective_size, generate as generate_image,
+};

@@ -3,11 +3,12 @@ import { Button, ButtonContainer, ComposerDecisionPanel, Globe2, Key, Square, Ty
 import type { ComposerAuthorityDecision } from "./useComposerAuthorityDecision";
 
 /** A step only the user can do in a tab: open the tab (desktop) or stop. The hand-back resolves it; nothing to allow. */
-export function ComposerBrowserHandoffSurface({ decision }: { decision: ComposerAuthorityDecision & Required<Pick<ComposerAuthorityDecision, "handoff">> }) {
+export function ComposerBrowserHandoffSurface({ decision, placement }: { placement?: "composer" | "conversation"; decision: ComposerAuthorityDecision & Required<Pick<ComposerAuthorityDecision, "handoff">> }) {
   useAppLocale();
   const copy = appCopy.interfaceTemplates.approvalRequest.signInHandoff;
   const { handoff } = decision;
   return <ComposerDecisionPanel
+    placement={placement}
     media={decision.media}
     icon={handoff.signIn ? <Key aria-hidden="true" size="lg" /> : <Globe2 aria-hidden="true" size="lg" />}
     eyebrow={copy.eyebrow}

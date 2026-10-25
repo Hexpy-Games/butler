@@ -195,13 +195,26 @@ pub(super) fn read(
                 .unwrap_or(true)
         ),
     );
+    insert_service_preferences(&stored, facts, &mut output, web_search, &model_fallback);
+    Ok(Value::Object(output))
+}
+fn insert_service_preferences(
+    stored: &Map<String, Value>,
+    facts: &AppSettingsFacts,
+    output: &mut Map<String, Value>,
+    web_search: Value,
+    model_fallback: &butler_turn::btcc::ModelFallback,
+) {
+    super::browsing::view(stored, facts, output);
     output.insert("web_search".into(), web_search);
     output.insert(
         "model_fallback".into(),
-        json!({"enabled":model_fallback.enabled,"models":model_fallback.models}),
+        json!({
+            "enabled": model_fallback.enabled, "models": model_fallback.models,
+        }),
     );
-    Ok(Value::Object(output))
 }
+
 /// The resolved conversation access mode and the schedule default (D7).
 fn insert_access(
     db: &Connection,

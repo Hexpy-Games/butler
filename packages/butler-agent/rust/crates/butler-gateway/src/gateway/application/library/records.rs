@@ -40,6 +40,7 @@ pub(in crate::gateway::application) fn save(
     item: &Value,
 ) -> Result<Value, AppStorageError> {
     let mut item = item.clone();
+    picture_asset(db, &mut item)?;
     if let Some(time) = item["capturedAt"]
         .as_str()
         .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
@@ -80,6 +81,30 @@ pub(in crate::gateway::application) fn save(
         item::replace_tags(db, &id, &tags)?;
     }
     item::refresh(db, &id)
+}
+/// Validate the original picture in the save transaction and expose its signing key.
+fn picture_asset(db: &Connection, item: &mut Value) -> Result<(), AppStorageError> {
+    if item["kind"] != "scrap" || item.get("asset").is_none() {
+        return Ok(());
+    }
+    let asset = item["asset"].as_str().unwrap_or_default();
+    let picture = db
+        .query_row(
+            "SELECT 1 FROM app_assets WHERE id=?1 AND kind IN ('generated','original','collected')",
+            [asset],
+            |_| Ok(()),
+        )
+        .optional()
+        .map_err(sql)?
+        .is_some();
+    if !picture {
+        return Err(item::failure(
+            super::super::storage::AppStorageCode::InvalidLibraryItem,
+            "Invalid saved item.",
+        ));
+    }
+    item["img"] = json!(asset);
+    Ok(())
 }
 /// After a rename the user's title stays and the saved title is the new `autoTitle`.
 fn keep_user_title(item: &mut Value, prior: Option<&Value>) {
@@ -128,8 +153,8 @@ pub(in crate::gateway::application) fn document(
     db: &Connection,
     id: &str,
 ) -> Result<(), AppStorageError> {
-    let row=db.query_row("SELECT id,owner_session_id,message_id,kind,mime_type,safe_name,size_bytes,sha256,storage_name,created_at,source_label,deliverable,title FROM message_files WHERE id=?1",[id],|r|Ok(super::super::AppMessageFileSnapshot {
-        id:r.get(0)?,owner_session_id:r.get(1)?,message_id:r.get(2)?,kind:r.get(3)?,mime_type:r.get(4)?,safe_name:r.get(5)?,size_bytes:r.get(6)?,sha256:r.get(7)?,storage_name:r.get(8)?,created_at:r.get(9)?,source_label:r.get(10)?,deliverable:r.get(11)?,title:r.get(12)?
+    let row=db.query_row("SELECT id,owner_session_id,message_id,kind,mime_type,safe_name,size_bytes,sha256,storage_name,created_at,source_label,deliverable,title,width,height FROM message_files WHERE id=?1",[id],|r|Ok(super::super::AppMessageFileSnapshot {
+        id:r.get(0)?,owner_session_id:r.get(1)?,message_id:r.get(2)?,kind:r.get(3)?,mime_type:r.get(4)?,safe_name:r.get(5)?,size_bytes:r.get(6)?,sha256:r.get(7)?,storage_name:r.get(8)?,created_at:r.get(9)?,source_label:r.get(10)?,deliverable:r.get(11)?,title:r.get(12)?,width:r.get(13)?,height:r.get(14)?
     })).map_err(AppStorageError::sqlite)?;
     let file = read_model::message_file_ref(&row)?;
     save(
@@ -228,4 +253,15 @@ fn file_not_found() -> AppStorageError {
         super::super::storage::AppStorageCode::LibraryFileNotFound,
         "File not found.",
     )
+}
+
+/// Editable document titles are authoritative, with history owned by documents.
+pub(in crate::gateway::application) fn editable_document(
+    db: &Connection,
+    item: &Value,
+) -> Result<Value, AppStorageError> {
+    let id = item["id"].as_str().unwrap_or_default();
+    db.execute("INSERT INTO browser_library(id,kind,title,url,payload,created_at) VALUES(?1,'doc',?2,?3,?4,?5) ON CONFLICT(id) DO UPDATE SET title=excluded.title,payload=excluded.payload,created_at=excluded.created_at",
+        params![id,item["title"].as_str(),item["url"].as_str(),item.to_string(),item["capturedAt"].as_str()]).map_err(sql)?;
+    item::refresh(db, id)
 }

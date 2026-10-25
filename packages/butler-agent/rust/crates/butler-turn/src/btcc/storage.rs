@@ -319,3 +319,16 @@ pub use testing::{Fixture as TestStorageFixture, prepared as test_prepared_turn}
 mod tests;
 #[cfg(test)]
 mod transition_tests;
+
+#[cfg(feature = "test-support")]
+pub fn pending_ask_plan_statements() -> Vec<(String, &'static str)> {
+    authority::pending_ask_statements()
+}
+#[cfg(feature = "test-support")]
+pub fn existing_ask_plan_statements() -> Vec<String> {
+    authority::existing_ask_statements()
+}
+#[cfg(feature = "test-support")]
+pub fn pending_ask_projection_schema() -> &'static str {
+    schema::pending_asks::SCHEMA
+}

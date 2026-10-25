@@ -1,4 +1,4 @@
-import { closeCanonInspector } from "./canon-board-inspector.ts";
+import { closeCanonAside } from "./canon-board-aside.ts";
 import { selectBoardPlan } from "./canon-board-selector.ts";
 import { strict as assert } from "node:assert";
 import type { Page } from "playwright";
@@ -31,7 +31,7 @@ export async function seedCanonBoard(server: NativeAppServerHandle): Promise<{ p
 export async function openCanonBoard(page: Page): Promise<void> {
   // The shared inspector is a modal drawer on phones; dismiss it before sidebar navigation.
   if (page.viewportSize()!.width === 390 && await page.locator('[data-test-class="right-panel-overlay-close"]').isVisible()) {
-    await closeCanonInspector(page);
+    await closeCanonAside(page);
   }
   const dashboard = page.getByRole("button", { name: "캐논 보드 프로젝트 대시보드", exact: true });
   await page.locator('[data-test-class~="mac-window"]').waitFor();
@@ -77,7 +77,7 @@ export async function verifyCanonFlows(page: Page, server: NativeAppServerHandle
   const saved = await server.api<EpicDetail>(`/canon/epics/${created.id}`);
   assert.equal(saved.plan_id, planId); assert.equal(saved.canon_status, "in_review");
   await verifyCanonConflict(page, server, created.id);
-  await closeCanonInspector(page);
+  await closeCanonAside(page);
   await board.getByRole("button", { name: "새 계획", exact: true }).click();
   await dialog.getByLabel("제목", { exact: true }).fill("다음 계획");
   await dialog.getByRole("button", { name: "만들기", exact: true }).click();
@@ -98,12 +98,16 @@ async function verifyCanonConflict(page: Page, server: NativeAppServerHandle, id
   await server.api(`/canon/epics/${id}`, { method: "PATCH", body: JSON.stringify({ expected_revision: current.revision, title: "실시간으로 고친 제목" }) });
   await detail.getByText("실시간으로 고친 제목", { exact: true }).waitFor();
   // The open edit retains its starting revision while canon.changed reloads the background.
-  await detail.getByRole("button", { name: "고치기", exact: true }).click();
+  await detail.getByRole("button", { name: "제목 수정", exact: true }).click();
   const epic = await server.api<EpicDetail>(`/canon/epics/${id}`);
   await server.api(`/canon/epics/${id}`, { method: "PATCH", body: JSON.stringify({ expected_revision: epic.revision, title: "다른 사람이 쓴 제목" }) });
   await detail.getByLabel("제목", { exact: true }).fill("오래된 화면의 제목");
+  const conflict = page.waitForResponse(response => response.request().method() === "PATCH" && new URL(response.url()).pathname === `/canon/epics/${id}`);
   await detail.getByRole("button", { name: "저장", exact: true }).click();
+  assert.equal((await conflict).status(), 409);
   await waitToast(page, "다른 사람이 먼저 고쳤습니다");
-  await detail.getByText("다른 사람이 쓴 제목", { exact: true }).waitFor();
+  await detail.getByText("제목: 다른 사람이 쓴 제목", { exact: true }).waitFor();
+  assert.equal(await detail.getByLabel("제목", { exact: true }).inputValue(), "오래된 화면의 제목");
+  await detail.getByRole("button", { name: "취소", exact: true }).click();
   assert.equal((await server.api<EpicDetail>(`/canon/epics/${id}`)).title, "다른 사람이 쓴 제목");
 }

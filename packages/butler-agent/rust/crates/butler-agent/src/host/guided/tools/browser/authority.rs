@@ -145,7 +145,7 @@ pub(super) async fn act_gate(
 /// every batch under ask-always, and under ask-first and Auto only a batch
 /// that commits something on the user's behalf (the risky browser step).
 /// Browsing never asks there.
-fn reviews(mode: &AccessMode, input: &Value) -> bool {
+pub(super) fn reviews(mode: &AccessMode, input: &Value) -> bool {
     input["always_confirm"] == true
         || match mode {
             AccessMode::AskAlways => true,

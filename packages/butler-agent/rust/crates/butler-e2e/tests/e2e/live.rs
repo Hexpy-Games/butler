@@ -20,6 +20,7 @@ use butler_e2e::e2e::scenario::{Scenario, Setup, accepted_turn_id};
 use butler_e2e::e2e::{HarnessError, live, nonce};
 use serde_json::{Value, json};
 
+mod browse_shop;
 mod drift;
 mod hedge;
 pub(crate) mod hedge_v2;

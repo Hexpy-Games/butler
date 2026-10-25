@@ -92,6 +92,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "developer-context-estimates", kind: "list", fields: [] },
   ],
   browser: [
+    { id: "browsing-agent", kind: "form", fields: ["browsing-agent"] },
     { id: "browser-history", kind: "form", fields: ["browser-history"] },
     { id: "browser-site-data", kind: "form", fields: ["browser-site-data"] },
     { id: "sign-ins", kind: "list", fields: [] },

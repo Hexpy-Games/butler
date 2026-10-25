@@ -8,15 +8,18 @@ pub(in crate::host::guided) use answer_blocks_stream::AnswerBlocksStream;
 mod deliver;
 mod discovery;
 mod dispatch;
+mod documents;
 mod effect;
 mod execute;
 mod feedback;
 mod folder;
 mod hooks;
 mod image;
+mod image_gen;
 mod library;
 mod memory_write;
 pub(crate) use memory_write::MemoryWriteServices;
+mod browse;
 mod browser;
 mod message;
 mod monitoring;
@@ -350,6 +353,7 @@ impl GuidedTools {
                     | ToolName::RunDueAutomations
                     | ToolName::WebSearch
                     | ToolName::WebRead
+                    | ToolName::Browse
                     | ToolName::ListWallpapers
                     | ToolName::SetWallpaper
                     | ToolName::SaveWallpaperModule
@@ -357,9 +361,7 @@ impl GuidedTools {
                     | ToolName::LibrarySearch
                     | ToolName::LibraryOrganize
             )
-        ) || browser::supports(name)
-            || GuidedWorkTools::is_work_tool(name)
-            || crate::host::guided::project_tools::GuidedProjectTools::supports(name)
+        ) || module_supports(name)
     }
 
     async fn resume_pool(&self) -> Result<&Mutex<ResumePool>, BtccError> {
@@ -477,4 +479,13 @@ impl GuidedTools {
             ))
         }
     }
+}
+
+/// Tools whose modules own their names.
+fn module_supports(name: &str) -> bool {
+    image_gen::supports(name)
+        || documents::supports(name)
+        || browser::supports(name)
+        || GuidedWorkTools::is_work_tool(name)
+        || crate::host::guided::project_tools::GuidedProjectTools::supports(name)
 }

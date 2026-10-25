@@ -64,15 +64,17 @@ export type DialogSize = "sm" | "md" | "lg" | "xl" | "full";
 export type DialogLayout = "flow" | "scroll-body";
 
 /** Data attributes DialogContent sets for its size props (read by Dialog.module.css). */
-export function dialogContentAttributes({ size = "sm", layout = "flow", maxHeight = "full" }: {
+export function dialogContentAttributes({ size = "sm", layout = "flow", maxHeight = "full", height }: {
   size?: DialogSize;
   layout?: DialogLayout;
   maxHeight?: "full" | "3/5";
+  height?: "full";
 }) {
   return {
     "data-size": size,
     "data-layout": layout,
     "data-max-height": maxHeight === "full" ? undefined : maxHeight,
+    "data-height": height,
   };
 }
 
@@ -86,6 +88,7 @@ function DialogContent({
   size = "sm",
   layout = "flow",
   maxHeight = "full",
+  height,
   container,
   onInteractOutside,
   ...props
@@ -100,6 +103,11 @@ function DialogContent({
   layout?: DialogLayout;
   /** `3/5`: at most 60% of the viewport height (live transcripts). */
   maxHeight?: "full" | "3/5";
+  /**
+   * `full`: the dialog's height is its cap (the viewport, the `maxHeight` share or the container), not its
+   * content, so a `scroll-body` with a short body still fills it. Omitted: as tall as the content.
+   */
+  height?: "full";
   /**
    * Anchors the dialog inside this element (a page card) instead of the window: it sits near the
    * container's top and its scrim covers only the container (which must be positioned). Pair it with
@@ -121,7 +129,7 @@ function DialogContent({
         data-glass="popover"
         data-radius={glassRadius}
         data-surface="tinted-glass"
-        {...dialogContentAttributes({ size, layout, maxHeight })}
+        {...dialogContentAttributes({ size, layout, maxHeight, height })}
         className={cn(
           tintedGlassSurfaceClassName,
           styles.content,

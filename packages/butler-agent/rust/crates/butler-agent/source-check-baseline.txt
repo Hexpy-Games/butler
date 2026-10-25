@@ -3,7 +3,6 @@
 # Entries may only shrink or disappear; new entries need review.
 src/host/app/monitoring/events.rs	run_events	94
 src/host/app/runtime_ports/assets.rs	<AppAssets as AppNativeAssetResolver>::resolve	95
-src/host/app/runtime_ports/model_catalog.rs	AppModelCatalog::execute_inner	109
 src/host/app/runtime_ports/personalization.rs	AppPersonalization::execute_inner	82
 src/host/app/runtime_ports/personalization.rs	AppPersonalization::update	97
 src/host/app/runtime_ports/session_workspaces.rs	<AppSessionWorkspaces as AppSessionWorkspaceProvisioner>::provision	90
@@ -18,7 +17,7 @@ src/host/guided/factory.rs	<GuidedTurnFactoryAdapter as GuidedTurnFactory>::bind
 src/host/guided/file_effects/edit.rs	decode	115
 src/host/guided/file_effects/edit.rs	recover	149
 src/host/guided/file_effects/edit/legacy.rs	recover	90
-src/host/guided/preparation.rs	GuidedPreparation::prepare	106
+src/host/guided/preparation.rs	GuidedPreparation::prepare	100
 src/host/guided/project_tools.rs	GuidedProjectTools::run	126
 src/host/guided/project_tools/evidence.rs	canonical_record	89
 src/host/guided/project_tools/lifecycle.rs	execute	86
@@ -29,7 +28,7 @@ src/host/guided/prompt/work_context.rs	render	267
 src/host/guided/tools/dispatch.rs	execute	174
 src/host/guided/tools/effect/ledger_input.rs	prepare	94
 src/host/guided/tools/effect/topic_conversation.rs	TopicConversationEffect::request	97
-src/host/guided/tools/execute.rs	execute	122
+src/host/guided/tools/execute.rs	execute	118
 src/host/guided/tools/image.rs	admitted_image	96
 src/host/guided/tools/image.rs	execute	100
 src/host/guided/tools/message/preview/work.rs	project_raw	99

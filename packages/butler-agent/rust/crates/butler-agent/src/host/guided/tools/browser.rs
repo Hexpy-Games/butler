@@ -4,7 +4,7 @@ mod compact;
 pub(super) use compact::TabView;
 mod authority;
 pub(super) use assets::lookup_assets;
-mod client;
+pub(super) mod client;
 mod dialog;
 mod effect;
 mod grant;
@@ -19,6 +19,8 @@ mod preview;
 mod reached;
 pub(super) use reached::discover as discover_reached;
 mod act;
+mod executor;
+pub(super) use executor::{execute_executor, handoff};
 mod signin;
 mod upload;
 use super::{GuidedTools, dispatch::encoded};
@@ -32,7 +34,8 @@ use std::sync::Arc;
 pub(super) fn supports(name: &str) -> bool {
     matches!(
         name,
-        "preview_start"
+        "browse"
+            | "preview_start"
             | "preview_stop"
             | "browser_open"
             | "browser_observe"
@@ -61,7 +64,10 @@ pub(super) async fn execute(
     call: &ModelRoundToolCall,
     occurrence: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    let mut args = Value::Object(call.arguments.clone());
+    if call.name == "browse" {
+        return super::browse::execute(owner, invocation, call, occurrence).await;
+    }
+    let args = Value::Object(call.arguments.clone());
     if !admitted(owner, &call.name) {
         return finish_batch(
             &args,
@@ -71,6 +77,17 @@ pub(super) async fn execute(
     let Some(client) = client::Client::new(owner).await else {
         return finish_batch(&args, json!({"status":"unavailable","reason":"no_browser"}));
     };
+    execute_client(owner, invocation, call, occurrence, client, args).await
+}
+
+async fn execute_client(
+    owner: &GuidedTools,
+    invocation: &GuidedInvocation<'_>,
+    call: &ModelRoundToolCall,
+    occurrence: &str,
+    client: client::Client,
+    mut args: Value,
+) -> Result<JsonDocument, ToolExecutionError> {
     if matches!(call.name.as_str(), "preview_start" | "preview_stop") {
         return preview::execute(owner, invocation, call, occurrence, client).await;
     }
@@ -116,6 +133,9 @@ pub(super) async fn execute(
     let image_class = if zoom { "browser_zoom" } else { &call.name };
     if pixels == look::Pixels::Always || result.get("image").is_some() {
         images::finish(owner, image_class, &mut result).await?;
+    }
+    if client.approval_handoff && result["status"] == "dialog_pending" {
+        return encoded(&handoff(&args, "dialog_pending"));
     }
     if result["status"] == "dialog_pending" {
         return dialog::finish(owner, invocation, call, occurrence, client, &args, &result).await;
@@ -262,10 +282,15 @@ fn delimit_labels(value: &mut Value) {
         record.insert("untrusted_content".into(), data);
     }
 }
-fn approval_input(args: &Value, prepared: &mut Value, scope: &str) -> Value {
+fn approval_input(
+    args: &Value,
+    prepared: &mut Value,
+    scope: &str,
+    honor_purchase_permission: bool,
+) -> Value {
     // A purchase step asks every time unless the user lets this merchant site
     // skip the final card in Settings; uploads always ask.
-    let purchase = prepared["purchase_allowed"] != true;
+    let purchase = !honor_purchase_permission || prepared["purchase_allowed"] != true;
     let always = prepared["steps"].as_array().is_some_and(|steps| {
         steps.iter().any(|s| {
             s["upload"] == true

@@ -1,3 +1,4 @@
+import { SessionSectionHeader } from "../session-info/SessionSection.tsx";
 import { scheduleFrequency } from "@/app/scheduleLabels";
 import { useAppLocale } from "@/app/copy.ts";
 import { Clock3 } from "@/butler-ds";
@@ -7,19 +8,21 @@ import { appCopy } from "@/app/copy.ts";
 import type { AutomationTargetSummary } from "@/app/types.ts";
 
 export function AutomationTargetsPanel({
-  automations,
+  automations, compact = false,
   onOpenAutomation,
 }: {
   automations: AutomationTargetSummary[];
+  compact?: boolean;
   onOpenAutomation: (automationId: string) => void;
 }) {
   useAppLocale();
   return (
     <InspectorInset>
       <Section
-        title={appCopy.automations.title}
+        title={compact ? undefined : appCopy.automations.title}
         gap="sm"
       >
+        {compact && <SessionSectionHeader title={appCopy.automations.title} count={automations.length} />}
         {automations.length > 0 ? (
           <Stack gap="xs">
             {automations.map((automation) => (

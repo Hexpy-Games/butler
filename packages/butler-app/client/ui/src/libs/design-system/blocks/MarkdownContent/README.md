@@ -55,6 +55,12 @@ ratio kept. Reply captures (`MessageInlineImage`) put the image in an
 Open and Save under it. Small images such as badges stay inline in their
 sentence.
 
+## Density
+`density="compact"` is for dense panes (a task description in a detail aside,
+a card): body line height, block gaps one step down (8px, 4px after a heading),
+headings at body size and semibold, tighter lists and code frames. The default
+`document` keeps the reading rhythm of a reply or a document.
+
 ## Wrong use cases
 Do not use it for chat message chrome or editable rich text. Use MessageRow or an editor-specific block instead.
 

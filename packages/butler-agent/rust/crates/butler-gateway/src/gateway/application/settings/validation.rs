@@ -39,13 +39,14 @@ const UPDATE_KEYS: &[&str] = &[
     "desktop_notifications",
     "desktop_tray_enabled",
     "web_search",
+    "browser",
     "model_fallback",
     "default_project_folder_selection_token",
     "onboarding",
 ];
 
 pub(super) fn is_request(value: &Value) -> bool {
-    if !super::logging::valid(value) {
+    if !super::browsing::valid(value) || !super::logging::valid(value) {
         return false;
     }
     let Some(input) = value.as_object() else {

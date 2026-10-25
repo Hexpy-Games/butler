@@ -230,3 +230,16 @@ pub(super) fn replay(
         .collect::<Result<Vec<_>, _>>()
         .map_err(AppStorageError::sqlite)
 }
+
+/// The newest durable event cursor; storage is closed when it cannot be read.
+pub(super) async fn latest_event_cursor(
+    storage: &super::AppStorage,
+) -> Result<u64, super::GatewayApplicationError> {
+    match storage.read(latest).await {
+        Ok(cursor) => Ok(cursor),
+        Err(error) => {
+            let _ = storage.close().await;
+            Err(super::app_error(error))
+        }
+    }
+}

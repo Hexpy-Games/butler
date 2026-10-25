@@ -25,13 +25,15 @@ pub(super) fn provider_candidates(
     policy: &GuidedExecutionPolicy,
     phase: GuidedPhase,
     required_profiles: &[String],
+    browse: bool,
 ) -> HashSet<String> {
     let mut names = profile_candidates(catalog, authorized, policy, phase, required_profiles);
     if turn_admits_zai_image_tool(policy) {
         names.insert("analyze_attached_image".to_owned());
     }
     for tool in authorized {
-        if tool.name == ToolName::UpdateTodoList
+        if matches!(tool.name.as_str(), "generate_image" | "edit_image")
+            || tool.name == ToolName::UpdateTodoList
             || BROWSER_CORE.contains(&tool.name.as_str())
             || tool.effect_boundary.as_deref() == Some("turn_local")
                 && tool.category.as_deref() == Some("message")
@@ -64,7 +66,15 @@ pub(super) fn provider_candidates(
     {
         names.insert("project_artifacts".into());
     }
+    if browse {
+        names.retain(|name| !deferred_browser(name));
+        names.insert("browse".into());
+    }
     names
+}
+
+pub(super) fn deferred_browser(name: &str) -> bool {
+    BROWSER_CORE.contains(&name) && name != "browser_act"
 }
 
 /// Initial tools of the public-web, workspace (outside the direct phase),

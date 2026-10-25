@@ -9,8 +9,12 @@ use std::sync::Arc;
 #[derive(Clone, Copy)]
 pub(super) enum Handler {
     NotFound,
+    ImageModels,
+    #[cfg(feature = "e2e-fixtures")]
+    ImageFixtures,
     DataReset,
     Authority,
+    PendingAsks,
     Automations,
     Browser,
     BrowserStills,
@@ -41,6 +45,7 @@ pub(super) enum Handler {
     History,
     Hooks,
     Library,
+    Documents,
     Live,
     Logs,
     Mcp,
@@ -96,6 +101,12 @@ pub(crate) fn templates() -> Vec<&'static str> {
     table().map(|(path, _)| path).collect()
 }
 const ROUTES: &[(&str, Handler)] = &[
+    ("/pending-asks", Handler::PendingAsks),
+    ("/sessions/{id}/pending-asks", Handler::PendingAsks),
+    (
+        "/sessions/{id}/pending-asks/{ask_id}/dismiss",
+        Handler::PendingAsks,
+    ),
     ("/authority-requests", Handler::Authority),
     ("/app-info", Handler::Shell),
     ("/data/reset", Handler::DataReset),
@@ -158,6 +169,13 @@ const ROUTES: &[(&str, Handler)] = &[
         "/internal/wallpapers/from-message-file",
         Handler::Wallpapers,
     ),
+    ("/documents", Handler::Documents),
+    ("/documents/{id}", Handler::Documents),
+    ("/documents/{id}/revisions", Handler::Documents),
+    ("/documents/{id}/revisions/{rev}", Handler::Documents),
+    ("/documents/{id}/restore", Handler::Documents),
+    ("/documents/{id}/diff", Handler::Documents),
+    ("/documents/{id}/seen", Handler::Documents),
     ("/library", Handler::Library),
     ("/library/facets", Handler::Library),
     ("/library/groups", Handler::Library),
@@ -194,6 +212,12 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/memory/reset/projects/{id}", Handler::Personalization),
     ("/memory/reset/{id}", Handler::Personalization),
     ("/message-assets/{id}", Handler::MessageFiles),
+    ("/message-assets/{id}/meta", Handler::MessageFiles),
+    ("/message-assets/{id}/versions", Handler::MessageFiles),
+    ("/internal/images/calls", Handler::Browser),
+    ("/message-assets/masks", Handler::ImageModels),
+    ("/settings/image-model", Handler::ImageModels),
+    ("/usage/images", Handler::ImageModels),
     ("/message-files", Handler::MessageUpload),
     ("/message-files/{id}", Handler::MessageFiles),
     ("/message-files/{id}/view", Handler::MessageFiles),
@@ -223,6 +247,7 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/canon/plans/{id}/order", Handler::Canon),
     ("/projects/{id}/canon/backlog/order", Handler::Canon),
     ("/projects/{id}/canon/epics", Handler::Canon),
+    ("/projects/{id}/canon/files", Handler::Canon),
     ("/previews/{*path}", Handler::Preview),
     ("/project-sessions", Handler::ProjectSessions),
     ("/projects", Handler::Projects),
@@ -358,6 +383,7 @@ fn table() -> impl Iterator<Item = (&'static str, Handler)> {
 #[cfg(feature = "e2e-fixtures")]
 const FIXTURE_ROUTES: &[(&str, Handler)] = &[
     ("/internal/e2e/logs/expire", Handler::Expire),
+    ("/internal/e2e/images/{action}", Handler::ImageFixtures),
     ("/internal/e2e/logs/writer/{action}", Handler::LogWriter),
     (
         "/automations/_test/scheduler-next-due-reads",

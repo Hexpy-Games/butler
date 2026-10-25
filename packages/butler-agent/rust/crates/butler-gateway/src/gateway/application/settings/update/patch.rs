@@ -17,6 +17,7 @@ pub(super) fn project(
     if let Some(value) = patch.get("consolidation_time") {
         output["consolidation_time"] = value.clone();
     }
+    super::super::browsing::project(current, patch, facts, &mut output);
     output
 }
 
@@ -46,5 +47,6 @@ pub(super) fn sanitize(
             patch.insert(conversation_background::KEY.into(), value);
         }
     }
+    super::super::browsing::sanitize(input, facts, &mut patch)?;
     Ok(patch)
 }

@@ -257,7 +257,7 @@ Copyright (c) 2021-present Floating UI contributors
 =====
 @hugeicons/core-free-icons 4.1.4
 MIT
-License: https://raw.githubusercontent.com/hugeicons/hugeicons/9c48f3723dfb243909fa83501aa7c6423ab972c0/LICENSE.md
+License: https://raw.githubusercontent.com/hugeicons/hugeicons/4fd1c2d5572f832eb908d401ca95a18013069abf/LICENSE.md
 Copyright (c) 2025 Hugeicons
 
 =====
@@ -5748,6 +5748,12 @@ License: https://github.com/addr-rs/psl/blob/23897ed897cf406bbf9b746fbdd1161d6d6
 Copyright (c) 2016 Rushmore Mushambi
 
 =====
+pulldown-cmark 0.13.5
+MIT
+License: https://github.com/raphlinus/pulldown-cmark/blob/48a2767b5b8ab0a4893e80d942e510065889fc6b/pulldown-cmark/LICENSE
+Copyright 2015 Google Inc. All rights reserved.
+
+=====
 pxfm 0.1.30
 BSD-3-Clause OR Apache-2.0
 License: https://github.com/awxkee/pxfm/blob/acf7acd00cfc845307eda7b7b2de19e42303de82/LICENSE-APACHE.md
@@ -6350,6 +6356,11 @@ simdutf8 0.1.5
 MIT OR Apache-2.0
 License: https://github.com/rusticstuff/simdutf8/blob/87ee8d9d20b849eae1974a82b248ee6fe7491bcc/LICENSE-Apache
 License: https://github.com/rusticstuff/simdutf8/blob/87ee8d9d20b849eae1974a82b248ee6fe7491bcc/LICENSE-MIT
+
+=====
+similar 2.7.0
+Apache-2.0
+License: https://github.com/mitsuhiko/similar/blob/28c146b628119065e9a4dae569eaa570a4632c17/LICENSE
 
 =====
 simplecss 0.2.2

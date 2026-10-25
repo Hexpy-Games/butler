@@ -56,7 +56,10 @@ pub fn registered_hosted_model_metadata(
         .iter()
         .filter_map(|config| {
             let mut base = catalog.find_static_model_metadata(Some(&config.model_ref))?;
-            if base.provider_id != config.provider_id || !base.runtime_supported {
+            if base.provider_id != config.provider_id
+                || !base.runtime_supported
+                || base.is_image_output()
+            {
                 return None;
             }
             let credential = config
@@ -73,6 +76,10 @@ pub fn registered_hosted_model_metadata(
             };
             base.registered = Some(true);
             base.auth_type = Some(config.auth_type);
+            if let Some(profile) = &config.auth_profile {
+                base.extensions
+                    .insert("auth_profile".into(), Value::String(profile.clone()));
+            }
             base.credential_id = config.credential_id.clone();
             base.credential_label = credential.map(|value| value.label.clone());
             base.credential_masked_value = credential.map(|value| value.masked_value.clone());
@@ -168,7 +175,7 @@ pub fn normalize_registered_hosted_model(
         format!("{provider_id}/{requested}")
     };
     let base = catalog.find_static_model_metadata(Some(&requested))?;
-    if base.provider_id != provider_id || !base.runtime_supported {
+    if base.provider_id != provider_id || !base.runtime_supported || base.is_image_output() {
         return None;
     }
     let credential_id = text(input.get("credential_id"));

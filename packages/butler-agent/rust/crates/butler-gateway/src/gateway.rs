@@ -19,7 +19,9 @@ mod image_files;
 mod live;
 mod message_validation;
 mod mutations;
+mod pending_asks_port;
 mod protocol;
+pub use pending_asks_port::GatewayPendingAsks;
 mod published_event;
 mod rate_limit;
 mod security_settings;
@@ -42,13 +44,14 @@ pub use crate::gateway::inbound_queue::{
 };
 pub use crate::gateway::message_file_store::AppMessageFiles;
 pub use application::settings::{
-    command_sandbox_enabled, diagnostics_enabled_readonly, producer_log_config, startup_log_config,
-    stored_ui_language_readonly,
+    browsing_agent_setting, command_sandbox_enabled, diagnostics_enabled_readonly,
+    producer_log_config, startup_log_config, stored_ui_language_readonly,
 };
 pub use application::{
-    APP_PERSON_ID, AppAssetCommand, AppCanonOperation, AppCardInput, AppProfileInput,
-    AppSessionTopicClassifier, AppSessionTopicInput, AppSignInCommand, AppSignInUpsert,
-    AppVaultCommand, GatewaySignIns,
+    APP_PERSON_ID, AppAssetCommand, AppCanonOperation, AppCardInput, AppImageUsageCommand,
+    AppProfileInput, AppSessionTopicClassifier, AppSessionTopicInput, AppSignInCommand,
+    AppSignInUpsert, AppVaultCommand, GatewaySignIns, GeneratedAssetKind, ImageUsageOperation,
+    ImageUsageRecord, composite, mask_bounds,
 };
 pub use application::{
     AppAdmissionAuthority, AppApplication, AppApplicationConfig, AppApplicationDependencies,
@@ -59,21 +62,22 @@ pub use application::{
     AppCanonRequest, AppCanonResource, AppCanonTagExists, AppChatKind, AppChatSummary,
     AppContextBudgetFacts, AppContextConfigurationFacts, AppContextReadFacts, AppContextReadPort,
     AppContextReadQuery, AppContextUsage, AppCreateProjectRequest, AppCreateProjectResult,
-    AppCreateSessionInput, AppCreateSessionRequest, AppCreateSessionResult, AppExecutorReadiness,
-    AppFileDownload, AppFileUpload, AppFileWrite, AppGrantRef, AppGrantView, AppIdentityClock,
-    AppLedgerSourceRequest, AppLibraryChange, AppLibraryCommand, AppLibraryQuery, AppMemoryCommand,
-    AppMemoryPort, AppMessageFileSnapshot, AppMessageFileStorage, AppModelCatalogCommand,
-    AppModelCatalogPort, AppModelFallbackFacts, AppModelMetadata, AppMonitorPage,
-    AppMonitoringPort, AppNativeAssetResolver, AppNativeIngress, AppPersonalizationCommand,
-    AppPersonalizationEvent, AppPersonalizationPort, AppPersonalizationResult,
-    AppPlanDecisionAction, AppPlanDecisionLedgerError, AppPlanDecisionLedgerFuture,
-    AppPlanDecisionLedgerPort, AppPlanDecisionPlan, AppPlanDecisionRequest, AppPlanDecisionResult,
-    AppPlanDecisionStatus, AppProjectActionResult, AppProjectDashboardActionProgress,
-    AppProjectDashboardBriefingPort, AppProjectDashboardBriefingPrompt,
-    AppProjectDashboardBriefingRequest, AppProjectDashboardCheckpoint,
-    AppProjectDashboardDisposition, AppProjectDashboardLedgerError, AppProjectDashboardLedgerEvent,
-    AppProjectDashboardLedgerFuture, AppProjectDashboardLedgerHistory,
-    AppProjectDashboardLedgerPort, AppProjectDashboardLedgerRecord, AppProjectDashboardManagedPlan,
+    AppCreateSessionInput, AppCreateSessionRequest, AppCreateSessionResult, AppDocumentCommand,
+    AppExecutorReadiness, AppFileDownload, AppFileUpload, AppFileWrite, AppGrantRef, AppGrantView,
+    AppIdentityClock, AppLedgerSourceRequest, AppLibraryChange, AppLibraryCommand, AppLibraryQuery,
+    AppMemoryCommand, AppMemoryPort, AppMessageFileSnapshot, AppMessageFileStorage,
+    AppModelCatalogCommand, AppModelCatalogPort, AppModelFallbackFacts, AppModelMetadata,
+    AppMonitorPage, AppMonitoringPort, AppNativeAssetResolver, AppNativeIngress,
+    AppPersonalizationCommand, AppPersonalizationEvent, AppPersonalizationPort,
+    AppPersonalizationResult, AppPlanDecisionAction, AppPlanDecisionLedgerError,
+    AppPlanDecisionLedgerFuture, AppPlanDecisionLedgerPort, AppPlanDecisionPlan,
+    AppPlanDecisionRequest, AppPlanDecisionResult, AppPlanDecisionStatus, AppProjectActionResult,
+    AppProjectDashboardActionProgress, AppProjectDashboardBriefingPort,
+    AppProjectDashboardBriefingPrompt, AppProjectDashboardBriefingRequest,
+    AppProjectDashboardCheckpoint, AppProjectDashboardDisposition, AppProjectDashboardLedgerError,
+    AppProjectDashboardLedgerEvent, AppProjectDashboardLedgerFuture,
+    AppProjectDashboardLedgerHistory, AppProjectDashboardLedgerPort,
+    AppProjectDashboardLedgerRecord, AppProjectDashboardManagedPlan,
     AppProjectDashboardManagedWork, AppProjectDashboardPageQuery, AppProjectDashboardPinRef,
     AppProjectDashboardPreferencesUpdate, AppProjectDashboardRecordsQuery,
     AppProjectDashboardReview, AppProjectDashboardSnapshot, AppProjectDashboardSource,
@@ -162,8 +166,8 @@ pub use data_reset::{AppDataResetPort, FullResetRequest, ResetNonce};
 mod browser_still_delivery;
 pub use browser_still_delivery::AppBrowserStillCommand;
 
-pub use application_port::GatewayApplication;
 mod application_port;
+pub use application_port::GatewayApplication;
 
 mod inbound_queue;
 mod message_file_store;
@@ -181,3 +185,5 @@ pub fn http_route_templates() -> Vec<&'static str> {
 }
 
 pub use http::reset_browser_secret_keys;
+
+pub use protocol::ImageEditRequest;

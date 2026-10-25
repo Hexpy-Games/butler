@@ -634,6 +634,7 @@
 | Tabs the user and conversations open, grouped by owner | `TabStrip` |  |
 | Tags on a saved Library item (card popover, detail panel) | `TagField` |  |
 | Teach a shortcut next to the control or in a hint | `Kbd` |  |
+| Text whose length varies: autoGrow grows the bordered box, then scrolls | `Textarea` |  |
 | The action is an icon without a visible label | `IconButton` | `Button` |
 | The action needs words to be understood | `Button` | `IconButton` |
 | The address in BrowserToolbar | `AddressField` |  |
@@ -952,9 +953,10 @@ A multi-line text box for prompts, personas, arguments and descriptions.
 
 - Use for: Enter a paragraph or a list with one item per line
 - Use for: In-place wrapping entry: variant=underline, textSize=label beside Typo.Label
+- Use for: Text whose length varies: autoGrow grows the bordered box, then scrolls
 - Not for: A single-line value → `Input`
 - Not for: Writing a chat message → `ComposerCard`
-- Tokens: `--line`, `--radius-control`, `--placeholder`, `--focus-ring`, `--focus-ring-width`, `--textarea-max-lines`, `--scroll-fade-size`
+- Tokens: `--line`, `--radius-control`, `--placeholder`, `--focus-ring`, `--focus-ring-width`, `--textarea-max-lines`, `--textarea-grow-max-lines`, `--scroll-fade-size`
 
 ### TimePicker
 
@@ -2017,7 +2019,7 @@ Files attached to a message: square tiles (composer row, sent message), a list w
 - Use for: Picked page elements in the composer (chips)
 - Not for: Files Butler produced → `ArtifactList`
 - Not for: Project documents → `DocumentTile`
-- Tokens: `--radius-pill`, `--line`, `--icon-size-sm`, `--radius-panel`, `--focus-ring-room`, `--motion-scale-press`, `--motion-scale-dialog`
+- Tokens: `--radius-pill`, `--line`, `--icon-size-sm`, `--radius-panel`, `--focus-ring-room`, `--motion-scale-press`, `--motion-scale-dialog`, `--danger`
 
 ### ComposerAdjunctPanel
 
@@ -2858,7 +2860,7 @@ Document typography for rendered markdown: headings, lists, code frames, tables,
 - Use for: Assistant answers, READMEs and project documents rendered from markdown
 - Not for: UI text → `Typo`
 - Not for: Raw file contents → `ArtifactPreviewPre`
-- Tokens: `--typo-body-line-height-document`, `--typo-code-size`, `--syntax-keyword`, `--radius-panel`, `--accent-text`, `--favicon-plate`
+- Tokens: `--typo-body-line-height-document`, `--typo-body-line-height`, `--typo-code-size`, `--syntax-keyword`, `--radius-panel`, `--accent-text`, `--favicon-plate`
 
 ### SplitBrowser
 

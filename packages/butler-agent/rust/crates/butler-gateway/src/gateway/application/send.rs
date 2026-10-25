@@ -36,9 +36,13 @@ impl AppApplication {
     #[tracing::instrument(name = "turn.admit", skip_all, fields(trace_root = true, chat_id = %command.chat_id), err)]
     async fn send_with_attachment_source(
         &self,
-        command: SendMessageCommand,
+        mut command: SendMessageCommand,
         reused_from_message_id: Option<String>,
     ) -> Result<MessageSendResult, GatewayApplicationError> {
+        command
+            .request
+            .persist_editor_metadata()
+            .map_err(GatewayApplicationError::internal_from)?;
         self.recover_expired().await?;
         let chat_id = command.chat_id.clone();
         let request = command.request.clone();

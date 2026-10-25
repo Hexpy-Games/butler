@@ -39,7 +39,10 @@
     "output_publish",
     "preview_start",
     "preview_stop",
-    "deliver_files"
+    "deliver_files",
+    "document_create",
+    "document_read",
+    "document_edit"
   ],
   "tools": [
     {
@@ -132,7 +135,7 @@
       "definition": {
         "type": "function",
         "name": "web_read",
-        "description": "Get a page's text as bounded evidence. Pass url to read a static document (article, documentation, reference, PDF) through Butler's page reader, or tab to read an open tab as it shows now; a url already open in a tab is read from that tab. App-like or script-built pages, such as stores, product listings or dashboards, show their content only in a tab: open them with browser_open first, then pass tab. URL reads are reused within the turn; tab reads check the live page and return unchanged only when its content is identical. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. Reads of different pages and tabs, and their continuations, are independent: request them together in one round. ok:false with next_action open_in_tab means the reader got only part of the page: open it with browser_open and read the tab before using anything from it. Read another source for the same fact only after the tab fails too, or when browser tools are unavailable; then report what still fails and what you tried.",
+        "description": "Get a page's text as bounded evidence. Pass url to read a static document (article, documentation, reference, PDF) through Butler's page reader, or tab to read an open tab as it shows now; a url already open in a tab is read from that tab. App-like or script-built pages, such as stores, product listings or dashboards, show their content only in a tab: open them with browser_open first, then pass tab. URL reads are reused within the turn; tab reads check the live page and return unchanged only when its content is identical. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. Reads of different pages and tabs, and their continuations, are independent: request them together in one round. ok:false with next_action open_in_tab means the reader got only part of the page: open it with browser_open and read the tab before using anything from it. Read another source for the same fact only after the tab fails too, or when browser tools are unavailable; then report what still fails and what you tried. With query, the chunks that best match it come first; read the others with start_chunk.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -164,6 +167,9 @@
               "minimum": 0,
               "default": 0,
               "description": "Zero-based chunk offset for continuing through the page (default 0). Use next_start_chunk from the previous result."
+            },
+            "query": {
+              "type": "string"
             }
           },
           "required": []
@@ -5609,7 +5615,7 @@
       "definition": {
         "type": "function",
         "name": "ask_user",
-        "description": "Ask the user 1–4 structured questions and wait for answers or skipping. Use short topic eyebrows. Options are 2–6 concrete answers; mark recommendations without selecting them. The card always offers free input and Skip, so never add options to skip, answer later or type one's own answer. For a free-text answer use kind text with no options. A deferred response means the user will answer later. Never include an icon.",
+        "description": "Ask the user 1–4 structured questions on a card. By default the turn waits for answers or skipping; use that only when you cannot continue the current task without the answer. Set wait false when you need the answer later but can finish this reply without it, such as a choice of next step or a preference: the turn goes on, the card stays in the conversation for the user to answer any time, and it stays open until answered or dropped. Its answer arrives as a later message. Use short topic eyebrows. Options are 2–6 concrete answers; mark recommendations without selecting them. The card always offers free input and Skip, so never add options to skip, answer later or type one's own answer. For a free-text answer use kind text with no options. A deferred response means the user will answer later. Never include an icon.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -5690,6 +5696,10 @@
                   "allow_custom"
                 ]
               }
+            },
+            "wait": {
+              "type": "boolean",
+              "description": "Default true: the turn waits for the answer. false: the question becomes an open card and you finish this reply without the answer."
             }
           },
           "required": [
@@ -6730,7 +6740,8 @@
                 "scrap",
                 "document",
                 "bookmark",
-                "output"
+                "output",
+                "doc"
               ]
             },
             "group": {
@@ -6936,10 +6947,305 @@
         "file"
       ],
       "durable": false
+    },
+    {
+      "name": "browse",
+      "definition": {
+        "type": "function",
+        "name": "browse",
+        "description": "Do one page task in a browser tab with a fast browsing agent and get back only the result: the requested fields with quoted evidence, a short summary and the tab. Use it to find, compare, check prices or options, fill a form up to its submit step, or reach a cart or checkout. Give a concrete goal and the fields you need; pass url or an open tab. Run independent browse calls in one round. A result with status needs_approval carries the exact steps that order, pay, submit or sign in: run them with browser_act so the user approves them. stuck and step_limit say what was reached; follow up with a narrower goal or use browser tools directly.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "goal": {
+              "type": "string"
+            },
+            "fields": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "url": {
+              "type": "string"
+            },
+            "tab": {
+              "type": "string"
+            },
+            "max_steps": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30
+            }
+          },
+          "required": [
+            "goal"
+          ]
+        }
+      },
+      "effectBoundary": "none",
+      "category": "control",
+      "tags": [
+        "browser",
+        "web",
+        "tabs"
+      ],
+      "durable": false
+    },
+    {
+      "name": "document_create",
+      "definition": {
+        "type": "function",
+        "name": "document_create",
+        "description": "Create a document in the user's 서랍: a final deliverable they will keep, revise or export, such as a report, plan, guide or brief. body is Markdown. Embed answer blocks as a fenced ```blocks code block holding one spec ({v, blocks}, the answer_blocks contract), and images as ![alt](img_…) with ids from image_collect. The user can edit it; you see their edits on your next turn. For a short answer use reply text and answer_blocks; for a page with its own layout or interactions use output_publish.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "body": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "title",
+            "body"
+          ]
+        },
+        "effectBoundary": "turn_local",
+        "concurrencySafe": false,
+        "interruptBehavior": "continue",
+        "transcriptVisibility": "visible"
+      },
+      "effectBoundary": "turn_local",
+      "category": "file",
+      "tags": [
+        "document",
+        "doc",
+        "서랍",
+        "deliverable",
+        "markdown",
+        "create"
+      ],
+      "durable": false
+    },
+    {
+      "name": "document_read",
+      "definition": {
+        "type": "function",
+        "name": "document_read",
+        "description": "Read a document's current Markdown and revision number. Read it before editing unless you saw its latest revision in this chat.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ]
+        },
+        "effectBoundary": "none",
+        "concurrencySafe": true,
+        "interruptBehavior": "continue",
+        "transcriptVisibility": "visible"
+      },
+      "effectBoundary": "none",
+      "category": "file",
+      "tags": [
+        "document",
+        "doc",
+        "서랍",
+        "deliverable",
+        "markdown",
+        "read"
+      ],
+      "durable": false
+    },
+    {
+      "name": "document_edit",
+      "definition": {
+        "type": "function",
+        "name": "document_edit",
+        "description": "Edit a document with exact replacements. base_rev is the revision you last read. Each anchor is text copied exactly from that revision that occurs there once; replace is its new text (empty deletes). To add text, anchor on nearby lines and repeat them in replace. The whole edit fails if an anchor is missing or repeated, or the user has since changed that part; then read the document again and redo the edit on the new text. The user sees each change and can undo it.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "base_rev": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "ops": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 20,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "anchor": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  },
+                  "replace": {
+                    "type": "string",
+                    "maxLength": 16000
+                  }
+                },
+                "required": [
+                  "anchor",
+                  "replace"
+                ]
+              }
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "id",
+            "base_rev",
+            "ops"
+          ]
+        },
+        "effectBoundary": "turn_local",
+        "concurrencySafe": false,
+        "interruptBehavior": "continue",
+        "transcriptVisibility": "visible"
+      },
+      "effectBoundary": "turn_local",
+      "category": "file",
+      "tags": [
+        "document",
+        "doc",
+        "서랍",
+        "deliverable",
+        "markdown",
+        "edit"
+      ],
+      "durable": false
+    },
+    {
+      "name": "generate_image",
+      "definition": {
+        "type": "function",
+        "name": "generate_image",
+        "description": "Create a new picture with the image model chosen in Settings. Use it when the user asks for an image, illustration, icon, photo or other visual that does not exist yet. prompt is a complete visual description: subject, composition, style, lighting, colours and any text the picture must show. To build on pictures from this chat, pass their ids in images. The picture appears in the chat by itself, so the reply does not describe it again. Every call is billed by the provider: make one picture per call and do not call again to vary it unless the user asks.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "prompt": {
+              "type": "string",
+              "description": "Complete visual description of the picture."
+            },
+            "size": {
+              "type": "string",
+              "description": "One of the image model's sizes (pixels such as 1536x1024, or an aspect ratio such as 16:9). Omit for the model's default."
+            },
+            "quality": {
+              "type": "string",
+              "description": "One of the image model's qualities. Omit for the default set in Settings."
+            },
+            "images": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Ids of pictures to build on: img_… from this chat or file ids of attached images."
+            },
+            "background": {
+              "type": "string",
+              "enum": [
+                "transparent",
+                "opaque"
+              ],
+              "description": "transparent only when the user wants a cut-out picture and the model supports it."
+            }
+          },
+          "required": [
+            "prompt"
+          ]
+        },
+        "effectBoundary": "external",
+        "concurrencySafe": false,
+        "interruptBehavior": "cancel",
+        "transcriptVisibility": "visible"
+      },
+      "category": "media",
+      "effectBoundary": "external",
+      "tags": [
+        "image"
+      ],
+      "durable": false
+    },
+    {
+      "name": "edit_image",
+      "definition": {
+        "type": "function",
+        "name": "edit_image",
+        "description": "Change an existing picture with the image model chosen in Settings. image is the id of a picture in this chat (img_…) or of an attached image. When the user sent a marked region from the image editor, pass that message's image and mask ids exactly: only the marked region changes. Without a mask the whole picture may change. prompt says what to change and, when it matters, what must stay. Each edit makes a new version of the picture; follow-ups edit the latest version unless the user picks another.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "prompt": {
+              "type": "string",
+              "description": "What to change."
+            },
+            "size": {
+              "type": "string",
+              "description": "One of the image model's sizes (pixels such as 1536x1024, or an aspect ratio such as 16:9). Omit for the model's default."
+            },
+            "quality": {
+              "type": "string",
+              "description": "One of the image model's qualities. Omit for the default set in Settings."
+            },
+            "image": {
+              "type": "string",
+              "description": "Id of the picture to change."
+            },
+            "mask": {
+              "type": "string",
+              "description": "Mask id from the image editor message; only that region changes."
+            }
+          },
+          "required": [
+            "image",
+            "prompt"
+          ]
+        },
+        "effectBoundary": "external",
+        "concurrencySafe": false,
+        "interruptBehavior": "cancel",
+        "transcriptVisibility": "visible"
+      },
+      "category": "media",
+      "effectBoundary": "external",
+      "tags": [
+        "image"
+      ],
+      "durable": false
     }
   ],
   "workerForbidden": [
-    "complete_project_work"
+    "complete_project_work",
+    "generate_image",
+    "edit_image"
   ],
   "workTracking": [
     "update_todo_list",
@@ -9893,7 +10199,7 @@
     "web_read": {
       "type": "function",
       "name": "web_read",
-      "description": "Get a page's text as bounded evidence. Pass url to read a static document (article, documentation, reference, PDF) through Butler's page reader, or tab to read an open tab as it shows now; a url already open in a tab is read from that tab. App-like or script-built pages, such as stores, product listings or dashboards, show their content only in a tab: open them with browser_open first, then pass tab. URL reads are reused within the turn; tab reads check the live page and return unchanged only when its content is identical. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. Reads of different pages and tabs, and their continuations, are independent: request them together in one round. ok:false with next_action open_in_tab means the reader got only part of the page: open it with browser_open and read the tab before using anything from it. Read another source for the same fact only after the tab fails too, or when browser tools are unavailable; then report what still fails and what you tried.",
+      "description": "Get a page's text as bounded evidence. Pass url to read a static document (article, documentation, reference, PDF) through Butler's page reader, or tab to read an open tab as it shows now; a url already open in a tab is read from that tab. App-like or script-built pages, such as stores, product listings or dashboards, show their content only in a tab: open them with browser_open first, then pass tab. URL reads are reused within the turn; tab reads check the live page and return unchanged only when its content is identical. When content_has_more is true, continue with start_chunk set to next_start_chunk; returned_chunks counts only complete chunks included in the current result. Reads of different pages and tabs, and their continuations, are independent: request them together in one round. ok:false with next_action open_in_tab means the reader got only part of the page: open it with browser_open and read the tab before using anything from it. Read another source for the same fact only after the tab fails too, or when browser tools are unavailable; then report what still fails and what you tried. With query, the chunks that best match it come first; read the others with start_chunk.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -9937,6 +10243,9 @@
               "disabled"
             ],
             "description": "Optional page reader backend override."
+          },
+          "query": {
+            "type": "string"
           }
         },
         "required": []
@@ -10156,7 +10465,7 @@
     "ask_user": {
       "type": "function",
       "name": "ask_user",
-      "description": "Ask the user 1–4 structured questions and wait for answers or skipping. Use short topic eyebrows. Options are 2–6 concrete answers; mark recommendations without selecting them. The card always offers free input and Skip, so never add options to skip, answer later or type one's own answer. For a free-text answer use kind text with no options. A deferred response means the user will answer later. Never include an icon.",
+      "description": "Ask the user 1–4 structured questions on a card. By default the turn waits for answers or skipping; use that only when you cannot continue the current task without the answer. Set wait false when you need the answer later but can finish this reply without it, such as a choice of next step or a preference: the turn goes on, the card stays in the conversation for the user to answer any time, and it stays open until answered or dropped. Its answer arrives as a later message. Use short topic eyebrows. Options are 2–6 concrete answers; mark recommendations without selecting them. The card always offers free input and Skip, so never add options to skip, answer later or type one's own answer. For a free-text answer use kind text with no options. A deferred response means the user will answer later. Never include an icon.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -10237,6 +10546,10 @@
                 "allow_custom"
               ]
             }
+          },
+          "wait": {
+            "type": "boolean",
+            "description": "Default true: the turn waits for the answer. false: the question becomes an open card and you finish this reply without the answer."
           }
         },
         "required": [
@@ -12155,7 +12468,8 @@
               "scrap",
               "document",
               "bookmark",
-              "output"
+              "output",
+              "doc"
             ]
           },
           "group": {
@@ -12337,6 +12651,228 @@
       "concurrencySafe": false,
       "interruptBehavior": "continue",
       "transcriptVisibility": "visible"
+    },
+    "browse": {
+      "type": "function",
+      "name": "browse",
+      "description": "Do one page task in a browser tab with a fast browsing agent and get back only the result: the requested fields with quoted evidence, a short summary and the tab. Use it to find, compare, check prices or options, fill a form up to its submit step, or reach a cart or checkout. Give a concrete goal and the fields you need; pass url or an open tab. Run independent browse calls in one round. A result with status needs_approval carries the exact steps that order, pay, submit or sign in: run them with browser_act so the user approves them. stuck and step_limit say what was reached; follow up with a narrower goal or use browser tools directly.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "goal": {
+            "type": "string"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "url": {
+            "type": "string"
+          },
+          "tab": {
+            "type": "string"
+          },
+          "max_steps": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30
+          }
+        },
+        "required": [
+          "goal"
+        ]
+      }
+    },
+    "document_create": {
+      "type": "function",
+      "name": "document_create",
+      "description": "Create a document in the user's 서랍: a final deliverable they will keep, revise or export, such as a report, plan, guide or brief. body is Markdown. Embed answer blocks as a fenced ```blocks code block holding one spec ({v, blocks}, the answer_blocks contract), and images as ![alt](img_…) with ids from image_collect. The user can edit it; you see their edits on your next turn. For a short answer use reply text and answer_blocks; for a page with its own layout or interactions use output_publish.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "body": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "body"
+        ]
+      },
+      "effectBoundary": "turn_local",
+      "concurrencySafe": false,
+      "interruptBehavior": "continue",
+      "transcriptVisibility": "visible"
+    },
+    "document_read": {
+      "type": "function",
+      "name": "document_read",
+      "description": "Read a document's current Markdown and revision number. Read it before editing unless you saw its latest revision in this chat.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "effectBoundary": "none",
+      "concurrencySafe": true,
+      "interruptBehavior": "continue",
+      "transcriptVisibility": "visible"
+    },
+    "document_edit": {
+      "type": "function",
+      "name": "document_edit",
+      "description": "Edit a document with exact replacements. base_rev is the revision you last read. Each anchor is text copied exactly from that revision that occurs there once; replace is its new text (empty deletes). To add text, anchor on nearby lines and repeat them in replace. The whole edit fails if an anchor is missing or repeated, or the user has since changed that part; then read the document again and redo the edit on the new text. The user sees each change and can undo it.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "base_rev": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "ops": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "anchor": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4000
+                },
+                "replace": {
+                  "type": "string",
+                  "maxLength": 16000
+                }
+              },
+              "required": [
+                "anchor",
+                "replace"
+              ]
+            }
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "id",
+          "base_rev",
+          "ops"
+        ]
+      },
+      "effectBoundary": "turn_local",
+      "concurrencySafe": false,
+      "interruptBehavior": "continue",
+      "transcriptVisibility": "visible"
+    },
+    "generate_image": {
+      "type": "function",
+      "name": "generate_image",
+      "description": "Create a new picture with the image model chosen in Settings. Use it when the user asks for an image, illustration, icon, photo or other visual that does not exist yet. prompt is a complete visual description: subject, composition, style, lighting, colours and any text the picture must show. To build on pictures from this chat, pass their ids in images. The picture appears in the chat by itself, so the reply does not describe it again. Every call is billed by the provider: make one picture per call and do not call again to vary it unless the user asks.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "description": "Complete visual description of the picture."
+          },
+          "size": {
+            "type": "string",
+            "description": "One of the image model's sizes (pixels such as 1536x1024, or an aspect ratio such as 16:9). Omit for the model's default."
+          },
+          "quality": {
+            "type": "string",
+            "description": "One of the image model's qualities. Omit for the default set in Settings."
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ids of pictures to build on: img_… from this chat or file ids of attached images."
+          },
+          "background": {
+            "type": "string",
+            "enum": [
+              "transparent",
+              "opaque"
+            ],
+            "description": "transparent only when the user wants a cut-out picture and the model supports it."
+          }
+        },
+        "required": [
+          "prompt"
+        ]
+      },
+      "effectBoundary": "external",
+      "concurrencySafe": false,
+      "interruptBehavior": "cancel",
+      "transcriptVisibility": "visible"
+    },
+    "edit_image": {
+      "type": "function",
+      "name": "edit_image",
+      "description": "Change an existing picture with the image model chosen in Settings. image is the id of a picture in this chat (img_…) or of an attached image. When the user sent a marked region from the image editor, pass that message's image and mask ids exactly: only the marked region changes. Without a mask the whole picture may change. prompt says what to change and, when it matters, what must stay. Each edit makes a new version of the picture; follow-ups edit the latest version unless the user picks another.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "description": "What to change."
+          },
+          "size": {
+            "type": "string",
+            "description": "One of the image model's sizes (pixels such as 1536x1024, or an aspect ratio such as 16:9). Omit for the model's default."
+          },
+          "quality": {
+            "type": "string",
+            "description": "One of the image model's qualities. Omit for the default set in Settings."
+          },
+          "image": {
+            "type": "string",
+            "description": "Id of the picture to change."
+          },
+          "mask": {
+            "type": "string",
+            "description": "Mask id from the image editor message; only that region changes."
+          }
+        },
+        "required": [
+          "image",
+          "prompt"
+        ]
+      },
+      "effectBoundary": "external",
+      "concurrencySafe": false,
+      "interruptBehavior": "cancel",
+      "transcriptVisibility": "visible"
     }
   },
   "allLedgerEffects": [
@@ -12375,7 +12911,10 @@
       "project_artifacts",
       "browser_history_search",
       "library_search",
-      "library_organize"
+      "library_organize",
+      "document_create",
+      "document_read",
+      "document_edit"
     ],
     "project": [
       "project_ledger_status",

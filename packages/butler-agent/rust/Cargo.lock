@@ -889,6 +889,7 @@ name = "butler-canon"
 version = "0.0.0"
 dependencies = [
  "caseless",
+ "pulldown-cmark",
  "rusqlite",
  "serde",
  "serde_json",
@@ -973,6 +974,7 @@ version = "0.0.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
+ "butler-canon",
  "butler-core",
  "butler-log",
  "butler-memory",
@@ -1166,6 +1168,7 @@ dependencies = [
  "futures-util",
  "hmac 0.12.1",
  "http",
+ "image",
  "parking_lot",
  "pin-project-lite",
  "regex",
@@ -1266,6 +1269,7 @@ dependencies = [
  "oxideav-avif",
  "parking_lot",
  "psl",
+ "pulldown-cmark",
  "regex",
  "regress",
  "reqwest 0.12.28",
@@ -1277,6 +1281,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "similar",
  "tar",
  "thiserror 2.0.20",
  "tokio",
@@ -6203,6 +6208,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33cb294fe86a74cbcf50d4445b37da762029549ebeea341421c7c70370f86cac"
 
 [[package]]
+name = "pulldown-cmark"
+version = "0.13.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "278e9268c93b9e498a2da46c34d90ba93a3255eb99009646398f34bc73ab36eb"
+dependencies = [
+ "bitflags 2.13.2",
+ "memchr",
+ "unicase",
+]
+
+[[package]]
 name = "pxfm"
 version = "0.1.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7298,6 +7314,12 @@ name = "simdutf8"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
+
+[[package]]
+name = "similar"
+version = "2.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
 
 [[package]]
 name = "simplecss"

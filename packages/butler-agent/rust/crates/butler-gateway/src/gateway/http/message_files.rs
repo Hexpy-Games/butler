@@ -126,7 +126,7 @@ impl<'a> FileRendering<'a> {
     }
 }
 
-async fn parse_upload(request: Request<Body>) -> Result<AppFileUpload, HttpError> {
+pub(super) async fn parse_upload(request: Request<Body>) -> Result<AppFileUpload, HttpError> {
     // Request.formData also accepts URL-encoded forms, which cannot contain a File.
     if request
         .headers()

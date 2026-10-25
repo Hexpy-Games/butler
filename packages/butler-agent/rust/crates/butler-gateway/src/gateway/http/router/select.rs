@@ -6,6 +6,7 @@ pub(super) fn handler(request: &Request<Body>) -> Option<Handler> {
     let family = [
         (family(path, "/logs"), Handler::Logs),
         (family(path, "/library"), Handler::Library),
+        (family(path, "/documents"), Handler::Documents),
         (family(path, "/browser-history"), Handler::History),
         (family(path, "/browser-stills"), Handler::BrowserStills),
         (path.starts_with("/internal/browser"), Handler::Browser),
@@ -35,12 +36,20 @@ fn commands(request: &Request<Body>) -> Option<Handler> {
     ) {
         return Some(Handler::CanonSidebar);
     }
+    if matches!(
+        parts.as_slice(),
+        ["pending-asks"]
+            | ["sessions", _, "pending-asks"]
+            | ["sessions", _, "pending-asks", _, "dismiss"]
+    ) {
+        return Some(Handler::PendingAsks);
+    }
     let routes = [
         (
             matches!(
                 parts.as_slice(),
                 ["projects", _, "canon"]
-                    | ["projects", _, "canon", "plans" | "epics" | "tags"]
+                    | ["projects", _, "canon", "plans" | "epics" | "tags" | "files"]
                     | ["projects", _, "canon", "backlog", "order"]
                     | ["canon", "plans" | "epics" | "tags", _]
                     | ["canon", "plans", _, "order"]

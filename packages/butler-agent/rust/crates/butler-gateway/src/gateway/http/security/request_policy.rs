@@ -21,8 +21,9 @@ const APP_ORIGIN: &str = "app://butler";
 /// Loopback names the gateway always answers, with its bound port.
 const LOOPBACK_NAMES: [&str; 3] = ["127.0.0.1", "localhost", "[::1]"];
 /// Routes whose bodies are multipart uploads, not JSON.
-const MULTIPART_ROUTES: [&str; 4] = [
+const MULTIPART_ROUTES: [&str; 5] = [
     "/message-files",
+    "/message-assets/masks",
     "/skills/import",
     "/wallpapers",
     "/wallpaper-modules/import",
@@ -221,7 +222,12 @@ pub(in crate::gateway::http) fn require_json_body(
         *method,
         Method::POST | Method::PUT | Method::PATCH | Method::DELETE
     ) && declares_body(headers);
-    if !sends_body || MULTIPART_ROUTES.contains(&path) || is_json(headers) {
+    let canon_upload = *method == Method::POST
+        && path
+            .strip_prefix("/projects/")
+            .and_then(|tail| tail.strip_suffix("/canon/files"))
+            .is_some_and(|id| !id.is_empty() && !id.contains('/'));
+    if !sends_body || MULTIPART_ROUTES.contains(&path) || canon_upload || is_json(headers) {
         return Ok(());
     }
     Err(HttpError::public(

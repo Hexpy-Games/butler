@@ -76,6 +76,18 @@ impl GuidedTurnFactoryAdapter {
         ))
     }
 
+    async fn prepare(
+        &self,
+        start: &GuidedTurnStart<'_>,
+    ) -> Result<PreparedNativeGuidedTurn, BtccError> {
+        self.preparation
+            .prepare(
+                start,
+                self.monitoring.browsing_agent_setting().await != "off",
+            )
+            .await
+    }
+
     async fn skill_catalog(&self, project_id: Option<String>) -> Result<String, BtccError> {
         self.capabilities
             .compact_skill_catalog(project_id)
@@ -120,6 +132,19 @@ impl GuidedTurnFactoryAdapter {
             let profiles = self.subsessions.enabled_worker_profiles().await?;
             surface::with_worker_profile_choices(phase, &profiles)?;
         }
+        if self
+            .monitoring
+            .configuration
+            .image_model_settings()
+            .await
+            .ok()
+            .is_none_or(|v| v["selected"].is_null())
+        {
+            for name in ["generate_image", "edit_image"] {
+                phase.authorized_names.retain(|n| n != name);
+                phase.provider_tools.retain(|t| t["name"] != name);
+            }
+        }
         surface::available(phase, self.preparation.catalog.snapshot())
     }
 }
@@ -142,7 +167,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 operation_results,
                 budget,
                 source_revision,
-            } = self.preparation.prepare(&start).await?;
+            } = self.prepare(&start).await?;
             let (workspace_path, root_pins, inventory) =
                 self.resolved_workspace(&workspace, &mut phase).await?;
             let consent = workspace.consent();

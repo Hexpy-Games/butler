@@ -149,3 +149,55 @@ fn explain_refusal(result: &mut Value) {
     };
     result["recovery"] = json!(recovery);
 }
+
+/// Internal image asset operations are authenticated with the same local admin boundary.
+pub(super) async fn image(
+    state: &HttpState,
+    session: &str,
+    op: &str,
+    args: &Value,
+) -> Result<Value, HttpError> {
+    use crate::gateway::{AppImageUsageCommand, GeneratedAssetKind};
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    let mut data = match op {
+        "images.resolve" => {
+            state
+                .application
+                .assets(AppAssetCommand::ResolveInput {
+                    session: session.into(),
+                    id: args["id"].as_str().ok_or(HttpError::Internal)?.into(),
+                    mask_for: args["mask_for"].as_str().map(str::to_owned),
+                })
+                .await?
+        }
+        "images.store" => {
+            state
+                .application
+                .assets(AppAssetCommand::PutGenerated {
+                    session: session.into(),
+                    bytes: STANDARD
+                        .decode(args["data"].as_str().ok_or(HttpError::Internal)?)
+                        .map_err(|_| HttpError::invalid_json())?,
+                    kind: GeneratedAssetKind::Generated,
+                    parent_id: args["parent_id"].as_str().map(str::to_owned),
+                    model_ref: args["model_ref"].as_str().map(str::to_owned),
+                })
+                .await?
+        }
+        "images.usage" => {
+            state
+                .application
+                .image_usage(AppImageUsageCommand::Record(
+                    serde_json::from_value(args.clone()).map_err(|_| HttpError::invalid_json())?,
+                ))
+                .await?
+        }
+        _ => return Err(HttpError::Internal),
+    };
+    if op == "images.store"
+        && let Some(id) = data["id"].as_str().map(str::to_owned)
+    {
+        data["url"] = json!(format!("/message-assets/{id}"));
+    }
+    Ok(data)
+}

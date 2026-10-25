@@ -27,12 +27,13 @@ function approvalPathText(text: string, decision: ComposerAuthorityDecision) {
   return <Typo.Text title={text} aria-label={text}>{display}</Typo.Text>;
 }
 
-export function ComposerAuthorityDecisionSurface({ decision }: { decision: ComposerAuthorityDecision }) {
+export function ComposerAuthorityDecisionSurface({ decision, placement }: { placement?: "composer" | "conversation"; decision: ComposerAuthorityDecision }) {
   useAppLocale();
   const { handoff } = decision;
-  if (handoff) return <ComposerBrowserHandoffSurface decision={{ ...decision, handoff }} />;
+  if (handoff) return <ComposerBrowserHandoffSurface placement={placement} decision={{ ...decision, handoff }} />;
   const Icon = KIND_ICONS[decision.actionKind];
   return <ComposerDecisionPanel
+    placement={placement}
     media={decision.media}
     icon={<Icon aria-hidden="true" size="lg" />}
     eyebrow={appCopy.composer.permission}

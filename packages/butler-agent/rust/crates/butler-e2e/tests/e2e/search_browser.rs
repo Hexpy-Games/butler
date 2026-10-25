@@ -35,6 +35,11 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
         .env("BUTLER_BRAVE_SEARCH_API_KEY", "offline-fixture-key");
     let s = setup.start().await?;
     super::outbound_http::logging(&s, "detailed").await?;
+    s.patch_settings(
+        json!({"browser":{"browsing_agent":"off"}}),
+        "direct browser tools",
+    )
+    .await?;
     let path = s.sandbox.data.join("butler.config.json");
     let mut config: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
     config["webSearch"] = json!({"provider":"brave","planning":{"enabled":false},

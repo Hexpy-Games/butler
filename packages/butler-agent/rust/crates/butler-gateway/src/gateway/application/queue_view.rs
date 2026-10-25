@@ -258,9 +258,11 @@ fn files_for_ids(
     let mut files = Vec::with_capacity(ids.len());
     for id in ids {
         let file = connection.query_row(
-            "SELECT id,kind,mime_type,safe_name,size_bytes,sha256,created_at FROM message_files WHERE id=?1",
+            "SELECT id,kind,mime_type,safe_name,size_bytes,sha256,created_at,width,height FROM message_files WHERE id=?1",
             [id], |row| Ok(MessageFileRef {
                 title: None,
+                width: row.get(7)?,
+                height: row.get(8)?,
                 source_label: None,
                 deliverable: false,
                 file_id: row.get(0)?, kind: parse_sql_enum(row.get::<_, String>(1)?)?,

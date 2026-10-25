@@ -73,25 +73,6 @@ pub struct SendMessageCommand {
     pub chat_id: String,
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct MessageSendRequest {
-    pub expected_project_id: Option<String>,
-    pub content_parts: Option<MessageContent>,
-    pub chat_id: Option<Value>,
-    pub text: Option<Value>,
-    pub client_message_id: Option<Value>,
-    pub attachments: Option<Value>,
-    pub model: Option<Value>,
-    pub reasoning_effort: Option<Value>,
-    pub access_mode: Option<Value>,
-    pub plan_mode: Option<Value>,
-    pub subsession_result: Option<butler_turn::btcc::SubsessionResultContext>,
-    /// Set only by the scheduler and the internal steward-result route (never
-    /// parsed from a client body): the schedule run this message belongs to,
-    /// and whether nobody attends it.
-    pub schedule_run: Option<butler_turn::btcc::ScheduleRunContext>,
-}
-
 #[derive(Clone, Debug)]
 pub struct SessionQueueUpdateRequest {
     pub content_parts: Option<MessageContent>,
@@ -166,6 +147,10 @@ pub struct MessageFileRef {
     pub mime_type: String,
     pub safe_name: String,
     pub size_bytes: u64,
+    #[serde(default)]
+    pub width: Option<u32>,
+    #[serde(default)]
+    pub height: Option<u32>,
     pub sha256: String,
     pub url: String,
     pub created_at: String,
@@ -493,3 +478,6 @@ pub(super) struct ApiError<'a> {
     pub code: &'a str,
     pub message: &'a str,
 }
+
+mod image_edit;
+pub use image_edit::{ImageEditRequest, MessageSendRequest};

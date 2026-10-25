@@ -17,7 +17,7 @@ impl AppApplication {
     ) -> Result<AppTurn, GatewayApplicationError> {
         let queued_id = claim.queued_message_id.clone();
         let claim_id = claim.claim_id.clone();
-        let (snapshot, conversation_access, default_project_folder) = self
+        let (snapshot, conversation_access, default_project_folder, document_edits) = self
             .storage
             .execute(move |db| claimed_input(db, &queued_id, &claim_id))
             .await
@@ -82,26 +82,28 @@ impl AppApplication {
             .native_assets
             .resolve(snapshot.clone())
             .await?;
-        self.with_canon_epics(rebuilt_turn(
+        let mut turn = rebuilt_turn(
             snapshot,
             assets,
             &conversation_access,
             default_project_folder,
-        ))
-        .await
+        );
+        turn.app_turn_context["documentEdits"] = json!(document_edits);
+        self.with_canon_epics(turn).await
     }
 }
 
 /// The claimed snapshot and its conversation's own access mode now.
-fn claimed_input(
+pub(super) fn claimed_input(
     db: &Connection,
     queued_id: &str,
     claim_id: &str,
-) -> Result<(ClaimedNativeSnapshot, AccessMode, String), AppStorageError> {
+) -> Result<(ClaimedNativeSnapshot, AccessMode, String, Vec<String>), AppStorageError> {
     let snapshot = claimed_snapshot(db, queued_id, claim_id)?;
     let access = settings::conversation_access_mode(db, &snapshot.chat_id)?;
     let folder = projects::effective_root(db)?.to_string_lossy().into_owned();
-    Ok((snapshot, access, folder))
+    let edits = super::documents::context::for_turn(db, &snapshot.chat_id, queued_id)?;
+    Ok((snapshot, access, folder, edits))
 }
 
 fn claimed_snapshot(
@@ -307,7 +309,7 @@ fn populate_snapshot_assets(
     let mut attached = db
         .prepare(
             "SELECT f.id,f.owner_session_id,f.message_id,f.kind,f.mime_type,f.safe_name,\
-         f.size_bytes,f.sha256,f.storage_name,f.created_at,f.source_label,f.deliverable,f.title FROM message_attachments a \
+         f.size_bytes,f.sha256,f.storage_name,f.created_at,f.source_label,f.deliverable,f.title,f.width,f.height FROM message_attachments a \
          JOIN message_files f ON f.id=a.file_id WHERE a.message_id=?1 ORDER BY a.position",
         )
         .map_err(AppStorageError::sqlite)?;
@@ -315,6 +317,8 @@ fn populate_snapshot_assets(
         .query_map([&snapshot.message_id], |row| {
             Ok(AppMessageFileSnapshot {
                 title: row.get(12)?,
+                width: row.get(13)?,
+                height: row.get(14)?,
                 source_label: row.get(10)?,
                 deliverable: row.get(11)?,
                 id: row.get(0)?,

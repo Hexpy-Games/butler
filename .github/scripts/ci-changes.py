@@ -24,6 +24,8 @@ from urllib.parse import urlencode
 GROUPS = ('rust', 'ui', 'site', 'ds', 'package', 'install', 'linux-package', 'workflows', 'licenses', 'signing')
 SHARED = ('VERSION', 'LICENSE', 'package.json', 'bun.lock*', 'bunfig.toml', 'tsconfig*.json',
           '*eslint*', '*stylelint*', '*prettier*')
+WINDOWS_BROWSER_INPUTS = ('tests/smoke/composer-permission-agent-smoke.ts',
+                          'tests/support/smoke-browser*', 'tests/support/bun-child-stdio.ts')
 PACKAGING = ('packages/butler-app/client/electron/*', 'packages/butler-app/electron/*',
              'packages/butler-app/main/*', 'packages/butler-app/scripts/release/*',
              'packages/butler-app/scripts/windows/*', 'packages/butler-npm/*', 'deploy/*',
@@ -31,7 +33,7 @@ PACKAGING = ('packages/butler-app/client/electron/*', 'packages/butler-app/elect
              'tests/support/quick-fixes*', 'tests/support/native-app-server*',
              'tests/support/update-work*', 'tests/support/electron-page-cdp*',
              'packages/butler-app/client/ui/src/components/layout/SessionObserverTimeline.tsx',
-             'packages/butler-app/client/ui/src/components/settings/Update*')
+             'packages/butler-app/client/ui/src/components/settings/Update*') + WINDOWS_BROWSER_INPUTS
 # PR packaging exceptions; main/release still exercise every Rust payload change.
 PR_PACKAGING = PACKAGING + ('VERSION', 'Cargo.toml', 'Cargo.lock', '**/Cargo.toml',
                             '**/Cargo.lock', 'packages/butler-agent/rust/scripts/*',
@@ -56,7 +58,7 @@ WINDOWS = ('deploy/windows**', '.github/workflows/**windows**', '.github/actions
            '.github/actions/release-python/**', '.github/actions/rust-agent-setup/**', '.github/scripts/**windows**',
            'windows**', '**/windows**', '**/windows**/**',
            'packages/butler-agent/rust/crates/butler-platform/**',
-           'packages/butler-agent/rust/crates/butler-e2e/tests/e2e/windows_**')
+           'packages/butler-agent/rust/crates/butler-e2e/tests/e2e/windows_**') + WINDOWS_BROWSER_INPUTS
 
 # Lint-only inputs have no product consumer. Matching consumer rules below also
 # apply: integration reuse hashes must observe release-only workflow changes.

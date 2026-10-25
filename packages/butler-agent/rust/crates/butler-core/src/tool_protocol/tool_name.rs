@@ -51,7 +51,9 @@ tool_names! {
     DeleteAutomation = "delete_automation",
     DeliverFiles = "deliver_files",
     EditFile = "edit_file",
+    EditImage = "edit_image",
     ForgetExplicitMemory = "forget_explicit_memory",
+    GenerateImage = "generate_image",
     GetContextMonitor = "get_context_monitor",
     GetMemoryHealth = "get_memory_health",
     GetUsageMonitor = "get_usage_monitor",
@@ -127,6 +129,7 @@ tool_names! {
     UpdateWorkStreamState = "update_work_stream_state",
     WaitForWorker = "wait_for_worker",
     WebRead = "web_read",
+    Browse = "browse",
     WebSearch = "web_search",
     WriteFile = "write_file",
     BrowserOpen = "browser_open",
@@ -148,6 +151,9 @@ tool_names! {
     BrowserHistorySearch = "browser_history_search",
     LibrarySearch = "library_search",
     LibraryOrganize = "library_organize",
+    DocumentCreate = "document_create",
+    DocumentRead = "document_read",
+    DocumentEdit = "document_edit",
 }
 
 impl std::fmt::Display for ToolName {

@@ -6,7 +6,7 @@ mod mcp;
 mod project;
 mod publication;
 mod steward;
-mod web;
+pub(super) mod web;
 pub(super) use web::web_provenance;
 mod work;
 mod worker;
@@ -285,10 +285,16 @@ async fn domain_tool(
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Option<Result<JsonDocument, ToolExecutionError>> {
+    if super::documents::supports(&call.name) {
+        return Some(super::documents::execute(owner, call, invocation).await);
+    }
     if super::library::supports(&call.name) {
         return Some(super::library::execute(owner, call).await);
     }
     match call.name.as_str() {
+        "generate_image" | "edit_image" => {
+            Some(super::image_gen::execute(owner, *invocation, call, call_id).await)
+        }
         "answer_blocks" => {
             Some(super::answer_blocks::execute(owner, call, call_id, invocation.progress).await)
         }

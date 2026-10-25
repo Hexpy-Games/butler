@@ -103,11 +103,7 @@ pub(super) async fn execute(
             }
             "failed" | "cancelled" => return prior_failure(&call.name, &record.status),
             "started" | "awaiting_authority"
-                if !GuidedTools::supports(&call.name)
-                    || matches!(
-                        ToolName::parse(effective_name.as_str()),
-                        Some(ToolName::UpdateOnboardingProfile | ToolName::IngestTaskMemory)
-                    ) =>
+                if interrupted_call(call, &effective_name, &record.status) =>
             {
                 return uncertain_mutation(&effective_name);
             }
@@ -349,7 +345,7 @@ async fn resolve_record(
     }
     Ok(None)
 }
-async fn start(
+pub(super) async fn start(
     owner: &GuidedTools,
     call: &ModelRoundToolCall,
     call_id: &str,
@@ -368,7 +364,7 @@ async fn start(
         .await
         .map_err(|error| ToolExecutionError::Integrity(error.into()))
 }
-async fn finish(
+pub(super) async fn finish(
     owner: &GuidedTools,
     call_id: &str,
     status: ToolJournalFinishStatus,
@@ -416,4 +412,13 @@ fn integrity(code: &'static str) -> ToolExecutionError {
 }
 fn integrity_message(code: &'static str, message: String) -> ToolExecutionError {
     ToolExecutionError::Integrity(BtccError::relayed(code, message))
+}
+
+fn interrupted_call(call: &ModelRoundToolCall, effective_name: &str, status: &str) -> bool {
+    status == "started" && super::image_gen::supports(effective_name)
+        || !GuidedTools::supports(&call.name)
+        || matches!(
+            ToolName::parse(effective_name),
+            Some(ToolName::UpdateOnboardingProfile | ToolName::IngestTaskMemory)
+        )
 }
