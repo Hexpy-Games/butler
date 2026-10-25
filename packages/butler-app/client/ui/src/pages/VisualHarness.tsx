@@ -15,6 +15,7 @@ import {
 import { WindowChromeLayer } from "@/components/layout/Chrome.tsx";
 import { Sidebar } from "@/components/layout/Sidebar.tsx";
 import { Titlebar } from "@/components/layout/Titlebar.tsx";
+import { LibraryPage } from "@/components/browser/LibraryPage";
 import { Conversation } from "@/components/conversation/Conversation.tsx";
 import { PlanOverview } from "@/components/canon/PlanOverview.tsx";
 import { ProjectDashboardView } from "@/components/management/ProjectDashboardView.tsx";
@@ -273,7 +274,7 @@ export function VisualHarness() {
             data-test-class="workspace"
           >
             <Titlebar />
-            {view.kind === "browser" ? (
+            {view.kind === "library" ? <LibraryPage /> : view.kind === "browser" ? (
               <Stack fill gap="none"><BrowserArea /></Stack>
             ) : view.kind === "plan-overview" ? (
               <PlanOverview key={`${view.projectId}:${view.planId}`} projectId={view.projectId} planId={view.planId} />

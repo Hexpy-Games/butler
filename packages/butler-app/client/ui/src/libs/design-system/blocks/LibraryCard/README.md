@@ -2,7 +2,7 @@
 
 ## What is this block
 `LibraryCard` is one library (서랍) item on a `Card` with a media slot: an image,
-a quote or a document preview at 16:10, a kind tag, the title with its source
+a quote, a document or a block preview at 16:10, a kind tag, the title with its source
 and a ⋯ menu.
 
 An image is always whole (`contain`) and never spills. Once it loads, a
@@ -47,3 +47,11 @@ The card fills its grid cell; the media keeps 16:10.
 
 ## Tags
 library, scrap, card, grid
+
+## Block scraps
+`media={{ kind: "block", content }}` previews a block scrap with the block
+itself: laid out 480px wide (a phone-wide answer column), scaled into the
+16:10 media box from its top start corner, inert (no focus, no pointer), on the
+raised surface, fading at the bottom edge. It renders only once the card comes
+near the viewport, so a long 서랍 never lays out every block at once. Pass the
+kind word as `tag` ("블록" / "Block").

@@ -1,0 +1,58 @@
+/* BlockActionFrame: title row with the ⋯ at its end. Untitled blocks float
+   the ⋯ on their top end corner, on a raised chip so it reads over content.
+   The frame never clips, so the trigger's focus ring keeps its room. */
+.frame {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  gap: var(--space-sm);
+}
+
+.header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.frame[data-titled="false"] > .header {
+  position: absolute;
+  z-index: var(--z-content);
+  inset-block-start: var(--space-xs);
+  inset-inline-end: var(--space-xs);
+}
+
+.frame[data-titled="false"] > .header > .trigger {
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-control);
+}
+
+/* Hidden until the pointer is on this block (not a child block) or focus is
+   inside it; an open menu keeps its trigger shown. */
+.trigger {
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--motion-ease-standard);
+}
+
+.frame:hover:not(:has(.frame:hover)) > .header > .trigger,
+.frame:focus-within:not(:has(.frame:focus-within)) > .header > .trigger,
+.trigger:focus-visible,
+.trigger[data-state="open"] {
+  opacity: 1;
+}
+
+/* Touch: a long-press opens the actions; no hover, so the ⋯ stays
+   invisible but keeps its box, where the menu opens. No system callout
+   competes with the long-press. */
+@media (hover: none) {
+  .frame {
+    -webkit-touch-callout: none;
+  }
+
+  .trigger,
+  .trigger[data-state="open"] {
+    visibility: hidden;
+  }
+}
