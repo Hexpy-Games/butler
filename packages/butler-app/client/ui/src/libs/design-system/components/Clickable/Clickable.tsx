@@ -11,9 +11,11 @@ export interface ClickableProps extends DsBaseProps<HTMLAttributes<HTMLDivElemen
   /**
    * `inline`: the row reaches into its container's gutter by its own inline
    * padding, so its content lines up with sibling content while the hover and
-   * selected fills extend past it. Row variant only.
+   * selected fills extend past it. `block`: the fills reach `--space-xs` above
+   * and below the content without moving it or the rows around it. `both`:
+   * both at once. Row variant only.
    */
-  bleed?: "inline";
+  bleed?: "inline" | "block" | "both";
   children: ReactNode;
   disabled?: boolean;
   onClick?: (event: MouseEvent<HTMLDivElement>) => void;

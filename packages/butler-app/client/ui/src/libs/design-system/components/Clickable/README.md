@@ -26,19 +26,30 @@ Nested icon controls retain compact defaults. A row can declare
 touch-target and icon-slot sizing instead. Set the icon size on the nearest
 control when leading identity icons differ from trailing action icons.
 
-Two opt-in row options, both off by default:
+Opt-in row options, all off by default:
 
 - `bleed="inline"` pulls the row into its container's gutter by its own inline
   padding (and grows a `stretch` row by the same amount), so the row's text
   lines up with sibling content and the card's content edge while the hover
   and selected fills extend into the gutter. Use it inside a padded surface
   such as a settings card; the focus ring stays inside the card padding.
+- `bleed="block"` lets the hover and selected fills reach `--space-xs` above
+  and below the content. The row takes the same space as without it, so its
+  text and the rows around it stay where they were; only the fill (and the
+  focus ring around it) grows. Keep at least `--space-xs` plus
+  `--focus-ring-room` between the row and its neighbours or a clipping edge.
+  `bleed="both"` applies the inline and block bleed together, as inline-edit
+  fields do.
 - `selected` makes the row a toggle: it sets `aria-pressed` (while the role is
   `button`), a lighter hover, and the `--selection-strong` fill when `true`.
 
 ```tsx
 <Clickable bleed="inline" stretch selected={active} onClick={toggle}>
   <ListRow title="Release checklist" meta="412K" />
+</Clickable>
+
+<Clickable bleed="both" stretch aria-label="Edit description" onClick={edit}>
+  <Typo.Body>Collect the changes and review the release notes.</Typo.Body>
 </Clickable>
 ```
 

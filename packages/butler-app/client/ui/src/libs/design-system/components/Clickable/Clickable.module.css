@@ -1,11 +1,13 @@
 .clickable {
   --clickable-padding-inline: 10px;
+  --clickable-padding-block: var(--space-xs);
+  --clickable-min-height: 30px;
 
   box-sizing: border-box;
   display: flex;
   width: max-content;
   max-width: 100%;
-  min-height: 30px;
+  min-height: var(--clickable-min-height);
   min-width: 0;
   align-items: center;
   padding-right: var(--clickable-padding-inline);
@@ -41,13 +43,25 @@
 
 /* Inline bleed: the row reaches into the gutter by its own padding, so its
    content lines up with sibling content and the fills extend past it. */
-.clickable[data-bleed="inline"] {
+.clickable:is([data-bleed="inline"], [data-bleed="both"]) {
   max-width: calc(100% + 2 * var(--clickable-padding-inline));
   margin-inline: calc(-1 * var(--clickable-padding-inline));
 }
 
-.clickable[data-bleed="inline"][data-stretch="true"] {
+.clickable:is([data-bleed="inline"], [data-bleed="both"])[data-stretch="true"] {
   width: calc(100% + 2 * var(--clickable-padding-inline));
+}
+
+/* Block bleed: the fills reach above and below the content by the block
+   padding while the margins give that room back, so the row takes the same
+   space and its content stays exactly where it was. */
+.clickable:is([data-bleed="block"], [data-bleed="both"]) {
+  min-height: calc(
+    var(--clickable-min-height) + 2 * var(--clickable-padding-block)
+  );
+  padding-top: var(--clickable-padding-block);
+  padding-bottom: var(--clickable-padding-block);
+  margin-block: calc(-1 * var(--clickable-padding-block));
 }
 
 .clickable:hover:not([data-disabled="true"]) {
