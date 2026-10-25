@@ -7,6 +7,7 @@
 )]
 mod agent;
 mod assets;
+pub(super) mod blocks;
 mod migration;
 mod organize;
 mod pages;

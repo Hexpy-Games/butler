@@ -13,7 +13,7 @@ const PAGE: usize = 60;
 /// One Library listing: every filter narrows the result (AND).
 #[derive(Clone, Debug, Default)]
 pub struct AppLibraryQuery {
-    /// One kind; `None` lists every kind (agent search).
+    /// Comma-separated kinds; `None` lists every kind (agent search).
     pub kind: Option<String>,
     pub search: String,
     pub cursor: String,
@@ -91,63 +91,41 @@ fn cursor(sort: &str, [time, id, title, site]: &[String; 4]) -> String {
 /// The SQL of one page and its arguments.
 fn statement(query: &AppLibraryQuery, terms: &str, limit: usize) -> (String, Vec<Sql>) {
     let mut sql_text = String::from(if terms.is_empty() {
-        "SELECT l.payload,l.created_at,l.id,l.title_key,l.site FROM browser_library l"
+        "SELECT CASE WHEN d.id IS NULL THEN l.payload ELSE json_set(l.payload,'$.author',r.author,'$.updatedAt',d.updated_at) END,l.created_at,l.id,l.title_key,l.site FROM browser_library l"
     } else {
-        "SELECT l.payload,l.created_at,l.id,l.title_key,l.site FROM browser_library_fts JOIN browser_library l ON l.rowid=browser_library_fts.rowid"
+        "SELECT CASE WHEN d.id IS NULL THEN l.payload ELSE json_set(l.payload,'$.author',r.author,'$.updatedAt',d.updated_at) END,l.created_at,l.id,l.title_key,l.site FROM browser_library_fts JOIN browser_library l ON l.rowid=browser_library_fts.rowid"
     });
-    let mut clauses: Vec<&str> = Vec::new();
-    let mut args: Vec<Sql> = Vec::new();
-    let mut push = |clause: &'static str, values: Vec<String>| {
-        clauses.push(clause);
-        args.extend(values.into_iter().map(Sql::Text));
-    };
-    if !terms.is_empty() {
-        push("browser_library_fts MATCH ?", vec![terms.to_owned()]);
-    }
-    if let Some(kind) = &query.kind {
-        push("l.kind=?", vec![kind.clone()]);
-    }
-    match query.group.as_deref() {
-        None => {}
-        Some("none") if !query.group_by_name => push("l.group_id IS NULL", vec![]),
-        Some(name) if query.group_by_name => push(
-            "l.group_id IN (SELECT id FROM browser_library_group WHERE name_key=?)",
-            vec![item::key(name)],
-        ),
-        Some(id) => push("l.group_id=?", vec![id.to_owned()]),
-    }
-    for tag in &query.tags {
-        push(
-            "l.id IN (SELECT item_id FROM browser_library_item_tag WHERE norm=?)",
-            vec![item::key(tag)],
-        );
-    }
-    if let Some(site) = &query.site {
-        push("l.site=?", vec![site.clone()]);
-    }
-    if let Some(since) = &query.since {
-        push("l.created_at>=?", vec![since.clone()]);
-    }
-    if let Some(until) = &query.until {
-        push("l.created_at<=?", vec![until.clone()]);
-    }
+    sql_text.push_str(" LEFT JOIN documents d ON d.id=l.id LEFT JOIN document_revisions r ON r.document_id=d.id AND r.rev=d.head_rev");
+    let (mut clauses, mut args) = filters(query, terms);
     let after = serde_json::from_str::<Vec<String>>(&query.cursor).unwrap_or_default();
     let order = match (query.sort.as_str(), after.as_slice()) {
         ("old", keys) => {
             if let [time, id] = keys {
-                push("(l.created_at,l.id)>(?,?)", vec![time.clone(), id.clone()]);
+                push_clause(
+                    &mut clauses,
+                    &mut args,
+                    "(l.created_at,l.id)>(?,?)",
+                    vec![time.clone(), id.clone()],
+                );
             }
             "l.created_at,l.id"
         }
         ("name", keys) => {
             if let [title, id] = keys {
-                push("(l.title_key,l.id)>(?,?)", vec![title.clone(), id.clone()]);
+                push_clause(
+                    &mut clauses,
+                    &mut args,
+                    "(l.title_key,l.id)>(?,?)",
+                    vec![title.clone(), id.clone()],
+                );
             }
             "l.title_key,l.id"
         }
         ("site", keys) => {
             if let [site, time, id] = keys {
-                push(
+                push_clause(
+                    &mut clauses,
+                    &mut args,
                     "(l.site>? OR (l.site=? AND (l.created_at,l.id)<(?,?)))",
                     vec![site.clone(), site.clone(), time.clone(), id.clone()],
                 );
@@ -156,7 +134,12 @@ fn statement(query: &AppLibraryQuery, terms: &str, limit: usize) -> (String, Vec
         }
         (_, keys) => {
             if let [time, id] = keys {
-                push("(l.created_at,l.id)<(?,?)", vec![time.clone(), id.clone()]);
+                push_clause(
+                    &mut clauses,
+                    &mut args,
+                    "(l.created_at,l.id)<(?,?)",
+                    vec![time.clone(), id.clone()],
+                );
             }
             "l.created_at DESC,l.id DESC"
         }
@@ -167,6 +150,79 @@ fn statement(query: &AppLibraryQuery, terms: &str, limit: usize) -> (String, Vec
     }
     sql_text.push_str(&format!(" ORDER BY {order} LIMIT {}", limit + 1));
     (sql_text, args)
+}
+
+/// Filter clauses and arguments shared by every Library page.
+fn filters(query: &AppLibraryQuery, terms: &str) -> (Vec<&'static str>, Vec<Sql>) {
+    let mut clauses = Vec::new();
+    let mut args = Vec::new();
+    if !terms.is_empty() {
+        push_clause(
+            &mut clauses,
+            &mut args,
+            "browser_library_fts MATCH ?",
+            vec![terms.to_owned()],
+        );
+    }
+    if let Some(kind) = &query.kind {
+        push_clause(
+            &mut clauses,
+            &mut args,
+            "l.kind IN (SELECT value FROM json_each(?))",
+            vec![json!(kind.split(',').collect::<Vec<_>>()).to_string()],
+        );
+    }
+    match query.group.as_deref() {
+        None => {}
+        Some("none") if !query.group_by_name => {
+            push_clause(&mut clauses, &mut args, "l.group_id IS NULL", vec![]);
+        }
+        Some(name) if query.group_by_name => push_clause(
+            &mut clauses,
+            &mut args,
+            "l.group_id IN (SELECT id FROM browser_library_group WHERE name_key=?)",
+            vec![item::key(name)],
+        ),
+        Some(id) => push_clause(&mut clauses, &mut args, "l.group_id=?", vec![id.to_owned()]),
+    }
+    for tag in &query.tags {
+        push_clause(
+            &mut clauses,
+            &mut args,
+            "l.id IN (SELECT item_id FROM browser_library_item_tag WHERE norm=?)",
+            vec![item::key(tag)],
+        );
+    }
+    if let Some(site) = &query.site {
+        push_clause(&mut clauses, &mut args, "l.site=?", vec![site.clone()]);
+    }
+    if let Some(since) = &query.since {
+        push_clause(
+            &mut clauses,
+            &mut args,
+            "l.created_at>=?",
+            vec![since.clone()],
+        );
+    }
+    if let Some(until) = &query.until {
+        push_clause(
+            &mut clauses,
+            &mut args,
+            "l.created_at<=?",
+            vec![until.clone()],
+        );
+    }
+    (clauses, args)
+}
+
+fn push_clause(
+    clauses: &mut Vec<&'static str>,
+    args: &mut Vec<Sql>,
+    clause: &'static str,
+    values: Vec<String>,
+) {
+    clauses.push(clause);
+    args.extend(values.into_iter().map(Sql::Text));
 }
 
 /// Agent search: compact items (id, kind, title, group name, tags, site,

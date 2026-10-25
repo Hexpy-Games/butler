@@ -461,6 +461,12 @@ fn insert_result_ref(
     controls: Option<&VerifiedExecutionControls>,
     (transport, app_turn_context): (&str, Option<&Value>),
 ) -> Result<(), BtccError> {
+    if let Some(origin) = app_turn_context
+        .and_then(|c| c.get("messageOrigin"))
+        .and_then(Value::as_str)
+    {
+        context.insert("messageOrigin".into(), origin.into());
+    }
     // A schedule the agent itself dispatches has nobody to ask either, nor
     // does a delegated child of an unattended run (its App context says so;
     // the mark can only make a turn stricter).

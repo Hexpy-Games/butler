@@ -222,10 +222,11 @@ pub(super) fn refresh(db: &Connection, id: &str) -> Result<Value, AppStorageErro
     } else {
         String::new()
     };
+    let block_text = super::blocks::text(&item["block"]);
     let terms = ["title", "autoTitle", "text", "url"]
         .iter()
         .filter_map(|field| item[*field].as_str())
-        .chain(std::iter::once(document_text.as_str()))
+        .chain([document_text.as_str(), block_text.as_str()])
         .chain(tags.iter().map(String::as_str))
         .chain(group_name.as_deref())
         .collect::<Vec<_>>()

@@ -107,6 +107,7 @@ tool_names! {
     RenderProjectDashboard = "render_project_dashboard",
     ReplaceWorkPlan = "replace_work_plan",
     AskUser = "ask_user",
+    ResolveAsk = "resolve_ask",
     RequestServiceRestart = "request_service_restart",
     RunCommand = "run_command",
     RunDueAutomations = "run_due_automations",
