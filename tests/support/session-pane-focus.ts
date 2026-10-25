@@ -42,9 +42,10 @@ export async function auditInlinePanes(browser: Browser) {
         await page.goto(server.url);
         for (const width of [1440, 1024]) {
           await page.setViewportSize({ width, height: 900 });
-          const aside = page.locator('[data-slot="conversation-aside"]');
+          const layout = width === 1440 ? "docked" : "floating";
+          const aside = page.locator(`[data-slot="conversation-aside"][data-layout="${layout}"]`);
           await aside.waitFor();
-          await page.waitForFunction(layout => document.querySelector('[data-slot="conversation-aside"]')?.getAttribute("data-layout") === layout, width === 1440 ? "docked" : "floating");
+          await page.locator(`[data-slot="conversation-aside"]:not([data-layout="${layout}"])`).waitFor({ state: "detached" });
           await verifyInlineTriggerRings(aside); stops += 2;
         }
         await page.getByRole("button", { name: "포커스 확인 프로젝트 대시보드", exact: true }).click();
@@ -52,8 +53,10 @@ export async function auditInlinePanes(browser: Browser) {
         await page.locator(`[data-kanban-item="${epic.id}"]`).getByRole("button").first().click();
         for (const width of [1440, 1024]) {
           await page.setViewportSize({ width, height: 900 });
-          const aside = page.locator('[data-slot="management-page-aside"]');
-          await page.waitForFunction(layout => document.querySelector('[data-slot="management-page-aside"]')?.getAttribute("data-layout") === layout, width === 1440 ? "docked" : "floating");
+          const layout = width === 1440 ? "docked" : "floating";
+          const aside = page.locator(`[data-slot="management-page-aside"][data-layout="${layout}"]`);
+          await aside.waitFor();
+          await page.locator(`[data-slot="management-page-aside"]:not([data-layout="${layout}"])`).waitFor({ state: "detached" });
           await verifyInlineTriggerRings(aside); stops += 2;
         }
       } finally { await page.close(); }
