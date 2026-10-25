@@ -1,26 +1,68 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { appCopy } from "@/app/copy";
-import { Box, ButtonContainer, IconButton, PageContainer, ScrollArea, Separator, Stack, Typo, X } from "@/butler-ds";
+import { ArrowLeft, Box, Button, ButtonContainer, IconButton, PageContainer, ScrollArea, Separator, Stack, Typo, X } from "@/butler-ds";
 
 export const FILE_VIEWER_PAGE_ID = "file-viewer-page";
 
-/** The open file's row: its name, "type / size · time", its actions and close. */
-export function FileViewerHeader({ title, meta, actions, onClose }: { title: string; meta?: string; actions?: ReactNode; onClose: () => void }) {
+/** Below this header width the actions show as icons (with tooltips) so name, actions and close keep one row. */
+const COMPACT_HEADER_WIDTH = 480;
+
+export interface FileViewerAction {
+  id: string;
+  label: string;
+  /** Names the target too ("저장하기: 릴리스-노트.md"). */
+  ariaLabel?: string;
+  icon: ReactNode;
+  /** Show the icon beside the label in the wide header too. */
+  labelIcon?: boolean;
+  run: () => void;
+}
+
+/**
+ * The open file's row: its name and "size · time" (both truncate), then its actions and close, which never wrap
+ * or shrink. In a narrow pane the actions are icon buttons with tooltips.
+ */
+export function FileViewerHeader({ title, meta, leading, actions = [], onClose, onBack }: {
+  title: string; meta?: string; leading?: ReactNode; actions?: FileViewerAction[]; onClose: () => void;
+  /** Back to the chat (the viewer took the whole workspace). */
+  onBack?: () => void;
+}) {
+  const [node, ref] = useState<HTMLDivElement | null>(null);
+  const compact = useCompactHeader(node);
   return <>
-    <Box paddingX="2xl" paddingY="md" data-test-class="file-viewer-header">
-      <Stack align="row" cross="center" gap="md">
-        <Stack gap="none" grow minWidth="0">
-          <Typo.PanelTitle as="h2" truncate>{title}</Typo.PanelTitle>
-          {meta ? <Typo.Caption tone="secondary" truncate>{meta}</Typo.Caption> : null}
+    <div ref={ref}>
+      <Box paddingX="2xl" paddingY="md" data-test-class="file-viewer-header" data-compact={compact || undefined}>
+        <Stack align="row" cross="center" gap="md" wrap={false}>
+          {onBack ? <IconButton label={appCopy.fileViewer.backToChat} data-test-class="file-viewer-back" onClick={onBack}><ArrowLeft size="md" /></IconButton> : null}
+          <Stack gap="none" grow basis="0" minWidth="0">
+            <Typo.PanelTitle as="h2" truncate>{title}</Typo.PanelTitle>
+            {meta ? <Typo.Caption tone="secondary" truncate>{meta}</Typo.Caption> : null}
+          </Stack>
+          {leading}
+          <ButtonContainer size={compact ? "icon-sm" : "sm"} wrap={false} shrink={false}>
+            {actions.map((action) => compact
+              ? <IconButton key={action.id} label={action.label} aria-label={action.ariaLabel ?? action.label} data-test-class={`file-viewer-${action.id}`}
+                onClick={action.run}>{action.icon}</IconButton>
+              : <Button key={action.id} size="sm" variant="outline" iconStart={action.labelIcon ? action.icon : undefined} text={action.label}
+                aria-label={action.ariaLabel} data-test-class={`file-viewer-${action.id}`} onClick={action.run} />)}
+            <IconButton label={appCopy.fileViewer.close} data-test-class="file-viewer-close" onClick={onClose}><X size="md" /></IconButton>
+          </ButtonContainer>
         </Stack>
-        <ButtonContainer size="sm" justify="end">
-          {actions}
-          <IconButton label={appCopy.fileViewer.close} data-test-class="file-viewer-close" onClick={onClose}><X size="md" /></IconButton>
-        </ButtonContainer>
-      </Stack>
-    </Box>
+      </Box>
+    </div>
     <Separator space="none" />
   </>;
+}
+
+function useCompactHeader(node: HTMLElement | null): boolean {
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    if (!node) return;
+    const observer = new ResizeObserver(([entry]) => setCompact(entry!.contentRect.width < COMPACT_HEADER_WIDTH));
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [node]);
+  return compact;
 }
 
 /**

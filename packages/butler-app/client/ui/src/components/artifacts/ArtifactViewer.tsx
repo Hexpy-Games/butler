@@ -31,7 +31,7 @@ export function ArtifactViewer({
 
   const meta = [artifactDescription(artifact), artifactMeta(artifact)]
     .filter(Boolean)
-    .join(" / ");
+    .join(" · ");
 
   return (
     <Stack gap="md">

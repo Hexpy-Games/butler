@@ -10,7 +10,7 @@ import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Locator, Page } from "playwright";
 import type { SessionView } from "../../packages/butler-app/client/ui/src/app/types.ts";
-import { FILES, IMAGE_SIZE, seedFileSession, viewerGeometry, withResults } from "../support/file-viewer-fixtures.ts";
+import { FILES, IMAGE_SIZE, headerLayout, seedFileSession, viewerGeometry, withResults } from "../support/file-viewer-fixtures.ts";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { auditSessionInfoFocus, installSessionBrowser } from "../support/session-info-fixtures.ts";
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
@@ -50,6 +50,8 @@ try {
     await page.screenshot({ path: join(shots, `${file}.png`), animations: "disabled" });
     const pane = page.locator('[data-slot="adaptive-shell-split-pane"]');
     if (await pane.count()) await pane.screenshot({ path: join(shots, `${file}-pane.png`), animations: "disabled" });
+    const header = page.locator('[data-test-class="file-viewer-header"]');
+    if (await header.count()) await header.screenshot({ path: join(shots, `${file}-header.png`), animations: "disabled" });
   };
 
   const split = page.locator('[data-slot="adaptive-shell-split-pane"]');
@@ -76,7 +78,10 @@ try {
   const [fileBox, browserBox] = [await fileToggle.boundingBox(), await browserToggle.boundingBox()];
   assert(fileBox!.x < browserBox!.x, "'파일 보기' sits left of the browser toggle");
   assert.equal(await tabs.count(), 0, "one file has no tabs");
-  await viewer.locator('[data-test-class="file-viewer-header"]').getByText(/^document \/ \d+(\.\d)? (B|KB) · /u).waitFor();
+  // Size and age only: the stored kind ("document") is an internal value and never shows.
+  await viewer.locator('[data-test-class="file-viewer-header"]').getByText(/^\d+(\.\d)? (B|KB) · 지금$/u).waitFor();
+  assert.equal(await viewer.locator('[data-test-class="file-viewer-header"]').getByText(/document/u).count(), 0);
+  await verifyHeader(viewer, "markdown", { compact: false, library: true });
   await verifyGeometry(viewer, "markdown");
   await infoToggle.click();
   await aside.waitFor({ state: "hidden" });
@@ -125,14 +130,25 @@ try {
   const size = await image.evaluate((node: HTMLImageElement) => ({ width: node.getBoundingClientRect().width, natural: node.naturalWidth, border: getComputedStyle(node).borderTopWidth }));
   assert.deepEqual(size, { width: IMAGE_SIZE.width, natural: IMAGE_SIZE.width, border: "0px" });
   await verifyGeometry(viewer, "image");
+  await verifyHeader(viewer, "image", { compact: false, library: false });
   await capture("image");
 
   await page.setViewportSize({ width: 1024, height: 768 });
   await tabs.filter({ hasText: FILES.markdown }).click();
   await viewer.locator("h1").getByText("릴리스 노트", { exact: true }).waitFor();
   await verifyGeometry(viewer, "markdown-1024");
+  await verifyHeader(viewer, "markdown-1024", { compact: false, library: true });
   await capture("markdown");
   await page.setViewportSize({ width: 1440, height: 960 });
+
+  // 서랍에서 열기 opens the 서랍's 문서 searched to this file; the conversation keeps its open files.
+  await viewer.locator('[data-test-class="file-viewer-open-in-library"]').click();
+  await page.locator('[data-test-class="library-toolbar"] input').waitFor();
+  assert.equal(await page.locator('[data-test-class="library-toolbar"] input').inputValue(), FILES.markdown);
+  assert.equal(await page.evaluate(() => document.querySelector('[data-test-class="file-viewer"]') === null), true);
+  await page.locator('[data-test-class="app-sidebar"]').getByText(title, { exact: true }).click();
+  await viewer.locator("h1").getByText("릴리스 노트", { exact: true }).waitFor();
+  assert.equal(await tabs.count(), 3, "the files stay open across the 서랍 visit");
 
   // Closing every file hides '파일 보기'; the browser, still open, takes the slot back.
   const close = viewer.locator('[data-test-class="file-viewer-close"]');
@@ -158,15 +174,26 @@ try {
   await viewer.locator('[data-test-class="file-viewer-close"]').click();
   await split.waitFor({ state: "detached" });
 
-  // A phone has no room beside the chat: the viewer takes the workspace, and closing it returns to the chat.
+  // A phone has no room beside the chat: the viewer takes the workspace. 세션 정보 has nothing to show beside it,
+  // so its toggle leaves; the back button returns to the chat with the files still open behind '파일 보기'.
   await page.setViewportSize({ width: 390, height: 844 });
   const phoneViewer = page.locator('[data-test-class="file-viewer"]');
   await page.locator('[data-test-class="message-image-open"]').scrollIntoViewIfNeeded();
   await page.locator('[data-test-class="message-image-open"]').click();
   await phoneViewer.locator('[data-test-class="artifact-viewer"] img').waitFor();
   assert.equal(await page.locator('[data-test-class~="conversation"]').count(), 0, "the viewer replaces the chat on a phone");
+  assert.equal(await infoToggle.count(), 0, "no 세션 정보 toggle while the viewer holds the phone workspace");
+  assert.equal(await fileToggle.getAttribute("aria-pressed"), "true");
   await verifyGeometry(phoneViewer, "phone");
+  await verifyHeader(phoneViewer, "phone-image", { compact: true, library: false });
   await capture("phone");
+  await phoneViewer.locator('[data-test-class="file-viewer-back"]').click();
+  await page.locator('[data-test-class~="conversation"]').waitFor();
+  await infoToggle.waitFor();
+  assert.equal(await fileToggle.getAttribute("aria-pressed"), "false", "back keeps the file open behind '파일 보기'");
+  await fileToggle.click();
+  await phoneViewer.locator('[data-test-class="artifact-viewer"] img').waitFor();
+  assert.equal(await infoToggle.count(), 0, "the 세션 정보 toggle leaves again with the viewer");
   await phoneViewer.locator('[data-test-class="file-viewer-close"]').click();
   await page.locator('[data-test-class~="conversation"]').waitFor();
 
@@ -187,4 +214,16 @@ async function verifyGeometry(viewer: Locator, name: string) {
   assert(geometry.pageWidth <= 760, `${name}: reading page ≤760px (${geometry.pageWidth}px)`);
   assert(geometry.insetStart >= 48 && geometry.insetEnd >= 48, `${name}: 48px insets (${geometry.insetStart}/${geometry.insetEnd})`);
   assert.equal(geometry.innerScrolls, 0, `${name}: no inner scroll`);
+}
+
+async function verifyHeader(viewer: Locator, name: string, expected: { compact: boolean; library: boolean }) {
+  const header = await headerLayout(viewer);
+  console.log(JSON.stringify({ header: name, ...header }));
+  assert.equal(header.compact, expected.compact, `${name}: ${expected.compact ? "icon" : "labelled"} actions`);
+  assert.deepEqual(header.offRow, [], `${name}: name, actions and close share one row`);
+  assert.equal(header.outside, 0, `${name}: no action past the header`);
+  assert(header.lastIsClose, `${name}: close comes last`);
+  assert.equal(header.unnamed, 0, `${name}: every action has an accessible name`);
+  if (expected.compact) assert.equal(header.iconOnly, header.labels.length, `${name}: icon-only actions`);
+  assert.equal(header.labels.some((label) => label?.startsWith("서랍에서 열기")), expected.library, `${name}: 서랍에서 열기 only for a delivered file`);
 }

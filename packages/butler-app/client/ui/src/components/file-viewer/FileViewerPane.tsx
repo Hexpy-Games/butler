@@ -11,10 +11,12 @@ import { FILE_VIEWER_PAGE_ID } from "./FileViewerFrame";
  * The file viewer in the conversation's right slot: one tab per open file (from two files on), the file's
  * header and the file as a reading page. Closing the last file empties the viewer, which frees the slot.
  */
-export function FileViewerPane({ sessionId, notice, documentPage }: {
+export function FileViewerPane({ sessionId, notice, onBack, documentPage }: {
   sessionId: string;
   /** A connection notice above the viewer when it takes the whole workspace. */
   notice?: ReactNode;
+  /** Back to the chat, when the viewer takes the whole workspace (a phone). */
+  onBack?: () => void;
   /** Renders an editable document (its own header actions and body); the documents feature supplies it. */
   documentPage?: (id: string) => ReactNode;
 }) {
@@ -36,8 +38,8 @@ export function FileViewerPane({ sessionId, notice, documentPage }: {
             groups={[{ id: "files", kind: "mine", label: c.files, tabs: files.entries.map((entry) => ({ id: entry.id, title: entryTitle(entry), icon: entryIcon(entry) })) }]} />
         </Box>}
         {active.kind === "artifact"
-          ? <FileViewerArtifact key={active.id} sessionId={sessionId} artifact={active.artifact} onClose={close} />
-          : <FileViewerDocument key={active.id} title={active.title} onClose={close}>{documentPage?.(active.id)}</FileViewerDocument>}
+          ? <FileViewerArtifact key={active.id} sessionId={sessionId} artifact={active.artifact} onClose={close} onBack={onBack} />
+          : <FileViewerDocument key={active.id} title={active.title} onClose={close} onBack={onBack}>{documentPage?.(active.id)}</FileViewerDocument>}
       </Stack></Presence>
     </AdaptiveShellCard>
   );

@@ -13,7 +13,8 @@ export async function openLibraryItem(item: LibraryItem, source = false) {
     if (item.file) {
       if (item.session) useButlerStore.getState().openSession(item.session);
       useButlerStore.getState().openArtifact({ id: item.id, session_id: item.session as string, kind: storedFileArtifactKind(item.file), title: item.title, file_id: item.file.file_id, url: item.file.url, size_bytes: item.file.size_bytes, created_at: item.capturedAt,
-        safe_path_label: item.file.safe_name, source_label: item.revisions?.[0]?.file.source_label, revisions: item.revisions }, item.session); return;
+        safe_path_label: item.file.safe_name, source_label: item.revisions?.[0]?.file.source_label, revisions: item.revisions,
+        deliverable: true }, item.session); return;
     }
     const url = item.output ? (await api<{ url:string }>(`/outputs/${item.output}/view`)).url : item.url;
     await openLink(url);

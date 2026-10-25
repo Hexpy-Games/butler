@@ -10,6 +10,7 @@ import { artifactCardActions } from "@/components/artifacts/artifactActions";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store";
 import { useOpenMessageImage } from "./messageImages";
+import { fileArtifact } from "./workingFiles";
 
 export interface MessageInlineImageProps
   extends Omit<ImgHTMLAttributes<HTMLImageElement>, "className" | "style"> {
@@ -42,11 +43,8 @@ export function MessageInlineImage({
   const key = file?.url ?? resolvedSrc;
   const view = openImage ? () => openImage(key) : undefined;
   const attachment = attachments.find(item => item.url === file?.url);
-  const artifact = artifacts.find(item => item.url === file?.url) ?? (attachment ? {
-    id: `artifact-${attachment.file_id}`, file_id: attachment.file_id,
-    title: attachment.safe_name, kind: attachment.kind, url: attachment.url,
-    signed_url: attachment.signed_url, created_at: attachment.created_at,
-  } : undefined);
+  // The attachment as an artifact keeps what decides its actions (delivered or not, its size).
+  const artifact = artifacts.find(item => item.url === file?.url) ?? (attachment ? fileArtifact(attachment) : undefined);
   const save = artifact ? artifactCardActions(artifact)[0] : undefined;
   const open = artifact ? () => openArtifact(artifact) : undefined;
   return (

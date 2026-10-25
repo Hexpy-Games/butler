@@ -64,16 +64,17 @@ export function withResults(view: SessionView): SessionView {
   const user = view.messages.find((message) => message.attachments?.length);
   assert(user, "the stub turn stored the uploaded files");
   const files = new Map(user.attachments!.map((file) => [file.safe_name, file]));
-  const artifact = (name: string, kind: string): SessionArtifactSummary => {
+  const artifact = (name: string, kind: string, deliverable: boolean): SessionArtifactSummary => {
     const file = files.get(name);
     assert(file, `${name} was stored`);
     return { id: `result-${file.file_id}`, session_id: view.session_id, message_id: "file-viewer-answer", file_id: file.file_id, title: name, kind,
-      safe_path_label: name, url: file.url, signed_url: file.signed_url, size_bytes: file.size_bytes, created_at: file.created_at };
+      safe_path_label: name, url: file.url, signed_url: file.signed_url, size_bytes: file.size_bytes, created_at: file.created_at, deliverable };
   };
-  const image = artifact(FILES.image, "image");
+  // The picture is shown in the answer, not delivered: it has no 서랍 entry.
+  const image = artifact(FILES.image, "image", false);
   const answer = { ...user, id: "file-viewer-answer", role: "assistant" as const, attachments: [], artifacts: [image],
     text: `검토한 화면입니다.\n\n![단축키 충돌](${image.url})`, cursor: (user.cursor ?? 0) + 100 };
-  return { ...view, artifacts: [artifact(FILES.markdown, "document"), artifact(FILES.code, "code")], messages: [...view.messages, answer] };
+  return { ...view, artifacts: [artifact(FILES.markdown, "document", true), artifact(FILES.code, "code", true)], messages: [...view.messages, answer] };
 }
 
 /** Geometry of the docked viewer: no sideways overflow anywhere, and the reading page within 760px and 48px in. */
@@ -94,6 +95,31 @@ export async function viewerGeometry(viewer: Locator) {
       paneScrolls: scroll.scrollHeight > scroll.clientHeight,
       innerScrolls: [...root.querySelectorAll('[data-test-class="artifact-viewer"] *')]
         .filter((node) => ["auto", "scroll"].includes(getComputedStyle(node).overflowY) && node.scrollHeight > node.clientHeight).length,
+    };
+  });
+}
+
+/**
+ * The header keeps one row: name, actions and close share a line, the name truncates, and below 480px the actions
+ * are icon buttons with accessible names.
+ */
+export async function headerLayout(viewer: Locator) {
+  return viewer.locator('[data-test-class="file-viewer-header"]').evaluate((header) => {
+    const title = header.querySelector("h2")!;
+    const center = (node: Element) => { const box = node.getBoundingClientRect(); return box.top + box.height / 2; };
+    const buttons = [...header.querySelectorAll("button, a")];
+    const titleCenter = center(title);
+    const card = header.getBoundingClientRect();
+    return {
+      compact: header.hasAttribute("data-compact"),
+      rows: new Set(buttons.map((button) => Math.round((center(button) - titleCenter) / 8))).size,
+      offRow: buttons.filter((button) => Math.abs(center(button) - titleCenter) > 14).map((button) => button.getAttribute("aria-label")),
+      outside: buttons.filter((button) => button.getBoundingClientRect().right > card.right + 0.5).length,
+      lastIsClose: buttons.at(-1)?.getAttribute("data-test-class") === "file-viewer-close",
+      unnamed: buttons.filter((button) => !(button.getAttribute("aria-label") || button.textContent?.trim())).length,
+      iconOnly: buttons.filter((button) => !button.textContent?.trim()).length,
+      labels: buttons.map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim()),
+      truncates: getComputedStyle(title).textOverflow === "ellipsis" || title.scrollWidth <= title.clientWidth,
     };
   });
 }

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { chromeEnvironment } from "@/app/chromeEnvironment";
 import { appCopy } from "@/app/copy";
+import { useFileViewerState } from "@/app/fileViewerState";
 import { AdaptiveShellCard, AdaptiveShellSplit, Stack, useAdaptiveDrawer } from "@/butler-ds";
 import { Conversation } from "../conversation/Conversation";
 import { FileViewerPane } from "../file-viewer/FileViewerPane";
@@ -17,8 +18,10 @@ export function ConversationBrowserFrame({ sessionId, pane, chatWidth, notice }:
 }) {
   const drawer = useAdaptiveDrawer(chromeEnvironment());
   if (!pane && !drawer) return <AdaptiveShellCard><Stack fill gap="none">{notice}<Conversation /></Stack></AdaptiveShellCard>;
-  // A phone has no room beside the chat: the viewer takes the workspace until its files close or it is hidden.
-  if (drawer && pane === "viewer") return <FileViewerPane sessionId={sessionId} notice={notice} />;
+  // A phone has no room beside the chat: the viewer takes the workspace, and its back button returns to the chat
+  // (the files stay open behind '파일 보기').
+  if (drawer && pane === "viewer") return <FileViewerPane sessionId={sessionId} notice={notice}
+    onBack={() => useFileViewerState.getState().setShown(sessionId, false)} />;
   return <Stack fill gap="none">{notice}<AdaptiveShellSplit paneOpen={pane !== null} chatWidth={chatWidth}
     onChatWidthChange={useBrowserShellState.getState().setChatWidth} resizeLabel={appCopy.browser.resizeChat} resizeHint={appCopy.titlebar.dragToResize}
     chat={<Conversation />} pane={pane === "browser" ? <BrowserArea sessionId={sessionId} />
