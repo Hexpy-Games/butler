@@ -105,13 +105,13 @@ function NestedTitle({ context }: { context: ShowcaseRenderContext }) {
   );
 }
 
-/** Title actions and chat trailing, pane closed: the 세션 정보 toggle without and with the attention dot. */
-function GroupedTitlebars({ context }: { context: ShowcaseRenderContext }) {
+/** Title actions and chat trailing, pane closed: the 세션 정보 toggle without and with the attention dot (`open`: pressed). */
+function GroupedTitlebars({ context, open = false }: { context: ShowcaseRenderContext; open?: boolean }) {
   return (
     <Stack gap="sm">
       {[false, true].map((pending) => (
         <div className={styles.fixture} key={String(pending)}>
-          <GroupedTitlebar locale={context.locale} pending={pending} className={dsClass(styles.fixtureTitlebar)} />
+          <GroupedTitlebar locale={context.locale} pending={pending} open={open} className={dsClass(styles.fixtureTitlebar)} />
         </div>
       ))}
     </Stack>
@@ -127,6 +127,8 @@ export const stories: ShowcaseStory[] = [
   { name: "Nested screen: back button", widths: ["375", "app", "wide"], render: (context) => <NestedTitle context={context} /> },
   { name: "Title actions and chat trailing: session info without and with the dot", widths: ["375", "app", "wide"],
     render: (context) => <GroupedTitlebars context={context} /> },
+  { name: "Session info open: the pressed toggle without and with the dot", states: ["pressed"], widths: ["375", "app", "wide"],
+    render: (context) => <GroupedTitlebars context={context} open /> },
   { name: "Browser split closed: chat trailing before the browser toggle", widths: ["app", "wide"],
     render: ({ locale }) => <SplitWindowDemo locale={locale} paneOpen={false} /> },
   { name: "Browser split open: the chat group spans the chat card (drag the divider)", widths: ["app", "wide"],

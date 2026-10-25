@@ -102,6 +102,7 @@ export const guidance: ShowcaseGuidance = {
     "Auto-scroll only when already at the bottom or while sending; the jump button is keyboard reachable.",
     "The background layer is decorative: aria-hidden and never takes pointer input.",
     "The aside is a complementary landmark (asideLabel names it); its content scrolls on its own and focus rings keep --focus-ring-room.",
+    "Opening or closing a docked aside glides the column on a transform (--motion-slow, emphasized) and the aside rides in or out with it; under reduced motion both move at once. The transcript keeps its scroll position.",
   ],
-  tokens: ["--composer-reserve", "--page-max-width-reading", "--conversation-bg", "--tab-rail-clearance", "--tab-rail-shelf-height"],
+  tokens: ["--composer-reserve", "--page-max-width-reading", "--conversation-bg", "--tab-rail-clearance", "--tab-rail-shelf-height", "--motion-slow", "--motion-ease-emphasized"],
 };

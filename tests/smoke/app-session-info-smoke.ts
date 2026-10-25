@@ -1,5 +1,6 @@
 import { verifyTaskOrder, verifyCompactContext, verifyDashboardTask } from "../support/session-pane-followups.ts";
 import { verifyInlineTriggerRings } from "../support/session-pane-focus.ts";
+import { verifySessionPaneMotion, verifyTitleActionsAfterSubtitle } from "../support/session-pane-motion.ts";
 // Stub/replay UI smoke through the real native App, isolated from the owner's data.
 import { sessionInfoStub, verifyNativePendingAsks, labelSessionInfoModel } from "../support/session-info-pending-asks.ts";
 import { strict as assert } from "node:assert";
@@ -33,6 +34,7 @@ try {
   let asksOpen = true;
   browser = await launchSmokeBrowser();
   if (!before) await verifyNativePendingAsks(browser, server, theme);
+  if (!before) await verifySessionPaneMotion(browser, server, view);
   const page = await browser.newPage({ viewport: { width: 1440, height: 1050 }, reducedMotion: "reduce" });
   const errors: string[] = [];
   let buttonRadii: { label: string; radius: string }[] = [];
@@ -64,6 +66,7 @@ try {
     assert.equal(await toggle.getAttribute("aria-pressed"), "false");
     await page.waitForFunction(() => document.querySelector('[data-test-class="session-info-toggle"]')?.getAttribute("aria-label") === "세션 정보 · 답을 기다리는 요청 있음");
     assert.equal(await toggle.locator('[data-slot="icon-button-indicator"]').count(), 1);
+    await verifyTitleActionsAfterSubtitle(page);
     await toggle.click();
     await aside.waitFor();
     assert.equal(await aside.getAttribute("data-layout"), "docked");
@@ -112,6 +115,7 @@ try {
     await page.locator('[data-test-class="browser-area"]').waitFor();
     await page.waitForFunction(() => document.querySelector('[data-slot="conversation-aside"]')?.getAttribute("data-layout") === "floating");
     await capture("browser-open");
+    console.log(JSON.stringify({ titleRowBesideBrowser: await verifyTitleActionsAfterSubtitle(page) }));
     await page.locator('[data-test-class="titlebar-browser-toggle"]').click();
     assert.equal(await page.getByRole("button", { name: "작업 그래프", exact: true }).count(), 0);
     asksOpen = false;
