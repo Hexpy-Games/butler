@@ -215,14 +215,23 @@ class UserBrowser {
     if (profile === "signed_out" && !this.conversationPartitions.has(partitionOwner)) this.conversationPartitions.set(partitionOwner, `butler-conv-${randomUUID()}`);
     const tab = { id: shortId("t", id => this.tabs.has(id)), owner, profile, popup: Boolean(popupSource), opener: popupSource?.id, popupParentUrl: popupSource?.url, stills: this.stillPreferences.get(owner) !== false, partition: input.partition ?? (profile === "signed_in" ? "persist:butler-web" : this.conversationPartitions.get(partitionOwner)),
       preview: input.preview_id ?? (url && new URL(url).pathname.startsWith("/__p/") ? new URL(url).pathname.slice(5) : undefined),
-      agent: input.agent === true, muted: input.agent === true, policy: input.policy ?? {}, epoch: 1, holder: owner === "mine" ? "user" : "agent", sticky: false, waiting: false, busy: false, observation: null, url, title: "", favicon: "", status: "idle", canBack: false, canForward: false,
+      agent: input.agent === true, muted: input.agent === true, placeholder: input.placeholder === true && !url && !popupSource, policy: input.policy ?? {}, epoch: 1, holder: owner === "mine" ? "user" : "agent", sticky: false, waiting: false, busy: false, observation: null, url, title: "", favicon: "", status: "idle", canBack: false, canForward: false,
       still: "", view: null, attached: null, slot: null, bounds: null, covered: false, capture: null };
     tab.onStillChanged = () => this.publish();
     this.tabs.set(tab.id, tab);
     if (owner === "mine") this.restore.changed();
     if (activateTab) this.activate(tab.id);
+    if (url) this.dropPlaceholders(owner);
     this.publish();
     return tab.id;
+  }
+  /** A page that opens in or moves into a group takes the place of the empty tab its pane opened on its own; the pane then shows that page. */
+  dropPlaceholders(owner) {
+    for (const tab of [...this.tabs.values()]) {
+      if (!tab.placeholder || tab.owner !== owner || tab.url) continue;
+      if (this.activeId === tab.id) this.activeId = null;
+      this.close(tab.id);
+    }
   }
   activate(id) {
     const tab = this.tabs.get(id);
@@ -314,7 +323,7 @@ class UserBrowser {
     if (!this.enabled()) throw new Error("browsing_disabled");
     if (tab.holder === "agent" && (tab.busy || tabInUse(this, tab))) throw new Error("agent_control");
     this.materialize(tab);
-    if (op === "navigate") { value = addressUrl(value); if (!value) return; }
+    if (op === "navigate") { value = addressUrl(value); if (!value) return; tab.placeholder = false; }
     if (!approved && !tab.agent && !tab.driven && ["navigate", "reload", "back", "forward"].includes(op)) { prepareUserNavigation(this, tab, op, value); return; }
     const contents = tab.view.webContents;
     if (["navigate", "reload", "back", "forward"].includes(op)) tab.navigationIntent = { op, value };
@@ -362,6 +371,7 @@ class UserBrowser {
     const before = peers[Math.max(0, index)];
     ordered.splice(before ? ordered.indexOf(before) : ordered.length, 0, tab);
     this.tabs.clear(); for (const item of ordered) this.tabs.set(item.id, item);
+    if (tab.owner !== previousOwner && tab.url) this.dropPlaceholders(tab.owner);
     if (tab.owner === "mine" || previousOwner === "mine") this.restore.changed(); this.publish();
     return tabId;
   }

@@ -1773,7 +1773,7 @@ The browser sheet: tab row, toolbar and the page card, inset on a tinted pane wh
 - Use for: The standalone Browser view under its title bar
 - Not for: A preview of a Butler output inside the chat → `ArtifactPreview`
 - Not for: A page frame inside a dashboard or settings → `SurfacePanel`
-- Tokens: `--browser-pane-bg`, `--browser-pane-radius`, `--browser-card-inset`, `--browser-band-height`, `--menu-item-height`
+- Tokens: `--browser-pane-bg`, `--browser-pane-radius`, `--browser-card-inset`, `--browser-band-height`, `--space-xs`, `--menu-item-height`
 
 ### DragPreview
 

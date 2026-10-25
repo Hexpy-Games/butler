@@ -62,5 +62,5 @@ export const guidance: ShowcaseGuidance = {
     "The pane is a labelled region; the toolbar row has role toolbar; tabs control the page card (TabStrip panelId = PageCard panelId).",
     "Every toolbar control is an IconButton with a label and tooltip.",
   ],
-  tokens: ["--browser-pane-bg", "--browser-pane-radius", "--browser-card-inset", "--browser-band-height", "--menu-item-height"],
+  tokens: ["--browser-pane-bg", "--browser-pane-radius", "--browser-card-inset", "--browser-band-height", "--space-xs", "--menu-item-height"],
 };
