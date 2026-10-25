@@ -23,7 +23,10 @@ mod operators;
 mod output;
 pub use output::CommandOutputDecoder;
 mod path_candidates;
-pub use path_candidates::path_tokens;
+pub use path_candidates::{path_script, path_tokens};
+
+/// Escape character interpreted by the platform command shell.
+pub const SHELL_ESCAPE: char = shell::ESCAPE;
 
 use std::collections::HashMap;
 use std::path::Path;
