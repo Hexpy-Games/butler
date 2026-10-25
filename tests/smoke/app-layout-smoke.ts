@@ -2821,7 +2821,7 @@ try {
           ? (cardsFrame && contentRect
               ? Math.abs(fluidRect.top - contentRect.top) <= 1 &&
                 fluidRect.bottom >= contentRect.bottom - 1 &&
-                radiusStyle?.overflow === "hidden" &&
+                radiusStyle?.overflow === "clip" &&
                 Math.abs(contentRect.bottom - (window.innerHeight - 8)) <= 1 &&
                 Math.abs(contentRect.right - (window.innerWidth - 8)) <= 1
               : Math.abs(fluidRect.top) <= 1 &&
