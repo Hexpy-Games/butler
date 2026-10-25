@@ -84,8 +84,9 @@ try {
     assert.ok(labels.includes(context === "app" ? "버틀러에서 열기" : "새 탭에서 열기"), JSON.stringify(labels));
     if (context === "page") {
       assert.ok(labels.includes("복사") && labels.includes("모두 선택"), JSON.stringify(labels));
-      assert.deepEqual(await a.main("globalThis.linkMenus.at(-1).items.filter(i=>i.role).map(i=>({role:i.role,label:i.label}))"), [
-        { role: "copy", label: "복사" }, { role: "selectAll", label: "모두 선택" },
+      // Electron stores roles in lower case (it matches them case-insensitively); the menu passes "selectAll".
+      assert.deepEqual(await a.main("globalThis.linkMenus.at(-1).items.filter(i=>i.role).map(i=>({role:i.role.toLowerCase(),label:i.label}))"), [
+        { role: "copy", label: "복사" }, { role: "selectall", label: "모두 선택" },
       ]);
     }
     const bounds = await a.main<{ x: number; y: number; width: number; height: number }>(`${a.win}.getBounds()`);

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bookmark, Tag, Box, Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, Folder, DropdownMenuTrigger, EmptyLine, Grid, IconButton, PageContainer, ScrollArea, Section, Stack, Typo } from "@/butler-ds";
+import { Bookmark, Tag, Box, Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, Folder, DropdownMenuTrigger, EmptyLine, Grid, IconButton, PageContainer, Section, Stack, Typo } from "@/butler-ds";
 import { appCopy } from "@/app/copy";
 import { useButlerStore } from "@/app/store";
 import { useLibraryPage, type LibraryItem } from "./libraryStore";
@@ -27,7 +27,8 @@ export function NewTabPage() {
   const scraps = useLibraryPage("scrap");
   const [attachment, setAttachment] = useState<LibraryItem>();
   const folders = [...new Set(page.items.map(item => item.folder ?? ""))];
-  return <ScrollArea fill><PageContainer width="full" gutter="xl"><Box paddingY="xl"><Stack gap="xl"><Section title={appCopy.browser.bookmarks}>
+  // PageCard's internal slot is the page's scroller; a ScrollArea here would bleed its scrollbar lane past the card.
+  return <PageContainer width="full" gutter="xl"><Box paddingY="xl"><Stack gap="xl"><Section title={appCopy.browser.bookmarks}>
     <Stack gap="lg">{folders.map(name => <Stack key={name} gap="sm">
       {name && <Tag icon={<Folder size="xs" />} data-test-class="bookmark-folder">{name}</Tag>}
       <Grid columns={{ compact: "2", base: "3", wide: "4" }} gap="md">{page.items.filter(item => (item.folder ?? "") === name).map(item =>
@@ -40,5 +41,5 @@ export function NewTabPage() {
     {!scraps.loading && !scraps.items.length && <EmptyLine message={scraps.failed ? appCopy.browser.failed : appCopy.browser.emptyLibrary} />}
   </Section><LibraryAttachDialog item={attachment} onClose={() => setAttachment(undefined)} />
     <ScrapViewer onSource={item => void openLibraryItem(item, true)} />
-  </Stack></Box></PageContainer></ScrollArea>;
+  </Stack></Box></PageContainer>;
 }

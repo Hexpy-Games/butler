@@ -13,7 +13,7 @@ type ConversationTab = { id: string; waiting?: boolean; busy?: boolean; agentAt?
 
 /**
  * The tab a conversation's browser opens on: one that needs you, then the one Butler is working in or
- * worked in last, then the one you last viewed, then the first. None before Butler opens a page.
+ * worked in last, then the one you last viewed, then the first. None while the group has no tabs.
  */
 export function relevantConversationTab<T extends ConversationTab>(tabs: readonly T[], remembered?: string): T | undefined {
   const latest = tabs.reduce<T | undefined>((best, tab) => (tab.agentAt ?? 0) > (best?.agentAt ?? 0) ? tab : best, undefined);
