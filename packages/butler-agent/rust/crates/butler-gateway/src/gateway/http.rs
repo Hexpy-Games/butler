@@ -269,9 +269,10 @@ async fn authorized_route(
     request.extensions_mut().insert(client.clone());
     let signs = client.access.receives_signed_urls();
     let keys = client.keys.clone();
+    let application = state.application.clone();
     let response = route_for_client(state, request, client).await?;
     Ok(if signs {
-        keys.sign_urls(response).await
+        keys.sign_urls(response, application.as_ref()).await
     } else {
         response
     })

@@ -25,7 +25,7 @@ pub(in crate::gateway::application) fn revision(
     rev: i64,
 ) -> Result<Value, AppStorageError> {
     db.query_row("SELECT d.id,d.title,d.chat_id,d.message_id,r.rev,b.body,r.updated_at,r.author,r.created_at FROM documents d JOIN document_revisions r ON r.document_id=d.id JOIN document_bodies b ON b.sha256=r.sha256 WHERE d.id=?1 AND r.rev=?2", params![id,rev], |r| {
-        Ok(json!({"id":r.get::<_,String>(0)?,"title":r.get::<_,String>(1)?,"chat_id":r.get::<_,Option<String>>(2)?,"message_id":r.get::<_,Option<String>>(3)?,"rev":r.get::<_,i64>(4)?,"body":r.get::<_,String>(5)?,"updated_at":r.get::<_,String>(6)?,"author":r.get::<_,String>(7)?,"created_at":r.get::<_,String>(8)?}))
+        Ok(json!({"id":r.get::<_,String>(0)?,"title":r.get::<_,String>(1)?,"chat_id":r.get::<_,Option<String>>(2)?,"message_id":r.get::<_,Option<String>>(3)?,"rev":r.get::<_,i64>(4)?,"body":r.get::<_,String>(5)?,"updated_at":r.get::<_,String>(6)?,"author":r.get::<_,String>(7)?,"created_at":r.get::<_,String>(8)?,"assets":butler_runtime::documents::parse(&r.get::<_,String>(5)?).images.into_iter().map(|id| json!({"id":id,"url":format!("/message-assets/{id}")})).collect::<Vec<_>>()}))
     }).optional().map_err(AppStorageError::sqlite)?.ok_or_else(missing)
 }
 pub(in crate::gateway::application) fn head(

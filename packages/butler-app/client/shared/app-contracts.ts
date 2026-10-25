@@ -81,13 +81,15 @@ export type CardItem = {
 
 export type AnswerCell = string | number | null;
 
+export type AnswerBlock = CardsBlock | TableBlock | GalleryBlock | FactsBlock | MetricsBlock | ChartBlock | CalloutBlock | ActionsBlock | TimelineBlock | ChecklistBlock | ProgressBlock | TextBlock | ImageBlock | QuoteBlock | ColumnsBlock | TabsBlock | GroupBlock;
+
 export type AnswerSource = string;
 
 export type CardValue = {
   amount: number;
   was?: number;
   note?: string;
-} & ({ unit?: string; cur?: never } | { unit?: never; cur?: string });
+} & ({ unit?: string; cur?: never; } | { unit?: never; cur?: string; });
 
 export type CardsBlock = {
   type: "cards";
@@ -140,6 +142,7 @@ export type MetricsBlock = {
   delta?: string;
   checked?: Checked;
   source?: AnswerSource;
+  direction?: "up-good" | "down-good" | "neutral";
 }>;
 };
 
@@ -178,10 +181,96 @@ export type ActionsBlock = {
 }>;
 };
 
-export type AnswerBlock = CardsBlock | TableBlock | GalleryBlock | FactsBlock | MetricsBlock | ChartBlock | CalloutBlock | ActionsBlock;
+export type TimelineBlock = {
+  type: "timeline";
+  id?: AnswerBlockId;
+  title?: AnswerBlockTitle;
+  items: Array<{
+  when: string;
+  title: string;
+  text?: string;
+  checked?: Checked;
+  source?: AnswerSource;
+}>;
+};
+
+export type ChecklistBlock = {
+  type: "checklist";
+  id?: AnswerBlockId;
+  title?: AnswerBlockTitle;
+  items: Array<{
+  text: string;
+  done: boolean;
+}>;
+};
+
+export type ProgressBlock = {
+  type: "progress";
+  id?: AnswerBlockId;
+  title?: AnswerBlockTitle;
+  items: Array<{
+  label: string;
+  value: number;
+  max?: number;
+  unit?: string;
+  checked?: Checked;
+  source?: AnswerSource;
+}>;
+};
+
+export type TextBlock = {
+  type: "text";
+  id?: AnswerBlockId;
+  title?: AnswerBlockTitle;
+  text: string;
+};
+
+export type ImageBlock = {
+  type: "image";
+  id?: AnswerBlockId;
+  title?: AnswerBlockTitle;
+  img: AssetId;
+  caption?: string;
+  source?: AnswerSource;
+};
+
+export type QuoteBlock = {
+  type: "quote";
+  id?: AnswerBlockId;
+  title?: AnswerBlockTitle;
+  text: string;
+  cite?: string;
+  source?: AnswerSource;
+};
+
+export type AnswerLeafBlock = CardsBlock | TableBlock | GalleryBlock | FactsBlock | MetricsBlock | ChartBlock | CalloutBlock | ActionsBlock | TimelineBlock | ChecklistBlock | ProgressBlock | TextBlock | ImageBlock | QuoteBlock;
+
+export type ColumnsBlock = {
+  type: "columns";
+  id?: AnswerBlockId;
+  title?: AnswerBlockTitle;
+  blocks: Array<AnswerLeafBlock>;
+};
+
+export type GroupBlock = {
+  type: "group";
+  id?: AnswerBlockId;
+  title?: AnswerBlockTitle;
+  blocks: Array<AnswerLeafBlock>;
+};
+
+export type TabsBlock = {
+  type: "tabs";
+  id?: AnswerBlockId;
+  title?: AnswerBlockTitle;
+  tabs: Array<{
+  label: string;
+  blocks: Array<AnswerLeafBlock>;
+}>;
+};
 
 export type AnswerBlocks = {
-  v: 1;
+  v: 1 | 2;
   blocks: Array<AnswerBlock>;
 };
 
