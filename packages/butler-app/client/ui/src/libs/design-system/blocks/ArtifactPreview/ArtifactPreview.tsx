@@ -9,17 +9,26 @@ import { dsStyle } from "../../lib/internal";
 import { cn } from "../../lib/utils";
 import styles from "./ArtifactPreview.module.css";
 
+export type ArtifactPreviewSurface = "card" | "page";
+
 export interface ArtifactPreviewProps extends DsBaseProps<HTMLAttributes<HTMLDivElement>> {
   children: ReactNode;
+  /**
+   * `card` (default): a bordered box with its own scroll, for a preview inside a panel or dialog.
+   * `page`: no box and no inner scroll; the content flows in the host's scroll as a reading page
+   * (a docked file viewer). The host gives the reading insets.
+   */
+  surface?: ArtifactPreviewSurface;
 }
 
 export function ArtifactPreview({
   children,
   className,
+  surface = "card",
   ...props
 }: ArtifactPreviewProps) {
   return (
-    <div className={cn(styles.viewer, className)} {...props}>
+    <div className={cn(styles.viewer, className)} data-surface={surface === "page" ? "page" : undefined} {...props}>
       {children}
     </div>
   );

@@ -90,6 +90,10 @@ block. Do not use it as a generic card or nested panel.
   `leftOpen={open && !collapsed}`.
 - The pane enters with a transform; NativeViewSlot's tracker follows
   ancestors that move, so the native view tracks the page card.
+- Whatever the pane holds fills the slot's height, as the chat column's child
+  does: the browser sheet, or a docked file viewer in an `AdaptiveShellCard`
+  (cards frame: the viewer is the second card) stays full height however
+  short its content. Scroll inside it with `ScrollArea fill`.
 
 ## Cards frame (`frame="cards"`)
 
