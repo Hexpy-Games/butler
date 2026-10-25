@@ -1,4 +1,5 @@
 import { verifySessionInlineEdit } from "../support/session-inline-edit.ts";
+import { verifyNewChatSessionInfo } from "../support/session-info-new-chat.ts";
 import { verifyTaskOrder, verifyCompactContext, verifyDashboardTask } from "../support/session-pane-followups.ts";
 import { verifyInlineTriggerRings } from "../support/session-pane-focus.ts";
 import { verifySessionPaneMotion, verifyTitleActionsAfterSubtitle } from "../support/session-pane-motion.ts";
@@ -36,6 +37,8 @@ try {
   let view = populatedSession(original);
   let asksOpen = true;
   browser = await launchSmokeBrowser();
+  if (!before) await verifyNewChatSessionInfo(browser, server, session.id, "릴리스 노트 정리", (page, name) =>
+    page.screenshot({ path: join(shots, `${name}-${theme}-1440.png`), animations: "disabled" }), theme);
   if (!before) await verifyNativePendingAsks(browser, server, theme);
   if (!before) await verifySessionPaneMotion(browser, server, view);
   if (!before) await verifyRailBesidePane(browser, server, view);
@@ -143,7 +146,9 @@ try {
     const emptyLoaded = page.waitForResponse(response => response.url().includes(`/session-view?session_id=${empty.id}`));
     await page.getByRole("button", { name: /다음 릴리스 준비/ }).first().click();
     await emptyLoaded;
-    await page.waitForFunction(() => document.querySelector('[data-test-class="session-sections"]')?.childElementCount === 0);
+    await toggle.waitFor({ state: "detached" });
+    assert.equal(await toggle.count(), 0);
+    assert.equal(await page.locator('[data-slot="conversation-aside"]').count(), 0);
     await capture("no-task-no-asks");
     assert.equal(await toggle.locator('[data-slot="icon-button-indicator"]').count(), 0);
     console.log(JSON.stringify({ sectionTitles: titles, hiddenSections: 8, layouts: ["docked", "floating", "browser-floating"] }));
@@ -154,6 +159,9 @@ try {
     await questionRead;
     const question = page.locator('[data-test-class="conversation-request"] [data-placement="conversation"]');
     await question.waitFor();
+    await toggle.waitFor();
+    await page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="session-info-toggle"] [data-slot="icon-button-indicator"]')));
+    assert.equal(await toggle.getAttribute("aria-label"), "세션 정보 · 답을 기다리는 요청 있음");
     assert.equal(await question.locator("..").getAttribute("data-radius"), "lg");
     buttonRadii = await question.getByRole("button").evaluateAll(elements => elements.map(element => ({ label: element.getAttribute("aria-label") ?? element.textContent ?? "", radius: getComputedStyle(element).borderRadius })));
     await capture("transcript-question");
