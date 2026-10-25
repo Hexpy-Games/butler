@@ -57,3 +57,18 @@ export function isHostOnlyError(error: unknown): boolean {
 export function isAdminRequiredError(error: unknown): boolean {
   return apiErrorCode(error) === "admin_credential_required";
 }
+
+/** Public credential inventory; tokens and internal account identifiers stay in the agent. */
+export interface OauthCredential {
+  id: string;
+  provider: "chatgpt";
+  kind: "sign_in" | "legacy_sign_in";
+  label: string | null;
+  obtained_at: number | null;
+  expires_at: number | null;
+  revocable: boolean;
+}
+export const listOauthCredentials = () => api<{ credentials: OauthCredential[] }>("/security/oauth");
+export const removeOauthCredential = (id: string) => api<{ removed: boolean; revoked: boolean | null }>(
+  `/security/oauth/${encodeURIComponent(id)}`, { method: "DELETE" },
+);

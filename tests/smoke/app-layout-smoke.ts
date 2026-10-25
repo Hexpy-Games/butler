@@ -721,7 +721,8 @@ try {
   );
   const sessionInfoToggle = page.locator(testClass("session-info-toggle"));
   await sessionInfoToggle.click();
-  const sessionAside = page.getByRole("complementary", { name: appCopy.sessionInfo.title, exact: true });
+  const sessionAside = page.getByRole("complementary", { name: appCopy.sessionInfo.title, exact: true })
+    .and(page.locator('[data-state="open"]'));
   await sessionAside.waitFor();
   const marginBounds = await sessionAside.evaluate(panel => {
     const sections = panel.querySelector<HTMLElement>('[data-test-class="session-sections"]')!;
