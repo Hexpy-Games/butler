@@ -35,7 +35,6 @@ export function QueuedMessageItem({
       showLessLabel={appCopy.conversation.messageActions.showLess}
       {...(item.canSendNow ? {
         sendNowLabel: copy.sendNow,
-        sendNowHint: copy.sendNowHint,
         onSendNow: () => { void sendNow(item); },
       } : {})}
       onEdit={() => edit(item)}

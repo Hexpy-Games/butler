@@ -80,6 +80,19 @@ async function prepare(page: Page, original: SessionView) {
 }
 
 type Replay = Awaited<ReturnType<typeof prepare>>;
+async function assertNoSendNowTooltip(page: Page, send: ReturnType<Page["getByRole"]>) {
+  assert.equal(await send.getAttribute("aria-describedby"), null);
+  await send.hover();
+  await page.waitForTimeout(700);
+  assert.equal(await page.getByRole("tooltip").count(), 0);
+  assert.equal(await send.getAttribute("aria-describedby"), null);
+  await page.mouse.move(0, 0);
+  await send.focus();
+  await page.waitForTimeout(700);
+  assert.equal(await page.getByRole("tooltip").count(), 0);
+  assert.equal(await send.getAttribute("aria-describedby"), null);
+}
+
 async function verifyFailure(page: Page, replay: Replay, status: number) {
   replay.fail(status);
   const first = page.locator('[data-test-class="queued-message"]').first();
@@ -102,6 +115,7 @@ async function verifyDelivery(page: Page, replay: Replay, capture: (name: string
   assert.equal(await rows.getByRole("button", { name: "지금 보내기", exact: true }).count(), 1);
   assert.equal(await second.getByRole("button", { name: "지금 보내기", exact: true }).count(), 0);
   const send = first.getByRole("button", { name: "지금 보내기", exact: true });
+  await assertNoSendNowTooltip(page, send);
   assert.deepEqual(await probeFocusRingFrames(page, () => send.focus()), []);
   await capture("queued");
   const posted = page.waitForRequest(request => request.url().endsWith("/send-now"));

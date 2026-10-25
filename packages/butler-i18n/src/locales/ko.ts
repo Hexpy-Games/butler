@@ -1159,7 +1159,6 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     queuedMessages: "대기 중인 메시지",
     queuedMessage: "대기 중인 메시지",
     sendNow: "지금 보내기",
-    sendNowHint: "지금 응답을 멈추고 바로 보냅니다",
     sendingStatus: "보내는 중…",
     sendNowFailed: "보내지 못했습니다",
     queuedMessageStatus: "대기 중",

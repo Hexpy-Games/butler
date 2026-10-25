@@ -1154,7 +1154,6 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     queuedMessages: "Queued messages",
     queuedMessage: "Queued message",
     sendNow: "Send now",
-    sendNowHint: "Stops the current response and sends this now",
     sendingStatus: "Sending…",
     sendNowFailed: "Couldn't send",
     queuedMessageStatus: "Queued",

@@ -1041,7 +1041,6 @@ export interface AppCopy {
     queuedMessages: string;
     queuedMessage: string;
     sendNow: string;
-    sendNowHint: string;
     sendingStatus: string;
     sendNowFailed: string;
     queuedMessageStatus: string;
