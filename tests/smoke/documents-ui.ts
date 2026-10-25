@@ -8,7 +8,7 @@ import { createServer } from "../../packages/butler-app/client/ui/node_modules/v
 import { launchSmokeBrowser } from "../support/smoke-browser";
 import { documentProfilePlugin } from "../support/document-profile";
 const root = process.cwd(), stage = process.env.BUTLER_DOCUMENT_STAGE ?? "after";
-const evidence = process.env.BUTLER_SMOKE_EVIDENCE ?? resolve(".tmp/documents-ui"); mkdirSync(evidence, { recursive: true });
+const evidence = process.env.BUTLER_SMOKE_EVIDENCE ?? resolve(process.env.TMPDIR ?? "/tmp", "bd3/shots"); mkdirSync(evidence, { recursive: true });
 const spec = { v: 2, blocks: [{ type: "metrics", title: "Budget", items: [{ label: "Total", value: 120 }] }] };
 const initial = `# Report\n\nAn **important** paragraph with *emphasis*.\n\n- first\n- second\n\n1. one\n2. two\n\n\`\`\`blocks\n${JSON.stringify(spec)}\n\`\`\`\n\n![image](img_abcdefghij)\n\n> Preserve unknown Markdown\n`;
 const artifact = { id: "doc_report", title: "Report", kind: "doc", session_id: "butler-client", message_id: "answer", created_at: "2026-10-25T08:00:00Z", deliverable: true };
@@ -85,12 +85,15 @@ async function open(page: Page, width = 1440, theme = "light") {
   await page.locator('[data-test-class="message-artifact-list"]').getByText("Report", { exact: true }).click();
   await page.getByRole("textbox", { name: "문서", exact: true }).waitFor();
   await page.evaluate(() => document.fonts.ready);
-  if (width === 390) {
+  if (stage !== "before" || width === 390) {
     const dialog = page.locator('[role="dialog"][data-height="full"]');
     await dialog.waitFor();
     await dialog.evaluate(async node => { await Promise.all(node.getAnimations().map(animation => animation.finished)); });
     assert.equal(await dialog.getAttribute("data-layout"), "scroll-body");
     assert.equal(await dialog.evaluate(node => Math.round(node.getBoundingClientRect().height)), await dialog.evaluate(node => Math.round(parseFloat(getComputedStyle(node).maxHeight))));
+    assert.equal(await dialog.getAttribute("aria-labelledby").then(id => page.locator(`[id="${id}"]`).innerText()), "Report");
+    assert.equal(await page.locator('[data-session-section="artifacts"] [data-document-id]').count(), 0);
+    await page.locator('[data-session-section="artifacts"]').getByText("Report", { exact: true }).waitFor();
   } else await page.locator('[data-slot="conversation-aside"] [data-session-section="artifacts"] [data-document-id]').waitFor();
 }
 const editor = (page: Page) => page.getByRole("textbox", { name: "문서", exact: true });
@@ -154,6 +157,22 @@ async function interactions(page: Page, width = 1440) {
   await page.getByRole("button", { name: "내보내기", exact: true }).click(); await page.getByRole("menuitem", { name: "PDF", exact: true }).click();
   await page.waitForTimeout(200); assert.equal(exports.at(-1)?.format, "pdf"); assert.ok(exports.at(-1)!.content.includes("data-document-read-only")); assert.ok(!exports.at(-1)!.content.includes("contenteditable=\"true\""));
   await page.evaluate(() => { delete window.butlerApp; });
+  await closeAndFlush(page);
+}
+async function closeAndFlush(page: Page) {
+  await editor(page).locator("h1").click(); await selectText(page);
+  await page.keyboard.press("Escape");
+  await page.getByRole("toolbar", { name: "서식" }).waitFor({ state: "hidden" });
+  await page.getByRole("dialog", { name: "Report", exact: true }).waitFor();
+  await editor(page).focus(); await page.keyboard.press("ControlOrMeta+End");
+  const saved = page.waitForResponse(response => response.request().method() === "PUT" && response.url().endsWith(`/documents/${head.id}`));
+  await page.keyboard.type(" flushed on close");
+  await page.keyboard.press("Escape");
+  await page.getByRole("dialog", { name: "Report", exact: true }).waitFor({ state: "hidden" });
+  await saved; assert.ok(head.body.includes(" flushed on close"));
+  const trigger = page.locator('[data-test-class="message-artifact-list"]').getByText("Report", { exact: true });
+  await page.waitForFunction(() => Boolean(document.activeElement?.closest('[data-test-class="message-artifact-list"]')));
+  assert.ok(await trigger.evaluate(node => node.contains(document.activeElement) || document.activeElement?.contains(node)), "focus returns to the opening trigger");
 }
 async function drawer(page: Page) {
   await page.evaluate(async () => { const path = "/src/components/library/libraryNav.ts"; (await import(/* @vite-ignore */ path)).openLibrary({ section: "document" }); });
@@ -162,21 +181,30 @@ async function drawer(page: Page) {
 async function navigation(page: Page) {
   await open(page, 900);
   assert.equal(await page.locator('[data-slot="conversation-aside"]').getAttribute("data-layout"), "floating");
-  assert.equal(await page.getByRole("dialog").count(), 0);
+  await page.getByRole("dialog", { name: "Report", exact: true }).waitFor();
   await page.getByRole("button", { name: "아티팩트 목록", exact: true }).click();
   await editor(page).waitFor({ state: "hidden" });
+  const paneTrigger = page.locator('[data-session-section="artifacts"]').getByText("Report", { exact: true });
   await page.locator('[data-session-section="artifacts"]').getByText("Report", { exact: true }).click();
   await editor(page).waitFor();
+  await page.keyboard.press("Escape");
+  await page.getByRole("dialog", { name: "Report", exact: true }).waitFor({ state: "hidden" });
+  await page.waitForFunction(() => Boolean(document.activeElement?.closest('[data-session-section="artifacts"]')));
+  assert.ok(await paneTrigger.evaluate(node => document.activeElement?.contains(node)), "focus returns to the pane trigger");
   await drawer(page);
   await page.locator('[data-library-item="doc_report"]').getByText("Report", { exact: true }).click();
   await editor(page).waitFor();
   await page.getByRole("button", { name: "원래 대화", exact: true }).click();
-  await page.locator('[data-session-section="artifacts"] [data-document-id]').waitFor();
+  await page.getByRole("dialog", { name: head.title, exact: true }).waitFor();
   assert.equal(new URL(page.url()).searchParams.get("doc"), null);
+  await page.keyboard.press("Escape");
+  await page.getByRole("dialog", { name: head.title, exact: true }).waitFor({ state: "hidden" });
   await drawer(page);
   await page.locator('[data-library-item="doc_report"]').getByRole("button", { name: "더 보기", exact: true }).click();
   await page.getByRole("menuitem", { name: "원본 열기", exact: true }).click();
-  await page.locator('[data-session-section="artifacts"] [data-document-id]').waitFor();
+  await page.getByRole("dialog", { name: head.title, exact: true }).waitFor();
+  await page.keyboard.press("Escape");
+  await page.getByRole("dialog", { name: head.title, exact: true }).waitFor({ state: "hidden" });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.locator('[data-slot="conversation-aside"][data-layout="docked"]').waitFor();
   await page.evaluate(async fixture => {
@@ -186,7 +214,7 @@ async function navigation(page: Page) {
   const block = page.locator('[data-answer-block="text"]').filter({ hasText: "Editable reply" });
   await block.hover(); await block.getByRole("button", { name: "더 보기", exact: true }).click();
   await page.getByRole("menuitem", { name: "문서로 만들기", exact: true }).click();
-  await page.locator('[data-session-section="artifacts"] [data-document-id]').waitFor();
+  await page.getByRole("dialog", { name: head.title, exact: true }).waitFor();
   await editor(page).getByText("Editable reply", { exact: true }).waitFor();
   head = { ...head, id: artifact.id, title: "Report", body: initial }; history = [structuredClone(head)];
 }
@@ -276,25 +304,18 @@ async function keyboardUnits(page: Page) {
   await editor(page).locator("h1").click(); await page.keyboard.press("End"); await page.keyboard.type("ordered");
   await page.getByText("저장됨", { exact: true }).waitFor(); assert.ok(head.body.includes("ordered"));
 }
-async function beforeMatrix(page: Page) {
-  for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (background of ["plain", "wallpaper"]) {
-    await page.setViewportSize({ width, height: 1000 }); await page.goto(`${base}?visual=components&theme=${theme}&locale=ko`);
-    await page.locator('[data-test-class="message-artifact-list"]').getByText("Report", { exact: true }).click();
-    await page.locator('[data-test-class="artifact-viewer"]').waitFor(); await shot(page, "chat-document", width, theme);
-    await page.evaluate(async () => { const path = "/src/components/library/libraryNav.ts"; (await import(/* @vite-ignore */ path)).openLibrary({ section: "document" }); });
-    await page.locator('[data-library-item="file-report"]').waitFor(); await shot(page, "drawer", width, theme);
-    await page.locator('[data-library-item="file-report"]').getByText("File report", { exact: true }).click();
-    await page.getByRole("combobox", { name: "버전", exact: true }).waitFor(); await shot(page, "file-viewer", width, theme);
-  }
-}
 async function matrix(page: Page) {
   for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (background of ["plain", "wallpaper"]) {
     head = { ...head, body: initial }; history = [structuredClone(head), { ...head, rev: head.rev - 1, author: "user" }];
     await open(page, width, theme); await shot(page, "chat-document", width, theme);
     await selectText(page); await shot(page, "format", width, theme); await page.keyboard.press("ArrowRight");
     await live(page); await shot(page, "butler-editing", width, theme);
-    await page.getByRole("button", { name: "버전 기록", exact: true }).click(); await page.getByRole("listbox").waitFor(); await shot(page, "versions", width, theme); await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "내보내기", exact: true }).click(); await page.getByRole("menuitem", { name: "PDF", exact: true }).waitFor(); await shot(page, "export", width, theme); await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "버전 기록", exact: true }).click(); await page.getByRole("listbox").waitFor(); await shot(page, "versions", width, theme); await page.keyboard.press("Escape"); await page.getByRole("listbox").waitFor({ state: "hidden" });
+    await page.getByRole("button", { name: "내보내기", exact: true }).click(); await page.getByRole("menuitem", { name: "PDF", exact: true }).waitFor(); await shot(page, "export", width, theme); await page.keyboard.press("Escape"); await page.getByRole("menu").waitFor({ state: "hidden" });
+    if (stage !== "before" || width === 390) {
+      await page.keyboard.press("Escape");
+      await page.getByRole("dialog", { name: head.title, exact: true }).waitFor({ state: "hidden" });
+    }
     await drawer(page); await shot(page, "drawer", width, theme);
     await page.locator('[data-library-item="doc_report"]').getByText("Report", { exact: true }).click(); await editor(page).waitFor(); await shot(page, "drawer-document", width, theme);
     assert.equal(new URL(page.url()).searchParams.get("doc"), head.id);
@@ -307,7 +328,7 @@ async function matrix(page: Page) {
 try {
   const page = await browser.newPage(); await setup(page);
   if (process.env.BUTLER_DOCUMENT_MEASURE_ONLY === "1") await measure(page);
-  else if (stage === "before") await beforeMatrix(page);
+  else if (stage === "before") { await matrix(page); await measure(page); }
   else {
     const phase = process.env.BUTLER_DOCUMENT_PHASE;
     if (!phase || phase === "interactions" || phase === "desktop") await interactions(page);

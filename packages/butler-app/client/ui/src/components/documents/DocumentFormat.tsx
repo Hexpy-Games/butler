@@ -1,6 +1,6 @@
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
-import { $getSelection, $isRangeSelection, $isElementNode, $setSelection, type RangeSelection, FORMAT_TEXT_COMMAND } from "lexical";
+import { $getSelection, $isRangeSelection, $isElementNode, $setSelection, type RangeSelection, FORMAT_TEXT_COMMAND, KEY_ESCAPE_COMMAND, COMMAND_PRIORITY_LOW } from "lexical";
 import { $createHeadingNode, $isHeadingNode } from "@lexical/rich-text";
 import { $createParagraphNode } from "lexical";
 import { INSERT_UNORDERED_LIST_COMMAND, REMOVE_LIST_COMMAND, $isListNode } from "@lexical/list";
@@ -27,6 +27,12 @@ export function DocumentFormat() {
       setFormats({ bold: selection.hasFormat("bold"), heading: $isHeadingNode(top), list: $isListNode(top) });
     });
   }), [editor]);
+  useEffect(() => editor.registerCommand(KEY_ESCAPE_COMMAND, event => {
+    if (!anchor || adding) return false;
+    const selection = $getSelection();
+    if ($isRangeSelection(selection)) selection.anchor.set(selection.focus.key, selection.focus.offset, selection.focus.type);
+    setAnchor(null); event.preventDefault(); return true;
+  }, COMMAND_PRIORITY_LOW), [editor, anchor, adding]);
   const heading = () => editor.update(() => {
     const selection = $getSelection(); if (!$isRangeSelection(selection)) return;
     const top = selection.anchor.getNode().getTopLevelElement();

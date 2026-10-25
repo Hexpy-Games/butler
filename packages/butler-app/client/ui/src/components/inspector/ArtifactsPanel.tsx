@@ -36,7 +36,7 @@ export function ArtifactsPanel({
   const messageArtifacts = messages.flatMap(
     (message) => message.artifacts ?? [],
   );
-  const allArtifacts = dedupeArtifacts([...artifacts, ...messageArtifacts]);
+  const allArtifacts = dedupeArtifacts([...artifacts, ...messageArtifacts, ...(selectedArtifactFallback ? [selectedArtifactFallback] : [])]);
   const selectedArtifact = selectedArtifactId
     ? (allArtifacts.find(
         (artifact) => artifact.id === selectedArtifactId,
@@ -55,14 +55,16 @@ export function ArtifactsPanel({
   );
 
   return (
+    <>
+    {selectedArtifact?.kind === "doc" && <DocumentArtifact key={selectedArtifact.id} id={selectedArtifact.id} title={selectedArtifact.title} onBack={() => setSelectedArtifactId(null)} />}
     <InspectorInset>
       <Section
         title={compact ? undefined : appCopy.artifacts.title}
         gap="md"
       >
         {compact && <SessionSectionHeader title={appCopy.sessionInfo.artifacts} count={allArtifacts.length} />}
-        {selectedArtifact ? (
-          selectedArtifact.kind === "doc" ? <DocumentArtifact key={selectedArtifact.id} id={selectedArtifact.id} title={selectedArtifact.title} onBack={() => setSelectedArtifactId(null)} /> : <ArtifactViewer
+        {selectedArtifact && selectedArtifact.kind !== "doc" ? (
+          <ArtifactViewer
             artifact={selectedArtifact}
             onBack={() => setSelectedArtifactId(null)}
             refreshFileUrls={refreshFileUrls}
@@ -88,6 +90,7 @@ export function ArtifactsPanel({
         )}
       </Section>
     </InspectorInset>
+    </>
   );
 }
 

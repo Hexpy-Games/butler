@@ -190,7 +190,8 @@ async function interactions(page: Page, reduced: boolean) {
   await page.getByRole("menuitem", { name: "문서로 만들기", exact: true }).click();
   await page.getByRole("textbox", { name: "문서", exact: true }).waitFor();
   assert.equal(new URL(page.url()).searchParams.get("doc"), null);
-  await page.locator('[data-session-section="artifacts"] [data-document-id="doc_created"]').waitFor();
+  await page.getByRole("dialog", { name: "전시 안내", exact: true }).locator('[data-document-id="doc_created"]').waitFor();
+  assert.equal(await page.locator('[data-session-section="artifacts"] [data-document-id]').count(), 0);
   assert.equal(calls.at(-1)?.path, "/documents");
   const body = calls.at(-1)!.body;
   assert.equal(body.title, "전시 안내");
