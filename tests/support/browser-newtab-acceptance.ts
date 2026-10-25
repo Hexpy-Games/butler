@@ -128,6 +128,22 @@ export async function populatedNewTab(page: ElectronPage, gateway: Awaited<Retur
 
 async function reloadNewTab(page: ElectronPage) {
   await page.reload();
-  await page.waitForFunction(() => Boolean(document.querySelector('[data-test-class="browser-entry"]')));
-  await page.clickSelector('[data-test-class="browser-entry"]');
+  await clickSettled(page, '[data-test-class="browser-entry"]');
+}
+
+/**
+ * Click `selector` once a user could: enabled, hit-testable at its center and not moved by a finite animation.
+ * The workspace mounts before the saved layout loads, so after a launch or reload the sidebar slides in.
+ */
+export async function clickSettled(page: ElectronPage, selector: string) {
+  await waitBrowser(() => page.expression(`(() => {
+    const node=document.querySelector(${JSON.stringify(selector)});
+    if (!node || node.disabled || node.getAttribute('aria-disabled')==='true') return false;
+    for (let parent=node;parent;parent=parent.parentElement) {
+      if (parent.getAnimations().some(a=>a.playState==='running' && a.timeline instanceof DocumentTimeline && a.effect?.getComputedTiming().iterations!==Infinity)) return false;
+    }
+    const box=node.getBoundingClientRect();
+    return box.width>0 && box.height>0 && node.contains(document.elementFromPoint(box.x+box.width/2,box.y+box.height/2));
+  })()`), `${selector} settled`);
+  await page.clickSelector(selector);
 }
