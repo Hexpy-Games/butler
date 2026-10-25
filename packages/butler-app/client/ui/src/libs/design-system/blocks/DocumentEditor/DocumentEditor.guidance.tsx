@@ -1,6 +1,6 @@
 import type { ShowcaseGuidance } from "../../showcase";
 import { IconButton } from "../../components/IconButton";
-import { Download, History } from "../../components/Icons";
+import { Download, History, X } from "../../components/Icons";
 import { Inline } from "../../components/Inline";
 import { Typo } from "../../components/Typo";
 import { DocumentEditor, documentEditorClasses } from "./DocumentEditor";
@@ -21,7 +21,9 @@ function Editable() {
 function TitleLine() {
   return (
     <DocumentEditor title={<Typo.PanelTitle as="h2" truncate>October budget</Typo.PanelTitle>} note="Saved"
-      actions={<Inline gap="xs" wrap={false}><IconButton label="Versions"><History size="sm" /></IconButton><IconButton label="Export"><Download size="sm" /></IconButton></Inline>}>
+      actions={<Inline gap="xs" wrap={false}><IconButton label="Versions"><History size="sm" /></IconButton><IconButton label="Export"><Download size="sm" /></IconButton></Inline>}
+      menuActions={[{ icon: <History size="sm" />, label: "Versions", onSelect: () => {} }, { icon: <Download size="sm" />, label: "Export as Markdown", onSelect: () => {} }]}
+      menuLabel="More" controls={<IconButton label="Close"><X size="sm" /></IconButton>}>
       <div className={documentEditorClasses.root} contentEditable suppressContentEditableWarning>
         <p>Spending rose 8% this month.</p>
       </div>
@@ -38,7 +40,7 @@ export const guidance: ShowcaseGuidance = {
     { when: "Writing a message", use: "ComposerCard" },
   ],
   recipes: [{ name: "An editable document", description: "The caller's editor engine renders into the page; `documentEditorClasses` names its node classes.", render: () => <Editable /> },
-    { name: "Title line", description: "The title line is one control tall (--control-height-md; --control-hit-target wherever controls grow to the touch target), and the title is centred on it with the actions at every width. The status line is a row under the title, so it never moves them.", render: () => <TitleLine /> },
+    { name: "Title line", description: "The title line is one control tall (--control-height-md; --control-hit-target wherever controls grow to the touch target), and the title is centred on it with the actions at every width. The status line is a row under the title, so it never moves them. Below a 30rem title line, the document actions fold into ⋯ (menuActions, the same actions as flat items) and `controls` (close) stay; wider lines keep them inline.", render: () => <TitleLine /> },
   ],
   doDont: [
     {
@@ -50,7 +52,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Wrapping the title in a custom row to line it up with the actions: the block already centres them.", render: () => <Typo.Body>Title with a hand-tuned top margin</Typo.Body> },
     },
   ],
-  content: ["Status is a few words: 저장됨, 버틀러가 수정 중.", "Paragraphs Butler is changing take data-butler-editing=\"true\"; set it back to \"false\" when the change lands so the wash fades out."],
-  accessibility: ["The editable root is the field: give it an accessible name (aria-label) and role=\"textbox\" with aria-multiline from the editor engine.", "Block embeds are one unit in the text: not editable as text, selectable with the arrow keys."],
+  content: ["⋯ items name the action in full, one item per choice: 버전 기록, 원래 대화, Markdown으로 내보내기, PDF로 내보내기.", "Status is a few words: 저장됨, 버틀러가 수정 중.", "Paragraphs Butler is changing take data-butler-editing=\"true\"; set it back to \"false\" when the change lands so the wash fades out."],
+  accessibility: ["An item that opens a popover anchors it to ⋯ (menuRef) and returns focus to the ⋯ trigger when it closes.", "The editable root is the field: give it an accessible name (aria-label) and role=\"textbox\" with aria-multiline from the editor engine.", "Block embeds are one unit in the text: not editable as text, selectable with the arrow keys."],
   tokens: ["--control-height-md", "--control-hit-target", "--butler-ink-blue", "--butler-ink-purple", "--accent", "--radius-control", "--motion-slow"],
 };

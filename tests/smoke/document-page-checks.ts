@@ -24,6 +24,7 @@ export const documentHarnessPlugin = {
 };
 
 export async function checkTrailing(page: Page, base: string, id: string) {
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(`${base}?visual=components&theme=light&locale=ko`);
   await page.evaluate(async id => {
     const path = "/document-host-harness";
@@ -32,8 +33,8 @@ export async function checkTrailing(page: Page, base: string, id: string) {
   const close = page.getByRole("button", { name: "Host close", exact: true });
   await close.waitFor();
   const buttons = page.locator('[data-test-class="editable-document"] > :first-child button');
-  assert.deepEqual(await buttons.evaluateAll(nodes => nodes.map(node => node.getAttribute("aria-label"))), ["버전 기록", "원래 대화", "내보내기", "Host close"]);
-  const rows = await buttons.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().y));
+  assert.deepEqual(await buttons.evaluateAll(nodes => nodes.filter(node => node.getClientRects().length).map(node => node.getAttribute("aria-label"))), ["버전 기록", "원래 대화", "내보내기", "Host close"]);
+  const rows = await buttons.evaluateAll(nodes => nodes.filter(node => node.getClientRects().length).map(node => node.getBoundingClientRect().y));
   assert(rows.every(y => Math.abs(y - rows[0]!) < 1), JSON.stringify(rows));
   await close.focus(); await page.keyboard.press("Enter");
   await close.waitFor({ state: "hidden" });
@@ -133,15 +134,32 @@ export async function checkTitleLine(page: Page, options: {
         || (!animation.pending && ["finished", "idle"].includes(animation.playState));
     });
   }, `${host} [data-test-class="editable-document"]`);
+  const beforeTitleWidth = await document.evaluate(node => {
+    const inline = node.querySelector<HTMLElement>('[data-slot="document-editor-actions"]')!;
+    const menu = node.querySelector<HTMLElement>('[data-slot="document-editor-menu"]');
+    inline.style.display = "flex"; if (menu) menu.style.display = "none";
+    const width = node.querySelector("h2")!.getBoundingClientRect().width;
+    inline.style.removeProperty("display"); menu?.style.removeProperty("display");
+    return width;
+  });
   const geometry = await document.locator(":scope > :first-child").evaluate(row => {
     const center = (node: Element) => { const rect = node.getBoundingClientRect(); return rect.y + rect.height / 2; };
     const title = row.querySelector("h2")!;
-    return { title: center(title), buttons: [...row.querySelectorAll("button")].map(button => ({
+    return { title: center(title), titleWidth: title.getBoundingClientRect().width, clientWidth: title.clientWidth, scrollWidth: title.scrollWidth, buttons: [...row.querySelectorAll("button")].filter(button => button.getClientRects().length).map(button => ({
       label: button.getAttribute("aria-label") ?? button.textContent, center: center(button),
     })) };
   });
+  if (stage !== "before") {
+    if (!fullPage) {
+      assert(await document.locator('[data-test-class="file-viewer-close"]').isVisible());
+      if (width === 390) assert(await document.locator('[data-test-class="file-viewer-back"]').isVisible());
+    }
+    assert.equal(await document.locator('[data-slot="document-editor-actions"]').isVisible(), width !== 390);
+    assert.equal(await document.locator('[data-slot="document-editor-menu"] button').isVisible(), width === 390);
+    if (width === 390) { assert(geometry.titleWidth >= 80, JSON.stringify(geometry)); assert(geometry.scrollWidth <= geometry.clientWidth, "fixture title fits without ellipsis"); }
+  }
   assert(geometry.buttons.length > 0, "the document title line has actions");
-  const result = { check: "document-title-line", stage, surface, width, theme, ...geometry };
+  const result = { check: "document-title-line", stage, surface, width, theme, beforeTitleWidth, ...geometry };
   console.log(JSON.stringify(result));
   const clip = await document.evaluate(node => {
     const row = node.firstElementChild!.getBoundingClientRect();
@@ -152,4 +170,82 @@ export async function checkTitleLine(page: Page, options: {
   });
   await page.screenshot({ path: join(evidence, `${surface}-${width}-${theme}-${stage}.jpg`), type: "jpeg", quality: 80, clip, animations: "disabled" });
   return result;
+}
+
+export async function clickDocumentAction(page: Page, label: string) {
+  const overflow = page.locator('[data-slot="document-editor-menu"] button');
+  if (await overflow.isVisible()) {
+    await overflow.click(); await page.getByRole("menuitem", { name: label, exact: true }).click();
+  } else if (label.endsWith(" 내보내기")) {
+    await page.getByRole("button", { name: "내보내기", exact: true }).click();
+    await page.getByRole("menuitem", { name: label.startsWith("PDF") ? "PDF" : "Markdown", exact: true }).click();
+  } else await page.getByRole("button", { name: label, exact: true }).click();
+}
+
+export async function measureHeader(page: Page, width: number, fullPage: boolean) {
+  const geometry = await page.locator('[data-test-class="editable-document"] > :first-child').evaluate(row => ({
+    headerWidth: row.getBoundingClientRect().width,
+    menu: Boolean(row.querySelector('[data-slot="document-editor-menu"] button')?.getClientRects().length),
+  }));
+  console.log(JSON.stringify({ check: "document-header-width", surface: fullPage ? "drawer" : "fv", width, ...geometry }));
+}
+
+async function menuCrop(page: Page, evidence: string, name: string) {
+  await page.waitForFunction(() => {
+    const overlay = document.querySelector('[role="menu"], [data-slot="popover-content"]');
+    return document.getAnimations().every(animation => {
+      const target = (animation.effect as KeyframeEffect | null)?.target;
+      const relevant = target instanceof Element && overlay && (target.contains(overlay) || overlay.contains(target));
+      return !relevant || (!animation.pending && ["finished", "idle"].includes(animation.playState));
+    });
+  });
+  const clip = await page.evaluate(() => {
+    const row = document.querySelector('[data-test-class="editable-document"] > :first-child')!.getBoundingClientRect();
+    const overlay = document.querySelector('[role="menu"], [data-slot="version-history"]')?.getBoundingClientRect();
+    const bottom = Math.min(innerHeight, Math.max(row.bottom + 40, (overlay?.bottom ?? 0) + 16));
+    const y = Math.max(0, row.top - 16, bottom - 800);
+    return { x: 0, y, width: innerWidth, height: Math.min(800, bottom - y) };
+  });
+  await page.screenshot({ path: join(evidence, name), type: "jpeg", quality: 80, clip, animations: "disabled" });
+}
+
+export async function checkDocumentMenu(page: Page, { theme, evidence, fullPage, exports }: {
+  theme: string; evidence: string; fullPage: boolean; exports: Record<string, string>[];
+}) {
+  const trigger = page.locator('[data-slot="document-editor-menu"] button');
+  await clickDocumentAction(page, "버전 기록");
+  await page.getByRole("listbox", { name: "버전 기록" }).waitFor();
+  await page.getByRole("menu").waitFor({ state: "hidden" });
+  await page.waitForFunction(() => document.activeElement === document.querySelector('[data-slot="document-editor-menu"] button'));
+  assert(await page.getByRole("listbox", { name: "버전 기록" }).isVisible(), "history survives menu close focus restoration");
+  if (!fullPage && theme === "light") await menuCrop(page, evidence, "fv-390-light-versions.jpg");
+  await page.keyboard.press("Escape"); await page.getByRole("listbox").waitFor({ state: "hidden" });
+  await page.waitForFunction(() => document.activeElement === document.querySelector('[data-slot="document-editor-menu"] button'));
+  for (const key of ["Enter", "Space"]) {
+    await trigger.focus(); await page.keyboard.press(key); await page.getByRole("menu").waitFor();
+    assert.deepEqual(await page.getByRole("menuitem").allTextContents().then(items => items.map(item => item.trim())), ["버전 기록", "원래 대화", "Markdown으로 내보내기", "PDF로 내보내기"]);
+    if (!fullPage && key === "Enter") await menuCrop(page, evidence, `fv-390-${theme}-menu.jpg`);
+    await page.keyboard.press("Escape"); await page.getByRole("menu").waitFor({ state: "hidden" });
+    await page.waitForFunction(() => document.activeElement === document.querySelector('[data-slot="document-editor-menu"] button'));
+  }
+  // Shift+Tab then Tab reaches the trigger through the real keyboard order.
+  await page.keyboard.press("Shift+Tab"); await page.keyboard.press("Tab");
+  assert(await trigger.evaluate(node => node === document.activeElement));
+  if (!fullPage && theme === "light") await menuCrop(page, evidence, "fv-390-light-focus.jpg");
+  await page.evaluate(() => { window.butlerApp = { exportDocument: (window as unknown as { captureExport: (value: unknown) => Promise<void> }).captureExport } as typeof window.butlerApp; });
+  for (const [label, format] of [["Markdown으로 내보내기", "markdown"], ["PDF로 내보내기", "pdf"]]) {
+    const count = exports.length;
+    await clickDocumentAction(page, label!);
+    await page.waitForFunction(() => document.querySelector('[role="menu"]') === null);
+    // The exposed callback resolves after the complete export payload arrives.
+    await page.waitForFunction(format => (window as unknown as { lastExport?: string }).lastExport === format, format);
+    assert.equal(exports.length, count + 1); assert.equal(exports.at(-1)?.format, format);
+    assert(exports.at(-1)!.content.includes("data:image/svg+xml;base64,"));
+    if (format === "pdf") assert(exports.at(-1)!.content.includes("data-document-read-only"));
+  }
+  await page.evaluate(() => { delete window.butlerApp; });
+  await clickDocumentAction(page, "원래 대화");
+  assert.equal(new URL(page.url()).searchParams.get("doc"), null);
+  const session = await page.evaluate(async () => { const path = "/src/app/store.ts"; return (await import(/* @vite-ignore */ path)).useButlerStore.getState().activeChatId; });
+  assert.equal(session, "butler-client");
 }
