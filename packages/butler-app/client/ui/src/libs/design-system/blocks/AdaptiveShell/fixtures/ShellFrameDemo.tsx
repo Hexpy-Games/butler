@@ -56,7 +56,7 @@ function DemoTitle({ locale, view, leftOpen }: { locale: Locale; view: ShellFram
         trailing={(
           <ButtonContainer size="icon-sm" data-ds-title-icons="">
             <IconButton label={copy.actions} aria-haspopup="menu"><MoreHorizontal size="md" /></IconButton>
-            <IconButton label={browserOn ? copy.hideBrowser : copy.showBrowser} pressed={browserOn} tone={browserOn ? "butler" : "default"}>
+            <IconButton label={browserOn ? copy.hideBrowser : copy.showBrowser} pane="browser" pressed={browserOn} tone={browserOn ? "butler" : "default"}>
               <Globe2 size="md" />
             </IconButton>
             <IconButton label={copy.showInspector}>

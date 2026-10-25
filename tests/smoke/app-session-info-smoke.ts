@@ -1,6 +1,7 @@
 import { verifyTaskOrder, verifyCompactContext, verifyDashboardTask } from "../support/session-pane-followups.ts";
 import { verifyInlineTriggerRings } from "../support/session-pane-focus.ts";
 import { verifySessionPaneMotion, verifyTitleActionsAfterSubtitle } from "../support/session-pane-motion.ts";
+import { verifyPaneToggleFill } from "../support/pane-toggle-fill.ts";
 import { verifyRailBesidePane } from "../support/session-pane-rail.ts";
 // Stub/replay UI smoke through the real native App, isolated from the owner's data.
 import { sessionInfoStub, verifyNativePendingAsks, labelSessionInfoModel } from "../support/session-info-pending-asks.ts";
@@ -69,9 +70,11 @@ try {
     await page.waitForFunction(() => document.querySelector('[data-test-class="session-info-toggle"]')?.getAttribute("aria-label") === "세션 정보 · 답을 기다리는 요청 있음");
     assert.equal(await toggle.locator('[data-slot="icon-button-indicator"]').count(), 1);
     await verifyTitleActionsAfterSubtitle(page);
+    await verifyPaneToggleFill(page, "aside", false);
     await toggle.click();
     await aside.waitFor();
     assert.equal(await aside.getAttribute("data-layout"), "docked");
+    const fills = [await verifyPaneToggleFill(page, "aside", true)];
     await aside.locator('[data-test-class="canon-epic-detail"]').waitFor();
     const titles = await aside.locator("[data-session-section]").evaluateAll(elements => elements.map(element => element.getAttribute("data-session-section")));
     assert.deepEqual(titles, ["asks", "environment", "task", "context", "artifacts", "attachments", "schedules", "queue"]);
@@ -112,11 +115,14 @@ try {
     await verifyInlineTriggerRings(aside);
     assert.equal(await aside.locator('[data-slot="separator"]').count(), 7);
     await capture("floating");
+    fills.push(await verifyPaneToggleFill(page, "aside", true));
     await page.setViewportSize({ width: 1440, height: 1050 });
     await page.locator('[data-test-class="titlebar-browser-toggle"]').click();
     await page.locator('[data-test-class="browser-area"]').waitFor();
     await page.waitForFunction(() => document.querySelector('[data-slot="conversation-aside"]')?.getAttribute("data-layout") === "floating");
     await capture("browser-open");
+    fills.push(await verifyPaneToggleFill(page, "browser", true), await verifyPaneToggleFill(page, "aside", true));
+    console.log(JSON.stringify({ paneToggleFills: fills.map(({ pane, fill }) => ({ pane, fill })) }));
     console.log(JSON.stringify({ titleRowBesideBrowser: await verifyTitleActionsAfterSubtitle(page) }));
     await page.locator('[data-test-class="titlebar-browser-toggle"]').click();
     assert.equal(await page.getByRole("button", { name: "작업 그래프", exact: true }).count(), 0);

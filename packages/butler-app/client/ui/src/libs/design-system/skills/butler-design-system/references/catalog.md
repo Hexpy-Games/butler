@@ -835,7 +835,7 @@ An icon-only action with a required label that doubles as its tooltip.
 - Not for: Copying text with confirmation → `CopyButton`
 - Not for: Saving or another one-shot action that confirms on the button → `DoneIconButton`
 - Not for: A rounded chip with an icon and text → `PillButton`
-- Tokens: `--control-height-md`, `--selection`, `--radius-pill`, `--focus-ring`, `--control-hit-target`, `--butler-ink-blue`, `--butler-ink-pink`
+- Tokens: `--control-height-md`, `--selection`, `--radius-pill`, `--focus-ring`, `--control-hit-target`, `--butler-ink-blue`, `--butler-ink-pink`, `--tinted-glass-tint`, `--browser-pane-bg`, `--shell-card-bg`
 
 ### PillButton
 
@@ -1700,7 +1700,7 @@ The window titlebar: leading toggle, title, its actions and subtitle, chat-card 
 - Use for: The top bar of the app window
 - Not for: A panel header → `PanelHeader`
 - Not for: A page title → `DashboardHeader`
-- Tokens: `--titlebar-height`, `--titlebar-bg`, `--chrome-floating-toggle-size`, `--shell-card-inset`
+- Tokens: `--titlebar-height`, `--titlebar-bg`, `--chrome-floating-toggle-size`, `--shell-card-inset`, `--tinted-glass-tint`, `--browser-pane-bg`, `--shell-card-bg`
 
 ### Wallpaper
 
