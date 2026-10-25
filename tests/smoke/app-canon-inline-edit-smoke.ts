@@ -57,8 +57,10 @@ try {
     await page.setViewportSize({ width, height: 900 });
     await openCanonBoard(page);
     await page.locator('[data-kanban-item="' + epic.id + '"]').getByRole("button").first().click();
-    const aside = page.locator('[data-slot="management-page-aside"]');
+    // A layout switch keeps the leaving (inert) aside mounted for its exit: use the open one, once the other has gone.
+    const aside = page.locator('[data-slot="management-page-aside"][data-state="open"]');
     await aside.waitFor();
+    await page.locator('[data-slot="management-page-aside"][data-state="closed"]').waitFor({ state: "detached" });
     assert.equal(await aside.getAttribute("data-layout"), width === 1440 ? "docked" : "floating");
     const dashboardShots = join(shots, "dashboard-" + width); mkdirSync(dashboardShots, { recursive: true });
     const current = await server.api<import("../../packages/butler-app/client/shared/canon-contracts.ts").EpicDetail>("/canon/epics/" + epic.id);
