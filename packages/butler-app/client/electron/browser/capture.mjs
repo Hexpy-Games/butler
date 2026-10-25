@@ -144,7 +144,7 @@ export async function screenshotTab(tab, args) {
   if (epoch !== tab.epoch || tab.holder !== "agent") return { status: "not_dispatched", reason: "control_changed" };
   const captured = encode(safe);
   return { status: captured.image ? "ok" : "refused", tab: tab.id, url: tab.url,
-    source_observation: observation.obs, untrusted_content: { fields: observation.fields }, ...captured };
+    source_observation: observation.obs, pixel_ratio: captured.image ? image.getSize().width / (rect ? rect.width / (tab.bounds?.scale ?? 1) : observation.geometry.cssWidth) : 1, untrusted_content: { fields: observation.fields }, ...captured };
 }
 function overlaps(a, b) {
   return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
@@ -172,7 +172,7 @@ export async function collectImage(tab, args) {
     const rect = { x: Math.floor(x*scale), y: Math.floor(y*scale), width: Math.ceil(width*scale), height: Math.ceil(height*scale) };
     if ((await secureBoxes(tab)).some(mark => overlaps(rect, mark.rect))) return { status: "refused", reason: "secure_field" };
     const image = await tab.view.webContents.capturePage(rect, { stayHidden: true });
-    return collectedPixels(tab, epoch, image.toPNG(), { alt: "", nearby_text: "", source_url: tab.url });
+    return collectedPixels(tab, epoch, image.toPNG(), { pixel_ratio: image.getSize().width / width, alt: "", nearby_text: "", source_url: tab.url });
   }
   const frame = args.ref ? observation.bindings.get(args.ref) : observation.main;
   if (!frame) return { status: "refused", reason: "stale_ref" };

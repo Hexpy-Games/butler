@@ -116,7 +116,7 @@ pub(super) fn put_generated(
             id = asset_id(&digest, 12);
         }
         write_blob(&tx, root, &hash, image)?;
-        tx.execute("INSERT INTO app_assets(id,sha256,mime,width,height,bytes,alt,source_url,created_at,kind,parent_id,model_ref) VALUES(?1,?2,?3,?4,?5,?6,'','',strftime('%Y-%m-%dT%H:%M:%fZ','now'),?7,?8,?9)", params![id,hash,image.mime,image.width,image.height,image.bytes.len(),kind.as_str(),parent_id,model_ref]).map_err(AppStorageError::sqlite)?;
+        tx.execute("INSERT INTO app_assets(id,sha256,mime,width,height,bytes,alt,source_url,created_at,kind,parent_id,model_ref,pixel_ratio) VALUES(?1,?2,?3,?4,?5,?6,'','',strftime('%Y-%m-%dT%H:%M:%fZ','now'),?7,?8,?9,1)", params![id,hash,image.mime,image.width,image.height,image.bytes.len(),kind.as_str(),parent_id,model_ref]).map_err(AppStorageError::sqlite)?;
         if let Some(parent) = parent_id {
             tx.execute(
                 "INSERT INTO app_asset_refs VALUES(?1,'asset',?2)",
