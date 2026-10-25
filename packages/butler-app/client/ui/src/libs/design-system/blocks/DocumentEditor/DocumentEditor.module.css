@@ -1,0 +1,91 @@
+/* DocumentEditor: a title row over the page. The page takes MarkdownContent's
+   document typography (the .markdown class) and adds only what editing needs. */
+.editor {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  gap: var(--space-lg);
+}
+
+.header {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.heading {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-xs);
+}
+
+.status {
+  color: var(--text-secondary);
+  font-size: var(--typo-caption-size);
+  line-height: var(--typo-caption-line-height);
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.page {
+  min-width: 0;
+}
+
+/* The editable root: no outline of its own (the page is the field), the
+   caret in the accent, room under the last line. */
+.root {
+  min-height: 12rem;
+  padding-block-end: var(--space-2xl);
+  caret-color: var(--accent);
+  outline: none;
+}
+
+/* The page starts at its first line: the first block (often a heading)
+   drops its top margin, as MarkdownContent's direct children do. */
+.root > :first-child {
+  margin-block-start: 0;
+}
+
+.bold {
+  font-weight: var(--font-weight-semibold);
+}
+
+.italic {
+  font-style: italic;
+}
+
+/* A block in the text: its own spacing, an outline when selected as a unit. */
+.blockEmbed {
+  margin-block: var(--space-md);
+  border-radius: var(--radius-control);
+  outline: var(--border-width-strong) solid transparent;
+  outline-offset: var(--space-xs);
+  transition: outline-color var(--motion-fast) var(--motion-ease-standard);
+}
+
+.blockEmbed[data-selected="true"] {
+  outline-color: var(--accent);
+}
+
+/* Butler is changing this paragraph: a wash of the Butler inks and an ink
+   rule at the start edge, fading in; it fades out when the change lands. */
+.page [data-butler-editing] {
+  border-radius: var(--radius-control);
+  background: transparent;
+  box-shadow: inset var(--border-width-strong) 0 0 transparent;
+  transition:
+    background-color var(--motion-slow) var(--motion-ease-standard),
+    box-shadow var(--motion-slow) var(--motion-ease-standard);
+}
+
+.page [data-butler-editing="true"] {
+  background: color-mix(in srgb, var(--butler-ink-purple) 9%, transparent);
+  box-shadow: inset var(--border-width-strong) 0 0 var(--butler-ink-blue);
+}

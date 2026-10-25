@@ -89,6 +89,7 @@ interface ButlerAppBridge extends PendingAsksBridge {
     sessionId: string;
     target: SessionFolderLaunchTarget;
   }) => Promise<SessionFolderLaunchResult>;
+  exportDocument?: (input: { format: "markdown" | "pdf"; name: string; content: string }) => Promise<unknown>;
   saveMessageFile?: (input?: unknown) => Promise<unknown>;
   openMessageFile?: (input?: unknown) => Promise<unknown>;
   showDesktopNotification?: (input?: unknown) => Promise<unknown>;

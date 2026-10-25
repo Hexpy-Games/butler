@@ -14,6 +14,22 @@ pub(super) async fn route(
         .split('/')
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>();
+    if let (&Method::POST, [id, "blocks", index]) = (&method, parts.as_slice()) {
+        let index = index.parse::<usize>().map_err(|_| {
+            HttpError::public(400, "invalid_document_request", "Invalid block index.")
+        })?;
+        let value = state
+            .application
+            .library(crate::gateway::AppLibraryCommand::SaveDocumentBlock {
+                document_id: (*id).into(),
+                index,
+            })
+            .await?;
+        return json(
+            StatusCode::OK,
+            json!({"protocol_version":APP_PROTOCOL_VERSION,"data":value}),
+        );
+    }
     let command = match (&method, parts.as_slice()) {
         (&Method::POST, []) => C::Create(input(request).await?),
         (&Method::GET, [id]) => C::Get((*id).into()),

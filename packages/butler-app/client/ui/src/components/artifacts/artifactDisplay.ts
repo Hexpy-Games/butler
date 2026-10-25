@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy";
 import { relativeAge } from "@/app/utils.ts";
 import type { SessionArtifactSummary } from "@/app/types.ts";
 import { absoluteGatewayUrl, messageFileSource } from "@/app/messageFileUrls.ts";

@@ -6,7 +6,7 @@ import type { LibraryKind } from "@/app/types";
 import type { LibraryItem } from "../browser/libraryStore";
 
 export type GroupKind = "scrap" | "bookmark";
-export const hasGroups = (kind: LibraryKind): kind is GroupKind => kind === "scrap" || kind === "bookmark";
+export const hasGroups = (kind: string): kind is GroupKind => kind === "scrap" || kind === "bookmark";
 
 export interface LibraryGroup { id: string; kind: GroupKind; name: string; position: number; count: number; updatedAt: string; recent: LibraryItem[] }
 export interface LibraryGroups { groups: LibraryGroup[]; ungrouped: number; total: number }
@@ -28,7 +28,7 @@ export function sinceFor(date: DatePreset | undefined, now = new Date()): string
 }
 
 export function queryString(query: LibraryQuery, cursor = "") {
-  const params = new URLSearchParams({ kind: query.kind });
+  const params = new URLSearchParams(query.kind === "document" ? { kinds: "doc,document" } : { kind: query.kind });
   if (query.group) params.set("group", query.group);
   if (query.q?.trim()) params.set("q", query.q.trim());
   if (query.tags?.length) params.set("tags", query.tags.join(","));
@@ -67,7 +67,7 @@ export function useLibraryGroups(kind: GroupKind | null) {
   return read;
 }
 export const useLibraryFacets = (kind: LibraryKind, group?: string, enabled = true) =>
-  useLibraryRead<LibraryFacets>(enabled ? `/library/facets?${new URLSearchParams({ kind, ...(group ? { group } : {}) })}` : null, { total: 0, ungrouped: null, tags: [], sites: [] });
+  useLibraryRead<LibraryFacets>(enabled ? `/library/facets?${new URLSearchParams({ ...(kind === "document" ? { kinds: "doc,document" } : { kind }), ...(group ? { group } : {}) })}` : null, { total: 0, ungrouped: null, tags: [], sites: [] });
 export const useLibraryTags = () => useLibraryRead<{ tags: TagCount[] }>("/library/tags", { tags: [] });
 
 /** Keyset pages of one query; a newer query never shows an older answer. */
