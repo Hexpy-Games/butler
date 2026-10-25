@@ -121,7 +121,6 @@ export * from "./blocks/WorkActivityBlock";
 export * from "./blocks/DisclosureRow";
 export * from "./blocks/ChangedLineDiff";
 export * from "./blocks/InspectorPanel";
-export * from "./blocks/InspectorShell";
 export * from "./blocks/KeyValueRow";
 export * from "./blocks/ProgressMeter";
 export * from "./blocks/SpanBar";

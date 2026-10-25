@@ -6,3 +6,16 @@
   border-radius: var(--radius-panel);
   background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
 }
+
+.inset {
+  box-sizing: border-box;
+  min-width: 0;
+  padding-inline: var(--inspector-inline-padding, 0);
+}
+
+.inset[data-fill="true"] {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
