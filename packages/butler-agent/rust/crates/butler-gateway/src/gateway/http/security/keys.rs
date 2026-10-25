@@ -78,11 +78,15 @@ pub(in crate::gateway::http) struct KeySet(
 
 impl KeySet {
     /// Adds `signed_url`s to an authenticated JSON response.
-    pub(in crate::gateway::http) async fn sign_urls(&self, response: Response) -> Response {
+    pub(in crate::gateway::http) async fn sign_urls(
+        &self,
+        response: Response,
+        application: &dyn crate::gateway::GatewayApplication,
+    ) -> Response {
         match &self.0.signer {
             Some(signer) => {
                 signer
-                    .decorate_response(response, unix_seconds(SystemTime::now()))
+                    .decorate_response(response, unix_seconds(SystemTime::now()), application)
                     .await
             }
             None => response,
@@ -92,9 +96,18 @@ impl KeySet {
     /// Adds `signed_url`s to live-event chunks (the stream is authenticated).
     pub(in crate::gateway::http) fn live_chunk_signer(
         &self,
-    ) -> Option<impl Fn(Bytes) -> Bytes + Send + 'static> {
+        application: Arc<dyn crate::gateway::GatewayApplication>,
+    ) -> Option<impl Fn(Bytes) -> crate::gateway::ApplicationFuture<Bytes> + Send + 'static> {
         let signer = self.0.signer.clone()?;
-        Some(move |chunk| signer.decorate_event_chunk(chunk, unix_seconds(SystemTime::now())))
+        Some(move |chunk| {
+            let chunk = signer.decorate_event_chunk(chunk, unix_seconds(SystemTime::now()));
+            let application = application.clone();
+            Box::pin(async move {
+                super::signed_urls::project_chunk(application.as_ref(), chunk)
+                    .await
+                    .map_err(|_| crate::gateway::GatewayApplicationError::internal())
+            }) as crate::gateway::ApplicationFuture<Bytes>
+        })
     }
 
     /// Fires when this key set's token rotates (or the gateway stops).

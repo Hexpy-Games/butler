@@ -2,6 +2,7 @@ import { memo, useMemo } from "react";
 import type { AnswerBlockSet } from "../../../../shared/app-contracts";
 import type { AnswerBlockView } from "../../../../shared/answer-blocks-view";
 import { parseAnswerBlocks } from "../../../../shared/answer-blocks-parse";
+import { answerMetricTrend } from "../../../../shared/answer-metric-trend";
 import { Button, Popup, Inline, KeyValueRow, MetricCard, MetricGrid, Notice, PillButton, Presence, usePresence, Reply, ItemCardSkeleton, Skeleton, Stack, Typo } from "@/butler-ds";
 import { useAppLocale } from "@/app/copy";
 import { useButlerStore } from "@/app/store";
@@ -11,11 +12,15 @@ import { AnswerItem } from "./AnswerItem";
 import { AnswerCards } from "./AnswerCards";
 import { AnswerChart, AnswerGallery, AnswerSourceLine, AnswerTable } from "./AnswerDataBlocks";
 import { AnswerSessionContext, runAnswerAction, useAnswerSession } from "./answerBlockActions";
+import { AnswerLeafBlocks } from "./AnswerLeafBlocks";
+import { AnswerContainers } from "./AnswerContainers";
 
 const Block = memo(function Block({ block, streaming, incoming }: { block: AnswerBlockView; streaming?: boolean; incoming?: unknown[] }) {
   const sendMessage = useButlerStore(state => state.sendMessage);
   const sessionId = useAnswerSession();
   switch (block.type) {
+    case "columns": case "tabs": case "group": return <AnswerContainers block={block} render={leaf => <Block block={leaf} />} />;
+    case "timeline": case "checklist": case "progress": case "text": case "image": case "quote": return <AnswerLeafBlocks block={block} />;
     case "cards": return <AnswerCards block={block} streaming={streaming} incoming={incoming} />;
     case "table": return <AnswerTable block={block} streaming={streaming} incoming={incoming} />;
     case "gallery": return <AnswerGallery block={block} incoming={incoming} />;
@@ -23,7 +28,7 @@ const Block = memo(function Block({ block, streaming, incoming }: { block: Answe
       <AnswerItem key={index} superseded={incoming !== undefined && !incoming.includes(item)}><KeyValueRow label={item.label} value={item.value} description={<AnswerSourceLine item={item} />} /></AnswerItem>)}</Stack>;
     case "metrics": return <MetricGrid>{block.items.map((item, index) => <AnswerItem key={index} superseded={incoming !== undefined && !incoming.includes(item)}><Stack gap="xs">
       <MetricCard label={item.label} value={[item.value, item.unit].filter(value => value !== undefined).join(" ")}
-        change={item.delta} trend={item.delta?.startsWith("-") ? "down" : item.delta?.startsWith("+") ? "up" : "neutral"} />
+        change={item.delta} trend={answerMetricTrend(item.delta, item.direction)} />
       <AnswerSourceLine item={item} />
     </Stack></AnswerItem>)}</MetricGrid>;
     case "chart": return <AnswerChart block={block} />;

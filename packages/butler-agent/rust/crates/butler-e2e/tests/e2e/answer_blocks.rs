@@ -348,3 +348,54 @@ fn draft_row_counts(
         )?,
     ))
 }
+
+#[path = "answer_blocks_v2.rs"]
+mod v2;
+
+#[tokio::test]
+async fn image_geometry_is_projected_from_asset_pixel_ratio() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut s = Setup::new("ANSWER-IMAGE-GEOMETRY")?
+        .stub_cassette(cassette()?)
+        .start()
+        .await?;
+    let (_, turn) = s.turn("general", PROMPT).await?;
+    assert_eq!(turn_state(&turn), "delivered");
+    let db = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
+    for (id, width, height, ratio) in [
+        ("img_small12080", 120, 80, 1.0),
+        ("img_large30000", 3000, 2000, 2.0),
+    ] {
+        db.execute("INSERT INTO app_assets(id,sha256,mime,width,height,bytes,alt,source_url,created_at,pixel_ratio) VALUES(?1,?1,'image/png',?2,?3,0,'','','2026-10-25',?4)", rusqlite::params![id,width,height,ratio])?;
+    }
+    let spec = json!({"v":2,"blocks":[{"type":"image","img":"img_small12080"},{"type":"columns","blocks":[{"type":"image","img":"img_large30000"}]}]});
+    let sets = json!([{"call_id":"geometry","set_ids":[],"spec":spec}]);
+    db.execute(
+        "UPDATE messages SET blocks_json=?1 WHERE role='assistant' AND status='delivered'",
+        [sets.to_string()],
+    )?;
+    let messages = s.gw.messages("general").await?;
+    let reply = messages
+        .iter()
+        .find(|m| m["role"] == "assistant" && m["status"] == "delivered")
+        .unwrap();
+    let blocks = &reply["answer_blocks"][0]["spec"]["blocks"];
+    assert_eq!(
+        (
+            blocks[0]["image_width"].clone(),
+            blocks[0]["image_height"].clone()
+        ),
+        (json!(120.0), json!(80.0))
+    );
+    let large = &blocks[1]["blocks"][0];
+    assert_eq!(
+        (large["image_width"].clone(), large["image_height"].clone()),
+        (json!(1500.0), json!(1000.0))
+    );
+    assert!(large["image_url"].as_str().unwrap().contains("signature="));
+    drop(db);
+    s.restart().await?;
+    let view = s.gw.get("/session-view?session_id=general").await?;
+    assert!(view.data().to_string().contains("\"image_width\":1500.0"));
+    s.finish().await
+}

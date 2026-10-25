@@ -4,6 +4,7 @@ mod composite;
 pub use composite::{composite, mask_bounds};
 mod generated;
 mod inputs;
+mod projection;
 pub use generated::GeneratedAssetKind;
 mod store;
 use super::{AppApplication, GatewayApplicationError, app_error};
@@ -17,9 +18,13 @@ pub enum AppAssetCommand {
     Collect {
         session: String,
         bytes: Vec<u8>,
+        pixel_ratio: f64,
         alt: String,
         nearby_text: String,
         source_url: String,
+    },
+    Project {
+        value: Value,
     },
     Lookup {
         ids: Vec<String>,
@@ -59,12 +64,16 @@ impl AppApplication {
             AppAssetCommand::Collect {
                 session,
                 bytes,
+                pixel_ratio,
                 alt,
                 nearby_text,
                 source_url,
             } => {
                 let image = tokio::task::spawn_blocking(move || {
-                    butler_runtime::browser::normalize_image(&bytes)
+                    butler_runtime::browser::normalize_image(&bytes).map(|mut image| {
+                        image.pixel_ratio = pixel_ratio;
+                        image
+                    })
                 })
                 .await
                 .map_err(|_| GatewayApplicationError::internal())?
@@ -79,6 +88,9 @@ impl AppApplication {
                     .await
                     .map_err(app_error)
             }
+            AppAssetCommand::Project { value } => projection::execute(self.storage.clone(), value)
+                .await
+                .map_err(app_error),
             AppAssetCommand::Lookup { ids } => self
                 .storage
                 .read(move |db| store::lookup(db, &ids))
