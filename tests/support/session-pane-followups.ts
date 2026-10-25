@@ -1,4 +1,6 @@
 // test-category: race
+import { verifyDelayedInlineSave } from "./session-inline-edit.ts";
+import type { NativeAppServerHandle } from "./native-app-server.ts";
 import { strict as assert } from "node:assert";
 import type { Locator, Page } from "playwright";
 
@@ -52,7 +54,7 @@ export async function verifyCompactContext(context: Locator, capture: (name: str
   assert.equal(await context.locator("[data-context-group]").count(), 5);
 }
 
-export async function verifyDashboardTask(page: Page, epicId: string, capture: (name: string) => Promise<unknown>) {
+export async function verifyDashboardTask(page: Page, epicId: string, capture: (name: string) => Promise<unknown>, server: NativeAppServerHandle) {
   await page.getByRole("button", { name: "버틀러 앱 프로젝트 대시보드", exact: true }).click();
   await page.getByRole("tab", { name: "보드", exact: true }).click();
   await page.locator(`[data-kanban-item="${epicId}"]`).getByRole("button").first().click();
@@ -60,6 +62,8 @@ export async function verifyDashboardTask(page: Page, epicId: string, capture: (
   await verifyTaskOrder(aside.locator('[data-test-class="canon-epic-detail"]'));
   assert.equal(await aside.getByRole("button", { name: "대화 열기", exact: true }).count(), 1);
   await capture("dashboard-task-order");
+  await verifyDelayedInlineSave(page, server, epicId, "description");
+  console.log("PASS dashboard inline delayed save + deferred focusout (session-info smoke)");
   await aside.getByRole("button", { name: "대화 열기", exact: true }).click();
   await page.getByRole("complementary", { name: "세션 정보", exact: true }).waitFor();
 }
