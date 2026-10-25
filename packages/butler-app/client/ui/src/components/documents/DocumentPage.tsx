@@ -1,7 +1,6 @@
-import { ADAPTIVE_MEDIA, useMediaMatch } from "@/libs/design-system/responsive";
 import { relativeAge } from "@/app/utils";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { DocumentEditor, PageContainer, Box, Button, MessageSquare, History, IconButton, Inline, Popover, PopoverContent, PopoverTrigger, VersionHistory, Typo, Stack } from "@/butler-ds";
+import { DocumentEditor, Button, MessageSquare, History, IconButton, Inline, Popover, PopoverContent, PopoverTrigger, VersionHistory, Typo, Stack } from "@/butler-ds";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { useButlerStore } from "@/app/store";
 import { subscribeDocumentUpdates } from "@/app/documentEvents";
@@ -55,6 +54,5 @@ export function DocumentPage({ id, trailing }: { id: string; trailing?: ReactNod
 function DocumentLayout({ title, actions, note, children }: {
   title: string; actions?: ReactNode; note?: ReactNode; children: ReactNode;
 }) {
-  const compact = useMediaMatch(ADAPTIVE_MEDIA.compact);
-  return <Box paddingX={compact ? "xl" : "2xl"}><Box paddingX={compact ? "none" : "2xl"}><PageContainer width="narrow" gutter="none"><DocumentEditor title={<Typo.PanelTitle as="h2" truncate>{title}</Typo.PanelTitle>} actions={actions} note={note} data-test-class="editable-document">{children}</DocumentEditor></PageContainer></Box></Box>;
+  return <DocumentEditor title={<Typo.PanelTitle as="h2" truncate>{title}</Typo.PanelTitle>} actions={actions} note={note} data-test-class="editable-document">{children}</DocumentEditor>;
 }

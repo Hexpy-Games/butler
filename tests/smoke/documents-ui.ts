@@ -1,5 +1,5 @@
 // UI behavior smoke: offline gateway fixtures, real Lexical editor and product screens.
-import { assertDocumentLayout, measureDocumentLayout, checkDocumentImage, checkTrailing, documentHarnessPlugin } from "./document-page-checks";
+import { assertDocumentOverflow, assertDocumentLayout, measureDocumentLayout, checkDocumentImage, checkTrailing, documentHarnessPlugin } from "./document-page-checks";
 import assert from "node:assert/strict";
 import { getAppCopy } from "../../packages/butler-i18n/src/index";
 import { execFileSync } from "node:child_process";
@@ -234,6 +234,7 @@ async function navigation(page: Page) {
 }
 async function slotSharing(page: Page) {
   await open(page);
+  const expected = await editor(page).innerText();
   await page.evaluate(async () => {
     const bridgePath = "/src/components/browser/browserBridge.ts", shellPath = "/src/components/browser/browserShellState.ts";
     (window as Window & { butlerBrowser?: unknown }).butlerBrowser = {
@@ -261,7 +262,7 @@ async function slotSharing(page: Page) {
     (await import(/* @vite-ignore */ path)).useFileViewerState.getState().setShown("butler-client", true);
   });
   await editor(page).waitFor();
-  assert.equal(await editor(page).locator("h1").innerText(), "Report");
+  assert.equal(await editor(page).innerText(), expected, "slot switches preserve the complete edited document");
   await page.evaluate(async doc => {
     const path = "/src/components/documents/documentApi.ts";
     (await import(/* @vite-ignore */ path)).openDocument(doc);
@@ -389,22 +390,37 @@ async function keyboardUnits(page: Page) {
   await editor(page).locator("h1").click(); await page.keyboard.press("End"); await page.keyboard.type("ordered");
   await page.getByText("저장됨", { exact: true }).waitFor(); assert.ok(head.body.includes("ordered"));
 }
+const wideContent = "\n\n> " + "Unknown raw Markdown ".repeat(30)
+  + "\n\n```typescript\nconst values = [" + "1234567890, ".repeat(40) + "];\n```"
+  + "\n\n| First column | Second column |\n| --- | --- |\n| " + "wide-cell-".repeat(50) + " | preserved |\n";
 async function matrix(page: Page) {
   for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (background of ["plain", "wallpaper"]) {
-    head = { ...head, title: "Report — document layout, revisions and export", body: initial }; history = [structuredClone(head), { ...head, rev: head.rev - 1, author: "user" }];
-    await open(page, width, theme); await shot(page, "pane-document", width, theme);
-    await live(page); await shot(page, "pane-butler-editing", width, theme);
+    head = { ...head, title: "Report — document layout, revisions and export", body: initial + wideContent }; history = [structuredClone(head), { ...head, rev: head.rev - 1, author: "user" }];
+    await open(page, width, theme);
+    const paneLayout = await measureDocumentLayout(page);
+    layouts.push({ width, theme, background, state: "pane-document", layout: paneLayout });
+    assertDocumentLayout(paneLayout, width); await assertDocumentOverflow(page);
+    await shot(page, "pane-document", width, theme);
+    await live(page);
+    const paneEditing = await measureDocumentLayout(page);
+    layouts.push({ width, theme, background, state: "pane-editing", layout: paneEditing });
+    assertDocumentLayout(paneEditing, width); await assertDocumentOverflow(page);
+    await shot(page, "pane-butler-editing", width, theme);
     await open(page, width, theme, true); await shot(page, "drawer-document", width, theme);
     const layout = await measureDocumentLayout(page);
     layouts.push({ width, theme, background, state: "document", layout });
-    assertDocumentLayout(layout, width);
+    assertDocumentLayout(layout, width); await assertDocumentOverflow(page);
     await checkDocumentImage(page, width, evidence);
     await selectText(page); await shot(page, "format", width, theme); await page.keyboard.press("ArrowRight");
     await live(page); await shot(page, "butler-editing", width, theme);
     const editingLayout = await measureDocumentLayout(page);
     layouts.push({ width, theme, background, state: "editing", layout: editingLayout });
-    assertDocumentLayout(editingLayout, width);
-    await page.getByRole("button", { name: "버전 기록", exact: true }).click(); await page.getByRole("listbox").waitFor(); await shot(page, "versions", width, theme); await page.keyboard.press("Escape"); await page.getByRole("listbox").waitFor({ state: "hidden" });
+    assertDocumentLayout(editingLayout, width); await assertDocumentOverflow(page);
+    await page.getByRole("button", { name: "버전 기록", exact: true }).click(); await page.getByRole("listbox").waitFor(); await shot(page, "versions", width, theme);
+    await page.getByRole("option").last().click(); await page.locator('[data-document-read-only] table').waitFor();
+    await assertDocumentOverflow(page);
+    await page.getByRole("option").first().click(); await editor(page).waitFor();
+    await page.keyboard.press("Escape"); await page.getByRole("listbox").waitFor({ state: "hidden" });
     await page.getByRole("button", { name: "내보내기", exact: true }).click(); await page.getByRole("menuitem", { name: "PDF", exact: true }).waitFor(); await shot(page, "export", width, theme); await page.keyboard.press("Escape"); await page.getByRole("menu").waitFor({ state: "hidden" });
     await drawer(page); await shot(page, "drawer", width, theme);
     await page.locator('[data-library-item="doc_report"]').getByText(head.title, { exact: true }).click(); await editor(page).waitFor(); await shot(page, "drawer-reopened", width, theme);

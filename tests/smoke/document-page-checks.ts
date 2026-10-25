@@ -41,25 +41,57 @@ export async function checkTrailing(page: Page, base: string, id: string) {
 
 export async function measureDocumentLayout(page: Page) {
   return page.locator('[data-test-class="editable-document"]').evaluate(node => {
-    const root = node.querySelector('[data-document-id]')!;
-    const column = node.parentElement!;
-    const inner = column.parentElement!, outer = inner.parentElement!;
-    const style = (element: Element) => {
-      const css = getComputedStyle(element);
-      return { background: css.backgroundColor, border: css.borderWidth, shadow: css.boxShadow };
-    };
+    const root = node.querySelector('[data-document-id], [data-document-read-only]')!;
+    const host = node.closest('[data-test-class="file-viewer-page"], [data-test-class="document-reading-page"]')!;
+    const column = host.firstElementChild!.firstElementChild!;
+    const contentLeft = column.getBoundingClientRect().left + parseFloat(getComputedStyle(column).paddingLeft);
+    const contentWidth = column.clientWidth - parseFloat(getComputedStyle(column).paddingLeft) - parseFloat(getComputedStyle(column).paddingRight);
     const wrappers = [];
-    for (let element = root.parentElement; element && element !== outer.parentElement; element = element.parentElement) wrappers.push(style(element));
-    return { inset: parseFloat(getComputedStyle(inner).paddingLeft) + parseFloat(getComputedStyle(outer).paddingLeft),
-      maxWidth: getComputedStyle(column).maxWidth, bodyWidth: root.getBoundingClientRect().width,
-      columnWidth: column.getBoundingClientRect().width, wrappers };
+    for (let element = root.parentElement; element && element !== column; element = element.parentElement) {
+      const css = getComputedStyle(element);
+      wrappers.push({ background: css.backgroundColor, border: css.borderWidth, shadow: css.boxShadow });
+    }
+    return { inset: parseFloat(getComputedStyle(host).paddingLeft) + parseFloat(getComputedStyle(column).paddingLeft),
+      maxWidth: getComputedStyle(host).maxWidth, bodyWidth: root.getBoundingClientRect().width, columnWidth: contentWidth,
+      hostLeft: host.getBoundingClientRect().left, contentLeft, textLeft: root.getBoundingClientRect().left,
+      pageLeft: node.getBoundingClientRect().left, wrappers };
   });
 }
-export function assertDocumentLayout(layout: Awaited<ReturnType<typeof measureDocumentLayout>>, width: number) {
-  assert.equal(layout.inset, width === 1440 ? 48 : 20);
+export function assertDocumentLayout(layout: Awaited<ReturnType<typeof measureDocumentLayout>>, _width: number) {
+  assert.equal(layout.inset, 48);
   assert.equal(layout.maxWidth, "760px");
-  assert(layout.bodyWidth <= 760 && layout.bodyWidth === layout.columnWidth, JSON.stringify(layout));
+  assert(layout.bodyWidth <= 760 && Math.abs(layout.bodyWidth - layout.columnWidth) <= 1, JSON.stringify(layout));
+  assert(Math.abs(layout.textLeft - layout.contentLeft) <= 1, JSON.stringify(layout));
+  assert(Math.abs(layout.pageLeft - layout.contentLeft) <= 1, "DocumentPage adds no inset: " + JSON.stringify(layout));
   assert(layout.wrappers.every(css => css.background === "rgba(0, 0, 0, 0)" && parseFloat(css.border) === 0 && css.shadow === "none"), JSON.stringify(layout));
+}
+
+/** Overflow is reachable inside a horizontal scroller, never lost beyond a clipping ancestor. */
+export async function assertDocumentOverflow(page: Page) {
+  const result = await page.locator('[data-slot="document-editor-page"]').evaluate(root => {
+    const failures: string[] = [], scrollers: string[] = [];
+    const horizontal = (node: Element) => /^(auto|scroll)$/u.test(getComputedStyle(node).overflowX);
+    for (const element of [root, ...root.querySelectorAll<HTMLElement>("*")]) {
+      if (!element.clientWidth || element.scrollWidth <= element.clientWidth + 1) continue;
+      let container: Element | null = element;
+      while (container && container !== root && !horizontal(container)) {
+        if (/^(hidden|clip)$/u.test(getComputedStyle(container).overflowX)) break;
+        container = container.parentElement;
+      }
+      if (!container || !horizontal(container)) failures.push(element.tagName + ":" + element.scrollWidth + "/" + element.clientWidth);
+      else {
+        const before = container.scrollLeft;
+        container.scrollLeft = container.scrollWidth;
+        if (container.scrollLeft <= 0) failures.push("unreachable:" + element.tagName);
+        container.scrollLeft = before;
+        scrollers.push(container.tagName);
+      }
+    }
+    return { failures, scrollers };
+  });
+  assert.deepEqual(result.failures, [], JSON.stringify(result));
+  assert(result.scrollers.length > 0, "wide content has a reachable horizontal scroller");
+  return result;
 }
 export async function checkDocumentImage(page: Page, width: number, evidence: string, scope = "[data-document-id]") {
   const frames = page.locator(`${scope} [data-slot="media-frame"]`);
