@@ -26,11 +26,13 @@ mod monitoring;
 mod occurrence;
 mod outputs;
 mod question;
+mod resolve_ask;
 pub(in crate::host) use monitoring::MonitoringReaders;
 mod profile;
 mod project_artifacts;
 mod project_source;
 mod resume;
+mod supported;
 mod turn_guard;
 mod wallpaper;
 pub(in crate::host) use message::structured_raw as structured_tool_preview;
@@ -62,6 +64,7 @@ use tokio::sync::OnceCell;
 
 pub(crate) struct GuidedToolBinding {
     pub turn_id: String,
+    pub(super) open_asks: Arc<Mutex<super::prompt::open_asks::Reminders>>,
     pub app_session_id: Option<String>,
     pub access_mode: butler_turn::btcc::AccessMode,
     pub enable_project_ledger_effects: bool,
@@ -132,6 +135,8 @@ impl GuidedToolBinding {
 struct State {
     next_call_index: u64,
     output_checks: u8,
+    /// Any result other than resolve_ask has entered this turn.
+    has_other_tool_result: bool,
     answer_blocks: Vec<Value>,
     output_images: u8,
     journal_by_provider: HashMap<String, String>,
@@ -279,89 +284,17 @@ impl GuidedTools {
             binding,
             state: Mutex::new(State {
                 described_ids,
+                has_other_tool_result: restored.is_some_and(|saved| {
+                    saved
+                        .tool_results
+                        .iter()
+                        .any(|result| result.name != "resolve_ask")
+                }),
                 ..State::default()
             }),
             resume: OnceCell::new(),
             authority_consumed: Mutex::new(false),
         })
-    }
-
-    pub(crate) fn supports(name: &str) -> bool {
-        matches!(
-            ToolName::parse(name),
-            Some(
-                ToolName::AskUser
-                    | ToolName::ReadFile
-                    | ToolName::RunCommand
-                    | ToolName::WriteFile
-                    | ToolName::OutputCheck
-                    | ToolName::OutputPublish
-                    | ToolName::DeliverFiles
-                    | ToolName::AnswerBlocks
-                    | ToolName::EditFile
-                    | ToolName::GrepFiles
-                    | ToolName::ReadToolOutputArtifact
-                    | ToolName::ReadToolEvidenceArtifact
-                    | ToolName::ListFiles
-                    | ToolName::ListSkills
-                    | ToolName::LoadSkill
-                    | ToolName::ReadSkillFile
-                    | ToolName::ListOperationResults
-                    | ToolName::ReadOperationResults
-                    | ToolName::QueryMemory
-                    | ToolName::RecallMemory
-                    | ToolName::IngestTaskMemory
-                    | ToolName::UpdateExplicitMemory
-                    | ToolName::ForgetExplicitMemory
-                    | ToolName::AnalyzeAttachedImage
-                    | ToolName::ReadConversationSession
-                    | ToolName::ListConversationSessions
-                    | ToolName::ReadConversationContext
-                    | ToolName::ToolSearch
-                    | ToolName::ToolDescribe
-                    | ToolName::ToolCall
-                    | ToolName::ListMcpCapabilities
-                    | ToolName::SummarizeUserProfile
-                    | ToolName::UpdateOnboardingProfile
-                    | ToolName::ReadProjectSource
-                    | ToolName::ProjectArtifacts
-                    | ToolName::BindSessionGitWorktree
-                    | ToolName::SwitchFolder
-                    | ToolName::StartTopicConversation
-                    | ToolName::RequestServiceRestart
-                    | ToolName::CallMcpTool
-                    | ToolName::ReadMcpResource
-                    | ToolName::DelegateToSteward
-                    | ToolName::DelegateToWorker
-                    | ToolName::SteerSteward
-                    | ToolName::SteerWorker
-                    | ToolName::CancelSteward
-                    | ToolName::WaitForWorker
-                    | ToolName::ReadPriorDelegation
-                    | ToolName::UpdateTodoList
-                    | ToolName::ListTodoList
-                    | ToolName::GetContextMonitor
-                    | ToolName::GetUsageMonitor
-                    | ToolName::GetMemoryHealth
-                    | ToolName::ListToolCapabilities
-                    | ToolName::ListWorkStreams
-                    | ToolName::UpdateWorkStreamState
-                    | ToolName::CreateAutomation
-                    | ToolName::UpdateAutomation
-                    | ToolName::ListAutomations
-                    | ToolName::DeleteAutomation
-                    | ToolName::RunDueAutomations
-                    | ToolName::WebSearch
-                    | ToolName::WebRead
-                    | ToolName::Browse
-                    | ToolName::ListWallpapers
-                    | ToolName::SetWallpaper
-                    | ToolName::SaveWallpaperModule
-                    | ToolName::BrowserHistorySearch
-                    | ToolName::LibrarySearch
-                    | ToolName::LibraryOrganize
-            )
-        ) || module_supports(name)
     }
 
     async fn resume_pool(&self) -> Result<&Mutex<ResumePool>, BtccError> {
@@ -479,13 +412,4 @@ impl GuidedTools {
             ))
         }
     }
-}
-
-/// Tools whose modules own their names.
-fn module_supports(name: &str) -> bool {
-    image_gen::supports(name)
-        || documents::supports(name)
-        || browser::supports(name)
-        || GuidedWorkTools::is_work_tool(name)
-        || crate::host::guided::project_tools::GuidedProjectTools::supports(name)
 }

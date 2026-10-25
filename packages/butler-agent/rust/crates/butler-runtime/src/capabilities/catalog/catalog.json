@@ -5720,6 +5720,56 @@
       "durable": true
     },
     {
+      "name": "resolve_ask",
+      "definition": {
+        "type": "function",
+        "name": "resolve_ask",
+        "description": "Settle an open ask from the user's reply in chat. Call it when the current user message answers or drops a question listed under Open asks, before acting on the reply. quote must be the user's own words from the current message; the runtime checks it. If the reply is ambiguous, ask instead of guessing. Approvals waiting on a card cannot be settled here.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ask_id": {
+              "type": "string",
+              "description": "From Open asks."
+            },
+            "outcome": {
+              "type": "string",
+              "enum": [
+                "answered",
+                "dropped"
+              ],
+              "description": "answered when the user answered the question; dropped when they no longer want it."
+            },
+            "answer": {
+              "type": "string",
+              "description": "For answered: the answer, in the user's words or a faithful short form."
+            },
+            "quote": {
+              "type": "string",
+              "description": "Exact words from the user's current message that settle this ask."
+            }
+          },
+          "required": [
+            "ask_id",
+            "outcome",
+            "quote"
+          ]
+        },
+        "effectBoundary": "none",
+        "concurrencySafe": false,
+        "interruptBehavior": "continue",
+        "transcriptVisibility": "visible"
+      },
+      "effectBoundary": "none",
+      "category": "control",
+      "tags": [
+        "question",
+        "user"
+      ],
+      "durable": true
+    },
+    {
       "name": "forget_explicit_memory",
       "definition": {
         "type": "function",
@@ -12873,6 +12923,46 @@
       "concurrencySafe": false,
       "interruptBehavior": "cancel",
       "transcriptVisibility": "visible"
+    },
+    "resolve_ask": {
+      "type": "function",
+      "name": "resolve_ask",
+      "description": "Settle an open ask from the user's reply in chat. Call it when the current user message answers or drops a question listed under Open asks, before acting on the reply. quote must be the user's own words from the current message; the runtime checks it. If the reply is ambiguous, ask instead of guessing. Approvals waiting on a card cannot be settled here.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "ask_id": {
+            "type": "string",
+            "description": "From Open asks."
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "answered",
+              "dropped"
+            ],
+            "description": "answered when the user answered the question; dropped when they no longer want it."
+          },
+          "answer": {
+            "type": "string",
+            "description": "For answered: the answer, in the user's words or a faithful short form."
+          },
+          "quote": {
+            "type": "string",
+            "description": "Exact words from the user's current message that settle this ask."
+          }
+        },
+        "required": [
+          "ask_id",
+          "outcome",
+          "quote"
+        ]
+      },
+      "effectBoundary": "none",
+      "concurrencySafe": false,
+      "interruptBehavior": "continue",
+      "transcriptVisibility": "visible"
     }
   },
   "allLedgerEffects": [
@@ -12908,6 +12998,7 @@
       "load_skill",
       "read_skill_file",
       "ask_user",
+      "resolve_ask",
       "project_artifacts",
       "browser_history_search",
       "library_search",

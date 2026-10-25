@@ -9,6 +9,7 @@ pub(super) const APPROVE: &str = "Read the files in the review directory.";
 #[derive(Default)]
 pub(super) struct Script {
     pub root: Mutex<String>,
+    pub replies: Mutex<std::collections::HashMap<String, Vec<Value>>>,
     pub requests: Mutex<Vec<Value>>,
 }
 pub(super) async fn start()
@@ -33,7 +34,21 @@ async fn reply(
 ) -> axum::response::Response {
     script.requests.lock().unwrap().push(body.clone());
     let key = matching::key("/v1/responses", &body, &Placeholders::default());
-    let item = match key.user_request.as_str() {
+    let scripted = script
+        .replies
+        .lock()
+        .unwrap()
+        .get(&key.user_request)
+        .and_then(|v| {
+            v.get(
+                key.round
+                    .iter()
+                    .filter(|k| k.as_str() == "function_call_output")
+                    .count(),
+            )
+        })
+        .cloned();
+    let item = scripted.unwrap_or_else(|| match key.user_request.as_str() {
         ASK if key.round.is_empty() => {
             let mut args = crate::ask_user::stub::questions();
             args["wait"] = json!(false);
@@ -50,15 +65,10 @@ async fn reply(
         _ => {
             json!({"type":"message","id":"msg_done","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Saved. The reply is complete.","annotations":[]}]})
         }
-    };
-    let response = crate::ask_user::stub::response(&item);
+    });
     (
         [("content-type", "text/event-stream")],
-        response
-            .chunks
-            .iter()
-            .map(|c| c.text.as_str())
-            .collect::<String>(),
+        crate::token_cache::wire(&item),
     )
         .into_response()
 }

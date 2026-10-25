@@ -387,6 +387,7 @@ pub struct ProjectSnapshot {
 
 #[derive(Clone, Debug)]
 pub struct ClaimedNativeSnapshot {
+    pub message_origin: Option<String>,
     pub chat_id: String,
     pub turn_id: String,
     pub message_id: String,

@@ -75,7 +75,7 @@ impl PrincipalAuthority {
     }
 }
 
-fn project(r: super::contracts::AuthorityRecord) -> AuthorityResult<PendingAsk> {
+pub(super) fn project(r: super::contracts::AuthorityRecord) -> AuthorityResult<PendingAsk> {
     let question = r.capability == "ask_user";
     let blocking = r.decision == RequestDecision::Pending;
     let title = if question {
@@ -123,4 +123,61 @@ fn project(r: super::contracts::AuthorityRecord) -> AuthorityResult<PendingAsk> 
         actions: actions.into_iter().map(str::to_owned).collect(),
         session_title: None,
     })
+}
+
+impl PrincipalAuthority {
+    /// Authority-owned entries; the host can combine independent reminder sources.
+    pub async fn ask_reminders(
+        &self,
+        owner: String,
+        turn: String,
+    ) -> AuthorityResult<Vec<serde_json::Value>> {
+        let records = self
+            .storage
+            .ask_reminder_records(owner, turn)
+            .await
+            .map_err(|e| AuthorityError::storage(e.code(), e.message()))??;
+        records
+            .into_iter()
+            .map(|r| {
+                let receipt = r
+                    .outcome_receipt_json
+                    .as_deref()
+                    .map(serde_json::from_str::<serde_json::Value>)
+                    .transpose()
+                    .map_err(|_| AuthorityError::policy("authority_request_corrupt"))?;
+                let resolved_at = r.updated_at.clone();
+                let ask = project(r)?;
+                Ok(serde_json::json!({"ask_id":ask.ask_id,"kind":ask.kind,
+                "title":ask.title.chars().take(160).collect::<String>(),
+                "created_at":ask.created_at,"resolved_at":receipt.as_ref().map(|_|resolved_at),
+                "response":receipt.as_ref().map(reminder_response)}))
+            })
+            .collect()
+    }
+}
+
+fn reminder_response(receipt: &serde_json::Value) -> serde_json::Value {
+    let answer = receipt
+        .get("answers")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|a| a.get("skipped").and_then(serde_json::Value::as_bool) != Some(true))
+        .flat_map(|a| {
+            a.get("selected")
+                .and_then(serde_json::Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(serde_json::Value::as_str)
+                .chain(a.get("custom").and_then(serde_json::Value::as_str))
+        })
+        .collect::<Vec<_>>()
+        .join(" · ");
+    let mut summary = answer.chars().take(160).collect::<String>();
+    if answer.chars().count() > 160 {
+        summary.pop();
+        summary.push('…');
+    }
+    serde_json::json!({"status":receipt.get("status"),"answer":summary})
 }
