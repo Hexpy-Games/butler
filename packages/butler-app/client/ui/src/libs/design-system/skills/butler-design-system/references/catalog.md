@@ -446,6 +446,7 @@
 | Grouped menus, submenus or radio items | `DropdownMenu` | `OverflowActionMenu` |
 | Groups at the top of a kind section on the Library main screen | `GroupTile` |  |
 | History of what Butler did (step stills) | `WorkActivityBlock` | `LiveTabCard` |
+| Hold back what takes the element's place until its exit has ended (onExitComplete) | `Presence` |  |
 | Icon actions trailing a list row | `ListRow` | `ButtonContainer` |
 | In-place wrapping entry: variant=underline, textSize=label beside Typo.Label | `Textarea` |  |
 | Inline help under a field | `FieldDescription` | `Tooltip` |
@@ -1276,6 +1277,7 @@ Keeps a child mounted through its exit animation and exposes data-state open/clo
 
 - Use for: Mount and unmount a small element with a fade or rise
 - Use for: Build a DS component that needs an exit animation
+- Use for: Hold back what takes the element's place until its exit has ended (onExitComplete)
 - Not for: Revealing content with a height change → `Collapsible`
 - Not for: Swapping one line of status text → `RollingSwap`
 - Tokens: `--motion-base`, `--motion-exit-base`, `--motion-distance-sm`
