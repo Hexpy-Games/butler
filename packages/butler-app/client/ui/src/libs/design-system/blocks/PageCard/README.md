@@ -63,6 +63,9 @@ only a stage too short for the page's aspect letterboxes it at the sides on
 - Do not fill an empty row with a status line nobody can act on.
 - Do not draw pick highlights or Butler's pointer in the page DOM; use the
   overlay layer (`AgentPointer`, `SelectionBar`).
+- Do not wrap an `internal` page in a `ScrollArea`: the slot already scrolls
+  it, and a ScrollArea bleeds its scrollbar lane past the card's inline end,
+  which the slot then scrolls sideways.
 
 ## Tags
 browser, page, native view, holder, riso edge, letterbox, loading
