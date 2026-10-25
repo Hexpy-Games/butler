@@ -24,6 +24,7 @@ import { resolveDialog, requestClose } from "./dialogs.mjs";
 import { protectPartition, wireTab } from "./tab-events.mjs";
 import { clearOffer } from "./signin-offer.mjs";
 import { drainStills } from "./still-delivery.mjs";
+import { capturePage, capturesSettled } from "./view-capture.mjs";
 
 /** One registry per App; no web view before Browser activation. */
 class UserBrowser {
@@ -110,18 +111,29 @@ class UserBrowser {
     // Occlusion can clear while the floating preview moves. Reattaching the page
     // above the overlay also cancels its native capture; wait for the real release.
     if (this.pointer.captures(tab.id) && this.pointer.attached === win && tab.attached !== win) return;
-    if (tab.attached !== win) { this.detach(tab); win.contentView.addChildView(tab.view); tab.attached = win; }
+    if (tab.attached !== win) {
+      this.detach(tab);
+      if (this.attachAfterCaptures(tab)) return;
+      win.contentView.addChildView(tab.view); tab.attached = win;
+    }
     tab.bounds = tab.slot;
     const { x, y, width, height } = tab.bounds;
     tab.view.setBounds({ x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
     tab.view.setBorderRadius(Math.max(0, Math.round(tab.bounds.radius ?? 0)));
     emulation(tab); this.pointer.sync(tab);
   }
+  /** True while the tab's captures are in flight (view-capture.mjs); the view attaches once they settle. */
+  attachAfterCaptures(tab) {
+    const settled = capturesSettled(tab);
+    if (!settled) return false;
+    tab.attachWait ??= settled.then(() => { tab.attachWait = null; if (this.tabs.get(tab.id) === tab) this.sync(tab); });
+    return true;
+  }
   async capture(tab) {
     if (tab.dialog) return tab.still;
     if (!tab.view?.webContents || tab.view.webContents.isDestroyed() || tab.status === "crashed") return tab.still;
     if (tab.capture) return tab.capture;
-    tab.capture = tab.view.webContents.capturePage(undefined, { stayHidden: true }).then((image) => {
+    tab.capture = capturePage(tab).then((image) => {
       if (!image.isEmpty()) tab.still = `data:image/jpeg;base64,${image.toJPEG(75).toString("base64")}`;
       return tab.still;
     }).catch(() => tab.still).finally(() => { tab.capture = null; });
