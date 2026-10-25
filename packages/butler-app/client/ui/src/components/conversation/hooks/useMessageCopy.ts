@@ -6,10 +6,12 @@ import type { MessageRecord } from "@/app/types";
 import { parseAnswerBlocks } from "../../../../../shared/answer-blocks-parse";
 import { toMarkdown } from "../../../../../shared/answer-blocks-markdown";
 
+import { gatewayImageSource } from "@/app/messageFileUrls";
+
 function messageMarkdown(message: MessageRecord): string {
   const blocks = (message.answer_blocks ?? []).flatMap(set => {
     const spec = parseAnswerBlocks(set.spec);
-    return spec ? [toMarkdown(spec)] : [];
+    return spec ? [toMarkdown(spec, gatewayImageSource)] : [];
   });
   return [message.text, ...blocks].filter(Boolean).join("\n\n");
 }

@@ -49,8 +49,16 @@ function table(columns: string[], rows: (string | number | null)[][]): string {
   return [row(columns), row(columns.map(() => "---")).replace(/\\-/g, "-"), ...rows.map(row)].join("\n");
 }
 
-function blockMarkdown(block: AnswerBlock): string {
+function blockMarkdown(block: AnswerBlock, imageUrl: (url?: string) => string | undefined): string {
   switch (block.type) {
+    case "columns": case "group": return block.blocks.map(child => titledBlock(child, imageUrl)).join("\n\n");
+    case "tabs": return block.tabs.map(tab => `### ${text(tab.label)}\n\n${tab.blocks.map(child => titledBlock(child, imageUrl)).join("\n\n")}`).join("\n\n");
+    case "timeline": return block.items.map(item => `- **${text(item.when)}** ${text(item.title)}${item.text ? ` — ${text(item.text)}` : ""}`).join("\n");
+    case "checklist": return block.items.map(item => `- [${item.done ? "x" : " "}] ${text(item.text)}`).join("\n");
+    case "progress": return block.items.map(item => `${text(item.label)}: ${item.value} / ${item.max ?? 100}${item.unit ? ` ${text(item.unit)}` : ""}`).join("\n");
+    case "text": return block.text;
+    case "quote": return `> ${text(block.text)}${block.cite ? ` — ${text(block.cite)}` : ""}`;
+    case "image": return `![${text(block.caption)}](${imageUrl((block as AnswerBlock & { image_url?: string }).image_url) ?? ""})`;
     case "cards": return block.items.map(card).join("\n");
     case "table": return table(block.columns, block.rows);
     case "gallery": return block.items.map(item => `- ${link(item.caption ?? item.img, item.source)} · ${text(item.img)}`).join("\n");
@@ -62,8 +70,11 @@ function blockMarkdown(block: AnswerBlock): string {
   }
 }
 
-/** Portable copy/export representation; assets remain ids until a client resolves them. */
-export function toMarkdown(spec: AnswerBlocks): string {
-  return spec.blocks.map(block => [block.title ? `### ${text(block.title)}` : "", blockMarkdown(block)]
-    .filter(Boolean).join("\n\n")).join("\n\n");
+function titledBlock(block: AnswerBlock, imageUrl: (url?: string) => string | undefined): string {
+  return [block.title ? `### ${text(block.title)}` : "", blockMarkdown(block, imageUrl)].filter(Boolean).join("\n\n");
+}
+
+/** Portable copy/export representation, resolving decorated image URLs as the renderer does. */
+export function toMarkdown(spec: AnswerBlocks, imageUrl: (url?: string) => string | undefined = url => url): string {
+  return spec.blocks.map(block => titledBlock(block, imageUrl)).join("\n\n");
 }

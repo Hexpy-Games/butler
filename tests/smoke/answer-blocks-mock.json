@@ -137,5 +137,159 @@
         }
       ]
     }
-  ]
+  ],
+  "v2": {
+    "v": 2,
+    "blocks": [
+      {
+        "type": "columns",
+        "id": "overview",
+        "title": "Overview",
+        "blocks": [
+          {
+            "type": "timeline",
+            "id": "events",
+            "title": "Events",
+            "items": [
+              {
+                "when": "Today",
+                "title": "Started",
+                "text": "Work began"
+              }
+            ]
+          },
+          {
+            "type": "checklist",
+            "title": "Tasks",
+            "items": [
+              {
+                "text": "Read",
+                "done": true
+              },
+              {
+                "text": "Deliver",
+                "done": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "tabs",
+        "id": "details",
+        "title": "Details",
+        "tabs": [
+          {
+            "label": "Status",
+            "blocks": [
+              {
+                "type": "progress",
+                "title": "Progress",
+                "items": [
+                  {
+                    "label": "Tasks",
+                    "value": 25,
+                    "unit": "items"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": "**Ready** for review"
+              }
+            ]
+          },
+          {
+            "label": "Picture",
+            "blocks": [
+              {
+                "type": "image",
+                "img": "img_0123456789",
+                "caption": "Record image",
+                "image_url": "/message-assets/img_0123456789?expires=4102444800&signature=smoke"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "id": "notes",
+        "title": "Notes",
+        "blocks": [
+          {
+            "type": "quote",
+            "text": "Make it clear",
+            "cite": "Reviewer"
+          },
+          {
+            "type": "metrics",
+            "items": [
+              {
+                "label": "Delay",
+                "value": 5,
+                "delta": "+2",
+                "direction": "down-good"
+              }
+            ]
+          },
+          {
+            "type": "callout",
+            "text": "Review next"
+          },
+          {
+            "type": "cards",
+            "items": [
+              {
+                "title": "Record"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "v2Markdown": "### Overview\n\n### Events\n\n- **Today** Started — Work began\n\n### Tasks\n\n- [x] Read\n- [ ] Deliver\n\n### Details\n\n### Status\n\n### Progress\n\nTasks: 25 / 100 items\n\n**Ready** for review\n\n### Picture\n\n![Record image](/message-assets/img_0123456789?expires=4102444800&signature=smoke)\n\n### Notes\n\n> Make it clear — Reviewer\n\n- Delay: 5 (\\+2)\n\n> Review next\n\n- Record",
+  "imageSizing": {
+    "v": 2,
+    "blocks": [
+      {
+        "type": "image",
+        "img": "img_small12080",
+        "caption": "Small image",
+        "image_url": "/message-assets/img_small12080?expires=4102444800&signature=smoke",
+        "image_width": 120,
+        "image_height": 80
+      },
+      {
+        "type": "image",
+        "img": "img_large30000",
+        "caption": "Large image",
+        "image_url": "/message-assets/img_large30000?expires=4102444800&signature=smoke",
+        "image_width": 1500,
+        "image_height": 1000
+      },
+      {
+        "type": "columns",
+        "blocks": [
+          {
+            "type": "image",
+            "img": "img_small12080",
+            "caption": "Small image",
+            "image_url": "/message-assets/img_small12080?expires=4102444800&signature=smoke",
+            "image_width": 120,
+            "image_height": 80
+          },
+          {
+            "type": "image",
+            "img": "img_large30000",
+            "caption": "Large image",
+            "image_url": "/message-assets/img_large30000?expires=4102444800&signature=smoke",
+            "image_width": 1500,
+            "image_height": 1000
+          }
+        ]
+      }
+    ]
+  }
 }

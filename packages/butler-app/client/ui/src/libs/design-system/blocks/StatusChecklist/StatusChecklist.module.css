@@ -1,0 +1,23 @@
+/* StatusChecklist: CheckCard's indicator on the first text line, the item text
+   beside it. Rows are not interactive, so there is no hover or focus look. */
+.list {
+  display: grid;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--space-sm);
+  align-items: start;
+}
+
+/* Centres the indicator on the first line of body text. */
+.indicator {
+  display: flex;
+  align-items: center;
+  height: var(--typo-body-line-height);
+}
