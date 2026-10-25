@@ -1,5 +1,6 @@
 import { verifyContextCompactLayout } from "../support/context-compact-layout.ts";
 import { assertWallpaperPaint } from "../support/wallpaper-paint.ts";
+import { assertSidebarFirstRowBaseline } from "../support/sidebar-baseline.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import {
   armPanelSlideCapture,
@@ -2726,6 +2727,7 @@ try {
   // widths; measure the settled layout, not the opening transition.
   await page.locator(testClass("app-sidebar")).waitFor({ state: "visible" });
   await page.waitForTimeout(400);
+  await assertSidebarFirstRowBaseline(page, testClass("mac-window"));
   await assertWallpaperPaint(page, testClass("new-chat-fluid-gradient"), "butler.riso-print");
   assert(await page.locator('[data-slot="conversation-background"] [data-test-class~="conversation-wallpaper"]').count() === 1, "One conversation wallpaper layer");
   const emptyStateLayout = await page
@@ -2819,7 +2821,7 @@ try {
           ? (cardsFrame && contentRect
               ? Math.abs(fluidRect.top - contentRect.top) <= 1 &&
                 fluidRect.bottom >= contentRect.bottom - 1 &&
-                radiusStyle?.overflow === "hidden" &&
+                radiusStyle?.overflow === "clip" &&
                 Math.abs(contentRect.bottom - (window.innerHeight - 8)) <= 1 &&
                 Math.abs(contentRect.right - (window.innerWidth - 8)) <= 1
               : Math.abs(fluidRect.top) <= 1 &&
@@ -3197,9 +3199,10 @@ try {
   await expectLocatorCount(
     page,
     sessionInfoToggleSelector,
-    1,
-    "session info remains available on draft new chat",
+    0,
+    "session info stays hidden on empty draft new chat",
   );
+  await expectLocatorCount(page, '[data-slot="conversation-aside"]', 0, "empty draft has no session info pane");
   await patchSettings({ main_screen_theme: "silk",
     wallpaper: { source: { kind: "live", module: "butler.silk" }, motion: "auto", pauseOnBattery: false } });
   // The live app keeps an event stream open, so "networkidle" never settles.
@@ -3737,7 +3740,7 @@ try {
         "narrow-new-chat-full-width-copy",
         "narrow-readable-type-scale",
         "new-chat-left-radius-preserved",
-        "session-info-available-on-draft-new-chat",
+        "session-info-hidden-on-empty-draft-new-chat",
         "composer-card-click-focuses-textarea",
         "composer-draft-session-isolation",
         "composer-draft-renderer-reload-recovery",

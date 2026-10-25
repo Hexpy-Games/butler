@@ -119,3 +119,44 @@ fn artifact_kind(file: &MessageFileRef) -> ArtifactKind {
         ArtifactKind::File
     }
 }
+
+/// Only the requested message page: indexed document origin lookups, no library scan.
+pub(super) fn documents(
+    db: &Connection,
+    chat: &str,
+    messages: &[String],
+) -> Result<std::collections::HashMap<String, Vec<SessionArtifactSummary>>, AppStorageError> {
+    let mut stmt = db.prepare_cached("WITH origins AS (SELECT id AS document_id,chat_id,message_id FROM documents WHERE chat_id=?1 AND message_id IN (SELECT value FROM json_each(?2)) UNION SELECT document_id,chat_id,message_id FROM document_deliveries WHERE chat_id=?1 AND message_id IN (SELECT value FROM json_each(?2))) SELECT d.id,d.title,o.chat_id,o.message_id,d.updated_at,m.turn_id FROM origins o JOIN documents d ON d.id=o.document_id JOIN messages m ON m.id=o.message_id").map_err(AppStorageError::sqlite)?;
+    let rows = stmt
+        .query_map(
+            rusqlite::params![chat, serde_json::json!(messages).to_string()],
+            |r| {
+                Ok(SessionArtifactSummary {
+                    id: r.get(0)?,
+                    title: r.get(1)?,
+                    session_id: r.get(2)?,
+                    message_id: r.get(3)?,
+                    created_at: r.get(4)?,
+                    turn_id: r.get(5)?,
+                    kind: ArtifactKind::Doc,
+                    deliverable: true,
+                    source_label: None,
+                    project_id: None,
+                    file_id: None,
+                    safe_path_label: None,
+                    url: None,
+                    size_bytes: None,
+                    open_action: Some(ArtifactOpenAction::Route),
+                })
+            },
+        )
+        .map_err(AppStorageError::sqlite)?;
+    let mut grouped = std::collections::HashMap::<String, Vec<SessionArtifactSummary>>::new();
+    for row in rows {
+        let row = row.map_err(AppStorageError::sqlite)?;
+        if let Some(id) = &row.message_id {
+            grouped.entry(id.clone()).or_default().push(row);
+        }
+    }
+    Ok(grouped)
+}

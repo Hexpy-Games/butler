@@ -28,6 +28,10 @@ pub enum AppLibraryCommand {
         url: String,
     },
     Save(Value),
+    SaveDocumentBlock {
+        document_id: String,
+        index: usize,
+    },
     SaveBlock {
         message_id: String,
         path: String,
@@ -84,6 +88,9 @@ impl AppApplication {
             C::Search(q) => self.library_read(move |db| query::search(db, &q)),
             C::Bookmark { url } => self.library_read(move |db| lookup(db, &url)),
             C::Promote { file_id } => self.library_write(move |db| records::promote(db, &file_id)),
+            C::SaveDocumentBlock { document_id, index } => {
+                self.library_write(move |db| blocks::save_document(db, &document_id, index))
+            }
             C::SaveBlock { message_id, path } => {
                 self.library_write(move |db| blocks::save(db, &message_id, &path))
             }

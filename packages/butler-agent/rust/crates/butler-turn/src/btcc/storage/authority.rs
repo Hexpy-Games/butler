@@ -15,6 +15,21 @@ pub(crate) use repository::SqliteAuthorityRepository;
 mod repository;
 
 impl super::BtccStorage {
+    pub(crate) async fn ask_reminder_records(
+        &self,
+        owner: String,
+        turn: String,
+    ) -> super::StorageResult<AuthorityResult<Vec<AuthorityRecord>>> {
+        self.read(move |db| {
+            Ok(query::many(
+                db,
+                &pending_asks::reminder_sql(),
+                &[&owner, &turn],
+            ))
+        })
+        .await
+    }
+
     pub(crate) async fn authority_session_requests(
         &self,
         owner: String,
@@ -103,6 +118,7 @@ pub(super) fn pending_ask_statements() -> Vec<(String, &'static str)> {
             pending_asks::DISMISS.into(),
             "sqlite_autoindex_btcc_authority_requests_2",
         ),
+        (pending_asks::reminder_sql(), "idx_btcc_questions_settled"),
     ]
 }
 #[cfg(feature = "test-support")]

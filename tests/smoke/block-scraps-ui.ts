@@ -24,11 +24,14 @@ const scrap = (path: string) => ({ id: `saved-${path.replaceAll("/", "-")}`, kin
   ...(stage === "before" ? { snapshot: { width: 480, height: 200 } } : {}) });
 const saved = [scrap("/blocks/0/blocks/0"), scrap("/blocks/0")];
 const calls: { path: string; body: Record<string, unknown> }[] = [], errors: string[] = [];
+const baseline = process.env.BUTLER_BLOCK_BASELINE;
+if (baseline) assert.equal(stage, "before", "baseline mode is for before captures only");
+if (stage === "before") assert(baseline, "BUTLER_BLOCK_BASELINE is required for before captures");
 const baselineSources = new Map<string, string>();
 if (stage === "before") {
   for (const file of ["conversation/AnswerBlocks.tsx", "conversation/AnswerContainers.tsx", "library/LibraryDetail.tsx", "library/LibraryItemCard.tsx"]) {
     const relative = `packages/butler-app/client/ui/src/components/${file}`;
-    baselineSources.set(resolve(root, relative), execFileSync("git", ["show", `207df85f3:${relative}`], { encoding: "utf8" }));
+    baselineSources.set(resolve(root, relative), execFileSync("git", ["show", `${baseline}:${relative}`], { cwd: root, encoding: "utf8" }));
   }
 }
 process.chdir(join(root, "packages/butler-app/client/ui"));
@@ -67,7 +70,11 @@ async function setup(page: Page) {
     const answer = (data: unknown) => route.fulfill({ json: { ok: true, data } });
     if (request.method() === "POST" && ["/library/blocks", "/documents"].includes(url.pathname)) {
       const body = request.postDataJSON(); calls.push({ path: url.pathname, body });
-      return answer(url.pathname === "/documents" ? { id: "doc_created", rev: 1 } : scrap(body.path));
+      return answer(url.pathname === "/documents" ? { ...body, id: "doc_created", rev: 1 } : scrap(body.path));
+    }
+    if (url.pathname === "/documents/doc_created") {
+      const created = calls.findLast(call => call.path === "/documents")!.body;
+      return answer({ ...created, id: "doc_created", rev: 1, author: "user", created_at: "2026-10-25T08:00:00Z", updated_at: "2026-10-25T08:00:00Z" });
     }
     if (url.pathname === "/library") return answer({ items: url.searchParams.get("kind") === "scrap" ? saved : [], next_cursor: null });
     if (url.pathname === "/library/groups") return answer({ groups: [], ungrouped: 2, total: 2 });
@@ -181,7 +188,10 @@ async function interactions(page: Page, reduced: boolean) {
   await page.locator('[data-test-class="library-detail"] [data-answer-block="quote"]').getByRole("button", { name: "더 보기", exact: true }).click();
   assert.deepEqual((await page.getByRole("menuitem").allTextContents()).map(text => text.trim()), ["문서로 만들기", "복사"]);
   await page.getByRole("menuitem", { name: "문서로 만들기", exact: true }).click();
-  await page.locator('[data-sonner-toast]').filter({ hasText: "문서를 만들었어요" }).getByRole("button", { name: "열기", exact: true }).click();
+  await page.getByRole("textbox", { name: "문서", exact: true }).waitFor();
+  assert.equal(new URL(page.url()).searchParams.get("doc"), "doc_created");
+  await page.locator('[data-document-id="doc_created"]').waitFor();
+  assert.equal(await page.locator('[data-session-section="artifacts"] [data-document-id]').count(), 0);
   assert.equal(calls.at(-1)?.path, "/documents");
   const body = calls.at(-1)!.body;
   assert.equal(body.title, "전시 안내");
@@ -252,15 +262,15 @@ async function touch() {
 try {
   const page = await browser.newPage({ timezoneId: "Asia/Seoul", locale: "ko-KR", reducedMotion: "no-preference" });
   await setup(page);
-  await screenshotMatrix(page);
+  const phase = process.env.BUTLER_BLOCK_PHASE;
+  if (!phase || phase === "matrix") await screenshotMatrix(page);
   if (stage === "after") {
-    await rightClick(page);
-    await interactions(page, false);
-    await interactions(page, true);
-    await touch();
+    if (!phase || phase === "pointer") await rightClick(page);
+    if (!phase || phase === "interactions") { await interactions(page, false); await interactions(page, true); }
+    if (!phase || phase === "touch") await touch();
   }
   assert.deepEqual(errors, []);
-  const result = { stage, screenshots: 32, modelCalls: 0, calls, ok: true };
-  writeFileSync(join(evidence, `${stage}-result.json`), JSON.stringify(result, null, 2));
+  const result = { stage, phase, screenshots: !phase || phase === "matrix" ? 32 : 0, modelCalls: 0, calls, ok: true };
+  writeFileSync(join(evidence, `${stage}${phase ? `-${phase}` : ""}-result.json`), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result));
 } finally { await browser.close(); await vite.close(); }

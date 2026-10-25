@@ -102,6 +102,9 @@ pub(super) async fn dispatch(
     if call.name == ToolName::ProjectArtifacts {
         return super::project_artifacts::execute(owner, invocation, call).await;
     }
+    if call.name == ToolName::ResolveAsk {
+        return super::resolve_ask::execute(owner, invocation, call).await;
+    }
     if call.name == ToolName::AskUser {
         return execute(owner, call, call_id).await;
     }

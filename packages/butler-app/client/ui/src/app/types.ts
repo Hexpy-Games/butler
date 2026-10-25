@@ -1763,7 +1763,7 @@ export type LibraryKind = "scrap" | "document" | "bookmark" | "output";
  * The Library: the main screen, a kind's full view (`section`), a group in it (`group`: an id or "none"
  * for ungrouped) and a scrap's detail (`item`). Each level is one step up from the next (titlebar back).
  */
-export type LibraryView = { kind: "library"; section?: LibraryKind; group?: string; item?: string };
+export type LibraryView = { kind: "library"; section?: LibraryKind; group?: string; item?: string; doc?: string };
 
 export type AppView =
   | { kind: "browser" }

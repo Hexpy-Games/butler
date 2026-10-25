@@ -1,4 +1,5 @@
 import { TitlebarSessionMenu } from "./TitlebarSessionMenu.tsx";
+import { useSessionInfoHasContent } from "../session-info/useSessionSectionsModel.ts";
 import { SessionInfoActions } from "../session-info/SessionInfoActions.tsx";
 import { useAppLocale } from "@/app/copy.ts";
 import { useMemo, useState } from "react";
@@ -32,6 +33,8 @@ export function Titlebar({ sidebarOpen, splitChatWidth }: { sidebarOpen?: boolea
   const leftOpen = useButlerStore((state) => state.leftOpen);
   // On a phone the viewer replaces the chat: 세션 정보 has nothing to show beside it.
   const viewerTakesWorkspace = useViewerTakesWorkspace(storeActiveChatId);
+  const hasInfoContent = useSessionInfoHasContent();
+  const graphEnabled = useButlerStore(state => state.taskGraphEnabled);
   const back = useTitlebarBack();
   useLibraryNames();
   const { title, subtitle } = useMemo(
@@ -79,7 +82,7 @@ export function Titlebar({ sidebarOpen, splitChatWidth }: { sidebarOpen?: boolea
       splitChatWidth={splitChatWidth}
       titleActions={activeSession ? <TitlebarSessionMenu activeSession={activeSession} canOpenSessionFolder={canOpenSessionFolder}
         sessionMenuOpen={sessionMenuOpen} setSessionMenuOpen={setSessionMenuOpen} /> : undefined}
-      chatTrailing={storeView.kind === "session" && !viewerTakesWorkspace ? <SessionInfoActions /> : undefined}
+      chatTrailing={storeView.kind === "session" && !viewerTakesWorkspace && (hasInfoContent || graphEnabled) ? <SessionInfoActions /> : undefined}
       trailing={
         <ButtonContainer size="icon-sm" data-test-class="project-controls">
           {storeView.kind === "session" && <FileViewerToggle />}

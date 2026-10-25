@@ -1,3 +1,5 @@
+import { openDocument } from "../components/documents/documentApi";
+import { initialDocumentView, persistDocumentView } from "./documentRoute";
 import { reconcileAnswerDrafts } from "./answerDrafts";
 import { retainAnswerBlocks } from "./stableAnswerBlocks";
 import { generalChatCleared } from "./generalChatEvents";
@@ -947,7 +949,7 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
   sidebarChatsCollapsed: false,
   sidebarProjectsCollapsed: false,
   sidebarCollapsedProjectIds: [],
-  view: { kind: "session" },
+  view: initialDocumentView(),
   settingsReturnView: { kind: "session" },
   activeChatId: "draft:chat",
   navigation: EMPTY_NAVIGATION,
@@ -986,6 +988,7 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
 
   setLeftOpen: (value) => set(state => ({ leftOpen: resolveUpdate(value, state.leftOpen) })),
   openArtifact: (artifact, session) => {
+    if (artifact.kind === "doc") { openDocument({ ...artifact, chat_id: artifact.session_id }); return; }
     const state = get();
     useFileViewerState.getState().open(session || state.activeChatId, { kind: "artifact", id: artifact.id, artifact });
     if (state.view.kind !== "session") void state.setView({ kind: "session" });
@@ -1019,7 +1022,7 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
     });
     set({
       activeChatId: uiState.active_session_id,
-      view: { kind: "session" },
+      view: initialDocumentView(),
       leftOpen: panels.leftOpen,
       sessionInfoOpen: uiState.session_info_open === true,
       taskGraphEnabled: uiState.task_graph_enabled === true,
@@ -2411,6 +2414,7 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
 }));
 
 useButlerStore.subscribe((state, previousState) => {
+  if (state.view !== previousState.view && typeof window !== "undefined") persistDocumentView(state.view);
   if (state.activeChatId !== previousState.activeChatId) {
     activeSessionGeneration += 1;
     // Session navigation/hydration re-projects the durable authority stack

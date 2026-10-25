@@ -1,3 +1,4 @@
+import { publishDocumentEvent } from "@/app/documentEvents";
 import { publishPendingAsksEvent } from "@/app/pendingAsks.ts";
 import { publishCanonEvent } from "@/app/canonEvents.ts";
 import { publishChatGptEvent } from "@/app/chatGptEvents.ts";
@@ -90,6 +91,7 @@ export function useLiveSessionEvents(): void {
       publishMemoryEvent(event);
       publishChatGptEvent(event);
       publishLibraryEvent(event);
+      publishDocumentEvent(event);
       publishCanonEvent(event);
       publishPendingAsksEvent(event);
       if (event.type.startsWith("authority.")) authorityPermissionsChanged();

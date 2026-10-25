@@ -91,10 +91,21 @@ pub(super) fn list_message_page(
     }
     let ids = rows.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
     let attachments = attachments(connection, &ids)?;
+    let docs = artifacts::documents(connection, chat_id, &ids)?;
     let changed_files = changed_files(connection, &ids)?;
     let mut messages = rows
         .into_iter()
-        .map(|row| message(row, &attachments, &changed_files))
+        .map(|row| {
+            let documents = docs.get(&row.id).cloned().unwrap_or_default();
+            let mut record = message(row, &attachments, &changed_files)?;
+            if !documents.is_empty() {
+                record
+                    .artifacts
+                    .get_or_insert_with(Vec::new)
+                    .extend(documents);
+            }
+            Ok(record)
+        })
         .collect::<Result<Vec<_>, _>>()?;
     let next_cursor = messages
         .last()

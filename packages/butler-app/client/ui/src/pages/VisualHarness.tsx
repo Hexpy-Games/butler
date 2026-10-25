@@ -1,3 +1,4 @@
+import { initialDocumentView } from "@/app/documentRoute";
 import { useDrawerSidebarState } from "@/hooks/useDrawerSidebarState.ts";
 import { useSessionAttentionNotifications } from "@/hooks/live-session/useSessionAttentionNotifications";
 import { useEffect, useMemo } from "react";
@@ -179,7 +180,7 @@ export function VisualHarness() {
     } else {
       setLeftOpen(false);
     }
-    setView({ kind: "session" });
+    setView(initialDocumentView());
     setActiveChatId("butler-client");
     setNavigation(harnessNavigation);
     setMessages(fixture?.messages ?? HARNESS_MESSAGES);
