@@ -8,6 +8,7 @@ import styles from "./ConversationShell.module.css";
 import { ConversationShellElementContext, useConversationColumnRect, type ConversationColumnRect } from "./conversationColumn";
 import { ConversationAsideDockedContext, CONVERSATION_ASIDE_DOCK_MIN, shownAside } from "./conversationAside";
 import { ConversationRailContext, useRailReserve } from "./conversationRail";
+import { ConversationColumnGlide } from "./ConversationColumnGlide";
 
 export type { ConversationColumnRect } from "./conversationColumn";
 export type { AsideLayout } from "../../lib/asideLayout";
@@ -90,6 +91,7 @@ export function ConversationShell({
             </div>
           ) : null}
           {children}
+          <ConversationColumnGlide shell={element} docked={asideState === "docked"} railed={reserved} />
           {hasRail ? <ConversationRailContext.Provider value={report}>{rail}</ConversationRailContext.Provider> : null}
           <AsideSlot aside={aside} layout={asideLayout} floatOpen={asideFloatOpen} slot="conversation-aside" label={asideLabel}
             className={styles.aside} glassClassName={styles.asideGlass} />
@@ -148,6 +150,7 @@ export function MessageListSurface({
         height && styles.virtualizedMessageList,
       )}
       data-test-class={`message-list${height ? " virtualized" : ""}`}
+      data-column-glide=""
       ref={setColumn}
       style={height ? { height: `${height}px` } : undefined}
     >

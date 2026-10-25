@@ -44,7 +44,7 @@ function BrowserToggle({ locale, open, onToggle }: { locale: Locale; open: boole
   );
 }
 
-/** Title, its ⋯ and the workspace subtitle, as the conversation titlebar passes them. */
+/** Title, the workspace subtitle and the ⋯ after them, as the conversation titlebar passes them. */
 function conversationTitle(locale: Locale) {
   const copy = COPY[locale];
   return {
@@ -60,11 +60,13 @@ function conversationTitle(locale: Locale) {
   };
 }
 
-/** The bar alone, pane closed: [title ⋯ subtitle ······ 세션 정보][browser]. */
-export function GroupedTitlebar({ locale, pending, className }: { locale: Locale; pending: boolean; className?: TitlebarShellProps["className"] }) {
+/** The bar alone, browser pane closed: [title subtitle ⋯ ······ 세션 정보][browser]; `open` presses the 세션 정보 toggle. */
+export function GroupedTitlebar({ locale, pending, open = false, className }: {
+  locale: Locale; pending: boolean; open?: boolean; className?: TitlebarShellProps["className"];
+}) {
   return (
     <TitlebarShell className={className} dragRegion {...conversationTitle(locale)}
-      chatTrailing={<ButtonContainer size="icon-sm"><SessionInfoToggle locale={locale} pending={pending} /></ButtonContainer>}
+      chatTrailing={<ButtonContainer size="icon-sm"><SessionInfoToggle locale={locale} pending={pending} open={open} /></ButtonContainer>}
       trailing={<ButtonContainer size="icon-sm"><BrowserToggle locale={locale} open={false} /></ButtonContainer>} />
   );
 }
