@@ -31,9 +31,29 @@ pub(super) fn sign_out(
         Ok(ChatGptSignOutView { revoked, account })
     })
 }
+pub(super) fn credentials(
+    configuration: Arc<ModelConfiguration>,
+) -> ApplicationFuture<butler_models::models::chatgpt::credentials::OauthCredentials> {
+    Box::pin(async move { configuration.oauth_credentials().await.map_err(error) })
+}
+pub(super) fn remove_credential(
+    configuration: Arc<ModelConfiguration>,
+    id: String,
+) -> ApplicationFuture<butler_models::models::chatgpt::credentials::RemovedOauthCredential> {
+    Box::pin(async move {
+        configuration
+            .remove_oauth_credential(&id)
+            .await
+            .map_err(error)
+    })
+}
 fn error(code: &'static str) -> GatewayApplicationError {
     GatewayApplicationError::Public {
-        status: 500,
+        status: if code == "credential_not_found" {
+            404
+        } else {
+            500
+        },
         code: code.into(),
         message: "ChatGPT account could not be updated.".into(),
         source: None,
