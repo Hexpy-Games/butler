@@ -18,7 +18,7 @@ export function SessionInfoActions() {
   return <ButtonContainer size="icon-sm">
     {graphEnabled && <Dialog open={graphOpen} onOpenChange={next => { void (async () => { if (!next || await leaveCanonEditor()) setGraphOpen(next); })(); }}>
       <DialogTrigger asChild><IconButton label={appCopy.taskGraph.title}><Blocks size="md" /></IconButton></DialogTrigger>
-      <DialogContent size="full" layout="scroll-body" closeLabel={appCopy.common.close}>
+      <DialogContent size="full" height="full" layout="scroll-body" closeLabel={appCopy.common.close}>
         <DialogHeader><DialogTitle>{appCopy.taskGraph.title}</DialogTitle></DialogHeader>
         <ScrollArea fill>{graphOpen && <TasksPanel key={sessionId} hideHeading />}</ScrollArea>
       </DialogContent>

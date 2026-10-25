@@ -9,6 +9,8 @@
 //! returns `None`. Renames that replace a file retry on Windows while
 //! another process briefly holds it ([`rename`]).
 
+mod hidden;
+pub use hidden::is_hidden;
 mod inventory;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub(crate) use inventory::credential_roots;

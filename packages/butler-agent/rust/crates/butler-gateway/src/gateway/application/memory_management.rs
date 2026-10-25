@@ -6,6 +6,10 @@ use tokio_util::sync::CancellationToken;
 
 /// Authenticated memory owner requests.
 pub enum AppMemoryCommand {
+    /// Read current consolidation and its latest result.
+    Consolidation,
+    /// Run the shared consolidation cycle now.
+    RunConsolidation { operation_id: String },
     /// Ends session-scoped instructions immediately.
     EndSession { session_id: String },
     /// Complete instruction list from the instruction owner.
@@ -76,8 +80,33 @@ impl super::AppApplication {
     ) -> Result<Value, GatewayApplicationError> {
         let command = self.canonical_project_command(command).await?;
         let listing = matches!(&command, AppMemoryCommand::Instructions);
+        let sink = self.memory_event_sink();
+        let mut view = self
+            .dependencies
+            .memory_management
+            .execute(command, sink, cancellation)
+            .await?;
+        if listing {
+            view = self.storage.execute(move |db| {
+                if let Some(rows) = view["instructions"].as_array_mut() {
+                    for row in rows {
+                        let project = row["project_id"].as_str();
+                        let name: Option<String> = if let Some(id) = project {
+                            use rusqlite::OptionalExtension;
+                            db.query_row("SELECT display_name FROM projects WHERE id=?1 OR ledger_project_id=?1 LIMIT 1", [id], |r| r.get(0)).optional().map_err(super::AppStorageError::sqlite)?
+                        } else { None };
+                        row["scope"] = if row["scope_session_id"].is_string() { serde_json::json!({"kind":"session"}) } else if project.is_some() { serde_json::json!({"kind":"project", "project_name":name}) } else { serde_json::json!({"kind":"all"}) };
+                    }
+                }
+                Ok(view)
+            }).await.map_err(super::app_error)?;
+        }
+        Ok(view)
+    }
+    /// Event bridge shared by explicit memory actions and host-owned scheduled runs.
+    pub fn memory_event_sink(&self) -> MemoryEventSink {
         let this = self.clone_handle();
-        let sink: MemoryEventSink = Arc::new(move |value| {
+        Arc::new(move |value| {
             let storage = this.storage.clone();
             let subscribers = this.subscribers.clone();
             let now = this.dependencies.identity_clock.now_iso();
@@ -101,28 +130,7 @@ impl super::AppApplication {
                     .await
                     .map_err(super::app_error)
             })
-        });
-        let mut view = self
-            .dependencies
-            .memory_management
-            .execute(command, sink, cancellation)
-            .await?;
-        if listing {
-            view = self.storage.execute(move |db| {
-                if let Some(rows) = view["instructions"].as_array_mut() {
-                    for row in rows {
-                        let project = row["project_id"].as_str();
-                        let name: Option<String> = if let Some(id) = project {
-                            use rusqlite::OptionalExtension;
-                            db.query_row("SELECT display_name FROM projects WHERE id=?1 OR ledger_project_id=?1 LIMIT 1", [id], |r| r.get(0)).optional().map_err(super::AppStorageError::sqlite)?
-                        } else { None };
-                        row["scope"] = if row["scope_session_id"].is_string() { serde_json::json!({"kind":"session"}) } else if project.is_some() { serde_json::json!({"kind":"project", "project_name":name}) } else { serde_json::json!({"kind":"all"}) };
-                    }
-                }
-                Ok(view)
-            }).await.map_err(super::app_error)?;
-        }
-        Ok(view)
+        })
     }
     async fn canonical_project_command(
         &self,

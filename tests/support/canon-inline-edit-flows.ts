@@ -28,7 +28,10 @@ export async function inlineShot(page: Page, dir: string, name: string) {
   else await page.waitForFunction(() => document.querySelectorAll("[data-sonner-toast]").length === 0);
   if (!name.endsWith("-hover")) {
     await page.mouse.move(5, 895); // Park the pointer so no hover tooltip overlaps the capture.
-    await page.waitForFunction(() => document.querySelectorAll('[role="tooltip"]:not([data-slot="resize-hint"])').length === 0);
+    await page.waitForFunction(() => document.querySelectorAll('[role="tooltip"]:not([data-slot="resize-hint"])').length === 0).catch(async error => {
+      const open = await page.evaluate(() => [...document.querySelectorAll('[role="tooltip"]:not([data-slot="resize-hint"])')].map(tip => tip.textContent));
+      throw new Error(`${name}: tooltip still open ${JSON.stringify(open)} (focus: ${await page.evaluate(() => document.activeElement?.outerHTML.slice(0, 160))})`, { cause: error });
+    });
   }
   await page.screenshot({ path: join(dir, `${name}.png`) });
 }
@@ -70,6 +73,14 @@ export async function verifyInlineFields(page: Page, server: NativeAppServerHand
   let writes = 0;
   const countWrite = (request: import("playwright").Request) => { if (request.method() === "PATCH") writes++; };
   page.on("request", countWrite);
+  await textarea.fill("문서 목록을 검토합니다.\n검색 흐름을 확인합니다.\n수정 내용을 정리합니다.");
+  const initialHeight = (await textarea.boundingBox())!.height;
+  await textarea.press("End");
+  for (let line = 0; line < 5; line++) { await textarea.press("Enter"); await textarea.pressSequentially("추가 설명"); }
+  const grownHeight = (await textarea.boundingBox())!.height;
+  assert(grownHeight > initialHeight, `Description grows after five lines: ${initialHeight} → ${grownHeight}`);
+  console.log(JSON.stringify({ descriptionInitialHeight: initialHeight, descriptionGrownHeight: grownHeight }));
+  await inlineShot(page, shots, "desc-editing-autogrow");
   await textarea.fill(description.split("\n")[0]!); await textarea.press("Enter"); await textarea.pressSequentially(description.split("\n").slice(1).join("\n"));
   assert.equal(await textarea.inputValue(), description); assert.equal(writes, 0);
   assert.equal((await read(server, id)).revision, before.revision);

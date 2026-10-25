@@ -1,3 +1,5 @@
+import { verifyTaskOrder, verifyCompactContext, verifyDashboardTask } from "../support/session-pane-followups.ts";
+import { verifyInlineTriggerRings } from "../support/session-pane-focus.ts";
 // Stub/replay UI smoke through the real native App, isolated from the owner's data.
 import { sessionInfoStub, verifyNativePendingAsks, labelSessionInfoModel } from "../support/session-info-pending-asks.ts";
 import { strict as assert } from "node:assert";
@@ -18,7 +20,7 @@ mkdirSync(shots, { recursive: true });
 const server = await createNativeAppServer({ ...sessionInfoStub(), uiRoot: resolve(process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist") });
 let browser: Awaited<ReturnType<typeof launchSmokeBrowser>> | undefined;
 try {
-  await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: theme, reduce_motion: true }) });
+  await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: theme, reduce_motion: true, wallpaper: { source: { kind: "live", module: "butler.riso-print" }, motion: "paused", pauseOnBattery: false } }) });
   await labelSessionInfoModel(server);
   const { project } = await server.api<{ project: { id: string } }>("/projects", { method: "POST", body: JSON.stringify({ source: "scratch", display_name: "버틀러 앱" }) });
   const plan = await server.api<{ id: string }>(`/projects/${project.id}/canon/plans`, { method: "POST", body: JSON.stringify({ title: "프리뷰 14" }) });
@@ -74,7 +76,9 @@ try {
     assert.equal(await aside.getByText("아직 작업이 없습니다", { exact: true }).count(), 0);
     assert.equal(await aside.locator('[data-session-section="asks"]').getByText("3", { exact: true }).count(), 1);
     await aside.getByText("질문 · 지금", { exact: true }).waitFor();
-    await capture("all-sections-dot");
+    await verifyTaskOrder(aside.locator('[data-test-class="canon-epic-detail"]'));
+    await verifyInlineTriggerRings(aside);
+    await capture("pane-task-order");
     await aside.getByText("작업 대기열", { exact: true }).scrollIntoViewIfNeeded();
     await capture("available-sections-bottom");
     await aside.getByText("환경", { exact: true }).scrollIntoViewIfNeeded();
@@ -86,19 +90,21 @@ try {
     await request.waitFor();
     assert(await request.isVisible(), "The ask scrolls to its transcript card");
     await context.getByRole("button").first().click();
-    await aside.locator('[data-test-class="context-overview"]').waitFor();
+    await aside.locator('[data-test-class="context-compact"]').waitFor();
     await context.evaluate(node => node.scrollIntoView({ block: "start" }));
-    await capture("context-expanded");
+    await verifyCompactContext(context, capture);
     const focus = await auditSessionInfoFocus(page, aside);
     assert.deepEqual(focus.clips, []);
     console.log(JSON.stringify({ sessionInfoFocusStops: focus.stops, clipped: focus.clips.length }));
     await context.getByRole("button").first().click();
+    await verifyDashboardTask(page, epic.id, capture);
     await toggle.click();
     await aside.waitFor({ state: "hidden" });
     await toggle.click();
     await aside.waitFor();
     await page.setViewportSize({ width: 1024, height: 900 });
     await page.waitForFunction(() => document.querySelector('[data-slot="conversation-aside"]')?.getAttribute("data-layout") === "floating");
+    await verifyInlineTriggerRings(aside);
     assert.equal(await aside.locator('[data-slot="separator"]').count(), 7);
     await capture("floating");
     await page.setViewportSize({ width: 1440, height: 1050 });
@@ -163,7 +169,10 @@ try {
     const dialog = page.getByRole("dialog", { name: "작업 그래프", exact: true });
     await dialog.waitFor();
     await dialog.getByText("아직 작업이 없습니다", { exact: true }).waitFor();
-    await capture("graph-modal");
+    const height = (await dialog.boundingBox())!.height;
+    assert(height >= page.viewportSize()!.height * 0.8, `Graph modal fills the viewport: ${height}`);
+    console.log(JSON.stringify({ graphModalHeight: height, viewportHeight: page.viewportSize()!.height }));
+    await capture("graph-modal-full");
     assert.equal(await dialog.getByText("작업 그래프", { exact: true }).count(), 1, "Exactly one 작업 그래프 heading");
     await page.keyboard.press("Escape");
     await dialog.waitFor({ state: "hidden" });

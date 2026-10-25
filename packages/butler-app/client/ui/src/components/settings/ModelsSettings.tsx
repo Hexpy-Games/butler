@@ -6,7 +6,6 @@ import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 import { BackupModelsSummary } from "./BackupModelsSummary";
 import { ButlerModelFields } from "./ButlerModelFields";
-import { MemoryCleanupFields } from "./MemoryCleanupFields";
 import { ModelAddEditPage } from "./ModelAddEditPage";
 import { ModelManagementPage } from "./ModelManagementPage";
 import { WorkerProfileControls } from "./WorkerProfileControls";
@@ -14,7 +13,7 @@ import { WorkerProfileEditor } from "./WorkerProfileEditor";
 import { useWorkerProfiles } from "./hooks/useWorkerProfiles";
 
 /**
- * The Models page. The main model and backup models are always visible; memory cleanup and worker profiles sit in a collapsed Advanced
+ * The Models page. The main model and backup models are always visible; worker profiles sit in a collapsed Advanced
  * disclosure on the same page.
  */
 export function ModelsSettings() {
@@ -56,9 +55,6 @@ function ModelsRootPage({ advancedOpen, onToggleAdvanced }: { advancedOpen: bool
       </SettingsSection>
       {advancedOpen && (
         <>
-          <SettingsSection id="memory-cleanup" kind="form" title={sections.memoryCleanup}>
-            <MemoryCleanupFields />
-          </SettingsSection>
           <SettingsSection
             id="worker-profiles"
             kind="list"

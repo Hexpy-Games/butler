@@ -22,6 +22,7 @@ import { AppToaster } from "@/components/common/AppToaster.tsx";
 import { ImageViewerHost } from "@/components/media/ImageViewerHost";
 import { SettingsView } from "@/components/settings/SettingsView.tsx";
 import { SessionObserverDialog } from "@/components/layout/SessionObserverDialog.tsx";
+import { ProjectCreateDialog } from "@/components/layout/ProjectCreateDialog.tsx";
 import { CommandPalette } from "@/components/command/CommandPalette.tsx";
 import { BrowserArea } from "@/components/browser/BrowserArea";
 import { connectBrowser } from "@/components/browser/browserBridge";
@@ -319,6 +320,7 @@ export function VisualHarness() {
       {fixture && <ImageViewerHost />}
       {ss03Surface && <SessionObserverDialog />}
       <CommandPalette open={commandOpen} />
+      <ProjectCreateDialog />
     </AdaptiveShell>
   );
 }

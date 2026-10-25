@@ -14,6 +14,9 @@ pub(super) fn project(
     wallpaper::project(current, patch, &mut output);
     composer_decoration::project(current, patch, &mut output);
     conversation_background::project(current, patch, &mut output);
+    if let Some(value) = patch.get("consolidation_time") {
+        output["consolidation_time"] = value.clone();
+    }
     super::super::browsing::project(current, patch, facts, &mut output);
     output
 }
@@ -23,6 +26,9 @@ pub(super) fn sanitize(
     facts: &super::super::AppSettingsFacts,
 ) -> Result<serde_json::Value, crate::gateway::GatewayApplicationError> {
     let mut patch = sanitize::sanitize(input, facts)?;
+    if let Some(value) = input.get("consolidation_time") {
+        patch["consolidation_time"] = value.clone();
+    }
     if let Some(value) = input.get(wallpaper::KEY) {
         let value = wallpaper::sanitize(value)?;
         if let Some(patch) = patch.as_object_mut() {

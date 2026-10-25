@@ -2209,9 +2209,11 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
       const result = await api<{ project: ProjectSummary }>("/projects", {
         method: "POST",
         body: JSON.stringify({
-          source: "existing_folder",
+          source: selection.workspace_path !== undefined ? "workspace_folder" : "existing_folder",
           display_name: displayName.trim(),
-          folder_selection_token: selection.folder_selection_token,
+          ...(selection.workspace_path !== undefined
+            ? { workspace_path: selection.workspace_path }
+            : { folder_selection_token: selection.folder_selection_token }),
         }),
       });
       await get().refreshNavigation();

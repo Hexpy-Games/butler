@@ -33,6 +33,7 @@ export const EMPTY_SETTINGS: SettingsView = {
   reasoning_effort: "medium",
   recall_mode: "accurate",
   recall_judge_model: "default",
+  consolidation_time: "04:00",
   consolidation_model: "default",
   consolidation_reasoning_effort: "xhigh",
   effective_consolidation_model: "",
