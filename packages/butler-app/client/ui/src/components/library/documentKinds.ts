@@ -7,8 +7,8 @@ import { storedFileArtifactKind } from "../artifacts/artifactDisplay";
 function openFile(item: LibraryItem) {
   if (!item.file) return;
   if (item.session) useButlerStore.getState().openSession(item.session);
-  useButlerStore.getState().openArtifact(item.id, { id: item.id, session_id: item.session, kind: storedFileArtifactKind(item.file), title: item.title, file_id: item.file.file_id, url: item.file.url, size_bytes: item.file.size_bytes, created_at: item.capturedAt,
-    safe_path_label: item.file.safe_name, source_label: item.revisions?.[0]?.file.source_label, revisions: item.revisions });
+  useButlerStore.getState().openArtifact({ id: item.id, session_id: item.session, kind: storedFileArtifactKind(item.file), title: item.title, file_id: item.file.file_id, url: item.file.url, size_bytes: item.file.size_bytes, created_at: item.capturedAt,
+    safe_path_label: item.file.safe_name, source_label: item.revisions?.[0]?.file.source_label, revisions: item.revisions }, item.session);
 }
 /** Document section presentation and opening policy; file and editable histories stay independent. */
 const documentKinds = {

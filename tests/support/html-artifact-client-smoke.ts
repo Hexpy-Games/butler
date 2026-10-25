@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { join } from "node:path";
 import { writeFileSync } from "node:fs";
-import type { Page } from "playwright";
+import type { Page, Response } from "playwright";
 import { electronFrame, type ElectronPage } from "./electron-page-cdp";
 import type { NativeAppServerHandle } from "./native-app-server";
 
@@ -34,12 +34,26 @@ export async function verifyBrowserHtmlRefresh(page: Page, server: NativeAppServ
   });
   if (process.env.BUTLER_SMOKE_SCREENSHOTS) await page.screenshot({ path: join(process.env.BUTLER_SMOKE_SCREENSHOTS, `before-url-refresh-${new URL(page.url()).protocol.replace(":", "")}.png`) });
   const response = page.waitForResponse(response => new URL(response.url()).pathname === "/session-view");
+  // Every session view the client reads from here on, so a phone (no chat on screen) can still prove it applied the refresh.
+  const views: Promise<string>[] = [];
+  const collect = (read: Response) => { if (new URL(read.url()).pathname === "/session-view") views.push(read.text().catch(() => "")); };
+  page.on("response", collect);
   const marker = await refreshHtmlFileUrls(server, sessionId);
   await response;
-  await page.getByText(marker, { exact: true }).last().waitFor();
+  if (await page.locator('[data-test-class~="conversation"]').count()) await page.getByText(marker, { exact: true }).last().waitFor();
+  else await waitFor(async () => (await Promise.all(views)).some(text => text.includes(marker)), "the client read the refreshed session view");
+  page.off("response", collect);
   assert.equal(await page.locator(frameSelector).getAttribute("src"), src);
   assert.equal(await child.evaluate(() => document.body.dataset.loadId), loadId);
   await page.frameLocator(frameSelector).getByRole("button", { name: "Clicked", exact: true }).waitFor();
+}
+
+async function waitFor(check: () => Promise<boolean>, label: string, timeoutMs = 30_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!await check()) {
+    assert(Date.now() < deadline, `timed out: ${label}`);
+    await new Promise(done => setTimeout(done, 100));
+  }
 }
 
 /** Same production app://butler preload boundary as the published-output smoke. */

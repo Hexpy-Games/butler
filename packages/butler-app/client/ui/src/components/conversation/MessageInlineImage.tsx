@@ -10,6 +10,7 @@ import { artifactCardActions } from "@/components/artifacts/artifactActions";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store";
 import { useOpenMessageImage } from "./messageImages";
+import { fileArtifact } from "./workingFiles";
 
 export interface MessageInlineImageProps
   extends Omit<ImgHTMLAttributes<HTMLImageElement>, "className" | "style"> {
@@ -22,7 +23,7 @@ export interface MessageInlineImageProps
  * A markdown image. Message files load through their signed URL; a failed
  * load (expired or revoked signature) refreshes the session once. The picture
  * opens the image viewer on the message's pictures; Open shows a message file
- * in the artifact viewer. A relative path that names no message file cannot
+ * in the file viewer. A relative path that names no message file cannot
  * load, so it shows nothing.
  */
 export function MessageInlineImage({
@@ -42,13 +43,10 @@ export function MessageInlineImage({
   const key = file?.url ?? resolvedSrc;
   const view = openImage ? () => openImage(key) : undefined;
   const attachment = attachments.find(item => item.url === file?.url);
-  const artifact = artifacts.find(item => item.url === file?.url) ?? (attachment ? {
-    id: `artifact-${attachment.file_id}`, file_id: attachment.file_id,
-    title: attachment.safe_name, kind: attachment.kind, url: attachment.url,
-    signed_url: attachment.signed_url, created_at: attachment.created_at,
-  } : undefined);
+  // The attachment as an artifact keeps what decides its actions (delivered or not, its size).
+  const artifact = artifacts.find(item => item.url === file?.url) ?? (attachment ? fileArtifact(attachment) : undefined);
   const save = artifact ? artifactCardActions(artifact)[0] : undefined;
-  const open = artifact ? () => openArtifact(artifact.id, artifact) : undefined;
+  const open = artifact ? () => openArtifact(artifact) : undefined;
   return (
     <Stack as="span" gap="xs" cross="start" data-test-class="message-image">
     <ArtifactPreviewImage

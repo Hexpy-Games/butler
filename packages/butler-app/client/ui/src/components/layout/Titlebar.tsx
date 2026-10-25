@@ -16,6 +16,8 @@ import { TitlebarShell } from "@/butler-ds";
 import { TitlebarWorkspaceSubtitle } from "./TitlebarWorkspaceSubtitle";
 import { WindowControls } from "./WindowControls";
 import { BrowserToggle } from "../browser/BrowserToggle";
+import { FileViewerToggle } from "../file-viewer/FileViewerToggle";
+import { useViewerTakesWorkspace } from "../file-viewer/useRightSlot";
 import { HubConversationButton } from "../browser/HubConversationButton";
 import { libraryTitle, useLibraryNames } from "../library/libraryNav";
 import { useTitlebarBack } from "@/app/navigationBack";
@@ -28,6 +30,8 @@ export function Titlebar({ sidebarOpen, splitChatWidth }: { sidebarOpen?: boolea
   const storeActiveChatId = useButlerStore((state) => state.activeChatId);
   const storeActiveChatTitle = useButlerStore((state) => state.activeChatTitle);
   const leftOpen = useButlerStore((state) => state.leftOpen);
+  // On a phone the viewer replaces the chat: 세션 정보 has nothing to show beside it.
+  const viewerTakesWorkspace = useViewerTakesWorkspace(storeActiveChatId);
   const back = useTitlebarBack();
   useLibraryNames();
   const { title, subtitle } = useMemo(
@@ -75,9 +79,10 @@ export function Titlebar({ sidebarOpen, splitChatWidth }: { sidebarOpen?: boolea
       splitChatWidth={splitChatWidth}
       titleActions={activeSession ? <TitlebarSessionMenu activeSession={activeSession} canOpenSessionFolder={canOpenSessionFolder}
         sessionMenuOpen={sessionMenuOpen} setSessionMenuOpen={setSessionMenuOpen} /> : undefined}
-      chatTrailing={storeView.kind === "session" ? <SessionInfoActions /> : undefined}
+      chatTrailing={storeView.kind === "session" && !viewerTakesWorkspace ? <SessionInfoActions /> : undefined}
       trailing={
         <ButtonContainer size="icon-sm" data-test-class="project-controls">
+          {storeView.kind === "session" && <FileViewerToggle />}
           {storeView.kind === "session" && isServerBackedSessionId(storeActiveChatId) && <BrowserToggle />}
         </ButtonContainer>
       }

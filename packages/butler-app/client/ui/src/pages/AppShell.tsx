@@ -24,6 +24,7 @@ import { useOrganizationNotice } from "@/components/space/hooks/useOrganizationN
 import { Titlebar } from "@/components/layout/Titlebar.tsx";
 import { LiveConnectionNotice } from "@/components/layout/LiveConnectionNotice.tsx";
 import { ConversationBrowserFrame } from "@/components/browser/ConversationBrowserFrame";
+import type { RightSlotPane } from "@/components/file-viewer/useRightSlot";
 import { LibraryDialogHost } from "@/components/library/LibraryDialogHost";
 import { CardDragPreview } from "@/components/library/CardDragPreview";
 import { HistoryPage } from "@/components/browser/HistoryPage";
@@ -199,14 +200,14 @@ function AppWorkspaceShell() {
       leftOpen={effectiveLeftOpen} leftPeek={peek.open} splitOpen={browser.paneOpen}
       compactSidebarFullWidth platform={nativePlatform()} resizing={Boolean(resize.resizingPanel)}
       rightOpen={false} settingsActive={isSettingsView} UNSAFE_style={resize.panelStyle}>
-      <AppWorkspaceContent leftOpen={effectiveLeftOpen} paneOpen={browser.paneOpen} chatWidth={browser.chatWidth} />
+      <AppWorkspaceContent leftOpen={effectiveLeftOpen} pane={browser.pane} chatWidth={browser.chatWidth} />
       <AppWorkspaceControls panels={panels} />
       <AppWorkspaceDialogs />
     </AdaptiveShell>
   );
 }
 
-function AppWorkspaceContent({ leftOpen, paneOpen, chatWidth }: { leftOpen: boolean; paneOpen: boolean; chatWidth: number }) {
+function AppWorkspaceContent({ leftOpen, pane, chatWidth }: { leftOpen: boolean; pane: RightSlotPane; chatWidth: number }) {
   const view = useButlerStore((state) => state.view);
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const isSettingsView = useButlerStore(selectIsSettingsView);
@@ -216,7 +217,7 @@ function AppWorkspaceContent({ leftOpen, paneOpen, chatWidth }: { leftOpen: bool
       <Sidebar />
     </AdaptiveShellSidebar>
     <AdaptiveShellWorkspace data-test-class="workspace">
-      <AdaptiveShellTitle><Titlebar sidebarOpen={leftOpen} splitChatWidth={paneOpen ? chatWidth : undefined} /></AdaptiveShellTitle>
+      <AdaptiveShellTitle><Titlebar sidebarOpen={leftOpen} splitChatWidth={pane ? chatWidth : undefined} /></AdaptiveShellTitle>
       {view.kind === "browser" && window.butlerBrowser ? (
         <Stack fill gap="none"><LiveConnectionNotice /><BrowserArea /></Stack>
       ) : view.kind === "history" ? (
@@ -231,7 +232,7 @@ function AppWorkspaceContent({ leftOpen, paneOpen, chatWidth }: { leftOpen: bool
         <AdaptiveShellCard><LiveConnectionNotice /><ErrorBoundary key={view.projectId} scope="project-dashboard"><ProjectDashboardView /></ErrorBoundary></AdaptiveShellCard>
       ) : (
         <ErrorBoundary resetKey={activeChatId} scope="conversation"><ConversationBrowserFrame
-          sessionId={activeChatId} paneOpen={paneOpen} chatWidth={chatWidth} notice={<LiveConnectionNotice />} /></ErrorBoundary>
+          sessionId={activeChatId} pane={pane} chatWidth={chatWidth} notice={<LiveConnectionNotice />} /></ErrorBoundary>
       )}
     </AdaptiveShellWorkspace>
   </>;

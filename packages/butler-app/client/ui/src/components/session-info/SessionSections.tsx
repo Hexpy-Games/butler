@@ -33,7 +33,6 @@ export function SessionSections({ layout }: { layout: AsideLayout }) {
   const waiting = queue.filter(item => item.chat_id === sessionId && ["queued", "dispatching"].includes(item.state));
   const running = (ACTIVE_TURN_STATES.has(summary?.turn_state ?? "") ? summary?.latest_progress?.safe_progress_rows : [])?.filter(row => ["running", "active", "thinking", "streaming", "reviewing", "waiting_for_tool"].includes(row.state ?? "")) ?? [];
   const hasArtifacts = artifacts.length > 0 || messages.some(message => message.artifacts?.length);
-  const selectedArtifact = useButlerStore(state => state.selectedArtifact);
   return <SessionSectionList layout={layout}>
     {asks && asks.open_count > 0 && <SessionSection id="asks" layout={layout} title={c.asks} count={asks.open_count}>
       <PendingAskRows asks={asks.asks} />
@@ -51,7 +50,7 @@ export function SessionSections({ layout }: { layout: AsideLayout }) {
         <ContextCompact context={summary.context_details} />
       </DisclosureRow>
     </SessionSection>}
-    {(hasArtifacts || selectedArtifact) && <SessionSection id="artifacts" layout={layout}>
+    {hasArtifacts && <SessionSection id="artifacts" layout={layout}>
       <ArtifactsPanel compact artifacts={artifacts} />
     </SessionSection>}
     {attachments.length > 0 && <SessionSection id="attachments" layout={layout} title={c.attachments} count={attachments.length}>

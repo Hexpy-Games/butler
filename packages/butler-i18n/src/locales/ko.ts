@@ -1,4 +1,5 @@
 import { SESSION_INFO_COPY } from "./session-info.ts";
+import { FILE_VIEWER_COPY } from "./file-viewer.ts";
 import { CANON_COPY } from "./canon.ts";
 import { TASK_GRAPH_COPY } from "./task-graph.ts";
 import { lifecycleCopy } from "../lifecycle.ts";
@@ -343,6 +344,7 @@ export const koKrCopy: AppCopy = {
   shell: { footerNav: "업데이트와 설정", update: { downloading: "업데이트 받는 중", working: "업데이트 준비 중", ready: "업데이트 준비됨", failed: "업데이트 실패", restart: "다시 시작" } },
   canon: CANON_COPY["ko-KR"],
   sessionInfo: SESSION_INFO_COPY["ko-KR"],
+  fileViewer: FILE_VIEWER_COPY["ko-KR"],
   taskGraph: TASK_GRAPH_COPY["ko-KR"],
   lifecycle: lifecycleCopy.ko,
   browser: {
@@ -1329,7 +1331,6 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     contentHostRequired: "보안 설정에서 결과물 호스트를 지정해 주세요.",
     title: "아티팩트",
     empty: "아직 아티팩트가 없습니다",
-    backToList: "아티팩트 목록",
     open: "열기",
     save: "저장하기",
     saved: "아티팩트를 저장했습니다",
