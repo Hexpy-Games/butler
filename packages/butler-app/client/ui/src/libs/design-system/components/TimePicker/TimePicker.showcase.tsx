@@ -15,18 +15,26 @@ export const meta: ShowcaseMeta = {
 const labels = {
   "en-US": {
     time: "Time", timeHint: "Runs only while Butler is on.", pick: "Choose time",
-    h23: "24-hour (en-GB)", h12: "12-hour (en-US)", ko: "Korean (ko-KR)",
+    h23: "24-hour (en-GB)", h12: "12-hour (en-US)", ko: "Korean (ko-KR)", de: "24-hour (de-DE)",
     offStep: "A typed 04:07 joins the 5-minute list in order.",
   },
   "ko-KR": {
     time: "실행 시간", timeHint: "버틀러가 켜져 있을 때만 실행합니다.", pick: "시간 고르기",
-    h23: "24시간제 (en-GB)", h12: "12시간제 (en-US)", ko: "한국어 (ko-KR)",
+    h23: "24시간제 (en-GB)", h12: "12시간제 (en-US)", ko: "한국어 (ko-KR)", de: "24시간제 (de-DE)",
     offStep: "직접 입력한 04:07은 5분 단위 목록에 순서대로 들어갑니다.",
   },
 } as const;
 
 function text({ locale }: ShowcaseRenderContext) {
   return labels[locale];
+}
+
+/** The viewer's own locale first; an English page shows no Korean day period. */
+function localeSamples(context: ShowcaseRenderContext): [string, string][] {
+  const copy = text(context);
+  return context.locale === "ko-KR"
+    ? [["ko-KR", copy.ko], ["en-US", copy.h12], ["en-GB", copy.h23]]
+    : [["en-US", copy.h12], ["en-GB", copy.h23], ["de-DE", copy.de]];
 }
 
 function Picker({ initial = "04:00", ...props }: Omit<TimePickerProps, "value" | "onValueChange"> & { initial?: string }) {
@@ -48,7 +56,7 @@ export const stories: ShowcaseStory[] = [
     name: "Locales: hour cycle, order and day period",
     render: (context) => (
       <Stack gap="md">
-        {([["en-US", text(context).h12], ["en-GB", text(context).h23], ["ko-KR", text(context).ko]] as const).map(([locale, caption]) => (
+        {localeSamples(context).map(([locale, caption]) => (
           <Stack gap="xs" key={locale}>
             <Typo.Caption tone="secondary">{caption}</Typo.Caption>
             <Picker initial="16:30" locale={locale} aria-label={caption} pickerLabel={text(context).pick} />
