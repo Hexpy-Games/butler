@@ -20,6 +20,15 @@ empty draw the same matte, so a row of cards keeps its rhythm. With
 `placeholder`, they draw a soft tinted surface with one centered mark
 instead: the `placeholderIcon` favicon on a light plate, or an image glyph.
 
+## Natural size
+`natural={{ width, height }}` gives the picture's own display size in CSS px
+(its pixel size divided by its pixel ratio). The frame then takes the picture's
+exact shape and is `min(100%, width)` wide: a small picture stays small, a large
+one shrinks to its container (a column, a tab, a narrow screen), and the shape is
+reserved before the picture loads, so nothing shifts. It sits at the inline
+start, like text. `aspect` is ignored. Use it for a picture shown on its own
+(the image answer block); keep `aspect` for sets of pictures that must line up.
+
 ## Loading
 The frame's aspect box is reserved from the first render, so a loading
 picture never shifts the layout. While it loads the matte shows; once it has
