@@ -1,3 +1,4 @@
+import { BlockScrap } from "./BlockScrap";
 import { useEffect, useRef, useState } from "react";
 import { appCopy } from "@/app/copy";
 import { notifyStatus } from "@/app/notifications";
@@ -29,6 +30,7 @@ export function LibraryDetail({ view, onAttach }: { view: LibraryView; onAttach:
   useEffect(() => {
     if (!item) { goUp(view); return; }
     let active = true;
+    if (item.block) return;
     void librarySnapshot(item.id).then((value) => { if (active) setHtml({ id: item.id, html: value }); }, () => { if (active) setHtml({ id: item.id, html: null }); });
     return () => { active = false; };
     // Metadata edits do not reload the saved HTML.
@@ -54,12 +56,12 @@ export function LibraryDetail({ view, onAttach }: { view: LibraryView; onAttach:
   return (
     <ScrollArea fill dataTestClass="library-detail"><PageContainer width="full" gutter="xl"><Box paddingY="xl">
       <Grid columns={{ compact: "1", base: "1", wide: "main-aside" }} gap="xl">
-        <ArtifactPreview>
+        {item.block ? <BlockScrap item={item} /> : <ArtifactPreview>
           {loaded?.html && item.snapshot ? <ArtifactPreviewFrame srcDoc={loaded.html} title={item.title} intrinsicSize={item.snapshot}
             sandbox="allow-popups allow-popups-to-escape-sandbox" referrerPolicy="no-referrer" data-test-class="scrap-frame" />
             : loaded && item.crop ? <ArtifactPreviewImage src={item.crop} alt={item.title} />
               : <Typo.Caption>{loaded ? appCopy.browser.failed : appCopy.artifacts.loading}</Typo.Caption>}
-        </ArtifactPreview>
+        </ArtifactPreview>}
         <Stack gap="lg">
           <Field><FieldLabel htmlFor="library-item-name">{copy.name}</FieldLabel>
             <Input id="library-item-name" value={name} maxLength={200} onChange={(event) => setName(event.target.value)} onBlur={commitName}
@@ -82,7 +84,7 @@ export function LibraryDetail({ view, onAttach }: { view: LibraryView; onAttach:
             ...(item.snapshot ? [{ label: copy.size, value: `${Math.round(item.snapshot.width)} × ${Math.round(item.snapshot.height)}` }] : []),
           ]} />
           <ButtonContainer size="sm">
-            <Button size="sm" variant="outline" iconStart={<Popup size="sm" />} onClick={() => void openLibraryItem(item, true)}>{appCopy.browser.openSourcePage}</Button>
+            <Button size="sm" variant="outline" iconStart={<Popup size="sm" />} onClick={() => void openLibraryItem(item, true)}>{item.block ? appCopy.conversation.answerBlocks.openOriginChat : appCopy.browser.openSourcePage}</Button>
             <Button size="sm" iconStart={<MessageSquarePlus size="sm" />} onClick={() => onAttach(item)}>{appCopy.browser.attach}</Button>
             <Button size="sm" variant="ghost" iconStart={<Trash2 size="sm" />} onClick={remove}>{copy.deleteItem}</Button>
           </ButtonContainer>

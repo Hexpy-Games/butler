@@ -1,4 +1,5 @@
 //! Library commands and indexed reads on the existing App SQLite owner lane.
+mod blocks;
 mod groups;
 mod item;
 mod organize;
@@ -27,6 +28,13 @@ pub enum AppLibraryCommand {
         url: String,
     },
     Save(Value),
+    SaveBlock {
+        message_id: String,
+        path: String,
+    },
+    Item {
+        id: String,
+    },
     Promote {
         file_id: String,
     },
@@ -76,6 +84,10 @@ impl AppApplication {
             C::Search(q) => self.library_read(move |db| query::search(db, &q)),
             C::Bookmark { url } => self.library_read(move |db| lookup(db, &url)),
             C::Promote { file_id } => self.library_write(move |db| records::promote(db, &file_id)),
+            C::SaveBlock { message_id, path } => {
+                self.library_write(move |db| blocks::save(db, &message_id, &path))
+            }
+            C::Item { id } => self.library_read(move |db| blocks::get(db, &id)),
             C::Save(item) => self.library_write(move |db| save_item(db, item)),
             C::Delete { id } => self.library_write(move |db| delete(db, &id)),
             C::Snapshot { id } => self.library_read(move |db| snapshot(db, &id)),
