@@ -47,6 +47,8 @@ try {
   await page.locator('[data-test-class="canon-epic-detail"]').getByRole("heading", { name: "문서 화면 정리", exact: true }).waitFor();
   await showCanonSidebar(page);
   await page.waitForFunction(() => document.querySelector('[data-slot="conversation-aside"]')?.getAttribute("data-layout") === "docked");
+  // The session summary arrives after the epic and mounts sections around the task; hovering earlier moves the title off the pointer.
+  await page.locator('[data-session-section="environment"]').waitFor();
   await verifyInlineFields(page, server, epic.id, shots);
   await verifyEmptyDescription(page, epic.id);
   await verifyInlineAttachment(page, epic.id);
