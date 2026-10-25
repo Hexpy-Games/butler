@@ -7,6 +7,7 @@ fn spec() -> Value {
     let mut spec = fixture["specs"]["v2"].clone();
     // Collected nested images are exercised by browser_delegation::answer.
     spec["blocks"][1]["tabs"][1]["blocks"][0] = json!({"type":"text","text":"Picture details"});
+    spec["blocks"][0]["blocks"][0]["items"][0]["text"] = json!("청자 panorama details");
     spec
 }
 
@@ -95,5 +96,77 @@ async fn containers_correct_and_stream_closed_children() -> Result<(), HarnessEr
         .position(|(_, op)| op["op"] == "item" && op["bi"] == 1 && op["list"] == "tabs");
     assert!(tab.is_some(), "a child closes before its tab unit");
     drop((live, db));
+    s.finish().await
+}
+
+#[tokio::test]
+async fn block_scraps_are_frozen_searchable_and_paths_are_checked() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("BLOCK-SCRAPS")?
+        .stub_cassette(recording()?)
+        .start()
+        .await?;
+    let (_, turn) = s.turn("general", PROMPT).await?;
+    assert_eq!(turn_state(&turn), "delivered");
+    let messages = s.gw.messages("general").await?;
+    let reply = messages.iter().find(|m| m["role"] == "assistant").unwrap();
+    let user = messages.iter().find(|m| m["role"] == "user").unwrap();
+    let mut expected = spec();
+    butler_runtime::capabilities::answer_blocks::normalize(&mut expected);
+    for (path, block) in [
+        ("/blocks/0", &expected["blocks"][0]),
+        ("/blocks/0/blocks/0", &expected["blocks"][0]["blocks"][0]),
+    ] {
+        let input =
+            json!({"message_id":reply["id"],"path":path,"block":{"type":"text","text":"forged"}});
+        let saved = s.gw.post("/library/blocks", input.clone()).await?;
+        assert_eq!(saved.status, 200, "{}", saved.text);
+        let item = saved.data();
+        assert_eq!(item["kind"], "scrap");
+        assert_eq!(item["block"], json!({"v":2,"blocks":[block]}));
+        assert_eq!(item["origin"]["session"], "general");
+        assert_eq!(item["origin"]["message"], reply["id"]);
+        assert_eq!(item["origin"]["path"], path);
+        assert_eq!(item["origin"].get("id"), block.get("id"));
+        assert!(item["capturedAt"].is_string());
+        assert_eq!(s.gw.post("/library/blocks", input).await?.data(), item);
+        let id = item["id"].as_str().unwrap();
+        assert_eq!(s.gw.get(&format!("/library/{id}")).await?.data(), item);
+    }
+    for word in ["청자", "panorama"] {
+        let query: String = url::form_urlencoded::Serializer::new(String::new())
+            .append_pair("q", word)
+            .finish();
+        let found = s.gw.get(&format!("/library?kind=scrap&{query}")).await?;
+        assert_eq!(found.data()["items"].as_array().unwrap().len(), 2);
+    }
+    for path in [
+        "/blocks/0/text",
+        "/blocks/00",
+        "/blocks/99",
+        "/blocks/0/blocks/0/text",
+        "/blocks/1/tabs/0",
+        "",
+    ] {
+        assert_eq!(
+            s.gw.post(
+                "/library/blocks",
+                json!({"message_id":reply["id"],"path":path})
+            )
+            .await?
+            .status,
+            400,
+            "{path}"
+        );
+    }
+    assert_eq!(
+        s.gw.post(
+            "/library/blocks",
+            json!({"message_id":user["id"],"path":"/blocks/0"})
+        )
+        .await?
+        .status,
+        400
+    );
     s.finish().await
 }

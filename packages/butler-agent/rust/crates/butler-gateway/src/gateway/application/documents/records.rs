@@ -98,6 +98,25 @@ pub(in crate::gateway::application) fn bind_reply(
         .map_err(AppStorageError::sqlite)?;
         db.execute("UPDATE browser_library SET payload=json_set(payload,'$.message',?2) WHERE id=?1 AND kind='doc'",params![id,reply]).map_err(AppStorageError::sqlite)?;
     }
+    db.execute(
+        "UPDATE document_deliveries SET message_id=?3 WHERE chat_id=?1 AND message_id=?2",
+        params![chat, original, reply],
+    )
+    .map_err(AppStorageError::sqlite)?;
+    Ok(())
+}
+
+pub(super) fn delivery(db: &Connection, id: &str, input: &Value) -> Result<(), AppStorageError> {
+    if input["author"] != "butler" {
+        return Ok(());
+    }
+    if let (Some(chat), Some(message)) = (input["chat_id"].as_str(), input["message_id"].as_str()) {
+        db.execute(
+            "INSERT OR IGNORE INTO document_deliveries VALUES(?1,?2,?3)",
+            params![id, chat, message],
+        )
+        .map_err(AppStorageError::sqlite)?;
+    }
     Ok(())
 }
 
@@ -110,7 +129,7 @@ pub(in crate::gateway::application) fn has_deliverable(
         return Ok(false);
     };
     db.query_row(
-        "SELECT 1 FROM documents WHERE chat_id=?1 AND message_id=?2 LIMIT 1",
+        "SELECT 1 FROM documents WHERE chat_id=?1 AND message_id=?2 UNION ALL SELECT 1 FROM document_deliveries WHERE chat_id=?1 AND message_id=?2 LIMIT 1",
         params![chat, original],
         |_| Ok(()),
     )
