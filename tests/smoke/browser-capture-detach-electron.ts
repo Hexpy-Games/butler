@@ -1,0 +1,58 @@
+/** #1583: pane motion re-attaches a native tab while its still capture is in flight; every capture must still settle. */
+import { strict as assert } from "node:assert";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
+import { nativeAligned, shellReady } from "../support/browser-shell-acceptance";
+
+const evidence = process.env.BUTLER_BROWSER_EVIDENCE; assert.ok(evidence); mkdirSync(evidence, { recursive: true });
+const fixture = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response(
+  "<!doctype html><title>Capture fixture</title><style>html,body{margin:0;height:100%;background:#365bf5}</style>",
+  { headers: { "content-type": "text/html" } }) });
+const app = await browserAgentApp(evidence, () => null);
+try {
+  await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "en", appearance_theme: "light" }) });
+  await app.page.reload(); await shellReady(app, "en");
+  await app.call("open");
+  const id = await app.call<string>("create", { url: fixture.url.href });
+  await app.click("Browser"); await app.call("activate", { id });
+  await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-slot=browser-pane]'))"), "browser pane");
+  await nativeAligned(app);
+  const facts: Record<string, unknown> = {};
+  // The bursts use the slot's own entry points: a gliding pane covers, moves and uncovers the page each frame;
+  // a driven tab parks in the hidden agent window between frames; closing the area hides every tab.
+  for (const variant of ["glide", "parked", "area"]) {
+    facts[variant] = await app.main(`(async()=>{
+      const b=globalThis.browserAgentSubject, t=b.tabs.get(${JSON.stringify(id)}), wait=ms=>new Promise(r=>setTimeout(r,ms));
+      const settles=async(label,promise)=>{let timer;const hung=new Promise((_,fail)=>{timer=setTimeout(()=>fail(new Error(label+' never settled')),10000)});
+        try{return await Promise.race([promise,hung])}finally{clearTimeout(timer)}};
+      const base={...t.slot}; let deferred=0;
+      t.driven=${JSON.stringify(variant)}==='parked';
+      for(let round=0;round<5;round++){
+        for(let i=0;i<20;i++){
+          const slot={...base,x:base.x+(i%5)*7,width:base.width-(i%5)*7};
+          if(${JSON.stringify(variant)}==='area'){b.hide();b.areaVisible=true;b.commandTab('bounds',t.id,slot);}
+          else{b.commandTab('covered',t.id,true);b.commandTab('bounds',t.id,slot);b.commandTab('covered',t.id,false);}
+        }
+        b.commandTab('bounds',t.id,base);
+        if(t.attachWait) deferred++;
+        await settles('still capture',b.capture(t));
+        await settles('page capture',t.view.webContents.capturePage(undefined,{stayHidden:true}));
+        await wait(50);
+      }
+      t.driven=false;
+      return {deferred,attached:t.attached===${app.win},bounds:t.view.getBounds(),slot:base};
+    })()`, 180_000);
+  }
+  writeFileSync(join(evidence, "capture-detach.json"), JSON.stringify(facts, null, 2));
+  for (const [variant, fact] of Object.entries(facts) as Array<[string, { deferred: number; attached: boolean }]>) {
+    assert.ok(fact.deferred > 0, `${variant}: a re-attach met an in-flight capture`);
+    assert.equal(fact.attached, true, `${variant}: the page is back in the window`);
+  }
+  await nativeAligned(app);
+  // The still that stands in for the page during motion shows the page itself.
+  const blue = await app.main<number>(`(async()=>{const b=globalThis.browserAgentSubject,t=b.tabs.get(${JSON.stringify(id)});await b.capture(t);
+    const image=process.getBuiltinModule('module').createRequire(${JSON.stringify(join(process.cwd(), "packages/butler-app/client/electron/package.json"))})('electron').nativeImage.createFromDataURL(t.still);
+    const p=image.getBitmap();let n=0;for(let i=0;i<p.length;i+=4)if(p[i]>180&&p[i+1]<150&&p[i+2]<120)n++;return n/(p.length/4)})()`);
+  assert.ok(blue > 0.9, `still shows the page (${blue})`);
+} finally { fixture.stop(true); await app.stop(); }

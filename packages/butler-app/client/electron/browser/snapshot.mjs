@@ -4,6 +4,7 @@ import { isIP } from "node:net";
 import { guardUrl, privateAddress } from "./guard.mjs";
 import { snapshotFonts, inlineSnapshotBlobs } from "./snapshot-page-resources.mjs";
 import { snapshotPage } from "./snapshot-page.mjs";
+import { capturePage } from "./view-capture.mjs";
 
 /**
  * A scrap's self-contained HTML copy of exactly the picked element (or area): the page's DOM with computed
@@ -186,7 +187,7 @@ async function islandImage(tab, island, at, masks) {
   if (at.clip) shown = meet(shown, at.clip);
   if (shown.right - shown.left < 1 || shown.bottom - shown.top < 1 || width * height > 16e6) return CLEAR;
   const x = Math.floor(shown.left * scale), y = Math.floor(shown.top * scale);
-  const image = await tab.view.webContents.capturePage({ x, y, width: Math.ceil(shown.right * scale) - x, height: Math.ceil(shown.bottom * scale) - y }, { stayHidden: true });
+  const image = await capturePage(tab, { x, y, width: Math.ceil(shown.right * scale) - x, height: Math.ceil(shown.bottom * scale) - y });
   if (image.isEmpty()) return CLEAR;
   const piece = nativeImage.createFromBuffer(image.toPNG()), size = piece.getSize(), source = piece.toBitmap();
   const pixels = Buffer.alloc(width * height * 4);
