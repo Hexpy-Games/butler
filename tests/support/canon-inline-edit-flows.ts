@@ -6,7 +6,7 @@ import type { NativeAppServerHandle } from "./native-app-server.ts";
 import type { EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 import { probeFocusRing } from "./focus-ring-clipping.ts";
 import { waitToast } from "./canon-board-scenarios.ts";
-import { canonInspectorClose } from "./canon-board-inspector.ts";
+import { canonAsideClose } from "./canon-board-aside.ts";
 
 const detail = (page: Page) => page.locator('[data-test-class="canon-epic-detail"]');
 const title = (page: Page) => detail(page).getByRole("button", { name: "제목 수정", exact: true });
@@ -98,12 +98,19 @@ async function verifyMarkdownLink(page: Page) {
   assert.equal(await link.getAttribute("target"), "_blank");
   assert.equal(await link.getAttribute("href"), "https://example.com/guide");
   // Observe the real click without navigating the smoke to an external network.
-  await link.evaluate(element => element.addEventListener("click", event => {
-    element.setAttribute("data-default-prevented", String(event.defaultPrevented));
-    event.preventDefault();
-  }, { once: true }));
+  await page.evaluate(() => {
+    const observe = (event: MouseEvent) => {
+      const anchor = (event.target as HTMLElement).closest("a");
+      if (anchor?.href !== "https://example.com/guide") return;
+      document.documentElement.setAttribute("data-link-default-prevented", String(event.defaultPrevented));
+      event.preventDefault();
+      document.removeEventListener("click", observe, true);
+    };
+    document.documentElement.removeAttribute("data-link-default-prevented");
+    document.addEventListener("click", observe, true);
+  });
   await link.click();
-  assert.equal(await link.getAttribute("data-default-prevented"), "false");
+  assert.equal(await page.locator("html").getAttribute("data-link-default-prevented"), "false");
   assert.equal(await detail(page).getByLabel("설명", { exact: true }).count(), 0);
 }
 
@@ -130,7 +137,7 @@ export async function verifyInlineExits(page: Page, server: NativeAppServerHandl
     await dialog.evaluate(async element => { await Promise.all(element.getAnimations().map(animation => animation.finished)); });
     const bounds = await dialog.boundingBox();
     assert(bounds);
-    assert(Math.abs(bounds.x + bounds.width / 2 - 720) < 2);
+    assert(Math.abs(bounds.x + bounds.width / 2 - page.viewportSize()!.width / 2) < 2);
     assert(Math.abs(bounds.y + bounds.height / 2 - 450) < 2);
     await page.locator('[data-slot="dialog-overlay"]').waitFor({ state: "visible" });
     if (choice === "계속 편집") await inlineShot(page, shots, "pane-unsaved-dialog");
@@ -163,7 +170,7 @@ export async function verifyInlineExits(page: Page, server: NativeAppServerHandl
 
 async function verifyCloseAndNavigation(page: Page, id: string) {
   await title(page).click(); await input(page).fill("닫기 초안");
-  await canonInspectorClose(page).click();
+  await canonAsideClose(page).click();
   const dialog = page.getByRole("alertdialog");
   await dialog.getByRole("button", { name: "계속 편집", exact: true }).click();
   assert.equal(await input(page).inputValue(), "닫기 초안");
@@ -173,7 +180,7 @@ async function verifyCloseAndNavigation(page: Page, id: string) {
   await page.getByRole("button", { name: "설정", exact: true }).click();
   await dialog.getByRole("button", { name: "계속 편집", exact: true }).click();
   assert.equal(await input(page).inputValue(), "닫기 초안");
-  await canonInspectorClose(page).click();
+  await canonAsideClose(page).click();
   await dialog.getByRole("button", { name: "저장 안 함", exact: true }).click();
   await detail(page).waitFor({ state: "hidden" });
   await page.locator(`[data-kanban-item="${id}"]`).getByRole("button").first().click();

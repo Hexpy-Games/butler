@@ -1,3 +1,4 @@
+import { DEFAULT_RIGHT_PANEL_WIDTH } from "@/app/panelSizing.ts";
 import { startupResourceReady } from "@/app/startupReady";
 import { useEffect, useRef } from "react";
 import { connectBrowser } from "@/components/browser/browserBridge";
@@ -20,7 +21,6 @@ import { turnProgressOf } from "@/app/turnProgress.ts";
 import { isServerBackedSessionId } from "@/app/sessionIds.ts";
 import {
   selectActiveSessionView,
-  selectRightAvailable,
   useButlerStore,
 } from "@/app/store.ts";
 import type {
@@ -38,9 +38,7 @@ import { useLiveSessionEvents } from "./live-session/useLiveSessionEvents.ts";
 export function useAppBootstrap() {
   useLiveSessionEvents();
   const activeChatId = useButlerStore((state) => state.activeChatId);
-  const activeSessionView = useButlerStore(state => selectActiveSessionView(state) || state.view.kind === "browser" && state.rightOpen);
-  const rightAvailable = useButlerStore(selectRightAvailable);
-  const setRightOpen = useButlerStore((state) => state.setRightOpen);
+  const activeSessionView = useButlerStore(state => selectActiveSessionView(state));
   const setModelCatalog = useButlerStore((state) => state.setModelCatalog);
   const setModelCatalogState = useButlerStore(
     (state) => state.setModelCatalogState,
@@ -66,9 +64,6 @@ export function useAppBootstrap() {
     undefined,
   );
 
-  useEffect(() => {
-    if (!rightAvailable) setRightOpen(false);
-  }, [rightAvailable, setRightOpen]);
 
   // User wallpaper modules; `wallpaper.modules.updated` refreshes them live.
   useEffect(() => {
@@ -106,12 +101,12 @@ export function useAppBootstrap() {
         void writeCachedAppUiState({
           active_session_id: current.activeChatId,
           left_open: current.leftOpen,
-          right_open: current.rightOpen,
+          right_open: false,
           session_info_open: current.sessionInfoOpen,
           task_graph_enabled: current.taskGraphEnabled,
-          right_tab: current.rightTab,
+          right_tab: "summary",
           left_panel_width: current.leftPanelWidth,
-          right_panel_width: current.rightPanelWidth,
+          right_panel_width: DEFAULT_RIGHT_PANEL_WIDTH,
           sidebar_chats_collapsed: current.sidebarChatsCollapsed,
           sidebar_projects_collapsed: current.sidebarProjectsCollapsed,
           sidebar_collapsed_project_ids: current.sidebarCollapsedProjectIds,
@@ -128,12 +123,9 @@ export function useAppBootstrap() {
       const changed =
         state.activeChatId !== previous.activeChatId ||
         state.leftOpen !== previous.leftOpen ||
-        state.rightOpen !== previous.rightOpen ||
         state.sessionInfoOpen !== previous.sessionInfoOpen ||
         state.taskGraphEnabled !== previous.taskGraphEnabled ||
-        state.rightTab !== previous.rightTab ||
         state.leftPanelWidth !== previous.leftPanelWidth ||
-        state.rightPanelWidth !== previous.rightPanelWidth ||
         state.sidebarChatsCollapsed !== previous.sidebarChatsCollapsed ||
         state.sidebarProjectsCollapsed !== previous.sidebarProjectsCollapsed ||
         state.sidebarCollapsedProjectIds !==

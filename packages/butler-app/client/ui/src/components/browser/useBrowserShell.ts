@@ -18,16 +18,10 @@ export function useBrowserShell(root: RefObject<HTMLElement | null>, sidebarWidt
   useEffect(() => {
     connectBrowser();
     const unsubscribeHistory = window.butlerBrowser?.onHistory?.(() => openHistory());
-    const unsubscribeStore = useButlerStore.subscribe((state, previous) => {
-      if (state.rightOpen && !previous.rightOpen && state.view.kind === "session") {
-        useBrowserShellState.getState().setOpen(state.activeChatId, false);
-      }
-    });
-    return () => { unsubscribeHistory?.(); unsubscribeStore(); };
+    return () => { unsubscribeHistory?.(); };
   }, []);
   useEffect(() => {
     if (!paneOpen) return;
-    useButlerStore.getState().setRightOpen(false);
     const state = useBrowserState.getState();
     const tabs = state.tabs.filter((tab) => tab.owner === `conversation:${session}`);
     const last = useBrowserShellState.getState().conversations[session]?.lastTab;
