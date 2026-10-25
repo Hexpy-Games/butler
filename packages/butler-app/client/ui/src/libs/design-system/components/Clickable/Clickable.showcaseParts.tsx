@@ -3,6 +3,7 @@ import type { ShowcaseRenderContext } from "../../showcase";
 import { ProgressMeter } from "../../blocks/ProgressMeter";
 import { SettingsSection } from "../../blocks/SettingsSection";
 import { Box } from "../Box";
+import { Pencil } from "../Icons";
 import { Inline } from "../Inline";
 import { Stack } from "../Stack";
 import { Typo } from "../Typo";
@@ -12,6 +13,10 @@ const labels = {
   "en-US": {
     usage: "Usage",
     chats: "Top chats",
+    editTitle: "Edit title",
+    editDescription: "Edit description",
+    task: "Tidy the release notes",
+    description: "Collect the changes and review the release notes.",
     shares: [
       { title: "Release checklist", description: "Chat · 2h ago", value: "412K", share: 46 },
       { title: "Weekly dependency audit", description: "Schedule · yesterday", value: "268K", share: 30 },
@@ -21,6 +26,10 @@ const labels = {
   "ko-KR": {
     usage: "사용량",
     chats: "많이 쓴 대화",
+    editTitle: "제목 수정",
+    editDescription: "설명 편집",
+    task: "릴리스 노트 정리",
+    description: "변경 사항을 모아 릴리스 노트를 검토합니다.",
     shares: [
       { title: "릴리스 체크리스트", description: "대화 · 2시간 전", value: "412K", share: 46 },
       { title: "주간 의존성 점검", description: "예약 작업 · 어제", value: "268K", share: 30 },
@@ -73,5 +82,25 @@ export function ToggleRows({ context }: { context: ShowcaseRenderContext }) {
         ))}
       </Stack>
     </SettingsSection>
+  );
+}
+
+/** Inline-editable title and description (canon 과제 detail): the fills get room above and below, the text stays put. */
+export function EditableFields({ context }: { context: ShowcaseRenderContext }) {
+  const text = labels[context.locale];
+  return (
+    <Box padding="md">
+      <Stack gap="lg">
+        <Clickable bleed="both" stretch aria-label={text.editTitle} onClick={() => undefined}>
+          <Stack inline align="row" cross="center" gap="xs" minWidth="0">
+            <Typo.PanelTitle as="h3" wrap="anywhere">{text.task}</Typo.PanelTitle>
+            <Pencil size="sm" />
+          </Stack>
+        </Clickable>
+        <Clickable bleed="both" stretch aria-label={text.editDescription} onClick={() => undefined}>
+          <Typo.Body wrap="anywhere">{text.description}</Typo.Body>
+        </Clickable>
+      </Stack>
+    </Box>
   );
 }

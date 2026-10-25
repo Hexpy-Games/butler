@@ -6,6 +6,8 @@ import type { Locator, Page } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
 import type { EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 
+import { verifyInlineBleed, verifyInlineKeyboardRing } from "./inline-bleed-geometry.ts";
+
 const review = process.env.BUTLER_INLINE_REVIEW_DIR ?? "/tmp/butler-inline-review";
 type Field = "title" | "description";
 const labels = { title: "제목", description: "설명" };
@@ -166,13 +168,14 @@ async function verifyGeometry(page: Page, server: NativeAppServerHandle, id: str
     await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
     const target = field === "title" ? trigger(page, field) : detail(page).getByRole("group", { name: triggers[field], exact: true });
     await target.scrollIntoViewIfNeeded();
-    const rest = await geometry(target);
+    const rest = await verifyInlineBleed(target);
     if (name === "one") await capture(page, theme, "after-one-rest");
     await target.hover();
     await page.getByRole("tooltip", { name: triggers[field], exact: true }).waitFor();
-    const hover = await geometry(target);
+    const hover = await verifyInlineBleed(target);
     assert.deepEqual(hover, rest, `${name}: hover height and first text y are exactly equal`);
     if (name !== "title") await capture(page, theme, `after-${name}-hover`);
+    await verifyInlineKeyboardRing(trigger(page, field));
     await trigger(page, field).click();
     const edit = await geometry(input(page, field), true);
     measurements.push({ field, name, rest, hover, edit });
