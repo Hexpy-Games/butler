@@ -12,6 +12,7 @@ mod permission_management;
 mod projection;
 pub(super) mod questions;
 mod receipt;
+pub(super) mod resolve_ask;
 mod service;
 
 #[cfg(any(test, feature = "test-support"))]

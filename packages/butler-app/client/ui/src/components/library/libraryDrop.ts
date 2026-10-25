@@ -1,12 +1,13 @@
+import type { LibraryItem } from "../browser/libraryStore";
 import { useButlerStore } from "@/app/store";
-import type { AppView, LibraryKind } from "@/app/types";
+import type { AppView } from "@/app/types";
 import { useLibraryDialogs } from "./libraryDialogs";
 import { useLibraryNames } from "./libraryNav";
 
 export type GroupTarget = { kind: "group"; group: string; name: string };
 
 /** A group tile (main screen) or group chip (kind view) under the pointer that accepts items of `kind`. */
-export function groupAt(hit: Element | null, kind: LibraryKind): GroupTarget | undefined {
+export function groupAt(hit: Element | null, kind: LibraryItem["kind"]): GroupTarget | undefined {
   const node = hit?.closest<HTMLElement>("[data-group-tile], [data-group-chip]");
   const id = node?.dataset.groupTile || node?.dataset.groupChip;
   const group = id ? useLibraryNames.getState().groups[id] : undefined;

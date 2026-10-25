@@ -406,6 +406,7 @@ export const koKrCopy: AppCopy = {
       delivered: "답변 완료", failed: "실패", cancelled: "중단", under30s: "30초 미만", under2m: "30초~2분",
       under10m: "2~10분", over10m: "10분 이상", recent: "0~7일", older: "8~30일", oldest: "31일 이상", unknown: "시각 확인 불가" },
   },
+  documents: { title: "문서", saved: "저장됨", editing: "버틀러가 수정 중", edited: "버틀러가 수정했어요", restore: "되돌리기", versions: "버전 기록", current: "현재", me: "나", butler: "버틀러", export: "내보내기", markdown: "Markdown", pdf: "PDF", bold: "굵게", heading: "제목", list: "목록", addBlock: "블록 추가", format: "서식", originalChat: "원래 대화" },
   library: {
     title: "서랍", search: "서랍 검색", kinds: { all: "전체", scrap: "스크랩", document: "문서", bookmark: "북마크", output: "결과물" },
     kindLabel: "종류", viewAll: "모두 보기", groups: { scrap: libraryGroupKo("그룹", "스크랩"), bookmark: libraryGroupKo("폴더", "북마크") },

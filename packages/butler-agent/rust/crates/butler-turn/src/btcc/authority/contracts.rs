@@ -457,6 +457,13 @@ pub(crate) trait AuthorityRepository {
     fn find_ref(&mut self, request_ref: &str) -> AuthorityResult<Option<AuthorityRecord>>;
     fn decide(&mut self, write: DecisionWrite) -> AuthorityResult<Option<AuthorityRecord>>;
     fn settle_question_followup(&mut self, request_ref: &str) -> AuthorityResult<()>;
+    fn settle_deferred_question(
+        &mut self,
+        owner: &str,
+        request_ref: &str,
+        receipt: &str,
+        now: &str,
+    ) -> AuthorityResult<()>;
     fn record_question_followup(
         &mut self,
         request_ref: &str,

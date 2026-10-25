@@ -130,3 +130,23 @@ fn strings(value: &Value, out: &mut Vec<String>) {
         _ => {}
     }
 }
+
+/// Freeze one embed resolved from the document's committed canonical body.
+pub(super) fn save_document(
+    db: &Connection,
+    id: &str,
+    index: usize,
+) -> Result<Value, AppStorageError> {
+    let doc = super::super::documents::head(db, id)?;
+    let markdown = butler_runtime::documents::parse(doc["body"].as_str().unwrap_or_default());
+    let fence = markdown.fences.get(index).ok_or_else(invalid)?;
+    let spec: Value = serde_json::from_str(&fence.content).map_err(|_| invalid())?;
+    let digest = format!("{:x}", Sha256::digest(fence.content.as_bytes()));
+    let title = doc["title"].as_str().unwrap_or_default();
+    records::save(
+        db,
+        &json!({"id":format!("block-{digest}"),"kind":"scrap","title":title,"block":spec,
+        "origin":{"document":id,"session":doc["chat_id"],"message":doc["message_id"],"path":format!("/fences/{index}")},
+        "capturedAt":item::now(),"url":""}),
+    )
+}
