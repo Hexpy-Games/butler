@@ -1,5 +1,6 @@
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import { Typo } from "../../components/Typo";
+import { ShellFrameDemo } from "../AdaptiveShell/fixtures/ShellFrameDemo";
 import { ArtifactPreview, ArtifactPreviewFrame, ArtifactPreviewImage, ArtifactPreviewPre } from "./index";
 
 export const meta: ShowcaseMeta = {
@@ -39,5 +40,23 @@ export const stories: ShowcaseStory[] = [
         <ArtifactPreview><Typo.Caption>{text(context).failed}</Typo.Caption></ArtifactPreview>
       </>
     ),
+  },
+  // surface="page": a docked file viewer in the split's right slot is the reading page; the preview draws no box
+  // and scrolls with the viewer. PageContainer's gutter plus Box padding give the 48px reading insets.
+  {
+    name: "Page surface: markdown in a docked viewer",
+    widths: ["app", "wide"],
+    render: ({ locale }) => <ShellFrameDemo locale={locale} frame="cards" view="file" file="markdown" fileTabs width={1440} height={900} />,
+  },
+  {
+    name: "Page surface: code file",
+    widths: ["app", "wide"],
+    render: ({ locale }) => <ShellFrameDemo locale={locale} frame="cards" view="file" file="code" width={1440} height={900} />,
+  },
+  {
+    // The image sits frameless on the page, keeping its own corner radius.
+    name: "Page surface: image, frameless",
+    widths: ["app", "wide"],
+    render: ({ locale }) => <ShellFrameDemo locale={locale} frame="cards" view="file" file="image" width={1440} height={900} />,
   },
 ];

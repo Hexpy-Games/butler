@@ -5,6 +5,7 @@ import { Typo } from "../../components/Typo";
 import { FormSection } from "../FormSection";
 import { MetaList } from "../../components/MetaList";
 import { SettingsFieldScopeProvider } from "../SettingsField";
+import { SurfacePanel } from "../SurfacePanel";
 import { SettingsActionField } from "./SettingsActionField";
 
 export const meta: ShowcaseMeta = {
@@ -25,6 +26,7 @@ const labels = {
     resetAction: "Reset",
     chats: "Chats",
     size: "Size",
+    canFree: "Can free",
     freeing: "Freeing up space · 312.0 MB freed",
     cancel: "Cancel",
     history: "Visited pages",
@@ -42,6 +44,7 @@ const labels = {
     resetAction: "초기화",
     chats: "대화",
     size: "크기",
+    canFree: "확보 가능",
     freeing: "공간 정리 중 · 312.0 MB 확보",
     cancel: "취소",
     history: "방문한 페이지",
@@ -63,6 +66,19 @@ export const stories: ShowcaseStory[] = [
         <SettingsActionField id="action-free" label={text(context).storage} description={text(context).storageDescription}
           action={<Button id="action-free" variant="outline" size="sm">{text(context).free}</Button>}
           meta={<MetaList items={[{ label: text(context).chats, value: "128" }, { label: text(context).size, value: "1.2 GB" }]} />} />
+      </SettingsFieldScopeProvider>
+    ),
+  },
+  {
+    name: "Facts card in details, above the action",
+    render: (context) => (
+      <SettingsFieldScopeProvider>
+        <SettingsActionField id="action-details" label={text(context).storage} description={text(context).storageDescription}
+          details={<SurfacePanel elevation="subtle">
+            <MetaList items={[{ label: text(context).chats, value: "128" }, { label: text(context).size, value: "1.2 GB" },
+              { label: text(context).canFree, value: "312.0 MB" }]} />
+          </SurfacePanel>}
+          action={<Button id="action-details" variant="outline" size="sm">{text(context).free}</Button>} />
       </SettingsFieldScopeProvider>
     ),
   },

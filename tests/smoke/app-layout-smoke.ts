@@ -1,3 +1,4 @@
+import { verifyContextCompactLayout } from "../support/context-compact-layout.ts";
 import { assertWallpaperPaint } from "../support/wallpaper-paint.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import {
@@ -768,7 +769,7 @@ try {
     `context popover should stay below titlebar safe area: ${JSON.stringify(contextPopoverGlass)}`,
   );
   // Click pins the context popover (it stays when the pointer leaves); Escape
-  // closes it. Context details live in the inspector's Context tab.
+  // closes it. Compact context details live in the session margin.
   await page
     .getByRole("button", { name: appCopy.composer.contextDetails })
     .click();
@@ -782,139 +783,14 @@ try {
   await page.keyboard.press("Escape");
   await page.locator(testClass("context-popover")).waitFor({ state: "hidden" });
   await sessionAside.locator(testClass("session-context")).getByRole("button").first().click();
-  await sessionAside.getByRole("heading", { name: "Context details" }).waitFor({ state: "visible" });
+  await sessionAside.locator(testClass("context-compact")).waitFor({ state: "visible" });
   await sessionAside.getByRole("img", { name: /Context window/u }).waitFor({ state: "visible" });
   await page.setViewportSize({ width: 900, height: 520 });
   await page.waitForFunction(() => document.querySelector('[data-slot="conversation-aside"]')?.getAttribute("data-layout") === "floating");
   // The floating layout remounts the disclosure with its default collapsed state.
   const floatingContext = sessionAside.locator(testClass("session-context")).getByRole("button").first();
   if (await floatingContext.getAttribute("aria-expanded") === "false") await floatingContext.click();
-  await page
-    .locator(testClass("context-legend-scroll"))
-    .waitFor({ state: "visible" });
-  const contextLegendState = await page
-    .locator(testClass("context-legend-scroll"))
-    .evaluate((scroll) => {
-      // Reserved categories (e.g. output reserve) are not charted and carry no
-      // swatch, so measure the first charted row.
-      const firstRow = scroll.querySelector<HTMLElement>(
-        "[data-test-class~='context-legend'] [data-test-class~='key-value-row']:has([data-test-class~='key-value-swatch'])",
-      );
-      const swatch = firstRow?.querySelector<HTMLElement>(
-        "[data-test-class~='key-value-swatch']",
-      );
-      const label = firstRow?.querySelector<HTMLElement>(
-        "[data-test-class~='key-value-label']",
-      );
-      const value = firstRow?.querySelector<HTMLElement>(
-        "[data-test-class~='key-value-value']",
-      );
-      const description = firstRow?.querySelector<HTMLElement>(
-        "[data-test-class~='key-value-description']",
-      );
-      const meta = firstRow?.querySelector<HTMLElement>(
-        "[data-test-class~='key-value-meta']",
-      );
-      const workingRow = document.querySelectorAll<HTMLElement>(
-        "[data-test-class~='context-overview'] [data-test-class~='key-value-row']",
-      )[1];
-      const workingDescription = workingRow?.querySelector<HTMLElement>(
-        "[data-test-class~='key-value-description']",
-      );
-      const workingMeta = workingRow?.querySelector<HTMLElement>(
-        "[data-test-class~='key-value-meta']",
-      );
-      const chart = document.querySelector<HTMLElement>(
-        '[aria-label="Context window usage chart"]',
-      );
-      const inspector = scroll.closest<HTMLElement>(
-        '[data-slot="conversation-aside"]',
-      );
-      const marginScroll = scroll.closest<HTMLElement>('[data-slot="conversation-aside-scroll"]')!;
-      const scrollBox = scroll.getBoundingClientRect();
-      const rowBox = firstRow?.getBoundingClientRect();
-      const chartBox = chart?.getBoundingClientRect();
-      const inspectorBox = inspector?.getBoundingClientRect();
-      const swatchBox = swatch?.getBoundingClientRect();
-      const labelBox = label?.getBoundingClientRect();
-      const descriptionBox = description?.getBoundingClientRect();
-      const metaBox = meta?.getBoundingClientRect();
-      const workingDescriptionBox = workingDescription?.getBoundingClientRect();
-      const workingMetaBox = workingMeta?.getBoundingClientRect();
-      const labelStyle = label ? getComputedStyle(label) : null;
-      const valueStyle = value ? getComputedStyle(value) : null;
-      return {
-        marginClientHeight: marginScroll.clientHeight,
-        marginScrollHeight: marginScroll.scrollHeight,
-        marginScrollbarWidth: getComputedStyle(marginScroll).scrollbarWidth,
-        clientHeight: scroll.clientHeight,
-        clientWidth: scroll.clientWidth,
-        chartRight: chartBox?.right ?? Number.NaN,
-        descriptionTop: descriptionBox?.top ?? Number.NaN,
-        inspectorRight: inspectorBox?.right ?? Number.NaN,
-        labelFontSize: labelStyle?.fontSize ?? "",
-        labelCenterY: labelBox ? labelBox.y + labelBox.height / 2 : Number.NaN,
-        metaTop: metaBox?.top ?? Number.NaN,
-        rowRight: rowBox?.right ?? Number.NaN,
-        scrollHeight: scroll.scrollHeight,
-        scrollLeft: scroll.scrollLeft,
-        scrollRight: scrollBox.right,
-        scrollWidth: scroll.scrollWidth,
-        scrollbarWidth: getComputedStyle(scroll).scrollbarWidth,
-        swatchCenterY: swatchBox
-          ? swatchBox.y + swatchBox.height / 2
-          : Number.NaN,
-        valueFontSize: valueStyle?.fontSize ?? "",
-        workingDescriptionBottom: workingDescriptionBox?.bottom ?? Number.NaN,
-        workingDescriptionLeft: workingDescriptionBox?.left ?? Number.NaN,
-        workingMetaLeft: workingMetaBox?.left ?? Number.NaN,
-        workingMetaTop: workingMetaBox?.top ?? Number.NaN,
-      };
-    });
-  assert(
-    Math.abs(
-      contextLegendState.swatchCenterY - contextLegendState.labelCenterY,
-    ) <= 0.5,
-    `context legend swatch should align to label row: ${JSON.stringify(contextLegendState)}`,
-  );
-  assert(
-    contextLegendState.valueFontSize === contextLegendState.labelFontSize,
-    `context legend usage value should match label font size: ${JSON.stringify(contextLegendState)}`,
-  );
-  assert(
-    Math.abs(contextLegendState.metaTop - contextLegendState.descriptionTop) <=
-      1,
-    `context legend percentage should top-align to description: ${JSON.stringify(contextLegendState)}`,
-  );
-  assert(
-    contextLegendState.scrollWidth <= contextLegendState.clientWidth + 1 &&
-      contextLegendState.scrollLeft === 0,
-    `context legend should not create horizontal scroll: ${JSON.stringify(contextLegendState)}`,
-  );
-  assert(
-    contextLegendState.workingMetaTop >=
-      contextLegendState.workingDescriptionBottom - 0.5 &&
-      Math.abs(
-        contextLegendState.workingMetaLeft -
-          contextLegendState.workingDescriptionLeft,
-      ) <= 1,
-    `working context compaction copy should stack vertically: ${JSON.stringify(contextLegendState)}`,
-  );
-  assert(
-    contextLegendState.marginScrollHeight > contextLegendState.marginClientHeight + 8,
-    `session margin should own context overflow scrolling: ${JSON.stringify(contextLegendState)}`,
-  );
-  assert(
-    contextLegendState.marginScrollbarWidth === "thin" &&
-      contextLegendState.rowRight <= contextLegendState.scrollRight - 10,
-    `context legend scrollbar should sit outside content: ${JSON.stringify(contextLegendState)}`,
-  );
-  assert(
-    Math.abs(contextLegendState.rowRight - contextLegendState.chartRight) <=
-      1.5 &&
-      contextLegendState.scrollRight >= contextLegendState.inspectorRight - 1,
-    `context legend content should align with overview while scrollbar reaches panel edge: ${JSON.stringify(contextLegendState)}`,
-  );
+  await verifyContextCompactLayout(sessionAside.locator(testClass("context-compact")));
   screenshots.push(await screenshot(page, "context-details-legend-scroll.png"));
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.waitForTimeout(320);
@@ -3750,12 +3626,9 @@ try {
         "context-legend-swatch-label-aligned",
         "context-legend-swatch-structural-alignment",
         "context-legend-value-caption-sized",
-        "context-legend-meta-top-aligned",
         "context-legend-horizontal-scroll-absent",
-        "context-working-copy-stacked",
         "session-margin-scrolls-context",
-        "context-legend-scrollbar-gutter",
-        "context-legend-content-aligns-overview",
+        "context-no-nested-scroll",
         "fresh-left-sidebar-collapsed",
         "left-toggle-titlebar-positioned",
         "browser-chrome-traffic-reserve-zero",

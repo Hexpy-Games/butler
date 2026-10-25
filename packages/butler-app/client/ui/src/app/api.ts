@@ -964,7 +964,21 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   throw new Error(`Unsupported Butler app API route: ${method} ${url.pathname}`);
 }
 
+export interface ProjectFolderPage {
+  root_name: string;
+  path: string;
+  folders: Array<{ name: string }>;
+  next_after: string | null;
+}
+
+export function listProjectFolders(path: string, after?: string): Promise<ProjectFolderPage> {
+  const query = new URLSearchParams({ path });
+  if (after !== undefined) query.set("after", after);
+  return api<ProjectFolderPage>(`/project-folders?${query}`);
+}
+
 export interface ProjectFolderSelection {
+  workspace_path?: string;
   cancelled?: boolean;
   display_name?: string;
   folder_path?: string;

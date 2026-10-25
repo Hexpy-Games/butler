@@ -131,5 +131,6 @@ fn settings_mutations(context: &Context<'_>) -> Arc<AppSettingsMutation> {
         context.runtime.profile.clone(),
         context.installation.clone(),
         context.data_root.to_path_buf(),
+        context.runtime.daily_cognition.gate.clone(),
     ))
 }

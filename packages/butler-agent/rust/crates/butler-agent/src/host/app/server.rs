@@ -148,6 +148,19 @@ impl AppServer {
         )
         .await?;
         let application = open_application(app_config, data_root, dependencies, &owners).await?;
+        let memory_application = Arc::downgrade(&application);
+        runtime
+            .daily_cognition
+            .gate
+            .set_sink(Arc::new(move |payload| {
+                let application = memory_application.upgrade();
+                Box::pin(async move {
+                    if let Some(application) = application {
+                        application.memory_event_sink()(payload).await?;
+                    }
+                    Ok(())
+                })
+            }));
         let draft_application = Arc::downgrade(&application);
         runtime.answer_drafts.set_sink(Arc::new(move |payload| {
             if let Some(application) = draft_application.upgrade() {

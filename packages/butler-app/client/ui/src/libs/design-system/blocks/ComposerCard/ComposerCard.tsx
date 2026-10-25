@@ -51,6 +51,7 @@ export function ComposerCard({
     <div
       className={cn(styles.wrap, floating && styles.floating, large && styles.large)}
       data-edge-reserve={reserve}
+      data-column-glide={floating ? "" : undefined}
       data-test-class={`composer-wrap${large ? " large" : ""}`}
       ref={containerRef}
       style={reserve ? ({ "--composer-edge-reserve": `${reserve}px` } as CSSProperties) : undefined}

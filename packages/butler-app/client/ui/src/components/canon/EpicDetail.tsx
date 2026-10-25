@@ -1,4 +1,4 @@
-import { canonTaskCounts, canonStatusInput } from "./canonProgressSource.ts";
+import { canonStatusInput } from "./canonProgressSource.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { Ref } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
@@ -12,8 +12,8 @@ import { CanonPersonSelect } from "./CanonPersonSelect.tsx";
 import { CanonPlanSelect } from "./CanonPlanSelect.tsx";
 import { SpecTree } from "./SpecTree.tsx";
 import { EpicSessionSummary } from "./EpicSessionSummary.tsx";
-import { EpicProgress } from "./EpicProgress.tsx";
-export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef, compact = false }: {
+export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef, compact = false, showConversation = true }: {
+  showConversation?: boolean;
   compact?: boolean;
   titleRef?: Ref<HTMLElement>; epic: Epic; plans: PlanCards[]; tasks: EpicProgressSnapshot | null; busy: boolean;
   onWrite: (input: EpicInput, message?: string) => Promise<boolean>;
@@ -38,15 +38,12 @@ export function EpicDetail({ epic, plans, tasks, busy, onWrite, titleRef, compac
         onChange={tags => void onWrite({ tags: tags.map(tag => tag.id) })} />} />
     </Stack>;
   return <Stack gap="lg" data-test-class="canon-epic-detail" data-epic-id={epic.id}>
-    <CanonInlineDraftProvider><EpicInlineFields epic={epic} busy={busy} onWrite={onWrite} titleRef={titleRef} compact={compact} properties={compact ? properties : undefined}
-      summary={compact ? <>
-        <Typo.Caption tone="secondary">{copy.statuses[epic.canon_status]} · {plan?.title ?? copy.backlog}</Typo.Caption>
-        <EpicSessionSummary epic={epic} tasks={tasks} />
-      </> : undefined} /></CanonInlineDraftProvider>
-    {!compact && properties}
-    {!compact && epic.home_session_id && <ButtonContainer size="sm"><Button size="sm" variant="link"
+    <CanonInlineDraftProvider><EpicInlineFields epic={epic} busy={busy} onWrite={onWrite} titleRef={titleRef} compact={compact}
+      summary={<Typo.Caption tone="secondary">{copy.statuses[epic.canon_status]} · {plan?.title ?? copy.backlog}</Typo.Caption>} /></CanonInlineDraftProvider>
+    {properties}
+    <EpicSessionSummary epic={epic} tasks={tasks} />
+    {showConversation && epic.home_session_id && <ButtonContainer size="sm"><Button size="sm" variant="link"
       onClick={() => { if (epic.home_session_id) void useButlerStore.getState().openSession(epic.home_session_id); }}>{copy.openConversation}</Button></ButtonContainer>}
     <SpecTree nodes={epic.specs} compact={compact} />
-    {!compact && <EpicProgress tasks={tasks} counts={canonTaskCounts(epic)} />}
   </Stack>;
 }

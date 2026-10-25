@@ -105,3 +105,29 @@ export async function nativePeekDismiss(app: ShellApp, name: string, evidence: s
   await app.shot(`${name}-peek-closed`, true);
   return { elapsedMs };
 }
+
+const aside = '[data-slot="conversation-aside"]';
+const asideLayout = (app: ShellApp) => app.page.expression<string | null>(`document.querySelector('${aside}')?.getAttribute('data-layout') ?? null`);
+
+/** #1549, #1557: 세션 정보 replaced the right inspector. Beside an open browser it floats in the
+ * conversation column; the browser pane stays open and its native page stays uncovered. */
+export async function sessionInfoBesideBrowser(app: ShellApp) {
+  const label = getAppCopy("en-US").sessionInfo.title, open = `Boolean(document.querySelector('${pane}'))`;
+  await app.click(label);
+  await waitBrowser(async () => await asideLayout(app) === "floating", "session info floats beside the browser");
+  assert.equal(await app.page.expression(`document.querySelector('[data-test-class="session-info-toggle"]').getAttribute('aria-pressed')`), "true");
+  assert.equal(await app.page.expression(open), true, "session info keeps the browser open");
+  await nativeAligned(app);
+  assert.deepEqual(await app.page.expression(`(() => {
+    const a=document.querySelector('${aside}').getBoundingClientRect(), c=document.querySelector('[data-slot=adaptive-shell-split-chat]').getBoundingClientRect();
+    const f=document.querySelector('[data-slot=native-view-frame]').getBoundingClientRect();
+    return { inChat: a.left >= c.left - 1 && a.right <= c.right + 1, clearOfPage: a.right <= f.left };
+  })()`), { inChat: true, clearOfPage: true }, "the floating aside stays in the conversation column, clear of the native page");
+  await togglePane(app, false);
+  await waitBrowser(async () => await asideLayout(app) === "docked", "session info docks once the browser closes");
+  await togglePane(app, true); await nativeAligned(app);
+  await waitBrowser(async () => await asideLayout(app) === "floating", "session info floats beside the reopened browser");
+  await app.click(label);
+  await waitBrowser(async () => await asideLayout(app) === null, "session info closes");
+  assert.equal(await app.page.expression(open), true, "closing session info keeps the browser open");
+}

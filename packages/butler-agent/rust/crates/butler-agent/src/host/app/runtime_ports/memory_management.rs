@@ -7,6 +7,7 @@ use butler_memory::{
     management::MemoryManagement,
 };
 mod actions;
+mod consolidation;
 mod instructions;
 mod resets;
 use serde_json::{Value, json};
@@ -19,6 +20,7 @@ use tokio_util::sync::CancellationToken;
 #[derive(Clone)]
 pub(crate) struct AppMemoryManagement {
     owner: Arc<MemoryManagement>,
+    daily: Arc<crate::host::memory_jobs::daily::DailyCognitionJobs>,
     instructions: Arc<RememberedRuleOwner>,
     profile: Arc<butler_memory::profile::ProfileService>,
     shutdown: CancellationToken,
@@ -28,8 +30,9 @@ pub(crate) struct AppMemoryManagement {
 }
 
 impl AppMemoryManagement {
-    pub(crate) fn new(
+    pub(in crate::host) fn new(
         owner: Arc<MemoryManagement>,
+        daily: Arc<crate::host::memory_jobs::daily::DailyCognitionJobs>,
         instructions: Arc<RememberedRuleOwner>,
         profile: Arc<butler_memory::profile::ProfileService>,
         shutdown: CancellationToken,
@@ -41,7 +44,8 @@ impl AppMemoryManagement {
             profile,
             shutdown,
             clock,
-            jobs: Arc::new(Mutex::new(HashMap::new())),
+            jobs: daily.gate.jobs.clone(),
+            daily,
             instruction_count: Arc::new(Mutex::new(None)),
         }
     }
@@ -52,6 +56,7 @@ impl AppMemoryManagement {
     ) -> Self {
         Self::new(
             runtime.memory_management.clone(),
+            runtime.daily_cognition.clone(),
             runtime.memory_writes.clone(),
             runtime.profile.clone(),
             runtime.service_shutdown.clone(),
@@ -66,6 +71,15 @@ impl AppMemoryManagement {
         cancellation: CancellationToken,
     ) -> Result<Value, GatewayApplicationError> {
         match command {
+            AppMemoryCommand::Consolidation => self
+                .daily
+                .gate
+                .view()
+                .await
+                .map_err(GatewayApplicationError::internal_from),
+            AppMemoryCommand::RunConsolidation { operation_id } => {
+                self.start_consolidation(operation_id).await
+            }
             AppMemoryCommand::EndSession { session_id } => {
                 self.instructions
                     .end_session(session_id)
@@ -97,15 +111,7 @@ impl AppMemoryManagement {
                 )
                 .await
             }
-            AppMemoryCommand::Status { operation_id } => encode(
-                self.owner
-                    .cleanup_status(operation_id)
-                    .await
-                    .map_err(error)?
-                    .ok_or_else(|| {
-                        public_error(404, "memory_operation_not_found", "Operation not found.")
-                    })?,
-            ),
+            AppMemoryCommand::Status { operation_id } => self.cleanup_status(operation_id).await,
             AppMemoryCommand::Cancel { operation_id } => {
                 let jobs = self
                     .jobs
