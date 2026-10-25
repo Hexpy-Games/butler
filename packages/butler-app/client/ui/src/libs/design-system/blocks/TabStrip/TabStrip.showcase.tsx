@@ -5,6 +5,7 @@ import { IconButton } from "../../components/IconButton";
 import { TabIn } from "../../components/Icons";
 import { conversationGroup, crowdedGroups, demoGroups, demoLabels, ICONS, TabStripDemo } from "./TabStrip.demo";
 import type { TabStripGroup } from "./tabStripModel";
+import { BrowserDemo } from "../BrowserPane/fixtures/BrowserDemo";
 
 export const meta: ShowcaseMeta = {
   title: "TabStrip",
@@ -22,7 +23,7 @@ const MATRIX_COPY = {
 
 function matrixGroups(variant: string, selected: boolean, { locale }: ShowcaseRenderContext): TabStripGroup[] {
   const copy = MATRIX_COPY[locale];
-  if (variant === "My tab") return [{ id: "mine", kind: "mine", tabs: [{ id: "t", title: copy.mine, faviconSrc: ICONS.docs }] }];
+  if (variant === "My tab" || variant === "Folder tab") return [{ id: "mine", kind: "mine", tabs: [{ id: "t", title: copy.mine, faviconSrc: ICONS.docs }] }];
   const tabs = [{ id: "t", title: copy.conversation, faviconSrc: ICONS.shop }];
   if (variant === "Conversation tab") return [{ id: "c", kind: "conversation", label: copy.group, tabs }];
   return [{ id: "c", kind: "conversation", label: copy.group, state: "working", collapsed: selected, tabs }];
@@ -37,7 +38,8 @@ function MatrixCell({ context }: { context: ShowcaseStateContext }) {
   }, [context.variant]);
   return (
     <div ref={cell}>
-      <TabStrip groups={matrixGroups(context.variant, selected, context)} activeTabId={selected ? "t" : null}
+      <TabStrip variant={context.variant === "Folder tab" ? "folder" : "pill"}
+        groups={matrixGroups(context.variant, selected, context)} activeTabId={selected ? "t" : null}
         labels={demoLabels(context.locale)} onActivate={noop} onClose={noop} onToggleGroup={noop} />
     </div>
   );
@@ -66,6 +68,16 @@ export const stories: ShowcaseStory[] = [
     ),
   },
   {
+    // The Browser's own strip: the selected tab is a folder tab that runs into the toolbar (BrowserPane draws the band).
+    name: "Folder variant in a BrowserPane",
+    widths: ["app", "wide"],
+    render: ({ locale }) => (
+      <div style={{ height: 240, display: "flex" }}>
+        <BrowserDemo locale={locale} placement="standalone" />
+      </div>
+    ),
+  },
+  {
     name: "Only my tabs (no chip)",
     render: ({ locale }) => <TabStripDemo locale={locale} initial={demoGroups(locale).slice(0, 1)} />,
   },
@@ -79,6 +91,6 @@ export const stories: ShowcaseStory[] = [
 
 export const stateMatrix: ShowcaseStateMatrix = {
   states: ["default", "hover", "focus-visible", "active", "selected"],
-  variants: ["My tab", "Conversation tab", "Group chip"],
+  variants: ["My tab", "Conversation tab", "Group chip", "Folder tab"],
   render: (context) => <MatrixCell context={context} />,
 };

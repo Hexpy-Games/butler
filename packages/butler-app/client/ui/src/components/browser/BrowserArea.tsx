@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy";
-import { BrowserPane, Button, EmptyLine, PageCard, Plus, Stack, TabStrip, type TabStripGroup } from "@/butler-ds";
+import { BrowserPane, Button, EmptyLine, PageCard, TabStrip, type TabStripGroup } from "@/butler-ds";
 import { useButlerStore } from "@/app/store";
 import { activeChatFromNavigation } from "@/app/utils";
 import { BrowserDialog } from "./BrowserDialog";
@@ -40,10 +40,14 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
   useEffect(() => {
     void browserCall("scope", { value: false, owner: sessionId ? `conversation:${sessionId}` : "mine" });
   }, [sessionId]);
+  const create = (placeholder = false) => browserCall("create", sessionId
+    ? { owner: `conversation:${sessionId}`, profile: "signed_out", placeholder } : { placeholder });
+  // Opened with no tabs, the pane opens a new tab at once (its in-app new-tab page, address focused).
+  // It is a placeholder: a page that opens in or moves into the group (Butler's, a link's) takes its place.
   useEffect(() => {
-    if (sessionId || !state.restored || !state.enabled || tabs.length || creating.current) return;
+    if (!state.restored || !state.enabled || tabs.length || creating.current) return;
     creating.current = true;
-    void browserCall("create").finally(() => { creating.current = false; });
+    void create(true).finally(() => { creating.current = false; });
   }, [sessionId, state.restored, state.enabled, tabs.length]);
   const groups: TabStripGroup[] = [];
   for (const item of tabs) {
@@ -56,18 +60,15 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
   }
   const drag = useBrowserTabDragHandler(groups.flatMap((group) => group.collapsed ? [] : group.tabs.map((item) => tabs.find((tab) => tab.id === item.id)!)));
   const call = (op: string, value?: unknown) => browserCall(op, { id: tab?.id, value });
-  const create = () => void browserCall("create", sessionId ? { owner: `conversation:${sessionId}`, profile: "signed_out" } : undefined);
   const empty = !tab || !tab.url;
   const crashed = tab?.status === "crashed";
   const disabled = !state.enabled;
-  // A conversation Butler has not browsed in yet: its empty state, never a blank page.
-  const waitingForPages = Boolean(sessionId) && !tabs.length && !disabled;
   return <BrowserPane placement={sessionId ? "conversation" : "standalone"} label={copy.title}
     id="butler-browser-area" data-test-class="browser-area"
     onFocusCapture={() => void browserCall("scope", { value: true })}
     onBlurCapture={(event) => {
       if (!event.currentTarget.contains(event.relatedTarget as Node | null)) void browserCall("scope", { value: false });
-    }} tabs={<TabStrip groups={groups} activeTabId={tab?.id ?? null} panelId="browser-page" hideChip={Boolean(sessionId)}
+    }} tabs={<TabStrip variant="folder" groups={groups} activeTabId={tab?.id ?? null} panelId="browser-page" hideChip={Boolean(sessionId)}
       onPointerDownCapture={drag} onKeyDownCapture={() => {
         // Modifier keys during a pointer drag must retain the outside-drop guard.
         if (!useBrowserTabDrag.getState().tabId) useBrowserTabDrag.setState({ outside: false });
@@ -78,11 +79,11 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
         moved: (title, group, position) => copy.tabMoved.replace("{title}", title).replace("{group}", group).replace("{position}", String(position)) }}
       onActivate={(id) => void browserCall("activate", { id })} onClose={(id) => void browserCall("close", { id })}
       onToggleGroup={(id, value) => setCollapsed((current) => ({ ...current, [id]: value }))}
-      onNewTab={state.enabled ? create : undefined}
+      onNewTab={state.enabled ? () => void create() : undefined}
       onMove={(move) => { if (!useBrowserTabDrag.getState().outside) void browserCall("move", move); }} />}
     toolbar={<AddressRow tab={tab} enabled={state.enabled} />}>
     <PageCard key={tab?.id ?? "empty"} panelId="browser-page" holder={browserHolder(tab)} hidden={empty || crashed || disabled}
-      internal={empty && !disabled && !waitingForPages ? <NewTabPage /> : undefined}
+      internal={empty && !disabled ? <NewTabPage /> : undefined}
       occluderSelector='[data-slot="nav-drop-label"]'
       viewport={tab?.agent ? { width: 1280, height: 800 } : undefined}
       stillSrc={stillSrc} covered={state.nativeCovered || Boolean(tab?.dialog)} contentRef={setDialogContainer}
@@ -90,8 +91,6 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
       overlay={tab?.dialog && <BrowserDialog key={tab.dialog.id} tab={tab} container={dialogContainer} />}
       onBoundsChange={(bounds) => { if (tab) void call("bounds", bounds); }}
       onOcclusion={(value) => { if (tab) void covered(value); }}>
-      {waitingForPages && <Stack fill justify="center" cross="center"><EmptyLine message={copy.conversationEmpty}
-        action={<Button size="sm" variant="outline" iconStart={<Plus size="md" />} text={copy.newTab} onClick={create} />} /></Stack>}
       {(crashed || disabled) && <EmptyLine
         message={disabled ? (state.blocked ? copy.restartRequired : copy.updateRequired) : copy.crashed}
         action={!disabled ? <Button size="sm" variant="outline" onClick={() => void call("reload")}>{copy.reload}</Button> : undefined}

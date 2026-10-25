@@ -50,6 +50,7 @@ export const guidance: ShowcaseGuidance = {
     "Group labels are the conversation title. Pass Korean labels (내 탭, 새 탭, 탭 닫기, 승인 대기) from the App copy.",
     "Group state is one of working, waiting for approval or crashed: no extra text in the strip.",
     "hideChip: a conversation's own browser pane shows its one group without the chip (the title bar names it) and at full strength; trailing holds row-end controls such as Bring in a tab.",
+    "variant=\"folder\" inside a BrowserPane: the selected tab is a folder tab joined to the toolbar below; pill (default) is a flat rounded fill.",
   ],
   accessibility: [
     "Each open group is a role=tablist named by its label; tabs are role=tab with aria-selected and aria-controls (panelId).",
@@ -60,5 +61,6 @@ export const guidance: ShowcaseGuidance = {
   tokens: [
     "--tab-strip-tab-min-width", "--tab-strip-tab-max-width", "--tab-strip-chip-max-width", "--selection-strong",
     "--control-height-md", "--scroll-fade-size", "--motion-base", "--color-warning-text", "--color-danger-text",
+    "--browser-pane-bg", "--menu-item-height", "--line-strong",
   ],
 };

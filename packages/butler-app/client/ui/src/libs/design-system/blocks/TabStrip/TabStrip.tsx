@@ -37,6 +37,12 @@ export interface TabStripProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivEl
   hideChip?: boolean;
   /** Controls after the new-tab button at the row end (bring in a tab); kept out of the tab focus order. */
   trailing?: ReactNode;
+  /**
+   * `pill` (default): the selected tab is a flat rounded fill.
+   * `folder`: the selected tab takes the surface under the strip and sits flush on its bottom edge, so it
+   * runs into the row below (a BrowserPane draws the recessed band and the joined toolbar).
+   */
+  variant?: "pill" | "folder";
 }
 
 /**
@@ -45,7 +51,7 @@ export interface TabStripProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivEl
  */
 export function TabStrip({
   groups, activeTabId, onActivate, onClose, onMove, onToggleGroup, onNewTab, panelId,
-  labels: labelOverrides, hideChip = false, trailing, className, ...props
+  labels: labelOverrides, hideChip = false, trailing, variant = "pill", className, ...props
 }: TabStripProps) {
   const labels = useMemo(() => ({ ...TAB_STRIP_LABELS, ...labelOverrides }), [labelOverrides]);
   const [announcement, setAnnouncement] = useState("");
@@ -61,7 +67,7 @@ export function TabStrip({
   };
 
   return (
-    <div role="group" aria-label={labels.tabs} className={cn(styles.root, className)} data-slot="tab-strip" onBlur={nav.onBlur} {...props}>
+    <div role="group" aria-label={labels.tabs} className={cn(styles.root, className)} data-slot="tab-strip" data-variant={variant} onBlur={nav.onBlur} {...props}>
       <DndContext sensors={drag.sensors} collisionDetection={closestCenter} accessibility={TAB_STRIP_DND_ACCESSIBILITY} {...drag.handlers}>
         <SortableContext items={tabKeys} strategy={horizontalListSortingStrategy}>
           <div ref={scroller.ref} className={styles.scroller} data-dragging={drag.draggingKey ? "true" : undefined} onWheel={scroller.onWheel}>

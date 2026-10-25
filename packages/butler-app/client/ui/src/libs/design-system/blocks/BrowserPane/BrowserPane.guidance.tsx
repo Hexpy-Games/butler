@@ -14,7 +14,7 @@ function ConversationPane() {
     <div style={{ height: 360, display: "flex" }}>
       <BrowserPane label="Browser" placement="conversation"
         tabs={(
-          <TabStrip hideChip groups={[{ id: "c1", kind: "conversation", label: "Office chair order", tabs: [{ id: "t1", title: "Office chairs" }] }]}
+          <TabStrip variant="folder" hideChip groups={[{ id: "c1", kind: "conversation", label: "Office chair order", tabs: [{ id: "t1", title: "Office chairs" }] }]}
             activeTabId="t1" onActivate={() => undefined} onClose={() => undefined} onNewTab={() => undefined}
             trailing={<IconButton label="Bring in a tab"><TabIn size="md" /></IconButton>} />
         )}
@@ -57,10 +57,11 @@ export const guidance: ShowcaseGuidance = {
   content: [
     "Labels come from butler-i18n browser.*: Browser / 브라우저 for the region; toolbar buttons name the action (Back, Reload).",
     "Korean copy says 버틀러; the bring-in button reads 내 탭 가져오기 / Bring in a tab.",
+    "Pass the TabStrip with variant=\"folder\": the tab row becomes a recessed band (--browser-tab-row-shade) and the selected tab runs into the toolbar, which gives the address field --space-sm above and below.",
   ],
   accessibility: [
     "The pane is a labelled region; the toolbar row has role toolbar; tabs control the page card (TabStrip panelId = PageCard panelId).",
     "Every toolbar control is an IconButton with a label and tooltip.",
   ],
-  tokens: ["--browser-pane-bg", "--browser-pane-radius", "--browser-card-inset", "--browser-band-height", "--menu-item-height"],
+  tokens: ["--browser-pane-bg", "--browser-tab-row-shade", "--browser-pane-radius", "--browser-card-inset", "--browser-band-height", "--menu-item-height"],
 };

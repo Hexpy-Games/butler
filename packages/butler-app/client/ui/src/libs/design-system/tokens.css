@@ -947,6 +947,13 @@
     var(--text-primary) 4%,
     var(--workspace-bg)
   );
+  /* Folder tabs (TabStrip variant="folder"): the tab row's recessed band,
+     a shade over the sheet; the selected tab and the toolbar keep the sheet. */
+  --browser-tab-row-shade: color-mix(
+    in srgb,
+    var(--text-primary) 6%,
+    transparent
+  );
   --ring: var(--focus-ring-color);
   --radius: var(--radius-control);
 
@@ -1365,6 +1372,8 @@
     var(--text-primary) 4%,
     var(--workspace-bg)
   );
+  /* Folder tabs: in dark the band recedes darker than the sheet. */
+  --browser-tab-row-shade: rgba(0, 0, 0, 0.36);
   --background: var(--surface-raised);
   --foreground: var(--text-primary);
   --popover: var(--color-surface-overlay);
@@ -1597,6 +1606,11 @@
     in srgb,
     var(--text-primary) 4%,
     var(--workspace-bg)
+  );
+  --browser-tab-row-shade: color-mix(
+    in srgb,
+    var(--text-primary) 6%,
+    transparent
   );
   --secondary: rgba(32, 35, 39, 0.08);
   --secondary-border: transparent;

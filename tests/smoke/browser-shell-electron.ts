@@ -76,11 +76,12 @@ try {
   await waitBrowser(() => app.page.expression(`!document.querySelector('${pane}') && document.querySelector('[data-test-class=custom-titlebar]')?.textContent.includes('Second conversation')`), "second conversation has its own closed browser pane");
   assert.equal(await app.page.expression(`Boolean(document.querySelector('${pane}'))`), false);
   await togglePane(app, true);
-  // 8edeb6fce5: conversation panes create tabs only through New tab.
-  await app.click("New tab");
-  await waitBrowser(async () => (await app.call<{ activeId: string }>("state")).activeId !== second, "second conversation creates its own tab");
+  // A conversation pane opened with no tabs opens one new tab at once (no empty state, no New tab click).
+  const ownTabs = async () => (await app.call<{ tabs: Array<{ id: string; owner: string }> }>("state")).tabs.filter((tab) => tab.owner === `conversation:${created.session.id}`);
+  await waitBrowser(async () => (await ownTabs()).length === 1 && (await app.call<{ activeId: string }>("state")).activeId === (await ownTabs())[0]?.id, "second conversation opens its own tab");
   const other = (await app.call<{ activeId: string }>("state")).activeId;
   assert.notEqual(other, second);
+  assert.equal((await ownTabs()).length, 1);
   await app.click(getAppCopy("en-US").space.general); await nativeAligned(app);
   assert.equal((await app.call<{ activeId: string }>("state")).activeId, second);
   await app.click("Show right panel");
