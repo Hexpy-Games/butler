@@ -130,6 +130,7 @@ fn respond(
 ) -> Result<String, ()> {
     let mut state = shared.state.lock().unwrap();
     match command {
+        "LOGIN" if state.reject_login => Err(()),
         "LOGIN" | "NOOP" => Ok(String::new()),
         "CAPABILITY" => Ok(format!(
             "* CAPABILITY IMAP4rev1 IDLE SPECIAL-USE{}{}\r\n",

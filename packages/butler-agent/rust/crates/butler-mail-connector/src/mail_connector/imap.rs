@@ -19,10 +19,13 @@ pub(super) async fn connect(config: &Config) -> Result<Connection> {
             .map_err(|_| "mail_starttls_failed")?;
         client = Client::new(transport::tls(client.into_inner(), &config.imap.host).await?);
     }
-    client
-        .login(&config.username, &config.password)
-        .await
-        .map_err(|_| "mail_login_failed")
+    match client.login(&config.username, &config.password).await {
+        Ok(connection) => Ok(connection),
+        Err((async_imap::error::Error::No(_) | async_imap::error::Error::Bad(_), _)) => {
+            Err("mail_auth_failed")
+        }
+        Err(_) => Err("mail_login_failed"),
+    }
 }
 pub(super) async fn destinations(connection: &mut Connection) -> Result<Vec<Value>> {
     let names: Vec<_> = connection

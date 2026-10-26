@@ -31,6 +31,7 @@ struct State {
     smtp_commands: Vec<String>,
     move_cap: bool,
     uidplus: bool,
+    reject_login: bool,
 }
 #[derive(Clone)]
 struct Shared {
@@ -93,6 +94,9 @@ impl FakeImap {
         let mut state = self.shared.state.lock().unwrap();
         state.move_cap = move_cap;
         state.uidplus = uidplus;
+    }
+    pub fn reject_login(&self, reject: bool) {
+        self.shared.state.lock().unwrap().reject_login = reject;
     }
     pub fn deliver(&self, mailbox: &str, raw: &str) -> u32 {
         self.shared.deliver(mailbox, raw)

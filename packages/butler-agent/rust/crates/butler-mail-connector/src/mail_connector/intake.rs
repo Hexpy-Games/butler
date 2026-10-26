@@ -5,10 +5,19 @@ use rmcp::{Peer, RoleServer, model::ResourceUpdatedNotificationParam};
 use std::{sync::Arc, time::Duration};
 use tokio_util::sync::CancellationToken;
 
-pub(super) async fn run(mail: Arc<Mail>, peer: Peer<RoleServer>, stop: CancellationToken) {
+pub(super) async fn run(
+    mail: Arc<Mail>,
+    peer: Peer<RoleServer>,
+    stop: CancellationToken,
+    auth_failed: CancellationToken,
+) {
     let mut delay = 1;
     loop {
-        let result = tokio::select! { ()=stop.cancelled()=>return, r=connected(&mail, &peer)=>r };
+        let result = tokio::select! { ()=stop.cancelled()=>return, r=connected(&mail, &peer, &auth_failed)=>r };
+        if result == Err("mail_auth_failed") {
+            auth_failed.cancel();
+            return;
+        }
         if result.is_ok() {
             delay = 1;
         }
@@ -16,8 +25,12 @@ pub(super) async fn run(mail: Arc<Mail>, peer: Peer<RoleServer>, stop: Cancellat
         delay = (delay * 2).min(60);
     }
 }
-async fn connected(mail: &Mail, peer: &Peer<RoleServer>) -> Result<()> {
-    let mut connection = imap::connect(&mail.config).await?;
+async fn connected(
+    mail: &Mail,
+    peer: &Peer<RoleServer>,
+    auth_failed: &CancellationToken,
+) -> Result<()> {
+    let mut connection = mail.connect(Some(auth_failed)).await?;
     let caps = connection
         .capabilities()
         .await

@@ -1,6 +1,6 @@
 use super::*;
 use rmcp::{RoleClient, model::*, service::RunningService, transport::async_rw::AsyncRwTransport};
-use std::process::Stdio;
+use std::process::{ExitStatus, Stdio};
 use tokio::process::{Child, Command};
 pub(super) struct Direct {
     client: RunningService<RoleClient, ()>,
@@ -81,5 +81,26 @@ impl Direct {
         assert!(!fs::read_to_string(&self.stderr)?.contains(password));
         fs::remove_file(self.stderr)?;
         Ok(())
+    }
+    #[allow(deprecated, reason = "PC0 uses resource subscriptions")]
+    pub(super) async fn subscribe_until_exit(
+        mut self,
+        password: &str,
+    ) -> Result<(ExitStatus, String), HarnessError> {
+        self.client
+            .peer()
+            .subscribe(SubscribeRequestParams::new("connector://events"))
+            .await
+            .map_err(|e| HarnessError(e.to_string()))?;
+        let status = tokio::time::timeout(Duration::from_secs(10), self.child.wait())
+            .await
+            .map_err(|_| HarnessError("connector did not exit after rejected LOGIN".into()))??;
+        let stderr = fs::read_to_string(&self.stderr)?;
+        assert!(
+            !stderr.contains(password),
+            "password canary leaked to connector stderr"
+        );
+        fs::remove_file(self.stderr)?;
+        Ok((status, stderr))
     }
 }

@@ -7,6 +7,7 @@
 )]
 mod acceptance;
 mod direct;
+mod rejected_login;
 mod rules;
 mod security;
 mod stub;

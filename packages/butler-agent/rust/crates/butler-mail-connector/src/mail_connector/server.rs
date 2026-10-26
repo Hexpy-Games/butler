@@ -8,26 +8,32 @@ use tokio_util::sync::CancellationToken;
 struct Server {
     mail: Option<Arc<Mail>>,
     stop: CancellationToken,
+    auth_failed: CancellationToken,
     intake: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
 }
 pub(super) async fn serve(mail: Option<Arc<Mail>>) -> Result<()> {
     let stop = CancellationToken::new();
+    let auth_failed = CancellationToken::new();
     let intake = Arc::new(Mutex::new(None));
     let server = Server {
         mail,
         stop: stop.clone(),
+        auth_failed: auth_failed.clone(),
         intake: intake.clone(),
     };
     let running = server
         .serve(rmcp::transport::stdio())
         .await
         .map_err(|_| "mail_mcp_failed")?;
-    let result = running.waiting().await;
+    let result = tokio::select! {
+        result = running.waiting() => result.map(|_| ()).map_err(|_| "mail_mcp_failed"),
+        () = auth_failed.cancelled() => Err("mail_auth_failed"),
+    };
     stop.cancel();
     if let Some(task) = intake.lock().await.take() {
         let _ = task.await;
     }
-    result.map(|_| ()).map_err(|_| "mail_mcp_failed")
+    result
 }
 fn error(code: &'static str) -> ErrorData {
     ErrorData::internal_error(code, None)
@@ -73,7 +79,7 @@ impl ServerHandler for Server {
                 json!({"events":mail.state.lock().await.drain(&mail.config.data).await.map_err(error)?})
             }
             "connector://destinations" => {
-                let mut connection = imap::connect(&mail.config).await.map_err(error)?;
+                let mut connection = mail.connect(Some(&self.auth_failed)).await.map_err(error)?;
                 let destinations = imap::destinations(&mut connection).await.map_err(error)?;
                 let _ = connection.logout().await;
                 json!({"destinations":destinations})
@@ -104,6 +110,7 @@ impl ServerHandler for Server {
                 mail.clone(),
                 context.peer,
                 self.stop.clone(),
+                self.auth_failed.clone(),
             )));
         }
         Ok(())
