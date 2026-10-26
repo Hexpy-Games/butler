@@ -23,8 +23,6 @@ pub enum CapabilityKind {
     FileEdit,
     Schedule,
     SettingsWrite,
-    /// Direct app-owned durable changes, including connector rules.
-    PersistentState,
     ProjectRecord,
     CrossConversation,
     ButlerOutput,
@@ -174,19 +172,21 @@ impl CapabilityKind {
     /// Gate creation rather than propagating taint through every derived artifact
     /// forever (schedule runs, recalled memory, new conversations). That propagation
     /// is fragile; a card lets the user see the exact artifact before it exists.
+    /// Documents are inert data read on demand, never instructions; Library
+    /// organization lets briefs attach them. Connector classification rules are
+    /// host-constrained and announced once with undo, so they also need no card.
     pub fn persists_beyond_turn(self) -> bool {
         match self {
             Self::Exempt(action) => match action {
                 ApprovalExemptAction::FirstConversationOnboarding
-                | ApprovalExemptAction::MemorySave
+                | ApprovalExemptAction::MemorySave => true,
+                ApprovalExemptAction::AttachedImageAnalysis
                 | ApprovalExemptAction::LibraryOrganize
-                | ApprovalExemptAction::DocumentWrite => true,
-                ApprovalExemptAction::AttachedImageAnalysis => false,
+                | ApprovalExemptAction::DocumentWrite => false,
             },
             Self::FileEdit
             | Self::Schedule
             | Self::SettingsWrite
-            | Self::PersistentState
             | Self::ProjectRecord
             | Self::CrossConversation
             | Self::ButlerOutput
@@ -285,10 +285,10 @@ impl CapabilityKind {
             }
             SetWallpaper | SaveWallpaperModule => Self::SettingsWrite,
             StartTopicConversation => Self::CrossConversation,
-            ToolName::ConnectorRuleSet | ToolName::ConnectorRuleRemove => Self::PersistentState,
             OutputPublish => Self::ButlerOutput,
             ToolName::DeliverFiles => Self::DeliverFiles,
             SwitchFolder => Self::FolderSwitch,
+            // Includes classification rules, whose host enforces action and read-only limits.
             _ => Self::InternalRead,
         }
     }

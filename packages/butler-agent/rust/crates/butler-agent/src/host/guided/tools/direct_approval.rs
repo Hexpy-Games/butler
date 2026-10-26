@@ -12,7 +12,6 @@ pub(super) fn supports(call: &ModelRoundToolCall) -> bool {
     matches!(
         CapabilityKind::of_call(&call.name, &call.arguments, false),
         CapabilityKind::Exempt(_)
-            | CapabilityKind::PersistentState
             | CapabilityKind::ButlerOutput
             | CapabilityKind::FullOnly(FullOnlyAction::MemoryForget)
     )

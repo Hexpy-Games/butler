@@ -183,3 +183,115 @@ fn schedule_responder(body: &Value) -> Option<butler_e2e::e2e::cassette::Respons
         &json!({"type":"function_call","id":id,"call_id":id,"name":name,"status":"completed","arguments":arguments.to_string()}),
     ))
 }
+
+async fn delivered_call(
+    s: &Scenario,
+    account: &str,
+    spec: Value,
+    n: i64,
+) -> Result<(), HarnessError> {
+    let mut injected = event(&format!("inert-write-{n}"));
+    injected["snippet"] = format!("fixture-call:{spec}").into();
+    emit(s, account, vec![injected]).await?;
+    count(
+        s,
+        "SELECT count(*) FROM turns WHERE state IN ('delivered','failed','cancelled')",
+        n,
+    )
+    .await?;
+    assert_eq!(
+        db(s).query_row(
+            "SELECT count(*) FROM turns WHERE state='delivered'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )?,
+        n
+    );
+    assert_eq!(
+        s.gw.approval_requests("general").await?,
+        Vec::<Value>::new()
+    );
+    Ok(())
+}
+
+async fn connector_rule_without_card(access: Access) -> Result<(), HarnessError> {
+    let setup = setup("PC2-RULE-NO-CARD")?.access(access);
+    let root = package(&setup.sandbox.home, false)?;
+    let s = setup.start().await?;
+    install(&s, &root).await?;
+    let id = connect(&s, "immediate", 10.0).await?;
+    account(&s, &id, "connected").await?;
+    s.provider()?.set_chat_responder(stub::run);
+    let arguments = json!({"id":"newsletters","connector":"source/items","title":"Organize newsletters","reason":"Classification preference","match":[{"field":"subject","op":"contains","value":"Newsletter"}],"actions":[{"type":"organize","tool":"events/mark_read","arguments":{}},{"type":"skip_model"}]});
+    let spec = json!({"name":"connector_rule_set","arguments":arguments});
+    for n in 1..=2 {
+        delivered_call(&s, &id, spec.clone(), n).await?;
+        let rules = api(&s, Method::GET, "/connector-rules", None).await?;
+        assert_eq!(rules.status, 200);
+        let rules = rules.data()["rules"].as_array().unwrap().clone();
+        assert_eq!(
+            rules.len(),
+            1,
+            "rule was not created: {rules:?}; approval feedback: {}",
+            s.provider()?
+                .requests()
+                .iter()
+                .any(|r| r.to_string().contains("schedule_permission_required"))
+        );
+        assert_eq!(rules[0]["id"], arguments["id"]);
+        assert_eq!(rules[0]["actions"], arguments["actions"]);
+        assert_eq!(
+            db(&s).query_row(
+                "SELECT count(*) FROM events WHERE type='connector.rule_announced'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )?,
+            1
+        );
+    }
+    s.finish().await
+}
+
+async fn connector_document_without_card(access: Access) -> Result<(), HarnessError> {
+    let setup = setup("PC2-DOCUMENT-NO-CARD")?.access(access);
+    let root = package(&setup.sandbox.home, false)?;
+    let s = setup.start().await?;
+    install(&s, &root).await?;
+    let id = connect(&s, "immediate", 10.0).await?;
+    account(&s, &id, "connected").await?;
+    s.provider()?.set_chat_responder(stub::run);
+    let spec = json!({"name":"document_create","arguments":{"title":"Source brief","body":"# Source brief\n\nComplete source notes."}});
+    delivered_call(&s, &id, spec.clone(), 1).await?;
+    let listed = s.gw.get("/library?kind=doc").await?;
+    assert_eq!(listed.status, 200);
+    let items = listed.data()["items"].as_array().unwrap().clone();
+    assert_eq!(items.len(), 1, "document was not created: {listed:?}");
+    let document =
+        s.gw.get(&format!("/documents/{}", items[0]["id"].as_str().unwrap()))
+            .await?;
+    assert_eq!(document.status, 200);
+    assert_eq!(document.data()["body"], spec["arguments"]["body"]);
+    assert_eq!(document.data()["title"], spec["arguments"]["title"]);
+    s.finish().await
+}
+
+#[tokio::test]
+async fn round_two_connector_rule_full_access_without_card() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    connector_rule_without_card(Access::FullAccess).await
+}
+#[tokio::test]
+async fn round_two_connector_rule_auto_without_card() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    connector_rule_without_card(Access::Auto).await
+}
+#[tokio::test]
+async fn round_two_connector_document_full_access_without_card() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    connector_document_without_card(Access::FullAccess).await
+}
+#[tokio::test]
+async fn round_two_connector_document_auto_without_card() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    connector_document_without_card(Access::Auto).await
+}
