@@ -82,11 +82,8 @@ pub(super) fn remove(db: &Connection, input: &Value) -> Result<Value, AppStorage
     .map_err(AppStorageError::sqlite)?;
     Ok(json!({"ok":true}))
 }
-pub(super) fn signal(
-    db: &mut Connection,
-    input: &Value,
-    now: &str,
-) -> Result<Value, AppStorageError> {
+pub(super) fn signal(db: &Connection, input: &Value, now: &str) -> Result<Value, AppStorageError> {
+    super::rows::prune(db, now)?;
     let tx = db;
     let received = chrono::DateTime::parse_from_rfc3339(now)
         .map_err(|_| invalid())?
@@ -97,10 +94,5 @@ pub(super) fn signal(
             SELECT j.value FROM app_connector_events e,json_each(e.matched_rules) j WHERE e.connector=?1 AND e.account=?2 AND e.dedupe_key=?3)",
             params![text(input,"connector")?,text(input,"account")?,text(&input["signal"],"ref")?,now]).map_err(AppStorageError::sqlite)?;
     }
-    tx.execute(
-        "UPDATE app_connector_events SET ready=1,digested_at=?2 WHERE event_id=?1",
-        params![text(input, "event_id")?, now],
-    )
-    .map_err(AppStorageError::sqlite)?;
     Ok(json!({"ok":true}))
 }

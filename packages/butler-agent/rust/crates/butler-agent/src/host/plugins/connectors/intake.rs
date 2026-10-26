@@ -9,8 +9,13 @@ impl Connectors {
         session: &ConnectorSession,
     ) -> Result<()> {
         let connector = format!("{}/{}", account.plugin, account.connector);
-        let mut event =
-            butler_core::plugins::validate_connector_event(event, &connector, &account.id)?;
+        let event = butler_core::plugins::validate_connector_event(event, &connector, &account.id)?;
+        // Signals have their own identity and must never consume an event with
+        // the same source dedupe key, including one still awaiting delivery.
+        if !event["signal"].is_null() {
+            self.storage("signal", event).await?;
+            return Ok(());
+        }
         let inserted = self.storage("insert", event.clone()).await?;
         if inserted["fresh"] != true {
             return Ok(());
@@ -18,11 +23,6 @@ impl Connectors {
         let event_id = inserted["event_id"]
             .as_str()
             .ok_or_else(|| error("connector_store_invalid"))?;
-        if !event["signal"].is_null() {
-            event["event_id"] = event_id.into();
-            self.storage("signal", event).await?;
-            return Ok(());
-        }
         let rules = self
             .storage("rules", json!({"connector":connector,"account":account.id}))
             .await?;
