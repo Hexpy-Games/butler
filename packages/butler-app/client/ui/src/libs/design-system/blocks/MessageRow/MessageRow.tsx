@@ -25,6 +25,8 @@ export interface MessageRowProps extends Omit<
   tone?: MessageRowTone;
   compactionEvent?: boolean;
   activity?: boolean;
+  /** Assistant only: left-aligned 대화 row; answer in `MessageBubble`, parts in `MessageBubbleAttachments`. */
+  bubble?: boolean;
   /** Newly inserted row: fades in with a small rise (a just-sent user bubble flies
    * in from the composer); "delivered" resolves a QueuedMessage bubble in place. */
   entering?: boolean | "delivered";
@@ -57,6 +59,7 @@ export const MessageRow = forwardRef<HTMLElement, MessageRowProps>(
       tone = "complete",
       compactionEvent = false,
       activity = false,
+      bubble = false,
       entering = false,
       index,
       style,
@@ -75,7 +78,7 @@ export const MessageRow = forwardRef<HTMLElement, MessageRowProps>(
         {...props}
         className={cn(
           styles.row,
-          role === "assistant" && styles.assistant,
+          role === "assistant" && [styles.assistant, bubble && styles.bubbleRow],
           role === "user" && styles.user,
           compactionEvent && styles.compactionEvent,
           activity && styles.activity,

@@ -35,7 +35,7 @@ pub(crate) fn historical_source_ref(kind: &str, session_id: &str, source_id: &st
 pub(super) fn app_session_id(chat_id: &str) -> String {
     let chat_id = chat_id.trim();
     if chat_id == "general" {
-        return "butler/app-general".into();
+        return crate::workspace::CHATS_RUNTIME_SESSION_ID.into();
     }
     let chat_id = if chat_id.is_empty() {
         "unknown"

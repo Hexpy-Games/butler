@@ -25,7 +25,7 @@ pub(super) fn text(value: &str, limit: usize, retrieval: &str) -> String {
 
 pub(super) fn priority(source: &str) -> u8 {
     match source {
-        "runtime-system-contract" | "role" | "runtime-state" => 3,
+        "runtime-system-contract" | "role" | "chats-reply-rules" | "runtime-state" => 3,
         "rules" | "active-persona-reminder" | "project-memory" => 2,
         "personalization-profile" | "session-continuity" => 1,
         _ => 0,

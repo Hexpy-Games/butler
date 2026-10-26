@@ -28,7 +28,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Attachment chips for generated files blur who made them.", render: () => <AttachmentList items={[{ id: "a", name: "release-notes.md", meta: "4 KB" }]} /> },
     },
   ],
-  content: ["Descriptions are type / size (document / 4.2 KB)."],
+  content: ["Descriptions are type / size (document / 4.2 KB).", "The list uses --radius-popover (12px), like the message bubbles it sits under."],
   accessibility: ["aria-label names the list; each action names its file."],
-  tokens: ["--surface-raised", "--radius-panel", "--icon-size-lg"],
+  tokens: ["--surface-raised", "--radius-popover", "--icon-size-lg"],
 };

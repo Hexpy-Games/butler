@@ -2,7 +2,7 @@
   width: 100%;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-popover);
   background: var(--surface-raised);
 }
 
@@ -19,6 +19,18 @@
   color: inherit;
   font: inherit;
   text-align: left;
+}
+
+/* The clipped list's first and last rows follow its corners, so an inset
+   focus ring is never cut. */
+.row:first-child {
+  border-start-start-radius: inherit;
+  border-start-end-radius: inherit;
+}
+
+.row:last-child {
+  border-end-start-radius: inherit;
+  border-end-end-radius: inherit;
 }
 
 .row + .row {

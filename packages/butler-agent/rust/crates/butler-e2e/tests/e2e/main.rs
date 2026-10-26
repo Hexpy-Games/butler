@@ -63,6 +63,7 @@ mod chatgpt_plan_usage;
 mod chatgpt_session;
 mod chatgpt_sign_in;
 mod chatgpt_wire;
+mod chats_replies;
 mod cli_launcher;
 mod cli_remote;
 mod cli_reply_language;
