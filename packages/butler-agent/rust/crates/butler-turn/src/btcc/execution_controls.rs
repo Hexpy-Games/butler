@@ -46,6 +46,8 @@ pub struct ScheduleRunContext {
     pub automation_id: String,
     pub run_id: String,
     pub unattended: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheduled_at: Option<String>,
 }
 
 /// Execution controls after schema and hash verification.

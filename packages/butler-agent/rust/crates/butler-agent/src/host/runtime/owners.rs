@@ -39,6 +39,7 @@ impl HostDependencies for RuntimeOwners {
                 self.context_maintenance.close(),
             )
             .await;
+            butler_platform::system_wake::close().await;
             measure("runtime_project_tools", self.project_tools.close()).await;
             measure("runtime_project_work", self.project_work.close()).await;
             measure("runtime_session_worktrees", self.session_worktrees.close()).await;

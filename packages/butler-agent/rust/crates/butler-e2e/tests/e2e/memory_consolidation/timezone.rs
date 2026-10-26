@@ -18,11 +18,15 @@ async fn nonexistent_time_runs_at_the_first_valid_minute_in_butlers_timezone()
         .set_env("BUTLER_E2E_APP_NOW", "2027-03-14T06:59:00.000Z");
     s.gw = s.agent.start_again().await?;
     settled(&address).await?;
-    assert_eq!(calls(&s), 0);
+    // D17 first catches up yesterday, then still honors today's DST gap boundary.
+    completed_calls(&s, 1).await;
+    assert_eq!(state(&s)["late"], true);
+    assert_eq!(state(&s)["scheduledAt"], "2027-03-13T07:30:00.000Z");
     clock(&address, "2027-03-14T07:00:00.000Z").await?;
-    terminal(&s, "scheduled", "complete").await?;
+    completed_calls(&s, 2).await;
+    assert_eq!(state(&s)["late"], false);
     assert_eq!(state(&s)["lastRunDate"], "2027-03-14");
-    assert_eq!(calls(&s), 1);
+    assert_eq!(calls(&s), 2);
     s.finish().await
 }
 
@@ -45,8 +49,12 @@ async fn repeated_local_time_runs_only_once() -> Result<(), HarnessError> {
         .set_env("BUTLER_E2E_APP_NOW", "2026-11-01T05:29:00.000Z");
     s.gw = s.agent.start_again().await?;
     settled(&address).await?;
+    // D17 catches up yesterday before today's first repeated wall-time occurrence.
+    completed_calls(&s, 1).await;
+    assert_eq!(state(&s)["late"], true);
     clock(&address, "2026-11-01T05:30:00.000Z").await?;
-    terminal(&s, "scheduled", "complete").await?;
+    completed_calls(&s, 2).await;
+    assert_eq!(state(&s)["late"], false);
     let first = state(&s);
     s.agent.terminate().await?;
     s.agent
@@ -54,7 +62,7 @@ async fn repeated_local_time_runs_only_once() -> Result<(), HarnessError> {
         .set_env("BUTLER_E2E_APP_NOW", "2026-11-01T06:30:00.000Z");
     s.gw = s.agent.start_again().await?;
     settled(&address).await?;
-    assert_eq!(calls(&s), 1);
+    assert_eq!(calls(&s), 2);
     assert_eq!(state(&s), first);
     s.finish().await
 }

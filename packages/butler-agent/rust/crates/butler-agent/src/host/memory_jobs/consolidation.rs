@@ -166,7 +166,7 @@ impl ConsolidationRunGate {
         let state = self.state().await?;
         let last = state.filter(|s| s["lastRunAt"].is_string()).map(|s| {
             let mut last = json!({"at":s["lastRunAt"],"status":s["status"]});
-            for key in ["message", "trigger"] {
+            for key in ["message", "trigger", "late", "scheduledAt"] {
                 if let Some(value) = s.get(key) {
                     last[key] = value.clone();
                 }
@@ -206,6 +206,11 @@ impl ConsolidationRunGate {
         state["status"] = json!(if result.is_ok() { "ok" } else { "error" });
         state["trigger"] = receipt["trigger"].clone();
         state["runId"] = receipt["operation_id"].clone();
+        state["late"] = json!(receipt["late"].as_bool().unwrap_or(false));
+        state["scheduledAt"] = receipt["scheduledAt"].clone();
+        if receipt["trigger"] == "scheduled" {
+            state["scheduledHandledAtMs"] = json!(started);
+        }
         state
             .as_object_mut()
             .ok_or("scheduler_state_invalid")?

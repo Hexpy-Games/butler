@@ -37,6 +37,8 @@ const COLUMNS: &[(&str, &str, &str)] = &[
     ),
     ("app_automations", "access_mode", "TEXT"),
     ("app_automations", "model", "TEXT"),
+    ("app_automation_runs", "scheduled_at", "TEXT"),
+    ("app_automation_runs", "late", "INTEGER NOT NULL DEFAULT 0"),
     (
         "app_automations",
         "schedule_type",
