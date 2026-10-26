@@ -7,18 +7,49 @@
   gap: var(--space-lg);
 }
 
+/* The title line is one control tall (the touch target where controls grow
+   to it, as IconButton does), and the title and the actions are centred on
+   it; the status line is a second row under the title, so it never moves
+   them. A title taller than a control grows the line, and the actions stay
+   centred on it. */
 .header {
-  display: flex;
-  min-width: 0;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-md);
-}
+  --document-title-line: var(--control-height-md);
 
-.heading {
+  container: document-title / inline-size;
+
   display: grid;
   min-width: 0;
-  gap: var(--space-xs);
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(var(--document-title-line), auto);
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+}
+
+@media (width <= 640px) {
+  .header:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
+    --document-title-line: max(
+      var(--control-height-md),
+      var(--control-hit-target)
+    );
+  }
+}
+
+@media (pointer: coarse) {
+  .header {
+    --document-title-line: max(
+      var(--control-height-md),
+      var(--control-hit-target)
+    );
+  }
+}
+
+.title {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+
+.header > .status {
+  grid-area: 2 / 1;
 }
 
 .status {
@@ -27,11 +58,35 @@
   line-height: var(--typo-caption-line-height);
 }
 
-.actions {
+.actions,
+.inline {
   display: flex;
   flex: none;
   align-items: center;
   gap: var(--space-xs);
+}
+
+.actions {
+  grid-area: 1 / 2;
+}
+
+/* A narrow title line folds the document actions into the ⋯ menu (when the
+   caller gives menuActions), so the title keeps the width; host controls
+   such as close stay. Below 30rem the touch-size actions, close and back
+   would take about half the line; a phone's line is well under it and a
+   side panel's well over it. */
+.menu {
+  display: none;
+}
+
+@container document-title (width < 30rem) {
+  .actions[data-folds="true"] > .inline {
+    display: none;
+  }
+
+  .actions[data-folds="true"] > .menu {
+    display: flex;
+  }
 }
 
 .page {

@@ -466,7 +466,7 @@ export interface AppCopy {
   browser: BrowserCopy;
   library: LibraryCopy;
   documents: { title: string; saved: string; editing: string; edited: string; restore: string;
-    versions: string; current: string; me: string; butler: string; export: string; markdown: string; pdf: string;
+    versions: string; current: string; me: string; butler: string; export: string; markdown: string; pdf: string; moreActions: string; exportMarkdown: string; exportPdf: string;
     bold: string; heading: string; list: string; addBlock: string; format: string; originalChat: string };
   projectSignpost: {
     evidenceCount: (count: number) => string;
