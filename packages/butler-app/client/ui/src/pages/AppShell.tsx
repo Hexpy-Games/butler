@@ -55,6 +55,7 @@ import {
 } from "@/app/store.ts";
 import { useAppBootstrap } from "@/hooks/useAppBootstrap.ts";
 import { useAgentRuntimeState } from "@/hooks/useAgentRuntimeState.ts";
+import { useTextSize } from "@/hooks/useTextSize";
 import { useNativeAppearanceTheme } from "@/hooks/useNativeAppearanceTheme.ts";
 import { useNativeShellPreferences } from "@/hooks/useNativeShellPreferences.ts";
 import { usePortalThemeClasses } from "@/hooks/usePortalThemeClasses.ts";
@@ -73,6 +74,8 @@ import { useOnboardingStore } from "@/stores/onboardingStore.ts";
 import { LegacyDataRecovery } from "@/components/first-run/LegacyDataRecovery.tsx";
 
 export function AppShell() {
+  const textSize = useButlerStore((state) => state.settings.text_size);
+  useTextSize(textSize);
   useEffect(() => { if (window.butlerApp?.startupIssue === "legacy-data") startupPaintReady(); }, []);
   if (window.butlerApp?.startupIssue === "legacy-data") return <ErrorBoundary scope="legacy-recovery"><LegacyDataRecovery /></ErrorBoundary>;
   return <AppOnboardingShell />;

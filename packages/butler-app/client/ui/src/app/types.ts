@@ -542,6 +542,7 @@ export interface SettingsView {
     | "modifier_enter_send_enter_newline"
     | "enter_send_shift_enter_newline";
   appearance_theme: "system" | "light" | "dark";
+  text_size: "default" | "large" | "larger";
   /** false follows the OS; true forces the DS reduced-motion path. */
   reduce_motion: boolean;
   collapse_message_box: boolean;

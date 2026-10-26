@@ -1543,6 +1543,7 @@ export interface AppCopy {
       model: string;
       reasoning: string;
       theme: string;
+      textSize: string;
       showThinking: string;
       conversationBackground: string; conversationOverlay: string; conversationPlain: string;
       wallpaper: string;
@@ -1595,6 +1596,9 @@ export interface AppCopy {
       modifierEnterSendEnterNewline: (modifier: string) => string;
       enterSendShiftEnterNewline: string;
       system: string;
+      textSizeDefault: string;
+      textSizeLarge: string;
+      textSizeLarger: string;
       light: string;
       dark: string;
       local: string;

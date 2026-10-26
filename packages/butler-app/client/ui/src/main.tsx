@@ -9,6 +9,9 @@ import { AppDialogs } from "@/components/common/AppDialogs.tsx";
 import { renderAppSurface } from "@/app/renderAppSurface";
 import "@/butler-ds/tokens.css";
 
+const initialTextSize = window.butlerApp?.initialTextSize;
+if (initialTextSize) document.documentElement.style.setProperty("--ui-scale", String(initialTextSize === "larger" ? 1.3 : initialTextSize === "large" ? 1.15 : 1));
+
 const visualMode = typeof window !== "undefined"
   ? new URLSearchParams(window.location.search).get("visual")
   : null;

@@ -60,6 +60,8 @@ export interface PowerState {
 }
 
 interface ButlerAppBridge extends PendingAsksBridge {
+  initialTextSize?: SettingsView["text_size"];
+  setTextSize?: (value: SettingsView["text_size"]) => Promise<void>;
   log?: (row: { level: "DEBUG"; category: "http.client"; event: "image.fetch"; attrs: { url: string } }) => void;
   writeCachedComposerDraft?: (input: { snapshot: import("./composerDraftCache").ComposerDraftSnapshot }) => Promise<unknown>;
   history?: (input: { path: string; method: string; body?: unknown }) => Promise<unknown>;

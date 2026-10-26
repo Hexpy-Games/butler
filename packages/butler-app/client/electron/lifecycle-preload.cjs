@@ -1,5 +1,8 @@
 performance.mark("lifecycle_preload");
 const { contextBridge, ipcRenderer } = require("electron");
+ipcRenderer.on("butler:text-size", (_event, factor) => {
+  if ([1, 1.15, 1.3].includes(factor)) document.documentElement.style.setProperty("--ui-scale", String(factor));
+});
 const painted = () => ipcRenderer.send("butler:lifecycle-painted", { card: {
     title: document.querySelector('[data-slot="title"]')?.textContent,
     line: document.querySelector('[data-slot="line"]')?.textContent,

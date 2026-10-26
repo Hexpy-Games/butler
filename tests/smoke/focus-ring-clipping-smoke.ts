@@ -32,6 +32,9 @@ import { delegatedUsageView } from "../../packages/butler-app/client/ui/src/comp
 import { launchSmokeBrowser } from "../support/smoke-browser";
 import { auditTabOrder, formatClips, probeFocusRing, probeFocusRingFrames, type FocusRingClip } from "../support/focus-ring-clipping";
 
+const textSize = process.env.BUTLER_SMOKE_TEXT_SIZE ?? "default";
+assert(["default", "large", "larger"].includes(textSize), "invalid smoke text size");
+const uiScale = textSize === "larger" ? 1.3 : textSize === "large" ? 1.15 : 1;
 const root = process.cwd();
 const copy = getAppCopy("ko-KR");
 const shots = process.env.BUTLER_FOCUS_RING_SHOTS;
@@ -104,7 +107,7 @@ function usageMonitor(url: URL): UsageMonitorView {
 /** `auth` picks the harness model's billing; a tracked one (api_key) shows usage in the context popover. */
 async function open(page: Page, cell: Cell, auth?: string) {
   fixture = { messages: [answer], background: cell.background };
-  await page.setViewportSize({ width: cell.width, height: cell.height });
+  await page.setViewportSize({ width: Math.round(cell.width / uiScale), height: Math.round(cell.height / uiScale) });
   await page.goto(`${base}?visual=components&theme=${cell.theme}&locale=ko${auth ? `&auth=${auth}` : ""}`);
   await page.locator('[data-slot="item-card"]').first().waitFor();
   await page.locator('[data-slot="tab-rail"]').first().waitFor();
@@ -345,6 +348,9 @@ async function auditUsage(page: Page, cell: Cell) {
 try {
   const page = await browser.newPage({ reducedMotion: "reduce", locale: "ko-KR", timezoneId: "Asia/Seoul" });
   page.on("pageerror", (error) => errors.push(error.message));
+  await page.addInitScript((scale) => {
+    document.addEventListener("DOMContentLoaded", () => document.documentElement.style.setProperty("--ui-scale", String(scale)), { once: true });
+  }, uiScale);
   await page.addInitScript((tabs) => {
     const state = { enabled: true, blocked: false, activeId: "m1", nativeCovered: false, tabs };
     (window as Window & { butlerBrowser?: unknown }).butlerBrowser = {
