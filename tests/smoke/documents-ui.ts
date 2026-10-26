@@ -1,5 +1,5 @@
 // UI behavior smoke: offline gateway fixtures, real Lexical editor and product screens.
-import { assertDocumentOverflow, assertDocumentLayout, measureDocumentLayout, checkDocumentImage, checkTrailing, documentHarnessPlugin } from "./document-page-checks";
+import { assertDocumentOverflow, assertDocumentLayout, measureDocumentLayout, checkDocumentImage, checkTrailing, checkTitleLine, clickDocumentAction, checkDocumentMenu, measureHeader, documentHarnessPlugin } from "./document-page-checks";
 import assert from "node:assert/strict";
 import { getAppCopy } from "../../packages/butler-i18n/src/index";
 import { execFileSync } from "node:child_process";
@@ -84,6 +84,12 @@ async function setup(page: Page) {
     return route.continue();
   });
   await page.exposeFunction("captureExport", (value: Record<string, string>) => exports.push(value));
+  await page.addInitScript(() => {
+    const capture = (window as unknown as { captureExport: (value: unknown) => Promise<void> }).captureExport;
+    (window as unknown as { captureExport: (value: { format: string }) => Promise<void> }).captureExport = async value => {
+      await capture(value); (window as unknown as { lastExport?: string }).lastExport = value.format;
+    };
+  });
 }
 async function open(page: Page, width = 1440, theme = "light", fullPage = false) {
   await page.setViewportSize({ width, height: 1000 });
@@ -99,7 +105,7 @@ async function open(page: Page, width = 1440, theme = "light", fullPage = false)
   assert.equal(await page.locator('[data-test-class="file-viewer"]').count(), fullPage ? 0 : 1);
   if (!fullPage) {
     const pane = page.locator('[data-test-class="file-viewer"]');
-    for (const name of ["버전 기록", "원래 대화", "내보내기"]) await pane.getByRole("button", { name, exact: true }).waitFor();
+    await pane.locator('[data-slot="document-editor-page"]').waitFor();
     // One title row: the document's own, carrying the viewer's close (and back on a phone); the pane adds no header.
     const row = pane.locator('[data-test-class="editable-document"] > :first-child');
     assert.equal(await pane.locator('[data-test-class="file-viewer-header"]').count(), 0, "no pane title row over the document");
@@ -111,7 +117,7 @@ async function open(page: Page, width = 1440, theme = "light", fullPage = false)
       assert(chat && viewer && viewer.x >= chat.x + chat.width, "document occupies the right slot beside the chat");
     }
   }
-  await page.getByRole("button", { name: "버전 기록", exact: true }).waitFor();
+  await page.locator('[data-slot="document-editor-page"]').waitFor();
 }
 const editor = (page: Page) => page.getByRole("textbox", { name: "문서", exact: true });
 async function selectText(page: Page) {
@@ -162,7 +168,7 @@ async function interactions(page: Page, width = 1440) {
   await editor(page).locator("h1").click(); await page.keyboard.press("ControlOrMeta+End"); await page.keyboard.type(" typed through conflict");
   await page.getByText("저장됨", { exact: true }).waitFor();
   assert.ok(head.body.includes("typed through conflict")); assert.ok(head.body.includes("Remote unknown"));
-  await page.getByRole("button", { name: "버전 기록", exact: true }).click();
+  await clickDocumentAction(page, "버전 기록");
   await page.getByRole("listbox", { name: "버전 기록" }).getByText("버틀러", { exact: true }).first().waitFor();
   await page.getByRole("option").last().click();
   await page.locator("[data-document-read-only]").waitFor();
@@ -172,11 +178,11 @@ async function interactions(page: Page, width = 1440) {
   await page.evaluate(() => {
     (window as unknown as { butlerApp: unknown }).butlerApp = { exportDocument: (window as unknown as { captureExport: (value: unknown) => void }).captureExport };
   });
-  await page.getByRole("button", { name: "내보내기", exact: true }).click(); await page.getByRole("menuitem", { name: "Markdown", exact: true }).click();
+  await clickDocumentAction(page, "Markdown으로 내보내기");
   await page.waitForTimeout(200); assert.equal(exports.at(-1)?.format, "markdown"); assert.ok(!exports.at(-1)!.content.includes("```blocks")); assert.ok(exports.at(-1)!.content.includes("data:image/svg+xml;base64,"));
   const expected = initial.replace(/```blocks\n[^]*?\n```/u, "### Budget\n\n- Total: 120").replace("(img_abcdefghij)", `(${imageData})`);
   assert.equal(exports.at(-1)!.content, expected);
-  await page.getByRole("button", { name: "내보내기", exact: true }).click(); await page.getByRole("menuitem", { name: "PDF", exact: true }).click();
+  await clickDocumentAction(page, "PDF로 내보내기");
   await page.waitForTimeout(200); assert.equal(exports.at(-1)?.format, "pdf"); assert.ok(exports.at(-1)!.content.includes("data-document-read-only")); assert.ok(!exports.at(-1)!.content.includes("contenteditable=\"true\""));
   await page.evaluate(() => { delete window.butlerApp; });
   await closeAndFlush(page);
@@ -212,7 +218,7 @@ async function outsideUndo(page: Page) {
 }
 async function navigation(page: Page) {
   await open(page, 900);
-  await page.getByRole("button", { name: "원래 대화", exact: true }).click();
+  await clickDocumentAction(page, "원래 대화");
   await page.locator('[data-test-class="file-viewer-close"]').click();
   await page.locator('[data-test-class="session-info-toggle"]').click();
   await page.locator('[data-session-section="artifacts"]').getByText("Report", { exact: true }).click();
@@ -222,7 +228,7 @@ async function navigation(page: Page) {
   await page.locator('[data-library-item="doc_report"]').getByText("Report", { exact: true }).click();
   await editor(page).waitFor();
   await page.reload(); await editor(page).waitFor();
-  await page.getByRole("button", { name: "원래 대화", exact: true }).click();
+  await clickDocumentAction(page, "원래 대화");
   assert.equal(new URL(page.url()).searchParams.get("doc"), null);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.evaluate(async fixture => {
@@ -352,7 +358,7 @@ async function unknownImage(page: Page) {
     const image = editor(page).locator('[data-slot="media-frame"]');
     assert.equal(await image.getAttribute("data-natural"), null);
     assert.equal(await image.getAttribute("data-aspect"), "16:10", "unknown editor images retain their existing frame");
-    await page.getByRole("button", { name: "버전 기록", exact: true }).click();
+    await clickDocumentAction(page, "버전 기록");
     await page.getByRole("option").last().click();
     const preview = page.locator('[data-document-read-only]');
     await preview.locator("img").waitFor();
@@ -367,7 +373,7 @@ async function imageEmbeds(page: Page) {
     await open(page, width);
     assert.equal(await editor(page).locator('[data-slot="media-frame"][data-natural]').count(), 2);
     await checkDocumentImage(page, width, evidence);
-    await page.getByRole("button", { name: "버전 기록", exact: true }).click();
+    await clickDocumentAction(page, "버전 기록");
     await page.getByRole("listbox").waitFor();
     await page.keyboard.press("Escape");
     await page.getByRole("listbox").waitFor({ state: "hidden" });
@@ -399,6 +405,21 @@ async function keyboardUnits(page: Page) {
 const wideContent = "\n\n> " + "Unknown raw Markdown ".repeat(30)
   + "\n\n```typescript\nconst values = [" + "1234567890, ".repeat(40) + "];\n```"
   + "\n\n| First column | Second column |\n| --- | --- |\n| " + "wide-cell-".repeat(50) + " | preserved |\n";
+async function titleLines() {
+  const page = await browser.newPage({ deviceScaleFactor: 2 }), results = [];
+  try {
+    await setup(page);
+    for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (const fullPage of [false, true]) {
+      await open(page, width, theme, fullPage);
+      results.push(await checkTitleLine(page, { width, theme, stage, evidence, fullPage }));
+      if (width === 390 && stage !== "before") await checkDocumentMenu(page, { theme, evidence, fullPage, exports });
+    }
+    for (const fullPage of [false, true]) for (const width of [390, 768, 1024, 1280, 1440]) {
+      await open(page, width, "light", fullPage); await measureHeader(page, width, fullPage);
+    }
+    assert(results.every(result => result.buttons.every(button => Math.abs(button.center - result.title) <= 0.5)), JSON.stringify(results));
+  } finally { await page.close(); }
+}
 async function matrix(page: Page) {
   for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (background of ["plain", "wallpaper"]) {
     head = { ...head, title: "Report — document layout, revisions and export", body: initial + wideContent }; history = [structuredClone(head), { ...head, rev: head.rev - 1, author: "user" }];
@@ -422,12 +443,12 @@ async function matrix(page: Page) {
     const editingLayout = await measureDocumentLayout(page);
     layouts.push({ width, theme, background, state: "editing", layout: editingLayout });
     assertDocumentLayout(editingLayout, width); await assertDocumentOverflow(page);
-    await page.getByRole("button", { name: "버전 기록", exact: true }).click(); await page.getByRole("listbox").waitFor(); await shot(page, "versions", width, theme);
+    await clickDocumentAction(page, "버전 기록"); await page.getByRole("listbox").waitFor(); await shot(page, "versions", width, theme);
     await page.getByRole("option").last().click(); await page.locator('[data-document-read-only] table').waitFor();
     await assertDocumentOverflow(page);
     await page.getByRole("option").first().click(); await editor(page).waitFor();
     await page.keyboard.press("Escape"); await page.getByRole("listbox").waitFor({ state: "hidden" });
-    await page.getByRole("button", { name: "내보내기", exact: true }).click(); await page.getByRole("menuitem", { name: "PDF", exact: true }).waitFor(); await shot(page, "export", width, theme); await page.keyboard.press("Escape"); await page.getByRole("menu").waitFor({ state: "hidden" });
+    await page.getByRole("button", { name: await page.getByRole("button", { name: "내보내기", exact: true }).isVisible() ? "내보내기" : "더보기", exact: true }).click(); await page.getByRole("menuitem", { name: /PDF/u }).waitFor(); await shot(page, "export", width, theme); await page.keyboard.press("Escape"); await page.getByRole("menu").waitFor({ state: "hidden" });
     await drawer(page); await shot(page, "drawer", width, theme);
     await page.locator('[data-library-item="doc_report"]').getByText(head.title, { exact: true }).click(); await editor(page).waitFor(); await shot(page, "drawer-reopened", width, theme);
     assert.equal(new URL(page.url()).searchParams.get("doc"), head.id);
@@ -439,6 +460,7 @@ async function matrix(page: Page) {
 }
 try {
   const page = await browser.newPage(); await setup(page);
+  await titleLines();
   if (stage === "before") { await matrix(page); await measure(page); }
   else {
     await imageEmbeds(page);
