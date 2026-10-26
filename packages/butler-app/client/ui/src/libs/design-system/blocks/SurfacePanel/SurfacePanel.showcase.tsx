@@ -16,11 +16,13 @@ const labels = {
     usage: "API provider usage", usageMeta: "OpenAI · this month", tokens: "1.2M tokens",
     archived: "Release checklist review", archivedMeta: "Conversation · 3 days ago", restore: "Restore",
     elevation: "elevation",
+    work: "Compare three laptop reviews", workMeta: "Running · 2 of 4 sources read",
   },
   "ko-KR": {
     usage: "API 제공자 사용량", usageMeta: "OpenAI · 이번 달", tokens: "120만 토큰",
     archived: "릴리스 체크리스트 검토", archivedMeta: "대화 · 3일 전", restore: "복원",
     elevation: "높이",
+    work: "노트북 리뷰 세 곳 비교", workMeta: "진행 중 · 자료 4개 중 2개 읽음",
   },
 } as const;
 
@@ -70,6 +72,19 @@ export const stories: ShowcaseStory[] = [
           </SurfacePanel>
         ))}
       </Stack>
+    ),
+  },
+  {
+    // StewardParentProgress: the background-work card in the conversation.
+    name: "In the conversation (radius lg)",
+    widths: ["375", "app"],
+    render: (context) => (
+      <SurfacePanel elevation="none" radius="lg">
+        <Stack gap="xs">
+          <Typo.Label as="span">{text(context).work}</Typo.Label>
+          <Typo.Caption>{text(context).workMeta}</Typo.Caption>
+        </Stack>
+      </SurfacePanel>
     ),
   },
   {

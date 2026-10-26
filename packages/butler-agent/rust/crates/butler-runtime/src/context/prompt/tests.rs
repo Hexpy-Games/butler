@@ -20,6 +20,7 @@ use butler_turn::workspace::{
     SessionLifecycleState, SessionRole as WorkspaceRole, StoredSessionBinding,
 };
 
+mod chats;
 mod integration;
 mod support;
 use support::{ids, temp};
@@ -176,10 +177,12 @@ impl CognitionPromptPort for Cognition {
     }
 }
 
+// test-category: format-pin
 #[tokio::test]
 async fn butler_and_steward_assemblies_keep_sections_producer_order_and_fallbacks() {
     let root = temp("golden");
     let (mut assembler, conversation, profile_calls, cognition_calls) = fixture(&root, false).await;
+    chats::assert_chats_reply_rules(&assembler, &root);
     let butler_binding = binding(WorkspaceRole::Butler);
     let request = request();
     let steward_binding = binding(WorkspaceRole::Steward);
