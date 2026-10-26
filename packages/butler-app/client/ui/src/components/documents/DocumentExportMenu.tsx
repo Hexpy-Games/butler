@@ -31,9 +31,8 @@ function download(name: string, content: string) {
   const anchor = document.createElement("a"); anchor.href = url; anchor.download = name; anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-export function DocumentExportMenu({ prepare }: { prepare: () => Promise<EditableDocument> }) {
+export function useDocumentExport(prepare: () => Promise<EditableDocument>) {
   const ref = useRef<HTMLDivElement>(null), [printDoc, setPrintDoc] = useState<EditableDocument>();
-  const copy = appCopy.documents;
   const run = async (format: "markdown" | "pdf") => {
     const doc = await prepare();
     const name = `${documentFileName(doc.title)}.${format === "markdown" ? "md" : "pdf"}`;
@@ -58,7 +57,12 @@ export function DocumentExportMenu({ prepare }: { prepare: () => Promise<Editabl
     }
   };
   const start = (format: "markdown" | "pdf") => { void run(format).catch(() => notifyStatus(appCopy.library.failed, { tone: "error" })); };
-  return <><DropdownMenu><DropdownMenuTrigger asChild><IconButton label={copy.export}><Download size="sm" /></IconButton></DropdownMenuTrigger>
+  const portal = printDoc ? createPortal(<div hidden aria-hidden="true"><div ref={ref}><Typo.H1>{printDoc.title}</Typo.H1><DocumentReadView doc={printDoc} print /></div></div>, document.body) : null;
+  return { start, portal };
+}
+export function DocumentExportMenu({ start }: { start: (format: "markdown" | "pdf") => void }) {
+  const copy = appCopy.documents;
+  return <DropdownMenu><DropdownMenuTrigger asChild><IconButton label={copy.export}><Download size="sm" /></IconButton></DropdownMenuTrigger>
     <DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => start("markdown")}>{copy.markdown}</DropdownMenuItem><DropdownMenuItem onSelect={() => start("pdf")}>{copy.pdf}</DropdownMenuItem></DropdownMenuContent>
-  </DropdownMenu>{printDoc ? createPortal(<div hidden aria-hidden="true"><div ref={ref}><Typo.H1>{printDoc.title}</Typo.H1><DocumentReadView doc={printDoc} print /></div></div>, document.body) : null}</>;
+  </DropdownMenu>;
 }

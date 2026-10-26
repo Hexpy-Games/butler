@@ -241,6 +241,17 @@ async function auditCell(page: Page, cell: Cell) {
   await page.locator('[data-test-class="message-artifact-list"]').getByText("Focus document", { exact: true }).click();
   await page.getByRole("textbox", { name: copy.documents.title, exact: true }).waitFor();
   await auditScope(page, cell, "document-page", '[data-test-class="editable-document"]', 30);
+  const documentMenu = page.locator('[data-slot="document-editor-menu"] button');
+  if (await documentMenu.isVisible()) {
+    await focusBefore(page, '[data-slot="document-editor-menu"]');
+    await page.keyboard.press("Tab");
+    const probe = await probeFocusRing(page);
+    assert(probe, "document overflow trigger has a focus ring");
+    record(cell, "document-overflow-trigger", { stops: 1, clipped: probe.clips });
+    await page.keyboard.press("Enter"); await page.getByRole("menu").waitFor();
+    await auditArrows(page, cell, "document-overflow-items", await page.getByRole("menuitem").count());
+    await page.keyboard.press("Escape");
+  }
   await open(page, cell);
   // A menu: a sidebar row's menu walked with arrow keys.
   await openSidebar(page);

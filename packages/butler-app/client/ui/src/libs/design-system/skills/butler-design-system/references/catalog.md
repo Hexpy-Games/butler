@@ -2857,7 +2857,7 @@ An editable document page: title row, one status line, header actions and the ed
 - Use for: A 버틀러 document the user edits (서랍 문서, the side panel next to the chat)
 - Not for: Reading a file or artifact → `DocumentReader`
 - Not for: Writing a message → `ComposerCard`
-- Tokens: `--butler-ink-blue`, `--butler-ink-purple`, `--accent`, `--radius-control`, `--motion-slow`
+- Tokens: `--control-height-md`, `--control-hit-target`, `--butler-ink-blue`, `--butler-ink-purple`, `--accent`, `--radius-control`, `--motion-slow`
 
 ### DocumentFormatBar
 
