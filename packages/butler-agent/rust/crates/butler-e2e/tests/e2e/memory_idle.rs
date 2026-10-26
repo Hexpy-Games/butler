@@ -220,6 +220,25 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
 
     // The service discovered the generation and finished its first sweep.
     wait_parked(&s).await;
+    // Wait for the first scheduler evaluation to arm this fresh data root.
+    tokio::time::timeout(Duration::from_secs(90), async {
+        loop {
+            let view = s.gw.get("/memory/consolidation").await?;
+            let marker = s
+                .sandbox
+                .data
+                .join("state/scheduler/consolidation-cycle.json");
+            if marker.exists() {
+                assert!(view.data()["active"].is_null());
+                assert!(view.data()["last_run"].is_null());
+                return Ok::<_, HarnessError>(());
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .expect("startup consolidation armed")?;
+
     let lock = s
         .sandbox
         .data
@@ -237,6 +256,11 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
     );
     let before_graph_version = data_version(&graph_db);
     let before_lock_version = data_version(&lock_db);
+    let schedule = s
+        .sandbox
+        .data
+        .join("state/scheduler/consolidation-cycle.json");
+    let before_schedule = signature(&schedule);
     let before_graph = signature(&graph);
     let before_wal = signature(&PathBuf::from(format!("{}-wal", graph.display())));
     let before_lock = signature(&lock);
@@ -274,6 +298,11 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
     assert_eq!(memory_workers, 0);
     eprintln!(
         "MEM-IDLE memory_workers={memory_workers} idle_window={idle_window:?} graph_commits={graph_commits} graph_changed={graph_changed} wal_changed={wal_changed} lock_changed={lock_changed} leases={leases}"
+    );
+    assert_eq!(
+        signature(&schedule),
+        before_schedule,
+        "idle scheduler write"
     );
     assert_eq!(graph_commits, 0, "graph transactions during idle");
     assert!(

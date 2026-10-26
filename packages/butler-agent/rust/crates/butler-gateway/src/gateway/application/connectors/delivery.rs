@@ -45,6 +45,7 @@ impl AppApplication {
                 run_id: id.clone(),
                 unattended: true,
                 connector_event: true,
+                scheduled_at: None,
             }),
         };
         self.send(SendMessageCommand {
