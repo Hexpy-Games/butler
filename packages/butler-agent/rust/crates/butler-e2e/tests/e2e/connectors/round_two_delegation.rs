@@ -62,11 +62,32 @@ async fn delegated(name: &str, arguments: Value) -> Result<(), HarnessError> {
         .insert("role: steward".into(), steps);
     let _ = attended(&s, json!({"name":"delegate_to_steward","arguments":{}})).await?;
     let deadline = Instant::now() + Duration::from_secs(30);
+    let mut bookkeeping = std::collections::BTreeSet::new();
     loop {
         no_schedule(&s).await?;
         let cards = s.gw.approval_requests("general").await?;
         if cards.iter().any(|c| c.to_string().contains(name)) {
+            assert!(
+                bookkeeping.contains("replace_work_plan")
+                    && bookkeeping.contains("record_work_review")
+            );
             break;
+        }
+        for card in cards {
+            let tool = card["approval"]["operation"]["tool"].as_str().unwrap();
+            assert!(
+                matches!(tool, "replace_work_plan" | "record_work_review"),
+                "unexpected card: {card}"
+            );
+            bookkeeping.insert(tool.to_owned());
+            let reference = card["request_ref"].as_str().unwrap();
+            let allowed =
+                s.gw.post(
+                    &format!("/authority-requests/{reference}/allow?session_id=general"),
+                    json!({"scope":"once"}),
+                )
+                .await?;
+            assert_eq!(allowed.status, 202, "{allowed:?}");
         }
         assert!(
             Instant::now() < deadline,

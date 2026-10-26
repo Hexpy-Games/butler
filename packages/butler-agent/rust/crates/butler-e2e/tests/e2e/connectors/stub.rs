@@ -1,6 +1,6 @@
 use butler_e2e::e2e::cassette::{Chunk, ResponseRecord};
 use serde_json::{Value, json};
-pub(super) fn run(body: &Value) -> Option<ResponseRecord> {
+pub(crate) fn run(body: &Value) -> Option<ResponseRecord> {
     let input = body["input"].as_array()?;
     let spec = find_spec(&body["input"]);
     let Some(spec) = spec else {
@@ -11,7 +11,18 @@ pub(super) fn run(body: &Value) -> Option<ResponseRecord> {
             .iter()
             .any(|v| v["type"] == "function_call_output" && v["call_id"] == id)
     };
-    let (id, name, args) = if !done("describe_connector") {
+    let direct =
+        butler_e2e::e2e::chatgpt_wire::functions(body).any(|tool| tool["name"] == spec["name"]);
+    let (id, name, args) = if direct {
+        if done("call_connector") {
+            return Some(answer());
+        }
+        (
+            "call_connector",
+            spec["name"].as_str()?,
+            spec["arguments"].clone(),
+        )
+    } else if !done("describe_connector") {
         (
             "describe_connector",
             "tool_describe",
@@ -103,7 +114,7 @@ pub(super) fn slow(_: &Value) -> Option<ResponseRecord> {
     Some(response)
 }
 
-fn find_spec(value: &Value) -> Option<Value> {
+pub(crate) fn find_spec(value: &Value) -> Option<Value> {
     match value {
         Value::String(text) => {
             // Earlier connector blocks can appear in conversation history.

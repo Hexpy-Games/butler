@@ -13,6 +13,8 @@ pub(super) fn supports(call: &ModelRoundToolCall) -> bool {
         CapabilityKind::of_call(&call.name, &call.arguments, false),
         CapabilityKind::Exempt(_)
             | CapabilityKind::ButlerOutput
+            | CapabilityKind::ProjectRecord
+            | CapabilityKind::WorkRecord
             | CapabilityKind::FullOnly(FullOnlyAction::MemoryForget)
     )
 }
@@ -160,7 +162,10 @@ async fn run(
     call: &ModelRoundToolCall,
     occurrence: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    if super::memory_write::supports(&call.name) {
+    if crate::host::GuidedWorkTools::is_work_tool(&call.name) {
+        let result = super::dispatch::execute_work(owner, call, occurrence).await?;
+        super::dispatch::encoded(&result)
+    } else if super::memory_write::supports(&call.name) {
         super::memory_write::execute(owner, invocation, call, occurrence).await
     } else if super::image::supports(&call.name) {
         Box::pin(super::image::execute(owner, invocation, call)).await
