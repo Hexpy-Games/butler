@@ -1,12 +1,16 @@
 import type { ReactNode } from "react";
-import { appCopy } from "@/app/copy";
-import { Typo } from "@/butler-ds";
-import { FileViewerHeader, FileViewerPage } from "./FileViewerFrame";
+import { FileViewerBackButton, FileViewerCloseButton, FileViewerPage } from "./FileViewerFrame";
 
-/** An editable document: the documents feature renders its page (header actions and body) inside the viewer. */
-export function FileViewerDocument({ title, onClose, onBack, children }: { title: string; onClose: () => void; onBack?: () => void; children?: ReactNode }) {
-  return <>
-    <FileViewerHeader title={title} onClose={onClose} onBack={onBack} />
-    <FileViewerPage>{children ?? <Typo.Caption>{appCopy.artifacts.unsupported}</Typo.Caption>}</FileViewerPage>
-  </>;
+/** The viewer's own controls for a document's title row: back to the chat (a phone) before the title, close at its end. */
+export interface DocumentPageControls { leading?: ReactNode; trailing: ReactNode }
+
+/** Renders an editable document with the viewer's controls in its title row; the documents feature supplies it. */
+export type DocumentPageRenderer = (id: string, controls: DocumentPageControls) => ReactNode;
+
+/** An editable document: its page carries the one title row (with back and close), so the viewer adds no header. */
+export function FileViewerDocument({ id, onClose, onBack, documentPage }: {
+  id: string; onClose: () => void; onBack?: () => void; documentPage: DocumentPageRenderer;
+}) {
+  const controls = { leading: onBack ? <FileViewerBackButton onBack={onBack} /> : undefined, trailing: <FileViewerCloseButton onClose={onClose} /> };
+  return <FileViewerPage>{documentPage(id, controls)}</FileViewerPage>;
 }

@@ -2,6 +2,8 @@ import { ACTIVE_TURN_STATES } from "@/app/constants.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useActiveCanonEpic } from "../canon/useActiveCanonEpic.ts";
 import { usePendingAsks } from "./usePendingAsks.ts";
+import { canOpenHandoffTab } from "../browser/browserHandoff.ts";
+import { useConversationAgentTabs } from "../browser/useConversationAgentTabs.ts";
 
 /** One ordered visibility model for the actions, layout and sections. */
 export function useSessionSectionsModel() {
@@ -11,6 +13,7 @@ export function useSessionSectionsModel() {
   const queue = useButlerStore(state => state.sessionQueue);
   const epic = useActiveCanonEpic();
   const asks = usePendingAsks(sessionId);
+  const browserTabs = useConversationAgentTabs(sessionId);
   const branch = summary?.branch_info;
   const folder = branch?.workspace_path || branch?.workspace_label;
   const artifacts = summary?.artifacts ?? [];
@@ -21,6 +24,7 @@ export function useSessionSectionsModel() {
   const hasArtifacts = artifacts.length > 0 || messages.some(message => message.artifacts?.length);
   const ids: string[] = [];
   if (asks && asks.open_count > 0) ids.push("asks");
+  if (browserTabs.length > 0 && canOpenHandoffTab()) ids.push("browser");
   if (folder || branch?.branch_name) ids.push("environment");
   if (epic) ids.push("task");
   if (summary?.context_details) ids.push("context");
@@ -28,7 +32,7 @@ export function useSessionSectionsModel() {
   if (attachments.length > 0) ids.push("attachments");
   if (schedules.length > 0) ids.push("schedules");
   if (running.length > 0 || waiting.length > 0) ids.push("queue");
-  return { ids, sessionId, summary, epic, asks, branch, folder, artifacts, attachments, schedules, running, waiting };
+  return { ids, sessionId, summary, epic, asks, browserTabs, branch, folder, artifacts, attachments, schedules, running, waiting };
 }
 
 export function useSessionInfoHasContent() {

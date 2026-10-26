@@ -1,3 +1,4 @@
+import { BrowserSection } from "./BrowserSection.tsx";
 import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -14,7 +15,7 @@ import { useSessionSectionsModel } from "./useSessionSectionsModel.ts";
 /** The same ordered sections on the flat margin and on floating glass. */
 export function SessionSections({ layout }: { layout: AsideLayout }) {
   useAppLocale();
-  const { ids, sessionId, summary, epic, asks, branch, folder, artifacts, attachments, schedules, running, waiting } = useSessionSectionsModel();
+  const { ids, sessionId, summary, epic, asks, browserTabs, branch, folder, artifacts, attachments, schedules, running, waiting } = useSessionSectionsModel();
   const sections = new Set(ids);
   const setView = useButlerStore(state => state.setView);
   const [contextOpen, setContextOpen] = useState(false);
@@ -23,6 +24,8 @@ export function SessionSections({ layout }: { layout: AsideLayout }) {
     {sections.has("asks") && asks && <SessionSection id="asks" layout={layout} title={c.asks} count={asks.open_count}>
       <PendingAskRows asks={asks.asks} />
     </SessionSection>}
+    {/* The model filters it, so a hidden browser section leaves no floating separator. */}
+    {sections.has("browser") && <BrowserSection key="browser" layout={layout} session={sessionId} tabs={browserTabs} />}
     {sections.has("environment") && <SessionSection id="environment" layout={layout} title={c.environment}>
       {folder && <KeyValueRow label={c.folder} value={folder} valueTextSize="caption" />}
       {branch?.branch_name && <KeyValueRow label={c.branch} value={branch.branch_name} valueTextSize="caption" />}

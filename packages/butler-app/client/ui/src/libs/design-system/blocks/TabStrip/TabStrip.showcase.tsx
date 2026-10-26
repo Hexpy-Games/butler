@@ -3,7 +3,7 @@ import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateContext, Showcas
 import { TabStrip } from "./TabStrip";
 import { IconButton } from "../../components/IconButton";
 import { FileText, ImageIcon, TabIn } from "../../components/Icons";
-import { conversationGroup, crowdedGroups, demoGroups, demoLabels, ICONS, TabStripDemo } from "./TabStrip.demo";
+import { conversationGroup, crowdedGroups, demoGroups, demoLabels, foldedGroups, ICONS, pairedGroups, TabStripDemo } from "./TabStrip.demo";
 import type { TabStripGroup } from "./tabStripModel";
 
 export const meta: ShowcaseMeta = {
@@ -43,7 +43,7 @@ function fileGroups(locale: ShowcaseRenderContext["locale"]): TabStripGroup[] {
 }
 
 /**
- * Forces the cell's state on the tab itself, not on the group chip in front of it. The close
+ * Forces the cell's state on the tab itself, not on the group title in front of it. The close
  * button shows only in the hover and focus-visible columns; "Selected tab" shows that the
  * active tab follows the same rule.
  */
@@ -63,28 +63,48 @@ function MatrixCell({ context }: { context: ShowcaseStateContext }) {
 
 export const stories: ShowcaseStory[] = [
   {
+    // Beside other groups every group is an outline pill: its title (a click folds it), its tabs and its own +.
     name: "My tabs and conversation groups",
     states: ["selected", "open", "loading"],
     render: ({ locale }) => <TabStripDemo locale={locale} initial={demoGroups(locale)} panelId="tab-strip-demo-page" />,
+  },
+  {
+    name: "My tabs beside one conversation",
+    render: ({ locale }) => <TabStripDemo locale={locale} initial={pairedGroups(locale)} />,
+  },
+  {
+    // Dividers sit between tabs and after the title; they step aside next to the selected (or hovered) tab.
+    name: "Dividers: the selected tab in the middle of a group",
+    render: ({ locale }) => <TabStripDemo locale={locale} initial={pairedGroups(locale, { middle: true })} activeTabId="s2" />,
+  },
+  {
+    // A folded group keeps its title, previews three favicons and counts the rest; its + hides with its tabs.
+    name: "Folded group: three favicons and +N beside an open group",
+    render: ({ locale }) => <TabStripDemo locale={locale} initial={foldedGroups(locale)} activeTabId="s1" />,
   },
   {
     name: "Group states: working, waiting for approval, crashed tab",
     render: ({ locale }) => <TabStripDemo locale={locale} initial={demoGroups(locale, { crashed: true })} activeTabId="x1" />,
   },
   {
+    // Tabs in every pill share one width; past the minimum the row scrolls with edge fades.
     name: "Overflow: tabs shrink, then scroll sideways",
-    render: ({ locale }) => <TabStripDemo locale={locale} initial={crowdedGroups(locale)} activeTabId="n12" />,
+    render: ({ locale }) => (
+      <div style={{ width: "100%", maxWidth: 600 }}>
+        <TabStripDemo locale={locale} initial={crowdedGroups(locale)} activeTabId="n12" />
+      </div>
+    ),
   },
   {
-    // A conversation's browser pane: only its group, no chip (the title bar names it), bring-in at the row end.
-    name: "Conversation pane: one group without its chip, trailing slot",
+    // A conversation's browser pane: only its group, no title or outline (the title bar names it), bring-in at the row end.
+    name: "Conversation pane: one group without its title, trailing slot",
     render: ({ locale }) => (
       <TabStripDemo locale={locale} initial={conversationGroup(locale)} activeTabId="s1" hideChip
         trailing={<IconButton label={locale === "ko-KR" ? "내 탭 가져오기" : "Bring in a tab"}><TabIn size="md" /></IconButton>} />
     ),
   },
   {
-    name: "Only my tabs (no chip)",
+    name: "Only my tabs: plain pill tabs and the row's +",
     render: ({ locale }) => <TabStripDemo locale={locale} initial={demoGroups(locale).slice(0, 1)} />,
   },
   {
