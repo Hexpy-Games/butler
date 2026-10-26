@@ -73,3 +73,5 @@ pub mod segmentation;
 pub mod tool_catalog;
 pub mod tool_protocol;
 pub mod wall_clock;
+
+pub mod plugins;

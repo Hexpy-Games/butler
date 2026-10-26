@@ -140,6 +140,7 @@ mod perf_ask_user;
 mod perf_turn;
 mod personalization;
 mod personalization_defaults;
+mod plugins;
 mod process_names;
 mod project_git;
 mod projection_backlog;

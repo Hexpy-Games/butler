@@ -39,18 +39,26 @@ pub(crate) struct SkillValidationIssue {
     pub message: String,
 }
 
-pub(super) fn runtime(
+pub(super) fn runtime_with_plugins(
     home: &Path,
     data: &Path,
     project: Option<&str>,
+    plugin_roots: &[(String, PathBuf)],
 ) -> Result<Vec<SkillDefinition>, SkillError> {
     let mut skills = Vec::new();
     if let Some(project) = project {
         skills.extend(load(&project_dir(data, project))?);
     }
     skills.extend(load(&user_dir(data))?);
+    for (name, path) in plugin_roots {
+        if let Some(mut skill) = read(path)? {
+            skill.name = name.clone();
+            skill.allowed_tools.clear();
+            skills.push(skill);
+        }
+    }
     skills.extend(load_core(home)?);
-    // First scope wins: project > user > built-in.
+    // First scope wins: project > user > plugin > built-in.
     let mut seen = HashSet::new();
     skills.retain(|skill| seen.insert(skill.name.clone()));
     Ok(skills)
@@ -131,6 +139,7 @@ pub(super) fn settings(
             .into_owned(),
         core,
         user,
+        plugin: Vec::new(),
         projects: views,
     })
 }
@@ -399,4 +408,18 @@ pub(super) fn project_dir(data: &Path, id: &str) -> PathBuf {
 }
 fn core_dir(resources: &Path) -> PathBuf {
     resources.join("skills")
+}
+
+pub(super) fn plugin_summaries(
+    roots: &[(String, PathBuf)],
+) -> Result<Vec<SkillSummary>, SkillError> {
+    let mut summaries = Vec::new();
+    for (name, path) in roots {
+        if let Some(mut skill) = read(path)? {
+            skill.name = name.clone();
+            skill.allowed_tools.clear();
+            summaries.push(summary(skill, "plugin", None));
+        }
+    }
+    Ok(summaries)
 }

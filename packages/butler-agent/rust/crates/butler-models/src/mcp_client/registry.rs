@@ -31,6 +31,7 @@ struct KeyValueSecret {
 #[derive(Clone)]
 pub(super) struct McpServerConfig {
     pub id: String,
+    pub plugin: Option<String>,
     pub display_name: String,
     pub enabled: bool,
     pub tool_filter_review_required: bool,
@@ -64,6 +65,9 @@ pub(super) struct ResolvedServerSecrets {
 /// `Display` is the user-facing message.
 #[derive(Debug, thiserror::Error)]
 pub enum McpRegistryError {
+    /// Plugin components are managed through the package registry.
+    #[error("Plugin servers are read-only; manage the plugin instead.")]
+    PluginReadOnly,
     /// A server entry has no id.
     #[error("MCP server id is required.")]
     ServerIdRequired,
@@ -356,6 +360,7 @@ fn normalize_server(
     let display_name = clean_string(value.get("display_name")).unwrap_or_else(|| id.clone());
     let now = now_iso();
     Ok(McpServerConfig {
+        plugin: None,
         id,
         display_name,
         enabled: value.get("enabled") != Some(&Value::Bool(false)),

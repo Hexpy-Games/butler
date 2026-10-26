@@ -44,10 +44,9 @@ use butler_turn::btcc;
 use butler_turn::btcc::{
     BtccError, BtccRepositories, ContextCompactionRepository, DefaultTurnPreparation,
     DurableWorkService, GuidedContinuationBudgetFactory, HostDependencies, ModelRouteRetryConfig,
-    OperationResultRepository, PortFuture, PrincipalAuthority, ProductionAgentLoop,
-    SessionWorkRepository, SqliteSubsessionRepository, StorageEffectJournal,
-    StorageProgressPublication, ToolJournalRepository, TurnFacadeDependencies,
-    TurnModelExecutionFactory,
+    OperationResultRepository, PortFuture, ProductionAgentLoop, SessionWorkRepository,
+    SqliteSubsessionRepository, StorageEffectJournal, StorageProgressPublication,
+    ToolJournalRepository, TurnFacadeDependencies, TurnModelExecutionFactory,
 };
 use butler_turn::workspace::{
     Commands, SessionWorkspaceRecovery, SessionWorktrees, WorkspaceFiles, WorkspaceMutations,
@@ -76,7 +75,8 @@ impl AgentRuntime {
         let host_environment = environment::initialize_host();
         let continuation_limits =
             btcc::select_turn_continuation_budget(|key| host_environment.get(key).cloned())?;
-        let mcp_client = mcp_owner::for_runtime(&paths, &host_environment, writes.clone());
+        let (plugins, mcp_client) =
+            mcp_owner::open(&paths, &host_environment, &writes, &mut startup).await?;
         let web_owner::ProcessWebServices { models, web_access } = web_owner::open(
             &paths,
             environment.model,
@@ -96,7 +96,8 @@ impl AgentRuntime {
         let (image_files, attachment_context) = attachments::owners(&paths.data_root);
         let commands = Commands::new();
         let mutations = WorkspaceMutations::new();
-        let (skills, capabilities, catalog) = skills_owner::open(&paths, &files, &mutations)?;
+        let (skills, capabilities, catalog) =
+            skills_owner::open(&paths, &files, &mutations, plugins.clone())?;
         startup.phase("skills");
         let stores =
             RuntimeStores::open(&paths.data_root, &collation, stop, timing, &startup).await?;
@@ -241,12 +242,7 @@ impl AgentRuntime {
             prompt,
             models.configuration.clone(),
         ));
-        let authority = Arc::new(PrincipalAuthority::new(
-            stores.btcc.clone(),
-            collation.clone(),
-            now.clone(),
-            Arc::new(|| uuid::Uuid::new_v4().to_string()),
-        ));
+        let authority = mcp_owner::authority(&plugins, &stores, &collation, now.clone());
         let session_work = Arc::new(SessionWorkRepository::new(stores.btcc.clone(), now.clone()));
         let (project_work, canon) = work_ports::create(&stores.btcc, &project_ledger, now.clone());
         let work_repository = Arc::new(
@@ -277,6 +273,7 @@ impl AgentRuntime {
         let restart_effect_journal = Arc::new(StorageEffectJournal::new(stores.btcc.clone(), now));
         let hooks: Arc<dyn butler_core::hooks::HookPort> = Arc::new(
             crate::host::hooks::Dispatcher::open(
+                plugins.clone(),
                 paths.data_root.clone(),
                 &host_environment,
                 stop.clone(),
@@ -388,6 +385,7 @@ impl AgentRuntime {
         Self::finish_startup(Self {
             data_reset: process.data_reset,
             hooks,
+            plugins,
             memory_writes: Arc::new(memory_writes.rules.clone()),
             memory_management,
             memory_acquisition,

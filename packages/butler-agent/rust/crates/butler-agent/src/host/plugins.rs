@@ -1,0 +1,214 @@
+//! Consent-bound local packages. No discovery, background jobs or startup spawns.
+mod capabilities;
+mod inspect;
+mod manifest;
+mod overlay;
+pub(crate) mod safe_mode;
+mod storage;
+mod types;
+mod verify;
+use butler_core::{
+    configuration::ConfigurationWrites,
+    plugins::{PluginError, PluginFuture, PluginPort},
+};
+use parking_lot::Mutex;
+use serde_json::{Value, json};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::PathBuf,
+    sync::Arc,
+};
+use types::*;
+type Result<T> = std::result::Result<T, PluginError>;
+fn error(code: &'static str) -> PluginError {
+    PluginError { status: 400, code }
+}
+#[derive(Clone)]
+struct State {
+    registry: Registry,
+    staging: BTreeMap<String, Arc<Inspection>>,
+    verified: BTreeSet<String>,
+}
+pub(crate) struct Plugins {
+    authority: std::sync::OnceLock<Arc<butler_turn::btcc::PrincipalAuthority>>,
+    root: PathBuf,
+    safe_mode: bool,
+    state: Mutex<State>,
+    mutation: Mutex<()>,
+    writes: Arc<ConfigurationWrites>,
+    secrets: butler_platform::secrets::SecretStore,
+}
+impl Plugins {
+    pub(crate) async fn open(
+        data: PathBuf,
+        safe_mode: bool,
+        writes: Arc<ConfigurationWrites>,
+    ) -> Result<Arc<Self>> {
+        tokio::task::spawn_blocking(move || {
+            let safe_mode = safe_mode::take(&data)? || safe_mode;
+            let root = data.join("plugins");
+            let registry = match std::fs::read(root.join("registry.json")) {
+                Ok(bytes) => {
+                    serde_json::from_slice(&bytes).map_err(|_| error("plugin_registry_invalid"))?
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Registry::default(),
+                Err(_) => return Err(error("plugin_registry_unreadable")),
+            };
+            let secrets = if std::env::var(butler_platform::secrets::STORE_VARIABLE).as_deref()
+                == Ok("system")
+            {
+                butler_platform::secrets::SecretStore::system()
+                    .map_err(|_| error("plugin_secret_store_unavailable"))?
+            } else {
+                butler_platform::secrets::SecretStore::file(data.join("secrets/plugins.json"))
+            };
+            Ok(Arc::new(Self {
+                authority: std::sync::OnceLock::new(),
+                root,
+                safe_mode,
+                mutation: Mutex::new(()),
+                state: Mutex::new(State {
+                    registry,
+                    staging: BTreeMap::new(),
+                    verified: BTreeSet::new(),
+                }),
+                writes,
+                secrets,
+            }))
+        })
+        .await
+        .map_err(|_| error("plugin_task_failed"))?
+    }
+    pub(crate) fn set_authority(&self, authority: Arc<butler_turn::btcc::PrincipalAuthority>) {
+        let _ = self.authority.set(authority);
+    }
+    async fn revoke_grants(&self, id: Option<&str>, input: &Value) -> Result<()> {
+        let id = id.ok_or_else(|| error("plugin_id_invalid"))?;
+        {
+            let state = self.state.lock();
+            if input.get("revision").and_then(Value::as_u64) != Some(state.registry.revision) {
+                return Err(PluginError {
+                    status: 409,
+                    code: "plugin_revision_conflict",
+                });
+            }
+            if !state.registry.plugins.contains_key(id) {
+                return Err(error("plugin_not_found"));
+            }
+        }
+        let authority = self
+            .authority
+            .get()
+            .ok_or_else(|| error("plugin_authority_unavailable"))?;
+        let prefix = format!("mcp:{id}/");
+        let grants = authority
+            .list_all_permissions()
+            .await
+            .map_err(|_| error("plugin_grant_revoke_failed"))?;
+        let grants = grants
+            .into_iter()
+            .filter(|p| p.capability == "call_mcp_tool" && p.target.starts_with(&prefix))
+            .map(|p| (p.owner_session_id, p.grant_ref))
+            .collect();
+        authority
+            .revoke_permissions(grants)
+            .await
+            .map_err(|_| error("plugin_grant_revoke_failed"))
+    }
+    fn inventory(&self) -> Value {
+        let state = self.state.lock();
+        let plugins = state.registry.plugins.iter().map(|(id, p)| json!({
+            "id": id, "version": p.package.version, "author": p.package.author,
+            "publisher_verified": false, "source": p.source, "enabled": p.enabled,
+            "quarantine": p.quarantine, "content_digest": p.approval.content_digest,
+            "capabilities": p.approval.capabilities, "compatibility": p.package.compatibility,
+        })).collect::<Vec<_>>();
+        json!({"plugins":plugins,"revision":state.registry.revision,"safe_mode":self.safe_mode})
+    }
+    fn save(&self, registry: &Registry) -> Result<()> {
+        butler_core::configuration::write_json_atomic(
+            &self.root.join("registry.json"),
+            &serde_json::to_value(registry).map_err(|_| error("plugin_registry_invalid"))?,
+        )
+        .map_err(|_| error("plugin_registry_write_failed"))
+    }
+    fn inspect(&self, input: &Value) -> Result<Value> {
+        let source = input
+            .get("path")
+            .and_then(Value::as_str)
+            .ok_or_else(|| error("plugin_path_required"))?;
+        if std::fs::symlink_metadata(source).is_ok_and(|m| m.is_symlink()) {
+            return Err(error("plugin_symlink_refused"));
+        }
+        let source = PathBuf::from(source)
+            .canonicalize()
+            .map_err(|_| error("plugin_path_unreadable"))?;
+        if source.starts_with(&self.root) || self.root.starts_with(&source) {
+            return Err(error("plugin_source_overlaps_storage"));
+        }
+        let _mutation = self.mutation.lock();
+        let mut state = self.state.lock().clone();
+        storage::clear_staging(&self.root)?;
+        state.staging.clear();
+        let id = uuid::Uuid::new_v4().to_string();
+        let stage = self.root.join("staging").join(&id);
+        let result = (|| {
+            let files = inspect::snapshot(&source, &stage, inspect::Limits::default())?;
+            let package = manifest::read(&stage)?;
+            let digest = inspect::digest(&files);
+            let caps = capabilities::derive_capabilities(&package)?;
+            let store = self.root.join("store").join(&digest);
+            let caps = overlay::resolve_preview(
+                caps,
+                &store,
+                &self.root.join("data").join(&package.name),
+            )?;
+            let view = json!({"staging_id":id,"source":source,"version":package.version,"id":package.name,
+                "author":package.author,"publisher_verified":false,"digest":digest,"short_digest":digest.get(..12),
+                "capabilities":caps,"compatibility":package.compatibility,"notice":"runs_with_your_permissions"});
+            state.staging.insert(
+                id.clone(),
+                Arc::new(Inspection {
+                    staging_id: id.clone(),
+                    source: source.to_string_lossy().into_owned(),
+                    digest,
+                    package,
+                    files,
+                }),
+            );
+            Ok(view)
+        })();
+        if result.is_err() {
+            let _ = std::fs::remove_dir_all(stage);
+        }
+        *self.state.lock() = state;
+        result
+    }
+}
+pub(crate) struct Admin(pub Arc<Plugins>);
+impl PluginPort for Admin {
+    fn safe_mode(&self) -> bool {
+        self.0.safe_mode
+    }
+    fn list(&self) -> PluginFuture<'_> {
+        Box::pin(async { Ok(self.0.inventory()) })
+    }
+    fn execute(&self, action: String, id: Option<String>, input: Value) -> PluginFuture<'_> {
+        let owner = self.0.clone();
+        Box::pin(async move {
+            let _permit = owner.writes.acquire_owned().await;
+            if action == "uninstall" {
+                owner.revoke_grants(id.as_deref(), &input).await?;
+            }
+            tokio::task::spawn_blocking(move || match action.as_str() {
+                "inspect" => owner.inspect(&input),
+                "install" => owner.install(&input),
+                "enable" | "disable" => owner.toggle(id.as_deref(), &input, action == "enable"),
+                "uninstall" => owner.uninstall(id.as_deref(), &input),
+                _ => Err(error("plugin_action_invalid")),
+            })
+            .await
+            .map_err(|_| error("plugin_task_failed"))?
+        })
+    }
+}

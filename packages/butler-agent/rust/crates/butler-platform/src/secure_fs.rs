@@ -116,8 +116,7 @@ impl FileMode {
         Self(bits)
     }
 
-    /// The raw permission bits, as an archive entry records them. Test
-    /// fixtures only.
+    /// The raw permission bits, as an archive entry records them. Test fixtures only.
     #[cfg(feature = "test-support")]
     pub const fn bits(self) -> u32 {
         self.0
@@ -494,3 +493,8 @@ pub mod fixture_links;
 pub mod fixture_locks;
 mod path_identity;
 pub use path_identity::{same_file, same_metadata, same_open_file};
+
+/// Open a regular package file, refusing links in every relative component.
+pub fn open_package_file(root: &Path, relative: &Path) -> io::Result<File> {
+    contained_read::open(root, relative, false)
+}

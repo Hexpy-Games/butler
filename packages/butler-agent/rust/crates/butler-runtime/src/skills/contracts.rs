@@ -26,6 +26,7 @@ pub struct SkillSettingsView {
     pub(crate) storage_root: String,
     pub core: Vec<SkillSummary>,
     pub user: Vec<SkillSummary>,
+    pub plugin: Vec<SkillSummary>,
     pub projects: Vec<SkillProjectView>,
 }
 
