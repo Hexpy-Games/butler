@@ -89,10 +89,10 @@ pub(super) fn event(fetch: &Fetch, id: &Id, account: &str) -> Result<Value> {
     let mut attrs = Map::new();
     for header in HEADERS {
         if let Some(value) = parsed.header_raw(*header) {
-            attrs.insert((*header).into(), value.trim().into());
+            attrs.insert((*header).into(), attribute(value.trim()).into());
         }
     }
-    attrs.insert("mailbox".into(), id.mailbox.clone().into());
+    attrs.insert("mailbox".into(), attribute(&id.mailbox).into());
     let from = parsed.from().and_then(|a| a.iter().next());
     let addressing = if contains(parsed.to(), account) {
         "direct"
@@ -135,4 +135,12 @@ pub(super) fn parse(bytes: &[u8]) -> Result<Message<'_>> {
     MessageParser::default()
         .parse(bytes)
         .ok_or("mail_parse_failed")
+}
+
+fn attribute(value: &str) -> &str {
+    let mut end = value.len().min(4096);
+    while !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    value.get(..end).unwrap_or_default()
 }
