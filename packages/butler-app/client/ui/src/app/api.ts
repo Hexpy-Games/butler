@@ -794,6 +794,13 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       traceparent,
     }));
   }
+  const queuedSendNowMatch = url.pathname.match(/^\/session-queue\/([^/]+)\/send-now$/u);
+  if (method === "POST" && queuedSendNowMatch) {
+    return await callBridge<T>(bridge, "sendQueuedMessageNow", {
+      queuedMessageId: decodeURIComponent(queuedSendNowMatch[1]!),
+      traceparent,
+    });
+  }
   const queuedMessageMatch = url.pathname.match(/^\/session-queue\/([^/]+)$/u);
   if (method === "PATCH" && queuedMessageMatch) {
     const body = parseBody(options.body);

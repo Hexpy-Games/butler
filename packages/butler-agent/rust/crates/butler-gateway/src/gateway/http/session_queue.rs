@@ -33,6 +33,9 @@ pub(super) async fn route(
     request: Request<Body>,
     uri: &Uri,
 ) -> Result<Response, HttpError> {
+    if *request.method() == Method::POST {
+        return send_now(state, request, uri).await;
+    }
     let id = uri
         .path()
         .strip_prefix("/session-queue/")
@@ -67,6 +70,35 @@ pub(super) async fn route(
         }
         _ => Err(HttpError::public(404, "not_found", "Route not found.")),
     }
+}
+
+async fn send_now(
+    state: std::sync::Arc<HttpState>,
+    request: Request<Body>,
+    uri: &Uri,
+) -> Result<Response, HttpError> {
+    let id = uri
+        .path()
+        .strip_prefix("/session-queue/")
+        .and_then(|tail| tail.strip_suffix("/send-now"))
+        .filter(|id| !id.is_empty() && !id.contains('/'))
+        .ok_or_else(|| HttpError::public(404, "not_found", "Route not found."))?;
+    let body = read_body_with_limit(request.into_body(), super::MAX_REQUEST_BODY_SIZE).await?;
+    let value: Value = serde_json::from_slice(&body).map_err(|_| HttpError::invalid_json())?;
+    if !value.as_object().is_some_and(Map::is_empty) {
+        return Err(invalid_request("Send now request must be empty."));
+    }
+    let queue = state
+        .application
+        .send_session_queue_now(decode_component(id)?)
+        .await?;
+    json(
+        axum::http::StatusCode::OK,
+        ApiEnvelope {
+            protocol_version: APP_PROTOCOL_VERSION,
+            data: queue,
+        },
+    )
 }
 
 fn strict_create(value: &Value) -> Result<MessageSendRequest, HttpError> {

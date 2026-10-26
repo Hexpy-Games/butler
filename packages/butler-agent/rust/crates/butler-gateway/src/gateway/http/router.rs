@@ -298,6 +298,7 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/security/vault/purchase-sites", Handler::Security),
     ("/session-queue", Handler::SessionQueue),
     ("/session-queue/{id}", Handler::Queue),
+    ("/session-queue/{id}/send-now", Handler::Queue),
     ("/session-summary", Handler::Subsessions),
     ("/session-view", Handler::Subsessions),
     ("/sessions", Handler::Sessions),

@@ -98,6 +98,17 @@ pub(super) fn pause(
     Ok(())
 }
 
+/// Explicit user input resumes the durable session queue.
+pub(super) fn resume(connection: &Connection, chat_id: &str) -> Result<(), AppStorageError> {
+    connection
+        .execute_cached(
+            "DELETE FROM session_queue_pauses WHERE chat_id=?1",
+            [chat_id],
+        )
+        .map_err(AppStorageError::sqlite)?;
+    Ok(())
+}
+
 pub(super) fn reserve(
     connection: &Connection,
     input: &QueueReservation,
@@ -146,12 +157,7 @@ pub(super) fn reserve(
         .map_err(AppStorageError::sqlite)?;
     // New user input (a send, a queue add or a retry) resumes a queue paused
     // by Stop; the messages queued before it run first (see `claim`).
-    connection
-        .execute_cached(
-            "DELETE FROM session_queue_pauses WHERE chat_id=?1",
-            [&input.chat_id],
-        )
-        .map_err(AppStorageError::sqlite)?;
+    resume(connection, &input.chat_id)?;
     Ok(true)
 }
 

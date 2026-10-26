@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useButlerStore } from "@/app/store.ts";
 import type { MessageRecord } from "@/app/types.ts";
 import { useEnteringKeys } from "@/butler-ds";
@@ -25,8 +25,10 @@ export function useQueuedConversation(
   const items = useMemo(() => queuedConversationItems({
     queue: sessionQueue.filter((record) => record.chat_id === activeChatId),
     messages: visibleMessages,
-  }), [activeChatId, sessionQueue, visibleMessages]);
+    sendingKeys: actions.sendingKeys,
+  }), [activeChatId, sessionQueue, visibleMessages, actions.sendingKeys]);
   const keys = useMemo(() => items.map((item) => item.key), [items]);
+  useEffect(() => actions.clearMissing(keys), [keys, actions.clearMissing]);
   const entering = useEnteringKeys(keys, activeChatId);
   const wasQueued = useQueuedDeliveries(keys, activeChatId);
   return { items, keys, entering, wasQueued, actions };

@@ -37,8 +37,7 @@ test("waiting messages get positions and failed sends keep their tone", () => {
     ["b", "queued", 2, 2],
     ["c", "failed", 0, 2],
   ]);
-  // Send now waits for a gateway API (owner decision): no item offers it.
-  expect(items.some((item) => "canSendNow" in item)).toBe(false);
+  expect(items.map(item => item.canSendNow)).toEqual([true, false, false]);
 });
 
 test("a record already shown as a message is hidden", () => {
@@ -49,4 +48,17 @@ test("a record already shown as a message is hidden", () => {
   expect(items.map((item) => item.key)).toEqual(["server-3"]);
   expect(items[0]!.position).toBe(1);
   expect(items[0]!.total).toBe(1);
+});
+
+test("sending keeps its waiting position and failed rows never offer Send now", () => {
+  const items = queuedConversationItems({
+    queue: [queued("failed", "failed"), queued("server", "queued", "client"), queued("next")],
+    messages: [],
+    sendingKeys: new Set(["client", "failed"]),
+  });
+  expect(items.map(item => [item.key, item.tone, item.position, item.total, item.canSendNow])).toEqual([
+    ["failed", "failed", 0, 2, false],
+    ["client", "sending", 1, 2, true],
+    ["next", "queued", 2, 2, false],
+  ]);
 });

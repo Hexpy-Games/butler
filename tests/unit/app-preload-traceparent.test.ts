@@ -27,6 +27,7 @@ function sentHeaders(traceparent: unknown): Array<{ path: string; headers: Recor
       const extra = { headers: { authorization: "Bearer other", cookie: "x" } };
       await bridge.sendMessage({ chatId: "c", text: "t", traceparent, ...extra });
       await bridge.queueMessage({ chatId: "c", text: "t", traceparent, ...extra });
+      await bridge.sendQueuedMessageNow({ queuedMessageId: "queue", traceparent, ...extra });
       await bridge.retryTurn({ turnId: "turn", traceparent, ...extra });
       await bridge.retryTurnWithCurrentControls({ turnId: "turn", traceparent, ...extra });
       await bridge.cancelTurn({ turnId: "turn", traceparent, ...extra });
@@ -42,7 +43,7 @@ function sentHeaders(traceparent: unknown): Array<{ path: string; headers: Recor
 test("the desktop bridge forwards a well-formed traceparent and keeps its own credentials", () => {
   const calls = sentHeaders(VALID);
   expect(calls.map((call) => call.path)).toEqual([
-    "/messages", "/session-queue", "/turns/turn/retry", "/turns/turn/retry-current", "/turns/turn/cancel", "/sessions/c/controls",
+    "/messages", "/session-queue", "/session-queue/queue/send-now", "/turns/turn/retry", "/turns/turn/retry-current", "/turns/turn/cancel", "/sessions/c/controls",
   ]);
   for (const call of calls) {
     expect(call.headers).toEqual({ "content-type": "application/json", traceparent: VALID, authorization: "Bearer local" });

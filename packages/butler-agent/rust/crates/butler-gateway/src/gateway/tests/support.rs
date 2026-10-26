@@ -378,6 +378,12 @@ impl GatewayApplication for TestApplication {
     ) -> ApplicationFuture<SessionQueueView> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
+    fn send_session_queue_now(
+        &self,
+        _queued_message_id: String,
+    ) -> ApplicationFuture<SessionQueueView> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn delete_session_queue(
         &self,
         _queued_message_id: String,

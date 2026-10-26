@@ -1,5 +1,5 @@
 use super::*;
-use crate::gateway::AppBrowserStillCommand;
+use crate::gateway::{AppBrowserStillCommand, TurnListView};
 use butler_runtime::operations::ProviderQuotaView as QuotaView;
 impl GatewayApplication for AppApplication {
     fn browser_still(&self, command: AppBrowserStillCommand) -> ApplicationFuture<Value> {
@@ -392,6 +392,9 @@ impl GatewayApplication for AppApplication {
                 .await
         })
     }
+    fn send_session_queue_now(&self, id: String) -> ApplicationFuture<SessionQueueView> {
+        self.send_session_queue_now_owned(id)
+    }
     fn delete_session_queue(
         &self,
         queued_message_id: String,
@@ -399,11 +402,7 @@ impl GatewayApplication for AppApplication {
         let this = self.clone_handle();
         Box::pin(async move { this.delete_session_queue_owned(queued_message_id).await })
     }
-    fn list_turns(
-        &self,
-        chat_id: String,
-        after: f64,
-    ) -> ApplicationFuture<crate::gateway::TurnListView> {
+    fn list_turns(&self, chat_id: String, after: f64) -> ApplicationFuture<TurnListView> {
         let this = self.clone_handle();
         Box::pin(async move { this.turn_page(chat_id, after).await })
     }

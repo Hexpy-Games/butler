@@ -259,7 +259,7 @@ function normalizeLocalServerUrl(value) {
 
 function recordWorkAction(path, options) {
   const traceparent = options.headers?.traceparent;
-  const action = path === "/messages" || path === "/session-queue" ? "send"
+  const action = path === "/messages" || path === "/session-queue" || /^\/session-queue\/[^/]+\/send-now$/u.test(path) ? "send"
     : /\/turns\/[^/]+\/cancel$/u.test(path) ? "stop"
     : /\/turns\/[^/]+\/retry(?:-current)?$/u.test(path) ? "retry"
     : /\/sessions\/[^/]+\/controls$/u.test(path) && options.method === "PATCH" ? "model_pick" : null;
@@ -1134,6 +1134,11 @@ const butlerApp = Object.freeze({
         attachments,
       }),
     }),
+  sendQueuedMessageNow: ({ queuedMessageId, traceparent } = {}) => requestJson(`/session-queue/${encodeURIComponent(queuedMessageId ?? "")}/send-now`, {
+    method: "POST",
+    headers: traceHeaders(traceparent),
+    body: JSON.stringify({}),
+  }),
   deleteQueuedMessage: ({ queuedMessageId } = {}) => requestJson(`/session-queue/${encodeURIComponent(queuedMessageId ?? "")}`, {
     method: "DELETE",
   }),
