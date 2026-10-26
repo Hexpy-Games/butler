@@ -1150,6 +1150,7 @@ export interface AppCopy {
     recommended: string;
   };
   automations: {
+    modelDefaultDescription: string;
     saved: string;
     frequency: string;
     time: string;
