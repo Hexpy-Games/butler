@@ -48,7 +48,13 @@ pub fn inject_wake() {
 
 /// Stop and reap the process-owned wake watcher before the host exits.
 /// Platforms with an in-process OS subscription need no child cleanup.
-pub async fn close() {
+pub fn close() -> impl std::future::Future<Output = ()> {
     #[cfg(target_os = "macos")]
-    macos::close().await;
+    {
+        macos::close()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        std::future::ready(())
+    }
 }
