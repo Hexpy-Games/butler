@@ -16,6 +16,7 @@ butler-canon = { path = "../butler-canon" }
 butler-log = { path = "../butler-log", features = ["e2e-fixtures"] }
 butler-gateway = { path = "../butler-gateway", features = ["test-support"] }
 butler-runtime = { path = "../butler-runtime", features = ["test-support"] }
+butler-mail-connector = { path = "../butler-mail-connector" }
 butler-core = { path = "../butler-core" }
 butler-models = { path = "../butler-models" }
 butler-turn = { path = "../butler-turn", features = ["test-support"] }

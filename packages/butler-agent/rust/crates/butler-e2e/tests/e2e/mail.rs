@@ -37,7 +37,7 @@ fn package(home: &Path) -> Result<PathBuf, HarnessError> {
     let source = butler_e2e::e2e::binary::workspace_root().join("../plugins/mail");
     fs::copy(source.join("plugin.json"), root.join("plugin.json"))?;
     fs::copy(
-        butler_e2e::e2e::binary::fixture_binary("butler-mail-connector")?,
+        butler_e2e::e2e::binary::fixture_binary("e2e-mail-connector")?,
         root.join("bin/butler-mail-connector"),
     )?;
     Ok(root)

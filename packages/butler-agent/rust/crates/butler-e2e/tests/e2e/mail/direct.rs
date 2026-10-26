@@ -19,7 +19,7 @@ impl Direct {
             .home
             .join(format!("connector-{}.stderr", uuid::Uuid::new_v4()));
         let mut command = Command::new(butler_e2e::e2e::binary::fixture_binary(
-            "butler-mail-connector",
+            "e2e-mail-connector",
         )?);
         command
             .env_clear()

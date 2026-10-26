@@ -102,7 +102,7 @@ async fn security_mail_secret_redaction_destination_refusal_and_remote_plaintext
         assert!(!result.to_string().contains(&password));
     }
     direct.close(&password).await?;
-    let result=tokio::process::Command::new(butler_e2e::e2e::binary::fixture_binary("butler-mail-connector")?).env_clear().env("BUTLER_CONNECTOR_FIELDS",json!({"address":"owner@example.test","imap_host":"192.0.2.1","imap_security":"plain","smtp_host":"127.0.0.1","smtp_security":"plain"}).to_string()).env("BUTLER_PLUGIN_DATA",s.sandbox.home.join("refused")).env("IMAP_PASSWORD",&password).stdin(std::process::Stdio::null()).output().await?;
+    let result=tokio::process::Command::new(butler_e2e::e2e::binary::fixture_binary("e2e-mail-connector")?).env_clear().env("BUTLER_CONNECTOR_FIELDS",json!({"address":"owner@example.test","imap_host":"192.0.2.1","imap_security":"plain","smtp_host":"127.0.0.1","smtp_security":"plain"}).to_string()).env("BUTLER_PLUGIN_DATA",s.sandbox.home.join("refused")).env("IMAP_PASSWORD",&password).stdin(std::process::Stdio::null()).output().await?;
     assert!(!result.status.success());
     assert!(!String::from_utf8_lossy(&result.stderr).contains(&password));
     // Refusal precedes opening a socket or creating state.
