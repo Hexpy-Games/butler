@@ -111,6 +111,13 @@ fn prepare(
     occurrence_day: Option<&str>,
 ) -> Result<Option<Value>, HostError> {
     let state = read_state(root, "consolidation-cycle")?;
+    let intent = read_state(root, "consolidation-cycle.intent")?;
+    // Existing state or an intent already establishes an armed schedule. A fresh
+    // data root must not catch up occurrences from before its first evaluation.
+    if state.is_none() && intent.is_none() {
+        write_state(root, "consolidation-cycle", &json!({"armedAtMs": now}))?;
+        return Ok(None);
+    }
     // Busy skips retain their current same-day semantics.
     if state
         .as_ref()
@@ -118,7 +125,7 @@ fn prepare(
     {
         return Ok(None);
     }
-    if let Some(intent) = read_state(root, "consolidation-cycle.intent")?
+    if let Some(intent) = intent
         && !state.as_ref().is_some_and(|s| {
             s["runId"] == intent["runId"]
                 || s["scheduledHandledAtMs"]
@@ -131,11 +138,12 @@ fn prepare(
     }
     let Some(due) = due else { return Ok(None) };
     if state.as_ref().is_some_and(|s| {
-        (s["scheduledHandledAtMs"].is_null()
-            && s["lastRunDate"]
-                .as_str()
-                .zip(occurrence_day)
-                .is_some_and(|(handled, due)| handled >= due))
+        s["armedAtMs"].as_i64().is_some_and(|armed| due <= armed)
+            || (s["scheduledHandledAtMs"].is_null()
+                && s["lastRunDate"]
+                    .as_str()
+                    .zip(occurrence_day)
+                    .is_some_and(|(handled, due)| handled >= due))
             || s["scheduledHandledAtMs"]
                 .as_i64()
                 .is_some_and(|started| started >= due)
