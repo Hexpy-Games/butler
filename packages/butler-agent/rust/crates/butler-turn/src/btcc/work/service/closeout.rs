@@ -6,6 +6,14 @@ use crate::btcc::work::contracts::*;
 impl DurableWorkService {
     /// Validates and records a disposition.
     pub async fn record_disposition(&self, input: DispositionInput) -> Result<WorkView, BtccError> {
+        self.disposition(input, None).await
+    }
+
+    pub(crate) async fn disposition(
+        &self,
+        input: DispositionInput,
+        delegated_result_id: Option<String>,
+    ) -> Result<WorkView, BtccError> {
         super::super::validation::validate_disposition(&input)?;
         let mut identity = serialized(&input)?;
         let object = object_mut(&mut identity)?;
@@ -13,6 +21,7 @@ impl DurableWorkService {
         object.remove("expectedMaterialFingerprint");
         let request_sha256 = fingerprint("record_work_disposition", &identity)?;
         let command = DispositionCommand {
+            delegated_result_id,
             normalized_summary: butler_core::public_text::trim_js_whitespace(&input.summary).into(),
             action_updates: input.action_updates.clone().unwrap_or_default(),
             remaining_actions: input.remaining_actions.clone().unwrap_or_default(),

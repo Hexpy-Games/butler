@@ -11,10 +11,9 @@ impl SubsessionService {
         let prior = self.prior_context(relation).await?;
         Ok(json!({"ok":false,"error":{
             "code":"delegated_session_closed","recoverable":true,
-            "message":"The prior delegated Work is closed. For a new user request, continue in this same turn: start a new Work, record and review its Steward Plan, then delegate_to_steward with previous_relation_id. Do not ask the user to restart or end with a connection notice. An acceptance/closeout request for already closed Work needs no replacement. No child was steered."
+            "message":"The prior delegated Work is closed. For a new user request, continue in this same turn: call delegate_to_steward with previous_relation_id; it records the new Work itself. Do not ask the user to restart or end with a connection notice. An acceptance/closeout request for already closed Work needs no replacement. No child was steered."
         },"next_action":{"tool":"delegate_to_steward",
-            "previous_relation_id":relation.relation_id,
-            "requires":["start_work","replace_work_plan","record_work_review"]},
+            "previous_relation_id":relation.relation_id},
             "prior_context":prior}))
     }
 
@@ -104,7 +103,7 @@ impl SubsessionService {
             (false, _) => "active: steer_steward for related follow-ups",
             (true, true) => "reported, Work open/blocked: steer_steward to its retained owner",
             (true, false) => {
-                "closed: new requests need a fresh reviewed Work and delegate_to_steward(previous_relation_id) in this turn"
+                "closed: new requests use delegate_to_steward(previous_relation_id) in this turn"
             }
         };
         Ok(format!(

@@ -242,6 +242,7 @@ fn start_command(turn_id: &str, call: &str, objective: &str) -> StartWorkCommand
 
 fn disposition_command(work_id: &str) -> DispositionCommand {
     DispositionCommand {
+        delegated_result_id: None,
         input: DispositionInput {
             scope: turn("turn-1"),
             mutation_call_id: "call-disposition".into(),

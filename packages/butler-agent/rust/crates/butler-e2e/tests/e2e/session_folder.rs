@@ -428,13 +428,16 @@ async fn a_delegated_child_starts_in_the_parents_current_folder() -> Result<(), 
     script.set(
         ASK,
         vec![
-            call("start", "start_work", &json!({"objective":ASK})),
-            call("plan", "replace_work_plan", &json!({"objective":ASK,"execution_mode":"steward",
-                "actions":[{"action_key":"check","description":"Check the folder","dependency_keys":[]}],
-                "checks":["Folder checked"]})),
-            call("review", "record_work_review", &json!({"subject":"plan","verdict":"accept","summary":"Ready"})),
-            call("switch", "switch_folder", &json!({"path":work.to_string_lossy(),"reason":"Work here"})),
-            call("delegate", "delegate_to_steward", &json!({"request":"Check the working folder.","safe_title":"Folder check"})),
+            call(
+                "switch",
+                "switch_folder",
+                &json!({"path":work.to_string_lossy(),"reason":"Work here"}),
+            ),
+            call(
+                "delegate",
+                "delegate_to_steward",
+                &json!({"request":"Check the working folder.","checks":["Folder checked"],"safe_title":"Folder check"}),
+            ),
         ],
     );
     script.set(

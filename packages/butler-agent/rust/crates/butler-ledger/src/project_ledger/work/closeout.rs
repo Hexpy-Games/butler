@@ -126,17 +126,7 @@ impl ProjectWorkRepository {
         command: &DispositionCommand,
         identity: &ProjectWorkOperationIdentity,
     ) -> Result<Option<Vec<ProjectLedgerRecordUpdate>>, BtccError> {
-        let runtime_owned_open = command.input.disposition == DispositionStatus::Open
-            && command
-                .input
-                .runtime_owned_open_generation
-                .is_some_and(|value| value.version == 1);
-        let bound = if runtime_owned_open {
-            Bound::OpenOrCompleted
-        } else {
-            Bound::Open
-        };
-        let current = self.require_bound(&command.input.scope, bound).await?;
+        let (current, runtime_owned_open) = self.disposition_target(command).await?;
         disposition_preconditions(&current, command)?;
         let decision = self
             .shared
@@ -157,11 +147,20 @@ impl ProjectWorkRepository {
         if let Some(plan) = &current.view.current_plan {
             trail.disposition_checkpoint(command, &plan.plan_revision_id, &action_progress)?;
         }
-        let mut provisional = current.view.clone();
-        provisional.status = disposed_status(command.input.disposition);
-        provisional.action_progress = action_progress;
-        provisional.latest_checkpoint = trail.latest.clone();
-        provisional.updated_at = at.clone();
+        let mut provisional = provisional_view(
+            command,
+            &current.view,
+            action_progress,
+            trail.latest.clone(),
+            &at,
+        );
+        if command.delegated_result_id.is_some()
+            && command.input.disposition == DispositionStatus::Open
+        {
+            return self
+                .abandoned_disposition_updates(&current, identity, provisional, trail)
+                .await;
+        }
         let material = self
             .shared
             .projection
@@ -198,6 +197,49 @@ impl ProjectWorkRepository {
             &revisions,
             trail.children,
         )
+        .await
+        .map(Some)
+    }
+
+    async fn disposition_target(
+        &self,
+        command: &DispositionCommand,
+    ) -> Result<(Snapshot, bool), BtccError> {
+        let runtime_owned_open = command.input.disposition == DispositionStatus::Open
+            && command
+                .input
+                .runtime_owned_open_generation
+                .is_some_and(|value| value.version == 1);
+        let bound = if runtime_owned_open {
+            Bound::OpenOrCompleted
+        } else {
+            Bound::Open
+        };
+        let current = if command.delegated_result_id.is_some() {
+            self.require_current(&command.input.work_id).await?
+        } else {
+            self.require_bound(&command.input.scope, bound).await?
+        };
+        Ok((current, runtime_owned_open))
+    }
+
+    async fn abandoned_disposition_updates(
+        &self,
+        current: &Snapshot,
+        identity: &ProjectWorkOperationIdentity,
+        mut view: WorkView,
+        trail: Trail<'_>,
+    ) -> Result<Option<Vec<ProjectLedgerRecordUpdate>>, BtccError> {
+        view.latest_disposition = None;
+        self.view_updates(super::write::WorkViewUpdates {
+            current,
+            view: &view,
+            identity,
+            revisions: &trail.revisions(),
+            children: trail.children,
+            operation: ProjectLedgerRecordOperation::Update,
+            leading: Vec::new(),
+        })
         .await
         .map(Some)
     }
@@ -386,4 +428,30 @@ fn review_for(
         "boundResultRefs":if command.input.subject == ReviewSubject::Plan { Vec::new() } else { view.result_refs.iter().map(|item| item.result_ref.clone()).collect() },
         "originTurnId":command.input.scope.turn_id,"createdAt":at,
     }))
+}
+
+fn provisional_view(
+    command: &DispositionCommand,
+    current: &WorkView,
+    action_progress: Vec<butler_turn::btcc::ActionProgress>,
+    checkpoint: Option<butler_turn::btcc::Checkpoint>,
+    at: &str,
+) -> WorkView {
+    let mut provisional = current.clone();
+    provisional.status = if command.delegated_result_id.is_some()
+        && command.input.disposition == DispositionStatus::Open
+    {
+        WorkStatus::Abandoned
+    } else {
+        disposed_status(command.input.disposition)
+    };
+    if command.delegated_result_id.is_some() {
+        provisional.current_stage = Some(butler_turn::btcc::WorkStage::Reporting);
+        provisional.allowed_next_stages =
+            butler_turn::btcc::allowed_next_work_stages(provisional.current_stage);
+    }
+    provisional.action_progress = action_progress;
+    provisional.latest_checkpoint = checkpoint;
+    provisional.updated_at = at.into();
+    provisional
 }
