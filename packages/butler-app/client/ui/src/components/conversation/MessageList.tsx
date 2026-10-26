@@ -8,6 +8,7 @@ import { useButlerStore } from "@/app/store.ts";
 import { MessageItem } from "./MessageItem";
 import { TurnActivityMessage } from "./TurnActivityMessage";
 import { ScrollToBottomButton } from "./ScrollToBottomButton";
+import { isGeneralChat } from "@/app/isGeneralChat";
 import { useMessageList } from "./hooks/useMessageList";
 import { useMessageListLayout } from "./hooks/useMessageListLayout";
 import { type ConversationColumnRect, ConversationScroll, MessageListSurface } from "@/butler-ds";
@@ -78,6 +79,7 @@ function MessageListComponent({ messages, turnProgress, bottomReserve, isSending
                   startedAt={turnStartedAt}
                   turnId={turnId}
                   rowVirtualizer={rowVirtualizer}
+                  chat={isGeneralChat(activeChatId)}
                 />
               );
             }

@@ -366,6 +366,7 @@
 | Browser tabs over a page area (pair with NativeViewSlot) | `TabStrip` |  |
 | Browsing history | `HistoryRow` |  |
 | Browsing history | `HistoryRow` | `VersionHistory` |
+| bubble: Butler replies in 대화 (Chats); work sessions keep the full-width answer | `MessageRow` |  |
 | Build a DS component that needs an exit animation | `Presence` |  |
 | Build a new composer-attached panel type | `ComposerAdjunctPanel` |  |
 | Busy with no progress to report, next to a verb | `Spinner` | `ProgressRing` |
@@ -1698,7 +1699,7 @@ A bordered panel surface with an elevation step for settings rows and grouped co
 - Use for: A flat bordered row or group inside settings and developer panels
 - Not for: A clickable item in a grid → `Card`
 - Not for: A settings section with a header above → `FormSection`
-- Tokens: `--surface-raised`, `--line`, `--radius-panel`, `--shadow-card`
+- Tokens: `--surface-raised`, `--line`, `--radius-control`, `--radius-popover`, `--shadow-card`
 
 ### TitlebarShell
 
@@ -2292,12 +2293,13 @@ The round avatar slot for system messages (and the active assistant mark where a
 
 `import { MessageRow } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=blocks/MessageRow`
 
-One message in the timeline: user bubble or full-width assistant document, with footer, status line and insert motion.
+One message in the timeline: user bubble, full-width assistant document or (in 대화 / Chats) a left Butler bubble, with footer, status line and insert motion.
 
 - Use for: Render a user, assistant or system message
+- Use for: bubble: Butler replies in 대화 (Chats); work sessions keep the full-width answer
 - Not for: A message waiting in the queue → `QueuedMessage`
 - Not for: Tool calls and work progress → `WorkActivityBlock`
-- Tokens: `--space-lg`, `--user-message-bg`, `--page-max-width-reading`, `--motion-base`, `--motion-distance-sm`, `--shimmer-duration`
+- Tokens: `--space-lg`, `--user-message-bg`, `--radius-popover`, `--page-max-width-reading`, `--motion-base`, `--motion-distance-sm`, `--shimmer-duration`
 
 ### QuestionAnswerCard
 
@@ -2834,7 +2836,7 @@ Files Butler produced in an answer: open the artifact, save it, or run another a
 - Use for: Artifacts attached to an assistant message
 - Not for: Files the user attached → `AttachmentList`
 - Not for: Artifacts in the inspector → `DocumentTile`
-- Tokens: `--surface-raised`, `--radius-panel`, `--icon-size-lg`
+- Tokens: `--surface-raised`, `--radius-popover`, `--icon-size-lg`
 
 ### ArtifactPreview
 

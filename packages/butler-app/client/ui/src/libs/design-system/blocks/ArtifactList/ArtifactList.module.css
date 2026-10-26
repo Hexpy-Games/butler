@@ -1,15 +1,22 @@
 .list {
+  container: artifact-list / inline-size;
   width: 100%;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-popover);
   background: var(--surface-raised);
 }
 
+/* Actions share the name's row while the name keeps a readable width; on a
+   narrower card they wrap to their own row, still at the right edge. */
 .row {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) auto;
-  gap: var(--space-md);
+  --artifact-icon-size: 40px;
+  --artifact-gap: var(--space-md);
+  --artifact-name-min: calc(var(--space-4xl) * 3);
+
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--artifact-gap);
   align-items: center;
   width: 100%;
   min-height: 68px;
@@ -19,6 +26,18 @@
   color: inherit;
   font: inherit;
   text-align: left;
+}
+
+/* The clipped list's first and last rows follow its corners, so an inset
+   focus ring is never cut. */
+.row:first-child {
+  border-start-start-radius: inherit;
+  border-start-end-radius: inherit;
+}
+
+.row:last-child {
+  border-end-start-radius: inherit;
+  border-end-end-radius: inherit;
 }
 
 .row + .row {
@@ -42,8 +61,9 @@
 
 .icon {
   display: inline-grid;
-  width: 40px;
-  height: 40px;
+  flex: none;
+  width: var(--artifact-icon-size);
+  height: var(--artifact-icon-size);
   place-items: center;
   border-radius: var(--radius-control);
   background: var(--surface);
@@ -52,6 +72,11 @@
 
 .text {
   display: grid;
+  flex: 1 1
+    min(
+      var(--artifact-name-min),
+      100% - var(--artifact-icon-size) - var(--artifact-gap)
+    );
   min-width: 0;
   gap: var(--space-1);
 }
@@ -74,10 +99,14 @@
 }
 
 .actions {
-  display: inline-flex;
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-1);
+  max-width: 100%;
+  margin-inline-start: auto;
 }
 
 .actionIcon {
@@ -86,19 +115,9 @@
   line-height: 1;
 }
 
-@media (width <= 560px) {
+@container artifact-list (width <= 25rem) {
   .row {
-    grid-template-columns: 32px minmax(0, 1fr);
-    gap: var(--space-sm);
-  }
-
-  .icon {
-    width: 32px;
-    height: 32px;
-  }
-
-  .actions {
-    grid-column: 2;
-    justify-content: flex-start;
+    --artifact-icon-size: 32px;
+    --artifact-gap: var(--space-sm);
   }
 }

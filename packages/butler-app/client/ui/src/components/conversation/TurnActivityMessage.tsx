@@ -11,6 +11,7 @@ interface TurnActivityMessageProps {
   virtualRow: VirtualItem;
   topOffset: number;
   rowVirtualizer: Virtualizer<HTMLDivElement, Element>;
+  chat?: boolean;
 }
 
 export function TurnActivityMessage({
@@ -21,6 +22,7 @@ export function TurnActivityMessage({
   virtualRow,
   topOffset,
   rowVirtualizer,
+  chat,
 }: TurnActivityMessageProps) {
   return (
     <MessageRow
@@ -37,6 +39,7 @@ export function TurnActivityMessage({
         state={turnState}
         startedAt={startedAt}
         turnId={turnId}
+        chat={chat}
       />
     </MessageRow>
   );

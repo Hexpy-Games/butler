@@ -8,7 +8,7 @@ import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { useEnteringKeys } from "../../lib/useEnteringKeys";
 import { MarkdownContent, useStreamingReveal } from "../MarkdownContent";
-import { AssistantFooterSample, MESSAGE_FOOTER_LABELS, MessageTurnSample, UserFooterSample } from "./MessageRow.showcaseParts";
+import { AssistantFooterSample, BUBBLE_COPY, BubbleTurnSample, MESSAGE_FOOTER_LABELS, MESSAGE_FOOTER_LABELS_KO, MessageTurnSample, UserFooterSample } from "./MessageRow.showcaseParts";
 import { MessageRow, MessageStatusLabel, MessageStatusRow } from "./MessageRow";
 
 export const meta: ShowcaseMeta = {
@@ -42,8 +42,7 @@ const labels = {
     question: "모션 시스템을 요약해 줘.",
     summary: "모션은 들어올 때 짧게 감속하고 나갈 때 더 빠르며, 동작 줄이기에서는 페이드만 남습니다.",
     thinking: "생각하는 중",
-    footer: { copy: "메시지 복사", copied: "복사됨", branchChat: "새 대화로 분기",
-      branchProject: "프로젝트로 분기", completed: "응답 완료", workedFor: "9초 동안 작업" },
+    footer: MESSAGE_FOOTER_LABELS_KO,
     answer: [
       "## 모션 시스템",
       "",
@@ -151,6 +150,7 @@ export const stories: ShowcaseStory[] = [
   { name: "Completed activity", render: (context) => <ActivityTurn {...context} /> },
   { name: "Completed turns", render: (context) => <ActivityTurn {...context} count={4} /> },
   { name: "Default", render: (context) => <MessageTurnSample question={labels[context.locale].question} answer={labels[context.locale].summary} labels={labels[context.locale].footer} /> },
+  { name: "Chats bubble", widths: ["375", "app", "wide"], render: (context) => <BubbleTurnSample copy={BUBBLE_COPY[context.locale]} labels={labels[context.locale].footer} /> },
   {
     name: "Send and stream",
     states: ["enter", "streaming", "thinking"],
