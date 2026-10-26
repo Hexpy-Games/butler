@@ -33,7 +33,7 @@ export function FileViewerHeader({ title, meta, leading, actions = [], onClose, 
     <div ref={ref}>
       <Box paddingX="2xl" paddingY="md" data-test-class="file-viewer-header" data-compact={compact || undefined}>
         <Stack align="row" cross="center" gap="md" wrap={false}>
-          {onBack ? <IconButton label={appCopy.fileViewer.backToChat} data-test-class="file-viewer-back" onClick={onBack}><ArrowLeft size="md" /></IconButton> : null}
+          {onBack ? <FileViewerBackButton onBack={onBack} /> : null}
           <Stack gap="none" grow basis="0" minWidth="0">
             <Typo.PanelTitle as="h2" truncate>{title}</Typo.PanelTitle>
             {meta ? <Typo.Caption tone="secondary" truncate>{meta}</Typo.Caption> : null}
@@ -45,13 +45,23 @@ export function FileViewerHeader({ title, meta, leading, actions = [], onClose, 
                 onClick={action.run}>{action.icon}</IconButton>
               : <Button key={action.id} size="sm" variant="outline" iconStart={action.labelIcon ? action.icon : undefined} text={action.label}
                 aria-label={action.ariaLabel} data-test-class={`file-viewer-${action.id}`} onClick={action.run} />)}
-            <IconButton label={appCopy.fileViewer.close} data-test-class="file-viewer-close" onClick={onClose}><X size="md" /></IconButton>
+            <FileViewerCloseButton onClose={onClose} />
           </ButtonContainer>
         </Stack>
       </Box>
     </div>
     <Separator space="none" />
   </>;
+}
+
+/** Back to the chat, at the start of the open file's title row (the viewer took the whole workspace). */
+export function FileViewerBackButton({ onBack }: { onBack: () => void }) {
+  return <IconButton label={appCopy.fileViewer.backToChat} data-test-class="file-viewer-back" onClick={onBack}><ArrowLeft size="md" /></IconButton>;
+}
+
+/** Closes the open file, at the end of its title row. */
+export function FileViewerCloseButton({ onClose }: { onClose: () => void }) {
+  return <IconButton label={appCopy.fileViewer.close} data-test-class="file-viewer-close" onClick={onClose}><X size="md" /></IconButton>;
 }
 
 function useCompactHeader(node: HTMLElement | null): boolean {

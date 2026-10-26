@@ -794,7 +794,7 @@ Makes a row, tile or piece of text one keyboard-operable click target without a 
 - Not for: A sidebar navigation row → `NavRow`
 - Not for: A card that opens something → `Card`
 - Not for: Choosing one of a few labelled options → `SegmentedControl`
-- Tokens: `--selection`, `--selection-strong`, `--radius-control`, `--focus-ring`, `--interactive-disabled-fg`, `--motion-fast`, `--motion-instant`, `--motion-ease-standard`
+- Tokens: `--selection`, `--selection-strong`, `--radius-control`, `--space-xs`, `--focus-ring`, `--interactive-disabled-fg`, `--motion-fast`, `--motion-instant`, `--motion-ease-standard`
 
 ### CopyButton
 
@@ -1762,7 +1762,7 @@ The browser toolbar's address: security glyph, bold host with a muted path, tags
 - Use for: A Butler page's name in the same place (library, new tab)
 - Not for: A plain URL setting in a form → `Input`
 - Not for: A link inside text → `InlineReference`
-- Tokens: `--control-height-md`, `--selection`, `--focus-ring`, `--radius-control`, `--placeholder`
+- Tokens: `--control-height-md`, `--selection`, `--focus-ring`, `--radius-pill`, `--placeholder`
 
 ### AgentPointer
 
@@ -2026,14 +2026,14 @@ The More (…) button and menu for a row's actions, from a simple items array.
 
 `import { TabStrip } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=blocks/TabStrip`
 
-The Browser area's tab row: closable, reorderable tabs grouped as my tabs plus one muted, foldable group per conversation. A tab's close button shows on hover or keyboard focus.
+The Browser area's tab row: closable, reorderable pill tabs grouped as my tabs plus one muted, foldable outline pill per conversation. A tab's close button shows on hover or keyboard focus.
 
 - Use for: Browser tabs over a page area (pair with NativeViewSlot)
 - Use for: Tabs the user and conversations open, grouped by owner
 - Not for: Switching peer views inside one panel → `Tabs`
 - Not for: Sidebar navigation between conversations → `NavRow`
 - Not for: Reordering settings cards → `SortableCardList`
-- Tokens: `--tab-strip-tab-min-width`, `--tab-strip-tab-max-width`, `--tab-strip-chip-max-width`, `--selection-strong`, `--control-height-md`, `--scroll-fade-size`, `--motion-base`, `--motion-fast`, `--color-warning-text`, `--color-danger-text`
+- Tokens: `--tab-strip-tab-min-width`, `--tab-strip-tab-max-width`, `--tab-strip-chip-max-width`, `--selection-strong`, `--radius-pill`, `--line`, `--border-hairline`, `--focus-ring-room`, `--control-height-md`, `--scroll-fade-size`, `--motion-base`, `--motion-fast`, `--color-warning-text`, `--color-danger-text`
 
 ## Blocks · Composer
 
