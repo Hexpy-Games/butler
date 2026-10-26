@@ -12,7 +12,9 @@ mod review_access;
 mod review_secrets;
 mod review_transport;
 mod round_two;
+mod round_two_access;
 mod round_two_cleanup;
+mod round_two_delegation;
 mod rules;
 mod stub;
 use butler_e2e::e2e::{
