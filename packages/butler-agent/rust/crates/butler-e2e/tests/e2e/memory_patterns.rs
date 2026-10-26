@@ -14,6 +14,7 @@ use butler_e2e::e2e::{
 use serde_json::{Value, json};
 use std::time::Duration;
 mod actions;
+mod readiness;
 mod settings;
 mod validation;
 
@@ -127,7 +128,7 @@ async fn run(s: &Scenario) -> Result<Value, HarnessError> {
     run_phase(s, "complete").await
 }
 async fn run_phase(s: &Scenario, phase: &str) -> Result<Value, HarnessError> {
-    super::memory_fixture::settle(&s.sandbox.data).await?;
+    readiness::settle(s).await?;
     parked(s).await;
     let id = uuid::Uuid::new_v4().to_string();
     let r =
@@ -161,7 +162,7 @@ async fn run_phase(s: &Scenario, phase: &str) -> Result<Value, HarnessError> {
                         }
                     }
                     assert_eq!(p["phase"], phase, "{event}");
-                    super::memory_fixture::settle(&s.sandbox.data).await?;
+                    readiness::settle(s).await?;
                     parked(s).await;
                     return Ok(read_store(s));
                 }
