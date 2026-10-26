@@ -17,7 +17,7 @@ async function readNativeIdentity() {
   } finally { host.destroy(); profile.protocol.unhandle("https"); }
 }
 
-/** A web profile keeps the process's plain Chromium User-Agent (bootstrap sets
+/** A web profile keeps the process's User-Agent (bootstrap sets
  * app.userAgentFallback) and Chromium's own brands; no debugger is needed. Its
  * requests get the Client Hints Chrome sends and Electron omits, from the same
  * values pages read. Resolves once those values are known. */

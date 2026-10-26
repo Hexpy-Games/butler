@@ -70,10 +70,12 @@ impl AppApplication {
             if trigger == "scheduled" && row.state != "enabled" {
                 return Err(AppStorageError::new(AppStorageCode::AutomationNotEnabled, "Schedule is not enabled."));
             }
+            let scheduled_at = if trigger == "scheduled" { super::occurrence::latest(&row, &started)? } else { None };
+            let late = super::occurrence::is_late(scheduled_at.as_deref(), &started);
             let busy = session_has_active_turn(db, &row.target_id)?;
             db.execute(
-                "INSERT INTO app_automation_runs(id,automation_id,target_session_id,state,trigger,started_at) VALUES(?1,?2,?3,'running',?4,?5)",
-                params![run,row.id,row.target_id,trigger,started],
+                "INSERT INTO app_automation_runs(id,automation_id,target_session_id,state,trigger,started_at,scheduled_at,late) VALUES(?1,?2,?3,'running',?4,?5,?6,?7)",
+                params![run,row.id,row.target_id,trigger,started,scheduled_at,late],
             ).map_err(AppStorageError::sqlite)?;
             // Bind the schedule input before dispatch can run any browser tools.
             db.execute(
@@ -182,13 +184,7 @@ impl AppApplication {
                 db,
                 &subscribers,
                 "automation.run",
-                &run_event(
-                    &queued.automation.id,
-                    &queued.run_target_id,
-                    &run.state.clone(),
-                    &queued.trigger,
-                    run.safe_error_code.clone(),
-                ),
+                &run_event(&run),
                 &completed,
             )?;
             Ok(run)
@@ -202,6 +198,13 @@ impl AppApplication {
         run_id: &str,
         trigger: &str,
     ) -> DispatchResult {
+        let Ok(context) = self.schedule_context(&row.id, run_id, trigger).await else {
+            return DispatchResult {
+                state: "failed",
+                safe_error: Some("automation_dispatch_failed".into()),
+                turn_id: None,
+            };
+        };
         let model = self.automation_model_override(row.model.as_deref());
         let request = MessageSendRequest {
             image_edit: None,
@@ -219,11 +222,7 @@ impl AppApplication {
             subsession_result: None,
             // A scheduler-started run has nobody to answer an approval (D8);
             // "run now" is attended and asks as usual.
-            schedule_run: Some(butler_turn::btcc::ScheduleRunContext {
-                automation_id: row.id.clone(),
-                run_id: run_id.to_owned(),
-                unattended: trigger == "scheduled",
-            }),
+            schedule_run: Some(context),
         };
         let result = match self
             .send(SendMessageCommand {
@@ -311,7 +310,6 @@ impl AppApplication {
             row.next.clone()
         };
         let subscribers = self.subscribers.clone();
-        let trigger = trigger.to_owned();
         self.storage.execute(move|db|{
             record_run(db,&run_id,&result,&completed)?;
             db.execute("UPDATE app_automations SET next_run_at=?1,last_run_at=?2,last_run_state=?3,last_safe_error_code=COALESCE(?4,(SELECT safe_error_code FROM app_automation_runs WHERE id=?6)),run_count=run_count+1,consecutive_failure_count=CASE WHEN ?3='failed' THEN consecutive_failure_count+1 ELSE 0 END,updated_at=?2,state=CASE WHEN schedule_type='once' THEN 'paused' ELSE state END WHERE id=?5",params![next,completed,result.state,result.safe_error,row.id,run_id]).map_err(AppStorageError::sqlite)?;
@@ -320,13 +318,7 @@ impl AppApplication {
                 db,
                 &subscribers,
                 "automation.run",
-                &run_event(
-                    &row.id.clone(),
-                    &row.target_id.clone(),
-                    &run.state.clone(),
-                    &trigger,
-                    run.safe_error_code.clone(),
-                ),
+                &run_event(&run),
                 &completed,
             )?;
             Ok(AutomationRunResult{automation:records::summary(records::active(db,&row.id)?),run})
@@ -334,20 +326,13 @@ impl AppApplication {
     }
 }
 
-pub(super) fn run_event(
-    automation_id: &str,
-    target_session_id: &str,
-    state: &str,
-    trigger: &str,
-    safe_error_code: Option<String>,
-) -> serde_json::Value {
+pub(super) fn run_event(run: &AutomationRunSummary) -> serde_json::Value {
     let mut event = json!({
-        "automation_id": automation_id,
-        "target_session_id": target_session_id,
-        "state": state,
-        "trigger": trigger,
+        "automation_id": run.automation_id, "target_session_id": run.target_session_id,
+        "state": run.state, "trigger": run.trigger,
+        "scheduled_at": run.scheduled_at, "late": run.late,
     });
-    if let Some(code) = safe_error_code {
+    if let Some(code) = &run.safe_error_code {
         event["safe_error_code"] = json!(code);
     }
     event

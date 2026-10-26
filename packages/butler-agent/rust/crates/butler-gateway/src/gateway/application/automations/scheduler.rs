@@ -36,6 +36,7 @@ pub(crate) struct AutomationScheduler {
     cancellation: CancellationToken,
     wake: Arc<Notify>,
     task: Mutex<Option<JoinHandle<()>>>,
+    wake_task: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl AutomationScheduler {
@@ -44,6 +45,7 @@ impl AutomationScheduler {
             cancellation: CancellationToken::new(),
             wake,
             task: Mutex::new(None),
+            wake_task: Mutex::new(None),
         }
     }
 
@@ -53,6 +55,7 @@ impl AutomationScheduler {
             NEXT_DUE_READS.store(0, Ordering::Relaxed);
             DISPATCH_ATTEMPTS.store(0, Ordering::Relaxed);
         }
+        self.subscribe_to_wake();
         let cancel = self.cancellation.clone();
         let wake = self.wake.clone();
         *self.task.lock() = Some(tokio::spawn(async move {
@@ -122,8 +125,29 @@ impl AutomationScheduler {
         Ok(())
     }
 
+    fn subscribe_to_wake(&self) {
+        let mut events = butler_platform::system_wake::wake_events();
+        let wake = self.wake.clone();
+        let cancel = self.cancellation.clone();
+        *self.wake_task.lock() = Some(tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    () = cancel.cancelled() => break,
+                    event = events.changed() => {
+                        if event.is_err() { break; }
+                        wake.notify_one();
+                    }
+                }
+            }
+        }));
+    }
+
     pub(crate) async fn close(&self) -> Result<(), GatewayApplicationError> {
         self.cancellation.cancel();
+        let wake_task = self.wake_task.lock().take();
+        if let Some(task) = wake_task {
+            task.await.map_err(GatewayApplicationError::internal_from)?;
+        }
         let task = self.task.lock().take();
         if let Some(task) = task {
             task.await.map_err(GatewayApplicationError::internal_from)?;
