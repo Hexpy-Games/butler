@@ -259,7 +259,7 @@ impl ProviderSecrets {
 }
 
 /// The owner-only fallback file of `root`.
-pub(super) fn fallback_file(root: &Path) -> SecretStore {
+pub fn fallback_file(root: &Path) -> SecretStore {
     SecretStore::file(root.join(FALLBACK_FILE))
 }
 
