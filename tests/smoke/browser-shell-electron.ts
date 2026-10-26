@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { browserAgentApp, waitBrowser } from "../support/browser-agent-app";
 import { nativeAligned, nativePeekDismiss, pane, sessionInfoBesideBrowser, shellGeometry, shellReady, toggle, togglePane, toggleState } from "../support/browser-shell-acceptance";
 import { assertNewTabContent, newTabHub } from "../support/browser-newtab-acceptance";
+import { playingVideoFixture, routeReturnKeepsPage } from "../support/browser-route-return";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE;
 assert.ok(evidence);
@@ -86,6 +87,17 @@ try {
   await assertNewTabContent(app.page, "en");
   await app.click(getAppCopy("en-US").space.general); await nativeAligned(app);
   assert.equal((await app.call<{ activeId: string }>("state")).activeId, second);
+  // A playing page stays on screen, with its favicon, through session and Settings round trips and a reload.
+  const video = playingVideoFixture();
+  try {
+    const playing = await app.call<string>("create", { owner: "conversation:general", url: video.url.href });
+    await app.call("activate", { id: playing }); await nativeAligned(app);
+    await waitBrowser(() => app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(playing)}).view.webContents.executeJavaScript("!document.querySelector('video').paused")`), "fixture video plays");
+    await routeReturnKeepsPage(app, playing, new URL("/icon.png", video.url).href, "Second conversation");
+    await app.shot("en-light-1440-route-return");
+    await app.call("close", { id: playing });
+  } finally { video.stop(true); }
+  await app.call("activate", { id: second }); await nativeAligned(app);
   await sessionInfoBesideBrowser(app);
   await app.click("Browser"); await app.call("activate", { id: mine });
   await app.click("Move to a conversation");
