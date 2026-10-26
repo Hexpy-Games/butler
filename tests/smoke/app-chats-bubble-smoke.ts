@@ -50,6 +50,8 @@ try {
         assert.equal(measured.document!.top - measured.bubble!.bottom, 16, "the wrapper owns the lg gap");
         assert(Math.abs(measured.document!.left - measured.bubble!.left) < 1, "document aligns to bubble");
         assert(measured.document!.width <= measured.maxWidth + 0.5, "document respects bubble cap");
+        assert(Math.abs(measured.actionLayout!.rightGap) < 1, "document actions align to the card's right edge");
+        if (measured.document!.width >= 400) assert(measured.actionLayout!.sameRow, "actions stay beside the name on a wide card");
         assert.equal(measured.terminalCount, 0, "completed status row is hidden");
         assert.equal(measured.completedLabel, false);
         assert.equal(measured.workedFor, false, "duration is hidden");
@@ -77,7 +79,8 @@ function transcript(sessionId: string): SessionView {
       text: "문서를 정리했어요.\n\n**검토 결과**를 첨부했어요. 다음 단계도 함께 확인해 주세요.",
       created_at: "2026-10-25T09:00:03Z", updated_at: "2026-10-25T09:00:03Z",
       artifacts: [{ id: "review-document", session_id: sessionId, message_id: "answer", title: "검토-결과.md",
-        kind: "document", safe_path_label: "검토-결과.md", deliverable: true, created_at: "2026-10-25T09:00:03Z" }] },
+        kind: "document", safe_path_label: "검토-결과.md", deliverable: true, size_bytes: 6104,
+        url: "/message-files/file-00000000-0000-4000-8000-000000000001", created_at: "2026-10-25T09:00:03Z" }] },
   ];
   return { ...HARNESS_SS03_OBSERVER_VIEW, session_id: sessionId, messages, active_turn: null, latest_turn: null,
     kind: sessionId === "general" ? "chat" : "project", parent_session_id: undefined, relation: undefined, artifacts: [], authority_requests: [], pending_questions: [], steward_children: [], status: "idle" };
@@ -119,7 +122,13 @@ async function measure(page: Page) {
       return { left: rect.left, top: rect.top, bottom: rect.bottom, width: rect.width, radius: style.borderRadius, background: style.backgroundColor, padding: style.padding };
     };
     const footer = assistant.querySelector('[data-test-class~="assistant-footer"]')!;
+    const row = card?.firstElementChild, actions = row?.lastElementChild, name = row?.children[1];
+    const actionLayout = row && actions && name && actions !== name ? {
+      rightGap: row.getBoundingClientRect().right - parseFloat(getComputedStyle(row).paddingRight) - actions.getBoundingClientRect().right,
+      sameRow: actions.getBoundingClientRect().top < name.getBoundingClientRect().bottom,
+    } : null;
     return {
+      actionLayout,
       body: geometry(body), user: geometry(user), bubble: bubble ? geometry(bubble) : null, document: card ? geometry(card) : null,
       bubbles: assistant.querySelectorAll('[data-test-class="assistant-bubble"]').length,
       maxWidth: Math.min(440, assistant.getBoundingClientRect().width * 0.68),
