@@ -51,6 +51,8 @@ pub use crate::workspace::TargetScope;
 pub enum TurnTaint {
     Clean,
     External,
+    /// The turn was admitted from an untrusted connector event.
+    ConnectorEvent,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AccessRequest {
@@ -88,11 +90,18 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
         ButlerOutput, CommandMutation, CommandObservation, Connector, DeliverFiles, Exempt,
         FileEdit, FileRead, FolderSwitch, FullOnly, InternalRead, Network, ProjectRecord,
     };
+    if request.taint == TurnTaint::ConnectorEvent && request.kind.can_send_outside() {
+        return if *mode == AccessMode::ReadOnly {
+            Deny(DenyReason::ReadOnly)
+        } else {
+            Ask(GrantUse::Ignore)
+        };
+    }
     if *mode == AccessMode::FullAccess {
         return Allow;
     }
     if let CapabilityKind::WebRequest { carries_data } = request.kind {
-        return if request.taint != TurnTaint::External || !carries_data {
+        return if request.taint == TurnTaint::Clean || !carries_data {
             Allow
         } else if *mode == AccessMode::ReadOnly {
             Deny(DenyReason::ReadOnly)
@@ -158,6 +167,22 @@ pub fn needs_scope(mode: &AccessMode, kind: CapabilityKind) -> bool {
     }
 }
 impl CapabilityKind {
+    /// Commands and undeclared effects can send data too; containment does
+    /// not establish that a command has no outward effect. Butler's own
+    /// records, outputs and delivery to its user remain internal operations.
+    fn can_send_outside(self) -> bool {
+        matches!(
+            self,
+            Self::Connector
+                | Self::Network
+                | Self::ImageModelCall
+                | Self::WebRequest { carries_data: true }
+                | Self::CommandMutation { .. }
+                | Self::CommandObservation { .. }
+                | Self::OtherEffect
+        )
+    }
+
     /// Effects cannot inherit exemptions intended for other dispatch routes.
     pub fn gated_effect(self) -> Self {
         match self {

@@ -8,6 +8,7 @@
 mod intake;
 mod lifecycle;
 mod rules;
+mod review_access;
 mod stub;
 use butler_e2e::e2e::{
     HarnessError,
