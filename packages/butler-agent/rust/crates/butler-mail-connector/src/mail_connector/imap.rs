@@ -28,8 +28,17 @@ pub(super) async fn connect(config: &Config) -> Result<Connection> {
     }
 }
 pub(super) async fn destinations(connection: &mut Connection) -> Result<Vec<Value>> {
+    let caps = connection
+        .capabilities()
+        .await
+        .map_err(|_| "mail_capability_failed")?;
+    let pattern = if caps.has_str("SPECIAL-USE") {
+        "\"*\" RETURN (SPECIAL-USE)"
+    } else {
+        "\"*\""
+    };
     let names: Vec<_> = connection
-        .list(Some(""), Some("*"))
+        .list(Some(""), Some(pattern))
         .await
         .map_err(|_| "mail_list_failed")?
         .try_collect()
@@ -93,6 +102,7 @@ pub(super) async fn select(connection: &mut Connection, id: &super::message::Id)
     if mailbox.uid_validity != Some(id.validity) {
         return Err("mail_event_expired");
     }
+    fetch(connection, id.uid, false).await?;
     Ok(())
 }
 pub(super) fn destination<'a>(destinations: &'a [Value], id: &str) -> Result<&'a Value> {
@@ -102,7 +112,7 @@ pub(super) fn destination<'a>(destinations: &'a [Value], id: &str) -> Result<&'a
         .ok_or("mail_destination_missing")?;
     if found["roles"]
         .as_array()
-        .is_none_or(|roles| roles.iter().any(|r| r == "trash" || r == "junk"))
+        .is_none_or(|roles| roles.is_empty() || roles.iter().any(|r| r == "trash" || r == "junk"))
     {
         return Err("mail_destination_refused");
     }
@@ -119,6 +129,22 @@ pub(super) fn role(destinations: &[Value], role: &str) -> Result<String> {
         .and_then(|d| d["id"].as_str())
         .map(str::to_owned)
         .ok_or("mail_destination_missing")
+}
+
+pub(super) fn source(destinations: &[Value], id: &str) -> Result<()> {
+    let roles = destinations
+        .iter()
+        .find(|d| d["id"] == id)
+        .and_then(|d| d["roles"].as_array())
+        .ok_or("mail_source_refused")?;
+    if roles.is_empty()
+        || roles
+            .iter()
+            .any(|r| r == "all" || r == "trash" || r == "junk")
+    {
+        return Err("mail_source_refused");
+    }
+    Ok(())
 }
 
 pub(super) async fn inbox(connection: &mut Connection) -> Result<async_imap::types::Mailbox> {

@@ -20,6 +20,9 @@ impl Mail {
             return self.search(c, args).await;
         }
         let id = message::Id::parse(text(args, "event_id")?)?;
+        if matches!(name, "move" | "archive") {
+            imap::source(&imap::destinations(c).await?, &id.mailbox)?;
+        }
         imap::select(c, &id).await?;
         match name {
             "thread" => {
@@ -27,28 +30,7 @@ impl Mail {
                 message::context(fetch.body().ok_or("mail_body_missing")?)
             }
             "move" => self.move_mail(c, &id, text(args, "destination")?).await,
-            "archive" => {
-                let destinations = imap::destinations(c).await?;
-                let caps = c
-                    .capabilities()
-                    .await
-                    .map_err(|_| "mail_capability_failed")?;
-                if caps.has_str("X-GM-EXT-1") {
-                    let all = imap::role(&destinations, "all")?;
-                    imap::destination(&destinations, &all)?;
-                    self.remember(c, &id).await?;
-                    c.run_command_and_check_ok(format!(
-                        "UID STORE {} -X-GM-LABELS (\\Inbox)",
-                        id.uid
-                    ))
-                    .await
-                    .map_err(|_| "mail_archive_failed")?;
-                    Ok(json!({"ok":true}))
-                } else {
-                    self.move_mail(c, &id, &imap::role(&destinations, "archive")?)
-                        .await
-                }
-            }
+            "archive" => self.archive(c, &id).await,
             "label" => self.label(c, id.uid, text(args, "label")?).await,
             "mark_read" => {
                 c.uid_store(id.uid.to_string(), "+FLAGS.SILENT (\\Seen)")
@@ -62,6 +44,25 @@ impl Mail {
             "draft_reply" => self.draft(c, &id, text(args, "body")?).await,
             "unsubscribe" => self.unsubscribe(c, &id).await,
             _ => Err("mail_tool_unknown"),
+        }
+    }
+    async fn archive(&self, c: &mut imap::Connection, id: &message::Id) -> Result<Value> {
+        let destinations = imap::destinations(c).await?;
+        let caps = c
+            .capabilities()
+            .await
+            .map_err(|_| "mail_capability_failed")?;
+        if caps.has_str("X-GM-EXT-1") {
+            let all = imap::role(&destinations, "all")?;
+            imap::destination(&destinations, &all)?;
+            self.remember(c, id).await?;
+            c.run_command_and_check_ok(format!("UID STORE {} -X-GM-LABELS (\\Inbox)", id.uid))
+                .await
+                .map_err(|_| "mail_archive_failed")?;
+            Ok(json!({"ok":true}))
+        } else {
+            self.move_mail(c, id, &imap::role(&destinations, "archive")?)
+                .await
         }
     }
     async fn remember(&self, c: &mut imap::Connection, id: &message::Id) -> Result<()> {

@@ -77,7 +77,8 @@
             },
             {
               "tool": "mail/archive",
-              "organize": true
+              "organize": true,
+              "relocates": true
             },
             {
               "tool": "mail/mark_read",
