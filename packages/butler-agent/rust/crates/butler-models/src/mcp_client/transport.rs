@@ -45,7 +45,7 @@ impl McpClient {
         let prepared = self.overlay_execution(&server.id).await?;
         let resolved = prepared
             .as_ref()
-            .map(|s| super::registry::resolve_secrets(s, &self.environment))
+            .map(|(s, _)| super::registry::resolve_secrets(s, &self.environment))
             .transpose()
             .map_err(|_| {
                 failure(
@@ -54,7 +54,7 @@ impl McpClient {
                     false,
                 )
             })?;
-        let server = prepared.as_ref().unwrap_or(server);
+        let server = prepared.as_ref().map(|(s, _)| s).unwrap_or(server);
         let secrets = resolved.as_ref().unwrap_or(secrets);
         if !server.enabled {
             return Err(failure(

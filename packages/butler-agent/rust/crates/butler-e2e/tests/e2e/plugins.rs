@@ -5,11 +5,16 @@
     clippy::panic,
     reason = "test assertions"
 )]
+mod git;
+mod git_support;
+mod git_timeout;
+mod growth;
 mod idle;
 mod inspection;
 mod lifecycle;
 mod security;
 mod stub;
+mod updates;
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,

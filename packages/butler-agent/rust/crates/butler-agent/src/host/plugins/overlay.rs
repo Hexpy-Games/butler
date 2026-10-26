@@ -100,9 +100,24 @@ impl butler_models::mcp_client::McpOverlay for Plugins {
     fn prepare(&self, server_id: &str) -> std::result::Result<Value, &'static str> {
         self.prepare_server(server_id).map_err(|e| e.code)
     }
+    fn prepare_leased(
+        &self,
+        server_id: &str,
+    ) -> std::result::Result<butler_models::mcp_client::PreparedOverlay, &'static str> {
+        // The mutation lock binds the selected digest and its execution lease.
+        let (config, approval) = self.prepare_snapshot(server_id).map_err(|e| e.code)?;
+        Ok(butler_models::mcp_client::PreparedOverlay {
+            config,
+            lease: Some(approval),
+        })
+    }
 }
 impl Plugins {
     fn prepare_server(&self, server_id: &str) -> Result<Value> {
+        self.prepare_snapshot(server_id).map(|(config, _)| config)
+    }
+    fn prepare_snapshot(&self, server_id: &str) -> Result<(Value, std::sync::Arc<Approval>)> {
+        let _mutation = self.mutation.lock();
         let (id, server_id) = server_id
             .split_once('/')
             .ok_or_else(|| error("plugin_mcp_id_invalid"))?;
@@ -126,9 +141,12 @@ impl Plugins {
         let data = self.root.join("data").join(id);
         let mut entries = server.command.iter().cloned().collect::<Vec<_>>();
         entries.extend(server.args.clone());
-        self.verify(id, &argv(&entries, &root, &data), false)?;
+        self.verify_locked(id, &argv(&entries, &root, &data), false)?;
         let secrets = self.secret_values(&plugin)?;
-        Ok(config(server_id, server, &plugin, &root, &data, &secrets))
+        Ok((
+            config(server_id, server, &plugin, &root, &data, &secrets),
+            plugin.approval.clone(),
+        ))
     }
     fn secret_values(&self, plugin: &Installed) -> Result<BTreeMap<String, String>> {
         plugin
