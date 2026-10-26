@@ -1,9 +1,11 @@
+// test-category: race
 // SS10: product conversation components through the existing offline VisualHarness.
 import { strict as assert } from "node:assert";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { extname, join, normalize, resolve, sep } from "node:path";
 import type { Page } from "playwright";
+import { EMPTY_SETTINGS } from "../../packages/butler-app/client/ui/src/app/constants.ts";
 import { HARNESS_NAVIGATION, HARNESS_SS03_OBSERVER_VIEW } from "../../packages/butler-app/client/ui/src/app/fixtures.ts";
 import type { MessageRecord, SessionView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
@@ -133,12 +135,21 @@ function liveTranscript(sessionId: string): SessionView {
 async function installFixture(page: Page, view: SessionView) {
   const types: Record<string, string> = { ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml",
     ".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp", ".woff2": "font/woff2", ".json": "application/json" };
+  let settings = { ...EMPTY_SETTINGS };
   const fixture = { messages: view.messages, sessionView: view, navigation: HARNESS_NAVIGATION, background: "plain" };
   await page.route("**/*", route => {
     const url = new URL(route.request().url());
     if (url.origin !== "http://chats-bubble.localhost") return route.abort();
-    if (url.pathname === "/") return route.fulfill({ contentType: "text/html", body: readFileSync(join(dist, "index.html"), "utf8")
+    if (url.pathname === "/") {
+      settings = { ...EMPTY_SETTINGS, language: url.searchParams.get("locale") === "ko" ? "ko" : "en",
+        appearance_theme: url.searchParams.get("theme") === "dark" ? "dark" : "light" };
+      return route.fulfill({ contentType: "text/html", body: readFileSync(join(dist, "index.html"), "utf8")
       .replace("<head>", `<head><script>window.butlerConversationFixture=${JSON.stringify(fixture).replaceAll("<", "\\u003c")}</script>`) });
+    }
+    if (url.pathname === "/settings") {
+      if (route.request().method() === "PATCH") settings = { ...settings, ...route.request().postDataJSON() };
+      return route.fulfill({ json: { ok: true, data: settings } });
+    }
     const file = normalize(join(dist, decodeURIComponent(url.pathname)));
     if (file.startsWith(dist + sep) && existsSync(file) && statSync(file).isFile())
       return route.fulfill({ contentType: types[extname(file)] ?? "application/octet-stream", body: readFileSync(file) });

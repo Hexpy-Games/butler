@@ -930,6 +930,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     failureReason: "실패 원인",
   },
   conversation: {
+    chatsIntro: "이제 여기선 편하게 얘기해요. 길어지는 건 문서로 드릴게요.",
     messageActions: {
       showMore: "더보기",
       showLess: "접기",
@@ -1485,6 +1486,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       empty: "아직 표시할 항목이 없습니다.",
     },
     pageSections: {
+      noticedPatterns: "버틀러가 알아챈 것",
       accessibility: "접근성",
       instructions: "지침",
       chatMemory: "대화 기억",
@@ -1531,6 +1533,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       purchaseSites: "확인 없이 결제",
     },
     pageSectionDescriptions: {
+      noticedPatterns: "대화에서 버틀러가 알아챈 습관입니다. 지우면 다시 제안하지 않습니다.",
       grants: "묻지 않고 실행하도록 허용한 작업입니다.",
       instructions: "채팅에서 추가하고 고칩니다.",
       chatMemory: "대화에서 버틀러가 스스로 기억한 내용입니다. 프로젝트 채팅도 포함합니다.",
@@ -1547,6 +1550,12 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       learning: "버틀러가 대화하면서 사용자를 알아가는 범위입니다.",
     },
     memory: {
+      patternsEmpty: "아직 없음", deletePatternTitle: "알아챈 것을 지울까요?", deletePatternBody: "다시 제안하지 않습니다.", patternDeleted: "지웠습니다",
+      patternDays: n => `최근 ${n}일`, patternWeeks: n => `최근 ${n}주`, patternMonths: n => `최근 ${n}개월`, patternCount: n => `${n}번`,
+      proactiveLevel: "먼저 말 걸기", proactiveDescription: "기억 정리 때 버틀러가 먼저 제안하는 정도입니다.",
+      proactiveOff: "끄기", proactiveSometimes: "가끔", proactiveOften: "자주",
+      quietHours: "조용한 시간", quietHoursDescription: "이 시간에는 버틀러가 먼저 말을 걸지 않습니다.", quietHoursStart: "시작 시간", quietHoursEnd: "종료 시간",
+
       reset: "초기화", resetChatTitle: "대화 기억을 초기화할까요?", resetProfileTitle: "프로필을 초기화할까요?", resetProjectTitle: "프로젝트 기억을 초기화할까요?",
       resetBody: "새 대화부터 다시 기억합니다. 되돌릴 수 없습니다.",
       resetProfileBody: "알아가기가 켜져 있으면 새 대화부터 다시 알아갑니다. 되돌릴 수 없습니다.",

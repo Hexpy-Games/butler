@@ -22,8 +22,9 @@ pub enum Phase {
     MemoryMetadataIntegrity,
     /// Aggregate source quality feedback.
     SourceQualityAggregation,
-    /// Revise know-how entries from feedback.
-    KnowhowRevision,
+    /// Extract recurring habits from new conversation evidence.
+    #[serde(alias = "knowhow_revision")]
+    PatternExtraction,
     /// Record memory health.
     MemoryHealth,
     /// Summarize the cycle metrics.
@@ -38,7 +39,7 @@ impl Phase {
         Self::NewChatBriefing,
         Self::MemoryMetadataIntegrity,
         Self::SourceQualityAggregation,
-        Self::KnowhowRevision,
+        Self::PatternExtraction,
         Self::MemoryHealth,
         Self::MetricsSummary,
     ];
@@ -52,7 +53,7 @@ impl Phase {
             Self::NewChatBriefing => "new_chat_briefing",
             Self::MemoryMetadataIntegrity => "memory_metadata_integrity",
             Self::SourceQualityAggregation => "source_quality_aggregation",
-            Self::KnowhowRevision => "knowhow_revision",
+            Self::PatternExtraction => "pattern_extraction",
             Self::MemoryHealth => "memory_health",
             Self::MetricsSummary => "metrics_summary",
         }

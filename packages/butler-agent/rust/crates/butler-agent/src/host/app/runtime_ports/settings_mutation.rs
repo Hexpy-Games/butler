@@ -75,6 +75,14 @@ impl AppSettingsMutation {
 
         let mut destinations = Vec::new();
         let writes_config = patch.contains_key("update_previews")
+            || [
+                "proactive_level",
+                "quiet_hours_start",
+                "quiet_hours_end",
+                "chats_intro_seen",
+            ]
+            .iter()
+            .any(|k| patch.contains_key(*k))
             || patch.contains_key("consolidation_time")
             || patch.contains_key("consolidation_model")
             || patch.contains_key("consolidation_reasoning_effort")
@@ -91,7 +99,7 @@ impl AppSettingsMutation {
         }
         let root = self.validated_root(&destinations)?;
 
-        self.apply_profile_and_channel(&patch, &root).await?;
+        self.apply_source_settings(&patch, &root).await?;
         if let (Some(key), Some(value)) = (environment_key, api_key) {
             self.configuration
                 .upsert_private_environment_value(key, value, &root)
@@ -115,6 +123,29 @@ impl AppSettingsMutation {
         }
 
         self.apply_user_settings(&patch, &projection, &root).await
+    }
+
+    async fn apply_source_settings(
+        &self,
+        patch: &Map<String, Value>,
+        root: &std::path::Path,
+    ) -> Result<(), GatewayApplicationError> {
+        self.apply_profile_and_channel(patch, root).await?;
+        if [
+            "proactive_level",
+            "quiet_hours_start",
+            "quiet_hours_end",
+            "chats_intro_seen",
+        ]
+        .iter()
+        .any(|k| patch.contains_key(*k))
+        {
+            self.configuration
+                .set_proactive_settings(&Value::Object(patch.clone()), root)
+                .await
+                .map_err(GatewayApplicationError::internal_from)?;
+        }
+        Ok(())
     }
 
     async fn apply_user_settings(

@@ -14,6 +14,19 @@ pub enum AppMemoryCommand {
     EndSession { session_id: String },
     /// Complete instruction list from the instruction owner.
     Instructions,
+    /// Active recurring pattern notes.
+    Patterns,
+    /// Pending proposal bundles.
+    PatternProposals,
+    /// Delete a pattern at the revision the user saw.
+    DeletePattern { id: String, expected_revision: u64 },
+    /// Decide one candidate; S3 records the choice only.
+    DecidePattern {
+        bundle_id: String,
+        pattern_id: String,
+        decision: String,
+        expected_revision: u64,
+    },
     /// A lasting all-chats instruction added outside a chat (an import).
     RememberInstruction { text: String, operation_id: String },
     /// User-selected deletion, independent of a chat turn.
