@@ -15,7 +15,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use indexmap::IndexSet;
+use indexmap::{IndexMap, IndexSet};
 use serde_json::{Map, Value};
 use tokio::sync::Mutex;
 
@@ -115,6 +115,7 @@ pub struct ConversationAdmissionTurnInput {
 
 #[derive(Default)]
 struct AdmissionState {
+    documents: IndexMap<String, String>,
     known_tool_call_ids: HashSet<String>,
     evidence_refs: IndexSet<String>,
     tool_message_id: Option<String>,
@@ -191,6 +192,25 @@ impl ConversationAdmissionTurn {
         &self,
         event: RuntimeAdmissionEvent<'_>,
     ) -> ConversationResult<()> {
+        if event.kind == "tool.completed" {
+            let mut state = self.state.lock().await;
+            for item in event
+                .payload
+                .and_then(|p| p.get("deliverables"))
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                if item.get("kind").and_then(Value::as_str) == Some("doc")
+                    && let (Some(id), Some(title)) = (
+                        item.get("id").and_then(Value::as_str),
+                        item.get("title").and_then(Value::as_str),
+                    )
+                {
+                    state.documents.insert(id.to_owned(), title.to_owned());
+                }
+            }
+        }
         let known = self.state.lock().await.known_tool_call_ids.clone();
         self.apply(ConversationAdmissionInput {
             source: AdmissionSource::RuntimeTurnEvent,

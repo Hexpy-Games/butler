@@ -95,7 +95,7 @@ impl ConversationAdmissionTurn {
             return self.accept_existing(existing, role, &text).await;
         }
         let (origin_kind, origin_reason) = self.message_origin(role);
-        let parts = self.user_parts(role, &text);
+        let parts = self.message_parts(role, &text).await;
         let input = AppendMessageInput {
             session_id: self.turn.session_id.clone(),
             turn_id: Some(self.turn.id.clone()),
@@ -129,6 +129,40 @@ impl ConversationAdmissionTurn {
             state.public_assistant_message_id = Some(message.message.id);
         }
         Ok(())
+    }
+
+    async fn message_parts(
+        &self,
+        role: ConversationRole,
+        text: &str,
+    ) -> Option<Vec<MessagePartInput>> {
+        let mut parts = self.user_parts(role, text);
+        if role != ConversationRole::Assistant {
+            return parts;
+        }
+        let state = self.state.lock().await;
+        if state.documents.is_empty() {
+            return parts;
+        }
+        let entries = parts.get_or_insert_with(|| {
+            vec![MessagePartInput {
+                kind: ConversationPartKind::Text,
+                content_json: json!({"text":text}),
+                tool_call_id: None,
+                parent_tool_call_id: None,
+                provider_shape: None,
+                status: None,
+            }]
+        });
+        entries.extend(state.documents.iter().map(|(id, title)| MessagePartInput {
+            kind: ConversationPartKind::AttachmentRef,
+            content_json: json!({"kind":"doc","id":id,"title":title}),
+            tool_call_id: None,
+            parent_tool_call_id: None,
+            provider_shape: None,
+            status: None,
+        }));
+        parts
     }
 
     /// The origin recorded on an appended message: assistant messages are

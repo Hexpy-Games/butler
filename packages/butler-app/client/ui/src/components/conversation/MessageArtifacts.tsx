@@ -17,7 +17,9 @@ export function MessageArtifacts({
   attachments = [],
   text = "",
   refreshFileUrls,
+  bubble = false,
 }: {
+  bubble?: boolean;
   artifacts: SessionArtifactSummary[];
   attachments?: MessageFileRef[];
   text?: string;
@@ -45,8 +47,8 @@ export function MessageArtifacts({
   if (visibleArtifacts.length === 0) return null;
   return (
     <>
-      <Space size="md" />
-      <Stack gap="md">{images.map(artifact => <MarkdownContent key={artifact.id}>
+      {!bubble && <Space size="md" />}
+      <Stack gap={bubble ? "lg" : "md"}>{images.map(artifact => <MarkdownContent key={artifact.id}>
         <MessageInlineImage src={artifact.url} alt={artifact.title} attachments={attachments}
           artifacts={artifacts} refreshFileUrls={refreshFileUrls} />
       </MarkdownContent>)}

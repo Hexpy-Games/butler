@@ -20,6 +20,7 @@ const NON_TERMINAL_ASSISTANT_STATUSES = new Set([
 ]);
 
 export function AssistantResponseFooter({
+  bubble = false,
   copied,
   meta,
   onCopy,
@@ -27,6 +28,7 @@ export function AssistantResponseFooter({
   suppressTerminalStatus = false,
   actions,
 }: {
+  bubble?: boolean;
   copied: boolean;
   meta: AssistantFooterMeta | null;
   onCopy: () => void;
@@ -50,14 +52,14 @@ export function AssistantResponseFooter({
           onCopy={onCopy}
         />
         {actions}
-        {settledMeta?.durationLabel && <span>{appCopy.interfaceTemplates.workedFor(settledMeta.durationLabel)}</span>}
+        {!bubble && settledMeta?.durationLabel && <span>{appCopy.interfaceTemplates.workedFor(settledMeta.durationLabel)}</span>}
         {settledMeta?.timeLabel && (
           <Typo.Text as="time" dateTime={settledMeta.completedAtIso ?? undefined} numeric="tabular">
             {settledMeta.timeLabel}
           </Typo.Text>
         )}
       </MessageFooter>
-      {terminalStatus && !suppressTerminalStatus ? (
+      {terminalStatus && !suppressTerminalStatus && !(bubble && terminalStatus.state === "complete") ? (
         <MessageStatusRow dataTestClass="assistant-terminal-status-row">
           <AssistantStatusLabel
             label={terminalStatus.label}
