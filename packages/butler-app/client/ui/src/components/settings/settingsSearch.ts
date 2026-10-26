@@ -3,7 +3,7 @@ import type { SettingsCopy, SettingsSectionDescriptor, SettingsSectionGroupDescr
 /** A moved setting's labels belong to its current page, including older search aliases. */
 export function settingsSearchAliases(copy: SettingsCopy, id: SettingsSectionDescriptor["id"]): string[] {
   const assigned: Partial<Record<SettingsSectionDescriptor["id"], string[]>> = {
-    memory: [copy.pageSections.memoryCleanup, copy.fields.consolidationTime, copy.fields.consolidationModel],
+    memory: [copy.pageSections.noticedPatterns, copy.memory.proactiveLevel, copy.memory.quietHours, copy.pageSections.memoryCleanup, copy.fields.consolidationTime, copy.fields.consolidationModel],
   };
   const inherited = copy.sectionAliases[id].filter((alias) => !Object.entries(assigned).some(([owner, labels]) =>
     owner !== id && labels.some((label) => normalizeSettingsSearchValue(label) === normalizeSettingsSearchValue(alias))));

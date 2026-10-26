@@ -19,6 +19,7 @@ pub(in crate::host) struct CyclePhases {
     pub(in crate::host) briefing_at: chrono::DateTime<chrono::Utc>,
     pub(in crate::host) metrics: Arc<CycleMetrics>,
     pub(in crate::host) briefing: Arc<BriefingGeneration>,
+    pub(in crate::host) patterns: Arc<butler_memory::cognition::PatternExtractionService>,
     pub(in crate::host) profile: Arc<ProfileConsolidation>,
     pub(in crate::host) legacy_metadata: Arc<LegacyMetadataIntegrityService>,
     pub(in crate::host) knowhow: Arc<KnowHowService>,
@@ -59,7 +60,11 @@ impl PhaseExecutor for CyclePhases {
                         })
                     })
                     .map_err(cognition_phase_error),
-                Phase::KnowhowRevision => Ok(butler_core::json::json_object!({"deferred":true})),
+                Phase::PatternExtraction => self
+                    .patterns
+                    .extract(run_id, self.briefing_at, cancellation)
+                    .await
+                    .map_err(|e| PhaseError::new(e.code(), e.code()).with_source(e)),
                 Phase::MemoryHealth => self
                     .health
                     .read()

@@ -26,6 +26,7 @@ pub(super) fn prepare(
     if !validation::is_request(input) {
         return Err(invalid_settings());
     }
+    super::proactive::validate_window(input, current)?;
     let mut patch = patch::sanitize(input, facts)?;
     onboarding::merge_into_patch(&mut patch, input, current)?;
     let workspace_root = input
@@ -109,6 +110,10 @@ pub(super) fn event_payload(projection: &Value) -> Map<String, Value> {
         "recall_judge_model",
         "consolidation_model",
         "consolidation_time",
+        "proactive_level",
+        "quiet_hours_start",
+        "quiet_hours_end",
+        "chats_intro_seen",
         "consolidation_reasoning_effort",
         "effective_consolidation_model",
         "context_window_tokens",

@@ -113,6 +113,8 @@ async fn profile_reply(axum::Json(request): axum::Json<Value>) -> axum::response
         .filter_map(|message| message["content"].as_str())
         .find_map(|text| serde_json::from_str::<Value>(text).ok());
     let text = match prompt.as_ref() {
+        Some(value) if value["task"] == "pattern_extraction" => json!({"updates":[]}).to_string(),
+        Some(value) if value["task"] == "pattern_proposal" => json!({"candidates":[]}).to_string(),
         Some(value) if value["task"] == "extract_profile_candidates" => {
             let observations = value["observations"].as_array().unwrap();
             let references: Vec<Value> = observations
