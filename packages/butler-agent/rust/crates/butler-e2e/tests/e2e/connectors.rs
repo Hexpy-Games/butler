@@ -12,6 +12,7 @@ mod review_access;
 mod review_secrets;
 mod review_transport;
 mod round_three_browser;
+mod round_three_memory;
 mod round_three_steering;
 mod round_three_work;
 mod round_three_worker;

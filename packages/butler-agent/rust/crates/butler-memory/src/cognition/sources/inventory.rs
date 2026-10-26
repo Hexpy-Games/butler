@@ -295,6 +295,7 @@ fn origin(value: ConversationOriginKind) -> &'static str {
         ConversationOriginKind::UserInput => "user_input",
         ConversationOriginKind::AssistantPublic => "assistant_public",
         ConversationOriginKind::InternalControl => "internal_control",
+        ConversationOriginKind::Connector => "connector",
         ConversationOriginKind::Unknown => "unknown",
     }
 }
