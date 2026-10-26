@@ -8,9 +8,29 @@ editor engine (Lexical in the app) and renders it into the page.
 
 | Export | Props |
 | --- | --- |
-| `DocumentEditor` | `title` (null inside a Dialog whose header shows it: no empty title row), `note` (the status line), `actions`, `children` (the editable root), `formatBar` |
+| `DocumentEditor` | `title` (null inside a Dialog whose header shows it: no empty title row), `note` (the status line), `actions`, `menuActions`, `menuLabel`, `menuRef`, `controls`, `children` (the editable root), `formatBar` |
 | `documentEditorClasses` | Class names for the engine's nodes: `root`, `bold`, `italic`, `blockEmbed` |
 | `DocumentBlockEmbed` | A block in the text (`selected` outlines it): not editable as text, one unit |
+
+## Title line
+The title and the actions share one line, one control tall:
+`--control-height-md`, rising to `--control-hit-target` wherever controls grow
+to the touch target (a phone width or a coarse pointer, as IconButton does).
+The title is centred on that line with the actions, at every width; a title
+role taller than a control grows the line and the actions stay centred on it.
+The status line (`note`) is a second row under the title, so showing or
+hiding it never moves the title or the actions.
+
+## Narrow title line
+Pass `menuActions`, the same document actions as flat `OverflowActionMenu`
+items, with `menuLabel`. When the title line is narrower than 30rem (a
+container query on the header, not the viewport), the inline `actions` fold
+into the ⋯ menu so the title keeps the width; wider lines keep them inline
+and show no ⋯. `controls` (close) stay visible at every width, and a back
+control belongs in `title` before the heading. An item that opens a popover
+anchors it to ⋯ through `menuRef` (a `PopoverAnchor` `virtualRef`; at 640px
+and narrower the Popover is its mobile sheet) and returns focus to the ⋯
+trigger when it closes.
 
 ## In a dialog
 Inside a Dialog whose header already shows the title and actions, pass
