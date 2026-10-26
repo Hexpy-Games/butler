@@ -8,6 +8,8 @@ pub(in crate::host::guided) use answer_blocks_stream::AnswerBlocksStream;
 mod deliver;
 mod discovery;
 mod dispatch;
+#[cfg(test)]
+pub(super) use dispatch::steward_gate::tests::assert_steward_mutation_predicate;
 mod documents;
 mod effect;
 mod execute;

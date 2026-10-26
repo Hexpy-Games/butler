@@ -36,17 +36,14 @@ export function liveDelegationStub(): { options: NativeAppServerOptions; whenHel
         if (isChild && step >= 2 && !released) await new Promise<void>(done => {
           resume = done; held = true; onHeld?.(); onHeld = undefined;
         });
-        return isChild ? "" : step >= 4 ? "Delegated work started." : "";
+        return isChild ? "" : step >= 1 ? "Delegated work started." : "";
       },
       stubToolCall: request => {
         const current = steps.get(request);
         if (!current) return null;
         const { child, step } = current;
         if (!child) return [
-          { name: "start_work", arguments: { objective } },
-          { name: "replace_work_plan", arguments: plan("steward") },
-          { name: "record_work_review", arguments: review },
-          { name: "delegate_to_steward", arguments: { request: objective, safe_title: "Live progress check" } },
+          { name: "delegate_to_steward", arguments: { request: objective, checks: ["All checks recorded"], safe_title: "Live progress check" } },
         ][step] ?? null;
         if (step === 0) return { name: "replace_work_plan", arguments: plan("direct") };
         if (step === 1) return { name: "record_work_review", arguments: review };
