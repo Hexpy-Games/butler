@@ -108,8 +108,8 @@ async fn review_special_use_extended_list_and_unknown_roles_fail_closed() -> Res
         &rfc822("source", "Source", "owner@example.test", "Body", ""),
     );
     let before = format!("{:?}", fake.snapshot());
-    for extended_only in [true, false] {
-        fake.special_use(false, extended_only);
+    {
+        fake.special_use(false, true);
         let destinations = direct.read("connector://destinations").await?;
         assert!(
             destinations["destinations"]
@@ -170,5 +170,52 @@ async fn review_archive_declares_relocation_so_read_happens_first() -> Result<()
         "archive ran before mark_read"
     );
     assert!(fake.snapshot()["INBOX"].is_empty());
+    s.finish().await
+}
+
+#[tokio::test]
+async fn review_list_attributes_without_capability_establish_roles() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let fake = FakeImap::start().await?;
+    fake.special_use(false, false);
+    let s = setup("MAIL-LIST-ROLES")?.start().await?;
+    let direct = Direct::open(&s, &fake, "list-roles", "password").await?;
+    let raw = rfc822(
+        "list-roles",
+        "Attribute roles",
+        "owner@example.test",
+        "Complete body",
+        "",
+    );
+    let uid = fake.deliver("INBOX", &raw);
+    let result = direct
+        .call(
+            "move",
+            json!({"event_id":id("INBOX",1,uid),"destination":"Filed"}),
+        )
+        .await?;
+    assert_ne!(result["isError"], true, "{result}");
+    let destinations = direct.read("connector://destinations").await?;
+    assert!(
+        destinations["destinations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|d| d["roles_known"] == true)
+    );
+    let snapshot = fake.snapshot();
+    assert!(snapshot["INBOX"].is_empty());
+    assert_eq!(snapshot["Filed"].len(), 1);
+    assert_eq!(snapshot["Filed"][0].raw, raw);
+    for destination in ["Bin", "Spam", "All"] {
+        let result = direct.call("move", json!({"event_id":id("Filed",1,snapshot["Filed"][0].uid),"destination":destination})).await?;
+        assert!(
+            result.to_string().contains("mail_destination_refused"),
+            "{result}"
+        );
+        assert_eq!(format!("{:?}", fake.snapshot()), format!("{snapshot:?}"));
+    }
+    fake.assert_no_forbidden_destinations();
+    direct.close("password").await?;
     s.finish().await
 }

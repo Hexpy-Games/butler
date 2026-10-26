@@ -67,7 +67,8 @@ async fn review_plain_folders_allow_move_source_and_keyword_label() -> Result<()
 async fn review_host_refuses_destinations_without_special_use() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let fake = FakeImap::start().await?;
-    fake.special_use(false, false);
+    // Unknown roles require neither the capability nor special-use attributes.
+    fake.special_use(false, true);
     let setup = setup("MAIL-HOST-UNKNOWN-ROLES")?;
     let root = package(&setup.sandbox.home)?;
     let s = setup.start().await?;

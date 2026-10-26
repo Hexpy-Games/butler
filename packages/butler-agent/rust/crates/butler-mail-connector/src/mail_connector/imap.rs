@@ -45,6 +45,24 @@ pub(super) async fn destinations(connection: &mut Connection) -> Result<Vec<Valu
         .try_collect()
         .await
         .map_err(|_| "mail_list_failed")?;
+    // Some servers include RFC 6154 attributes in ordinary LIST responses
+    // without advertising SPECIAL-USE. Only protocol attributes establish roles.
+    let roles_known = roles_known
+        || names.iter().any(|name| {
+            name.attributes().iter().any(|attr| {
+                use async_imap::types::NameAttribute;
+                matches!(
+                    attr,
+                    NameAttribute::All
+                        | NameAttribute::Archive
+                        | NameAttribute::Drafts
+                        | NameAttribute::Flagged
+                        | NameAttribute::Junk
+                        | NameAttribute::Sent
+                        | NameAttribute::Trash
+                )
+            })
+        });
     Ok(names
         .iter()
         .map(|name| {
