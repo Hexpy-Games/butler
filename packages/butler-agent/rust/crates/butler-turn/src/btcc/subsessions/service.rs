@@ -3,7 +3,12 @@
 mod control;
 mod delegation;
 mod followup;
+#[cfg(feature = "e2e-fixtures")]
+mod handoff_hold;
 mod helpers;
+mod one_call;
+mod project_handoff;
+mod project_settlement;
 mod projection;
 mod result_delivery;
 mod selection;
@@ -218,6 +223,7 @@ impl SubsessionService {
             ExecutionMode::Steward,
             BtccCode::StewardDelegationPlanModeRequired,
         )?;
+        let accepted = (plan, Some(review));
         let parent_chat_id = parent
             .transport_bindings
             .iter()
@@ -225,7 +231,7 @@ impl SubsessionService {
             .map(|binding| binding.peer_id.clone())
             .ok_or_else(|| error(BtccCode::ParentAppBindingRequired))?;
         request.model_ref = self.profiles.background_model(request.model_ref).await?;
-        let identity = packets::steward_identity(&request, reviewed, (plan, review));
+        let identity = packets::steward_identity(&request, reviewed, accepted);
         let delegation_id = delegation::delegation_id(&delegation::STEWARD, &identity)?;
         if let Some(existing) = self.replay_existing(&delegation_id).await? {
             if self
@@ -241,7 +247,7 @@ impl SubsessionService {
         }
         let ids = delegation::DelegationIds::derive(&delegation::STEWARD, delegation_id);
         let now = (self.now)();
-        let mut packet = packets::steward(&ids, &request, parent_chat_id, reviewed, (plan, review));
+        let mut packet = packets::steward(&ids, &request, parent_chat_id, reviewed, accepted);
         packet.prior_context = self.followup_context(&request).await?;
         let envelope = child_envelope(ChildEnvelopeInput {
             role: "steward",

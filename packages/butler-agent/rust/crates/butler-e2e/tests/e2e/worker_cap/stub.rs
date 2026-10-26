@@ -239,12 +239,9 @@ async fn reply(
 fn parent(step: usize, group: &str) -> Value {
     let objective = format!("Verify batch {group}");
     match step {
-        0 => call("start_work", json!({"objective":objective})),
-        1 => call("replace_work_plan", plan(&objective, "steward", 1)),
-        2 => call("record_work_review", review()),
-        3 => call(
+        0 => call(
             "delegate_to_steward",
-            json!({"request":objective,"safe_title":objective}),
+            json!({"request":objective,"checks":["Evidence verified"],"safe_title":objective}),
         ),
         _ => message("Verification delegated."),
     }

@@ -57,6 +57,19 @@ Use `MessageTurnGroup` for chronological transcript rows (including delegated
 work): its `Stack gap="lg"` replaces individual row padding with the same 16px
 gap. See "Running activity", "Completed activity" and "Completed turns".
 
+Bubble rows (대화 / Chats only): pass `bubble` with `role="assistant"`. The
+row aligns left; `MessageBubble` holds the answer text with the user bubble's
+shape, padding, fill (`--user-message-bg`) and max width (`min(440px, 68%)`).
+One answer is one bubble. `MessageBubbleAttachments` holds files, answer
+blocks and panels under it: they align to the bubble's left edge and are no
+wider than its max width. A panel that keeps its own width (the background-work
+card) is a direct body child instead. The footer (copy, time) follows; the
+completed status row is not shown in 대화. Work sessions keep the full-width
+answer layout.
+
+User and Butler bubbles, and the document and in-chat cards around them, use
+`--radius-popover` (12px).
+
 The optional `footer` slot renders metadata outside the message bubble. User
 messages use this slot for their sent date/time and full-text copy action.
 Long user text is folded by the conversation container at five rendered lines;

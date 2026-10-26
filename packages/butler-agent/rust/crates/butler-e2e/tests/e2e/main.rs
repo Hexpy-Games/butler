@@ -64,6 +64,7 @@ mod chatgpt_plan_usage;
 mod chatgpt_session;
 mod chatgpt_sign_in;
 mod chatgpt_wire;
+mod chats_replies;
 mod cli_launcher;
 mod cli_remote;
 mod cli_reply_language;
@@ -297,3 +298,4 @@ mod work_model_schema;
 mod worker_cap;
 
 mod canon_link;
+mod one_call_delegation;

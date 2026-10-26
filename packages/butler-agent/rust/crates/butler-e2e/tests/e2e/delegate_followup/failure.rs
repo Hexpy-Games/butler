@@ -130,7 +130,7 @@ async fn wait_blocked(s: &Scenario, relation: &str) -> Result<Value, HarnessErro
 }
 
 #[tokio::test]
-async fn duplicate_assignment_returns_the_running_relation() -> Result<(), HarnessError> {
+async fn replayed_tool_call_keeps_one_running_relation() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (url, script, server) = stub::start(true).await?;
     script.duplicate.store(true, Ordering::SeqCst);
@@ -155,19 +155,10 @@ async fn duplicate_assignment_returns_the_running_relation() -> Result<(), Harne
                 .collect::<Result<Vec<_>, _>>()
                 .unwrap()
         };
-        if rows.len() == 2 {
+        if rows.len() == 1 {
             let first: Value = serde_json::from_str(&rows[0])?;
-            let second: Value = serde_json::from_str(&rows[1])?;
             assert_eq!(first["ok"], true);
-            assert_eq!(second["ok"], false);
-            assert_eq!(second["error"]["code"], "already_delegated");
-            assert_eq!(first["relation_id"], second["relation_id"]);
-            assert!(
-                second["error"]["message"]
-                    .as_str()
-                    .unwrap()
-                    .contains("steer_steward")
-            );
+            assert!(first["relation_id"].is_string());
             assert_eq!(children(&s).await?.len(), 1);
             break;
         }
