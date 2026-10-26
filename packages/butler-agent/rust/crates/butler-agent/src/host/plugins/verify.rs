@@ -21,14 +21,6 @@ pub(super) fn files(root: &Path, records: &[FileRecord], hashes: bool) -> Result
 impl Plugins {
     pub(super) fn verify(&self, id: &str, entrypoints: &[String], hook: bool) -> Result<Installed> {
         let _mutation = self.mutation.lock();
-        self.verify_locked(id, entrypoints, hook)
-    }
-    pub(super) fn verify_locked(
-        &self,
-        id: &str,
-        entrypoints: &[String],
-        hook: bool,
-    ) -> Result<Installed> {
         let mut state = self.state.lock().clone();
         if self.safe_mode {
             return Err(error("plugin_safe_mode"));

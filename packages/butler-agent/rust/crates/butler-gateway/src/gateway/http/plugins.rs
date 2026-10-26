@@ -29,12 +29,7 @@ pub(super) async fn route(
             .execute(action.clone(), id, input)
             .await
             .map_err(|e| failure(&e))?;
-        if action != "inspect"
-            && action != "registry_list"
-            && (action != "check"
-                || result["applied"] == true
-                || result["status"] == "needs_review")
-        {
+        if action != "inspect" {
             state
                 .application
                 .publish_gateway_event(
@@ -58,9 +53,6 @@ async fn command(
     uri: &Uri,
     request: Request<Body>,
 ) -> Result<(String, Option<String>, Value), HttpError> {
-    if uri.path().starts_with("/plugin-registries") {
-        return registry_command(method, uri, request).await;
-    }
     let path = uri
         .path()
         .strip_prefix("/plugins/")
@@ -90,10 +82,7 @@ async fn command(
         (path, None)
     } else {
         let (id, action) = path.split_once('/').ok_or_else(HttpError::invalid_json)?;
-        if !matches!(
-            action,
-            "enable" | "disable" | "check" | "update" | "rollback"
-        ) {
+        if !matches!(action, "enable" | "disable") {
             return Err(HttpError::invalid_json());
         }
         (action, Some(id.to_owned()))
@@ -104,48 +93,4 @@ async fn command(
 }
 fn failure(e: &butler_core::plugins::PluginError) -> HttpError {
     HttpError::public(e.status, e.code, e.code)
-}
-
-async fn registry_command(
-    method: Method,
-    uri: &Uri,
-    request: Request<Body>,
-) -> Result<(String, Option<String>, Value), HttpError> {
-    let path = uri
-        .path()
-        .strip_prefix("/plugin-registries")
-        .ok_or_else(HttpError::invalid_json)?;
-    if method == Method::GET && path.is_empty() {
-        return Ok(("registry_list".into(), None, value!({})));
-    }
-    if method == Method::DELETE {
-        let id = path
-            .strip_prefix('/')
-            .filter(|p| !p.contains('/'))
-            .ok_or_else(HttpError::invalid_json)?;
-        let revision = url::form_urlencoded::parse(uri.query().unwrap_or_default().as_bytes())
-            .find(|(k, _)| k == "revision")
-            .and_then(|(_, v)| v.parse::<u64>().ok());
-        return Ok((
-            "registry_delete".into(),
-            Some(id.into()),
-            value!({"revision":revision}),
-        ));
-    }
-    if method != Method::POST {
-        return Err(HttpError::invalid_json());
-    }
-    let (action, id) = if path.is_empty() {
-        ("registry_add", None)
-    } else {
-        let id = path
-            .strip_prefix('/')
-            .and_then(|p| p.strip_suffix("/refresh"))
-            .filter(|p| !p.contains('/'))
-            .ok_or_else(HttpError::invalid_json)?;
-        ("registry_refresh", Some(id.to_owned()))
-    };
-    let bytes = read_body_with_limit(request.into_body(), super::MAX_REQUEST_BODY_SIZE).await?;
-    let input = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
-    Ok((action.into(), id, input))
 }

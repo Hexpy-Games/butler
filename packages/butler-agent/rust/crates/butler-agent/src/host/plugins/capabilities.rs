@@ -67,7 +67,6 @@ pub(crate) fn derive_capabilities(manifest: &Package) -> Result<CapabilitySet> {
         matcher.sort();
         matcher.dedup();
         caps.hooks.insert(HookCapability {
-            canonical: canonical_hook(hook)?,
             event: serde_json::to_value(hook.event)
                 .ok()
                 .and_then(|v| v.as_str().map(str::to_owned))
@@ -162,10 +161,4 @@ fn exact_package(package: &str) -> Result<()> {
         return Err(error("plugin_runtime_package_unpinned"));
     }
     Ok(())
-}
-
-fn canonical_hook(hook: &butler_core::hooks::HookDefinition) -> Result<String> {
-    let mut value = serde_json::to_value(hook).map_err(|_| error("plugin_hooks_invalid"))?;
-    value.sort_all_objects();
-    Ok(value.to_string())
 }

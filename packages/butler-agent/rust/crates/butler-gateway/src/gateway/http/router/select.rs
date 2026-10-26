@@ -15,10 +15,7 @@ pub(super) fn handler(request: &Request<Body>) -> Option<Handler> {
         (path.starts_with("/outputs/"), Handler::Output),
         (family(path, "/security"), Handler::Security),
         (family(path, "/hooks"), Handler::Hooks),
-        (
-            family(path, "/plugins") || family(path, "/plugin-registries"),
-            Handler::Plugins,
-        ),
+        (family(path, "/plugins"), Handler::Plugins),
     ]
     .into_iter()
     .find_map(|(matches, handler)| matches.then_some(handler));

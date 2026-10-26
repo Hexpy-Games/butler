@@ -10,41 +10,6 @@ pub(super) fn clear_staging(root: &Path) -> Result<()> {
     }
     Ok(())
 }
-/// Reclaim abandoned snapshots once at startup, when no operation holds a lease.
-pub(super) fn recover(root: &Path, registry: &Registry) -> Result<()> {
-    butler_platform::plugin_files::remove(&root.join("work"))
-        .map_err(|_| error("plugin_staging_cleanup_failed"))?;
-    let mut stores = std::collections::BTreeSet::new();
-    let mut stages = std::collections::BTreeSet::new();
-    for plugin in registry.plugins.values() {
-        stores.insert(plugin.approval.content_digest.as_str());
-        if let Some(previous) = &plugin.previous {
-            stores.insert(previous.approval.content_digest.as_str());
-        }
-        if let Some(pending) = &plugin.pending_inspection {
-            stages.insert(pending.staging_id.as_str());
-        }
-    }
-    for (directory, retained) in [("store", stores), ("staging", stages)] {
-        let entries = match fs::read_dir(root.join(directory)) {
-            Ok(entries) => entries,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(_) => return Err(error("plugin_store_cleanup_failed")),
-        };
-        for entry in entries {
-            let entry = entry.map_err(|_| error("plugin_store_cleanup_failed"))?;
-            if !entry
-                .file_name()
-                .to_str()
-                .is_some_and(|name| retained.contains(name))
-            {
-                butler_platform::plugin_files::remove(&entry.path())
-                    .map_err(|_| error("plugin_store_cleanup_failed"))?;
-            }
-        }
-    }
-    Ok(())
-}
 pub(super) fn key(id: &str, field: &str) -> Result<SecretKey> {
     SecretKey::new(
         "io.github.hexpy-games.butler.plugins",
@@ -52,7 +17,7 @@ pub(super) fn key(id: &str, field: &str) -> Result<SecretKey> {
     )
     .map_err(|_| error("plugin_secret_key_invalid"))
 }
-pub(super) fn revision(state: &State, input: &Value) -> Result<()> {
+fn revision(state: &State, input: &Value) -> Result<()> {
     if input.get("revision").and_then(Value::as_u64) != Some(state.registry.revision) {
         return Err(butler_core::plugins::PluginError {
             status: 409,
@@ -61,7 +26,7 @@ pub(super) fn revision(state: &State, input: &Value) -> Result<()> {
     }
     Ok(())
 }
-pub(super) fn id(input: Option<&str>) -> Result<&str> {
+fn id(input: Option<&str>) -> Result<&str> {
     input
         .filter(|s| super::manifest::valid_id(s))
         .ok_or_else(|| error("plugin_id_invalid"))
@@ -94,16 +59,27 @@ impl Plugins {
             return Err(error("plugin_already_installed"));
         }
         let stage = self.root.join("staging").join(staging_id);
-        let mut files = inspect::inventory(&stage, inspect::Limits::default())?;
-        if inspection.pin.is_some() {
-            super::sources::restore_modes(&mut files, &inspection.files);
-        }
+        let files = inspect::inventory(&stage, inspect::Limits::default())?;
         if inspect::digest(&files) != inspection.digest {
             return Err(error("plugin_digest_mismatch"));
         }
         inspection.files = files;
         let caps = super::capabilities::derive_capabilities(&inspection.package)?;
-        let values = install_secrets(input, &caps)?;
+        let values = input
+            .get("secrets")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        if values
+            .keys()
+            .any(|k| !caps.secrets.iter().any(|f| &f.key == k))
+            || caps
+                .secrets
+                .iter()
+                .any(|f| values.get(&f.key).and_then(Value::as_str).is_none())
+        {
+            return Err(error("plugin_secret_fields_invalid"));
+        }
         let store = self.root.join("store").join(&inspection.digest);
         fs::create_dir_all(self.root.join("store")).map_err(|_| error("plugin_store_failed"))?;
         if store.exists() {
@@ -130,20 +106,13 @@ impl Plugins {
             return Err(e);
         }
         state.registry = next;
-        if let Some(pin) = &inspection.pin {
-            super::sources::track(
-                &mut state.source_users,
-                &pin.git,
-                &format!("plugin:{}", inspection.package.name),
-                true,
-            );
-        }
         *self.state.lock() = state.clone();
         state.staging.remove(staging_id);
         *self.state.lock() = state.clone();
+        clear_staging(&self.root)?;
         Ok(json!({"id":inspection.package.name,"revision":state.registry.revision}))
     }
-    pub(super) fn store_secrets(
+    fn store_secrets(
         &self,
         id: &str,
         values: &serde_json::Map<String, Value>,
@@ -179,10 +148,7 @@ impl Plugins {
         }
         Ok(saved)
     }
-    pub(super) fn restore_secrets(
-        &self,
-        saved: &[(SecretKey, Option<butler_platform::secrets::SecretText>)],
-    ) {
+    fn restore_secrets(&self, saved: &[(SecretKey, Option<butler_platform::secrets::SecretText>)]) {
         for (key, value) in saved {
             match value {
                 Some(v) => {
@@ -242,8 +208,6 @@ impl Plugins {
                 .join(&plugin.approval.content_digest),
         )
         .map_err(|_| error("plugin_store_cleanup_failed"))?;
-        self.cleanup_removed(&mut state, &plugin)?;
-        *self.state.lock() = state.clone();
         if input.get("data") == Some(&Value::Bool(true)) {
             let data = self.root.join("data").join(id);
             if data.exists() {
@@ -259,44 +223,31 @@ impl Plugins {
     }
 }
 
-pub(super) fn approved(inspection: &Inspection, caps: CapabilitySet) -> Installed {
+fn approved(inspection: &Inspection, caps: CapabilitySet) -> Installed {
     let approval = Approval {
         content_digest: inspection.digest.clone(),
         capabilities: caps,
-        hook_hashes: super::coverage::hook_hashes(inspection),
+        hook_hashes: inspection
+            .files
+            .iter()
+            .filter(|f| {
+                inspection.package.hooks.iter().any(|h| {
+                    h.args
+                        .iter()
+                        .flatten()
+                        .any(|arg| arg == &format!("${{BUTLER_PLUGIN_ROOT}}/{}", f.path))
+                })
+            })
+            .map(|f| (f.path.clone(), f.hash.clone()))
+            .collect(),
         approved_at: chrono::Utc::now().to_rfc3339(),
     };
     Installed {
         package: std::sync::Arc::new(inspection.package.clone()),
         source: inspection.source.clone(),
-        source_kind: source_kind(inspection.pin.as_ref()).into(),
         approval: std::sync::Arc::new(approval),
         files: std::sync::Arc::new(inspection.files.clone()),
         enabled: true,
         quarantine: None,
-        pin: inspection.pin.clone(),
-        listed_in: inspection.listed_in.clone(),
-        previous: None,
-        pending: None,
-        pending_inspection: None,
     }
-}
-
-fn install_secrets(input: &Value, caps: &CapabilitySet) -> Result<serde_json::Map<String, Value>> {
-    let values = input
-        .get("secrets")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    if values
-        .keys()
-        .any(|k| !caps.secrets.iter().any(|f| &f.key == k))
-        || caps
-            .secrets
-            .iter()
-            .any(|f| values.get(&f.key).and_then(Value::as_str).is_none())
-    {
-        return Err(error("plugin_secret_fields_invalid"));
-    }
-    Ok(values)
 }
