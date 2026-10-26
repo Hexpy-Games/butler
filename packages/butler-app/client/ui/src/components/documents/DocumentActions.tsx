@@ -38,7 +38,12 @@ export function useDocumentActions({ chatId, historyOpen, setHistoryOpen, prepar
       const trigger = menuButton();
       const closingMenu = event.target instanceof Element ? event.target.closest('[role="menu"][data-state="closed"]') : null;
       if (fromMenu.current && (event.target === trigger || (trigger && closingMenu?.getAttribute("aria-labelledby") === trigger.id))) event.preventDefault();
-    }} onCloseAutoFocus={() => { if (fromMenu.current) menuButton()?.focus(); }}>
+    }} onCloseAutoFocus={event => {
+      // Focus returns after the exit animation; by then the user may have moved on (opened ⋯, clicked the text).
+      const active = document.activeElement;
+      if (active && active !== document.body && !(event.target instanceof Node && event.target.contains(active))) { event.preventDefault(); return; }
+      if (fromMenu.current) menuButton()?.focus();
+    }}>
       {children}
     </PopoverContent>
   </Popover>;
