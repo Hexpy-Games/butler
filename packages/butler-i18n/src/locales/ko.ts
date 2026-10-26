@@ -1273,6 +1273,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     recommended: "권장",
   },
   automations: {
+    modelDefaultDescription: "대상 대화의 모델을 따릅니다.",
 
     saved: "예약 작업 저장됨", frequency: "주기", time: "시간", weekday: "요일",
     interval: "간격", daily: "매일", weekdays: "평일", weekly: "매주", once: "한 번",

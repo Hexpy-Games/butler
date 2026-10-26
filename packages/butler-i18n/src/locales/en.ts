@@ -1268,6 +1268,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     recommended: "Recommended",
   },
   automations: {
+    modelDefaultDescription: "Follows the target chat's model.",
 
     saved: "Schedule saved", frequency: "Frequency", time: "Time", weekday: "Day",
     interval: "Interval", daily: "Daily", weekdays: "Weekdays", weekly: "Weekly", once: "Once",

@@ -98,6 +98,8 @@ pub struct AutomationRunSummary {
     pub state: String,
     pub trigger: String,
     pub started_at: String,
+    pub scheduled_at: Option<String>,
+    pub late: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub completed_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

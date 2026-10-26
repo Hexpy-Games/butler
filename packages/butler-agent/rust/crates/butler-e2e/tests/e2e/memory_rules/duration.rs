@@ -274,18 +274,16 @@ async fn daily(s: &mut Scenario) -> Result<(), HarnessError> {
         "BUTLER_E2E_APP_NOW",
         later.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
     );
-    for job in ["session-sync", "consolidation-cycle"] {
-        let path = s.sandbox.data.join(format!("state/scheduler/{job}.json"));
-        if path.exists() {
-            std::fs::remove_file(path)?;
-        }
-    }
     s.gw = s.agent.start_again().await?;
     let marker = s
         .sandbox
         .data
         .join("state/scheduler/consolidation-cycle.json");
-    support::until(|| marker.exists()).await;
+    support::until(|| {
+        support::read_json(&marker)
+            .is_some_and(|state| state["lastRunDate"] == later.format("%Y-%m-%d").to_string())
+    })
+    .await;
     assert_eq!(support::read_json(&marker).unwrap()["status"], "ok");
     Ok(())
 }

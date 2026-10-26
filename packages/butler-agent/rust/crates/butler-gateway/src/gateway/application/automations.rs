@@ -3,6 +3,7 @@
 mod attention;
 mod contracts;
 mod dispatch;
+mod occurrence;
 mod owner;
 mod records;
 mod scheduler;

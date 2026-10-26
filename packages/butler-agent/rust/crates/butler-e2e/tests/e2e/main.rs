@@ -84,6 +84,7 @@ mod durable_files;
 mod embed_download;
 mod error_library;
 mod favicons;
+mod feature_models;
 mod full_reset;
 mod gateway_browser;
 #[path = "gateway_pairing.rs"]
@@ -168,6 +169,7 @@ mod schedule_chat;
 mod schedule_model;
 mod schedule_sleep_wake;
 mod schedule_store;
+mod schedule_wake_catchup;
 mod schedules;
 mod search_browser;
 mod security_oauth;
