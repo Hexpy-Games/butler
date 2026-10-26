@@ -17,6 +17,11 @@ use tokio::{
     sync::Notify,
 };
 
+/// Host operation deadline. Connector processes receive this value and must
+/// finish their own upstream deadline at least 1,000 ms earlier, returning a
+/// structured error. Applies equally to tool calls and resource reads.
+const CONNECTOR_CALL_TIMEOUT_MS: u64 = 15_000;
+
 #[derive(Clone)]
 struct Handler(Arc<Notify>);
 impl ClientHandler for Handler {
@@ -86,6 +91,10 @@ impl ConnectorSession {
             environment,
         ));
         command.envs(secrets.env);
+        command.env(
+            "BUTLER_CONNECTOR_CALL_TIMEOUT_MS",
+            CONNECTOR_CALL_TIMEOUT_MS.to_string(),
+        );
         if let Some(cwd) = config.cwd {
             command.current_dir(cwd);
         }
@@ -129,12 +138,15 @@ impl ConnectorSession {
         }
     }
     pub async fn read(&self, uri: &str) -> Result<Value, &'static str> {
-        let result = self
-            .client
-            .peer()
-            .read_resource(ReadResourceRequestParams::new(uri))
-            .await
-            .map_err(|_| "connector_read_failed")?;
+        let result = tokio::time::timeout(
+            std::time::Duration::from_millis(CONNECTOR_CALL_TIMEOUT_MS),
+            self.client
+                .peer()
+                .read_resource(ReadResourceRequestParams::new(uri)),
+        )
+        .await
+        .map_err(|_| "connector_read_timeout")?
+        .map_err(|_| "connector_read_failed")?;
         let mut values = Vec::new();
         for content in result.contents {
             if let ResourceContents::TextResourceContents { text, .. } = content {
@@ -154,12 +166,15 @@ impl ConnectorSession {
         tool: &str,
         arguments: Map<String, Value>,
     ) -> Result<Value, &'static str> {
-        let result = self
-            .client
-            .peer()
-            .call_tool(CallToolRequestParams::new(tool.to_owned()).with_arguments(arguments))
-            .await
-            .map_err(|_| "connector_tool_failed")?;
+        let result = tokio::time::timeout(
+            std::time::Duration::from_millis(CONNECTOR_CALL_TIMEOUT_MS),
+            self.client
+                .peer()
+                .call_tool(CallToolRequestParams::new(tool.to_owned()).with_arguments(arguments)),
+        )
+        .await
+        .map_err(|_| "connector_tool_timeout")?
+        .map_err(|_| "connector_tool_failed")?;
         serde_json::to_value(result).map_err(|_| "connector_tool_failed")
     }
     pub async fn close(mut self) {

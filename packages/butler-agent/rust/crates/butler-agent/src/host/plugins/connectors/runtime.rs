@@ -9,7 +9,7 @@ impl Connectors {
         mut calls: mpsc::Receiver<Call>,
         cancel: CancellationToken,
     ) {
-        let (events, consumer, delivery) = self.workers(&account, &definition, &cancel);
+        let (pending, delivery) = self.workers(&account, &cancel);
         let mut exits = std::collections::VecDeque::new();
         while !cancel.is_cancelled() {
             self.status(
@@ -36,7 +36,7 @@ impl Connectors {
                             &definition,
                             &mut session,
                             &mut calls,
-                            &events,
+                            &pending,
                             &cancel,
                         )
                         .await;
@@ -65,46 +65,23 @@ impl Connectors {
         if !cancel.is_cancelled() {
             cancel.cancelled().await;
         }
-        drop(events);
         delivery.abort();
-        let _ = consumer.await;
         let _ = delivery.await;
     }
     fn workers(
         self: &Arc<Self>,
         account: &Account,
-        definition: &Connector,
         cancel: &CancellationToken,
-    ) -> (mpsc::UnboundedSender<Value>, JoinHandle<()>, JoinHandle<()>) {
-        let (events, mut intake) = mpsc::unbounded_channel();
-        let runtime = self.clone();
-        let a = account.clone();
-        let d = definition.clone();
+    ) -> (Arc<tokio::sync::Notify>, JoinHandle<()>) {
         let pending = Arc::new(tokio::sync::Notify::new());
         let wake = pending.clone();
-        let consumer = tokio::spawn(async move {
-            if let Ok(rows) = runtime.storage("unfinished", json!({"account":a.id})).await {
-                for event in rows["rows"].as_array().into_iter().flatten() {
-                    if let Err(e) = runtime.ingest(&a, &d, event.clone()).await {
-                        runtime.status(&a.id, "connected", Some(e.code));
-                    }
-                }
-                wake.notify_one();
-            }
-            while let Some(event) = intake.recv().await {
-                if let Err(e) = runtime.ingest(&a, &d, event).await {
-                    runtime.status(&a.id, "connected", Some(e.code));
-                }
-                wake.notify_one();
-            }
-        });
         let runtime = self.clone();
         let a = account.clone();
         let stop = cancel.clone();
         let delivery = tokio::spawn(async move {
-            runtime.deliver(a, pending, stop).await;
+            runtime.deliver(a, wake, stop).await;
         });
-        (events, consumer, delivery)
+        (pending, delivery)
     }
     async fn drive(
         &self,
@@ -112,7 +89,7 @@ impl Connectors {
         definition: &Connector,
         session: &mut ConnectorSession,
         calls: &mut mpsc::Receiver<Call>,
-        events: &mpsc::UnboundedSender<Value>,
+        pending: &Arc<tokio::sync::Notify>,
         cancel: &CancellationToken,
     ) -> Result<()> {
         if let Some(dest) = &definition.destinations {
@@ -123,26 +100,78 @@ impl Connectors {
             }
         }
         self.status(&account.id, "connected", None);
+        self.replay(account, definition, session).await?;
+        pending.notify_one();
         loop {
             tokio::select! {
                 ()=cancel.cancelled()=>return Ok(()),
                 value=session.changed()=> {
                     value.map_err(error)?;
-                    let value=tokio::time::timeout(Duration::from_secs(10),session.read("connector://events")).await
-                        .map_err(|_|error("connector_read_timeout"))?.map_err(error)?;
-                    let values=value["events"].as_array().ok_or_else(||error("connector_events_invalid"))?;
-                    for event in values {events.send(event.clone()).map_err(|_|error("connector_intake_closed"))?;}
+                    self.read_batch(account, definition, session).await?;
+                    pending.notify_one();
                 }
                 call=calls.recv()=> {
                     let Some(call)=call else {return Ok(())};
-                    let result=tokio::select! {
-                        ()=cancel.cancelled()=>Err(error("connector_disconnected")),
-                        r=tokio::time::timeout(Duration::from_secs(10),session.call(&call.tool,call.args))=>r.map_err(|_|error("connector_tool_timeout")).and_then(|r|r.map_err(error))
-                    };
+                    // Reconfiguration waits for this admitted operation to finish.
+                    let result=session.call(&call.tool,call.args).await.map_err(error);
                     let _=call.response.send(result);
                 }
             }
         }
+    }
+    async fn replay(
+        &self,
+        account: &Account,
+        definition: &Connector,
+        session: &ConnectorSession,
+    ) -> Result<()> {
+        let rows = self
+            .storage("unfinished", json!({"account":account.id}))
+            .await?;
+        for event in rows["rows"].as_array().into_iter().flatten() {
+            self.ingest(account, definition, event.clone(), session)
+                .await?;
+        }
+        Ok(())
+    }
+    async fn read_batch(
+        &self,
+        account: &Account,
+        definition: &Connector,
+        session: &ConnectorSession,
+    ) -> Result<()> {
+        let value = session.read("connector://events").await.map_err(error)?;
+        let cursor = value["cursor"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| error("connector_events_invalid"))?;
+        let events = value["events"]
+            .as_array()
+            .ok_or_else(|| error("connector_events_invalid"))?;
+        let connector = format!("{}/{}", account.plugin, account.connector);
+        let mut valid = Vec::new();
+        for event in events {
+            match butler_core::plugins::validate_connector_event(
+                event.clone(),
+                &connector,
+                &account.id,
+            ) {
+                Ok(event) => valid.push(event),
+                Err(e) => self.status(&account.id, "connected", Some(e.code)),
+            }
+        }
+        // The cursor and every accepted row commit together before the server
+        // is allowed to release anything. A failed ack is safe to repeat.
+        self.storage(
+            "batch",
+            json!({"account":account.id,"cursor":cursor,"events":valid}),
+        )
+        .await?;
+        let mut uri =
+            url::Url::parse("connector://events").map_err(|_| error("connector_events_invalid"))?;
+        uri.query_pairs_mut().append_pair("after", cursor);
+        session.read(uri.as_str()).await.map_err(error)?;
+        self.replay(account, definition, session).await
     }
     async fn deliver(
         &self,

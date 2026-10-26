@@ -97,5 +97,10 @@ pub(super) fn signal(
             SELECT j.value FROM app_connector_events e,json_each(e.matched_rules) j WHERE e.connector=?1 AND e.account=?2 AND e.dedupe_key=?3)",
             params![text(input,"connector")?,text(input,"account")?,text(&input["signal"],"ref")?,now]).map_err(AppStorageError::sqlite)?;
     }
+    tx.execute(
+        "UPDATE app_connector_events SET ready=1,digested_at=?2 WHERE event_id=?1",
+        params![text(input, "event_id")?, now],
+    )
+    .map_err(AppStorageError::sqlite)?;
     Ok(json!({"ok":true}))
 }

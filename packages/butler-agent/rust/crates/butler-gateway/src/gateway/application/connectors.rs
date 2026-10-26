@@ -31,6 +31,7 @@ impl ConnectorStore for Store {
             app.storage.execute(move |db|{
                 match operation.as_str() {
                     "insert"=>rows::insert(db,input,&now),
+                    "batch"=>rows::batch(db,&input,&now),
                     "ready"=>rows::ready(db,&input),
                     "pending"=>{let mut pending=rows::pending(db,&input)?;pending["now"]=now.clone().into();Ok(pending)},
                     "unfinished"=>rows::unfinished(db,&input),

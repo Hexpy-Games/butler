@@ -23,7 +23,15 @@ pub struct AccountSchema {
     pub fields: Vec<Field>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-/// The declared event transport.
+/// The declared event transport. `connector://events` returns pending `events`
+/// and an opaque string `cursor`. Reads never consume events. After atomically
+/// storing the rows and cursor, the host reads `connector://events?after=...`
+/// (URL-encoded cursor) to acknowledge through that batch; the reply is `{ok:true}`.
+/// Acknowledgement is idempotent. Servers durably retain unacknowledged events
+/// across restarts and return them again on the next read. An acknowledgement
+/// must never discard events newer than its cursor. Notifications wake reads;
+/// neither endpoint polls. `BUTLER_CONNECTOR_CALL_TIMEOUT_MS` is the host's
+/// deadline; servers end upstream operations at least 1,000 ms before it.
 pub struct Events {
     /// Plugin-relative stdio MCP server id.
     pub server: String,

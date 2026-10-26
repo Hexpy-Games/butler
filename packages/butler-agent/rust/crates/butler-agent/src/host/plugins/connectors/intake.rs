@@ -1,17 +1,16 @@
 use super::*;
+use butler_models::mcp_client::ConnectorSession;
 impl Connectors {
     pub(super) async fn ingest(
         &self,
         account: &Account,
         definition: &Connector,
         event: Value,
+        session: &ConnectorSession,
     ) -> Result<()> {
         let connector = format!("{}/{}", account.plugin, account.connector);
-        let event = butler_core::plugins::validate_connector_event(event, &connector, &account.id)?;
-        if !event["signal"].is_null() {
-            self.storage("signal", event).await?;
-            return Ok(());
-        }
+        let mut event =
+            butler_core::plugins::validate_connector_event(event, &connector, &account.id)?;
         let inserted = self.storage("insert", event.clone()).await?;
         if inserted["fresh"] != true {
             return Ok(());
@@ -19,6 +18,11 @@ impl Connectors {
         let event_id = inserted["event_id"]
             .as_str()
             .ok_or_else(|| error("connector_store_invalid"))?;
+        if !event["signal"].is_null() {
+            event["event_id"] = event_id.into();
+            self.storage("signal", event).await?;
+            return Ok(());
+        }
         let rules = self
             .storage("rules", json!({"connector":connector,"account":account.id}))
             .await?;
@@ -50,7 +54,14 @@ impl Connectors {
             .count()
             > 1;
         let results = self
-            .apply_actions(account, definition, &event, &actions, (read_only, multiple))
+            .apply_actions(
+                account,
+                definition,
+                &event,
+                &actions,
+                (read_only, multiple),
+                session,
+            )
             .await;
         let skip_rules = actions
             .iter()
@@ -72,6 +83,7 @@ impl Connectors {
         event: &Value,
         actions: &[(Value, Value)],
         (read_only, multiple): (bool, bool),
+        session: &ConnectorSession,
     ) -> Vec<Value> {
         let mut results = Vec::new();
         for (rule, action) in actions.iter().filter(|(_, a)| a["type"] == "organize") {
@@ -85,6 +97,7 @@ impl Connectors {
                     definition,
                     event["id"].as_str().unwrap_or_default(),
                     action,
+                    session,
                 )
                 .await
                 .unwrap_or_else(|e| json!({"ok":false,"code":e.code}))
@@ -99,6 +112,7 @@ impl Connectors {
         definition: &Connector,
         event_id: &str,
         action: &Value,
+        session: &ConnectorSession,
     ) -> Result<Value> {
         let tool = action["tool"]
             .as_str()
@@ -118,7 +132,11 @@ impl Connectors {
             .ok_or_else(|| error("connector_tool_invalid"))?;
         self.destination(&format!("{}/{server}", account.plugin), name, &args)
             .map_err(error)?;
-        self.call(account, tool, args).await
+        if server == definition.events.server {
+            session.call(name, args).await.map_err(error)
+        } else {
+            self.call(account, tool, args).await
+        }
     }
 }
 fn relocates(definition: &Connector, action: &Value) -> bool {

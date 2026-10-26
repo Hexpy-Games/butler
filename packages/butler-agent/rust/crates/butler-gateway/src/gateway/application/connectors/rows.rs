@@ -1,6 +1,6 @@
 use super::*;
 pub(super) fn insert(
-    db: &mut Connection,
+    db: &Connection,
     mut event: Value,
     now: &str,
 ) -> Result<Value, AppStorageError> {
@@ -117,4 +117,18 @@ pub(super) fn unfinished(db: &Connection, input: &Value) -> Result<Value, AppSto
         events.push(parse(&row.map_err(AppStorageError::sqlite)?)?);
     }
     Ok(json!({"rows":events}))
+}
+
+pub(super) fn batch(
+    db: &mut Connection,
+    input: &Value,
+    now: &str,
+) -> Result<Value, AppStorageError> {
+    let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
+    for event in input["events"].as_array().ok_or_else(invalid)? {
+        insert(&tx, event.clone(), now)?;
+    }
+    tx.execute("INSERT INTO app_connector_cursors(account,cursor) VALUES(?1,?2) ON CONFLICT(account) DO UPDATE SET cursor=excluded.cursor",params![text(input,"account")?,text(input,"cursor")?]).map_err(AppStorageError::sqlite)?;
+    tx.commit().map_err(AppStorageError::sqlite)?;
+    Ok(json!({"ok":true}))
 }
