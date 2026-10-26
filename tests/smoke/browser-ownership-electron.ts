@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { redesignApp } from "../support/browser-redesign-app";
 import { waitBrowser } from "../support/browser-agent-app";
 import { nativeAligned, togglePane } from "../support/browser-shell-acceptance";
+import { signInSite, userTabsKeepSignIn } from "../support/browser-signed-in-tabs";
 
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE; assert.ok(evidence); mkdirSync(evidence, { recursive: true });
 const app = await redesignApp(evidence);
@@ -43,6 +44,18 @@ try {
     await app.page.press("Escape");
   }
   await app.settings("en", "light", 1440);
+  // A sign-in made in a tab the user opened in a conversation lasts past that tab, in the pane and in the hub.
+  const site = signInSite();
+  try {
+    await app.call("activate", { id: first }); await app.click("Browser");
+    await app.page.clickSelector('[data-slot="titlebar-leading"] button');
+    await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-slot=browser-pane]'))"), "conversation browser pane");
+    await userTabsKeepSignIn(app, new URL(site.url), "conversation:general", '[data-slot=browser-pane] button[aria-label="New tab"]',
+      '[data-slot=browser-pane] button[aria-label^="New tab in "]:not([aria-label="New tab in My tabs"])', async () => {
+        await app.click("Browser");
+        await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-slot=browser-pane] button[aria-label^=\"New tab in \"]'))"), "hub group pills");
+      });
+  } finally { site.stop(true); }
   await app.call("activate", { id: first }); await app.click("Browser");
   await app.page.clickSelector('[data-slot="titlebar-leading"] button');
   await app.click("Bring in a tab");
