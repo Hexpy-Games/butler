@@ -339,7 +339,10 @@ impl Connectors {
                                 list.iter().any(|d| {
                                     d["id"] == id
                                         && d["roles"].as_array().is_some_and(|roles| {
-                                            !roles.iter().any(|r| r == "trash" || r == "junk")
+                                            d["roles_known"].as_bool().unwrap_or(!roles.is_empty())
+                                                && !roles.iter().any(|r| {
+                                                    r == "trash" || r == "junk" || r == "all"
+                                                })
                                         })
                                 })
                             })

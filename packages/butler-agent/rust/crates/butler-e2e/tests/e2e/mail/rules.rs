@@ -43,7 +43,7 @@ async fn ss11_model_rule_files_existing_folder_digests_and_records_returned_sign
         s.gw.approval_requests("general").await?,
         Vec::<Value>::new()
     );
-    for destination in ["Bin", "Spam"] {
+    for destination in ["Bin", "Spam", "All"] {
         let mut refused = rule();
         refused["id"] = "refused".into();
         refused["actions"][1]["arguments"]["destination"] = destination.into();
@@ -107,7 +107,7 @@ async fn ss11_model_rule_files_existing_folder_digests_and_records_returned_sign
     })
     .await?;
     let direct = direct::Direct::open(&s, &fake, &id, "mail-password").await?;
-    for destination in ["Bin", "Spam"] {
+    for destination in ["Bin", "Spam", "All"] {
         let result = direct
             .call(
                 "move",

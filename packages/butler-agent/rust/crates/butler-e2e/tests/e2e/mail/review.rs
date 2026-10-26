@@ -18,6 +18,7 @@ pub(super) async fn arrived(direct: &Direct) -> Result<Value, HarnessError> {
 
 mod ack;
 mod headers;
+mod ordinary;
 mod reconnect;
 mod relocation;
 mod timeout;

@@ -32,7 +32,8 @@ pub(super) async fn destinations(connection: &mut Connection) -> Result<Vec<Valu
         .capabilities()
         .await
         .map_err(|_| "mail_capability_failed")?;
-    let pattern = if caps.has_str("SPECIAL-USE") {
+    let roles_known = caps.has_str("SPECIAL-USE");
+    let pattern = if roles_known {
         "\"*\" RETURN (SPECIAL-USE)"
     } else {
         "\"*\""
@@ -67,7 +68,7 @@ pub(super) async fn destinations(connection: &mut Connection) -> Result<Vec<Valu
                     roles.push(role);
                 }
             }
-            json!({"id":name.name(),"name":name.name(),"roles":roles})
+            json!({"id":name.name(),"name":name.name(),"roles":roles,"roles_known":roles_known})
         })
         .collect())
 }
@@ -110,9 +111,12 @@ pub(super) fn destination<'a>(destinations: &'a [Value], id: &str) -> Result<&'a
         .iter()
         .find(|d| d["id"] == id)
         .ok_or("mail_destination_missing")?;
-    if found["roles"]
-        .as_array()
-        .is_none_or(|roles| roles.is_empty() || roles.iter().any(|r| r == "trash" || r == "junk"))
+    if found["roles_known"] != true
+        || found["roles"].as_array().is_none_or(|roles| {
+            roles
+                .iter()
+                .any(|r| r == "trash" || r == "junk" || r == "all")
+        })
     {
         return Err("mail_destination_refused");
     }
@@ -132,15 +136,16 @@ pub(super) fn role(destinations: &[Value], role: &str) -> Result<String> {
 }
 
 pub(super) fn source(destinations: &[Value], id: &str) -> Result<()> {
-    let roles = destinations
+    let found = destinations
         .iter()
         .find(|d| d["id"] == id)
-        .and_then(|d| d["roles"].as_array())
         .ok_or("mail_source_refused")?;
-    if roles.is_empty()
-        || roles
-            .iter()
-            .any(|r| r == "all" || r == "trash" || r == "junk")
+    if found["roles_known"] != true
+        || found["roles"].as_array().is_none_or(|roles| {
+            roles
+                .iter()
+                .any(|r| r == "all" || r == "trash" || r == "junk")
+        })
     {
         return Err("mail_source_refused");
     }

@@ -83,7 +83,7 @@ impl FakeImap {
         };
         for (name, roles) in [
             ("INBOX", vec![]),
-            ("Filed", vec!["\\Flagged"]),
+            ("Filed", vec![]),
             ("All", vec!["\\All"]),
             ("Unknown", vec![]),
             ("Archive", vec!["\\Archive"]),

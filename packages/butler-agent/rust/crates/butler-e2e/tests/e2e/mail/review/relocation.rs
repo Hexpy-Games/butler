@@ -1,16 +1,17 @@
 use super::*;
 #[tokio::test]
-async fn review_relocation_refuses_protected_unknown_and_stale_sources() -> Result<(), HarnessError>
-{
+async fn review_relocation_refuses_protected_destinations_sources_and_stale_sources()
+-> Result<(), HarnessError> {
     butler_e2e::gate!();
     let fake = FakeImap::start().await?;
     let s = setup("MAIL-SOURCES")?.start().await?;
     let direct = Direct::open(&s, &fake, "sources", "password").await?;
-    for source in ["All", "Bin", "Spam", "Unknown"] {
+    for source in ["All", "Bin", "Spam"] {
         let uid = fake.deliver(
             source,
             &rfc822(source, source, "owner@example.test", "Body", ""),
         );
+        let before = format!("{:?}", fake.snapshot());
         for (moves, uidplus) in [(true, true), (false, true)] {
             fake.capabilities(moves, uidplus);
             for action in ["move", "archive"] {
@@ -24,8 +25,29 @@ async fn review_relocation_refuses_protected_unknown_and_stale_sources() -> Resu
                     result.to_string().contains("mail_source_refused"),
                     "{source} {action}: {result}"
                 );
-                assert_eq!(fake.snapshot()[source].len(), 1);
+                assert_eq!(format!("{:?}", fake.snapshot()), before);
             }
+        }
+    }
+    let uid = fake.deliver(
+        "INBOX",
+        &rfc822("safe", "Safe", "owner@example.test", "Body", ""),
+    );
+    let before = format!("{:?}", fake.snapshot());
+    for (moves, uidplus) in [(true, true), (false, true)] {
+        fake.capabilities(moves, uidplus);
+        for destination in ["All", "Bin", "Spam"] {
+            let result = direct
+                .call(
+                    "move",
+                    json!({"event_id":id("INBOX",1,uid),"destination":destination}),
+                )
+                .await?;
+            assert!(
+                result.to_string().contains("mail_destination_refused"),
+                "{result}"
+            );
+            assert_eq!(format!("{:?}", fake.snapshot()), before);
         }
     }
     let uid = fake.deliver(
@@ -77,36 +99,45 @@ async fn review_special_use_extended_list_and_unknown_roles_fail_closed() -> Res
             .iter()
             .any(|c| c.ends_with("LIST \"\" \"*\" RETURN (SPECIAL-USE)"))
     );
-    fake.special_use(false, true);
-    let uid = fake.deliver(
+    let inbox = fake.deliver(
         "INBOX",
         &rfc822("roles", "Roles", "owner@example.test", "Body", ""),
     );
-    let result = direct
-        .call(
-            "move",
-            json!({"event_id":id("INBOX",1,uid),"destination":"Bin"}),
-        )
-        .await?;
-    assert!(
-        result.to_string().contains("mail_destination_refused"),
-        "{result}"
-    );
-    let uid = fake.deliver(
-        "Filed",
+    let ordinary = fake.deliver(
+        "Unknown",
         &rfc822("source", "Source", "owner@example.test", "Body", ""),
     );
-    let result = direct
-        .call(
-            "move",
-            json!({"event_id":id("Filed",1,uid),"destination":"INBOX"}),
-        )
-        .await?;
-    assert!(
-        result.to_string().contains("mail_source_refused"),
-        "{result}"
-    );
-    assert_eq!(fake.snapshot()["Bin"].len(), 0);
+    let before = format!("{:?}", fake.snapshot());
+    for extended_only in [true, false] {
+        fake.special_use(false, extended_only);
+        let destinations = direct.read("connector://destinations").await?;
+        assert!(
+            destinations["destinations"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|d| d["roles_known"] == false)
+        );
+        for (source, uid, destination) in
+            [("INBOX", inbox, "Filed"), ("Unknown", ordinary, "INBOX")]
+        {
+            let result = direct
+                .call(
+                    "move",
+                    json!({"event_id":id(source,1,uid),"destination":destination}),
+                )
+                .await?;
+            assert!(
+                result.to_string().contains("mail_source_refused"),
+                "{result}"
+            );
+            assert_eq!(format!("{:?}", fake.snapshot()), before);
+        }
+    }
+    assert!(!fake.commands().iter().any(|c| c.contains("UID MOVE")
+        || c.contains("UID COPY")
+        || c.contains("\\Deleted")
+        || c.contains("EXPUNGE")));
     direct.close("password").await?;
     s.finish().await
 }
