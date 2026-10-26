@@ -249,6 +249,11 @@ fn failed_profile(request: &Value) -> Option<ResponseRecord> {
 }
 
 fn successful_profile(request: &Value) -> Option<ResponseRecord> {
+    if super::memory_patterns::task(request)["task"] == "pattern_extraction" {
+        return Some(butler_e2e::e2e::provider::title_response(
+            r#"{"updates":[]}"#,
+        ));
+    }
     briefing(request).or_else(|| {
         Some(butler_e2e::e2e::provider::title_response(
             r#"{"candidates":[]}"#,

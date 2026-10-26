@@ -106,7 +106,8 @@ pub use configuration::{
     LocalModelMutation, McpModelTarget, ModelConfiguration, ModelConfigurationClock,
     ModelConfigurationEnvironment, ModelConfigurationRead, ModelContextMetadataRead,
     ProviderCredentialMutation, ProviderKeyCheck, ProviderKeyCheckError, ProviderKeySaveError,
-    ResolvedImageModel, SavedProviderKey, SettingsError, generate_pkce_verifier, pkce_challenge,
+    QuietHours, ResolvedImageModel, SavedProviderKey, SettingsError, generate_pkce_verifier,
+    pkce_challenge,
 };
 pub use status::{StatusModels, auth_status_with_environment, open_status_models};
 

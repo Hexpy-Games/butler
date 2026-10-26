@@ -933,6 +933,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     failureReason: "Failure reason",
   },
   conversation: {
+    chatsIntro: "You can talk to me casually here. Anything long, I'll send as a document.",
     messageActions: {
       showMore: "Show more",
       showLess: "Show less",
@@ -1479,6 +1480,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       empty: "Nothing to show yet.",
     },
     pageSections: {
+      noticedPatterns: "What Butler noticed",
       accessibility: "Accessibility",
       instructions: "Instructions",
       chatMemory: "Chat memory",
@@ -1525,6 +1527,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       purchaseSites: "Pay without asking",
     },
     pageSectionDescriptions: {
+      noticedPatterns: "Habits Butler noticed in your chats. Delete one and Butler won't suggest it again.",
       grants: "Actions Butler runs without asking.",
       instructions: "Add or change these in chat.",
       chatMemory: "What Butler has picked up from your chats, including project chats.",
@@ -1541,6 +1544,12 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       learning: "How much Butler picks up about you from your chats.",
     },
     memory: {
+      patternsEmpty: "Nothing yet", deletePatternTitle: "Delete this?", deletePatternBody: "Butler won't suggest it again.", patternDeleted: "Deleted",
+      patternDays: n => `Last ${n} days`, patternWeeks: n => `Last ${n} weeks`, patternMonths: n => `Last ${n} months`, patternCount: n => `${n} times`,
+      proactiveLevel: "Reach out first", proactiveDescription: "How readily Butler suggests things after memory consolidation.",
+      proactiveOff: "Off", proactiveSometimes: "Sometimes", proactiveOften: "Often",
+      quietHours: "Quiet hours", quietHoursDescription: "Butler won't reach out during these hours.", quietHoursStart: "Start time", quietHoursEnd: "End time",
+
       reset: "Reset", resetChatTitle: "Reset chat memory?", resetProfileTitle: "Reset profile?", resetProjectTitle: "Reset project memory?",
       resetBody: "Butler starts remembering again with new chats. This can't be undone.",
       resetProfileBody: "If profile building is on, Butler starts over with new chats. This can't be undone.",

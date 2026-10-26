@@ -9,12 +9,23 @@ use axum::{
     response::Response,
 };
 use std::sync::Arc;
+mod patterns;
 
 pub(super) async fn route(
     state: Arc<HttpState>,
     request: axum::http::Request<Body>,
     uri: &Uri,
 ) -> Result<Response, HttpError> {
+    if uri.path().starts_with("/memory/patterns")
+        || uri.path().starts_with("/memory/pattern-proposals")
+    {
+        return execute(
+            state,
+            patterns::command(request, uri.path()).await?,
+            StatusCode::OK,
+        )
+        .await;
+    }
     let (command, status) = match (request.method(), uri.path()) {
         (&Method::GET, "/memory/consolidation") => {
             (AppMemoryCommand::Consolidation, StatusCode::OK)

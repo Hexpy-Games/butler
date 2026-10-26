@@ -10,6 +10,8 @@ pub(super) fn project(
     workspace_root: &std::path::Path,
 ) -> serde_json::Value {
     let mut output = project::project(current, patch, facts, workspace_root);
+    super::super::proactive::copy(current, &mut output);
+    super::super::proactive::copy(patch, &mut output);
     super::super::logging::project(current, patch, &mut output);
     wallpaper::project(current, patch, &mut output);
     composer_decoration::project(current, patch, &mut output);
@@ -26,6 +28,7 @@ pub(super) fn sanitize(
     facts: &super::super::AppSettingsFacts,
 ) -> Result<serde_json::Value, crate::gateway::GatewayApplicationError> {
     let mut patch = sanitize::sanitize(input, facts)?;
+    super::super::proactive::copy(input, &mut patch);
     if let Some(value) = input.get("consolidation_time") {
         patch["consolidation_time"] = value.clone();
     }

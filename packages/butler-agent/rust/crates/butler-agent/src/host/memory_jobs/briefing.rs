@@ -202,7 +202,7 @@ impl BriefingInputSource for BriefingSource {
     }
 }
 
-fn settings(
+pub(super) fn settings(
     config: &Value,
     app_settings: Option<&Value>,
     catalog: &butler_models::models::ModelCatalogSnapshot,
