@@ -1,11 +1,16 @@
 //! Consent-bound local packages. No discovery, background jobs or startup spawns.
 mod capabilities;
+mod coverage;
 mod inspect;
+mod inspection;
 mod manifest;
 mod overlay;
+mod registries;
 pub(crate) mod safe_mode;
+mod sources;
 mod storage;
 mod types;
+mod updates;
 mod verify;
 use butler_core::{
     configuration::ConfigurationWrites,
@@ -28,6 +33,10 @@ struct State {
     registry: Registry,
     staging: BTreeMap<String, Arc<Inspection>>,
     verified: BTreeSet<String>,
+    pending_stages: BTreeSet<String>,
+    checked: BTreeMap<String, (std::time::Instant, Value)>,
+    retired: BTreeMap<String, (String, std::sync::Weak<Approval>)>,
+    source_users: BTreeMap<String, BTreeSet<String>>,
 }
 pub(crate) struct Plugins {
     authority: std::sync::OnceLock<Arc<butler_turn::btcc::PrincipalAuthority>>,
@@ -54,6 +63,14 @@ impl Plugins {
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => Registry::default(),
                 Err(_) => return Err(error("plugin_registry_unreadable")),
             };
+            storage::recover(&root, &registry)?;
+            let source_users = sources::users(&registry);
+            let staging: BTreeMap<_, _> = registry
+                .plugins
+                .values()
+                .filter_map(|p| p.pending_inspection.clone())
+                .map(|i| (i.staging_id.clone(), i))
+                .collect();
             let secrets = if std::env::var(butler_platform::secrets::STORE_VARIABLE).as_deref()
                 == Ok("system")
             {
@@ -69,8 +86,12 @@ impl Plugins {
                 mutation: Mutex::new(()),
                 state: Mutex::new(State {
                     registry,
-                    staging: BTreeMap::new(),
+                    pending_stages: staging.keys().cloned().collect(),
+                    staging,
                     verified: BTreeSet::new(),
+                    checked: BTreeMap::new(),
+                    retired: BTreeMap::new(),
+                    source_users,
                 }),
                 writes,
                 secrets,
@@ -122,6 +143,8 @@ impl Plugins {
             "publisher_verified": false, "source": p.source, "enabled": p.enabled,
             "quarantine": p.quarantine, "content_digest": p.approval.content_digest,
             "capabilities": p.approval.capabilities, "compatibility": p.package.compatibility,
+            "pin":p.pin,"source_kind":p.source_kind,"listed_in":p.listed_in,"pending":p.pending,
+            "state":if p.pending.is_some(){"needs_review"}else{"installed"},
         })).collect::<Vec<_>>();
         json!({"plugins":plugins,"revision":state.registry.revision,"safe_mode":self.safe_mode})
     }
@@ -131,58 +154,6 @@ impl Plugins {
             &serde_json::to_value(registry).map_err(|_| error("plugin_registry_invalid"))?,
         )
         .map_err(|_| error("plugin_registry_write_failed"))
-    }
-    fn inspect(&self, input: &Value) -> Result<Value> {
-        let source = input
-            .get("path")
-            .and_then(Value::as_str)
-            .ok_or_else(|| error("plugin_path_required"))?;
-        if std::fs::symlink_metadata(source).is_ok_and(|m| m.is_symlink()) {
-            return Err(error("plugin_symlink_refused"));
-        }
-        let source = PathBuf::from(source)
-            .canonicalize()
-            .map_err(|_| error("plugin_path_unreadable"))?;
-        if source.starts_with(&self.root) || self.root.starts_with(&source) {
-            return Err(error("plugin_source_overlaps_storage"));
-        }
-        let _mutation = self.mutation.lock();
-        let mut state = self.state.lock().clone();
-        storage::clear_staging(&self.root)?;
-        state.staging.clear();
-        let id = uuid::Uuid::new_v4().to_string();
-        let stage = self.root.join("staging").join(&id);
-        let result = (|| {
-            let files = inspect::snapshot(&source, &stage, inspect::Limits::default())?;
-            let package = manifest::read(&stage)?;
-            let digest = inspect::digest(&files);
-            let caps = capabilities::derive_capabilities(&package)?;
-            let store = self.root.join("store").join(&digest);
-            let caps = overlay::resolve_preview(
-                caps,
-                &store,
-                &self.root.join("data").join(&package.name),
-            )?;
-            let view = json!({"staging_id":id,"source":source,"version":package.version,"id":package.name,
-                "author":package.author,"publisher_verified":false,"digest":digest,"short_digest":digest.get(..12),
-                "capabilities":caps,"compatibility":package.compatibility,"notice":"runs_with_your_permissions"});
-            state.staging.insert(
-                id.clone(),
-                Arc::new(Inspection {
-                    staging_id: id.clone(),
-                    source: source.to_string_lossy().into_owned(),
-                    digest,
-                    package,
-                    files,
-                }),
-            );
-            Ok(view)
-        })();
-        if result.is_err() {
-            let _ = std::fs::remove_dir_all(stage);
-        }
-        *self.state.lock() = state;
-        result
     }
 }
 pub(crate) struct Admin(pub Arc<Plugins>);
@@ -203,6 +174,12 @@ impl PluginPort for Admin {
             tokio::task::spawn_blocking(move || match action.as_str() {
                 "inspect" => owner.inspect(&input),
                 "install" => owner.install(&input),
+                "check" => owner.check(id.as_deref(), &input),
+                "update" => owner.update(id.as_deref(), &input),
+                "rollback" => owner.rollback(id.as_deref(), &input),
+                "registry_list" | "registry_add" | "registry_refresh" | "registry_delete" => {
+                    owner.registry_action(&action, id.as_deref(), &input)
+                }
                 "enable" | "disable" => owner.toggle(id.as_deref(), &input, action == "enable"),
                 "uninstall" => owner.uninstall(id.as_deref(), &input),
                 _ => Err(error("plugin_action_invalid")),
