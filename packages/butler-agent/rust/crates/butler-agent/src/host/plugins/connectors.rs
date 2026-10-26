@@ -33,6 +33,7 @@ struct Status {
     destinations: Value,
 }
 struct Live {
+    digest: String,
     cancel: CancellationToken,
     task: JoinHandle<()>,
     calls: mpsc::Sender<Call>,
@@ -128,14 +129,24 @@ impl Connectors {
                             .get(&a.plugin)
                             .is_some_and(|p| p.enabled && p.quarantine.is_none())
                 })
-                .map(|a| (a.id.clone(), a.clone()))
+                .filter_map(|a| {
+                    state
+                        .registry
+                        .plugins
+                        .get(&a.plugin)
+                        .map(|p| (a.id.clone(), (a.clone(), p.approval.content_digest.clone())))
+                })
                 .collect::<BTreeMap<_, _>>()
         };
         let removed = {
             let mut live = self.live.lock();
             let ids = live
                 .keys()
-                .filter(|id| !desired.contains_key(*id))
+                .filter(|id| {
+                    desired
+                        .get(*id)
+                        .is_none_or(|(_, digest)| live.get(*id).is_none_or(|l| l.digest != *digest))
+                })
                 .cloned()
                 .collect::<Vec<_>>();
             ids.into_iter()
@@ -147,7 +158,7 @@ impl Connectors {
             let _ = live.task.await;
             self.status(&id, "disconnected", None);
         }
-        for (id, account) in desired {
+        for (id, (account, digest)) in desired {
             if self.live.lock().contains_key(&id) {
                 continue;
             }
@@ -164,6 +175,7 @@ impl Connectors {
             self.live.lock().insert(
                 id,
                 Live {
+                    digest,
                     cancel,
                     task,
                     calls,

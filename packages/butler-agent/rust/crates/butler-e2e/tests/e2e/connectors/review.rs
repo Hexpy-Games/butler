@@ -146,3 +146,72 @@ async fn review_relocating_actions_execute_last_and_are_unique() -> Result<(), H
     s.finish().await
 }
 
+#[tokio::test]
+async fn review_silent_update_restarts_the_account_on_new_digest() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = setup("PC-UPDATE")?;
+    let root = package(&setup.sandbox.home, false)?;
+    let s = setup.start().await?;
+    install(&s, &root).await?;
+    let id = connect(&s, "immediate", 10.0).await?;
+    account(&s, &id, "connected").await?;
+    let before = fs::read_to_string(data(&s).join(format!("{id}-starts")))?;
+    invoke(&s,"connector_rule_set",json!({"id":"live-call","connector":"source/items","title":"Preference","reason":"Preference","match":[{"field":"subject","op":"contains","value":"Item"}],"actions":[{"type":"organize","tool":"events/mark_read","arguments":{}}]})).await?;
+    let slow = data(&s).join(format!("{id}-slow-operation"));
+    fs::write(&slow, "1")?;
+    emit(&s, &id, vec![event("inflight")]).await?;
+    let calls = data(&s).join(format!("{id}-calls"));
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while !calls.exists() {
+        assert!(Instant::now() < deadline, "outward call never started");
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    let mut manifest: Value = serde_json::from_slice(&fs::read(root.join("plugin.json"))?)?;
+    manifest["version"] = "1.0.1".into();
+    fs::write(root.join("plugin.json"), manifest.to_string())?;
+    let checked = api(
+        &s,
+        Method::POST,
+        "/plugins/source/check",
+        Some(json!({"force":true})),
+    )
+    .await?;
+    assert_eq!(checked.status, 200, "{checked:?}");
+    assert_eq!(checked.data()["applied"], true, "{checked:?}");
+    count(
+        &s,
+        "SELECT count(*) FROM app_connector_events WHERE delivered_at IS NOT NULL",
+        1,
+    )
+    .await?;
+    let results: String =
+        db(&s).query_row("SELECT actions_json FROM app_connector_events", [], |r| {
+            r.get(0)
+        })?;
+    assert!(
+        results.contains("upstream_deadline_exceeded"),
+        "update abandoned in-flight call: {results}"
+    );
+    fs::remove_file(slow)?;
+    account(&s, &id, "connected").await?;
+    let after = fs::read_to_string(data(&s).join(format!("{id}-starts")))?;
+    assert_eq!(
+        after.lines().count(),
+        before.lines().count() + 1,
+        "silent update retained old process"
+    );
+    let old: Value = serde_json::from_str(before.lines().last().unwrap())?;
+    let new: Value = serde_json::from_str(after.lines().last().unwrap())?;
+    assert_ne!(
+        old["executable"], new["executable"],
+        "account did not move to the new content store"
+    );
+    emit(&s, &id, vec![event("updated")]).await?;
+    count(
+        &s,
+        "SELECT count(*) FROM app_connector_events WHERE delivered_at IS NOT NULL",
+        2,
+    )
+    .await?;
+    s.finish().await
+}
