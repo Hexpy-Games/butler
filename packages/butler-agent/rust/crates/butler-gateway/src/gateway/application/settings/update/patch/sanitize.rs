@@ -125,6 +125,7 @@ pub(super) fn sanitize(
             ][..],
         ),
         ("appearance_theme", &["system", "light", "dark"][..]),
+        ("text_size", &["default", "large", "larger"][..]),
         (
             "main_screen_theme_preset",
             &[

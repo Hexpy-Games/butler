@@ -236,6 +236,14 @@ fn insert_access(
 /// they describe until a PATCH stores one.
 fn appearance(stored: &Map<String, Value>, output: &mut Map<String, Value>) {
     output.insert(
+        "text_size".into(),
+        json!(enum_value(
+            stored.get("text_size"),
+            &["default", "large", "larger"],
+            "default"
+        )),
+    );
+    output.insert(
         "appearance_theme".into(),
         json!(enum_value(
             stored.get("appearance_theme"),
