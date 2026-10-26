@@ -106,6 +106,10 @@ pub(super) fn slow(_: &Value) -> Option<ResponseRecord> {
 fn find_spec(value: &Value) -> Option<Value> {
     match value {
         Value::String(text) => {
+            // Earlier connector blocks can appear in conversation history.
+            let text = text
+                .rsplit_once("## Current request\n")
+                .map_or(text.as_str(), |(_, current)| current);
             if let Some((_, data)) = text.split_once("<connector-data>\n") {
                 let payload = serde_json::Deserializer::from_str(data)
                     .into_iter::<Value>()
