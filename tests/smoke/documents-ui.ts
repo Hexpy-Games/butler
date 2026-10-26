@@ -100,6 +100,12 @@ async function open(page: Page, width = 1440, theme = "light", fullPage = false)
   if (!fullPage) {
     const pane = page.locator('[data-test-class="file-viewer"]');
     for (const name of ["버전 기록", "원래 대화", "내보내기"]) await pane.getByRole("button", { name, exact: true }).waitFor();
+    // One title row: the document's own, carrying the viewer's close (and back on a phone); the pane adds no header.
+    const row = pane.locator('[data-test-class="editable-document"] > :first-child');
+    assert.equal(await pane.locator('[data-test-class="file-viewer-header"]').count(), 0, "no pane title row over the document");
+    assert.deepEqual(await pane.evaluate(node => [...node.querySelectorAll("h2")].filter(h => !h.closest('[role="textbox"]')).map(h => h.textContent)), [head.title], "the title shows once");
+    assert.equal(await row.locator('[data-test-class="file-viewer-close"]').count(), 1, "close sits in the document's title row");
+    if (width === 390 || width === 1440) assert.equal(await row.locator('[data-test-class="file-viewer-back"]').count(), width === 390 ? 1 : 0, "back sits in the title row on a phone");
     if (width === 1440) {
       const chat = await page.locator('[data-test-class~="conversation-scroll"]').boundingBox(), viewer = await pane.boundingBox();
       assert(chat && viewer && viewer.x >= chat.x + chat.width, "document occupies the right slot beside the chat");

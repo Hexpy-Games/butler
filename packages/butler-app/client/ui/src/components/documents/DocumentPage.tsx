@@ -10,7 +10,8 @@ import { DocumentBody } from "./DocumentBody";
 import { DocumentReadView } from "./DocumentReadView";
 import { DocumentExportMenu } from "./DocumentExportMenu";
 import { readDocument, revisions, type DocumentRevision, type EditableDocument } from "./documentApi";
-export function DocumentPage({ id, trailing }: { id: string; trailing?: ReactNode }) {
+/** A document's page: one title row (the host's `leading` before the title, its `trailing` after the actions), then the body. */
+export function DocumentPage({ id, leading, trailing }: { id: string; leading?: ReactNode; trailing?: ReactNode }) {
   useAppLocale();
   const session = useMemo(() => new DocumentSession(id), [id]);
   const state = useSyncExternalStore(session.subscribe, session.snapshot);
@@ -32,14 +33,14 @@ export function DocumentPage({ id, trailing }: { id: string; trailing?: ReactNod
     return () => { active = false; };
   }, [historyOpen, id, session, state.head?.rev]);
   const copy = appCopy.documents, doc = state.head;
-  if (!doc) return <DocumentLayout title="" actions={trailing}><Typo.Caption>{state.failed ? appCopy.library.failed : appCopy.artifacts.loading}</Typo.Caption></DocumentLayout>;
+  if (!doc) return <DocumentLayout title="" leading={leading} actions={trailing}><Typo.Caption>{state.failed ? appCopy.library.failed : appCopy.artifacts.loading}</Typo.Caption></DocumentLayout>;
   const select = (rev: number) => {
     const request = ++previewRequest.current;
     if (rev === session.state.head?.rev) { setPreview(undefined); return; }
     void readDocument(id, rev).then(doc => { if (request === previewRequest.current) setPreview(doc); }, () => notifyStatus(appCopy.library.failed, { tone: "error" }));
   };
   const restore = async () => { if (!preview) return; await session.restore(preview.rev); setPreview(undefined); setHistoryOpen(false); };
-  return <DocumentLayout title={doc.title} note={state.editing ? copy.editing : state.saved ? copy.saved : undefined}
+  return <DocumentLayout title={doc.title} leading={leading} note={state.editing ? copy.editing : state.saved ? copy.saved : undefined}
     actions={<Inline gap="xs" wrap={false}><Popover open={historyOpen} onOpenChange={setHistoryOpen}><PopoverTrigger asChild><IconButton label={copy.versions}><History size="sm" /></IconButton></PopoverTrigger>
       <PopoverContent align="end"><VersionHistory label={copy.versions} currentLabel={copy.current} selectedId={String(preview?.rev ?? doc.rev)}
         entries={history.map(row => ({ id: String(row.rev), author: row.author, authorLabel: row.author === "butler" ? copy.butler : copy.me, time: relativeAge(row.updated_at), dateTime: row.updated_at }))}
@@ -51,8 +52,10 @@ export function DocumentPage({ id, trailing }: { id: string; trailing?: ReactNod
   </DocumentLayout>;
 }
 
-function DocumentLayout({ title, actions, note, children }: {
-  title: string; actions?: ReactNode; note?: ReactNode; children: ReactNode;
+function DocumentLayout({ title, leading, actions, note, children }: {
+  title: string; leading?: ReactNode; actions?: ReactNode; note?: ReactNode; children: ReactNode;
 }) {
-  return <DocumentEditor title={<Typo.PanelTitle as="h2" truncate>{title}</Typo.PanelTitle>} actions={actions} note={note} data-test-class="editable-document">{children}</DocumentEditor>;
+  const heading = <Typo.PanelTitle as="h2" truncate>{title}</Typo.PanelTitle>;
+  return <DocumentEditor title={leading ? <Stack align="row" cross="center" gap="md" wrap={false}>{leading}<Stack gap="none" grow basis="0" minWidth="0">{heading}</Stack></Stack> : heading}
+    actions={actions} note={note} data-test-class="editable-document">{children}</DocumentEditor>;
 }
