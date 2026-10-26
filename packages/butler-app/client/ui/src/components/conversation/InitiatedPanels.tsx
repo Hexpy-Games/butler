@@ -5,7 +5,7 @@ import { initiatedAction } from "@/app/initiatedAction";
 import type { InitiatedOrigin, PatternCandidate, PatternProposalPanel, SchedulePausePanel } from "@/app/initiatedTypes";
 import { notifyStatus } from "@/app/notifications";
 import { useButlerStore } from "@/app/store";
-import { Button, ButtonContainer, Clock3, ComposerDecisionPanel, Tag } from "@/butler-ds";
+import { Button, ButtonContainer, Clock3, ComposerDecisionPanel, Clickable, Stack, Typo } from "@/butler-ds";
 import { patternMeta } from "../settings/hooks/usePatterns";
 
 export function InitiatedPanels({ origin }: { origin?: InitiatedOrigin }) {
@@ -67,12 +67,14 @@ function Proposal({ panel, candidate }: { panel: PatternProposalPanel; candidate
       pattern_id: candidate.pattern_id, decision: accept ? "accepted" : "declined", expected_revision: view.revision,
     }) });
   }, () => useButlerStore.getState().refreshSessionView("general")); };
+  const action = initiatedAction(candidate.action.title, candidate.action.schedule, timezone, candidate.state !== "accepted" || Boolean(next), next);
+  if (candidate.state !== "pending") return <SettledSuggestion
+    text={candidate.state === "accepted" ? copy.created(action) : copy.skipped(action)}
+    automationId={candidate.state === "accepted" ? candidate.automation_id : undefined} />;
   return <ComposerDecisionPanel placement="conversation" icon={<Clock3 size="lg" />} data-test-class="initiated-proposal"
-    title={initiatedAction(candidate.action.title, candidate.action.schedule, timezone, candidate.state !== "accepted" || Boolean(next), next)}
-    details={[candidate.title, patternMeta({ ...candidate, id: candidate.pattern_id })]}
-    onOpen={() => openSchedule(candidate.state === "accepted" ? candidate.automation_id : undefined)}
-    aside={candidate.state !== "pending" ? <Tag>{copy[candidate.state]}</Tag> : undefined}
-    actions={candidate.state === "pending" ? <DecisionActions busy={decision.busy} onDecide={decide} /> : null} />;
+    title={action} details={[candidate.title, patternMeta({ ...candidate, id: candidate.pattern_id })]}
+    onOpen={() => openSchedule()}
+    actions={<DecisionActions busy={decision.busy} onDecide={decide} />} />;
 }
 
 function Pause({ panel }: { panel: SchedulePausePanel }) {
@@ -83,8 +85,17 @@ function Pause({ panel }: { panel: SchedulePausePanel }) {
   const decide = (accept: boolean) => { void decision.run(() => api(`/automations/${encodeURIComponent(panel.automation_id)}/report-pause`, {
     method: "POST", body: JSON.stringify({ decision: accept ? "continue" : "stop" }),
   })); };
+  const action = initiatedAction(panel.title, panel.schedule, timezone, false);
+  if (panel.state !== "pending") return <SettledSuggestion
+    text={panel.state === "continued" ? copy.continuing(action) : copy.paused(action)} automationId={panel.automation_id} />;
   return <ComposerDecisionPanel placement="conversation" icon={<Clock3 size="lg" />} data-test-class="initiated-pause"
-    title={initiatedAction(panel.title, panel.schedule, timezone, false)} details={[copy.unopened(panel.unopened_count)]}
-    onOpen={() => openSchedule(panel.automation_id)} aside={panel.state !== "pending" ? <Tag>{copy[panel.state]}</Tag> : undefined}
-    actions={panel.state === "pending" ? <DecisionActions busy={decision.busy} onDecide={decide} /> : null} />;
+    title={action} details={[copy.unopened(panel.unopened_count)]} onOpen={() => openSchedule(panel.automation_id)}
+    actions={<DecisionActions busy={decision.busy} onDecide={decide} />} />;
+}
+
+function SettledSuggestion({ text, automationId }: { text: string; automationId?: string }) {
+  const caption = <Typo.Caption as="span" tone="secondary" wrap="anywhere">{text}</Typo.Caption>;
+  return <Stack gap="none" data-test-class="initiated-resolution">
+    {automationId ? <Clickable variant="text" onClick={() => openSchedule(automationId)}>{caption}</Clickable> : caption}
+  </Stack>;
 }

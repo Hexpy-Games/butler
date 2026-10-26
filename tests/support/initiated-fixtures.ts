@@ -97,7 +97,10 @@ export async function installInitiatedGateway(page: Page, language: "ko" | "en",
       controls: { model: HARNESS_MODEL_CATALOG.default_model_ref, reasoning_effort: "none", access_mode: "ask_first", plan_mode: false } });
     if (path === "/sessions/general/read") general.unread = false;
     if (path === "/memory/pattern-proposals") return send({ revision: 7, bundles: [proposal] });
-    if (path === "/automations/schedule-1") return send({ automation: { next_run_at: "2026-10-27T22:50:00Z" } });
+    if (path === "/automations/schedule-1") return send({ automation: { id: "schedule-1", title: "환율·미국 증시 정리", prompt_body: "소식 정리", target_session_id: "general", target_label: "대화",
+      state: "enabled", interval_seconds: 86400, access_mode: "ask_first", schedule_type: "daily", schedule: { kind: "daily", time: "07:50", tz: "Asia/Seoul", weekdays: [] }, next_run_at: "2026-10-27T22:50:00Z" } });
+    if (path === "/automations") return send({ automations: [] });
+    if (path.endsWith("/runs")) return send({ runs: [] });
     if (path.endsWith("/pending-asks")) return send({ session_id: "general", asks: [], open_count: 0 });
     if (path.includes("wallpaper")) return send({ modules: [], assets: [] });
     return send({});

@@ -7,6 +7,7 @@ import type { Locator, Page } from "playwright";
 import { getAppCopy } from "../../packages/butler-i18n/src";
 import { initiatedMessage, installInitiatedGateway } from "../support/initiated-fixtures";
 import { launchSmokeBrowser } from "../support/smoke-browser";
+import { proposalDecisions, pauseDecisions } from "../support/initiated-decisions";
 import { probeFocusRingFrames } from "../support/focus-ring-clipping";
 
 const output = process.env.BUTLER_INITIATED_CAPTURES;
@@ -50,6 +51,8 @@ try {
       for (const button of await panel.getByRole("button").all()) assert.deepEqual(await probeFocusRingFrames(page, () => button.focus()), []);
     }
     await capture(page, panels, "proposal-pending", "먼저 제안한 예약 작업 두 개 · 처리 전", language, theme, width);
+    const captureDecision = (region: Locator, name: string, caption: string) => capture(page, region, name, caption, language, theme, width);
+    await proposalDecisions(page, gateway, language, captureDecision);
     if (language === "en") {
       await gateway.approval();
       await page.getByText("Weekdays at 7:50 AM", { exact: true }).waitFor();
@@ -58,17 +61,6 @@ try {
       assert.deepEqual(errors, []);
       await page.close(); cells++; continue;
     }
-    const decision = page.waitForRequest(request => request.url().endsWith("/memory/pattern-proposals/bundle-1") && request.method() === "POST");
-    await panels.first().getByRole("button", { name: labels.soundsGood, exact: true }).click();
-    assert.deepEqual((await decision).postDataJSON(), { pattern_id: "pattern-1", decision: "accepted", expected_revision: 7 });
-    const accepted = initiatedMessage("proposal");
-    assert(accepted.initiated?.panel?.kind === "pattern_proposal");
-    accepted.initiated.panel.candidates[0] = { ...accepted.initiated.panel.candidates[0], state: "accepted", automation_id: "schedule-1" };
-    await gateway.show(accepted);
-    await panels.first().getByText(labels.accepted, { exact: true }).waitFor().catch(async error => { console.error(JSON.stringify({ body: await page.locator("body").innerText(), errors })); throw error; });
-    await panels.first().getByText("예약 작업 · 매일 오전 7:50 · 환율·미국 증시 정리 · 10월 28일부터 · 대화로 받아요", { exact: true }).waitFor();
-    assert.equal(await panels.first().locator('[data-slot="composer-decision-actions"] button').count(), 0);
-    await capture(page, panels, "proposal-accepted", "첫 예약 작업을 만든 뒤", language, theme, width);
     await gateway.show(initiatedMessage("report"));
     const bubble = page.locator('[data-test-class="assistant-bubble"]');
     await bubble.getByText("오늘 아침 소식을 정리했어요. 자세한 내용은 문서로 드릴게요.", { exact: true }).waitFor();
@@ -82,14 +74,8 @@ try {
     const pause = page.locator('[data-test-class="initiated-pause"]');
     await pause.waitFor();
     await capture(page, pause, "pause-pending", "보고를 계속 받을지 묻는 예약 작업", language, theme, width);
-    const continued = page.waitForRequest(request => request.url().endsWith("/automations/schedule-1/report-pause"));
-    await pause.getByRole("button", { name: labels.soundsGood, exact: true }).click();
-    assert.deepEqual((await continued).postDataJSON(), { decision: "continue" });
-    const resolved = initiatedMessage("pause");
-    assert(resolved.initiated?.panel?.kind === "schedule_pause"); resolved.initiated.panel.state = "continued";
-    await gateway.show(resolved);
-    await pause.getByText(labels.continued, { exact: true }).waitFor();
-    assert.equal(await pause.locator('[data-slot="composer-decision-actions"] button').count(), 0);
+    await pauseDecisions(page, gateway, (region, name, caption) => width === 1440 && theme === "light"
+      ? captureDecision(region, name, caption) : Promise.resolve());
     if (width === 1440 && theme === "light") await composing(page, gateway.requests);
     await unreadAndNotifications(page, gateway, language, theme, width);
     await gateway.approval();
@@ -162,7 +148,7 @@ async function capture(page: Page, region: Locator, name: string, caption: strin
   const targets = name === "schedule-report" ? page.locator('[data-test-class="assistant-bubble"], [data-test-class="message-artifact-list"], [data-test-class~="assistant-footer"] time') : region;
   const boxes = await targets.evaluateAll(nodes => nodes.map(node => { const r = node.getBoundingClientRect(); return { x: r.x, y: r.y, right: r.right, bottom: r.bottom }; }));
   assert(boxes.length, `capture region ${name} exists`);
-  if (name.startsWith("proposal-") || name === "pause-pending") {
+  if (name.startsWith("proposal-") || name.startsWith("pause-")) {
     const bubble = await region.first().evaluate(node => {
       const r = node.closest('[data-test-class="message-body"]')!.querySelector('[data-test-class="assistant-bubble"]')!.getBoundingClientRect();
       return { x: r.x, y: r.y, right: r.right, bottom: r.bottom };

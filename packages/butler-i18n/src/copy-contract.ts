@@ -245,7 +245,9 @@ interface ConversationWorkCopy {
 interface ConversationCopy {
   chatsIntro: string;
   initiated: {
-    noThanks: string; soundsGood: string; accepted: string; declined: string; continued: string; stopped: string;
+    noThanks: string; soundsGood: string;
+    created: (action: string) => string; skipped: (action: string) => string;
+    continuing: (action: string) => string; paused: (action: string) => string;
     alreadyHandled: string; failed: string;
     dailyAt: (time: string) => string; weekdaysAt: (time: string) => string;
     unopened: (count: number) => string;
