@@ -166,10 +166,13 @@ pub fn validate(mut event: Value, connector: &str, account: &str) -> Result<Valu
             .is_none_or(|s| s.chars().count() > 1000)
         || field(field(&event, "from"), "address").as_str().is_none()
         || field(field(&event, "from"), "display").as_str().is_none()
-        || ["subject", "thread_id", "link"]
+        || ["subject", "thread_id"]
             .iter()
             .any(|k| field(&event, k).as_str().is_none())
     {
+        return Err(fail());
+    }
+    if event.get("link").is_some_and(|v| !v.is_string()) {
         return Err(fail());
     }
     let attrs = field(&event, "attributes").as_object().ok_or_else(fail)?;

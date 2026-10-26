@@ -71,7 +71,7 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // Outbound transport produces records through the structured logging facade.
         "http" => &["structured_logging"],
         // butler-e2e: dev-only harness around the built binary; one domain.
-        "e2e" => &[],
+        "e2e" | "mail_connector" => &[],
         _ => return None,
     })
 }
