@@ -123,8 +123,10 @@ pub struct AutomationRunResult {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CalendarSchedule {
     pub kind: String,
+    #[serde(default)]
     pub time: String,
     #[serde(default)]
     pub weekdays: Vec<u8>,
+    #[serde(default)]
     pub tz: String,
 }

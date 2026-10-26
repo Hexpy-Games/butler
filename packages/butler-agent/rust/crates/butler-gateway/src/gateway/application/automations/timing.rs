@@ -6,7 +6,7 @@ use chrono::{DateTime, Datelike, Duration, NaiveTime, SecondsFormat, Timelike, U
 use super::CalendarSchedule;
 use crate::gateway::application::storage::{AppStorageCode, AppStorageError};
 
-pub(super) fn invalid() -> AppStorageError {
+pub(in crate::gateway::application) fn invalid() -> AppStorageError {
     AppStorageError::new(
         AppStorageCode::AutomationIntervalInvalid,
         "Schedule timing is invalid.",
@@ -15,7 +15,7 @@ pub(super) fn invalid() -> AppStorageError {
 
 /// Advance directly to the first anchor grid point strictly after the cutoff.
 /// Future anchors remain due at the anchor, including after an attended run.
-pub(super) fn interval_next(
+pub(in crate::gateway::application) fn interval_next(
     anchor: &str,
     seconds: i64,
     now: &str,
@@ -51,7 +51,10 @@ pub(super) fn interval_next(
         .ok_or_else(invalid)
 }
 
-pub(super) fn next(rule: &CalendarSchedule, now: &str) -> Result<String, AppStorageError> {
+pub(in crate::gateway::application) fn next(
+    rule: &CalendarSchedule,
+    now: &str,
+) -> Result<String, AppStorageError> {
     let path = Path::new(&rule.tz);
     if rule.tz.is_empty()
         || rule.tz.len() > 100

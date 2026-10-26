@@ -244,6 +244,13 @@ interface ConversationWorkCopy {
 
 interface ConversationCopy {
   chatsIntro: string;
+  initiated: {
+    noThanks: string; soundsGood: string; accepted: string; declined: string; continued: string; stopped: string;
+    alreadyHandled: string; failed: string;
+    dailyAt: (time: string) => string; weekdaysAt: (time: string) => string;
+    unopened: (count: number) => string;
+    action: (frequency: string, title: string, date?: string) => string;
+  };
   messageActions: {
     showMore: string;
     showLess: string;

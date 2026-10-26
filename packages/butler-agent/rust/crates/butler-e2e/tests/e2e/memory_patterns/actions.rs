@@ -26,7 +26,19 @@ async fn evidence_bundle_decline_and_ignored_candidate_are_durable() -> Result<(
         assert!(p["proposed_at"].is_string());
     }
     let pending = s.gw.get("/memory/pattern-proposals").await?.data().clone();
-    assert_eq!(pending["bundles"], store["bundles"]);
+    let mut public_bundles = store["bundles"].clone();
+    for candidate in public_bundles
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .flat_map(|b| b["candidates"].as_array_mut().unwrap())
+    {
+        candidate["action"]
+            .as_object_mut()
+            .unwrap()
+            .remove("prompt");
+    }
+    assert_eq!(pending["bundles"], public_bundles);
     let bundle = &store["bundles"][0];
     let declined = &bundle["candidates"][0]["pattern_id"];
     let ignored = &bundle["candidates"][1]["pattern_id"];

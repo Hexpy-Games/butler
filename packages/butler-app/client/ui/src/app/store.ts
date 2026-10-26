@@ -336,6 +336,7 @@ function messageRecordsEqual(
       message.turn_id === other.turn_id &&
       message.text === other.text &&
       structurallyEqual(message.content_parts, other.content_parts) &&
+      structurallyEqual(message.initiated, other.initiated) &&
       message.delivery_state === other.delivery_state &&
       structurallyEqual(message.limitation_codes ?? [], other.limitation_codes ?? []) &&
       structurallyEqual(message.limitations ?? [], other.limitations ?? []) &&

@@ -930,6 +930,12 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     failureReason: "실패 원인",
   },
   conversation: {
+    initiated: {
+      noThanks: "괜찮아요", soundsGood: "좋아요", accepted: "만들었어요", declined: "다시 묻지 않을게요",
+      continued: "계속 받아요", stopped: "멈춰 뒀어요", alreadyHandled: "이미 처리된 제안이에요", failed: "처리하지 못했어요. 다시 해 주세요.",
+      dailyAt: time => `매일 ${time}`, weekdaysAt: time => `평일 ${time}`, unopened: n => `${n}번 연속 안 열어보셨어요`,
+      action: (frequency, title, date) => ["예약 작업", frequency, title, ...(date ? [`${date}부터`] : []), "대화로 받아요"].join(" · "),
+    },
     chatsIntro: "이제 여기선 편하게 얘기해요. 길어지는 건 문서로 드릴게요.",
     messageActions: {
       showMore: "더보기",
