@@ -10,11 +10,13 @@ pub struct Evaluation {
     client: reqwest::Client,
     steward: bool,
     max_rounds: usize,
-    rounds: AtomicUsize,
+    rounds: Mutex<usize>,
     pub limited: std::sync::atomic::AtomicBool,
     pub samples: Mutex<Vec<Value>>,
     pub local_text: Mutex<String>,
-    pub delegation: Mutex<Option<Value>>,
+    pub delegation: Mutex<std::collections::VecDeque<Value>>,
+    pub local_calls: Mutex<Vec<String>>,
+    pub inflight: AtomicUsize,
     pub armed: std::sync::atomic::AtomicBool,
 }
 
@@ -45,11 +47,13 @@ impl Provider {
                 .build()?,
             steward,
             max_rounds,
-            rounds: AtomicUsize::new(0),
+            rounds: Mutex::new(0),
             limited: false.into(),
             samples: Mutex::new(vec![]),
             local_text: Mutex::new("Done.".into()),
-            delegation: Mutex::new(None),
+            delegation: Mutex::new(std::collections::VecDeque::new()),
+            local_calls: Mutex::new(vec![]),
+            inflight: AtomicUsize::new(0),
             armed: false.into(),
         });
         let socket = TcpListener::bind("127.0.0.1:0").await?;
@@ -98,23 +102,46 @@ impl Evaluation {
                 self.armed.swap(false, Ordering::SeqCst)
             };
         if !forward {
-            let call = if tools && self.steward && !child {
-                lock(&self.delegation).take()
-            } else {
-                None
-            };
-            return wire::answer(
-                &path,
-                call,
-                &lock(&self.local_text),
-                value["model"].as_str().unwrap_or(""),
-            );
+            return self.local_answer(&path, &value, tools && self.steward && !child);
         }
-        if self.rounds.fetch_add(1, Ordering::SeqCst) >= self.max_rounds {
-            self.limited.store(true, Ordering::SeqCst);
+        if !self.admit() {
             return plain(429, "evaluation model round limit reached");
         }
-        self.forward(state, parts, bytes, value, key).await
+        let response = self.forward(state, parts, bytes, value, key).await;
+        self.inflight.fetch_sub(1, Ordering::SeqCst);
+        response
+    }
+
+    fn admit(&self) -> bool {
+        let mut rounds = lock(&self.rounds);
+        if *rounds >= self.max_rounds {
+            self.limited.store(true, Ordering::SeqCst);
+            return false;
+        }
+        *rounds += 1;
+        self.inflight.fetch_add(1, Ordering::SeqCst);
+        true
+    }
+
+    fn local_answer(&self, path: &str, value: &Value, parent: bool) -> Response<Body> {
+        let call = if parent {
+            lock(&self.delegation).pop_front()
+        } else {
+            None
+        };
+        if let Some(call) = &call {
+            lock(&self.local_calls).push(call["name"].as_str().unwrap_or("").to_owned());
+        }
+        wire::answer(
+            path,
+            call,
+            &lock(&self.local_text),
+            value["model"].as_str().unwrap_or(""),
+        )
+    }
+
+    pub fn upstream_rounds(&self) -> usize {
+        *lock(&self.rounds)
     }
 
     async fn forward(

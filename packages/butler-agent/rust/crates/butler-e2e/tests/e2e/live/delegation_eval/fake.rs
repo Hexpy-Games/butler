@@ -3,10 +3,12 @@ use axum::{Router, body::Body, http::Request};
 use butler_e2e::e2e::{HarnessError, provider::delegation_eval::wire};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+use std::fmt::Write;
 use std::sync::{Arc, Mutex};
 pub(super) struct Upstream {
     pub base: String,
     seen: Arc<Mutex<Vec<String>>>,
+    pub header_names: Arc<Mutex<Vec<Vec<String>>>>,
     server: tokio::task::JoinHandle<()>,
 }
 impl Drop for Upstream {
@@ -20,15 +22,20 @@ impl Upstream {
         let base = format!("http://{}", socket.local_addr()?);
         let seen = Arc::new(Mutex::new(vec![]));
         let capture = seen.clone();
+        let header_names = Arc::new(Mutex::new(vec![]));
+        let headers = header_names.clone();
+        let final_body = std::env::var("BUTLER_E2E_DELEGATION_WIRE").as_deref() == Ok("final");
         let delegate = case["label"] == "delegate";
         let app = Router::new().fallback(move |req: Request<Body>| {
             let seen = capture.clone();
+            let headers = headers.clone();
             async move {
                 let path = req.uri().path().to_owned();
                 if req.method() == axum::http::Method::GET {
                     return axum::http::Response::builder().header("content-type","application/json")
                         .body(Body::from(json!({"models":[{"slug":"gpt-6-luna","display_name":"GPT 6 Luna","visibility":"list"}]}).to_string())).unwrap();
                 }
+                headers.lock().unwrap().push(req.headers().keys().map(|n|n.as_str().to_owned()).collect());
                 let bytes = axum::body::to_bytes(req.into_body(), 64 * 1024 * 1024)
                     .await
                     .unwrap();
@@ -42,13 +49,21 @@ impl Upstream {
                 } else {
                     steward(step, &body)
                 };
-                wire::answer(&path, call, "Finished.", body["model"].as_str().unwrap())
+                let model = body["model"].as_str().unwrap();
+                if first && !path.ends_with("/messages") {
+                    first_answer(call, model, final_body)
+                } else { wire::answer(&path, call, "Finished.", model) }
             }
         });
         let server = tokio::spawn(async move {
             let _ = axum::serve(socket, app).await;
         });
-        Ok(Self { base, seen, server })
+        Ok(Self {
+            base,
+            seen,
+            header_names,
+            server,
+        })
     }
     pub(super) fn verify(&self, samples: &[Value]) {
         let seen = self.seen.lock().unwrap();
@@ -114,4 +129,40 @@ fn work_id(v: &Value) -> Option<String> {
         Value::Array(a) => a.iter().find_map(work_id),
         _ => None,
     }
+}
+
+fn first_answer(call: Option<Value>, model: &str, final_body: bool) -> axum::http::Response<Body> {
+    let item = call
+        .map(|mut call| {
+            call["namespace"] = json!("butler");
+            call["name"] = json!("butler.delegate_to_steward");
+            call
+        })
+        .unwrap_or_else(
+            || json!({"type":"message","content":[{"type":"output_text","text":"Finished."}]}),
+        );
+    if final_body {
+        return axum::http::Response::builder()
+            .header("content-type", "application/json")
+            .body(Body::from(
+                json!({"model":model,"status":"completed","output":[item],
+                "usage":{"input_tokens":100,"output_tokens":41}})
+                .to_string(),
+            ))
+            .unwrap();
+    }
+    let events = [
+        json!({"type":"response.output_item.added","output_index":0,"item":item}),
+        json!({"type":"response.output_item.done","output_index":0,"item":item}),
+        json!({"type":"response.completed","response":{"model":model,"status":"completed","output":[],
+            "usage":{"input_tokens":100,"output_tokens":41}}}),
+    ];
+    let mut body = String::new();
+    for event in events {
+        write!(body, "data: {event}\n\n").unwrap();
+    }
+    axum::http::Response::builder()
+        .header("content-type", "text/event-stream")
+        .body(Body::from(body))
+        .unwrap()
 }

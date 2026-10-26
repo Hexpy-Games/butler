@@ -96,3 +96,36 @@ pub(super) async fn workers(s: &Scenario) -> Result<(), HarnessError> {
     .await?;
     Ok(())
 }
+
+/// Hosted API-key models need a registered connection as well as a saved key.
+pub(super) async fn register_model(s: &Scenario, proxy: &str) -> Result<(), HarnessError> {
+    let provider = s.model.provider();
+    if provider == "openai" {
+        return Ok(());
+    }
+    let credentials = s.gw.get("/credentials").await?;
+    let id = credentials.data()["credentials"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|credential| credential["provider_id"] == provider)
+        .map(|credential| credential["id"].clone())
+        .ok_or_else(|| HarnessError("evaluation provider credential is not registered".into()))?;
+    let model = s.model.model.split_once('/').unwrap().1;
+    let registered =
+        s.gw.post(
+            "/model-catalog/registered-models",
+            json!({
+                "provider_id":provider,"model_id":model,"auth_type":"api_key","credential_id":id,
+                "api_base_url":format!("{proxy}{}", butler_e2e::e2e::config::base_path(provider))
+            }),
+        )
+        .await?;
+    if registered.status != 201 {
+        return Err(HarnessError(format!(
+            "evaluation model registration failed: {}",
+            registered.status
+        )));
+    }
+    Ok(())
+}

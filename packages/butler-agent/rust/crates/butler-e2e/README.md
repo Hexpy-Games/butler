@@ -323,7 +323,11 @@ These owner-run evaluations are outside CI. No cassettes are recorded. The
 ignored tests require `BUTLER_E2E_DELEGATION_EVAL=1` (set by the runner), an
 explicit live tier and live credentials. `self-test` uses a local fake upstream
 with the stub tier, including raw-body SHA-256 equality and zero executed
-first-decision tools. It requires only the new debug Agent binary.
+first-decision tools. It exercises namespaced Responses calls in both SSE item
+and final JSON shapes, direct text, Anthropic routing/auth/cache wiring, exact
+round admission, and both local Butler scripts against the new debug Agent.
+It requires only the new debug Agent binary. The real merge-base executable is
+exercised only by the owner's live runs.
 
 From the Rust workspace, after sourcing the toolchain and preparing static ORT
 as described in the Rust README:
@@ -347,7 +351,13 @@ old worktree, retaining its executable and SHA. All tests use the new harness;
 `BUTLER_E2E_BIN` selects the variant's real Agent. Re-run prepare after changing
 product code. No branch changes, commits or pushes are made.
 
-`first-decision` defaults to `--variants old,new`, `--repeat 1`, all 43 cases.
+Both modes default to `--variants old,new` and `--repeat 1`; first-decision
+selects all 43 cases by default. In steward mode, `old` answers Butler locally
+with `start_work`, `replace_work_plan` (steward mode and case checks),
+`record_work_review` (plan accept), then `delegate_to_steward`, one per round.
+`new` uses one-call delegation. Steward and Worker requests go upstream for both.
+The old runtime has no plan gate: its refusal count is zero; review-before-mutation
+is still scored from recorded tool order, including unsuccessful attempts.
 `--cases id,id` narrows either evaluation. Each case uses an ordinary App chat with only its isolated workspace binding
 seeded through the existing SessionBindingStore API; no project Ledger or setup
 conversation is introduced. Seeded prior turns are answered locally with their fixture text. The product builds the complete provider
@@ -358,14 +368,23 @@ real serializer emits the same breakpoints and default 1h TTL. The evaluator for
 the existing harness recorder transport once, retains the upstream first-round
 calls for scoring, and answers the Agent with local text. Thus proposed tools
 cannot execute. Headers carry the Agent's own provider authentication and are
-never retained. Butler's calls in steward mode are local; only Steward/Worker
+never retained. API-key models are registered through the gateway using the
+harness credential and explicit proxy URL before the evaluation turn. Butler's calls in steward mode are local; only Steward/Worker
 rounds go upstream, with all Worker profiles selecting the evaluation model.
 
 Routing counts any first-round `delegate_to_steward`, `start_work`, `continue_work`,
 or steward-mode `replace_work_plan` as delegation; ask-only rounds are `ask`;
 all others are direct. Reports include ordered calls, confusion counts, recall,
 false-delegation rate, accuracy, raw provider usage and catalog-price USD
-estimates. Invalid/limited requests remain in the denominator and are identified.
+estimates. Each sample records `first_output_item` with only the raw first item's
+`type`, `name`, and `namespace`, without arguments. Calls use the same namespace
+projection as the product decoder. `extraction_mismatch` flags function-call
+metadata (including `fc_` usage items) with no extracted calls; it cannot silently
+score as a valid direct answer. Raw rows and the summary identify `invalid_reason`
+(timeout, harness error, absent samples, upstream HTTP error, missing upstream or
+Agent terminal result, or extraction mismatch). `outcome` distinguishes `completed`,
+`limit_hit`, and `invalid`; the summary counts limit hits separately. Invalid and
+limited requests remain in the denominator.
 Steward scoring reads only the case's stopped, isolated BTCC database: Plan
 Review binding, review-before-mutation attempts (including gate refusals), chosen
 mode, successful Worker calls and terminal child/parent Work. Checks are
@@ -373,8 +392,16 @@ report-only for human review, without an LLM judge. The complete workspace and
 journals are retained for inspection.
 
 Steward defaults: 80 upstream model rounds and 900 seconds per case; adjust with
-`--max-rounds` and `--seconds`. Limits are recorded, with no silent retry. Product
-HTTP retries can consume the remaining round allowance. Results and captured
+`--max-rounds` and `--seconds`. The round budget is shared by that case's Steward
+and Workers only. Local Butler answers (including seeded history and all four old
+steps), metadata discovery, and background answers consume no upstream rounds.
+Exactly N upstream requests are admitted for `--max-rounds N`; request N+1 is
+refused and reports `limit_hit`. Product HTTP retries consume the same allowance.
+`upstream_rounds` counts admitted requests; report `rounds` counts collected samples.
+The evaluator drains admitted requests on a limit hit before taking its snapshot;
+a timeout can still leave fewer collected samples, with `invalid_reason: timeout`.
+No round counter subtracts a local Butler round, so 79 samples under the default
+80 is not by itself evidence of an off-by-one or a round-limit hit. Results and captured
 request bodies are private temp artifacts under `$TMPDIR/delegation-eval/<timestamp>/`:
 `raw.jsonl`, `results.json`, `summary.md`, and `workspaces/`. The runner prints the
 summary path. They contain only synthetic cases and isolated paths; no headers,

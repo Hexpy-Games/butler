@@ -83,3 +83,66 @@ fn collect(
     }
     Ok(())
 }
+
+/// End-to-end contracts shared by both offline variant runs.
+pub(super) fn verify(case: &Value, first: bool, row: &Value, workspace: &Path) {
+    let samples = row["samples"].as_array().unwrap();
+    let graph = &row["db"];
+    for prior in case["history"].as_array().into_iter().flatten() {
+        assert!(
+            samples[0]["request"]
+                .to_string()
+                .contains(prior["butler"].as_str().unwrap()),
+            "seeded history is missing"
+        );
+    }
+    assert!(
+        samples[0]["instruction_tool_tokens_o200k_estimate"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+    assert_eq!(row["outcome"], "completed", "{row}");
+    if first {
+        assert_eq!(samples.len(), 1);
+        if case["label"] == "delegate" {
+            assert_eq!(samples[0]["calls"][0]["name"], "delegate_to_steward");
+        } else {
+            assert_eq!(samples[0]["calls"], json!([]));
+        }
+        assert_eq!(
+            graph["executed_tools"],
+            json!([]),
+            "evaluated tools executed"
+        );
+    } else {
+        let expected = if row["variant"] == "old" {
+            json!([
+                "start_work",
+                "replace_work_plan",
+                "record_work_review",
+                "delegate_to_steward"
+            ])
+        } else {
+            json!(["delegate_to_steward"])
+        };
+        assert_eq!(row["local_calls"], expected);
+        let parent = graph["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|t| t["role"] == "butler")
+            .map(|t| t["tool_name"].clone())
+            .collect::<Vec<_>>();
+        for (actual, expected) in parent.iter().zip(expected.as_array().unwrap()) {
+            assert_eq!(actual, expected);
+        }
+        assert!(parent.len() >= expected.as_array().unwrap().len());
+        assert_eq!(graph["plan_gate_refusals"], 1, "{graph}");
+        assert_eq!(graph["plan_before_first_mutation"], false, "{graph}");
+        assert_eq!(graph["plan_review_accepted"], true, "{graph}");
+        assert_eq!(graph["workers_when_expected"], true, "{graph}");
+        assert_eq!(graph["disposition_recorded"], true, "{graph}");
+        assert!(!workspace.join("premature.txt").exists());
+    }
+}

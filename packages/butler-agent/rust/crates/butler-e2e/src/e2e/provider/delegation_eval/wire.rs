@@ -1,7 +1,8 @@
 //! Responses and Anthropic SSE adapters used only by the opt-in evaluation.
 use axum::{body::Body, http::Response};
 use serde_json::{Value, json};
-use std::collections::BTreeMap;
+mod decode;
+pub use decode::parse;
 
 pub fn call(name: &str, arguments: &Value) -> Value {
     json!({"type":"function_call","id":"fc_eval","call_id":"call_eval","name":name,
@@ -74,57 +75,6 @@ fn anthropic(call: Option<Value>, text: &str, model: &str) -> Vec<Value> {
         json!({"type":"message_delta","delta":{"stop_reason":if tool {"tool_use"} else {"end_turn"}},"usage":{"output_tokens":20}}),
         json!({"type":"message_stop"}),
     ]
-}
-
-/// Keep all calls in upstream order, and usage as actually reported.
-pub fn parse(bytes: &[u8]) -> Value {
-    let text = String::from_utf8_lossy(bytes);
-    let events: Vec<Value> = text
-        .lines()
-        .filter_map(|line| line.strip_prefix("data:"))
-        .filter_map(|line| serde_json::from_str(line.trim()).ok())
-        .collect();
-    let mut calls = Vec::new();
-    let mut blocks = BTreeMap::<u64, Value>::new();
-    let mut usage = json!({});
-    for e in &events {
-        match e["type"].as_str().unwrap_or_default() {
-            "response.completed" => {
-                calls = e["response"]["output"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter(|v| v["type"] == "function_call")
-                    .cloned()
-                    .collect();
-                usage = e["response"]["usage"].clone();
-            }
-            "message_start" => usage = e["message"]["usage"].clone(),
-            "content_block_start" if e["content_block"]["type"] == "tool_use" => {
-                let mut call = e["content_block"].clone();
-                call["arguments"] = json!("");
-                blocks.insert(e["index"].as_u64().unwrap_or(0), call);
-            }
-            "content_block_delta" => {
-                if let Some(call) = blocks.get_mut(&e["index"].as_u64().unwrap_or(0)) {
-                    let next = format!(
-                        "{}{}",
-                        call["arguments"].as_str().unwrap_or(""),
-                        e["delta"]["partial_json"].as_str().unwrap_or("")
-                    );
-                    call["arguments"] = json!(next);
-                }
-            }
-            "message_delta" => {
-                if let (Some(to), Some(from)) = (usage.as_object_mut(), e["usage"].as_object()) {
-                    to.extend(from.clone());
-                }
-            }
-            _ => {}
-        }
-    }
-    calls.extend(blocks.into_values());
-    json!({"calls":calls,"usage":usage,"complete":events.iter().any(|e| matches!(e["type"].as_str(),Some("response.completed"|"message_stop")))})
 }
 
 /// Role markers are taken only from user context, never tool descriptions.

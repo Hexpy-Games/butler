@@ -77,13 +77,21 @@ run_test() {
      CARGO_TARGET_DIR="$new_target" "$script_dir/isolated-run.sh" cargo test -j 2 -p butler-e2e --test delegation_eval "$filter" -- --ignored --exact --test-threads=1 --nocapture)
 }
 if [[ $command == self-test ]]; then
+    unset BUTLER_E2E_DELEGATION_WIRE
     export BUTLER_E2E_TIER=stub BUTLER_E2E_BIN="$new_target/debug/butler-agent" BUTLER_E2E_DELEGATION_VARIANT=new
+    export BUTLER_E2E_DELEGATION_DUMMY_KEY=dummy-offline-key
+    run_test delegation_contracts
     export BUTLER_E2E_DELEGATION_MODE=first-decision BUTLER_E2E_DELEGATION_CASES=d03-pdf-from-above,s06-thanks
     run_test delegation_offline
+    export BUTLER_E2E_DELEGATION_WIRE=final BUTLER_E2E_DELEGATION_REPEAT=2
+    run_test delegation_offline
+    unset BUTLER_E2E_DELEGATION_WIRE
+    export BUTLER_E2E_DELEGATION_REPEAT=1
     export BUTLER_E2E_DELEGATION_MODE=steward BUTLER_E2E_DELEGATION_CASES=w07-small-fix
     run_test delegation_offline
+    export BUTLER_E2E_DELEGATION_VARIANT=old
+    run_test delegation_offline
 else
-    [[ $command != steward ]] || variants=new
     IFS=',' read -r -a sides <<< "$variants"
     fixture_name=first-decision-cases.json
     [[ $command != steward ]] || fixture_name=steward-cases.json

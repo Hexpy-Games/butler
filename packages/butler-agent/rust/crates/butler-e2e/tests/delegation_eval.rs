@@ -7,12 +7,16 @@
 )]
 #[path = "e2e/live/delegation_eval/checks.rs"]
 mod checks;
+#[path = "e2e/live/delegation_eval/contracts.rs"]
+mod contracts;
 #[path = "e2e/live/delegation_eval/db.rs"]
 mod db;
 #[path = "e2e/live/delegation_eval/fake.rs"]
 mod fake;
 #[path = "e2e/live/delegation_eval/fixture.rs"]
 mod fixture;
+#[path = "e2e/live/delegation_eval/local.rs"]
+mod local;
 #[path = "e2e/live/delegation_eval/run.rs"]
 mod run;
 use butler_e2e::e2e::{HarnessError, live};
@@ -41,4 +45,16 @@ async fn delegation_offline() -> Result<(), HarnessError> {
     );
     assert_eq!(std::env::var("BUTLER_E2E_TIER").as_deref(), Ok("stub"));
     run::suite(None).await
+}
+
+#[tokio::test]
+#[ignore = "on-demand offline wire and routing self-test"]
+async fn delegation_contracts() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    assert_eq!(std::env::var("BUTLER_E2E_TIER").as_deref(), Ok("stub"));
+    contracts::anthropic_default();
+    contracts::responses_output_items();
+    contracts::anthropic_blocks();
+    contracts::forwarding().await?;
+    contracts::round_limit().await
 }

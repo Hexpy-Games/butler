@@ -1,9 +1,9 @@
 //! Same execution path for offline fake-upstream validation and owner live runs.
-use super::{checks, db, fake, fixture};
+use super::{checks, db, fake, fixture, local};
 use butler_e2e::e2e::{
     HarnessError,
     cassette::{Cassette, Meta},
-    config::{LiveProvider, ModelChoice, base_path},
+    config::{LiveProvider, ModelChoice},
     gateway::turn_state,
     provider::{Provider, delegation_eval::Evaluation},
     scenario::{Scenario, Setup},
@@ -41,7 +41,18 @@ pub(super) async fn suite(live: Option<LiveProvider>) -> Result<(), HarnessError
         );
     }
     for case in cases {
-        one(case, first, live.clone()).await?;
+        if let Err(error) = one(case, first, live.clone()).await {
+            let mut row = json!({"mode":mode,"model":live.as_ref().map(|p|p.choice.label())
+                .unwrap_or_else(||"openai/gpt-6-luna".into()),"variant":variant(),
+                "repeat":number("BUTLER_E2E_DELEGATION_REPEAT",1),"case":case["id"],
+                "label":case["label"],"samples":[],"db":{},"wall_ms":0,"timed_out":false,
+                "round_limit":false,"error":error.to_string(),"offline":live.is_none()});
+            diagnostics(&mut row);
+            write(row).await?;
+            if live.is_none() {
+                return Err(error);
+            }
+        }
     }
     Ok(())
 }
@@ -51,76 +62,19 @@ async fn one(case: &Value, first: bool, live: Option<LiveProvider>) -> Result<()
     } else {
         None
     };
-    let upstream = live
-        .as_ref()
-        .and_then(|p| {
-            p.base_url
-                .clone()
-                .or_else(|| p.upstream_default().map(str::to_owned))
-        })
-        .unwrap_or_else(|| fake.as_ref().unwrap().base.clone());
+    let upstream = local::upstream(live.as_ref(), fake.as_ref().map(|f| f.base.as_str()))?;
     let max = number("BUTLER_E2E_DELEGATION_MAX_ROUNDS", 80);
     let (proxy, eval) = Provider::delegation_evaluation(upstream, !first, max).await?;
     let model = live
         .as_ref()
         .map(|p| p.choice.clone())
         .unwrap_or_else(|| ModelChoice::parse("openai/gpt-6-luna").unwrap());
-    let mut setup = Setup::new(&format!("DELEGATION-{}", case["id"].as_str().unwrap()))?;
-    setup = if let Some(mut provider) = live {
-        provider.base_url = Some(format!(
-            "{}{}",
-            proxy.base_url,
-            base_path(&provider.provider)
-        ));
-        let anthropic = provider.provider == "anthropic";
-        let mut configured = setup.live(provider);
-        if anthropic {
-            // This loopback recorder forwards unchanged bytes to the official endpoint.
-            configured = configured.env(
-                "BUTLER_ANTHROPIC_CACHE_VERIFIED_ENDPOINT",
-                format!("{}/messages", proxy.base_url),
-            );
-        }
-        configured
-    } else {
-        setup
-            .stub_cassette(Cassette {
-                scenario: "eval-local".into(),
-                meta: Meta {
-                    provider: "openai-subscription".into(),
-                    model: model.model.clone(),
-                    ..Meta::default()
-                },
-                exchanges: vec![],
-            })
-            .env(
-                "BUTLER_CHATGPT_API_BASE_URL",
-                format!("{}/v1", proxy.base_url),
-            )
-    };
-    let root = setup.sandbox.workspace.clone();
-    let c = case.clone();
-    tokio::task::spawn_blocking(move || fixture::files(&root, &c, first))
-        .await
-        .unwrap()?;
-    let mut s = setup.start().await?;
-    if !first {
-        fixture::workers(&s).await?;
-    }
-    let chat = fixture::chat(&s).await?;
-    for prior in case["history"].as_array().into_iter().flatten() {
-        *eval.local_text.lock().unwrap() = prior["butler"].as_str().unwrap().into();
-        let (_, turn) = s.turn(&chat, prior["user"].as_str().unwrap()).await?;
-        assert_eq!(turn_state(&turn), "delivered", "{turn}");
-    }
+    let setup = setup(case, live, &model, &proxy.base_url)?;
+    let (mut s, chat) = prepare(setup, case, first, &eval, &proxy.base_url).await?;
     *eval.local_text.lock().unwrap() = "Evaluation turn finished.".into();
     eval.armed.store(first, Ordering::SeqCst);
     if !first {
-        *eval.delegation.lock().unwrap() =
-            Some(butler_e2e::e2e::provider::delegation_eval::wire::call(
-                "delegate_to_steward",
-                &json!({"request":case["request"],"checks":case["checks"]}),
-            ));
+        *eval.delegation.lock().unwrap() = local::parent_script(case, &variant()).into();
     }
     let begin = Instant::now();
     let result = tokio::time::timeout(
@@ -132,70 +86,135 @@ async fn one(case: &Value, first: bool, live: Option<LiveProvider>) -> Result<()
     let error = result.ok().and_then(Result::err).map(|e| e.to_string());
     // Stop before reading the case database; every case owns its child process.
     drop(s.agent);
-    let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
-    let c = case.clone();
-    let workspace = s.sandbox.workspace.clone();
-    let graph = tokio::task::spawn_blocking(move || {
-        let mut graph = db::snapshot(&path, &c, first)?;
-        if !first {
-            graph["checks_look_met"] = checks::inspect(&workspace, &c, &graph)?;
-        }
-        Ok::<_, HarnessError>(graph)
-    })
-    .await
-    .unwrap()?;
+    let graph = snapshot(&s.sandbox.data, &s.sandbox.workspace, case, first).await?;
     let samples = eval.snapshot();
-    if let Some(fake) = &fake {
-        fake.verify(&samples);
-        for prior in case["history"].as_array().into_iter().flatten() {
-            assert!(
-                samples[0]["request"]
-                    .to_string()
-                    .contains(prior["butler"].as_str().unwrap()),
-                "seeded history is missing"
-            );
-        }
-        assert!(
-            samples[0]["instruction_tool_tokens_o200k_estimate"]
-                .as_u64()
-                .unwrap()
-                > 0
-        );
-        assert!(!timed_out, "offline evaluation timed out: {graph}");
-        assert!(error.is_none(), "{error:?}");
-        if first {
-            assert_eq!(samples.len(), 1);
-            if case["label"] == "delegate" {
-                assert_eq!(samples[0]["calls"][0]["name"], "delegate_to_steward");
-            } else {
-                assert_eq!(samples[0]["calls"], json!([]));
-            }
-            assert_eq!(
-                graph["executed_tools"],
-                json!([]),
-                "evaluated tools executed"
-            );
-        } else {
-            assert_eq!(graph["plan_gate_refusals"], 1, "{graph}");
-            assert_eq!(graph["plan_before_first_mutation"], false, "{graph}");
-            assert_eq!(graph["plan_review_accepted"], true, "{graph}");
-            assert_eq!(graph["workers_when_expected"], true, "{graph}");
-            assert_eq!(graph["disposition_recorded"], true, "{graph}");
-            assert!(!s.sandbox.workspace.join("premature.txt").exists());
-        }
-    }
+    let local_calls = eval.local_calls.lock().unwrap().clone();
     let artifacts = retain(&s.sandbox.workspace, case).await?;
-    let row = json!({"mode":if first {"first-decision"} else {"steward"},"model":model.label(),
-        "variant":std::env::var("BUTLER_E2E_DELEGATION_VARIANT").unwrap_or_else(|_|"new".into()),
+    let mut row = json!({"mode":if first {"first-decision"} else {"steward"},"model":model.label(),
+        "variant":variant(),
         "repeat":number("BUTLER_E2E_DELEGATION_REPEAT",1),"case":case["id"],"label":case["label"],
         "expected_mode":case["expected_mode"],"checks":case["checks"],"samples":samples,"db":graph,
         "artifacts":artifacts,"wall_ms":begin.elapsed().as_millis(),"timed_out":timed_out,"error":error,
-        "round_limit":eval.limited.load(Ordering::SeqCst),"offline":fake.is_some()});
+        "round_limit":eval.limited.load(Ordering::SeqCst),"offline":fake.is_some(),
+        "terminal_result":!timed_out && error.is_none() && !eval.limited.load(Ordering::SeqCst),
+        "upstream_rounds":eval.upstream_rounds(),"local_calls":local_calls});
+    diagnostics(&mut row);
+    if let Some(fake) = &fake {
+        fake.verify(row["samples"].as_array().unwrap());
+        checks::verify(case, first, &row, &s.sandbox.workspace);
+    }
     write(row).await?;
     s.sandbox.mark_success();
     drop(proxy); // replay state; never serializes transient recorder exchanges
     Ok(())
 }
+async fn prepare(
+    setup: Setup,
+    case: &Value,
+    first: bool,
+    eval: &Evaluation,
+    proxy: &str,
+) -> Result<(Scenario, String), HarnessError> {
+    let root = setup.sandbox.workspace.clone();
+    let c = case.clone();
+    tokio::task::spawn_blocking(move || fixture::files(&root, &c, first))
+        .await
+        .unwrap()?;
+    let s = setup.start().await?;
+    fixture::register_model(&s, proxy).await?;
+    if !first {
+        fixture::workers(&s).await?;
+    }
+    let chat = fixture::chat(&s).await?;
+    for prior in case["history"].as_array().into_iter().flatten() {
+        *eval.local_text.lock().unwrap() = prior["butler"].as_str().unwrap().into();
+        let (_, turn) = s.turn(&chat, prior["user"].as_str().unwrap()).await?;
+        if turn_state(&turn) != "delivered" {
+            return Err(HarnessError("seeded history turn did not deliver".into()));
+        }
+    }
+    Ok((s, chat))
+}
+fn variant() -> String {
+    std::env::var("BUTLER_E2E_DELEGATION_VARIANT").unwrap_or_else(|_| "new".into())
+}
+fn setup(
+    case: &Value,
+    live: Option<LiveProvider>,
+    model: &ModelChoice,
+    proxy: &str,
+) -> Result<Setup, HarnessError> {
+    let setup = Setup::new(&format!("DELEGATION-{}", case["id"].as_str().unwrap()))?;
+    Ok(if let Some(provider) = live {
+        local::live_setup(setup, provider, proxy)
+    } else {
+        setup
+            .stub_cassette(Cassette {
+                scenario: "eval-local".into(),
+                meta: Meta {
+                    provider: "openai-subscription".into(),
+                    model: model.model.clone(),
+                    ..Meta::default()
+                },
+                exchanges: vec![],
+            })
+            .env("BUTLER_CHATGPT_API_BASE_URL", format!("{proxy}/v1"))
+    })
+}
+async fn snapshot(
+    data: &std::path::Path,
+    workspace: &std::path::Path,
+    case: &Value,
+    first: bool,
+) -> Result<Value, HarnessError> {
+    let path = data.join("agent-runtime/btcc.sqlite");
+    let (case, workspace) = (case.clone(), workspace.to_owned());
+    tokio::task::spawn_blocking(move || {
+        let mut graph = db::snapshot(&path, &case, first)?;
+        if !first {
+            graph["checks_look_met"] = checks::inspect(&workspace, &case, &graph)?;
+        }
+        Ok(graph)
+    })
+    .await
+    .unwrap()
+}
+
+pub(super) fn diagnostics(row: &mut Value) {
+    let samples = row["samples"].as_array().unwrap();
+    let mismatch = samples.iter().any(|s| s["extraction_mismatch"] == true);
+    let reason = if row["timed_out"] == true {
+        Some("timeout")
+    } else if row["error"].is_string() {
+        Some("harness_error")
+    } else if samples.is_empty() {
+        Some("no_upstream_samples")
+    } else if samples.iter().any(|s| s["http_status"] != 200) {
+        Some("upstream_http_error")
+    } else if samples.iter().any(|s| s["complete"] != true) {
+        Some("missing_upstream_terminal_result")
+    } else if mismatch {
+        Some("extraction_mismatch")
+    } else if row["terminal_result"] == false && row["round_limit"] != true {
+        Some("missing_agent_terminal_result")
+    } else {
+        None
+    };
+    row["first_output_item"] = samples
+        .first()
+        .map(|s| s["first_output_item"].clone())
+        .unwrap_or(Value::Null);
+    row["extraction_mismatch"] = json!(mismatch);
+    row["invalid_reason"] = json!(reason);
+    row["outcome"] = json!(if reason.is_some() {
+        "invalid"
+    } else if row["round_limit"] == true {
+        "limit_hit"
+    } else {
+        "completed"
+    });
+}
+
 async fn execute(
     s: &Scenario,
     chat: &str,
@@ -205,12 +224,21 @@ async fn execute(
 ) -> Result<(), HarnessError> {
     if first {
         let (_, turn) = s.turn(chat, case["request"].as_str().unwrap()).await?;
-        assert_eq!(turn_state(&turn), "delivered", "{turn}");
+        if turn_state(&turn) != "delivered" {
+            return Err(HarnessError(format!(
+                "evaluation turn ended {}",
+                turn_state(&turn)
+            )));
+        }
         return Ok(());
     }
     s.gw.say(chat, case["request"].as_str().unwrap()).await?;
     loop {
         if eval.limited.load(Ordering::SeqCst) {
+            // A concurrent Worker request may still be collecting its last sample.
+            while eval.inflight.load(Ordering::SeqCst) > 0 {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
             return Ok(());
         }
         let path = s.sandbox.data.join("agent-runtime/btcc.sqlite");
