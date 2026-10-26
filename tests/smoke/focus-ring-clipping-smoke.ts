@@ -38,6 +38,9 @@ import type { SettingsView } from "../../packages/butler-app/client/ui/src/app/t
 const textSize = process.env.BUTLER_SMOKE_TEXT_SIZE ?? "default";
 assert(["default", "large", "larger"].includes(textSize), "invalid smoke text size");
 const uiScale = textSizeFactor(textSize as SettingsView["text_size"]);
+/** The CSS viewport the App shows in a window of `cell` DIPs under its page zoom, never below the App's minimum window. */
+const cssViewport = (cell: { width: number; height: number }) =>
+  ({ width: Math.max(Math.round(cell.width / uiScale), 344), height: Math.max(Math.round(cell.height / uiScale), 480) });
 const root = process.cwd();
 const copy = getAppCopy("ko-KR");
 const shots = process.env.BUTLER_FOCUS_RING_SHOTS;
@@ -69,13 +72,12 @@ const errors: string[] = [];
 const failures: string[] = [];
 let checked = 0;
 let scrolledStops = 0;
-let radiusScale = uiScale;
 
 type Cell = { width: number; height: number; theme: "light" | "dark"; background: "plain" | "wallpaper" };
 let fixture: { messages: MessageRecord[]; background: string } = { messages: [answer], background: "plain" };
 
 async function capture(page: Page, name: string) {
-  if (shots) await page.screenshot({ path: join(shots, `${name}-scale-${radiusScale}-${page.viewportSize()!.width}x${page.viewportSize()!.height}.png`) });
+  if (shots) await page.screenshot({ path: join(shots, `${name}.png`) });
 }
 
 function record(cell: Cell, screen: string, result: { stops: number; clipped: FocusRingClip[]; visited?: string[]; unmarked?: string[] }) {
@@ -86,7 +88,7 @@ function record(cell: Cell, screen: string, result: { stops: number; clipped: Fo
   }
   assert(result.stops > 0, `${screen}: the keyboard reached no control`);
   if (result.clipped.length) {
-    const failure = `${screen} @ ${Math.max(Math.round(cell.width / uiScale), 344)}×${Math.max(Math.round(cell.height / uiScale), 480)} CSS px scale ${radiusScale} ${cell.theme} ${cell.background}: ${result.clipped.length} clipped ring(s)\n${formatClips(result.clipped)}`;
+    const failure = `${screen} @ ${cell.width}px${uiScale === 1 ? "" : ` (${cssViewport(cell).width} CSS px at ${uiScale})`} ${cell.theme} ${cell.background}: ${result.clipped.length} clipped ring(s)\n${formatClips(result.clipped)}`;
     failures.push(failure);
     if (process.env.BUTLER_FOCUS_RING_VERBOSE) console.error(failure);
   }
@@ -111,7 +113,7 @@ function usageMonitor(url: URL): UsageMonitorView {
 /** `auth` picks the harness model's billing; a tracked one (api_key) shows usage in the context popover. */
 async function open(page: Page, cell: Cell, auth?: string) {
   fixture = { messages: [answer], background: cell.background };
-  await page.setViewportSize({ width: Math.max(Math.round(cell.width / uiScale), 344), height: Math.max(Math.round(cell.height / uiScale), 480) });
+  await page.setViewportSize(cssViewport(cell));
   await page.goto(`${base}?visual=components&theme=${cell.theme}&locale=ko${auth ? `&auth=${auth}` : ""}`);
   await page.locator('[data-slot="item-card"]').first().waitFor();
   await page.locator('[data-slot="tab-rail"]').first().waitFor();
@@ -353,7 +355,7 @@ try {
   const page = await browser.newPage({ reducedMotion: "reduce", locale: "ko-KR", timezoneId: "Asia/Seoul" });
   page.on("pageerror", (error) => errors.push(error.message));
   await page.addInitScript((scale) => {
-    document.addEventListener("DOMContentLoaded", () => document.documentElement.style.setProperty("--ui-scale", sessionStorage.getItem("focus-audit-scale") ?? String(scale)), { once: true });
+    document.addEventListener("DOMContentLoaded", () => document.documentElement.style.setProperty("--ui-scale", String(scale)), { once: true });
   }, uiScale);
   await page.addInitScript((tabs) => {
     const state = { enabled: true, blocked: false, activeId: "m1", nativeCovered: false, tabs };
@@ -393,22 +395,12 @@ try {
     if (url.pathname === "/usage-monitor") return route.fulfill({ json: { ok: true, data: usageMonitor(url) } });
     return route.fulfill({ status: 404, json: { ok: false, error: { code: "not_found" } } });
   });
-  for (const [width, height] of [[1280, 800], [390, 844]]) {
+  for (const [width, height] of [[1280, 860], [390, 844]]) {
     for (const theme of ["light", "dark"] as const) {
       for (const background of ["plain", "wallpaper"] as const) {
         const only = process.env.BUTLER_FOCUS_RING_CELL;
         if (only && only !== `${width}-${theme}-${background}`) continue;
-        console.log(JSON.stringify({ width, height, theme, background, scale: uiScale,
-          cssWidth: Math.max(Math.round(width / uiScale), 344), cssHeight: Math.max(Math.round(height / uiScale), 480) }));
         await auditCell(page, { width, height, theme, background });
-        if (uiScale !== 1) {
-          await page.evaluate(() => sessionStorage.setItem("focus-audit-scale", "1"));
-          radiusScale = 1;
-          console.log("Same CSS viewport, scale 1 reference");
-          await auditCell(page, { width, height, theme, background });
-          await page.evaluate(() => sessionStorage.removeItem("focus-audit-scale"));
-          radiusScale = uiScale;
-        }
       }
     }
   }
