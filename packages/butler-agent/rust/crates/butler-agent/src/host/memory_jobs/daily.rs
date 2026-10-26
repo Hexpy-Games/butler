@@ -102,7 +102,7 @@ impl DailyCognitionJobs {
             data_root.clone(),
             coordinator.clone(),
             provider.clone(),
-            configuration,
+            configuration.clone(),
             profile.clone(),
             ledger,
             date_parser,
@@ -112,6 +112,14 @@ impl DailyCognitionJobs {
             briefing_at: SystemTime::now().into(),
             metrics: cycle_metrics,
             briefing,
+            patterns: Arc::new(super::patterns::compose(
+                data_root.clone(),
+                coordinator.clone(),
+                provider,
+                configuration,
+                profile.clone(),
+                gate.clone(),
+            )),
             profile: Arc::new(ProfileConsolidation {
                 rules: feedback_rules(&data_root, &paths, coordinator.clone()),
                 profile,
@@ -133,6 +141,10 @@ impl DailyCognitionJobs {
             legacy,
             gate,
         }
+    }
+
+    pub(in crate::host) fn patterns(&self) -> &butler_memory::cognition::PatternRepository {
+        self.phases.patterns.repository()
     }
 
     pub(in crate::host) fn context_maintenance(
