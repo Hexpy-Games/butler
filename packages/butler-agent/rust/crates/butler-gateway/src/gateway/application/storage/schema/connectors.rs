@@ -11,6 +11,7 @@ pub(super) fn create(db: &Connection) -> Result<(), AppStorageError> {
         DROP INDEX IF EXISTS connector_retention;
         CREATE INDEX IF NOT EXISTS connector_arrival_retention ON app_connector_events(arrived_at) WHERE delivered_at IS NOT NULL OR digested_at IS NOT NULL;
         CREATE TABLE IF NOT EXISTS app_connector_cursors(account TEXT PRIMARY KEY, cursor TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS connector_event_delivery ON app_connector_events(delivery_id);
         CREATE INDEX IF NOT EXISTS connector_pending ON app_connector_events(account,ready,delivered_at,digested_at);
         CREATE INDEX IF NOT EXISTS connector_lane ON app_connector_events(lane,received_at);
         CREATE TABLE IF NOT EXISTS app_connector_signals(
