@@ -6,7 +6,7 @@ import {
 } from "./tabStripModel";
 
 const NAV_KEYS = new Set<string>(["ArrowLeft", "ArrowRight", "Home", "End"]);
-/** The focusable element inside a registered slot (the tab or the chip). */
+/** The focusable element inside a registered slot (the tab, the chip or a group's new-tab button). */
 export const TAB_STRIP_STOP = "data-tab-strip-stop";
 
 interface NavigationOptions {
@@ -17,6 +17,8 @@ interface NavigationOptions {
   onMove?: (move: TabStripMove) => void;
   announce: (message: string) => void;
   hideChip?: boolean;
+  /** Titled groups end in their own new-tab button, a stop after their tabs. */
+  groupNewTab?: boolean;
 }
 
 /** The roving tab stop: the focused item while focus is inside, else the active tab (or its folded chip). */
@@ -29,12 +31,14 @@ function restingKey(groups: readonly TabStripGroup[], items: readonly TabStripIt
 }
 
 /**
- * Roving focus for the strip (one tab stop): arrows move across chips and tabs and wrap, Home/End
+ * Roving focus for the strip (one tab stop): arrows move across chips, tabs and group new-tab buttons and wrap, Home/End
  * jump, Delete/Backspace close the focused tab, Cmd/Ctrl+Shift+arrows move it. Focus follows the
  * tab through re-renders (a move remounts it inside its new group).
  */
-export function useTabStripNavigation({ groups, activeTabId, labels, onClose, onMove, announce, hideChip = false }: NavigationOptions) {
-  const items = useMemo(() => stripItems(groups, hideChip), [groups, hideChip]);
+export function useTabStripNavigation({
+  groups, activeTabId, labels, onClose, onMove, announce, hideChip = false, groupNewTab = false,
+}: NavigationOptions) {
+  const items = useMemo(() => stripItems(groups, hideChip, groupNewTab), [groups, hideChip, groupNewTab]);
   const nodes = useRef(new Map<string, HTMLElement>());
   const refs = useRef(new Map<string, (node: HTMLElement | null) => void>());
   const pending = useRef<string | null>(null);

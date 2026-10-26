@@ -289,6 +289,18 @@ async function auditCell(page: Page, cell: Cell) {
   await page.goto(`${base}?visual=design-system&page=blocks/KanbanBoard&theme=${cell.theme}&locale=ko`);
   await page.locator('[data-slot="kanban-drag-scope"] [data-kanban-item]').first().waitFor();
   await auditScope(page, cell, "kanban-drag-board", '[data-slot="kanban-drag-scope"]', 40);
+  // Folded titles and each open pill's + are part of the strip's arrow order.
+  await page.goto(`${base}?visual=design-system&page=blocks/TabStrip&theme=${cell.theme}&locale=ko`);
+  const stripStory = '[data-ds-story="Folded group: three favicons and +N beside an open group"]';
+  const stops = page.locator(`${stripStory} [data-tab-strip-stop]:not([inert] *)`);
+  await stops.first().waitFor();
+  await stops.first().focus();
+  for (let index = 0; index < await stops.count(); index += 1) {
+    const clipped = await probeFocusRingFrames(page, () => page.keyboard.press(index === 0 ? "Home" : "ArrowRight"));
+    const probe = await probeFocusRing(page);
+    assert(probe, "TabStrip arrow stop has a focus indicator");
+    record(cell, "tab-strip-folded-group", { stops: 1, clipped: [...clipped, ...probe.clips] });
+  }
   // Tag edit pencils (DS viewer stories): an editable Tag, and FilteredSelectPopover rows whose edit menu sits at the scroller's edge.
   await page.goto(`${base}?visual=design-system&page=components/Tag&theme=${cell.theme}&locale=ko`);
   await page.locator('[data-ds-story="Editable"] [aria-haspopup="menu"]').first().waitFor();

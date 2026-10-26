@@ -16,8 +16,8 @@ import { tabKey, type TabStripTab } from "./tabStripModel";
 import { TAB_STRIP_STOP } from "./useTabStripNavigation";
 import styles from "./TabStrip.module.css";
 
-/** Favicon slot: activity replaces the site icon; a missing or broken icon shows a globe. */
-function TabFavicon({ tab }: { tab: TabStripTab }) {
+/** Favicon slot: activity replaces the site icon; a missing or broken icon shows a globe. Also a folded group's preview. */
+export function TabFavicon({ tab }: { tab: TabStripTab }) {
   const [brokenSrc, setBrokenSrc] = useState<string | null>(null);
   let mark;
   if (tab.state === "loading") mark = <Spinner size={14} />;
@@ -32,14 +32,17 @@ function TabFavicon({ tab }: { tab: TabStripTab }) {
 
 const stopPointer = (event: PointerEvent) => event.stopPropagation();
 
-export function TabStripTabView({ tab, groupId, scope }: { tab: TabStripTab; groupId: string; scope: TabStripScope }) {
+/** One tab. `folded`: its group is folded, so the tab neither drags nor takes drops. */
+export function TabStripTabView({ tab, groupId, folded = false, scope }: {
+  tab: TabStripTab; groupId: string; folded?: boolean; scope: TabStripScope;
+}) {
   const key = tabKey(tab.id);
   const item = { key, kind: "tab" as const, groupId, tabId: tab.id };
   const active = tab.id === scope.activeTabId;
   const closable = tab.closable !== false;
   const sortable = useSortable({
     id: key,
-    disabled: !scope.draggable,
+    disabled: !scope.draggable || folded,
     transition: prefersReducedMotion() ? null : { duration: motionDuration("base"), easing: "var(--motion-ease-standard)" },
   });
   const ref = useComposedRefs<HTMLDivElement>(sortable.setNodeRef, scope.nav.register(key));
