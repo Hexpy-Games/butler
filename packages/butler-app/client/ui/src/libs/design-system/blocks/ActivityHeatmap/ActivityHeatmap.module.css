@@ -120,12 +120,12 @@
     box-shadow var(--motion-fast) var(--motion-ease-standard);
 }
 .root[data-cell="compact"] .day.day {
-  border-radius: 3px;
+  border-radius: calc(3px / var(--ui-scale));
 }
 .root[data-cell="compact"] .day::before {
   width: 100%;
   height: 100%;
-  border-radius: 3px;
+  border-radius: calc(3px / var(--ui-scale));
 }
 /* Light steps darken with intensity; dark steps brighten. */
 .day[data-level="1"]::before {

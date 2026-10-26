@@ -2,7 +2,7 @@
 /* The root is the toggle; the layout grid sits inside it. */
 .root {
   min-width: 0;
-  border-radius: var(--space-xs);
+  border-radius: calc(var(--space-xs) / var(--ui-scale));
   color: var(--text-primary);
   outline: none;
 }

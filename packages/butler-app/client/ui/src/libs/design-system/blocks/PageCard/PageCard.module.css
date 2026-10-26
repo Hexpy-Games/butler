@@ -86,7 +86,9 @@
   inset: calc(var(--page-card-top) - var(--border-hairline))
     calc(var(--border-hairline) * -1)
     calc(var(--page-card-note, 0px) - var(--border-hairline));
-  border-radius: calc(var(--radius-popover) + var(--border-hairline));
+  border-radius: calc(
+    var(--radius-popover) + var(--border-hairline) / var(--ui-scale)
+  );
   content: "";
   pointer-events: none;
 }
@@ -202,8 +204,10 @@
 
 .card:has(> .inner > .bandRow:empty) .content {
   overflow: hidden;
-  border-radius: calc(var(--radius-popover) - var(--border-hairline))
-    calc(var(--radius-popover) - var(--border-hairline)) 0 0;
+  border-radius: calc(
+      var(--radius-popover) - var(--border-hairline) / var(--ui-scale)
+    )
+    calc(var(--radius-popover) - var(--border-hairline) / var(--ui-scale)) 0 0;
 }
 
 /* Side letterbox of a fixed-size page in a pane wider than its aspect. */
