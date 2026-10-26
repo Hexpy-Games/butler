@@ -10,6 +10,7 @@ mod manifest;
 mod overlay;
 mod registries;
 pub(crate) mod safe_mode;
+mod secret_cleanup;
 mod source_work;
 mod sources;
 mod storage;

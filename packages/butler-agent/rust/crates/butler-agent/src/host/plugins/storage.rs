@@ -241,9 +241,15 @@ impl Plugins {
             .plugins
             .remove(id)
             .ok_or_else(|| error("plugin_not_found"))?;
-        for account in next.accounts.values().filter(|a| a.plugin == id) {
-            self.connectors.delete_secrets(account)?;
-        }
+        let connector_keys = next
+            .accounts
+            .values()
+            .filter(|a| a.plugin == id)
+            .map(|a| self.connectors.secret_keys(a))
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
         next.accounts.retain(|_, account| account.plugin != id);
         next.revision += 1;
         self.save(&next)?;
@@ -260,18 +266,24 @@ impl Plugins {
         .map_err(|_| error("plugin_store_cleanup_failed"))?;
         self.cleanup_removed(&mut state, &plugin)?;
         *self.state.lock() = state.clone();
+        let mut leftovers = super::secret_cleanup::system(&connector_keys);
         if input.get("data") == Some(&Value::Bool(true)) {
             let data = self.root.join("data").join(id);
             if data.exists() {
                 fs::remove_dir_all(data).map_err(|_| error("plugin_data_cleanup_failed"))?;
             }
-            for field in &plugin.approval.capabilities.secrets {
-                secret_store()?
-                    .delete(&key(id, &field.key)?)
-                    .map_err(|_| error("plugin_secret_store_unavailable"))?;
-            }
+            let keys = plugin
+                .approval
+                .capabilities
+                .secrets
+                .iter()
+                .map(|field| key(id, &field.key))
+                .collect::<Result<Vec<_>>>()?;
+            leftovers.extend(super::secret_cleanup::system(&keys));
         }
-        Ok(json!({"id":id,"revision":state.registry.revision}))
+        let mut response = json!({"id":id,"revision":state.registry.revision});
+        super::secret_cleanup::report(&mut response, &leftovers);
+        Ok(response)
     }
 }
 

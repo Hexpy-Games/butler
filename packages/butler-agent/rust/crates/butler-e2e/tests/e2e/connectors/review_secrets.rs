@@ -66,6 +66,7 @@ async fn review_disconnect_and_uninstall_remove_connector_secrets() -> Result<()
         )
         .await?;
         assert_eq!(r.status, 200, "{r:?}");
+        assert_eq!(r.data()["leftover_secrets"], json!([]));
         assert!(!present(&first)?, "disconnect retained secret");
         let r = api(
             &s,
@@ -78,6 +79,7 @@ async fn review_disconnect_and_uninstall_remove_connector_secrets() -> Result<()
         )
         .await?;
         assert_eq!(r.status, 200, "{r:?}");
+        assert_eq!(r.data()["leftover_secrets"], json!([]));
         assert!(!present(&second)?, "uninstall retained secret");
         assert!(!s.sandbox.data.join("secrets/plugins.json").exists());
         s.finish().await?;
