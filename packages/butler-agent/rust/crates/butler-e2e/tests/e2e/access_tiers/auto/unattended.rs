@@ -139,16 +139,11 @@ fn review(id: &str) -> Value {
 
 /// The scheduled turn plans, reviews and hands the work to a steward.
 fn delegation() -> Vec<Value> {
-    vec![
-        call("start", "start_work", &json!({"objective":DELEGATE})),
-        plan("steward"),
-        review("review"),
-        call(
-            "delegate",
-            "delegate_to_steward",
-            &json!({"request":DELEGATE,"safe_title":"Research"}),
-        ),
-    ]
+    vec![call(
+        "delegate",
+        "delegate_to_steward",
+        &json!({"request":DELEGATE,"checks":["remote checked"],"safe_title":"Research"}),
+    )]
 }
 
 /// The steward tries a step its mode asks about, then reports.

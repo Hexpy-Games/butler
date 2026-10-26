@@ -158,6 +158,9 @@ pub(super) fn prepare_disposition(
     command: &DispositionCommand,
     current: &WorkView,
 ) -> StorageResult<ProjectWorkDispositionPreparation> {
+    if let Some(result) = &command.delegated_result_id {
+        return super::delegated_result::prepare(db, command, current, result);
+    }
     let fresh = command.input.disposition == DispositionStatus::Open
         && current.status == WorkStatus::Completed
         && command

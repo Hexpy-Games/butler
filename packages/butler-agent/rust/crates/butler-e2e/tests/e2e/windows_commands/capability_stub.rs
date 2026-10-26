@@ -213,27 +213,10 @@ fn call(id: &str, name: &str, args: &Value) -> Value {
 fn parent(step: usize) -> Value {
     match step {
         0 => call(
-            "parent-start",
-            "start_work",
-            &json!({"objective":"Delegate writing a file"}),
-        ),
-        1 => call(
-            "parent-plan",
-            "replace_work_plan",
-            &json!({"objective":"Delegate writing a file",
-            "execution_mode":"steward","actions":[{"action_key":"basic","description":"Write the test file"}],
-            "checks":["File exists after user approval"]}),
-        ),
-        2 => call(
-            "parent-review",
-            "record_work_review",
-            &json!({"subject":"plan","verdict":"accept","summary":"Ready"}),
-        ),
-        3 => call(
             "delegate",
             "delegate_to_steward",
             &json!({"request":"Write Downloads/위임 파일.txt with the exact approved content",
-            "safe_title":"파일 작성"}),
+            "checks":["File exists after user approval"],"safe_title":"파일 작성"}),
         ),
         _ => message("위임 작업 확인"),
     }

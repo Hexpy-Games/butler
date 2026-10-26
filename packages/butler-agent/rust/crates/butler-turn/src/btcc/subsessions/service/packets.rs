@@ -17,7 +17,7 @@ pub(super) type Reviewed<'a> = (&'a WorkPlan, &'a WorkReview);
 pub(super) fn steward_identity<'a>(
     request: &'a StewardDelegationRequest,
     reviewed: &'a WorkView,
-    (plan, review): Reviewed<'a>,
+    (plan, review): (&'a WorkPlan, Option<&'a WorkReview>),
 ) -> StewardIdentity<'a> {
     StewardIdentity {
         parent_session_id: &request.parent_session_id,
@@ -25,7 +25,7 @@ pub(super) fn steward_identity<'a>(
         request: &request.request,
         work_id: &reviewed.work_id,
         plan_revision_id: &plan.plan_revision_id,
-        review_revision_id: &review.review_revision_id,
+        review_revision_id: review.map(|review| review.review_revision_id.as_str()),
         previous_relation_id: request.previous_relation_id.as_deref(),
     }
 }
@@ -52,7 +52,7 @@ pub(super) fn steward(
     request: &StewardDelegationRequest,
     parent_chat_id: String,
     reviewed: &WorkView,
-    (plan, review): Reviewed<'_>,
+    (plan, review): (&WorkPlan, Option<&WorkReview>),
 ) -> SubsessionPacket {
     SubsessionPacket {
         child_role: ChildRole::Steward,
@@ -126,7 +126,7 @@ pub(super) fn worker(
             reviewed,
             &request.parent_turn_id,
             plan,
-            review,
+            Some(review),
         )),
         worker_profile: Some(crate::btcc::PacketWorkerProfile {
             id: profile.id.clone(),

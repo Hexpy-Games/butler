@@ -208,11 +208,11 @@ fn assert_followup(
                 == stub::FOLLOWUP
         })
         .collect();
-    assert_eq!(followups.len(), 5, "{followups:?}");
+    assert_eq!(followups.len(), 2, "{followups:?}");
     assert!(
         followups[0]
             .to_string()
-            .contains("closed: new requests need a fresh reviewed Work")
+            .contains("closed: new requests use delegate_to_steward(previous_relation_id)")
     );
     assert!(followups[0].to_string().contains("previous_relation_id"));
     let feedback = followups[1]["input"]
@@ -227,6 +227,7 @@ fn assert_followup(
         feedback["output"]["next_action"]["previous_relation_id"],
         relation
     );
+    assert!(feedback["output"]["next_action"].get("requires").is_none());
     assert_eq!(
         feedback["output"]["prior_context"]["result"]["status"],
         if stopped { "cancelled" } else { "success" }

@@ -96,13 +96,10 @@ fn plan(mode: &str) -> Value {
 
 fn parent(round: usize) -> Value {
     match round {
-        0 => call("start", "start_work", &json!({"objective":REQUEST})),
-        1 => call("plan", "replace_work_plan", &plan("steward")),
-        2 => call("review", "record_work_review", &review()),
-        3 => call(
+        0 => call(
             "delegate",
             "delegate_to_steward",
-            &json!({"request":REQUEST}),
+            &json!({"request":REQUEST,"checks":["Every source read in full","Goal: Know the spring tide height","Deliver: A sourced comparison","Next: Plan around the tide","Assumed: Published tables are current"]}),
         ),
         _ => message("The research is under way."),
     }

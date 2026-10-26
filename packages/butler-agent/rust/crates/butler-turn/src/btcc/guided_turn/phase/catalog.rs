@@ -43,6 +43,23 @@ pub struct GuidedCatalogSnapshot {
 }
 
 impl GuidedCatalogSnapshot {
+    /// Artifact and external effects, excluding orchestration bookkeeping.
+    pub fn steward_plan_effects(&self) -> impl Iterator<Item = &str> {
+        self.tools
+            .iter()
+            .filter(|tool| match tool.effect_boundary.as_deref() {
+                Some("reviewed_persistent" | "external") => true,
+                Some("turn_local") => {
+                    !matches!(
+                        tool.category.as_deref(),
+                        Some("work" | "todo" | "dispatch" | "message")
+                    ) || tool.tags.iter().any(|tag| tag == "file")
+                }
+                _ => false,
+            })
+            .map(|tool| tool.name.as_str())
+    }
+
     /// Every catalog tool.
     pub fn capability_tools(&self) -> impl Iterator<Item = GuidedCatalogRead<'_>> {
         self.tools.iter().map(|tool| GuidedCatalogRead {
