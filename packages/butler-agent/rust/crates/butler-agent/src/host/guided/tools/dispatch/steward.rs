@@ -170,6 +170,7 @@ pub(super) async fn steer(
                 butler_turn::workspace::SessionRole::Steward
             },
             access_mode: access_mode(owner),
+            schedule_run: owner.inherited_run(),
         })
         .await
         .map_err(ToolExecutionError::Integrity)?;

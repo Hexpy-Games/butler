@@ -21,6 +21,7 @@ mod model;
 mod onboarding;
 pub(super) mod persistence;
 mod plan_continuation;
+mod proactive;
 mod readonly;
 pub use readonly::{diagnostics_enabled_readonly, stored_ui_language_readonly};
 mod session;

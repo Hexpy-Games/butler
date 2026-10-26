@@ -154,18 +154,39 @@ impl GuidedTools {
         extensions
     }
 
+    pub(super) async fn refresh_instruction_context(&self) -> Result<(), ToolExecutionError> {
+        let run = self
+            .subsessions
+            .instruction_run_context(&self.binding.source_session_id)
+            .await
+            .map_err(ToolExecutionError::Integrity)?;
+        if let Some(run) = run {
+            if run.connector_event {
+                *self.turn_taint.lock() = TurnTaint::ConnectorEvent;
+            }
+            *self.instruction_run.lock() = Some(run);
+        }
+        Ok(())
+    }
+
     pub(super) fn unattended(&self) -> bool {
         self.binding.turn_guard.unattended.is_some()
+            || self
+                .instruction_run
+                .lock()
+                .as_ref()
+                .is_some_and(|run| run.unattended)
     }
 
     /// Preserve attendance and event origin in every delegated child.
     pub(super) fn inherited_run(&self) -> Option<butler_turn::btcc::ScheduleRunContext> {
         let run = self.binding.turn_guard.unattended.as_ref();
         let connector_event = self.taint() == TurnTaint::ConnectorEvent;
-        if run.is_none() && !connector_event {
+        let inherited = self.instruction_run.lock().clone();
+        if run.is_none() && !connector_event && inherited.is_none() {
             return None;
         }
-        Some(butler_turn::btcc::ScheduleRunContext {
+        let mut result = inherited.unwrap_or(butler_turn::btcc::ScheduleRunContext {
             automation_id: run
                 .and_then(|r| r.automation_id.clone())
                 .unwrap_or_default(),
@@ -173,7 +194,10 @@ impl GuidedTools {
             unattended: run.is_some(),
             connector_event,
             scheduled_at: run.and_then(|r| r.scheduled_at.clone()),
-        })
+        });
+        result.connector_event |= connector_event;
+        result.unattended |= run.is_some();
+        Some(result)
     }
 }
 

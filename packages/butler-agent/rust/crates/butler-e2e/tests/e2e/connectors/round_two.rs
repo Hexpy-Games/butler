@@ -7,6 +7,7 @@ async fn round_two_returned_signal_preserves_original_in_batch_window() -> Resul
     let setup = setup("PC2-RETURNED")?;
     let root = package(&setup.sandbox.home, false)?;
     let s = setup.start().await?;
+    s.provider()?.set_chat_responder(|_| Some(stub::answer()));
     install(&s, &root).await?;
     let id = connect(&s, "batch", 0.1).await?;
     account(&s, &id, "connected").await?;
@@ -18,6 +19,7 @@ async fn round_two_returned_signal_preserves_original_in_batch_window() -> Resul
     )
     .await?;
     let mut signal = event("returned");
+    signal["dedupe_key"] = "original".into();
     signal["signal"] = json!({"type":"returned","ref":"original"});
     emit(&s, &id, vec![signal.clone()]).await?;
     count(&s, "SELECT count(*) FROM app_connector_signals", 1).await?;
@@ -52,5 +54,13 @@ async fn round_two_returned_signal_preserves_original_in_batch_window() -> Resul
         .collect::<Vec<_>>();
     assert_eq!(events.len(), 1);
     assert_eq!(events[0]["id"], "original");
+    count(&s, "SELECT count(*) FROM turns WHERE state='delivered'", 1).await?;
+    assert!(
+        s.provider()?.requests().iter().any(|request| {
+            let text = request.to_string();
+            text.contains("<connector-data>") && text.contains("original")
+        }),
+        "the original event must reach the model"
+    );
     s.finish().await
 }

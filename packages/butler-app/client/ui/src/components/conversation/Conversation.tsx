@@ -14,6 +14,7 @@ import { useConversationWallpaper } from "./hooks/useConversationWallpaper";
 import { EmptyState } from "./EmptyState";
 import { BranchProjectContext } from "./AssistantBranchActions";
 import { withQuestionAnswers } from "./userQuestions";
+import { useChatsIntroVisible } from "./ChatsIntro";
 import { MessageList } from "./MessageList";
 import { Composer } from "./Composer";
 import {
@@ -87,7 +88,7 @@ export function Conversation() {
     );
   }, []);
 
-  const hasMessages = messages.length > 0;
+  const hasTranscript = useChatsIntroVisible() || messages.length > 0;
   const stewardParentSubscriptionId = summary?.steward_children?.some(
     (child) => child.active_turn,
   ) ? activeChatId : null;
@@ -96,7 +97,7 @@ export function Conversation() {
     summary?.steward_children?.some((child) => child.active_turn) ||
     summary?.latest_progress?.safe_progress_rows?.length,
   );
-  const showMessageList = hasMessages || Boolean(pendingQuestions?.length || approvals.length) || hasDurableActivity || Boolean(summary?.branch_seed);
+  const showMessageList = hasTranscript || Boolean(pendingQuestions?.length || approvals.length) || hasDurableActivity || Boolean(summary?.branch_seed);
   const showEmptyState = !showMessageList && !messageLoadPending;
   const wallpaper = useConversationWallpaper(showEmptyState, isActiveChatSending);
   const composerLarge = true;

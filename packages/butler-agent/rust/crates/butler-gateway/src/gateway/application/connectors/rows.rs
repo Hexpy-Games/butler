@@ -7,26 +7,8 @@ pub(super) fn insert(
     let received = chrono::DateTime::parse_from_rfc3339(text(&event, "received_at")?)
         .map_err(|_| invalid())?
         .timestamp();
-    let cutoff = chrono::DateTime::parse_from_rfc3339(now)
-        .map_err(|_| invalid())?
-        .timestamp()
-        - 30 * 86400;
+    prune(db, now)?;
     let tx = db;
-    tx.execute(
-        "DELETE FROM app_connector_events WHERE arrived_at<?1 AND (delivered_at IS NOT NULL OR digested_at IS NOT NULL)",
-        [chrono::DateTime::from_timestamp(cutoff, 0).ok_or_else(invalid)?.to_rfc3339()],
-    )
-    .map_err(AppStorageError::sqlite)?;
-    tx.execute(
-        "DELETE FROM app_connector_signals WHERE received_at<?1",
-        [cutoff],
-    )
-    .map_err(AppStorageError::sqlite)?;
-    tx.execute(
-        "DELETE FROM app_connector_deliveries WHERE created_at<?1 AND admitted_at IS NOT NULL AND NOT EXISTS(SELECT 1 FROM app_connector_events WHERE delivery_id=app_connector_deliveries.id)",
-        [cutoff],
-    )
-    .map_err(AppStorageError::sqlite)?;
     let id = format!("event-{}", uuid::Uuid::new_v4());
     event["event_id"] = id.clone().into();
     let fresh=tx.execute("INSERT OR IGNORE INTO app_connector_events(event_id,connector,account,dedupe_key,received_at,data_json,arrived_at) VALUES(?1,?2,?3,?4,?5,?6,?7)",
@@ -126,14 +108,38 @@ pub(super) fn batch(
 ) -> Result<Value, AppStorageError> {
     let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
     for event in input["events"].as_array().ok_or_else(invalid)? {
-        let inserted = insert(&tx, event.clone(), now)?;
-        if event["signal"]["type"] == "returned" {
-            let mut signal = event.clone();
-            signal["event_id"] = inserted["event_id"].clone();
-            super::rules::signal(&tx, &signal, now)?;
+        if event["signal"].is_null() {
+            insert(&tx, event.clone(), now)?;
+        } else {
+            super::rules::signal(&tx, event, now)?;
         }
     }
     tx.execute("INSERT INTO app_connector_cursors(account,cursor) VALUES(?1,?2) ON CONFLICT(account) DO UPDATE SET cursor=excluded.cursor",params![text(input,"account")?,text(input,"cursor")?]).map_err(AppStorageError::sqlite)?;
     tx.commit().map_err(AppStorageError::sqlite)?;
     Ok(json!({"ok":true}))
+}
+
+/// Both event and signal intake retain the same bounded source history.
+pub(super) fn prune(db: &Connection, now: &str) -> Result<(), AppStorageError> {
+    let cutoff = chrono::DateTime::parse_from_rfc3339(now)
+        .map_err(|_| invalid())?
+        .timestamp()
+        - 30 * 86400;
+    let tx = db;
+    tx.execute(
+        "DELETE FROM app_connector_events WHERE arrived_at<?1 AND (delivered_at IS NOT NULL OR digested_at IS NOT NULL)",
+        [chrono::DateTime::from_timestamp(cutoff, 0).ok_or_else(invalid)?.to_rfc3339()],
+    )
+    .map_err(AppStorageError::sqlite)?;
+    tx.execute(
+        "DELETE FROM app_connector_signals WHERE received_at<?1",
+        [cutoff],
+    )
+    .map_err(AppStorageError::sqlite)?;
+    tx.execute(
+        "DELETE FROM app_connector_deliveries WHERE created_at<?1 AND admitted_at IS NOT NULL AND NOT EXISTS(SELECT 1 FROM app_connector_events WHERE delivery_id=app_connector_deliveries.id)",
+        [cutoff],
+    )
+    .map_err(AppStorageError::sqlite)?;
+    Ok(())
 }

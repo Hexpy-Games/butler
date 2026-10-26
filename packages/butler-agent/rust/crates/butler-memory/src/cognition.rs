@@ -31,6 +31,11 @@ mod memory_recall;
 mod migration;
 mod mutable_paths;
 mod paths;
+mod patterns;
+pub use patterns::{
+    PatternError, PatternEvent, PatternExtractionService, PatternFuture, PatternInput,
+    PatternInputSource, PatternRepository,
+};
 mod project_capsule;
 mod prompt;
 mod recall;

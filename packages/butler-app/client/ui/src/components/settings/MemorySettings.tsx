@@ -1,5 +1,6 @@
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { SettingsActionField, SettingsSection, SurfacePanel, Typo } from "@/butler-ds";
+import { PatternsSection } from "./PatternsSection";
 import { SettingsPage } from "./SettingsPage";
 import { useMemorySummary } from "./hooks/useMemorySummary";
 import { useInstructions } from "./hooks/useInstructions";
@@ -38,6 +39,7 @@ export function MemorySettings() {
       state={instructions.state} emptyMessage={instructions.unavailable ? copy.memory.unavailable : copy.memory.instructionsEmpty} onRetry={instructions.reload}>
       <InstructionsContent instructions={instructions} card={card("pinned")} locked={reset.kind === "project_memory"} />
     </SettingsSection>
+    <PatternsSection consentOn={profile?.health.consent_on} />
     <SettingsSection id="chat-memory" kind="form" title={copy.pageSections.chatMemory} description={copy.pageSectionDescriptions.chatMemory}
       state={cardState(summary.state, chat)} emptyMessage={copy.memory.unavailable} onRetry={() => { void summary.reload(true); }}>
       <RecallSettings />

@@ -5,11 +5,18 @@ pub(super) fn schedule() -> Value {
     json!({"name":"create_automation","arguments":{"title":"Review source","prompt":"Review new items","schedule_type":"interval","interval_minutes":60}})
 }
 pub(super) async fn attended(s: &Scenario, spec: Value) -> Result<Value, HarnessError> {
+    attended_with(s, spec, stub::run).await
+}
+pub(super) async fn attended_with(
+    s: &Scenario,
+    spec: Value,
+    responder: fn(&Value) -> Option<butler_e2e::e2e::cassette::ResponseRecord>,
+) -> Result<Value, HarnessError> {
     let connection =
         rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
     connection.execute("INSERT INTO app_connector_deliveries(id,account,payload,created_at,admitted_at) VALUES('attended-event','source','{}',0,'done')", [])?;
     drop(connection);
-    s.provider()?.set_chat_responder(stub::run);
+    s.provider()?.set_chat_responder(responder);
     let accepted = s.gw.send_message(json!({"chat_id":"general","text":format!("fixture-call:{spec}"),"client_message_id":"attended-event"})).await?;
     let turn = butler_e2e::e2e::scenario::accepted_turn_id(&accepted)?;
     s.gw.wait_turn(

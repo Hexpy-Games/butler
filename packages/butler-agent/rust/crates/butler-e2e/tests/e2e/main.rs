@@ -248,6 +248,7 @@ mod mac_app_update;
 mod memory_consolidation;
 mod memory_instructions;
 mod memory_management;
+mod memory_patterns;
 mod memory_profile_reset;
 mod memory_reset;
 mod memory_wiring_more;

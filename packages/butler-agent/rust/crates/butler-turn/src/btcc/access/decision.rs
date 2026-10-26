@@ -24,6 +24,8 @@ pub enum CapabilityKind {
     Schedule,
     SettingsWrite,
     ProjectRecord,
+    /// Durable lifecycle bookkeeping that also bootstraps its own Plan authority.
+    WorkRecord,
     CrossConversation,
     ButlerOutput,
     DeliverFiles,
@@ -89,6 +91,7 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     use CapabilityKind::{
         ButlerOutput, CommandMutation, CommandObservation, Connector, DeliverFiles, Exempt,
         FileEdit, FileRead, FolderSwitch, FullOnly, InternalRead, Network, ProjectRecord,
+        WorkRecord,
     };
     if request.taint == TurnTaint::ConnectorEvent
         && (request.kind.can_send_outside() || request.kind.persists_beyond_turn())
@@ -117,7 +120,7 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     if *mode == AccessMode::ReadOnly {
         return if matches!(
             request.kind,
-            InternalRead | FileRead | DeliverFiles | CommandObservation { .. }
+            InternalRead | WorkRecord | FileRead | DeliverFiles | CommandObservation { .. }
         ) {
             Allow
         } else {
@@ -128,7 +131,7 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     let auto = *mode == AccessMode::Auto;
     let first = auto || *mode == AccessMode::AskExceptReads;
     match request.kind {
-        Exempt(_) | InternalRead | ButlerOutput | DeliverFiles => Allow,
+        Exempt(_) | InternalRead | WorkRecord | ButlerOutput | DeliverFiles => Allow,
         CommandMutation {
             sandbox: CommandSandbox::Disabled,
         } if auto => Ask(GrantUse::Honor),
@@ -188,6 +191,7 @@ impl CapabilityKind {
             | Self::Schedule
             | Self::SettingsWrite
             | Self::ProjectRecord
+            | Self::WorkRecord
             | Self::CrossConversation
             | Self::ButlerOutput
             | Self::FolderSwitch
@@ -226,9 +230,11 @@ impl CapabilityKind {
     /// Effects cannot inherit exemptions intended for other dispatch routes.
     pub fn gated_effect(self) -> Self {
         match self {
-            Self::InternalRead | Self::Exempt(_) | Self::ButlerOutput | Self::DeliverFiles => {
-                Self::OtherEffect
-            }
+            Self::InternalRead
+            | Self::WorkRecord
+            | Self::Exempt(_)
+            | Self::ButlerOutput
+            | Self::DeliverFiles => Self::OtherEffect,
             kind => kind,
         }
     }
@@ -285,6 +291,18 @@ impl CapabilityKind {
             }
             SetWallpaper | SaveWallpaperModule => Self::SettingsWrite,
             StartTopicConversation => Self::CrossConversation,
+            ToolName::ControlWork
+                if arguments.get("action").and_then(Value::as_str) == Some("view_result") =>
+            {
+                Self::InternalRead
+            }
+            ToolName::ControlWork => Self::ProjectRecord,
+            ToolName::StartWork
+            | ToolName::ContinueWork
+            | ToolName::ReplaceWorkPlan
+            | ToolName::RecordWorkCheckpoint
+            | ToolName::RecordWorkReview
+            | ToolName::RecordWorkDisposition => Self::WorkRecord,
             OutputPublish => Self::ButlerOutput,
             ToolName::DeliverFiles => Self::DeliverFiles,
             SwitchFolder => Self::FolderSwitch,

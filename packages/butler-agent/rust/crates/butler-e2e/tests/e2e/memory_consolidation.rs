@@ -84,7 +84,11 @@ fn calls(s: &Scenario) -> usize {
         .count()
 }
 
-async fn terminal(s: &Scenario, trigger: &str, phase: &str) -> Result<Value, HarnessError> {
+pub(crate) async fn terminal(
+    s: &Scenario,
+    trigger: &str,
+    phase: &str,
+) -> Result<Value, HarnessError> {
     tokio::time::timeout(Duration::from_secs(90), async {
         loop {
             let events = s.gw.events_since(0).await?;
@@ -285,7 +289,12 @@ fn failed_profile(request: &Value) -> Option<ResponseRecord> {
     briefing(request).or_else(|| Some(butler_e2e::e2e::provider::title_response("Understood.")))
 }
 
-fn successful_profile(request: &Value) -> Option<ResponseRecord> {
+pub(crate) fn successful_profile(request: &Value) -> Option<ResponseRecord> {
+    if super::memory_patterns::task(request)["task"] == "pattern_extraction" {
+        return Some(butler_e2e::e2e::provider::title_response(
+            r#"{"updates":[]}"#,
+        ));
+    }
     briefing(request).or_else(|| {
         Some(butler_e2e::e2e::provider::title_response(
             r#"{"candidates":[]}"#,

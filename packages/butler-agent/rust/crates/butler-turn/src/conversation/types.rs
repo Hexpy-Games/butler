@@ -61,6 +61,8 @@ pub enum ConversationProviderShape {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConversationOriginKind {
+    /// External input and derived content admitted from a connected source.
+    Connector,
     UserInput,
     AssistantPublic,
     InternalControl,

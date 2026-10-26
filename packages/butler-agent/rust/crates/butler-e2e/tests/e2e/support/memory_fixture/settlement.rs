@@ -11,7 +11,8 @@ pub(crate) async fn settle(data: &Path) -> Result<(), HarnessError> {
         OpenFlags::SQLITE_OPEN_READ_ONLY,
     )?;
     let turns = canonical
-        .prepare("SELECT turn_id FROM conversation_turn_outcomes ORDER BY turn_id")?
+        // External and control inputs intentionally have no memory projection.
+        .prepare("SELECT o.turn_id FROM conversation_turn_outcomes o JOIN conversation_messages m ON m.id=o.request_message_id WHERE m.role='user' AND m.origin_kind='user_input' AND m.status IN ('complete','compacted') ORDER BY o.turn_id")?
         .query_map([], |row| row.get::<_, String>(0))?
         .collect::<Result<Vec<_>, _>>()?;
     drop(canonical);

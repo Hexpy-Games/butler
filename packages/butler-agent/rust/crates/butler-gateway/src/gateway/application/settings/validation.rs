@@ -11,6 +11,10 @@ const UPDATE_KEYS: &[&str] = &[
     "recall_judge_model",
     "consolidation_model",
     "consolidation_time",
+    "proactive_level",
+    "quiet_hours_start",
+    "quiet_hours_end",
+    "chats_intro_seen",
     "consolidation_reasoning_effort",
     "context_window_tokens",
     "worker_profiles",
@@ -46,22 +50,13 @@ const UPDATE_KEYS: &[&str] = &[
 ];
 
 pub(super) fn is_request(value: &Value) -> bool {
-    if !super::browsing::valid(value) || !super::logging::valid(value) {
+    if !valid_native(value) || !super::browsing::valid(value) || !super::logging::valid(value) {
         return false;
     }
     let Some(input) = value.as_object() else {
         return false;
     };
     if !input.keys().all(|key| UPDATE_KEYS.contains(&key.as_str())) {
-        return false;
-    }
-    if input
-        .get("consolidation_time")
-        .is_some_and(|v| !v.as_str().is_some_and(valid_time_of_day))
-        || input
-            .get("update_previews")
-            .is_some_and(|value| !value.is_boolean())
-    {
         return false;
     }
     if input
@@ -123,6 +118,22 @@ pub(super) fn is_request(value: &Value) -> bool {
         && input
             .get("collapse_message_box")
             .is_none_or(Value::is_boolean)
+}
+
+fn valid_native(input: &Value) -> bool {
+    if !super::proactive::valid(input) {
+        return false;
+    }
+    if input
+        .get("consolidation_time")
+        .is_some_and(|v| !v.as_str().is_some_and(valid_time_of_day))
+        || input
+            .get("update_previews")
+            .is_some_and(|value| !value.is_boolean())
+    {
+        return false;
+    }
+    true
 }
 
 pub(super) fn is_iana_timezone(value: &Value) -> bool {
@@ -309,7 +320,7 @@ fn utf16_len(value: &str) -> usize {
     value.encode_utf16().count()
 }
 
-fn valid_time_of_day(value: &str) -> bool {
+pub(super) fn valid_time_of_day(value: &str) -> bool {
     let b = value.as_bytes();
     b.len() == 5
         && b[2] == b':'
