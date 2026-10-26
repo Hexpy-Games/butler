@@ -194,7 +194,7 @@ fn apply_claimed(
     if input.kind == "turn_suspended" {
         return apply_suspended(tx, &input);
     }
-    if input.kind == "turn_failed" && btcc_retains_authority(&tx, &input.turn_id)? {
+    if input.kind == "turn_failed" && terminal_authority_pending(&tx, &input.turn_id)? {
         return skip(tx, input.action_id, input.cursor, input.now);
     }
     apply_projection(tx, input)
