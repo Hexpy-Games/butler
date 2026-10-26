@@ -87,6 +87,17 @@ try {
   assert(!Object.hasOwn((await unchanged).request().postDataJSON(), "model"), "an unchanged default omits the model");
   await page.getByRole("button", { name: "Back to schedules", exact: true }).click();
   await page.getByText(/On · Every day at 8:00 AM · Next:/u).waitFor();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const title = page.getByText("Daily eight", { exact: true });
+  const row = title.locator("../../..");
+  const meta = row.getByText(/On · Every day at 8:00 AM · Next:/u);
+  const titleBox = await title.boundingBox();
+  const rowBox = await row.boundingBox();
+  const metaBox = await meta.boundingBox();
+  assert(titleBox && titleBox.width > 0, `390px schedule title has positive width: ${JSON.stringify(titleBox)}`);
+  assert(rowBox && titleBox.x >= rowBox.x && titleBox.x + titleBox.width <= rowBox.x + rowBox.width, "390px schedule title stays inside the row horizontally");
+  assert(metaBox && rowBox && metaBox.x >= rowBox.x && metaBox.x + metaBox.width <= rowBox.x + rowBox.width, "390px schedule meta stays inside the row horizontally");
+  await page.setViewportSize({ width: 1440, height: 900 });
   const scheduleId = data.automations[0]!.id;
   await server.api(`/automations/${scheduleId}`, { method: "PATCH", body: JSON.stringify({ model: stubB }) });
   await server.api(`/model-catalog/local-models/${encodeURIComponent(stubB)}`, { method: "DELETE" });
