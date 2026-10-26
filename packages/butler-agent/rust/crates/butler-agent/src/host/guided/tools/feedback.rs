@@ -10,6 +10,10 @@ pub(super) fn solvable(code: &str) -> bool {
 }
 
 pub(super) const SOLVABLE: &[&str] = &[
+    "steward_plan_review_required",
+    "canon_epic_refs_multiple",
+    "canon_epic_not_bound",
+    "canon_epic_link_conflict",
     "schedule_access_exceeds_turn",
     "schedule_permission_required",
     "schedule_question_unavailable",
@@ -87,7 +91,7 @@ pub(super) const SOLVABLE: &[&str] = &[
 pub(super) fn result(error: &BtccError) -> Result<JsonDocument, ToolExecutionError> {
     let message = match error.code() {
         "delegation_reviewed_plan_required" => {
-            "Create or continue parent Work, record a Plan with execution_mode steward or workers, and record an accepting Plan Review bound to that current Plan revision. Then retry delegation. No delegation was started."
+            "Record your Plan with execution_mode workers and an accepting Plan Review bound to that current Plan revision, then retry. No Worker was assigned."
         }
         "steward_delegation_plan_mode_required" => {
             "Revise the current Plan to execution_mode steward and record an accepting Plan Review before retrying."
@@ -102,7 +106,7 @@ pub(super) fn result(error: &BtccError) -> Result<JsonDocument, ToolExecutionErr
             "Each todo requires a unique id. Correct the duplicate ids, then retry."
         }
         "steward_relation_not_found" | "active_steward_relation_not_found" => {
-            "Check the exact relation_id and current delegation state. For a new request after the previous Work closed, start and review a fresh Work, then delegate_to_steward with previous_relation_id in this same turn. Do not ask the user to restart. No child was steered or cancelled."
+            "Check the exact relation_id and current delegation state. For a new request after the previous Work closed, call delegate_to_steward with previous_relation_id in this same turn. Do not ask the user to restart. No child was steered or cancelled."
         }
         _ => error.message(),
     };
@@ -110,6 +114,11 @@ pub(super) fn result(error: &BtccError) -> Result<JsonDocument, ToolExecutionErr
         "code":error.code(),"message":message,"recoverable":true,
         "next_action":"Inspect the current Work, Plan execution_mode, action status and dependency results in context. Correct the named field using the tool schema (or describe_tools for a discovered tool). Resolve pending dependencies first; choose a permitted action or revise the Plan before retrying. Wait for an active child through the existing delegation flow, using wait_for_worker when it is available. Ask the user only for an input or decision that they alone can provide."
     }});
+    if error.code() == "steward_plan_review_required" {
+        value["error"]["next_action"] = json!([
+            {"tool":"replace_work_plan"}, {"tool":"record_work_review","subject":"plan","verdict":"accept"}
+        ]);
+    }
     if error.code().starts_with("effect_") {
         value["error"]["next_action"] = repair(error.code()).into();
     }

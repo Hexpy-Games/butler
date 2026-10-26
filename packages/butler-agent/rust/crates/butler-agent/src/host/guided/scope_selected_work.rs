@@ -140,6 +140,10 @@ impl ScopeSelectedWorkRepository {
 }
 
 impl DurableWorkRepository for ScopeSelectedWorkRepository {
+    fn steward_owns_work(&self, session: String, work: String) -> PortFuture<'_, bool> {
+        self.session.steward_owns_work(session, work)
+    }
+
     fn load_context(&self, scope: WorkTurnScope) -> PortFuture<'_, Option<WorkContext>> {
         Box::pin(async move {
             self.store_for_scope(&scope)

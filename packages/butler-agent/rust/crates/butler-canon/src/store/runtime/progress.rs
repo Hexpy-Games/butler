@@ -134,10 +134,10 @@ pub(super) fn reported(db: &Connection, work: &Value, views: &ProjectViews) -> R
                 .unwrap_or(Value::Null),
         )
     };
+    let reviewed = review["subject"] == "completion" && review["verdict"] == "accept";
     if disposition["disposition"] != "completed"
-        || review["subject"] != "completion"
-        || review["verdict"] != "accept"
         || checkpoint["stage"] != "reporting"
+        || !(reviewed || delegated_completion(db, id)?)
     {
         return Ok(false);
     }
@@ -153,6 +153,24 @@ pub(super) fn reported(db: &Connection, work: &Value, views: &ProjectViews) -> R
         Ok(state.as_deref() == Some("delivered"))
     };
     Ok(finished(&checkpoint)? && finished(&disposition)?)
+}
+
+/// A delegated parent's closeout belongs to its Steward's terminal result.
+fn delegated_completion(db: &Connection, work: &str) -> Result<bool> {
+    let Some(plan) = latest(db, Query::Plan, work)? else {
+        return Ok(false);
+    };
+    if plan["execution_mode"] != "steward" {
+        return Ok(false);
+    }
+    Ok(db
+        .query_row(
+            Query::DelegatedCompletion.sql(),
+            params![work, text(&plan, "plan_revision_id")?],
+            |_| Ok(()),
+        )
+        .optional()?
+        .is_some())
 }
 
 fn disposition(db: &Connection, work: &Value, views: &ProjectViews) -> Result<Value> {

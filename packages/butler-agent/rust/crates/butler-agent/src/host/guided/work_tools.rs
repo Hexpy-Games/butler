@@ -81,6 +81,13 @@ impl GuidedWorkTools {
                 "This is not a durable Work tool",
             ));
         }
+        if name == ToolName::RecordWorkDisposition
+            && let Some(work) = self.bound_work().await?
+            && args.get("work_id").and_then(Value::as_str) == Some(work.work_id.as_str())
+            && settled_by_steward(&work)?
+        {
+            return Ok(json!({"ok":true,"already_settled":true,"work":view::success(&work)}));
+        }
         if let Some(error) = self.handoff_rejection(args) {
             return Ok(self.rejected(error).await);
         }
@@ -161,6 +168,11 @@ impl GuidedWorkTools {
         self.bound_work().await
     }
 
+    pub(crate) fn settled_disposition(work: &WorkView) -> Result<Option<Value>, BtccError> {
+        Ok(settled_by_steward(work)?
+            .then(|| json!({"ok":true,"already_settled":true,"work":view::success(work)})))
+    }
+
     pub(crate) async fn bound_work(&self) -> Result<Option<WorkView>, BtccError> {
         self.service
             .bound_work_for_turn(self.scope.turn_id.clone())
@@ -177,6 +189,20 @@ impl GuidedWorkTools {
             Command::Disposition(input) => self.service.record_disposition(input).await,
         }
     }
+}
+
+fn settled_by_steward(work: &WorkView) -> Result<bool, BtccError> {
+    if work.status == butler_turn::btcc::DurableWorkStatus::Abandoned {
+        return Ok(true);
+    }
+    let Some(disposition) = &work.latest_disposition else {
+        return Ok(false);
+    };
+    Ok(disposition
+        .disposition_revision_id
+        .starts_with("steward-result-disposition:")
+        && disposition.material_fingerprint
+            == butler_turn::btcc::disposition_material_fingerprint(work)?)
 }
 
 fn source_error(error: &BtccError) -> Value {

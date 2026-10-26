@@ -15,6 +15,10 @@ use crate::btcc::BtccCode;
 
 /// Durable Work storage; each command is idempotent by its mutation call id.
 pub trait DurableWorkRepository: Send + Sync {
+    /// Whether an active Steward owns this parent Work.
+    fn steward_owns_work(&self, _session: String, _work: String) -> PortFuture<'_, bool> {
+        Box::pin(async { Ok(false) })
+    }
     /// The turn's bound Work with its request and results.
     fn load_context(&self, scope: WorkTurnScope) -> PortFuture<'_, Option<WorkContext>>;
     /// Imports the scope's open legacy Work, if any.
@@ -58,6 +62,15 @@ impl DurableWorkService {
     /// A service over the Work repository.
     pub fn new(repository: Arc<dyn DurableWorkRepository>) -> Self {
         Self { repository }
+    }
+
+    /// Whether parent closeout belongs to an active Steward.
+    pub async fn steward_owns_work(
+        &self,
+        session: String,
+        work: String,
+    ) -> Result<bool, BtccError> {
+        self.repository.steward_owns_work(session, work).await
     }
 
     /// The turn's bound Work context.

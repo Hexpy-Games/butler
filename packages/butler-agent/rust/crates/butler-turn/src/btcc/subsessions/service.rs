@@ -4,6 +4,7 @@ mod control;
 mod delegation;
 mod followup;
 mod helpers;
+mod one_call;
 mod projection;
 mod result_delivery;
 mod selection;
@@ -214,13 +215,14 @@ impl SubsessionService {
             ExecutionMode::Steward,
             BtccCode::StewardDelegationPlanModeRequired,
         )?;
+        let accepted = (plan, Some(review));
         let parent_chat_id = parent
             .transport_bindings
             .iter()
             .find(|binding| binding.transport == "app" && !binding.peer_id.trim().is_empty())
             .map(|binding| binding.peer_id.clone())
             .ok_or_else(|| error(BtccCode::ParentAppBindingRequired))?;
-        let identity = packets::steward_identity(&request, reviewed, (plan, review));
+        let identity = packets::steward_identity(&request, reviewed, accepted);
         let delegation_id = delegation::delegation_id(&delegation::STEWARD, &identity)?;
         if let Some(existing) = self.replay_existing(&delegation_id).await? {
             if self
@@ -236,7 +238,7 @@ impl SubsessionService {
         }
         let ids = delegation::DelegationIds::derive(&delegation::STEWARD, delegation_id);
         let now = (self.now)();
-        let mut packet = packets::steward(&ids, &request, parent_chat_id, reviewed, (plan, review));
+        let mut packet = packets::steward(&ids, &request, parent_chat_id, reviewed, accepted);
         packet.prior_context = self.followup_context(&request).await?;
         let envelope = child_envelope(ChildEnvelopeInput {
             role: "steward",

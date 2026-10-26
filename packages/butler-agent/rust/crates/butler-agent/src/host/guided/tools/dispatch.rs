@@ -8,6 +8,7 @@ mod publication;
 mod steward;
 pub(super) mod web;
 pub(super) use web::web_provenance;
+pub(super) mod steward_gate;
 mod work;
 mod worker;
 use butler_core::tool_protocol::ToolName;
@@ -72,7 +73,7 @@ pub(super) async fn execute(
         return Box::pin(mcp::execute(owner, invocation, call)).await;
     }
     if call.name == ToolName::DelegateToSteward || call.name == ToolName::ReadPriorDelegation {
-        return Box::pin(steward::execute(owner, invocation, call)).await;
+        return Box::pin(steward::execute(owner, invocation, call, call_id)).await;
     }
     if call.name == ToolName::ListAutomations {
         return list_automations(owner, call).await;
