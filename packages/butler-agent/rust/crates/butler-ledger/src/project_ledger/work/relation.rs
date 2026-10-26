@@ -307,9 +307,13 @@ pub(super) fn has_binding(snapshot: &Snapshot, turn_id: &str) -> bool {
         .get("bindingRefs")
         .and_then(Value::as_array)
         .is_some_and(|items| {
-            items
-                .iter()
-                .any(|item| item.get("turnId").and_then(Value::as_str) == Some(turn_id))
+            items.iter().any(|item| {
+                item.get("turnId").and_then(Value::as_str) == Some(turn_id)
+                    && item
+                        .get("isCurrent")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(true)
+            })
         })
 }
 
