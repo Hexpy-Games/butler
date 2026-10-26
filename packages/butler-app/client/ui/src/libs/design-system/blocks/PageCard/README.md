@@ -25,6 +25,14 @@ notch.
 ## When to use this block
 Use it for the page area of `BrowserPane`, one card for the visible tab.
 
+## Corners
+The card corners are `--page-card-radius` (the popover radius, 12px, when
+unset). `BrowserPane` lays the card flush with its own edges and sets the
+radius to its own bottom corners: 0 beside the window frame, the shell card
+radius in the cards frame. There the card's hairline and the holder edges
+outside it sit under the pane's edges, so a holder edge shows only along the
+page's top, under the toolbar.
+
 ## Container vs Presenter
 The App forwards `onBoundsChange` (x, y, width, height, visible, scale,
 radius) and `onOcclusion` to the main process and picks the holder:

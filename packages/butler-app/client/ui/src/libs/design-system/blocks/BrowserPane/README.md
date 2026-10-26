@@ -2,12 +2,16 @@
 
 ## What is this block
 `BrowserPane` is the browser sheet: a tinted pane (`--browser-pane-bg`) whose two
-top corners use the page card radius (`--browser-pane-radius`, 12px). It holds the
-tab row, the toolbar row and the page card, inset by `--browser-card-inset`.
+top corners use the popover radius (`--browser-pane-radius`, 12px). It holds the
+tab row and the toolbar row, inset by `--browser-card-inset`, and the page card,
+which fills the sheet edge to edge under the toolbar: no margin around the page.
+The card's transparent hairline sits under the sheet's own edges, so the native
+view starts right inside the sheet's hairline. The card corners follow the
+sheet's bottom corners through `--page-card-radius`: square beside the window
+frame, the shell card radius (12px) in the cards frame.
 `BrowserToolbar` lays out navigation · address · page actions on that row. The
-row keeps `--space-xs` above it (on top of `--browser-band-height`), so the
-address field sits about as far below the tabs (9px) as the tabs sit below the
-sheet's top edge.
+row is one `--browser-band-height` plus two `--space-xs` tall, so the 34px
+address field sits 7px below the tabs and centres with the 28px buttons.
 
 ## When to use this block
 - Beside a conversation: `placement="conversation"` inside the `AdaptiveShellSplit`
@@ -51,8 +55,10 @@ card; in the standalone Browser it is the card (do not wrap it in
 `AdaptiveShellCard`). The shell sets `--browser-pane-bg` to a
 `--shell-sheet-tint` ink tint of the card surface (1% light, 2.5% dark) and
 the page card's shadow to `--shell-page-shadow` (tight in light), so the
-sheet's strip beside the 8px gap is as light as the chat card, the gap reads
-as 8px, and the page card still lifts off the sheet by its edge.
+sheet's strip beside the 8px gap is as light as the chat card and the gap reads
+as 8px. The page reaches the sheet's sides and bottom and takes its 12px bottom
+corners (the native view takes one radius, so its top corners under the
+toolbar are 12px too).
 
 ## Wrong use cases
 - Do not lay glass over the page top: the page is a native view that glass

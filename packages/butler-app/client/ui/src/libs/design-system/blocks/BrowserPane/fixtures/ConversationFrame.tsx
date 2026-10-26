@@ -65,6 +65,7 @@ export function DemoChat({ locale, wallpaper = false }: { locale: Locale; wallpa
 export interface ConversationFrameDemoProps extends Omit<BrowserDemoProps, "placement"> {
   width: number;
   height: number;
+  frame?: "flat" | "cards";
   /** `live-peek`: collapsed, and the left edge really peeks (useSidebarPeek); the button sends the host signal. */
   sidebar?: "open" | "collapsed" | "peek" | "live-peek";
   paneOpen?: boolean;
@@ -92,7 +93,7 @@ export function StandaloneFrameDemo({ width, height, ...browser }: Omit<Conversa
 }
 
 /** A whole window: sidebar, the conversation titlebar, chat | browser pane (AdaptiveShellSplit). */
-export function ConversationFrameDemo({ width, height, sidebar = "open", paneOpen = true, autoCollapse = false, wallpaper = false, ...browser }: ConversationFrameDemoProps) {
+export function ConversationFrameDemo({ width, height, sidebar = "open", paneOpen = true, autoCollapse = false, wallpaper = false, frame: shellFrame = "flat", ...browser }: ConversationFrameDemoProps) {
   const copy = SIDEBAR[browser.locale];
   const demo = BROWSER_DEMO_COPY[browser.locale];
   const [chatWidth, setChatWidth] = useState(400);
@@ -103,7 +104,7 @@ export function ConversationFrameDemo({ width, height, sidebar = "open", paneOpe
   const browsing = browser.holder === undefined || browser.holder === "butler";
   const frame = (
     <ScaledFrame width={width} height={height}>
-      <AdaptiveShell ref={shell} leftOpen={leftOpen} rightOpen={false} splitOpen={paneOpen} leftPeek={sidebar === "peek" || peek.open}
+      <AdaptiveShell ref={shell} frame={shellFrame} leftOpen={leftOpen} rightOpen={false} splitOpen={paneOpen} leftPeek={sidebar === "peek" || peek.open}
         UNSAFE_style={{ height: "100%", ...adaptivePanelStyle({ leftWidth: 304, rightWidth: 376 }) }}>
         {leftOpen ? null : (
           <ChromeFloatingToggleLayer>

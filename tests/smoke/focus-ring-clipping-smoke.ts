@@ -43,7 +43,7 @@ const answer: MessageRecord = { id: "answer", chat_id: "butler-client", role: "a
 const myTabs = ["https://news.ycombinator.com/", "https://developer.mozilla.org/"].map((url, index) => ({
   id: `m${index + 1}`, owner: "mine", url, title: `My tab ${index + 1}`, favicon: "", status: "idle", canBack: false, canForward: false,
 }));
-const agentTabs = ["https://www.musinsa.com/products/4471209", "https://map.naver.com/", "https://example.com/a-very-long-path"].map((url, index) => ({
+const agentTabs = ["https://www.musinsa.com/products/4471209", "https://map.naver.com/", "https://example.com/a-very-long-path", "https://example.org/"].map((url, index) => ({
   id: `t${index + 1}`, owner: "conversation:butler-client", url, title: `Tab ${index + 1}`, favicon: "", agent: true, holder: "agent",
   agentAt: 1_760_000_000_000 - index, status: "idle", canBack: false, canForward: false, ...(index === 0 ? { waiting: true } : {}),
 }));
@@ -222,6 +222,21 @@ async function auditScrolledFades(page: Page, cell: Cell, screen: string, scope:
   await page.evaluate(() => document.querySelectorAll("[data-focus-audit-scroller]").forEach((element) => element.removeAttribute("data-focus-audit-scroller")));
 }
 
+async function auditShelf(page: Page, cell: Cell) {
+  await open(page, cell);
+  await page.keyboard.press("Escape");
+  const shelf = '[data-slot="tab-rail"][data-mode="shelf"]';
+  const pill = page.locator(`${shelf} button`).filter({ hasText: /^\+\d+$/u });
+  await pill.waitFor();
+  await focusBefore(page, `${shelf} button[aria-label^="탭 "]`);
+  await page.keyboard.press("Tab");
+  assert(await pill.evaluate(element => element === document.activeElement), "shelf overflow pill takes keyboard focus");
+  const probe = await probeFocusRing(page);
+  assert(probe, "shelf overflow pill has a focus ring");
+  record(cell, "tab-rail-shelf", { stops: 1, clipped: probe.clips });
+  await capture(page, `tab-rail-shelf-${cell.width}-${cell.theme}-${cell.background}`);
+}
+
 async function auditCell(page: Page, cell: Cell) {
   await open(page, cell);
   await openSidebar(page);
@@ -383,6 +398,7 @@ try {
     if (url.pathname === "/usage-monitor") return route.fulfill({ json: { ok: true, data: usageMonitor(url) } });
     return route.fulfill({ status: 404, json: { ok: false, error: { code: "not_found" } } });
   });
+  for (const theme of ["light", "dark"] as const) await auditShelf(page, { width: 344, height: 480, theme, background: "plain" });
   for (const [width, height] of [[1280, 860], [390, 844]]) {
     for (const theme of ["light", "dark"] as const) {
       for (const background of ["plain", "wallpaper"] as const) {

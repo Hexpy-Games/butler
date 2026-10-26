@@ -20,6 +20,11 @@ function Pane({ locale, placement }: { locale: "en-US" | "ko-KR"; placement: "co
 
 export const stories: ShowcaseStory[] = [
   {
+    name: "Conversation frame at 1440 (cards frame)",
+    widths: ["app", "wide"],
+    render: ({ locale }) => <ConversationFrameDemo locale={locale} width={1440} height={900} frame="cards" />,
+  },
+  {
     // The approved layout: chat left (400px), the pane right, Butler holding the tab.
     name: "Conversation frame at 1440",
     widths: ["app", "wide"],
