@@ -1,6 +1,6 @@
 use super::*;
 pub(super) fn insert(
-    db: &mut Connection,
+    db: &Connection,
     mut event: Value,
     now: &str,
 ) -> Result<Value, AppStorageError> {
@@ -13,8 +13,8 @@ pub(super) fn insert(
         - 30 * 86400;
     let tx = db;
     tx.execute(
-        "DELETE FROM app_connector_events WHERE received_at<?1",
-        [cutoff],
+        "DELETE FROM app_connector_events WHERE arrived_at<?1 AND (delivered_at IS NOT NULL OR digested_at IS NOT NULL)",
+        [chrono::DateTime::from_timestamp(cutoff, 0).ok_or_else(invalid)?.to_rfc3339()],
     )
     .map_err(AppStorageError::sqlite)?;
     tx.execute(
@@ -23,7 +23,7 @@ pub(super) fn insert(
     )
     .map_err(AppStorageError::sqlite)?;
     tx.execute(
-        "DELETE FROM app_connector_deliveries WHERE created_at<?1 AND admitted_at IS NOT NULL",
+        "DELETE FROM app_connector_deliveries WHERE created_at<?1 AND admitted_at IS NOT NULL AND NOT EXISTS(SELECT 1 FROM app_connector_events WHERE delivery_id=app_connector_deliveries.id)",
         [cutoff],
     )
     .map_err(AppStorageError::sqlite)?;
@@ -117,4 +117,18 @@ pub(super) fn unfinished(db: &Connection, input: &Value) -> Result<Value, AppSto
         events.push(parse(&row.map_err(AppStorageError::sqlite)?)?);
     }
     Ok(json!({"rows":events}))
+}
+
+pub(super) fn batch(
+    db: &mut Connection,
+    input: &Value,
+    now: &str,
+) -> Result<Value, AppStorageError> {
+    let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
+    for event in input["events"].as_array().ok_or_else(invalid)? {
+        insert(&tx, event.clone(), now)?;
+    }
+    tx.execute("INSERT INTO app_connector_cursors(account,cursor) VALUES(?1,?2) ON CONFLICT(account) DO UPDATE SET cursor=excluded.cursor",params![text(input,"account")?,text(input,"cursor")?]).map_err(AppStorageError::sqlite)?;
+    tx.commit().map_err(AppStorageError::sqlite)?;
+    Ok(json!({"ok":true}))
 }

@@ -61,13 +61,18 @@ impl UnattendedRun {
 fn initial_taint(context: &Value, restored: Option<&AuthorityLoopContinuation>) -> TurnTaint {
     let resumed = restored
         .and_then(|continuation| continuation.extensions.get(TAINT_KEY))
-        .and_then(Value::as_str)
-        == Some("external");
+        .and_then(Value::as_str);
+    if resumed == Some("connector_event")
+        || context["messageOrigin"] == "connector"
+        || context["scheduleRun"]["connector_event"] == true
+    {
+        return TurnTaint::ConnectorEvent;
+    }
     let attached = context
         .get("attachments")
         .and_then(Value::as_array)
         .is_some_and(|items| !items.is_empty());
-    if resumed || attached || context["messageOrigin"] == "connector" {
+    if resumed == Some("external") || attached {
         TurnTaint::External
     } else {
         TurnTaint::Clean
@@ -117,7 +122,10 @@ impl GuidedTools {
 
     /// The turn read content from outside the project and the user.
     pub(super) fn mark_external(&self) {
-        *self.turn_taint.lock() = TurnTaint::External;
+        let mut taint = self.turn_taint.lock();
+        if *taint == TurnTaint::Clean {
+            *taint = TurnTaint::External;
+        }
     }
 
     /// Records the taint a finished call of `effective_name` brings in.
@@ -129,8 +137,14 @@ impl GuidedTools {
 
     pub(super) fn taint_extensions(&self) -> Map<String, Value> {
         let mut extensions = Map::new();
-        if self.taint() == TurnTaint::External {
-            extensions.insert(TAINT_KEY.into(), "external".into());
+        match self.taint() {
+            TurnTaint::Clean => (),
+            TurnTaint::External => {
+                extensions.insert(TAINT_KEY.into(), "external".into());
+            }
+            TurnTaint::ConnectorEvent => {
+                extensions.insert(TAINT_KEY.into(), "connector_event".into());
+            }
         }
         if let Some(web) = self.web_session.snapshot() {
             extensions.insert(WEB_KEY.into(), web);
@@ -142,13 +156,20 @@ impl GuidedTools {
         self.binding.turn_guard.unattended.is_some()
     }
 
-    /// The unattended run a delegated child inherits, so it cannot wait either.
-    pub(super) fn unattended_run(&self) -> Option<butler_turn::btcc::ScheduleRunContext> {
-        let run = self.binding.turn_guard.unattended.as_ref()?;
+    /// Preserve attendance and event origin in every delegated child.
+    pub(super) fn inherited_run(&self) -> Option<butler_turn::btcc::ScheduleRunContext> {
+        let run = self.binding.turn_guard.unattended.as_ref();
+        let connector_event = self.taint() == TurnTaint::ConnectorEvent;
+        if run.is_none() && !connector_event {
+            return None;
+        }
         Some(butler_turn::btcc::ScheduleRunContext {
-            automation_id: run.automation_id.clone().unwrap_or_default(),
-            run_id: run.run_id.clone().unwrap_or_default(),
-            unattended: true,
+            automation_id: run
+                .and_then(|r| r.automation_id.clone())
+                .unwrap_or_default(),
+            run_id: run.and_then(|r| r.run_id.clone()).unwrap_or_default(),
+            unattended: run.is_some(),
+            connector_event,
         })
     }
 }
@@ -190,7 +211,7 @@ pub(super) async fn unattended_feedback(
 ) -> Value {
     notify(owner).await;
     json!({"ok":false,"error":{
-        "reason": (owner.taint() == TurnTaint::External)
+        "reason": (owner.taint() != TurnTaint::Clean)
             .then_some("This run read outside content, so the step needs a fresh permission."),
         "code":"schedule_permission_required",
         "message":"This scheduled run cannot ask for permission, so this step did not run.",
@@ -231,7 +252,8 @@ async fn notify(owner: &GuidedTools) {
         encode(automation),
         encode(run_id)
     );
-    let body = json!({"code":"schedule_permission_required", "tainted":owner.taint() == TurnTaint::External});
+    let body =
+        json!({"code":"schedule_permission_required", "tainted":owner.taint() != TurnTaint::Clean});
     let _ = client.request(Method::POST, &path, Some(body)).await;
 }
 

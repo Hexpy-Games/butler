@@ -1,17 +1,16 @@
 use super::*;
+use butler_models::mcp_client::ConnectorSession;
 impl Connectors {
     pub(super) async fn ingest(
         &self,
         account: &Account,
         definition: &Connector,
         event: Value,
+        session: &ConnectorSession,
     ) -> Result<()> {
         let connector = format!("{}/{}", account.plugin, account.connector);
-        let event = butler_core::plugins::validate_connector_event(event, &connector, &account.id)?;
-        if !event["signal"].is_null() {
-            self.storage("signal", event).await?;
-            return Ok(());
-        }
+        let mut event =
+            butler_core::plugins::validate_connector_event(event, &connector, &account.id)?;
         let inserted = self.storage("insert", event.clone()).await?;
         if inserted["fresh"] != true {
             return Ok(());
@@ -19,53 +18,93 @@ impl Connectors {
         let event_id = inserted["event_id"]
             .as_str()
             .ok_or_else(|| error("connector_store_invalid"))?;
+        if !event["signal"].is_null() {
+            event["event_id"] = event_id.into();
+            self.storage("signal", event).await?;
+            return Ok(());
+        }
         let rules = self
             .storage("rules", json!({"connector":connector,"account":account.id}))
             .await?;
         let read_only = self.storage("access", json!({})).await?["read_only"] == true;
-        let mut matched = Vec::new();
-        let mut actions = Vec::new();
-        let mut skip = false;
-        let mut skip_rules = Vec::new();
-        let mut tags = Vec::new();
-        for rule in rules["rules"].as_array().into_iter().flatten() {
-            let Some(conditions) = rule["match"].as_array() else {
-                continue;
-            };
-            if !butler_core::plugins::connector_matches(&event, conditions) {
-                continue;
-            }
-            matched.push(rule["id"].clone());
-            for action in rule["actions"].as_array().into_iter().flatten() {
-                match action["type"].as_str() {
-                    Some("skip_model") => {
-                        skip = true;
-                        skip_rules.push(rule["id"].clone());
-                    }
-                    Some("tag") => tags.push(action["tag"].clone()),
-                    Some("organize") => {
-                        let result = if read_only {
-                            json!({"ok":false,"code":"connector_read_only"})
-                        } else {
-                            self.organize(
-                                account,
-                                definition,
-                                event["id"]
-                                    .as_str()
-                                    .ok_or_else(|| error("connector_event_invalid"))?,
-                                action,
-                            )
-                            .await
-                            .unwrap_or_else(|e| json!({"ok":false,"code":e.code}))
-                        };
-                        actions.push(json!({"rule_id":rule["id"],"action":action,"result":result}));
-                    }
-                    _ => (),
-                }
-            }
-        }
-        self.storage("ready",json!({"event_id":event_id,"matched_rules":matched,"actions":actions,"skip_model":skip,"tags":tags,"skip_rules":skip_rules})).await?;
+        let matched = rules["rules"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|rule| {
+                rule["match"]
+                    .as_array()
+                    .is_some_and(|c| butler_core::plugins::connector_matches(&event, c))
+            })
+            .collect::<Vec<_>>();
+        let mut actions = matched
+            .iter()
+            .flat_map(|rule| {
+                rule["actions"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(|action| (rule["id"].clone(), action.clone()))
+            })
+            .collect::<Vec<_>>();
+        actions.sort_by_key(|(_, action)| relocates(definition, action));
+        let multiple = actions
+            .iter()
+            .filter(|(_, a)| relocates(definition, a))
+            .count()
+            > 1;
+        let results = self
+            .apply_actions(
+                account,
+                definition,
+                &event,
+                &actions,
+                (read_only, multiple),
+                session,
+            )
+            .await;
+        let skip_rules = actions
+            .iter()
+            .filter(|(_, a)| a["type"] == "skip_model")
+            .map(|(id, _)| id)
+            .collect::<Vec<_>>();
+        let tags = actions
+            .iter()
+            .filter(|(_, a)| a["type"] == "tag")
+            .map(|(_, a)| &a["tag"])
+            .collect::<Vec<_>>();
+        self.storage("ready",json!({"event_id":event_id,"matched_rules":matched.iter().map(|r|&r["id"]).collect::<Vec<_>>(),"actions":results,"skip_model":!skip_rules.is_empty(),"tags":tags,"skip_rules":skip_rules})).await?;
         Ok(())
+    }
+    async fn apply_actions(
+        &self,
+        account: &Account,
+        definition: &Connector,
+        event: &Value,
+        actions: &[(Value, Value)],
+        (read_only, multiple): (bool, bool),
+        session: &ConnectorSession,
+    ) -> Vec<Value> {
+        let mut results = Vec::new();
+        for (rule, action) in actions.iter().filter(|(_, a)| a["type"] == "organize") {
+            let result = if read_only {
+                json!({"ok":false,"code":"connector_read_only"})
+            } else if multiple && relocates(definition, action) {
+                json!({"ok":false,"code":"connector_rule_invalid"})
+            } else {
+                self.organize(
+                    account,
+                    definition,
+                    event["id"].as_str().unwrap_or_default(),
+                    action,
+                    session,
+                )
+                .await
+                .unwrap_or_else(|e| json!({"ok":false,"code":e.code}))
+            };
+            results.push(json!({"rule_id":rule,"action":action,"result":result}));
+        }
+        results
     }
     async fn organize(
         &self,
@@ -73,6 +112,7 @@ impl Connectors {
         definition: &Connector,
         event_id: &str,
         action: &Value,
+        session: &ConnectorSession,
     ) -> Result<Value> {
         let tool = action["tool"]
             .as_str()
@@ -92,6 +132,17 @@ impl Connectors {
             .ok_or_else(|| error("connector_tool_invalid"))?;
         self.destination(&format!("{}/{server}", account.plugin), name, &args)
             .map_err(error)?;
-        self.call(account, tool, args).await
+        if server == definition.events.server {
+            session.call(name, args).await.map_err(error)
+        } else {
+            self.call(account, tool, args).await
+        }
     }
+}
+fn relocates(definition: &Connector, action: &Value) -> bool {
+    action["type"] == "organize"
+        && definition
+            .actions
+            .iter()
+            .any(|a| action["tool"] == a.tool && (a.destination || a.relocates))
 }

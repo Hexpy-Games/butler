@@ -8,6 +8,7 @@ impl Plugins {
         action: &str,
         id: Option<&str>,
         input: &Value,
+        prepared: Option<TeamRegistry>,
     ) -> Result<Value> {
         let _mutation = self.mutation.lock();
         let mut state = self.state.lock().clone();
@@ -31,18 +32,16 @@ impl Plugins {
                 if next.registries.contains_key(&id) {
                     return Err(error("plugin_registry_exists"));
                 }
-                let registry =
-                    self.read_registry(&url, input.get("ref").and_then(Value::as_str))?;
+                let registry = prepared.ok_or_else(|| error("plugin_registry_invalid"))?;
                 next.registries.insert(id.clone(), registry);
                 id
             }
             "registry_refresh" => {
                 let id = id.ok_or_else(|| error("plugin_registry_not_found"))?;
-                let old = next
-                    .registries
-                    .get(id)
-                    .ok_or_else(|| error("plugin_registry_not_found"))?;
-                let registry = self.read_registry(&old.url, old.reference.as_deref())?;
+                if !next.registries.contains_key(id) {
+                    return Err(error("plugin_registry_not_found"));
+                }
+                let registry = prepared.ok_or_else(|| error("plugin_registry_invalid"))?;
                 next.registries.insert(id.to_owned(), registry);
                 id.to_owned()
             }
@@ -79,8 +78,13 @@ impl Plugins {
             json!({"id":id,"registry":state.registry.registries.get(&id),"revision":state.registry.revision}),
         )
     }
-    pub(super) fn read_registry(&self, url: &str, reference: Option<&str>) -> Result<TeamRegistry> {
-        let (root, commit) = sources::checkout(&self.root, url, reference, None)?;
+    pub(super) fn read_registry(
+        &self,
+        url: &str,
+        reference: Option<&str>,
+        work: &std::path::Path,
+    ) -> Result<TeamRegistry> {
+        let (root, commit) = sources::checkout(work, url, reference, None)?;
         sources::modes(&root)?;
         let file = butler_platform::secure_fs::open_package_file(
             &root,

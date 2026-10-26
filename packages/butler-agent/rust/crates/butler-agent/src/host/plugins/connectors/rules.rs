@@ -53,6 +53,21 @@ impl Connectors {
         let definition = self.definition(plugin, id)?;
         let read_only = read_only || self.storage("access", json!({})).await?["read_only"] == true;
         validate_rule(&input)?;
+        let relocating = input["actions"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|action| {
+                action["type"] == "organize"
+                    && definition
+                        .actions
+                        .iter()
+                        .any(|a| action["tool"] == a.tool && (a.destination || a.relocates))
+            })
+            .count();
+        if relocating > 1 {
+            return Err(error("connector_rule_invalid"));
+        }
         for action in input["actions"].as_array().into_iter().flatten() {
             if action["type"] != "organize" {
                 continue;
@@ -106,7 +121,7 @@ fn validate_rule(rule: &Value) -> Result<()> {
             .strip_prefix("attributes.")
             .is_some_and(|s| !s.is_empty()))
             || !matches!(c["op"].as_str(), Some("equals" | "contains" | "ends_with"))
-            || c["value"].as_str().is_none()
+            || c["value"].as_str().is_none_or(|v| v.trim().is_empty())
         {
             return Err(invalid());
         }

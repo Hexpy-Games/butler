@@ -85,6 +85,7 @@ impl Connectors {
                 .ok_or_else(|| error("connector_account_not_found"))?;
             match action {
                 "connector_disconnect" => {
+                    self.delete_secrets(account)?;
                     account.enabled = false;
                 }
                 "connector_retry" => {
@@ -116,7 +117,6 @@ impl Connectors {
         definition: &Connector,
         input: &Value,
     ) -> Result<Account> {
-        let owner = self.owner()?;
         let fields: BTreeMap<String, String> = serde_json::from_value(input["fields"].clone())
             .map_err(|_| error("connector_fields_invalid"))?;
         if fields
@@ -131,19 +131,19 @@ impl Connectors {
             return Err(error("connector_fields_invalid"));
         }
         let handling = handling(input.get("handling"))?;
+        let secrets = credentials::store()?;
         for field in &definition.account.secrets {
             let value = input["secrets"][&field.key]
                 .as_str()
                 .filter(|s| !s.is_empty())
                 .ok_or_else(|| error("connector_secret_required"))?;
             butler_log::register_secret(value);
-            owner
-                .secrets
+            secrets
                 .set(
-                    &secret_key(plugin, connector, account_id, &field.key)?,
+                    &credentials::key(plugin, connector, account_id, &field.key)?,
                     value,
                 )
-                .map_err(|_| error("connector_secret_unavailable"))?;
+                .map_err(|_| error("connector_secret_store_unavailable"))?;
         }
         Ok(Account {
             id: account_id.into(),
@@ -182,17 +182,17 @@ impl Connectors {
             .ok_or_else(|| error("connector_config_invalid"))?;
         env.push(json!({"key":"BUTLER_CONNECTOR_ACCOUNT","source":"literal","value":account.id}));
         env.push(json!({"key":"BUTLER_CONNECTOR_FIELDS","source":"literal","value":serde_json::to_string(&account.fields).map_err(|_|error("connector_fields_invalid"))?}));
+        let secrets = credentials::store()?;
         for field in &definition.account.secrets {
-            let secret = owner
-                .secrets
-                .get(&secret_key(
+            let secret = secrets
+                .get(&credentials::key(
                     &account.plugin,
                     &account.connector,
                     &account.id,
                     &field.key,
                 )?)
-                .map_err(|_| error("connector_secret_unavailable"))?
-                .ok_or_else(|| error("connector_secret_unavailable"))?;
+                .map_err(|_| error("connector_secret_store_unavailable"))?
+                .ok_or_else(|| error("connector_secret_store_unavailable"))?;
             butler_log::register_secret(secret.expose());
             env.push(json!({"key":field.key,"source":"literal","value":secret.expose()}));
         }
@@ -216,16 +216,4 @@ fn handling(value: Option<&Value>) -> Result<butler_core::plugins::ConnectorHand
         return Err(error("connector_handling_invalid"));
     }
     Ok(h)
-}
-fn secret_key(
-    plugin: &str,
-    connector: &str,
-    account: &str,
-    key: &str,
-) -> Result<butler_platform::secrets::SecretKey> {
-    butler_platform::secrets::SecretKey::new(
-        "io.github.hexpy-games.butler.plugins",
-        &format!("{plugin}/{connector}/{account}/{key}"),
-    )
-    .map_err(|_| error("connector_secret_key_invalid"))
 }

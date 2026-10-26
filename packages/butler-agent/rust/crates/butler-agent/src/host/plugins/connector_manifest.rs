@@ -65,7 +65,10 @@ pub(super) fn covers(
             .all(|f| old.account.secrets.iter().any(|o| o.key == f.key))
         && new.actions.iter().all(|a| {
             old.actions.iter().any(|o| {
-                o.tool == a.tool && (!a.organize || o.organize) && o.destination == a.destination
+                o.tool == a.tool
+                    && (!a.organize || o.organize)
+                    && o.destination == a.destination
+                    && o.relocates == a.relocates
             })
         })
 }

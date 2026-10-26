@@ -11,6 +11,7 @@ import { Stack } from "@/butler-ds";
 import { TurnActivityPending } from "./TurnActivityPending";
 import { appCopy } from "@/app/copy.ts";
 import { CollapsedTurnActivity } from "./WorkBlocks";
+import { chatActivityLabel } from "./chatActivityLabel";
 
 /** Live progress of the running turn, attached to its message or its own row. */
 export interface LiveTurnActivity {
@@ -20,14 +21,14 @@ export interface LiveTurnActivity {
   startedAt?: string;
 }
 
-/** Activity row before the first answer text: the work, then the live status line. */
-export function TurnActivityPanel({ rows, state, turnId, startedAt }: LiveTurnActivity) {
+/** Activity row before the first answer text: the work, then the live status line (대화: the line alone). */
+export function TurnActivityPanel({ rows, state, turnId, startedAt, chat = false }: LiveTurnActivity & { chat?: boolean }) {
   useAppLocale();
   // Pending and current status are different trees, so the status mark remounts when work
   // arrives; one key per panel lets it continue the morph instead of restarting from the logo.
   const markKey = useId();
   const projection = projectTurnActivity(useThinkingRows(rows, turnId), turnId);
-  if (!hasLiveWork(projection)) return <TurnActivityStatus markKey={markKey} rows={rows} state={state} turnId={turnId} startedAt={startedAt} />;
+  if (chat || !hasLiveWork(projection)) return <TurnActivityStatus markKey={markKey} rows={rows} state={state} turnId={turnId} startedAt={startedAt} chat={chat} />;
   return (
     <Stack
       as="section"
@@ -51,8 +52,8 @@ export function liveTurnWork(projection: TurnActivityProjection, turnId?: string
   return showDecision ? <TurnDecisionRow decision={decisions.at(-1)!} /> : null;
 }
 
-/** The live status line: pending label before any work, then the current step and timer. */
-export function TurnActivityStatus({ markKey: sharedMarkKey, rows, state, turnId, startedAt }: LiveTurnActivity & { markKey?: string }) {
+/** The live status line: pending label before any work, then the current step (대화: the current tool) and timer. */
+export function TurnActivityStatus({ markKey: sharedMarkKey, rows, state, turnId, startedAt, chat = false }: LiveTurnActivity & { markKey?: string; chat?: boolean }) {
   useAppLocale();
   const thinkingLine = useModelThinking(store => turnId ? store.lines[turnId] : undefined);
   const ownMarkKey = useId();
@@ -66,6 +67,7 @@ export function TurnActivityStatus({ markKey: sharedMarkKey, rows, state, turnId
       markKey={markKey}
       state={state}
       waitingForAnswer={rows.some((row) => row.safe_tool_name === "ask_user")}
+      activityLabel={chat ? chatActivityLabel(phaseActivities) : undefined}
       modelRoundWait={modelRoundWait}
       operation={operation}
       publicActivity={publicActivity}

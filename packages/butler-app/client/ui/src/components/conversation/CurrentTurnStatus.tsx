@@ -11,6 +11,7 @@ import { Typo } from "@/butler-ds";
 import { selectActiveAuthorityApprovals, useButlerStore } from "@/app/store.ts";
 import { useElapsedTime } from "./hooks/useElapsedTime";
 
+/** The running turn's status line; `activityLabel` (대화's current tool) replaces the step and model-wait labels. */
 export function CurrentTurnStatus({
   markKey,
   thinkingLine,
@@ -21,7 +22,9 @@ export function CurrentTurnStatus({
   startedAt,
   state,
   waitingForAnswer = false,
+  activityLabel,
 }: {
+  activityLabel?: string;
   markKey?: string;
   thinkingLine?: string;
   operation?: ProgressRow;
@@ -41,13 +44,10 @@ export function CurrentTurnStatus({
   const providerRecovery = publicActivity?.bridge_phase ===
     "operational_recovery" ? publicActivity : undefined;
   const waitingForApproval = state === "waiting_for_form";
-  // A browser hand-off waits on the user's step in the tab, not on an approval.
-  const handoffTool = useButlerStore((store) => selectActiveAuthorityApprovals(store)[0]?.approval?.operation?.tool);
-  const waitingLabel = waitingForAnswer ? appCopy.interfaceStatus.answerWaiting
-    : handoffTool === "browser_sign_in_wait" ? appCopy.interfaceStatus.signInWaiting
-      : handoffTool === "browser_wait_for_user" || handoffTool === "browser_pay_wait" ? appCopy.interfaceStatus.tabWaiting : appCopy.interfaceStatus.approvalWaiting;
-  const summaryLine = !waitingForApproval && !operation && !providerRecovery && modelRoundWait ? thinkingLine : undefined;
-  const fullLabel = waitingForApproval ? waitingLabel : operationLabel ?? (providerRecovery ? interfaceProgressLabel(providerRecovery) : undefined) ??
+  const waitingLabel = useWaitingLabel(waitingForAnswer);
+  const activity = !waitingForApproval && !providerRecovery ? activityLabel : undefined;
+  const summaryLine = !waitingForApproval && !operation && !providerRecovery && !activity && modelRoundWait ? thinkingLine : undefined;
+  const fullLabel = waitingForApproval ? waitingLabel : activity ?? operationLabel ?? (providerRecovery ? interfaceProgressLabel(providerRecovery) : undefined) ??
     (modelRoundWait ? summaryLine ?? appCopy.interfaceStatus.generating : undefined) ?? (publicActivity ? interfaceProgressLabel(publicActivity) : undefined) ??
     phaseLabel ??
     appCopy.interfaceStatus.generating;
@@ -65,7 +65,7 @@ export function CurrentTurnStatus({
         shimmer={!summaryLine}
       >
         <div data-test-class="turn-current-status-content">
-          {waitingForApproval ? <Typo.Body as="p">{fullLabel}</Typo.Body> : operation ? (
+          {waitingForApproval ? <Typo.Body as="p">{fullLabel}</Typo.Body> : activity ? <ChatActivityText label={activity} elapsed={elapsed} /> : operation ? (
             <CurrentPhaseActivity row={{ ...operation, safe_label: operationLabel! }} />
           ) : providerRecovery ? (
             <CurrentPhaseActivity row={providerRecovery} />
@@ -89,4 +89,21 @@ export function CurrentTurnStatus({
       </AssistantStatusLabel>
     </RollingStatusLine>
   );
+}
+
+function ChatActivityText({ label, elapsed }: { label: string; elapsed?: string }) {
+  return (
+    <Typo.Body as="p" tone="secondary" minWidth="0" data-test-class="turn-chat-activity">
+      {label}{elapsed ? ` · ${elapsed}` : ""}
+    </Typo.Body>
+  );
+}
+
+/** What a waiting turn waits on: an answer, the user's step in a browser tab, or an approval. */
+function useWaitingLabel(waitingForAnswer: boolean): string {
+  // A browser hand-off waits on the user's step in the tab, not on an approval.
+  const handoffTool = useButlerStore((store) => selectActiveAuthorityApprovals(store)[0]?.approval?.operation?.tool);
+  return waitingForAnswer ? appCopy.interfaceStatus.answerWaiting
+    : handoffTool === "browser_sign_in_wait" ? appCopy.interfaceStatus.signInWaiting
+      : handoffTool === "browser_wait_for_user" || handoffTool === "browser_pay_wait" ? appCopy.interfaceStatus.tabWaiting : appCopy.interfaceStatus.approvalWaiting;
 }

@@ -18,7 +18,7 @@ const step = (name: string) => ({ "--step": `var(${name})` }) as CSSProperties;
 const SHAPES: Record<string, { label: string; shape: string }> = {
   "--radius-control": { label: "Buttons, fields, rows", shape: "control" },
   "--radius-panel": { label: "Cards and panels", shape: "panel" },
-  "--radius-popover": { label: "Menus, popovers, dialogs, column-wide cards", shape: "popover" },
+  "--radius-popover": { label: "Menus, popovers, dialogs, column-wide cards, message bubbles and in-chat cards", shape: "popover" },
   "--radius-composer": { label: "Composer and glass", shape: "composer" },
   "--radius-pill": { label: "Tags, switches, pills", shape: "pill" },
   "--adaptive-composer-radius": { label: "Composer on narrow screens", shape: "composer" },

@@ -139,7 +139,7 @@ fn bounded_non_eol(
     for document in &mut documents {
         if matches!(
             document.source_id.as_str(),
-            "role" | "runtime-system-contract"
+            "role" | "runtime-system-contract" | "chats-reply-rules"
         ) {
             remaining = remaining.saturating_sub(document.content.len());
             continue; // Governing runtime instructions stay exact.
@@ -263,7 +263,9 @@ async fn project_profile(
     ]
     .into_iter()
     .collect();
-    let governing_sources: HashSet<_> = ["role", "runtime-system-contract"].into_iter().collect();
+    let governing_sources: HashSet<_> = ["role", "runtime-system-contract", "chats-reply-rules"]
+        .into_iter()
+        .collect();
     let others = admitted
         .into_iter()
         .filter(|document| document.source_id != "eol")

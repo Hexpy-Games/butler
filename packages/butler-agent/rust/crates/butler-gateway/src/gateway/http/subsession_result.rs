@@ -50,7 +50,7 @@ pub(super) async fn post(
         .map(serde_json::from_value::<butler_turn::btcc::ScheduleRunContext>)
         .transpose()
         .map_err(|_| invalid_request())?
-        .filter(|run| run.unattended);
+        .filter(|run| run.unattended || run.connector_event);
     let client = format!(
         "subsession-result:{}",
         butler_turn::btcc::digest_identity(&format!("{relation_id}\0{result_id}"))

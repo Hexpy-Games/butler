@@ -57,6 +57,17 @@ impl PromptAssembler {
             "profile",
             "user",
         );
+        if binding.is_chats() {
+            push(
+                &mut sections,
+                "chats-reply-rules",
+                "Chats Reply Rules",
+                read_text_if_exists(&resource_path(&self.paths, &["prompts", "chats.md"]))?,
+                "static_context",
+                "profile",
+                "user",
+            );
+        }
         Ok(sections)
     }
 

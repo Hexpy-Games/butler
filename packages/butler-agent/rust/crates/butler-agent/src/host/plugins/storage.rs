@@ -12,6 +12,8 @@ pub(super) fn clear_staging(root: &Path) -> Result<()> {
 }
 /// Reclaim abandoned snapshots once at startup, when no operation holds a lease.
 pub(super) fn recover(root: &Path, registry: &Registry) -> Result<()> {
+    butler_platform::plugin_files::remove(&root.join("work"))
+        .map_err(|_| error("plugin_staging_cleanup_failed"))?;
     let mut stores = std::collections::BTreeSet::new();
     let mut stages = std::collections::BTreeSet::new();
     for plugin in registry.plugins.values() {
@@ -227,6 +229,9 @@ impl Plugins {
             .plugins
             .remove(id)
             .ok_or_else(|| error("plugin_not_found"))?;
+        for account in next.accounts.values().filter(|a| a.plugin == id) {
+            self.connectors.delete_secrets(account)?;
+        }
         next.accounts.retain(|_, account| account.plugin != id);
         next.revision += 1;
         self.save(&next)?;

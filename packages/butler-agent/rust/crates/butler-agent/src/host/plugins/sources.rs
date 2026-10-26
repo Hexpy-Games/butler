@@ -46,7 +46,7 @@ pub(super) fn git(root: &Path, args: &[&str]) -> Result<Vec<u8>> {
         .stdin(Stdio::null())
         .stderr(Stdio::null());
     butler_platform::process_control::hide_console(&mut command);
-    let output = command.output().map_err(|_| error("plugin_git_failed"))?;
+    let output = super::git_process::output(command, args.first().copied())?;
     if !output.status.success() {
         return Err(error("plugin_git_failed"));
     }

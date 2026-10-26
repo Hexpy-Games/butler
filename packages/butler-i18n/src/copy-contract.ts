@@ -631,6 +631,8 @@ export interface AppCopy {
     emptyLane: (label: string) => string;
     contextMetric: (kind: "full" | "used" | "budget" | "available" | "compact", value: string | number) => string;
     activityHistory: (live: boolean, label: string, count: number) => string;
+    /** 대화's live status: the current tool's label, with the count its activity group already shows. */
+    chatActivity: (tool: string, count: number) => string;
     pendingApprovals: (count: number) => string;
     approvalRequest: ApprovalRequestCopy;
     allowedCount: (count: number) => string;

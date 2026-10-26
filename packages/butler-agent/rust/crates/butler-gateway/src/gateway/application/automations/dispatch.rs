@@ -223,6 +223,7 @@ impl AppApplication {
                 automation_id: row.id.clone(),
                 run_id: run_id.to_owned(),
                 unattended: trigger == "scheduled",
+                connector_event: false,
             }),
         };
         let result = match self

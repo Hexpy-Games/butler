@@ -3,12 +3,14 @@ mod capabilities;
 mod connector_manifest;
 mod connectors;
 mod coverage;
+mod git_process;
 mod inspect;
 mod inspection;
 mod manifest;
 mod overlay;
 mod registries;
 pub(crate) mod safe_mode;
+mod source_work;
 mod sources;
 mod storage;
 mod types;
@@ -184,29 +186,44 @@ impl PluginPort for Admin {
             if action.starts_with("connector") {
                 return owner.connectors.admin(&action, id, input).await;
             }
-            let _permit = owner.writes.acquire_owned().await;
-            if action == "uninstall" {
-                owner.revoke_grants(id.as_deref(), &input).await?;
-                owner.connectors.stop_plugin(id.as_deref()).await;
-            }
             let runtime = owner.connectors.clone();
             let changed_action = action.clone();
             let changed_id = id.clone();
-            let result = tokio::task::spawn_blocking(move || match action.as_str() {
-                "inspect" => owner.inspect(&input),
-                "install" => owner.install(&input),
-                "check" => owner.check(id.as_deref(), &input),
-                "update" => owner.update(id.as_deref(), &input),
-                "rollback" => owner.rollback(id.as_deref(), &input),
-                "registry_list" | "registry_add" | "registry_refresh" | "registry_delete" => {
-                    owner.registry_action(&action, id.as_deref(), &input)
+            let result = if matches!(
+                action.as_str(),
+                "inspect" | "check" | "registry_add" | "registry_refresh"
+            ) {
+                // Source work runs outside the admin locks (network I/O).
+                tokio::task::spawn_blocking(move || {
+                    owner.source_action(&action, id.as_deref(), &input)
+                })
+                .await
+                .map_err(|_| error("plugin_task_failed"))?
+            } else {
+                let permit = owner.writes.acquire_owned().await;
+                if action == "uninstall" {
+                    owner.revoke_grants(id.as_deref(), &input).await?;
+                    owner.connectors.stop_plugin(id.as_deref()).await;
                 }
-                "enable" | "disable" => owner.toggle(id.as_deref(), &input, action == "enable"),
-                "uninstall" => owner.uninstall(id.as_deref(), &input),
-                _ => Err(error("plugin_action_invalid")),
-            })
-            .await
-            .map_err(|_| error("plugin_task_failed"))?;
+                tokio::task::spawn_blocking(move || {
+                    let _permit = permit;
+                    match action.as_str() {
+                        "install" => owner.install(&input),
+                        "update" => owner.update(id.as_deref(), &input),
+                        "rollback" => owner.rollback(id.as_deref(), &input),
+                        "registry_list" | "registry_delete" => {
+                            owner.registry_action(&action, id.as_deref(), &input, None)
+                        }
+                        "enable" | "disable" => {
+                            owner.toggle(id.as_deref(), &input, action == "enable")
+                        }
+                        "uninstall" => owner.uninstall(id.as_deref(), &input),
+                        _ => Err(error("plugin_action_invalid")),
+                    }
+                })
+                .await
+                .map_err(|_| error("plugin_task_failed"))?
+            };
             if result.is_ok() {
                 runtime
                     .plugin_changed(&changed_action, changed_id.as_deref())
