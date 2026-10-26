@@ -229,6 +229,9 @@ impl Plugins {
             .plugins
             .remove(id)
             .ok_or_else(|| error("plugin_not_found"))?;
+        for account in next.accounts.values().filter(|a| a.plugin == id) {
+            self.connectors.delete_secrets(account)?;
+        }
         next.accounts.retain(|_, account| account.plugin != id);
         next.revision += 1;
         self.save(&next)?;

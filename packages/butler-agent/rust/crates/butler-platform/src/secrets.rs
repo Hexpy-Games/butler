@@ -30,7 +30,8 @@ mod test_file;
 mod test_keychain;
 #[cfg(feature = "test-support")]
 pub use test_keychain::{
-    delete_system_secret_for_test, prepare_system_keychain_for_test, system_secret_present_for_test,
+    delete_system_secret_for_test, isolated_system_secret_present_for_test,
+    prepare_system_keychain_for_test, system_secret_present_for_test,
 };
 #[cfg(feature = "test-support")]
 mod test_seed;

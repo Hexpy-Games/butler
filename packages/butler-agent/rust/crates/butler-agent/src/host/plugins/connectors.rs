@@ -1,5 +1,6 @@
 //! Account lifecycle is change-driven. Each enabled account owns one child.
 mod accounts;
+mod credentials;
 mod intake;
 mod rules;
 mod runtime;

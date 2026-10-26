@@ -72,6 +72,14 @@ pub(super) fn run(home: &Path, args: &[&str], path: &Path) -> std::io::Result<()
 /// Checks metadata only; the test process does not read an Agent-created secret.
 pub fn system_secret_present_for_test(home: &Path, key: &SecretKey) -> std::io::Result<bool> {
     require_test_service(key)?;
+    isolated_system_secret_present_for_test(home, key)
+}
+
+/// Checks metadata in an explicitly isolated temporary keychain.
+pub fn isolated_system_secret_present_for_test(
+    home: &Path,
+    key: &SecretKey,
+) -> std::io::Result<bool> {
     #[cfg(target_os = "macos")]
     {
         let query = query(home, key)?;

@@ -9,6 +9,7 @@ mod intake;
 mod lifecycle;
 mod rules;
 mod review_access;
+mod review_secrets;
 mod stub;
 use butler_e2e::e2e::{
     HarnessError,
@@ -25,7 +26,11 @@ use std::{
     time::{Duration, Instant},
 };
 fn setup(name: &str) -> Result<Setup, HarnessError> {
-    Ok(Setup::new(name)?.stub_cassette(Cassette::load("TOOL-01")?))
+    let setup = Setup::new(name)?
+        .stub_cassette(Cassette::load("TOOL-01")?)
+        .env("BUTLER_SECRET_STORE", "system");
+    butler_platform::secrets::prepare_system_keychain_for_test(&setup.sandbox.home)?;
+    Ok(setup)
 }
 async fn api(
     s: &Scenario,
