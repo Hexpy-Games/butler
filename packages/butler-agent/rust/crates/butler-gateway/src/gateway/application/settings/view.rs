@@ -403,6 +403,7 @@ fn consolidation_settings(
     output: &mut Map<String, Value>,
     model: &str,
 ) {
+    super::proactive::view(native, output);
     let consolidation = native.get("consolidation").map(object).unwrap_or_default();
     let configured_consolidation = consolidation
         .get("model")

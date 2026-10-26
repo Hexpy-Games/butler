@@ -9,6 +9,7 @@ use butler_memory::{
 mod actions;
 mod consolidation;
 mod instructions;
+mod patterns;
 mod resets;
 use serde_json::{Value, json};
 use std::{
@@ -89,6 +90,12 @@ impl AppMemoryManagement {
                 Ok(json!({"ok":true}))
             }
             AppMemoryCommand::Instructions => self.list_instructions().await,
+            command @ (AppMemoryCommand::Patterns
+            | AppMemoryCommand::PatternProposals
+            | AppMemoryCommand::DeletePattern { .. }
+            | AppMemoryCommand::DecidePattern { .. }) => {
+                self.pattern_command(command, sink, cancellation).await
+            }
             command @ (AppMemoryCommand::RememberInstruction { .. }
             | AppMemoryCommand::DeleteInstruction { .. }) => {
                 self.change_instruction(command, sink, cancellation).await

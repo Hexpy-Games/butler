@@ -24,12 +24,14 @@ mod local_image_startup;
 mod logging;
 mod mcp;
 mod mutations;
+mod proactive;
 mod probes;
 mod provider;
 mod quota;
 mod read;
 mod secret_store;
 mod settings;
+pub use proactive::QuietHours;
 mod setup;
 mod store_policy;
 

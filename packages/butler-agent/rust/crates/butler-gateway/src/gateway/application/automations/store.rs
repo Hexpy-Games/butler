@@ -162,7 +162,7 @@ impl AppApplication {
             let calendar_next = schedule.as_ref().map(|rule| super::timing::next(rule, &now)).transpose()?;
             if schedule.is_none() { validate_timing_row(&schedule_type, seconds, run_at.as_deref(), start_at.as_deref())?; }
             let access = input.access_mode.unwrap_or(old.access);
-            let model = model.or(old.model);
+            let model = if input.model.is_some() { model } else { old.model };
             let state = input.state.unwrap_or_else(|| old.state.clone());
             if state != "enabled" && state != "paused" {
                 return Err(AppStorageError::new(AppStorageCode::AutomationStateInvalid, "Schedule state must be enabled or paused."));
@@ -187,7 +187,9 @@ impl AppApplication {
         &self,
         model: Option<&str>,
     ) -> Result<Option<String>, GatewayApplicationError> {
-        let Some(model) = model else { return Ok(None) };
+        let Some(model) = model.filter(|model| !model.is_empty()) else {
+            return Ok(None);
+        };
         self.dependencies.settings_facts.refresh().await?;
         let facts = self.dependencies.settings_facts.snapshot()?;
         settings::selectable_model_ref(&facts, model)

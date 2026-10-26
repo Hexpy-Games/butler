@@ -104,6 +104,7 @@ impl ContextMaintenance {
         let timezone = Arc::clone(&self.timezone);
         let daily_cognition = Arc::clone(&self.daily_cognition);
         let cancellation = self.cancellation.clone();
+        let mut system_wake = butler_platform::system_wake::wake_events();
         let mut schedule_changes = daily_cognition.gate.subscribe();
         *task = Some(tokio::spawn(async move {
             loop {
@@ -150,6 +151,7 @@ impl ContextMaintenance {
                 tokio::select! {
                     () = cancellation.cancelled() => break,
                     _ = schedule_changes.changed() => {},
+                    _ = system_wake.changed() => {},
                     () = butler_core::wall_clock::wait_until(deadline, current_epoch_millis) => {}
                 }
             }

@@ -523,6 +523,10 @@ export interface SettingsView {
   reasoning_effort: ReasoningEffort;
   recall_mode: "faster" | "accurate";
   recall_judge_model: string;
+  proactive_level: "off" | "sometimes" | "often";
+  quiet_hours_start: string;
+  quiet_hours_end: string;
+  chats_intro_seen: boolean;
   consolidation_time: string;
   consolidation_model: string;
   consolidation_reasoning_effort: ReasoningEffort;

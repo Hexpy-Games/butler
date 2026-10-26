@@ -243,6 +243,7 @@ interface ConversationWorkCopy {
 }
 
 interface ConversationCopy {
+  chatsIntro: string;
   messageActions: {
     showMore: string;
     showLess: string;
@@ -1150,6 +1151,7 @@ export interface AppCopy {
     recommended: string;
   };
   automations: {
+    modelDefaultDescription: string;
     saved: string;
     frequency: string;
     time: string;
@@ -1376,8 +1378,8 @@ export interface AppCopy {
       downloadMeta: string; downloadedBytes: string; cancelled: string;
     };
     updateErrors: Record<"download" | "damaged" | "incompatible" | "storage" | "apply" | "generic", string>;
-    pageSections: Record<"instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "fullReset" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "connectedAccounts" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "agentImport" | "paymentMethods" | "profiles" | "purchaseSites", string>;
-    pageSectionDescriptions: Record<"instructions" | "chatMemory" | "memoryCleanup" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "learning" | "grants", string>;
+    pageSections: Record<"noticedPatterns" | "instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "fullReset" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "connectedAccounts" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "agentImport" | "paymentMethods" | "profiles" | "purchaseSites", string>;
+    pageSectionDescriptions: Record<"noticedPatterns" | "instructions" | "chatMemory" | "memoryCleanup" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "learning" | "grants", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     grants: {
       kind: Record<"command" | "fileWrite" | "network" | "tool" | "other", string>;
@@ -1403,6 +1405,11 @@ export interface AppCopy {
       linkLabel: string; linkDescription: string; linkOpen: string; linkOpenLabel: string;
       freeSpace: string; project: string; none: string; profileBuildingOff: string;
       notMeasured: string; unavailable: string; noProjects: string; allChats: string;
+      patternsEmpty: string; deletePatternTitle: string; deletePatternBody: string; patternDeleted: string;
+      patternDays: (n: number) => string; patternWeeks: (n: number) => string; patternMonths: (n: number) => string;
+      patternCount: (n: number) => string;
+      proactiveLevel: string; proactiveDescription: string; proactiveOff: string; proactiveSometimes: string; proactiveOften: string;
+      quietHours: string; quietHoursDescription: string; quietHoursStart: string; quietHoursEnd: string;
       deleting: string; instructionsEmpty: string; deleteInstructionTitle: string;
       chatsKept: string; instructionDeleted: string; deleteFailed: string;
       freeWaiting: string; nothingToFree: string; inUse: string;
