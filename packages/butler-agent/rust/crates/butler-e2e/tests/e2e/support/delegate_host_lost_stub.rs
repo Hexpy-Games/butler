@@ -64,13 +64,10 @@ async fn reply(
 
 fn parent(step: usize) -> Value {
     match step {
-        0 => call("start", "start_work", &json!({"objective":OWNER})),
-        1 => call("plan", "replace_work_plan", &plan("steward")),
-        2 => call("review", "record_work_review", &review()),
-        3 => call(
+        0 => call(
             "delegate",
             "delegate_to_steward",
-            &json!({"request":OWNER,"safe_title":"Phone page check"}),
+            &json!({"request":OWNER,"checks":["The page is checked at phone width."],"safe_title":"Phone page check"}),
         ),
         _ => message("Checking the page."),
     }

@@ -70,6 +70,9 @@ impl SqliteSubsessionRepository {
             if inserted == 0 {
                 return Ok(());
             }
+            if packet.child_role == ChildRole::Steward {
+                super::super::work::settle_steward_parent(&tx, &delegation, (&result_id, &child_turn), &status, &summary, &evidence_refs, &now)?;
+            }
             let feedback = delegation_feedback(&tx, &delegation, &result_id, failure_reason.as_deref())?;
             let mut text = format!("Delegated result\nstatus: {status}\nsummary: {summary}\nevidence_refs: {evidence_json}{feedback}");
             text.push_str(&super::assets::delivery_assets(&tx, &child_turn)?);

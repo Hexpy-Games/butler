@@ -335,8 +335,19 @@ fn assert_acceptance_contract(parent: &Value, steward: &Value) {
             .unwrap_or_else(|| panic!("{name} offered"))
             .clone()
     };
+    let handoff =
+        tool(parent, "delegate_to_steward")["parameters"]["properties"]["checks"]["description"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+    assert!(
+        handoff.contains("each explicit constraint in the request its own check")
+            && handoff.contains("each observable with a tool")
+            && handoff.contains("Steward's acceptance criteria"),
+        "{handoff}"
+    );
     let checks =
-        tool(parent, "replace_work_plan")["parameters"]["properties"]["checks"]["description"]
+        tool(steward, "replace_work_plan")["parameters"]["properties"]["checks"]["description"]
             .as_str()
             .unwrap_or_default()
             .to_owned();

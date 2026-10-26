@@ -41,7 +41,7 @@ impl BtccStorage {
         self.read(move |db| operation(db).map_err(work_error)).await
     }
 }
-fn work_error(error: store::Error) -> StorageError {
+pub(super) fn work_error(error: store::Error) -> StorageError {
     if let store::Error::Sqlite(error) = error {
         return StorageError::sqlite(error);
     }

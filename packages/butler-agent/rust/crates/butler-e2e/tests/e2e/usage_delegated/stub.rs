@@ -70,7 +70,7 @@ async fn reply(
         works.get(role).cloned().unwrap_or_default()
     };
     let template = match role {
-        "main" if step < 4 => replay["parent"][step].clone(),
+        "main" if step < 1 => replay["parent"][step].clone(),
         "steward" => steward(step, &work),
         "worker-a" | "worker-b" => worker(step, &work),
         _ => json!({"type":"message","text":"Verified evidence."}),
