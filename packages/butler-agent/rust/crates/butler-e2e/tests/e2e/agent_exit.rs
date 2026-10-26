@@ -23,8 +23,8 @@ async fn policy_refusals_feed_back_to_model_without_interrupting_service()
     for (tool, args, code) in [
         (
             "delegate_to_steward",
-            json!({"request":"test"}),
-            "delegation_reviewed_plan_required",
+            json!({"request":"test","epic_ref":"canon:epic/unbound"}),
+            "canon_epic_not_bound",
         ),
         // Butler may delegate only to a Steward; Worker calls are model feedback too.
         ("delegate_to_worker", worker, "tool_unavailable"),
@@ -76,6 +76,21 @@ async fn policy_refusals_feed_back_to_model_without_interrupting_service()
             assert!(feedback.contains("schema"), "{tool}: {feedback}");
         }
 
+        if code == "canon_epic_not_bound" {
+            let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+            let works: i64 = db.query_row("SELECT count(*) FROM btcc_guided_works", [], |row| {
+                row.get(0)
+            })?;
+            let children: i64 =
+                db.query_row("SELECT count(*) FROM btcc_session_relations", [], |row| {
+                    row.get(0)
+                })?;
+            assert_eq!(
+                (works, children),
+                (0, 0),
+                "Canon refusal rolls back the entire handoff"
+            );
+        }
         assert!(
             !s.agent
                 .logs()

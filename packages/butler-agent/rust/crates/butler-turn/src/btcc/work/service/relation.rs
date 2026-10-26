@@ -21,6 +21,20 @@ impl DurableWorkService {
             .await
     }
 
+    pub(crate) async fn start_handoff_work(
+        &self,
+        input: StartWorkInput,
+    ) -> Result<WorkView, BtccError> {
+        super::super::validation::validate_start(&input)?;
+        let request_sha256 = fingerprint("start_handoff_work", &serialized(&input)?)?;
+        self.repository
+            .start_handoff_work(StartWorkCommand {
+                input,
+                request_sha256,
+            })
+            .await
+    }
+
     /// Validates and continues existing Work.
     pub async fn continue_work(&self, input: ContinueWorkInput) -> Result<WorkView, BtccError> {
         super::super::validation::validate_continue(&input)?;

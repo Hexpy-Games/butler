@@ -108,7 +108,8 @@ pub struct ParentWorkRef {
     pub session_id: String,
     pub turn_id: String,
     pub plan_revision_id: String,
-    pub review_revision_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review_revision_id: Option<String>,
 }
 
 /// The worker profile a worker runs with.
@@ -300,7 +301,7 @@ impl SubsessionPacket {
                 session_id: "parent-session".into(),
                 turn_id: "parent-turn".into(),
                 plan_revision_id: "plan".into(),
-                review_revision_id: "review".into(),
+                review_revision_id: Some("review".into()),
             }),
             worker_profile: None,
             model_ref: "provider/model".into(),
@@ -365,6 +366,22 @@ impl DispatchIntent {
 mod tests {
     use super::*;
 
+    fn one_call_packet_decodes_without_parent_review() {
+        let mut packet =
+            serde_json::to_value(SubsessionPacket::fixture(ChildRole::Steward, "Delegate"))
+                .unwrap();
+        packet["parent_work_ref"]
+            .as_object_mut()
+            .unwrap()
+            .remove("review_revision_id");
+        let decoded: SubsessionPacket = serde_json::from_value(packet.clone()).unwrap();
+        assert_eq!(
+            decoded.parent_work_ref.as_ref().unwrap().review_revision_id,
+            None
+        );
+        assert_eq!(serde_json::to_value(decoded).unwrap(), packet);
+    }
+
     fn steward() -> SubsessionPacket {
         let mut packet = SubsessionPacket::fixture(ChildRole::Steward, "Do it");
         packet.acceptance_criteria = vec!["check".into()];
@@ -382,6 +399,7 @@ mod tests {
     #[tokio::test]
     async fn persisted_btcc_records_are_byte_stable() {
         steward_packet_is_byte_stable();
+        one_call_packet_decodes_without_parent_review();
         worker_packet_is_byte_stable();
         dispatch_intent_is_byte_stable();
         outbox_inputs_are_byte_stable();
