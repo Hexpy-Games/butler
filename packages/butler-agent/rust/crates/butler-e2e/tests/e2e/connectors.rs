@@ -8,6 +8,7 @@
 mod intake;
 mod lifecycle;
 mod rules;
+mod review;
 mod review_access;
 mod review_secrets;
 mod stub;

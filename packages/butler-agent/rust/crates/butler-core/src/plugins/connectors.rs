@@ -53,6 +53,10 @@ pub struct Action {
     #[serde(default)]
     /// Whether the destination policy applies.
     pub destination: bool,
+    #[serde(default)]
+    /// Relocates the item, invalidating its previous address. Destination
+    /// actions always relocate; this also covers actions without a destination.
+    pub relocates: bool,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 /// A generic account-bound plugin event component.
@@ -212,6 +216,9 @@ pub fn matches(event: &Value, conditions: &[Value]) -> bool {
             .as_str()
             .unwrap_or_default()
             .to_lowercase();
+        if expected.trim().is_empty() {
+            return false;
+        }
         match field(condition, "op").as_str() {
             Some("equals") => value == expected,
             Some("contains") => value.contains(&expected),
