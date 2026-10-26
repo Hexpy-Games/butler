@@ -604,6 +604,7 @@ export const enUsCopy: AppCopy = {
     emptyLane: label => `No ${label.toLowerCase()} items`,
     contextMetric: (kind, value) => ({ full: `${value}% full`, used: `${value} used`, budget: `${value} budget`, available: `${value} available before compaction pressure`, compact: `auto compact at ${value}` })[kind],
     activityHistory: (live, label, count) => `${live ? "Current" : "Activity"} · ${label} · ${count} ${count === 1 ? "record" : "records"}`,
+    chatActivity: (tool, count) => `${tool}${count > 1 ? ` · ${count} checked` : ""}`,
     grantedItems: count => `${count} allowed items`,
     pendingApprovals: count => `${count} pending ${count === 1 ? "approval" : "approvals"}`, allowedCount: count => `${count} allowed`, revoke: title => `${title} — Revoke`,
     approvalRequest: {

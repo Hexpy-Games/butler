@@ -58,7 +58,7 @@ export function MessageLiveGroup({ live, kept, children, bubble = false }: {
         <Stack gap="none">
           <Space size="lg" />
           {/* A flex column keeps the inline status label the same height it has as a body row. */}
-          <Stack gap="none" data-test-class="turn-live-status-line">{kept ? <TurnActivityStatus {...kept} /> : null}</Stack>
+          <Stack gap="none" data-test-class="turn-live-status-line">{kept ? <TurnActivityStatus {...kept} chat={bubble} /> : null}</Stack>
         </Stack>
       </Collapsible>
     </Stack>

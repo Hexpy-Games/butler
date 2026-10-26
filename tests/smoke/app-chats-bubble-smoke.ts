@@ -66,7 +66,37 @@ try {
       await page.close();
     }
   }
-  console.log(JSON.stringify({ result: "SS10_PASS", theme, cells: 4, screenshots: shots, modelCalls: 0 }));
+  // While a reply runs, 대화 names the current tool in its status line, counted as its timeline group would.
+  for (const [locale, sessionId, expected] of [["ko", "general", "웹 검색 중 · 3개 확인"], ["en", "general", "Web search · 3 checked"], ["ko", "butler-client", null]] as const) {
+    for (const width of [1280, 375]) {
+      const page = await browser.newPage({ viewport: { width, height: 960 }, colorScheme: theme, reducedMotion: "reduce" });
+      const errors: string[] = [];
+      page.on("pageerror", error => errors.push(error.message));
+      await installFixture(page, liveTranscript(sessionId));
+      await page.goto(`http://chats-bubble.localhost/?visual=components&theme=${theme}&locale=${locale}`);
+      const status = page.locator('[data-test-class~="turn-current-status-slot"]').last();
+      await status.waitFor();
+      await page.evaluate(() => document.fonts.ready);
+      const screenshot = join(shots, `live-${sessionId === "general" ? "chats" : "session"}-${locale}-${theme}-${width}.png`);
+      await page.screenshot({ path: screenshot, animations: "disabled" });
+      const measured = await page.evaluate(() => ({
+        activity: document.querySelector('[data-test-class="turn-chat-activity"]')?.textContent ?? null,
+        status: document.querySelector('[data-test-class~="turn-current-status-slot"]')?.textContent ?? "",
+        timeline: document.querySelectorAll('[data-test-class~="turn-current-phase-activity"]').length,
+      }));
+      console.log(JSON.stringify({ theme, width, locale, session: sessionId === "general" ? "chats" : "work", screenshot, ...measured }));
+      if (expected) {
+        assert(measured.activity?.startsWith(expected), `대화 status names the current tool: ${measured.activity}`);
+        assert.equal(measured.timeline, 0, "대화 keeps its activity in the status line");
+      } else {
+        assert.equal(measured.activity, null, "work sessions keep their status line");
+        assert.equal(measured.timeline, 1, "work sessions keep their activity timeline");
+      }
+      assert.deepEqual(errors, []);
+      await page.close();
+    }
+  }
+  console.log(JSON.stringify({ result: "SS10_PASS", theme, cells: 10, screenshots: shots, modelCalls: 0 }));
 } finally {
   await browser.close();
 }
@@ -84,6 +114,19 @@ function transcript(sessionId: string): SessionView {
   ];
   return { ...HARNESS_SS03_OBSERVER_VIEW, session_id: sessionId, messages, active_turn: null, latest_turn: null,
     kind: sessionId === "general" ? "chat" : "project", parent_session_id: undefined, relation: undefined, artifacts: [], authority_requests: [], pending_questions: [], steward_children: [], status: "idle" };
+}
+
+/** A running turn as the gateway projects it after three web searches, waiting on the next model round. */
+function liveTranscript(sessionId: string): SessionView {
+  const start = Date.now() - 12_000, at = (second: number) => new Date(start + second * 1000).toISOString();
+  const search = (call: number) => ({ id: `search-${call}`, kind: "used_tool" as const, safe_label: "web_search", state: "delivered",
+    safe_tool_name: "web_search", tool_call_id: `call-${call}`, bridge_phase: "btcc_operation" as const, semantic_block_id: `tool-call-${call}`, created_at: at(call * 2) });
+  const rows = [search(1), search(2), search(3), { id: "round-3", kind: "message" as const, safe_label: "Generating", state: "running",
+    safe_tool_name: "model_round", tool_call_id: "btcc-model-round-3", bridge_phase: "model_round_waiting" as const, interface_label_key: "generating", created_at: at(8) }];
+  const turn = { id: "live", state: "thinking", delivery_state: "running" as const, cancellable: true, retryable: false, limitations: [], limitation_codes: [],
+    progress: { turn_id: "live", state: "thinking", delivery_state: "running" as const, updated_at: at(8), safe_progress_rows: rows }, created_at: at(0), updated_at: at(8) };
+  const question: MessageRecord = { id: "question", chat_id: sessionId, role: "user", text: "날씨 알려 줘", status: "sent", cursor: 1, turn_id: "live", created_at: at(0) };
+  return { ...transcript(sessionId), messages: [question], active_turn: turn, latest_turn: turn, status: "active" };
 }
 
 async function installFixture(page: Page, view: SessionView) {
