@@ -237,7 +237,7 @@ async fn a_time_change_rearms_today_but_never_runs_immediately() -> Result<(), H
         200
     );
     clock(&address, "2026-10-02T06:00:00.000Z").await?;
-    settled(&address).await?;
-    assert_eq!(calls(&s), 1);
+    completed_calls(&s, 2).await;
+    assert_eq!(state(&s)["late"], false);
     s.finish().await
 }

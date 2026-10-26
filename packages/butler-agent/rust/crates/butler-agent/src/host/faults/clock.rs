@@ -46,6 +46,9 @@ fn start_control(clock: Arc<FixedClock>, address: &str) {
                 if reader.read_line(&mut value).is_err() {
                     continue;
                 }
+                if value.trim() == "wake" {
+                    butler_platform::system_wake::inject_wake();
+                }
                 if let Ok(time) = chrono::DateTime::parse_from_rfc3339(value.trim()) {
                     *clock.0.write() = time
                         .with_timezone(&chrono::Utc)

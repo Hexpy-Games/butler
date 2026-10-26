@@ -1299,6 +1299,7 @@ dependencies = [
  "windows-native-keyring-store",
  "windows-permissions",
  "winsafe",
+ "zbus",
  "zbus-secret-service-keyring-store",
  "zeroize",
  "zip",

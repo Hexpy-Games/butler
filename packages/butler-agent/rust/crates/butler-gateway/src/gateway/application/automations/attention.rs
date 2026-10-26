@@ -49,8 +49,7 @@ impl AppApplication {
                 )
                 .map_err(AppStorageError::sqlite)?;
                 let run = records::run(db, &run_id)?;
-                let mut event = run_event(&run.automation_id, &run.target_session_id,
-                    &run.state, &run.trigger, run.safe_error_code.clone());
+                let mut event = run_event(&run);
                 event["tainted"] = serde_json::Value::Bool(tainted);
                 publish(db, &subscribers, "automation.run", &event, &now)?;
                 Ok(run)

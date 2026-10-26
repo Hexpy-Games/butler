@@ -93,7 +93,7 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "command_sandbox" => &["secure_fs", "account_dirs", "data_paths"],
         "process_control" => &["process_table"],
         // The headless browser's DevTools pipe runs in a contained process tree.
-        "browser_process" => &["process_control"],
+        "browser_process" | "system_wake" => &["process_control"],
         // The installed App is found under the user's home; its windowless
         // browser host runs in a contained process tree.
         "app_browser" => &["process_control", "user_dirs"],
