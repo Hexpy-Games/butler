@@ -1,12 +1,14 @@
 //! Consent-bound local packages. No discovery, background jobs or startup spawns.
 mod capabilities;
 mod coverage;
+mod git_process;
 mod inspect;
 mod inspection;
 mod manifest;
 mod overlay;
 mod registries;
 pub(crate) mod safe_mode;
+mod source_work;
 mod sources;
 mod storage;
 mod types;
@@ -174,22 +176,33 @@ impl PluginPort for Admin {
     fn execute(&self, action: String, id: Option<String>, input: Value) -> PluginFuture<'_> {
         let owner = self.0.clone();
         Box::pin(async move {
-            let _permit = owner.writes.acquire_owned().await;
+            if matches!(
+                action.as_str(),
+                "inspect" | "check" | "registry_add" | "registry_refresh"
+            ) {
+                return tokio::task::spawn_blocking(move || {
+                    owner.source_action(&action, id.as_deref(), &input)
+                })
+                .await
+                .map_err(|_| error("plugin_task_failed"))?;
+            }
+            let permit = owner.writes.acquire_owned().await;
             if action == "uninstall" {
                 owner.revoke_grants(id.as_deref(), &input).await?;
             }
-            tokio::task::spawn_blocking(move || match action.as_str() {
-                "inspect" => owner.inspect(&input),
-                "install" => owner.install(&input),
-                "check" => owner.check(id.as_deref(), &input),
-                "update" => owner.update(id.as_deref(), &input),
-                "rollback" => owner.rollback(id.as_deref(), &input),
-                "registry_list" | "registry_add" | "registry_refresh" | "registry_delete" => {
-                    owner.registry_action(&action, id.as_deref(), &input)
+            tokio::task::spawn_blocking(move || {
+                let _permit = permit;
+                match action.as_str() {
+                    "install" => owner.install(&input),
+                    "update" => owner.update(id.as_deref(), &input),
+                    "rollback" => owner.rollback(id.as_deref(), &input),
+                    "registry_list" | "registry_add" | "registry_refresh" | "registry_delete" => {
+                        owner.registry_action(&action, id.as_deref(), &input, None)
+                    }
+                    "enable" | "disable" => owner.toggle(id.as_deref(), &input, action == "enable"),
+                    "uninstall" => owner.uninstall(id.as_deref(), &input),
+                    _ => Err(error("plugin_action_invalid")),
                 }
-                "enable" | "disable" => owner.toggle(id.as_deref(), &input, action == "enable"),
-                "uninstall" => owner.uninstall(id.as_deref(), &input),
-                _ => Err(error("plugin_action_invalid")),
             })
             .await
             .map_err(|_| error("plugin_task_failed"))?

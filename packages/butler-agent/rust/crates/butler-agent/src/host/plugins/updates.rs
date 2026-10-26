@@ -2,44 +2,38 @@ use super::{
     Plugins, Result, State, capabilities, coverage, error, inspect, sources, storage, types::*,
 };
 use serde_json::{Value, json};
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{sync::Arc, time::Instant};
 
 impl Plugins {
-    pub(super) fn check(&self, id: Option<&str>, input: &Value) -> Result<Value> {
-        let id = storage::id(id)?;
-        let _mutation = self.mutation.lock();
-        let mut state = self.state.lock().clone();
-        if input.get("revision").is_some() {
-            storage::revision(&state, input)?;
-        }
+    pub(super) fn finish_check(
+        &self,
+        state: &mut State,
+        id: &str,
+        view: Result<Value>,
+    ) -> Result<Value> {
         let old = state
             .registry
             .plugins
             .get(id)
             .cloned()
             .ok_or_else(|| error("plugin_not_found"))?;
-        if input.get("force").and_then(Value::as_bool) != Some(true)
-            && let Some((time, result)) = state.checked.get(id)
-            && time.elapsed() < Duration::from_hours(6)
-        {
-            return Ok(result.clone());
-        }
-        let result = self
-            .check_source(&mut state, id, &old)
+        let result = view
+            .and_then(|view| self.consider(state, id, &old, view))
             .unwrap_or_else(|e| json!({"id":id,"status":"error","error":e.code}));
         drop(old);
         *self.state.lock() = state.clone();
-        self.collect_retired(&mut state)?;
+        self.collect_retired(state)?;
         state
             .checked
             .insert(id.to_owned(), (Instant::now(), result.clone()));
-        *self.state.lock() = state;
         Ok(result)
     }
-    fn check_source(&self, state: &mut State, id: &str, old: &Installed) -> Result<Value> {
+    pub(super) fn check_source(
+        &self,
+        state: &mut State,
+        old: &Installed,
+        work: &std::path::Path,
+    ) -> Result<Value> {
         let request = if let Some(pin) = &old.pin {
             if let Some(registry_id) = &pin.registry {
                 let registry = state
@@ -47,7 +41,8 @@ impl Plugins {
                     .registries
                     .get(registry_id)
                     .ok_or_else(|| error("plugin_registry_not_found"))?;
-                let fresh = self.read_registry(&registry.url, registry.reference.as_deref())?;
+                let fresh =
+                    self.read_registry(&registry.url, registry.reference.as_deref(), work)?;
                 // Refresh only the inspection snapshot; a failed check must not persist it.
                 let mut snapshot = state.clone();
                 snapshot
@@ -57,16 +52,16 @@ impl Plugins {
                 let view = self.inspect_into(
                     &mut snapshot,
                     &json!({"registry":registry_id,"name":pin.name}),
+                    work,
                 )?;
                 state.staging = snapshot.staging;
-                return self.consider(state, id, old, view);
+                return Ok(view);
             }
             json!({"git":pin.git,"ref":pin.reference,"commit":pin.requested_commit})
         } else {
             json!({"path":old.source})
         };
-        let view = self.inspect_into(state, &request)?;
-        self.consider(state, id, old, view)
+        self.inspect_into(state, &request, work)
     }
     fn consider(
         &self,

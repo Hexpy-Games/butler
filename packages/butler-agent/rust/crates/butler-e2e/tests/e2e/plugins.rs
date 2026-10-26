@@ -7,6 +7,7 @@
 )]
 mod git;
 mod git_support;
+mod git_timeout;
 mod growth;
 mod idle;
 mod inspection;
