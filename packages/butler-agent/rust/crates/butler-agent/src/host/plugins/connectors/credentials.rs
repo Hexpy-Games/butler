@@ -11,23 +11,16 @@ pub(super) fn key(plugin: &str, connector: &str, account: &str, field: &str) -> 
     .map_err(|_| error("connector_secret_key_invalid"))
 }
 impl Connectors {
-    // Called only on the admin blocking lane, before forgetting account metadata.
-    pub(in crate::host::plugins) fn delete_secrets(&self, account: &Account) -> Result<()> {
-        let definition = self.definition(&account.plugin, &account.connector)?;
-        if definition.account.secrets.is_empty() {
-            return Ok(());
-        }
-        let store = store()?;
-        for field in &definition.account.secrets {
-            store
-                .delete(&key(
-                    &account.plugin,
-                    &account.connector,
-                    &account.id,
-                    &field.key,
-                )?)
-                .map_err(|_| error("connector_secret_store_unavailable"))?;
-        }
-        Ok(())
+    // Capture names before removing account or plugin metadata. No credential I/O.
+    pub(in crate::host::plugins) fn secret_keys(
+        &self,
+        account: &Account,
+    ) -> Result<Vec<SecretKey>> {
+        self.definition(&account.plugin, &account.connector)?
+            .account
+            .secrets
+            .iter()
+            .map(|field| key(&account.plugin, &account.connector, &account.id, &field.key))
+            .collect()
     }
 }

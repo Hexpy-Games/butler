@@ -10,6 +10,7 @@ mod manifest;
 mod overlay;
 mod registries;
 pub(crate) mod safe_mode;
+mod secret_cleanup;
 mod source_work;
 mod sources;
 mod storage;
@@ -50,7 +51,6 @@ pub(crate) struct Plugins {
     state: Mutex<State>,
     mutation: Mutex<()>,
     writes: Arc<ConfigurationWrites>,
-    secrets: butler_platform::secrets::SecretStore,
 }
 impl Plugins {
     pub(crate) async fn open(
@@ -76,21 +76,6 @@ impl Plugins {
                 .filter_map(|p| p.pending_inspection.clone())
                 .map(|i| (i.staging_id.clone(), i))
                 .collect();
-            let secret_store_policy = butler_models::models::credential_store_policy(
-                &data,
-                butler_models::models::SecretStoreFacts::for_data_root(&data),
-            );
-            let secrets = if secret_store_policy.store == "system" {
-                match butler_platform::secrets::SecretStore::system() {
-                    Ok(store) => store,
-                    Err(butler_platform::secrets::SecretError::Unavailable(_)) => {
-                        butler_models::models::fallback_file(&data)
-                    }
-                    Err(_) => return Err(error("plugin_secret_store_unavailable")),
-                }
-            } else {
-                butler_platform::secrets::SecretStore::file(data.join("secrets/plugins.json"))
-            };
             Ok(Arc::new_cyclic(|weak| Self {
                 connectors: connectors::Connectors::new(weak.clone()),
                 authority: std::sync::OnceLock::new(),
@@ -107,7 +92,6 @@ impl Plugins {
                     source_users,
                 }),
                 writes,
-                secrets,
             }))
         })
         .await

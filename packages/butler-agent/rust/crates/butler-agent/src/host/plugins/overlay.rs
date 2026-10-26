@@ -203,14 +203,17 @@ impl Plugins {
         ))
     }
     fn secret_values(&self, plugin: &Installed) -> Result<BTreeMap<String, String>> {
+        if plugin.approval.capabilities.secrets.is_empty() {
+            return Ok(BTreeMap::new());
+        }
+        let secrets = super::storage::secret_store()?;
         plugin
             .approval
             .capabilities
             .secrets
             .iter()
             .map(|s| {
-                let value = self
-                    .secrets
+                let value = secrets
                     .get(&super::storage::key(&plugin.package.name, &s.key)?)
                     .map_err(|_| error("plugin_secret_unavailable"))?
                     .ok_or_else(|| error("plugin_secret_unavailable"))?;

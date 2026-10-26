@@ -37,8 +37,9 @@ impl Connectors {
         let owner = self.owner()?;
         let _permit = owner.writes.acquire_owned().await;
         let runtime = self.clone();
+        let disconnect = action == "connector_disconnect";
         let action = action.to_owned();
-        let changed =
+        let mut changed =
             tokio::task::spawn_blocking(move || runtime.change_account(&action, id, &input))
                 .await
                 .map_err(|_| error("connector_task_failed"))??;
@@ -51,8 +52,30 @@ impl Connectors {
             }
             self.states.lock().remove(id);
         }
+        if disconnect {
+            let runtime = self.clone();
+            let account_id = changed["account"].as_str().unwrap_or_default().to_owned();
+            let leftovers =
+                tokio::task::spawn_blocking(move || runtime.cleanup_account(&account_id))
+                    .await
+                    .map_err(|_| error("connector_task_failed"))??;
+            super::super::secret_cleanup::report(&mut changed, &leftovers);
+        }
         self.reconcile().await;
         Ok(changed)
+    }
+    fn cleanup_account(&self, id: &str) -> Result<Vec<Value>> {
+        let owner = self.owner()?;
+        let account = owner
+            .state
+            .lock()
+            .registry
+            .accounts
+            .get(id)
+            .cloned()
+            .ok_or_else(|| error("connector_account_not_found"))?;
+        let keys = self.secret_keys(&account)?;
+        Ok(super::super::secret_cleanup::system(&keys))
     }
     fn change_account(&self, action: &str, id: Option<String>, input: &Value) -> Result<Value> {
         let owner = self.owner()?;
@@ -85,7 +108,6 @@ impl Connectors {
                 .ok_or_else(|| error("connector_account_not_found"))?;
             match action {
                 "connector_disconnect" => {
-                    self.delete_secrets(account)?;
                     account.enabled = false;
                 }
                 "connector_retry" => {

@@ -90,7 +90,9 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
         ButlerOutput, CommandMutation, CommandObservation, Connector, DeliverFiles, Exempt,
         FileEdit, FileRead, FolderSwitch, FullOnly, InternalRead, Network, ProjectRecord,
     };
-    if request.taint == TurnTaint::ConnectorEvent && request.kind.can_send_outside() {
+    if request.taint == TurnTaint::ConnectorEvent
+        && (request.kind.can_send_outside() || request.kind.persists_beyond_turn())
+    {
         return if *mode == AccessMode::ReadOnly {
             Deny(DenyReason::ReadOnly)
         } else {
@@ -167,13 +169,51 @@ pub fn needs_scope(mode: &AccessMode, kind: CapabilityKind) -> bool {
     }
 }
 impl CapabilityKind {
+    /// Gate creation rather than propagating taint through every derived artifact
+    /// forever (schedule runs, recalled memory, new conversations). That propagation
+    /// is fragile; a card lets the user see the exact artifact before it exists.
+    /// Documents are inert data read on demand, never instructions; Library
+    /// organization lets briefs attach them. Connector classification rules are
+    /// host-constrained and announced once with undo, so they also need no card.
+    pub fn persists_beyond_turn(self) -> bool {
+        match self {
+            Self::Exempt(action) => match action {
+                ApprovalExemptAction::FirstConversationOnboarding
+                | ApprovalExemptAction::MemorySave => true,
+                ApprovalExemptAction::AttachedImageAnalysis
+                | ApprovalExemptAction::LibraryOrganize
+                | ApprovalExemptAction::DocumentWrite => false,
+            },
+            Self::FileEdit
+            | Self::Schedule
+            | Self::SettingsWrite
+            | Self::ProjectRecord
+            | Self::CrossConversation
+            | Self::ButlerOutput
+            | Self::FolderSwitch
+            | Self::FullOnly(FullOnlyAction::GitWorktree | FullOnlyAction::MemoryForget) => true,
+            Self::InternalRead
+            | Self::FileRead
+            | Self::WebRequest { .. }
+            | Self::CommandObservation { .. }
+            | Self::CommandMutation { .. }
+            | Self::ImageModelCall
+            | Self::Network
+            | Self::Connector
+            | Self::DeliverFiles
+            | Self::FullOnly(FullOnlyAction::ServiceRestart)
+            | Self::OtherEffect => false,
+        }
+    }
+
     /// Commands and undeclared effects can send data too; containment does
     /// not establish that a command has no outward effect. Butler's own
     /// records, outputs and delivery to its user remain internal operations.
     fn can_send_outside(self) -> bool {
         matches!(
             self,
-            Self::Connector
+            Self::Exempt(ApprovalExemptAction::AttachedImageAnalysis)
+                | Self::Connector
                 | Self::Network
                 | Self::ImageModelCall
                 | Self::WebRequest { carries_data: true }
@@ -248,6 +288,7 @@ impl CapabilityKind {
             OutputPublish => Self::ButlerOutput,
             ToolName::DeliverFiles => Self::DeliverFiles,
             SwitchFolder => Self::FolderSwitch,
+            // Includes classification rules, whose host enforces action and read-only limits.
             _ => Self::InternalRead,
         }
     }

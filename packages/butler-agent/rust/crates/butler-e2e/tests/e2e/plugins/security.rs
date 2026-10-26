@@ -78,6 +78,7 @@ pub(super) fn assert_empty(s: &Scenario, subdir: &str) -> Result<(), HarnessErro
 async fn compatibility_and_secret_fields_never_disclose_values() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let setup = setup("PG-COMPAT")?;
+    butler_platform::secrets::prepare_system_keychain_for_test(&setup.sandbox.home)?;
     let folder = package(&setup.sandbox.home, "helper")?;
     fs::create_dir(folder.join(".claude-plugin"))?;
     fs::write(folder.join(".claude-plugin/plugin.json"),json!({"name":"helper","version":"1.2.3","skills":"./skills","commands":"./commands","mcpServers":"./.mcp.json"}).to_string())?;
@@ -117,19 +118,15 @@ async fn compatibility_and_secret_fields_never_disclose_values() -> Result<(), H
         true,
         "MCP did not receive the approved secret"
     );
-    let store =
-        butler_platform::secrets::SecretStore::file(s.sandbox.data.join("secrets/plugins.json"));
     let key = butler_platform::secrets::SecretKey::new(
         "io.github.hexpy-games.butler.plugins",
         "helper/PRIVATE_TOKEN",
     )
     .unwrap();
     assert!(
-        store
-            .get(&key)
-            .unwrap()
-            .is_some_and(|s| s.expose() == canary)
+        butler_platform::secrets::isolated_system_secret_present_for_test(&s.sandbox.home, &key)?
     );
+    assert!(!s.sandbox.data.join("secrets/plugins.json").exists());
     assert!(!i.to_string().contains(&canary));
     assert!(
         !api(&s, Method::GET, "/plugins", None)
