@@ -45,6 +45,10 @@ pub(super) fn recover(root: &Path, registry: &Registry) -> Result<()> {
     }
     Ok(())
 }
+pub(super) fn secret_store() -> Result<butler_platform::secrets::SecretStore> {
+    butler_platform::secrets::SecretStore::system()
+        .map_err(|_| error("plugin_secret_store_unavailable"))
+}
 pub(super) fn key(id: &str, field: &str) -> Result<SecretKey> {
     SecretKey::new(
         "io.github.hexpy-games.butler.plugins",
@@ -151,20 +155,22 @@ impl Plugins {
         for value in values.values().filter_map(Value::as_str) {
             butler_log::register_secret(value);
         }
+        if values.is_empty() {
+            return Ok(Vec::new());
+        }
+        let secrets = secret_store()?;
         let saved = values
             .keys()
             .map(|field| {
                 let key = key(id, field)?;
-                let old = self
-                    .secrets
+                let old = secrets
                     .get(&key)
-                    .map_err(|_| error("plugin_secret_store_failed"))?;
+                    .map_err(|_| error("plugin_secret_store_unavailable"))?;
                 Ok((key, old))
             })
             .collect::<Result<Vec<_>>>()?;
         for ((key, _), value) in saved.iter().zip(values.values()) {
-            if self
-                .secrets
+            if secrets
                 .set(
                     key,
                     value
@@ -174,7 +180,7 @@ impl Plugins {
                 .is_err()
             {
                 self.restore_secrets(&saved);
-                return Err(error("plugin_secret_store_failed"));
+                return Err(error("plugin_secret_store_unavailable"));
             }
         }
         Ok(saved)
@@ -183,13 +189,19 @@ impl Plugins {
         &self,
         saved: &[(SecretKey, Option<butler_platform::secrets::SecretText>)],
     ) {
+        if saved.is_empty() {
+            return;
+        }
+        let Ok(secrets) = secret_store() else {
+            return;
+        };
         for (key, value) in saved {
             match value {
                 Some(v) => {
-                    let _ = self.secrets.set(key, v.expose());
+                    let _ = secrets.set(key, v.expose());
                 }
                 None => {
-                    let _ = self.secrets.delete(key);
+                    let _ = secrets.delete(key);
                 }
             }
         }
@@ -254,9 +266,9 @@ impl Plugins {
                 fs::remove_dir_all(data).map_err(|_| error("plugin_data_cleanup_failed"))?;
             }
             for field in &plugin.approval.capabilities.secrets {
-                self.secrets
+                secret_store()?
                     .delete(&key(id, &field.key)?)
-                    .map_err(|_| error("plugin_secret_store_failed"))?;
+                    .map_err(|_| error("plugin_secret_store_unavailable"))?;
             }
         }
         Ok(json!({"id":id,"revision":state.registry.revision}))

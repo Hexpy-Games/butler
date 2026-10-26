@@ -23,6 +23,7 @@ async fn pg10_each_growth_requires_review_removals_narrow_and_rollback_refuses()
 }
 async fn growth(kind: &str) -> Result<(), HarnessError> {
     let setup = git_setup(&format!("PG10-{kind}"))?;
+    butler_platform::secrets::prepare_system_keychain_for_test(&setup.sandbox.home)?;
     let repo = Repo::new(&setup.sandbox.home, "helper", true)?;
     edit(&repo.work.join("plugin.json"), |v| {
         v["extensions"]["io.github.hexpy-games.butler"]["capabilities"] =
