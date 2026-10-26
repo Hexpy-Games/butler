@@ -93,7 +93,7 @@ async fn security_mail_secret_redaction_destination_refusal_and_remote_plaintext
         ("search", json!({"query":"ALL","limit":10})),
         (
             "unsubscribe",
-            json!({"event_id":event(&s,"security")["id"]}),
+            json!({"event_id":event(&s,"security")["id"],"mailto":"mailto:leave@example.test"}),
         ),
     ] {
         let result = direct.call(tool, args).await?;

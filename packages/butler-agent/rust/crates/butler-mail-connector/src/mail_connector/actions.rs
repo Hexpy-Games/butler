@@ -42,7 +42,10 @@ impl Mail {
                 Ok(json!({"ok":true}))
             }
             "draft_reply" => self.draft(c, &id, text(args, "body")?).await,
-            "unsubscribe" => self.unsubscribe(c, &id).await,
+            "unsubscribe" => {
+                self.unsubscribe(c, &id, super::outward::unsubscribe_target(args)?)
+                    .await
+            }
             _ => Err("mail_tool_unknown"),
         }
     }

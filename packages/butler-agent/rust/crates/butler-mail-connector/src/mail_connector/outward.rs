@@ -122,6 +122,7 @@ impl Mail {
         &self,
         c: &mut imap::Connection,
         id: &message::Id,
+        target: &str,
     ) -> Result<Value> {
         let fetch = imap::fetch(c, id.uid, false).await?;
         let parsed = message::parse(fetch.header().ok_or("mail_headers_missing")?)?;
@@ -134,14 +135,19 @@ impl Mail {
         let one_click = parsed
             .header_raw("List-Unsubscribe-Post")
             .is_some_and(|s| s.trim().eq_ignore_ascii_case("List-Unsubscribe=One-Click"));
-        if one_click && let Some(link) = links.iter().find(|s| s.starts_with("https://")) {
+        if !links.iter().any(|link| link == target)
+            || !(target.starts_with("mailto:") || one_click && target.starts_with("https://"))
+        {
+            return Err("mail_unsubscribe_target_mismatch");
+        }
+        if target.starts_with("https://") {
             let client =
                 butler_log::http::external(butler_log::http::Purpose::new("mail.unsubscribe"))
                     .redirect(butler_log::http::RedirectPolicy::none())
                     .build()
                     .map_err(|_| "mail_unsubscribe_failed")?;
             let response = client
-                .post(link)
+                .post(target)
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .body("List-Unsubscribe=One-Click");
             let response = butler_log::http::send(
@@ -156,7 +162,7 @@ impl Mail {
             }
             return Ok(json!({"ok":true}));
         }
-        Ok(json!({"links":links}))
+        Ok(json!({"links":[target]}))
     }
 }
 fn recipients(value: &str) -> Result<Vec<&str>> {
@@ -176,4 +182,12 @@ fn recipients_list(value: &str) -> Result<Vec<&str>> {
         return Err("mail_address_invalid");
     }
     Ok(items)
+}
+
+pub(super) fn unsubscribe_target(args: &Value) -> Result<&str> {
+    match (args.get("url"), args.get("mailto")) {
+        (Some(Value::String(url)), None) if url.starts_with("https://") => Ok(url),
+        (None, Some(Value::String(mailto))) if mailto.starts_with("mailto:") => Ok(mailto),
+        _ => Err("mail_unsubscribe_target_mismatch"),
+    }
 }

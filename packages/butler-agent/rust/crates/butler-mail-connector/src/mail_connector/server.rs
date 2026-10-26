@@ -207,16 +207,43 @@ fn tools() -> std::result::Result<Vec<Tool>, ErrorData> {
         ),
         (
             "unsubscribe",
-            "Submit one-click unsubscribe or return subscription links",
+            "Submit the exact one-click HTTPS URL or return the exact mailto link",
             vec!["event_id"],
-            vec![],
+            vec!["url", "mailto"],
         ),
     ];
-    specs.into_iter().map(|(name, description, required, optional)| {
-        let mut properties = serde_json::Map::new();
-        for key in required.iter().chain(optional.iter()).copied().chain(std::iter::once("account")) {
-            properties.insert(key.into(), if key == "limit" { json!({"type":"integer","minimum":1,"maximum":1000}) } else { json!({"type":"string"}) });
-        }
-        serde_json::from_value(json!({"name":name,"description":description,"inputSchema":{"type":"object","properties":properties,"required":required,"additionalProperties":false},"annotations":{"readOnlyHint":matches!(name,"thread"|"search"),"destructiveHint":false}})).map_err(|_| error("mail_schema_failed"))
-    }).collect()
+    specs
+        .into_iter()
+        .map(|(name, description, required, optional)| {
+            tool(name, description, &required, &optional)
+        })
+        .collect()
+}
+fn tool(
+    name: &str,
+    description: &str,
+    required: &[&str],
+    optional: &[&str],
+) -> std::result::Result<Tool, ErrorData> {
+    let mut properties = serde_json::Map::new();
+    for key in required
+        .iter()
+        .chain(optional.iter())
+        .copied()
+        .chain(std::iter::once("account"))
+    {
+        properties.insert(
+            key.into(),
+            if key == "limit" {
+                json!({"type":"integer","minimum":1,"maximum":1000})
+            } else {
+                json!({"type":"string"})
+            },
+        );
+    }
+    let mut schema = json!({"type":"object","properties":properties,"required":required,"additionalProperties":false});
+    if name == "unsubscribe" {
+        schema["oneOf"] = json!([{"required":["url"]},{"required":["mailto"]}]);
+    }
+    serde_json::from_value(json!({"name":name,"description":description,"inputSchema":schema,"annotations":{"readOnlyHint":matches!(name,"thread"|"search"),"destructiveHint":false}})).map_err(|_| error("mail_schema_failed"))
 }

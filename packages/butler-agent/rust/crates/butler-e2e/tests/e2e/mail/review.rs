@@ -20,3 +20,4 @@ mod ack;
 mod reconnect;
 mod relocation;
 mod timeout;
+mod unsubscribe;
