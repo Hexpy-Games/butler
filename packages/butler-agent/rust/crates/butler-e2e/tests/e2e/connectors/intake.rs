@@ -27,7 +27,7 @@ async fn pc2_compaction_dedupe_oversize_retention_and_triage() -> Result<(), Har
         ],
     )
     .await?;
-    count(&s, "SELECT count(*) FROM app_connector_events", 3).await?;
+    count(&s, "SELECT count(*) FROM app_connector_events", 4).await?;
     let a = account(&s, &id, "connected").await?;
     assert_eq!(a["last_error"], "connector_event_too_large");
     count(
@@ -41,9 +41,9 @@ async fn pc2_compaction_dedupe_oversize_retention_and_triage() -> Result<(), Har
             r.get(0)
         })?;
     let payload: Value = serde_json::from_str(&payload)?;
-    assert_eq!(payload["events"].as_array().unwrap().len(), 3);
-    assert_eq!(payload["events"][0]["id"], "one");
-    assert_eq!(payload["events"][2]["id"], "three");
+    assert_eq!(payload["events"].as_array().unwrap().len(), 4);
+    assert_eq!(payload["events"][0]["id"], "expired");
+    assert_eq!(payload["events"][3]["id"], "three");
     let event_id: String = db(&s).query_row(
         "SELECT event_id FROM app_connector_events WHERE dedupe_key='one'",
         [],
@@ -79,7 +79,7 @@ async fn pc2_compaction_dedupe_oversize_retention_and_triage() -> Result<(), Har
             .contains("connector-private-value")
     );
     eprintln!(
-        "PC2 batch: 3 complete events, 1 delivery, 1 duplicate coalesced, oversized rejected, expired removed"
+        "PC2 batch: 4 complete events, 1 delivery, 1 duplicate coalesced, oversized rejected, old source timestamp retained"
     );
     s.finish().await
 }

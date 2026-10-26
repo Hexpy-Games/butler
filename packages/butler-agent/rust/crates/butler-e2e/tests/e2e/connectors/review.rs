@@ -54,6 +54,41 @@ async fn review_blank_conditions_are_rejected_on_set_and_patch() -> Result<(), H
 }
 
 #[tokio::test]
+async fn review_old_source_timestamp_survives_later_arrival() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = setup("PC-RETENTION")?;
+    let root = package(&setup.sandbox.home, false)?;
+    let s = setup.start().await?;
+    install(&s, &root).await?;
+    let id = connect(&s, "batch", 0.05).await?;
+    account(&s, &id, "connected").await?;
+    let mut old = event("old-source");
+    old["received_at"] = "2000-01-01T00:00:00Z".into();
+    emit(&s, &id, vec![old]).await?;
+    count(
+        &s,
+        "SELECT count(*) FROM app_connector_events WHERE ready=1",
+        1,
+    )
+    .await?;
+    emit(&s, &id, vec![event("new-source")]).await?;
+    count(
+        &s,
+        "SELECT count(*) FROM app_connector_events WHERE delivered_at IS NOT NULL",
+        2,
+    )
+    .await?;
+    let payload: String =
+        db(&s).query_row("SELECT payload FROM app_connector_deliveries", [], |r| {
+            r.get(0)
+        })?;
+    let payload: Value = serde_json::from_str(&payload)?;
+    assert_eq!(payload["events"].as_array().unwrap().len(), 2);
+    assert_eq!(payload["events"][0]["id"], "old-source");
+    s.finish().await
+}
+
+#[tokio::test]
 async fn review_relocating_actions_execute_last_and_are_unique() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let setup = setup("PC-ORDER")?;

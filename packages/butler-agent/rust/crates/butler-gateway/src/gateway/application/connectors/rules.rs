@@ -88,7 +88,7 @@ pub(super) fn signal(
     now: &str,
 ) -> Result<Value, AppStorageError> {
     let tx = db;
-    let received = chrono::DateTime::parse_from_rfc3339(text(input, "received_at")?)
+    let received = chrono::DateTime::parse_from_rfc3339(now)
         .map_err(|_| invalid())?
         .timestamp();
     let fresh=tx.execute("INSERT OR IGNORE INTO app_connector_signals(connector,account,dedupe_key,received_at) VALUES(?1,?2,?3,?4)",params![text(input,"connector")?,text(input,"account")?,text(input,"dedupe_key")?,received]).map_err(AppStorageError::sqlite)?;
