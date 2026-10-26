@@ -93,6 +93,8 @@ try {
     const playing = await app.call<string>("create", { owner: "conversation:general", url: video.url.href });
     await app.call("activate", { id: playing }); await nativeAligned(app);
     await waitBrowser(() => app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(playing)}).view.webContents.executeJavaScript("!document.querySelector('video').paused")`), "fixture video plays");
+    // Precondition: playing media turns throttling off, so the page stays visible while detached.
+    await waitBrowser(() => app.main(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(playing)}).view.webContents.getBackgroundThrottling() === false`), "playing page runs unthrottled");
     await routeReturnKeepsPage(app, playing, new URL("/icon.png", video.url).href, "Second conversation");
     await app.shot("en-light-1440-route-return");
     await app.call("close", { id: playing });
