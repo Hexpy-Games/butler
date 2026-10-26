@@ -12,6 +12,7 @@ pub(super) mod images;
 mod live;
 pub(super) use live::page as live_page;
 mod look;
+mod navigation;
 mod observe_after;
 mod open;
 mod pay;
@@ -102,6 +103,10 @@ async fn execute_client(
     }
     if call.name == "browser_sign_in" || call.name.ends_with("_fill") {
         return pay::execute(owner, invocation, call, occurrence, client, args).await;
+    }
+    if call.name == "browser_open" && owner.taint() == butler_turn::btcc::TurnTaint::ConnectorEvent
+    {
+        return navigation::execute(owner, invocation, call, occurrence, client, args).await;
     }
     if call.name == "browser_open" && args.get("results").is_some() {
         return open::execute(owner, invocation, call, occurrence, client).await;
@@ -316,7 +321,7 @@ fn approval_input(
         "signed_out"
     };
     let commit = authority::commits(args, prepared);
-    json!({"tab":args["tab"],"observation":args["observation"],"steps":args["steps"],"resolved_steps":prepared["steps"],"site":scope,"mode":mode,"always_confirm":always,"commit":commit})
+    json!({"tab":args["tab"],"observation":args["observation"],"steps":args["steps"],"resolved_steps":prepared["steps"],"url":prepared["url"],"site":scope,"mode":mode,"always_confirm":always,"commit":commit})
 }
 /// The act's authority target: the page's site under its tab profile.
 fn act_scope(prepared: &Value) -> String {
@@ -357,7 +362,8 @@ async fn dispatch_effect(
     dispatch_args["prepared_steps"] = prepared["steps"].clone();
     dispatch_args["commit_cleared"] = json!(authority::commit_cleared(
         &owner.binding.access_mode,
-        &input
+        &input,
+        owner.taint()
     ));
     let outcome = owner
         .effects
