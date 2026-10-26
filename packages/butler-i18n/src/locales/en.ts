@@ -1544,7 +1544,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       learning: "How much Butler picks up about you from your chats.",
     },
     memory: {
-      patternsEmpty: "Nothing yet", deletePatternTitle: "Delete this?", deletePatternBody: "Butler won't suggest it again.", patternDeleted: "Deleted",
+      patternsEmpty: "Nothing yet", deletePatternTitle: "Delete this habit?", deletePatternBody: "Butler won't suggest it again.", patternDeleted: "Deleted",
       patternDays: n => `Last ${n} days`, patternWeeks: n => `Last ${n} weeks`, patternMonths: n => `Last ${n} months`, patternCount: n => `${n} times`,
       proactiveLevel: "Reach out first", proactiveDescription: "How readily Butler suggests things after memory consolidation.",
       proactiveOff: "Off", proactiveSometimes: "Sometimes", proactiveOften: "Often",
