@@ -67,7 +67,7 @@ try {
     }
   }
   // While a reply runs, 대화 names the current tool in its status line, counted as its timeline group would.
-  for (const [locale, sessionId, expected] of [["ko", "general", "웹 검색 중 · 3개 확인"], ["en", "general", "Web search · 3 checked"], ["ko", "butler-client", null]] as const) {
+  for (const [locale, sessionId, expected] of [["ko", "general", "웹 검색 중 · 3개"], ["en", "general", "Web search · 3"], ["ko", "butler-client", null]] as const) {
     for (const width of [1280, 375]) {
       const page = await browser.newPage({ viewport: { width, height: 960 }, colorScheme: theme, reducedMotion: "reduce" });
       const errors: string[] = [];
@@ -86,7 +86,8 @@ try {
       }));
       console.log(JSON.stringify({ theme, width, locale, session: sessionId === "general" ? "chats" : "work", screenshot, ...measured }));
       if (expected) {
-        assert(measured.activity?.startsWith(expected), `대화 status names the current tool: ${measured.activity}`);
+        // The elapsed time follows as the last segment.
+        assert.equal(measured.activity?.replace(/ · [^·]+$/u, ""), expected, "대화 status names the current tool and its count");
         assert.equal(measured.timeline, 0, "대화 keeps its activity in the status line");
       } else {
         assert.equal(measured.activity, null, "work sessions keep their status line");
