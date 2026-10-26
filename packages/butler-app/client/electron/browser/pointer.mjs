@@ -1,9 +1,9 @@
-import { ipcMain, WebContentsView, session } from "electron";
+import { ipcMain, WebContentsView } from "electron";
 import { fileURLToPath } from "node:url";
 import { tabInUse } from "./usage.mjs";
 import { mouseInput } from "./pointer-input.mjs";
+import { overlaySession } from "./overlay-session.mjs";
 
-let overlayProtocolInstalled = false;
 const MODES = new Set(["observe", "click", "type", "scroll", "batch", "parked"]);
 
 /** One transparent presenter above the page; capturePage on tab.view never captures it. */
@@ -55,13 +55,8 @@ export class BrowserPointer {
   }
   create() {
     if (this.view) return;
-    const overlaySession = session.fromPartition("butler-browser-overlay");
-    if (!overlayProtocolInstalled) {
-      overlayProtocolInstalled = true;
-      overlaySession.protocol.handle("app", request => session.defaultSession.fetch(request.url));
-    }
     this.view = new WebContentsView({ webPreferences: {
-      session: overlaySession,
+      session: overlaySession(),
       preload: fileURLToPath(new URL("./overlay-preload.cjs", import.meta.url)),
       sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: true,
     } });

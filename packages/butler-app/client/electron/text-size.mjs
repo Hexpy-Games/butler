@@ -34,8 +34,9 @@ function updateWindow(win, options) {
 /** Only registered App surfaces can change App zoom; web page and frame senders cannot. */
 export function registerTextSizeWindow(win, options = {}) {
   options.factor = appZoomFactor();
-  windows.set(win.webContents.id, { win, options });
-  win.once("closed", () => windows.delete(win.webContents.id));
+  const id = win.webContents.id;
+  windows.set(id, { win, options });
+  win.once("closed", () => windows.delete(id));
 }
 ipcMain.handle("butler:set-text-size", (event, value) => {
   if (!windows.has(event.sender.id) || event.senderFrame !== event.sender.mainFrame) return;

@@ -1,6 +1,6 @@
 const { contextBridge, ipcRenderer } = require("electron");
 ipcRenderer.on("butler:text-size", (_event, factor) => {
-  if ([1, 1.15, 1.3].includes(factor)) document.documentElement.style.setProperty("--ui-scale", String(factor));
+  if (typeof factor === "number" && Number.isFinite(factor) && factor > 0) document.documentElement.style.setProperty("--ui-scale", String(factor));
 });
 
 // Capture links before nested message menus; non-web schemes keep their handlers.
