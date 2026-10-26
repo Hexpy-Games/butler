@@ -17,6 +17,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 mod busy;
 mod timezone;
+mod wake_catchup;
 
 async fn setup(id: &str) -> Result<(Scenario, String), HarnessError> {
     let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
@@ -113,6 +114,29 @@ async fn terminal(s: &Scenario, trigger: &str, phase: &str) -> Result<Value, Har
     .expect("consolidation terminal event")
 }
 
+async fn completed_calls(s: &Scenario, count: usize) {
+    tokio::time::timeout(Duration::from_secs(90), async {
+        loop {
+            let events = s.gw.events_since(0).await.unwrap();
+            let completed = events
+                .iter()
+                .filter(|e| {
+                    e["type"] == "memory.operation"
+                        && e["payload"]["kind"] == "consolidation"
+                        && e["payload"]["phase"] == "complete"
+                })
+                .count();
+            if completed == count {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .expect("new consolidation completion");
+    assert_eq!(calls(s), count);
+}
+
 async fn wait_calls(s: &Scenario, count: usize) {
     tokio::time::timeout(Duration::from_secs(90), async {
         while calls(s) < count {
@@ -160,7 +184,7 @@ async fn time_persists_and_runs_once_at_the_selected_minute() -> Result<(), Harn
 }
 
 #[tokio::test]
-async fn missed_time_is_skipped_until_tomorrow() -> Result<(), HarnessError> {
+async fn missed_time_runs_once_late_on_restart() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (mut s, address) = setup("MEM-CONSOLIDATION-MISSED").await?;
     assert_eq!(
@@ -174,18 +198,30 @@ async fn missed_time_is_skipped_until_tomorrow() -> Result<(), HarnessError> {
         .launch
         .set_env("BUTLER_E2E_APP_NOW", "2026-10-02T07:00:00.000Z");
     s.gw = s.agent.start_again().await?;
-    settled(&address).await?;
-    assert_eq!(calls(&s), 0);
-    assert!(
-        !s.sandbox
-            .data
-            .join("state/scheduler/consolidation-cycle.intent.json")
-            .exists()
+    terminal(&s, "scheduled", "complete").await?;
+    assert_eq!(calls(&s), 1);
+    assert_eq!(state(&s)["late"], true);
+    assert_eq!(state(&s)["scheduledAt"], "2026-10-02T05:00:00.000Z");
+    assert_eq!(
+        s.gw.get("/memory/consolidation").await?.data()["last_run"]["late"],
+        true
     );
+    s.restart().await?;
+    settled(&address).await?;
+    assert_eq!(calls(&s), 1);
     clock(&address, "2026-10-03T05:00:00.000Z").await?;
+    clock(&address, "wake").await?;
+    tokio::time::timeout(Duration::from_secs(90), async {
+        while state(&s)["lastRunDate"] != "2026-10-03" {
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .expect("next day's scheduled run");
     terminal(&s, "scheduled", "complete").await?;
     assert_eq!(state(&s)["lastRunDate"], "2026-10-03");
-    assert_eq!(calls(&s), 1);
+    assert_eq!(calls(&s), 2);
+    assert_eq!(state(&s)["late"], false);
     s.finish().await
 }
 

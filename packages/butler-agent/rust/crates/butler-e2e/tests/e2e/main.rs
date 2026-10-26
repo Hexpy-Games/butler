@@ -166,6 +166,7 @@ mod schedule_chat;
 mod schedule_model;
 mod schedule_sleep_wake;
 mod schedule_store;
+mod schedule_wake_catchup;
 mod schedules;
 mod search_browser;
 mod security_oauth;

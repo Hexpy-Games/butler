@@ -141,7 +141,7 @@ pub(super) fn runs(
     db: &Connection,
     id: &str,
 ) -> Result<Vec<AutomationRunSummary>, AppStorageError> {
-    let mut statement = db.prepare("SELECT id,automation_id,target_session_id,state,trigger,started_at,completed_at,safe_error_code,queued_message_id,turn_id FROM app_automation_runs WHERE automation_id=?1 ORDER BY rowid DESC LIMIT 50").map_err(AppStorageError::sqlite)?;
+    let mut statement = db.prepare("SELECT id,automation_id,target_session_id,state,trigger,started_at,completed_at,safe_error_code,queued_message_id,turn_id,scheduled_at,late FROM app_automation_runs WHERE automation_id=?1 ORDER BY rowid DESC LIMIT 50").map_err(AppStorageError::sqlite)?;
     statement
         .query_map([id], run_row)
         .map_err(AppStorageError::sqlite)?
@@ -150,7 +150,7 @@ pub(super) fn runs(
 }
 
 pub(super) fn run(db: &Connection, id: &str) -> Result<AutomationRunSummary, AppStorageError> {
-    db.query_row("SELECT id,automation_id,target_session_id,state,trigger,started_at,completed_at,safe_error_code,queued_message_id,turn_id FROM app_automation_runs WHERE id=?1", [id], run_row).map_err(AppStorageError::sqlite)
+    db.query_row("SELECT id,automation_id,target_session_id,state,trigger,started_at,completed_at,safe_error_code,queued_message_id,turn_id,scheduled_at,late FROM app_automation_runs WHERE id=?1", [id], run_row).map_err(AppStorageError::sqlite)
 }
 
 pub(super) fn summary(value: AutomationRow) -> AutomationSummary {
@@ -231,6 +231,8 @@ fn run_row(item: &Row<'_>) -> rusqlite::Result<AutomationRunSummary> {
         safe_error_code: item.get(7)?,
         queued_message_id: item.get(8)?,
         turn_id: item.get(9)?,
+        scheduled_at: item.get(10)?,
+        late: item.get(11)?,
     })
 }
 fn schedule_at(item: &Row<'_>, at: usize) -> rusqlite::Result<Option<super::CalendarSchedule>> {

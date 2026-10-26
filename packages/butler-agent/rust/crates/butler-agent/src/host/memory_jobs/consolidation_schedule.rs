@@ -1,4 +1,4 @@
-//! Consolidation alone uses a bounded local-time window; intents remain recoverable.
+//! Consolidation coalesces missed local occurrences; intents remain recoverable.
 use super::{
     consolidation::{ConsolidationRunGate, Schedule},
     daily::DailyCognitionJobs,
@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
-const GRACE_MS: i64 = 2 * 60_000;
+use butler_core::wall_clock::SCHEDULE_GRACE_MS;
 
 /// Resolve the first occurrence, advancing through a DST gap to its first valid minute.
 pub(super) fn target(timezone: &DateParser, day: &str, time: &str) -> Option<i64> {
@@ -28,11 +28,17 @@ pub(super) fn target(timezone: &DateParser, day: &str, time: &str) -> Option<i64
     None
 }
 
-pub(super) fn in_window(timezone: &DateParser, day: &str, now: i64, schedule: &Schedule) -> bool {
-    target(timezone, day, &schedule.time).is_some_and(|due| {
-        schedule.changed_at.is_none_or(|changed| due > changed)
-            && (due..=due.saturating_add(GRACE_MS)).contains(&now)
-    })
+fn most_recent(schedule: &Schedule, day: &str, now: i64) -> Option<i64> {
+    let today = target(&schedule.timezone, day, &schedule.time)?;
+    let due = if today <= now {
+        today
+    } else {
+        let yesterday = chrono::NaiveDate::parse_from_str(day, "%Y-%m-%d")
+            .ok()?
+            .pred_opt()?;
+        target(&schedule.timezone, &yesterday.to_string(), &schedule.time)?
+    };
+    (due <= now && schedule.changed_at.is_none_or(|changed| due > changed)).then_some(due)
 }
 
 pub(super) async fn run_due(
@@ -52,10 +58,15 @@ pub(super) async fn run_due(
         .map_err(HostError::from_error)?;
     let root = daily.data_root().to_owned();
     let local_day = day.clone();
-    let window = in_window(&schedule.timezone, &day, now, &schedule);
-    let prepared = tokio::task::spawn_blocking(move || prepare(&root, &local_day, now, window))
-        .await
-        .map_err(HostError::from_error)??;
+    let due = most_recent(&schedule, &day, now);
+    let occurrence_day = due
+        .and_then(|due| schedule.timezone.local_day_and_minute(due).ok())
+        .map(|v| v.0);
+    let prepared = tokio::task::spawn_blocking(move || {
+        prepare(&root, &local_day, now, due, occurrence_day.as_deref())
+    })
+    .await
+    .map_err(HostError::from_error)??;
     let Some(intent) = prepared else {
         return Ok(());
     };
@@ -68,7 +79,8 @@ pub(super) async fn run_due(
     {
         let mut state = gate.state().await?.unwrap_or(json!({}));
         state["lastRunDate"] = json!(day);
-        state["skipped"] = json!({"at":iso_at(now),"reason":"busy"});
+        state["scheduledHandledAtMs"] = json!(now);
+        state["skipped"] = json!({"at":iso_at(now),"date":day,"reason":"busy"});
         gate.persist(state).await?;
         return Ok(());
     }
@@ -79,9 +91,15 @@ pub(super) async fn run_due(
     let started = intent["scheduledAtMs"]
         .as_i64()
         .ok_or("scheduler_intent_invalid")?;
-    let receipt = gate.reserve(&id, "scheduled");
+    let mut receipt = gate.reserve(&id, "scheduled");
+    receipt["scheduledAt"] = intent["scheduledAt"].clone();
+    receipt["late"] = intent["late"].clone();
     drop(admission);
-    gate.drive(daily, receipt, started, Some(day), cancellation)
+    let scheduled_day = intent["scheduledDate"]
+        .as_str()
+        .ok_or("scheduler_intent_invalid")?
+        .to_owned();
+    gate.drive(daily, receipt, started, Some(scheduled_day), cancellation)
         .await
 }
 
@@ -89,20 +107,48 @@ fn prepare(
     root: &std::path::Path,
     day: &str,
     now: i64,
-    window: bool,
+    due: Option<i64>,
+    occurrence_day: Option<&str>,
 ) -> Result<Option<Value>, HostError> {
-    if read_state(root, "consolidation-cycle")?.is_some_and(|s| s["lastRunDate"] == day) {
+    let state = read_state(root, "consolidation-cycle")?;
+    // Busy skips retain their current same-day semantics.
+    if state
+        .as_ref()
+        .is_some_and(|s| s["lastRunDate"] == day && s["skipped"]["date"] == day)
+    {
         return Ok(None);
     }
     if let Some(intent) = read_state(root, "consolidation-cycle.intent")?
-        && intent["scheduledDate"] == day
+        && !state.as_ref().is_some_and(|s| {
+            s["runId"] == intent["runId"]
+                || s["scheduledHandledAtMs"]
+                    .as_i64()
+                    .zip(intent["scheduledAtMs"].as_i64())
+                    .is_some_and(|(handled, started)| handled >= started)
+        })
     {
         return Ok(Some(intent));
     }
-    if !window {
+    let Some(due) = due else { return Ok(None) };
+    if state.as_ref().is_some_and(|s| {
+        (s["scheduledHandledAtMs"].is_null()
+            && s["lastRunDate"]
+                .as_str()
+                .zip(occurrence_day)
+                .is_some_and(|(handled, due)| handled >= due))
+            || s["scheduledHandledAtMs"]
+                .as_i64()
+                .is_some_and(|started| started >= due)
+            || (s["trigger"] == "scheduled"
+                && s["lastRunAt"]
+                    .as_str()
+                    .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+                    .is_some_and(|started| started.timestamp_millis() >= due))
+    }) {
         return Ok(None);
     }
-    let intent = json!({"scheduledDate":day,"lastRunAt":iso_at(now),"scheduledAtMs":now,
+    let intent = json!({"scheduledDate":occurrence_day,"lastRunAt":iso_at(now),"scheduledAtMs":now,
+        "scheduledAt":iso_at(due), "late":now.saturating_sub(due) > SCHEDULE_GRACE_MS,
         "runId":format!("cr_scheduled_{}",uuid::Uuid::new_v4().simple()),"status":"pending"});
     write_state(root, "consolidation-cycle.intent", &intent)?;
     Ok(Some(intent))

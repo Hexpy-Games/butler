@@ -220,6 +220,22 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
 
     // The service discovered the generation and finished its first sweep.
     wait_parked(&s).await;
+    // D17 catches up the previous occurrence at startup. A parked sync consumer
+    // alone is not idle while that consolidation still owns its write lease.
+    tokio::time::timeout(Duration::from_secs(90), async {
+        loop {
+            let view = s.gw.get("/memory/consolidation").await?;
+            if view.data()["active"].is_null() && view.data()["last_run"]["trigger"] == "scheduled"
+            {
+                assert_eq!(view.data()["last_run"]["status"], "ok");
+                return Ok::<_, HarnessError>(());
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .expect("startup consolidation settled")?;
+
     let lock = s
         .sandbox
         .data
