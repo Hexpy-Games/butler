@@ -18,6 +18,7 @@ pub(super) async fn connect(endpoint: &Endpoint) -> Result<Socket> {
     let stream = TcpStream::connect((endpoint.host.as_str(), endpoint.port))
         .await
         .map_err(|_| "mail_connect_failed")?;
+    butler_platform::network::tcp_keepalive(&stream).map_err(|_| "mail_keepalive_failed")?;
     if endpoint.security == "tls" {
         tls(Box::new(stream), &endpoint.host).await
     } else {

@@ -120,3 +120,26 @@ pub(super) fn role(destinations: &[Value], role: &str) -> Result<String> {
         .map(str::to_owned)
         .ok_or("mail_destination_missing")
 }
+
+pub(super) async fn inbox(connection: &mut Connection) -> Result<async_imap::types::Mailbox> {
+    let caps = connection
+        .capabilities()
+        .await
+        .map_err(|_| "mail_capability_failed")?;
+    if !caps.has_str("IDLE") {
+        return Err("mail_idle_unsupported");
+    }
+    let inbox = connection
+        .select("INBOX")
+        .await
+        .map_err(|error| match error {
+            async_imap::error::Error::No(_) | async_imap::error::Error::Bad(_) => {
+                "mail_server_unsupported"
+            }
+            _ => "mail_select_failed",
+        })?;
+    if inbox.uid_validity.is_none() || inbox.uid_next.is_none() {
+        return Err("mail_server_unsupported");
+    }
+    Ok(inbox)
+}

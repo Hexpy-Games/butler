@@ -7,12 +7,12 @@ pub(super) struct Cursor {
     pub validity: u32,
     pub last: u32,
 }
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub(super) struct State {
     pub cursor: Option<Cursor>,
     #[serde(skip)]
     pub moved: VecDeque<String>,
-    #[serde(skip)]
+    #[serde(default)]
     pub pending: Vec<(Value, Cursor)>,
 }
 impl State {
@@ -61,14 +61,35 @@ impl State {
             .await
             .map_err(|_| "mail_state_failed")
     }
-    pub(super) async fn drain(&mut self, path: &Path) -> Result<Vec<Value>> {
-        if let Some((_, cursor)) = self.pending.last() {
-            self.cursor = Some(cursor.clone());
-            self.save(path).await?;
+    pub(super) fn batch(&self) -> Value {
+        let cursor = self.pending.last().map(|(_, c)| c).or(self.cursor.as_ref());
+        let cursor = cursor.map_or_else(|| "0-0".into(), |c| format!("{}-{}", c.validity, c.last));
+        serde_json::json!({"cursor":cursor,"events":self.pending.iter().map(|(v,_)|v).collect::<Vec<_>>()})
+    }
+    pub(super) async fn acknowledge(&mut self, path: &Path, cursor: &str) -> Result<()> {
+        let (validity, last) = cursor.split_once('-').ok_or("mail_cursor_invalid")?;
+        let validity = validity.parse::<u32>().map_err(|_| "mail_cursor_invalid")?;
+        let last = last.parse::<u32>().map_err(|_| "mail_cursor_invalid")?;
+        if validity == 0 && last == 0 {
+            return Ok(());
         }
-        Ok(std::mem::take(&mut self.pending)
-            .into_iter()
-            .map(|(event, _)| event)
-            .collect())
+        if self
+            .cursor
+            .as_ref()
+            .is_some_and(|c| c.validity == validity && last <= c.last)
+        {
+            return Ok(());
+        }
+        let through = self
+            .pending
+            .iter()
+            .position(|(_, c)| c.validity == validity && c.last == last)
+            .ok_or("mail_cursor_invalid")?;
+        let mut saved = self.clone();
+        saved.cursor = Some(Cursor { validity, last });
+        saved.pending.drain(..=through);
+        saved.save(path).await?;
+        *self = saved;
+        Ok(())
     }
 }

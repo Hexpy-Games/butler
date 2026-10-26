@@ -10,7 +10,10 @@ pub async fn run_process() -> i32 {
             // Only stable errors reach stderr. Server responses may echo credentials.
             eprintln!(
                 "{}",
-                if code == "mail_auth_failed" {
+                if matches!(
+                    code,
+                    "mail_auth_failed" | "mail_idle_unsupported" | "mail_server_unsupported"
+                ) {
                     code
                 } else {
                     "mail_connector_failed"

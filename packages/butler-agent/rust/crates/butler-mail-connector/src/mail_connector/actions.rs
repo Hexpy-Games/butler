@@ -5,7 +5,7 @@ impl Mail {
         if name == "send" {
             return self.send(&args).await;
         }
-        let mut connection = self.connect(None).await?;
+        let (mut connection, _) = self.connect(None).await?;
         let result = self.imap_action(&mut connection, name, &args).await;
         let _ = connection.logout().await;
         result

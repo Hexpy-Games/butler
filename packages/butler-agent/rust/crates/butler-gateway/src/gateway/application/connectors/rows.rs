@@ -126,7 +126,12 @@ pub(super) fn batch(
 ) -> Result<Value, AppStorageError> {
     let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
     for event in input["events"].as_array().ok_or_else(invalid)? {
-        insert(&tx, event.clone(), now)?;
+        let inserted = insert(&tx, event.clone(), now)?;
+        if event["signal"]["type"] == "returned" {
+            let mut signal = event.clone();
+            signal["event_id"] = inserted["event_id"].clone();
+            super::rules::signal(&tx, &signal, now)?;
+        }
     }
     tx.execute("INSERT INTO app_connector_cursors(account,cursor) VALUES(?1,?2) ON CONFLICT(account) DO UPDATE SET cursor=excluded.cursor",params![text(input,"account")?,text(input,"cursor")?]).map_err(AppStorageError::sqlite)?;
     tx.commit().map_err(AppStorageError::sqlite)?;

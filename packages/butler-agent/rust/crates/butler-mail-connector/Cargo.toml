@@ -7,6 +7,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+butler-platform = { path = "../butler-platform" }
 butler-log = { path = "../butler-log" }
 async-imap = { version = "=0.11.3", default-features = false, features = ["runtime-tokio"] }
 imap-proto = "0.16.4"

@@ -24,19 +24,35 @@ struct Mailbox {
     messages: Vec<Message>,
 }
 #[derive(Default)]
+struct Capabilities {
+    move_cap: bool,
+    uidplus: bool,
+    idle: bool,
+}
+#[derive(Default)]
+struct Listing {
+    special_use: bool,
+    extended_roles: bool,
+}
+#[derive(Default)]
 struct State {
     boxes: BTreeMap<String, Mailbox>,
     commands: Vec<String>,
     smtp_messages: Vec<String>,
     smtp_commands: Vec<String>,
-    move_cap: bool,
-    uidplus: bool,
+    capabilities: Capabilities,
+    listing: Listing,
     reject_login: bool,
+    stall_done: bool,
+    stall_command: Option<String>,
+    flap: usize,
+    connections: Vec<std::time::Instant>,
 }
 #[derive(Clone)]
 struct Shared {
     state: Arc<Mutex<State>>,
     changed: broadcast::Sender<String>,
+    disconnect: broadcast::Sender<()>,
 }
 /// Owns all fake listener and connection tasks; dropping it aborts the listeners.
 pub struct FakeImap {
@@ -54,13 +70,22 @@ impl FakeImap {
         let smtp_port = smtp.local_addr()?.port();
         let (changed, _) = broadcast::channel(1024);
         let mut state = State {
-            move_cap: true,
-            uidplus: true,
+            capabilities: Capabilities {
+                move_cap: true,
+                uidplus: true,
+                idle: true,
+            },
+            listing: Listing {
+                special_use: true,
+                extended_roles: false,
+            },
             ..Default::default()
         };
         for (name, roles) in [
             ("INBOX", vec![]),
-            ("Filed", vec![]),
+            ("Filed", vec!["\\Flagged"]),
+            ("All", vec!["\\All"]),
+            ("Unknown", vec![]),
             ("Archive", vec!["\\Archive"]),
             ("Drafts", vec!["\\Drafts"]),
             ("Bin", vec!["\\Trash"]),
@@ -79,6 +104,7 @@ impl FakeImap {
         let shared = Shared {
             state: Arc::new(Mutex::new(state)),
             changed,
+            disconnect: broadcast::channel(16).0,
         };
         let stop = CancellationToken::new();
         let task = tokio::spawn(listen(imap, smtp, shared.clone(), stop.clone()));
@@ -90,10 +116,33 @@ impl FakeImap {
             task,
         })
     }
+    pub fn special_use(&self, advertised: bool, extended_only: bool) {
+        let mut state = self.shared.state.lock().unwrap();
+        state.listing.special_use = advertised;
+        state.listing.extended_roles = extended_only;
+    }
+    pub fn stall_command(&self, command: Option<&str>) {
+        self.shared.state.lock().unwrap().stall_command = command.map(str::to_owned);
+    }
+    pub fn idle_supported(&self, supported: bool) {
+        self.shared.state.lock().unwrap().capabilities.idle = supported;
+    }
+    pub fn stall_done(&self, stall: bool) {
+        self.shared.state.lock().unwrap().stall_done = stall;
+    }
+    pub fn flap(&self, attempts: usize) {
+        self.shared.state.lock().unwrap().flap = attempts;
+    }
+    pub fn disconnect(&self) {
+        let _ = self.shared.disconnect.send(());
+    }
+    pub fn connections(&self) -> Vec<std::time::Instant> {
+        self.shared.state.lock().unwrap().connections.clone()
+    }
     pub fn capabilities(&self, move_cap: bool, uidplus: bool) {
         let mut state = self.shared.state.lock().unwrap();
-        state.move_cap = move_cap;
-        state.uidplus = uidplus;
+        state.capabilities.move_cap = move_cap;
+        state.capabilities.uidplus = uidplus;
     }
     pub fn reject_login(&self, reject: bool) {
         self.shared.state.lock().unwrap().reject_login = reject;

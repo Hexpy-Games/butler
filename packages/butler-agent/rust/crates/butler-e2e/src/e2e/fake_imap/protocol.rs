@@ -35,8 +35,15 @@ fn tokens(line: &str) -> Vec<String> {
     result
 }
 pub(super) async fn connection(stream: TcpStream, shared: Shared) -> io::Result<()> {
+    shared
+        .state
+        .lock()
+        .unwrap()
+        .connections
+        .push(std::time::Instant::now());
     let mut socket = BufReader::new(stream);
     let mut changes = shared.changed.subscribe();
+    let mut disconnect = shared.disconnect.subscribe();
     let mut selected = "INBOX".to_owned();
     write(&mut socket, "* OK loopback IMAP ready\r\n").await?;
     loop {
@@ -57,13 +64,29 @@ pub(super) async fn connection(stream: TcpStream, shared: Shared) -> io::Result<
         };
         shared.state.lock().unwrap().commands.push(logged);
         let args = &parts[2..];
+        let stall = shared.state.lock().unwrap().stall_command.as_deref() == Some(command.as_str());
+        if stall {
+            let mut byte = [0];
+            let _ = socket.read(&mut byte).await?;
+            return Ok(());
+        }
         match command.as_str() {
             "IDLE" => {
+                let flap = {
+                    let mut state = shared.state.lock().unwrap();
+                    let flap = state.flap > 0;
+                    state.flap = state.flap.saturating_sub(1);
+                    flap
+                };
+                if flap {
+                    return Ok(());
+                }
                 write(&mut socket, "+ idling\r\n").await?;
                 loop {
                     let mut done = String::new();
                     tokio::select! {
                         line=socket.read_line(&mut done)=> { if line? == 0 { return Ok(()); } shared.state.lock().unwrap().commands.push(done.trim().into()); break; }
+                        _=disconnect.recv()=> return Ok(()),
                         update=changes.recv()=> {
                             if update.is_ok_and(|m|m == selected) {
                                 let count=shared.state.lock().unwrap().boxes[&selected].messages.len();
@@ -71,6 +94,13 @@ pub(super) async fn connection(stream: TcpStream, shared: Shared) -> io::Result<
                             }
                         }
                     }
+                }
+                let stalled = shared.state.lock().unwrap().stall_done;
+                if stalled {
+                    // Simulate a half-open peer until the client closes it.
+                    let mut byte = [0];
+                    let _ = socket.read(&mut byte).await?;
+                    return Ok(());
                 }
             }
             "APPEND" => append(&mut socket, &shared, args).await?,
@@ -133,16 +163,36 @@ fn respond(
         "LOGIN" if state.reject_login => Err(()),
         "LOGIN" | "NOOP" => Ok(String::new()),
         "CAPABILITY" => Ok(format!(
-            "* CAPABILITY IMAP4rev1 IDLE SPECIAL-USE{}{}\r\n",
-            if state.move_cap { " MOVE" } else { "" },
-            if state.uidplus { " UIDPLUS" } else { "" }
+            "* CAPABILITY IMAP4rev1{}{}{}{}\r\n",
+            if state.capabilities.idle { " IDLE" } else { "" },
+            if state.listing.special_use {
+                " SPECIAL-USE"
+            } else {
+                ""
+            },
+            if state.capabilities.move_cap {
+                " MOVE"
+            } else {
+                ""
+            },
+            if state.capabilities.uidplus {
+                " UIDPLUS"
+            } else {
+                ""
+            }
         )),
         "LIST" => {
             let mut response = String::new();
             for (name, b) in &state.boxes {
                 response.push_str(&format!(
                     "* LIST ({}) \"/\" \"{name}\"\r\n",
-                    b.roles.join(" ")
+                    if !state.listing.extended_roles
+                        || (state.listing.special_use && args.iter().any(|a| a == "(SPECIAL-USE)"))
+                    {
+                        b.roles.join(" ")
+                    } else {
+                        String::new()
+                    }
                 ));
             }
             Ok(response)

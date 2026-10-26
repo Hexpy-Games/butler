@@ -16,7 +16,7 @@ pub(super) async fn serve(mail: Option<Arc<Mail>>) -> Result<()> {
     let auth_failed = CancellationToken::new();
     let intake = Arc::new(Mutex::new(None));
     let server = Server {
-        mail,
+        mail: mail.clone(),
         stop: stop.clone(),
         auth_failed: auth_failed.clone(),
         intake: intake.clone(),
@@ -27,7 +27,13 @@ pub(super) async fn serve(mail: Option<Arc<Mail>>) -> Result<()> {
         .map_err(|_| "mail_mcp_failed")?;
     let result = tokio::select! {
         result = running.waiting() => result.map(|_| ()).map_err(|_| "mail_mcp_failed"),
-        () = auth_failed.cancelled() => Err("mail_auth_failed"),
+        () = auth_failed.cancelled() => {
+            let code = match &mail {
+                Some(mail) => mail.terminal.lock().await.unwrap_or("mail_auth_failed"),
+                None => "mail_auth_failed",
+            };
+            Err(code)
+        },
     };
     stop.cancel();
     if let Some(task) = intake.lock().await.take() {
@@ -75,14 +81,27 @@ impl ServerHandler for Server {
             .as_ref()
             .ok_or_else(|| error("mail_account_required"))?;
         let value = match request.uri.as_str() {
-            "connector://events" => {
-                json!({"events":mail.state.lock().await.drain(&mail.config.data).await.map_err(error)?})
-            }
-            "connector://destinations" => {
-                let mut connection = mail.connect(Some(&self.auth_failed)).await.map_err(error)?;
-                let destinations = imap::destinations(&mut connection).await.map_err(error)?;
-                let _ = connection.logout().await;
-                json!({"destinations":destinations})
+            "connector://events" => mail.state.lock().await.batch(),
+            "connector://destinations" => mail
+                .bounded(async {
+                    let (mut connection, _) = mail.connect(Some(&self.auth_failed)).await?;
+                    let destinations = imap::destinations(&mut connection).await?;
+                    let _ = connection.logout().await;
+                    Ok(json!({"destinations":destinations}))
+                })
+                .await
+                .map_err(error)?,
+            uri if uri.starts_with("connector://events?after=") => {
+                let cursor = uri
+                    .strip_prefix("connector://events?after=")
+                    .ok_or_else(|| error("mail_cursor_invalid"))?;
+                mail.state
+                    .lock()
+                    .await
+                    .acknowledge(&mail.config.data, cursor)
+                    .await
+                    .map_err(error)?;
+                json!({"ok":true})
             }
             _ => return Err(error("mail_resource_unknown")),
         };
@@ -136,11 +155,8 @@ impl ServerHandler for Server {
             .as_ref()
             .ok_or_else(|| error("mail_account_required"))?;
         let args = serde_json::Value::Object(request.arguments.unwrap_or_default());
-        let result = tokio::time::timeout(
-            std::time::Duration::from_secs(60),
-            mail.action(&request.name, args),
-        )
-        .await;
+        let result =
+            tokio::time::timeout(mail.config.timeout, mail.action(&request.name, args)).await;
         let result = match result {
             Ok(Ok(value)) => CallToolResult::success(vec![ContentBlock::text(value.to_string())]),
             Ok(Err(code)) => CallToolResult::error(vec![ContentBlock::text(code)]),

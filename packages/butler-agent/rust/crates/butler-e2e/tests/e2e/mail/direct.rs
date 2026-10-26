@@ -30,6 +30,7 @@ impl Direct {
                 s.sandbox.data.join("plugins/data/mail"),
             )
             .env("IMAP_PASSWORD", password)
+            .env("BUTLER_CONNECTOR_CALL_TIMEOUT_MS", "3000")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(fs::File::create(&stderr)?)
@@ -48,6 +49,32 @@ impl Direct {
             child,
             stderr,
         })
+    }
+    pub(super) async fn read(&self, uri: &str) -> Result<Value, HarnessError> {
+        let result = self
+            .client
+            .peer()
+            .read_resource(ReadResourceRequestParams::new(uri))
+            .await
+            .map_err(|e| HarnessError(e.to_string()))?;
+        let result = serde_json::to_value(result)?;
+        Ok(serde_json::from_str(
+            result["contents"][0]["text"].as_str().unwrap(),
+        )?)
+    }
+    #[allow(deprecated, reason = "connector event contract")]
+    pub(super) async fn subscribe(&self) -> Result<(), HarnessError> {
+        self.client
+            .peer()
+            .subscribe(SubscribeRequestParams::new("connector://events"))
+            .await
+            .map_err(|e| HarnessError(e.to_string()))
+    }
+    pub(super) async fn kill(mut self) -> Result<(), HarnessError> {
+        self.child.kill().await?;
+        self.child.wait().await?;
+        fs::remove_file(self.stderr)?;
+        Ok(())
     }
     pub(super) async fn call(&self, name: &str, args: Value) -> Result<Value, HarnessError> {
         let result = self

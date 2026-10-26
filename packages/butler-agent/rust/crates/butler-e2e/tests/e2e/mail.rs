@@ -8,6 +8,7 @@
 mod acceptance;
 mod direct;
 mod rejected_login;
+mod review;
 mod rules;
 mod security;
 mod stub;
@@ -27,9 +28,12 @@ use std::{
     time::{Duration, Instant},
 };
 fn setup(name: &str) -> Result<Setup, HarnessError> {
-    Ok(Setup::new(name)?
+    let setup = Setup::new(name)?
         .stub_cassette(Cassette::load("TOOL-01")?)
-        .access(Access::AskExceptReads))
+        .access(Access::AskExceptReads)
+        .env("BUTLER_SECRET_STORE", "system");
+    butler_platform::secrets::prepare_system_keychain_for_test(&setup.sandbox.home)?;
+    Ok(setup)
 }
 fn package(home: &Path) -> Result<PathBuf, HarnessError> {
     let root = home.join("mail-package");

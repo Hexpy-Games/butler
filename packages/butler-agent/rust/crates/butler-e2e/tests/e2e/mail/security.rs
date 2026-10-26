@@ -16,7 +16,6 @@ async fn security_mail_secret_redaction_destination_refusal_and_remote_plaintext
     let mut config: Value = serde_json::from_slice(&fs::read(&config_path)?)?;
     config["secrets"]["store"] = json!("system");
     fs::write(config_path, serde_json::to_vec_pretty(&config)?)?;
-    butler_platform::secrets::prepare_system_keychain_for_test(&setup.sandbox.home)?;
     let root = package(&setup.sandbox.home)?;
     let s = setup.start().await?;
     let mut settings =

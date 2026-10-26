@@ -18,6 +18,7 @@ struct Mail {
     config: Config,
     state: Mutex<state::State>,
     connection_gate: Mutex<()>,
+    terminal: Mutex<Option<&'static str>>,
 }
 /// Run until the host closes stdin. Nothing is logged from remote errors.
 pub async fn run() -> Result<()> {
@@ -30,23 +31,42 @@ pub async fn run() -> Result<()> {
         config,
         state: Mutex::new(state),
         connection_gate: Mutex::new(()),
+        terminal: Mutex::new(None),
     });
     server::serve(Some(mail)).await
 }
 impl Mail {
-    async fn connect(&self, auth_failed: Option<&CancellationToken>) -> Result<imap::Connection> {
+    async fn bounded<T>(&self, future: impl std::future::Future<Output = Result<T>>) -> Result<T> {
+        tokio::time::timeout(self.config.timeout, future)
+            .await
+            .map_err(|_| "mail_operation_timeout")?
+    }
+    async fn connect(
+        &self,
+        failed: Option<&CancellationToken>,
+    ) -> Result<(imap::Connection, Option<async_imap::types::Mailbox>)> {
         let _gate = self.connection_gate.lock().await;
-        if auth_failed.is_some_and(CancellationToken::is_cancelled) {
-            return Err("mail_auth_failed");
+        if failed.is_some_and(CancellationToken::is_cancelled) {
+            return Err(self.terminal.lock().await.unwrap_or("mail_auth_failed"));
         }
-        let result = imap::connect(&self.config).await;
-        if result
-            .as_ref()
-            .err()
-            .is_some_and(|code| *code == "mail_auth_failed")
-            && let Some(auth_failed) = auth_failed
+        let result = self
+            .bounded(async {
+                let mut connection = imap::connect(&self.config).await?;
+                let inbox = if failed.is_some() {
+                    Some(imap::inbox(&mut connection).await?)
+                } else {
+                    None
+                };
+                Ok((connection, inbox))
+            })
+            .await;
+        if let Err(
+            code @ ("mail_auth_failed" | "mail_idle_unsupported" | "mail_server_unsupported"),
+        ) = &result
+            && let Some(failed) = failed
         {
-            auth_failed.cancel();
+            *self.terminal.lock().await = Some(*code);
+            failed.cancel();
         }
         result
     }

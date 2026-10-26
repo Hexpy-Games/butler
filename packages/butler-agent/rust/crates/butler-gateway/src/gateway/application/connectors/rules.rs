@@ -82,11 +82,7 @@ pub(super) fn remove(db: &Connection, input: &Value) -> Result<Value, AppStorage
     .map_err(AppStorageError::sqlite)?;
     Ok(json!({"ok":true}))
 }
-pub(super) fn signal(
-    db: &mut Connection,
-    input: &Value,
-    now: &str,
-) -> Result<Value, AppStorageError> {
+pub(super) fn signal(db: &Connection, input: &Value, now: &str) -> Result<Value, AppStorageError> {
     let tx = db;
     let received = chrono::DateTime::parse_from_rfc3339(now)
         .map_err(|_| invalid())?

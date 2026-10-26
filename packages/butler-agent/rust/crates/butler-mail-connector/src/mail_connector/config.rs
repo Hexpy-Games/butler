@@ -15,6 +15,7 @@ pub(super) struct Config {
     pub imap: Endpoint,
     pub smtp: Endpoint,
     pub data: PathBuf,
+    pub timeout: std::time::Duration,
 }
 impl Config {
     pub(super) fn load() -> Result<Self> {
@@ -42,6 +43,7 @@ impl Config {
             return Err("mail_account_invalid");
         }
         Ok(Self {
+            timeout: deadline()?,
             imap: Endpoint::read(&fields, "imap", 993, 143)?,
             smtp: Endpoint::read(&fields, "smtp", 465, 587)?,
             data: PathBuf::from(
@@ -90,4 +92,15 @@ impl Endpoint {
             security,
         })
     }
+}
+
+fn deadline() -> Result<std::time::Duration> {
+    let millis = std::env::var("BUTLER_CONNECTOR_CALL_TIMEOUT_MS").map_or(Ok(15_000), |s| {
+        s.parse::<u64>().map_err(|_| "mail_deadline_invalid")
+    })?;
+    let upstream = millis
+        .checked_sub(1000)
+        .filter(|v| *v > 0)
+        .ok_or("mail_deadline_invalid")?;
+    Ok(std::time::Duration::from_millis(upstream))
 }
