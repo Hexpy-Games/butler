@@ -79,3 +79,16 @@ pub fn mode(metadata: &fs::Metadata) -> String {
         "644".into()
     }
 }
+
+/// Git records executable intent on platforms whose checkout cannot represent it.
+pub fn git_mode(checkout_mode: &str, index_mode: Option<&str>) -> String {
+    #[cfg(windows)]
+    {
+        index_mode.unwrap_or(checkout_mode).to_owned()
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = index_mode;
+        checkout_mode.to_owned()
+    }
+}

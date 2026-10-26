@@ -111,6 +111,7 @@ change nothing else. Each is off unless set to `1`.
 
 | Setting | Output |
 | --- | --- |
+| `BUTLER_PLUGIN_GIT_TIMEOUT_SECS` | Plugin git hang deadline in seconds (positive integer; default/cap 120 for network operations, 15 for local operations) |
 | `BUTLER_STARTUP_TRACE` | Startup phase timings, and a resource sample after a startup timeout |
 | `BUTLER_SHUTDOWN_TRACE` | Shutdown phase begin/end markers (the desktop App sets it) |
 | `BUTLER_MEMORY_SYNC_TRACE` | Memory sync wakes, source revisions and vector scheduling |
