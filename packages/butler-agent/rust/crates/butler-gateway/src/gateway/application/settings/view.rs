@@ -140,7 +140,7 @@ pub(super) fn read(
     );
     output.insert("model".into(), json!(controls.model.clone()));
     output.insert("reasoning_effort".into(), json!(controls.reasoning));
-    consolidation_settings(&native, &mut output, &controls.model);
+    consolidation_settings(&native, &mut output, &controls.model, facts);
     output.insert("context_window_tokens".into(), json!(context_window));
     output.insert(
         "worker_profiles".into(),
@@ -394,6 +394,7 @@ fn consolidation_settings(
     native: &Map<String, Value>,
     output: &mut Map<String, Value>,
     model: &str,
+    facts: &AppSettingsFacts,
 ) {
     let consolidation = native.get("consolidation").map(object).unwrap_or_default();
     let configured_consolidation = consolidation
@@ -438,4 +439,5 @@ fn consolidation_settings(
             .unwrap_or(json!("04:00")),
     );
     output.insert("consolidation_uses_butler_model".into(), json!(uses_butler));
+    super::background_model::project(output, facts);
 }

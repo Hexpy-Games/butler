@@ -31,6 +31,7 @@ impl Gate {
 
 pub(crate) struct Script {
     count: usize,
+    pub(crate) requests: Mutex<Vec<(String, Value)>>,
     pub(crate) repeat_first: AtomicBool,
     pub(crate) repeated_outputs: Mutex<Vec<Value>>,
     pub(crate) steer: AtomicBool,
@@ -57,6 +58,7 @@ pub(crate) async fn start(
     let url = format!("http://{}/codex", listener.local_addr()?);
     let script = Arc::new(Script {
         count,
+        requests: Default::default(),
         repeat_first: AtomicBool::new(false),
         repeated_outputs: Default::default(),
         steer: AtomicBool::new(false),
@@ -105,6 +107,11 @@ async fn reply(
     } else {
         "parent"
     };
+    script
+        .requests
+        .lock()
+        .unwrap()
+        .push((role.into(), body.clone()));
     let index = (0..4)
         .find(|i| key.user_request.contains(&format!("{group}-{i}")))
         .unwrap_or(0);

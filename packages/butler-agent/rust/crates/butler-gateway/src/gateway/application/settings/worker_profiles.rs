@@ -159,6 +159,11 @@ fn stored_profile(
 ) -> Value {
     let (model, reasoning) = model_fields(entry, facts, primary_model, primary_reasoning);
     let mut output = Map::new();
+    let explicit = entry
+        .get("model_explicit")
+        .and_then(Value::as_bool)
+        .unwrap_or(id != DEFAULT_ID || model != primary_model);
+    output.insert("model_explicit".into(), json!(explicit));
     output.insert("id".into(), id.into());
     output.insert(
         "label".into(),
@@ -172,7 +177,14 @@ fn stored_profile(
     if let Some(domain) = bounded(entry.get("domain"), 96) {
         output.insert("domain".into(), domain.into());
     }
-    output.insert("model".into(), model.into());
+    output.insert(
+        "model".into(),
+        if explicit {
+            model.into()
+        } else {
+            primary_model.into()
+        },
+    );
     output.insert("reasoning_effort".into(), json!(reasoning));
     if let Some(prompt) = entry.get("prompt").and_then(Value::as_str)
         && prompt.encode_utf16().count() <= 2_000
@@ -229,7 +241,7 @@ fn ensure_default(values: &mut Vec<Value>, model: &str, reasoning: &ReasoningEff
 
 fn default_profile(model: &str, reasoning: &ReasoningEffort) -> Value {
     json!({"id":"default","label":"Default","enabled":true,
-        "job":{"kind":"builtin","job":"coding"},"model":model,"reasoning_effort":reasoning})
+        "job":{"kind":"builtin","job":"coding"},"model":model,"model_explicit":false,"reasoning_effort":reasoning})
 }
 
 fn valid_job(input: Option<&Value>) -> Value {

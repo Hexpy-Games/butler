@@ -22,6 +22,13 @@ impl AppWorkerProfileReader {
 }
 
 impl WorkerProfileReader for AppWorkerProfileReader {
+    fn background_model(&self, fallback: String) -> PortFuture<'_, String> {
+        Box::pin(async move {
+            let settings = self.fetch().await?;
+            Ok(resolve_model(&settings, None, &fallback))
+        })
+    }
+
     fn max_simultaneous_workers(&self) -> PortFuture<'_, u64> {
         Box::pin(async move {
             self.fetch()
@@ -35,20 +42,31 @@ impl WorkerProfileReader for AppWorkerProfileReader {
 
     fn list(&self) -> PortFuture<'_, Vec<WorkerProfile>> {
         Box::pin(async move {
-            let profiles = self.profiles().await?;
-            profiles.iter().map(parse_profile).collect()
+            let settings = self.fetch().await?;
+            let profiles = settings
+                .get("worker_profiles")
+                .and_then(Value::as_array)
+                .ok_or_else(|| error("worker_profiles_missing"))?;
+            profiles
+                .iter()
+                .map(|value| parse_profile(value, &settings))
+                .collect()
         })
     }
 
     fn read(&self, profile_id: Option<String>) -> PortFuture<'_, WorkerProfile> {
         Box::pin(async move {
-            let profiles = self.profiles().await?;
+            let settings = self.fetch().await?;
+            let profiles = settings
+                .get("worker_profiles")
+                .and_then(Value::as_array)
+                .ok_or_else(|| error("worker_profiles_missing"))?;
             let selected = profile_id.as_deref().unwrap_or("default");
             let profile = profiles
                 .iter()
                 .find(|value| value.get("id").and_then(Value::as_str) == Some(selected))
                 .ok_or_else(|| error("worker_profile_unavailable"))?;
-            let profile = parse_profile(profile)?;
+            let profile = parse_profile(profile, &settings)?;
             if !profile.enabled {
                 return Err(error("worker_profile_unavailable"));
             }
@@ -58,15 +76,6 @@ impl WorkerProfileReader for AppWorkerProfileReader {
 }
 
 impl AppWorkerProfileReader {
-    async fn profiles(&self) -> Result<Vec<Value>, BtccError> {
-        self.fetch()
-            .await?
-            .get("worker_profiles")
-            .and_then(Value::as_array)
-            .cloned()
-            .ok_or_else(|| error("worker_profiles_missing"))
-    }
-
     async fn fetch(&self) -> Result<Value, BtccError> {
         let endpoint = self
             .endpoint
@@ -105,7 +114,7 @@ impl AppWorkerProfileReader {
     }
 }
 
-fn parse_profile(value: &Value) -> Result<WorkerProfile, BtccError> {
+fn parse_profile(value: &Value, settings: &Value) -> Result<WorkerProfile, BtccError> {
     let required = |key: &str| {
         value
             .get(key)
@@ -126,7 +135,13 @@ fn parse_profile(value: &Value) -> Result<WorkerProfile, BtccError> {
             .get("enabled")
             .and_then(Value::as_bool)
             .ok_or_else(|| error("worker_profile_settings_invalid"))?,
-        model_ref: required("model")?,
+        model_ref: resolve_model(
+            settings,
+            (value.get("model_explicit").and_then(Value::as_bool) != Some(false))
+                .then(|| value.get("model").and_then(Value::as_str))
+                .flatten(),
+            &required("model")?,
+        ),
         reasoning_effort: required("reasoning_effort")?,
         prompt: value
             .get("prompt")
@@ -138,4 +153,23 @@ fn parse_profile(value: &Value) -> Result<WorkerProfile, BtccError> {
 
 fn error(code: &'static str) -> BtccError {
     BtccError::relayed(code, code)
+}
+
+// The gateway projects availability against the current catalog. A missing
+// background selection follows the supplied parent/profile fallback.
+fn resolve_model(settings: &Value, explicit: Option<&str>, fallback: &str) -> String {
+    let background = settings.get("background_model").and_then(Value::as_str);
+    butler_core::configuration::resolve_background_model(
+        explicit,
+        background,
+        Some(fallback),
+        |value| {
+            settings
+                .get("effective_background_model")
+                .and_then(Value::as_str)
+                == Some(value)
+        },
+    )
+    .unwrap_or(fallback)
+    .to_owned()
 }

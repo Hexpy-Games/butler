@@ -76,6 +76,7 @@ impl AppSettingsMutation {
         let mut destinations = Vec::new();
         let writes_config = patch.contains_key("update_previews")
             || patch.contains_key("consolidation_time")
+            || patch.contains_key("background_model")
             || patch.contains_key("consolidation_model")
             || patch.contains_key("consolidation_reasoning_effort")
             || patch.contains_key("web_search")
@@ -91,6 +92,12 @@ impl AppSettingsMutation {
         }
         let root = self.validated_root(&destinations)?;
 
+        if let Some(value) = patch.get("background_model") {
+            self.configuration
+                .set_background_model(value.as_str())
+                .await
+                .map_err(GatewayApplicationError::internal_from)?;
+        }
         self.apply_profile_and_channel(&patch, &root).await?;
         if let (Some(key), Some(value)) = (environment_key, api_key) {
             self.configuration

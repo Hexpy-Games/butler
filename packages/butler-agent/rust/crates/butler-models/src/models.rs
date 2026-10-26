@@ -1,5 +1,7 @@
 //! Immutable model catalog snapshots and source-compatible token estimation.
 
+mod background_model;
+pub use background_model::background_model_from_config;
 mod attachment_text;
 pub use attachment_text::{
     MAX_INLINE_BYTES, NotInlined, decode_text, display_name, is_pdf, is_text, listing_line,

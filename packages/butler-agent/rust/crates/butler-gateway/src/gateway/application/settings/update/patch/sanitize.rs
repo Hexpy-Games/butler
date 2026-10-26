@@ -288,6 +288,7 @@ fn sanitize_recall(
     facts: &AppSettingsFacts,
     output: &mut Map<String, Value>,
 ) -> Result<(), GatewayApplicationError> {
+    sanitize_background(input, facts, output)?;
     if let Some(value @ ("faster" | "accurate")) = input.get("recall_mode").and_then(Value::as_str)
     {
         output.insert("recall_mode".into(), json!(value));
@@ -320,4 +321,31 @@ fn normalized_web_provider(value: &Value) -> Value {
     } else {
         value.clone()
     }
+}
+
+fn sanitize_background(
+    input: &Map<String, Value>,
+    facts: &AppSettingsFacts,
+    output: &mut Map<String, Value>,
+) -> Result<(), GatewayApplicationError> {
+    if let Some(value) = input.get("background_model") {
+        let selected = value.as_str().map(trim_js_whitespace);
+        let value = match selected {
+            None | Some("default") if value.is_null() || selected == Some("default") => Value::Null,
+            Some(value) => {
+                let parsed = butler_models::models::parse_model_ref(value);
+                let model = super::super::super::background_model::selectable_background_model_ref(
+                    facts, value,
+                )
+                .filter(|_| {
+                    parsed.source == butler_models::models::ParsedModelRefSource::Namespaced
+                })
+                .ok_or_else(|| super::super::model_unavailable("background_model"))?;
+                json!(model)
+            }
+            None => return Err(super::super::model_unavailable("background_model")),
+        };
+        output.insert("background_model".into(), value);
+    }
+    Ok(())
 }

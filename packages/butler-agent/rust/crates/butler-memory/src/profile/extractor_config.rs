@@ -32,7 +32,11 @@ pub(crate) fn read(data_root: &Path) -> ProfilingExtractorModelSnapshot {
         .unwrap_or("xhigh")
         .to_owned();
     ProfilingExtractorModelSnapshot {
-        effective_model: configured.clone().unwrap_or(fallback),
+        effective_model: butler_models::models::background_model_from_config(
+            &config,
+            configured.as_deref(),
+            &fallback,
+        ),
         uses_butler_model: configured.is_none(),
         configured_model: configured,
         reasoning_effort: reasoning,

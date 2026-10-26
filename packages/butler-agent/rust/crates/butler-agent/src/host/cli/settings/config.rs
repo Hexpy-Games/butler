@@ -11,6 +11,7 @@ pub(super) const SAFE_CONFIG_PATHS: &[&str] = &[
     "user.timezone",
     "system.defaultModel",
     "system.butlerModel",
+    "system.backgroundModel",
     "system.workerModel",
     "system.openaiModel",
     "system.openaiReasoningEffort",

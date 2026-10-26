@@ -1737,6 +1737,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       searchPlanningEnabled: "스마트 검색계획 사용",
       searchDefaultDepth: "기본 검색 깊이",
       butlerModel: "모델",
+      backgroundModel: "작업 모델",
+      backgroundModelUnset: "기본 모델 그대로",
       butlerReasoning: "추론",
       consolidationModel: "대화 기억 정리 모델",
       consolidationTime: "실행 시간",
@@ -1845,6 +1847,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       timezoneEmpty: "일치하는 시간대가 없습니다",
     },
     descriptions: {
+      backgroundModel: "예약 작업, 기억 정리, 작업을 이 모델로 실행해요.",
       runtimeSupportedModelsOnly:
         "현재 실행 가능한 제공자의 모델만 표시합니다.",
       scheduleAccess: "새 예약 작업이 이 권한으로 실행됩니다.",

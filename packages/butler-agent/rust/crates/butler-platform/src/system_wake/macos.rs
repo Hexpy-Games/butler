@@ -46,10 +46,10 @@ pub(super) async fn close() {
 }
 
 async fn watch(cancel: CancellationToken) -> std::io::Result<()> {
-    let mut command = std::process::Command::new("/usr/bin/notifyutil");
+    let mut command = std::process::Command::new("/bin/sh");
     command
-        .args(["-w", "com.apple.powermanagement.systempowerstate"])
-        .stdin(Stdio::null())
+        .args(["-c", "/usr/bin/notifyutil -w com.apple.powermanagement.systempowerstate & n=$!; read _; kill \"$n\"; wait \"$n\""])
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
     process_control::hide_console(&mut command);
@@ -58,6 +58,8 @@ async fn watch(cancel: CancellationToken) -> std::io::Result<()> {
         .kill_on_drop(true)
         .spawn()?;
     process_control::contain(&child)?;
+    // EOF is the parent-death signal, including when the host is SIGKILLed.
+    let stdin = child.stdin.take();
     let stdout = child
         .stdout
         .take()
@@ -65,7 +67,7 @@ async fn watch(cancel: CancellationToken) -> std::io::Result<()> {
     let mut lines = BufReader::new(stdout).lines();
     loop {
         tokio::select! {
-            () = cancel.cancelled() => { child.kill().await?; return Ok(()); },
+            () = cancel.cancelled() => { drop(stdin); child.wait().await?; return Ok(()); },
             line = lines.next_line() => {
                 if line?.is_none() { break; }
                 super::emit();

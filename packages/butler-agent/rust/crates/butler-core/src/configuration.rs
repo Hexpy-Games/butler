@@ -3,6 +3,9 @@
 //! Domains retain normalization and file/DB ordering; this is not a transaction
 //! and it never rolls back already completed writes or retains snapshots.
 
+mod background_model;
+pub use background_model::resolve_background_model;
+
 use std::{collections::HashMap, fs, io::Write, path::Path, sync::Arc};
 
 use butler_platform::{secrets::ChangeLock, secure_fs};

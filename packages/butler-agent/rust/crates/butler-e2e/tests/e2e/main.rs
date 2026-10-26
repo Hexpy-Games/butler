@@ -26,6 +26,7 @@ mod attachment_types;
 mod authority_parallel_batch;
 mod authority_permissions;
 mod automation;
+mod background_model;
 mod briefing_effort;
 mod briefing_shutdown;
 mod browse_executor;

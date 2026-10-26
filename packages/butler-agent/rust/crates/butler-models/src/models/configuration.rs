@@ -9,6 +9,7 @@ mod image_model;
 pub use image_model::{ImageModelError, ImageModelSelection, ResolvedImageModel};
 mod admission;
 mod auth;
+mod background_model;
 mod catalog_cache;
 pub mod chatgpt;
 mod credential_admin;
