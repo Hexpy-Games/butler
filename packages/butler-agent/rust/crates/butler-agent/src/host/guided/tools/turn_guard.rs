@@ -21,6 +21,7 @@ const WEB_KEY: &str = "turnWeb";
 pub(crate) struct UnattendedRun {
     automation_id: Option<String>,
     run_id: Option<String>,
+    scheduled_at: Option<String>,
 }
 
 /// What a turn starts with: whether anyone attends it, and its taint.
@@ -52,6 +53,7 @@ impl UnattendedRun {
         (run.get("unattended") == Some(&Value::Bool(true))).then(|| Self {
             automation_id: text("automation_id"),
             run_id: text("run_id"),
+            scheduled_at: text("scheduled_at"),
         })
     }
 }
@@ -148,6 +150,7 @@ impl GuidedTools {
             automation_id: run.automation_id.clone().unwrap_or_default(),
             run_id: run.run_id.clone().unwrap_or_default(),
             unattended: true,
+            scheduled_at: run.scheduled_at.clone(),
         })
     }
 }

@@ -86,6 +86,7 @@ async fn next_daily_cycle(s: &mut Scenario) -> Result<(), HarnessError> {
     for job in ["session-sync", "consolidation-cycle"] {
         std::fs::remove_file(s.sandbox.data.join(format!("state/scheduler/{job}.json")))?;
     }
+    super::memory_fixture::arm_consolidation(&s.sandbox.data, NOW)?;
     s.gw = s.agent.start_again().await?;
     let marker = s
         .sandbox
