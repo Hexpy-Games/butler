@@ -56,8 +56,7 @@ impl Mail {
             .await
             .map_err(|_| "mail_capability_failed")?;
         if caps.has_str("X-GM-EXT-1") {
-            let all = imap::role(&destinations, "all")?;
-            imap::destination(&destinations, &all)?;
+            // Gmail archive changes label membership, not the destination mailbox.
             self.remember(c, id).await?;
             c.run_command_and_check_ok(format!("UID STORE {} -X-GM-LABELS (\\Inbox)", id.uid))
                 .await

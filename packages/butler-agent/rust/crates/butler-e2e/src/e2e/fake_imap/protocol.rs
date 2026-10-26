@@ -163,7 +163,12 @@ fn respond(
         "LOGIN" if state.reject_login => Err(()),
         "LOGIN" | "NOOP" => Ok(String::new()),
         "CAPABILITY" => Ok(format!(
-            "* CAPABILITY IMAP4rev1{}{}{}{}\r\n",
+            "* CAPABILITY IMAP4rev1{}{}{}{}{}\r\n",
+            if state.capabilities.dialect == super::Dialect::Gmail {
+                " X-GM-EXT-1"
+            } else {
+                ""
+            },
             if state.capabilities.idle { " IDLE" } else { "" },
             if state.listing.special_use {
                 " SPECIAL-USE"
@@ -238,6 +243,14 @@ fn uid(
         return Ok(format!("* SEARCH {}\r\n", result.join(" ")));
     }
     let target = args[1].parse::<u32>().map_err(|_| ())?;
+    if state.capabilities.dialect == super::Dialect::Gmail
+        && operation == "STORE"
+        && args.get(2).is_some_and(|s| s.ends_with("X-GM-LABELS"))
+    {
+        return super::gmail::store(state, args, selected, shared);
+    }
+    let labels = (state.capabilities.dialect == super::Dialect::Gmail)
+        .then(|| super::gmail::labels(state, selected, target));
     let mailbox = state.boxes.get_mut(selected).ok_or(())?;
     let index = mailbox
         .messages
@@ -249,6 +262,7 @@ fn uid(
             &mailbox.messages[index],
             index + 1,
             &args[2..].join(" "),
+            labels.as_deref(),
         )),
         "STORE" => {
             let flags = args[3..]
@@ -290,7 +304,7 @@ fn uid(
         _ => Err(()),
     }
 }
-fn fetch(message: &Message, sequence: usize, query: &str) -> String {
+fn fetch(message: &Message, sequence: usize, query: &str, labels: Option<&str>) -> String {
     let raw = message.raw.as_str();
     let (headers, text) = raw.split_once("\r\n\r\n").unwrap_or((raw, ""));
     let headers = format!("{headers}\r\n\r\n");
@@ -301,6 +315,11 @@ fn fetch(message: &Message, sequence: usize, query: &str) -> String {
         chrono::Utc::now().format("%d-%b-%Y %H:%M:%S %z"),
         raw.len()
     );
+    if query.contains("X-GM-LABELS")
+        && let Some(labels) = labels
+    {
+        response.push_str(&format!(" X-GM-LABELS ({labels})"));
+    }
     if query.contains("BODY.PEEK[]") {
         response.push_str(&format!(" BODY[] {{{}}}\r\n{raw}", raw.len()));
     } else {

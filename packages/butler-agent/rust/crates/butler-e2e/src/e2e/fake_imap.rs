@@ -1,5 +1,6 @@
 //! Push-driven loopback IMAP and SMTP fixtures. Credentials are never logged.
 #![allow(clippy::unwrap_used, reason = "harness fixture locks")]
+mod gmail;
 mod protocol;
 mod smtp;
 use std::{
@@ -12,6 +13,7 @@ use tokio_util::sync::CancellationToken;
 /// Stored message and server flags, available for acceptance assertions.
 #[derive(Clone, Debug)]
 pub struct Message {
+    key: u64,
     pub uid: u32,
     pub raw: String,
     pub flags: Vec<String>,
@@ -23,11 +25,18 @@ struct Mailbox {
     next: u32,
     messages: Vec<Message>,
 }
+#[derive(Default, PartialEq)]
+enum Dialect {
+    #[default]
+    Imap,
+    Gmail,
+}
 #[derive(Default)]
 struct Capabilities {
     move_cap: bool,
     uidplus: bool,
     idle: bool,
+    dialect: Dialect,
 }
 #[derive(Default)]
 struct Listing {
@@ -36,6 +45,7 @@ struct Listing {
 }
 #[derive(Default)]
 struct State {
+    next_message: u64,
     boxes: BTreeMap<String, Mailbox>,
     commands: Vec<String>,
     smtp_messages: Vec<String>,
@@ -74,6 +84,7 @@ impl FakeImap {
                 move_cap: true,
                 uidplus: true,
                 idle: true,
+                dialect: Dialect::Imap,
             },
             listing: Listing {
                 special_use: true,
@@ -115,6 +126,9 @@ impl FakeImap {
             stop,
             task,
         })
+    }
+    pub fn gmail(&self) {
+        self.shared.state.lock().unwrap().capabilities.dialect = Dialect::Gmail;
     }
     pub fn special_use(&self, advertised: bool, extended_only: bool) {
         let mut state = self.shared.state.lock().unwrap();
@@ -217,14 +231,20 @@ impl Drop for FakeImap {
 impl Shared {
     fn deliver(&self, mailbox: &str, raw: &str) -> u32 {
         let mut state = self.state.lock().unwrap();
+        state.next_message += 1;
+        let key = state.next_message;
         let target = state.boxes.get_mut(mailbox).unwrap();
         let uid = target.next;
         target.next += 1;
         target.messages.push(Message {
+            key,
             uid,
             raw: raw.into(),
             flags: vec![],
         });
+        if state.capabilities.dialect == Dialect::Gmail {
+            gmail::include_all(&mut state, mailbox, uid);
+        }
         drop(state);
         let _ = self.changed.send(mailbox.into());
         uid
