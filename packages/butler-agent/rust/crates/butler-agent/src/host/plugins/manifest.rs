@@ -93,6 +93,13 @@ fn declared(package: &mut Package, ext: Option<&Value>) -> Result<()> {
     }
     for scope in &package.declared.files {
         if scope.path.is_empty()
+            || scope.path.contains('\\')
+            || std::path::Path::new(&scope.path).components().any(|c| {
+                matches!(
+                    c,
+                    std::path::Component::ParentDir | std::path::Component::CurDir
+                )
+            })
             || !matches!(scope.access.as_str(), "read" | "write" | "read_write")
         {
             return Err(error("plugin_capabilities_invalid"));

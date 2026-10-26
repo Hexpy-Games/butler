@@ -6,6 +6,13 @@ use super::{
 };
 use serde_json::Value;
 use std::sync::Arc;
+/// Execution snapshot and an optional host-owned content lease.
+pub struct PreparedOverlay {
+    /// Resolved configuration.
+    pub config: Value,
+    /// Keeps immutable package content alive through the operation.
+    pub lease: Option<Arc<dyn Send + Sync>>,
+}
 /// On-demand package server overlay. Snapshots never launch code or read secrets.
 pub trait McpOverlay: Send + Sync {
     /// Enabled, trusted configurations, with namespaced ids and source metadata.
@@ -13,7 +20,15 @@ pub trait McpOverlay: Send + Sync {
     /// Verify integrity and resolve approved credentials immediately before execution.
     /// Called on a blocking thread. Errors must contain no secret bytes.
     fn prepare(&self, id: &str) -> Result<Value, &'static str>;
+    /// Acquire content for the lifetime of an operation, on a blocking thread.
+    fn prepare_leased(&self, id: &str) -> Result<PreparedOverlay, &'static str> {
+        self.prepare(id).map(|config| PreparedOverlay {
+            config,
+            lease: None,
+        })
+    }
 }
+type LeasedConfig = (McpServerConfig, Option<Arc<dyn Send + Sync>>);
 impl McpClient {
     /// Attach a host registry without making the model crate depend on host types.
     pub fn with_overlay(mut self, overlay: Arc<dyn McpOverlay>) -> Self {
@@ -32,7 +47,7 @@ impl McpClient {
     pub(super) async fn overlay_execution(
         &self,
         id: &str,
-    ) -> Result<Option<McpServerConfig>, McpClientError> {
+    ) -> Result<Option<LeasedConfig>, McpClientError> {
         if !id.contains('/') {
             return Ok(None);
         }
@@ -41,12 +56,12 @@ impl McpClient {
             .clone()
             .ok_or_else(|| failure("plugin_unavailable", "Plugin is unavailable.", false))?;
         let id = id.to_owned();
-        let value = tokio::task::spawn_blocking(move || overlay.prepare(&id))
+        let value = tokio::task::spawn_blocking(move || overlay.prepare_leased(&id))
             .await
             .map_err(|_| failure("plugin_unavailable", "Plugin is unavailable.", false))?
             .map_err(|code| failure(code, "Plugin execution refused.", false))?;
-        config(&value)
-            .map(Some)
+        config(&value.config)
+            .map(|config| Some((config, value.lease)))
             .map_err(|_| failure("plugin_invalid", "Plugin server is invalid.", false))
     }
 }
