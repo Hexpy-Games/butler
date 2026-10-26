@@ -33,5 +33,5 @@ export const guidance: ShowcaseGuidance = {
     "The whole field shows the focus ring while editing; the lock and warning glyphs carry their own names.",
     "With listbox={{ id, expanded, activeOptionId }} the editing input is a combobox for a SuggestionList; arrows move the highlight while focus stays in the field.",
   ],
-  tokens: ["--control-height-md", "--selection", "--focus-ring", "--radius-control", "--placeholder"],
+  tokens: ["--control-height-md", "--selection", "--focus-ring", "--radius-pill", "--placeholder"],
 };
