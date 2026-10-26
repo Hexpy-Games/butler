@@ -19,6 +19,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "json" => &["public_text"],
         // Typed hook envelopes preserve complete tool JSON.
         "hooks" => &["json"],
+        // Plugin admin port carries inert values and secret-free failures.
+        "plugins" => &[],
         // butler-canon: inert SQL definitions and pure chain invariants.
         "work_schema" | "work_queries" | "work_rank" | "work_types" => &[],
         "work_chain" => &["work_types"],
@@ -83,7 +85,7 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // SQLite owns host VFS selection and file synchronization; DB state and schema stay in callers.
         "data_paths" | "cpu" | "memory" | "desktop" | "launcher" | "network" | "process_table"
         | "storage_size" | "stdio" | "time_zone" | "user_auth" | "user_dirs" | "diagnostics"
-        | "account_dirs" | "process_priority" | "download_mark" => &[],
+        | "account_dirs" | "process_priority" | "download_mark" | "plugin_files" => &[],
         "secure_fs" => &["data_paths", "user_dirs"],
         // SQLite synchronization, credentials, install pointers and post-run
         // quarantine consume the secure filesystem facade.

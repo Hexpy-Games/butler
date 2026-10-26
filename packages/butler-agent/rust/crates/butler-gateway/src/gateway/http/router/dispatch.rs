@@ -48,6 +48,7 @@ pub(in crate::gateway::http) async fn route(
         Handler::Preview => content::preview::view(&state, &request),
         Handler::Output => content::view(state, request).await,
         Handler::Security => security_settings::route(state, request).await,
+        Handler::Plugins => plugins::route(state, request).await,
         Handler::Hooks => hooks::route(state, request).await,
         Handler::OpenedFiles => opened_files::route(state, request).await,
         Handler::Settings if request.method() == Method::GET => {

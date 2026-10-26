@@ -33,14 +33,14 @@ fn main() {
                         std::thread::sleep(std::time::Duration::from_secs(3600));
                     }
                 }
-                if !required.is_empty() && std::env::var(&required).is_err() {
-                    Err(json!({"code": -32000, "message": "required secret missing"}))
-                } else {
+                if environment_ready(&required) {
                     Ok(json!({
                         "protocolVersion": request["params"]["protocolVersion"].as_str().unwrap_or("2025-06-18"),
                         "capabilities": {"tools": {}},
                         "serverInfo": {"name": "e2e-mcp-fixture", "version": "1.0.0"}
                     }))
+                } else {
+                    Err(json!({"code":-32000,"message":"required environment missing"}))
                 }
             }
             "tools/list" => Ok(json!({"tools": [{
@@ -82,6 +82,9 @@ fn main() {
 }
 
 fn prepare_process() {
+    if let Ok(path) = std::env::var("E2E_MCP_STARTED_FILE") {
+        let _ = std::fs::write(path, std::process::id().to_string());
+    }
     if std::env::args().any(|arg| arg == "--descendant") {
         if let Ok(path) = std::env::var("E2E_MCP_CHILD_PID_FILE") {
             let _ = std::fs::write(path, std::process::id().to_string());
@@ -106,4 +109,32 @@ fn prepare_process() {
     {
         std::process::exit(2);
     }
+}
+
+fn environment_ready(required: &str) -> bool {
+    use sha2::{Digest, Sha256};
+    if required
+        .split(',')
+        .filter(|s| !s.is_empty())
+        .any(|key| std::env::var(key).is_err())
+    {
+        return false;
+    }
+    let forbidden = std::env::var("E2E_MCP_FORBIDDEN_ENV").unwrap_or_default();
+    if forbidden
+        .split(',')
+        .filter(|s| !s.is_empty())
+        .any(|key| std::env::var_os(key).is_some())
+    {
+        return false;
+    }
+    let expected = std::env::var("E2E_MCP_ENV_SHA256").unwrap_or_else(|_| "{}".into());
+    let Ok(expected) =
+        serde_json::from_str::<std::collections::BTreeMap<String, String>>(&expected)
+    else {
+        return false;
+    };
+    expected.iter().all(|(key, hash)| {
+        std::env::var(key).is_ok_and(|v| format!("{:x}", Sha256::digest(v.as_bytes())) == *hash)
+    })
 }
