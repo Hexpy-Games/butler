@@ -283,6 +283,7 @@ interface ButlerStore {
     controls?: ComposerControls,
   ) => Promise<void>;
   deleteQueuedMessage: (queuedMessageId: string) => Promise<void>;
+  sendQueuedMessageNow: (queuedMessageId: string) => Promise<void>;
   cancelActiveTurn: () => Promise<void>;
   createScratchProject: (displayName: string) => Promise<boolean>;
   createProjectFromExistingFolder: (selection: ProjectFolderSelection, displayName: string) => Promise<boolean>;
@@ -1688,6 +1689,16 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
         id: `update-queued-message-${queuedMessageId}`,
       });
     }
+  },
+
+  sendQueuedMessageNow: async (queuedMessageId) => {
+    const targetChatId = get().activeChatId;
+    const data = await api<SessionQueueView>(
+      `/session-queue/${encodeURIComponent(queuedMessageId)}/send-now`,
+      { method: "POST", body: JSON.stringify({}) },
+    );
+    if (get().activeChatId === targetChatId)
+      set({ sessionQueue: data.queued_messages });
   },
 
   deleteQueuedMessage: async (queuedMessageId) => {

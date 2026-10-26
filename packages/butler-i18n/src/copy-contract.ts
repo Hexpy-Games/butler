@@ -1040,6 +1040,9 @@ export interface AppCopy {
     stop: string;
     queuedMessages: string;
     queuedMessage: string;
+    sendNow: string;
+    sendingStatus: string;
+    sendNowFailed: string;
     queuedMessageStatus: string;
     queuedAttachmentCount: (count: number) => string;
     editQueuedMessage: string;

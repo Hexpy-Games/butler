@@ -25,6 +25,7 @@ pub(super) fn app_error(error: AppStorageError) -> GatewayApplicationError {
         | "automation_state_invalid"
         | "message_file_already_attached"
         | "queued_message_changed"
+        | "queued_message_not_next"
         | "general_channel_protected"
         | "queued_message_identity_conflict"
         | "project_source_scope_changed"
